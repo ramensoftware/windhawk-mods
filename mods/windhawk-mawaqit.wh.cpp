@@ -63,6 +63,10 @@ Choose your preferred theme and taskbar position. You're ready!
 ## More Information
 For additional screenshots, troubleshooting, technical details, and release information, visit the [GitHub project](https://github.com/hheitlager/windhawk-mawaqit).
 
+### Network access and privacy
+The mod retrieves your selected mosque's published prayer schedule from Mawaqit over HTTPS and caches it locally. Mawaqit can see your IP address and selected mosque identifier when the schedule is requested. No account is required.
+For refresh behavior, caching details, and technical implementation, see the [project documentation](https://github.com/hheitlager/windhawk-mawaqit).
+
 ## Credits and Acknowledgements
 - Mawaqit Prayer Clock is an independent, open-source community project built for [Windhawk](https://windhawk.net).
 - Special thanks to the Windhawk community and the developers whose work helped inspire this mod, including the contributors to [Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp).
@@ -226,7 +230,7 @@ This is an unofficial community project and is not affiliated with or endorsed b
     - PopupFooter: ""
       $name: Popup footer
     $name: Custom theme settings
-    $description: Optional color overrides for any selected theme. Empty fields inherit the selected palette. Previously saved custom colors remain active until cleared.
+    $description: Optional color overrides for any selected theme. Empty fields inherit the selected palette. Non-empty overrides remain active when switching themes until cleared.
   - ModSettingsAdvanced:
     - RefreshHours: 24
       $name: Refresh interval (hours)
@@ -1403,6 +1407,23 @@ struct Http
     Http& operator=(const Http&) = delete;
 };
 
+// Network access and cached schedules
+//
+// The mod retrieves the selected mosque's public prayer schedule
+// using an HTTPS GET request to:
+//   https://mawaqit.net/<language>/<mosque-identifier>
+//
+// Mawaqit can observe the requesting IP address and selected
+// mosque identifier. No Mawaqit account is required.
+//
+// Schedules are cached locally in Windhawk-managed mod storage.
+// Normal refresh: every RefreshHours hours (default: 24).
+// Failed download: retry after approximately one hour.
+// Mosque or refresh interval changed: request a fresh schedule.
+// Cache format upgrade to v4: download a fresh schedule once.
+//
+// Network requests use WinHTTP over HTTPS with redirects disabled.
+// The maximum accepted response size is 8 MB.
 static std::string fetch(const std::wstring& path)
 {
     Http session(WinHttpOpen(L"EmberveilMawaqit/0.5", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
