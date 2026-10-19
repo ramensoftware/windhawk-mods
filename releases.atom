@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-19T18:05:02.000Z</updated>
+    <updated>2026-10-19T20:02:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Keep Windows Clear of Taskbar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/keep-windows-clear-of-taskbar#ebdfb4280309ef0023530a596f94da19a44e6447</id>
+        <link href="https://windhawk.net/mods/keep-windows-clear-of-taskbar"/>
+        <updated>2026-10-19T20:02:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="keepwindowsclearoftaskbar">Keep Windows Clear of Taskbar</h1>
+<p>Keep Windows Clear of Taskbar v1.0.0 by Goobis</p>
+<p>AI was used to help develop this application</p>
+<p><a href="https://ko-fi.com/goobis2dmx">Support on Ko-fi</a></p>
+<p>Windows lets app windows open, restore or be dragged so they end up under the
+taskbar. This mod keeps every normal window (one with a title bar and a sizing
+border) clear of the taskbar, whichever screen edge the taskbar is on: bottom,
+top, left or right. A window is corrected when:</p>
+<ul>
+<li>it opens,</li>
+<li>you restore it from maximized,</li>
+<li>an app moves or resizes it,</li>
+<li>you finish dragging or resizing it (can be turned off in Settings).</li>
+</ul>
+<p>Windows that are already open are checked too: when the mod starts, and again
+whenever the taskbar or the display layout changes (for example when you move
+or resize the taskbar, or change resolution or monitors). An auto-hide taskbar
+sliding in and out doesn't count, so it never shuffles your windows around.</p>
+<p>If a window fits, it is moved just far enough to clear the taskbar. If it is too
+big to fit between the taskbar and the opposite screen edge, it is shrunk to
+fit; if the app refuses to get that small, it is lined up with the edge next to
+the taskbar instead.</p>
+<p>Left alone: maximized and fullscreen windows, minimized windows, tool windows,
+always-on-top windows, menus, tooltips, windows you have placed across two
+monitors, and screen edges without a taskbar or other reserved screen space
+(you can still park a window partly off-screen there). Space reserved by docks,
+app bars or mods such as Maximized Window Margins counts as reserved too, so
+windows are kept clear of it as well.</p>
+<h2 id="relationtotaskbartopwindowguard">Relation to Taskbar Top Window Guard</h2>
+<p>Taskbar Top Window Guard solves the same problem for a taskbar at the top of the
+screen, and adds optional centering of new windows. This mod covers any taskbar
+edge, including the bottom, and does not center windows. With a top taskbar,
+both mods correct the same windows, so Taskbar Top Window Guard is only worth
+adding alongside this one for its centering.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod runs as a Windhawk tool mod in its own windhawk.exe process. It listens
+to the window events Windows already broadcasts to accessibility tools and moves
+offending windows asynchronously, so a hung app can never block it. It doesn't
+load into, hook or subclass any other process, so it can't crash other apps or
+Explorer. If an app keeps fighting the correction, the mod backs off from that
+window.</p>
+<p>The mod measures where the taskbar actually is, so it also works when another
+mod (such as Taskbar auto-hide when maximized) puts the taskbar in auto-hide mode
+but keeps it visible.</p>
+<p>You may see a window appear at its old size for a split second before it jumps
+into place. That is expected: the correction happens right after Windows moves
+the window.</p>
+<p>Apps running as administrator can't be moved by a normal process, so their
+windows are not corrected.</p>]]></content>
+        <author>
+            <name>Goobis</name>
+            <uri>https://github.com/b2dmx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Hover Info 1.1.1]]></title>
         <id>https://windhawk.net/mods/file-hover-info#5a1aef942cf4db6248a43b5f102d7b7296fcedd4</id>
@@ -1174,68 +1233,6 @@ hides the other takes its place.</p>
 Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
 AudioFlipper app, if you have it (from <code>%APPDATA%\AudioFlipper\settings.txt</code>, which it doesn't
 change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar RDP Launcher 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-rdp-launcher#3c8dad353a8a45fa414a8a27e7ac46a0f403d48c</id>
-        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
-        <updated>2026-10-16T12:03:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarrdplauncher">Taskbar RDP Launcher</h1>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-rdp-launcher/screenshot.png" alt="The widget on the taskbar, with a computer and buttons for 1, 2 and 3 displays" /></p>
-<p>A taskbar widget, in the style of the Windows weather widget, that starts Remote Desktop
-full screen on as many of your displays as you want. Instead of editing <code>use multimon</code> and
-<code>selectedmonitors</code> in an .rdp file (after looking up the display numbers with <code>mstsc /l</code>), click a
-number.</p>
-<ul>
-<li><strong>Number buttons</strong>: click <strong>1</strong>, <strong>2</strong> or <strong>3</strong> to connect full screen on that many displays.
-There's one button for each display you have.</li>
-<li><strong>Hover a number</strong> to see a map of your displays, laid out the way they are on your desk. The
-ones that button uses are highlighted, and the session's main display (where the remote taskbar
-goes) has a bar along its bottom. <strong>Click a display to add it or take it off.</strong></li>
-<li><strong>The computer</strong> shows its address, or the name you gave it over its address. Click it (or scroll
-over it) to go to the next of your computers.</li>
-<li><strong>Right-click</strong> for the menu: add computers (by name, from a saved .rdp file, or from Remote
-Desktop Connection's recent list), rename or remove them, and open their Remote Desktop settings.</li>
-<li><strong>Drag</strong> the widget left or right to move it along the taskbar.</li>
-</ul>
-<p>Out of the box, <strong>1</strong> is your main display, <strong>2</strong> adds the display nearest to it, and so on up to
-all of them. The buttons are remembered for each arrangement of displays, so a laptop that's
-sometimes docked keeps separate buttons for the desk and for the road.</p>
-<h2 id="howitconnects">How it connects</h2>
-<ul>
-<li><p>Computers added by name connect with <code>mstsc /v:&lt;computer&gt;</code>, like typing the computer into Remote
-Desktop Connection. Since the April 2026 Windows update, Remote Desktop shows a security warning
-every time an .rdp file is opened, but not for computers typed in, so this avoids it.</p>
-<p>Remote Desktop Connection takes the display options for these from its own settings file,
-<code>Default.rdp</code> in Documents. So just before the session starts, the mod sets <code>screen mode id</code>,
-<code>use multimon</code>, <code>span monitors</code> and <code>selectedmonitors</code> there (creating the file, hidden, if there
-isn't one), and as soon as the session ends, it puts back what they were. It notes what they were
-in its own storage first, so if Windhawk is closed during a session, they're put back the next
-time the mod starts; if the mod is turned off during a session, they're put back right away. A
-setting you change in Remote Desktop Connection in the meantime is left as you set it.</p></li>
-<li><p>Saved .rdp files are never changed: the mod opens a copy with the display options set (and gets
-the warning, as any .rdp file does), and deletes the copy when the session ends. If the file is
-signed and its signature covers the display options, the copy goes without the signature, so
-Remote Desktop shows it as from an unknown publisher.</p></li>
-<li><p>Remote Desktop numbers displays its own way (not as Windows Settings does), so the first time you
-connect on some of your displays, the mod reads Remote Desktop's list (<code>mstsc /l</code>, whose box may
-flash) and remembers it until your displays change. <strong>Read display numbers again</strong> in the menu
-asks again.</p></li>
-</ul>
-<h2 id="linkingwithtaskbaraudioflipper">Linking with Taskbar Audio Flipper</h2>
-<p>With the Taskbar Audio Flipper mod running too, the two widgets can be joined into one: right-click
-either, choose <strong>Link with AudioFlipper</strong> (or <strong>Link with RDPLauncher</strong>) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.</p>
-<h2 id="settings">Settings</h2>
-<p>The computers, their names and the display buttons are kept in the mod's storage, which Windhawk
-removes along with the mod. The first time it runs, the mod takes on the computers and display
-buttons of the RDPLauncher app, if you have it (from <code>%APPDATA%\RDPLauncher\settings.txt</code>, which it
-doesn't change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
