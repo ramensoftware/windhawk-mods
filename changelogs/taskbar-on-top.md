@@ -1,3 +1,8 @@
+## 1.3 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/642dd8ae0b826225f3425948adfc9dce78640f01/mods/taskbar-on-top.wh.cpp))
+
+* Improved taskbar auto-hide support, and added auto-hide support when the native option to show the taskbar on top is used.
+* Improved the Start menu open animation to animate in the right direction in more cases.
+
 ## 1.2 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d0da8ec90f989ede5626b5ab38e8f786d72af270/mods/taskbar-on-top.wh.cpp))
 
 * The mod now uses and customizes the native Windows top taskbar implementation, if available:

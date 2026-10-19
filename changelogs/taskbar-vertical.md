@@ -1,3 +1,8 @@
+## 1.5 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d43a770c5ff162d49f1322d239426dc69af877e3/mods/taskbar-vertical.wh.cpp))
+
+* Improved taskbar auto-hide support, and added auto-hide support when the native option to show the vertical taskbar is used.
+* Improved the Start menu open animation to animate in the right direction in more cases.
+
 ## 1.4.2 ([Sep 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3f34e7e3836a762a8b18dd683a781476c8bf2208/mods/taskbar-vertical.wh.cpp))
 
 * Added the ability to move secondary taskbars to the top/bottom (similar to how the Taskbar on top mod can move secondary taskbars to the left/right).

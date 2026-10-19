@@ -15402,7 +15402,7 @@
         "ratingUsers": 660,
         "reviews": 0,
         "trendingSorting": -4.372581739667844,
-        "updated": 1790638180000,
+        "updated": 1792398791000,
         "users": 24647
       },
       "featured": true,
@@ -15423,7 +15423,7 @@
         ],
         "name": "Taskbar on top for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.2"
+        "version": "1.3"
       }
     },
     "taskbar-open-window-underline": {
@@ -16187,7 +16187,7 @@
         "ratingUsers": 761,
         "reviews": 0,
         "trendingSorting": -3.7246462093442894,
-        "updated": 1790641448000,
+        "updated": 1792398920000,
         "users": 19026
       },
       "featured": true,
@@ -16208,7 +16208,7 @@
         ],
         "name": "Vertical Taskbar for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.4.2"
+        "version": "1.5"
       }
     },
     "taskbar-volume-control": {
