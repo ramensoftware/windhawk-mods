@@ -15,6 +15,8 @@
 /*
 # Fullscreen Start (Launchpad style)
 
+![Fullscreen Start](https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/fullscreen-start.png)
+
 Replaces the Windows Start menu with a screen in the style of the macOS
 Launchpad: all installed apps in a grid, with search at the top and a blurred
 background.
