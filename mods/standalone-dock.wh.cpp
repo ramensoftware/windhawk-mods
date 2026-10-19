@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              macos-dock
+// @id              standalone-dock
 // @name            Standalone Dock (macOS-like)
 // @description     A macOS-style Dock: magnification on hover, bouncing icons, running app indicators, drag to rearrange and more
 // @version         1.0.0
