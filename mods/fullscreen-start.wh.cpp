@@ -7,7 +7,7 @@
 // @github          https://github.com/RafaelMendes1407
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lshell32 -lshcore -ldwmapi -ld2d1 -ldwrite -lole32 -luuid -lcomctl32
+// @compilerOptions -lgdi32 -lshell32 -lshcore -ldwmapi -ld2d1 -ldwrite -lole32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -109,7 +109,6 @@ Changes to the settings apply the next time Start opens.
 #include <d2d1_1.h>
 #include <dwrite.h>
 #include <wrl/client.h>
-#include <commctrl.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
