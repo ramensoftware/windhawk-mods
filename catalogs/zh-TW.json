@@ -6947,6 +6947,30 @@
         "version": "1.0.0"
       }
     },
+    "file-hover-info": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792433102000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792433102000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lshell32 -ld2d1 -ldwrite -ldwmapi -lshlwapi -lgdi32 -luser32 -loleacc",
+        "description": "A themeable info card with size, dates and more when you hover files on the desktop or in File Explorer",
+        "github": "https://github.com/haven80",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "File Hover Info",
+        "version": "1.1.1"
+      }
+    },
     "file-operation-styler": {
       "details": {
         "defaultSorting": 110060,

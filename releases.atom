@@ -2,12 +2,58 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-19T17:04:01.000Z</updated>
+    <updated>2026-10-19T18:05:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Hover Info 1.1.1]]></title>
+        <id>https://windhawk.net/mods/file-hover-info#5a1aef942cf4db6248a43b5f102d7b7296fcedd4</id>
+        <link href="https://windhawk.net/mods/file-hover-info"/>
+        <updated>2026-10-19T18:05:02.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="filehoverinfo">File Hover Info</h1>
+<p>Rest the cursor on a file, folder, drive or shortcut — on the desktop or in a
+File Explorer window — and a card appears with the details you choose: size,
+folder size, free space on drives, creation / modification / access dates,
+attributes, image dimensions, media duration, file version, shortcut target,
+folder contents and location.</p>
+<p><img src="https://i.imgur.com/Gk2ZcFl.png" alt="File Hover Info card" /></p>
+<p>The card follows the Windows display language (English, Italian, Spanish,
+French, German and Portuguese are included; other languages fall back to
+English), or you can pick one.</p>
+<p>Everything is configurable: which fields to show, date style (absolute,
+relative or both), theme (follow Windows, dark, light or fully custom colors),
+solid / acrylic / blur background, accent color and bar, corner radius,
+shadow, fade-in, font, size, icon or thumbnail.</p>
+<h2 id="windowsownpopup">Windows' own popup</h2>
+<p>By default the mod hides Windows' built-in hover popup, so only the card is
+shown. This only affects Explorer while the mod is running: the Windows
+setting itself is not changed, and the popup comes back as soon as the option
+or the mod is turned off. The option also hides the small tooltip Windows
+shows for desktop icon names that are cut off, since the card shows the full
+name anyway.</p>
+<h2 id="foldersize">Folder size</h2>
+<p>Folder sizes are summed on a background thread, so Explorer is never blocked.
+The card shows "Calculating…" and updates when the total is ready. The
+calculation stops as soon as the cursor moves away, and after the time limit
+set in the options (the card then shows a partial total). Drives show their
+free space instead of being scanned.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Acrylic and blur use an undocumented Windows API; on some builds the blur
+may not follow the rounded corners.</li>
+<li>Items are matched by their displayed name. If two items in the same folder
+show the same name (e.g. <code>photo.jpg</code> and <code>photo.png</code> with extensions
+hidden), the first one is shown.</li>
+<li>Pages that aren't classic folder views (Home, Gallery) are not supported.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Real-time Cast Shadow Wallpaper 1.0.3]]></title>
         <id>https://windhawk.net/mods/realtime-cast-shadow-wallpaper#b2cec81257f082e05d00a6aa292494dde3ad40e2</id>
@@ -1193,74 +1239,6 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.</p
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.6.9]]></title>
-        <id>https://windhawk.net/mods/windhawk-mawaqit#94e338b1d2c90b55cb81a9882d1ee8d0be42a3c8</id>
-        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
-        <updated>2026-10-16T11:32:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mawaqitprayerclock">Mawaqit Prayer Clock</h1>
-<p>Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Upcoming prayer name, scheduled time, and live countdown</li>
-<li>Clickable prayer-schedule popup with optional auto-close timer</li>
-<li>13 appearance themes, including Windows / System, Traditional Islamic, Catppuccin Mocha, Emberveil, Dracula, Nord, Gruvbox Dark, Tokyo Night, Solarized Dark and Light, and Custom</li>
-<li>Independent custom colors for the pill and popup</li>
-<li>Visibility switches for the prayer label, countdown, and popup</li>
-<li>Five selectable taskbar positions, including experimental dynamic centering</li>
-<li>Native XAML taskbar integration with reserved layout space for anchored positions</li>
-<li>Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size</li>
-<li>Background schedule updates through native WinHTTP, with configurable refresh interval</li>
-<li>Live settings updates without restarting Explorer</li>
-</ul>
-<h2 id="networkaccessandcachedschedules">Network access and cached schedules</h2>
-<p>This mod intentionally uses Mawaqit’s published mosque-specific prayer times rather
-than locally calculated astronomical times, preserving mosque-specific adjustments.</p>
-<p>This mod connects to <strong>https://mawaqit.net</strong> over HTTPS to retrieve the public
-prayer schedule for the mosque identifier configured in Settings. The request
-is an HTTP GET for <code>https://mawaqit.net/&lt;language&gt;/&lt;mosque-identifier&gt;</code>;
-no account or authentication is required. The server can observe the request
-and normal connection information such as your IP address.</p>
-<p>The schedule is stored in Windhawk's mod-specific storage. A valid cached
-schedule is reused when Explorer restarts, until the configured refresh interval
-expires (24 hours by default; adjustable from 1 to 168 hours). The mod also
-requests a fresh schedule when the mosque or refresh interval changes.
-If a download fails, it retries after one hour. An empty, expired, mismatched,
-or unusable cache causes a download at startup. The mod reads schedule data
-from the public Mawaqit webpage, so changes to that page can interrupt updates.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.</p>
-<p>Windows System Default | Traditional Islamic |
-|:---:|:---:|
-<img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png" alt="Windows" /> | <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png" alt="Traditional" /> |</p>
-<p>| Catppuccin Mocha | Emberveil |
-|:---:|:---:|
-| <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png" alt="Catppuccin" /> | <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png" alt="Emberveil" /> |</p>
-<h2 id="desktopintegration">Desktop Integration</h2>
-<p>See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
-<img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop.png" alt="Desktop" /></p>
-<h2 id="configuration">Configuration</h2>
-<p>Choose a mosque identifier or Mawaqit URL in Settings.
-Select an appearance theme and customize the widget as desired.
-Custom color settings only apply when the Custom theme is selected.
-Set popup auto-close to 0 to keep the popup open until dismissed.</p>
-<h2 id="moreinformation">More information</h2>
-<p>For installation instructions, additional screenshots,
-troubleshooting, and release information, visit:</p>
-<p><a href="https://github.com/hheitlager/windhawk-mawaqit">GitHub Project</a></p>
-<h2 id="compatibilityandcredits">Compatibility and credits</h2>
-<p>Windows 11 only. Taskbar XAML integration adapted from Windhawk’s
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp">taskbar-folder-menus</a> (MIT).</p>
-<h2 id="license">License</h2>
-<p>MIT License.</p>
-<h2 id="disclaimer">Disclaimer</h2>
-<p>This is an unofficial community project and is not affiliated
-with or endorsed by Mawaqit.</p>]]></content>
-        <author>
-            <name>HHeitlager</name>
-            <uri>https://github.com/hheitlager</uri>
         </author>
     </entry>
 </feed>
