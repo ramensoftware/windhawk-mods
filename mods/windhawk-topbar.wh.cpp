@@ -5365,13 +5365,22 @@ FrameworkElement BuildSearchIcon(double displaySize) {
 
 FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging, bool present = true) {
     if (!present) {
-        std::wstring brush = GetEffectiveIconColorString();
+        std::wstring batteryXaml;
+        batteryXaml += L"<Grid Width=\"108.809\" Height=\"55.6796\">";
+        batteryXaml += L"<Border Width=\"5.404\" Height=\"11.931\" "
+                       L"CornerRadius=\"0,3,3,0\" Background=\"#D1D1D1\" "
+                       L"HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\"/>";
+        batteryXaml += L"<Grid Width=\"99.4277\" Height=\"55.6796\" "
+                       L"HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\">";
+        batteryXaml += L"<Border Width=\"99.4277\" Height=\"55.6796\" "
+                       L"CornerRadius=\"15.9085\" Background=\"#D1D1D1\"/>";
+        batteryXaml += L"<Path Data=\"M15,15 L84,40 M84,15 L15,40\" Stroke=\"#FFFFFF\" StrokeThickness=\"6\" StrokeStartLineCap=\"Round\" StrokeEndLineCap=\"Round\"/>";
+        batteryXaml += L"</Grid>";
+        batteryXaml += L"</Grid>";
         std::wstring xaml =
             L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
             L"Stretch=\"Uniform\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-            L"<Grid Width=\"24\" Height=\"24\">"
-            L"<Path Data=\"M5,5 L19,19 M19,5 L5,19\" Stroke=\"" + brush + L"\" StrokeThickness=\"2\"/>"
-            L"</Grid></Viewbox>";
+            + batteryXaml + L"</Viewbox>";
         try {
             auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
             element.Name(L"BatteryIcon");
@@ -5715,7 +5724,7 @@ FrameworkElement WifiIcon(int signal, bool connected) {
         PCWSTR glyph;
         double opacity = 1.0;
         if (!connected) {
-            glyph = L"\uE872";
+            glyph = L"\uE701";
             opacity = 0.4;
         } else if (signal >= 75) {
             glyph = L"\uE701";
@@ -5755,7 +5764,7 @@ FrameworkElement BatteryIcon(int percentage, bool charging, bool present = true)
         if (charging) {
             static const wchar_t* kCharging[11] = {
                 L"\uE85A", L"\uE85B", L"\uE85C", L"\uE85D", L"\uE85E",
-                L"\uE85F", L"\uE860", L"\uE861", L"\uE862", L"\uE83E", L"\uE83E"
+                L"\uE85F", L"\uE860", L"\uE861", L"\uE862", L"\uE83E", L"\uEA93"
             };
             int slot = percentage / 10;
             if (slot > 10) slot = 10;
@@ -6789,6 +6798,7 @@ FrameworkElement BuildTaskButtonContent(HWND hwnd, const std::wstring& title) {
         wuxc::Grid::SetColumn(text, 1);
         // No MaxWidth on text; the button's own width will clip it.
         text.ClearValue(FrameworkElement::MaxWidthProperty());
+        text.Margin(Thickness{0, 0, 0, 2});
         content.Children().Append(text);
     } else {
         textColumn.Width(GridLength{0, GridUnitType::Pixel});
@@ -8899,6 +8909,22 @@ void RequestScan() {
     session.api.scan(session.handle, &session.interfaceGuid, nullptr, nullptr, nullptr);
 }
 
+bool Available() {
+    auto& api = GetApi();
+    if (!api.valid()) return false;
+    HANDLE handle = nullptr;
+    DWORD negotiated = 0;
+    if (api.open(2, nullptr, &negotiated, &handle) != ERROR_SUCCESS) return false;
+    PWLAN_INTERFACE_INFO_LIST list = nullptr;
+    bool hasInterface = false;
+    if (api.enumInterfaces(handle, nullptr, &list) == ERROR_SUCCESS && list) {
+        hasInterface = list->dwNumberOfItems > 0;
+        api.freeMemory(list);
+    }
+    api.close(handle, nullptr);
+    return hasInterface;
+}
+
 std::vector<Network> EnumerateNetworks() {
     std::vector<Network> networks;
     Session session;
@@ -9209,9 +9235,9 @@ bool IsRadioOn() {
 }
 
 bool Available() {
-    // Only check if the API exists, NOT if the radio handle exists.
-    // This keeps the toggle enabled when the radio is off, so you can turn it back on.
-    return GetApi().valid();
+    if (!GetApi().valid()) return false;
+    RadioHandle radio;
+    return radio.ok();
 }
 
 bool SetRadio(bool on) {
@@ -10220,7 +10246,6 @@ struct GaussianBlurEffect
 };
 
 std::vector<winrt::weak_ref<wuxm::XamlCompositionBrushBase>> g_liveBlurBrushes;
-
 class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
    public:
     XamlBlurBrush(UIElement element, float blurAmount, wui::Color tint,
@@ -12948,7 +12973,7 @@ void UpdateMediaVisualizerTick() {
     static float s_smoothFlyout[24] = {0};
     if (!g_visualizerBars.empty()) {
         size_t nFly = g_visualizerBars.size();
-        const double maxH = 44.0;
+        const double maxH = 60.0;
         for (size_t i = 0; i < nFly && i < 24; i++) {
             float v = 0;
             int from = (int)(i * 24 / nFly);
@@ -12956,7 +12981,7 @@ void UpdateMediaVisualizerTick() {
             if (to <= from) to = from + 1;
             for (int k = from; k < to && k < 24; k++) v = (std::max)(v, bands[k]);
             s_smoothFlyout[i] = s_smoothFlyout[i] * 0.72f + v * 0.28f;
-            double h = 4.0 + s_smoothFlyout[i] * maxH;
+            double h = 6.0 + s_smoothFlyout[i] * maxH;
             try { g_visualizerBars[i].Height(h); } catch (...) {}
         }
     }
@@ -12965,7 +12990,7 @@ void UpdateMediaVisualizerTick() {
     if (!g_mediaButtonBars.empty()) {
         // Collapse 24 bands down to the mini visualizer's bar count.
         size_t nBtn = g_mediaButtonBars.size();
-        const double maxH = 14.0;
+        const double maxH = 20.0;
         for (size_t i = 0; i < nBtn; i++) {
             float v = 0;
             int from = (int)(i * 24 / nBtn);
@@ -12973,7 +12998,7 @@ void UpdateMediaVisualizerTick() {
             if (to <= from) to = from + 1;
             for (int k = from; k < to && k < 24; k++) v = (std::max)(v, bands[k]);
             s_smoothButton[i] = s_smoothButton[i] * 0.7f + v * 0.3f;
-            double h = 3.0 + s_smoothButton[i] * maxH;
+            double h = 4.0 + s_smoothButton[i] * maxH;
             try { g_mediaButtonBars[i].Height(h); } catch (...) {}
         }
     }
@@ -14989,6 +15014,63 @@ int QueryBatteryHealth() {
     }
     cachedHealth = health;
     return health;
+}
+
+bool IsLaptop() {
+    static int s_isLaptop = -1;
+    if (s_isLaptop != -1) return s_isLaptop != 0;
+    SYSTEM_POWER_STATUS sps;
+    if (GetSystemPowerStatus(&sps)) {
+        if ((sps.BatteryFlag & 128) == 0 && sps.BatteryLifePercent != 255) {
+            s_isLaptop = 1;
+            return true;
+        }
+    }
+    static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+    static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+    winrt::com_ptr<IWbemLocator> locator;
+    if (SUCCEEDED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER, kIID_IWbemLocator, locator.put_void()))) {
+        BSTR ns = SysAllocString(L"root\\cimv2");
+        winrt::com_ptr<IWbemServices> services;
+        if (SUCCEEDED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr, services.put()))) {
+            CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+            BSTR query = SysAllocString(L"SELECT ChassisTypes FROM Win32_SystemEnclosure");
+            BSTR lang = SysAllocString(L"WQL");
+            winrt::com_ptr<IEnumWbemClassObject> enumerator;
+            if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, enumerator.put()))) {
+                IWbemClassObject* obj = nullptr;
+                ULONG returned = 0;
+                if (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
+                    VARIANT v;
+                    VariantInit(&v);
+                    if (SUCCEEDED(obj->Get(L"ChassisTypes", 0, &v, nullptr, nullptr)) && (v.vt & VT_ARRAY) && v.parray) {
+                        SAFEARRAY* sa = v.parray;
+                        VARTYPE elem = static_cast<VARTYPE>(v.vt & VT_TYPEMASK);
+                        LONG lb = 0, ub = -1;
+                        SafeArrayGetLBound(sa, 1, &lb);
+                        SafeArrayGetUBound(sa, 1, &ub);
+                        for (LONG i = lb; i <= ub; ++i) {
+                            short val = 0;
+                            if (elem == VT_I2) SafeArrayGetElement(sa, &i, &val);
+                            else if (elem == VT_UI2) { unsigned short uval; SafeArrayGetElement(sa, &i, &uval); val = uval; }
+                            else if (elem == VT_I4) { long lval; SafeArrayGetElement(sa, &i, &lval); val = static_cast<short>(lval); }
+                            if (val == 8 || val == 9 || val == 10 || val == 11 || val == 12 || val == 14 || val == 18 || val == 21 || val == 30 || val == 31 || val == 32) {
+                                s_isLaptop = 1;
+                                break;
+                            }
+                        }
+                    }
+                    VariantClear(&v);
+                    obj->Release();
+                }
+            }
+            SysFreeString(query);
+            SysFreeString(lang);
+        }
+        SysFreeString(ns);
+    }
+    if (s_isLaptop == -1) s_isLaptop = 0;
+    return s_isLaptop != 0;
 }
 
 BatteryInfo GetBatteryInfo() {
@@ -22197,6 +22279,12 @@ static int s_currentPage = 0;
 [[clang::no_destroy]] static wux::DispatcherTimer s_applyTimer{ nullptr };
 static const wchar_t* kClassName = L"TopBarSettingsWnd";
 
+static wuxm::TranslateTransform s_wallpaperTransform{nullptr};
+static wuxm::RectangleGeometry s_wallpaperClip{nullptr};
+static wuxc::Image s_wallpaperImage{nullptr};
+
+void UpdateWallpaperOffsets(HWND hwnd, const RECT* proposedRect = nullptr);
+
 wuxm::SolidColorBrush MakeSolid(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
     return wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(a, r, g, b));
 }
@@ -24353,11 +24441,81 @@ void ShowPage(int idx) {
 
 wuxc::Grid BuildWindowContent() {
     wuxc::Grid root;
-    root.Background(MakeSolid(0xFF, 0x14, 0x14, 0x14));
+    root.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
     root.RequestedTheme(wux::ElementTheme::Dark);
+
+    wchar_t wallPath[MAX_PATH];
+    SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wallPath, 0);
+    winrt::hstring wallpaperPath = winrt::hstring(L"file:///") + wallPath;
+
+    HMONITOR mon = MonitorFromWindow(s_hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfo(mon, &mi);
+    UINT dpiX = 96, dpiY = 96;
+    GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    float dpiScale = dpiX / 96.0f;
+    float monitorW = (float)(mi.rcMonitor.right - mi.rcMonitor.left) / dpiScale;
+    float monitorH = (float)(mi.rcMonitor.bottom - mi.rcMonitor.top) / dpiScale;
+
+    wuxc::Canvas wallpaperHost;
+    wallpaperHost.HorizontalAlignment(HorizontalAlignment::Stretch);
+    wallpaperHost.VerticalAlignment(VerticalAlignment::Stretch);
+    
+    s_wallpaperClip = wuxm::RectangleGeometry();
+    s_wallpaperClip.Rect({0.0f, 0.0f, 800.0f, 600.0f});
+    wallpaperHost.Clip(s_wallpaperClip);
+
+    wuxc::Image wallpaperImage;
+    wuxm::Imaging::BitmapImage bmp;
+    bmp.UriSource(winrt::Windows::Foundation::Uri(wallpaperPath));
+    wallpaperImage.Source(bmp);
+    wallpaperImage.Width(monitorW);
+    wallpaperImage.Height(monitorH);
+    wallpaperImage.Stretch(wuxm::Stretch::UniformToFill);
+
+    wuxh::ElementCompositionPreview::SetIsTranslationEnabled(wallpaperImage, true);
+    wallpaperHost.Children().Append(wallpaperImage);
+    s_wallpaperImage = wallpaperImage;
+
+    wuxc::Border blurOverlay;
+    blurOverlay.HorizontalAlignment(HorizontalAlignment::Stretch);
+    blurOverlay.VerticalAlignment(VerticalAlignment::Stretch);
+    auto blurBrush = winrt::make<XamlBlurBrush>(
+        blurOverlay.as<UIElement>(),
+        60.0f,
+        wui::ColorHelper::FromArgb(255, 0, 0, 0),
+        160,
+        false
+    );
+    blurOverlay.Background(blurBrush);
+
+    root.Children().Append(wallpaperHost);
+    root.Children().Append(blurOverlay);
 
     wuxc::NavigationView nav;
     nav.Name(L"SettingsNav");
+    nav.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+    nav.Resources().Insert(winrt::box_value(winrt::hstring(L"NavigationViewContentBackground")),
+                           MakeSolid(0x00, 0x00, 0x00, 0x00));
+    nav.Resources().Insert(winrt::box_value(winrt::hstring(L"NavigationViewDefaultPaneBackground")),
+                           MakeSolid(0x00, 0x00, 0x00, 0x00));
+    nav.Resources().Insert(winrt::box_value(winrt::hstring(L"NavigationViewExpandedPaneBackground")),
+                           MakeSolid(0x00, 0x00, 0x00, 0x00));
+    nav.Loaded([](wf::IInspectable const& sender, RoutedEventArgs const&) {
+        auto nv = sender.as<wuxc::NavigationView>();
+        nv.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+        if (auto fe = nv.FindName(L"ContentGrid").try_as<FrameworkElement>()) {
+            if (auto grid = fe.try_as<wuxc::Grid>()) grid.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+            else if (auto border = fe.try_as<wuxc::Border>()) border.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+        }
+        if (auto fe = nv.FindName(L"PaneRoot").try_as<FrameworkElement>()) {
+            if (auto grid = fe.try_as<wuxc::Grid>()) grid.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+            else if (auto border = fe.try_as<wuxc::Border>()) border.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+        }
+        if (auto fe = nv.FindName(L"PaneContentGrid").try_as<FrameworkElement>()) {
+            if (auto grid = fe.try_as<wuxc::Grid>()) grid.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
+        }
+    });
     nav.IsBackButtonVisible(wuxc::NavigationViewBackButtonVisible::Collapsed);
     nav.IsSettingsVisible(false);
     nav.IsPaneToggleButtonVisible(false);
@@ -24365,6 +24523,7 @@ wuxc::Grid BuildWindowContent() {
     nav.OpenPaneLength(220);
     nav.IsPaneOpen(true);
     nav.SelectionFollowsFocus(wuxc::NavigationViewSelectionFollowsFocus::Disabled);
+    nav.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
 
     // Translucent pane so the DWM blur shows through (Fix 3)
     nav.Resources().Insert(winrt::box_value(winrt::hstring(L"NavigationViewDefaultPaneBackground")),
@@ -24399,6 +24558,7 @@ wuxc::Grid BuildWindowContent() {
     }
 
     wuxc::ScrollViewer scroll;
+    scroll.Background(MakeSolid(0x00, 0x00, 0x00, 0x00));
     scroll.HorizontalScrollMode(wuxc::ScrollMode::Disabled);
     scroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     s_contentPanel = wuxc::StackPanel();
@@ -24611,14 +24771,24 @@ wuxc::Grid BuildWindowContent() {
     if (nav.MenuItems().Size() > 0) {
         nav.SelectedItem(nav.MenuItems().GetAt(0));
     }
+
     return root;
 }
 
 LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
+        case WM_MOVE:
+            UpdateWallpaperOffsets(h, nullptr);
+            return 0;
         case WM_SIZE:
             if (s_islandHwnd) MoveWindow(s_islandHwnd, 0, 0, LOWORD(l), HIWORD(l), TRUE);
+            UpdateWallpaperOffsets(h, nullptr);
             return 0;
+        case WM_MOVING: {
+            RECT* r = (RECT*)l;
+            UpdateWallpaperOffsets(h, r);
+            break;
+        }
         case WM_SETFOCUS:
             if (s_islandHwnd) SetFocus(s_islandHwnd);
             return 0;
@@ -24787,9 +24957,9 @@ void CreateWindowOnCurrentThread() {
 
     ShowWindow(s_hwnd, SW_SHOW);
     UpdateWindow(s_hwnd);
-    // Applied after the first ShowWindow so the initial theme pass doesn't
-    // overwrite them.
     ApplyModernWindowChrome(s_hwnd);
+    SetWindowPos(s_hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
     // Re-assert once DWM has fully created the frame.
     SetWindowPos(s_hwnd, nullptr, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
@@ -27450,80 +27620,85 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
     rightPanel.Children().Append(g_soundButton);
 
     {
-        auto status = wifi::GetStatus();
-
-g_wifiButton = MakeControlButton(
-    L"WifiButton", iconpacks::WifiIcon(status.signal, status.connected),
-    g_wifiFlyout, [] {
-        // Show loading
-        if (g_wifiPanel) {
-            g_populatingPanel = true;
-            auto children = g_wifiPanel.Children();
-            children.Clear();
-            children.Append(MakePanelTitle(L"Wi-Fi"));
-            children.Append(MakeStatusText(L"Loading…"));
-            g_populatingPanel = false;
-        }
-        // Fetch in background
-        RunInBackground([] {
+        if (wifi::Available()) {
             auto status = wifi::GetStatus();
-            auto networks = wifi::EnumerateNetworks();
-RunOnUiThread([status, networks = std::move(networks)]() mutable {
-    g_wifiNetworks = std::move(networks);
-    g_wifiPasswordPrompt = false;
-    g_wifiPromptError.clear();
-    PopulateWifiPanel();
-    StartWifiScan();
-    EnsureAutoRefreshTimers();
-    if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Start();
-});
-        });
-    });
 
+            g_wifiButton = MakeControlButton(
+                L"WifiButton", iconpacks::WifiIcon(status.signal, status.connected),
+                g_wifiFlyout, [] {
+                    // Show loading
+                    if (g_wifiPanel) {
+                        g_populatingPanel = true;
+                        auto children = g_wifiPanel.Children();
+                        children.Clear();
+                        children.Append(MakePanelTitle(L"Wi-Fi"));
+                        children.Append(MakeStatusText(L"Loading…"));
+                        g_populatingPanel = false;
+                    }
+                    // Fetch in background
+                    RunInBackground([] {
+                        auto status = wifi::GetStatus();
+                        auto networks = wifi::EnumerateNetworks();
+                        RunOnUiThread([status, networks = std::move(networks)]() mutable {
+                            g_wifiNetworks = std::move(networks);
+                            g_wifiPasswordPrompt = false;
+                            g_wifiPromptError.clear();
+                            PopulateWifiPanel();
+                            StartWifiScan();
+                            EnsureAutoRefreshTimers();
+                            if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Start();
+                        });
+                    });
+                });
 
-        rightPanel.Children().Append(g_wifiButton);
+            rightPanel.Children().Append(g_wifiButton);
+        }
     }
 
     {
-        auto icon = iconpacks::BluetoothIcon(true);
+        if (bluetooth::Available()) {
+            auto icon = iconpacks::BluetoothIcon(true);
 
-    g_bluetoothButton = MakeControlButton(L"BluetoothButton", icon, g_bluetoothFlyout, [] {
-        // Show loading
-        if (g_bluetoothPanel) {
-            g_populatingPanel = true;
-            auto children = g_bluetoothPanel.Children();
-            children.Clear();
-            children.Append(MakePanelTitle(L"Bluetooth"));
-            children.Append(MakeStatusText(L"Loading…"));
-            g_populatingPanel = false;
-        }
-        RefreshBluetoothRadioState(); // update radio state in background
-        // First load paired devices (fast, no scan)
-        RunInBackground([] {
-            auto devices = bluetooth::Enumerate(false); // no inquiry, instant
-            RunOnUiThread([devices = std::move(devices)]() mutable {
-                g_bluetoothDevices = std::move(devices);
-                PopulateBluetoothPanel();
-                // Do a single scan for new devices (no auto-refresh loop)
-                StartBluetoothScan(true);
+            g_bluetoothButton = MakeControlButton(L"BluetoothButton", icon, g_bluetoothFlyout, [] {
+                // Show loading
+                if (g_bluetoothPanel) {
+                    g_populatingPanel = true;
+                    auto children = g_bluetoothPanel.Children();
+                    children.Clear();
+                    children.Append(MakePanelTitle(L"Bluetooth"));
+                    children.Append(MakeStatusText(L"Loading…"));
+                    g_populatingPanel = false;
+                }
+                RefreshBluetoothRadioState(); // update radio state in background
+                // First load paired devices (fast, no scan)
+                RunInBackground([] {
+                    auto devices = bluetooth::Enumerate(false); // no inquiry, instant
+                    RunOnUiThread([devices = std::move(devices)]() mutable {
+                        g_bluetoothDevices = std::move(devices);
+                        PopulateBluetoothPanel();
+                        // Do a single scan for new devices (no auto-refresh loop)
+                        StartBluetoothScan(true);
+                    });
+                });
             });
-        });
-    });
 
-        rightPanel.Children().Append(g_bluetoothButton);
+            rightPanel.Children().Append(g_bluetoothButton);
+        }
     }
 
     // Battery button. The percentage is drawn inside the icon, so no separate
     // text label is added next to it.
     {
-        BatteryInfo info = GetBatteryInfo();
-        auto batteryIcon = iconpacks::BatteryIcon(info.percentage, info.charging, info.present);
-        if (batteryIcon) {
-            batteryIcon.VerticalAlignment(VerticalAlignment::Center);
+        if (IsLaptop()) {
+            BatteryInfo info = GetBatteryInfo();
+            auto batteryIcon = iconpacks::BatteryIcon(info.percentage, info.charging, info.present);
+            if (batteryIcon) {
+                batteryIcon.VerticalAlignment(VerticalAlignment::Center);
+            }
+            g_batteryButton = MakeControlButton(L"BatteryButton", batteryIcon, g_batteryFlyout,
+                                                [] { PopulateBatteryPanel(); });
+            rightPanel.Children().Append(g_batteryButton);
         }
-        g_batteryButton = MakeControlButton(L"BatteryButton", batteryIcon, g_batteryFlyout,
-                                            [] { PopulateBatteryPanel(); });
-        rightPanel.Children().Append(g_batteryButton);
     }
 
     {
@@ -30514,7 +30689,6 @@ void PinTopBarFlyoutHwnd() {
             Wh_Log(L"PinTopBarFlyoutHwnd: popup HWND changed %p -> %p",
                    g_topBarPopupHwnd, newest);
             g_topBarPopupHwnd = newest;
-            g_forcePopupPosition = false;
             g_replaceAttempts = 0;
         }
     }
@@ -30528,7 +30702,6 @@ void PinTopBarFlyoutHwnd() {
             Wh_Log(L"PinTopBarFlyoutHwnd: adopting popup HWND %p -> %p",
                    g_topBarPopupHwnd, newest);
             g_topBarPopupHwnd = newest;
-            g_forcePopupPosition = false;
             g_replaceAttempts = 0;
         }
     }
@@ -31243,10 +31416,12 @@ void EnsureTopBarPopupShown() {
                 HWND found = FindTopBarFlyoutHwnd();
                 if (found && found != g_topBarPopupHwnd) {
                     g_topBarPopupHwnd = found;
-                    g_forcePopupPosition = false;
                     g_replaceAttempts = 0;
                 } else if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) {
                     g_topBarPopupHwnd = found;
+                }
+                if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                    InstallPopupSubclass(g_topBarPopupHwnd);
                 }
             }
 
@@ -31255,7 +31430,19 @@ void EnsureTopBarPopupShown() {
             // any OS display-scale change, and stays wrong until some other
             // event forces a XAML layout pass.
             if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
-                ForcePopupDpiRecalc(g_topBarPopupHwnd);
+                static HWND s_lastForcedDpiPopup = nullptr;
+                static UINT s_lastForcedDpi = 0;
+                UINT currentDpi = 0;
+                HMONITOR mon = MonitorFromWindow(g_topBarPopupHwnd, MONITOR_DEFAULTTONEAREST);
+                if (mon && SUCCEEDED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI,
+                                                      &currentDpi, &currentDpi))) {
+                    if (g_topBarPopupHwnd != s_lastForcedDpiPopup ||
+                        currentDpi != s_lastForcedDpi) {
+                        s_lastForcedDpiPopup = g_topBarPopupHwnd;
+                        s_lastForcedDpi = currentDpi;
+                        ForcePopupDpiRecalc(g_topBarPopupHwnd);
+                    }
+                }
             }
 
             // Immediately kill Mica on the freshly created popup. This has
@@ -32712,6 +32899,7 @@ void StartThumbShowAnimation(int finalX, int finalY, int W, int H, bool isFirstS
 }
 
 void ShowThumbnailPreview(HWND source, wuxc::Button const& anchor) {
+    double dpi = GetBarDpiScale();
     if (!IsWindow(source)) return;
     if (!g_settings.thumbPreviewEnabled) return;
     if (g_thumbPreviewHwnd && IsWindow(g_thumbPreviewHwnd) &&
@@ -32785,8 +32973,8 @@ void ShowThumbnailPreview(HWND source, wuxc::Button const& anchor) {
     if (srcAspect > 3.0) srcAspect = 3.0;
     if (srcAspect < 1.0 / 3.0) srcAspect = 1.0 / 3.0;
 
-    int maxW = g_settings.thumbPreviewMaxWidth;
-    int maxH = g_settings.thumbPreviewMaxHeight;
+    int maxW = static_cast<int>(g_settings.thumbPreviewMaxWidth * dpi);
+    int maxH = static_cast<int>(g_settings.thumbPreviewMaxHeight * dpi);
     if (maxW < 200) maxW = 200;
     if (maxH < 120) maxH = 120;
 
@@ -32798,13 +32986,11 @@ void ShowThumbnailPreview(HWND source, wuxc::Button const& anchor) {
         previewH = maxH;
         previewW = static_cast<int>(maxH * srcAspect + 0.5);
     }
-    if (previewW < 160) previewW = 160;
-    if (previewH < 90) previewH = 90;
+    if (previewW < static_cast<int>(160 * dpi)) previewW = static_cast<int>(160 * dpi);
+    if (previewH < static_cast<int>(90 * dpi)) previewH = static_cast<int>(90 * dpi);
     int totalH = previewH;
 
     RECT mon = GetBarMonitorRect();
-    double dpi = GetBarDpiScale();
-    if (dpi <= 0.0) dpi = 1.0;
 
     RECT popupRect{};
     bool havePopupRect = false;
@@ -33073,6 +33259,43 @@ void ApplyWindowBackdrop(HWND hwnd) {
 #define DWMWA_NCRENDERING_POLICY 2
 #endif
 
+namespace topbar_settings_window {
+void UpdateWallpaperOffsets(HWND hwnd, const RECT* proposedRect) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    RECT r;
+    if (proposedRect) {
+        r = *proposedRect;
+    } else {
+        DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r));
+    }
+    HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfo(mon, &mi);
+    
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (dpi == 0) dpi = 96;
+    float dpiScale = dpi / 96.0f;
+    
+    float offsetX = (float)(r.left - mi.rcMonitor.left) / dpiScale;
+    float offsetY = (float)(r.top - mi.rcMonitor.top) / dpiScale;
+    
+    RECT clientR;
+    GetClientRect(hwnd, &clientR);
+    float windowW = (float)(clientR.right - clientR.left) / dpiScale;
+    float windowH = (float)(clientR.bottom - clientR.top) / dpiScale;
+
+    if (s_wallpaperImage) {
+        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(s_wallpaperImage);
+        if (visual) {
+            visual.Properties().InsertVector3(L"Translation", { -offsetX, -offsetY, 0.0f });
+        }
+    }
+    if (s_wallpaperClip && !proposedRect) {
+        s_wallpaperClip.Rect({0.0f, 0.0f, windowW, windowH});
+    }
+}
+}
+
 void ApplyModernWindowChrome(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     BOOL dark = TRUE;
@@ -33081,6 +33304,10 @@ void ApplyModernWindowChrome(HWND hwnd) {
         DWORD corner = 2;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
                               &corner, sizeof(corner));
+        DWORD backdrop = 2;
+        DwmSetWindowAttribute(hwnd, 38, &backdrop, sizeof(backdrop));
+        MARGINS margins{-1, -1, -1, -1};
+        DwmExtendFrameIntoClientArea(hwnd, &margins);
     }
 }
 
@@ -34717,17 +34944,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     double curScale = GetBarDpiScale();
                     if (s_lastOsScale > 0.0 &&
                         std::abs(curScale - s_lastOsScale) > 0.001) {
-                        Wh_Log(L"Restore: OS scale changed %.3f -> %.3f, restarting topbar thread",
+                        Wh_Log(L"Restore: OS scale changed %.3f -> %.3f, reloading topbar",
                                s_lastOsScale, curScale);
-                        // Full thread restart — see RestartTopBarThreadForScaleChange.
-                        // In-place attempts to reset XAML's cached DPI all
-                        // leave stale state, and some of them (detaching and
-                        // reattaching the DesktopWindowXamlSource) produce a
-                        // non-interactive artifact on the desktop because the
-                        // old island's composition target still holds the
-                        // last frame it painted.
                         RunOnUiThread([] {
-                            try { RestartTopBarThreadForScaleChange(); } catch (...) {}
+                            try { ReloadTopBarFully(); } catch (...) {}
                         });
                     }
                     s_lastOsScale = curScale;
