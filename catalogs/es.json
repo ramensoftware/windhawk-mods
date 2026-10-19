@@ -11883,6 +11883,30 @@
         "version": "1.0.0"
       }
     },
+    "realtime-cast-shadow-wallpaper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792429441000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792429441000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-lopengl32 -lgdi32 -luser32 -lshell32 -ldwmapi -lgdiplus -lole32 -luuid -lwtsapi32",
+        "description": "A light moves over your desktop and every open window casts a soft, real-time shadow on the wallpaper",
+        "github": "https://github.com/haven80",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Real-time Cast Shadow Wallpaper",
+        "version": "1.0.3"
+      }
+    },
     "recycle-bin-original-names": {
       "details": {
         "defaultSorting": 450,

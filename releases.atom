@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-19T10:00:28.000Z</updated>
+    <updated>2026-10-19T17:04:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Real-time Cast Shadow Wallpaper 1.0.3]]></title>
+        <id>https://windhawk.net/mods/realtime-cast-shadow-wallpaper#b2cec81257f082e05d00a6aa292494dde3ad40e2</id>
+        <link href="https://windhawk.net/mods/realtime-cast-shadow-wallpaper"/>
+        <updated>2026-10-19T17:04:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="realtimecastshadowwallpaper">Real-time Cast Shadow Wallpaper</h1>
+<p>Turns the desktop into a lit surface: a light source moves over your wallpaper
+and every visible window casts a projected shadow on it, updated in real time
+as you move, resize and drag windows.</p>
+<p><img src="https://i.imgur.com/hfuF3Na.gif" alt="Preview" /></p>
+<p><a href="https://i.imgur.com/5f4m5cO.mp4">Watch the full-quality video</a></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Light motion</strong>: follow the mouse, wander randomly, orbit the screen, sweep
+across it like the sun, follow the real time of day, or stay fixed.</li>
+<li><strong>Light presets</strong>: warm lamp, daylight, flickering candle, moonlight, neon,
+or fully custom color, intensity, radius and height.</li>
+<li><strong>Shadow presets</strong>: crisp, soft, diffuse, long (dramatic), subtle, or custom
+opacity, softness and length.</li>
+<li><strong>Anchored shadows</strong>: the shadow stays attached to the window base and
+stretches away from the light, with a sharp contact edge and a soft tail.</li>
+<li><strong>Contact shadow</strong>: a soft darkening right around each window that grounds
+it on the desktop, independent of the light.</li>
+<li><strong>Shadow color</strong>: neutral, cool, warm or violet shadows.</li>
+<li><strong>Shadows on other windows</strong> (optional): windows also shade the
+applications below them, following the real window stacking order.</li>
+<li><strong>Background</strong>: your current Windows wallpaper (per monitor, slideshows
+included), a custom image, or a plain dark surface; optional vignette.</li>
+<li>Multi-monitor support, pause on fullscreen apps, smooth tracking while
+dragging windows.</li>
+</ul>
+<h2 id="lightmotion">Light motion</h2>
+<p>| Motion | Behavior |
+|---|---|
+| Follow the mouse | The light follows the cursor across all monitors. |
+| Wander | Smooth random paths, independent on each monitor. |
+| Orbit | A slow elliptical orbit around the center of each monitor. |
+| Sun arc | Rises on the left, crosses the top, sets on the right, then repeats. Shadows are long and the light warm near the horizon. |
+| Time of day | Like the sun arc, but driven by your clock: sunrise at 6:00, noon at the top, sunset at 20:00, then a dim moonlight arc at night. |
+| Fixed point | Pinned to a position in % of the monitor; values below 0 or above 100 place it off-screen for long, raking shadows. |</p>
+<p>"Speed" applies to wander, orbit and sun arc.</p>
+<h2 id="presets">Presets</h2>
+<p>Choosing a light or shadow preset overrides the matching custom values; pick
+"Custom" to use your own. Shadow presets express length relative to the light
+height, so they look consistent with every light preset.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows are approximated as rounded rectangles with a common virtual height:
+shadows don't follow transparency or irregular window shapes.</li>
+<li>Shadows are drawn on the wallpaper behind the desktop icons. Shadows on
+other windows use a click-through overlay that never covers the window
+casting them; the taskbar, menus and tooltips are left untouched. This
+option adds some CPU/GPU load.</li>
+<li>Rendering uses OpenGL (GLSL 1.20). On current Windows 11 desktops, frames
+are only redrawn when the light, the windows or the background change, so a
+still desktop costs almost nothing (the flickering candle redraws
+continuously). On older desktop layouts every frame is drawn, up to the FPS
+limit.</li>
+<li>Rendering pauses while the session is locked, the display is off, or every
+monitor shows a fullscreen app. If the desktop isn't ready yet (at sign-in,
+or while Explorer restarts), the mod waits and attaches when it appears.</li>
+<li>The Windows wallpaper setting is never modified, Explorer's own windows are
+never reordered, and nothing is written to the registry. Disabling the mod
+removes everything it created.</li>
+<li>Disable other animated-wallpaper mods while using this one.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Screen Date and Time Format 1.0]]></title>
         <id>https://windhawk.net/mods/lockscreen-datetime-format#16df35e500e1bc07d675ab1dba52ded2d1cc499f</id>
@@ -1190,54 +1261,6 @@ with or endorsed by Mawaqit.</p>]]></content>
         <author>
             <name>HHeitlager</name>
             <uri>https://github.com/hheitlager</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Maximized Window Margins 1.0]]></title>
-        <id>https://windhawk.net/mods/maximized-window-margins#b4d6b87f9febd496839055ee71c41c549a05582d</id>
-        <link href="https://windhawk.net/mods/maximized-window-margins"/>
-        <updated>2026-10-16T07:01:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="maximizedwindowmargins">Maximized Window Margins</h1>
-<p><img src="https://raw.githubusercontent.com/mariogomesbarbosa/window-maximized-margin/main/images/preview.png" alt="Screenshot" /></p>
-<p>Maximized windows no longer touch the screen edges. A configurable gap is kept
-on every side, which pairs nicely with a floating dock (for example the
-<em>Luminosity</em> or <em>DockLike</em> themes of <strong>Windows 11 Taskbar Styler</strong>).</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod runs as a <em>tool mod</em> (in its own <code>windhawk.exe</code> process, nothing is
-injected into other programs). For each monitor and each edge with a margin
-greater than zero, it registers an invisible
-<a href="https://learn.microsoft.com/windows/win32/shell/application-desktop-toolbars">AppBar</a>
-of the configured thickness. Windows then reduces the work area, and every
-maximized window fits inside it.</p>
-<ul>
-<li>Margins are set in DIPs and scaled per monitor DPI.</li>
-<li>AppBars are registered again when Explorer restarts, when displays change,
-and when the taskbar or another AppBar moves.</li>
-<li>Disabling the mod restores the original work area immediately.</li>
-</ul>
-<h2 id="sideeffects">Side effects</h2>
-<p>Since the work area itself shrinks, the gap also applies to:</p>
-<ul>
-<li>Snap / Snap Layouts (snapped windows keep the margin too).</li>
-<li>Desktop icon placement.</li>
-<li>Anything else that positions itself from the work area, such as pop-ups and
-notifications that apps place in a corner of the screen.</li>
-</ul>
-<p>Real fullscreen apps (games, videos, F11) cover the whole monitor and are not
-affected.</p>
-<h2 id="tips">Tips</h2>
-<ul>
-<li>With a floating dock, the taskbar still reserves its own height at the
-bottom. The bottom margin is added on top of it, so a small value (0–10)
-is usually enough.</li>
-<li>Maximized windows have square corners in Windows 11. To round them, install
-<em>Custom Window Corner Radius</em> and set "Rounded corners for maximized and
-snapped windows" to "Round snapped and maximized windows". The "Corner
-radius" setting of that mod then applies to maximized windows too.</li>
-</ul>]]></content>
-        <author>
-            <name>Mário Barbosa</name>
-            <uri>https://github.com/mariogomesbarbosa</uri>
         </author>
     </entry>
 </feed>
