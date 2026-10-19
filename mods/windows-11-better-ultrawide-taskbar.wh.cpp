@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.80
+// @version         0.3.81
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -6771,7 +6771,9 @@ float4 ps(VertexOutput input) : SV_Target {
             for (auto const& source : added) CloseSource(source);
             return;
         }
-        for (auto const& source : removed) CloseSource(source);
+        // A removed source's window may already be destroyed, and the capture
+        // server can leave that StopCapture unanswered (issue 16).
+        RetireSources(std::move(removed));
         for (auto const& source : added) {
             if (StartSource(source)) continue;
             source->active.store(false, std::memory_order_release);
