@@ -3770,18 +3770,24 @@ void PlaceThumbnailWindows() {
 }
 
 // Finds the thumbnails' windows (made the first time they show: the classic
-// one, and the XAML ones of newer Windows 11 builds) and watches them.
+// one, and the XAML ones of newer Windows 11 builds) and watches them. Taskbar
+// thread only.
 void WatchThumbnails() {
     // (Not the "_WASDK" XAML window: the desktop's context menu shows in
-    // it.)
+    // it. Only the ones of this thread, the taskbar's, which shows the
+    // thumbnails: Alt+Tab, Task View and the desktops' switcher show in
+    // windows of the same class on a thread of their own, and
+    // PlaceThumbnails reads the taskbar thread's g_grownTaskbars.)
     for (PCWSTR className :
          {L"TaskListThumbnailWnd", L"XamlExplorerHostIslandWindow"}) {
         HWND thumbnails = nullptr;
         while ((thumbnails = FindWindowEx(nullptr, thumbnails, className,
                                           nullptr))) {
             DWORD processId = 0;
-            GetWindowThreadProcessId(thumbnails, &processId);
+            const DWORD threadId =
+                GetWindowThreadProcessId(thumbnails, &processId);
             if (processId != GetCurrentProcessId() ||
+                threadId != GetCurrentThreadId() ||
                 std::find(g_thumbnailWindows.begin(), g_thumbnailWindows.end(),
                           thumbnails) != g_thumbnailWindows.end()) {
                 continue;
@@ -4112,6 +4118,12 @@ SRWLOCK g_overlayIconsLock = SRWLOCK_INIT;
 std::vector<OverlayIcon> g_overlayIcons;
 unsigned g_overlaySerial = 0;
 
+// Whether an overlay's text has a count in it (like "0 notifications"):
+// apps also show their status with one (presence, "recording"), without.
+bool OverlayHasCount(const std::wstring& description) {
+    return description.find_first_of(L"0123456789") != std::wstring::npos;
+}
+
 // The count an overlay's text gives (its first number, "99+" as 99), or 0.
 int OverlayCount(const std::wstring& description) {
     const size_t digit = description.find_first_of(L"0123456789");
@@ -4119,14 +4131,15 @@ int OverlayCount(const std::wstring& description) {
                                        : _wtoi(description.c_str() + digit);
 }
 
-// The count an app's overlay icon shows. Discord's text ("N notifications")
-// says the count before the newest one (its first notification comes with
-// "0 notifications", its picture showing 1): one more.
+// The count an app's overlay icon shows. Discord's text ("N notifications",
+// in its own language) says the count before the newest one (its first
+// notification comes with "0 notifications", its picture showing 1): one
+// more.
 int OverlayShownCount(const OverlayIcon& overlay) {
     const int count = OverlayCount(overlay.description);
-    const bool discord =
-        overlay.icon && StrStrI(overlay.appId.c_str(), L"Discord") &&
-        overlay.description.ends_with(L" notifications");
+    const bool discord = overlay.icon &&
+                         StrStrI(overlay.appId.c_str(), L"Discord") &&
+                         OverlayHasCount(overlay.description);
     return discord ? count + 1 : count;
 }
 
@@ -4174,7 +4187,7 @@ void PublishBadgeApps() {
         }
     }
     // The apps' overlay icons too (their windows still open), with the count
-    // their text gives.
+    // their text gives: only the ones with a count (not a status).
     AcquireSRWLockExclusive(&g_overlayIconsLock);
     std::erase_if(g_overlayIcons, [](const OverlayIcon& overlay) {
         if (IsWindow(overlay.wnd)) {
@@ -4185,6 +4198,7 @@ void PublishBadgeApps() {
     });
     for (const auto& overlay : g_overlayIcons) {
         if (overlay.icon && !overlay.appId.empty() &&
+            OverlayHasCount(overlay.description) &&
             std::find(ids.begin(), ids.end(), overlay.appId) == ids.end()) {
             apps.push_back(overlay.appId + L"\t" +
                            std::to_wstring(OverlayShownCount(overlay)));
@@ -5402,8 +5416,11 @@ int BigIconPixels(int pixels) {
                       kBigIconStep, 256);
 }
 
-[[clang::no_destroy]] std::vector<std::pair<std::wstring, Media::ImageSource>>
-    g_bigIcons;
+// The apps' pictures by app and size, as XAML pictures (made at their first
+// use, freed whole while unloading, see FreeXamlGlobals). Taskbar thread
+// only.
+using DockPictures = std::vector<std::pair<std::wstring, Media::ImageSource>>;
+[[clang::no_destroy]] std::optional<DockPictures> g_bigIcons;
 
 // A 32-bit picture for XAML (nullptr if it can't be read).
 Media::ImageSource PictureFromBitmap(HBITMAP bitmap) {
@@ -5452,15 +5469,9 @@ Media::ImageSource PictureFromBitmap(HBITMAP bitmap) {
 }
 
 // The apps' overlay icons as XAML pictures, by app, the picture they come
-// from (its serial, see OverlayIcon) and their size. Taskbar thread only.
-[[clang::no_destroy]] std::vector<std::pair<std::wstring, Media::ImageSource>>
-    g_overlaySources;
-
-// Whether an overlay's text has a count in it (like "0 notifications"; see
-// OverlayCount).
-bool OverlayHasCount(const std::wstring& description) {
-    return description.find_first_of(L"0123456789") != std::wstring::npos;
-}
+// from (its serial, see OverlayIcon) and their size (like g_bigIcons).
+// Taskbar thread only.
+[[clang::no_destroy]] std::optional<DockPictures> g_overlaySources;
 
 // A red bubble with `count` (a smaller dot in its corner for 0), `pixels`
 // wide, for an app's overlay icon the app draws small (see UseBigOverlay).
@@ -5590,7 +5601,9 @@ void UseBigOverlay(DockIcon& icon,
                              std::to_wstring(own ? 0 : pixels);
     Media::ImageSource big{nullptr};
     bool made = false;
-    for (const auto& [id, source] : g_overlaySources) {
+    auto& sources =
+        g_overlaySources ? *g_overlaySources : g_overlaySources.emplace();
+    for (const auto& [id, source] : sources) {
         if (id == key) {
             big = source;
             made = true;
@@ -5625,12 +5638,11 @@ void UseBigOverlay(DockIcon& icon,
         }
         // (A few sizes of a few apps' kept.)
         constexpr size_t kMaxOverlaySources = 16;
-        if (g_overlaySources.size() >= kMaxOverlaySources) {
-            g_overlaySources.erase(
-                g_overlaySources.begin(),
-                g_overlaySources.begin() + kMaxOverlaySources / 2);
+        if (sources.size() >= kMaxOverlaySources) {
+            sources.erase(sources.begin(),
+                          sources.begin() + kMaxOverlaySources / 2);
         }
-        g_overlaySources.push_back({key, big});
+        sources.push_back({key, big});
     }
     const auto source = image.Source();
     if (!big || !source || source == big ||
@@ -5793,7 +5805,8 @@ void StopBigIcons() {
 Media::ImageSource BigAppIcon(const std::wstring& appId, int pixels) {
     pixels = BigIconPixels(pixels);
     const std::wstring key = std::to_wstring(pixels) + L"|" + appId;
-    for (const auto& [id, source] : g_bigIcons) {
+    auto& icons = g_bigIcons ? *g_bigIcons : g_bigIcons.emplace();
+    for (const auto& [id, source] : icons) {
         if (id == key) {
             return source;
         }
@@ -5810,11 +5823,10 @@ Media::ImageSource BigAppIcon(const std::wstring& appId, int pixels) {
     }
     // The oldest go past a limit (the icons showing keep theirs).
     constexpr size_t kMaxBigIcons = 64;
-    if (g_bigIcons.size() >= kMaxBigIcons) {
-        g_bigIcons.erase(g_bigIcons.begin(),
-                         g_bigIcons.begin() + kMaxBigIcons / 2);
+    if (icons.size() >= kMaxBigIcons) {
+        icons.erase(icons.begin(), icons.begin() + kMaxBigIcons / 2);
     }
-    g_bigIcons.push_back({key, source});
+    icons.push_back({key, source});
     return source;
 }
 
@@ -6331,9 +6343,8 @@ BOOL CALLBACK ApplyToTaskbarWindowProc(HWND hWnd, LPARAM) {
 void FreeXamlGlobals() {
     g_otherDocks.clear();
     g_dockShelf = {};
-    std::vector<std::pair<std::wstring, Media::ImageSource>>().swap(g_bigIcons);
-    std::vector<std::pair<std::wstring, Media::ImageSource>>().swap(
-        g_overlaySources);
+    g_bigIcons.reset();
+    g_overlaySources.reset();
     // (The overlay icons' copies too.)
     AcquireSRWLockExclusive(&g_overlayIconsLock);
     for (const auto& overlay : g_overlayIcons) {
@@ -7197,10 +7208,19 @@ void LogKeptDown() {
     }
 }
 
+// TrayUI::Unhide's request (TrayCommon::UnhideRequest) for an app asking for
+// attention: measured, the one that comes right after a flash.
+constexpr int kUnhideForAttention = 17;
+// When the main taskbar was last asked to show itself for something else
+// (see TrayUI_Unhide_Hook), and for how long that wins.
+std::atomic<double> g_otherUnhideAt{-100.0};
+constexpr double kOtherUnhideSeconds = 1.0;
+
 // Unless the whole dock is wanted, the taskbar doesn't show itself when an
 // app asks for attention: only the app's icon peeks out (or nothing). The
 // transparent taskbar never does (its button shows it, once up). Not when
-// the user is reaching for it.
+// the user is reaching for it, nor when it was just asked up for something
+// else (like Start opening).
 bool KeepsDownForAttention(HWND hTaskbarWnd) {
     // (A button asking for attention counts too: an app like Discord gets
     // the taskbar up before its flash reaches the mod.)
@@ -7209,16 +7229,20 @@ bool KeepsDownForAttention(HWND hTaskbarWnd) {
            (NowSeconds() - g_lastFlashTime < kAttentionShowWindow ||
             std::any_of(g_dockIcons.begin(), g_dockIcons.end(),
                         [](const DockIcon& icon) { return icon.attention; })) &&
+           NowSeconds() - g_otherUnhideAt >= kOtherUnhideSeconds &&
            !UserIsReachingForTaskbar(hTaskbarWnd);
 }
 
-// The main taskbar asked to show itself, for whatever reason: not for an app
-// asking for attention (see KeepsDownForAttention).
+// The main taskbar asked to show itself: not for an app asking for attention
+// (see KeepsDownForAttention); any other reason goes through, and its show
+// too (see TrayUI_SlideWindow_Hook).
 using TrayUI_Unhide_t = void(WINAPI*)(void* pThis, int flags, int request);
 TrayUI_Unhide_t TrayUI_Unhide_Original;
 void WINAPI TrayUI_Unhide_Hook(void* pThis, int flags, int request) {
-    if (HWND taskbar = FindCurrentProcessTaskbarWnd();
-        taskbar && KeepsDownForAttention(taskbar)) {
+    if (request != kUnhideForAttention) {
+        g_otherUnhideAt = NowSeconds();
+    } else if (HWND taskbar = FindCurrentProcessTaskbarWnd();
+               taskbar && KeepsDownForAttention(taskbar)) {
         LogKeptDown();
         return;
     }
@@ -9711,8 +9735,12 @@ std::wstring TaskbarAppIdOfWindow(HWND hWnd) {
 }
 
 // An app's overlay icon set or cleared (see OverlayIcon): its picture copied
-// (the taskbar keeps its own).
+// (the taskbar keeps its own). Not while unloading: the copies are freed then
+// (see FreeXamlGlobals), and the hooks stay until the unload ends.
 void KeepOverlayIcon(HWND hWnd, HICON icon) {
+    if (g_unloading) {
+        return;
+    }
     HICON copy = icon ? CopyIcon(icon) : nullptr;
     int size = 0;
     ICONINFO info{};
@@ -9768,8 +9796,12 @@ void WINAPI CTaskBand__HandleOverlayIcon_Hook(void* pThis,
     CTaskBand__HandleOverlayIcon_Original(pThis, hWnd, icon);
 }
 
-// An app's overlay icon's text set (it may come before the picture).
+// An app's overlay icon's text set (it may come before the picture). Not
+// while unloading (see KeepOverlayIcon).
 void KeepOverlayText(HWND hWnd, PCWSTR text) {
+    if (g_unloading) {
+        return;
+    }
     AcquireSRWLockExclusive(&g_overlayIconsLock);
     auto it = std::find_if(
         g_overlayIcons.begin(), g_overlayIcons.end(),
@@ -10103,32 +10135,86 @@ BOOL CALLBACK FindAppIdWindowProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+// The program an app's window gives the taskbar to start it again
+// (PKEY_AppUserModel_RelaunchCommand), when it's a file that's there. The
+// command may be a path with spaces and no quotes, like Steam's
+// "C:\Program Files (x86)\Steam\steam.exe": the whole of it first.
+std::wstring WindowRelaunchProgram(HWND window) {
+    auto isProgram = [](const std::wstring& path) {
+        const DWORD attributes =
+            IsLocalDrivePath(path) ? GetFileAttributes(path.c_str())
+                                   : INVALID_FILE_ATTRIBUTES;
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+               !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+    };
+    const std::wstring command = GetWindowAppText(window, 2);
+    if (command.empty() || isProgram(command)) {
+        return command;
+    }
+    std::wstring program;
+    int count = 0;
+    if (LPWSTR* parts = CommandLineToArgvW(command.c_str(), &count)) {
+        if (count > 0 && isProgram(parts[0])) {
+            program = parts[0];
+        }
+        LocalFree(parts);
+    }
+    return program;
+}
+
 // The icon an app's window gives the taskbar for its own ID (its
 // PKEY_AppUserModel_RelaunchIconResource, "path,index"), like the profile's
-// picture of a browser's second profile, which has no Start menu entry.
+// picture of a browser's second profile, which has no Start menu entry; or,
+// without one (like Steam's window), its relaunch program's or its process
+// file's, as big as asked (the taskbar's own is small).
 HBITMAP WindowRelaunchIconBitmap(const std::wstring& appId, int size) {
     std::pair<const std::wstring*, HWND> search{&appId, nullptr};
     EnumWindows(FindAppIdWindowProc, reinterpret_cast<LPARAM>(&search));
-    const std::wstring resource =
-        search.second ? GetWindowAppText(search.second, 3) : std::wstring();
-    const size_t comma = resource.rfind(L',');
-    if (comma == std::wstring::npos || comma == 0) {
+    if (!search.second) {
         return nullptr;
     }
-    WCHAR path[MAX_PATH];
-    if (!ExpandEnvironmentStrings(resource.substr(0, comma).c_str(), path,
-                                  ARRAYSIZE(path)) ||
-        !IsLocalDrivePath(path)) {
+    const std::wstring resource = GetWindowAppText(search.second, 3);
+    if (const size_t comma = resource.rfind(L',');
+        comma != std::wstring::npos && comma != 0) {
+        WCHAR path[MAX_PATH];
+        HICON icon = nullptr;
+        if (ExpandEnvironmentStrings(resource.substr(0, comma).c_str(), path,
+                                     ARRAYSIZE(path)) &&
+            IsLocalDrivePath(path) &&
+            PrivateExtractIcons(path, _wtoi(resource.c_str() + comma + 1),
+                                size, size, &icon, nullptr, 1, 0) == 1 &&
+            icon) {
+            HBITMAP bitmap = IconBitmap(icon);
+            DestroyIcon(icon);
+            return bitmap;
+        }
+    }
+    std::wstring program = WindowRelaunchProgram(search.second);
+    // (Nor a program: its process's file. Not a packaged app's: its window
+    // may be the frame of another process.)
+    DWORD processId = 0;
+    if (program.empty() && appId.find(L'!') == std::wstring::npos &&
+        GetWindowThreadProcessId(search.second, &processId)) {
+        if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                         FALSE, processId)) {
+            WCHAR path[MAX_PATH];
+            DWORD length = ARRAYSIZE(path);
+            if (QueryFullProcessImageName(process, 0, path, &length)) {
+                program = path;
+            }
+            CloseHandle(process);
+        }
+    }
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    HBITMAP bitmap = nullptr;
+    if (program.empty() ||
+        FAILED(SHCreateItemFromParsingName(program.c_str(), nullptr,
+                                           IID_PPV_ARGS(factory.put()))) ||
+        FAILED(factory->GetImage({size, size},
+                                 SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
+                                 &bitmap))) {
         return nullptr;
     }
-    HICON icon = nullptr;
-    if (PrivateExtractIcons(path, _wtoi(resource.c_str() + comma + 1), size,
-                            size, &icon, nullptr, 1, 0) != 1 ||
-        !icon) {
-        return nullptr;
-    }
-    HBITMAP bitmap = IconBitmap(icon);
-    DestroyIcon(icon);
     return bitmap;
 }
 
@@ -62237,32 +62323,9 @@ std::wstring FocusedAppKey(HWND window, std::wstring* name) {
             return key;
         }
     }
-    // (The command may be a path with spaces and no quotes, like Steam's
-    // "C:\Program Files (x86)\Steam\steam.exe": the whole of it first; a
-    // program file that's there only.)
-    std::wstring program;
-    auto isProgram = [](const std::wstring& path) {
-        const DWORD attributes =
-            IsLocalDrivePath(path) ? GetFileAttributes(path.c_str())
-                                   : INVALID_FILE_ATTRIBUTES;
-        return attributes != INVALID_FILE_ATTRIBUTES &&
-               !(attributes & FILE_ATTRIBUTE_DIRECTORY);
-    };
-    if (const std::wstring command = GetWindowAppText(window, 2);
-        !command.empty()) {
-        if (isProgram(command)) {
-            program = command;
-        } else {
-            int count = 0;
-            if (LPWSTR* parts = CommandLineToArgvW(command.c_str(), &count)) {
-                if (count > 0 && isProgram(parts[0])) {
-                    program = parts[0];
-                }
-                LocalFree(parts);
-            }
-        }
-    }
-    if (!program.empty()) {
+    // (Its relaunch program, see WindowRelaunchProgram.)
+    if (const std::wstring program = WindowRelaunchProgram(window);
+        !program.empty()) {
         *name = GetWindowAppText(window, 4);
         if (!name->empty() && (*name)[0] == L'@') {
             WCHAR resolved[256];
