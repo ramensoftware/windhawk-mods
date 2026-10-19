@@ -2,7 +2,7 @@
 // @id              lockscreen-datetime-format
 // @name            Lock Screen Date and Time Format
 // @description     Changes how the lock screen shows the time and date: vertical or horizontal clock, 12/24-hour, custom separator, and date formats
-// @version         1.0
+// @version         1.0.1
 // @author          grn15RenS
 // @github          https://github.com/grn15RenS
 // @donateUrl       https://ko-fi.com/grn15rens
@@ -28,7 +28,7 @@ Example (Windows default on the left, this mod on the right):
 
 | Before | After |
 |--------|-------|
-| ![Before](https://i.imgur.com/vwH10YW.png) | ![After](https://i.imgur.com/2kZgtnm.png) |
+| ![Before](https://i.imgur.com/RacefWU.jpeg) | ![After](https://i.imgur.com/X7FyLkG.jpeg) |
 
 The clock keeps updating on its own, and choosing the "Windows default"
 options restores the original text.
@@ -53,7 +53,7 @@ options restores the original text.
 
   Example with an emoji as the separator:
 
-  ![Clock with an emoji as the separator](https://i.imgur.com/HDPAl63.png)
+  ![Clock with an emoji as the separator](https://i.imgur.com/BgbWJn5.jpeg)
 
 - **Hour format**: follow the Windows short time format (the one the lock
   screen shows), or force 24-hour or 12-hour.
@@ -100,22 +100,30 @@ AM/PM is placed after the last unit shown: the minutes, or the seconds when
 ## Styling
 
 This mod does not change fonts, sizes, colors or positions. For that, use the
-**Windows 11 Start Menu Styler** mod with `LockApp.exe` added to its process
+[Windows 11 Start Menu Styler](https://windhawk.net/mods/windows-11-start-menu-styler) mod by [m417z](https://github.com/m417z) with `LockApp.exe` added to its process
 inclusion list. For example:
 
 ```
 - target: StackPanel#TimePanel > TextBlock#Time
   styles:
-    - FontSize=350
+    - FontFamily=Plus Jakarta Sans ExtraBold
+    - FontSize=300
     - FontWeight=Bold
-- target: TextBlock#Date
+    - CharacterSpacing=-60
+    - Opacity=0.7
+    - RenderTransform:=<TranslateTransform X="0" Y="-80"/>
+- target: StackPanel#TimeAndDatePanel > TextBlock#Date
   styles:
-    - FontSize=28
+    - FontFamily=SF Pro
+    - FontWeight=Light
+    - FontSize=30
+    - Margin=0,-100,0,0
 ```
+Note: `Plus Jakarta Sans` and `SF Pro` are not bundled with Windows and have to be installed separately, otherwise Windows falls back to a default font. Replace them with any font you have installed.
 
 Example with this mod and the Styler together:
 
-![Lock screen using this mod together with Windows 11 Start Menu Styler](https://i.imgur.com/FobjRr6.png)
+![Lock screen using this mod together with Windows 11 Start Menu Styler](https://i.imgur.com/UvXQ5jN.jpeg)
 
 Making the clock font bigger usually moves the clock; adjust a
 `TranslateTransform` in the Styler if it ends up off-center.
@@ -157,6 +165,14 @@ for it to move and forcing a width could get it cut off.
 If nothing happens, open the Windhawk log for this mod and lock the screen
 with Win+L. You should see `Hook installed on UI thread`, `Clock format
 attached` and `Date format attached`.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![otherscreenshot1](https://i.imgur.com/deNfP1g.jpeg) | ![otherscreenshot4](https://i.imgur.com/DhXtIHB.jpeg) |
+| ![otherscreenshot2](https://i.imgur.com/QlKQbhb.jpeg) | ![otherscreenshot5](https://i.imgur.com/L1ORUbh.jpeg) |
+| ![otherscreenshot3](https://i.imgur.com/SHiTh3N.jpeg) | ![otherscreenshot6](https://i.imgur.com/Qb4IN5i.jpeg) |
 */
 // ==/WindhawkModReadme==
  

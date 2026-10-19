@@ -8991,7 +8991,7 @@
         "ratingUsers": 0,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792404028000,
+        "updated": 1792442479000,
         "users": 0
       },
       "metadata": {
@@ -9008,7 +9008,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Lock Screen Date and Time Format",
-        "version": "1.0"
+        "version": "1.0.1"
       }
     },
     "logon-logoff-shutdown-sounds": {

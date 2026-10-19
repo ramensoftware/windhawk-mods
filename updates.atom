@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-19T20:02:45.000Z</updated>
+    <updated>2026-10-19T20:41:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Date and Time Format 1.0.1]]></title>
+        <id>https://windhawk.net/mods/lockscreen-datetime-format#df8be5c8cee075752072f68c2c0638eb077d71e8</id>
+        <link href="https://windhawk.net/mods/lockscreen-datetime-format"/>
+        <updated>2026-10-19T20:41:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Readme update: replaced images that failed to load, updated the Styling example, and added a Screenshots section.</li>
+</ul>]]></content>
+        <author>
+            <name>grn15RenS</name>
+            <uri>https://github.com/grn15RenS</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Keep Windows Clear of Taskbar 1.0.0]]></title>
         <id>https://windhawk.net/mods/keep-windows-clear-of-taskbar#ebdfb4280309ef0023530a596f94da19a44e6447</id>
@@ -614,21 +627,6 @@ combine" but blind to combined groups.</li>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.7]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#a395f6d754b9e2a54ef68b12ecc2308d56f3d7eb</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-10-18T13:02:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>App launch animation: Tauri and Slint (and other winit / GPU-rendered) apps no longer flash on screen before the genie. Launching windows are now hidden with a DWM cloak instead of layered transparency.</li>
-<li>Firefox-family browsers keep the previous launch behavior for their first window.</li>
-<li>Excluded programs are no longer briefly hidden on launch.</li>
-</ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
