@@ -3,10 +3,10 @@
 // @name            Lunar & Holiday Calendar
 // @name:zh-CN      农历与节假日日历
 // @name:vi-VN      Lịch âm & ngày lễ
-// @description     Write your own text and colour into the Windows 11 calendar flyout: the holidays of an iCalendar (.ics) feed you supply, marked by rules you write yourself, and the Vietnamese lunar calendar in the cells if you ask for it
-// @description:zh-CN 在 Windows 11 日历里写你自己的文字和颜色：按你自己写的规则标记你填的 ICS 订阅源里的节假日，也可以把农历换成越南农历
-// @description:vi-VN Viết chữ và màu của bạn vào bảng lịch Windows 11: ngày lễ từ link iCalendar (.ics) bạn tự nhập, tô màu theo quy tắc bạn tự viết, và có thể hiện lịch âm Việt Nam
-// @version         0.22
+// @description     Write your own text and colour into the Windows 11 calendar: holidays from an iCalendar (.ics) feed, dates matched by your rules, and optionally the Vietnamese lunar calendar
+// @description:zh-CN 在 Windows 11 日历里写自己的文字和颜色：按规则标记 ICS 订阅中的节假日，或直接标记农历/阳历日期；也可以换成越南农历
+// @description:vi-VN Viết chữ và màu vào bảng lịch Windows 11: ngày lễ từ link iCalendar (.ics) hoặc ngày do quy tắc của bạn chọn; có thể hiện lịch âm Việt Nam
+// @version         1.0
 // @author          dcsmf
 // @github          https://github.com/dcsmf
 // @include         ShellExperienceHost.exe
@@ -22,41 +22,44 @@
 
 ![Lunar & Holiday Calendar View](https://i.imgur.com/SBafHNL.png)
 
-Windows 11 的日历（点击任务栏右下角的时间弹出）默认只在日期数字下面显示农历或节气。这个 mod 会把你填的
-节假日数据写进日期格子：哪些日子被标记、标成什么颜色和文字，全由你自己写的规则决定，所以任何国家的节假日
-都能用，不限于中国。
+Windows 11 的日历（点击任务栏右下角的时间弹出）会在日期格里显示农历、节气或节日名。这个 mod 按你写的
+规则，把节假日的文字和颜色写进这一行；也可以直接用规则标记农历或阳历日期。任何国家的订阅源都能用。
 
-- **放假/节日**：默认"休"标到的日子显示节日名（如"国庆节"），蓝色。
-- **调休上班日**：默认"班"标到的日子显示"补班"，红色。
-- 其余日期保持系统原本的农历/节气显示。
+- **默认**：`休` 标到的日子显示节日名（蓝），`班` 标到的日子显示 `补班`（红）。
+- 其他日子保留系统那一行；打开越南农历后显示越南农历日期。
 
 ## 使用前提
 
-mod 是往日期格子里的**第二行**写的，也就是系统显示农历/节气的那一行，所以先把它打开：
+mod 写的是日期格里的**第二行**（通常就是显示农历、节气或节日名的那一行），所以先把它打开：
 
 设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历" → 选中"简体中文（农历）"
 
 不打开这一行，日期格子里往往就没有可写的地方，日历上也看不出标记——越南农历写的也是这一行。
+格子已经有内容、但找不到可用的第二行文本块（不存在或没有文字）时，mod 不会猜别的文本块，直接跳过
+这个格子并在日志里说明。
 
 ## 设置项
 
 | 设置 | 填什么 |
 | --- | --- |
-| 越南农历（替换农历文字） | 打开后每个日期格显示越南农历日期、日历标题显示越南年号。见下文。 |
-| 数据来源 | 你的 `.ics` 订阅地址。**留空（默认）则什么都不显示**，mod 也不会联网。 |
+| 数据来源 | 你的 `.ics` 订阅地址。**留空（默认）则不读取订阅源**；只用日期规则标记时可以不填。 |
 | 刷新间隔（小时） | 隔多久重新下载一次（默认 24 小时）。 |
+| 越南农历（替换农历文字） | 日期格默认显示越南农历；日历顶部的农历日期是中文格式时也改成越南写法。见下文。 |
+| 悬停时显示完整文字 | 鼠标停在有标记的日期上，显示完整名称（或规则写的文字）。名字太长、日期格显示不下时用。 |
 | 高亮规则 | 哪些日子被标记、标成什么颜色和文字。见下文。 |
 | 剔除的文字 | 从事件原文里删掉的那几段文字（默认 `（休）`、`（班）`）。见下文。 |
 
-改规则、改"剔除的文字"都不用重新下载：mod 会拿已经读到的数据按新设置重新标一遍。
+改规则、改"剔除的文字"不会立即重新下载：mod 会拿已经读到的数据按新设置重新标一遍。
 
 ## 越南农历
 
 打开"越南农历（替换农历文字）"后：
 
-- 每个日期格显示当天的越南农历日期，写成 `日/月`（如 `15/8`），闰月写成 `1/2N` 这样。
-- 日历标题的农历日期换成越南的年号写法（如 `15 Tháng 8 Năm Bính Ngọ`）。
-- 日期是离线算出来的（东七区），和"数据来源"无关，不填订阅地址也能用；订阅源照常工作。
+- 日期格默认显示越南农历日期，写成 `日/月`（如 `15/8`），闰月写成 `1/2N`；有规则文字时显示
+  规则文字。
+- 日历顶部的农历日期行是中文格式时，整行换成越南写法：日期、月份和干支年（如
+  `15 Tháng 8 Năm Bính Ngọ`）。
+- 日期离线计算（UTC+7），不依赖订阅源。
 
 越南的节假日不内置在 mod 里：要么订阅源里有，要么用下面的规则标。
 
@@ -67,11 +70,12 @@ mod 是往日期格子里的**第二行**写的，也就是系统显示农历/�
     要找的词：休        颜色：#4EA1FF        显示的文字：{name}
 
 - **要找的词**：只填一个词，它出现在事件文字里就算命中。默认两项是"休"和"班"；填 `*` 是**兜底**：
-  所有没被别的规则命中过的事件都归它——别国的订阅源大多没有"休"/"班"，加一项填 `*` 就能全标上。
-- **颜色**：取色器选一个，或者手填 `#RRGGBB`。**留空则不动颜色**，只换文字。
-- **显示的文字**：`{name}` 是事件原文（再按"剔除的文字"删掉其中你写的部分）；也可以写死一段文字，
-  默认"班"那一项就写着 `补班`。**留空则保留系统原本的农历/节气文字**，只改颜色。
-- **留空的栏表示不动**；从上往下第一条命中的生效。
+  所有没被别的规则命中过的事件都归它，写在哪一项都可以——别国的订阅源大多没有"休"/"班"，
+  加一项填 `*` 就能全标上。
+- **颜色**：`#RRGGBB`；留空不设置颜色。
+- **显示的文字**：`{name}` 是事件原文（先按"剔除的文字"删除）；留空沿用日期格自己的文字
+  （系统那一行，或越南农历日期）。
+- 颜色和文字都留空、或要找的词留空，这一项不生效；第一条命中的生效。
 
 几个例子（每行都是列表里的一项）：
 
@@ -80,7 +84,7 @@ mod 是往日期格子里的**第二行**写的，也就是系统显示农历/�
 | `休` | `#4EA1FF` | `{name}` | 放假的日子显示节日名、蓝色（默认） |
 | `班` | `#FF5A5A` | `补班` | 调休上班的日子显示"补班"、红色（默认） |
 | `*` | `#4EA1FF` | `{name}` | 订阅源里的所有事件都显示原文、蓝色 |
-| `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色，保留原有文字 |
+| `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色，沿用日期格文字 |
 | `nghỉ lễ` | `#FF5A5A` | `{name}` | 越南订阅源里"nghỉ lễ"的日子显示原文、红色 |
 
 ### 用规则标农历日子
@@ -89,48 +93,54 @@ mod 是往日期格子里的**第二行**写的，也就是系统显示农历/�
 
 | 写法 | 意思 |
 | --- | --- |
-| `{lunar: day=15}` | 每个农历月的十五（含闰月） |
-| `{lunar: month=8; day=15}` | 农历八月十五（本气月，不算闰八月十五） |
-| `{lunar: month=8; day=15; leap=true}` | 闰八月十五；`leap=any` 是两个都算 |
-| `{lunar: month=9}` | 农历九月的每一天 |
-| `{solar: month=4; day=30}` | 阳历 4 月 30 日 |
+| `{lunar: d=15}` | 每个农历月的十五（含闰月） |
+| `{lunar: m=8, d=15}` | 农历八月十五（不算闰八月十五） |
+| `{lunar: m=8L, d=15}` | 闰八月十五；也可写 `{lunar: m=8, d=15, leap}` |
+| `{lunar: m=9}` | 农历九月的每一天 |
+| `{solar: m=4, d=30}` | 阳历 4 月 30 日 |
 
-- 键是 `month`、`day`、`leap`，大小写和空格随便写；写错的（不认识的键、月份超过 12、日子超过 30）
-  这一项就什么都不标记，日志里说一次。
+- `m` 月份、`d` 日子，用逗号分隔；顺序、大小写和空格都不影响。
+- `m=8L`，或者加一个 `leap` 字段，表示闰月；写了月份但没加，表示那个号码的本气月。只写
+  `d` 不写月份时，闰月也算。
+- `solar` 没有闰月，不能写 `L` 或 `leap`。
+- 阳历日子可以到 31，农历日子最多 30；写了月份但该月没有这一天（例如 2 月 30 日）也算写法有误。
+- 同一个月份的本气月和闰月都想标，就写两项：`{lunar: m=8, d=15}` 和
+  `{lunar: m=8L, d=15}`。
+- 写法有误（未知键、月份或日子越界、重复字段、没有日期）这一项不生效。
 - 农历日期按哪本历算**看上面那个开关**：开着按越南农历，关着按系统显示的中国农历。
-- 同一天既有订阅源事件又匹配这类规则时，订阅源优先。
-- 这类规则没有事件原文，所以"显示的文字"里写 `{name}` 是空的：想保留农历日期就留空，想显示别的就写死。
-- 一项只能写一个日子，要多个日子就写多项。
+- 同一天有被订阅源规则命中的事件时，订阅源优先；订阅源里没有命中的日子才由这类规则标记。
+- 这类规则没有事件原文，所以 `{name}` 是空的；文字留空就保留原有日期。一项只写一个日期条件。
 
 越南节假日的一组例子（每行都是列表里的一项）：
 
 | 要找的词 | 颜色 | 显示的文字 | 效果 |
 | --- | --- | --- | --- |
-| `{lunar: day=1}` | `#FF5A5A` | （留空） | 每个农历初一，保留农历日期，红色 |
-| `{lunar: day=15}` | `#FF5A5A` | （留空） | 每个农历十五（Rằm），保留农历日期，红色 |
-| `{lunar: month=1; day=1}` | `#E81123` | `Tết Nguyên đán` | 越南春节 |
-| `{lunar: month=3; day=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | 雄王纪念日 |
-| `{lunar: month=5; day=5}` | `#E81123` | `Đoan Ngọ` | 端午节 |
-| `{lunar: month=8; day=15}` | `#E81123` | `Tết Trung thu` | 中秋节 |
-| `{lunar: month=12; day=23}` | `#E81123` | `Ông Táo` | 灶君 |
-| `{solar: month=4; day=30}` | `#E81123` | `Ngày Thống nhất` | 越南统一日 |
-| `{solar: month=9; day=2}` | `#E81123` | `Quốc khánh` | 越南国庆 |
+| `{lunar: d=1}` | `#FF5A5A` | （留空） | 每个农历初一，保留农历日期，红色 |
+| `{lunar: d=15}` | `#FF5A5A` | （留空） | 每个农历十五（Rằm），保留农历日期，红色 |
+| `{lunar: m=1, d=1}` | `#E81123` | `Tết Nguyên đán` | 越南春节 |
+| `{lunar: m=3, d=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | 雄王纪念日 |
+| `{lunar: m=5, d=5}` | `#E81123` | `Đoan Ngọ` | 端午节 |
+| `{lunar: m=8, d=15}` | `#E81123` | `Tết Trung thu` | 中秋节 |
+| `{lunar: m=12, d=23}` | `#E81123` | `Ông Táo` | 灶君 |
+| `{solar: m=4, d=30}` | `#E81123` | `Ngày Thống nhất` | 越南统一日 |
+| `{solar: m=9, d=2}` | `#E81123` | `Quốc khánh` | 越南国庆 |
 
 ## 剔除的文字
 
-事件原文里不想要的那一段，原样写一条，它就从显示的文字里消失（出现几次删几次，写的是什么就删什么
-——括号、空格都算）。默认两条是中文订阅源的标记：
+事件原文里不想要的那一段，原样写一条，它就从显示的文字里消失（出现几次删几次，写什么删什么，
+括号和空格都算）。它只影响显示，不影响规则匹配。默认两条是中文订阅源的标记：
 
 ```
 （休）       国庆节（休）                    显示成  国庆节
-(nghỉ bù)    Giỗ tổ Hùng Vương (nghỉ bù)    显示成  Giỗ tổ Hùng Vương
 ```
 
-把列表清空就什么都不删，`{name}` 显示的就是订阅源原文。
+`（班）` 也一样；如果规则显示固定文字，就显示那段固定文字。其他订阅源可以自己加标记，例如
+`(nghỉ bù)`。默认只列了全角括号；半角 `(休)`、`(班)` 或其他写法自己加一条。清空列表就什么都不删。
+如果整个名字都被删空，这一天只保留颜色或原有日期。
 
 ## 数据来源
 
-mod 不联网、也不内置任何节假日数据，只读你填的那个地址。下面几个都只是示例，mod 不会自己去访问：
+mod 不内置节假日数据，只会请求你填的地址。下面只是示例：
 
 - 苹果 iCloud 中国节假日：`https://p10-calendars.icloud.com/holiday/CN_zh.ics`
 - 苹果 iCloud 越南节假日：`https://p10-calendars.icloud.com/holiday/VN_vi.ics`
@@ -142,7 +152,8 @@ mod 不联网、也不内置任何节假日数据，只读你填的那个地址�
 SUMMARY:春节（休）
 ```
 
-任何 `.ics` 订阅地址都能用。取不到数据时（没填地址、没网、地址失效）日历保持系统原样，不会变成空白。
+常见按日期的 `.ics` 订阅都能用。暂时读不到新数据时，已加载的标记会保留；没有数据时日历仍显示
+系统内容（或越南农历）和日期规则。
 
 ## 致谢
 
@@ -158,47 +169,50 @@ SUMMARY:春节（休）
 
 # Lunar & Holiday Calendar (English)
 
-Writes your own text and colour into the Windows 11 calendar flyout (the one which opens
-when you click the clock on the taskbar): the holidays of the iCalendar feed you enter,
-marked by rules you write yourself - any country's holidays, not only Chinese ones.
+The Windows 11 calendar flyout prints a lunar date, solar term or festival name in each day
+cell. This mod writes holiday text and colour into that line by rules you write; rules can
+also mark a lunar or solar date directly. Feeds from any country work.
 
-- **Days off**: days marked 休 show the name of the holiday (for example `国庆节`), in blue.
-- **Adjusted workdays (调休)**: days marked 班 show `补班`, in red.
-- Every other day keeps the lunar date or the solar term the system prints there.
+- **Default**: days marked `休` show the holiday name in blue; days marked `班` show `补班` in red.
+- Other days keep the system's line; with the Vietnamese lunar calendar on, they show the
+  Vietnamese lunar date.
 
 ## Requirements
 
-The mod writes into the **second line of a day cell**, the one which shows the lunar date
-or the solar term, so that line has to be on:
+The mod writes into the **second line of a day cell** (usually the one which shows the lunar
+date, solar term or festival name), so that line has to be on:
 
 Settings -> Time & language -> Date & time -> "Show additional calendars in the taskbar"
 -> Simplified Chinese (Lunar)
 
 With that line switched off a day cell usually has nothing to write into, and no mark
 shows up on the calendar. The Vietnamese lunar calendar below writes into that same line.
+When a cell already has content but no usable system-named second-line text block (missing or
+empty), the mod skips it instead of guessing at another one and says so in the log.
 
 ## Settings
 
 | Setting | What to fill in |
 | --- | --- |
-| Vietnamese lunar calendar | Every day cell shows the Vietnamese lunar date and the header the Vietnamese name of the year, when this is on. See below. |
-| Data source (ICS) | The address of your `.ics` feed. **Empty by default, and then nothing is shown** and the mod fetches nothing. |
+| Data source (ICS) | The address of your `.ics` feed. **Empty by default, and then no feed is read**; leave it empty if you only mark days with rules. |
 | Refresh interval (hours) | How often the feed is read again (24 h by default). |
+| Vietnamese lunar calendar | Day cells show the Vietnamese lunar date by default; a Chinese lunar date at the top of the calendar is written in Vietnamese too. See below. |
+| Tooltip on hover | The full name (or the text your rule writes) when the pointer rests on a marked day. Useful when a long name does not fit in the cell. |
 | Highlight rules | Which days are marked, in which colour and with which text. See below. |
 | Text to remove | The pieces of the text of an event which are cut off it (default `（休）` and `（班）`). See below. |
 
-Changing the rules, or the text to remove, does not download the feed again: the data
-which was already read is marked again with the new settings.
+Changing the rules or the text to remove does not force a new download: the data already
+read is marked again with the new settings.
 
 ## Vietnamese lunar calendar
 
 With "Vietnamese lunar calendar (replace the lunar text)" on:
 
-- every day cell shows the Vietnamese lunar date of that day, written `day/month` (`15/8`), and
-  `1/2N` in a leap month;
-- the header of the calendar shows the Vietnamese name of the year (`15 Tháng 8 Năm Bính Ngọ`);
-- the dates are calculated offline (the seventh hour east of Greenwich), so this needs no
-  address and the feed above keeps working as it does.
+- a day cell shows the Vietnamese lunar date (`15/8`; `1/2N` in a leap month) unless a rule
+  gives another text;
+- when the lunar date line at the top of the calendar is in the Chinese format, it is written
+  in Vietnamese (day, month and Can Chi year, e.g. `15 Tháng 8 Năm Bính Ngọ`);
+- the dates are calculated offline (UTC+7) and need no feed.
 
 The Vietnamese holidays are not built into the mod: they come from a feed, or from a rule
 written below.
@@ -209,16 +223,12 @@ One item per kind of day, three fields each:
 
     Word: 休        Colour: #4EA1FF        Text: {name}
 
-- **Word**: one word, and a day is marked when it appears in the text of an event. The
-  two default items look for 休 and 班; `*` is the **catch-all**: it takes every event no
-  other rule matched - a feed of another country, whose events carry no 休/班 marker, is
-  one item with `*` away.
-- **Colour**: pick one, or write `#RRGGBB`. **Empty keeps the colour of the cell** and only
-  changes the text.
-- **Text**: `{name}` is the text of the event as it stands (with what "Text to remove" says
-  deleted from it); a fixed text works too - the default 班 item says `补班`. **Empty keeps
-  the lunar text of the system** and only changes the colour.
-- A field left empty is left alone, and the first rule which matches a day marks it.
+- **Word**: one word; an event is marked when its text contains it. A `*` rule takes every
+  event no other rule matched, wherever it appears in the list.
+- **Colour**: `#RRGGBB`; empty sets no colour.
+- **Text**: `{name}` is the event text (after "Text to remove"); empty uses the cell's own
+  line (the system line, or the Vietnamese date).
+- A rule with no word, or with neither colour nor text, does nothing. The first match wins.
 
 A few examples, each of them one item of the list:
 
@@ -227,7 +237,7 @@ A few examples, each of them one item of the list:
 | `休` | `#4EA1FF` | `{name}` | a day off shows the name of the holiday, in blue (default) |
 | `班` | `#FF5A5A` | `补班` | an adjusted workday shows `补班`, in red (default) |
 | `*` | `#4EA1FF` | `{name}` | every event of the feed shows its own text, in blue |
-| `祝日` | `#E81123` | (empty) | 祝日 of a Japanese feed is coloured, its own text kept |
+| `祝日` | `#E81123` | (empty) | 祝日 of a Japanese feed is coloured, the cell text kept |
 | `nghỉ lễ` | `#FF5A5A` | `{name}` | days of a Vietnamese feed which say `nghỉ lễ`, in red |
 
 ### Marking a day of the calendar
@@ -236,55 +246,61 @@ A few examples, each of them one item of the list:
 
 | What to write | What it asks for |
 | --- | --- |
-| `{lunar: day=15}` | the fifteenth day of every lunar month, leap months included |
-| `{lunar: month=8; day=15}` | the fifteenth of the eighth month (the ordinary one of that number) |
-| `{lunar: month=8; day=15; leap=true}` | the fifteenth of the leap eighth month; `leap=any` is both |
-| `{lunar: month=9}` | every day of the ninth month |
-| `{solar: month=4; day=30}` | the thirtieth of April |
+| `{lunar: d=15}` | the fifteenth day of every lunar month, leap months included |
+| `{lunar: m=8, d=15}` | the fifteenth of the eighth month (not the leap one) |
+| `{lunar: m=8L, d=15}` | the fifteenth of the leap eighth month; `{lunar: m=8, d=15, leap}` means the same |
+| `{lunar: m=9}` | every day of the ninth month |
+| `{solar: m=4, d=30}` | the thirtieth of April |
 
-- The keys are `month`, `day` and `leap`, in any case and with spaces anywhere. A token which
-  cannot be read - an unknown key, a month past 12, a day past 30 - marks no day at all, and the
-  log says so once.
+- `m` is the month and `d` the day, separated by commas, in any order and with any case.
+- `m=8L`, or a separate `leap` field, asks for the leap month; a month written without either
+  means the ordinary month. A token with only `d` takes leap months too.
+- `solar` has no leap month, so `L` and `leap` are not used there.
+- A solar day goes up to 31 and a lunar one up to 30; a day the named month does not have
+  (30 February, for example) is a typo.
+- To mark both the ordinary and the leap month of the same number, write two items:
+  `{lunar: m=8, d=15}` and `{lunar: m=8L, d=15}`.
+- A token which cannot be read (unknown key, out-of-range value, repeated field, no date)
+  marks no day.
 - Which calendar a lunar day is read in is what the switch above says: the Vietnamese one with
   it on, the Chinese one the cells show with it off.
-- A day an event of the feed covers is settled by that event's rule; a rule of this kind only
-  answers for the days no event names.
-- A rule of this kind has no text of an event to name, so `{name}` in it is empty: leave the text
-  out to keep the lunar date of the day, or write the text you want to read there.
-- One item is one day; several days take several items.
+- A day whose event is matched by a rule of the feed is settled by that rule; a rule of this
+  kind only answers for the days no event rule marks.
+- A rule of this kind has no event text, so `{name}` is empty; an empty text keeps the date.
+  One item is one date pattern.
 
 A set of Vietnamese holidays (each line is one item of the list):
 
 | Word | Colour | Text | What it does |
 | --- | --- | --- | --- |
-| `{lunar: day=1}` | `#FF5A5A` | (empty) | the first day of every lunar month, red, the date kept |
-| `{lunar: day=15}` | `#FF5A5A` | (empty) | every Rằm, red, the date kept |
-| `{lunar: month=1; day=1}` | `#E81123` | `Tết Nguyên đán` | Vietnamese New Year |
-| `{lunar: month=3; day=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | the day of the Hùng kings |
-| `{lunar: month=5; day=5}` | `#E81123` | `Đoan Ngọ` | the mid-year festival |
-| `{lunar: month=8; day=15}` | `#E81123` | `Tết Trung thu` | Mid-Autumn |
-| `{lunar: month=12; day=23}` | `#E81123` | `Ông Táo` | the kitchen god |
-| `{solar: month=4; day=30}` | `#E81123` | `Ngày Thống nhất` | Reunification Day |
-| `{solar: month=9; day=2}` | `#E81123` | `Quốc khánh` | the national day |
+| `{lunar: d=1}` | `#FF5A5A` | (empty) | the first day of every lunar month, red, the date kept |
+| `{lunar: d=15}` | `#FF5A5A` | (empty) | every Rằm, red, the date kept |
+| `{lunar: m=1, d=1}` | `#E81123` | `Tết Nguyên đán` | Vietnamese New Year |
+| `{lunar: m=3, d=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | the day of the Hùng kings |
+| `{lunar: m=5, d=5}` | `#E81123` | `Đoan Ngọ` | the mid-year festival |
+| `{lunar: m=8, d=15}` | `#E81123` | `Tết Trung thu` | Mid-Autumn |
+| `{lunar: m=12, d=23}` | `#E81123` | `Ông Táo` | the kitchen god |
+| `{solar: m=4, d=30}` | `#E81123` | `Ngày Thống nhất` | Reunification Day |
+| `{solar: m=9, d=2}` | `#E81123` | `Quốc khánh` | the national day |
 
 ## Text to remove
 
-A part of the text of an event you do not want to read is written here as it stands, and
-it disappears from the name (every appearance of it, exactly the characters you wrote - a
-bracket or a space included). The two default items are the marker of the Chinese feed:
+A string written here is removed from the displayed event text exactly as written, every time
+it occurs (brackets and spaces included). It changes only the display, not which rule matches.
+The two default items are the Chinese markers:
 
 ```
 （休）       国庆节（休）                     shows  国庆节
-(nghỉ bù)    Giỗ tổ Hùng Vương (nghỉ bù)     shows  Giỗ tổ Hùng Vương
 ```
 
-Empty the list and nothing is taken out, so `{name}` is the text of the feed as it stands.
+`（班）` works the same; a fixed rule text still wins. Add other markers as needed, for
+example `(nghỉ bù)`. The defaults use full-width brackets; add half-width `(休)`, `(班)` or
+another form yourself. Empty the list and nothing is removed.
+If the whole name is removed, only the colour or the date stays.
 
 ## Data source
 
-The mod fetches nothing and ships with no holiday data of its own: it reads the address
-you enter, and nothing else. The addresses below are examples - the mod does not contact
-them by itself:
+The mod ships with no holiday data and requests only the address you enter. Examples:
 
 - Apple iCloud holidays for China: `https://p10-calendars.icloud.com/holiday/CN_zh.ics`
 - Apple iCloud holidays for Vietnam: `https://p10-calendars.icloud.com/holiday/VN_vi.ics`
@@ -296,8 +312,9 @@ An event of a feed looks like this, and **the word of a rule is looked for in it
 SUMMARY:春节（休）
 ```
 
-Any `.ics` address works. A feed which cannot be read (no address, no network, an address
-which is gone) leaves the calendar as the system draws it; it does not turn empty.
+A usual date-based `.ics` feed works. If a refresh fails, marks already loaded stay; with no
+data, the calendar still shows the system content (or the Vietnamese lunar calendar) and the
+date rules.
 
 ## Credits
 
@@ -314,44 +331,47 @@ side of the mod.
 
 # Lịch âm & ngày lễ (Tiếng Việt)
 
-Viết chữ và màu của bạn vào bảng lịch Windows 11 (bấm vào đồng hồ ở khay hệ thống): ngày lễ từ link
-iCalendar (`.ics`) bạn tự nhập, được tô theo quy tắc bạn tự viết - ngày lễ của bất kỳ nước nào, không chỉ
-Trung Quốc.
+Bảng lịch Windows 11 (bấm vào đồng hồ ở khay hệ thống) hiện ngày âm, tiết khí hoặc tên ngày lễ trong ô
+ngày. Mod này ghi chữ và màu ngày lễ vào dòng đó theo quy tắc bạn viết; quy tắc cũng có thể tô trực tiếp
+một ngày âm hoặc dương. Nguồn của bất kỳ nước nào đều dùng được.
 
-- **Ngày nghỉ/lễ**: mặc định những ngày có dấu "休" hiện tên ngày lễ (ví dụ 国庆节), màu xanh.
-- **Ngày làm bù**: mặc định những ngày có dấu "班" hiện 补班, màu đỏ.
-- Những ngày còn lại giữ nguyên chữ âm lịch/tiết khí của hệ thống.
+- **Mặc định**: ngày có `休` hiện tên ngày lễ (xanh); ngày có `班` hiện `补班` (đỏ).
+- Các ngày khác giữ dòng của hệ thống; bật lịch Việt Nam thì hiện ngày âm lịch Việt Nam.
 
 ## Yêu cầu
 
-Mod viết vào **dòng chữ thứ hai** của ô ngày, tức dòng hiện ngày âm lịch hoặc tiết khí, nên phải bật dòng
-đó trước:
+Mod viết vào **dòng chữ thứ hai** của ô ngày (thường là dòng hiện ngày âm, tiết khí hoặc tên ngày lễ),
+nên phải bật dòng đó trước:
 
 Cài đặt → Thời gian & ngôn ngữ → Ngày & giờ → "Hiển thị lịch bổ sung trên khay hệ thống" → chọn
 "Trung (Giản thể, Âm lịch)"
 
 Không bật dòng đó thì ô ngày thường không còn chỗ nào để viết, và trên lịch sẽ không thấy dấu nào. Lịch
 âm Việt Nam bên dưới cũng viết vào chính dòng đó.
+Khi ô đã có nội dung nhưng không có khối chữ thứ hai dùng được do hệ thống đặt tên (không có hoặc
+đang trống), mod bỏ qua ô đó thay vì đoán khối khác và ghi vào log.
 
 ## Cài đặt
 
 | Cài đặt | Điền gì |
 | --- | --- |
-| Lịch âm Việt Nam (thay chữ âm lịch) | Bật thì mỗi ô ngày hiện ngày âm lịch Việt Nam và tiêu đề lịch hiện tên năm Can Chi. Xem bên dưới. |
-| Nguồn dữ liệu (ICS) | Địa chỉ `.ics` của bạn. **Để trống (mặc định) thì không hiện gì** và mod không tải gì cả. |
+| Nguồn dữ liệu (ICS) | Địa chỉ `.ics` của bạn. **Để trống (mặc định) thì không đọc nguồn nào**; có thể để trống nếu chỉ tô ngày bằng quy tắc. |
 | Khoảng thời gian làm mới (giờ) | Bao lâu tải lại nguồn một lần (mặc định 24 giờ). |
+| Lịch âm Việt Nam (thay chữ âm lịch) | Ô ngày mặc định hiện ngày âm Việt Nam; dòng ngày âm ở đầu bảng lịch cũng được viết theo kiểu Việt Nam. Xem bên dưới. |
+| Hiện đầy đủ khi rê chuột | Hiện tên đầy đủ (hoặc chữ quy tắc ghi) khi đưa chuột lên ngày được tô. Dùng khi tên quá dài, ô không hiện hết. |
 | Quy tắc tô màu | Ngày nào được tô, màu gì và chữ gì. Xem bên dưới. |
 | Chữ cần bỏ | Những đoạn chữ bị bỏ khỏi nguyên văn sự kiện (mặc định `（休）`, `（班）`). Xem bên dưới. |
 
-Đổi quy tắc hay đổi "chữ cần bỏ" đều không phải tải lại nguồn: mod tô lại dữ liệu đã đọc theo cài đặt mới.
+Đổi quy tắc hay "chữ cần bỏ" không buộc tải lại ngay: mod tô lại dữ liệu đã đọc theo cài đặt mới.
 
 ## Lịch âm Việt Nam
 
 Khi bật "Lịch âm Việt Nam (thay chữ âm lịch)":
 
-- mỗi ô ngày hiện ngày âm lịch Việt Nam, dạng `ngày/tháng` (`15/8`), tháng nhuận là `1/2N`;
-- tiêu đề lịch hiện tên năm theo Can Chi (`15 Tháng 8 Năm Bính Ngọ`);
-- ngày được tính offline (múi giờ +7), không cần địa chỉ nào, và nguồn dữ liệu ở trên vẫn chạy như thường.
+- ô ngày mặc định hiện ngày âm Việt Nam (`15/8`; tháng nhuận `1/2N`), trừ khi quy tắc cho chữ khác;
+- nếu dòng ngày âm ở đầu bảng lịch là kiểu Trung Quốc, dòng đó được viết theo kiểu Việt Nam
+  (ngày, tháng, năm Can Chi, ví dụ `15 Tháng 8 Năm Bính Ngọ`);
+- ngày được tính offline (UTC+7), không cần nguồn.
 
 Ngày lễ Việt Nam không được nhúng sẵn trong mod: lấy từ nguồn dữ liệu, hoặc từ quy tắc bên dưới.
 
@@ -361,14 +381,12 @@ Mỗi mục là một loại ngày, gồm ba ô:
 
     Từ: 休        Màu: #4EA1FF        Chữ: {name}
 
-- **Từ**: chỉ một từ, xuất hiện trong nội dung sự kiện là ngày đó được tô. Hai mục mặc định là 休 và 班;
-  `*` là **bao trọn**: nhận mọi sự kiện không quy tắc nào khớp - nguồn của nước khác, sự kiện không có
-  dấu 休/班, chỉ cần thêm một mục với `*`.
-- **Màu**: chọn trong bảng màu, hoặc tự viết `#RRGGBB`. **Để trống là giữ nguyên màu**, chỉ đổi chữ.
-- **Chữ**: `{name}` là nguyên văn sự kiện (sau khi bỏ những gì bạn viết trong "Chữ cần bỏ"); cũng có thể
-  viết một chữ cố định - mục 班 mặc định ghi `补班`. **Để trống là giữ chữ âm lịch/tiết khí của hệ
-  thống**, chỉ đổi màu.
-- Ô để trống là giữ nguyên; quy tắc đầu tiên khớp sẽ được dùng.
+- **Từ**: một từ; sự kiện có chứa từ đó thì được tô. Quy tắc `*` nhận mọi sự kiện không
+  quy tắc nào khác khớp, đặt ở đâu trong danh sách cũng được.
+- **Màu**: `#RRGGBB`; để trống là không đặt màu.
+- **Chữ**: `{name}` là nguyên văn sự kiện (sau "Chữ cần bỏ"); để trống là dùng dòng của ô
+  (dòng hệ thống, hoặc ngày âm Việt Nam).
+- Mục không có từ, hoặc không có cả màu lẫn chữ, không có tác dụng. Mục đầu tiên khớp được dùng.
 
 Vài ví dụ (mỗi dòng là một mục trong danh sách):
 
@@ -377,7 +395,7 @@ Vài ví dụ (mỗi dòng là một mục trong danh sách):
 | `休` | `#4EA1FF` | `{name}` | ngày nghỉ hiện tên ngày lễ, màu xanh (mặc định) |
 | `班` | `#FF5A5A` | `补班` | ngày làm bù hiện 补班, màu đỏ (mặc định) |
 | `*` | `#4EA1FF` | `{name}` | mọi sự kiện của nguồn đều hiện nguyên văn, màu xanh |
-| `祝日` | `#E81123` | (trống) | ngày 祝日 của nguồn Nhật chỉ đổi màu, giữ chữ của hệ thống |
+| `祝日` | `#E81123` | (trống) | ngày 祝日 của nguồn Nhật chỉ đổi màu, giữ dòng hiện có |
 | `nghỉ lễ` | `#FF5A5A` | `{name}` | ngày có "nghỉ lễ" của nguồn Việt hiện nguyên văn, màu đỏ |
 
 ### Tô một ngày âm lịch bằng quy tắc
@@ -386,53 +404,59 @@ Vài ví dụ (mỗi dòng là một mục trong danh sách):
 
 | Viết gì | Nghĩa |
 | --- | --- |
-| `{lunar: day=15}` | ngày rằm (15) của mọi tháng âm, kể cả tháng nhuận |
-| `{lunar: month=8; day=15}` | 15 tháng 8 âm (tháng thường, không phải tháng nhuận) |
-| `{lunar: month=8; day=15; leap=true}` | 15 tháng 8 nhuận; `leap=any` là cả hai |
-| `{lunar: month=9}` | mọi ngày của tháng 9 âm |
-| `{solar: month=4; day=30}` | ngày 30 tháng 4 dương lịch |
+| `{lunar: d=15}` | ngày rằm (15) của mọi tháng âm, kể cả tháng nhuận |
+| `{lunar: m=8, d=15}` | 15 tháng 8 âm (tháng thường, không phải tháng nhuận) |
+| `{lunar: m=8L, d=15}` | 15 tháng 8 nhuận; `{lunar: m=8, d=15, leap}` cũng là nghĩa đó |
+| `{lunar: m=9}` | mọi ngày của tháng 9 âm |
+| `{solar: m=4, d=30}` | ngày 30 tháng 4 dương lịch |
 
-- Khóa là `month`, `day`, `leap`, viết hoa thường hay có dấu cách đều được. Viết sai (khóa lạ, tháng quá
-  12, ngày quá 30) thì mục đó không tô ngày nào, và log ghi một lần.
+- `m` là tháng, `d` là ngày, cách nhau bằng dấu phẩy; thứ tự, chữ hoa thường và dấu cách đều được.
+- `m=8L`, hoặc thêm ô `leap`, để chỉ lấy tháng nhuận; có tháng mà không thêm gì thì là tháng
+  thường. Chỉ ghi `d` mà không ghi tháng thì tháng nhuận cũng được tính.
+- `solar` không có tháng nhuận, nên không dùng `L` hay `leap`.
+- Ngày dương có thể đến 31, ngày âm tối đa 30; ngày mà tháng đã ghi không có (ví dụ 30 tháng 2)
+  cũng là viết sai.
+- Muốn tô cả tháng thường và tháng nhuận của cùng một số thì viết hai mục:
+  `{lunar: m=8, d=15}` và `{lunar: m=8L, d=15}`.
+- Viết sai (khóa lạ, giá trị quá giới hạn, lặp ô, không có ngày) thì mục đó không tô ngày nào.
 - Ngày âm được đọc theo lịch mà công tắc ở trên nói: bật thì theo lịch Việt Nam, tắt thì theo lịch Trung
   Quốc mà các ô đang hiện.
-- Ngày đã có sự kiện của nguồn thì do quy tắc của sự kiện đó quyết định; quy tắc kiểu này chỉ dùng cho
-  những ngày không nguồn nào có.
-- Quy tắc kiểu này không có nguyên văn sự kiện, nên `{name}` trong ô Chữ là rỗng: để trống ô Chữ thì giữ
-  ngày âm lịch, muốn hiện chữ khác thì viết thẳng ra.
-- Mỗi mục chỉ một ngày; nhiều ngày thì thêm nhiều mục.
+- Ngày có sự kiện được quy tắc của nguồn khớp thì do quy tắc đó quyết định; quy tắc kiểu này chỉ
+  dùng cho những ngày không quy tắc nguồn nào tô.
+- Quy tắc kiểu này không có nguyên văn sự kiện nên `{name}` rỗng; để trống Chữ là giữ ngày.
+  Mỗi mục một mẫu ngày.
 
 Một bộ ngày lễ Việt Nam (mỗi dòng là một mục trong danh sách):
 
 | Từ | Màu | Chữ | Tác dụng |
 | --- | --- | --- | --- |
-| `{lunar: day=1}` | `#FF5A5A` | (trống) | mùng 1 mọi tháng âm, màu đỏ, giữ ngày âm |
-| `{lunar: day=15}` | `#FF5A5A` | (trống) | ngày rằm mọi tháng âm, màu đỏ, giữ ngày âm |
-| `{lunar: month=1; day=1}` | `#E81123` | `Tết Nguyên đán` | Tết Nguyên đán |
-| `{lunar: month=3; day=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | Giỗ tổ Hùng Vương |
-| `{lunar: month=5; day=5}` | `#E81123` | `Đoan Ngọ` | Tết Đoan Ngọ |
-| `{lunar: month=8; day=15}` | `#E81123` | `Tết Trung thu` | Tết Trung thu |
-| `{lunar: month=12; day=23}` | `#E81123` | `Ông Táo` | Ông Táo về trời |
-| `{solar: month=4; day=30}` | `#E81123` | `Ngày Thống nhất` | Ngày Thống nhất đất nước |
-| `{solar: month=9; day=2}` | `#E81123` | `Quốc khánh` | Quốc khánh |
+| `{lunar: d=1}` | `#FF5A5A` | (trống) | mùng 1 mọi tháng âm, màu đỏ, giữ ngày âm |
+| `{lunar: d=15}` | `#FF5A5A` | (trống) | ngày rằm mọi tháng âm, màu đỏ, giữ ngày âm |
+| `{lunar: m=1, d=1}` | `#E81123` | `Tết Nguyên đán` | Tết Nguyên đán |
+| `{lunar: m=3, d=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | Giỗ tổ Hùng Vương |
+| `{lunar: m=5, d=5}` | `#E81123` | `Đoan Ngọ` | Tết Đoan Ngọ |
+| `{lunar: m=8, d=15}` | `#E81123` | `Tết Trung thu` | Tết Trung thu |
+| `{lunar: m=12, d=23}` | `#E81123` | `Ông Táo` | Ông Táo về trời |
+| `{solar: m=4, d=30}` | `#E81123` | `Ngày Thống nhất` | Ngày Thống nhất đất nước |
+| `{solar: m=9, d=2}` | `#E81123` | `Quốc khánh` | Quốc khánh |
 
 ## Chữ cần bỏ
 
-Đoạn chữ bạn không muốn thấy trong nguyên văn sự kiện thì viết vào đây đúng như nó vốn có, và nó biến mất
-khỏi chữ hiển thị (mọi chỗ xuất hiện, đúng những ký tự bạn viết - kể cả ngoặc và dấu cách). Hai mục mặc
-định là dấu của nguồn Trung Quốc:
+Chuỗi viết ở đây bị xóa khỏi chữ hiển thị đúng như đã viết, mọi lần xuất hiện (kể cả ngoặc và dấu cách).
+Nó chỉ đổi phần hiển thị, không đổi việc quy tắc nào khớp. Mặc định là dấu của nguồn Trung Quốc:
 
 ```
 （休）        国庆节（休）                     hiện  国庆节
-(nghỉ bù)     Giỗ tổ Hùng Vương (nghỉ bù)     hiện  Giỗ tổ Hùng Vương
 ```
 
-Xóa hết danh sách thì không bỏ gì, `{name}` là nguyên văn nguồn.
+`（班）` cũng vậy; nếu quy tắc cho chữ cố định thì chữ đó được hiện. Có thể thêm dấu của nguồn
+khác, ví dụ `(nghỉ bù)`. Mặc định chỉ có dạng ngoặc full-width; hãy tự thêm `(休)`, `(班)` hoặc
+cách viết khác. Xóa hết danh sách thì không bỏ gì.
+Nếu xóa hết tên, chỉ còn màu hoặc ngày.
 
 ## Nguồn dữ liệu
 
-Mod không tải gì và không kèm dữ liệu ngày lễ nào: nó chỉ đọc địa chỉ bạn nhập. Vài địa chỉ dưới đây chỉ
-là ví dụ, mod không tự truy cập:
+Mod không kèm dữ liệu ngày lễ và chỉ đọc địa chỉ bạn nhập. Ví dụ:
 
 - Ngày lễ Trung Quốc của Apple iCloud: `https://p10-calendars.icloud.com/holiday/CN_zh.ics`
 - Ngày lễ Việt Nam của Apple iCloud: `https://p10-calendars.icloud.com/holiday/VN_vi.ics`
@@ -444,8 +468,8 @@ Mỗi sự kiện trong nguồn trông như thế này, và **"Từ" của quy t
 SUMMARY:春节（休）
 ```
 
-Mọi địa chỉ `.ics` đều dùng được. Khi không đọc được dữ liệu (chưa nhập địa chỉ, không có mạng, địa chỉ
-hỏng) thì lịch giữ nguyên như hệ thống vẽ, không bị trống.
+Các link `.ics` thường dùng theo ngày đều được. Nếu đọc lại thất bại, các dấu đã tải vẫn giữ; khi chưa
+có dữ liệu, lịch vẫn hiện nội dung hệ thống (hoặc lịch Việt Nam) và quy tắc ngày.
 
 ## Ghi công
 
@@ -463,89 +487,92 @@ do hai bạn phụ trách.
 
 // ==WindhawkModSettings==
 /*
-- vietnameseLunar: false
-  $name: Vietnamese lunar calendar (replace the lunar text)
-  $name:zh-CN: 越南农历（替换农历文字）
-  $name:vi-VN: Lịch âm Việt Nam (thay chữ âm lịch)
-  $description: >-
-    On: every day cell shows the Vietnamese lunar date of that day (14/9, and 14/9N in a
-    leap month), and the header of the calendar the Vietnamese name of the year
-    (14 Tháng 9 Năm Bính Ngọ). The dates are calculated offline, so this needs no address
-    and has nothing to do with the feed above.
-    Off (the default): the calendar keeps the lunar text of the system.
-  $description:zh-CN: >-
-    打开：每个日期格显示当天的越南农历日期（14/9，闰月写 14/9N），日历标题显示越南语的年号
-    （如 14 Tháng 9 Năm Bính Ngọ）。日期离线算出，不需要订阅地址，和上面的订阅源无关。
-    关闭（默认）：显示系统原本的农历文字。
-  $description:vi-VN: >-
-    Bật: mỗi ô ngày hiện ngày âm lịch Việt Nam (14/9, tháng nhuận là 14/9N), tiêu đề lịch
-    hiện tên năm theo Can Chi (14 Tháng 9 Năm Bính Ngọ). Tính offline, không cần link nào
-    và không liên quan tới nguồn dữ liệu ở trên.
-    Tắt (mặc định): giữ chữ âm lịch của hệ thống.
 - dataSourceUrl: ""
-  $name: Data source (ICS, empty = no data)
-  $name:zh-CN: 数据来源（ICS 地址，留空则不显示节假日）
-  $name:vi-VN: Nguồn dữ liệu (ICS, để trống = không có dữ liệu)
+  $name: Data source (ICS, empty = no feed)
+  $name:zh-CN: 数据来源（ICS 地址，留空则不读取订阅源）
+  $name:vi-VN: Nguồn dữ liệu (ICS, để trống = không đọc nguồn)
   $description: >-
-    An iCalendar (.ics) feed, for example
-    https://p10-calendars.icloud.com/holiday/CN_zh.ics. Only the events of it which the
-    rules below match are read.
+    An iCalendar (.ics) feed. Only events matched by the rules below are shown.
   $description:zh-CN: >-
-    一个 iCalendar（.ics）订阅地址，例如 https://p10-calendars.icloud.com/holiday/CN_zh.ics。
-    只有被下面"高亮规则"匹配到的事件会读；除了这个地址，mod 不访问任何网址。
+    iCalendar（.ics）订阅地址。只有被下面规则匹配到的事件会显示。
   $description:vi-VN: >-
-    Một link iCalendar (.ics), ví dụ https://p10-calendars.icloud.com/holiday/CN_zh.ics.
-    Chỉ những sự kiện khớp với quy tắc bên dưới được đọc; ngoài link này mod không truy
-    cập địa chỉ nào khác.
+    Link iCalendar (.ics). Chỉ các sự kiện khớp quy tắc bên dưới được hiện.
 - refreshIntervalHours: 24
   $name: Refresh interval (hours)
   $name:zh-CN: 刷新间隔（小时）
   $name:vi-VN: Khoảng thời gian làm mới (giờ)
   $description: >-
-    How long the data is reused before the feed is read again (default 24).
-  $description:zh-CN: 这段时间内不重复下载。
-  $description:vi-VN: Trong khoảng này mod không tải lại dữ liệu.
+    How long loaded data is reused before the feed is read again (default 24).
+  $description:zh-CN: 已加载的数据用多久后重新读取订阅源（默认 24 小时）。
+  $description:vi-VN: Dữ liệu đã đọc được dùng bao lâu trước khi đọc lại nguồn (mặc định 24 giờ).
+- vietnameseLunar: false
+  $name: Vietnamese lunar calendar (replace the lunar text)
+  $name:zh-CN: 越南农历（替换农历文字）
+  $name:vi-VN: Lịch âm Việt Nam (thay chữ âm lịch)
+  $description: >-
+    On: day cells show the Vietnamese lunar date (14/9; 14/9N in a leap month) unless a
+    rule gives another text. A Chinese lunar date at the top of the calendar is written in
+    Vietnamese too. Calculated offline.
+    Off (default): no Vietnamese date is written.
+  $description:zh-CN: >-
+    打开：日期格默认显示越南农历日期（14/9，闰月 14/9N），有规则文字时显示规则文字；
+    日历顶部的农历日期是中文格式时，也整行改成越南写法。日期离线计算。
+    关闭（默认）：不写越南日期。
+  $description:vi-VN: >-
+    Bật: ô ngày mặc định hiện ngày âm Việt Nam (14/9; tháng nhuận 14/9N), trừ khi quy tắc
+    cho chữ khác; dòng ngày âm kiểu Trung Quốc ở đầu bảng lịch cũng được viết theo kiểu
+    Việt Nam. Tính offline.
+    Tắt (mặc định): không ghi ngày âm Việt Nam.
+- showHolidayTooltip: true
+  $name: Tooltip on hover
+  $name:zh-CN: 悬停时显示完整文字
+  $name:vi-VN: Hiện đầy đủ khi rê chuột
+  $description: >-
+    Resting the pointer on a marked day shows its full name, or the text the rule writes.
+    Useful when a long name does not fit in the cell.
+  $description:zh-CN: >-
+    鼠标停在有标记的日期上时，显示完整名称（或规则写的文字）。名字太长、日期格显示不下时用。
+  $description:vi-VN: >-
+    Đưa chuột lên ngày được tô để xem tên đầy đủ, hoặc chữ mà quy tắc ghi. Dùng khi tên
+    quá dài, ô không hiện hết.
 - highlightRules:
   - - word: "休"
       $name: Word to look for
       $name:zh-CN: 要找的词
       $name:vi-VN: Từ cần tìm
       $description: >-
-        One word, found anywhere in the text of an event. "*" takes every event no other
-        rule matched; an empty word marks nothing. A day of the calendar may be written
-        instead of a word, as in "{lunar: day=15}" - the README has the whole form.
+        One word, matched anywhere in an event's text. "*" takes every event no other rule
+        matched. A date may be written instead, e.g. "{lunar: d=15}"; see the README.
       $description:zh-CN: >-
-        一个词，出现在事件文字里就算匹配。填 "*" 表示兜底：没被别的规则匹配到的事件都归它；
-        留空则这一项不标记任何日子（刚加进来还没填）。也可以不填词而填一个日子，例如
-        "{lunar: day=15}"（每月十五），写法见 README。
+        一个词，事件文字里包含它就算命中。填 "*" 兜底；也可以填日期，例如
+        "{lunar: d=15}"，写法见 README。
       $description:vi-VN: >-
-        Một từ, xuất hiện trong nội dung sự kiện là khớp. "*" là bao trọn: nhận mọi sự kiện
-        không quy tắc nào khớp; để trống thì mục này không tô ngày nào. Cũng có thể viết một
-        ngày thay cho một từ, ví dụ "{lunar: day=15}"; xem README.
+        Một từ, khớp ở bất kỳ đâu trong nội dung sự kiện. "*" nhận mọi sự kiện không quy tắc
+        nào khớp. Có thể viết ngày thay cho từ, ví dụ "{lunar: d=15}"; xem README.
     - color: "#4EA1FF"
       $name: Colour
       $name:zh-CN: 颜色
       $name:vi-VN: Màu
       $description: >-
-        The colour of the text of a marked day (#RRGGBB). Empty keeps the colour the cell
-        has.
+        Text colour (#RRGGBB). Empty sets no colour.
       $description:zh-CN: >-
-        被标记那天文字的颜色（#RRGGBB）。留空则不动颜色。
+        文字颜色（#RRGGBB）。留空不设置颜色。
       $description:vi-VN: >-
-        Màu chữ của ngày được tô (#RRGGBB). Để trống là giữ nguyên màu.
+        Màu chữ (#RRGGBB). Để trống là không đặt màu.
       #! $format: colorRgb
     - text: "{name}"
       $name: Text to show
       $name:zh-CN: 显示的文字
       $name:vi-VN: Chữ hiển thị
       $description: >-
-        What the cell shows. "{name}" is the text of the event as the feed writes it;
-        empty keeps the lunar text and only changes the colour.
+        Cell text. "{name}" is the event text; empty uses the cell's own line (the system
+        line, or the Vietnamese date) and only changes the colour.
       $description:zh-CN: >-
-        日历上显示的文字。"{name}" 就是事件原文；留空则保留系统农历文字、只改颜色。
+        日期格显示的文字。"{name}" 是事件原文；留空沿用日期格自己的文字（系统那一行，或
+        越南农历日期），只改颜色。
       $description:vi-VN: >-
-        Chữ hiện trên lịch. "{name}" là nguyên văn của sự kiện; để trống là giữ chữ âm lịch
-        và chỉ đổi màu.
+        Chữ trong ô ngày. "{name}" là nguyên văn sự kiện; để trống là dùng dòng của ô (dòng
+        hệ thống, hoặc ngày âm Việt Nam) và chỉ đổi màu.
   - - word: "班"
       $name: Word to look for
       $name:zh-CN: 要找的词
@@ -563,30 +590,28 @@ do hai bạn phụ trách.
   $name:zh-CN: 高亮规则
   $name:vi-VN: Quy tắc tô màu
   $description: >-
-    One item per kind of day - a word, a colour, a text. A field left empty is left
-    alone, and the first rule which matches a day marks it.
+    One item per kind of day. A rule with no word, or with neither colour nor text, does
+    nothing. The first match wins; a "*" rule takes every event no other rule matched,
+    wherever it appears.
   $description:zh-CN: >-
-    一项一类日子：一个词、颜色、文字，留空的栏表示不动。从上往下第一条匹配上的生效。
+    一项一类日子。没有词，或颜色和文字都留空的项不生效。从上往下第一条命中；"*" 只接住
+    没有被其他规则命中过的事件，写在哪一项都可以。
   $description:vi-VN: >-
-    Mỗi mục là một loại ngày: một từ, màu, chữ. Ô để trống là giữ nguyên; quy tắc đầu tiên
-    khớp sẽ được dùng.
+    Mỗi mục một loại ngày. Mục không có từ, hoặc không có cả màu lẫn chữ, không có tác dụng.
+    Mục đầu tiên khớp được dùng; quy tắc "*" nhận mọi sự kiện không quy tắc nào khác khớp,
+    đặt ở đâu cũng được.
 - removeTexts: ["（休）", "（班）"]
   $name: Text to remove from the name
   $name:zh-CN: 剔除的文字
   $name:vi-VN: Chữ cần bỏ khỏi tên
   $description: >-
-    One item per string, deleted from the text above as it is written - a bracket or a
-    space written by hand is a part of it, and every appearance of it goes. The two
-    default items are the marker of the Chinese feed ("（休）" turns "春节（休）" into
-    "春节"); remove them and nothing is taken out.
+    Strings removed from the event text exactly as written, every occurrence. The defaults
+    are the Chinese markers; clear the list to remove nothing.
   $description:zh-CN: >-
-    每条一项，把这条文字从上面的文字里删掉：写的是什么就删什么（括号、空格都算），出现几次删
-    几次。默认的两条是中国订阅源的标记（写 "（休）"，"春节（休）" 就显示成 "春节"）；把它们
-    删掉就什么都不删了。
+    从事件原文里原样删除的文字，出现几次删几次。默认是中文订阅源的标记；清空列表则不删除。
   $description:vi-VN: >-
-    Mỗi mục một chuỗi, bị xóa khỏi chữ ở trên đúng như đã viết - ngoặc hay dấu cách bạn viết
-    đều tính, và mọi chỗ xuất hiện đều bị xóa. Hai mục mặc định là dấu của nguồn Trung Quốc
-    ("（休）" biến "春节（休）" thành "春节"); xóa hết hai mục đó thì không xóa gì nữa.
+    Chuỗi bị xóa khỏi nguyên văn đúng như đã viết, mọi lần xuất hiện. Mặc định là dấu của
+    nguồn Trung Quốc; xóa hết danh sách thì không xóa gì.
 */
 // ==/WindhawkModSettings==
 
@@ -679,12 +704,14 @@ namespace wux = winrt::Windows::UI::Xaml;
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
+namespace wuxd = winrt::Windows::UI::Xaml::Data;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -701,18 +728,22 @@ struct LunarDay {
 // A day of the calendar a rule may ask for instead of a word of an event. The word of such
 // a rule is written by hand, as one of these:
 //
-//     {lunar: day=15}                        every fifteenth day of a lunar month
-//     {lunar: month=2; day=15}               the fifteenth of the second month
-//     {lunar: month=8; day=15; leap=true}    the fifteenth of the leap eighth month
-//     {lunar: month=9}                       every day of the ninth month
-//     {solar: month=4; day=30}               the thirtieth of April
+//     {lunar: d=15}                 every fifteenth day of a lunar month
+//     {lunar: m=2, d=15}            the fifteenth of the second month
+//     {lunar: m=8L, d=15}           the fifteenth of the leap eighth month
+//     {lunar: m=9}                  every day of the ninth month
+//     {solar: m=4, d=30}            the thirtieth of April
+//
+// "m" and "d" are the month and the day. "L" after the number of a month, or a bare
+// "leap" field, asks for the leap month.
 //
 // A month written by hand is the ordinary month of that number: a year which has its eighth
 // month twice has a leap one as well, and the day a festival falls on is the one which is
 // not the leap one - Mid-Autumn is the fifteenth of the eighth month, not of the leap eighth
-// month. A month left out takes both, which is what makes "{lunar: day=1}" the first day of
+// month. A month left out takes both, which is what makes "{lunar: d=1}" the first day of
 // every month, leap months included: a leap month has a first day too. The leap month alone
-// is asked for with "leap=true", and "leap=any" is the two of them together.
+// is asked for with "m=8L" or "leap"; the ordinary and the leap month together take two
+// rules.
 //
 // What a day of the lunar month is in the first place is decided by the switch above the
 // list: with the Vietnamese lunar calendar on, the dates are the Vietnamese ones the cells
@@ -738,9 +769,9 @@ struct DateSpec {
 //
 // A field which is left out asks for that part of the day to be left alone: a rule with
 // no colour keeps the colour the shell gave the cell, and a rule with no text keeps the
-// lunar text of it - so a rule can change the colour of a day, the text of a day, or
-// both. What the fields are is in the WindhawkModSettings block above, which the two
-// have to be changed together.
+// line the cell shows - so a rule can change the colour of a day, the text of a day, or
+// both. A rule with neither does nothing. What the fields are is in the
+// WindhawkModSettings block above, which the two have to be changed together.
 struct HighlightRule {
     // The one word this rule looks for. "*" is the catch-all, which takes every event no
     // other rule matched, and an empty word is a rule which marks nothing - the state of
@@ -758,23 +789,27 @@ struct DayRule {
     DateSpec day;
 };
 
-// The snapshot of the settings. The defaults are written twice on purpose: here, for
-// a setting which cannot be read, and in the WindhawkModSettings YAML, which is what
-// the settings UI starts from, so the two have to be changed together. LoadSettings
-// publishes a whole new snapshot as a shared_ptr to an immutable object, and every
-// caller takes that pointer rather than a copy of the struct: a cell is looked at on
-// every pass of the sweep, and copying a rule list for each of them is work with no
+// The snapshot of the settings. The scalar defaults are written twice on purpose: here,
+// for a setting which cannot be read, and in the WindhawkModSettings YAML, which is what
+// the settings UI starts from, so the two have to be changed together. The rule and
+// removal lists have no defaults here: the YAML is where their default items come from.
+// LoadSettings publishes a whole new snapshot as a shared_ptr to an immutable object, and
+// every caller takes that pointer rather than a copy of the struct: a cell is looked at
+// on every pass of the sweep, and copying a rule list for each of them is work with no
 // purpose behind it.
 struct Settings {
-    // The Vietnamese lunar calendar: every cell shows the lunar date of that calendar and
-    // the header the Vietnamese name of the year, both calculated offline. Off by default,
-    // which leaves the calendar as the system drew it. It has nothing to do with the feed,
-    // and the feed works the same either way.
+    // The Vietnamese lunar calendar: a cell shows the lunar date of that calendar unless a
+    // rule gives it another text, and the header the Vietnamese date and Can Chi year, both
+    // calculated offline. Off by default, which leaves the calendar as the system drew it.
+    // It has nothing to do with the feed, and the feed works the same either way.
     bool vietnameseLunar = false;
-    // Empty by default on purpose: the mod then contacts nothing at all and the
-    // calendar is left as the system drew it. The address is the user's to fill in.
+    // Empty by default on purpose: the mod then contacts nothing at all. The date rules and
+    // the Vietnamese switch still work. The address is the user's to fill in.
     std::wstring dataSourceUrl;
     int refreshIntervalHours = 24;
+    // Whether a marked day shows its full name when the pointer rests on it. On by
+    // default: a name can be longer than a day cell, and the tooltip has room for all of it.
+    bool showHolidayTooltip = true;
     // The rule list as the setting is parsed into it; an empty list marks nothing.
     std::vector<HighlightRule> rules;
     // The rules of that list which name a day of the calendar, and whether any of them asks
@@ -807,6 +842,11 @@ std::wstring ReadStringSetting(PCWSTR name, Args... args) {
         WindhawkUtils::StringSetting::make(name, args...);
     return std::wstring(value.get());
 }
+
+// Defined with the iCalendar reading below. The settings are put in the same Unicode form
+// as the feed there, so a word typed with a combining mark still matches the feed's
+// precomposed text.
+std::wstring NormalizeNfc(std::wstring const& text);
 
 // Colour parsing, and why so many written forms are accepted: a colour of a rule is
 // written as "RRGGBB", often with a '#' in front of it, or as eight digits (AARRGGBB) by
@@ -900,12 +940,12 @@ std::vector<HighlightRule> LoadHighlightRules() {
     bool saidAboutOlderWords = false;
 
     for (int i = 0; i < kMaxHighlightRules; i++) {
-        const std::wstring word =
-            TrimWhitespace(ReadStringSetting(L"highlightRules[%d].word", i));
+        const std::wstring word = NormalizeNfc(
+            TrimWhitespace(ReadStringSetting(L"highlightRules[%d].word", i)));
         const std::wstring colorText =
             TrimWhitespace(ReadStringSetting(L"highlightRules[%d].color", i));
-        const std::wstring text =
-            TrimWhitespace(ReadStringSetting(L"highlightRules[%d].text", i));
+        const std::wstring text = NormalizeNfc(
+            TrimWhitespace(ReadStringSetting(L"highlightRules[%d].text", i)));
 
         // An item which is not written at all is skipped: that is the state of an item
         // the user has just added, and of every index past the end of the list.
@@ -999,7 +1039,7 @@ constexpr int kMaxRemoveTexts = 16;
 std::vector<std::wstring> LoadRemoveTexts() {
     std::vector<std::wstring> texts;
     for (int i = 0; i < kMaxRemoveTexts; i++) {
-        const std::wstring text = ReadStringSetting(L"removeTexts[%d]", i);
+        const std::wstring text = NormalizeNfc(ReadStringSetting(L"removeTexts[%d]", i));
         if (text.empty()) {
             continue;
         }
@@ -1075,21 +1115,25 @@ bool IsDateTokenShape(std::wstring const& word) {
 }
 
 // Whether a text is one of these two words, ignoring case: the parts of a token are written
-// by hand, and "Day=15" and "day=15" ask for the same day.
+// by hand, and "M=8" and "m=8" ask for the same month.
 bool SameTokenWord(std::wstring const& text, PCWSTR word) {
     const int length = static_cast<int>(wcslen(word));
     return static_cast<int>(text.size()) == length &&
            CompareStringOrdinal(text.c_str(), length, word, length, TRUE) == CSTR_EQUAL;
 }
 
+// Defined with the date helpers below; a solar token whose month is written may name no
+// day that month has, and the answer is needed here already.
+int DaysInMonth(int year, int month);
+
 // The day a word asks for, or nothing when the word is not written as one. A token is
 // written by hand, so a typo is worth rejecting rather than reading as a day nobody asked
-// for: the keys are the three below and nothing else, the values are the ones written here
-// and nothing else, and a month of 1 to 12 and a day of 1 to 30 is what a calendar has. A
-// word which is not written as a token at all is the word of an event and is not read here.
+// for: the keys are "d" and "m", the optional field is the bare word "leap", a month is
+// 1 to 12, and a day is 1 to 30 in a lunar month or 1 to 31 in a solar one. A word which
+// is not written as a token at all is the word of an event and is not read here.
 bool ParseDateToken(std::wstring const& word, DateSpec& out) {
-    // "{lunar:" ... "}": the shortest token there is is "{lunar:day=1}".
-    if (!IsDateTokenShape(word) || word.size() < 13) {
+    // "{lunar:" ... "}": the shortest token there is is "{lunar:d=1}".
+    if (!IsDateTokenShape(word) || word.size() < 10) {
         return false;
     }
     const size_t colon = word.find(L':');
@@ -1125,16 +1169,16 @@ bool ParseDateToken(std::wstring const& word, DateSpec& out) {
         return true;
     };
 
-    // The fields, separated by ";". A field which is empty - "day=15;;" and a trailing ";" -
+    // The fields, separated by ",". A field which is empty - "d=15,," and a trailing "," -
     // is a typo like any other, and is not read as "the rest of the token says nothing".
     const std::wstring body = word.substr(colon + 1, word.size() - colon - 2);
     bool seenDay = false;
     bool seenMonth = false;
     bool seenLeap = false;
     for (size_t position = 0; position <= body.size();) {
-        size_t end = body.find(L';', position);
-        if (end == std::wstring::npos) {
-            end = body.size();
+        size_t end = position;
+        while (end < body.size() && body[end] != L',') {
+            end++;
         }
         const std::wstring field = TrimWhitespace(body.substr(position, end - position));
         position = end + 1;
@@ -1144,53 +1188,66 @@ bool ParseDateToken(std::wstring const& word, DateSpec& out) {
 
         const size_t equals = field.find(L'=');
         if (equals == std::wstring::npos) {
-            return false;
+            if (!spec.lunar || seenLeap || !SameTokenWord(field, L"leap")) {
+                return false;
+            }
+            spec.leap = 1;
+            seenLeap = true;
+            continue;
         }
         const std::wstring key = TrimWhitespace(field.substr(0, equals));
         const std::wstring value = TrimWhitespace(field.substr(equals + 1));
 
-        if (SameTokenWord(key, L"day")) {
-            if (seenDay || !readNumber(value, 1, 30, spec.day)) {
+        if (SameTokenWord(key, L"d")) {
+            const int largestDay = spec.lunar ? 30 : 31;
+            if (seenDay || !readNumber(value, 1, largestDay, spec.day)) {
                 return false;
             }
             seenDay = true;
-        } else if (SameTokenWord(key, L"month")) {
-            if (seenMonth || !readNumber(value, 1, 12, spec.month)) {
+        } else if (SameTokenWord(key, L"m")) {
+            std::wstring number = value;
+            bool writtenAsLeap = false;
+            if (!number.empty() &&
+                (number.back() == L'L' || number.back() == L'l')) {
+                writtenAsLeap = true;
+                number.pop_back();
+            }
+            if (seenMonth || !readNumber(number, 1, 12, spec.month)) {
                 return false;
+            }
+            if (writtenAsLeap) {
+                if (!spec.lunar || seenLeap) {
+                    return false;
+                }
+                spec.leap = 1;
+                seenLeap = true;
             }
             seenMonth = true;
-        } else if (SameTokenWord(key, L"leap")) {
-            // A month of a solar calendar is never the second one of its number.
-            if (seenLeap || !spec.lunar) {
-                return false;
-            }
-            if (SameTokenWord(value, L"true")) {
-                spec.leap = 1;
-            } else if (SameTokenWord(value, L"false")) {
-                spec.leap = 0;
-            } else if (SameTokenWord(value, L"any")) {
-                spec.leap = -1;
-            } else {
-                return false;
-            }
-            seenLeap = true;
         } else {
             return false;
         }
     }
 
+    // A solar day is checked against the month when one is written, so that "m=2, d=30"
+    // is a typo rather than a rule which can never match. February is checked as a leap
+    // February, which is the only way "m=2, d=29" can be a day.
+    if (!spec.lunar && seenMonth &&
+        spec.day > DaysInMonth(2000, spec.month)) {
+        return false;
+    }
+
     // A token which names neither a day nor a month asks for nothing, and a day nobody asked
-    // for is not marked: "leap=true" on its own is the leap month of no day in particular.
+    // for is not marked.
     if (!seenDay && !seenMonth) {
         return false;
     }
 
     // A month written by hand is the ordinary month of that number, and the leap one has to be
-    // asked for with "leap=true" or "leap=any": the day a festival falls on is the one of the
+    // asked for with "L" or "leap": the day a festival falls on is the one of the
     // month which is not the leap one (Mid-Autumn is the fifteenth of the eighth month, and a
     // year with a leap eighth month has a fifteenth day in that month as well). A token which
     // names no month keeps both, since a month left out is not a month which was left out of
-    // the token - "day=1" is the first day of every month, and a leap month has one too.
+    // the token - "d=1" is the first day of every month, and a leap month has one too.
     if (seenMonth && !seenLeap) {
         spec.leap = 0;
     }
@@ -1288,6 +1345,7 @@ void LoadSettings() {
     settings->vietnameseLunar = Wh_GetIntSetting(L"vietnameseLunar") != 0;
     settings->dataSourceUrl = ReadStringSetting(L"dataSourceUrl");
     settings->refreshIntervalHours = Wh_GetIntSetting(L"refreshIntervalHours");
+    settings->showHolidayTooltip = Wh_GetIntSetting(L"showHolidayTooltip") != 0;
     settings->rules = LoadHighlightRules();
     settings->removeTexts = LoadRemoveTexts();
 
@@ -1379,7 +1437,7 @@ int DaysInMonth(int year, int month) {
 // here: a range is walked with NextDateKey(), which turns the "+1 day" of
 // 2026-02-31 into 2026-03-03, so a typo in a feed would mark a real date which
 // the feed never named. The year range keeps MakeDateKey() (year*10000+month*100
-// +day) inside an int32 as well, and turns away a "19700101" placeholder.
+// +day) inside an int32 as well, and turns away years before 1900 or after 9999.
 bool IsValidDate(int year, int month, int day) {
     if (year < 1900 || year > 9999) {
         return false;
@@ -1732,7 +1790,7 @@ void LookupLunarDate(int32_t key, LunarCalendar calendar, LunarDateInfo& out) {
 
 // Whether a text is one the mod wrote itself: the "14/9" the Vietnamese lunar calendar puts
 // in a cell, and "14/9N" in a leap month. IsOwnText asks this so that a date the mod wrote
-// is not saved as the text the shell had, which would be written back over the date later.
+// is not mistaken for the shell's text when deciding whether to save the text binding.
 bool IsVietnameseLunarText(std::wstring const& text) {
     if (text.empty() || text.size() > 7) {
         return false;
@@ -2977,6 +3035,7 @@ bool DecompressBody(const char* data, size_t length, std::string& out) {
 void SweepDayItems();
 void StartSweepTimer();
 void RefreshCalendarOnUiThreads();
+bool CalendarIsShownNow();
 
 // The worker thread exists only while a data source is set: it is created by the
 // first refresh request which has something to fetch, and a failed start is retried
@@ -3495,10 +3554,9 @@ int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
     return MakeDateKey(date.wYear, date.wMonth, date.wDay);
 }
 
-// The name the Windows 11 calendar gives the text block which holds the lunar
-// date or the solar term.
-// It is a strong hint rather than the only rule: another Windows build may name the
-// block differently, which is why FindLabelTextBlock has fallbacks.
+// The name the Windows 11 calendar gives the text block which holds the lunar date,
+// solar term or festival name. This is the only block the mod writes into: a build
+// which does not have it is left alone instead of guessed at.
 constexpr PCWSTR kLunarTextBlockName = L"LunarTextBlock";
 
 struct FoundElement {
@@ -3560,6 +3618,24 @@ std::wstring ElementText(wuxc::TextBlock const& textBlock) {
     }
 }
 
+// Whether the element is laid out and visible. A collapsed or not-yet-measured
+// element is not a line the calendar is showing.
+bool IsElementVisible(wux::DependencyObject const& element) {
+    auto frameworkElement = element.try_as<wux::FrameworkElement>();
+    if (!frameworkElement) {
+        return false;
+    }
+    try {
+        if (frameworkElement.Visibility() != wux::Visibility::Visible ||
+            frameworkElement.Opacity() <= 0) {
+            return false;
+        }
+        return frameworkElement.ActualWidth() > 0 && frameworkElement.ActualHeight() > 0;
+    } catch (...) {
+        return false;
+    }
+}
+
 // Prints what the day cell is made of, so that a cell which doesn't look the way
 // the mod expects can be diagnosed from the log.
 void LogDayItemStructure(wuxc::CalendarViewDayItem const& item) {
@@ -3587,27 +3663,14 @@ void LogDayItemStructure(wuxc::CalendarViewDayItem const& item) {
         }
 
         if (auto frameworkElement = found.element.try_as<wux::FrameworkElement>()) {
+            line += L" visibility=" + std::to_wstring((int)frameworkElement.Visibility());
+            line += L" opacity=" + std::to_wstring((int)(frameworkElement.Opacity() * 100));
             line += L" size=" + std::to_wstring((int)frameworkElement.ActualWidth()) +
                     L"x" + std::to_wstring((int)frameworkElement.ActualHeight());
         }
 
         Wh_Log(L"%s", line.c_str());
     }
-}
-
-// The day number is the only text in a day cell which is made of digits: the
-// lunar date below it is "廿二", "立冬" or "中秋节". A text block which holds a
-// number is therefore never the one the mod may write to.
-bool IsNumberText(std::wstring const& text) {
-    if (text.empty()) {
-        return false;
-    }
-    for (wchar_t c : text) {
-        if (c < L'0' || c > L'9') {
-            return false;
-        }
-    }
-    return true;
 }
 
 // Whether the shell has filled the day cell in at all. A day item which was just
@@ -3620,8 +3683,10 @@ bool DayItemHasContent(wuxc::CalendarViewDayItem const& item) {
     return false;
 }
 
-// Finds the text block which holds the shell's lunar/solar-term text: the text
-// block inside the day cell which is not the day number.
+// Finds the text block which holds the shell's lunar/solar-term text. Only a
+// non-empty block Windows names "LunarTextBlock" is accepted; a text block picked
+// by its font size or contents would be a guess, and an empty template is not a
+// line the calendar is showing.
 //
 // This is done again on every pass rather than remembered: the shell takes the
 // text blocks out of a day item and puts new ones in when it reuses the item for
@@ -3633,60 +3698,32 @@ wuxc::TextBlock FindLabelTextBlock(wuxc::CalendarViewDayItem const& item,
     std::vector<FoundElement> descendants;
     CollectDescendants(item, descendants);
 
-    std::vector<wuxc::TextBlock> candidates;
+    wuxc::TextBlock named = nullptr;
     for (const auto& found : descendants) {
         auto textBlock = found.element.try_as<wuxc::TextBlock>();
-        if (!textBlock || IsNumberText(ElementText(textBlock))) {
+        if (!textBlock || ElementName(textBlock) != kLunarTextBlockName) {
             continue;
         }
-        candidates.push_back(textBlock);
-    }
-
-    if (candidates.empty()) {
-        return nullptr;
-    }
-
-    // The text block the mod wrote to before, as long as the calendar still
-    // shows it, so that what was written there is not written a second time.
-    if (preferredId) {
-        for (const auto& candidate : candidates) {
-            if (winrt::get_abi(candidate) == preferredId) {
-                return candidate;
-            }
+        // A named block which has no text is not a usable second line yet: the
+        // shell may not have filled the cell in, or this build may keep an empty
+        // template here. Writing a holiday name into it would put text into a
+        // line the calendar is not showing.
+        if (ElementText(textBlock).empty()) {
+            continue;
+        }
+        if (!IsElementVisible(textBlock)) {
+            continue;
+        }
+        // The block the mod wrote to before wins while it is still there, so that
+        // what was written there is not written a second time.
+        if (preferredId && winrt::get_abi(textBlock) == preferredId) {
+            return textBlock;
+        }
+        if (!named) {
+            named = textBlock;
         }
     }
-
-    // The name the Windows 11 calendar gives its lunar text block wins over the
-    // heuristics below. Other builds may name it differently, and the heuristics
-    // are what is used then.
-    for (const auto& candidate : candidates) {
-        if (ElementName(candidate) == kLunarTextBlockName) {
-            return candidate;
-        }
-    }
-
-    // The lunar text is the smaller of the texts: prefer a text block which
-    // already has text, and among those the one with the smallest font.
-    wuxc::TextBlock best = nullptr;
-    double bestFontSize = 0;
-    bool bestHasText = false;
-    for (const auto& candidate : candidates) {
-        bool hasText = !ElementText(candidate).empty();
-        double fontSize = 0;
-        try {
-            fontSize = candidate.FontSize();
-        } catch (...) {
-        }
-
-        if (!best || (hasText != bestHasText && hasText) ||
-            (hasText == bestHasText && fontSize < bestFontSize)) {
-            best = candidate;
-            bestFontSize = fontSize;
-            bestHasText = hasText;
-        }
-    }
-
-    return best;
+    return named;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3703,12 +3740,13 @@ struct DayCell {
     void* labelId = nullptr;
     int64_t labelChangedToken = 0;
     // The date this state was computed for. A day item which now shows another
-    // date was filled in by the shell again, so its text belongs to the shell.
+    // date was filled in by the shell again, so the per-date state is refreshed.
     int32_t key = 0;
-    // The shell's own lunar/solar-term text, saved before the first change. Only
-    // trusted while the same cell shows the same date.
-    std::wstring savedText;
-    bool hasSavedText = false;
+    // The binding the shell's template had on Text before the mod replaced it with a
+    // local value. Re-applying it lets the shell's own data source - ShortTitle or
+    // LunarTitle - supply the text again instead of the mod writing it back.
+    wuxd::BindingBase savedTextBinding{nullptr};
+    bool hasSavedTextBinding = false;
     // The brush the label carried before the mod wrote its own colour, when it
     // carried one of its own, and whether it did at all. Held by a strong
     // reference: the shell drops its own reference to a brush once it is applied,
@@ -3722,12 +3760,20 @@ struct DayCell {
     // reference stays alive, so the object it names can't be reused by another
     // brush and make a later comparison wrong.
     wuxm::Brush ownBrush{nullptr};
-    // What the mod wrote into the cell, if anything.
+    // The text the mod wants the cell to show, if any: the mod's own text is told
+    // from the shell's by this, both when the cell is recycled and when the shell
+    // writes over it.
     std::wstring appliedText;
     // Whether the mod's colour is on the label right now. This belongs to the
     // label element rather than to the date: an element the shell reuses for
     // another month still carries the mod's brush.
     bool hadColor = false;
+    // The tooltip the mod put on the day item, the text it shows, and the tooltip
+    // the shell had there before. The tooltip belongs to the item, not to the text
+    // block the mod writes to.
+    std::wstring tooltipText;
+    winrt::Windows::Foundation::IInspectable savedToolTip{nullptr};
+    bool hasTooltip = false;
     int64_t dateChangedToken = 0;
     bool busy = false;
 };
@@ -3762,9 +3808,35 @@ thread_local std::vector<TrackedDayItem> t_dayItems;
 // block of a day cell reports no parent at all.
 thread_local std::unordered_map<void*, winrt::weak_ref<wuxc::CalendarViewDayItem>>
     t_labelOwners;
-// A day cell the mod could not find the lunar text in is worth reporting once,
-// with the structure of the cell, and not once per cell.
+// A day cell the mod could not find the named second-line block in is worth reporting
+// once, with the structure of the cell, and not once per cell.
 thread_local bool t_loggedMissingTextBlock = false;
+// Whether the shell's lunar line turned out to be a binding, reported once.
+thread_local bool t_loggedTextBinding = false;
+thread_local bool t_loggedRestoreBinding = false;
+thread_local bool t_loggedNoTextBinding = false;
+
+void LogMissingSecondLine(wuxc::CalendarViewDayItem const& item,
+                          int32_t key,
+                          bool empty) {
+    if (t_loggedMissingTextBlock) {
+        return;
+    }
+    t_loggedMissingTextBlock = true;
+    if (empty) {
+        Wh_Log(L"Day %d: the named \"%s\" text block is empty; the second line is "
+               L"left unchanged",
+               key, kLunarTextBlockName);
+    } else {
+        Wh_Log(L"No usable \"%s\" text block in the day cell of %d (missing or "
+               L"empty); the second line is left unchanged. The additional "
+               L"calendar may be off, or this Windows build may name the block "
+               L"differently",
+               kLunarTextBlockName, key);
+    }
+    LogDayItemStructure(item);
+}
+
 // Hitting the limit of tracked day items says that the shell is holding on to
 // day items which the calendar no longer shows, which is worth reporting once.
 thread_local bool t_loggedTrackLimit = false;
@@ -3772,6 +3844,18 @@ thread_local bool t_loggedTrackLimit = false;
 // colour being taken back. SweepDayItems() uses it to tell "the shell is still rewriting
 // the cells" from "nothing has happened for a while", which is what stops the timer again.
 thread_local bool t_applyWrote = false;
+// Set while a sweep sees a second-line text which is not the text the mod wrote
+// for that cell - that is, a text the shell still owns. If a sweep finds cells
+// without a holiday rule but no such text, the system's second line is gone and
+// the mod's holiday names have to be taken off.
+thread_local bool t_seenNativeSecondLine = false;
+thread_local bool t_seenCellWithoutInfo = false;
+// Whether the window which hosts the calendar of this thread is on screen. A closed
+// flyout keeps its day cells alive and lets the shell empty their lunar text, which
+// looks exactly like a calendar whose additional calendar was switched off. Only the
+// window itself tells the two apart, and only a shown calendar may be read as "the
+// second line is gone".
+thread_local bool t_calendarShown = true;
 
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item);
 
@@ -3943,6 +4027,54 @@ void RestoreForeground(wuxc::TextBlock const& label, DayCell const& cell) {
     }
 }
 
+// Puts the shell's own text back. The calendar's LunarTextBlock is bound to the day
+// model in the shell's template; writing a local value replaces that binding. Putting
+// the binding back makes the shell's own data source supply the text again, which is
+// the value the system would draw for its current calendar settings. Returns false when
+// no binding was saved; the caller then takes the mod's text off instead.
+bool RestoreLabelBinding(wuxc::TextBlock const& label, DayCell& cell) {
+    if (!cell.hasSavedTextBinding || !cell.savedTextBinding) {
+        return false;
+    }
+
+    try {
+        label.SetBinding(wuxc::TextBlock::TextProperty(), cell.savedTextBinding);
+        cell.savedTextBinding = nullptr;
+        cell.hasSavedTextBinding = false;
+        t_applyWrote = true;
+        if (!t_loggedRestoreBinding) {
+            t_loggedRestoreBinding = true;
+            Wh_Log(L"Restored the second line by re-applying the shell's binding");
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Puts the tooltip of the day item back the way the shell had it: the object it
+// carried before the mod wrote one, or no tooltip at all when it had none. Does
+// nothing while the mod has not put one there.
+void RestoreTooltip(wuxc::CalendarViewDayItem const& item, DayCell& cell) {
+    if (!cell.hasTooltip) {
+        return;
+    }
+
+    try {
+        if (cell.savedToolTip) {
+            wuxc::ToolTipService::SetToolTip(item, cell.savedToolTip);
+        } else {
+            item.ClearValue(wuxc::ToolTipService::ToolTipProperty());
+        }
+        t_applyWrote = true;
+    } catch (...) {
+    }
+
+    cell.tooltipText.clear();
+    cell.savedToolTip = nullptr;
+    cell.hasTooltip = false;
+}
+
 // The shell's lunar text of a cell which was reused for another month is written
 // after the mod has put the holiday name there, and that would take the name away
 // again. The text callback is what catches it: when the text is not the one the
@@ -3965,12 +4097,12 @@ void OnLabelTextChanged(wux::DependencyObject const& sender) {
 
 // Whether a text is one the mod could have written. A cell which the shell reused
 // for another month still holds the mod's text of the old date, and that text is
-// not worth remembering as the shell's own.
+// not worth treating as the shell's text when deciding whether to save a binding.
 // appliedText cannot cover that window, because the shell recycles a cell by clearing
 // what it holds while the mod's own holiday name is still on it; the name is then the
 // only thing left to recognise. The price is that a lunar text which happens to equal a
-// holiday name is not saved as the shell's own, which is harmless: the text the mod wants
-// to write is the same one.
+// holiday name is not taken for the shell's own, which is harmless: the text the mod
+// wants to write is the same one.
 //
 // A text of a rule which holds no {name} is recognised as it is written; a rule whose
 // text is built from the name of the event is not, and neither is it in the version
@@ -3980,9 +4112,9 @@ bool IsOwnText(std::wstring const& text, Settings const& settings) {
     if (text.empty()) {
         return false;
     }
-    // The Vietnamese lunar date is the mod's own text as well: a cell which shows it does not
-    // show the text of the shell, and a date saved as the shell's would be written back over
-    // the Vietnamese one later (see IsVietnameseLunarText).
+    // The Vietnamese lunar date is the mod's own text as well: a cell which shows it does
+    // not show the text of the shell, so it must not be taken as the source of a binding
+    // to save (see IsVietnameseLunarText).
     if (settings.vietnameseLunar && IsVietnameseLunarText(text)) {
         return true;
     }
@@ -4029,6 +4161,13 @@ std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
     return result;
 }
 
+// What the tooltip of a marked day says. An event gives its name; a rule which names a
+// day of the calendar instead has no event, so the text that rule writes is shown. A rule
+// which only colours the day has nothing to say and gets no tooltip.
+std::wstring HolidayTooltipText(HolidayInfo const& info) {
+    return !info.name.empty() ? info.name : ExpandName(info.text, info.name);
+}
+
 // One day cell, in full. The name of the event which covers this date, and the text and
 // the colour of the rule which marked it, go into the cell's lunar text block, which is
 // all the shell's day cell has room for:
@@ -4039,7 +4178,7 @@ std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
 //      the day;
 //   5) decide the colour: the colour of that same rule - and put the shell's own colour
 //      back for a day which is marked no more, or which a rule marks by text alone;
-//   6) remember what was written, so that it can be restored later.
+//   6) remember the shell's binding, so that the text can be restored later.
 //
 // Nothing is written while the cell already shows the wanted value: every write costs a
 // layout pass, and a write which changed nothing would also keep the sweep running for
@@ -4065,10 +4204,16 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         ~BusyGuard() { busy = false; }
     } guard{cell.busy};
 
+    // Read once per cell: only a calendar which is on screen may be read as "the
+    // system's second line is gone". A closed flyout keeps the cells alive but lets
+    // the shell empty their text, and clearing the mod's text then would wipe the
+    // calendar the user is about to open.
+    const bool calendarShown = CalendarIsShownNow();
+
     // A day item which now shows another date was filled in by the shell again,
-    // so its text is the shell's own and there is nothing left to restore. The
-    // colour state stays, because it belongs to the label element, which is still
-    // the same one and still carries the mod's brush.
+    // so its text is the shell's own. A binding saved for the label element still
+    // applies and is kept; the colour state stays too, because it belongs to the
+    // label element, which is still the same one and still carries the mod's brush.
     //
     // The saved colour value is dropped, but the brush the mod wrote itself
     // (ownBrush) is kept: the shell re-templates a recycled cell for its new date
@@ -4080,9 +4225,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     // there in the meantime.
     if (cell.key != key) {
         cell.key = key;
-        cell.savedText.clear();
         cell.appliedText.clear();
-        cell.hasSavedText = false;
         cell.savedForeground = nullptr;
         cell.hasSavedForeground = false;
         cell.savedForegroundWasLocal = false;
@@ -4141,16 +4284,34 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         }
     }
 
-    // The shell's lunar/solar-term text block.
+    // The shell's named lunar/solar-term text block.
     wuxc::TextBlock label = FindLabelTextBlock(item, cell.labelId);
     if (!label) {
-        if (DayItemHasContent(item) && !t_loggedMissingTextBlock) {
-            t_loggedMissingTextBlock = true;
-            Wh_Log(L"No text block to replace in the day cell of %d - the cell has no "
-                   L"second line, which is where the mod writes, so the additional "
-                   L"calendar of the taskbar has to be switched on",
-                   key);
-            LogDayItemStructure(item);
+        if (calendarShown && !hasInfo && DayItemHasContent(item)) {
+            t_seenCellWithoutInfo = true;
+        }
+        // Only a calendar which is on screen can be showing a stale holiday name.
+        // A closed flyout keeps the cells alive but lets the shell empty their
+        // second line, which must not be mistaken for the line being switched off.
+        if (calendarShown) {
+            // A block the mod wrote to before can still be in the cell while the
+            // named block is gone, hidden or empty. Do not leave the holiday name
+            // behind in it.
+            if (auto previous = cell.label.get()) {
+                if (!cell.appliedText.empty() &&
+                    ElementText(previous) == cell.appliedText) {
+                    try {
+                        previous.Text(L"");
+                        cell.appliedText.clear();
+                        t_applyWrote = true;
+                    } catch (...) {
+                    }
+                }
+            }
+            if (DayItemHasContent(item)) {
+                LogMissingSecondLine(item, key, false);
+            }
+            RestoreTooltip(item, cell);
         }
         return;
     }
@@ -4159,6 +4320,14 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     // the shell writing its own text, so that the holiday name survives it.
     if (cell.label.get() != label) {
         if (auto previous = cell.label.get()) {
+            if (!cell.appliedText.empty() &&
+                ElementText(previous) == cell.appliedText) {
+                try {
+                    previous.Text(L"");
+                    t_applyWrote = true;
+                } catch (...) {
+                }
+            }
             if (cell.labelChangedToken) {
                 try {
                     previous.UnregisterPropertyChangedCallback(
@@ -4172,9 +4341,9 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
 
         cell.label = winrt::make_weak(label);
         cell.labelId = winrt::get_abi(label);
-        cell.savedText.clear();
         cell.appliedText.clear();
-        cell.hasSavedText = false;
+        cell.savedTextBinding = nullptr;
+        cell.hasSavedTextBinding = false;
         cell.savedForeground = nullptr;
         cell.hasSavedForeground = false;
         cell.savedForegroundWasLocal = false;
@@ -4217,12 +4386,78 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     }
 
     std::wstring current = ElementText(label);
+    if (calendarShown && !hasInfo) {
+        t_seenCellWithoutInfo = true;
+    }
+    if (calendarShown && !current.empty() && current != cell.appliedText) {
+        t_seenNativeSecondLine = true;
+    }
+    if (current.empty() && (hasInfo || settings->vietnameseLunar)) {
+        // The shell can clear the line after the lookup above. An empty second
+        // line is not a place to write a holiday name or a colour.
+        if (calendarShown) {
+            LogMissingSecondLine(item, key, true);
+            RestoreTooltip(item, cell);
+        }
+        return;
+    }
+
+    // The tooltip of a marked day: the name of the event, or the text of a rule which
+    // names a day instead. It belongs to the day item rather than to the text block, so
+    // a name too long for the cell can still be read in full. The shell's own tooltip is
+    // saved before the first write and put back when the option is off, the day is no
+    // longer marked, or the cell has no line to show.
+    std::wstring tooltip =
+        hasInfo && settings->showHolidayTooltip ? HolidayTooltipText(info) : std::wstring();
+    if (!tooltip.empty()) {
+        if (!cell.hasTooltip || cell.tooltipText != tooltip) {
+            try {
+                if (!cell.hasTooltip) {
+                    cell.savedToolTip = wuxc::ToolTipService::GetToolTip(item);
+                }
+                wuxc::ToolTipService::SetToolTip(
+                    item, winrt::box_value(winrt::hstring(tooltip)));
+                cell.tooltipText = std::move(tooltip);
+                cell.hasTooltip = true;
+                t_applyWrote = true;
+            } catch (...) {
+            }
+        }
+    } else {
+        RestoreTooltip(item, cell);
+    }
 
     if (!desired.empty() && current != desired) {
         if (current != cell.appliedText && !IsOwnText(current, *settings)) {
-            // The shell's own text is being replaced: remember it.
-            cell.savedText = current;
-            cell.hasSavedText = true;
+            // Remember the binding the shell's text came from, before the local value
+            // below replaces it. The shell writes this line through a binding to the
+            // day model, so putting that binding back is what makes the shell supply
+            // the text again.
+            try {
+                bool savedBinding = false;
+                if (auto expression =
+                        label.GetBindingExpression(
+                            wuxc::TextBlock::TextProperty())) {
+                    if (auto binding = expression.ParentBinding()) {
+                        cell.savedTextBinding = binding;
+                        cell.hasSavedTextBinding = true;
+                        savedBinding = true;
+                        if (!t_loggedTextBinding) {
+                            t_loggedTextBinding = true;
+                            Wh_Log(L"Day %d: the second line is bound; the "
+                                   L"binding is saved for restore",
+                                   key);
+                        }
+                    }
+                }
+                if (!savedBinding && !t_loggedNoTextBinding) {
+                    t_loggedNoTextBinding = true;
+                    Wh_Log(L"Day %d: the second line is not bound; the mod's "
+                           L"text will be taken off on restore",
+                           key);
+                }
+            } catch (...) {
+            }
         }
         try {
             label.Text(desired);
@@ -4233,15 +4468,15 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         }
     } else if (desired.empty() && !cell.appliedText.empty() &&
                current == cell.appliedText) {
-        // The mod's text is not wanted any more: put the shell's own text back.
-        try {
-            if (cell.hasSavedText) {
-                label.Text(cell.savedText);
+        // The mod's text is not wanted any more: put the shell's binding back, or
+        // take the text off when this build did not give the line a binding.
+        if (!RestoreLabelBinding(label, cell)) {
+            try {
+                label.Text(L"");
                 t_applyWrote = true;
+            } catch (...) {
             }
-        } catch (...) {
         }
-        cell.hasSavedText = false;
     }
 
     cell.appliedText = desired;
@@ -4262,6 +4497,48 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         cell.hadColor = false;
     }
 
+}
+
+// Takes off the texts this mod wrote while the system's second line is no longer
+// present. This is the fallback for a shell which leaves the last text in cells
+// instead of clearing the line when the additional calendar is switched off.
+size_t ClearModTextOnCurrentThread() {
+    size_t cleared = 0;
+    for (auto& entry : t_cells) {
+        DayCell& cell = *entry.second;
+        auto item = cell.item.get();
+        if (!item || !IsElementVisible(item)) {
+            continue;
+        }
+        auto label = cell.label.get();
+        if (!label || cell.appliedText.empty() ||
+            ElementText(label) != cell.appliedText) {
+            continue;
+        }
+
+        // The system's line is gone, so the binding - if the shell uses one - will
+        // evaluate to an empty value. Putting the binding back is still better than
+        // leaving a local empty value on the block: when the line comes back, the
+        // binding follows the shell again instead of staying detached.
+        if (!RestoreLabelBinding(label, cell)) {
+            try {
+                label.Text(L"");
+                t_applyWrote = true;
+            } catch (...) {
+            }
+        }
+
+        cell.appliedText.clear();
+        cleared++;
+
+        RestoreTooltip(item, cell);
+
+        if (cell.hadColor) {
+            RestoreForeground(label, cell);
+            cell.hadColor = false;
+        }
+    }
+    return cleared;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4391,6 +4668,8 @@ void RegisterCalendarTriggersOnCurrentThread() {
                 if (args.WindowActivationState() !=
                     wuc::CoreWindowActivationState::Deactivated) {
                     OnCalendarOpenedOnCurrentThread();
+                } else {
+                    t_calendarShown = false;
                 }
             });
         t_windowTriggers.visibilityChangedToken = coreWindow.VisibilityChanged(
@@ -4398,6 +4677,8 @@ void RegisterCalendarTriggersOnCurrentThread() {
                wuc::VisibilityChangedEventArgs const& args) {
                 if (args.Visible()) {
                     OnCalendarOpenedOnCurrentThread();
+                } else {
+                    t_calendarShown = false;
                 }
             });
 
@@ -4424,6 +4705,68 @@ void UnregisterCalendarTriggersOnCurrentThread() {
     }
 
     t_windowTriggers = {};
+}
+
+bool IsCalendarWindowClass(PCWSTR className);
+
+// The cheap answer for a cell which is being worked on right now: the CoreWindow knows
+// its own visibility without a walk, and the newer target uses what the last sweep found
+// out. A text callback can arrive while the flyout is closing, before the next sweep has
+// looked at the window, so the window is asked here rather than only once per pass.
+bool CalendarIsShownNow() {
+    if (t_windowTriggers.coreWindow) {
+        try {
+            return t_calendarShown && t_windowTriggers.coreWindow.Visible();
+        } catch (...) {
+        }
+    }
+    return t_calendarShown;
+}
+
+// Whether the calendar of this thread is on screen. The CoreWindow answers this where
+// there is one; the newer target has no CoreWindow, so its window is looked for by the
+// thread it was created on. A thread without a calendar window at all is not a reason to
+// believe the calendar is hidden.
+bool CalendarWindowIsShownOnCurrentThread() {
+    if (t_windowTriggers.coreWindow) {
+        try {
+            return t_windowTriggers.coreWindow.Visible();
+        } catch (...) {
+        }
+    }
+
+    struct WindowSearch {
+        DWORD threadId = 0;
+        bool found = false;
+        bool visible = false;
+    } search;
+    search.threadId = GetCurrentThreadId();
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            WindowSearch& search = *reinterpret_cast<WindowSearch*>(lParam);
+            DWORD processId = 0;
+            if (GetWindowThreadProcessId(hWnd, &processId) != search.threadId ||
+                processId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            WCHAR className[32];
+            if (!GetClassName(hWnd, className, ARRAYSIZE(className)) ||
+                !IsCalendarWindowClass(className)) {
+                return TRUE;
+            }
+
+            search.found = true;
+            if (IsWindowVisible(hWnd)) {
+                search.visible = true;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&search));
+
+    return !search.found || search.visible;
 }
 
 // A window which was just shown does not have its calendar yet: the day cells come with the
@@ -4600,6 +4943,8 @@ bool IsChineseLunarHeaderText(std::wstring const& text) {
 // What the mod wrote into one header and what the shell had written there: the text block of
 // a header is used for the date of the day and for the month which is on screen, so the text
 // of the shell is kept to be put back when the mod is not the one writing there any more.
+// The header is set directly by the shell and has no binding to re-apply, which is why this
+// one still saves its text.
 struct LunarHeaderState {
     winrt::weak_ref<wuxc::TextBlock> label{nullptr};
     std::wstring savedText;
@@ -4816,6 +5161,15 @@ void SweepDayItems() {
     // Everything a pass writes sets this, so that a pass which only reads can be told
     // from one which changed something (see kSweepQuietTicksToStop).
     t_applyWrote = false;
+    t_seenNativeSecondLine = false;
+    t_seenCellWithoutInfo = false;
+
+    // The check below asks whether any ordinary cell still has the shell's own second-line
+    // text. With the Vietnamese lunar calendar on the mod writes into every cell, so no
+    // such text is left to find and the check would always answer "the line is gone".
+    // Only a calendar the mod does not own completely can be judged that way.
+    const std::shared_ptr<const Settings> settings = GetSettings();
+    const bool canJudgeSecondLine = !settings->vietnameseLunar;
 
     // A pass arms state on this thread - the window events, the tracked cells and their
     // callbacks, the timer which called it - so the thread is initialized first: the unload
@@ -4826,6 +5180,14 @@ void SweepDayItems() {
     // the window events are asked for again until the CoreWindow of this thread is there
     // to be watched.
     RegisterCalendarTriggersOnCurrentThread();
+    {
+        const bool shown = CalendarWindowIsShownOnCurrentThread();
+        if (shown != t_calendarShown) {
+            Wh_Log(L"The calendar window is now %s",
+                   shown ? L"shown" : L"hidden");
+            t_calendarShown = shown;
+        }
+    }
     CollectDayItemsOnCurrentThread();
 
     // The list is only indexed, never iterated over: applying to a day item can
@@ -4841,6 +5203,17 @@ void SweepDayItems() {
         i++;
     }
 
+    // The shell can leave the mod's text in the cells after the additional
+    // calendar is switched off. If no ordinary cell still has a second-line text
+    // of its own, take the mod's text off instead of leaving it on screen.
+    if (canJudgeSecondLine && CalendarIsShownNow() &&
+        !t_seenNativeSecondLine && t_seenCellWithoutInfo) {
+        const size_t cleared = ClearModTextOnCurrentThread();
+        if (cleared) {
+            Wh_Log(L"The system's second line is gone; cleared %zu holiday text(s)",
+                   cleared);
+        }
+    }
     for (auto it = t_cells.begin(); it != t_cells.end();) {
         if (it->second->item.get()) {
             ++it;
@@ -4879,10 +5252,12 @@ void SweepDayItems() {
 }
 
 // Undoes everything the mod did to the day cells of this thread: unregisters the two
-// property callbacks, writes the saved text and colour back, clears the state and stops
-// the timer. Only cells which are still alive are handled; one the shell has destroyed
-// is filled in by the shell itself. Nothing here changes the element tree, so the worst
-// case is that the text and the colour are repainted a moment later.
+// property callbacks, puts the shell's binding and colour back while the cell still shows
+// what the mod wrote, clears the state and stops the timer. A cell the shell has
+// already repainted is left alone. Only cells which are still alive are handled; one
+// the shell has destroyed is filled in by the shell itself. Nothing here changes the
+// element tree, so the worst case is that the text and the colour are repainted a
+// moment later.
 void UninitializeDayItemsForCurrentThread() {
     for (auto& entry : t_cells) {
         DayCell& cell = *entry.second;
@@ -4901,6 +5276,8 @@ void UninitializeDayItemsForCurrentThread() {
             cell.dateChangedToken = 0;
         }
 
+        RestoreTooltip(item, cell);
+
         if (auto label = cell.label.get()) {
             if (cell.labelChangedToken) {
                 try {
@@ -4911,12 +5288,15 @@ void UninitializeDayItemsForCurrentThread() {
                 cell.labelChangedToken = 0;
             }
             try {
-                // The text goes back only when the shell's own text was saved.
-                // A cell whose text the mod wrote without saving it keeps the
-                // holiday name until the shell repaints it, which it does when
-                // the calendar is opened again.
-                if (cell.hasSavedText) {
-                    label.Text(cell.savedText);
+                // Only take back a text the mod wrote and the shell has not
+                // repainted since. A known binding is re-applied and the shell
+                // supplies the current value; without one, the mod's text is taken
+                // off rather than left in a cell the shell owns again.
+                if (!cell.appliedText.empty() &&
+                    ElementText(label) == cell.appliedText) {
+                    if (!RestoreLabelBinding(label, cell)) {
+                        label.Text(L"");
+                    }
                 }
                 if (cell.hadColor) {
                     RestoreForeground(label, cell);
@@ -5311,8 +5691,7 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
 
 // The window being shown is the moment the flyout is opened, and it is the signal both
 // targets have in common: the newer builds moved the calendar into a window which is not
-// a CoreWindow, so the activation events are not available there. A hide is ignored - the
-// marks are not taken back when the flyout is closed, the shell repaints the cells itself.
+// a CoreWindow, so the activation events are not available there.
 void OnWindowShown(HWND hWnd) {
     // Nothing is posted while the mod is being unloaded: the post would have to be drained
     // or unhooked again, and the calendar is not marked after this point anyway.
@@ -5338,6 +5717,30 @@ void OnWindowShown(HWND hWnd) {
         hWnd, [](PVOID) { OnCalendarOpenedOnCurrentThread(); }, nullptr);
 }
 
+// The window being hidden is the moment the flyout is closed. The cells stay alive and
+// the shell may empty their second line on the way out; recording the hide keeps that
+// from being read as the additional calendar having been switched off.
+void OnWindowHidden(HWND hWnd) {
+    if (g_shuttingDown) {
+        return;
+    }
+
+    DWORD dwProcessId = 0;
+    if (!hWnd || !GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+        dwProcessId != GetCurrentProcessId()) {
+        return;
+    }
+
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0 ||
+        !IsCalendarWindowClass(szClassName)) {
+        return;
+    }
+
+    RunFromWindowThreadViaPostMessage(
+        hWnd, [](PVOID) { t_calendarShown = false; }, nullptr);
+}
+
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original;
 
@@ -5346,7 +5749,9 @@ ShowWindow_t ShowWindow_Original;
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     const BOOL wasVisible = ShowWindow_Original(hWnd, nCmdShow);
 
-    if (nCmdShow != SW_HIDE) {
+    if (nCmdShow == SW_HIDE) {
+        OnWindowHidden(hWnd);
+    } else {
         OnWindowShown(hWnd);
     }
 
