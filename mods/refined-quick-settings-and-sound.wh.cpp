@@ -9,7 +9,7 @@
 // @include ShellHost.exe
 // @include ShellExperienceHost.exe
 // @architecture x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -liphlpapi -lshlwapi -lshell32 -lversion -luuid
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lcomctl32 -lole32 -loleaut32 -lruntimeobject -liphlpapi -lshlwapi -lshell32 -lversion -luuid
 // @license GPL-3.0-only
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
@@ -93,7 +93,9 @@ in this source file.
 #ifndef WH_WINRT_WINUI2
 #define WH_WINRT_WINUI2
 #endif
+#include <winsock2.h>
 #include <windows.h>
+#include <shellapi.h>
 #include <windhawk_utils.h>
 #include <xamlom.h>
 #include <ocidl.h>
@@ -7811,20 +7813,18 @@ inline void WINAPI Tapped(void *self, IInspectable const &sender,
   originalTapped(self, sender, std::move(args));
 }
 inline bool HookTray(HMODULE module) {
-  // Exact decorated symbols verified in the installed SystemTray.pdb.
+  // Undecorated names verified against the same RVAs in both cached SystemTray PDBs.
   // SystemTray.dll
   WindhawkUtils::SYMBOL_HOOK hooks[] = {
-      {{L"??0IconView@implementation@SystemTray@winrt@@QEAA@XZ"},
+      {{L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)"},
        &originalConstructor,
        Constructed},
-      {{L"?OnTappedHandler@IconView@implementation@SystemTray@winrt@@AEAAXAEBUIInspectable@"
-        L"Foundation@Windows@4@UTappedRoutedEventArgs@Input@Xaml@UI@74@@Z"},
+      {{L"private: void __cdecl winrt::SystemTray::implementation::IconView::OnTappedHandler("
+        L"struct winrt::Windows::Foundation::IInspectable const &,"
+        L"struct winrt::Windows::UI::Xaml::Input::TappedRoutedEventArgs)"},
        &originalTapped,
        Tapped}};
-  WH_HOOK_SYMBOLS_OPTIONS options{};
-  options.optionsSize = sizeof(options);
-  options.noUndecoratedSymbols = TRUE;
-  auto result = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), &options);
+  auto result = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
   return result;
 }
 using Load = decltype(&LoadLibraryExW);
