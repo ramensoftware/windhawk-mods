@@ -2,12 +2,14 @@
 // @id              explorer-terminal-admin-alias
 // @name            File Explorer Terminal Admin Aliases
 // @description     Launch elevated or custom terminals (cmd, Windows Terminal, PowerShell) directly from the File Explorer address bar with configurable aliases.
-// @version         1.0.0
+// @version         1.0.1
 // @author          RobotsNeverDie
 // @github          https://github.com/RBND
 // @homepage        https://github.com/RBND/CMD-Admin
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
+// @architecture    arm64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -luuid
 // ==/WindhawkMod==
 
@@ -25,7 +27,7 @@ Just like typing `cmd`, `wt`, or `powershell` into File Explorer—but with admi
 - **Configurable Aliases**: Choose any alias trigger you want (`cmda`, `wta`, `psa`, `pwsha`, `basha`, or your own custom commands).
 - **Native & Silent Elevation**: Intercepts shell execution directly inside File Explorer and launches with native `runas` elevation—no background PowerShell spawns, no `.bat` files, and zero flickering.
 - **Zero PATH Pollution**: Works without needing to edit your system/user `Path` environment variable.
-- **Directory Preservation**: Accurately preserves the active directory in elevated sessions, handling spaces, special characters, and network UNC paths.
+- **Directory Preservation**: Accurately preserves the active directory in elevated sessions, handling spaces, special characters, drive roots, and network UNC paths.
 - **Virtual Folder Fallback**: Automatically defaults to `%USERPROFILE%` when launched from virtual folders (e.g., "This PC", "Quick Access", or "Home").
 - **Clean UAC Cancellation**: If you cancel or dismiss the UAC prompt, the mod cleanly suppresses the annoying "Windows cannot find..." error dialog.
 - **Inline Arguments Supported**: Type extra arguments directly in the address bar (e.g. `cmda /k dir` or `wta -p PowerShell`).
@@ -157,9 +159,20 @@ struct ModSettings {
     bool custom1Elevated = false;
 
     std::wstring fallbackPath;
-} g_settings;
+};
+
+static ModSettings g_settings;
+static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 
 thread_local bool g_inHook = false;
+
+// Thread-safe settings getter
+static ModSettings GetSettings() {
+    AcquireSRWLockShared(&g_settingsLock);
+    ModSettings copy = g_settings;
+    ReleaseSRWLockShared(&g_settingsLock);
+    return copy;
+}
 
 // Helper: Trim whitespace
 static std::wstring Trim(const std::wstring& str) {
@@ -228,7 +241,7 @@ static void ReplaceAll(std::wstring& str, const std::wstring& from, const std::w
     }
 }
 
-// Helper: Normalize directory string for command line parameters (prevent trailing backslash issues)
+// Helper: Normalize directory string (strip trailing backslash for subdirectories, leave drive root like C:\)
 static std::wstring NormalizeDir(const std::wstring& dir) {
     if (dir.empty()) return dir;
     std::wstring result = dir;
@@ -236,6 +249,16 @@ static std::wstring NormalizeDir(const std::wstring& dir) {
         result.pop_back();
     }
     return result;
+}
+
+// Helper: Safely enclose a path in quotes, escaping trailing backslashes so Windows CLI parser does not treat \" as an escaped quote
+static std::wstring QuotePath(const std::wstring& path) {
+    if (path.empty()) return L"\"\"";
+    std::wstring result = path;
+    if (result.back() == L'\\') {
+        result.push_back(L'\\'); // e.g. "C:\" becomes "C:\\" inside quotes so closing quote is preserved
+    }
+    return L"\"" + result + L"\"";
 }
 
 // Helper: URL decoding (%20 -> space, + -> space)
@@ -304,9 +327,15 @@ static bool GetExplorerWindowFolder(HWND hwnd, std::wstring& outPath) {
     HWND hwndTop = GetAncestor(hwnd, GA_ROOT);
     if (!hwndTop) hwndTop = hwnd;
 
+    // Ensure COM is initialized on the current thread
+    HRESULT hrCoInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     IShellWindows* pShellWindows = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pShellWindows));
-    if (FAILED(hr) || !pShellWindows) return false;
+    if (FAILED(hr) || !pShellWindows) {
+        if (SUCCEEDED(hrCoInit)) CoUninitialize();
+        return false;
+    }
 
     long count = 0;
     pShellWindows->get_Count(&count);
@@ -363,35 +392,41 @@ static bool GetExplorerWindowFolder(HWND hwnd, std::wstring& outPath) {
     }
 
     pShellWindows->Release();
+    if (SUCCEEDED(hrCoInit)) CoUninitialize();
     return found;
 }
 
-// Load / Reload Settings
+// Load / Reload Settings with exclusive lock
 static void LoadSettings() {
-    g_settings.cmdAlias = ReadStringSetting(L"cmd_alias", L"cmda");
-    g_settings.cmdElevated = Wh_GetIntSetting(L"cmd_elevated") != 0;
+    ModSettings s;
+    s.cmdAlias = ReadStringSetting(L"cmd_alias", L"cmda");
+    s.cmdElevated = Wh_GetIntSetting(L"cmd_elevated") != 0;
 
-    g_settings.wtAlias = ReadStringSetting(L"wt_alias", L"wta");
-    g_settings.wtElevated = Wh_GetIntSetting(L"wt_elevated") != 0;
-    g_settings.wtProfile = ReadStringSetting(L"wt_profile", L"");
-    g_settings.wtFallbackCmd = Wh_GetIntSetting(L"wt_fallback_cmd") != 0;
+    s.wtAlias = ReadStringSetting(L"wt_alias", L"wta");
+    s.wtElevated = Wh_GetIntSetting(L"wt_elevated") != 0;
+    s.wtProfile = ReadStringSetting(L"wt_profile", L"");
+    s.wtFallbackCmd = Wh_GetIntSetting(L"wt_fallback_cmd") != 0;
 
-    g_settings.psAlias = ReadStringSetting(L"ps_alias", L"psa");
-    g_settings.psElevated = Wh_GetIntSetting(L"ps_elevated") != 0;
+    s.psAlias = ReadStringSetting(L"ps_alias", L"psa");
+    s.psElevated = Wh_GetIntSetting(L"ps_elevated") != 0;
 
-    g_settings.pwshAlias = ReadStringSetting(L"pwsh_alias", L"pwsha");
-    g_settings.pwshElevated = Wh_GetIntSetting(L"pwsh_elevated") != 0;
+    s.pwshAlias = ReadStringSetting(L"pwsh_alias", L"pwsha");
+    s.pwshElevated = Wh_GetIntSetting(L"pwsh_elevated") != 0;
 
-    g_settings.gitBashAlias = ReadStringSetting(L"gitbash_alias", L"");
-    g_settings.gitBashElevated = Wh_GetIntSetting(L"gitbash_elevated") != 0;
-    g_settings.gitBashPath = ReadStringSetting(L"gitbash_path", L"");
+    s.gitBashAlias = ReadStringSetting(L"gitbash_alias", L"");
+    s.gitBashElevated = Wh_GetIntSetting(L"gitbash_elevated") != 0;
+    s.gitBashPath = ReadStringSetting(L"gitbash_path", L"");
 
-    g_settings.custom1Alias = ReadStringSetting(L"custom1_alias", L"");
-    g_settings.custom1Target = ReadStringSetting(L"custom1_target", L"");
-    g_settings.custom1Args = ReadStringSetting(L"custom1_args", L"%DIR%");
-    g_settings.custom1Elevated = Wh_GetIntSetting(L"custom1_elevated") != 0;
+    s.custom1Alias = ReadStringSetting(L"custom1_alias", L"");
+    s.custom1Target = ReadStringSetting(L"custom1_target", L"");
+    s.custom1Args = ReadStringSetting(L"custom1_args", L"%DIR%");
+    s.custom1Elevated = Wh_GetIntSetting(L"custom1_elevated") != 0;
 
-    g_settings.fallbackPath = ReadStringSetting(L"fallback_path", L"%USERPROFILE%");
+    s.fallbackPath = ReadStringSetting(L"fallback_path", L"%USERPROFILE%");
+
+    AcquireSRWLockExclusive(&g_settingsLock);
+    g_settings = std::move(s);
+    ReleaseSRWLockExclusive(&g_settingsLock);
 }
 
 enum class ShellType {
@@ -407,11 +442,12 @@ enum class ShellType {
 struct MatchedAlias {
     ShellType type = ShellType::None;
     bool elevated = true;
+    std::wstring aliasToken;
     std::wstring extraUserArgs;
 };
 
 // Check if input matches any configured alias
-static bool MatchAlias(LPCWSTR lpFile, LPCWSTR lpParameters, MatchedAlias& outMatch) {
+static bool MatchAlias(LPCWSTR lpFile, LPCWSTR lpParameters, MatchedAlias& outMatch, const ModSettings& settings) {
     if (!lpFile || lpFile[0] == L'\0') return false;
 
     // Clean URL prefixes, search queries, etc.
@@ -427,6 +463,12 @@ static bool MatchAlias(LPCWSTR lpFile, LPCWSTR lpParameters, MatchedAlias& outMa
         inlineArgs = Trim(fullCommand.substr(firstSpace + 1));
     } else {
         aliasToken = fullCommand;
+    }
+
+    // Strip leading path if synthesized (e.g. C:\Windows\System32\cmda.exe -> cmda.exe)
+    size_t lastSlash = aliasToken.find_last_of(L"\\/");
+    if (lastSlash != std::wstring::npos) {
+        aliasToken = aliasToken.substr(lastSlash + 1);
     }
 
     // Strip trailing ".exe" or ".bat" if typed
@@ -450,46 +492,47 @@ static bool MatchAlias(LPCWSTR lpFile, LPCWSTR lpParameters, MatchedAlias& outMa
         }
     }
     outMatch.extraUserArgs = userArgs;
+    outMatch.aliasToken = aliasToken;
 
     // Check Command Prompt
-    if (!g_settings.cmdAlias.empty() && EqualsIgnoreCase(aliasToken, g_settings.cmdAlias)) {
+    if (!settings.cmdAlias.empty() && EqualsIgnoreCase(aliasToken, settings.cmdAlias)) {
         outMatch.type = ShellType::Cmd;
-        outMatch.elevated = g_settings.cmdElevated;
+        outMatch.elevated = settings.cmdElevated;
         return true;
     }
 
     // Check Windows Terminal
-    if (!g_settings.wtAlias.empty() && EqualsIgnoreCase(aliasToken, g_settings.wtAlias)) {
+    if (!settings.wtAlias.empty() && EqualsIgnoreCase(aliasToken, settings.wtAlias)) {
         outMatch.type = ShellType::WindowsTerminal;
-        outMatch.elevated = g_settings.wtElevated;
+        outMatch.elevated = settings.wtElevated;
         return true;
     }
 
     // Check PowerShell 5.1
-    if (!g_settings.psAlias.empty() && EqualsIgnoreCase(aliasToken, g_settings.psAlias)) {
+    if (!settings.psAlias.empty() && EqualsIgnoreCase(aliasToken, settings.psAlias)) {
         outMatch.type = ShellType::PowerShell;
-        outMatch.elevated = g_settings.psElevated;
+        outMatch.elevated = settings.psElevated;
         return true;
     }
 
     // Check PowerShell 7+
-    if (!g_settings.pwshAlias.empty() && EqualsIgnoreCase(aliasToken, g_settings.pwshAlias)) {
+    if (!settings.pwshAlias.empty() && EqualsIgnoreCase(aliasToken, settings.pwshAlias)) {
         outMatch.type = ShellType::PowerShellCore;
-        outMatch.elevated = g_settings.pwshElevated;
+        outMatch.elevated = settings.pwshElevated;
         return true;
     }
 
     // Check Git Bash
-    if (!g_settings.gitBashAlias.empty() && EqualsIgnoreCase(aliasToken, g_settings.gitBashAlias)) {
+    if (!settings.gitBashAlias.empty() && EqualsIgnoreCase(aliasToken, settings.gitBashAlias)) {
         outMatch.type = ShellType::GitBash;
-        outMatch.elevated = g_settings.gitBashElevated;
+        outMatch.elevated = settings.gitBashElevated;
         return true;
     }
 
     // Check Custom 1
-    if (!g_settings.custom1Alias.empty() && EqualsIgnoreCase(aliasToken, g_settings.custom1Alias)) {
+    if (!settings.custom1Alias.empty() && EqualsIgnoreCase(aliasToken, settings.custom1Alias)) {
         outMatch.type = ShellType::Custom1;
-        outMatch.elevated = g_settings.custom1Elevated;
+        outMatch.elevated = settings.custom1Elevated;
         return true;
     }
 
@@ -497,29 +540,33 @@ static bool MatchAlias(LPCWSTR lpFile, LPCWSTR lpParameters, MatchedAlias& outMa
 }
 
 // Resolve the active directory with virtual folder fallbacks
-static std::wstring ResolveTargetDirectory(HWND hwnd, LPCWSTR lpDirectory) {
+static std::wstring ResolveTargetDirectory(HWND hwnd, LPCWSTR lpDirectory, const ModSettings& settings) {
     WCHAR szSysDir[MAX_PATH];
     GetSystemDirectoryW(szSysDir, ARRAYSIZE(szSysDir));
 
     std::wstring target;
-    if (lpDirectory && lpDirectory[0] != L'\0') {
+
+    // 1. Try COM folder from active Explorer window first if hwnd is valid.
+    // If the user is viewing a real folder (including C:\Windows\System32), COM returns the exact folder.
+    // Virtual folders (e.g. "This PC") fail SHGetPathFromIDListW and return false.
+    if (hwnd) {
+        std::wstring comPath;
+        if (GetExplorerWindowFolder(hwnd, comPath) && IsDirectory(comPath)) {
+            target = comPath;
+        }
+    }
+
+    // 2. If COM didn't resolve, check lpDirectory (ignoring System32 which is Explorer's default for virtual folders)
+    if (target.empty() && lpDirectory && lpDirectory[0] != L'\0') {
         std::wstring rawDir = Trim(lpDirectory);
         if (IsDirectory(rawDir) && !EqualsIgnoreCase(rawDir, szSysDir)) {
             target = rawDir;
         }
     }
 
-    // If still empty or in System32, try retrieving from Explorer window COM
-    if (target.empty() && hwnd) {
-        std::wstring comPath;
-        if (GetExplorerWindowFolder(hwnd, comPath) && IsDirectory(comPath) && !EqualsIgnoreCase(comPath, szSysDir)) {
-            target = comPath;
-        }
-    }
-
-    // If still empty, use fallback directory (%USERPROFILE%)
+    // 3. If still empty, use configured fallback directory (%USERPROFILE%)
     if (target.empty()) {
-        std::wstring fallback = ExpandEnv(g_settings.fallbackPath);
+        std::wstring fallback = ExpandEnv(settings.fallbackPath);
         if (IsDirectory(fallback)) {
             target = fallback;
         } else {
@@ -545,13 +592,15 @@ PathFindOnPathW_t PathFindOnPathW_Original = nullptr;
 
 // Core execution handler
 static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory) {
+    ModSettings settings = GetSettings();
     MatchedAlias match;
-    if (!MatchAlias(lpFile, lpParameters, match)) {
+    if (!MatchAlias(lpFile, lpParameters, match, settings)) {
         return false;
     }
 
-    std::wstring rawTargetDir = ResolveTargetDirectory(hwnd, lpDirectory);
+    std::wstring rawTargetDir = ResolveTargetDirectory(hwnd, lpDirectory, settings);
     std::wstring targetDir = NormalizeDir(rawTargetDir);
+    std::wstring quotedTargetDir = QuotePath(targetDir);
     Wh_Log(L"Intercepted alias: raw='%s' dir='%s'", lpFile ? lpFile : L"", targetDir.c_str());
 
     std::wstring executable;
@@ -561,7 +610,7 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
     switch (match.type) {
         case ShellType::Cmd: {
             executable = L"cmd.exe";
-            arguments = L"/k pushd \"" + targetDir + L"\"";
+            arguments = L"/k pushd " + quotedTargetDir;
             if (!match.extraUserArgs.empty()) {
                 arguments += L" & " + match.extraUserArgs;
             }
@@ -570,19 +619,19 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
 
         case ShellType::WindowsTerminal: {
             bool hasWT = ExecutableExists(L"wt.exe");
-            if (!hasWT && g_settings.wtFallbackCmd) {
+            if (!hasWT && settings.wtFallbackCmd) {
                 executable = L"cmd.exe";
-                arguments = L"/k pushd \"" + targetDir + L"\"";
+                arguments = L"/k pushd " + quotedTargetDir;
                 if (!match.extraUserArgs.empty()) {
                     arguments += L" & " + match.extraUserArgs;
                 }
             } else {
                 executable = L"wt.exe";
                 arguments = L"";
-                if (!g_settings.wtProfile.empty()) {
-                    arguments += L"-p \"" + g_settings.wtProfile + L"\" ";
+                if (!settings.wtProfile.empty()) {
+                    arguments += L"-p " + QuotePath(settings.wtProfile) + L" ";
                 }
-                arguments += L"-d \"" + targetDir + L"\"";
+                arguments += L"-d " + quotedTargetDir;
                 if (!match.extraUserArgs.empty()) {
                     arguments += L" " + match.extraUserArgs;
                 }
@@ -615,7 +664,7 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
         }
 
         case ShellType::GitBash: {
-            std::wstring bashPath = g_settings.gitBashPath;
+            std::wstring bashPath = settings.gitBashPath;
             if (bashPath.empty()) {
                 std::wstring testPath = ExpandEnv(L"%ProgramFiles%\\Git\\git-bash.exe");
                 if (FileExists(testPath)) {
@@ -632,7 +681,7 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
                 bashPath = ExpandEnv(bashPath);
             }
             executable = bashPath;
-            arguments = L"--cd=\"" + targetDir + L"\"";
+            arguments = L"--cd=" + quotedTargetDir;
             if (!match.extraUserArgs.empty()) {
                 arguments += L" " + match.extraUserArgs;
             }
@@ -640,8 +689,8 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
         }
 
         case ShellType::Custom1: {
-            executable = ExpandEnv(g_settings.custom1Target);
-            arguments = g_settings.custom1Args;
+            executable = ExpandEnv(settings.custom1Target);
+            arguments = settings.custom1Args;
             ReplaceAll(arguments, L"%DIR%", targetDir);
             ReplaceAll(arguments, L"<DIR>", targetDir);
             if (arguments.find(L"%ARGS%") != std::wstring::npos || arguments.find(L"<ARGS>") != std::wstring::npos) {
@@ -681,6 +730,9 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
         if (dwErr == ERROR_CANCELLED) {
             return true;
         }
+        // If launch failed for another reason (e.g. binary not found), return false
+        // so Explorer can report the error properly
+        return false;
     }
 
     return true;
@@ -699,21 +751,25 @@ DWORD WINAPI SearchPathW_Hook(
         return SearchPathW_Original(lpPath, lpFileName, lpExtension, nBufferLength, lpBuffer, lpFilePart);
     }
 
+    ModSettings settings = GetSettings();
     MatchedAlias match;
-    if (MatchAlias(lpFileName, nullptr, match)) {
+    if (MatchAlias(lpFileName, nullptr, match, settings)) {
         Wh_Log(L"SearchPathW intercepted alias: %s", lpFileName);
         WCHAR sysDir[MAX_PATH];
         GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
         WCHAR dummyPath[MAX_PATH];
-        PathCombineW(dummyPath, sysDir, L"cmd.exe");
+        std::wstring fakeExe = match.aliasToken + L".exe";
+        PathCombineW(dummyPath, sysDir, fakeExe.c_str());
         DWORD len = (DWORD)wcslen(dummyPath);
         if (lpBuffer && nBufferLength > len) {
             wcscpy_s(lpBuffer, nBufferLength, dummyPath);
             if (lpFilePart) {
                 *lpFilePart = wcsrchr(lpBuffer, L'\\') ? wcsrchr(lpBuffer, L'\\') + 1 : lpBuffer;
             }
+            return len;
         }
-        return len;
+        // Comply with Win32 SearchPath contract: return required size including null terminator
+        return len + 1;
     }
 
     return SearchPathW_Original(lpPath, lpFileName, lpExtension, nBufferLength, lpBuffer, lpFilePart);
@@ -725,12 +781,14 @@ BOOL WINAPI PathFindOnPathW_Hook(LPWSTR pszPath, PZPCWSTR ppszOtherDirs) {
         return PathFindOnPathW_Original(pszPath, ppszOtherDirs);
     }
 
+    ModSettings settings = GetSettings();
     MatchedAlias match;
-    if (MatchAlias(pszPath, nullptr, match)) {
+    if (MatchAlias(pszPath, nullptr, match, settings)) {
         Wh_Log(L"PathFindOnPathW intercepted alias: %s", pszPath);
         WCHAR sysDir[MAX_PATH];
         GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
-        PathCombineW(pszPath, sysDir, L"cmd.exe");
+        std::wstring fakeExe = match.aliasToken + L".exe";
+        PathCombineW(pszPath, sysDir, fakeExe.c_str());
         return TRUE;
     }
 
