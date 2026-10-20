@@ -2,10 +2,10 @@
 // @id              taskbar-rdp-launcher
 // @name            Taskbar RDP Launcher
 // @description     A taskbar widget that starts Remote Desktop full screen on the number of displays you pick
-// @version         1.1.0
+// @version         1.2.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
-// @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lcomdlg32
 // @license         MIT
 // ==/WindhawkMod==
@@ -71,9 +71,10 @@ this one into one: right-click any of them, open **Link widgets**, and choose **
 they sit side by side with a divider between them, and dragging any of them moves them all; **Move
 this widget left** and **right** change their order. A widget that hides leaves no gap.
 
-Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
-later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
-unlinked.
+Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.2 or
+later, Taskbar Snipper 1.1 or later): their widgets are inside the taskbar now, where older versions
+don't look for them, so an older one overlaps the others and doesn't follow them when they're
+dragged, reordered or unlinked.
 
 ## Settings
 
@@ -110,7 +111,6 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 
 namespace {
 
-const wchar_t kSelfApp[] = L"RDPLauncher";
 const wchar_t kWidgetClassName[] = L"RDPLauncher.Mod.Widget";
 const wchar_t kWidgetTitle[] = L"Taskbar RDP Launcher";
 // This widget's place among the widgets that can link (WidgetLink::kMembers), and the one it was
@@ -219,9 +219,9 @@ std::wstring WindowsFolder() {
     return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows";
 }
 
-// System32, for starting the programs in it. Windhawk 1.7 runs tool mods in its 32-bit
-// windhawk.exe, where Windows redirects System32 to the 32-bit SysWOW64; "Sysnative" reaches the
-// real System32 from there. Windhawk 2.0 runs them 64-bit, where System32 is the real one.
+// System32, for starting the programs in it. Explorer and the app are 64-bit on 64-bit Windows,
+// where System32 is the real one; a 32-bit process there gets the 32-bit SysWOW64 instead, and
+// "Sysnative" reaches the real System32 from it.
 std::wstring NativeSystemFolder() {
     return WindowsFolder() + (IsWow64() ? L"\\Sysnative" : L"\\System32");
 }
@@ -531,52 +531,27 @@ HWND TaskbarWindow() {
     return FindWindowW(L"Shell_TrayWnd", nullptr);
 }
 
-// The main taskbar and its monitor, when the taskbar is horizontal and on screen (not slid away
-// by auto-hide).
-bool TryGetVisibleTaskbar(RECT& bar, RECT& monitor) {
-    HWND window = TaskbarWindow();
-    if (!window || !IsWindowVisible(window) || !GetWindowRect(window, &bar)) {
+// Whether this is an Explorer process.
+bool InExplorer() {
+    WCHAR path[MAX_PATH];
+    DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) {
         return false;
     }
-    MONITORINFO info{sizeof(info)};
-    if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info)) {
-        return false;
-    }
-    monitor = info.rcMonitor;
-    int width = bar.right - bar.left;
-    int height = bar.bottom - bar.top;
-    RECT visible{};
-    IntersectRect(&visible, &bar, &monitor);
-    return width > height && height > 0 && visible.bottom - visible.top >= height - 2;
+    const wchar_t* name = wcsrchr(path, L'\\');
+    return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
 }
 
-// Whether a full-screen app (game, video, presentation) is in front on the monitor.
-// shellReportsFullScreen is Windows' own verdict, the notification that makes the taskbar step
-// aside; screen overlays such as screenshot tools cover the screen too, but Windows doesn't
-// count them, so neither does this.
-bool IsFullScreenAppActive(const RECT& monitor, HWND ignore, bool shellReportsFullScreen) {
-    QUERY_USER_NOTIFICATION_STATE state;
-    if (SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_RUNNING_D3D_FULL_SCREEN) {
-        return true;
+// The taskbar to put the widget in, if there is one. In Explorer, only the process that has it:
+// Windhawk loads the mod into Explorer's folder-window processes too. (The app puts the widget in
+// Explorer's taskbar from its own process.)
+HWND WidgetTaskbar() {
+    HWND taskbar = TaskbarWindow();
+    DWORD process = 0;
+    if (taskbar && InExplorer() && GetWindowThreadProcessId(taskbar, &process) && process != GetCurrentProcessId()) {
+        return nullptr;
     }
-    if (!shellReportsFullScreen) {
-        return false;
-    }
-    // The notification doesn't say which monitor, so also check the app in front covers this one.
-    HWND window = GetForegroundWindow();
-    RECT rect;
-    if (!window || window == ignore || !GetWindowRect(window, &rect)) {
-        return false;
-    }
-    WCHAR className[256] = {};
-    GetClassNameW(window, className, ARRAYSIZE(className));
-    for (const wchar_t* shellClass : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"}) {
-        if (wcscmp(className, shellClass) == 0) {
-            return false;
-        }
-    }
-    return rect.left <= monitor.left && rect.top <= monitor.top && rect.right >= monitor.right &&
-           rect.bottom >= monitor.bottom;
+    return taskbar;
 }
 
 UINT DpiForPoint(POINT point) {
@@ -1441,10 +1416,14 @@ BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
     return TRUE;
 }
 
-// The widget windows of the other widgets that are running, with their ids.
+// The widget windows of the other widgets that are running, with their ids: top-level windows, and
+// windows inside the taskbar (a widget's mod that Windhawk loads into Explorer puts it there).
 std::vector<std::pair<int, HWND>> OtherWidgets() {
     std::vector<std::pair<int, HWND>> widgets;
     EnumWindows(AddOtherWidget, (LPARAM)&widgets);
+    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        EnumChildWindows(taskbar, AddOtherWidget, (LPARAM)&widgets);
+    }
     return widgets;
 }
 
@@ -1453,7 +1432,11 @@ HWND FindMember(int member) {
         return nullptr;
     }
     if (member < kMemberCount) {
-        return FindWindowW(kMembers[member].windowClass, nullptr);
+        if (HWND window = FindWindowW(kMembers[member].windowClass, nullptr)) {
+            return window;
+        }
+        HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        return taskbar ? FindWindowExW(taskbar, nullptr, kMembers[member].windowClass, nullptr) : nullptr;
     }
     // One added after this widget: by the id it shows.
     for (const auto& [id, window] : OtherWidgets()) {
@@ -1502,11 +1485,15 @@ void NotifyOthers() {
 // The taskbar widget
 
 // A taskbar button in the style of the Windows weather widget. Windows 11 has no API for adding
-// things to the taskbar, so this is a transparent, always-on-top window kept just above the
-// taskbar. It moves back above the taskbar when the taskbar is clicked, and hides when the
-// taskbar auto-hides or a full-screen app is in front. To know about full-screen apps it registers
-// as an app bar (without reserving any screen space), the same way the taskbar learns to step
-// aside for them. Drag it to move it along the taskbar.
+// things to the taskbar, so this is a transparent window inside the taskbar's own window, over the
+// buttons Explorer draws there: it moves and auto-hides with the taskbar, and full-screen apps and
+// the Start menu cover it as they do the rest of the taskbar. Drag it to move it along the taskbar.
+//
+// Windhawk loads the mod into Explorer, which has the taskbar; the app puts the widget into
+// Explorer's taskbar from its own process. Windows sends its notices of settings, display and
+// taskbar changes only to top-level windows, so a hidden one takes those for the widget, and keeps
+// its timers: when Explorer recreates the taskbar, the widget's window goes with the old one, and
+// the widget goes into the new one.
 //
 // Subclasses lay out and draw the content and handle clicks.
 class TaskbarWidget {
@@ -1515,11 +1502,8 @@ public:
         if (hwnd_) {
             DestroyWindow(hwnd_);
         }
-        if (foregroundHook_) {
-            UnhookWinEvent(foregroundHook_);
-        }
-        if (widgetForHook_ == this) {
-            widgetForHook_ = nullptr;
+        if (events_.hwnd_) {
+            DestroyWindow(events_.hwnd_);
         }
     }
 
@@ -1531,43 +1515,36 @@ public:
     bool Create(int offset) {
         offset_ = offset;
         link_ = WidgetLink::Load();
-        if (const wchar_t* registered = RegisterForwardingClass<TaskbarWidget>(kWidgetClassName)) {
-            CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, registered, kWidgetTitle, WS_POPUP,
-                            0, 0, 1, 1, nullptr, nullptr, ModuleInstance(), this);
+        events_.widget = this;
+        static const std::wstring eventsClass = std::wstring(kWidgetClassName) + L".Events";
+        if (const wchar_t* registered = RegisterForwardingClass<Events>(eventsClass.c_str())) {
+            CreateWindowExW(WS_EX_TOOLWINDOW, registered, kWidgetTitle, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), &events_);
         }
-        if (!hwnd_) {
+        if (!events_.hwnd_) {
             return false;
         }
-        // Only needed when Windhawk itself runs as administrator (a portable Windhawk started that
-        // way): lets the other widgets' and the shell's messages through to the widget.
-        ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
-        appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
-        ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
+        // Only needed when the app runs as administrator: lets Explorer's notice through.
         taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
-        ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
-        RegisterAppBar();
-        // Take the other widgets' copy of the group if it changed more recently, and let them know
-        // this one is here.
-        WidgetLink::Publish(hwnd_, link_);
-        SyncLink();
-        WidgetLink::NotifyOthers();
+        ChangeWindowMessageFilterEx(events_.hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
+        SetTimer(events_.hwnd_, kPlacementTimer, 250, nullptr);
+        AttachToTaskbar();
         return true;
     }
 
     void Destroy() {
-        if (!hwnd_) {
-            return;
-        }
         SetShown(false);
+        if (events_.hwnd_) {
+            DestroyWindow(events_.hwnd_);  // Its timers go with it.
+        }
         if (linkSavePending_) {
+            linkSavePending_ = false;
             WidgetLink::Save(link_);
         }
-        APPBARDATA data{sizeof(data)};
-        data.hWnd = hwnd_;
-        SHAppBarMessage(ABM_REMOVE, &data);
-        WidgetLink::Unpublish(hwnd_);
-        DestroyWindow(hwnd_);
-        WidgetLink::NotifyOthers();  // So they close the gap.
+        if (hwnd_) {
+            WidgetLink::Unpublish(hwnd_);
+            DestroyWindow(hwnd_);
+            WidgetLink::NotifyOthers();  // So they close the gap.
+        }
     }
 
     HWND Handle() const { return hwnd_; }
@@ -1576,30 +1553,17 @@ public:
 
     RECT Bounds() const {
         RECT rect{};
-        GetWindowRect(hwnd_, &rect);
+        if (hwnd_) {
+            GetWindowRect(hwnd_, &rect);
+        }
         return rect;
     }
 
-    // Shows or hides the widget; it only watches the taskbar while it's meant to be shown.
     void SetShown(bool shown) {
         if (shown == shown_) {
             return;
         }
         shown_ = shown;
-        if (shown) {
-            SetTimer(hwnd_, kPlacementTimer, 250, nullptr);
-            if (!foregroundHook_) {
-                widgetForHook_ = this;
-                foregroundHook_ = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
-                                                  OnForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
-            }
-        } else {
-            KillTimer(hwnd_, kPlacementTimer);
-            if (foregroundHook_) {
-                UnhookWinEvent(foregroundHook_);
-                foregroundHook_ = nullptr;
-            }
-        }
         UpdatePlacement(true);
     }
 
@@ -1699,35 +1663,12 @@ public:
             UpdatePlacement(false);
             return true;
         }
-        if (taskbarCreatedMessage_ && message == taskbarCreatedMessage_) {
-            // Explorer started (again, or after the mod at sign-in) and knows no app bars yet.
-            shellReportsFullScreen_ = false;
-            RegisterAppBar();
-            UpdatePlacement(true);
-            return true;
-        }
-        if (appBarMessage_ && message == appBarMessage_) {
-            // Windows says a full-screen app opened or closed (lParam is nonzero while one is open).
-            if (wParam == ABN_FULLSCREENAPP) {
-                shellReportsFullScreen_ = lParam != 0;
-                UpdatePlacement(false);
-            }
-            return true;
-        }
         switch (message) {
             case WM_MOUSEACTIVATE:
                 result = MA_NOACTIVATE;
                 return true;
             case WM_TIMER:
-                if (wParam == kPlacementTimer) {
-                    UpdatePlacement(false);
-                } else if (wParam == kLinkSaveTimer) {
-                    KillTimer(hwnd_, kLinkSaveTimer);
-                    linkSavePending_ = false;
-                    WidgetLink::Save(link_);
-                } else {
-                    OnTimer(wParam);
-                }
+                OnTimer(wParam);
                 return true;
             case WM_MOUSEMOVE: {
                 POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
@@ -1824,15 +1765,15 @@ public:
                 }
                 return true;
             }
-            case WM_DISPLAYCHANGE:
-                if (onDisplaysChanged) {
-                    onDisplaysChanged();
-                }
+            case WM_DPICHANGED_AFTERPARENT:
                 UpdatePlacement(true);
                 return false;
-            case WM_SETTINGCHANGE:
-                RefreshShellSettings();
-                UpdatePlacement(true);
+            case WM_DESTROY:
+                // Destroyed here, or along with the taskbar (which Explorer can recreate; the widget
+                // goes into the new one).
+                WidgetLink::Unpublish(hwnd_);
+                OnHidden();
+                WidgetLink::NotifyOthers();
                 return false;
         }
         return false;
@@ -1864,15 +1805,13 @@ protected:
 
     bool Pressed() const { return pressed_; }
 
-    // Moves the widget onto the taskbar and above it, or hides it when it shouldn't show.
+    // Places the widget on the taskbar, or hides it when it shouldn't show.
     void UpdatePlacement(bool contentChanged) {
-        if (!hwnd_) {
-            return;
-        }
+        HWND taskbar = hwnd_ ? GetParent(hwnd_) : nullptr;
         RECT bar;
-        RECT monitor;
-        if (!shown_ || !TryGetVisibleTaskbar(bar, monitor) || IsFullScreenAppActive(monitor, hwnd_, shellReportsFullScreen_)) {
-            if (IsWindowVisible(hwnd_)) {
+        // A vertical taskbar (Windows 10 can have one) has no room for it.
+        if (!shown_ || !taskbar || !GetWindowRect(taskbar, &bar) || bar.right - bar.left <= bar.bottom - bar.top) {
+            if (hwnd_ && IsWindowVisible(hwnd_)) {
                 ShowWindow(hwnd_, SW_HIDE);
                 if (link_.Linked()) {
                     WidgetLink::NotifyOthers();  // So they close the gap.
@@ -1883,12 +1822,9 @@ protected:
         }
 
         // Scale with the taskbar's display.
-        UINT dpi = GetDpiForWindow(TaskbarWindow());
-        if (dpi == 0) {
-            dpi = DpiForPoint({(bar.left + bar.right) / 2, (bar.top + bar.bottom) / 2});
-        }
-        float scale = dpi / 96.0f;
-        if (scale > 0 && scale != scale_) {
+        UINT dpi = GetDpiForWindow(taskbar);
+        float scale = (dpi ? dpi : 96) / 96.0f;
+        if (scale != scale_) {
             scale_ = scale;
             OnScaleChanged();
             contentChanged = true;
@@ -1955,13 +1891,13 @@ protected:
             Render(target);
         }
         if (!IsWindowVisible(hwnd_)) {
-            ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+            ShowWindow(hwnd_, SW_SHOWNA);
         }
+        StayOverTaskbarContent();
         if (moved && linked) {
             WidgetLink::NotifyOthers();  // So they move up against this widget.
         }
         OnPlaced();
-        StayAboveTaskbar();
     }
 
     void Render() { Render(Bounds()); }
@@ -1970,14 +1906,77 @@ private:
     static constexpr UINT_PTR kPlacementTimer = 1;
     static constexpr UINT_PTR kLinkSaveTimer = 3;
 
-    // Registers the widget as an app bar (without reserving any space), for Windows' notice that a
-    // full-screen app opened or closed. Fails harmlessly when it's registered already, and when the
-    // taskbar isn't there yet; it's done again when the taskbar is created.
-    void RegisterAppBar() {
-        APPBARDATA data{sizeof(data)};
-        data.hWnd = hwnd_;
-        data.uCallbackMessage = appBarMessage_;
-        SHAppBarMessage(ABM_NEW, &data);
+    // The hidden top-level window: takes Windows' notices for the widget, and keeps its timers.
+    struct Events {
+        TaskbarWidget* widget = nullptr;
+        HWND hwnd_ = nullptr;
+
+        bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+            return widget->HandleEvent(message, wParam, lParam, result);
+        }
+    };
+
+    bool HandleEvent(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+        if (taskbarCreatedMessage_ && message == taskbarCreatedMessage_) {
+            // Explorer started again, or recreated the taskbar: the widget goes into the new one.
+            AttachToTaskbar();
+            return true;
+        }
+        switch (message) {
+            case WM_TIMER:
+                if (wParam == kPlacementTimer) {
+                    // Also notices the taskbar moving or changing size.
+                    AttachToTaskbar();
+                    if (shown_) {
+                        UpdatePlacement(false);
+                    }
+                } else if (wParam == kLinkSaveTimer) {
+                    KillTimer(events_.hwnd_, kLinkSaveTimer);
+                    linkSavePending_ = false;
+                    WidgetLink::Save(link_);
+                }
+                return true;
+            case WM_DISPLAYCHANGE:
+                if (onDisplaysChanged) {
+                    onDisplaysChanged();
+                }
+                UpdatePlacement(true);
+                return false;
+            case WM_SETTINGCHANGE:
+                RefreshShellSettings();
+                UpdatePlacement(true);
+                return false;
+        }
+        return false;
+    }
+
+    // Puts the widget in the taskbar, once there is one (again).
+    void AttachToTaskbar() {
+        if (hwnd_) {
+            return;
+        }
+        HWND taskbar = WidgetTaskbar();
+        if (!taskbar) {
+            return;
+        }
+        if (const wchar_t* registered = RegisterForwardingClass<TaskbarWidget>(kWidgetClassName)) {
+            // Layered, as only a layered window draws over the content of the Windows 11 taskbar.
+            CreateWindowExW(WS_EX_LAYERED | WS_EX_NOPARENTNOTIFY, registered, kWidgetTitle, WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 1, 1,
+                            taskbar, nullptr, ModuleInstance(), this);
+        }
+        if (!hwnd_) {
+            return;
+        }
+        // Only needed when the app runs as administrator: lets the other widgets' messages through.
+        ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
+        // Take the other widgets' copy of the group if it changed more recently, and let them know
+        // this one is here.
+        WidgetLink::Publish(hwnd_, link_);
+        SyncLink();
+        WidgetLink::NotifyOthers();
+        if (shown_) {
+            UpdatePlacement(true);
+        }
     }
 
     // A change to the group made here: it's stamped as the newest copy, shown to the other widgets,
@@ -1989,7 +1988,9 @@ private:
         }
         group.stamp = WidgetLink::NewStamp(newerThan);
         link_ = group;
-        WidgetLink::Publish(hwnd_, link_);
+        if (hwnd_) {
+            WidgetLink::Publish(hwnd_, link_);
+        }
         SaveLinkSoon();
     }
 
@@ -1998,14 +1999,16 @@ private:
         std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest();
         if (newest && newest->stamp > link_.stamp) {
             link_ = *newest;
-            WidgetLink::Publish(hwnd_, link_);
+            if (hwnd_) {
+                WidgetLink::Publish(hwnd_, link_);
+            }
             SaveLinkSoon();
         }
     }
 
     void SaveLinkSoon() {
         linkSavePending_ = true;
-        SetTimer(hwnd_, kLinkSaveTimer, 1000, nullptr);
+        SetTimer(events_.hwnd_, kLinkSaveTimer, 1000, nullptr);
     }
 
     // Keeps where a drag left the widget (or the group).
@@ -2025,10 +2028,11 @@ private:
         }
     }
 
+    // Draws the widget at the bounds (on screen).
     void Render(const RECT& bounds) {
         int width = bounds.right - bounds.left;
         int height = bounds.bottom - bounds.top;
-        if (width <= 0 || height <= 0) {
+        if (!hwnd_ || width <= 0 || height <= 0) {
             return;
         }
         BITMAPINFO info{};
@@ -2063,7 +2067,9 @@ private:
                 }
                 Draw(graphics, width, height, lightTaskbar_);
             }
+            // A child window's position is in its parent's client area.
             POINT position{bounds.left, bounds.top};
+            MapWindowPoints(nullptr, GetParent(hwnd_), &position, 1);
             SIZE size{width, height};
             POINT source{0, 0};
             BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -2077,42 +2083,24 @@ private:
         ReleaseDC(nullptr, screen);
     }
 
-    // The taskbar comes to the front whenever it's clicked, so move back above it. Only just above
-    // it, though: windows that belong over the taskbar, like a screenshot tool's overlay or an
-    // always-on-top window, stay over the widget too.
-    void StayAboveTaskbar() {
-        HWND taskbar = TaskbarWindow();
-        if (!taskbar) {
-            return;
-        }
-        for (HWND window = GetWindow(taskbar, GW_HWNDPREV); window; window = GetWindow(window, GW_HWNDPREV)) {
-            if (window == hwnd_) {
-                return;  // Already above the taskbar.
+    // Keeps the widget over the taskbar's own content (the windows Explorer draws its buttons in),
+    // leaving other widgets in the taskbar where they are.
+    void StayOverTaskbarContent() {
+        for (HWND above = GetWindow(hwnd_, GW_HWNDPREV); above; above = GetWindow(above, GW_HWNDPREV)) {
+            if (!GetPropW(above, WidgetLink::kMemberProperty)) {
+                SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                return;
             }
         }
-        // Placing the widget after (below) the window just above the taskbar puts it directly over the taskbar.
-        HWND justAbove = GetWindow(taskbar, GW_HWNDPREV);
-        SetWindowPos(hwnd_, justAbove ? justAbove : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
-    // Another app came to the front, which may have put the taskbar over the widget.
-    static void CALLBACK OnForegroundChanged(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
-        if (widgetForHook_) {
-            widgetForHook_->UpdatePlacement(false);
-        }
-    }
-
-    static inline TaskbarWidget* widgetForHook_ = nullptr;
-
+    Events events_;
     bool shown_ = false;
     int offset_ = -1;  // Pixels from the taskbar's left edge; negative means the default position.
     RECT taskbar_{};
     float scale_ = 0;
     bool lightTaskbar_ = false;
-    bool shellReportsFullScreen_ = false;
-    UINT appBarMessage_ = 0;
     UINT taskbarCreatedMessage_ = 0;
-    HWINEVENTHOOK foregroundHook_ = nullptr;
     bool trackingMouse_ = false;
     bool pressed_ = false;
     bool dragging_ = false;
@@ -2279,7 +2267,7 @@ private:
     std::vector<HANDLE> threads_;
 };
 
-// Runs the UI on its own thread with a message loop, for WhTool_ModInit/WhTool_ModUninit.
+// Runs the UI on its own thread with a message loop, for Wh_ModInit/Wh_ModUninit.
 class UiThread {
 public:
     // run is called on the new thread (with COM and GDI+ set up) and returns an object that lives
@@ -4526,8 +4514,13 @@ UiThread g_uiThread;
 
 }  // namespace
 
-BOOL WhTool_ModInit() {
+BOOL Wh_ModInit() {
     Wh_Log(L">");
+    // Windhawk loads the mod into every Explorer process, folder windows' too: it runs in the one
+    // with the taskbar (or, while Explorer is starting, the one that's about to have it).
+    if (TaskbarWindow() && !WidgetTaskbar()) {
+        return FALSE;
+    }
     return g_uiThread.Start([]() -> std::shared_ptr<void> {
         auto app = std::make_shared<RdpApp>();
         if (!app->Start()) {
@@ -4538,190 +4531,11 @@ BOOL WhTool_ModInit() {
     });
 }
 
-void WhTool_ModSettingsChanged() {
-    Wh_Log(L">");
-}
-
-void WhTool_ModUninit() {
-    Wh_Log(L">");
-    g_uiThread.Stop();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
-
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
-}
-
-BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
+    Wh_Log(L">");
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
+    Wh_Log(L">");
+    g_uiThread.Stop();
 }
