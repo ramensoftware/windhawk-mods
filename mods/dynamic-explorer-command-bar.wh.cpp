@@ -79,7 +79,9 @@ The mod supports rich parameter expansions that dynamically resolve the state of
 | `%%` | Literal percent sign escape | `%` |
 
 Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.exe "%sel%"`).
-> **Note on UI Labels:** To prevent toolbar buttons from overflowing, multi-item tokens like `%base%`, `%name%`, and `%1%` automatically evaluate to the **first highlighted item's name** rather than full multi-line absolute paths.
+
+> * **Virtual Shell Locations:** Locations such as *This PC*, *Recycle Bin*, and *Control Panel* do not possess a physical filesystem path. For these virtual locations, folder path tokens (`%path%`, `%dir%`, `%d%`, `%p`) automatically fall back to the active user's profile path (`%USERPROFILE%`) to guarantee terminal shells and scripts always launch successfully without syntax errors. Use `%d_name` if you want the native visible title (e.g. `This PC` or `Recycle Bin`).
+> * **UI Labels:** To prevent toolbar buttons from overflowing, multi-item tokens like `%base%`, `%name%`, and `%1%` automatically evaluate to the **first highlighted item's name** rather than full multi-line absolute paths.
 
 ---
 
@@ -87,18 +89,36 @@ Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.
 
 The **File extension filter** (`matchExtensions`) field lets you display toolbar actions contextually:
 
+> **How Evaluation Works:** 
+> * Multiple comma-separated tokens evaluate using **`OR`** logic (matches if *any* rule succeeds).
+> * Use **`+`** within a rule for **`AND`** logic (e.g. `files + single`).
+> * Negative tokens prefixed with **`-`** or **`~`** (e.g. `-zip`, `-exe`, `-folder`) act as an **absolute veto** — if any highlighted item matches an exclusion rule, the button is immediately hidden.
+> * **`hide` Override:** Adding `hide` (or `hidden`) anywhere in the filter permanently disables and hides the button under all conditions. This is ideal if you want to temporarily shelve a button or menu without having to delete its configuration from settings.
+
+### Available Filter Keywords
+
+* **`hide` / `hidden`** — Absolute override. Keeps the button permanently hidden until removed.
 * **Leave blank or `*`** — Always show the button regardless of selection.
-* **Target any selection** — `selected` or `any` (Button appears whenever at least one item is highlighted, whether files, folders, or both).
-* **Target single item only** — `single` (Appears exclusively when exactly 1 item is selected).
-* **Target multiple items** — `multiple` (or `multi`) (Appears only when 2 or more items are selected).
-* **Target files only** — `files` (or `file`) (Hides button whenever a folder is selected).
-* **Target folders only** — `folders` (or `folder`, `dir`) (Button appears exclusively when directories are selected).
-* **Combine rules** — 
-  * `files, single` — Appears only when exactly one regular file is selected (ideal for actions like **Open With**).
-  * `folders, single` — Appears only when exactly one folder is selected.
-  * `txt, js, cpp` — Whitelist specific file formats.
-  * `*,-exe,-zip` — Shows for all items except executables and archives.
-  * `files,-zip` — Shows for regular files, excluding zip archives.
+* **`none` / `empty` / `nothing`** — Show **only** when nothing is selected (0 items highlighted). Hides as soon as any item is clicked.
+* **`selected` / `any`** — Show whenever at least one item of any kind is highlighted.
+* **`files` / `file`** — Show if regular files are selected (regardless of count).
+* **`folders` / `folder` / `dir`** — Show if folders/directories are selected (regardless of count).
+* **`single`** — Show only when exactly 1 item (file or folder) is selected.
+* **`multiple` / `multi`** — Show only when 2 or more items are selected.
+* **`single_file`** *(or `single_files`)* — Show exclusively when exactly 1 regular file is selected.
+* **`multi_file`** *(or `multi_files`)* — Show exclusively when 2 or more regular files are selected.
+* **`single_folder`** *(or `single_folders`)* — Show exclusively when exactly 1 folder is selected.
+* **`multi_folder`** *(or `multi_folders`)* — Show exclusively when 2 or more folders are selected.
+* **`txt, js, cpp`** — Whitelist specific file extensions.
+
+### Combining Rules (`OR`, `AND`, and Exclusions)
+
+* **`folders, multi_file`** — Shows when any folder is selected **OR** 2+ files are selected (ideal for batch actions or directory tools).
+* **`none, folders`** — Shows in empty directory backgrounds **OR** when folders are selected.
+* **`single_file, single_folder`** — Shows for any single item, but automatically hides on multi-selection.
+* **`files + single`** — Same as `single_file` (uses `+` for strict intersection).
+* **`folders, multi_file, -zip`** — Matches folders or multiple files, but immediately hides if any item in the selection is a `.zip` file.
+* **`files, hide`** — Kept permanently hidden because `hide` takes absolute precedence over all other tokens.
 
 ---
 
@@ -165,19 +185,19 @@ To place buttons inside a dropdown menu:
       $name: Command
       $description: >-
         The executable to run, or an internal command using 'internal:' or 'int:' prefix (case-insensitive, e.g. internal:openWith, internal:openwith, internal:OpeNWitH, and INT:OPENWITH).
+        See Details Tab for full list of internal commands. 
     - parameters: ""
       $name: Parameters
       $description: >-
-        Command line arguments. Supports tokens: %base% / %basename% / %file_name% (base name), %name% / %n% / %1% (full name), %path% / %dir% (folder path), %sel% / %f% (selected items), %sel_each% (run per item), %files% (files only), %folders% (folders only), %ext% (extension), %count% / %c% (item count), %d_name% (folder name), %parent% / %p% (parent folder). Use %% for literal %. All work with or without trailing %.
+        Command line arguments. Common tokens: %path% (folder), %sel% (selected items), %sel_each% (batch launch), %files, %folders, %name, %base, %d_name, etc. Use %% for literal %. 
+        All work with or without trailing %. See Details Tab for full list. 
     - matchExtensions: ""
       $name: "File extension filter"
       $description: >-
-        Comma-separated list of extensions (e.g. txt, js, cpp).
-        Use 'selected' or 'any' to show whenever anything is selected (files, folders, or both).
-        Use 'files' for files only, 'folders' (or 'dir') for directories only.
-        Use 'single' for exactly 1 item, 'multiple' (or 'multi') for 2+ items.
-        Prefix with '-' to exclude (e.g. -exe, -folders).
-        Prefix with '*' or leave blank to show always.
+        Comma-separated rules evaluate using OR logic. Use '+' for AND (e.g. files + single). Prefix with '-' to exclude (e.g. -exe, -zip).
+        Supports extensions (txt, png), categories (files, folders), counts (single, multi, single_file), 'none' (unselected), or 'hide'. 
+        Leave blank or '*' to always show.
+        See Details Tab for full list
     - iconGlyph: E713
       $name: Icon glyph or icon path
       $description: >-
@@ -571,6 +591,7 @@ class ComApartmentScope {
 struct ExplorerContext {
     std::wstring folderPath;
     std::wstring selectedPath;
+    std::wstring folderDisplayName;
     std::vector<std::wstring> allSelectedPaths;
     winrt::com_ptr<IShellView> shellView;
     size_t selectionCount = 0;
@@ -753,6 +774,22 @@ ExplorerContext GetContextFromView(IShellView* pView, int selectionCount = -1) {
                                           GPFIDL_DEFAULT)) {
                     result.folderPath = path;
                 }
+
+                // Query native display name for both physical and virtual
+                // folders
+                winrt::com_ptr<IShellItem> folderItem;
+                if (SUCCEEDED(SHCreateItemFromIDList(
+                        pidl, IID_PPV_ARGS(folderItem.put()))) &&
+                    folderItem) {
+                    PWSTR name = nullptr;
+                    if (SUCCEEDED(folderItem->GetDisplayName(
+                            SIGDN_NORMALDISPLAY, &name)) &&
+                        name) {
+                        result.folderDisplayName = name;
+                        CoTaskMemFree(name);
+                    }
+                }
+
                 CoTaskMemFree(pidl);
             }
         }
@@ -802,7 +839,7 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
         result.selectedPath = result.allSelectedPaths[0];
     }
 
-    // 3. Active folder path
+    // 3. Active folder path & display name
     if (auto folderView = result.shellView.try_as<IFolderView>()) {
         winrt::com_ptr<IPersistFolder2> persistFolder;
         if (SUCCEEDED(
@@ -815,6 +852,20 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
                                           GPFIDL_DEFAULT)) {
                     result.folderPath = path;
                 }
+
+                winrt::com_ptr<IShellItem> folderItem;
+                if (SUCCEEDED(SHCreateItemFromIDList(
+                        pidl, IID_PPV_ARGS(folderItem.put()))) &&
+                    folderItem) {
+                    PWSTR name = nullptr;
+                    if (SUCCEEDED(folderItem->GetDisplayName(
+                            SIGDN_NORMALDISPLAY, &name)) &&
+                        name) {
+                        result.folderDisplayName = name;
+                        CoTaskMemFree(name);
+                    }
+                }
+
                 CoTaskMemFree(pidl);
                 pidl = nullptr;
             }
@@ -907,10 +958,30 @@ std::wstring QuoteArg(std::wstring value) {
     return L"\"" + value + L"\"";
 }
 
+std::wstring GetEffectiveFolderPath(const std::wstring& folderPath) {
+    if (!folderPath.empty() && PathFileExistsW(folderPath.c_str())) {
+        return folderPath;
+    }
+    // Fall back to user profile (e.g. C:\Users\<Username>)
+    WCHAR userProfile[MAX_PATH];
+    if (GetEnvironmentVariableW(L"USERPROFILE", userProfile,
+                                ARRAYSIZE(userProfile))) {
+        return userProfile;
+    }
+    // Secondary fallback to System32
+    WCHAR sysDir[MAX_PATH];
+    if (GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir))) {
+        return sysDir;
+    }
+    return L"C:\\";
+}
+
 std::wstring BuildParameters(std::wstring parameters,
                              ExplorerContext const& context) {
     if (parameters.empty() || parameters.find(L'%') == std::wstring::npos)
         return parameters;
+
+    std::wstring effectiveDir = GetEffectiveFolderPath(context.folderPath);
 
     // 1. Mask escaped '%%' using a non-printable sentinel character
     bool hasEscapedPercent = (parameters.find(L"%%") != std::wstring::npos);
@@ -1029,7 +1100,7 @@ std::wstring BuildParameters(std::wstring parameters,
     // ---
     if (parameters.find(L"%d_smart") != std::wstring::npos) {
         std::wstring smartDir =
-            !foldersOnly.empty() ? foldersOnly[0] : context.folderPath;
+            !foldersOnly.empty() ? foldersOnly[0] : effectiveDir;
         std::wstring quotedSmart = QuoteArg(smartDir);
         ReplacePlaceholder(parameters, L"\"%d_smart%\"", quotedSmart);
         ReplacePlaceholder(parameters, L"%d_smart%", smartDir);
@@ -1039,7 +1110,7 @@ std::wstring BuildParameters(std::wstring parameters,
 
     // --- %d_name (Folder name of active directory) ---
     if (parameters.find(L"%d_name") != std::wstring::npos) {
-        std::wstring dir = context.folderPath;
+        std::wstring dir = effectiveDir;
         while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
             dir.pop_back();
         PCWSTR namePtr = PathFindFileNameW(dir.c_str());
@@ -1068,27 +1139,27 @@ std::wstring BuildParameters(std::wstring parameters,
     }
 
     // --- %path% / %dir / %d (Active folder path) ---
-    std::wstring quotedPath = QuoteArg(context.folderPath);
+    std::wstring quotedPath = QuoteArg(effectiveDir);
 
     ReplacePlaceholder(parameters, L"\"%path%\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%path%", context.folderPath);
+    ReplacePlaceholder(parameters, L"%path%", effectiveDir);
     ReplacePlaceholder(parameters, L"\"%path\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%path", context.folderPath);
+    ReplacePlaceholder(parameters, L"%path", effectiveDir);
 
     ReplacePlaceholder(parameters, L"\"%dir%\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%dir%", context.folderPath);
+    ReplacePlaceholder(parameters, L"%dir%", effectiveDir);
     ReplacePlaceholder(parameters, L"\"%dir\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%dir", context.folderPath);
+    ReplacePlaceholder(parameters, L"%dir", effectiveDir);
 
     ReplacePlaceholder(parameters, L"\"%d%\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%d%", context.folderPath);
+    ReplacePlaceholder(parameters, L"%d%", effectiveDir);
     ReplacePlaceholder(parameters, L"\"%d\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%d", context.folderPath);
+    ReplacePlaceholder(parameters, L"%d", effectiveDir);
 
     // --- %p / %parent (Parent directory of active tab) ---
     if (parameters.find(L"%p") != std::wstring::npos ||
         parameters.find(L"%parent") != std::wstring::npos) {
-        std::wstring parent = context.folderPath;
+        std::wstring parent = effectiveDir;
         while (!parent.empty() &&
                (parent.back() == L'\\' || parent.back() == L'/'))
             parent.pop_back();
@@ -1128,14 +1199,12 @@ std::wstring BuildParameters(std::wstring parameters,
 void ExecuteProcess(std::wstring const& command,
                     std::wstring const& parameters,
                     std::wstring const& workingDir) {
-    bool isPath = command.find(L'\\') != std::wstring::npos;
     SHELLEXECUTEINFOW execInfo{};
     execInfo.cbSize = sizeof(execInfo);
     execInfo.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
     execInfo.lpFile = command.c_str();
     execInfo.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
-    execInfo.lpDirectory =
-        (isPath && !workingDir.empty()) ? workingDir.c_str() : nullptr;
+    execInfo.lpDirectory = !workingDir.empty() ? workingDir.c_str() : nullptr;
     execInfo.nShow = SW_SHOWNORMAL;
 
     if (!ShellExecuteExW(&execInfo)) {
@@ -1151,13 +1220,16 @@ void LaunchItemForWindow(HWND hExplorerWnd,
     Wh_Log(L"Launching %s for window %08X, path: %s", item.command.c_str(),
            (DWORD)(ULONG_PTR)hExplorerWnd, capturedContext.folderPath.c_str());
 
+    std::wstring workingDir =
+        GetEffectiveFolderPath(capturedContext.folderPath);
+
     if (item.parameters.find(L"%sel_each%") != std::wstring::npos) {
         if (capturedContext.allSelectedPaths.empty()) {
             std::wstring param = item.parameters;
             ReplacePlaceholder(param, L"\"%sel_each%\"", L"");
             ReplacePlaceholder(param, L"%sel_each%", L"");
-            ReplacePlaceholder(param, L"%path%", capturedContext.folderPath);
-            ExecuteProcess(command, param, capturedContext.folderPath);
+            ReplacePlaceholder(param, L"%path%", workingDir);
+            ExecuteProcess(command, param, workingDir);
             return;
         }
 
@@ -1205,13 +1277,13 @@ void LaunchItemForWindow(HWND hExplorerWnd,
 
             param = BuildParameters(param, capturedContext);
 
-            ExecuteProcess(command, param, capturedContext.folderPath);
+            ExecuteProcess(command, param, workingDir);
         }
         return;
     }
 
     std::wstring parameters = BuildParameters(item.parameters, capturedContext);
-    ExecuteProcess(command, parameters, capturedContext.folderPath);
+    ExecuteProcess(command, parameters, workingDir);
 }
 
 std::mutex g_launchThreadsMutex;
@@ -1816,6 +1888,8 @@ bool HasElement(muxc::CommandBar const& commandBar,
 // ============================================================================
 struct SelectionSummary {
     size_t count = 0;
+    size_t fileCount = 0;
+    size_t folderCount = 0;
     std::vector<std::wstring> extensions;
 };
 
@@ -1847,8 +1921,10 @@ SelectionSummary SummarizeSelection(IShellView* psv) {
                 item->GetAttributes(SFGAO_FOLDER | SFGAO_STREAM, &attrs))) {
             bool isFolder = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
             if (isFolder) {
+                summary.folderCount++;
                 summary.extensions.push_back(L"folder");
             } else {
+                summary.fileCount++;
                 PWSTR displayName = nullptr;
                 if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING,
                                                    &displayName)) &&
@@ -1871,158 +1947,174 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
                                 const SelectionSummary& summary) {
     std::wstring filter = TrimWhitespaceAndQuotes(filterPattern);
 
-    // Empty or '*' means always visible, even when nothing is selected.
+    // Empty or '*' means always visible regardless of selection
     if (filter.empty() || filter == L"*") {
         return true;
     }
 
-    // Every other filter requires at least one item to be selected.
-    if (summary.count == 0) {
-        return false;
-    }
-
-    bool allowAnySelection = false;
-    bool explicitFilesRule = false;
-    bool explicitFoldersRule = false;
-    bool matchAllExtensions = false;
-
-    // Selection count constraint
-    enum class CountRule { None, Single, Multiple };
-    CountRule countRule = CountRule::None;
-
-    std::vector<std::wstring> positiveExts;
-    std::vector<std::wstring> negativeExts;
+    // 1. Parse tokens into negative exclusions and OR branches
+    std::vector<std::wstring> orBranches;
+    std::vector<std::wstring> negativeTokens;
 
     size_t start = 0;
     while (start < filter.size()) {
-        size_t end = filter.find_first_of(L",; ", start);
+        size_t end = filter.find_first_of(L",;", start);
         if (end == std::wstring::npos)
             end = filter.size();
-
-        std::wstring token = filter.substr(start, end - start);
+        std::wstring rawToken =
+            TrimWhitespaceAndQuotes(filter.substr(start, end - start));
         start = end + 1;
 
-        token = TrimWhitespaceAndQuotes(token);
-        if (token.empty())
+        if (rawToken.empty())
             continue;
 
-        token = ToLower(token);
-
-        // --- Count keywords ---
-        if (token == L"single") {
-            countRule = CountRule::Single;
-            continue;
-        }
-        if (token == L"multiple" || token == L"multi") {
-            countRule = CountRule::Multiple;
-            continue;
-        }
-
-        bool isNegative = false;
-        if (token.front() == L'-' || token.front() == L'~') {
-            isNegative = true;
-            token.erase(token.begin());
-        }
-
-        if (!token.empty() && token.front() == L'.') {
-            token.erase(token.begin());
-        }
-
-        if (token == L"dir" || token == L"directory" || token == L"folders") {
-            token = L"folder";
-        }
-
-        bool isFileKeyword = (token == L"file" || token == L"files");
-        bool isFolderKeyword = (token == L"folder");
-        bool isAnyKeyword = (token == L"selected" || token == L"any");
-
-        if (isAnyKeyword) {
-            if (!isNegative) {
-                allowAnySelection = true;
-            }
-            continue;
-        }
-
-        if (token == L"*") {
-            if (!isNegative) {
-                matchAllExtensions = true;
-            }
-            continue;
-        }
-
-        if (isFileKeyword) {
-            if (isNegative) {
-                negativeExts.push_back(L"file");
-            } else {
-                explicitFilesRule = true;
-            }
-            continue;
-        }
-
-        if (isFolderKeyword) {
-            if (isNegative) {
-                negativeExts.push_back(L"folder");
-            } else {
-                explicitFoldersRule = true;
-            }
-            continue;
-        }
-
-        if (isNegative) {
-            negativeExts.push_back(token);
+        if (rawToken.front() == L'-' || rawToken.front() == L'~') {
+            rawToken.erase(rawToken.begin());
+            rawToken = TrimWhitespaceAndQuotes(rawToken);
+            if (!rawToken.empty() && rawToken.front() == L'.')
+                rawToken.erase(rawToken.begin());
+            rawToken = ToLower(rawToken);
+            if (rawToken == L"dir" || rawToken == L"directory" ||
+                rawToken == L"folders")
+                rawToken = L"folder";
+            if (rawToken == L"files")
+                rawToken = L"file";
+            negativeTokens.push_back(rawToken);
         } else {
-            positiveExts.push_back(token);
+            orBranches.push_back(rawToken);
         }
     }
 
-    // Check count constraint
-    if (countRule == CountRule::Single && summary.count != 1) {
-        return false;
-    }
-    if (countRule == CountRule::Multiple && summary.count < 2) {
-        return false;
-    }
+    // Helper: checks if a token string represents 'hide'
+    auto isHideToken = [](const std::wstring& s) {
+        std::wstring t = ToLower(TrimWhitespaceAndQuotes(s));
+        return t == L"hide" || t == L"hidden";
+    };
 
-    bool hasPositiveTerms = allowAnySelection || matchAllExtensions ||
-                            explicitFilesRule || explicitFoldersRule ||
-                            !positiveExts.empty();
-
-    // If only count rules were specified (e.g., "single"), allow any selected
-    // item
-    if (!hasPositiveTerms && negativeExts.empty()) {
-        return true;
-    }
-
-    // Validate every item in the current selection
-    for (const auto& ext : summary.extensions) {
-        bool isDir = (ext == L"folder");
-
-        // 1. Check exclusions
-        for (const auto& neg : negativeExts) {
-            if (isDir && neg == L"folder") {
-                return false;
-            }
-            if (!isDir && (neg == L"file" || ext == neg)) {
-                return false;
-            }
-        }
-
-        // Only exclusions were provided (e.g. "-exe"): everything not excluded
-        // passes
-        if (!hasPositiveTerms)
-            continue;
-
-        bool allowed =
-            allowAnySelection || matchAllExtensions ||
-            (isDir ? explicitFoldersRule
-                   : (explicitFilesRule ||
-                      std::find(positiveExts.begin(), positiveExts.end(),
-                                ext) != positiveExts.end()));
-        if (!allowed)
+    // --- ABSOLUTE OVERRIDE: HIDE FILTER ---
+    // If 'hide' or 'hidden' is specified anywhere, forcibly keep button hidden
+    for (const auto& branch : orBranches) {
+        if (isHideToken(branch))
             return false;
+
+        // Check if 'hide' exists inside a '+' AND group
+        size_t hStart = 0;
+        while (hStart < branch.size()) {
+            size_t hEnd = branch.find(L'+', hStart);
+            if (hEnd == std::wstring::npos)
+                hEnd = branch.size();
+            if (isHideToken(branch.substr(hStart, hEnd - hStart)))
+                return false;
+            hStart = hEnd + 1;
+        }
     }
 
-    return true;
+    // 2. Strict Negative Exclusions (Veto) - applies when items are selected
+    if (summary.count > 0) {
+        for (const auto& ext : summary.extensions) {
+            bool isDir = (ext == L"folder");
+            for (const auto& neg : negativeTokens) {
+                if (isDir && neg == L"folder")
+                    return false;
+                if (!isDir && (neg == L"file" || ext == neg))
+                    return false;
+            }
+        }
+    }
+
+    if (orBranches.empty()) {
+        return summary.count > 0;
+    }
+
+    auto evalAtomicToken = [&](std::wstring token) -> bool {
+        token = ToLower(TrimWhitespaceAndQuotes(token));
+        if (!token.empty() && token.front() == L'.')
+            token.erase(token.begin());
+
+        // NONE / EMPTY FILTER (only when 0 items are highlighted)
+        if (token == L"none" || token == L"empty" || token == L"nothing" ||
+            token == L"unselected") {
+            return summary.count == 0;
+        }
+
+        // All subsequent checks require at least one item selected
+        if (summary.count == 0)
+            return false;
+
+        // Universal wildcards (match anything selected, including mixed)
+        if (token == L"*" || token == L"any" || token == L"selected")
+            return true;
+
+        // Broad Categories: strictly files (0 folders) or strictly folders (0
+        // files)
+        if (token == L"files" || token == L"file") {
+            return summary.fileCount > 0 && summary.folderCount == 0;
+        }
+        if (token == L"folders" || token == L"folder" || token == L"dir" ||
+            token == L"directory") {
+            return summary.folderCount > 0 && summary.fileCount == 0;
+        }
+
+        // General item counts (files + folders combined)
+        if (token == L"single")
+            return summary.count == 1;
+        if (token == L"multi" || token == L"multiple")
+            return summary.count >= 2;
+
+        // Specific File Counts (strictly files, 0 folders)
+        if (token == L"single_file" || token == L"single_files") {
+            return summary.fileCount == 1 && summary.folderCount == 0;
+        }
+        if (token == L"multi_file" || token == L"multi_files" ||
+            token == L"multiple_files" || token == L"multiple_file") {
+            return summary.fileCount >= 2 && summary.folderCount == 0;
+        }
+
+        // Specific Folder Counts (strictly folders, 0 files)
+        if (token == L"single_folder" || token == L"single_folders" ||
+            token == L"single_dir") {
+            return summary.folderCount == 1 && summary.fileCount == 0;
+        }
+        if (token == L"multi_folder" || token == L"multi_folders" ||
+            token == L"multiple_folders" || token == L"multiple_folder" ||
+            token == L"multi_dir") {
+            return summary.folderCount >= 2 && summary.fileCount == 0;
+        }
+
+        // Extension check (strictly regular files matching this extension)
+        for (const auto& ext : summary.extensions) {
+            if (ext != L"folder" && ext == token)
+                return true;
+        }
+        return false;
+    };
+
+    // 3. Evaluate OR branches (with '+' AND sub-evaluations)
+    for (const auto& branch : orBranches) {
+        bool branchPassed = true;
+        size_t bStart = 0;
+        while (bStart < branch.size()) {
+            size_t bEnd = branch.find(L'+', bStart);
+            if (bEnd == std::wstring::npos)
+                bEnd = branch.size();
+            std::wstring subToken = branch.substr(bStart, bEnd - bStart);
+            bStart = bEnd + 1;
+
+            subToken = TrimWhitespaceAndQuotes(subToken);
+            if (subToken.empty())
+                continue;
+
+            if (!evalAtomicToken(subToken)) {
+                branchPassed = false;
+                break;
+            }
+        }
+
+        if (branchPassed)
+            return true;
+    }
+
+    return false;
 }
 
 constexpr size_t kMaxToolbarLabelLength = 24;
@@ -2109,20 +2201,26 @@ std::wstring ResolveLabelTokens(std::wstring label,
     ReplacePlaceholder(label, L"%ext%", ext);
     ReplacePlaceholder(label, L"%ext", ext);
 
-    // %d_name% (Current active folder name, e.g. "Downloads")
-    std::wstring dir = context.folderPath;
-    while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
-        dir.pop_back();
-    PCWSTR dirName = PathFindFileNameW(dir.c_str());
-    std::wstring dName = dirName ? dirName : L"";
+    std::wstring effectiveDir = GetEffectiveFolderPath(context.folderPath);
+
+    // %d_name% (Native folder display name)
+    std::wstring dName = context.folderDisplayName;
+    if (dName.empty()) {
+        std::wstring dir = effectiveDir;
+        while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
+            dir.pop_back();
+        PCWSTR dirName = PathFindFileNameW(dir.c_str());
+        if (dirName)
+            dName = dirName;
+    }
     ReplacePlaceholder(label, L"%d_name%", dName);
     ReplacePlaceholder(label, L"%d_name", dName);
 
     // %path% / %dir (Full folder path)
-    ReplacePlaceholder(label, L"%path%", context.folderPath);
-    ReplacePlaceholder(label, L"%path", context.folderPath);
-    ReplacePlaceholder(label, L"%dir%", context.folderPath);
-    ReplacePlaceholder(label, L"%dir", context.folderPath);
+    ReplacePlaceholder(label, L"%path%", effectiveDir);
+    ReplacePlaceholder(label, L"%path", effectiveDir);
+    ReplacePlaceholder(label, L"%dir%", effectiveDir);
+    ReplacePlaceholder(label, L"%dir", effectiveDir);
 
     // 2. Restore masked '%%' back to literal '%'
     if (hasEscapedPercent) {
