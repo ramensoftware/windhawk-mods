@@ -2,14 +2,13 @@
 // @id              explorer-terminal-admin-alias
 // @name            File Explorer Terminal Admin Aliases
 // @description     Launch elevated or custom terminals (cmd, Windows Terminal, PowerShell) directly from the File Explorer address bar with configurable aliases.
-// @version         1.0.1
+// @version         1.0.2
 // @author          RobotsNeverDie
 // @github          https://github.com/RBND
 // @homepage        https://github.com/RBND/CMD-Admin
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @architecture    arm64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -luuid
 // ==/WindhawkMod==
 
