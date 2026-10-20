@@ -62,9 +62,10 @@ More themes, stylings, etc can be found and contributed from:
 
 ## Settings
 
-Settings live in a dedicated settings window. Open it from the ⚙ button on
+Settings live in a dedicated settings window. Open it by the shortcut key `Ctrl + Alt + S`, from the ⚙ button on
 the topbar, from any right-click context menu, or via the **TopBar settings…**
-entry. Pages:
+entry. 
+Pages:
 
 - **Appearance** — bar height, corner radius, global tint color & opacity,
   global blur amount, icon color, font family / size / color / weight, clock
@@ -189,6 +190,10 @@ desktop are ignored.
 
 ## Known Limitations
 - Some Font Families can misalign the text in topbar buttons, and some can also compress or stretch the ui of flyouts. 
+- There is a DWM Backdrop that appears on AutoHide mode(and default mode too but less noticable), and it is a limitation from Windows DWM. 
+
+  **The Only fix is:** Disable the `Transparency Effects` from Windows Settings.
+  It can NOT be removed without that unless you abandon the XAML Flyouts, for Other method to display topbar, but that will abandon the styling support, Windhawk Blur will no longer be supported.
 
 */
 // ==/WindhawkModReadme==
@@ -1502,6 +1507,8 @@ struct {
     int activationPillWidth = 120;
     int activationPillVerticalOffset = 0;
     std::wstring activationPillColor = L"#FFFFFF";
+    int topBarRevealDelayMs = 100;
+    int topBarHideDelayMs = 200;
     std::wstring trayOrder;
 
     std::wstring weatherLocationName;
@@ -2526,6 +2533,8 @@ static const std::map<std::wstring, int>& IntDefaults() {
         { L"activationPillWidth", 120 },
         { L"activationPillVerticalOffset", 0 },
         { L"topBarAutoHideSpeed", 1 },
+        { L"topBarRevealDelayMs", 100 },
+        { L"topBarHideDelayMs", 200 },
     };
     return kDefaults;
 }
@@ -4764,24 +4773,39 @@ void PerformCalendarScroll(int direction, int steps) {
         idleAnim.InsertKeyFrame(1.0f, {0.0f, 0.0f, 0.0f}, ease);
         idleVisual.StartAnimation(L"Offset", idleAnim);
 
+        struct CalendarAnimState {
+            winrt::Windows::UI::Composition::Visual activeVisual{nullptr};
+            winrt::Windows::UI::Composition::Visual idleVisual{nullptr};
+            wuxc::Grid activeGrid{nullptr};
+            wuxc::Grid idleGrid{nullptr};
+            uint64_t generation = 0;
+            double travel = 0.0;
+        };
+        static auto s_animState = std::make_shared<CalendarAnimState>();
+        s_animState->activeVisual = activeVisual;
+        s_animState->idleVisual = idleVisual;
+        s_animState->activeGrid = activeGrid;
+        s_animState->idleGrid = idleGrid;
+        s_animState->generation = generation;
+        s_animState->travel = travel;
         static std::shared_ptr<DispatcherTimer> s_animCleanupTimer;
         if (!s_animCleanupTimer) {
             s_animCleanupTimer = std::make_shared<DispatcherTimer>();
             s_animCleanupTimer->Interval(std::chrono::milliseconds(140));
+            s_animCleanupTimer->Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                s_animCleanupTimer->Stop();
+                if (s_animState->generation != s_animationGeneration) return;
+                try {
+                    s_animState->activeVisual.StopAnimation(L"Offset");
+                    s_animState->idleVisual.StopAnimation(L"Offset");
+                    s_animState->activeVisual.Offset({0.0f, 0.0f, 0.0f});
+                    s_animState->idleVisual.Offset({static_cast<float>(s_animState->travel), 0.0f, 0.0f});
+                } catch (...) {}
+                g_clockCalGridActive = s_animState->idleGrid;
+                g_clockCalGridIdle = s_animState->activeGrid;
+            });
         }
         s_animCleanupTimer->Stop();
-        s_animCleanupTimer->Tick([activeVisual, idleVisual, activeGrid, idleGrid, generation, travel](wf::IInspectable const&, wf::IInspectable const&) {
-            s_animCleanupTimer->Stop();
-            if (generation != s_animationGeneration) return;
-            try {
-                activeVisual.StopAnimation(L"Offset");
-                idleVisual.StopAnimation(L"Offset");
-                activeVisual.Offset({0.0f, 0.0f, 0.0f});
-                idleVisual.Offset({static_cast<float>(travel), 0.0f, 0.0f});
-            } catch (...) {}
-            g_clockCalGridActive = idleGrid;
-            g_clockCalGridIdle = activeGrid;
-        });
         s_animCleanupTimer->Start();
     } catch (...) {}
 }
@@ -6464,6 +6488,10 @@ void DemoteTopBarForFullscreen() {
         SetWindowPos(g_islandHwnd, HWND_BOTTOM, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
+    if (g_activationPillHwnd && IsWindow(g_activationPillHwnd) &&
+        IsWindowVisible(g_activationPillHwnd)) {
+        ShowWindow(g_activationPillHwnd, SW_HIDE);
+    }
 }
 
 void RestoreTopBarZOrder() {
@@ -6492,6 +6520,12 @@ void RestoreTopBarZOrder() {
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                      (keepHidden ? 0 : SWP_SHOWWINDOW));
         g_suppressPopupPositionLock = false;
+    }
+    if (g_settings.topBarBehaviour != L"default" && g_topBarAutoHidden.load() &&
+        g_settings.topBarShowTrigger == L"activationbar" &&
+        !(g_activationPillHwnd && IsWindow(g_activationPillHwnd) &&
+          IsWindowVisible(g_activationPillHwnd))) {
+        AnimateActivationPillWindow(true);
     }
 }
 
@@ -7978,7 +8012,8 @@ void ComputeBands(const float* samples, int n, float* outBands) {
         // maps the signal back to the [0, 1] range before scaling.
         avg /= (kFFT_N / 2.0f);
         // Apply visual scaling and a slight boost for higher bands.
-        float val = avg * 3.0f * (1.0f + b * 0.05f);
+        float val = avg * 8.0f * (1.0f + b * 0.05f);
+        val = sqrtf(val);
         if (val < 0.0f || std::isnan(val)) val = 0.0f;
         if (val > 1.0f) val = 1.0f;
         outBands[b] = val;
@@ -11408,18 +11443,23 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut,
                     visual.StopAnimation(L"Scale");
                 } catch (...) {}
             };
-            std::shared_ptr<std::function<void()>> resetPtr =
-                std::make_shared<std::function<void()>>(resetVisual);
+            struct FlyoutResetState {
+                std::function<void()> reset;
+            };
+            static auto s_flyoutResetState = std::make_shared<FlyoutResetState>();
+            s_flyoutResetState->reset = resetVisual;
             static std::shared_ptr<DispatcherTimer> s_flyoutResetTimer;
             if (!s_flyoutResetTimer) {
                 s_flyoutResetTimer = std::make_shared<DispatcherTimer>();
+                s_flyoutResetTimer->Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                    s_flyoutResetTimer->Stop();
+                    if (s_flyoutResetState->reset) {
+                        try { s_flyoutResetState->reset(); } catch (...) {}
+                    }
+                });
             }
             s_flyoutResetTimer->Stop();
             s_flyoutResetTimer->Interval(std::chrono::milliseconds(static_cast<DWORD>(dur.count()) + 30));
-            s_flyoutResetTimer->Tick([resetPtr](wf::IInspectable const&, wf::IInspectable const&) {
-                s_flyoutResetTimer->Stop();
-                (*resetPtr)();
-            });
             s_flyoutResetTimer->Start();
         } catch (...) {}
     });
@@ -12973,7 +13013,7 @@ void UpdateMediaVisualizerTick() {
     static float s_smoothFlyout[24] = {0};
     if (!g_visualizerBars.empty()) {
         size_t nFly = g_visualizerBars.size();
-        const double maxH = 60.0;
+        const double maxH = 92.0;
         for (size_t i = 0; i < nFly && i < 24; i++) {
             float v = 0;
             int from = (int)(i * 24 / nFly);
@@ -12990,7 +13030,7 @@ void UpdateMediaVisualizerTick() {
     if (!g_mediaButtonBars.empty()) {
         // Collapse 24 bands down to the mini visualizer's bar count.
         size_t nBtn = g_mediaButtonBars.size();
-        const double maxH = 20.0;
+        const double maxH = 14.0;
         for (size_t i = 0; i < nBtn; i++) {
             float v = 0;
             int from = (int)(i * 24 / nBtn);
@@ -13152,20 +13192,22 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
     }
 
     if (g_settings.mediaButtonShowVisualizer) {
-        wuxc::StackPanel viz;
-        viz.Orientation(wuxc::Orientation::Horizontal);
-        viz.Spacing(1);
-        viz.VerticalAlignment(VerticalAlignment::Center);
-        viz.Height(18);
-        wui::Color accent{};
+            wuxc::StackPanel viz;
+            viz.Orientation(wuxc::Orientation::Horizontal);
+            viz.Spacing(1);
+            viz.VerticalAlignment(VerticalAlignment::Center);
+            viz.Height(20);
+            viz.Margin(Thickness{0, 0, 0, 2});
+            wui::Color accent{};
         if (!TryParseHexColor(mediaIconColorHex, &accent)) {
             accent = wui::ColorHelper::FromArgb(255, 255, 255, 255);
         }
         g_mediaButtonBars.clear();
+        viz.Height(20);
         constexpr int kBars = 5;
         for (int i = 0; i < kBars; i++) {
             winrt::Windows::UI::Xaml::Shapes::Rectangle bar;
-            bar.Width(2);
+            bar.Width(3);
             bar.RadiusX(1);
             bar.RadiusY(1);
             bar.Height(3);
@@ -13370,7 +13412,7 @@ void PopulateMediaPanel() {
             if (g_settings.showMediaVisualizer) {
                 wuxc::Grid viz;
                 viz.Width(30);
-                viz.Height(50);
+                viz.Height(92);
                 viz.VerticalAlignment(VerticalAlignment::Center);
                 wui::Color accent{};
                 if (!TryParseHexColor(GetEffectiveIconColorString(), &accent)) {
@@ -13397,7 +13439,7 @@ void PopulateMediaPanel() {
                     g_visualizerBars.push_back(bar);
                 }
                 auto clipGeom = wuxm::RectangleGeometry();
-                clipGeom.Rect(winrt::Windows::Foundation::Rect{ 0.0f, 0.0f, 30.0f, 50.0f });
+                clipGeom.Rect(winrt::Windows::Foundation::Rect{ 0.0f, 0.0f, 30.0f, 92.0f });
                 viz.Clip(clipGeom);
                 wuxc::Grid::SetColumn(viz, 2);
                 header.Children().Append(viz);
@@ -23630,6 +23672,12 @@ void BuildBehaviourPage(wuxc::StackPanel& p) {
                      swprintf_s(buf, L"%.1f sec", ms / 1000.0);
                      return buf;
                  });
+    AddSliderRow(p, L"Reveal delay (ms)", L"topBarRevealDelayMs", 0, 2000,
+                 L"Time the cursor must hover the reveal target before the TopBar appears.",
+                 50);
+    AddSliderRow(p, L"Hide delay (ms)", L"topBarHideDelayMs", 0, 2000,
+                 L"Time the cursor must stay outside the TopBar before it hides.",
+                 50);
     AddSliderRow(p, L"Pill height (px)",        L"activationPillHeight", 1, 20);
     AddSliderRow(p, L"Pill width (px)",         L"activationPillWidth",  20, 400);
     AddSliderRow(p, L"Vertical offset (px)",    L"activationPillVerticalOffset", -30, 60);
@@ -23830,6 +23878,8 @@ static std::wstring BuildSettingsJson() {
     addStr(L"topBarBehaviour");
     addStr(L"topBarShowTrigger");
     addInt(L"topBarAutoHideMs");
+    addInt(L"topBarRevealDelayMs");
+    addInt(L"topBarHideDelayMs");
     addStr(L"flyoutAnimation");
     addInt(L"activationPillHeight");
     addInt(L"activationPillWidth");
@@ -24040,7 +24090,8 @@ static void ApplySettingsPairs(
         L"showClock", L"timeFormat", L"showDate", L"dateFormat",
         L"weatherLocationName", L"weatherLatitude", L"weatherLongitude",
         L"weatherUnit",
-        L"topBarBehaviour", L"topBarShowTrigger", L"topBarAutoHideMs", L"flyoutAnimation",
+        L"topBarBehaviour", L"topBarShowTrigger", L"topBarAutoHideMs",
+        L"topBarRevealDelayMs", L"topBarHideDelayMs", L"flyoutAnimation",
         L"activationPillHeight", L"activationPillWidth", L"activationPillVerticalOffset", L"activationPillColor",
         L"thumbPreviewEnabled", L"thumbShowPin", L"thumbShowMinimize", L"thumbShowMaximize", L"thumbShowClose", L"thumbPreviewScale"
     };
@@ -24081,6 +24132,8 @@ static void ApplySettingsPairs(
         { L"showDate",                  {   0,   1 } },
         { L"fontBold",                  {   0,   1 } },
         { L"topBarAutoHideMs",          {   0, 2000 } },
+        { L"topBarRevealDelayMs",       {   0, 2000 } },
+        { L"topBarHideDelayMs",         {   0, 2000 } },
         { L"activationPillHeight",      {   1,  20 } },
         { L"activationPillWidth",       {  20, 400 } },
         { L"activationPillVerticalOffset", { -30, 60 } },
@@ -26195,7 +26248,22 @@ void FinishShowBarForAutoHide() {
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         DwmFlush();
     }
-    SlideTopBarXaml(true, true);
+    if (g_settings.topBarShowTrigger == L"activationbar") {
+        AnimateActivationPillWindow(false);
+        static DispatcherTimer s_pillHideDelayTimer{nullptr};
+        if (!s_pillHideDelayTimer) {
+            s_pillHideDelayTimer = DispatcherTimer();
+            s_pillHideDelayTimer.Interval(std::chrono::milliseconds(120));
+            s_pillHideDelayTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                s_pillHideDelayTimer.Stop();
+                try { SlideTopBarXaml(true, true); } catch (...) {}
+            });
+        }
+        s_pillHideDelayTimer.Stop();
+        s_pillHideDelayTimer.Start();
+    } else {
+        SlideTopBarXaml(true, true);
+    }
     for (int delayMs : { 16, 40, 90, 180, 320, 600, 1000 }) {
         RunInBackground([delayMs] {
             if (WaitForSingleObject(g_stopEvent, delayMs) == WAIT_OBJECT_0) return;
@@ -26209,9 +26277,6 @@ void FinishShowBarForAutoHide() {
                 } catch (...) {}
             });
         });
-    }
-    if (g_settings.topBarShowTrigger == L"activationbar") {
-        AnimateActivationPillWindow(false);
     }
     g_barLeaveTick = 0;
 }
@@ -26253,7 +26318,7 @@ void HideBarForAutoHide() {
     DwmFlush();
     SlideTopBarXaml(false, true);
     ScheduleCloakAfterSlide();
-    if (g_settings.topBarShowTrigger == L"activationbar") {
+    if (g_settings.topBarShowTrigger == L"activationbar" && !IsTrueFullscreen()) {
         AnimateActivationPillWindow(true);
     }
 }
@@ -26457,9 +26522,18 @@ void AutoHideTick() {
             fgIsFullscreen = IsWindowFullscreenOnMonitor(fgNow, mon);
         }
         if (fgIsFullscreen) {
+            if (g_activationPillHwnd && IsWindow(g_activationPillHwnd) &&
+                IsWindowVisible(g_activationPillHwnd)) {
+                ShowWindow(g_activationPillHwnd, SW_HIDE);
+            }
             return;
         }
         g_fullScreenAppActive = false;
+        if (g_settings.topBarShowTrigger == L"activationbar" &&
+            !(g_activationPillHwnd && IsWindow(g_activationPillHwnd) &&
+              IsWindowVisible(g_activationPillHwnd))) {
+            AnimateActivationPillWindow(true);
+        }
     }
 
     if (g_anyChildFlyoutOpen.load()) {
@@ -26497,13 +26571,12 @@ void AutoHideTick() {
         return;
     }
 
-    // Require a short 100 ms continuous hover on the activation pill. Edge
-    // mode retains its immediate reveal behavior.
     if (currentlyHidden && shouldShow) {
-        if (g_settings.topBarShowTrigger == L"activationbar") {
-            ULONGLONG now = GetTickCount64();
-            if (s_activationHoverStart == 0) s_activationHoverStart = now;
-            if (now - s_activationHoverStart < 100) return;
+        ULONGLONG now = GetTickCount64();
+        if (s_activationHoverStart == 0) s_activationHoverStart = now;
+        if (now - s_activationHoverStart <
+            static_cast<ULONGLONG>(g_settings.topBarRevealDelayMs)) {
+            return;
         }
         s_activationHoverStart = 0;
         ShowBarForAutoHide();
@@ -26551,7 +26624,8 @@ void AutoHideTick() {
             ULONGLONG leaveTick = g_barLeaveTick.load();
             if (leaveTick == 0) {
                 g_barLeaveTick = now;
-            } else if (now - leaveTick > 200) {
+            } else if (now - leaveTick >
+                       static_cast<ULONGLONG>(g_settings.topBarHideDelayMs)) {
                 HideBarForAutoHide();
             }
         } else {
@@ -27162,16 +27236,27 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
                                 offsetAnim.InsertKeyFrame(1.0f, {-30.0f, 0.0f, 0.0f}, ease);
                                 visual.StartAnimation(L"Offset", offsetAnim);
                                 animated = true;
+                                struct NotifDismissState {
+                                    wuxc::StackPanel panel{nullptr};
+                                    wuxc::Flyout flyout{nullptr};
+                                };
+                                static auto s_notifDismissState = std::make_shared<NotifDismissState>();
+                                s_notifDismissState->panel = panel;
+                                s_notifDismissState->flyout = flyout;
                                 static std::shared_ptr<DispatcherTimer> s_notifDismissTimer;
                                 if (!s_notifDismissTimer) {
                                     s_notifDismissTimer = std::make_shared<DispatcherTimer>();
                                     s_notifDismissTimer->Interval(std::chrono::milliseconds(200));
+                                    s_notifDismissTimer->Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                                        s_notifDismissTimer->Stop();
+                                        try {
+                                            PopulateWindowsNotificationPanel(
+                                                s_notifDismissState->panel,
+                                                s_notifDismissState->flyout);
+                                        } catch (...) {}
+                                    });
                                 }
                                 s_notifDismissTimer->Stop();
-                                s_notifDismissTimer->Tick([panel, flyout](wf::IInspectable const&, wf::IInspectable const&) {
-                                    s_notifDismissTimer->Stop();
-                                    PopulateWindowsNotificationPanel(panel, flyout);
-                                });
                                 s_notifDismissTimer->Start();
                             }
                         }
@@ -33957,6 +34042,99 @@ static std::atomic<bool> g_scaleRestartPending{false};
 
 DWORD WINAPI TopBarThreadProc(LPVOID);
 
+HANDLE g_statusPollThread = nullptr;
+
+static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    std::wstring lastWifiSig, lastSoundSig, lastBtSig;
+    bool first = true;
+    while (true) {
+        DWORD wr = WaitForSingleObject(g_stopEvent, first ? 100 : 3000);
+        first = false;
+        if (wr == WAIT_OBJECT_0 || wr == WAIT_FAILED) break;
+        try {
+            if (g_settings.showWeatherButton &&
+                !g_settings.weatherLatitude.empty() &&
+                !g_settings.weatherLongitude.empty() &&
+                !g_weatherState.valid) {
+                weather::EnsureFresh();
+            }
+        } catch (...) {}
+        bool wantWifi = g_settings.showWifiButton && g_wifiButton;
+        bool wantSound = g_settings.showSoundButton && g_soundButton;
+        bool wantBt = g_settings.showBluetoothButton && g_bluetoothButton;
+        if (!wantWifi && !wantSound && !wantBt) continue;
+        wifi::Status wifiStatus{};
+        int volume = 0;
+        bool muted = false;
+        bool btOn = false;
+        if (wantWifi) wifiStatus = wifi::GetStatus();
+        if (wantSound) {
+            volume = audio::GetMasterVolume();
+            muted = audio::GetMasterMute();
+        }
+        if (wantBt) {
+            btOn = bluetooth::IsRadioOn();
+#if TOPBAR_HAS_RADIOS
+            try {
+                using namespace winrt::Windows::Devices::Radios;
+                auto access = Radio::RequestAccessAsync().get();
+                if (access == RadioAccessStatus::Allowed) {
+                    auto radios = Radio::GetRadiosAsync().get();
+                    for (auto&& radio : radios) {
+                        if (radio.Kind() == RadioKind::Bluetooth) {
+                            btOn = radio.State() == RadioState::On;
+                            std::lock_guard<std::mutex> lock(bluetooth::g_bluetoothRadioMutex);
+                            bluetooth::g_bluetoothRadioOn = btOn;
+                            break;
+                        }
+                    }
+                }
+            } catch (...) {}
+#endif
+        }
+        std::wstring wifiSig = wantWifi
+            ? (std::to_wstring(wifiStatus.signal) + L"|" +
+               (wifiStatus.connected && wifiStatus.radioOn ? L"1" : L"0"))
+            : L"";
+        std::wstring soundSig = wantSound
+            ? (std::to_wstring(volume) + L"|" + (muted ? L"1" : L"0"))
+            : L"";
+        std::wstring btSig = wantBt ? (btOn ? L"1" : L"0") : L"";
+        bool wifiChanged = wantWifi && wifiSig != lastWifiSig;
+        bool soundChanged = wantSound && soundSig != lastSoundSig;
+        bool btChanged = wantBt && btSig != lastBtSig;
+        if (wifiChanged || soundChanged || btChanged) {
+            wifi::Status wifiCopy = wifiStatus;
+            int volCopy = volume;
+            bool mutedCopy = muted;
+            bool btCopy = btOn;
+            bool wc = wifiChanged, sc = soundChanged, bc = btChanged;
+            RunOnUiThread([wifiCopy, volCopy, mutedCopy, btCopy, wc, sc, bc] {
+                try {
+                    if (wc && g_wifiButton) {
+                        if (auto icon = iconpacks::WifiIcon(wifiCopy.signal,
+                                wifiCopy.connected && wifiCopy.radioOn))
+                            g_wifiButton.Content(icon);
+                    }
+                    if (sc && g_soundButton) {
+                        if (auto icon = iconpacks::SoundIcon(volCopy, mutedCopy))
+                            g_soundButton.Content(icon);
+                    }
+                    if (bc && g_bluetoothButton) {
+                        g_bluetoothButton.Content(iconpacks::BluetoothIcon(btCopy));
+                    }
+                } catch (...) {}
+            });
+            if (wantWifi) lastWifiSig = wifiSig;
+            if (wantSound) lastSoundSig = soundSig;
+            if (wantBt) lastBtSig = btSig;
+        }
+    }
+    CoUninitialize();
+    return 0;
+}
+
 void RestartTopBarThreadForScaleChange() {
     bool expected = false;
     if (!g_scaleRestartPending.compare_exchange_strong(expected, true)) {
@@ -34389,70 +34567,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         // Keep status glyphs live even while their flyouts are closed. The
         // device queries run off the UI thread; only the XAML updates are
         // dispatched back to the bar thread.
-        if (!g_statusIconTimer) {
-            g_statusIconTimer = DispatcherTimer();
-            g_statusIconTimer.Interval(std::chrono::seconds(3));
-            g_statusIconTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-                try {
-                    if (g_settings.showWeatherButton &&
-                        !g_settings.weatherLatitude.empty() &&
-                        !g_settings.weatherLongitude.empty() &&
-                        !g_weatherState.valid) {
-                        weather::EnsureFresh();
-                    }
-                } catch (...) {}
-                if (!g_settings.showWifiButton && !g_settings.showSoundButton &&
-                    !g_settings.showBluetoothButton) {
-                    return;
-                }
-                static std::atomic<bool> s_refreshing{false};
-                bool expected = false;
-                if (!s_refreshing.compare_exchange_strong(expected, true)) return;
-                RunInBackground([] {
-                    struct Reset { std::atomic<bool>& flag; ~Reset() { flag = false; } } reset{s_refreshing};
-                    try {
-                        auto wifiStatus = wifi::GetStatus();
-                        int volume = audio::GetMasterVolume();
-                        bool muted = audio::GetMasterMute();
-                        bool bluetoothOn = bluetooth::IsRadioOn();
-#if TOPBAR_HAS_RADIOS
-                        try {
-                            using namespace winrt::Windows::Devices::Radios;
-                            auto access = Radio::RequestAccessAsync().get();
-                            if (access == RadioAccessStatus::Allowed) {
-                                auto radios = Radio::GetRadiosAsync().get();
-                                for (auto&& radio : radios) {
-                                    if (radio.Kind() == RadioKind::Bluetooth) {
-                                        bluetoothOn = radio.State() == RadioState::On;
-                                        std::lock_guard<std::mutex> lock(bluetooth::g_bluetoothRadioMutex);
-                                        bluetooth::g_bluetoothRadioOn = bluetoothOn;
-                                        break;
-                                    }
-                                }
-                            }
-                        } catch (...) {}
-#endif
-                        RunOnUiThread([wifiStatus, volume, muted, bluetoothOn] {
-                            try {
-                                if (g_wifiButton) {
-                                    if (auto icon = iconpacks::WifiIcon(wifiStatus.signal,
-                                            wifiStatus.connected && wifiStatus.radioOn))
-                                        g_wifiButton.Content(icon);
-                                }
-                                if (g_soundButton) {
-                                    if (auto icon = iconpacks::SoundIcon(volume, muted))
-                                        g_soundButton.Content(icon);
-                                }
-                                if (g_bluetoothButton) {
-                                    g_bluetoothButton.Content(iconpacks::BluetoothIcon(bluetoothOn));
-                                }
-                            } catch (...) {}
-                        });
-                    } catch (...) {}
-                });
-            });
+        if (!g_statusPollThread && g_stopEvent) {
+            g_statusPollThread = CreateThread(nullptr, 0, StatusPollWorkerProc,
+                                              nullptr, 0, nullptr);
         }
-        g_statusIconTimer.Start();
 
     if (!g_topBarAutoHideTimer) {
         g_topBarAutoHideTimer = DispatcherTimer();
@@ -35476,6 +35594,12 @@ void LoadSettings() {
     if (g_settings.activationPillVerticalOffset > 60) g_settings.activationPillVerticalOffset = 60;
     g_settings.activationPillColor = GetStringSettingCopy(L"activationPillColor");
     if (g_settings.activationPillColor.empty()) g_settings.activationPillColor = L"#FFFFFF";
+    g_settings.topBarRevealDelayMs = ReadIntSetting(L"topBarRevealDelayMs", 100);
+    if (g_settings.topBarRevealDelayMs < 0) g_settings.topBarRevealDelayMs = 0;
+    if (g_settings.topBarRevealDelayMs > 2000) g_settings.topBarRevealDelayMs = 2000;
+    g_settings.topBarHideDelayMs = ReadIntSetting(L"topBarHideDelayMs", 200);
+    if (g_settings.topBarHideDelayMs < 0) g_settings.topBarHideDelayMs = 0;
+    if (g_settings.topBarHideDelayMs > 2000) g_settings.topBarHideDelayMs = 2000;
 
     {
         std::vector<wchar_t> buf(256);
