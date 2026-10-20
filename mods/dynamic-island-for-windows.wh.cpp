@@ -424,7 +424,7 @@ We love community contributions! To ensure high-quality updates, please follow t
   - MediaTabLyrics: false
     $name: Lyrics in the media tab
     $description: Shows synced lyrics in a side panel next to the album art and playback controls when the island is expanded on the Media tab. The island is only wider while this is on. Can also be toggled from the right-click menu.
-  - Lyrics: true
+  - Lyrics: false
     $name: Lyrics module
     $description: Shows synced lyrics for the current track (fetched from LRCLIB, a free open-source lyrics database) while the island is expanded. Scroll to the Lyrics tab to view them.
   - LyricsVisualizer: true
@@ -496,7 +496,7 @@ We love community contributions! To ensure high-quality updates, please follow t
       - auto: Auto (Follow Windows)
       - monday: Monday
       - sunday: Sunday
-  - QuickLookup: true
+  - QuickLookup: false
     $name: Quick Lookup (hotkey)
     $description: "Press the Quick Lookup hotkey (Shortcuts tab) to open a search box on the island. Type a word or short phrase and press Enter, or pick your clipboard text or a recent lookup. Nothing is sent anywhere until you submit a search; searches go to en.wiktionary.org and en.wikipedia.org (and api.dictionaryapi.dev as a backup dictionary). Recent lookups are kept in memory only and cleared when the mod restarts."
   - FileTrayModule: false
@@ -507,7 +507,7 @@ We love community contributions! To ensure high-quality updates, please follow t
     $description: 1 to 25. How many files the shelf keeps before the oldest one drops off.
   - FileTrayPersist: true
     $name: File Tray remembers items (disk)
-    $description: Keeps the tray's contents across restarts, in %LOCALAPPDATA%\DynamicIslandForWindows\filetray. Only file paths and pasted text snippets are stored, never copies of your files. Turn off to stop all disk reads and writes and delete the saved list.
+    $description: Keeps the tray's contents across restarts, in the mod's storage folder. Only file paths and pasted text snippets are stored, never copies of your files. Turn off to stop all disk reads and writes and delete the saved list.
   - MediaExpandBlocklist: ""
     $name: Never auto-expand for these apps
     $description: 'Comma-separated list of app or site names that should never make the island expand on a track change, while still updating quietly in the collapsed pill. Matched loosely against the media source and title, for example: chrome, tiktok, youtube.'
@@ -1167,7 +1167,7 @@ struct Settings {
     UINT hideShowVk = 'D';
 
     // Quick Lookup: hotkey-triggered dictionary / Wikipedia card.
-    bool quickLookup = true;
+    bool quickLookup = false;
     UINT lookupModifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
     UINT lookupVk = VK_SPACE;
     bool bluetoothIndicator = true;
@@ -1181,7 +1181,7 @@ struct Settings {
     bool weather = true;
     std::wstring weatherCity;
     bool weatherFahrenheit = false;
-    bool lyrics = true;
+    bool lyrics = false;
     bool lyricsVisualizer = true;
     bool karaokeLyrics = true;
     bool karaokeLetterGlow = true;
@@ -1733,6 +1733,7 @@ bool g_brightnessInitialized = false;
 int g_lastBrightness = -1;
 BYTE g_brightnessPowerSource = 255;  // ACLineStatus of the previous sample
 std::atomic<double> g_lastNudgeTime = 0.0;
+std::atomic<double> g_lastLyricsViewTime = 0.0;
 
 std::mutex g_bluetoothBatteryCacheMutex;
 std::unordered_map<std::wstring, int> g_bluetoothBatteryCache;  // Bluetooth device Id -> last known battery percent (-1 = never learned)
@@ -3908,16 +3909,6 @@ void PositionOverlayWindow(HWND hwnd, int width, int height) {
 
     HWND zOrder = g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST;
 
-    // Manage owner window to firmly anchor to desktop when alwaysOnTop is false
-    if (g_settings.alwaysOnTop) {
-        SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, 0);
-    } else {
-        HWND hProgman = FindWindowW(L"Progman", nullptr);
-        if (hProgman) {
-            SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(hProgman));
-        }
-    }
-
     x += g_settings.offsetX;
     y += ResolveOffsetY(static_cast<float>(height));
     // Yield to the screen-clip overlay.
@@ -4064,15 +4055,6 @@ StageLayout ComputeStageLayout(const Settings& settings, float pillW, float pill
 // never moves or resizes in a separate step from its content.
 void ApplyOverlayZOrder(HWND hwnd, int width, int height) {
     HWND zOrder = g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST;
-
-    if (g_settings.alwaysOnTop) {
-        SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, 0);
-    } else {
-        HWND hProgman = FindWindowW(L"Progman", nullptr);
-        if (hProgman) {
-            SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(hProgman));
-        }
-    }
 
     // Yield to the screen-clip overlay.
     const bool yieldToClipUi = Backdrop::ClipUiActiveCached();
@@ -6836,10 +6818,6 @@ DWORD WINAPI WeatherThreadProc(void*) {
 
         Wh_Log(L"Weather: Requesting weather from wttr.in/host: wttr.in, path: %s", url.c_str());
         std::string wRes = HttpGet(L"wttr.in", url.c_str(), true);
-        if (wRes.empty()) {
-            Wh_Log(L"Weather: HTTPS request failed, retrying over plain HTTP...");
-            wRes = HttpGet(L"wttr.in", url.c_str(), false);
-        }
 
         bool weatherCommitted = false;
 
@@ -7004,7 +6982,7 @@ DWORD WINAPI WeatherThreadProc(void*) {
 // ── Lyrics (LRCLIB, https://lrclib.net) ──────────────────────────────────────
 // OPTIONAL: User-Agent sent to LRCLIB. 
 constexpr wchar_t kLyricsUserAgent[] =
-    L"DynamicIslandForWindows/1.3.1 (https://github.com/devcode90/Dynamic-Island-for-Windows)";
+    L"DynamicIslandForWindows/1.4.0 (https://github.com/devcode90/Dynamic-Island-for-Windows)";
 
 bool IsUrlSafeChar(unsigned char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
@@ -8226,7 +8204,9 @@ DWORD WINAPI LyricsThreadProc(void*) {
             diskCapBytes = static_cast<uint64_t>(std::max(0, g_settings.lyricsCacheMaxMB)) * 1024ull * 1024ull;
         }
         LyricsCache::IterationGuard cacheGuard(diskCacheOn, diskCapBytes);
-        if (!lyricsEnabled) {
+        const bool lyricsViewVisible =
+            (NowSeconds() - g_lastLyricsViewTime.load(std::memory_order_relaxed)) < 3.0;
+        if (!lyricsEnabled || !lyricsViewVisible) {
             WaitForSingleObject(g_stopEvent, 1000);
             continue;
         }
@@ -9604,7 +9584,7 @@ int LookupRowAtContentPoint(const MediaContentPoint& pt, int rowCount, bool head
 // Wikimedia asks API clients to send a descriptive User-Agent with contact info.
 // Replace the placeholder with your fork's page, like kLyricsUserAgent.
 constexpr wchar_t kLookupUserAgent[] =
-    L"DynamicIslandForWindows/1.3 (https://github.com/devcode90/Dynamic-Island-for-Windows) QuickLookup";
+    L"DynamicIslandForWindows/1.4.0 (https://github.com/devcode90/Dynamic-Island-for-Windows) QuickLookup";
 
 // Bumped for every new request AND when the card is dismissed. A worker only
 // publishes if its id is still current, so a slow reply can never resurrect a card
@@ -10336,16 +10316,11 @@ std::vector<LookupRow> CurrentLookupRows(LookupStatus* status) {
 }
 
 void ForceForeground(HWND hwnd) {
-    HWND fg = GetForegroundWindow();
-    const DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    const DWORD me = GetCurrentThreadId();
-    const bool attached = fgThread && fgThread != me && AttachThreadInput(me, fgThread, TRUE);
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
     BringWindowToTop(hwnd);
     SetFocus(hwnd);
-    if (attached) {
-        AttachThreadInput(me, fgThread, FALSE);
-    }
 }
 
 // The island is WS_EX_NOACTIVATE so it never steals focus. While the search box is
@@ -14495,6 +14470,7 @@ class Renderer {
         {
             const bool lyricsFresh = lyricsLastDrawn_ >= 0.0 && (now - lyricsLastDrawn_) < 0.25;
             lyricsLastDrawn_ = now;
+            g_lastLyricsViewTime.store(now, std::memory_order_relaxed);
             if (!lyricsFresh) {
                 lyricsScrollAnimStartTime_ = -1.0;  // triggers the snap branch below
                 lyricsWaveformFadeTime_ = -1.0;     // snaps the visualizer alpha
@@ -16380,6 +16356,7 @@ class Renderer {
         const bool fresh = immLastDrawn_ >= 0.0 && (now - immLastDrawn_) < 0.25;
         const float dt = fresh ? Clamp(static_cast<float>(now - immLastDrawn_), 0.001f, 0.05f) : 0.016f;
         immLastDrawn_ = now;
+        g_lastLyricsViewTime.store(now, std::memory_order_relaxed);
 
         ID2D1Layer* fadeLayer = AcquireLayer();
         if (fadeLayer) {
@@ -16560,7 +16537,7 @@ class Renderer {
 
                 target_->SetTransform(D2D1::Matrix3x2F::Scale(s, s, D2D1::Point2F(cx, yc)) * oldTransform);
 
-                if (settings.karaokeLyrics && i == idx) {
+                if (settings.karaokeLyrics && i == idx && idx >= 0) {
                     // Dim base, then a soft-edged bright wipe following the song.
                     mutedBrush_->SetOpacity(alpha * (0.62f + 0.38f * (1.0f - focus)));
                     target_->DrawTextLayout(origin, L.layout.Get(), mutedBrush_.Get(),
@@ -16869,6 +16846,7 @@ class Renderer {
     // Draws the current synced lyric line inside `area`. When the line changes,
     // the old one slides up and fades out while the new one rises in from below.
     void DrawCollapsedLyrics(const SharedState& state, D2D1_RECT_F area, double now, float alpha) {
+        g_lastLyricsViewTime.store(now, std::memory_order_relaxed);
         IDWriteTextFormat* fmt = textFormat_.Get();
         if (!fmt || !dwriteFactory_ || alpha <= 0.01f) {
             return;
