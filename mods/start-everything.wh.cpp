@@ -32,7 +32,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - Adds app and custom-command suggestions for an empty query, shared favorite learning, configurable menu width and height, and settings organized into sections.
 - Adds named custom commands with CMD, Windows PowerShell, PowerShell 7, or a custom shell; optional hidden terminals; and emoji, Windows glyph, image, icon, or executable icons.
 - Adds automatic text and monochrome-icon contrast across the search window, with a fixed-color override. Background sampling pauses during motion and scrolling; unchanged samples reuse the cached color map.
-- Isolates preview extraction and media decoding in a separate Windows worker process, with a built-in image-decoding fallback. With a bottom taskbar, preview cards grow down while they fit search, then align at its bottom and grow upward when taller. Top and side taskbars keep previews top-aligned and growing downward. Crossing that height and changing selections mid-animation remain smooth.
+- Fetches previews on a dedicated background thread, with built-in Windows image decoding, PDF rendering, and SVG rasterization. With a bottom taskbar, preview cards grow down while they fit search, then align at its bottom and grow upward when taller. Top and side taskbars keep previews top-aligned and growing downward. Crossing that height and changing selections mid-animation remain smooth.
 - Keeps search input and selection when a context menu closes. Typing or Backspace closes the menu and continues the query; Escape closes the menu before clearing search.
 - Defers search UI creation until first use, buffers opening text, waits for the editable IME context before replaying opening keys through Windows native input, and restores native and text-box focus after input handoffs.
 - Supports top and side taskbars, with animations confined to the selected monitor. Right-side taskbars place the preview on the left.
@@ -129,7 +129,7 @@ With a **top, left, or right taskbar**, the preview always aligns with the top o
 
 Click the name, an individual detail value, or the full path to copy it. Copy targets follow the text area, and copying keeps the displayed path unchanged. Select and copy text directly from text/document excerpts. Previews stay hidden throughout drag and drop.
 
-Preview files are processed in a separate, hidden Windows worker using the same mod DLL; no additional preview application is required. Explorer receives only decoded pixels, text, and details. A failed worker leaves the last thumbnail or a file icon, and the next preview request can start a new worker. The worker stops when the preview hides. Large animations are bounded to protect memory use.
+Preview extraction runs on a dedicated background thread. Videos use Windows’ native media presenter, muted and looping. No separate helper process or preview application is required. Animated-image and PDF-frame caches are bounded to protect memory use; hiding the preview stops playback and cancels pending page rendering.
 
 Turn off **Play Videos and Animations** to keep previews still, or turn off **File Preview** to hide the card. Hiding the Files panel also hides its previews and stops the mod's Everything file queries; the Everything application itself keeps running.
 
@@ -577,7 +577,6 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <wincodec.h>
 #include <d3d11.h>
 #include <d2d1_3.h>
-extern "C" HRESULT WINAPI CreateDirect3D11SurfaceFromDXGISurface(IDXGISurface*, IInspectable**);
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <string_view>
 #include <limits>
@@ -4506,8 +4505,6 @@ static bool PromoteFileDragPointer() {
     static const Convert convert = [] {
         HMODULE user = GetModuleHandleW(L"user32.dll");
         auto function = reinterpret_cast<Convert>(GetProcAddress(user, "ConvertPrimaryPointerToMouseDrag"));
-        // Documented User32 ordinal on Windows 11, for builds without the name.
-        if (!function) function = reinterpret_cast<Convert>(GetProcAddress(user, MAKEINTRESOURCEA(2811)));
         return function;
     }();
     if (!convert) {
@@ -4522,23 +4519,6 @@ static bool PromoteFileDragPointer() {
 
 static void NativeDragTrace(const wchar_t* message) {
     Wh_Log(L"drag: %ls", message);
-#ifdef START_EVERYTHING_DRAG_DIAGNOSTICS
-    wchar_t path[MAX_PATH]{};
-    DWORD length = GetTempPathW(ARRAYSIZE(path), path);
-    if (!length || length + 36 >= ARRAYSIZE(path)) return;
-    wcscat_s(path, L"StartEverything-native-drag.log");
-    HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                              nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    SYSTEMTIME time{};
-    GetLocalTime(&time);
-    wchar_t line[768]{};
-    const int count = swprintf_s(line, L"%02u:%02u:%02u.%03u pid=%lu %ls\r\n", time.wHour,
-                                time.wMinute, time.wSecond, time.wMilliseconds, GetCurrentProcessId(), message);
-    DWORD written = 0;
-    if (count > 0) WriteFile(file, line, count * sizeof(wchar_t), &written, nullptr);
-    CloseHandle(file);
-#endif
 }
 
 class FileDragSource final : public IDropSource, public IDropSourceNotify {
@@ -6967,8 +6947,8 @@ void SetFileSelection(int index, bool fromPointer = false) {
 // which run here on the preview thread in Explorer.
 //
 // Motion plays over the still once it is ready (animatePreview): a video,
-// muted and looping, decoded in the isolated worker; a GIF or animated
-// WebP, whose decoded frames are sent to the card
+// muted and looping, shown by Windows' native media presenter; a GIF or
+// animated WebP, whose decoded frames are sent to the card
 // whole but without their timing, which is read from the file
 // (WebpFrameDurations); a PDF's first pages, a second each. Never sound. All
 // of it stops and is let go the
@@ -7007,8 +6987,7 @@ struct Result {
     std::vector<std::pair<std::wstring, std::wstring>> facts;  // label and value, in the order shown
     std::wstring text;       // the start of a text file or a document, shown where a picture would be
     bool monospace = false;  // the text is a text file's, line for line
-    bool video = false;  // worker-only media playback
-    bool liveFrame = false;  // a decoded video frame received from the worker
+    winrt::Windows::Storage::StorageFile video{nullptr};  // played muted by the XAML media presenter
     std::vector<std::vector<BYTE>> frames;  // GIF/WebP/PDF frames, each like pixels
     std::vector<int> delays;                // milliseconds per frame
 };
@@ -7017,7 +6996,6 @@ std::mutex g_mutex;
 std::condition_variable g_wake;
 std::wstring g_request;  // the path to fetch next, or empty
 bool g_quit = false;
-bool g_resetWorker = false;  // protected by g_mutex
 std::atomic<uint64_t> g_generation{0};
 std::atomic<bool> g_motionDispatchQueued{false};
 [[clang::no_destroy]] std::optional<Result> g_result;  // the last fetched, for the XAML thread
@@ -7398,9 +7376,8 @@ inline void DecodeAnimatedWebp(const std::wstring& path, int width, int height, 
     });
 }
 
-// Decoders below are called only by the isolated preview process. Explorer
-// receives premultiplied pixels and text, never a file-backed media source.
-struct PreviewWorkerDevice {
+// SVG rasterization uses a short-lived graphics device on the preview thread.
+struct PreviewRenderDevice {
     winrt::com_ptr<ID3D11Device> device;
     winrt::com_ptr<ID3D11DeviceContext> context;
     winrt::com_ptr<ID3D11Texture2D> texture, staging;
@@ -7452,7 +7429,7 @@ struct PreviewWorkerDevice {
 };
 
 inline bool RasterizeSvg(std::wstring const& path, int width, int height, Result* result) {
-    PreviewWorkerDevice gpu;
+    PreviewRenderDevice gpu;
     if (!gpu.Init(width, height)) return false;
     auto dxgi = gpu.device.as<IDXGIDevice>();
     winrt::com_ptr<ID2D1Factory1> factory;
@@ -7576,7 +7553,7 @@ inline bool DecodeGifFrames(std::wstring const& path, int width, int height, Res
     return true;
 }
 
-// Decode animation frames, or mark a video for playback in the worker.
+// Decode animation frames or prepare a file for native video playback.
 inline void FetchMotion(const std::wstring& path, int width, int height, Result* r) {
     const size_t dot = r->name.rfind(L'.');
     if (dot == std::wstring::npos) {
@@ -7590,11 +7567,11 @@ inline void FetchMotion(const std::wstring& path, int width, int height, Result*
     } else if (ext == L".webp") {
         DecodeAnimatedWebp(path, width, height, r);
     } else if (SUCCEEDED(AssocGetPerceivedType(ext.c_str(), &type, &flags, nullptr)) && type == PERCEIVED_TYPE_VIDEO) {
-        r->video = true;
+        RunInMta([&] { r->video = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get(); });
     }
 }
 
-// SVGs are rasterized in the worker so Explorer never parses their content.
+// Rasterize SVGs on the preview thread, away from XAML layout and input.
 inline bool OpenSvg(const std::wstring& path, Result* r) {
     return RasterizeSvg(path, static_cast<int>(kThumbWidth * r->scale),
                         static_cast<int>(kThumbHeight * r->scale), r);
@@ -7748,8 +7725,8 @@ inline bool TrustedDocumentFilter(const std::wstring& extension, CLSID* filter) 
 // The start of a document's text -- Word, Excel, PowerPoint, RTF,
 // OpenDocument -- through the document filter Windows' own search reads it
 // with (TrustedDocumentFilter): Windows has them for these, Office or not.
-// They run only in the isolated preview process: only Windows' or
-// Office's, up to 30 MB, the first 1500 characters.
+// Only trusted Windows/Office filters run on the background preview thread,
+// for files up to 30 MB, extracting the first 1500 characters.
 inline bool ReadDocumentText(const std::wstring& path, const std::wstring& lowerName, std::wstring* text) {
     static const wchar_t* const kDocuments[] = {L".doc", L".docx", L".docm", L".dot", L".dotx", L".rtf",
                                                 L".odt", L".xls", L".xlsx", L".xlsm", L".ppt", L".pptx",
@@ -7874,7 +7851,7 @@ inline void TypeIcon(const std::wstring& path, int side, Result* r) {
     }
 }
 
-// Called only by the isolated preview worker.
+// Called on the dedicated background preview thread.
 inline Result Fetch(const std::wstring& path, double scale, bool animate, everything::Client* everythingClient) {
     Result r;
     r.path = path;
@@ -8030,364 +8007,6 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
     return r;
 }
 
-constexpr uint32_t kWorkerMagic = 0x53505731;
-constexpr uint32_t kWorkerMaxPacket = 80u << 20;
-enum WorkerPacketKind : uint32_t { WorkerRequest = 1, WorkerStill, WorkerFrames, WorkerVideoFrame, WorkerDone };
-struct WorkerPacketHeader { uint32_t magic, kind, bytes, sequence; };
-
-struct WorkerWriter {
-    std::vector<BYTE> bytes;
-    template<class T> void Pod(T const& value) {
-        if (bytes.size() > kWorkerMaxPacket - sizeof(T)) throw std::length_error("preview packet");
-        const auto* first = reinterpret_cast<BYTE const*>(&value);
-        bytes.insert(bytes.end(), first, first + sizeof(T));
-    }
-    void Blob(std::vector<BYTE> const& value) {
-        if (value.size() > kWorkerMaxPacket || bytes.size() + value.size() + 4 > kWorkerMaxPacket)
-            throw std::length_error("preview bitmap");
-        Pod(static_cast<uint32_t>(value.size()));
-        bytes.insert(bytes.end(), value.begin(), value.end());
-    }
-    void Text(std::wstring const& value) {
-        if (value.size() > 65536) throw std::length_error("preview text");
-        Pod(static_cast<uint32_t>(value.size()));
-        const auto* first = reinterpret_cast<BYTE const*>(value.data());
-        bytes.insert(bytes.end(), first, first + value.size() * sizeof(wchar_t));
-    }
-};
-
-struct WorkerReader {
-    std::vector<BYTE> const& bytes;
-    size_t at = 0;
-    template<class T> T Pod() {
-        if (at > bytes.size() || sizeof(T) > bytes.size() - at) throw std::runtime_error("preview packet");
-        T value;
-        memcpy(&value, bytes.data() + at, sizeof(value));
-        at += sizeof(value);
-        return value;
-    }
-    std::wstring Text() {
-        const uint32_t count = Pod<uint32_t>();
-        if (count > 65536 || at > bytes.size() || count * sizeof(wchar_t) > bytes.size() - at)
-            throw std::runtime_error("preview text");
-        std::wstring value(count, L'\0');
-        memcpy(value.data(), bytes.data() + at, count * sizeof(wchar_t));
-        at += count * sizeof(wchar_t);
-        return value;
-    }
-    std::vector<BYTE> Blob(size_t expected) {
-        const uint32_t count = Pod<uint32_t>();
-        if ((count && count != expected) || at > bytes.size() || count > bytes.size() - at)
-            throw std::runtime_error("preview bitmap");
-        std::vector<BYTE> value(bytes.begin() + at, bytes.begin() + at + count);
-        at += count;
-        return value;
-    }
-};
-
-inline bool WorkerWrite(HANDLE pipe, void const* buffer, size_t size) {
-    const auto* bytes = static_cast<BYTE const*>(buffer);
-    while (size) {
-        DWORD written = 0;
-        if (!WriteFile(pipe, bytes, static_cast<DWORD>(std::min<size_t>(size, 65536)), &written, nullptr) || !written)
-            return false;
-        bytes += written;
-        size -= written;
-    }
-    return true;
-}
-
-inline bool WorkerSend(HANDLE pipe, uint32_t kind, uint32_t sequence, WorkerWriter const& writer) {
-    WorkerPacketHeader header{kWorkerMagic, kind, static_cast<uint32_t>(writer.bytes.size()), sequence};
-    return WorkerWrite(pipe, &header, sizeof(header)) && WorkerWrite(pipe, writer.bytes.data(), writer.bytes.size());
-}
-
-inline WorkerWriter EncodeWorkerResult(Result const& result) {
-    WorkerWriter out;
-    out.Pod(result.width); out.Pod(result.height); out.Pod(result.scale); out.Pod(result.pages);
-    out.Pod(static_cast<uint32_t>(result.monospace));
-    out.Text(result.name); out.Text(result.text);
-    out.Pod(static_cast<uint32_t>(result.facts.size()));
-    for (auto const& fact : result.facts) { out.Text(fact.first); out.Text(fact.second); }
-    out.Blob(result.pixels);
-    out.Pod(static_cast<uint32_t>(result.frames.size()));
-    for (size_t i = 0; i < result.frames.size(); ++i) {
-        out.Pod(i < result.delays.size() ? result.delays[i] : 100);
-        out.Blob(result.frames[i]);
-    }
-    return out;
-}
-
-inline Result DecodeWorkerResult(std::vector<BYTE> const& bytes, std::wstring const& path) {
-    WorkerReader in{bytes};
-    Result result;
-    result.path = path;
-    result.width = in.Pod<int>(); result.height = in.Pod<int>();
-    result.scale = in.Pod<double>(); result.pages = in.Pod<int>();
-    if (result.width < 0 || result.height < 0 || result.width > 4096 || result.height > 4096 ||
-        !std::isfinite(result.scale) || result.scale < 0.5 || result.scale > 8 || result.pages < 0)
-        throw std::runtime_error("preview dimensions");
-    const size_t expected = static_cast<size_t>(result.width) * result.height * 4;
-    result.monospace = in.Pod<uint32_t>() != 0;
-    result.name = in.Text(); result.text = in.Text();
-    const uint32_t facts = in.Pod<uint32_t>();
-    if (facts > 64) throw std::runtime_error("preview facts");
-    for (uint32_t i = 0; i < facts; ++i) {
-        auto label = in.Text();
-        result.facts.emplace_back(std::move(label), in.Text());
-    }
-    result.pixels = in.Blob(expected);
-    const uint32_t frames = in.Pod<uint32_t>();
-    if (frames > 300 || (frames && !expected) || expected * frames > (64u << 20))
-        throw std::runtime_error("preview frames");
-    for (uint32_t i = 0; i < frames; ++i) {
-        const int delay = in.Pod<int>();
-        if (delay < 10 || delay > 60000) throw std::runtime_error("preview delay");
-        result.delays.push_back(delay);
-        auto pixels = in.Blob(expected);
-        if (pixels.size() != expected) throw std::runtime_error("empty preview frame");
-        result.frames.push_back(std::move(pixels));
-    }
-    if (in.at != bytes.size()) throw std::runtime_error("trailing preview data");
-    return result;
-}
-
-inline bool WorkerInputPending(HANDLE pipe) {
-    DWORD available = 0;
-    return !PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr) || available != 0;
-}
-
-// Decoding and GPU readback stay in the worker. Only one preview-sized frame
-// crosses the pipe at a time, at most 24 times per second; audio stays muted.
-inline void WorkerPlayVideo(HANDLE input, HANDLE output, uint32_t sequence, Result const& still) {
-    RunInMta([&] {
-        using winrt::Windows::Media::Playback::MediaPlayer;
-        struct VideoState {
-            winrt::handle ready{CreateEventW(nullptr, FALSE, FALSE, nullptr)};
-            std::atomic<bool> failed{false};
-        };
-        auto state = std::make_shared<VideoState>();
-        if (!state->ready) return;
-        const HANDLE ready = state->ready.get();
-        MediaPlayer player;
-        player.IsVideoFrameServerEnabled(true);
-        player.IsMuted(true);
-        player.IsLoopingEnabled(true);
-        auto frame = player.VideoFrameAvailable(winrt::auto_revoke, [state](auto&&, auto&&) { SetEvent(state->ready.get()); });
-        auto error = player.MediaFailed(winrt::auto_revoke, [state](auto&&, auto&&) { state->failed = true; SetEvent(state->ready.get()); });
-        try {
-            auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(still.path).get();
-            player.Source(winrt::Windows::Media::Core::MediaSource::CreateFromStorageFile(file));
-            player.Play();
-            PreviewWorkerDevice gpu;
-            winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DSurface surface{nullptr};
-            ULONGLONG lastFrame = 0;
-            const ULONGLONG began = GetTickCount64();
-            while (!state->failed && !WorkerInputPending(input)) {
-                if (WaitForSingleObject(ready, 50) != WAIT_OBJECT_0) {
-                    if (!lastFrame && GetTickCount64() - began > 8000) break;
-                    continue;
-                }
-                if (GetTickCount64() - lastFrame < 42) continue;
-                const UINT sourceW = player.PlaybackSession().NaturalVideoWidth();
-                const UINT sourceH = player.PlaybackSession().NaturalVideoHeight();
-                if (!sourceW || !sourceH) continue;
-                const double fit = std::min({1.0, kThumbWidth * still.scale / sourceW,
-                                             kThumbHeight * still.scale / sourceH});
-                const int width = std::max(1, static_cast<int>(sourceW * fit));
-                const int height = std::max(1, static_cast<int>(sourceH * fit));
-                if (!surface || width != gpu.width || height != gpu.height) {
-                    if (!gpu.Init(width, height)) break;
-                    auto dxgi = gpu.texture.as<IDXGISurface>();
-                    winrt::com_ptr<IInspectable> object;
-                    winrt::check_hresult(CreateDirect3D11SurfaceFromDXGISurface(dxgi.get(), object.put()));
-                    surface = object.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DSurface>();
-                }
-                player.CopyFrameToVideoSurface(surface);
-                Result image;
-                image.width = width; image.height = height; image.scale = still.scale;
-                if (!gpu.Pixels(&image.pixels)) break;
-                for (size_t i = 3; i < image.pixels.size(); i += 4) image.pixels[i] = 255;
-                if (!WorkerSend(output, WorkerVideoFrame, sequence, EncodeWorkerResult(image))) break;
-                lastFrame = GetTickCount64();
-            }
-        } catch (...) {}
-        frame.revoke(); error.revoke(); player.Close();
-    });
-}
-
-inline bool WorkerReadBlocking(HANDLE pipe, void* buffer, size_t size) {
-    auto* bytes = static_cast<BYTE*>(buffer);
-    while (size) {
-        DWORD read = 0;
-        if (!ReadFile(pipe, bytes, static_cast<DWORD>(std::min<size_t>(size, 65536)), &read, nullptr) || !read) return false;
-        bytes += read; size -= read;
-    }
-    return true;
-}
-
-inline void PreviewWorkerMain(HANDLE input, HANDLE output) {
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-    winrt::init_apartment(winrt::apartment_type::single_threaded);
-    {
-        everything::Client everythingClient(L"WindhawkEverythingIsolatedPreviewReply");
-        const bool haveEverything = everythingClient.Init();
-        WorkerPacketHeader header{};
-        while (WorkerReadBlocking(input, &header, sizeof(header))) {
-            if (header.magic != kWorkerMagic || header.kind != WorkerRequest || header.bytes > 132000) break;
-            std::vector<BYTE> payload(header.bytes);
-            if (!WorkerReadBlocking(input, payload.data(), payload.size())) break;
-            try {
-                WorkerReader request{payload};
-                auto path = request.Text();
-                std::replace(path.begin(), path.end(), L'/', static_cast<wchar_t>(92));
-#ifdef START_EVERYTHING_DRAG_DIAGNOSTICS
-                if (path == L"::test-worker-stall::") Sleep(INFINITE);
-                if (path == L"::test-worker-exit::") ExitProcess(37);
-#endif
-                const double scale = request.Pod<double>();
-                const bool animate = request.Pod<uint32_t>() != 0;
-                if (request.at != payload.size() || path.empty() || path.size() > 32760 ||
-                    !std::isfinite(scale) || scale < 0.5 || scale > 8 || !OnFixedDrive(path)) break;
-                auto result = Fetch(path, scale, animate, haveEverything ? &everythingClient : nullptr);
-                if (!WorkerSend(output, WorkerStill, header.sequence, EncodeWorkerResult(result))) break;
-                if (result.morePages) {
-                    Result pages;
-                    pages.path = path; pages.width = result.width; pages.height = result.height; pages.scale = scale;
-                    RenderPdfFrames(path, result, [&] { return WorkerInputPending(input); }, &pages.frames, &pages.delays);
-                    if (!pages.frames.empty() && !WorkerSend(output, WorkerFrames, header.sequence, EncodeWorkerResult(pages))) break;
-                }
-                if (result.video && animate) WorkerPlayVideo(input, output, header.sequence, result);
-                if (!WorkerSend(output, WorkerDone, header.sequence, WorkerWriter{})) break;
-            } catch (...) {
-                if (!WorkerSend(output, WorkerDone, header.sequence, WorkerWriter{})) break;
-            }
-        }
-    }
-    winrt::uninit_apartment();
-}
-
-class PreviewWorkerClient {
-    HANDLE process_ = nullptr, job_ = nullptr, input_ = nullptr, output_ = nullptr;
-    uint32_t sequence_ = 0;
-public:
-    DWORD ProcessId() const { return process_ ? GetProcessId(process_) : 0; }
-    ~PreviewWorkerClient() { Reset(); }
-    void Reset() {
-        if (job_) { TerminateJobObject(job_, 0); CloseHandle(job_); job_ = nullptr; }
-        if (process_) { WaitForSingleObject(process_, 250); CloseHandle(process_); process_ = nullptr; }
-        if (input_) { CloseHandle(input_); input_ = nullptr; }
-        if (output_) { CloseHandle(output_); output_ = nullptr; }
-    }
-    bool Start() {
-        if (process_ && WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) return true;
-        Reset();
-        SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
-        HANDLE childInput = nullptr, childOutput = nullptr;
-        auto cleanup = [&] {
-            if (childInput) CloseHandle(childInput);
-            if (childOutput) CloseHandle(childOutput);
-        };
-        if (!CreatePipe(&childInput, &input_, &security, 131072) ||
-            !CreatePipe(&output_, &childOutput, &security, 131072)) { cleanup(); Reset(); return false; }
-        SetHandleInformation(input_, HANDLE_FLAG_INHERIT, 0);
-        SetHandleInformation(output_, HANDLE_FLAG_INHERIT, 0);
-        job_ = CreateJobObjectW(nullptr, nullptr);
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-            JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION | JOB_OBJECT_LIMIT_PROCESS_MEMORY;
-        limits.ProcessMemoryLimit = 512ull << 20;
-        if (!job_ || !SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
-            cleanup(); Reset(); return false;
-        }
-        wchar_t module[32768]{}, system[MAX_PATH]{};
-        if (!GetModuleFileNameW(GetCurrentModuleHandle(), module, ARRAYSIZE(module)) ||
-            !GetSystemDirectoryW(system, ARRAYSIZE(system))) { cleanup(); Reset(); return false; }
-        const std::wstring executable = std::wstring(system) + L"/rundll32.exe";
-        std::wstring command = L"\"" + executable + L"\" \"" + module + L"\",StartEverythingPreviewWorker " +
-            std::to_wstring(reinterpret_cast<ULONG_PTR>(childInput)) + L" " +
-            std::to_wstring(reinterpret_cast<ULONG_PTR>(childOutput));
-        // Reuse the runtimes already loaded by Windhawk, including portable
-        // installs. Only this child's environment changes, never Explorer's.
-        std::wstring paths;
-        for (PCWSTR name : {L"windhawk.dll", L"libc++.whl", L"libunwind.whl"}) {
-            wchar_t path[32768]{};
-            if (HMODULE library = GetModuleHandleW(name); library && GetModuleFileNameW(library, path, ARRAYSIZE(path))) {
-                if (auto slash = wcsrchr(path, L'\\')) { *slash = 0; paths += path; paths += L';'; }
-            }
-        }
-        std::vector<wchar_t> environment;
-        if (LPWCH block = GetEnvironmentStringsW()) {
-            for (PCWSTR entry = block; *entry; entry += wcslen(entry) + 1) {
-                std::wstring value(entry);
-                if (_wcsnicmp(entry, L"PATH=", 5) == 0) value = L"PATH=" + paths + (entry + 5);
-                environment.insert(environment.end(), value.begin(), value.end());
-                environment.push_back(0);
-            }
-            FreeEnvironmentStringsW(block);
-        }
-        environment.push_back(0);
-        SIZE_T attributeBytes = 0;
-        InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
-        std::vector<BYTE> attributes(attributeBytes);
-        STARTUPINFOEXW startup{};
-        startup.StartupInfo.cb = sizeof(startup);
-        startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
-        startup.StartupInfo.wShowWindow = SW_HIDE;
-        startup.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
-        HANDLE handles[]{childInput, childOutput};
-        if (!InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &attributeBytes)) {
-            cleanup(); Reset(); return false;
-        }
-        const bool attributesReady = UpdateProcThreadAttribute(startup.lpAttributeList, 0,
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles, sizeof(handles), nullptr, nullptr) != FALSE;
-        PROCESS_INFORMATION child{};
-        const BOOL created = attributesReady && CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE,
-            CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
-            environment.data(), nullptr, &startup.StartupInfo, &child);
-        DeleteProcThreadAttributeList(startup.lpAttributeList);
-        cleanup();
-        if (!created) { Reset(); return false; }
-        process_ = child.hProcess;
-        if (!AssignProcessToJobObject(job_, process_)) {
-            TerminateProcess(process_, 0); CloseHandle(child.hThread); Reset(); return false;
-        }
-        ResumeThread(child.hThread);
-        CloseHandle(child.hThread);
-        return true;
-    }
-    bool Begin(std::wstring const& path, double scale, bool animate) {
-        if (!Start()) return false;
-        WorkerWriter request;
-        request.Text(path); request.Pod(scale); request.Pod(static_cast<uint32_t>(animate));
-        if (!WorkerSend(input_, WorkerRequest, ++sequence_, request)) { Reset(); return false; }
-        return true;
-    }
-    template<class Cancel> bool Read(void* target, size_t size, Cancel const& cancel, ULONGLONG deadline) {
-        auto* bytes = static_cast<BYTE*>(target);
-        while (size) {
-            if (cancel() || GetTickCount64() >= deadline || !process_ || WaitForSingleObject(process_, 0) != WAIT_TIMEOUT)
-                return false;
-            DWORD available = 0, read = 0;
-            if (!PeekNamedPipe(output_, nullptr, 0, nullptr, &available, nullptr)) return false;
-            if (!available) { Sleep(5); continue; }
-            const DWORD amount = static_cast<DWORD>(std::min<size_t>({size, available, 65536}));
-            if (!ReadFile(output_, bytes, amount, &read, nullptr) || !read) return false;
-            bytes += read; size -= read;
-        }
-        return true;
-    }
-    template<class Cancel> bool Next(WorkerPacketHeader* header, std::vector<BYTE>* bytes, Cancel const& cancel) {
-        const ULONGLONG deadline = GetTickCount64() + 12000;
-        if (!Read(header, sizeof(*header), cancel, deadline) || header->magic != kWorkerMagic ||
-            header->sequence != sequence_ || header->bytes > kWorkerMaxPacket ||
-            header->kind < WorkerStill || header->kind > WorkerDone) { Reset(); return false; }
-        bytes->resize(header->bytes);
-        if (!Read(bytes->data(), bytes->size(), cancel, deadline)) { Reset(); return false; }
-        return true;
-    }
-};
-
 }  // namespace preview
 
 // The card, built on first use. XAML thread only.
@@ -8407,6 +8026,8 @@ std::wstring g_previewShownPath;
 std::wstring g_previewWanted;  // the selected file's path, or empty
 
 // What plays over the still. XAML thread only.
+[[clang::no_destroy]] wuxc::MediaPlayerElement g_previewVideo{nullptr};
+[[clang::no_destroy]] winrt::Windows::Media::Playback::MediaPlayer g_previewPlayer{nullptr};
 [[clang::no_destroy]] wux::DispatcherTimer g_previewFrameTimer{nullptr};
 [[clang::no_destroy]] wuxmi::WriteableBitmap g_previewFrameBitmap{nullptr};
 std::vector<std::vector<BYTE>> g_previewFrames;
@@ -8419,21 +8040,18 @@ void ApplyPreviewFrames();
 void PreviewThreadMain() {
     const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     {
-        preview::PreviewWorkerClient worker;
+        everything::Client everythingClient(L"WindhawkEverythingPreviewReply");
+        const bool haveEverything = everythingClient.Init();
         for (;;) {
             std::wstring path;
             uint64_t generation = 0;
-            bool resetWorker = false;
             {
                 std::unique_lock lock(preview::g_mutex);
-                preview::g_wake.wait(lock, [] { return preview::g_quit || preview::g_resetWorker || !preview::g_request.empty(); });
+                preview::g_wake.wait(lock, [] { return preview::g_quit || !preview::g_request.empty(); });
                 if (preview::g_quit) break;
                 path = std::exchange(preview::g_request, std::wstring());
                 generation = preview::g_generation.load();
-                resetWorker = std::exchange(preview::g_resetWorker, false);
             }
-            if (resetWorker) worker.Reset();
-            if (path.empty()) continue;
             auto canceled = [&] {
                 std::lock_guard lock(preview::g_mutex);
                 return preview::g_quit || generation != preview::g_generation.load();
@@ -8446,7 +8064,6 @@ void PreviewThreadMain() {
                 std::lock_guard lock(g_settingsMutex);
                 animate = g_settings.animatePreview;
             }
-            bool haveStill = false;
             auto publish = [&](preview::Result result, bool motion) {
                 {
                     std::lock_guard lock(preview::g_mutex);
@@ -8461,29 +8078,29 @@ void PreviewThreadMain() {
                 } else PostMessageW(host, kSearchWindowPreviewResultMessage, 0, 0);
             };
             try {
-                if (worker.Begin(path, scale, animate)) {
-                    preview::WorkerPacketHeader packet{};
-                    std::vector<BYTE> bytes;
-                    while (worker.Next(&packet, &bytes, canceled)) {
-                        if (packet.kind == preview::WorkerDone) break;
-                        auto result = preview::DecodeWorkerResult(bytes, path);
-                        const bool motion = packet.kind != preview::WorkerStill;
-                        result.liveFrame = packet.kind == preview::WorkerVideoFrame;
-                        if (!motion) haveStill = true;
-                        publish(std::move(result), motion);
-                    }
+                auto result = preview::Fetch(path, scale, animate, haveEverything ? &everythingClient : nullptr);
+                std::optional<preview::Result> pages;
+                if (result.morePages) {
+                    pages.emplace();
+                    pages->path = path; pages->scale = scale;
+                    pages->width = result.width; pages->height = result.height;
+                    pages->pixels = result.pixels;
+                }
+                publish(std::move(result), false);
+                if (pages && !canceled()) {
+                    preview::RenderPdfFrames(path, *pages, canceled, &pages->frames, &pages->delays);
+                    if (!pages->frames.empty()) publish(std::move(*pages), true);
                 }
             } catch (...) {
-                worker.Reset();
-            }
-            if (!haveStill && !canceled()) {
-                // A failed decoder gets an icon, not an in-process retry.
-                preview::Result result;
-                result.path = path; result.scale = scale;
-                const size_t slash = path.find_last_of(L"\\/");
-                result.name = slash == std::wstring::npos ? path : path.substr(slash + 1);
-                preview::TypeIcon(path, preview::TypeIconPixels(scale), &result);
-                publish(std::move(result), false);
+                if (!canceled()) {
+                    Wh_Log(L"preview: decoding failed (%08X)", static_cast<unsigned>(winrt::to_hresult()));
+                    preview::Result result;
+                    result.path = path; result.scale = scale;
+                    const size_t slash = path.find_last_of(L"\\/");
+                    result.name = slash == std::wstring::npos ? path : path.substr(slash + 1);
+                    preview::TypeIcon(path, preview::TypeIconPixels(scale), &result);
+                    publish(std::move(result), false);
+                }
             }
         }
     }
@@ -8518,6 +8135,18 @@ void StopPreviewMotion() {
     g_previewFrames.clear();
     g_previewDelays.clear();
     g_previewFrameBitmap = nullptr;
+    try {
+        if (g_previewVideo) {
+            g_previewVideo.Visibility(wux::Visibility::Collapsed);
+            g_previewVideo.SetMediaPlayer(nullptr);
+        }
+        if (g_previewPlayer) {
+            g_previewPlayer.Pause();
+            g_previewPlayer.Source(nullptr);
+            g_previewPlayer.Close();
+            g_previewPlayer = nullptr;
+        }
+    } catch (...) {}
 }
 
 void HidePreview() {
@@ -8525,7 +8154,6 @@ void HidePreview() {
     {
         std::lock_guard<std::mutex> lock(preview::g_mutex);
         preview::g_request.clear();
-        preview::g_resetWorker = true;
     }
     preview::g_wake.notify_all();
     StopPreviewMotion();
@@ -8601,6 +8229,13 @@ void BuildPreviewCard() {
     image.HorizontalAlignment(wux::HorizontalAlignment::Center);
     image.VerticalAlignment(wux::VerticalAlignment::Center);
     thumbGrid.Children().Append(image);
+    wuxc::MediaPlayerElement video;
+    video.AreTransportControlsEnabled(false);
+    video.Stretch(wuxm::Stretch::Uniform);
+    video.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    video.VerticalAlignment(wux::VerticalAlignment::Center);
+    video.Visibility(wux::Visibility::Collapsed);
+    thumbGrid.Children().Append(video);
     auto thumbText = SearchTextBlock();  // a text file's or a document's start (Result::text)
     thumbText.Margin(wux::ThicknessHelper::FromLengths(10, 8, 10, 8));
     ScaleFont(thumbText, 11);
@@ -8681,6 +8316,7 @@ void BuildPreviewCard() {
     g_previewThumbBox = thumbBox;
     g_previewDetails = details;
     g_previewImage = image;
+    g_previewVideo = video;
     g_previewText = thumbText;
     g_previewName = name;
     g_previewFacts = facts;
@@ -8782,6 +8418,21 @@ void StartPreviewMotion(preview::Result& result) {
         }
         g_previewFrameTimer.Interval(std::chrono::milliseconds(g_previewDelays[0]));
         g_previewFrameTimer.Start();
+    } else if (result.video) {
+        // Muted and looping, over the still, which it shows as its poster
+        // until the first frame is ready.
+        namespace playback = winrt::Windows::Media::Playback;
+        playback::MediaPlayer player;
+        player.IsMuted(true);
+        player.IsLoopingEnabled(true);
+        player.AutoPlay(true);
+        g_previewVideo.PosterSource(g_previewImage.Source());
+        g_previewVideo.Visibility(wux::Visibility::Visible);
+        g_previewVideo.Width(g_previewImage.Width());
+        g_previewVideo.Height(g_previewImage.Height());
+        g_previewVideo.SetMediaPlayer(player);
+        g_previewPlayer = player;
+        player.Source(winrt::Windows::Media::Core::MediaSource::CreateFromStorageFile(result.video));
     }
 }
 
@@ -9015,32 +8666,6 @@ void ApplyPreviewFrames() try {
     }
     if (!frames || !g_previewPopup || !g_previewPopup.IsOpen() || frames->path != g_previewShownPath ||
         frames->path != g_previewWanted || g_dragging.load()) return;
-    if (frames->liveFrame) {
-        if (frames->width < 1 || frames->height < 1 ||
-            frames->pixels.size() != static_cast<size_t>(frames->width) * frames->height * 4) return;
-        const bool resized = !g_previewFrameBitmap || g_previewFrameBitmap.PixelWidth() != frames->width ||
-                             g_previewFrameBitmap.PixelHeight() != frames->height;
-        if (resized) g_previewFrameBitmap = wuxmi::WriteableBitmap{frames->width, frames->height};
-        auto access = g_previewFrameBitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
-        BYTE* pixels = nullptr;
-        if (FAILED(access->Buffer(&pixels)) || !pixels || g_previewFrameBitmap.PixelBuffer().Capacity() < frames->pixels.size()) return;
-        memcpy(pixels, frames->pixels.data(), frames->pixels.size());
-        g_previewFrameBitmap.Invalidate();
-        g_previewImage.Source(g_previewFrameBitmap);
-        g_previewImage.Visibility(wux::Visibility::Visible);
-        if (resized) {
-            const double from = g_previewCard.ActualHeight();
-            g_previewImage.Width(frames->width / frames->scale);
-            g_previewImage.Height(frames->height / frames->scale);
-            g_previewThumbBox.Height(std::max(frames->height / frames->scale, 48.0));
-            g_previewThumbBox.Visibility(wux::Visibility::Visible);
-            g_previewText.Visibility(wux::Visibility::Collapsed);
-            g_previewCard.ClearValue(wux::FrameworkElement::HeightProperty());
-            g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
-            PreviewResize(from, g_previewCard.DesiredSize().Height);
-        }
-        return;
-    }
     if (g_previewFrames.empty()) StartPreviewMotion(*frames);
 } catch (...) {
 }
@@ -12678,6 +12303,7 @@ void TeardownSearchUi() {
         g_previewDetails = nullptr;
         g_previewThumbBox = nullptr;
         g_previewImage = nullptr;
+        g_previewVideo = nullptr;
         g_previewName = nullptr;
         g_previewFacts = nullptr;
         g_previewPath = nullptr;
@@ -14101,11 +13727,11 @@ bool TryCaptureSearchCompositionBrush(searchcomp::CompositionBrush const& compos
 
 struct SearchCapturedXamlBrush {
     winrt::weak_ref<wf::IInspectable> owner;
-    void* protectedBrush = nullptr; // non-owning; only used while owner resolves
+    void* innerBrush = nullptr; // composable base; its owner retains it
     bool captured = false;
     SearchBrushData data;
 };
-[[clang::no_destroy]] static std::unordered_map<void*, SearchCapturedXamlBrush> g_searchMaterialXaml;
+static std::unordered_map<void*, SearchCapturedXamlBrush> g_searchMaterialXaml;
 using SearchCreateXamlBrush = HRESULT(WINAPI*)(void*, void*, void**, void**);
 static SearchCreateXamlBrush g_searchCreateXamlBrush = nullptr;
 
@@ -14121,7 +13747,7 @@ void NoteSearchXamlBrush(void* outer, void* inner, void* result) noexcept {
         std::lock_guard lock(g_searchMaterialMutex);
         std::erase_if(g_searchMaterialXaml, [](auto const& item) { return !item.second.owner.get(); });
         if (g_searchMaterialXaml.size() < 256)
-            g_searchMaterialXaml.insert_or_assign(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(owner), winrt::get_abi(access)});
+            g_searchMaterialXaml.insert_or_assign(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(owner), inner});
     } catch (...) {}
 }
 
@@ -14142,9 +13768,12 @@ bool CaptureSearchXamlMaterial(wuxm::XamlCompositionBrushBase const& brush, Sear
         owner = entry->second.owner.get();
         if (!owner || owner.as<IUnknown>().get() != identity.get()) return false;
         // The public composable factory supplies its base object separately.
-        // This accesses the protected interface on that base, without reading
-        // a derived C++ object or retaining its non-delegating inner object.
-        winrt::copy_from_abi(access, entry->second.protectedBrush);
+        // Query the live base each time: a protected interface may be a
+        // temporary tear-off, so never cache that interface's raw pointer.
+        wf::IInspectable base{nullptr};
+        winrt::copy_from_abi(base, entry->second.innerBrush);
+        access = base.try_as<wuxm::IXamlCompositionBrushBaseProtected>();
+        if (!access) return false;
     }
     auto composition = access.CompositionBrush();
     if (composition) {
@@ -14173,11 +13802,12 @@ bool CaptureSearchXamlMaterial(wuxm::XamlCompositionBrushBase const& brush, Sear
 // Start process may not have loaded XAML/Composition yet; the temporary API
 // discovery thread otherwise releases their last reference before hooks apply.
 static std::array<HMODULE, 4> g_searchMaterialModules{};
-bool SetSearchMaterialHook(size_t index, void* target, void* hook, void** original) {
+template <typename Prototype>
+bool SetSearchMaterialHook(size_t index, void* target, Prototype* hook, Prototype** original) {
     HMODULE module = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<PCWSTR>(target), &module))
         return false;
-    if (!Wh_SetFunctionHook(target, hook, original)) {
+    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<Prototype*>(target), hook, original)) {
         FreeLibrary(module);
         return false;
     }
@@ -14217,14 +13847,14 @@ void InitSearchMaterialCapture() noexcept {
                     auto xamlFactory = winrt::get_activation_factory<wuxm::XamlCompositionBrushBase, wuxm::IXamlCompositionBrushBaseFactory>();
                     struct XamlFactoryFunctions { void* inspectable[6]; void* createInstance; };
                     auto x = *reinterpret_cast<XamlFactoryFunctions**>(winrt::get_abi(xamlFactory));
-                    bool first = SetSearchMaterialHook(0, c->createEffectFactory, reinterpret_cast<void*>(SearchCreateFactoryHook),
-                                                   reinterpret_cast<void**>(&g_searchCreateFactory));
-                    bool second = SetSearchMaterialHook(1, c->createEffectFactoryWithProperties, reinterpret_cast<void*>(SearchCreateFactoryWithPropertiesHook),
-                                                    reinterpret_cast<void**>(&g_searchCreateFactoryWithProperties));
-                    bool third = SetSearchMaterialHook(2, f->createBrush, reinterpret_cast<void*>(SearchCreateEffectBrushHook),
-                                                   reinterpret_cast<void**>(&g_searchCreateEffectBrush));
-                    bool fourth = SetSearchMaterialHook(3, x->createInstance, reinterpret_cast<void*>(SearchCreateXamlBrushHook),
-                                                     reinterpret_cast<void**>(&g_searchCreateXamlBrush));
+                    bool first = SetSearchMaterialHook(0, c->createEffectFactory, SearchCreateFactoryHook,
+                                                   &g_searchCreateFactory);
+                    bool second = SetSearchMaterialHook(1, c->createEffectFactoryWithProperties, SearchCreateFactoryWithPropertiesHook,
+                                                    &g_searchCreateFactoryWithProperties);
+                    bool third = SetSearchMaterialHook(2, f->createBrush, SearchCreateEffectBrushHook,
+                                                   &g_searchCreateEffectBrush);
+                    bool fourth = SetSearchMaterialHook(3, x->createInstance, SearchCreateXamlBrushHook,
+                                                     &g_searchCreateXamlBrush);
                     g_searchMaterialCapture = first && second && third && fourth;
                     } catch (...) { Wh_Log(L"material API initialization unavailable: %08X", static_cast<unsigned>(winrt::to_hresult())); }
                     complete.set_value();
@@ -17995,7 +17625,7 @@ void RefreshSearchUiSettings() {
         RescaleFonts(g_resultsHost);
         RescaleFonts(g_previewCard);
         ApplyFilesPanelLayout();
-        HidePreview();  // cancel the worker before applying preview setting changes
+        HidePreview();  // stop playback and cancel pending page rendering before settings change
         if (g_ourBox) {
             QueueQuery(std::wstring(g_ourBox.Text()));
         }
@@ -18118,76 +17748,3 @@ void Wh_ModUninit() {
     }
     Wh_Log(L"uninit: StartMenuExperienceHost teardown complete");
 }
-
-// A correctly shaped rundll32 entry point keeps the worker in the same source
-// file and compiled DLL. It never calls Windhawk APIs or initializes hooks/UI.
-extern "C" __declspec(dllexport) void CALLBACK StartEverythingPreviewWorker(HWND, HINSTANCE, LPSTR arguments, int) {
-    unsigned long long input = 0, output = 0;
-    char extra = 0;
-    if (!arguments || sscanf(arguments, "%llu %llu %c", &input, &output, &extra) != 2) return;
-    HANDLE read = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(input));
-    HANDLE write = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(output));
-    if (GetFileType(read) != FILE_TYPE_PIPE || GetFileType(write) != FILE_TYPE_PIPE) return;
-    try { preview::PreviewWorkerMain(read, write); } catch (...) {}
-}
-
-#ifdef START_EVERYTHING_DRAG_DIAGNOSTICS
-struct PreviewWorkerTestResult {
-    DWORD stills, frames, width, height, textLength, facts, processId, processStopped, changes, opaque;
-};
-extern "C" __declspec(dllexport) int StartEverythingPreviewTest(PCWSTR path, DWORD mode, PreviewWorkerTestResult* facts) {
-    if (!path || !facts) return 1;
-    *facts = {};
-    preview::PreviewWorkerClient worker;
-    try {
-        if (!worker.Begin(mode == 2 ? L"::test-worker-stall::" : mode == 3 ? L"::test-worker-exit::" : path,
-                          1.0, mode != 1)) return 2;
-        facts->processId = worker.ProcessId();
-        const ULONGLONG began = GetTickCount64();
-        auto cancel = [&] { return GetTickCount64() - began > (mode == 2 ? 100 : 15000); };
-        preview::WorkerPacketHeader header{};
-        std::vector<BYTE> bytes;
-        uint32_t previousHash = 0;
-        auto inspectPixels = [&](std::vector<BYTE> const& pixels) {
-            uint32_t hash = 2166136261u;
-            for (size_t i = 0; i < pixels.size(); ++i) { hash ^= pixels[i]; hash *= 16777619u; }
-            if (previousHash && hash != previousHash) ++facts->changes;
-            previousHash = hash;
-            DWORD opaque = 0;
-            for (size_t i = 3; i < pixels.size(); i += 4) opaque += pixels[i] != 0;
-            facts->opaque = opaque;
-        };
-        while (worker.Next(&header, &bytes, cancel)) {
-            if (header.kind == preview::WorkerDone) break;
-            auto result = preview::DecodeWorkerResult(bytes, path);
-            if (header.kind == preview::WorkerStill) {
-                ++facts->stills;
-                facts->width = result.width; facts->height = result.height;
-                facts->textLength = static_cast<DWORD>(result.text.size());
-                facts->facts = static_cast<DWORD>(result.facts.size());
-                inspectPixels(result.pixels);
-            } else {
-                facts->frames += result.frames.empty() ? 1 : static_cast<DWORD>(result.frames.size());
-                if (result.frames.empty()) inspectPixels(result.pixels);
-            }
-            if (header.kind == preview::WorkerStill) facts->frames += static_cast<DWORD>(result.frames.size());
-            for (auto const& frame : result.frames) inspectPixels(frame);
-            if (facts->frames >= 4) break;
-        }
-        if (mode == 3) {
-            if (!worker.Begin(path, 1.0, false)) return 6;
-            facts->processId = worker.ProcessId();
-            if (!worker.Next(&header, &bytes, cancel) || header.kind != preview::WorkerStill) return 7;
-            auto result = preview::DecodeWorkerResult(bytes, path);
-            facts->stills = 1;
-            facts->width = result.width; facts->height = result.height;
-        }
-        const DWORD pid = facts->processId;
-        worker.Reset();
-        HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
-        facts->processStopped = !process || WaitForSingleObject(process, 2000) == WAIT_OBJECT_0;
-        if (process) CloseHandle(process);
-        return mode == 2 ? (facts->processStopped ? 0 : 4) : (facts->stills ? 0 : 3);
-    } catch (...) { return 5; }
-}
-#endif
