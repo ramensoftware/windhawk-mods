@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win8-network-flyout-restorer
 // @name            Windows 8 Network Flyout Restorer
-// @description     This mod restores the Windows 8 Network Flyout; uses native System32 VAN when available and verified MSDL components otherwise
+// @description     This mod restores the Windows 8 Network Flyout on Windows 10 and Windows 11 (24H2+ included)
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -18,6 +18,7 @@
 This mod restores the Windows 8-style network panel from the taskbar network icon.
 The panel provides access to Wi-Fi networks, wired connections, VPN connections
 and Airplane mode, where supported by Windows and the installed hardware.
+This modification has been tested on Windows 11 24H2 and Windows 11 25H2.
 
 ## Requirements
 
@@ -64,6 +65,9 @@ If the panel does not open, check the internet connection and Windhawk's mod log
 An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
 restores the normal Windows behavior. If shutdown gets stuck, some resources may
 be kept until Explorer exits to avoid unloading code that is still running.
+
+## Credits 
+- AdministratoX - Testing on Windows 11 25H2
 */
 // ==/WindhawkModReadme==
 
@@ -5212,29 +5216,48 @@ using Shell_NotifyIconW_t = BOOL(WINAPI*)(DWORD, PNOTIFYICONDATAW);
 Shell_NotifyIconW_t g_origShell_NotifyIconW = nullptr;
 
 BOOL WINAPI Hook_Shell_NotifyIconW(DWORD dwMessage, PNOTIFYICONDATAW lpData) {
-    if (lpData && lpData->hWnd &&
-        (dwMessage == NIM_ADD || dwMessage == NIM_MODIFY) &&
-        (lpData->uFlags & NIF_MESSAGE) && lpData->uCallbackMessage != 0 &&
-        g_vanStoreReady.load(std::memory_order_acquire) &&
-        !g_shuttingDown.load(std::memory_order_acquire)) {
-        const HWND hFallback = g_fallbackTrayHwnd.load(std::memory_order_acquire);
-        if (lpData->hWnd != hFallback) {
-            // pnidui.dll's CLSID_NetworkTray registers its callback window
-            // from the STA worker thread of this process.
-            const DWORD staTid = g_staThreadId.load(std::memory_order_acquire);
-            if (staTid != 0 && GetCurrentThreadId() == staTid) {
-                g_pnidTrayCallbackMsg.store(lpData->uCallbackMessage, std::memory_order_release);
-                if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-                        lpData->hWnd, PnidTrayWndSubclassProc, 0)) {
+    try {
+        if (!g_inHookGuard && lpData && lpData->hWnd &&
+            (dwMessage == NIM_ADD || dwMessage == NIM_MODIFY) &&
+            (lpData->uFlags & NIF_MESSAGE) && lpData->uCallbackMessage != 0 &&
+            g_vanStoreReady.load(std::memory_order_acquire) &&
+            !g_shuttingDown.load(std::memory_order_acquire)) {
+            const HWND hFallback = g_fallbackTrayHwnd.load(std::memory_order_acquire);
+            if (lpData->hWnd != hFallback) {
+                // pnidui.dll's CLSID_NetworkTray registers its callback window
+                // from the STA worker thread of this process.
+                const DWORD staTid = g_staThreadId.load(std::memory_order_acquire);
+                if (staTid != 0 && GetCurrentThreadId() == staTid) {
+                    ScopedHookGuard guard;
+                    // Track the candidate before the helper: a throwing helper
+                    // might already have installed a callback that needs teardown.
                     g_pnidTrayHwnd.store(lpData->hWnd, std::memory_order_release);
-                } else {
-                    g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
-                    Wh_Log(L"Could not subclass the pnidui tray callback window");
+                    g_pnidTrayCallbackMsg.store(lpData->uCallbackMessage, std::memory_order_release);
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            lpData->hWnd, PnidTrayWndSubclassProc, 0)) {
+                        g_pnidTrayHwnd.store(lpData->hWnd, std::memory_order_release);
+                    } else {
+                        HWND expected = lpData->hWnd;
+                        g_pnidTrayHwnd.compare_exchange_strong(
+                            expected, nullptr, std::memory_order_acq_rel);
+                        g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
+                        Wh_Log(L"Could not subclass the pnidui tray callback window");
+                    }
                 }
             }
         }
+    } catch (...) {
+        g_unloadSafetyFailure.store(true, std::memory_order_release);
+        DisableModAfterCppException(L"Hook_Shell_NotifyIconW subclass setup");
     }
-    return g_origShell_NotifyIconW(dwMessage, lpData);
+    try {
+        return g_origShell_NotifyIconW(dwMessage, lpData);
+    } catch (...) {
+        g_unloadSafetyFailure.store(true, std::memory_order_release);
+        DisableModAfterCppException(L"Hook_Shell_NotifyIconW original API");
+        SetLastError(ERROR_GEN_FAILURE);
+        return FALSE;
+    }
 }
 
 // ===========================================================================
