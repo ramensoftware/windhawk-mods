@@ -2,12 +2,190 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-20T04:01:44.000Z</updated>
+    <updated>2026-10-20T05:03:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Disappearing Icon Fix for Windows 11 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11#21f2428e07c6783f78ea7b0a3b3038ab2ee3c6f6</id>
+        <link href="https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11"/>
+        <updated>2026-10-20T05:03:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>State that this mod is deprecated for Windows 11 24H2+ since I have not been able to reproduce the bug at all after a certain 24H2 version.</li>
+</ul>]]></content>
+        <author>
+            <name>yezhiyi9670</name>
+            <uri>https://github.com/yezhiyi9670</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars 2.0.1]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#90e067381451a3a716f239a37f3c0191f4c601a1</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-10-20T05:02:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Update screenshot</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Sandbox: close without confirmation 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-sandbox-close-no-confirm#ffc0a69d0cfb2cd03a55b7f38ccfb773108b2912</id>
+        <link href="https://windhawk.net/mods/windows-sandbox-close-no-confirm"/>
+        <updated>2026-10-20T05:02:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowssandboxclosewithoutconfirmation">Windows Sandbox: close without confirmation</h1>
+<p>Closing a Windows Sandbox window normally asks for confirmation before the sandbox is shut down. This mod replaces the close button with a clean <code>wsb stop</code>, so the window goes away without the prompt.</p>
+<h2 id="requirements">Requirements</h2>
+<p>This mod targets the new Windows Sandbox, whose remote session process is <code>WindowsSandboxRemoteSession.exe</code>. That process is also what the mod's include scope matches: if it does not exist on the system, the sandbox is the older version and the mod has nothing to attach to. The <code>wsb</code> command line tool must also be available.</p>
+<h2 id="notes">Notes</h2>
+<p>The sandbox id is read from the process command line. If it cannot be found, the mod does nothing and the usual confirmation is shown.</p>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Restore legacy network tray 1.0]]></title>
+        <id>https://windhawk.net/mods/restore-legacy-network-tray#44b3fe7b010002fc8d12c9134affbb6f3fc4ec95</id>
+        <link href="https://windhawk.net/mods/restore-legacy-network-tray"/>
+        <updated>2026-10-20T05:02:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Redstores the classic network tray icon on Windows 10 taskbar running under Windows 11 24H2 or later.
+The mod downloads the network icon dll from the Microsoft's symbols server.</p>
+<p>This mod downloads the version of the network icon dll from one of the latest builds of Windows 11 23H2, so it may conflict 
+with the mod <code>Windows 10 legacy flyouts on Win11 24H2 restorer</code>. It is recommended to use only one of the mods.</p>
+<p>The original version of the mod is by user DerBaron of WinClassic forum, published under MIT license:
+https://winclassic.net/post/40623</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Snipper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-snipper#737ac0bd8a791ba491e35dadcda50eda00c1d3e2</id>
+        <link href="https://windhawk.net/mods/taskbar-snipper"/>
+        <updated>2026-10-20T05:02:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarsnipper">Taskbar Snipper</h1>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-snipper/screenshot.png" alt="The screenshot and record buttons on the taskbar" /></p>
+<p>Press <strong>Print Screen</strong>, or click the screenshot button on the taskbar, to select part of the
+screen. A toolbox opens right above the selection to mark it up with a pencil, lines, arrows, boxes
+and text, in any color and thickness. When you're done, click anywhere outside the selection (or
+press <strong>Enter</strong>), and the screenshot is copied to the clipboard, saved to a folder, or both, as you
+choose in the mod's settings.</p>
+<p>Press <strong>Win+Shift+R</strong>, or click the record button, to record part of the screen as a video. When
+you stop, trim its start and end, then copy or save it.</p>
+<h2 id="selecting">Selecting</h2>
+<ul>
+<li><strong>Drag</strong> to select an area. The screen stays as it was when you pressed Print Screen.</li>
+<li><strong>Click</strong> a window to select all of it, or the desktop to select the whole display.</li>
+<li><strong>Esc</strong> or <strong>right-click</strong> cancels.</li>
+</ul>
+<h2 id="thetoolbox">The toolbox</h2>
+<ul>
+<li><strong>Select</strong> (V), <strong>Pencil</strong> (P), <strong>Line</strong> (L), <strong>Arrow</strong> (A), <strong>Box</strong> (B) and <strong>Text</strong> (T). Drag
+inside the selection to draw; hold <strong>Shift</strong> to keep a line or arrow to 45° steps, or a box
+square. A click with the pencil makes a dot. With Text, click where the text goes and type;
+<strong>Enter</strong> starts a new line, and <strong>Esc</strong> or a click elsewhere finishes it.</li>
+<li><strong>Colors</strong>: eight at hand, and the last swatch picks any color.</li>
+<li><strong>Thickness</strong>: <strong>−</strong> and <strong>+</strong>, or the mouse wheel. Text gets bigger with it too.</li>
+<li><strong>Undo</strong> (Ctrl+Z), <strong>Copy</strong> (Ctrl+C), <strong>Save</strong> (Ctrl+S) and <strong>Close</strong> (Esc).</li>
+</ul>
+<p><strong>Copy</strong> and <strong>Save</strong> do just that. Clicking outside the selection or pressing Enter does what the
+<strong>When you're done</strong> setting says: copy, save, or both. Screenshots are saved as PNG files named by
+the date and time, in Windows' Screenshots folder (in Pictures) unless you choose another. A note
+in the corner of the screen says what happened; click it to show a saved screenshot in File
+Explorer.</p>
+<h2 id="movingandchangingmarks">Moving and changing marks</h2>
+<ul>
+<li>Whatever tool is in hand, <strong>drag</strong> anything already drawn to move it; the pointer turns into a
+four-way arrow over it. The <strong>Select</strong> tool only selects and moves, for when you'd rather not
+draw by accident.</li>
+<li><strong>Click</strong> a mark to select it. Its color and thickness show in the toolbox, and changing them
+changes the mark. The <strong>arrow keys</strong> nudge it (with <strong>Shift</strong>, 10 pixels at a time), <strong>Delete</strong>
+removes it, and <strong>Esc</strong> lets go of it.</li>
+<li>To change text, click it with the Text tool, or click it again once it's selected.</li>
+<li>Undo takes back moves and changes too.</li>
+</ul>
+<h2 id="recordingthescreen">Recording the screen</h2>
+<ul>
+<li>Press <strong>Win+Shift+R</strong>, click the record button, or choose <strong>Record the screen</strong> from the buttons'
+menu. Select an area as for a screenshot, then click <strong>Start recording</strong> (or press <strong>Enter</strong>).
+Recording starts after a 3-second countdown.</li>
+<li>While recording, a red line marks the area and a bar beside it shows the time; neither is in the
+video. To stop, click the <strong>stop</strong> square on the bar or the record button, or press
+<strong>Win+Shift+R</strong> again. The bar's <strong>X</strong> throws the recording away.</li>
+<li>The recording then opens to trim it. Drag the handles at either end of the strip of frames to cut
+off its start and end, and click the strip to see any moment. <strong>Space</strong> plays the part kept, the
+<strong>arrow keys</strong> step a frame at a time (a second with <strong>Shift</strong>), and <strong>I</strong> and <strong>O</strong> set the start
+and end at the frame shown.</li>
+<li><strong>Copy</strong> (Ctrl+C) puts the video on the clipboard, to paste into a chat, an email or a folder.
+<strong>Save</strong> (Ctrl+S) saves it in Windows' Screen Recordings folder (in Videos) unless you choose
+another.</li>
+<li>Recordings are MP4 videos (H.264, without sound) of up to 30 frames a second, with the mouse
+pointer.</li>
+</ul>
+<h2 id="thebuttons">The buttons</h2>
+<p>The screenshot and record buttons sit on the taskbar like the Windows weather widget: click one to
+take a screenshot or record, right-click them for their menu, and drag them to move them along the
+taskbar. <strong>Which buttons</strong> in the mod's settings shows both, or just one of them, and <strong>Buttons on
+the taskbar</strong> turns them off; the shortcuts work either way.</p>
+<p>The menu opens the screenshots and recordings folders, and <strong>Choose the screenshots folder…</strong> and
+<strong>Choose the recordings folder…</strong> pick others. The folders can be set in the mod's settings too;
+whichever you changed last is used.</p>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png" alt="Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar" /></p>
+<p>From the left: <a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a>,
+<a href="https://windhawk.net/mods/taskbar-audio-flipper">Taskbar Audio Flipper</a> and
+<a href="https://windhawk.net/mods/taskbar-rdp-launcher">Taskbar RDP Launcher</a>.</p>
+<p>With the Taskbar Audio Flipper or Taskbar RDP Launcher mod running too, their widgets can be joined
+with the buttons into one: right-click any of them, open <strong>Link widgets</strong>, and choose <strong>Link with</strong>
+the other. Linked, they sit side by side with a divider between them, and dragging any of them
+moves them all; <strong>Move this widget left</strong> and <strong>right</strong> change their order.</p>
+<p>Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
+later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
+unlinked.</p>
+<h2 id="goodtoknow">Good to know</h2>
+<ul>
+<li>Only Print Screen on its own is taken over. Alt+Print Screen, Win+Print Screen and Win+Shift+S
+work as usual, and turning the mod off gives Print Screen back to Windows. Win+Shift+R is taken
+over while <strong>Win+Shift+R records the screen</strong> is on in the settings.</li>
+<li>While a program running as administrator is in front, Windows doesn't let the mod see Print
+Screen or Win+Shift+R, so Windows handles them as usual.</li>
+<li>The tool, color and thickness you used last are remembered.</li>
+<li>A recording closed without copying or saving it is deleted; the window asks first. If the mod
+turns off (or Windows signs out) while recording, or with a recording still open, the recording
+goes to the recordings folder: right away when that's on the same drive as Windhawk's mod storage,
+otherwise the next time the mod starts.</li>
+<li>Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
+mod's storage (in a folder only you can open), and go with the mod.</li>
+<li>Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
+than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 records up to 4K.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Audio Flipper 1.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-flipper#0559a0e550149979f1896abf7be76c006b5594b7</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
+        <updated>2026-10-20T05:02:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Devices are shown with a Fluent icon for their kind (speakers, headphones, headset, monitor or microphone) in the taskbar's color, like the rest of Windows 11, struck through while muted. The webcam's icon is a Fluent glyph too. The icons chosen in the Sound control panel are no longer shown, and <strong>Rename or change device icons…</strong> is now <strong>Rename devices…</strong>.</li>
+<li>The widget links with up to two others now: Taskbar RDP Launcher and the new Taskbar Snipper. <strong>Link widgets</strong> in the right-click menu has <strong>Link with</strong> for each of them, and <strong>Move this widget left</strong> and <strong>right</strong> to put them in order. A link made with Taskbar RDP Launcher in 1.0 carries over.</li>
+<li>The readme shows the three widgets linked, with links to each mod.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar RDP Launcher 1.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-rdp-launcher#f6432c021584bf08d3ee6629ab47de33ecd7452a</id>
@@ -485,146 +663,6 @@ Styler); the smoke follows the taskbar's button groups. Runs in its own process
         <author>
             <name>Rubicus</name>
             <uri>https://github.com/xxsoulxx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 5.2.0]]></title>
-        <id>https://windhawk.net/mods/win7-network-flyout-recreation#16daa7c23005f6dce3f8152f548e5af5c7ca629b</id>
-        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
-        <updated>2026-10-19T04:49:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for StartAllBack (credits to awnaise for the implementation)</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Open Window Underline 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-open-window-underline#ed9b52479fb527279540b2fb7afcd367afac640e</id>
-        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
-        <updated>2026-10-19T04:03:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaropenwindowunderline">Taskbar Open Window Underline</h1>
-<p>Underlines the label of every Windows 11 taskbar button that has a window
-currently shown on the desktop. Buttons whose windows are all minimized keep a
-plain label, so you can tell at a glance which apps actually have something
-open in front of you.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo.png" alt="Labels underlined" />
-<em>Whole label</em></p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo2.png" alt="First letter underlined" />
-<em>First letter only</em></p>
-<p>Requirements:</p>
-<ul>
-<li>Windows 11 with the XAML taskbar (22H2 or newer).</li>
-<li>Taskbar labels must be visible: Settings → Personalization → Taskbar →
-Taskbar behaviors → "Combine taskbar buttons and hide labels" set to
-<strong>Never</strong> (or <strong>When taskbar is full</strong>). The "Show labels, combine taskbar
-buttons" mode of the Taskbar Labels mod is supported as well; a combined
-group is underlined when any (or, optionally, every) one of its windows is
-shown.</li>
-</ul>
-<p>How it works:</p>
-<ul>
-<li>The taskbar's buttons live in an <code>ItemsRepeater</code>; each button's item is its
-view model (<code>TaskListWindowViewModel</code> for one window, <code>TaskListGroupViewModel</code>
-for a group), and the view model knows its windows through the shell's
-<code>TaskItem</code> / <code>TaskGroup</code> objects. The mod resolves every button's windows
-that way and judges them with <code>IsIconic</code> (plus DWM cloaking for windows on
-other virtual desktops). Win+D counts as minimized.</li>
-<li>A WinEvent hook (minimize / restore / show / hide / cloak, and foreground or
-title changes when a setting needs them) invalidates the buttons; events are
-coalesced and every button is re-evaluated on the taskbar thread, on every
-taskbar.</li>
-<li>The underline is the native <code>TextBlock</code> underline, so it follows the text
-color, trimming and theme. It can cover the whole label or just its first
-letter. It is removed when the mod is disabled.</li>
-<li>On builds where the view-model symbols can't be resolved, the mod falls back
-to matching label text against window titles, which is exact for "Never
-combine" but blind to combined groups.</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Cached Context Menu 1.1.0]]></title>
-        <id>https://windhawk.net/mods/custom-cached-context-menu#3275a4ab62bd8c754a1820acf3cdff814fe08575</id>
-        <link href="https://windhawk.net/mods/custom-cached-context-menu"/>
-        <updated>2026-10-19T04:03:46.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>Top action bar (opt-in): Cut, Copy, Paste, Rename and Delete as an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Unavailable actions are hidden from the bar.</li>
-<li>Paste into a single right-clicked folder, like the Windows 11 menu.</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Middle-clicking a folder no longer fails to open it in a new tab (invocation-only menu builds are no longer deferred).</li>
-<li>The icon cache no longer runs its destructor at process exit.</li>
-<li>Items that report SFGAO_FOLDER but are not directories (for example .zip files) no longer get the folder menu and its Paste.</li>
-<li>Actions no longer wait for the shell menu: Open, Cut, Copy, Delete, Properties and Set as desktop background are dispatched directly, and registered extension verbs (Share, Print, Open in Terminal and others) run through the shell's association lookup, so clicking an action starts it immediately instead of after a short pause with a busy cursor. The shell menu is only populated for items that exist only inside it.</li>
-<li>The menu disappears immediately when an action is chosen instead of playing the closing animation, so nothing lingers on screen while a modal dialog (Properties, the delete confirmation) is up.</li>
-<li>Cut and Copy run the file view's own command when the view owns the keyboard (guarded so the keys can never land in another window), keeping the cut dimming, the shell clipboard data object and undo exactly like the native menu; otherwise they write the clipboard directly. Paste drops the clipboard object on the target folder's drop target — the shell's own paste path — so collision naming, undo and virtual clipboard items match, including for a right-clicked folder and the navigation tree.</li>
-<li>Hover highlights track the mouse immediately during fast sweeps: interactive repaints no longer wait for vsync, and a burst of mouse moves paints only the final hover position.</li>
-<li>Windows items that are not moved into the submenu no longer jump to the top of background menus; they stay with the other extras above the "More options" entry.</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>Theme names in the settings now match the bundled theme previews.</li>
-<li>Default padding tightened to 4; existing configs and theme files are migrated when they still carry the old default (schema v9). Right-aligned content now mirrors the icon's left inset.</li>
-<li>The "Windows items to move" default list uses language-independent verbs where they exist instead of English labels (labels still work as a fallback); commands whose verb is a GUID accept friendly aliases (openterminal, editwithphotos, editwithpaint, editwithnotepad), and Windows' modern commands are no longer treated as third-party handlers.</li>
-</ul>]]></content>
-        <author>
-            <name>BOLT</name>
-            <uri>https://github.com/Bolt-Scripts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars 2.0]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#f2a007255a1fa993638d0b9f7130f3d1fafea1c9</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-10-18T19:00:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Use another method</li>
-<li>Remove black lines under titlebars</li>
-<li>Improve compatibility with Windows 11 23H2 and Windows 10</li>
-<li>Improve compatibility with themed setups</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Legacy Clock Square Cutout & Animated Custom Image 3.2.1]]></title>
-        <id>https://windhawk.net/mods/remove-clock-cutout-background#47a5170a682da083cfc0bd7cbb10ac410ef79cf4</id>
-        <link href="https://windhawk.net/mods/remove-clock-cutout-background"/>
-        <updated>2026-10-18T17:02:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed transparent PNG and GIF background bleeding by clearing the background with the parent color.</li>
-<li>Removed leftover window border lines (<code>WS_BORDER</code>) on clock controls.</li>
-</ul>]]></content>
-        <author>
-            <name>awnaise</name>
-            <uri>https://github.com/awnaise</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Magic Pointer 1.0.3]]></title>
-        <id>https://windhawk.net/mods/magic-pointer#2cb665613f187b4f2160998718b76a5600c22011</id>
-        <link href="https://windhawk.net/mods/magic-pointer"/>
-        <updated>2026-10-18T16:01:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added translations. The hint, the card with its buttons and messages, and the Google Lens helper page now follow your Windows display language. Available in Arabic, Bengali, Chinese (Simplified and Traditional), Croatian, Czech, Danish, Dutch, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian, Persian, Polish, Portuguese (Brazil), Romanian, Russian, Spanish, Swedish, Tamil, Thai, Turkish, Ukrainian and Vietnamese, including right-to-left layouts. To make things easier the translations were written with AI assistance, so corrections are welcome on GitHub.</li>
-<li>New <strong>Language</strong> setting to use a different language than Windows. The settings page is translated too, in the languages Windhawk offers, and follows Windhawk's own language.</li>
-<li>The Translate button now uses your chosen language when <strong>Translate to</strong> is set to Auto. The language list shows native names and gained Croatian, Persian and Tamil, and Smart suggestions are written in your language.</li>
-<li>The ripple animation is much smoother on slower PCs and high-resolution screens. It lowers its detail when a frame takes too long, and it now follows your monitor's refresh rate, up to 144 fps.</li>
-<li>Fixed a hitch when summoning the pointer on large or high-resolution screens.</li>
-</ul>]]></content>
-        <author>
-            <name>Rono</name>
-            <uri>https://github.com/rono-zeroseven</uri>
         </author>
     </entry>
 </feed>

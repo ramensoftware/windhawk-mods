@@ -2,12 +2,149 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-19T20:02:45.000Z</updated>
+    <updated>2026-10-20T05:02:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Sandbox: close without confirmation 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-sandbox-close-no-confirm#ffc0a69d0cfb2cd03a55b7f38ccfb773108b2912</id>
+        <link href="https://windhawk.net/mods/windows-sandbox-close-no-confirm"/>
+        <updated>2026-10-20T05:02:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowssandboxclosewithoutconfirmation">Windows Sandbox: close without confirmation</h1>
+<p>Closing a Windows Sandbox window normally asks for confirmation before the sandbox is shut down. This mod replaces the close button with a clean <code>wsb stop</code>, so the window goes away without the prompt.</p>
+<h2 id="requirements">Requirements</h2>
+<p>This mod targets the new Windows Sandbox, whose remote session process is <code>WindowsSandboxRemoteSession.exe</code>. That process is also what the mod's include scope matches: if it does not exist on the system, the sandbox is the older version and the mod has nothing to attach to. The <code>wsb</code> command line tool must also be available.</p>
+<h2 id="notes">Notes</h2>
+<p>The sandbox id is read from the process command line. If it cannot be found, the mod does nothing and the usual confirmation is shown.</p>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Restore legacy network tray 1.0]]></title>
+        <id>https://windhawk.net/mods/restore-legacy-network-tray#44b3fe7b010002fc8d12c9134affbb6f3fc4ec95</id>
+        <link href="https://windhawk.net/mods/restore-legacy-network-tray"/>
+        <updated>2026-10-20T05:02:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Redstores the classic network tray icon on Windows 10 taskbar running under Windows 11 24H2 or later.
+The mod downloads the network icon dll from the Microsoft's symbols server.</p>
+<p>This mod downloads the version of the network icon dll from one of the latest builds of Windows 11 23H2, so it may conflict 
+with the mod <code>Windows 10 legacy flyouts on Win11 24H2 restorer</code>. It is recommended to use only one of the mods.</p>
+<p>The original version of the mod is by user DerBaron of WinClassic forum, published under MIT license:
+https://winclassic.net/post/40623</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Snipper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-snipper#737ac0bd8a791ba491e35dadcda50eda00c1d3e2</id>
+        <link href="https://windhawk.net/mods/taskbar-snipper"/>
+        <updated>2026-10-20T05:02:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarsnipper">Taskbar Snipper</h1>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-snipper/screenshot.png" alt="The screenshot and record buttons on the taskbar" /></p>
+<p>Press <strong>Print Screen</strong>, or click the screenshot button on the taskbar, to select part of the
+screen. A toolbox opens right above the selection to mark it up with a pencil, lines, arrows, boxes
+and text, in any color and thickness. When you're done, click anywhere outside the selection (or
+press <strong>Enter</strong>), and the screenshot is copied to the clipboard, saved to a folder, or both, as you
+choose in the mod's settings.</p>
+<p>Press <strong>Win+Shift+R</strong>, or click the record button, to record part of the screen as a video. When
+you stop, trim its start and end, then copy or save it.</p>
+<h2 id="selecting">Selecting</h2>
+<ul>
+<li><strong>Drag</strong> to select an area. The screen stays as it was when you pressed Print Screen.</li>
+<li><strong>Click</strong> a window to select all of it, or the desktop to select the whole display.</li>
+<li><strong>Esc</strong> or <strong>right-click</strong> cancels.</li>
+</ul>
+<h2 id="thetoolbox">The toolbox</h2>
+<ul>
+<li><strong>Select</strong> (V), <strong>Pencil</strong> (P), <strong>Line</strong> (L), <strong>Arrow</strong> (A), <strong>Box</strong> (B) and <strong>Text</strong> (T). Drag
+inside the selection to draw; hold <strong>Shift</strong> to keep a line or arrow to 45° steps, or a box
+square. A click with the pencil makes a dot. With Text, click where the text goes and type;
+<strong>Enter</strong> starts a new line, and <strong>Esc</strong> or a click elsewhere finishes it.</li>
+<li><strong>Colors</strong>: eight at hand, and the last swatch picks any color.</li>
+<li><strong>Thickness</strong>: <strong>−</strong> and <strong>+</strong>, or the mouse wheel. Text gets bigger with it too.</li>
+<li><strong>Undo</strong> (Ctrl+Z), <strong>Copy</strong> (Ctrl+C), <strong>Save</strong> (Ctrl+S) and <strong>Close</strong> (Esc).</li>
+</ul>
+<p><strong>Copy</strong> and <strong>Save</strong> do just that. Clicking outside the selection or pressing Enter does what the
+<strong>When you're done</strong> setting says: copy, save, or both. Screenshots are saved as PNG files named by
+the date and time, in Windows' Screenshots folder (in Pictures) unless you choose another. A note
+in the corner of the screen says what happened; click it to show a saved screenshot in File
+Explorer.</p>
+<h2 id="movingandchangingmarks">Moving and changing marks</h2>
+<ul>
+<li>Whatever tool is in hand, <strong>drag</strong> anything already drawn to move it; the pointer turns into a
+four-way arrow over it. The <strong>Select</strong> tool only selects and moves, for when you'd rather not
+draw by accident.</li>
+<li><strong>Click</strong> a mark to select it. Its color and thickness show in the toolbox, and changing them
+changes the mark. The <strong>arrow keys</strong> nudge it (with <strong>Shift</strong>, 10 pixels at a time), <strong>Delete</strong>
+removes it, and <strong>Esc</strong> lets go of it.</li>
+<li>To change text, click it with the Text tool, or click it again once it's selected.</li>
+<li>Undo takes back moves and changes too.</li>
+</ul>
+<h2 id="recordingthescreen">Recording the screen</h2>
+<ul>
+<li>Press <strong>Win+Shift+R</strong>, click the record button, or choose <strong>Record the screen</strong> from the buttons'
+menu. Select an area as for a screenshot, then click <strong>Start recording</strong> (or press <strong>Enter</strong>).
+Recording starts after a 3-second countdown.</li>
+<li>While recording, a red line marks the area and a bar beside it shows the time; neither is in the
+video. To stop, click the <strong>stop</strong> square on the bar or the record button, or press
+<strong>Win+Shift+R</strong> again. The bar's <strong>X</strong> throws the recording away.</li>
+<li>The recording then opens to trim it. Drag the handles at either end of the strip of frames to cut
+off its start and end, and click the strip to see any moment. <strong>Space</strong> plays the part kept, the
+<strong>arrow keys</strong> step a frame at a time (a second with <strong>Shift</strong>), and <strong>I</strong> and <strong>O</strong> set the start
+and end at the frame shown.</li>
+<li><strong>Copy</strong> (Ctrl+C) puts the video on the clipboard, to paste into a chat, an email or a folder.
+<strong>Save</strong> (Ctrl+S) saves it in Windows' Screen Recordings folder (in Videos) unless you choose
+another.</li>
+<li>Recordings are MP4 videos (H.264, without sound) of up to 30 frames a second, with the mouse
+pointer.</li>
+</ul>
+<h2 id="thebuttons">The buttons</h2>
+<p>The screenshot and record buttons sit on the taskbar like the Windows weather widget: click one to
+take a screenshot or record, right-click them for their menu, and drag them to move them along the
+taskbar. <strong>Which buttons</strong> in the mod's settings shows both, or just one of them, and <strong>Buttons on
+the taskbar</strong> turns them off; the shortcuts work either way.</p>
+<p>The menu opens the screenshots and recordings folders, and <strong>Choose the screenshots folder…</strong> and
+<strong>Choose the recordings folder…</strong> pick others. The folders can be set in the mod's settings too;
+whichever you changed last is used.</p>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png" alt="Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar" /></p>
+<p>From the left: <a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a>,
+<a href="https://windhawk.net/mods/taskbar-audio-flipper">Taskbar Audio Flipper</a> and
+<a href="https://windhawk.net/mods/taskbar-rdp-launcher">Taskbar RDP Launcher</a>.</p>
+<p>With the Taskbar Audio Flipper or Taskbar RDP Launcher mod running too, their widgets can be joined
+with the buttons into one: right-click any of them, open <strong>Link widgets</strong>, and choose <strong>Link with</strong>
+the other. Linked, they sit side by side with a divider between them, and dragging any of them
+moves them all; <strong>Move this widget left</strong> and <strong>right</strong> change their order.</p>
+<p>Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
+later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
+unlinked.</p>
+<h2 id="goodtoknow">Good to know</h2>
+<ul>
+<li>Only Print Screen on its own is taken over. Alt+Print Screen, Win+Print Screen and Win+Shift+S
+work as usual, and turning the mod off gives Print Screen back to Windows. Win+Shift+R is taken
+over while <strong>Win+Shift+R records the screen</strong> is on in the settings.</li>
+<li>While a program running as administrator is in front, Windows doesn't let the mod see Print
+Screen or Win+Shift+R, so Windows handles them as usual.</li>
+<li>The tool, color and thickness you used last are remembered.</li>
+<li>A recording closed without copying or saving it is deleted; the window asks first. If the mod
+turns off (or Windows signs out) while recording, or with a recording still open, the recording
+goes to the recordings folder: right away when that's on the same drive as Windhawk's mod storage,
+otherwise the next time the mod starts.</li>
+<li>Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
+mod's storage (in a folder only you can open), and go with the mod.</li>
+<li>Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
+than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 records up to 4K.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Keep Windows Clear of Taskbar 1.0.0]]></title>
         <id>https://windhawk.net/mods/keep-windows-clear-of-taskbar#ebdfb4280309ef0023530a596f94da19a44e6447</id>
@@ -1077,165 +1214,6 @@ states. The current version is intentionally focused on that workflow.</p>
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Properties Button 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-properties-button#032e419e893a9668ecd3624d7a71293d8a1f58c6</id>
-        <link href="https://windhawk.net/mods/explorer-properties-button"/>
-        <updated>2026-10-16T14:01:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerpropertiesbutton">Explorer Properties Button</h1>
-<p><img src="https://raw.githubusercontent.com/AnnAngela/windhawk-mods/main/explorer-properties-button/screenshot.png" alt="Explorer Properties Button" /></p>
-<p>Adds a <strong>Properties</strong> button to the Windows 11 File Explorer command bar,
-between the <strong>Delete</strong> and <strong>Sort</strong> buttons. Clicking it opens the properties
-dialog of the current selection:</p>
-<ul>
-<li><strong>Multiple selection</strong> - opens the combined properties dialog, just like
-the context menu's Properties entry.</li>
-<li><strong>Virtual locations</strong> - This PC, Recycle Bin, Quick Access and other items
-without a filesystem path work too.</li>
-<li><strong>No selection</strong> (configurable) - shows the properties of the current
-folder, or does nothing.</li>
-</ul>
-<p>The dialog opens via fast shell APIs (SHObjectProperties /
-SHMultiFileProperties) without building the shell context menu, so it appears
-without the delay that loading shell extensions would add. The context-menu
-properties verb is only used as a fallback for exotic locations.</p>
-<h1 id="systemrequirements">System requirements</h1>
-<p>Windows 11 24H2 / 25H2 or newer, with the WinAppSDK (WinUI 3) File Explorer
-command bar. Older versions (Windows 10, Windows 11 23H2 and earlier) use a
-completely different command bar; the mod stays silently disabled there.</p>
-<h1 id="howitworks">How it works</h1>
-<p>The mod hooks a couple of functions of File Explorer's own WinUI 3 code
-(FileExplorerExtensions.dll), gets the command bar from there, and inserts a
-WinRT-constructed AppBarButton into its PrimaryCommands. The button survives
-tab switches, navigation and new windows, and is cleanly removed when the mod
-is disabled. Clicks drive the shell lookups from a worker thread, so the
-Explorer UI stays responsive.</p>
-<p>File Explorer windows which were already open when the mod is enabled are
-handled too, but if the button doesn't show up in one of them right away,
-opening a new tab or navigating to another folder makes it appear.</p>
-<p>Implementation follows the Explorer Command Bar mod by DanRotaru from the
-official windhawk-mods repository.</p>
-<hr />
-<h1 id="">资源管理器属性按钮（中文说明）</h1>
-<p>在 Windows 11 文件资源管理器的命令栏（工具栏）上，"删除"和"排序"按钮之间添加一个"属性"按钮，点击后打开当前选中项目的属性对话框：</p>
-<ul>
-<li>支持多选：多选时与右键菜单里的"属性"一样，打开合并的属性对话框。</li>
-<li>支持虚拟位置：此电脑、回收站、Quick Access 等没有文件系统路径的项目也能正确打开属性。</li>
-<li>没有选中项时（可配置）：显示当前文件夹的属性，或什么都不做。</li>
-</ul>
-<p>属性对话框通过快速 Shell API（SHObjectProperties / SHMultiFileProperties）直接打开，不构建右键菜单，避免了加载 shell 扩展带来的延迟；右键菜单的"属性"动词仅作为特殊位置的兜底。</p>
-<h1 id="-1">系统要求</h1>
-<p>适用于 Windows 11 24H2 / 25H2 及以上使用 WinAppSDK (WinUI 3) 命令栏的文件资源管理器。旧版本（Windows 10、Windows 11 23H2 及更早）使用完全不同的命令栏实现，本 mod 会在其中安静地保持不启用状态。</p>
-<h1 id="-2">工作原理</h1>
-<p>本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击的 Shell 查询由独立工作线程驱动，资源管理器界面保持响应。</p>
-<p>启用本 mod 时已经打开的文件资源管理器窗口也会被处理；若某个已有窗口中按钮没有立即出现，打开一个新标签页或导航到其他文件夹即可让它出现。</p>
-<p>实现参考了官方仓库的 Explorer Command Bar mod（DanRotaru），在此致谢。</p>]]></content>
-        <author>
-            <name>AnnAngela</name>
-            <uri>https://github.com/AnnAngela</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.0]]></title>
-        <id>https://windhawk.net/mods/winv-panel-tweaks#d7afc202adc5a0b927f4fc78e67e1a3e4230afaa</id>
-        <link href="https://windhawk.net/mods/winv-panel-tweaks"/>
-        <updated>2026-10-16T12:04:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winvpaneltweaks">Win+V Panel Tweaks</h1>
-<p>The Win+V clipboard panel and the Win+. emoji panel are the same panel, with
-tabs for Most recently used, Emoji, GIF, Kaomoji, Symbols and Clipboard. This
-mod makes the panel bigger or smaller and hides the tabs you turn off in its
-settings.</p>
-<p><img src="https://raw.githubusercontent.com/jayll1303/WindowsClipboardMods/main/images/winv-panel-tweaks-taller-clipboard-only.png" alt="A taller Win+V panel showing more clipboard entries, with only the Clipboard tab left" /></p>
-<h2 id="panelsize">Panel size</h2>
-<p>The panel is normally 360 x 400 (in display-scaled pixels). Width and height
-are scaled separately, e.g. width 150% and height 100% gives 540 x 400.
-Windows still keeps the panel within the space available on screen. A new
-size applies the next time the panel opens.</p>
-<p>By default the items keep their normal size, so a taller panel shows more
-clipboard entries and a wider one fits more emoji per row. Turn on "Scale
-content with the panel" to have the items grow with the panel instead.</p>
-<h2 id="tabs">Tabs</h2>
-<p>The Clipboard tab is always kept. Hiding a tab only removes its button: a
-shortcut that opens a view directly still opens it (e.g. Win+. still opens
-Emoji even when the Emoji tab is hidden).</p>
-<h2 id="howitworks">How it works</h2>
-<p>The panel is drawn by TextInputHost.exe. Its size is computed in
-<code>InputApp.dll</code>, which the mod hooks using Microsoft's public symbols, so the
-first start after installing may take a moment while Windhawk downloads them.</p>
-<p>The tab strip lives in a web page hosted in a WebView inside the panel. The
-same hook finds that WebView each time the panel opens and runs a small script
-in the page, which marks the chosen tabs as hidden in the page's own view
-model, re-applying it whenever the page resets them. Tweaks therefore show up
-the next time the panel opens after the mod is enabled.</p>
-<p>That page ships with Windows but Microsoft can update it separately. If it
-changes in a way the mod doesn't recognize, the mod leaves it alone and the
-panel keeps working as usual.</p>
-<p>Tested on Windows 11 25H2 (build 26200).</p>
-<p>Source and research notes: https://github.com/jayll1303/WindowsClipboardMods</p>]]></content>
-        <author>
-            <name>jayll1303</name>
-            <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Audio Flipper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-flipper#50db4c4d6c2dd9c6822ad676c7787c78cd5aba4f</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
-        <updated>2026-10-16T12:03:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaraudioflipper">Taskbar Audio Flipper</h1>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-audio-flipper/screenshot.png" alt="The widget on the taskbar, with its Output, Input and Webcam sections" /></p>
-<p>A taskbar widget, in the style of the Windows weather widget, for switching audio devices. It has
-up to three sections, which you can each show or hide:</p>
-<ul>
-<li><strong>Output</strong>: the active output device's icon, name and volume. Click it to switch to the next
-output (speakers → headset → monitor → …).</li>
-<li><strong>Input</strong>: the same for your microphone.</li>
-<li><strong>Webcam</strong>: the chosen webcam's name and whether it's on, with a camera icon. Click it to turn
-the webcam on or off.</li>
-</ul>
-<p>On the Output and Input sections:</p>
-<ul>
-<li><strong>Hover</strong>: a flyout opens above it with the device's name, a volume slider, and the device icon
-as a mute button, like the Windows 11 volume flyout.</li>
-<li><strong>Left-click</strong>: switch to the next device.</li>
-<li><strong>Scroll</strong>: turn the volume (or microphone level) up or down.</li>
-<li><strong>Middle-click</strong>: mute / unmute.</li>
-</ul>
-<p>After you change the output volume, the mod plays the Windows "Default Beep" ding at the new level,
-like Windows' own volume slider. Turn it off with <strong>Output → Ding when changing volume</strong>.</p>
-<p>Anywhere on the widget, <strong>right-click</strong> for the menu and <strong>drag</strong> left or right to move it along the
-taskbar. The <strong>Output</strong>, <strong>Input</strong> and <strong>Webcam</strong> submenus each have a <strong>Show on taskbar</strong> switch for
-their section, and the settings for it: picking a device directly, which devices are in the click
-rotation, whether to switch the communications device too, and links to the Windows settings.</p>
-<p>Devices are shown with the name and icon they have in the Windows Sound control panel. To change
-them, choose <strong>Rename or change device icons…</strong> in the <strong>Output</strong> or <strong>Input</strong> submenu, right-click a
-device, and choose <strong>Properties</strong>.</p>
-<h2 id="webcamonoff">Webcam on/off</h2>
-<p>Turn it on under <strong>Webcam → Show on taskbar</strong> and pick the webcam to control in the same menu. The
-camera icon has a slash through it while the webcam is off; click it to switch. Windows has no way to
-rename a webcam, but <strong>Webcam → Rename…</strong> gives it a name to show on the widget.</p>
-<p>Turning the webcam off works like <strong>Disable device</strong> in Device Manager: no app can use it until it's
-turned back on. It stays off after a restart, and after the mod is turned off or removed. To turn it
-back on without the mod, open Device Manager, find the webcam under <strong>Cameras</strong> (or <strong>Imaging
-devices</strong>), right-click it and choose <strong>Enable device</strong>.</p>
-<p>Windows only lets administrators turn devices on and off, so each switch runs Microsoft's PnP Utility
-(<code>pnputil.exe</code>) as administrator, which may show a Windows prompt asking to allow it, depending on
-your User Account Control settings.</p>
-<h2 id="linkingwithtaskbarrdplauncher">Linking with Taskbar RDP Launcher</h2>
-<p>With the Taskbar RDP Launcher mod running too, the two widgets can be joined into one: right-click
-either, choose <strong>Link with RDPLauncher</strong> (or <strong>Link with AudioFlipper</strong>) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.</p>
-<h2 id="settings">Settings</h2>
-<p>The sections, the click rotation and the webcam settings are kept in the mod's storage, which
-Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
-AudioFlipper app, if you have it (from <code>%APPDATA%\AudioFlipper\settings.txt</code>, which it doesn't
-change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>

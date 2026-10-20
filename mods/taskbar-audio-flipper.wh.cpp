@@ -2,7 +2,7 @@
 // @id              taskbar-audio-flipper
 // @name            Taskbar Audio Flipper
 // @description     A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off
-// @version         1.0.0
+// @version         1.1.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         windhawk.exe
@@ -41,9 +41,10 @@ taskbar. The **Output**, **Input** and **Webcam** submenus each have a **Show on
 their section, and the settings for it: picking a device directly, which devices are in the click
 rotation, whether to switch the communications device too, and links to the Windows settings.
 
-Devices are shown with the name and icon they have in the Windows Sound control panel. To change
-them, choose **Rename or change device icons…** in the **Output** or **Input** submenu, right-click a
-device, and choose **Properties**.
+Devices are shown with the name they have in the Windows Sound control panel, and a Fluent icon for
+their kind (speakers, headphones, headset, monitor or microphone) in the taskbar's color, like the
+rest of Windows 11, struck through while muted. To change a device's name, choose **Rename
+devices…** in the **Output** or **Input** submenu, right-click a device, and choose **Properties**.
 
 ## Webcam on/off
 
@@ -60,12 +61,22 @@ Windows only lets administrators turn devices on and off, so each switch runs Mi
 (`pnputil.exe`) as administrator, which may show a Windows prompt asking to allow it, depending on
 your User Account Control settings.
 
-## Linking with Taskbar RDP Launcher
+## Linking with the other widgets
 
-With the Taskbar RDP Launcher mod running too, the two widgets can be joined into one: right-click
-either, choose **Link with RDPLauncher** (or **Link with AudioFlipper**) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.
+![Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png)
+
+From the left: [Taskbar Snipper](https://windhawk.net/mods/taskbar-snipper),
+[Taskbar Audio Flipper](https://windhawk.net/mods/taskbar-audio-flipper) and
+[Taskbar RDP Launcher](https://windhawk.net/mods/taskbar-rdp-launcher).
+
+With the Taskbar RDP Launcher or Taskbar Snipper mod running too, their widgets can be joined with
+this one into one: right-click any of them, open **Link widgets**, and choose **Link with** the other. Linked,
+they sit side by side with a divider between them, and dragging any of them moves them all; **Move
+this widget left** and **right** change their order. A widget that hides leaves no gap.
+
+Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
+later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
+unlinked.
 
 ## Settings
 
@@ -105,18 +116,20 @@ change). Use the app or the mod, not both: each shows its own widget.
 namespace {
 
 const wchar_t kSelfApp[] = L"AudioFlipper";
-const wchar_t kPartnerApp[] = L"RDPLauncher";
 const wchar_t kWidgetClassName[] = L"AudioFlipper.Mod.Widget";
-const wchar_t kPartnerWidgetClassName[] = L"RDPLauncher.Mod.Widget";
 const wchar_t kWidgetTitle[] = L"Taskbar Audio Flipper";
+// This widget's place among the widgets that can link (WidgetLink::kMembers), and the one it was
+// linked with as a pair before there were three.
+constexpr int kSelfMember = 0;
+constexpr int kLegacyPartner = 1;
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both, each
-// keeping the parts it uses): the taskbar widget window, popups, menus, the text
-// prompt, the link between the two widgets, the mod's storage and launching
-// programs.
+// Shared by the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper mods
+// (the same code is in all three, each keeping the parts it uses): the taskbar
+// widget window, popups, menus, the text prompt, the link between the widgets, the
+// mod's storage and launching programs.
 
 namespace gp = Gdiplus;
 
@@ -204,17 +217,6 @@ std::wstring WindowsFolder() {
 // real System32 from there. Windhawk 2.0 runs them 64-bit, where System32 is the real one.
 std::wstring NativeSystemFolder() {
     return WindowsFolder() + (IsWow64() ? L"\\Sysnative" : L"\\System32");
-}
-
-std::wstring ExpandEnvironment(const std::wstring& text) {
-    DWORD length = ExpandEnvironmentStringsW(text.c_str(), nullptr, 0);
-    if (length == 0) {
-        return text;
-    }
-    std::wstring expanded(length, L'\0');
-    ExpandEnvironmentStringsW(text.c_str(), expanded.data(), length);
-    expanded.resize(wcslen(expanded.c_str()));
-    return expanded;
 }
 
 bool ReadFileBytes(const std::wstring& path, std::string& bytes) {
@@ -371,6 +373,10 @@ std::wstring GetString(const wchar_t* name) {
 
 bool SetString(const wchar_t* name, const std::wstring& value) {
     return Wh_SetStringValue(ValueName(name).c_str(), value.c_str());
+}
+
+void Delete(const wchar_t* name) {
+    Wh_DeleteValue(ValueName(name).c_str());
 }
 
 }  // namespace Storage
@@ -1270,40 +1276,87 @@ std::optional<std::wstring> PromptForText(const std::wstring& title, const std::
 }
 
 // ---------------------------------------------------------------------------
-// The link between the Taskbar Audio Flipper and Taskbar RDP Launcher widgets (the same in both
-// mods). Linked, they sit side by side as one widget, in the order chosen, with a divider between
-// them, and dragging either moves both.
+// Linking the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper widgets (the same
+// code is in all three mods). Linked widgets sit side by side as one, in the order chosen, with a
+// divider between them, and dragging any of them moves them all.
 //
-// Each mod keeps its own copy of the link (on or off, which widget is on the left, and where the
-// pair is) in its storage, and shows it to the other as properties of its widget window, stamped
-// with when it last changed: the newer copy wins. Each widget finds the other by its window class
-// and posts it a message whenever its link, size or place changes.
+// Each mod keeps its own copy of the group (which widgets are in it, left to right, and where it
+// is) in its storage, and shows it to the others as properties of its widget window, stamped with
+// when it last changed: the newest copy wins. Each widget shows its id on its window too, finds the
+// others by theirs (the ones it knows, by their window class), and posts them a message whenever
+// its group, size or place changes.
 
 namespace WidgetLink {
 
-struct State {
-    bool linked = false;
-    bool selfOnLeft = true;
-    int offset = -1;  // The pair's left edge from the taskbar's left edge; negative for the default.
-    int stamp = 0;    // When it last changed, in seconds since 2020: the newer copy wins.
-
-    // As one number, the way it's stored and shown to the other widget (as seen from this side).
-    int Pack() const { return (linked ? 1 : 0) | (selfOnLeft ? 2 : 0) | (std::max(-1, offset) + 1) << 2; }
-
-    static State Unpack(int packed, int stamp) {
-        return State{(packed & 1) != 0, (packed & 2) != 0, (packed >> 2) - 1, stamp};
-    }
-
-    // The same link as the other widget sees it.
-    State Mirrored() const { return State{linked, !selfOnLeft, offset, stamp}; }
+struct Member {
+    const wchar_t* name;         // As the menus show it.
+    const wchar_t* windowClass;  // Of its widget window.
 };
 
-const wchar_t kStateProperty[] = L"TaskbarWidgetLink.Mod.State";
-const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.Stamp";
+// Every widget that can link, by id (its place here). Ids stay as they are: a new widget goes at
+// the end, up to 15 of them.
+constexpr Member kMembers[] = {
+    {L"Audio Flipper", L"AudioFlipper.Mod.Widget"},
+    {L"RDP Launcher", L"RDPLauncher.Mod.Widget"},
+    {L"Snipper", L"TaskbarSnipper.Mod.Widget"},
+};
+constexpr int kMemberCount = ARRAYSIZE(kMembers);
 
-// Posted to the other widget when the link, or this widget's size or place, changes.
+// The format of the group shown to the other widgets and kept in storage, in the top four bits of
+// its order. A widget skips copies in a format it doesn't know. Widgets added later don't need a new
+// one: an id a widget doesn't know stays in the group as it is.
+constexpr unsigned kFormat = 1;
+constexpr int kOrderSlots = 7;  // Widgets in a group: four bits each, below the format.
+
+struct Group {
+    std::vector<int> order;  // The widgets in it, by id, left to right.
+    int offset = -1;         // Its left edge from the taskbar's left edge; negative for the default.
+    int stamp = 0;           // When it last changed, in seconds since 2020: the newest copy wins.
+
+    bool Has(int member) const { return std::find(order.begin(), order.end(), member) != order.end(); }
+
+    // Whether this widget is linked with another.
+    bool Linked() const { return order.size() >= 2 && Has(kSelfMember); }
+
+    // The order as one number: the format, then four bits for each widget, left to right (its id
+    // plus one; none after the last).
+    int PackOrder() const {
+        unsigned packed = kFormat << 28;
+        for (size_t i = 0; i < order.size() && i < (size_t)kOrderSlots; i++) {
+            packed |= (unsigned)((order[i] + 1) & 15) << (4 * i);
+        }
+        return (int)packed;
+    }
+
+    // Reads the order. False for a format this widget doesn't know.
+    bool UnpackOrder(int packed) {
+        if ((unsigned)packed >> 28 != kFormat) {
+            return false;
+        }
+        order.clear();
+        for (int i = 0; i < kOrderSlots; i++) {
+            int member = (int)(((unsigned)packed >> (4 * i)) & 15) - 1;
+            if (member < 0) {
+                break;
+            }
+            if (!Has(member)) {
+                order.push_back(member);
+            }
+        }
+        return true;
+    }
+};
+
+// What each widget shows on its window: its id (so any widget can find it, even one added after
+// this one), and its copy of the group.
+const wchar_t kMemberProperty[] = L"TaskbarWidgetLink.Mod.Member";
+const wchar_t kOrderProperty[] = L"TaskbarWidgetLink.Mod.Order";
+const wchar_t kOffsetProperty[] = L"TaskbarWidgetLink.Mod.Offset";
+const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.GroupStamp";
+
+// Posted to the other widgets when the group, or this widget's size or place, changes.
 UINT ChangedMessage() {
-    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.Changed");
+    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.GroupChanged");
     return message;
 }
 
@@ -1320,64 +1373,114 @@ int NewStamp(int newerThan) {
     return std::max(seconds, newerThan + 1);
 }
 
-State Load() {
-    return State::Unpack(Storage::GetInt(L"Link", 0), Storage::GetInt(L"LinkStamp", 0));
+Group Load() {
+    Group group;
+    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
+    if (stamp != 0 && group.UnpackOrder(Storage::GetInt(L"LinkGroupOrder", 0))) {
+        group.offset = Storage::GetInt(L"LinkGroupOffset", -1);
+        group.stamp = stamp;
+        return group;
+    }
+    // Before there were three, two widgets linked as a pair, kept as Link (on or off, whether this
+    // widget was on the left, and the offset) and LinkStamp. The stamp counts even when they were
+    // unlinked: unlinking while the other widget's mod wasn't running still wins.
+    group = {};
+    if (kLegacyPartner >= 0) {
+        int pair = Storage::GetInt(L"Link", 0);
+        if (pair & 1) {
+            group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
+            group.offset = (pair >> 2) - 1;
+        }
+        group.stamp = Storage::GetInt(L"LinkStamp", 0);
+    }
+    return group;
 }
 
-void Save(const State& state) {
-    Storage::SetInt(L"Link", state.Pack());
-    Storage::SetInt(L"LinkStamp", state.stamp);
+void Save(const Group& group) {
+    Storage::SetInt(L"LinkGroupOrder", group.PackOrder());
+    Storage::SetInt(L"LinkGroupOffset", group.offset);
+    Storage::SetInt(L"LinkGroupStamp", group.stamp);
+    // The pair link from before is in the group now.
+    Storage::Delete(L"Link");
+    Storage::Delete(L"LinkStamp");
 }
 
-// Shows this widget's copy of the link on its window, for the other widget to read.
-void Publish(HWND window, const State& state) {
-    SetPropW(window, kStateProperty, (HANDLE)(INT_PTR)state.Pack());
-    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)state.stamp);
+// Shows this widget's id and copy of the group on its window, for the other widgets to read.
+void Publish(HWND window, const Group& group) {
+    SetPropW(window, kMemberProperty, (HANDLE)(INT_PTR)(kSelfMember + 1));
+    SetPropW(window, kOrderProperty, (HANDLE)(INT_PTR)group.PackOrder());
+    SetPropW(window, kOffsetProperty, (HANDLE)(INT_PTR)(std::max(-1, group.offset) + 1));
+    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)group.stamp);
 }
 
 void Unpublish(HWND window) {
-    RemovePropW(window, kStateProperty);
+    RemovePropW(window, kMemberProperty);
+    RemovePropW(window, kOrderProperty);
+    RemovePropW(window, kOffsetProperty);
     RemovePropW(window, kStampProperty);
 }
 
-HWND FindPartner() {
-    return FindWindowW(kPartnerWidgetClassName, nullptr);
-}
-
-// The other widget's copy of the link, as this widget sees it, if it's running.
-std::optional<State> ReadPartner() {
-    HWND window = FindPartner();
-    if (!window || !GetPropW(window, kStampProperty)) {
-        return std::nullopt;
+BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
+    int member = (int)(INT_PTR)GetPropW(window, kMemberProperty) - 1;
+    if (member >= 0 && member != kSelfMember) {
+        ((std::vector<std::pair<int, HWND>>*)widgets)->emplace_back(member, window);
     }
-    return State::Unpack((int)(INT_PTR)GetPropW(window, kStateProperty), (int)(INT_PTR)GetPropW(window, kStampProperty))
-        .Mirrored();
+    return TRUE;
 }
 
-// Whether the other mod is running, to link with.
-bool PartnerRunning() {
-    return FindPartner() != nullptr;
+// The widget windows of the other widgets that are running, with their ids.
+std::vector<std::pair<int, HWND>> OtherWidgets() {
+    std::vector<std::pair<int, HWND>> widgets;
+    EnumWindows(AddOtherWidget, (LPARAM)&widgets);
+    return widgets;
 }
 
-// The other app's widget, when it's on the taskbar right now.
-bool TryGetPartnerBounds(RECT& bounds) {
-    HWND window = FindPartner();
+HWND FindMember(int member) {
+    if (member == kSelfMember || member < 0) {
+        return nullptr;
+    }
+    if (member < kMemberCount) {
+        return FindWindowW(kMembers[member].windowClass, nullptr);
+    }
+    // One added after this widget: by the id it shows.
+    for (const auto& [id, window] : OtherWidgets()) {
+        if (id == member) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+// Whether the widget's mod is running (this one always is).
+bool Running(int member) {
+    return member == kSelfMember || FindMember(member) != nullptr;
+}
+
+// The newest copy of the group among the other widgets that are running.
+std::optional<Group> ReadNewest() {
+    std::optional<Group> newest;
+    for (const auto& [member, window] : OtherWidgets()) {
+        int stamp = (int)(INT_PTR)GetPropW(window, kStampProperty);
+        Group group;
+        if (stamp != 0 && (!newest || stamp > newest->stamp) && group.UnpackOrder((int)(INT_PTR)GetPropW(window, kOrderProperty))) {
+            group.offset = (int)(INT_PTR)GetPropW(window, kOffsetProperty) - 1;
+            group.stamp = stamp;
+            newest = group;
+        }
+    }
+    return newest;
+}
+
+// The widget, when it's on the taskbar right now.
+bool TryGetBounds(int member, RECT& bounds) {
+    HWND window = FindMember(member);
     return window && IsWindowVisible(window) && GetWindowRect(window, &bounds) && bounds.right > bounds.left;
 }
 
-void NotifyPartner() {
-    if (HWND window = FindPartner()) {
+void NotifyOthers() {
+    for (const auto& [member, window] : OtherWidgets()) {
         PostMessageW(window, ChangedMessage(), 0, 0);
     }
-}
-
-// Where a linked widget goes: the pair starts at groupOffset (kept on the taskbar), with the left
-// app first. Both apps work it out the same way from the same numbers, so they meet without a
-// gap. Without the other widget showing, this one takes the pair's place.
-int PlaceInGroup(int barLeft, int barWidth, int ownWidth, int partnerWidth, bool selfOnLeft, int groupOffset, int& groupLeft) {
-    int total = std::min(ownWidth + partnerWidth, barWidth);
-    groupLeft = barLeft + std::max(0, std::min(groupOffset, barWidth - total));
-    return selfOnLeft || partnerWidth == 0 ? groupLeft : std::min(groupLeft + partnerWidth, barLeft + barWidth - ownWidth);
 }
 
 }  // namespace WidgetLink
@@ -1423,18 +1526,18 @@ public:
             return false;
         }
         // Only needed when Windhawk itself runs as administrator (a portable Windhawk started that
-        // way): lets the other widget's and the shell's messages through to the widget.
+        // way): lets the other widgets' and the shell's messages through to the widget.
         ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
         appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
         ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
         taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
         ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
         RegisterAppBar();
-        // Take the other widget's copy of the link if it changed more recently, and let it know
+        // Take the other widgets' copy of the group if it changed more recently, and let them know
         // this one is here.
         WidgetLink::Publish(hwnd_, link_);
         SyncLink();
-        WidgetLink::NotifyPartner();
+        WidgetLink::NotifyOthers();
         return true;
     }
 
@@ -1451,7 +1554,7 @@ public:
         SHAppBarMessage(ABM_REMOVE, &data);
         WidgetLink::Unpublish(hwnd_);
         DestroyWindow(hwnd_);
-        WidgetLink::NotifyPartner();  // So it takes the pair's place.
+        WidgetLink::NotifyOthers();  // So they close the gap.
     }
 
     HWND Handle() const { return hwnd_; }
@@ -1490,24 +1593,80 @@ public:
     // Re-renders after the content changed (and resizes if its width did).
     void ContentChanged() { UpdatePlacement(true); }
 
-    const WidgetLink::State& Link() const { return link_; }
+    const WidgetLink::Group& Link() const { return link_; }
 
-    // Links this widget with the other mod's, with this one on the given side, or unlinks them.
-    void SetLink(bool linked, bool selfOnLeft) {
-        int groupOffset = link_.offset;
-        if (linked && !link_.linked) {
-            // Start the pair where the leftmost of the two widgets is now.
-            RECT bounds = Bounds();
-            int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
-            RECT partner;
-            if (WidgetLink::TryGetPartnerBounds(partner)) {
-                left = Visible() ? std::min(left, (int)partner.left) : (int)partner.left;
+    // Links another mod's widget with this one (joining its group if it's in one), or takes it out
+    // of the group.
+    void SetMemberLinked(int member, bool linked) {
+        WidgetLink::Group group = link_;
+        if (linked) {
+            if (group.order.size() < 2) {
+                // A new group starts where the leftmost of the two widgets is now, in the order
+                // they're in.
+                RECT bounds = Bounds();
+                int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
+                RECT other;
+                bool otherFirst = false;
+                if (WidgetLink::TryGetBounds(member, other)) {
+                    otherFirst = other.left < left;
+                    left = std::min(left, (int)other.left);
+                }
+                group.order = otherFirst ? std::vector<int>{member, kSelfMember} : std::vector<int>{kSelfMember, member};
+                group.offset = std::max(0, left - (int)taskbar_.left);
+            } else {
+                // Joining the group, at its right end.
+                if (!group.Has(kSelfMember)) {
+                    group.order.push_back(kSelfMember);
+                }
+                if (!group.Has(member)) {
+                    group.order.push_back(member);
+                }
             }
-            groupOffset = std::max(0, left - (int)taskbar_.left);
+        } else {
+            group.order.erase(std::remove(group.order.begin(), group.order.end(), member), group.order.end());
+            if (group.order.size() < 2) {
+                group.order.clear();
+            }
         }
-        ChangeLink(WidgetLink::State{linked, selfOnLeft, groupOffset});
+        ChangeLink(group);
         UpdatePlacement(true);
-        WidgetLink::NotifyPartner();
+        WidgetLink::NotifyOthers();
+    }
+
+    // Whether a widget in the group is showing left (-1) or right (1) of this one, to move past.
+    bool CanMoveInGroup(int direction) const { return NeighborShowing(direction) >= 0; }
+
+    // Moves this widget past the nearest widget in its group that's showing on its left (-1) or
+    // right (1). (Past one that's hidden, nothing would change to see.)
+    void MoveInGroup(int direction) {
+        int neighbor = NeighborShowing(direction);
+        if (neighbor < 0) {
+            return;
+        }
+        WidgetLink::Group group = link_;
+        int passed = group.order[neighbor];
+        group.order.erase(std::remove(group.order.begin(), group.order.end(), kSelfMember), group.order.end());
+        auto place = std::find(group.order.begin(), group.order.end(), passed);
+        group.order.insert(direction < 0 ? place : place + 1, kSelfMember);
+        ChangeLink(group);
+        UpdatePlacement(true);
+        WidgetLink::NotifyOthers();
+    }
+
+    // The place in the group of the nearest widget showing on this one's left (-1) or right (1),
+    // or -1.
+    int NeighborShowing(int direction) const {
+        auto self = std::find(link_.order.begin(), link_.order.end(), kSelfMember);
+        if (self == link_.order.end()) {
+            return -1;
+        }
+        RECT bounds;
+        for (int i = (int)(self - link_.order.begin()) + direction; i >= 0 && i < (int)link_.order.size(); i += direction) {
+            if (WidgetLink::TryGetBounds(link_.order[i], bounds)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     float Scale() const { return scale_; }
@@ -1522,7 +1681,7 @@ public:
 
     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
         if (message == WidgetLink::ChangedMessage()) {
-            // The other widget moved, changed size, or changed the link.
+            // Another widget moved, changed size, or changed the group.
             SyncLink();
             UpdatePlacement(false);
             return true;
@@ -1579,9 +1738,9 @@ public:
                 }
                 int dragged = std::max(0, dragStartOffset_ + distance);
                 if (wasLinked_) {
-                    WidgetLink::State moved = link_;
+                    WidgetLink::Group moved = link_;
                     moved.offset = dragged;
-                    ChangeLink(moved);  // Moves the pair; the other widget follows when told.
+                    ChangeLink(moved);  // Moves the group; the other widgets follow when told.
                 } else {
                     offset_ = dragged;
                 }
@@ -1706,8 +1865,8 @@ protected:
         if (!shown_ || !TryGetVisibleTaskbar(bar, monitor) || IsFullScreenAppActive(monitor, hwnd_, shellReportsFullScreen_)) {
             if (IsWindowVisible(hwnd_)) {
                 ShowWindow(hwnd_, SW_HIDE);
-                if (link_.linked) {
-                    WidgetLink::NotifyPartner();  // So it takes the pair's place.
+                if (link_.Linked()) {
+                    WidgetLink::NotifyOthers();  // So they close the gap.
                 }
             }
             OnHidden();
@@ -1736,31 +1895,49 @@ protected:
         taskbar_ = bar;
 
         RECT bounds = Bounds();
-        if (wasLinked_ && !link_.linked && IsWindowVisible(hwnd_)) {
-            // Just unlinked: stay where the pair left this widget.
+        bool linked = link_.Linked();
+        if (wasLinked_ && !linked && IsWindowVisible(hwnd_)) {
+            // Just unlinked: stay where the group left this widget.
             offset_ = std::max(0, (int)(bounds.left - bar.left));
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
             }
         }
-        wasLinked_ = link_.linked;
+        wasLinked_ = linked;
 
         int x;
-        int partnerWidth = 0;
-        if (link_.linked) {
-            // Side by side with the other widget, wherever the pair was put.
-            RECT partner;
-            if (WidgetLink::TryGetPartnerBounds(partner)) {
-                partnerWidth = partner.right - partner.left;
+        bool divider = false;
+        if (linked) {
+            // Side by side with the other widgets in the group that are showing, in its order,
+            // wherever the group was put. Every widget works it out the same way from the same
+            // numbers, so they meet without gaps.
+            int before = 0;
+            int total = 0;
+            bool reachedSelf = false;
+            for (int member : link_.order) {
+                int memberWidth = 0;
+                RECT other;
+                if (member == kSelfMember) {
+                    memberWidth = width;
+                    reachedSelf = true;
+                } else if (WidgetLink::TryGetBounds(member, other)) {
+                    memberWidth = other.right - other.left;
+                }
+                if (!reachedSelf) {
+                    before += memberWidth;
+                }
+                total += memberWidth;
             }
-            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, width + partnerWidth);
-            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link_.selfOnLeft, groupOffset, groupLeft_);
+            total = std::min(total, barWidth);
+            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, total);
+            groupLeft_ = bar.left + std::max(0, std::min(groupOffset, barWidth - total));
+            x = std::min(groupLeft_ + before, (int)bar.left + barWidth - width);
+            divider = before > 0;
         } else {
             int preferredOffset = offset_ >= 0 ? offset_ : DefaultOffset(barWidth, width);
             x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
             groupLeft_ = x;
         }
-        bool divider = partnerWidth > 0 && !link_.selfOnLeft;
         RECT target{x, bar.top, x + width, bar.bottom};
 
         bool moved = !EqualRect(&target, &bounds) || !IsWindowVisible(hwnd_);
@@ -1771,8 +1948,8 @@ protected:
         if (!IsWindowVisible(hwnd_)) {
             ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         }
-        if (moved && link_.linked) {
-            WidgetLink::NotifyPartner();  // So it moves up against this widget.
+        if (moved && linked) {
+            WidgetLink::NotifyOthers();  // So they move up against this widget.
         }
         OnPlaced();
         StayAboveTaskbar();
@@ -1794,24 +1971,24 @@ private:
         SHAppBarMessage(ABM_NEW, &data);
     }
 
-    // A change to the link made here: it's stamped as the newest copy, shown to the other widget,
+    // A change to the group made here: it's stamped as the newest copy, shown to the other widgets,
     // and saved once it settles (a drag changes it on every mouse move).
-    void ChangeLink(WidgetLink::State state) {
+    void ChangeLink(WidgetLink::Group group) {
         int newerThan = link_.stamp;
-        if (std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner()) {
-            newerThan = std::max(newerThan, partner->stamp);
+        if (std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest()) {
+            newerThan = std::max(newerThan, newest->stamp);
         }
-        state.stamp = WidgetLink::NewStamp(newerThan);
-        link_ = state;
+        group.stamp = WidgetLink::NewStamp(newerThan);
+        link_ = group;
         WidgetLink::Publish(hwnd_, link_);
         SaveLinkSoon();
     }
 
-    // Takes the other widget's copy of the link when it changed more recently than this one's.
+    // Takes the other widgets' copy of the group when it changed more recently than this one's.
     void SyncLink() {
-        std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner();
-        if (partner && partner->stamp > link_.stamp) {
-            link_ = *partner;
+        std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest();
+        if (newest && newest->stamp > link_.stamp) {
+            link_ = *newest;
             WidgetLink::Publish(hwnd_, link_);
             SaveLinkSoon();
         }
@@ -1822,14 +1999,14 @@ private:
         SetTimer(hwnd_, kLinkSaveTimer, 1000, nullptr);
     }
 
-    // Keeps where a drag left the widget (or the pair).
+    // Keeps where a drag left the widget (or the group).
     void EndDrag() {
         if (wasLinked_) {
-            WidgetLink::State moved = link_;
-            moved.offset = groupLeft_ - taskbar_.left;  // Where the pair ended up after clamping.
+            WidgetLink::Group moved = link_;
+            moved.offset = groupLeft_ - taskbar_.left;  // Where the group ended up after clamping.
             ChangeLink(moved);
             Render();
-            WidgetLink::NotifyPartner();
+            WidgetLink::NotifyOthers();
         } else {
             offset_ = Bounds().left - taskbar_.left;  // Where it ended up after clamping.
             Render();
@@ -1871,7 +2048,7 @@ private:
                                     gp::RectF((float)Px(2), (float)Px(4), (float)(width - Px(4)), (float)(height - Px(8))), (float)Px(4));
                 }
                 if (dividerAtLeft_) {
-                    // Linked with the other app's widget on the left: the divider between the two.
+                    // Linked, with another widget on the left: the divider between them.
                     gp::Pen pen(WithAlpha(lightTaskbar_ ? 50 : 60, foreground), 1);
                     graphics.DrawLine(&pen, 1.0f, (float)Px(14), 1.0f, (float)(height - Px(14)));
                 }
@@ -1933,12 +2110,39 @@ private:
     int dragStartCursorX_ = 0;
     int dragStartOffset_ = 0;
     int wheelRemainder_ = 0;
-    int groupLeft_ = 0;  // Left edge of the linked pair on screen (or of this widget alone).
-    WidgetLink::State link_;
+    int groupLeft_ = 0;  // Left edge of the linked group on screen (or of this widget alone).
+    WidgetLink::Group link_;
     bool linkSavePending_ = false;
     bool wasLinked_ = false;
-    bool dividerAtLeft_ = false;  // Linked, with the other widget on the left.
+    bool dividerAtLeft_ = false;  // Linked, with another widget on the left.
 };
+
+// The Link widgets submenu: links this widget with the other mods' widgets that are running (or
+// linked already), and moves it left or right among them.
+void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
+    const WidgetLink::Group& group = widget.Link();
+    std::vector<int> others;
+    for (int member = 0; member < WidgetLink::kMemberCount; member++) {
+        if (member != kSelfMember && (WidgetLink::Running(member) || (group.Linked() && group.Has(member)))) {
+            others.push_back(member);
+        }
+    }
+    if (others.empty()) {
+        return;
+    }
+    menu.AddSeparator();
+    Menu& submenu = menu.AddSubmenu(L"Link widgets");
+    for (int member : others) {
+        bool linked = group.Linked() && group.Has(member);
+        submenu.Add(std::wstring(L"Link with ") + WidgetLink::kMembers[member].name,
+                    [&widget, member, linked]() { widget.SetMemberLinked(member, !linked); }, linked);
+    }
+    if (group.Linked()) {
+        submenu.AddSeparator();
+        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, widget.CanMoveInGroup(-1));
+        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, widget.CanMoveInGroup(1));
+    }
+}
 
 // The flyout shown above a part of the widget while hovering it. It stays open while the mouse is
 // on its way up from the widget, and closes as soon as the mouse leaves the flyout.
@@ -2157,8 +2361,6 @@ const PROPERTYKEY kKeyFriendlyName = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 
 const PROPERTYKEY kKeyEndpointName = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 2};
 // PKEY_DeviceInterface_FriendlyName: the audio hardware ("4- USB Audio Device").
 const PROPERTYKEY kKeyInterfaceName = {{0x026E516E, 0xB814, 0x414B, {0x83, 0xCD, 0x85, 0x6D, 0x6F, 0xEF, 0x48, 0x22}}, 2};
-// PKEY_DeviceClass_IconPath: the icon chosen in the Sound control panel ("%SystemRoot%\System32\mmres.dll,-3011").
-const PROPERTYKEY kKeyIconPath = {{0x259ABFFC, 0x50A7, 0x47CE, {0xAF, 0x08, 0x68, 0xC9, 0xA7, 0xD7, 0x33, 0x66}}, 12};
 // PKEY_AudioEndpoint_FormFactor.
 const PROPERTYKEY kKeyFormFactor = {{0x1DA5D803, 0xD492, 0x4EDD, {0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E}}, 0};
 
@@ -2253,9 +2455,9 @@ public:
         return role == eConsole ? Changed() : S_OK;
     }
 
-    // Only for the names and icon; Windows reports many other properties changing as well.
+    // Only for the names and kind; Windows reports many other properties changing as well.
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY key) override {
-        for (const PROPERTYKEY& shown : {kKeyFriendlyName, kKeyEndpointName, kKeyInterfaceName, kKeyIconPath, kKeyFormFactor}) {
+        for (const PROPERTYKEY& shown : {kKeyFriendlyName, kKeyEndpointName, kKeyInterfaceName, kKeyFormFactor}) {
             if (key.fmtid == shown.fmtid && key.pid == shown.pid) {
                 return Changed();
             }
@@ -2287,7 +2489,6 @@ struct AudioDevice {
     std::wstring description;  // The audio hardware ("4- USB Advanced Audio Device").
     std::wstring fullName;     // Name plus the audio hardware ("Headset (4- USB Advanced Audio Device)").
     DeviceKind kind = DeviceKind::Speakers;
-    std::wstring iconPath;
 };
 
 struct AudioStatus {
@@ -2299,7 +2500,7 @@ struct AudioStatus {
 
     bool operator==(const AudioStatus& other) const {
         return device.id == other.device.id && device.name == other.device.name && device.description == other.device.description &&
-               device.fullName == other.device.fullName && device.iconPath == other.device.iconPath && level == other.level &&
+               device.fullName == other.device.fullName && device.kind == other.device.kind && level == other.level &&
                muted == other.muted;
     }
 };
@@ -2362,7 +2563,6 @@ bool ReadDevice(IMMDevice* device, AudioDevice& info) {
     }
     info.description = ReadStringProperty(store.Get(), kKeyInterfaceName);
     info.kind = ReadKind(store.Get());
-    info.iconPath = ReadStringProperty(store.Get(), kKeyIconPath);
     return true;
 }
 
@@ -2567,157 +2767,74 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Device icons: the ones chosen for each device in the Sound control panel (Properties > Change
-// Icon), or a glyph from the Windows icon font.
+// Icons: glyphs from the Windows icon font, in the taskbar's color, like its own icons.
 
-const wchar_t* GlyphFor(const std::optional<AudioStatus>& status) {
+const wchar_t* const kGlyphMute = L"\uE74F";
+const wchar_t* const kGlyphMicOff = L"\uEC54";
+const wchar_t* const kGlyphSpeakers = L"\uE7F5";
+const wchar_t* const kGlyphHeadphone = L"\uE7F6";
+const wchar_t* const kGlyphHeadset = L"\uE95B";
+const wchar_t* const kGlyphTvMonitor = L"\uE7F4";
+const wchar_t* const kGlyphMicrophone = L"\uE720";
+const wchar_t* const kGlyphVideo = L"\uE714";
+
+// The glyph for a muted (or missing) output or input: a struck-through speaker or microphone.
+const wchar_t* MutedGlyph(EDataFlow flow) {
+    return flow == eCapture ? kGlyphMicOff : kGlyphMute;
+}
+
+// The glyph for the output's or input's kind, or the muted one when there's no device. Inputs of
+// other kinds (line in, S/PDIF, Remote Audio) are microphones, and outputs of other kinds speakers.
+const wchar_t* GlyphFor(EDataFlow flow, const std::optional<AudioStatus>& status) {
     if (!status) {
-        return L"";  // Mute
+        return MutedGlyph(flow);
     }
     switch (status->device.kind) {
         case DeviceKind::Headphones:
-            return L"";
+            return kGlyphHeadphone;
         case DeviceKind::Headset:
-            return L"";
+            return kGlyphHeadset;
         case DeviceKind::Display:
-            return L"";
+            return kGlyphTvMonitor;
         case DeviceKind::Microphone:
-            return L"";
+            return kGlyphMicrophone;
         default:
-            return L"";
+            return flow == eCapture ? kGlyphMicrophone : kGlyphSpeakers;
     }
 }
 
-// A copy of an icon as a bitmap, with its transparency (from its alpha channel, or its mask for
-// older icons without one).
-std::shared_ptr<gp::Bitmap> IconToBitmap(HICON icon) {
-    ICONINFO info{};
-    if (!GetIconInfo(icon, &info)) {
-        return nullptr;
+// Draws an icon-font glyph at one font size, centered in the box by its ink, the way the taskbar
+// draws its own glyphs: unlike DrawGlyph, it doesn't stretch each glyph to fill the box, so they all
+// keep the same size and weight. Returns where the ink went.
+gp::RectF DrawGlyphAtSize(gp::Graphics& graphics, const wchar_t* glyph, float emSize, const gp::RectF& box, const gp::Color& color) {
+    const wchar_t* fontName = IconFontName();
+    if (!fontName) {
+        DrawGlyph(graphics, glyph, box, color);  // Draws a placeholder.
+        return box;
     }
-    std::shared_ptr<gp::Bitmap> result;
-    BITMAP colorInfo{};
-    if (info.hbmColor && GetObjectW(info.hbmColor, sizeof(colorInfo), &colorInfo)) {
-        int width = colorInfo.bmWidth;
-        int height = colorInfo.bmHeight;
-        BITMAPINFO header{};
-        header.bmiHeader.biSize = sizeof(header.bmiHeader);
-        header.bmiHeader.biWidth = width;
-        header.bmiHeader.biHeight = -height;
-        header.bmiHeader.biPlanes = 1;
-        header.bmiHeader.biBitCount = 32;
-        header.bmiHeader.biCompression = BI_RGB;
-        std::vector<DWORD> pixels((size_t)width * height);
-        std::vector<DWORD> mask((size_t)width * height);
-        HDC screen = GetDC(nullptr);
-        bool ok = GetDIBits(screen, info.hbmColor, 0, height, pixels.data(), &header, DIB_RGB_COLORS) == height;
-        bool hasAlpha = std::any_of(pixels.begin(), pixels.end(), [](DWORD pixel) { return (pixel >> 24) != 0; });
-        if (ok && !hasAlpha && info.hbmMask) {
-            ok = GetDIBits(screen, info.hbmMask, 0, height, mask.data(), &header, DIB_RGB_COLORS) == height;
-            for (size_t i = 0; ok && i < pixels.size(); i++) {
-                pixels[i] = (pixels[i] & 0x00FFFFFF) | ((mask[i] & 0x00FFFFFF) ? 0 : 0xFF000000);  // White mask is see-through.
-            }
-        }
-        ReleaseDC(nullptr, screen);
-        if (ok) {
-            result = std::make_shared<gp::Bitmap>(width, height, PixelFormat32bppARGB);
-            gp::Rect rect(0, 0, width, height);
-            gp::BitmapData data;
-            if (result->LockBits(&rect, gp::ImageLockModeWrite, PixelFormat32bppARGB, &data) == gp::Ok) {
-                for (int y = 0; y < height; y++) {
-                    memcpy((BYTE*)data.Scan0 + (size_t)y * data.Stride, pixels.data() + (size_t)y * width, (size_t)width * 4);
-                }
-                result->UnlockBits(&data);
-            } else {
-                result.reset();
-            }
-        }
+    gp::FontFamily family(fontName);
+    gp::GraphicsPath path;
+    path.AddString(glyph, -1, &family, gp::FontStyleRegular, emSize, gp::PointF(0, 0), gp::StringFormat::GenericTypographic());
+    gp::RectF ink;
+    path.GetBounds(&ink);
+    if (ink.Width <= 0 || ink.Height <= 0) {
+        return box;
     }
-    if (info.hbmColor) {
-        DeleteObject(info.hbmColor);
-    }
-    if (info.hbmMask) {
-        DeleteObject(info.hbmMask);
-    }
-    return result;
+    gp::RectF placed(box.X + (box.Width - ink.Width) / 2, box.Y + (box.Height - ink.Height) / 2, ink.Width, ink.Height);
+    gp::Matrix transform;
+    transform.Translate(placed.X - ink.X, placed.Y - ink.Y);
+    path.Transform(&transform);
+    gp::SolidBrush brush(color);
+    graphics.FillPath(&brush, &path);
+    return placed;
 }
 
-// The devices' Windows icons, loaded once for each size and icon path. Owned by the app, so they're
-// gone before GDI+ shuts down.
-class DeviceIcons {
-public:
-    // The icon at the given pixel size, or null if it can't be loaded.
-    gp::Bitmap* Get(const std::wstring& iconPath, int size);
-
-private:
-    std::map<std::wstring, std::shared_ptr<gp::Bitmap>> cache_;
-};
-
-gp::Bitmap* DeviceIcons::Get(const std::wstring& iconPath, int size) {
-    if (Trim(iconPath).empty() || size <= 0) {
-        return nullptr;
-    }
-    std::wstring key = std::to_wstring(size) + L"|" + iconPath;
-    auto found = cache_.find(key);
-    if (found != cache_.end()) {
-        return found->second.get();  // Failures are kept too, so they aren't retried on every paint.
-    }
-    // Icon paths look like "%SystemRoot%\System32\mmres.dll,-3011"; a negative index is a resource ID.
-    std::wstring file = Trim(iconPath);
-    if (!file.empty() && file[0] == L'@') {
-        file = file.substr(1);
-    }
-    int index = 0;
-    size_t comma = file.find_last_of(L',');
-    if (comma != std::wstring::npos && comma > 0 && ParseInt(Trim(file.substr(comma + 1)), index)) {
-        file = file.substr(0, comma);
-    }
-    file = Trim(file);
-    if (file.size() >= 2 && file.front() == L'"' && file.back() == L'"') {
-        file = file.substr(1, file.size() - 2);
-    }
-    file = ExpandEnvironment(file);
-    std::shared_ptr<gp::Bitmap> bitmap;
-    HICON icon = nullptr;
-    if (SUCCEEDED(SHDefExtractIconW(file.c_str(), index, 0, &icon, nullptr, MAKELONG(size, 0))) && icon) {
-        bitmap = IconToBitmap(icon);
-        DestroyIcon(icon);
-    }
-    cache_[key] = bitmap;
-    return bitmap.get();
-}
-
-void DrawMuteBadge(gp::Graphics& graphics, const gp::RectF& bounds) {
-    float size = bounds.Width * 0.6f;
-    gp::RectF badge(bounds.GetRight() - size, bounds.GetBottom() - size, size, size);
-    gp::SolidBrush fill(Argb(255, 196, 43, 28));
-    graphics.FillEllipse(&fill, badge);
-    gp::Pen pen(Argb(255, 255, 255, 255), std::max(1.2f, size / 7.0f));
-    float inset = size * 0.32f;
-    graphics.DrawLine(&pen, badge.X + inset, badge.Y + inset, badge.GetRight() - inset, badge.GetBottom() - inset);
-    graphics.DrawLine(&pen, badge.GetRight() - inset, badge.Y + inset, badge.X + inset, badge.GetBottom() - inset);
-}
-
-// Draws the device's Windows icon, or a glyph when there's no device or its icon can't be loaded.
-// Muted devices are faded, with a mute badge.
-void DrawDeviceIcon(gp::Graphics& graphics, DeviceIcons& icons, const std::optional<AudioStatus>& status, const gp::RectF& bounds,
-                    const gp::Color& glyphColor) {
-    gp::Bitmap* icon = status ? icons.Get(status->device.iconPath, (int)std::min(bounds.Width, bounds.Height)) : nullptr;
+// Draws the icon of the output or input device: a glyph at three quarters of the box's height, about
+// the size of the taskbar's own icons, struck through when the device is muted.
+void DrawDeviceIcon(gp::Graphics& graphics, EDataFlow flow, const std::optional<AudioStatus>& status, const gp::RectF& bounds,
+                    const gp::Color& color) {
     bool muted = status && status->muted;
-    if (!icon) {
-        DrawGlyph(graphics, GlyphFor(status), bounds, muted ? WithAlpha(115, glyphColor) : glyphColor);
-    } else {
-        gp::InterpolationMode previous = graphics.GetInterpolationMode();
-        graphics.SetInterpolationMode(gp::InterpolationModeHighQualityBicubic);
-        gp::ImageAttributes attributes;
-        gp::ColorMatrix matrix = {{{1, 0, 0, 0, 0}, {0, 1, 0, 0, 0}, {0, 0, 1, 0, 0}, {0, 0, 0, muted ? 0.45f : 1.0f, 0}, {0, 0, 0, 0, 1}}};
-        attributes.SetColorMatrix(&matrix);
-        graphics.DrawImage(icon, bounds, 0, 0, (gp::REAL)icon->GetWidth(), (gp::REAL)icon->GetHeight(), gp::UnitPixel, &attributes);
-        graphics.SetInterpolationMode(previous);
-    }
-    if (muted) {
-        DrawMuteBadge(graphics, bounds);
-    }
+    DrawGlyphAtSize(graphics, muted ? MutedGlyph(flow) : GlyphFor(flow, status), bounds.Height * 0.75f, bounds, color);
 }
 
 // ---------------------------------------------------------------------------
@@ -3030,28 +3147,28 @@ private:
 
 namespace {
 
-// A video-camera outline: a body and a lens, with a slash through it when off.
+// The video glyph, at three quarters of the box's height like the devices' icons, with a slash
+// through it when off.
 void DrawWebcamIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, bool off, const gp::Color& behind) {
-    float s = box.Width;
-    FillRoundedRect(graphics, color, gp::RectF(box.X + s * 0.04f, box.Y + s * 0.26f, s * 0.62f, s * 0.48f), s * 0.1f);
-    gp::PointF lens[] = {{box.X + s * 0.70f, box.Y + s * 0.42f}, {box.X + s * 0.96f, box.Y + s * 0.27f},
-                         {box.X + s * 0.96f, box.Y + s * 0.73f}, {box.X + s * 0.70f, box.Y + s * 0.58f}};
-    gp::SolidBrush brush(color);
-    graphics.FillPolygon(&brush, lens, 4);
+    float em = box.Height * 0.75f;
+    gp::RectF ink = DrawGlyphAtSize(graphics, kGlyphVideo, em, box, color);
     if (!off) {
         return;
     }
-    gp::PointF start(box.X + s * 0.06f, box.Y + s * 0.06f);
-    gp::PointF end(box.X + s * 0.94f, box.Y + s * 0.94f);
-    // Cut a gap around the slash so it reads clearly against the icon.
+    float middleX = ink.X + ink.Width / 2;
+    float middleY = ink.Y + ink.Height / 2;
+    float reach = em * 0.5f;
+    gp::PointF start(middleX - reach, middleY - reach);
+    gp::PointF end(middleX + reach, middleY + reach);
+    // Cut a gap around the slash so it reads clearly against the glyph, as the muted glyphs have.
     gp::CompositingMode previous = graphics.GetCompositingMode();
     graphics.SetCompositingMode(gp::CompositingModeSourceCopy);
-    gp::Pen gap(behind, s * 0.26f);
+    gp::Pen gap(behind, em * 0.2f);
     gap.SetStartCap(gp::LineCapRound);
     gap.SetEndCap(gp::LineCapRound);
     graphics.DrawLine(&gap, start, end);
     graphics.SetCompositingMode(previous);
-    gp::Pen slash(color, s * 0.1f);
+    gp::Pen slash(color, em / 14);
     slash.SetStartCap(gp::LineCapRound);
     slash.SetEndCap(gp::LineCapRound);
     graphics.DrawLine(&slash, start, end);
@@ -3068,12 +3185,12 @@ public:
     std::function<void(int notches)> onVolumeSteps;
     std::function<void()> onMute;
 
-    explicit VolumeFlyout(DeviceIcons& icons) : icons_(icons) {}
 
     bool Create() { return CreatePopup(L"AudioFlipper.Mod.VolumeFlyout"); }
 
-    void SetStatus(const std::optional<AudioStatus>& status) {
+    void SetStatus(const std::optional<AudioStatus>& status, EDataFlow flow) {
         status_ = status;
+        flow_ = flow;
         if (holdingDragLevel_ && status && std::abs(status->level - dragLevel_) < 0.005f) {
             holdingDragLevel_ = false;
         }
@@ -3193,7 +3310,7 @@ protected:
                             (float)Px(4));
         }
         float iconSize = (float)Px(24);
-        DrawDeviceIcon(graphics, icons_, status_,
+        DrawDeviceIcon(graphics, flow_, status_,
                        gp::RectF(button.left + (button.right - button.left - iconSize) / 2, button.top + (button.bottom - button.top - iconSize) / 2,
                                  iconSize, iconSize),
                        colors.foreground);
@@ -3258,8 +3375,8 @@ private:
         }
     }
 
-    DeviceIcons& icons_;
     std::optional<AudioStatus> status_;
+    EDataFlow flow_ = eRender;
     std::unique_ptr<gp::Font> titleFont_;
     std::unique_ptr<gp::Font> detailFont_;
     std::unique_ptr<gp::Font> valueFont_;
@@ -3304,8 +3421,6 @@ public:
     std::function<void()> onWebcamToggle;
     std::function<void()> onMenu;
 
-    explicit AfWidget(DeviceIcons& icons) : icons_(icons), flyout_(icons) {}
-
     bool Create(int offset) {
         if (!TaskbarWidget::Create(offset) || !flyout_.Create()) {
             return false;
@@ -3344,7 +3459,7 @@ public:
         output_ = output;
         input_ = input;
         if (flyoutPart_ != kNone) {
-            flyout_.SetStatus(StatusOf(flyoutPart_));
+            flyout_.SetStatus(StatusOf(flyoutPart_), FlowOf(flyoutPart_).value_or(eRender));
         }
         ContentChanged();
     }
@@ -3464,7 +3579,7 @@ protected:
         GetCursorPos(&cursor);
         if (Visible() && !Pressed() && PtInRect(&bounds, cursor)) {
             flyoutPart_ = hoverTarget_;
-            flyout_.SetStatus(StatusOf(flyoutPart_));
+            flyout_.SetStatus(StatusOf(flyoutPart_), FlowOf(flyoutPart_).value_or(eRender));
             flyout_.ShowAbove(bounds);
         }
     }
@@ -3593,8 +3708,8 @@ private:
         gp::Color secondary = light ? Argb(255, 90, 90, 90) : Argb(255, 205, 205, 205);
         gp::Color iconColor = webcam_->busy ? WithAlpha(110, foreground) : foreground;
         float middle = height / 2.0f;
-        float camera = (float)Px(20);
-        DrawWebcamIcon(graphics, gp::RectF(section.x + (float)Px(12), middle - camera / 2, camera, camera), iconColor, !webcam_->enabled,
+        float iconSize = (float)Px(24);
+        DrawWebcamIcon(graphics, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), iconColor, !webcam_->enabled,
                        behindIcon);
 
         float textLeft = section.x + (float)Px(40);
@@ -3613,7 +3728,8 @@ private:
 
         float middle = height / 2.0f;
         float iconSize = (float)Px(24);
-        DrawDeviceIcon(graphics, icons_, status, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
+        DrawDeviceIcon(graphics, *FlowOf(section.part), status,
+                       gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
 
         float textLeft = section.x + (float)Px(44);
         float textWidth = section.x + section.width - textLeft - Px(10);
@@ -3631,7 +3747,6 @@ private:
         }
     }
 
-    DeviceIcons& icons_;
     VolumeFlyout flyout_;
     std::vector<Section> sections_;
     std::map<std::wstring, int> measuredWidths_;
@@ -3782,8 +3897,8 @@ private:
         content.level = output->Percent();
         content.levelMuted = output->muted;
         AudioStatus status = *output;
-        content.icon = [this, status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
-            DrawDeviceIcon(graphics, icons_, status, bounds, color);
+        content.icon = [status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
+            DrawDeviceIcon(graphics, eRender, status, bounds, color);
         };
         popup_.Show(content, 1800);
     }
@@ -3997,9 +4112,9 @@ private:
         }
 
         submenu.AddSeparator();
-        // The classic Sound control panel (Playback or Recording tab), where a device can be renamed or
-        // given a different icon via right-click > Properties.
-        submenu.Add(L"Rename or change device icons…", [isOutput]() {
+        // The classic Sound control panel (Playback or Recording tab), where a device can be renamed via
+        // right-click > Properties.
+        submenu.Add(L"Rename devices…", [isOutput]() {
             Launch(NativeSystemFolder() + L"\\control.exe", isOutput ? L"mmsys.cpl,,0" : L"mmsys.cpl,,1");
         });
         submenu.Add(L"Sound settings…", []() { OpenWithShell(L"ms-settings:sound"); });
@@ -4052,17 +4167,7 @@ private:
         AddAudioMenu(menu, eCapture);
         AddWebcamMenu(menu);
 
-        // Linking the widget with Taskbar RDP Launcher's into one, on either side; offered while that
-        // mod is running (or they're linked).
-        const WidgetLink::State& link = widget_.Link();
-        if (link.linked || WidgetLink::PartnerRunning()) {
-            menu.AddSeparator();
-            Menu& linkMenu = menu.AddSubmenu(std::wstring(L"Link with ") + kPartnerApp);
-            bool selfOnLeft = link.selfOnLeft;
-            linkMenu.Add(L"Not linked", [this, selfOnLeft]() { widget_.SetLink(false, selfOnLeft); }, !link.linked);
-            linkMenu.Add(std::wstring(kPartnerApp) + L" on the left", [this]() { widget_.SetLink(true, false); }, link.linked && !selfOnLeft);
-            linkMenu.Add(std::wstring(kPartnerApp) + L" on the right", [this]() { widget_.SetLink(true, true); }, link.linked && selfOnLeft);
-        }
+        AddLinkMenu(menu, widget_);
 
         RECT bounds = widget_.Bounds();
         POINT cursor;
@@ -4074,8 +4179,7 @@ private:
     Settings settings_;
     AudioDevices audio_;
     MessageWindow messages_;
-    DeviceIcons icons_;  // Before the windows that draw them, so it's destroyed after them.
-    AfWidget widget_{icons_};
+    AfWidget widget_;
     MessagePopup popup_;
     WorkerThreads workers_;
     std::optional<AudioStatus> lastOutput_;

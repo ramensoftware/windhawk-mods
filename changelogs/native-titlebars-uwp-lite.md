@@ -1,3 +1,7 @@
+## 2.0.1 ([Oct 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/90e067381451a3a716f239a37f3c0191f4c601a1/mods/native-titlebars-uwp-lite.wh.cpp))
+
+* Update screenshot
+
 ## 2.0 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2a007255a1fa993638d0b9f7130f3d1fafea1c9/mods/native-titlebars-uwp-lite.wh.cpp))
 
 * Use another method
