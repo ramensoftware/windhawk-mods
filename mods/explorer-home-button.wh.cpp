@@ -2,13 +2,13 @@
 // @id              explorer-home-button
 // @name            File Explorer Address Bar Home Button
 // @description     Adds a dedicated "Home" (This PC) button next to the Refresh button in the Windows 11 File Explorer address bar
-// @version         1.0.0
+// @version         1.0.1
 // @author          RobotsNeverDie
 // @github          https://github.com/RBND
 // @homepage        https://github.com/RBND/HomeExplorer
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,12 +17,14 @@
 
 Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Refresh** button in the Windows 11 File Explorer address bar.
 
+![File Explorer Address Bar Home Button](https://raw.githubusercontent.com/RBND/HomeExplorer/main/screenshot.png)
+
 ## Features
-- **Native WinUI 3 / XAML Islands Integration**: Injects an `AppBarButton` directly into File Explorer's `NavigationBarControl` (`CommandBar#NavigationCommands`) next to `refreshButton`.
-- **Exact Visual & Theme Match**: Inherits the native `refreshButton`'s style, dimensions, margins, corner radius, hover/pressed/focus visual states, and dynamically adapts to Windows 11 Light, Dark, and High Contrast themes.
+- **Native WinUI 3 Integration**: Injects an `AppBarButton` directly into File Explorer's address bar command bar (`CommandBar#NavigationCommands`) next to `refreshButton`.
+- **Exact Visual & Theme Match**: Inherits the native `refreshButton`'s style, dimensions, margins, corner radius, and hover/pressed/focus visual states, dynamically matching Windows 11 Light, Dark, and High Contrast themes.
 - **Active-Tab-Only Navigation**: Uses COM Shell APIs (`IShellWindows`, `IServiceProvider`, `IShellBrowser::BrowseObject`, and `IWebBrowser2::Navigate2`) matched against the active `ShellTabWindowClass` child window so only the currently active tab navigates to **This PC** (`shell:MyComputerFolder` / `::{20D04FE0-3AEA-1069-A2D8-08002B30309D}`).
-- **Configurable Settings**: Customize the target shell location, button placement (before or after the Refresh button), icon glyph (`Home \uE80F` or `Computer \uE770`), and tooltip text (`This PC (Alt+Home)`).
-- **Clean Lifecycle**: Supports live injection into open File Explorer windows, live settings updates, and clean removal on mod unload without leaking XAML elements.
+- **Configurable Settings**: Customize the target shell location, button placement (before or after the Refresh button), icon glyph (`Home \uE80F` or `Computer \uE770`), and tooltip text (`This PC`).
+- **Clean Lifecycle**: Supports live injection into open File Explorer windows, live settings updates, and clean removal on mod unload without leaking XAML elements or conflicting with other XAML mods.
 */
 // ==/WindhawkModReadme==
 
@@ -49,10 +51,10 @@ Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Ref
   $options:
     - home: Home (E80F)
     - computer: Computer / This PC (E770)
-- tooltip: "This PC (Alt+Home)"
+- tooltip: "This PC"
   $name: Tooltip Text
   $description: >-
-    The tooltip shown when hovering over the Home button.
+    The tooltip shown when hovering over the Home button. Defaults to "This PC".
 */
 // ==/WindhawkModSettings==
 
@@ -60,22 +62,15 @@ Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Ref
 
 #include <exdisp.h>
 #include <knownfolders.h>
-#include <ocidl.h>
-#include <shdeprecated.h>
-#include <shlguid.h>
 #include <shlobj.h>
-#include <shlwapi.h>
 #include <shobjidl.h>
-#include <weakreference.h>
-#include <xamlom.h>
 
 #include <atomic>
-#include <cmath>
-#include <memory>
-#include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #undef GetCurrentTime
@@ -90,7 +85,6 @@ Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Ref
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.System.h>
 #include <winrt/base.h>
 
 namespace wf = winrt::Windows::Foundation;
@@ -98,11 +92,12 @@ namespace mux = winrt::Microsoft::UI::Xaml;
 namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace muxa = winrt::Microsoft::UI::Xaml::Automation;
 namespace muxm = winrt::Microsoft::UI::Xaml::Media;
+namespace muxi = winrt::Microsoft::UI::Xaml::Input;
 
-constexpr WCHAR kHomeButtonName[] = L"WindhawkHomeExplorerButton";
+#define kHomeButtonName L"WindhawkHomeExplorerButton"
 constexpr WCHAR kThisPcClsidPath[] = L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
 constexpr WCHAR kDefaultTargetLocation[] = L"shell:MyComputerFolder";
-constexpr WCHAR kDefaultTooltip[] = L"This PC (Alt+Home)";
+constexpr WCHAR kDefaultTooltip[] = L"This PC";
 constexpr WCHAR kGlyphHome[] = L"\uE80F";
 constexpr WCHAR kGlyphComputer[] = L"\uE770";
 
@@ -120,18 +115,10 @@ struct ModSettings {
 
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 ModSettings g_settings;
+std::atomic<bool> g_unloading{false};
 
-std::atomic<bool> g_tapInitialized{false};
-std::atomic<bool> g_uninitializing{false};
-
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle),
-                       &module);
-    return module;
-}
+std::atomic<bool> g_fileExplorerExtensionsHooked{false};
+std::atomic<bool> g_fileExplorerExtensionsHookAttempted{false};
 
 ModSettings GetSettingsSnapshot() {
     AcquireSRWLockShared(&g_settingsLock);
@@ -141,97 +128,93 @@ ModSettings GetSettingsSnapshot() {
 }
 
 void LoadSettings() {
-    ModSettings updated;
+    ModSettings s;
 
-    PCWSTR rawTarget = Wh_GetStringSetting(L"targetLocation");
-    if (rawTarget && *rawTarget) {
-        updated.targetLocation = rawTarget;
+    WindhawkUtils::StringSetting targetLocation =
+        WindhawkUtils::StringSetting::make(L"targetLocation");
+    if (targetLocation.get() && *targetLocation.get()) {
+        s.targetLocation = targetLocation.get();
     } else {
-        updated.targetLocation = kDefaultTargetLocation;
+        s.targetLocation = kDefaultTargetLocation;
     }
-    Wh_FreeStringSetting(rawTarget);
 
-    PCWSTR rawPlacement = Wh_GetStringSetting(L"placement");
-    if (rawPlacement && _wcsicmp(rawPlacement, L"before") == 0) {
-        updated.placement = ButtonPlacement::BeforeRefresh;
+    WindhawkUtils::StringSetting placement =
+        WindhawkUtils::StringSetting::make(L"placement");
+    if (placement.get() && wcscmp(placement.get(), L"before") == 0) {
+        s.placement = ButtonPlacement::BeforeRefresh;
     } else {
-        updated.placement = ButtonPlacement::AfterRefresh;
+        s.placement = ButtonPlacement::AfterRefresh;
     }
-    Wh_FreeStringSetting(rawPlacement);
 
-    PCWSTR rawGlyph = Wh_GetStringSetting(L"iconGlyph");
-    if (rawGlyph && _wcsicmp(rawGlyph, L"computer") == 0) {
-        updated.iconGlyph = kGlyphComputer;
+    WindhawkUtils::StringSetting iconGlyph =
+        WindhawkUtils::StringSetting::make(L"iconGlyph");
+    if (iconGlyph.get() && wcscmp(iconGlyph.get(), L"computer") == 0) {
+        s.iconGlyph = kGlyphComputer;
     } else {
-        updated.iconGlyph = kGlyphHome;
+        s.iconGlyph = kGlyphHome;
     }
-    Wh_FreeStringSetting(rawGlyph);
 
-    PCWSTR rawTooltip = Wh_GetStringSetting(L"tooltip");
-    if (rawTooltip && *rawTooltip) {
-        updated.tooltip = rawTooltip;
+    WindhawkUtils::StringSetting tooltip =
+        WindhawkUtils::StringSetting::make(L"tooltip");
+    if (tooltip.get() && *tooltip.get()) {
+        s.tooltip = tooltip.get();
     } else {
-        updated.tooltip = kDefaultTooltip;
+        s.tooltip = kDefaultTooltip;
     }
-    Wh_FreeStringSetting(rawTooltip);
 
     AcquireSRWLockExclusive(&g_settingsLock);
-    g_settings = std::move(updated);
+    g_settings = std::move(s);
     ReleaseSRWLockExclusive(&g_settingsLock);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Window & Active Tab COM Shell Navigation
+// Window and Tab Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
 bool IsCabinetWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
         return false;
     }
-    WCHAR className[64]{};
+    WCHAR className[64] = {};
     if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
         return false;
     }
-    return _wcsicmp(className, L"CabinetWClass") == 0;
+    return wcscmp(className, L"CabinetWClass") == 0;
 }
 
-HWND GetExplorerCabinetWindowFromElement(mux::UIElement const& element) {
-    try {
-        if (element) {
-            auto xamlRoot = element.XamlRoot();
-            if (xamlRoot) {
-                auto islandEnv = xamlRoot.ContentIslandEnvironment();
-                if (islandEnv) {
-                    HWND islandWnd = reinterpret_cast<HWND>(
-                        static_cast<uintptr_t>(islandEnv.AppWindowId().Value));
-                    if (islandWnd && IsWindow(islandWnd)) {
-                        HWND rootWnd = GetAncestor(islandWnd, GA_ROOT);
-                        if (IsCabinetWindow(rootWnd)) {
-                            return rootWnd;
-                        }
-                        if (IsCabinetWindow(islandWnd)) {
-                            return islandWnd;
-                        }
-                    }
+HWND FindActiveTabWindow(HWND hCabinetWnd) {
+    if (!hCabinetWnd) {
+        return nullptr;
+    }
+
+    struct EnumContext {
+        HWND hActiveTab = nullptr;
+    } ctx;
+
+    EnumChildWindows(
+        hCabinetWnd,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            WCHAR className[64] = {};
+            if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                wcscmp(className, L"ShellTabWindowClass") == 0) {
+                if (IsWindowVisible(hWnd)) {
+                    auto pCtx = reinterpret_cast<EnumContext*>(lParam);
+                    pCtx->hActiveTab = hWnd;
+                    return FALSE;
                 }
             }
-        }
-    } catch (...) {
-        Wh_Log(L"Failed to resolve XamlRoot AppWindowId: %08X",
-               static_cast<unsigned>(winrt::to_hresult()));
-    }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&ctx));
 
-    HWND activeWnd = GetActiveWindow();
-    if (activeWnd) {
-        HWND rootWnd = GetAncestor(activeWnd, GA_ROOT);
-        if (IsCabinetWindow(rootWnd)) {
-            return rootWnd;
-        }
-    }
+    return ctx.hActiveTab;
+}
 
-    HWND foundCabinet = nullptr;
+HWND GetExplorerCabinetWindowForCurrentThread() {
+    DWORD currentTid = GetCurrentThreadId();
+    HWND foundWnd = nullptr;
     EnumThreadWindows(
-        GetCurrentThreadId(),
+        currentTid,
         [](HWND hWnd, LPARAM lParam) -> BOOL {
             if (IsCabinetWindow(hWnd)) {
                 *reinterpret_cast<HWND*>(lParam) = hWnd;
@@ -239,222 +222,168 @@ HWND GetExplorerCabinetWindowFromElement(mux::UIElement const& element) {
             }
             return TRUE;
         },
-        reinterpret_cast<LPARAM>(&foundCabinet));
+        reinterpret_cast<LPARAM>(&foundWnd));
 
-    if (foundCabinet) {
-        return foundCabinet;
-    }
-
-    HWND fgWnd = GetForegroundWindow();
-    if (IsCabinetWindow(fgWnd)) {
-        return fgWnd;
-    }
-
-    return nullptr;
+    return foundWnd;
 }
 
-HWND FindActiveShellTabWindow(HWND hwndCabinet) {
-    if (!hwndCabinet) {
+PIDLIST_ABSOLUTE ResolveTargetPidl(const std::wstring& target) {
+    if (target.empty()) {
         return nullptr;
     }
 
-    HWND firstTab = nullptr;
-    HWND child = nullptr;
-    while ((child = FindWindowExW(hwndCabinet, child, L"ShellTabWindowClass",
-                                  nullptr)) != nullptr) {
-        if (!firstTab) {
-            firstTab = child;
-        }
-        if (IsWindowVisible(child)) {
-            return child;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    HRESULT hr = S_OK;
+
+    if (_wcsicmp(target.c_str(), L"shell:MyComputerFolder") == 0 ||
+        _wcsicmp(target.c_str(), kThisPcClsidPath) == 0) {
+        hr = SHGetKnownFolderIDList(FOLDERID_ComputerFolder, KF_FLAG_DEFAULT,
+                                    nullptr, &pidl);
+        if (SUCCEEDED(hr) && pidl) {
+            return pidl;
         }
     }
-    return firstTab;
-}
 
-PIDLIST_ABSOLUTE ResolveTargetPidl(const std::wstring& targetLocation) {
-    PIDLIST_ABSOLUTE pidl = nullptr;
-
-    HRESULT hr =
-        SHParseDisplayName(targetLocation.c_str(), nullptr, &pidl, 0, nullptr);
+    hr = SHParseDisplayName(target.c_str(), nullptr, &pidl, 0, nullptr);
     if (SUCCEEDED(hr) && pidl) {
         return pidl;
     }
 
-    if (_wcsicmp(targetLocation.c_str(), L"shell:MyComputerFolder") == 0 ||
-        _wcsicmp(targetLocation.c_str(), kThisPcClsidPath) == 0 ||
-        _wcsicmp(targetLocation.c_str(), L"This PC") == 0) {
-        hr = SHParseDisplayName(kThisPcClsidPath, nullptr, &pidl, 0, nullptr);
-        if (SUCCEEDED(hr) && pidl) {
-            return pidl;
-        }
-
-        hr = SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, nullptr, &pidl);
-        if (SUCCEEDED(hr) && pidl) {
-            return pidl;
-        }
-    }
-
     return nullptr;
 }
 
-bool NavigateBrowserToTarget(IShellBrowser* shellBrowser,
-                             IWebBrowser2* webBrowser,
-                             PIDLIST_ABSOLUTE pidl,
-                             const std::wstring& targetLocation) {
-    if (shellBrowser && pidl) {
-        HRESULT hr = shellBrowser->BrowseObject(
-            pidl, SBSP_DEFBROWSER | SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-        if (SUCCEEDED(hr)) {
-            Wh_Log(L"Navigated active tab via IShellBrowser::BrowseObject");
-            return true;
-        }
-        Wh_Log(L"IShellBrowser::BrowseObject returned %08X, trying IWebBrowser2",
-               static_cast<unsigned>(hr));
+bool NavigateActiveTabToLocation(HWND hExplorerWnd,
+                                 const std::wstring& targetLocation) {
+    PIDLIST_ABSOLUTE pidl = ResolveTargetPidl(targetLocation);
+    if (!pidl) {
+        return false;
     }
 
-    if (webBrowser) {
-        VARIANT varTarget{};
-        varTarget.vt = VT_BSTR;
-        const std::wstring& navPath =
-            (_wcsicmp(targetLocation.c_str(), L"shell:MyComputerFolder") == 0)
-                ? std::wstring(kThisPcClsidPath)
-                : targetLocation;
-        varTarget.bstrVal = SysAllocString(navPath.c_str());
-        if (varTarget.bstrVal) {
-            VARIANT varFlags{};
-            varFlags.vt = VT_I4;
-            varFlags.lVal = 0;
+    HWND hActiveTab = FindActiveTabWindow(hExplorerWnd);
 
-            VARIANT varEmpty{};
-            VariantInit(&varEmpty);
-
-            HRESULT hr = webBrowser->Navigate2(&varTarget, &varFlags, &varEmpty,
-                                               &varEmpty, &varEmpty);
-            SysFreeString(varTarget.bstrVal);
-            if (SUCCEEDED(hr)) {
-                Wh_Log(L"Navigated active tab via IWebBrowser2::Navigate2");
-                return true;
-            }
-            Wh_Log(L"IWebBrowser2::Navigate2 failed: %08X",
-                   static_cast<unsigned>(hr));
-        }
+    winrt::com_ptr<IShellWindows> spShellWindows;
+    HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr,
+                                  CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&spShellWindows));
+    if (FAILED(hr) || !spShellWindows) {
+        ILFree(pidl);
+        return false;
     }
 
-    return false;
-}
-
-void NavigateActiveTabToHome(mux::UIElement const& senderElement) {
-    const ModSettings settings = GetSettingsSnapshot();
-    HWND hwndCabinet = GetExplorerCabinetWindowFromElement(senderElement);
-    if (!hwndCabinet) {
-        Wh_Log(L"Could not locate containing CabinetWClass window");
-        return;
-    }
-
-    HWND hwndActiveTab = FindActiveShellTabWindow(hwndCabinet);
-    Wh_Log(L"Navigating CabinetWClass=%p ActiveTab=%p to '%s'", hwndCabinet,
-           hwndActiveTab, settings.targetLocation.c_str());
-
-    PIDLIST_ABSOLUTE pidl = ResolveTargetPidl(settings.targetLocation);
+    long windowCount = 0;
+    spShellWindows->get_Count(&windowCount);
 
     bool navigated = false;
 
-    winrt::com_ptr<IShellWindows> shellWindows;
-    HRESULT hr = CoCreateInstance(
-        CLSID_ShellWindows, nullptr,
-        CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(shellWindows.put()));
+    for (long i = 0; i < windowCount && !navigated; ++i) {
+        winrt::com_ptr<IDispatch> spDisp;
+        VARIANT vIndex;
+        VariantInit(&vIndex);
+        vIndex.vt = VT_I4;
+        vIndex.lVal = i;
 
-    if (SUCCEEDED(hr) && shellWindows) {
-        long count = 0;
-        if (SUCCEEDED(shellWindows->get_Count(&count))) {
-            winrt::com_ptr<IShellBrowser> fallbackBrowser;
-            winrt::com_ptr<IWebBrowser2> fallbackWebBrowser;
+        hr = spShellWindows->Item(vIndex, spDisp.put());
+        VariantClear(&vIndex);
+        if (FAILED(hr) || !spDisp) {
+            continue;
+        }
 
-            for (long i = 0; i < count; i++) {
-                VARIANT varIndex{};
-                varIndex.vt = VT_I4;
-                varIndex.lVal = i;
+        auto spWebBrowser = spDisp.try_as<IWebBrowser2>();
+        if (!spWebBrowser) {
+            continue;
+        }
 
-                winrt::com_ptr<IDispatch> disp;
-                if (FAILED(shellWindows->Item(varIndex, disp.put())) || !disp) {
-                    continue;
-                }
+        // Fast HWND check before doing cross-thread/in-proc QueryService
+        SHANDLE_PTR hWindowRaw = 0;
+        if (FAILED(spWebBrowser->get_HWND(&hWindowRaw))) {
+            continue;
+        }
 
-                auto webBrowser = disp.try_as<IWebBrowser2>();
-                auto serviceProvider = disp.try_as<::IServiceProvider>();
-                if (!serviceProvider) {
-                    continue;
-                }
+        HWND hItemWnd = reinterpret_cast<HWND>(hWindowRaw);
+        if (hItemWnd != hExplorerWnd && hItemWnd != hActiveTab) {
+            continue;
+        }
 
-                winrt::com_ptr<IShellBrowser> shellBrowser;
-                if (FAILED(serviceProvider->QueryService(
-                        SID_STopLevelBrowser,
-                        IID_PPV_ARGS(shellBrowser.put()))) ||
-                    !shellBrowser) {
-                    continue;
-                }
+        auto spServiceProvider = spDisp.try_as<IServiceProvider>();
+        if (!spServiceProvider) {
+            continue;
+        }
 
-                HWND hwndBrowser = nullptr;
-                if (FAILED(shellBrowser->GetWindow(&hwndBrowser)) ||
-                    !hwndBrowser) {
-                    continue;
-                }
+        winrt::com_ptr<IShellBrowser> spShellBrowser;
+        hr = spServiceProvider->QueryService(SID_STopLevelBrowser,
+                                             IID_PPV_ARGS(&spShellBrowser));
+        if (FAILED(hr) || !spShellBrowser) {
+            continue;
+        }
 
-                HWND rootWnd = GetAncestor(hwndBrowser, GA_ROOT);
-                if (rootWnd != hwndCabinet) {
-                    SHANDLE_PTR wbHwnd = 0;
-                    if (!webBrowser || FAILED(webBrowser->get_HWND(&wbHwnd)) ||
-                        reinterpret_cast<HWND>(wbHwnd) != hwndCabinet) {
-                        continue;
-                    }
-                }
-
-                // Exact match for the currently active tab in this window.
-                if (hwndActiveTab &&
-                    (hwndBrowser == hwndActiveTab ||
-                     IsChild(hwndActiveTab, hwndBrowser))) {
-                    navigated = NavigateBrowserToTarget(
-                        shellBrowser.get(), webBrowser.get(), pidl,
-                        settings.targetLocation);
-                    break;
-                }
-
-                // Fallback candidate if the active tab is visible.
-                if (IsWindowVisible(hwndBrowser) && !fallbackBrowser) {
-                    fallbackBrowser = shellBrowser;
-                    fallbackWebBrowser = webBrowser;
-                }
-            }
-
-            if (!navigated && (fallbackBrowser || fallbackWebBrowser)) {
-                navigated = NavigateBrowserToTarget(
-                    fallbackBrowser.get(), fallbackWebBrowser.get(), pidl,
-                    settings.targetLocation);
+        HWND hBrowserTabWnd = nullptr;
+        if (SUCCEEDED(spShellBrowser->GetWindow(&hBrowserTabWnd))) {
+            if (hActiveTab && hBrowserTabWnd != hActiveTab) {
+                continue;
             }
         }
-    } else {
-        Wh_Log(L"CoCreateInstance(CLSID_ShellWindows) failed: %08X",
-               static_cast<unsigned>(hr));
+
+        hr = spShellBrowser->BrowseObject(pidl, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
+        if (SUCCEEDED(hr)) {
+            navigated = true;
+            break;
+        }
+
+        VARIANT vPidl;
+        VariantInit(&vPidl);
+        vPidl.vt = VT_ARRAY | VT_UI1;
+        UINT cbPidl = ILGetSize(pidl);
+        SAFEARRAY* psa = SafeArrayCreateVector(VT_UI1, 0, cbPidl);
+        if (psa) {
+            void* pData = nullptr;
+            SafeArrayAccessData(psa, &pData);
+            memcpy(pData, pidl, cbPidl);
+            SafeArrayUnaccessData(psa);
+            vPidl.parray = psa;
+
+            VARIANT vFlags;
+            VariantInit(&vFlags);
+            vFlags.vt = VT_I4;
+            vFlags.lVal = 0;
+
+            hr = spWebBrowser->Navigate2(&vPidl, &vFlags, nullptr, nullptr, nullptr);
+            VariantClear(&vPidl);
+            VariantClear(&vFlags);
+            if (SUCCEEDED(hr)) {
+                navigated = true;
+                break;
+            }
+        }
     }
 
-    if (pidl) {
-        CoTaskMemFree(pidl);
+    ILFree(pidl);
+    return navigated;
+}
+
+void NavigateActiveTabToHome() {
+    const ModSettings settings = GetSettingsSnapshot();
+
+    HWND hExplorerWnd = GetExplorerCabinetWindowForCurrentThread();
+    if (!hExplorerWnd) {
+        Wh_Log(L"Failed to identify CabinetWClass window for current thread");
+        return;
+    }
+
+    if (!NavigateActiveTabToLocation(hExplorerWnd, settings.targetLocation)) {
+        Wh_Log(L"NavigateActiveTabToLocation failed for target: %ls",
+               settings.targetLocation.c_str());
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// WinUI 3 XAML Button Injection & Lifecycle Management
+// UI Tracking and Visual Tree Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
 struct InjectedButtonRecord {
     winrt::weak_ref<muxc::AppBarButton> homeButton;
     winrt::weak_ref<muxc::AppBarButton> refreshButton;
     winrt::weak_ref<muxc::CommandBar> commandBar;
-    winrt::weak_ref<muxc::Panel> parentPanel;
-    muxc::Button::Click_revoker clickRevoker;
-    mux::FrameworkElement::ActualThemeChanged_revoker themeChangedRevoker;
+    muxc::AppBarButton::Click_revoker clickRevoker;
 };
 
 struct PendingRefreshRecord {
@@ -462,32 +391,28 @@ struct PendingRefreshRecord {
     mux::FrameworkElement::Loaded_revoker loadedRevoker;
 };
 
-// Accessed on the UI thread that owns the XAML elements.
-thread_local std::unordered_map<void*, InjectedButtonRecord>
-    g_injectedButtonsForThread;
-thread_local std::unordered_map<void*, PendingRefreshRecord>
-    g_pendingRefreshForThread;
+thread_local std::unordered_map<void*, InjectedButtonRecord> g_injectedButtonsForThread;
+thread_local std::unordered_map<void*, PendingRefreshRecord> g_pendingRefreshForThread;
 
-void* GetElementKey(wf::IInspectable const& obj) {
-    if (!obj) {
+void* GetElementKey(mux::DependencyObject const& elem) {
+    if (!elem) {
         return nullptr;
     }
-    winrt::com_ptr<::IUnknown> unk;
-    reinterpret_cast<::IUnknown*>(winrt::get_abi(obj))
-        ->QueryInterface(IID_PPV_ARGS(unk.put()));
-    return unk.get();
+    return winrt::get_abi(elem);
 }
 
 template <typename T>
-T FindDescendantByName(mux::DependencyObject const& root, PCWSTR targetName) {
-    if (!root) {
+T FindDescendantByName(mux::DependencyObject const& root,
+                       std::wstring_view targetName,
+                       int maxDepth = 64) {
+    if (!root || maxDepth <= 0) {
         return nullptr;
     }
 
-    if (auto fe = root.try_as<mux::FrameworkElement>()) {
-        if (fe.Name() == targetName) {
-            if (auto matched = fe.try_as<T>()) {
-                return matched;
+    if (auto elem = root.try_as<mux::FrameworkElement>()) {
+        if (elem.Name() == targetName) {
+            if (auto typed = root.try_as<T>()) {
+                return typed;
             }
         }
     }
@@ -499,211 +424,134 @@ T FindDescendantByName(mux::DependencyObject const& root, PCWSTR targetName) {
         return nullptr;
     }
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; ++i) {
         mux::DependencyObject child{nullptr};
         try {
             child = muxm::VisualTreeHelper::GetChild(root, i);
         } catch (...) {
             continue;
         }
-        if (auto found = FindDescendantByName<T>(child, targetName)) {
+        if (auto found = FindDescendantByName<T>(child, targetName, maxDepth - 1)) {
             return found;
         }
     }
-
     return nullptr;
 }
 
 muxc::CommandBar FindAncestorCommandBar(mux::DependencyObject const& start) {
-    mux::DependencyObject curr = start;
-    while (curr) {
-        if (auto cmdBar = curr.try_as<muxc::CommandBar>()) {
-            return cmdBar;
-        }
+    if (!start) {
+        return nullptr;
+    }
+
+    mux::DependencyObject current = start;
+    int depth = 0;
+    while (current && depth < 32) {
+        mux::DependencyObject parent{nullptr};
         try {
-            curr = muxm::VisualTreeHelper::GetParent(curr);
+            parent = muxm::VisualTreeHelper::GetParent(current);
         } catch (...) {
             break;
         }
+        if (!parent) {
+            break;
+        }
+        if (auto cmdBar = parent.try_as<muxc::CommandBar>()) {
+            return cmdBar;
+        }
+        current = parent;
+        ++depth;
     }
     return nullptr;
 }
 
+void CopyVisualProperties(muxc::AppBarButton const& source,
+                          muxc::AppBarButton const& target) {
+    if (!source || !target) {
+        return;
+    }
+
+    try {
+        target.Width(source.Width());
+        target.Height(source.Height());
+        target.MinWidth(source.MinWidth());
+        target.MinHeight(source.MinHeight());
+        target.Margin(source.Margin());
+        target.Padding(source.Padding());
+        target.CornerRadius(source.CornerRadius());
+        target.Style(source.Style());
+        target.VerticalAlignment(source.VerticalAlignment());
+        target.HorizontalAlignment(source.HorizontalAlignment());
+    } catch (...) {
+    }
+}
+
 void ConfigureHomeButtonVisuals(muxc::AppBarButton const& homeButton,
                                 muxc::AppBarButton const& refreshButton,
-                                const ModSettings& settings) {
+                                ModSettings const& settings) {
     if (!homeButton) {
         return;
     }
 
     if (refreshButton) {
-        try {
-            if (auto style = refreshButton.Style()) {
-                homeButton.Style(style);
-            }
-            if (!std::isnan(refreshButton.Width())) {
-                homeButton.Width(refreshButton.Width());
-            }
-            if (!std::isnan(refreshButton.Height())) {
-                homeButton.Height(refreshButton.Height());
-            }
-            homeButton.MinWidth(refreshButton.MinWidth());
-            homeButton.MinHeight(refreshButton.MinHeight());
-            homeButton.MaxWidth(refreshButton.MaxWidth());
-            homeButton.MaxHeight(refreshButton.MaxHeight());
-            homeButton.Margin(refreshButton.Margin());
-            homeButton.Padding(refreshButton.Padding());
-            homeButton.CornerRadius(refreshButton.CornerRadius());
-            homeButton.BorderThickness(refreshButton.BorderThickness());
-            homeButton.IsCompact(refreshButton.IsCompact());
-            homeButton.LabelPosition(refreshButton.LabelPosition());
-            homeButton.VerticalAlignment(refreshButton.VerticalAlignment());
-            homeButton.HorizontalAlignment(refreshButton.HorizontalAlignment());
-            homeButton.UseSystemFocusVisuals(
-                refreshButton.UseSystemFocusVisuals());
-            homeButton.FocusVisualMargin(refreshButton.FocusVisualMargin());
-            homeButton.FocusVisualPrimaryThickness(
-                refreshButton.FocusVisualPrimaryThickness());
-            homeButton.FocusVisualSecondaryThickness(
-                refreshButton.FocusVisualSecondaryThickness());
-            homeButton.RequestedTheme(refreshButton.RequestedTheme());
-        } catch (...) {
-            Wh_Log(L"Warning copying properties from refreshButton: %08X",
-                   static_cast<unsigned>(winrt::to_hresult()));
+        CopyVisualProperties(refreshButton, homeButton);
+
+        muxc::FontIcon homeIcon;
+        homeIcon.Glyph(winrt::hstring(settings.iconGlyph));
+
+        if (auto refreshIcon = refreshButton.Icon().try_as<muxc::FontIcon>()) {
+            homeIcon.FontFamily(refreshIcon.FontFamily());
+            homeIcon.FontSize(refreshIcon.FontSize());
+            homeIcon.FontWeight(refreshIcon.FontWeight());
+            homeIcon.FontStyle(refreshIcon.FontStyle());
+            homeIcon.IsTextScaleFactorEnabled(refreshIcon.IsTextScaleFactorEnabled());
+            homeIcon.MirroredWhenRightToLeft(refreshIcon.MirroredWhenRightToLeft());
+        } else {
+            homeIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
+            homeIcon.FontSize(16.0);
         }
-    } else {
-        homeButton.IsCompact(true);
-        homeButton.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
+
+        homeButton.Icon(homeIcon);
     }
 
-    muxc::FontIcon fontIcon;
-    fontIcon.Glyph(settings.iconGlyph);
-
-    bool copiedIconMetrics = false;
-    if (refreshButton) {
-        try {
-            if (auto refreshIcon =
-                    refreshButton.Icon().try_as<muxc::FontIcon>()) {
-                if (auto ff = refreshIcon.FontFamily()) {
-                    fontIcon.FontFamily(ff);
-                }
-                if (refreshIcon.FontSize() > 0) {
-                    fontIcon.FontSize(refreshIcon.FontSize());
-                }
-                fontIcon.FontWeight(refreshIcon.FontWeight());
-                fontIcon.FontStyle(refreshIcon.FontStyle());
-                fontIcon.Margin(refreshIcon.Margin());
-                fontIcon.HorizontalAlignment(
-                    refreshIcon.HorizontalAlignment());
-                fontIcon.VerticalAlignment(refreshIcon.VerticalAlignment());
-                copiedIconMetrics = true;
-            }
-        } catch (...) {
-        }
-    }
-
-    if (!copiedIconMetrics) {
-        fontIcon.FontFamily(
-            muxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
-        fontIcon.FontSize(16.0);
-    }
-
-    homeButton.Icon(fontIcon);
-    homeButton.Label(L"This PC");
     muxc::ToolTipService::SetToolTip(homeButton,
-                                     winrt::box_value(settings.tooltip));
-    muxa::AutomationProperties::SetName(homeButton, L"This PC");
+                                     winrt::box_value(winrt::hstring(settings.tooltip)));
+
+    // Keep automation / accessible name in sync with user-facing tooltip
+    muxa::AutomationProperties::SetName(homeButton, winrt::hstring(settings.tooltip));
 }
 
 void PositionHomeButtonInCommandBar(muxc::CommandBar const& commandBar,
                                     muxc::AppBarButton const& refreshButton,
                                     muxc::AppBarButton const& homeButton,
                                     ButtonPlacement placement) {
-    auto primaryCommands = commandBar.PrimaryCommands();
-    if (!primaryCommands) {
+    if (!commandBar || !refreshButton || !homeButton) {
         return;
     }
 
+    auto commands = commandBar.PrimaryCommands();
     uint32_t existingHomeIdx = 0;
-    if (primaryCommands.IndexOf(homeButton, existingHomeIdx)) {
-        primaryCommands.RemoveAt(existingHomeIdx);
+    if (commands.IndexOf(homeButton, existingHomeIdx)) {
+        commands.RemoveAt(existingHomeIdx);
     }
 
     uint32_t refreshIdx = 0;
-    if (!primaryCommands.IndexOf(refreshButton, refreshIdx)) {
-        primaryCommands.Append(homeButton);
-        return;
-    }
-
-    if (placement == ButtonPlacement::BeforeRefresh) {
-        primaryCommands.InsertAt(refreshIdx, homeButton);
+    if (commands.IndexOf(refreshButton, refreshIdx)) {
+        uint32_t insertIdx = (placement == ButtonPlacement::BeforeRefresh)
+                                 ? refreshIdx
+                                 : (refreshIdx + 1);
+        if (insertIdx > commands.Size()) {
+            insertIdx = commands.Size();
+        }
+        commands.InsertAt(insertIdx, homeButton);
     } else {
-        uint32_t insertIdx = refreshIdx + 1;
-        // In Windows 11 NavigationBarControl, stopButton immediately follows
-        // refreshButton and toggles visibility with it while loading. Placing
-        // the Home button after stopButton keeps it directly adjacent to the
-        // Refresh/Stop slot without shifting.
-        if (insertIdx < primaryCommands.Size()) {
-            if (auto nextFe =
-                    primaryCommands.GetAt(insertIdx)
-                        .try_as<mux::FrameworkElement>()) {
-                if (nextFe.Name() == L"stopButton") {
-                    insertIdx++;
-                }
-            }
-        }
-        if (insertIdx >= primaryCommands.Size()) {
-            primaryCommands.Append(homeButton);
-        } else {
-            primaryCommands.InsertAt(insertIdx, homeButton);
-        }
-    }
-}
-
-void PositionHomeButtonInPanel(muxc::Panel const& panel,
-                               muxc::AppBarButton const& refreshButton,
-                               muxc::AppBarButton const& homeButton,
-                               ButtonPlacement placement) {
-    auto children = panel.Children();
-    if (!children) {
-        return;
-    }
-
-    uint32_t existingHomeIdx = 0;
-    if (children.IndexOf(homeButton, existingHomeIdx)) {
-        children.RemoveAt(existingHomeIdx);
-    }
-
-    uint32_t refreshIdx = 0;
-    if (!children.IndexOf(refreshButton, refreshIdx)) {
-        children.Append(homeButton);
-        return;
-    }
-
-    if (placement == ButtonPlacement::BeforeRefresh) {
-        children.InsertAt(refreshIdx, homeButton);
-    } else {
-        uint32_t insertIdx = refreshIdx + 1;
-        if (insertIdx < children.Size()) {
-            if (auto nextFe =
-                    children.GetAt(insertIdx).try_as<mux::FrameworkElement>()) {
-                if (nextFe.Name() == L"stopButton") {
-                    insertIdx++;
-                }
-            }
-        }
-        if (insertIdx >= children.Size()) {
-            children.Append(homeButton);
-        } else {
-            children.InsertAt(insertIdx, homeButton);
-        }
+        commands.Append(homeButton);
     }
 }
 
 bool TryInjectHomeButtonForRefreshButton(
     muxc::AppBarButton const& refreshButton,
     muxc::CommandBar const& knownCommandBar = nullptr) {
-    if (!refreshButton || g_uninitializing.load()) {
+    if (!refreshButton || g_unloading.load()) {
         return false;
     }
 
@@ -712,7 +560,6 @@ bool TryInjectHomeButtonForRefreshButton(
         return false;
     }
 
-    // Check if we already injected a live Home button for this refreshButton.
     auto existingIt = g_injectedButtonsForThread.find(key);
     if (existingIt != g_injectedButtonsForThread.end()) {
         if (auto existingBtn = existingIt->second.homeButton.get()) {
@@ -726,24 +573,12 @@ bool TryInjectHomeButtonForRefreshButton(
         commandBar = FindAncestorCommandBar(refreshButton);
     }
 
-    muxc::Panel parentPanel{nullptr};
-    if (commandBar) {
-        uint32_t idx = 0;
-        if (!commandBar.PrimaryCommands().IndexOf(refreshButton, idx)) {
-            commandBar = nullptr;
-        }
-    }
-
     if (!commandBar) {
-        try {
-            if (auto parent = muxm::VisualTreeHelper::GetParent(refreshButton)) {
-                parentPanel = parent.try_as<muxc::Panel>();
-            }
-        } catch (...) {
-        }
+        return false;
     }
 
-    if (!commandBar && !parentPanel) {
+    uint32_t idx = 0;
+    if (!commandBar.PrimaryCommands().IndexOf(refreshButton, idx)) {
         return false;
     }
 
@@ -756,42 +591,21 @@ bool TryInjectHomeButtonForRefreshButton(
     InjectedButtonRecord record;
     record.homeButton = winrt::make_weak(homeButton);
     record.refreshButton = winrt::make_weak(refreshButton);
+    record.commandBar = winrt::make_weak(commandBar);
 
     record.clickRevoker = homeButton.Click(
         winrt::auto_revoke,
-        [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+        [](wf::IInspectable const&, mux::RoutedEventArgs const&) {
             try {
-                if (auto uiElem = sender.try_as<mux::UIElement>()) {
-                    NavigateActiveTabToHome(uiElem);
-                }
+                NavigateActiveTabToHome();
             } catch (...) {
                 Wh_Log(L"Exception in Home button Click handler: %08X",
                        static_cast<unsigned>(winrt::to_hresult()));
             }
         });
 
-    record.themeChangedRevoker = refreshButton.ActualThemeChanged(
-        winrt::auto_revoke,
-        [weakHome = winrt::make_weak(homeButton)](
-            mux::FrameworkElement const& sender,
-            wf::IInspectable const&) {
-            try {
-                if (auto home = weakHome.get()) {
-                    home.RequestedTheme(sender.RequestedTheme());
-                }
-            } catch (...) {
-            }
-        });
-
-    if (commandBar) {
-        record.commandBar = winrt::make_weak(commandBar);
-        PositionHomeButtonInCommandBar(commandBar, refreshButton, homeButton,
-                                       settings.placement);
-    } else if (parentPanel) {
-        record.parentPanel = winrt::make_weak(parentPanel);
-        PositionHomeButtonInPanel(parentPanel, refreshButton, homeButton,
-                                  settings.placement);
-    }
+    PositionHomeButtonInCommandBar(commandBar, refreshButton, homeButton,
+                                   settings.placement);
 
     g_injectedButtonsForThread.emplace(key, std::move(record));
     g_pendingRefreshForThread.erase(key);
@@ -802,7 +616,7 @@ bool TryInjectHomeButtonForRefreshButton(
 
 void EnsureRefreshButtonHooked(muxc::AppBarButton const& refreshButton,
                                muxc::CommandBar const& knownCommandBar = nullptr) {
-    if (!refreshButton || g_uninitializing.load()) {
+    if (!refreshButton || g_unloading.load()) {
         return;
     }
 
@@ -828,54 +642,67 @@ void EnsureRefreshButtonHooked(muxc::AppBarButton const& refreshButton,
     g_pendingRefreshForThread.emplace(key, std::move(pending));
 }
 
-void InspectFrameworkElement(mux::FrameworkElement const& fe) {
-    if (!fe || g_uninitializing.load()) {
+void InspectXamlElement(mux::UIElement const& element) {
+    if (!element || g_unloading.load()) {
         return;
     }
 
-    const auto name = fe.Name();
-    if (name == kHomeButtonName) {
-        return;
-    }
-
-    if (name == L"refreshButton") {
-        if (auto refreshBtn = fe.try_as<muxc::AppBarButton>()) {
+    try {
+        if (auto refreshBtn =
+                FindDescendantByName<muxc::AppBarButton>(element, L"refreshButton")) {
             EnsureRefreshButtonHooked(refreshBtn);
+            return;
         }
-        return;
-    }
 
-    if (name == L"NavigationCommands") {
-        if (auto cmdBar = fe.try_as<muxc::CommandBar>()) {
-            for (auto const& item : cmdBar.PrimaryCommands()) {
+        if (auto navCmds =
+                FindDescendantByName<muxc::CommandBar>(element, L"NavigationCommands")) {
+            for (auto const& item : navCmds.PrimaryCommands()) {
                 if (auto btn = item.try_as<muxc::AppBarButton>()) {
                     if (btn.Name() == L"refreshButton") {
-                        EnsureRefreshButtonHooked(btn, cmdBar);
-                        break;
+                        EnsureRefreshButtonHooked(btn, navCmds);
+                        return;
                     }
                 }
             }
         }
+    } catch (...) {
+    }
+}
+
+void ScanCurrentThreadForNavigationCommands() {
+    if (g_unloading.load()) {
         return;
     }
-
-    if (name == L"NavigationBarControl" ||
-        name == L"NavigationBarControlGrid") {
-        if (auto cmdBar =
-                FindDescendantByName<muxc::CommandBar>(fe, L"NavigationCommands")) {
-            for (auto const& item : cmdBar.PrimaryCommands()) {
-                if (auto btn = item.try_as<muxc::AppBarButton>()) {
-                    if (btn.Name() == L"refreshButton") {
-                        EnsureRefreshButtonHooked(btn, cmdBar);
-                        break;
-                    }
+    try {
+        auto focused = muxi::FocusManager::GetFocusedElement();
+        if (auto element = focused ? focused.try_as<mux::UIElement>() : nullptr) {
+            if (auto root = element.XamlRoot()) {
+                if (auto content = root.Content()) {
+                    InspectXamlElement(content);
+                    return;
                 }
             }
-        } else if (auto refreshBtn = FindDescendantByName<muxc::AppBarButton>(
-                       fe, L"refreshButton")) {
-            EnsureRefreshButtonHooked(refreshBtn);
         }
+    } catch (...) {
     }
+}
+
+void ScheduleCurrentThreadScan() {
+    if (g_unloading.load()) {
+        return;
+    }
+    try {
+        auto dispatcherQueue =
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+        if (dispatcherQueue) {
+            dispatcherQueue.TryEnqueue([]() {
+                ScanCurrentThreadForNavigationCommands();
+            });
+            return;
+        }
+    } catch (...) {
+    }
+    ScanCurrentThreadForNavigationCommands();
 }
 
 void UpdateInjectedButtonsForCurrentThread() {
@@ -885,351 +712,215 @@ void UpdateInjectedButtonsForCurrentThread() {
          it != g_injectedButtonsForThread.end();) {
         auto homeBtn = it->second.homeButton.get();
         auto refreshBtn = it->second.refreshButton.get();
-        if (!homeBtn || !refreshBtn) {
+        auto cmdBar = it->second.commandBar.get();
+
+        if (!homeBtn || !refreshBtn || !cmdBar) {
             it = g_injectedButtonsForThread.erase(it);
             continue;
         }
 
-        try {
-            ConfigureHomeButtonVisuals(homeBtn, refreshBtn, settings);
-            if (auto cmdBar = it->second.commandBar.get()) {
-                PositionHomeButtonInCommandBar(cmdBar, refreshBtn, homeBtn,
-                                               settings.placement);
-            } else if (auto panel = it->second.parentPanel.get()) {
-                PositionHomeButtonInPanel(panel, refreshBtn, homeBtn,
-                                          settings.placement);
-            }
-        } catch (...) {
-            Wh_Log(L"Error updating Home button on thread: %08X",
-                   static_cast<unsigned>(winrt::to_hresult()));
-        }
-
+        ConfigureHomeButtonVisuals(homeBtn, refreshBtn, settings);
+        PositionHomeButtonInCommandBar(cmdBar, refreshBtn, homeBtn,
+                                       settings.placement);
         ++it;
     }
 }
 
 void RemoveInjectedButtonsForCurrentThread() {
-    g_pendingRefreshForThread.clear();
-
-    auto injected = std::move(g_injectedButtonsForThread);
-    g_injectedButtonsForThread.clear();
-
-    for (auto& [key, record] : injected) {
+    for (auto& [key, record] : g_injectedButtonsForThread) {
         record.clickRevoker.revoke();
-        record.themeChangedRevoker.revoke();
-
-        auto homeBtn = record.homeButton.get();
-        if (!homeBtn) {
-            continue;
-        }
-
-        try {
-            if (auto cmdBar = record.commandBar.get()) {
+        if (auto cmdBar = record.commandBar.get()) {
+            if (auto homeBtn = record.homeButton.get()) {
                 uint32_t idx = 0;
                 if (cmdBar.PrimaryCommands().IndexOf(homeBtn, idx)) {
                     cmdBar.PrimaryCommands().RemoveAt(idx);
                 }
-            } else if (auto panel = record.parentPanel.get()) {
-                uint32_t idx = 0;
-                if (panel.Children().IndexOf(homeBtn, idx)) {
-                    panel.Children().RemoveAt(idx);
-                }
             }
-        } catch (...) {
-            Wh_Log(L"Error removing Home button during cleanup: %08X",
-                   static_cast<unsigned>(winrt::to_hresult()));
         }
     }
+    std::exchange(g_injectedButtonsForThread, {});
+    std::exchange(g_pendingRefreshForThread, {});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// XAML Diagnostics TAP & VisualTreeWatcher
+// Hooks of File Explorer WinUI 3 (FileExplorerExtensions.dll)
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr GUID IID_IXamlDiagnosticsTestHooks = {
-    0x735941a2,
-    0x3ee3,
-    0x495a,
-    {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
-
-struct IXamlDiagnosticsTestHooks : ::IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE
-    UnregisterInstance(InstanceHandle handle) = 0;
-    virtual HRESULT STDMETHODCALLTYPE
-    TryGetDispatcherQueueForObject(InstanceHandle handle,
-                                   void** dispatcherQueue) = 0;
-};
-
-// {74E8F5B1-39D8-46B2-B988-2A6998A1109D}
-static constexpr CLSID CLSID_HomeExplorerTAP = {
-    0x74e8f5b1,
-    0x39d8,
-    0x46b2,
-    {0xb9, 0x88, 0x2a, 0x69, 0x98, 0xa1, 0x10, 0x9d}};
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher,
-                               IVisualTreeServiceCallback2,
-                               winrt::non_agile> {
-   public:
-    explicit VisualTreeWatcher(winrt::com_ptr<::IUnknown> site)
-        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
-        m_xamlDiagnostics->QueryInterface(
-            IID_IXamlDiagnosticsTestHooks,
-            m_xamlDiagnosticsTestHooks.put_void());
-
-        // Advise on a worker thread to avoid deadlocking Advising::RunOnUIThread.
-        HANDLE thread = CreateThread(
-            nullptr, 0,
-            [](LPVOID lpParam) -> DWORD {
-                auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
-                HRESULT hr = watcher->m_xamlDiagnostics.as<IVisualTreeService3>()
-                                 ->AdviseVisualTreeChange(watcher);
-                watcher->Release();
-                if (FAILED(hr)) {
-                    Wh_Log(L"AdviseVisualTreeChange failed: %08X",
-                           static_cast<unsigned>(hr));
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (thread) {
-            AddRef();
-            CloseHandle(thread);
-        }
+using CommandBarManager_CommandBar_t = void(WINAPI*)(void* pThis, void* commandBar);
+CommandBarManager_CommandBar_t CommandBarManager_CommandBar_Original = nullptr;
+void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
+    CommandBarManager_CommandBar_Original(pThis, commandBar);
+    if (g_unloading.load() || !commandBar) {
+        return;
     }
 
-    VisualTreeWatcher(const VisualTreeWatcher&) = delete;
-    VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
-
-    void UnadviseVisualTreeChange() {
-        if (m_xamlDiagnostics) {
-            HRESULT hr = m_xamlDiagnostics.as<IVisualTreeService3>()
-                             ->UnadviseVisualTreeChange(this);
-            if (FAILED(hr)) {
-                Wh_Log(L"UnadviseVisualTreeChange failed: %08X",
-                       static_cast<unsigned>(hr));
-            }
-        }
-    }
-
-   private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
-        ParentChildRelation relation,
-        VisualElement element,
-        VisualMutationType mutationType) override try {
-        if (g_uninitializing.load()) {
-            return S_OK;
+    try {
+        auto bar = *reinterpret_cast<muxc::CommandBar const*>(commandBar);
+        if (!bar) {
+            return;
         }
 
-        if (mutationType == Add) {
-            wf::IInspectable inspectable;
-            HRESULT hr = m_xamlDiagnostics->GetIInspectableFromHandle(
-                element.Handle,
-                reinterpret_cast<::IInspectable**>(
-                    winrt::put_abi(inspectable)));
-            if (SUCCEEDED(hr) && inspectable) {
-                if (auto fe = inspectable.try_as<mux::FrameworkElement>()) {
-                    InspectFrameworkElement(fe);
-                }
+        if (auto root = bar.XamlRoot()) {
+            if (auto content = root.Content()) {
+                InspectXamlElement(content);
             }
         }
 
-        // Release XAML diagnostics handle references so elements aren't pinned.
-        if (m_xamlDiagnosticsTestHooks) {
-            if (mutationType == Add) {
-                if (element.Handle) {
-                    m_xamlDiagnosticsTestHooks->UnregisterInstance(
-                        element.Handle);
-                }
-                if (relation.Parent) {
-                    m_xamlDiagnosticsTestHooks->UnregisterInstance(
-                        relation.Parent);
-                }
-            } else if (mutationType == Remove && element.Handle) {
-                m_xamlDiagnosticsTestHooks->UnregisterInstance(element.Handle);
+        bar.Loaded([](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+            if (g_unloading.load()) {
+                return;
             }
-        }
-
-        return S_OK;
+            try {
+                if (auto b = sender.try_as<muxc::CommandBar>()) {
+                    if (auto r = b.XamlRoot()) {
+                        if (auto c = r.Content()) {
+                            InspectXamlElement(c);
+                        }
+                    }
+                }
+            } catch (...) {
+            }
+        });
     } catch (...) {
-        return S_OK;
+        Wh_Log(L"Exception in CommandBarManager_CommandBar_Hook: %08X",
+               static_cast<unsigned>(winrt::to_hresult()));
     }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(
-        InstanceHandle,
-        VisualElementState,
-        LPCWSTR) noexcept override {
-        return S_OK;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
-    winrt::com_ptr<IXamlDiagnosticsTestHooks> m_xamlDiagnosticsTestHooks;
-};
-
-[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-SRWLOCK g_visualTreeWatcherLock = SRWLOCK_INIT;
-
-winrt::com_ptr<VisualTreeWatcher> ExchangeVisualTreeWatcher(
-    winrt::com_ptr<VisualTreeWatcher> watcher) {
-    AcquireSRWLockExclusive(&g_visualTreeWatcherLock);
-    std::swap(g_visualTreeWatcher, watcher);
-    ReleaseSRWLockExclusive(&g_visualTreeWatcherLock);
-    return watcher;
 }
 
-class HomeExplorerTAP
-    : public winrt::implements<HomeExplorerTAP,
-                               IObjectWithSite,
-                               winrt::non_agile> {
-   public:
-    HRESULT STDMETHODCALLTYPE SetSite(::IUnknown* pUnkSite) override try {
-        if (auto previous = ExchangeVisualTreeWatcher(nullptr)) {
-            previous->UnadviseVisualTreeChange();
-        }
+using CommandBarControl_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
+CommandBarControl_OnApplyTemplate_t CommandBarControl_OnApplyTemplate_Original = nullptr;
+CommandBarControl_OnApplyTemplate_t CommandBarControl_Wave1_OnApplyTemplate_Original = nullptr;
 
-        m_site.copy_from(pUnkSite);
-
-        if (m_site) {
-            // Balance the LoadLibrary reference added by InitializeXamlDiagnosticsEx.
-            FreeLibrary(GetCurrentModuleHandle());
-            ExchangeVisualTreeWatcher(
-                winrt::make_self<VisualTreeWatcher>(m_site));
-        }
-
-        return S_OK;
-    } catch (...) {
-        return winrt::to_hresult();
+void WINAPI CommandBarControl_OnApplyTemplate_Hook(void* pThis) {
+    CommandBarControl_OnApplyTemplate_Original(pThis);
+    if (!g_unloading.load()) {
+        ScheduleCurrentThreadScan();
     }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid,
-                                      void** ppvSite) noexcept override {
-        return m_site.as(riid, ppvSite);
-    }
-
-   private:
-    winrt::com_ptr<::IUnknown> m_site;
-};
-
-template <class T>
-struct SimpleFactory
-    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(::IUnknown* pUnkOuter,
-                                             REFIID riid,
-                                             void** ppvObject) override try {
-        if (!pUnkOuter) {
-            *ppvObject = nullptr;
-            return winrt::make<T>().as(riid, ppvObject);
-        }
-        return CLASS_E_NOAGGREGATION;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
-        return S_OK;
-    }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport) _Use_decl_annotations_ STDAPI DllGetClassObject(
-    REFCLSID rclsid,
-    REFIID riid,
-    LPVOID* ppv) try {
-    if (rclsid == CLSID_HomeExplorerTAP) {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<HomeExplorerTAP>>().as(riid, ppv);
-    }
-    return CLASS_E_CLASSNOTAVAILABLE;
-} catch (...) {
-    return winrt::to_hresult();
 }
 
-__declspec(dllexport) _Use_decl_annotations_ STDAPI DllCanUnloadNow() {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
+void WINAPI CommandBarControl_Wave1_OnApplyTemplate_Hook(void* pThis) {
+    CommandBarControl_Wave1_OnApplyTemplate_Original(pThis);
+    if (!g_unloading.load()) {
+        ScheduleCurrentThreadScan();
+    }
 }
 
-#pragma clang diagnostic pop
+using CommandBarControl_GotFocusHandler_t =
+    void(WINAPI*)(void* pThis, void* sender, void* args);
+CommandBarControl_GotFocusHandler_t CommandBarControl_GotFocusHandler_Original = nullptr;
+CommandBarControl_GotFocusHandler_t CommandBarControl_Wave1_GotFocusHandler_Original = nullptr;
 
-using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX =
-    decltype(&InitializeXamlDiagnosticsEx);
+void WINAPI CommandBarControl_GotFocusHandler_Hook(void* pThis, void* sender, void* args) {
+    CommandBarControl_GotFocusHandler_Original(pThis, sender, args);
+    if (!g_unloading.load()) {
+        ScheduleCurrentThreadScan();
+    }
+}
 
-HRESULT InjectWindhawkTAP() noexcept {
-    HMODULE module = GetCurrentModuleHandle();
+void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis, void* sender, void* args) {
+    CommandBarControl_Wave1_GotFocusHandler_Original(pThis, sender, args);
+    if (!g_unloading.load()) {
+        ScheduleCurrentThreadScan();
+    }
+}
+
+bool HookFileExplorerExtensionsSymbols(HMODULE module) {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
+            &CommandBarManager_CommandBar_Original,
+            CommandBarManager_CommandBar_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::OnApplyTemplate(void))"},
+            &CommandBarControl_OnApplyTemplate_Original,
+            CommandBarControl_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::OnApplyTemplate(void))"},
+            &CommandBarControl_Wave1_OnApplyTemplate_Original,
+            CommandBarControl_Wave1_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))"},
+            &CommandBarControl_GotFocusHandler_Original,
+            CommandBarControl_GotFocusHandler_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))"},
+            &CommandBarControl_Wave1_GotFocusHandler_Original,
+            CommandBarControl_Wave1_GotFocusHandler_Hook,
+            true,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"HookSymbols failed for FileExplorerExtensions.dll");
+        return false;
+    }
+    return true;
+}
+
+bool HookFileExplorerExtensionsIfLoaded(bool apply) {
+    if (g_fileExplorerExtensionsHooked.load()) {
+        return true;
+    }
+    HMODULE module = GetModuleHandleW(L"FileExplorerExtensions.dll");
     if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
+        return false;
     }
-
-    WCHAR location[MAX_PATH]{};
-    DWORD len = GetModuleFileNameW(module, location, ARRAYSIZE(location));
-    if (len == 0 || len == ARRAYSIZE(location)) {
-        return HRESULT_FROM_WIN32(GetLastError());
+    bool expected = false;
+    if (!g_fileExplorerExtensionsHookAttempted.compare_exchange_strong(expected, true)) {
+        return g_fileExplorerExtensionsHooked.load();
     }
-
-    const HMODULE wux = GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll");
-    if (!wux) {
-        return HRESULT_FROM_WIN32(GetLastError());
+    if (!HookFileExplorerExtensionsSymbols(module)) {
+        Wh_Log(L"FileExplorerExtensions symbol hook failed");
+        return false;
     }
-
-    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
-        GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
-    if (!ixde) {
-        return HRESULT_FROM_WIN32(GetLastError());
+    g_fileExplorerExtensionsHooked.store(true);
+    if (apply) {
+        Wh_ApplyHookOperations();
     }
+    return true;
+}
 
-    HRESULT hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-    for (int i = 0; i < 10000; i++) {
-        WCHAR connectionName[256];
-        wsprintfW(connectionName, L"WinUIVisualDiagConnection%d", i + 1);
-
-        hr = ixde(connectionName, GetCurrentProcessId(), L"", location,
-                  CLSID_HomeExplorerTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            break;
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module && lpLibFileName && !g_unloading.load() &&
+        !g_fileExplorerExtensionsHookAttempted.load()) {
+        PCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
+        fileName = fileName ? fileName + 1 : lpLibFileName;
+        if (_wcsicmp(fileName, L"FileExplorerExtensions.dll") == 0) {
+            HookFileExplorerExtensionsIfLoaded(true);
         }
     }
-
-    return hr;
-}
-
-void EnsureTapInitialized() {
-    if (g_uninitializing.load()) {
-        return;
-    }
-    if (!GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll")) {
-        return;
-    }
-    if (g_tapInitialized.exchange(true)) {
-        return;
-    }
-
-    HRESULT hr = InjectWindhawkTAP();
-    if (FAILED(hr)) {
-        Wh_Log(L"InjectWindhawkTAP failed: %08X", static_cast<unsigned>(hr));
-        g_tapInitialized.store(false);
-    } else {
-        Wh_Log(L"InjectWindhawkTAP succeeded");
-    }
+    return module;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Window Thread Dispatch & Hooks
+// Thread Invocation Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+using RUN_FROM_WINDOW_THREAD_PROC = void (*)(PVOID param);
+
+struct RUN_FROM_WINDOW_THREAD_PARAM {
+    RUN_FROM_WINDOW_THREAD_PROC proc;
+    PVOID procParam;
+};
 
 bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
+                         RUN_FROM_WINDOW_THREAD_PROC proc,
                          PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
-    };
+    static UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" kHomeButtonName);
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) {
@@ -1245,11 +936,11 @@ bool RunFromWindowThread(HWND hWnd,
         WH_CALLWNDPROC,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(
-                        cwp->lParam);
-                    param->proc(param->procParam);
+                auto pMessage = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (pMessage->message == runFromWindowThreadRegisteredMsg) {
+                    auto pParam = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(
+                        pMessage->lParam);
+                    pParam->proc(pParam->procParam);
                 }
             }
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -1282,47 +973,6 @@ std::vector<HWND> GetExplorerCabinetWindows() {
     return hWnds;
 }
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original = nullptr;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 PVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd && IsCabinetWindow(hWnd)) {
-        EnsureTapInitialized();
-    }
-    return hWnd;
-}
-
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                   HANDLE hFile,
-                                   DWORD dwFlags) {
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module && lpLibFileName && !g_tapInitialized.load()) {
-        PCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
-        fileName = fileName ? fileName + 1 : lpLibFileName;
-        if (_wcsicmp(fileName, L"Microsoft.Internal.FrameworkUdk.dll") == 0 ||
-            _wcsicmp(fileName, L"FileExplorerExtensions.dll") == 0 ||
-            _wcsicmp(fileName, L"CoreMessagingXP.dll") == 0) {
-            EnsureTapInitialized();
-        }
-    }
-    return module;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk Mod Entry Points
 ////////////////////////////////////////////////////////////////////////////////
@@ -1330,11 +980,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing explorer-home-button mod");
 
-    g_uninitializing.store(false);
+    g_unloading.store(false);
     LoadSettings();
-
-    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
-                                   &CreateWindowExW_Original);
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     if (kernelBaseModule) {
@@ -1351,7 +998,21 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit");
-    EnsureTapInitialized();
+    HookFileExplorerExtensionsIfLoaded(true);
+
+    auto windows = GetExplorerCabinetWindows();
+    std::unordered_set<DWORD> visitedThreads;
+    for (HWND hWnd : windows) {
+        DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
+        if (tid && visitedThreads.insert(tid).second) {
+            RunFromWindowThread(
+                hWnd,
+                [](PVOID) {
+                    ScheduleCurrentThreadScan();
+                },
+                nullptr);
+        }
+    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -1373,13 +1034,14 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing explorer-home-button mod");
-    g_uninitializing.store(true);
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"Wh_ModBeforeUninit");
+    g_unloading.store(true);
+}
 
-    if (auto watcher = ExchangeVisualTreeWatcher(nullptr)) {
-        watcher->UnadviseVisualTreeChange();
-    }
+void Wh_ModUninit() {
+    Wh_Log(L"Wh_ModUninit");
+    g_unloading.store(true);
 
     auto windows = GetExplorerCabinetWindows();
     std::unordered_set<DWORD> visitedThreads;
@@ -1394,6 +1056,4 @@ void Wh_ModUninit() {
                 nullptr);
         }
     }
-
-    g_tapInitialized.store(false);
 }
