@@ -2,14 +2,13 @@
 // @id refined-quick-settings-and-sound
 // @name Refined Quick Settings and Sound
 // @description A "vanilla+" rework of the Windows 11 Quick Settings and Volume mixer panels for daily use
-// @version 0.1.141
+// @version 0.1.148
 // @author HeyOkay
 // @github https://github.com/HeyOkay
 // @include explorer.exe
 // @include ShellHost.exe
-// @include ShellExperienceHost.exe
 // @architecture x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lcomctl32 -lole32 -loleaut32 -lruntimeobject -liphlpapi -lshlwapi -lshell32 -lversion -luuid
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lcomctl32 -lole32 -loleaut32 -lruntimeobject -liphlpapi -lshlwapi -lshell32 -lpowrprof -luuid
 // @license GPL-3.0-only
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
@@ -54,7 +53,9 @@ customizations are restored when the mod is unloaded.
 
 ## Compatibility
 
-- Windows 11, x86-64. Development testing: build 26300, primarily at 125% scale.
+- Windows 11 24H2 or later (Quick Settings hosted by ShellHost), x86-64
+  (ARM64 is untested).
+  Development testing: build 26300, primarily at 125% scale.
 - Other Windows builds and display scales need validation. The mod depends on
   internal shell XAML elements and symbols which can change with Windows updates.
 - DDC/CI brightness requires a compatible monitor with DDC/CI enabled.
@@ -127,29 +128,25 @@ in this source file.
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 
-#include <windows.h>
 #include <mmdeviceapi.h>
 #include <mmreg.h> // WAVEFORMATEX for the endpoint policy interface
+#include <powrprof.h>
+#include <powersetting.h>
 #include <endpointvolume.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <propsys.h>
 #include <shlwapi.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#include <atomic>
 #include <condition_variable>
 #include <deque>
-#include <functional>
-#include <mutex>
 #include <thread>
 
 #include <algorithm>
 #include <cmath>
 #include <cwctype>
-#include <map>
 #include <string>
 #include <vector>
-#include <windows.h>
 namespace sound {
 // Adapted from the hidden-applications parser of the Sound Output Direct and
 // Taller Windhawk mod; the only code taken from it.
@@ -218,6 +215,55 @@ struct Command {
 } // namespace sound
 
 namespace sound {
+// Display-on and resume-from-sleep notifications (power callbacks on a system
+// thread). DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS and DEVICE_NOTIFY_CALLBACK (2) are
+// declared here: the mod's MinGW headers lack them.
+class PowerWake {
+  struct Subscribe {
+    ULONG(CALLBACK *Callback)(PVOID, ULONG, PVOID);
+    PVOID Context;
+  };
+  static constexpr DWORD notifyCallback = 2;
+  static constexpr GUID displayState = {
+      0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+  std::function<void()> on_;
+  Subscribe params_{};
+  HPOWERNOTIFY display_ = nullptr, resume_ = nullptr;
+  static ULONG CALLBACK Changed(PVOID context, ULONG type, PVOID setting) {
+    bool wake = type == PBT_APMRESUMEAUTOMATIC;
+    if (type == PBT_POWERSETTINGCHANGE && setting) {
+      auto s = static_cast<POWERBROADCAST_SETTING *>(setting);
+      wake = IsEqualGUID(s->PowerSetting, displayState) && s->DataLength >= sizeof(DWORD) &&
+             *reinterpret_cast<DWORD const *>(s->Data) == 1;
+    }
+    if (wake && context)
+      try {
+        static_cast<PowerWake *>(context)->on_();
+      } catch (...) {
+      }
+    return 0;
+  }
+
+public:
+  explicit PowerWake(std::function<void()> on) : on_(std::move(on)) {
+    params_.Callback = Changed;
+    params_.Context = this;
+    if (PowerSettingRegisterNotification(&displayState, notifyCallback, &params_, &display_) !=
+        ERROR_SUCCESS)
+      display_ = nullptr;
+    if (PowerRegisterSuspendResumeNotification(notifyCallback, &params_, &resume_) !=
+        ERROR_SUCCESS)
+      resume_ = nullptr;
+  }
+  PowerWake(PowerWake const &) = delete;
+  PowerWake &operator=(PowerWake const &) = delete;
+  ~PowerWake() {
+    if (display_)
+      PowerSettingUnregisterNotification(display_);
+    if (resume_)
+      PowerUnregisterSuspendResumeNotification(resume_);
+  }
+};
 // All COM audio objects belong to one MTA thread. The UI exchanges plain data.
 class Audio final {
   struct VolumeFeed {
@@ -478,6 +524,14 @@ class Audio final {
                               SUCCEEDED(master_->GetMute(&mute));
       state.muted = mute;
       masters_[masterId_].Observe(state.master, state.muted);
+      // An invalidated endpoint keeps failing: it is opened again on the next
+      // read (the next notification).
+      if (!state.masterAvailable) {
+        if (volumeObserver_)
+          master_->UnregisterControlChangeNotify(volumeObserver_.get());
+        volumeObserver_ = nullptr;
+        master_ = nullptr;
+      }
     }
     // The shell's own lists serve output devices, application sessions and
     // spatial sound; this worker serves the added input selector, the master
@@ -528,8 +582,8 @@ class Audio final {
             publish_();
         }
         std::unique_lock lock(wake_->mutex);
-        // No polling: endpoint, default-device and master volume changes all
-        // arrive as notifications (Notify, VolumeNotify), commands through Send.
+        // No polling: endpoint, default-device and master volume changes arrive
+        // as notifications (Notify, VolumeNotify), commands through Send.
         wake_->cv.wait(lock, [&] { return stop_ || wake_->changed; });
         wake_->changed = false;
       }
@@ -817,7 +871,7 @@ inline C::Button Button(X::FrameworkElement const &owner, PCWSTR name, PCWSTR gl
 // Block divider colour: the Quick Settings tiles Border, whose bottom edge
 // divides the tiles from the All settings block. Set by QuickPage, read by the
 // Sound page; a binding follows theme changes.
-[[clang::no_destroy]] inline winrt::weak_ref<C::Border> quickDivider;
+inline winrt::weak_ref<C::Border> quickDivider;
 inline C::Border QuickDivider() {
   auto b = quickDivider.get();
   if (!b)
@@ -834,6 +888,19 @@ inline D::Binding DividerBinding(C::Border const &source) {
 }
 // Dark theme: every divider and slider rail looks like the line above All
 // settings. An opaque grey would look wrong over a tinted wallpaper.
+// Shown and not cloaked by DWM (the shell hides its panel windows by cloaking).
+inline bool WindowShown(HWND window) {
+  if (!window || !IsWindowVisible(window))
+    return false;
+  using Dwm = HRESULT(WINAPI *)(HWND, DWORD, void *, DWORD);
+  static auto get = [] {
+    auto dll = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    return dll ? reinterpret_cast<Dwm>(GetProcAddress(dll, "DwmGetWindowAttribute")) : nullptr;
+  }();
+  DWORD cloaked = 0;
+  return !(get && SUCCEEDED(get(window, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) &&
+           cloaked);
+}
 inline bool DarkTheme(X::FrameworkElement const &e) {
   return e && e.ActualTheme() == X::ElementTheme::Dark;
 }
@@ -1120,7 +1187,7 @@ class AnimatedVolume {
   int64_t stateToken_ = 0;
   bool reapplying_ = false;
   ULONGLONG changedAt_ = 0;
-  winrt::event_token loadedToken_{};
+  winrt::event_token loadedToken_{}, lostToken_{};
   U::AnimatedIcon loading_{nullptr};
   static constexpr ULONGLONG transitionMs = 700; // QA_Volume transitions are shorter
   U::AnimatedIcon Make() {
@@ -1218,10 +1285,22 @@ public:
     host_.HorizontalAlignment(X::HorizontalAlignment::Center);
     host_.VerticalAlignment(X::VerticalAlignment::Center);
     host_.Children().Append(icon_);
+    // After the graphics device was lost (display off and on, sleep) the
+    // Lottie picture comes back on its first frame (the Mute pose) while
+    // State keeps its value, so the icon is rebuilt at its current state.
+    try {
+      lostToken_ = M::CompositionTarget::SurfaceContentsLost([this](auto &&, auto &&) { Redraw(); });
+    } catch (...) {
+    }
   }
   AnimatedVolume(AnimatedVolume const &) = delete;
   AnimatedVolume &operator=(AnimatedVolume const &) = delete;
   ~AnimatedVolume() {
+    if (lostToken_)
+      try {
+        M::CompositionTarget::SurfaceContentsLost(lostToken_);
+      } catch (...) {
+      }
     Unwatch();
     if (loading_)
       try {
@@ -1240,8 +1319,17 @@ public:
     } catch (...) {
     }
   }
+  // A fresh icon showing the current state, without a transition.
+  void Redraw() {
+    if (state_.empty() || !host_ || !host_.IsLoaded())
+      return;
+    try {
+      Fresh(state_);
+    } catch (...) {
+      Wh_Log(L"VolumeIconRedrawError %08X", winrt::to_hresult());
+    }
+  }
   // Always the isolating Grid (the icon inside it is replaced).
-  X::FrameworkElement Element() { return host_; }
   X::FrameworkElement Isolated() { return host_; }
   void Update(float value, bool muted, bool available = true) {
     std::wstring state = available ? VolumeState(value, muted) : L"Disabled";
@@ -2017,7 +2105,7 @@ class SoundPage {
   // buttons 1 px low. Margins, not transforms, keep the glyphs on the pixel grid.
   static constexpr double listGlyphDrop = .8, buttonGlyphRaise = .8;
   std::set<void *> thinSliders_;
-  // Thin look: slider-look.h. VM rows keep the right edge on the badge column.
+  // Thin look: SliderLook. VM rows keep the right edge on the badge column.
   void ThinSlider(C::Slider const &slider) {
     SliderLook{journal_, revoke_, thinSliders_, slider == master_}.Thin(
         slider, [this, slider](double half) {
@@ -3073,7 +3161,7 @@ public:
       Set(back, X::FrameworkElement::MinHeightProperty(), winrt::box_value(0.));
       Set(back, X::FrameworkElement::MarginProperty(),
           winrt::box_value(X::Thickness{16, 0, 12, 0}));
-      // Hiding the page (exit.h): its command is wrapped; weak references only,
+      // Hiding the page (ExitWithSnapshot): its command is wrapped; weak references only,
       // an abandoned page keeps the wrapper.
       if (auto original = back.Command()) {
         auto weakPage = winrt::make_weak(page_);
@@ -3227,8 +3315,6 @@ public:
       rowsDirty_ = true;
       prepared_ = true;
       preparing_ = false;
-      auto presets = L"wanted=" + std::to_wstring(wantedHeight_) + L" items=" +
-                     std::to_wstring(mixerList_.Items().Size());
       if (!DataReady(false))
         StartGate();
       RememberHeight();
@@ -4114,9 +4200,6 @@ public:
 
 
 
-#include <mmdeviceapi.h>
-#include <endpointvolume.h>
-#include <winrt/Windows.System.h>
 
 namespace native {
 // System volume of the Quick Settings row, with the logic of SV on the Sound
@@ -4301,7 +4384,7 @@ public:
     saved_[id_].Observe(value, muted);
     return true;
   }
-  // As SV (audio.h Execute): level from the slider, muted exactly at 0. The
+  // As SV (sound::Audio::Execute): level from the slider, muted exactly at 0. The
   // mute is written only when it changes, so a drag costs one call per step.
   void SetValue(float value) {
     if (!volume_)
@@ -4333,14 +4416,6 @@ public:
 } // namespace native
 
 
-#include <windows.h>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <map>
-#include <vector>
-#include <algorithm>
-#include <cmath>
 // Monitor brightness over DDC/CI (dxva2, loaded at run time) for displays
 // without a native brightness slider. All monitor I/O runs on one worker
 // thread: a DDC/CI request takes tens of milliseconds and must not block the
@@ -4529,8 +4604,6 @@ public:
 } // namespace native
 
 #include <winrt/Windows.UI.Text.h>
-#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
-#include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 namespace native {
 // Quick Settings main page (ControlCenter.ControlCenterView). L1Grid holds a
 // light Border spanning TogglesGroup + SlidersGroup, then FooterGrid
@@ -4598,7 +4671,7 @@ class QuickPage {
     return done_.insert({winrt::get_abi(object), tag}).second;
   }
   SliderLook Look() { return {journal_, revoke_, thinSliders_}; }
-  // The volume row's own slider and mute button (quick-volume.h).
+  // The volume row's own slider and mute button (QuickVolume).
   std::unique_ptr<QuickVolume> quickVolume_;
   C::Slider quickSlider_{nullptr};
   C::Button quickMute_{nullptr};
@@ -4706,7 +4779,7 @@ class QuickPage {
     }
     if (alignPasses_ >= 4)
       return;
-    // The pixel row of the drawn 1 DIP rail (slider-look.h), not the slider's
+    // The pixel row of the drawn 1 DIP rail (SliderLook), not the slider's
     // centre: at 125% the centre falls on half pixels.
     auto centre = [&](X::FrameworkElement const &e) {
       X::FrameworkElement rail = Named(e, L"NativeSoundRail");
@@ -5187,19 +5260,7 @@ class QuickPage {
     auto group = Named(view_, L"SlidersGroup");
     return group && Named(group, L"BrightnessPlayer");
   }
-  bool PanelVisible() {
-    if (!host_ || !IsWindowVisible(host_))
-      return false;
-    using Dwm = HRESULT(WINAPI *)(HWND, DWORD, void *, DWORD);
-    static auto get = [] {
-      auto dll = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-      return dll ? reinterpret_cast<Dwm>(GetProcAddress(dll, "DwmGetWindowAttribute")) : nullptr;
-    }();
-    DWORD cloaked = 0;
-    if (get && SUCCEEDED(get(host_, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) && cloaked)
-      return false;
-    return true;
-  }
+  bool PanelVisible() { return WindowShown(host_); }
   void ApplyBright(int value) {
     if (!brightRow_)
       return;
@@ -5335,7 +5396,7 @@ class QuickPage {
   // cell, with the system QA_Volume asset driven by Core Audio and the slider.
   // The mod's icon cannot live inside the native ToggleButton: the shell owns
   // that button and puts its own icon and Mute state back.
-  // The volume row: the mod's own slider (quick-volume.h) and mute button. The
+  // The volume row: the mod's own slider (QuickVolume) and mute button. The
   // native slider stays in the layout, transparent, without hit testing, tab
   // stop or UI Automation presence, so the shell's row keeps its size; the
   // native ToggleButton leaves the row and is put back on unload.
@@ -5543,7 +5604,7 @@ class QuickPage {
         for (auto const &child : row.Children())
           if (auto toggle = child.try_as<P::ToggleButton>())
             SmallButton(toggle);
-      // Hiding Quick Settings on the way to Sound (exit.h).
+      // Hiding Quick Settings on the way to Sound (ExitWithSnapshot).
       if (auto original = l2.Command()) {
         auto weakView = winrt::make_weak(view_);
         Set(l2, P::ButtonBase::CommandProperty(),
@@ -5737,7 +5798,7 @@ class QuickPage {
         return;
       RefreshVolume();
       // Back from Sound: L1Grid visible again; the transparency set for the
-      // hiding picture (exit.h) and the mute glyph state are refreshed.
+      // hiding picture (ExitWithSnapshot) and the mute glyph state are refreshed.
       if (First(l1, 9)) {
         auto weak = winrt::make_weak(l1);
         auto token = l1.RegisterPropertyChangedCallback(
@@ -5891,7 +5952,7 @@ struct Job {
   std::function<void()> action;
 };
 inline std::mutex jobsMutex;
-[[clang::no_destroy]] inline std::map<UINT_PTR, Job *> jobs;
+inline std::map<UINT_PTR, Job *> jobs;
 inline std::atomic<UINT_PTR> nextJob = 0;
 inline LRESULT CALLBACK DispatchHook(int code, WPARAM w, LPARAM l) {
   if (code >= 0) {
@@ -5946,7 +6007,7 @@ inline bool BeginRelease();
 inline bool FinishRelease();
 inline bool Reconnect();
 inline std::mutex runtimesMutex;
-[[clang::no_destroy]] inline std::map<DWORD, Runtime *> runtimes;
+inline std::map<DWORD, Runtime *> runtimes;
 struct Runtime {
   HWND window = nullptr;
   // The UI thread's queue: the unload path reaches the thread through it when
@@ -5955,18 +6016,7 @@ struct Runtime {
   // While the panel is hidden the maintenance timer stops; showing or
   // uncloaking the panel window starts it again (WinEvent hooks, UI thread).
   HWINEVENTHOOK showHook = nullptr, uncloakHook = nullptr;
-  bool Hidden() const {
-    if (!window || !IsWindowVisible(window))
-      return true;
-    using Dwm = HRESULT(WINAPI *)(HWND, DWORD, void *, DWORD);
-    static auto get = [] {
-      auto dll = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-      return dll ? reinterpret_cast<Dwm>(GetProcAddress(dll, "DwmGetWindowAttribute")) : nullptr;
-    }();
-    DWORD cloaked = 0;
-    return get && SUCCEEDED(get(window, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) &&
-           cloaked;
-  }
+  bool Hidden() const { return !WindowShown(window); }
   void Wake() {
     if (timer && !stopping) {
       timer.Interval(std::chrono::milliseconds(200));
@@ -6466,10 +6516,19 @@ struct Runtime {
 };
 // Stopped and reset by StopBridge; never destroyed at thread or process exit.
 [[clang::no_destroy]] inline thread_local std::unique_ptr<Runtime> runtime;
+// Matched by window class, not by the stored handle: the shell can recreate
+// the panel window while the timer is stopped.
 inline void CALLBACK PanelShown(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD,
                                 DWORD) {
-  if (object == OBJID_WINDOW && runtime && window == runtime->window)
-    runtime->Wake();
+  if (object != OBJID_WINDOW || !runtime || !window)
+    return;
+  WCHAR name[96]{};
+  GetClassNameW(window, name, 96);
+  if (_wcsicmp(name, L"ControlCenterWindow"))
+    return;
+  if (runtime->window != window)
+    runtime->window = window;
+  runtime->Wake();
 }
 inline thread_local bool compositionDisabled = false;
 class Watcher : public winrt::implements<Watcher, IVisualTreeServiceCallback2, winrt::non_agile> {
@@ -6729,10 +6788,16 @@ inline void StopBridge() {
     current = std::move(watcher);
     retired = std::move(retiredWatcher);
   }
-  if (current)
+  // Each watcher is released right after it stops, so the Runtime's reference,
+  // dropped on the UI thread below, is the last one to IXamlDiagnostics.
+  if (current) {
     current->Stop();
-  if (retired)
+    current = nullptr;
+  }
+  if (retired) {
     retired->Stop();
+    retired = nullptr;
+  }
   std::vector<std::pair<DWORD, Runtime *>> copy;
   {
     std::lock_guard lock(runtimesMutex);
@@ -6751,6 +6816,8 @@ inline void StopBridge() {
       continue;
     // No usable window: queue the stop on the thread's DispatcherQueue and
     // wait for it, so no Runtime (timer, handlers) outlives the module.
+    // Waits without a timeout, like SendMessageW in Dispatch: the queued stop
+    // must not run after the module is gone.
     bool stopped = false;
     if (auto queue = state->queue)
       if (auto done = CreateEventW(nullptr, TRUE, FALSE, nullptr)) {
@@ -6758,9 +6825,8 @@ inline void StopBridge() {
               stop();
               SetEvent(done);
             }))
-          stopped = WaitForSingleObject(done, 10000) == WAIT_OBJECT_0;
-        if (stopped)
-          CloseHandle(done);
+          stopped = WaitForSingleObject(done, INFINITE) == WAIT_OBJECT_0;
+        CloseHandle(done);
       }
     if (!stopped)
       Wh_Log(L"Runtime on thread %u could not be stopped before unload", thread);
@@ -6876,22 +6942,26 @@ inline bool InitializeHost() {
 
 
 
-#include <winsock2.h>
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
+#include <optional>
 namespace native::tray {
 inline std::atomic<bool> stopping{false}, moduleHooked{false};
 
 // Globals that own threads, COM objects or XAML references are never destroyed
 // by the C++ runtime: Shutdown releases them explicitly, and destructors run at
 // process exit after other modules are gone.
-[[clang::no_destroy]] inline sound::Audio audio;
+[[clang::no_destroy]] inline std::optional<sound::Audio> audio; // emplaced in Initialize, reset in Shutdown
+// Display on / resume: the volume icons are rebuilt (their Lottie picture can
+// come back on its Mute frame), on each taskbar's own thread via the pulse.
+[[clang::no_destroy]] inline std::optional<sound::PowerWake> powerWake;
+inline std::atomic<unsigned> redrawGeneration{0}; // each record redraws once per wake
 inline HINSTANCE moduleInstance = nullptr;
 struct Job {
   std::function<void()> call;
 };
 inline std::mutex jobsMutex, recordsMutex;
-[[clang::no_destroy]] inline std::map<UINT_PTR, std::shared_ptr<Job>> jobs;
+inline std::map<UINT_PTR, std::shared_ptr<Job>> jobs;
 inline std::atomic<UINT_PTR> nextJob{0};
 inline UINT dispatchMessage = RegisterWindowMessageW(L"Windhawk.SoundPanel.ThreadDispatch.1");
 inline LRESULT CALLBACK DispatchHook(int code, WPARAM w, LPARAM l) {
@@ -6993,17 +7063,32 @@ inline X::XamlRoot Root(HWND taskbar) {
   }
   if (!site)
     return nullptr;
+  // Offset of the taskbar element's IUnknown inside TaskbarHost, read from
+  // the start of TaskbarHost::FrameHeight (same patterns as taskbar-multirow).
+  size_t offset = 0;
+#if defined(_M_X64)
+  // sub rsp, imm8 / add rcx, offset
   auto code = static_cast<BYTE const *>(frameHeight);
-  if (!Readable(code, 8) || code[0] != 0x48 || code[1] != 0x83 || code[2] != 0xec ||
-      code[4] != 0x48 || code[5] != 0x83 || code[6] != 0xc1 || code[7] > 0x7f) {
-    Wh_Log(L"Unsupported TaskbarHost layout; native icon retained");
+  if (Readable(code, 8) && code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xec &&
+      code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xc1 && code[7] <= 0x7f)
+    offset = code[7];
+#elif defined(_M_ARM64)
+  // pacibsp / stp fp, lr, [sp, #-0x10]! / mov fp, sp / ldr x8, [x0, #offset]!
+  auto code = static_cast<DWORD const *>(frameHeight);
+  if (Readable(code, 4 * sizeof(DWORD)) && code[0] == 0xD503237F &&
+      (code[1] & 0xFFC07FFF) == 0xA9807BFD && code[2] == 0x910003FD &&
+      (code[3] & 0xFFF00FE0) == 0xF8400C00)
+    offset = (code[3] >> 12) & 0xFF;
+#endif
+  if (!offset) {
+    Wh_Log(L"Unsupported TaskbarHost layout; existing icons are styled when recreated");
     return nullptr;
   }
   void *shared[2]{};
   getHost(site, shared);
   X::XamlRoot root{nullptr};
   if (shared[0]) {
-    auto address = reinterpret_cast<IUnknown **>(static_cast<BYTE *>(shared[0]) + code[7]);
+    auto address = reinterpret_cast<IUnknown **>(static_cast<BYTE *>(shared[0]) + offset);
     if (Readable(address, sizeof(void *)) && *address)
       try {
         X::FrameworkElement value{nullptr};
@@ -7027,6 +7112,7 @@ struct Record {
   winrt::event_token loaded{}, tick{};
   Journal glyphJournal;
   std::shared_ptr<AnimatedVolume> animated;
+  unsigned redrawn = 0;
   std::vector<std::function<void()>> glyphRevoke;
   int displayed = -1, hiddenCount = -1;
   unsigned attempts = 0;
@@ -7085,7 +7171,14 @@ inline int NetworkLeaf(X::DependencyObject const &node) {
   return 0;
 }
 // A wired hardware adapter with its medium connected (not Hyper-V/WSL/VPN virtual ones).
-inline bool WiredConnected() {
+// Cached between network changes: NotifyIpInterfaceChange clears the cache,
+// so the interface table is read only after a change, not on every tick.
+inline std::atomic<int> wiredCache{-1};
+inline HANDLE ipNotification = nullptr;
+inline void CALLBACK IpInterfaceChanged(PVOID, PMIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE) {
+  wiredCache = -1;
+}
+inline bool ReadWiredConnected() {
   PMIB_IF_TABLE2 table = nullptr;
   if (GetIfTable2(&table) != NO_ERROR || !table)
     return false;
@@ -7099,6 +7192,14 @@ inline bool WiredConnected() {
   }
   FreeMibTable(table);
   return found;
+}
+inline bool WiredConnected() {
+  int cached = wiredCache;
+  if (cached >= 0 && ipNotification)
+    return cached == 1;
+  bool value = ReadWiredConnected();
+  wiredCache = value ? 1 : 0;
+  return value;
 }
 inline M::Brush LeafBrush(X::FrameworkElement const &leaf) {
   if (auto text = leaf.try_as<C::TextBlock>())
@@ -7365,7 +7466,9 @@ inline void Refresh(std::shared_ptr<Record> const &record) {
     RefreshNetwork(record, icon);
     return;
   }
-  auto state = audio.Get();
+  if (!audio)
+    return;
+  auto state = audio->Get();
   auto native = record->native.get();
   auto parent = record->parent.get();
   if (!native || !parent)
@@ -7385,7 +7488,7 @@ inline void Refresh(std::shared_ptr<Record> const &record) {
     // Construct and attach the real system AnimatedIcon before suppressing
     // any native leaf. Failure leaves the original taskbar icon visible.
     auto animated = std::make_shared<AnimatedVolume>();
-    auto replacement = animated->Element();
+    auto replacement = animated->Isolated();
     replacement.Name(L"NativeSoundTrayGlyph");
     if (auto grid = parent.try_as<C::Grid>()) {
       C::Grid::SetColumnSpan(replacement, std::max(1u, grid.ColumnDefinitions().Size()));
@@ -7454,7 +7557,7 @@ inline void Refresh(std::shared_ptr<Record> const &record) {
   }
 }
 inline std::mutex pulsesMutex;
-[[clang::no_destroy]] inline std::map<HWND, std::shared_ptr<VolumePulse>> pulses;
+inline std::map<HWND, std::shared_ptr<VolumePulse>> pulses;
 inline LRESULT CALLBACK VolumeProc(HWND window, UINT message, WPARAM w, LPARAM l, DWORD_PTR) {
   if (message == volumePulseMessage) {
     {
@@ -7470,8 +7573,14 @@ inline LRESULT CALLBACK VolumeProc(HWND window, UINT message, WPARAM w, LPARAM l
           if (record->taskbar == window && record->attached)
             local.push_back(record);
       }
+      unsigned generation = redrawGeneration;
       for (auto const &record : local)
         try {
+          if (record->redrawn != generation) {
+            record->redrawn = generation;
+            if (record->animated)
+              record->animated->Redraw();
+          }
           Refresh(record);
         } catch (...) {
           Wh_Log(L"TrayAnimationError %08X", winrt::to_hresult());
@@ -7697,6 +7806,15 @@ inline HMODULE WINAPI Loaded(LPCWSTR path, HANDLE file, DWORD flags) {
 inline bool Initialize(HINSTANCE instance) {
   moduleInstance = instance;
   stopping = false;
+  audio.emplace();
+  powerWake.emplace([] {
+    ++redrawGeneration;
+    VolumeChanged();
+  });
+  wiredCache = -1;
+  if (NotifyIpInterfaceChange(AF_UNSPEC, IpInterfaceChanged, nullptr, FALSE, &ipNotification) !=
+      NO_ERROR)
+    ipNotification = nullptr;
   auto taskbar = GetModuleHandleW(L"Taskbar.dll");
   if (!taskbar)
     taskbar = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -7717,14 +7835,14 @@ inline bool Initialize(HINSTANCE instance) {
     moduleHooked = true;
     auto result = HookTray(module);
     if (result)
-      audio.Start(VolumeChanged);
+      audio->Start(VolumeChanged);
     return result;
   }
   auto load =
       reinterpret_cast<Load>(GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"));
   auto result = WindhawkUtils::SetFunctionHook(load, Loaded, &originalLoad);
   if (result)
-    audio.Start(VolumeChanged);
+    audio->Start(VolumeChanged);
   return result;
 }
 inline void AttachExisting() {
@@ -7746,12 +7864,18 @@ inline void AttachExisting() {
 }
 inline void Shutdown() {
   stopping = true;
+  powerWake.reset();
+  if (ipNotification) {
+    CancelMibChangeNotify2(ipNotification); // waits for a running callback
+    ipNotification = nullptr;
+  }
   {
     std::lock_guard lock(pulsesMutex);
     for (auto const &[window, pulse] : pulses)
       pulse->active = false;
   }
-  audio.Stop();
+  if (audio)
+    audio->Stop();
   std::vector<HWND> windows = Taskbars();
   {
     std::lock_guard lock(recordsMutex);
@@ -7794,6 +7918,13 @@ inline void Shutdown() {
     std::lock_guard lock(pulsesMutex);
     pulses.clear();
   }
+  // The no_destroy globals give their contents back here, not at process exit.
+  {
+    std::lock_guard lock(recordsMutex);
+    records.clear();
+    records.shrink_to_fit();
+  }
+  audio.reset();
 }
 } // namespace native::tray
 
@@ -7801,8 +7932,7 @@ namespace native {
 inline bool explorer = false;
 inline void Settings() {
   auto setting = WindhawkUtils::StringSetting::make(L"hiddenApps");
-  auto text = setting.get();
-  hidden = sound::ParseHidden(text ? text : L"");
+  hidden = sound::ParseHidden(setting.get());
 }
 } // namespace native
 BOOL Wh_ModInit() {
