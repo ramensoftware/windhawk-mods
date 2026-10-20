@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -luuid -lwlanapi -lruntimeobject
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -luuid -lwlanapi -lruntimeobject -lversion
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // ==/WindhawkMod==
@@ -17,10 +17,12 @@
 
 This mod restores the Windows 10 network and battery flyouts (network icon with its menu, battery
 icon with the flyout, volume icon) on Windows 11 24H2. It does not patch the Windows 11 shell: it
-runs inside the *private* Windows 10 shell, so it **requires**
-[Windows 10 taskbar on Win11 24H2](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) (by
-Anixx) to be installed and running. Outside the private shell the mod loads and does nothing: no
-hook is installed, nothing is written, so the Windows 11 shell is never touched.
+requires [Windows 10 taskbar on Win11 24H2](https://windhawk.net/mods/win10-taskbar-on-win11-24h2)
+(by Anixx) to be installed and running. Outside the private shell, `explorer.exe` installs no hooks
+and writes nothing; in `ShellExperienceHost.exe`, lightweight module/string-reference hooks watch
+for flyout loads and activate the template and quick-action patches *only* while `Shell_TrayWnd`
+belongs to the private Windows 10 shell (doing nothing when the native Windows 11 shell owns the
+taskbar or if the taskbar owner cannot be determined).
 
 What it does, inside the private shell:
 
@@ -62,10 +64,16 @@ Not included on purpose: the Action Center button and its animation are left to 
   crash cannot leave registry values changed by this menu. The optional tray reset
   (`ForceNetworkTrayResetTraySettings`) is a separate, deliberate, one-time deletion of shared
   shell state after a complete backup; it is not undone automatically - see its setting.
-- **In `ShellExperienceHost.exe`.** The template-set change is reverted when the mod is disabled.
-  The module that was patched is also *pinned* (`GET_MODULE_HANDLE_EX_FLAG_PIN`), and there is no
-  documented way to un-pin a module: `Windows.UI.QuickActions.dll` therefore stays loaded until
-  `ShellExperienceHost.exe` ends. Nothing is written to disk and no other process is touched.
+- **In `ShellExperienceHost.exe`.** Both changes applied while the private Windows 10 shell owns
+  `Shell_TrayWnd` are reverted when the mod is disabled (or if the user switches back to the
+  Windows 11 shell): the patched bytes of `Windows.UI.QuickActions.dll` are restored, and every
+  XAML resource entry modified for `NetworkUX.dll`'s quick-action tiles (scoped to the flyout root
+  element where present, preserving existing non-size style setters, and saved with its prior state
+  before writing) is restored on the UI thread with a bounded `1.5 s` wait. `Windows.UI.QuickActions.dll`
+  is *pinned* (`GET_MODULE_HANDLE_EX_FLAG_PIN`) once patched — and if the UI thread ever fails to
+  answer the unload restore within the timeout, the mod also pins itself so queued `CoreDispatcher`
+  cleanup cannot touch unmapped code — so pinned modules stay loaded until `ShellExperienceHost.exe`
+  ends. Nothing is written to disk and no other process is touched.
 - **Architecture.** `@architecture x86-64`: everything this mod does - the byte patterns of the
   tray modules, the QuickActions pattern, the import-table entry of `pnidui` - is written for x64.
   Note that on ARM64 Windhawk still loads an `x86-64` mod into `ShellExperienceHost.exe`
@@ -197,21 +205,21 @@ Not included on purpose: the Action Center button and its animation are left to 
 #include <string.h>
 #include <limits.h>
 
-// Only C++/WinRT's base header is used, and only for winrt::com_ptr and
-// winrt::hresult_error - the two types the NLM lookup and the class-factory
-// resolution are written with. No WinRT component header is included: MinGW's
-// toolchain ships winrt/base.h, while the component headers (for example
-// winrt/Windows.UI.Xaml.h) are not there and broke the build.
+// C++/WinRT headers used for COM pointers/errors and for reading/restoring XAML resource
+// dictionary entries on the NetworkUX UI thread in ShellExperienceHost.exe. Undefine
+// Win32's GetCurrentTime macro beforehand so Windows.UI.Xaml headers compile cleanly.
 #ifdef GetCurrentTime
 #undef GetCurrentTime
 #endif
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -7615,6 +7623,148 @@ static bool IsPrivateExplorerProcess() {
     return IsLegacyShellProcess();
 }
 
+static bool QueryProcessNtImagePath(DWORD pid, std::wstring& out) noexcept {
+    out.clear();
+    if (!pid) return false;
+
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return false;
+    using NtQuerySystemInformation_t =
+        LONG(NTAPI*)(ULONG SystemInformationClass, PVOID SystemInformation,
+                     ULONG SystemInformationLength, PULONG ReturnLength);
+    auto ntQuerySystemInformation = reinterpret_cast<NtQuerySystemInformation_t>(
+        GetProcAddress(ntdll, "NtQuerySystemInformation"));
+    if (!ntQuerySystemInformation) return false;
+
+    struct SystemProcessIdInfo {
+        PVOID processId;
+        UNICODE_STRING imageName;
+    };
+
+    wchar_t buffer[1024] = {};
+    SystemProcessIdInfo info = {};
+    info.processId = reinterpret_cast<PVOID>(static_cast<ULONG_PTR>(pid));
+    info.imageName.Length = 0;
+    info.imageName.MaximumLength = static_cast<USHORT>(sizeof(buffer) - sizeof(wchar_t));
+    info.imageName.Buffer = buffer;
+
+    // SystemProcessIdInformation (88) queries EPROCESS image path directly in kernel mode
+    // without opening a process handle, so it succeeds even inside AppContainer hosts such
+    // as ShellExperienceHost.exe where OpenProcess returns ERROR_ACCESS_DENIED.
+    static constexpr ULONG kSystemProcessIdInformation = 88;
+    const LONG status =
+        ntQuerySystemInformation(kSystemProcessIdInformation, &info, sizeof(info), nullptr);
+    if (status < 0 || !info.imageName.Buffer || info.imageName.Length < sizeof(wchar_t)) {
+        return false;
+    }
+
+    out.assign(info.imageName.Buffer, info.imageName.Length / sizeof(wchar_t));
+    return !out.empty();
+}
+
+static bool IsPre24H2FileOn24H2System(const wchar_t* filePath) noexcept {
+    if (!filePath || !filePath[0]) return false;
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return false;
+    using RtlGetVersion_t = LONG(NTAPI*)(PRTL_OSVERSIONINFOW);
+    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(GetProcAddress(ntdll, "RtlGetVersion"));
+    if (!rtlGetVersion) return false;
+
+    RTL_OSVERSIONINFOW osvi = {};
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+    if (rtlGetVersion(&osvi) != 0 || osvi.dwBuildNumber < 26000) return false;
+
+    DWORD handle = 0;
+    const DWORD infoSize = GetFileVersionInfoSizeW(filePath, &handle);
+    if (!infoSize) return false;
+    std::vector<BYTE> verBuf(infoSize);
+    if (!GetFileVersionInfoW(filePath, 0, infoSize, verBuf.data())) return false;
+
+    VS_FIXEDFILEINFO* ffi = nullptr;
+    UINT ffiLen = 0;
+    if (!VerQueryValueW(verBuf.data(), L"\\", reinterpret_cast<LPVOID*>(&ffi), &ffiLen) ||
+        !ffi || ffiLen < sizeof(VS_FIXEDFILEINFO)) {
+        return false;
+    }
+    const DWORD major = HIWORD(ffi->dwFileVersionMS);
+    const DWORD build = HIWORD(ffi->dwFileVersionLS);
+    return major == 10 && build > 0 && build < 26000;
+}
+
+// Determines whether the currently active taskbar (Shell_TrayWnd) belongs to a private
+// Windows 10 shell rather than the native Windows 11 <Windows>\explorer.exe. Returns false
+// whenever Shell_TrayWnd does not exist or its owning image path cannot be determined, so
+// ShellExperienceHost.exe never touches Windows 11's own flyouts or Quick Settings.
+static bool IsPrivateShellOwningTaskbar() noexcept {
+    HWND trayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!trayWnd) return false;
+
+    DWORD trayPid = 0;
+    if (!GetWindowThreadProcessId(trayWnd, &trayPid) || !trayPid) return false;
+
+    // 1. Try Win32 path query first when process DACL allows PROCESS_QUERY_LIMITED_INFORMATION.
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, trayPid);
+    if (proc) {
+        wchar_t trayPath[MAX_PATH] = {};
+        DWORD cch = _countof(trayPath);
+        const BOOL ok = QueryFullProcessImageNameW(proc, 0, trayPath, &cch);
+        CloseHandle(proc);
+        if (ok && trayPath[0]) {
+            if (!IsProcessImageName(trayPath, L"explorer.exe")) return false;
+
+            wchar_t windowsDir[MAX_PATH] = {};
+            DWORD dirChars = GetWindowsDirectoryW(windowsDir, _countof(windowsDir));
+            while (dirChars > 0 && windowsDir[dirChars - 1] == L'\\') {
+                windowsDir[--dirChars] = L'\0';
+            }
+            static constexpr wchar_t kTail[] = L"\\explorer.exe";
+            if (dirChars > 0 && dirChars < _countof(windowsDir)) {
+                const bool isSystemShell =
+                    wcslen(trayPath) == dirChars + (_countof(kTail) - 1) &&
+                    _wcsnicmp(trayPath, windowsDir, dirChars) == 0 &&
+                    _wcsicmp(trayPath + dirChars, kTail) == 0;
+                if (!isSystemShell) return true;
+                return IsPre24H2FileOn24H2System(trayPath);
+            }
+            return false;
+        }
+    }
+
+    // 2. Inside AppContainer (ShellExperienceHost.exe), OpenProcess on desktop explorer.exe
+    // returns ERROR_ACCESS_DENIED. Query NT kernel image paths via SystemProcessIdInformation:
+    // ShellExperienceHost.exe itself lives under <NtWindowsDir>\SystemApps\..., giving the
+    // exact NT device path of <Windows> without any drive-letter assumptions.
+    std::wstring trayNtPath;
+    std::wstring selfNtPath;
+    if (!QueryProcessNtImagePath(trayPid, trayNtPath) ||
+        !QueryProcessNtImagePath(GetCurrentProcessId(), selfNtPath)) {
+        return false;
+    }
+
+    static constexpr wchar_t kExplorerTail[] = L"\\explorer.exe";
+    static constexpr size_t kExplorerTailLen = _countof(kExplorerTail) - 1;
+    if (trayNtPath.size() <= kExplorerTailLen ||
+        _wcsicmp(trayNtPath.c_str() + trayNtPath.size() - kExplorerTailLen, kExplorerTail) != 0) {
+        return false;
+    }
+
+    static constexpr wchar_t kSystemAppsMarker[] = L"\\SystemApps\\";
+    static constexpr size_t kSystemAppsMarkerLen = _countof(kSystemAppsMarker) - 1;
+    for (size_t pos = 0; pos + kSystemAppsMarkerLen <= selfNtPath.size(); ++pos) {
+        if (_wcsnicmp(selfNtPath.c_str() + pos, kSystemAppsMarker, kSystemAppsMarkerLen) == 0) {
+            std::wstring ntSystemShell = selfNtPath.substr(0, pos);
+            ntSystemShell += kExplorerTail;
+            if (trayNtPath.size() == ntSystemShell.size() &&
+                _wcsicmp(trayNtPath.c_str(), ntSystemShell.c_str()) == 0) {
+                return false;
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
 }
 
 using namespace RestorerTaskbar;
@@ -8316,6 +8466,11 @@ static bool SiteLooksPatched(const unsigned char* target, const unsigned char* s
 static void PatchQuickActionsTemplates(HMODULE module) noexcept {
     try {
         if (!module) return;
+        if (!IsPrivateShellOwningTaskbar()) {
+            Wh_Log(L"[flyout-host] private Windows 10 shell does not own Shell_TrayWnd: "
+                   L"Windows.UI.QuickActions.dll left untouched");
+            return;
+        }
 
         // (C): the early "if g_patched, return" is gone: that flag says "I did it", not "the
         // module in memory is rewritten", and after a reload of the mod the flags are new
@@ -8459,8 +8614,27 @@ static void Uninstall() noexcept {
     }
 }
 
+static void PatchQuickActionsTemplates(HMODULE module) noexcept;
+static void Uninstall() noexcept;
+
 static bool NameIsQuickActions(const wchar_t* text, size_t length) noexcept {
     return NameIsModuleNamed(text, length, L"Windows.UI.QuickActions.dll");
+}
+
+static void NotifyNetworkUxModule(HMODULE module) noexcept;
+static void RevertNetworkUxResources() noexcept;
+
+static void SyncHostPatchesWithActiveShell() noexcept {
+    if (IsPrivateShellOwningTaskbar()) {
+        if (!g_patched.load(std::memory_order_acquire)) {
+            if (HMODULE qa = GetModuleHandleW(L"Windows.UI.QuickActions.dll")) {
+                PatchQuickActionsTemplates(qa);
+            }
+        }
+    } else if (g_patched.load(std::memory_order_acquire)) {
+        RevertNetworkUxResources();
+        Uninstall();
+    }
 }
 
 static void OnModuleLoaded(HMODULE module, const wchar_t* text, size_t length) noexcept {
@@ -8468,18 +8642,21 @@ static void OnModuleLoaded(HMODULE module, const wchar_t* text, size_t length) n
         if (!module) return;
         if (NameIsQuickActions(text, length)) {
             if (g_logs.fetch_add(1) < 8)
-                Wh_Log(L"[flyout-host] Windows.UI.QuickActions.dll is here (0x%p): the template "
-                       L"set is changed before the shell builds anything with it",
+                Wh_Log(L"[flyout-host] Windows.UI.QuickActions.dll is here (0x%p): checking active "
+                       L"shell before patching template set",
                        (void*)module);
             PatchQuickActionsTemplates(module);
             return;
         }
         if (NameIsModuleNamed(text, length, L"NetworkUX.dll")) {
+            NotifyNetworkUxModule(module);
+            SyncHostPatchesWithActiveShell();
             if (g_logs.fetch_add(1) < 8)
                 Wh_Log(L"[flyout-host] NetworkUX.dll is loaded in this host (0x%p)",
                        (void*)module);
             return;
         }
+        SyncHostPatchesWithActiveShell();
     } catch (...) {
     }
 }
@@ -8524,24 +8701,56 @@ static void Install() noexcept {
 
 }  // namespace FlyoutHostPatch
 
+namespace NetworkUxQuickActions {
+static void RememberNetworkUxRange(HMODULE module) noexcept;
+static void Uninstall() noexcept;
+}
+
+namespace FlyoutHostPatchDetail {
+inline void NotifyNetworkUxLoaded(HMODULE module) noexcept {
+    NetworkUxQuickActions::RememberNetworkUxRange(module);
+}
+inline void RevertNetworkUx() noexcept {
+    NetworkUxQuickActions::Uninstall();
+}
+}  // namespace FlyoutHostPatchDetail
+
+namespace FlyoutHostPatch {
+static void NotifyNetworkUxModule(HMODULE module) noexcept {
+    FlyoutHostPatchDetail::NotifyNetworkUxLoaded(module);
+}
+static void RevertNetworkUxResources() noexcept {
+    FlyoutHostPatchDetail::RevertNetworkUx();
+}
+}  // namespace FlyoutHostPatch
+
 // ===========================================================================
 // Windows 10 Quick-Action tiles in the Network flyout (NetworkUX.dll)
 //
 // Once FlyoutHostPatch swaps Windows.UI.QuickActions.dll onto the Windows 10
 // QuickActionTemplates dictionary, "ToggleButtonWinuiFluentTemplate" no longer exists in
 // that dictionary — only "QuickToggleWinuiFluentTemplate" does. Without redirecting that
-// template lookup and updating the page resource dictionary metrics (90x64 tile size and
+// template lookup and updating the quick-action tile metrics (90x64 tile size and
 // 12,0,0,12 panel margin, matching ExplorerPatcher's HandleLoadedNetworkUX), XAML resolves
 // a null ControlTemplate and renders the three bottom tiles (Wi-Fi, Airplane mode, Mobile
 // hotspot) as bare non-interactive text labels.
 //
-// Instead of patching NetworkUX.dll's IAT or pinning NetworkUX.dll in memory, we hook
-// combase.dll!WindowsCreateStringReference via Wh_SetFunctionHook inside Wh_ModInit():
-// Windhawk applies and removes the hook cleanly with zero module pinning.
+// Design constraints:
+//   1. Caller-scoped fast path: ApiSet/combase WindowsCreateStringReference hooks compare
+//      the caller's return address against NetworkUX.dll's image range first and immediately
+//      tail-jump to the original function for every other caller in ShellExperienceHost.exe.
+//   2. One-shot UI-thread resource setup: XAML dictionary work runs only once, strictly from
+//      the "ToggleButtonWinuiFluentTemplate" remap branch on NetworkUX's own UI thread.
+//   3. Scoped & fully reversible: theme corner/focus overrides are placed in the flyout root
+//      element's own Resources() when available, existing non-size Setters on
+//      QuickActionControlStyle are preserved, every modified ResourceDictionary entry is
+//      saved before writing, and Wh_ModBeforeUninit() dispatches a full restore onto the UI
+//      thread with a bounded wait.
 // ===========================================================================
 namespace NetworkUxQuickActions {
 
 namespace wux = winrt::Windows::UI::Xaml;
+namespace wuc = winrt::Windows::UI::Core;
 
 using WindowsCreateStringReference_t =
     HRESULT(WINAPI*)(PCWSTR sourceString, UINT32 length, void* hstringHeader, void** string);
@@ -8551,10 +8760,43 @@ static WindowsCreateStringReference_t g_combaseCreateStringRefOriginal = nullptr
 static constexpr wchar_t kWin11ButtonTemplate[] = L"ToggleButtonWinuiFluentTemplate";
 static constexpr wchar_t kWin10ButtonTemplate[] = L"QuickToggleWinuiFluentTemplate";
 
-static std::atomic<void*> g_patchedValuesDict{nullptr};
-static std::atomic<void*> g_patchedStyleDict{nullptr};
+static std::atomic<ULONG_PTR> g_networkUxBegin{~ULONG_PTR{0}};
+static std::atomic<ULONG_PTR> g_networkUxEnd{0};
+static std::atomic<bool> g_metricsAttempted{false};
 static std::atomic<int> g_logs{0};
-static std::atomic<int> g_probeLogs{0};
+static std::atomic<bool> g_selfPinnedOnTimeout{false};
+
+struct SavedResourceEntry {
+    wux::ResourceDictionary dict{nullptr};
+    winrt::Windows::Foundation::IInspectable key{nullptr};
+    bool existed = false;
+    winrt::Windows::Foundation::IInspectable oldValue{nullptr};
+};
+
+static std::mutex g_restoreMutex;
+static std::vector<SavedResourceEntry> g_savedEntries;
+static wuc::CoreDispatcher g_uiDispatcher{nullptr};
+static DWORD g_uiThreadId = 0;
+
+static void RememberNetworkUxRange(HMODULE module) noexcept {
+    if (!module) return;
+    auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
+    auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+        reinterpret_cast<const BYTE*>(module) + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return;
+
+    const auto begin = reinterpret_cast<ULONG_PTR>(module);
+    const auto end = begin + static_cast<ULONG_PTR>(nt->OptionalHeader.SizeOfImage);
+    const ULONG_PTR prevBegin = g_networkUxBegin.load(std::memory_order_acquire);
+    // Close the range first so concurrent readers never observe an uninitialized lower bound.
+    g_networkUxEnd.store(0, std::memory_order_release);
+    g_networkUxBegin.store(begin, std::memory_order_release);
+    g_networkUxEnd.store(end, std::memory_order_release);
+    if (prevBegin != ~ULONG_PTR{0} && prevBegin != begin) {
+        g_metricsAttempted.store(false, std::memory_order_release);
+    }
+}
 
 static bool ValueIsOfType(winrt::Windows::Foundation::IInspectable const& value,
                           const wchar_t* needle) noexcept {
@@ -8590,18 +8832,23 @@ static wux::ResourceDictionary FindDictionaryContainingKey(wux::ResourceDictiona
     return nullptr;
 }
 
-static bool PutValue(wux::ResourceDictionary const& resources, const wchar_t* key,
-                     winrt::Windows::Foundation::IInspectable const& value,
-                     const wchar_t* typeNeedle, bool insertIfAbsent) noexcept {
+static bool WriteAndRecordValue(std::vector<SavedResourceEntry>& saved,
+                                wux::ResourceDictionary const& resources, const wchar_t* key,
+                                winrt::Windows::Foundation::IInspectable const& value,
+                                const wchar_t* typeNeedle, bool insertIfAbsent) noexcept {
     try {
         auto boxedKey = winrt::box_value(winrt::hstring(key));
-        if (resources.HasKey(boxedKey)) {
-            if (!ValueIsOfType(resources.Lookup(boxedKey), typeNeedle)) {
+        const bool existed = resources.HasKey(boxedKey);
+        winrt::Windows::Foundation::IInspectable oldVal{nullptr};
+        if (existed) {
+            oldVal = resources.Lookup(boxedKey);
+            if (!ValueIsOfType(oldVal, typeNeedle)) {
                 return false;
             }
         } else if (!insertIfAbsent) {
             return false;
         }
+        saved.push_back(SavedResourceEntry{resources, boxedKey, existed, oldVal});
         resources.Insert(boxedKey, value);
         return true;
     } catch (...) {
@@ -8609,165 +8856,292 @@ static bool PutValue(wux::ResourceDictionary const& resources, const wchar_t* ke
     }
 }
 
-static bool PutControlStyleMetrics(wux::ResourceDictionary const& resources) noexcept {
+static bool WriteAndRecordControlStyle(std::vector<SavedResourceEntry>& saved,
+                                       wux::ResourceDictionary const& resources) noexcept {
     try {
         auto boxedKey = winrt::box_value(winrt::hstring(L"QuickActionControlStyle"));
-        auto style = resources.Lookup(boxedKey).try_as<wux::Style>();
+        if (!resources.HasKey(boxedKey)) return false;
+        auto rawOriginal = resources.Lookup(boxedKey);
+        auto style = rawOriginal.try_as<wux::Style>();
         if (!style) return false;
 
-        wux::Style targetStyle = style;
-        const bool wasSealed = style.IsSealed();
-        if (wasSealed) {
-            targetStyle = wux::Style(style.TargetType());
-        } else {
-            targetStyle.Setters().Clear();
+        wux::Style targetStyle(style.TargetType());
+        if (auto basedOn = style.BasedOn()) {
+            targetStyle.BasedOn(basedOn);
         }
+
+        const auto marginProp = wux::FrameworkElement::MarginProperty();
+        const auto widthProp = wux::FrameworkElement::WidthProperty();
+        const auto heightProp = wux::FrameworkElement::HeightProperty();
+        void* const marginAbi = winrt::get_abi(marginProp);
+        void* const widthAbi = winrt::get_abi(widthProp);
+        void* const heightAbi = winrt::get_abi(heightProp);
 
         auto setters = targetStyle.Setters();
-        setters.Append(wux::Setter(wux::FrameworkElement::MarginProperty(),
-                                   winrt::box_value(wux::Thickness{4.0, 0.0, 0.0, 4.0})));
-        setters.Append(wux::Setter(wux::FrameworkElement::WidthProperty(),
-                                   winrt::box_value(90.0)));
-        setters.Append(wux::Setter(wux::FrameworkElement::HeightProperty(),
-                                   winrt::box_value(64.0)));
-
-        if (wasSealed) {
-            resources.Insert(boxedKey, targetStyle);
+        for (auto const& item : style.Setters()) {
+            if (auto existing = item.try_as<wux::Setter>()) {
+                auto prop = existing.Property();
+                void* const propAbi = winrt::get_abi(prop);
+                if (propAbi == marginAbi || propAbi == widthAbi || propAbi == heightAbi) {
+                    continue;
+                }
+                setters.Append(wux::Setter(prop, existing.Value()));
+            }
         }
 
-        Wh_Log(L"[networkux] Windows 10 quick-action button metrics applied "
-               L"(90x64, margin 4,0,0,4, wasSealed=%d)",
-               wasSealed ? 1 : 0);
+        setters.Append(wux::Setter(marginProp,
+                                   winrt::box_value(wux::Thickness{4.0, 0.0, 0.0, 4.0})));
+        setters.Append(wux::Setter(widthProp, winrt::box_value(90.0)));
+        setters.Append(wux::Setter(heightProp, winrt::box_value(64.0)));
+
+        saved.push_back(SavedResourceEntry{resources, boxedKey, true, rawOriginal});
+        resources.Insert(boxedKey, targetStyle);
+
+        Wh_Log(L"[networkux] Windows 10 quick-action button metrics applied (90x64, margin 4,0,0,4)");
         return true;
     } catch (...) {
         return false;
     }
 }
 
-static void TryApplyDictionaryMetrics() noexcept {
-    if (!GetModuleHandleW(L"NetworkUX.dll")) return;
+static void RestoreEntriesOnUiThread(std::vector<SavedResourceEntry> const& entries) noexcept {
+    for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+        try {
+            if (!it->dict || !it->key) continue;
+            if (it->existed) {
+                it->dict.Insert(it->key, it->oldValue);
+            } else if (it->dict.HasKey(it->key)) {
+                it->dict.Remove(it->key);
+            }
+        } catch (...) {
+        }
+    }
+}
+
+static void ApplyDictionaryMetricsOnce() noexcept {
+    static thread_local bool s_applying = false;
+    if (s_applying) return;
+    struct Guard {
+        bool& flag;
+        explicit Guard(bool& f) noexcept : flag(f) { flag = true; }
+        ~Guard() noexcept { flag = false; }
+    } guard(s_applying);
 
     try {
         auto app = wux::Application::Current();
         if (!app) return;
         auto rootResources = app.Resources();
         if (!rootResources) return;
-        void* rootAbi = winrt::get_abi(rootResources);
 
-        if (g_patchedValuesDict.load(std::memory_order_acquire) != rootAbi) {
-            if (auto dict = FindDictionaryContainingKey(rootResources, L"QuickActionPanelMargin")) {
-                int written = 0;
-                if (PutValue(dict, L"QuickActionPanelMargin",
-                             winrt::box_value(wux::Thickness{12.0, 0.0, 0.0, 12.0}),
-                             L"Thickness", false))
-                    ++written;
-                if (PutValue(dict, L"ControlCornerRadius",
-                             winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
-                             L"CornerRadius", true))
-                    ++written;
-                if (PutValue(dict, L"OverlayCornerRadius",
-                             winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
-                             L"CornerRadius", true))
-                    ++written;
-                if (PutValue(dict, L"FocusVisualPrimaryThickness",
-                             winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
-                             L"Thickness", false))
-                    ++written;
-                if (PutValue(dict, L"FocusVisualSecondaryThickness",
-                             winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
-                             L"Thickness", false))
-                    ++written;
-                g_patchedValuesDict.store(rootAbi, std::memory_order_release);
-                Wh_Log(L"[networkux] applied %d Windows 10 resource dictionary value(s)", written);
+        auto window = wux::Window::Current();
+        wuc::CoreDispatcher dispatcher = window ? window.Dispatcher() : nullptr;
+        wux::FrameworkElement rootElement =
+            window ? window.Content().try_as<wux::FrameworkElement>() : nullptr;
+        wux::ResourceDictionary flyoutResources =
+            rootElement ? rootElement.Resources() : nullptr;
+
+        std::vector<SavedResourceEntry> saved;
+        int written = 0;
+
+        if (auto panelDict = FindDictionaryContainingKey(rootResources, L"QuickActionPanelMargin")) {
+            if (WriteAndRecordValue(saved, panelDict, L"QuickActionPanelMargin",
+                                    winrt::box_value(wux::Thickness{12.0, 0.0, 0.0, 12.0}),
+                                    L"Thickness", false)) {
+                ++written;
+            }
+            // Prefer the flyout root element's own Resources() for corner/focus keys so other
+            // surfaces hosted by ShellExperienceHost.exe never resolve them; fall back to
+            // NetworkUX's dictionary (and still record old values for full restore on unload)
+            // if Window::Current().Content() has not been attached yet.
+            wux::ResourceDictionary visualTarget = flyoutResources ? flyoutResources : panelDict;
+            const bool insertFocusKeys = (flyoutResources != nullptr);
+            if (WriteAndRecordValue(saved, visualTarget, L"ControlCornerRadius",
+                                    winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
+                                    L"CornerRadius", true)) {
+                ++written;
+            }
+            if (WriteAndRecordValue(saved, visualTarget, L"OverlayCornerRadius",
+                                    winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
+                                    L"CornerRadius", true)) {
+                ++written;
+            }
+            if (WriteAndRecordValue(saved, visualTarget, L"FocusVisualPrimaryThickness",
+                                    winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
+                                    L"Thickness", insertFocusKeys)) {
+                ++written;
+            }
+            if (WriteAndRecordValue(saved, visualTarget, L"FocusVisualSecondaryThickness",
+                                    winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
+                                    L"Thickness", insertFocusKeys)) {
+                ++written;
             }
         }
 
-        if (g_patchedStyleDict.load(std::memory_order_acquire) != rootAbi) {
-            if (auto dict = FindDictionaryContainingKey(rootResources, L"QuickActionControlStyle")) {
-                if (PutControlStyleMetrics(dict)) {
-                    g_patchedStyleDict.store(rootAbi, std::memory_order_release);
-                }
-            }
+        if (auto styleDict = FindDictionaryContainingKey(rootResources, L"QuickActionControlStyle")) {
+            WriteAndRecordControlStyle(saved, styleDict);
+        }
+
+        if (!saved.empty()) {
+            std::lock_guard<std::mutex> lock(g_restoreMutex);
+            g_savedEntries = std::move(saved);
+            g_uiDispatcher = dispatcher;
+            g_uiThreadId = GetCurrentThreadId();
+            Wh_Log(L"[networkux] applied %d Windows 10 resource dictionary value(s)", written);
         }
     } catch (...) {
     }
 }
 
-static bool ContainsWideSubstring(PCWSTR hay, UINT32 len, const wchar_t* needle) noexcept {
-    if (!hay || !needle) return false;
-    const size_t nlen = wcslen(needle);
-    if (nlen == 0 || len < nlen) return false;
-    for (size_t i = 0; i + nlen <= len; ++i) {
-        if (_wcsnicmp(hay + i, needle, nlen) == 0) return true;
-    }
-    return false;
-}
-
-static HRESULT HandleCreateStringReference(WindowsCreateStringReference_t original,
-                                           PCWSTR sourceString, UINT32 length,
-                                           void* hstringHeader, void** string) noexcept {
-    if (!original) return E_FAIL;
-
-    // Crucial re-entrancy guard: C++/WinRT calls WindowsCreateStringReference inside
-    // Application::Current(), hstring construction, and Wh_Log formatting.
-    static thread_local bool s_inHook = false;
-    if (s_inHook || g_unloading.load(std::memory_order_acquire) ||
-        !FlyoutHostPatch::TemplatesPatched()) {
-        return original(sourceString, length, hstringHeader, string);
-    }
-
-    struct ReentrancyGuard {
-        bool& active;
-        explicit ReentrancyGuard(bool& flag) noexcept : active(flag) { active = true; }
-        ~ReentrancyGuard() noexcept { active = false; }
-    } guard(s_inHook);
-
-    if (sourceString) {
-        if (length == _countof(kWin11ButtonTemplate) - 1 &&
-            sourceString[0] == L'T' &&
-            wcsncmp(sourceString, kWin11ButtonTemplate, length) == 0) {
-            if (g_logs.fetch_add(1, std::memory_order_relaxed) < 6) {
-                Wh_Log(L"[networkux] remapping ToggleButtonWinuiFluentTemplate -> "
-                       L"QuickToggleWinuiFluentTemplate");
-            }
-            sourceString = kWin10ButtonTemplate;
-            length = static_cast<UINT32>(_countof(kWin10ButtonTemplate) - 1);
-        } else if (length > 0 && length < 96 && GetModuleHandleW(L"NetworkUX.dll") != nullptr &&
-                   g_probeLogs.load(std::memory_order_relaxed) < 12 &&
-                   (ContainsWideSubstring(sourceString, length, L"Template") ||
-                    ContainsWideSubstring(sourceString, length, L"QuickAction"))) {
-            if (g_probeLogs.fetch_add(1, std::memory_order_relaxed) < 12) {
-                Wh_Log(L"[networkux] string ref seen: %.*ls", static_cast<int>(length),
-                       sourceString);
-            }
+static HRESULT HandleNetworkUxStringReference(WindowsCreateStringReference_t original,
+                                              PCWSTR sourceString, UINT32 length,
+                                              void* hstringHeader, void** string) noexcept {
+    if (!g_unloading.load(std::memory_order_acquire) &&
+        FlyoutHostPatch::TemplatesPatched() &&
+        length == _countof(kWin11ButtonTemplate) - 1 &&
+        sourceString && sourceString[0] == L'T' &&
+        wcsncmp(sourceString, kWin11ButtonTemplate, length) == 0 &&
+        IsPrivateShellOwningTaskbar()) {
+        if (g_logs.fetch_add(1, std::memory_order_relaxed) < 6) {
+            Wh_Log(L"[networkux] remapping ToggleButtonWinuiFluentTemplate -> "
+                   L"QuickToggleWinuiFluentTemplate");
         }
+        sourceString = kWin10ButtonTemplate;
+        length = static_cast<UINT32>(_countof(kWin10ButtonTemplate) - 1);
+        const HRESULT hr = original(sourceString, length, hstringHeader, string);
+        if (!g_metricsAttempted.exchange(true, std::memory_order_acq_rel)) {
+            ApplyDictionaryMetricsOnce();
+        }
+        return hr;
     }
 
-    const HRESULT hr = original(sourceString, length, hstringHeader, string);
-    TryApplyDictionaryMetrics();
-    return hr;
+    return original(sourceString, length, hstringHeader, string);
 }
 
 static HRESULT WINAPI ApiSetCreateStringReference_Hook(PCWSTR sourceString, UINT32 length,
                                                        void* hstringHeader,
                                                        void** string) noexcept {
-    return HandleCreateStringReference(g_apiSetCreateStringRefOriginal, sourceString, length,
-                                       hstringHeader, string);
+    const auto caller = reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
+    const auto begin = g_networkUxBegin.load(std::memory_order_acquire);
+    const auto end = g_networkUxEnd.load(std::memory_order_acquire);
+    if (caller < begin || caller >= end) {
+        return g_apiSetCreateStringRefOriginal(sourceString, length, hstringHeader, string);
+    }
+    return HandleNetworkUxStringReference(g_apiSetCreateStringRefOriginal, sourceString, length,
+                                          hstringHeader, string);
 }
 
 static HRESULT WINAPI CombaseCreateStringReference_Hook(PCWSTR sourceString, UINT32 length,
                                                         void* hstringHeader,
                                                         void** string) noexcept {
-    return HandleCreateStringReference(g_combaseCreateStringRefOriginal, sourceString, length,
-                                       hstringHeader, string);
+    const auto caller = reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
+    const auto begin = g_networkUxBegin.load(std::memory_order_acquire);
+    const auto end = g_networkUxEnd.load(std::memory_order_acquire);
+    if (caller < begin || caller >= end) {
+        return g_combaseCreateStringRefOriginal(sourceString, length, hstringHeader, string);
+    }
+    return HandleNetworkUxStringReference(g_combaseCreateStringRefOriginal, sourceString, length,
+                                          hstringHeader, string);
+}
+
+static void Uninstall() noexcept {
+    std::vector<SavedResourceEntry> entries;
+    wuc::CoreDispatcher dispatcher{nullptr};
+    DWORD uiTid = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_restoreMutex);
+        entries = std::move(g_savedEntries);
+        dispatcher = std::move(g_uiDispatcher);
+        uiTid = g_uiThreadId;
+        g_uiThreadId = 0;
+    }
+    g_metricsAttempted.store(false, std::memory_order_release);
+
+    if (entries.empty() || !dispatcher) return;
+
+    try {
+        if (dispatcher.HasThreadAccess()) {
+            RestoreEntriesOnUiThread(entries);
+            Wh_Log(L"[networkux] restored %zu XAML resource entry(s) on UI thread",
+                   entries.size());
+            return;
+        }
+
+        struct RestoreSyncState {
+            std::vector<SavedResourceEntry> entries;
+            HANDLE done = nullptr;
+            explicit RestoreSyncState(std::vector<SavedResourceEntry>&& in)
+                : entries(std::move(in)),
+                  done(CreateEventW(nullptr, TRUE, FALSE, nullptr)) {}
+            ~RestoreSyncState() {
+                if (done) CloseHandle(done);
+            }
+        };
+
+        auto state = std::make_shared<RestoreSyncState>(std::move(entries));
+        if (!state->done) return;
+
+        const size_t count = state->entries.size();
+        auto asyncOp = dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal, [state]() noexcept {
+            RestoreEntriesOnUiThread(state->entries);
+            SetEvent(state->done);
+        });
+
+        DWORD waitResult = WaitForSingleObject(state->done, 250);
+        if (waitResult == WAIT_TIMEOUT && uiTid != 0) {
+            // If Windows PLM suspended ShellExperienceHost.exe while idle in the background,
+            // briefly decrement the UI thread's suspend count with ResumeThread (which is a
+            // no-op returning 0 on a non-suspended thread) so CoreDispatcher drains the item.
+            if (HANDLE uiThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, uiTid)) {
+                DWORD resumedCount = 0;
+                for (int guard = 0; guard < 8; ++guard) {
+                    const DWORD prev = ResumeThread(uiThread);
+                    if (prev == 0 || prev == static_cast<DWORD>(-1)) break;
+                    ++resumedCount;
+                    if (prev == 1) break;
+                }
+                waitResult = WaitForSingleObject(state->done, 1250);
+                for (DWORD i = 0; i < resumedCount; ++i) {
+                    SuspendThread(uiThread);
+                }
+                CloseHandle(uiThread);
+            } else {
+                waitResult = WaitForSingleObject(state->done, 1250);
+            }
+        }
+
+        if (waitResult == WAIT_OBJECT_0) {
+            Wh_Log(L"[networkux] restored %zu XAML resource entry(s) via CoreDispatcher", count);
+        } else {
+            // The queued DispatchedHandler still holds code in this DLL if the UI thread is
+            // unresponsive: cancel the async action and pin this module so CoreDispatcher
+            // can never call into unmapped memory on later teardown.
+            try {
+                asyncOp.Cancel();
+            } catch (...) {
+            }
+            if (!g_selfPinnedOnTimeout.exchange(true, std::memory_order_acq_rel)) {
+                HMODULE selfMod = nullptr;
+                GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
+                                       GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                   reinterpret_cast<LPCWSTR>(&Uninstall), &selfMod);
+            }
+            Wh_Log(L"[networkux] UI-thread restore timed out after 1500 ms");
+        }
+    } catch (...) {
+        Wh_Log(L"[networkux] exception while restoring XAML resource entries");
+    }
 }
 
 static void Install() noexcept {
+    if (HMODULE loadedNetUx = GetModuleHandleW(L"NetworkUX.dll")) {
+        RememberNetworkUxRange(loadedNetUx);
+    }
+
     // NetworkUX.dll imports WindowsCreateStringReference from
     // api-ms-win-core-winrt-string-l1-1-0.dll, which on Windows 11 24H2 resolves via the OS
     // ApiSetMap to kernelbase.dll!WindowsCreateStringReference (distinct in memory from
     // combase.dll!WindowsCreateStringReference). Hook the exact ApiSet target AND combase.dll
-    // if distinct so every caller path in ShellExperienceHost.exe is covered cleanly.
+    // if distinct; non-NetworkUX callers immediately pass through via return-address check.
     HMODULE apiSet = LoadLibraryExW(L"api-ms-win-core-winrt-string-l1-1-0.dll", nullptr,
                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
     void* apiTarget = apiSet ? reinterpret_cast<void*>(
@@ -8814,11 +9188,14 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[flyout] data folder: %s",
                g_cfg.storePath[0] ? g_cfg.storePath : L"(not available)");
 
-        // ShellExperienceHost.exe hosts the flyouts this mod draws (network, battery). This
-        // mod is loaded there as well, and in that process only the flyout-host patches run:
-        // it is not the shell process, and nothing else of the mod applies to it.
+        // ShellExperienceHost.exe hosts the flyouts this mod draws (network, battery). Its
+        // lightweight watch hooks stay inert whenever the native Windows 11 shell owns
+        // Shell_TrayWnd (or when the owner cannot be determined), and dynamically apply or
+        // revert the QuickActions/NetworkUX patches if the active shell changes across the
+        // host process's lifetime.
         if (IsProcessImageName(g_realExePath, L"ShellExperienceHost.exe")) {
-            Wh_Log(L"[flyout] ShellExperienceHost: only the flyout-host patches run here");
+            Wh_Log(L"[flyout] ShellExperienceHost: private Windows 10 shell currently active=%s",
+                   IsPrivateShellOwningTaskbar() ? L"yes" : L"no");
             FlyoutHostPatch::Install();
             NetworkUxQuickActions::Install();
             return TRUE;
@@ -8926,9 +9303,10 @@ void Wh_ModBeforeUninit() {
     CancelActiveDownload();
     ShellOpGuard::BeginShutdown();
     ClearPeekOverridesOnUnload();
-    // The bytes written in ShellExperienceHost.exe by this copy of the mod are its own
-    // doing, and are given back before the image goes away. The module pin cannot be
-    // undone (no documented way exists); that is noted in the README and in the log.
+    // The bytes and XAML resource dictionary entries written in ShellExperienceHost.exe by
+    // this copy of the mod are given back before the image goes away. The module pin cannot
+    // be undone (no documented way exists); that is noted in the README and in the log.
+    NetworkUxQuickActions::Uninstall();
     FlyoutHostPatch::Uninstall();
     if (g_stopEvent) SetEvent(g_stopEvent);
     JoinServicesThread(L"Wh_ModBeforeUninit");
