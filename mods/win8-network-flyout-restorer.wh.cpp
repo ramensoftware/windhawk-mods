@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win8-network-flyout-restorer
 // @name            Windows 8 Network Flyout Restorer
-// @description     Restores the Windows 8 Network Flyout; uses native System32 VAN when available and verified MSDL components otherwise
+// @description     This mod restores the Windows 8 Network Flyout; uses native System32 VAN when available and verified MSDL components otherwise
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -15,7 +15,7 @@
 /*
 # Windows 8 Network Flyout Restorer
 
-Restores the Windows 8-style network panel from the taskbar network icon.
+This mod restores the Windows 8-style network panel from the taskbar network icon.
 The panel provides access to Wi-Fi networks, wired connections, VPN connections
 and Airplane mode, where supported by Windows and the installed hardware.
 
@@ -56,6 +56,10 @@ Downloaded components remain cached to avoid downloading them at every start.
 
 ## Troubleshooting
 
+If a handled C++ error occurs, the mod stops accepting requests for that session
+and attempts to shut down its features. Restart Explorer before trying again.
+This does not protect Explorer from every possible error in legacy Windows components.
+
 If the panel does not open, check the internet connection and Windhawk's mod log.
 An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
 restores the normal Windows behavior. If shutdown gets stuck, some resources may
@@ -67,13 +71,13 @@ be kept until Explorer exits to avoid unloading code that is still running.
 /*
 - enableLegacyTrayIcon: false
   $name: "Enable classic network tray icon (pnidui.dll)"
-  $description: "Hosts the classic network icon in the downloaded fallback mode. Native ReplaceVan mode uses the system icon; if no clickable network icon exists, a live fallback icon is shown."
+  $description: "This setting enables the classic network icon when downloaded components are used. The built-in Windows mode uses the system icon; an alternative icon is shown if no clickable network icon is available."
 - interceptAvailableNetworksUri: true
   $name: "Redirect ms-availablenetworks to Windows 8 flyout"
-  $description: "Intercepts ms-availablenetworks URI launches inside explorer.exe and opens the native or verified fallback VAN runtime."
+  $description: "This setting redirects ms-availablenetworks links opened by Explorer to the Windows 8 network panel."
 - uiLanguage: auto
   $name: "Flyout UI language"
-  $description: "Language used for hydrated fallback strings and connection prompts; native mode uses Windows resources."
+  $description: "This setting selects the language of the downloaded network panel and its connection prompts. Built-in Windows components keep their original language. Restart Explorer after changing the panel language."
   $options:
   - auto: "Automatic (match Windows UI language; unsupported languages fall back to English)"
   - it: "Italiano"
@@ -83,10 +87,10 @@ be kept until Explorer exits to avoid unloading code that is still running.
   - pt: "Português (Brasil)"
 - hideDuplicateWlanAdapters: false
   $name: "Hide secondary virtual Wi-Fi adapters"
-  $description: "Filters extra virtual WLAN interfaces beyond the primary adapter inside the flyout when virtual hotspot or container adapters duplicate entries."
+  $description: "This setting hides additional Wi-Fi interfaces in the panel when virtual hotspot or container adapters create duplicate entries, keeping only the first interface reported by Windows."
 - enableHotkey: false
   $name: "Enable Win+Shift+N hotkey"
-  $description: "Registers a global Win+Shift+N shortcut that opens (or closes) the Windows 8 Network Flyout."
+  $description: "This setting enables the Win+Shift+N shortcut to open or close the Windows 8 network panel."
 */
 // ==/WindhawkModSettings==
 
@@ -117,6 +121,8 @@ using std::nullptr_t;
 #include <atomic>
 #include <cwctype>
 #include <filesystem>
+#include <exception>
+#include <new>
 #include <map>
 #include <mutex>
 #include <string>
@@ -2221,17 +2227,74 @@ std::filesystem::path GetManagedDllPath(const wchar_t* canonicalName) {
     return g_vanStoreDir / canonicalName;
 }
 
+// Checked copies instead of compiler-specific SEH. ReadProcessMemory reports
+// unreadable ranges as an API failure; never dereference the source PE directly.
+bool TryReadManagedImageSize(HMODULE module, DWORD* imageSize) noexcept {
+    if (!module || !imageSize) return false;
+    *imageSize = 0;
+    IMAGE_DOS_HEADER dos{};
+    IMAGE_NT_HEADERS64 nt{};
+    SIZE_T copied = 0;
+    if (!ReadProcessMemory(GetCurrentProcess(), module, &dos, sizeof(dos), &copied) ||
+        copied != sizeof(dos)) {
+        Wh_Log(L"PE DOS header read failed (%lu)", GetLastError());
+        return false;
+    }
+    if (dos.e_magic != IMAGE_DOS_SIGNATURE || dos.e_lfanew <= 0 ||
+        dos.e_lfanew > 1024 * 1024) return false;
+    const ULONG_PTR base = reinterpret_cast<ULONG_PTR>(module);
+    const ULONG_PTR offset = static_cast<ULONG_PTR>(dos.e_lfanew);
+    if (base > static_cast<ULONG_PTR>(-1) - offset) return false;
+    copied = 0;
+    if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(base + offset),
+                           &nt, sizeof(nt), &copied) || copied != sizeof(nt)) {
+        Wh_Log(L"PE NT header read failed (%lu)", GetLastError());
+        return false;
+    }
+    if (nt.Signature != IMAGE_NT_SIGNATURE ||
+        nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        !nt.OptionalHeader.SizeOfImage ||
+        base > static_cast<ULONG_PTR>(-1) - nt.OptionalHeader.SizeOfImage) return false;
+    *imageSize = nt.OptionalHeader.SizeOfImage;
+    return true;
+}
+
+// Phase diagnostics only, NOT exception handlers. An unmatched enter/leave
+// pair helps locate synchronous faults; Windows retains normal crash reporting.
+HRESULT ObserveShowVanCall(ShowVAN_t function) {
+    if (!function) return E_POINTER;
+    Wh_Log(L"Legacy call enter: ShowVAN (thread %lu)", GetCurrentThreadId());
+    const HRESULT result = function(false, false, nullptr);
+    Wh_Log(L"Legacy call leave: ShowVAN hr=0x%08lX", static_cast<unsigned long>(result));
+    return result;
+}
+
+void ObserveVanVoidCall(HideVAN_t function, const wchar_t* operation) {
+    if (!function) return;
+    Wh_Log(L"Legacy call enter: %s (thread %lu)", operation, GetCurrentThreadId());
+    function();
+    Wh_Log(L"Legacy call leave: %s", operation);
+}
+
+HRESULT ObserveTrayActivate(INetworkTrayPrivate* tray, BYTE* context) {
+    if (!tray || !context) return E_POINTER;
+    Wh_Log(L"Legacy call enter: pnidui Activate (thread %lu)", GetCurrentThreadId());
+    const HRESULT result = tray->Activate(4, context + 0x18, context + 0x10);
+    Wh_Log(L"Legacy call leave: pnidui Activate hr=0x%08lX", static_cast<unsigned long>(result));
+    return result;
+}
+
 void PublishManagedImage(HMODULE module, const wchar_t* canonicalName) noexcept {
     if (!module || !canonicalName) return;
-    const auto* base = reinterpret_cast<const BYTE*>(module);
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0) return;
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE || !nt->OptionalHeader.SizeOfImage) return;
+    DWORD imageSize = 0;
+    if (!TryReadManagedImageSize(module, &imageSize)) {
+        Wh_Log(L"Cannot publish managed image %s; PE probe failed", canonicalName);
+        return;
+    }
     for (size_t i = 0; i < kRuntimeDllCount; ++i) {
         if (_wcsicmp(canonicalName, kRuntimeDllNames[i]) == 0) {
             const ULONG_PTR begin = reinterpret_cast<ULONG_PTR>(module);
-            g_managedImageEnd[i].store(begin + nt->OptionalHeader.SizeOfImage,
+            g_managedImageEnd[i].store(begin + imageSize,
                                       std::memory_order_relaxed);
             g_managedImageBegin[i].store(begin, std::memory_order_release);
             break;
@@ -2537,7 +2600,7 @@ bool ComputeFileSha256Hex(HANDLE hFile, std::wstring& outUpperHex) noexcept {
 
 bool OpenVerifiedFile(
     const std::filesystem::path& path, const wchar_t* expectedSha256,
-    ScopedFileHandle* keepOpen, std::wstring* actualHash = nullptr) {
+    ScopedFileHandle* keepOpen, std::wstring* actualHash = nullptr) try {
     ScopedFileHandle file(CreateFileW(
         path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
@@ -2572,6 +2635,16 @@ bool OpenVerifiedFile(
         *keepOpen = std::move(file);
     }
     return true;
+} catch (const std::bad_alloc&) {
+    Wh_Log(L"C++ allocation failure during file verification; file rejected");
+    return false;
+} catch (const std::filesystem::filesystem_error& error) {
+    Wh_Log(L"C++ filesystem exception during file verification (code %d); file rejected",
+           error.code().value());
+    return false;
+} catch (...) {
+    Wh_Log(L"Unexpected C++ exception during file verification; file rejected");
+    return false;
 }
 
 // Diagnostic-only Authenticode check. MSDL files are catalog-signed, so this
@@ -2652,6 +2725,10 @@ HINTERNET AcquireWinHttpSession() {
 
 bool DownloadMsdlFileWithWinHttp(const wchar_t* relativeTail,
                                  const std::filesystem::path& destTmpPath) {
+    // WinHttpOpenRequest needs the full server-relative object path, not just
+    // the artifact tail. Keep this identical to the URLMon fallback endpoint.
+    const std::wstring requestPath =
+        std::wstring(L"/download/symbols/") + relativeTail;
     HINTERNET hSession = AcquireWinHttpSession();
     if (!hSession) {
         Wh_Log(L"WinHttpOpen failed (%lu)", GetLastError());
@@ -2665,7 +2742,7 @@ bool DownloadMsdlFileWithWinHttp(const wchar_t* relativeTail,
     }
 
     HINTERNET hRequest = WinHttpOpenRequest(
-        hConnect, L"GET", relativeTail, nullptr, WINHTTP_NO_REFERER,
+        hConnect, L"GET", requestPath.c_str(), nullptr, WINHTTP_NO_REFERER,
         WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (!hRequest) {
         WinHttpCloseHandle(hConnect);
@@ -2830,6 +2907,33 @@ bool CopyResourcesFromDonorPe(const std::filesystem::path& donorPath, HANDLE hUp
     return ctx.copiedCount > 0;
 }
 
+class ScopedDataModule {
+  public:
+    explicit ScopedDataModule(HMODULE module) noexcept : module_(module) {}
+    ~ScopedDataModule() noexcept { if (module_) FreeLibrary(module_); }
+    ScopedDataModule(const ScopedDataModule&) = delete;
+    ScopedDataModule& operator=(const ScopedDataModule&) = delete;
+  private:
+    HMODULE module_;
+};
+
+class ScopedResourceUpdate {
+  public:
+    explicit ScopedResourceUpdate(HANDLE update) noexcept : update_(update) {}
+    ~ScopedResourceUpdate() noexcept { if (update_) EndUpdateResourceW(update_, TRUE); }
+    BOOL commit() noexcept {
+        HANDLE update = update_;
+        update_ = nullptr;
+        return EndUpdateResourceW(update, FALSE);
+    }
+    ScopedResourceUpdate(const ScopedResourceUpdate&) = delete;
+    ScopedResourceUpdate& operator=(const ScopedResourceUpdate&) = delete;
+  private:
+    HANDLE update_;
+};
+
+thread_local bool g_muiCollectionFailed = false;
+
 struct MuiDeleteEntry {
     std::wstring nameStr;
     ULONG_PTR nameInt = 0;
@@ -2838,7 +2942,7 @@ struct MuiDeleteEntry {
 };
 
 BOOL CALLBACK EnumMuiLangCollectProc(
-    HMODULE, LPCWSTR, LPCWSTR lpName, WORD wIDLanguage, LONG_PTR lParam) {
+    HMODULE, LPCWSTR, LPCWSTR lpName, WORD wIDLanguage, LONG_PTR lParam) try {
     auto* vec = reinterpret_cast<std::vector<MuiDeleteEntry>*>(lParam);
     MuiDeleteEntry item{};
     if (IS_INTRESOURCE(lpName)) {
@@ -2849,30 +2953,38 @@ BOOL CALLBACK EnumMuiLangCollectProc(
     }
     item.langId = wIDLanguage;
     vec->push_back(std::move(item));
-    return TRUE;
+    return g_muiCollectionFailed ? FALSE : TRUE;
+} catch (...) {
+    g_muiCollectionFailed = true;
+    return FALSE;
 }
 
 BOOL CALLBACK EnumMuiNameCollectProc(
     HMODULE hModule, LPCWSTR lpType, LPWSTR lpName, LONG_PTR lParam) {
     EnumResourceLanguagesW(hModule, lpType, lpName, EnumMuiLangCollectProc, lParam);
-    return TRUE;
+    return g_muiCollectionFailed ? FALSE : TRUE;
 }
 
 bool HydrateRuntimePe(
     const std::filesystem::path& targetPePath,
     const wchar_t* canonicalModuleLower,
     int languageIndex,
-    const std::filesystem::path* optionalDonorPe) {
+    const std::filesystem::path* optionalDonorPe) try {
     // Collect existing "MUI" manifest resources so hydration can remove the
     // MUI split - without this the loader keeps looking for <dll>.mui files
     // that do not exist next to the hydrated copy and every string misses.
     std::vector<MuiDeleteEntry> muiEntries;
+    g_muiCollectionFailed = false;
     if (HMODULE hInspect = LoadLibraryExW(
             targetPePath.c_str(), nullptr,
             LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)) {
+        ScopedDataModule inspectOwner(hInspect);
         EnumResourceNamesW(
             hInspect, L"MUI", EnumMuiNameCollectProc, reinterpret_cast<LONG_PTR>(&muiEntries));
-        FreeLibrary(hInspect);
+        if (g_muiCollectionFailed) {
+            Wh_Log(L"C++ exception collecting MUI resources; generation rejected");
+            return false;
+        }
     }
 
     // Standard Win32 RT_STRING layout: bundle N holds string IDs
@@ -2895,6 +3007,8 @@ bool HydrateRuntimePe(
                targetPePath.c_str());
         return false;
     }
+
+    ScopedResourceUpdate updateOwner(hUpdate);
 
     for (const auto& m : muiEntries) {
         LPCWSTR lpName = m.isIntName ? MAKEINTRESOURCEW(m.nameInt) : m.nameStr.c_str();
@@ -2931,7 +3045,7 @@ bool HydrateRuntimePe(
         }
     }
 
-    if (!EndUpdateResourceW(hUpdate, FALSE)) {
+    if (!updateOwner.commit()) {
         Wh_Log(L"EndUpdateResourceW failed (%lu) on %s", GetLastError(), targetPePath.c_str());
         return false;
     }
@@ -2942,6 +3056,16 @@ bool HydrateRuntimePe(
         return false;
     }
     return true;
+} catch (const std::bad_alloc&) {
+    Wh_Log(L"C++ allocation failure while preparing runtime resources; image rejected");
+    return false;
+} catch (const std::filesystem::filesystem_error& error) {
+    Wh_Log(L"C++ filesystem exception while preparing runtime resources (code %d); image rejected",
+           error.code().value());
+    return false;
+} catch (...) {
+    Wh_Log(L"Unexpected C++ exception while preparing runtime resources; image rejected");
+    return false;
 }
 
 // ===========================================================================
@@ -3575,15 +3699,68 @@ bool EnsureVanStoreProvisioned() {
 // Legacy marker-tagged COM entries are deleted only after the old PID state proves
 // no older Explorer process can still be using them.
 // ===========================================================================
+// Small noncopyable owners. Destructors only release the resource they own;
+// UI/legacy teardown remains explicit on its owning STA, never on an arbitrary thread.
+class ScopedRegistryKey {
+  public:
+    explicit ScopedRegistryKey(HKEY key) noexcept : key_(key) {}
+    ~ScopedRegistryKey() noexcept { if (key_) RegCloseKey(key_); }
+    ScopedRegistryKey(const ScopedRegistryKey&) = delete;
+    ScopedRegistryKey& operator=(const ScopedRegistryKey&) = delete;
+  private:
+    HKEY key_;
+};
+
+void DisableModAfterCppException(const wchar_t* phase) noexcept {
+    g_vanStoreReady.store(false, std::memory_order_release);
+    // Keep registry redirection alive until owning-thread cleanup finishes:
+    // legacy teardown must not fall through and write real system/COM keys.
+    g_shuttingDown.store(true, std::memory_order_release);
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    Wh_Log(L"C++ exception in %s: mod disabled for this session; STA cleanup requested", phase);
+}
+
+class ScopedStaComApartment {
+  public:
+    ScopedStaComApartment() noexcept
+        : result_(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)) {}
+    ~ScopedStaComApartment() noexcept { if (SUCCEEDED(result_)) CoUninitialize(); }
+    HRESULT result() const noexcept { return result_; }
+    ScopedStaComApartment(const ScopedStaComApartment&) = delete;
+    ScopedStaComApartment& operator=(const ScopedStaComApartment&) = delete;
+  private:
+    HRESULT result_;
+};
+
+template <typename Interface>
+class ScopedComReference {
+  public:
+    explicit ScopedComReference(Interface* value) noexcept : value_(value) {}
+    ~ScopedComReference() noexcept {
+        if (!value_) return;
+        try { value_->Release(); }
+        catch (...) {
+            // The COM ABI promises HRESULTs, not C++ throws. Retain resources
+            // if a foreign implementation violates that contract during release.
+            g_unloadSafetyFailure.store(true, std::memory_order_release);
+            DisableModAfterCppException(L"COM temporary Release");
+        }
+    }
+    ScopedComReference(const ScopedComReference&) = delete;
+    ScopedComReference& operator=(const ScopedComReference&) = delete;
+  private:
+    Interface* value_;
+};
+
 void RegWriteSz(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName,
                 const std::wstring& value, DWORD type = REG_SZ) {
     HKEY hKey = nullptr;
     if (RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
                         KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        ScopedRegistryKey owner(hKey);
         RegSetValueExW(
             hKey, valueName, 0, type, reinterpret_cast<const BYTE*>(value.c_str()),
             static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
-        RegCloseKey(hKey);
     }
 }
 
@@ -3592,9 +3769,9 @@ void RegWriteDword(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueN
     HKEY hKey = nullptr;
     if (RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
                         KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        ScopedRegistryKey owner(hKey);
         RegSetValueExW(hKey, valueName, 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value),
                        sizeof(value));
-        RegCloseKey(hKey);
     }
 }
 
@@ -3670,6 +3847,8 @@ bool PopulateVirtualRegistryOverlay() {
             KEY_ALL_ACCESS, nullptr, &hOverlayRoot, nullptr) != ERROR_SUCCESS) {
         return false;
     }
+
+    ScopedRegistryKey rootOwner(hOverlayRoot);
 
     // 1a. HKLM\SYSTEM\CurrentControlSet\Control\VAN\{CLSID} media managers.
     struct MediaManagerSpec {
@@ -3777,7 +3956,6 @@ bool PopulateVirtualRegistryOverlay() {
         RegWriteSz(hOverlayRoot, inproc, L"ThreadingModel", entry.threadingModel);
     }
 
-    RegCloseKey(hOverlayRoot);
 
     Wh_Log(L"Virtual registry overlay populated; COM classes are served by in-process hooks");
 
@@ -4306,7 +4484,8 @@ LONG WINAPI Hook_RegGetValueW(
     if (value && _wcsicmp(value, L"ReplaceVan") == 0 &&
         (hkey == HKEY_LOCAL_MACHINE || hkey == HKEY_CURRENT_USER) && subKey &&
         _wcsicmp(subKey, kReplaceVanSettingsSubKey) == 0 &&
-        g_nativeSystemVan.load(std::memory_order_acquire)) {
+        g_nativeSystemVan.load(std::memory_order_acquire) &&
+        !g_shuttingDown.load(std::memory_order_acquire)) {
         return ReturnVirtualReplaceVanDword(2, flags, type, data, dataSize);
     }
 
@@ -4658,7 +4837,7 @@ NTSTATUS NTAPI Hook_LdrLoadDll(
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t g_origLoadLibraryExW = nullptr;
 
-HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) try {
     if (lpLibFileName && g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) && !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
@@ -4695,12 +4874,16 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         }
     }
     return g_origLoadLibraryExW(lpLibFileName, hFile, dwFlags);
+} catch (...) {
+    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    DisableModAfterCppException(L"Hook_LoadLibraryExW");
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr;
 }
 
 using LoadLibraryW_t = HMODULE(WINAPI*)(LPCWSTR);
 LoadLibraryW_t g_origLoadLibraryW = nullptr;
 
-HMODULE WINAPI Hook_LoadLibraryW(LPCWSTR lpLibFileName) {
+HMODULE WINAPI Hook_LoadLibraryW(LPCWSTR lpLibFileName) try {
     if (lpLibFileName && g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) && !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
@@ -4709,17 +4892,24 @@ HMODULE WINAPI Hook_LoadLibraryW(LPCWSTR lpLibFileName) {
         }
     }
     return g_origLoadLibraryW(lpLibFileName);
+} catch (...) {
+    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    DisableModAfterCppException(L"Hook_LoadLibraryW");
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr;
 }
 
 // ===========================================================================
 // In-proc COM resolution
 // ===========================================================================
 HRESULT TryGetInProcManagedClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
+    if (!ppv) return E_POINTER;
+    *ppv = nullptr;
     for (size_t i = 0; i < kInProcComCount; ++i) {
         if (IsEqualGUID(rclsid, kInProcComTable[i].clsid)) {
             HMODULE hMod = LoadManagedDll(kInProcComTable[i].dllBaseName);
             if (!hMod) {
-                return HRESULT_FROM_WIN32(GetLastError());
+                const DWORD error = GetLastError();
+                return HRESULT_FROM_WIN32(error ? error : ERROR_MOD_NOT_FOUND);
             }
             using DllGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, REFIID, LPVOID*);
             auto pfn = ResolveExportAddress<DllGetClassObject_t>(hMod, "DllGetClassObject");
@@ -4763,7 +4953,7 @@ HRESULT TryGetPopupWindowFactoryClassObject(REFIID riid, LPVOID* ppv) {
 }
 
 HRESULT WINAPI Hook_CoGetClassObject(
-    REFCLSID rclsid, DWORD dwClsContext, LPVOID pvReserved, REFIID riid, LPVOID* ppv) {
+    REFCLSID rclsid, DWORD dwClsContext, LPVOID pvReserved, REFIID riid, LPVOID* ppv) try {
     if (ppv && (dwClsContext & CLSCTX_INPROC_SERVER) != 0 && g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) &&
         !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
@@ -4789,13 +4979,17 @@ HRESULT WINAPI Hook_CoGetClassObject(
         }
     }
     return hr;
+} catch (...) {
+    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    DisableModAfterCppException(L"Hook_CoGetClassObject");
+    if (ppv) *ppv = nullptr; return E_UNEXPECTED;
 }
 
 using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
 CoCreateInstance_t g_origCoCreateInstance = nullptr;
 
 HRESULT WINAPI Hook_CoCreateInstance(
-    REFCLSID rclsid, LPUNKNOWN pUnkOuter, DWORD dwClsContext, REFIID riid, LPVOID* ppv) {
+    REFCLSID rclsid, LPUNKNOWN pUnkOuter, DWORD dwClsContext, REFIID riid, LPVOID* ppv) try {
     if (ppv && (dwClsContext & CLSCTX_INPROC_SERVER) != 0 && g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) &&
         !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
@@ -4828,6 +5022,10 @@ HRESULT WINAPI Hook_CoCreateInstance(
         }
     }
     return hr;
+} catch (...) {
+    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    DisableModAfterCppException(L"Hook_CoCreateInstance");
+    if (ppv) *ppv = nullptr; return E_UNEXPECTED;
 }
 
 // ===========================================================================
@@ -4917,13 +5115,13 @@ void InvokeShowVanOnStaThread(bool allowToggleClose) {
     }
 
     if (allowToggleClose && g_pfnHideVAN && IsVanFlyoutWindowVisible()) {
-        g_pfnHideVAN();
+        ObserveVanVoidCall(g_pfnHideVAN, L"HideVAN");
         return;
     }
 
     // ShowVAN spawns and manages its internal RunVANUI thread by itself;
     // never create a parallel VAN UI thread here.
-    HRESULT hr = g_pfnShowVAN(false, false, nullptr);
+    HRESULT hr = ObserveShowVanCall(g_pfnShowVAN);
     if (FAILED(hr)) {
         Wh_Log(L"ShowVAN returned HRESULT 0x%08lX", static_cast<unsigned long>(hr));
     }
@@ -4970,7 +5168,7 @@ std::atomic<UINT> g_pnidTrayCallbackMsg{0};
 // DWORD_PTR dwRefData). The wrapper removes the subclass on WM_NCDESTROY;
 // explicit removal is also performed during normal teardown.
 LRESULT CALLBACK PnidTrayWndSubclassProc(
-    HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR /*dwRefData*/) {
+    HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR /*dwRefData*/) try {
     if (uMsg == WM_NCDESTROY) {
         HWND expected = hWnd;
         if (g_pnidTrayHwnd.compare_exchange_strong(
@@ -4991,6 +5189,9 @@ LRESULT CALLBACK PnidTrayWndSubclassProc(
         }
     }
 
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+} catch (...) {
+    DisableModAfterCppException(L"pnidui subclass callback");
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
@@ -5082,7 +5283,7 @@ bool IsNativeNetworkTrayIconVisible() {
     return GetModernNetworkIconRect(&rc);
 }
 
-LRESULT CALLBACK VanTrayMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK VanTrayMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) try {
     if (nCode == HC_ACTION &&
         (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP || wParam == WM_LBUTTONDBLCLK)) {
         const auto* pm = reinterpret_cast<const MOUSEHOOKSTRUCT*>(lParam);
@@ -5099,6 +5300,9 @@ LRESULT CALLBACK VanTrayMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
     }
     return CallNextHookEx(g_trayMouseHook, nCode, wParam, lParam);
+} catch (...) {
+    DisableModAfterCppException(L"tray mouse callback");
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 // ===========================================================================
@@ -5363,8 +5567,9 @@ class FallbackTrayIcon {
     }
 
     static LRESULT CALLBACK WndProc(
-        HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        if (uMsg == WM_APP_FALLBACK_TRAY_CB) {
+        HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) try {
+        if (!g_shuttingDown.load(std::memory_order_acquire) &&
+            uMsg == WM_APP_FALLBACK_TRAY_CB) {
             const UINT notifyEvent = LOWORD(lParam);
             if (notifyEvent == WM_LBUTTONUP || notifyEvent == NIN_SELECT ||
                 notifyEvent == NIN_KEYSELECT || notifyEvent == WM_LBUTTONDBLCLK) {
@@ -5377,7 +5582,10 @@ class FallbackTrayIcon {
             }
         }
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-    }
+    } catch (...) {
+    DisableModAfterCppException(L"fallback tray window callback");
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
 
     static void ShowContextMenu(HWND hWnd) {
         static constexpr const wchar_t* kOpenLabels[] = {
@@ -5434,12 +5642,13 @@ class NetworkTrayHostController {
             return;
         }
 
+        ScopedComReference<IClassFactory> factoryOwner(pFactory);
+
         // pnidui 22621 has no IOleCommandTarget: activation goes through the
         // private CNwSSO interface (Start/Stop).
         INetworkTrayPrivate* pTray = nullptr;
         hr = pFactory->CreateInstance(
             nullptr, IID_NetworkTrayPrivate, reinterpret_cast<void**>(&pTray));
-        pFactory->Release();
         if (FAILED(hr) || !pTray) {
             Wh_Log(L"CLSID_NetworkTray CreateInstance(IID_NetworkTrayPrivate) failed "
                    L"(0x%08lX)",
@@ -5457,14 +5666,18 @@ class NetworkTrayHostController {
             pTray->Release();
             return;
         }
+        // Publish ownership before foreign activation: if it throws, STA
+        // cleanup can still see the object and context (or park on failure).
+        m_trayObject = pTray;
         BYTE* base = reinterpret_cast<BYTE*>(m_trayContext);
         Wh_Log(L"Starting optional legacy pnidui tray object");
-        hr = pTray->Activate(4, base + 0x18, base + 0x10);
+        hr = ObserveTrayActivate(pTray, base);
         if (FAILED(hr)) {
             Wh_Log(L"NetworkTray Start(4) returned 0x%08lX",
                    static_cast<unsigned long>(hr));
             LocalFree(m_trayContext);
             m_trayContext = nullptr;
+            m_trayObject = nullptr;
             pTray->Release();
             return;
         }
@@ -5511,13 +5724,16 @@ int g_hostMissCount = 0;
 
 void ReevaluateHostingOnSta();
 
-LRESULT CALLBACK VanStaWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK VanStaWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) try {
     if (uMsg == WM_NCDESTROY) {
         if (g_staCtrlWnd == hWnd) {
             g_staCtrlWnd = nullptr;
         }
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
+
+    if (g_shuttingDown.load(std::memory_order_acquire))
+        return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 
     if (uMsg == g_wmShowVanIpc && g_wmShowVanIpc != 0) {
         // Cross-process flyout request from a secondary explorer.exe.
@@ -5542,6 +5758,9 @@ LRESULT CALLBACK VanStaWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
 
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+} catch (...) {
+    DisableModAfterCppException(L"STA window callback");
+    return 0;
 }
 
 HWND CreateStaWindow(const wchar_t* className) {
@@ -5736,38 +5955,18 @@ void ReevaluateHostingOnSta() {
     }
 }
 
-DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
-    HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    const bool comInitialized = SUCCEEDED(hrCom);
-    if (!comInitialized) {
-        Wh_Log(L"STA COM initialization failed (0x%08lX); panel remains inactive",
-               static_cast<unsigned long>(hrCom));
-        return 0;
-    }
-    Wh_Log(L"Startup diagnostics: caller-scoped hooks; STA COM initialized");
-
+void RunVanStaWorkerBody() {
     MSG dummyMsg{};
     PeekMessageW(&dummyMsg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     // 1. Prefer a compatible System32 VAN stack; only download/hydrate MSDL
     //    components when the native capability probe rejected this build.
     const bool nativeMode = g_nativeSystemVan.load(std::memory_order_acquire);
-    const bool provisioned = [&]() noexcept {
-        if (nativeMode) return true;
-        try {
-            return EnsureVanStoreProvisioned();
-        } catch (...) {
-            Wh_Log(L"C++ exception during provisioning; downloaded panel remains inactive");
-            return false;
-        }
-    }();
+    const bool provisioned = nativeMode || EnsureVanStoreProvisioned();
     if ((!provisioned) ||
         g_shuttingDown.load(std::memory_order_acquire)) {
         Wh_Log(L"VAN runtime not ready - flyout restorer staying passive this session");
-        if (comInitialized) {
-            CoUninitialize();
-        }
-        return 0;
+        return;
     }
 
     // 2. Publish all full paths and the STA thread id before enabling hooks.
@@ -5797,29 +5996,20 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
             Wh_Log(L"Could not acquire the overlay mutex; staying passive rather than using "
                    L"untracked registry state");
             g_staThreadId.store(0, std::memory_order_release);
-            if (comInitialized) {
-                CoUninitialize();
-            }
-            return 0;
+            return;
         }
         if (!PruneAndAddInstancePid()) {
             Wh_Log(L"Overlay PID tracking failed; staying passive and leaving the overlay "
                    L"untouched for later recovery");
             g_staThreadId.store(0, std::memory_order_release);
-            if (comInitialized) {
-                CoUninitialize();
-            }
-            return 0;
+            return;
         }
         g_overlayInstanceRegistered.store(true, std::memory_order_release);
         if (!PopulateVirtualRegistryOverlay()) {
             Wh_Log(L"Virtual registry overlay population failed; staying passive; tracked "
                    L"state will be removed or retained according to the PID list");
             g_staThreadId.store(0, std::memory_order_release);
-            if (comInitialized) {
-                CoUninitialize();
-            }
-            return 0;
+            return;
         }
         g_registryOverlayReady.store(true, std::memory_order_release);
     }
@@ -5866,12 +6056,18 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
     while (!g_shuttingDown.load(std::memory_order_acquire)) {
         DWORD waitRes = MsgWaitForMultipleObjectsEx(
             1, &g_stopEvent, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (waitRes == WAIT_FAILED) {
+            Wh_Log(L"STA wait failed (%lu); disabling mod for this session", GetLastError());
+            g_shuttingDown.store(true, std::memory_order_release);
+            break;
+        }
         if (waitRes == WAIT_OBJECT_0 || g_shuttingDown.load(std::memory_order_acquire)) {
             break;
         }
         if (waitRes == WAIT_OBJECT_0 + 1) {
             MSG msg{};
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            while (!g_shuttingDown.load(std::memory_order_acquire) &&
+                   PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_QUIT) {
                     g_shuttingDown.store(true, std::memory_order_release);
                     break;
@@ -5891,6 +6087,9 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
         }
     }
 
+}
+
+void CleanupVanStaOnOwningThread() {
     // 7. Deterministic shutdown (all on the owning STA thread):
     //    tray first, then the VAN UI thread via van.dll's own ShutdownVAN.
     RemoveTrayMouseHook();
@@ -5909,13 +6108,13 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
     }
 
     if (g_pfnHideVAN) {
-        g_pfnHideVAN();
+        ObserveVanVoidCall(g_pfnHideVAN, L"HideVAN");
     }
     if (g_pfnShutdownVAN) {
         // This export joins van.dll's internal UI thread and can block on some
         // Windows builds. Wh_ModUninit has a bounded wait and pins the mod
         // image on timeout; it never terminates this thread unsafely.
-        g_pfnShutdownVAN();
+        ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
     }
 
     UnregisterStaWindowClasses();
@@ -5924,9 +6123,38 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
     g_registryOverlayReady.store(false, std::memory_order_release);
     g_staThreadId.store(0, std::memory_order_release);
 
-    if (comInitialized) {
-        CoFreeUnusedLibrariesEx(0, 0);
-        CoUninitialize();
+}
+
+DWORD WINAPI VanStaWorkerThreadProc(LPVOID) noexcept {
+    ScopedStaComApartment apartment;
+    if (FAILED(apartment.result())) {
+        Wh_Log(L"STA COM initialization failed (0x%08lX); panel remains inactive",
+               static_cast<unsigned long>(apartment.result()));
+        return 0;
+    }
+    Wh_Log(L"STA worker initialized with C++ failure containment");
+    try {
+        RunVanStaWorkerBody();
+    } catch (const std::exception&) {
+        DisableModAfterCppException(L"STA worker (std::exception)");
+    } catch (...) {
+        DisableModAfterCppException(L"STA worker (unknown C++ exception)");
+    }
+    try {
+        CleanupVanStaOnOwningThread();
+        if (g_unloadSafetyFailure.load(std::memory_order_acquire)) {
+            Wh_Log(L"Incomplete callback/COM teardown; parking STA until Explorer exits");
+            for (;;) Sleep(INFINITE);
+        }
+    } catch (...) {
+        DisableModAfterCppException(L"STA teardown");
+        g_unloadSafetyFailure.store(true, std::memory_order_release);
+        Wh_Log(L"STA cleanup threw: parking worker and retaining resources; restart Explorer. "
+               L"Unload will retain the mod image rather than free live callbacks.");
+        // Do not destroy the apartment, drop DLLs, or terminate a thread while
+        // foreign UI objects may still be alive. The existing unload timeout
+        // pins this image and retains its resources. No automatic retry.
+        for (;;) Sleep(INFINITE);
     }
     return 0;
 }
@@ -5936,7 +6164,7 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
 // ===========================================================================
 // Windhawk lifecycle
 // ===========================================================================
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit() try {
     Wh_Log(L"Initializing Windows 8 Network Flyout Restorer v1.0.0...");
 
     // Install the required write guard before allocating mod-owned resources.
@@ -6281,6 +6509,13 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"All hooks installed; starting the STA worker");
     return TRUE;
+} catch (...) {
+    DisableModAfterCppException(L"initialization");
+    // No worker has started: pending hooks are discarded by Windhawk after FALSE.
+    if (g_overlayMutex) { CloseHandle(g_overlayMutex); g_overlayMutex = nullptr; }
+    if (g_provisionMutex) { CloseHandle(g_provisionMutex); g_provisionMutex = nullptr; }
+    if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
+    return FALSE;
 }
 
 void Wh_ModAfterInit() {
@@ -6321,11 +6556,14 @@ void Wh_ModSettingsChanged() try {
         Wh_Log(L"Flyout language changed to %s - hydration stamp invalidated",
                GetLanguageCode(currentLanguage));
     }
+} catch (const std::filesystem::filesystem_error& error) {
+    Wh_Log(L"C++ filesystem exception applying settings (code %d)", error.code().value());
+    DisableModAfterCppException(L"settings update");
 } catch (...) {
-    Wh_Log(L"C++ exception while applying settings; restart Explorer before retrying");
+    DisableModAfterCppException(L"settings update");
 }
 
-void Wh_ModUninit() {
+void Wh_ModUninit() try {
     Wh_Log(L"Uninitializing Windows 8 Network Flyout Restorer...");
 
     auto keepModImageMapped = []() -> bool {
@@ -6456,4 +6694,17 @@ void Wh_ModUninit() {
     g_vanStoreReady.store(false, std::memory_order_release);
     g_registryOverlayReady.store(false, std::memory_order_release);
     Wh_Log(L"Windows 8 Network Flyout Restorer unloaded cleanly");
+} catch (...) {
+    DisableModAfterCppException(L"mod unload");
+    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    HMODULE retained = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_PIN,
+                          reinterpret_cast<LPCWSTR>(&Wh_ModUninit), &retained)) {
+        Wh_Log(L"Unload C++ failure: mod image retained and remaining resources left intact; "
+               L"restart Explorer before using this mod again");
+        return;
+    }
+    Wh_Log(L"CRITICAL: cannot retain image after unload exception; blocking unsafe unload");
+    for (;;) Sleep(INFINITE);
 }
