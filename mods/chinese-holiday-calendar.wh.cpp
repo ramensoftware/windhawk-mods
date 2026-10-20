@@ -2287,15 +2287,20 @@ bool ParseDurationSeconds(std::wstring const& text, int64_t& seconds) {
             i++;
             continue;
         }
-        if (!iswdigit(text[i])) {
+        if (text[i] < L'0' || text[i] > L'9') {
             return false;
         }
         int number = 0;
-        while (i < text.size() && iswdigit(text[i])) {
+        while (i < text.size() && text[i] >= L'0' && text[i] <= L'9') {
             number = number * 10 + (text[i] - L'0');
+            // Checked while reading, so a run of digits which is too long is turned away
+            // before it can overflow the int it is read into.
+            if (number > 10000) {
+                return false;
+            }
             i++;
         }
-        if (i >= text.size() || number > 10000) {
+        if (i >= text.size()) {
             return false;  // a number which is not followed by a part of its own
         }
         const wchar_t part = text[i++];
@@ -2622,24 +2627,40 @@ bool ParseIcs(std::wstring const& text,
             added++;
         };
 
-        for (int32_t key = collected.start; key && key < end; key = NextDateKey(key)) {
-            // The limit is looked at inside the loop as well: a single event which spans
-            // millions of days is what a limit at the start of the event does not catch.
-            if (added >= kMaxHolidayDates) {
-                hitDateLimit = true;
-                break;
-            }
-            addDate(key);
+        // How many days the event covers. An occurrence which is not the one the event
+        // itself writes - an RDATE, or a later year of a yearly rule - lasts as long as
+        // this one, so the same number of days is marked from that occurrence's date.
+        int lengthDays = 0;
+        for (int32_t key = collected.start;
+             key && key < end && lengthDays < kMaxHolidayDates;
+             key = NextDateKey(key)) {
+            lengthDays++;
         }
 
-        // The dates the event names of their own, which a feed writes as an RDATE: one
-        // event may be a list of days rather than a period, and they may sit outside it.
+        // The limit is looked at inside the loop as well: a single event which spans
+        // millions of days is what a limit at the start of the event does not catch.
+        auto addRange = [&](int32_t from) {
+            int32_t key = from;
+            for (int day = 0; day < lengthDays && key; day++) {
+                if (added >= kMaxHolidayDates) {
+                    hitDateLimit = true;
+                    return;
+                }
+                addDate(key);
+                key = NextDateKey(key);
+            }
+        };
+
+        addRange(collected.start);
+
+        // The dates the event names of their own, which a feed writes as an RDATE: each of
+        // them is an occurrence of the event, so each lasts as long as the event does.
         for (int32_t key : collected.ownDates) {
             if (added >= kMaxHolidayDates) {
                 hitDateLimit = true;
                 break;
             }
-            addDate(key);
+            addRange(key);
         }
 
         // A yearly rule: the same day of the same month, the next year and the year after
@@ -2689,7 +2710,7 @@ bool ParseIcs(std::wstring const& text,
                     if (collected.yearly.until && key > collected.yearly.until) {
                         break;
                     }
-                    addDate(key);
+                    addRange(key);
                     marked++;
                 }
             }
