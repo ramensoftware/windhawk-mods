@@ -17,8 +17,8 @@
 // Based on "Chrome/Edge scroll tabs with mouse wheel" by m417z, published under
 // The GNU General Public License v3.0:
 // https://github.com/m417z/my-windhawk-mods/blob/main/mods/chrome-wheel-scroll-tabs.wh.cpp
-// The window subclassing, browser window detection and enumeration, DPI helper
-// and CreateWindowExW hook code are taken from that mod.
+// The browser window detection and enumeration, DPI helper and CreateWindowExW
+// hook code are taken from that mod.
 
 // ==WindhawkModReadme==
 /*
@@ -35,9 +35,10 @@ Advanced settings (custom process inclusion list).
 
 The empty tab bar area is detected using the window's hit-testing: Chrome
 reports it as a caption (draggable) area, while tabs and buttons are reported
-as client area. By default, only caption areas that have a tab or a button to
-their left are used, so the thin drag strip above the tabs and the area left of
-the first tab are ignored.
+as client area. By default, only caption areas that have a tab or a button
+between them and the side away from the window buttons are used, so the thin
+drag strip above the tabs and the area before the first tab are ignored. This
+also works with right-to-left UI languages, where the tab bar is mirrored.
 
 Installed web apps (PWAs) are ignored, since they have a title bar instead of a
 tab bar.
@@ -52,11 +53,15 @@ Ctrl+T), so no keyboard input is simulated.
 - onlyNextToTabs: true
   $name: Only next to the tabs
   $description: >-
-    Only react to the empty area to the right of the tabs (e.g. between the "+"
-    button and the window buttons). When disabled, any empty part of the title
-    bar works, including the thin strip above the tabs.
+    Only react to the empty area next to the tabs (e.g. between the "+" button
+    and the window buttons). When disabled, any empty part of the title bar
+    works, including the thin strip above the tabs and the title bar of windows
+    without tabs, such as popups and DevTools; there, a new tab opens in a
+    regular browser window.
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <commctrl.h>
 #include <propsys.h>
@@ -69,18 +74,6 @@ struct {
 
 DWORD g_uiThreadId;
 HWND g_middleButtonDownWnd;
-
-// wParam - TRUE to subclass, FALSE to unsubclass
-// lParam - subclass data
-UINT g_subclassRegisteredMsg = RegisterWindowMessage(
-    L"Windhawk_SetWindowSubclassFromAnyThread_chrome-middle-click-new-tab");
-
-struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
-    SUBCLASSPROC pfnSubclass;
-    UINT_PTR uIdSubclass;
-    DWORD_PTR dwRefData;
-    BOOL result;
-};
 
 UINT GetDpiForWindowWithFallback(HWND hWnd) {
     using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
@@ -106,54 +99,6 @@ UINT GetDpiForWindowWithFallback(HWND hWnd) {
     }
 
     return dpi;
-}
-
-LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode,
-                                              WPARAM wParam,
-                                              LPARAM lParam) {
-    if (nCode == HC_ACTION) {
-        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-        if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
-            SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param =
-                (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
-            param->result =
-                SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
-                                  param->uIdSubclass, param->dwRefData);
-        }
-    }
-
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
-
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
-                                    SUBCLASSPROC pfnSubclass,
-                                    UINT_PTR uIdSubclass,
-                                    DWORD_PTR dwRefData) {
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return FALSE;
-    }
-
-    if (dwThreadId == GetCurrentThreadId()) {
-        return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
-    }
-
-    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass,
-                                  nullptr, dwThreadId);
-    if (!hook) {
-        return FALSE;
-    }
-
-    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
-    param.pfnSubclass = pfnSubclass;
-    param.uIdSubclass = uIdSubclass;
-    param.dwRefData = dwRefData;
-    param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return param.result;
 }
 
 // Installed web apps (PWAs) use the same window class as browser windows, but
@@ -187,20 +132,37 @@ bool IsWebAppWindow(HWND hWnd) {
     return isWebApp;
 }
 
-// Checks whether there's a client area element (a tab or the "+" button) to
-// the left of the point, on the same row. This is true for the empty area to
-// the right of the tabs, but not for the drag strip above the tabs or the area
-// left of the first tab.
+// With a right-to-left UI language, the tab strip is mirrored and the window
+// buttons are on the left. Chrome doesn't set WS_EX_LAYOUTRTL on the window, so
+// check which top corner has the close button.
+bool AreWindowButtonsOnLeft(HWND hWnd, const RECT& rect, UINT dpi) {
+    int x = rect.left + MulDiv(24, dpi, 96);
+    int y = rect.top + MulDiv(16, dpi, 96);
+    return SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(x, y)) == HTCLOSE;
+}
+
+// Checks whether there's a client area element (a tab or the "+" button) on the
+// same row, on the side away from the window buttons. This is true for the
+// empty area after the tabs, but not for the drag strip above the tabs or the
+// area before the first tab.
 bool IsNextToTabs(HWND hWnd, int xPos, int yPos) {
     RECT rect{};
     GetWindowRect(hWnd, &rect);
 
-    int step = MulDiv(2, GetDpiForWindowWithFallback(hWnd), 96);
+    UINT dpi = GetDpiForWindowWithFallback(hWnd);
+
+    int step = MulDiv(2, dpi, 96);
     if (step < 1) {
         step = 1;
     }
 
-    for (int x = xPos - step; x >= rect.left; x -= step) {
+    if (AreWindowButtonsOnLeft(hWnd, rect, dpi)) {
+        Wh_Log(L"Window buttons are on the left, scanning to the right");
+    } else {
+        step = -step;
+    }
+
+    for (int x = xPos + step; x >= rect.left && x < rect.right; x += step) {
         LRESULT hitTest =
             SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(x, yPos));
         if (hitTest == HTCLIENT) {
@@ -237,16 +199,11 @@ void OpenNewTab(HWND hWnd) {
                 MAKELPARAM(0, FAPPCOMMAND_MOUSE | APPCOMMAND_NEW));
 }
 
-LRESULT CALLBACK BrowserWindowSubclassProc(_In_ HWND hWnd,
-                                           _In_ UINT uMsg,
-                                           _In_ WPARAM wParam,
-                                           _In_ LPARAM lParam,
-                                           _In_ UINT_PTR uIdSubclass,
-                                           _In_ DWORD_PTR dwRefData) {
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
-        RemoveWindowSubclass(hWnd, BrowserWindowSubclassProc, 0);
-    }
-
+LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
+                                           UINT uMsg,
+                                           WPARAM wParam,
+                                           LPARAM lParam,
+                                           DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_NCMBUTTONDOWN:
         // A quick second click arrives as a double click, treat it as another
@@ -259,6 +216,12 @@ LRESULT CALLBACK BrowserWindowSubclassProc(_In_ HWND hWnd,
                 g_middleButtonDownWnd = hWnd;
                 return 0;
             }
+            break;
+
+        // A press in the client area means that a release on the tab bar
+        // doesn't complete a click that started there.
+        case WM_MBUTTONDOWN:
+            g_middleButtonDownWnd = nullptr;
             break;
 
         case WM_NCMBUTTONUP:
@@ -323,7 +286,8 @@ BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam) {
             g_uiThreadId = dwThreadId;
         }
 
-        SetWindowSubclassFromAnyThread(hWnd, BrowserWindowSubclassProc, 0, 0);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hWnd, BrowserWindowSubclassProc, 0);
     }
 
     return TRUE;
@@ -333,7 +297,8 @@ BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam) {
     if (IsBrowserWindow(hWnd)) {
         Wh_Log(L"Browser window to unsubclass: %08X", (DWORD)(ULONG_PTR)hWnd);
 
-        SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hWnd, BrowserWindowSubclassProc);
     }
 
     return TRUE;
@@ -372,10 +337,34 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
             g_uiThreadId = GetCurrentThreadId();
         }
 
-        SetWindowSubclass(hWnd, BrowserWindowSubclassProc, 0, 0);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hWnd, BrowserWindowSubclassProc, 0);
     }
 
     return hWnd;
+}
+
+// Renderer, GPU and other child processes have a "--type=" switch and own no
+// browser windows.
+bool IsBrowserProcess() {
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return false;
+    }
+
+    bool isBrowserProcess = true;
+    for (int i = 1; i < argc; i++) {
+        if (wcsncmp(argv[i], L"--type=", sizeof("--type=") - 1) == 0) {
+            isBrowserProcess = false;
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    return isBrowserProcess;
 }
 
 void LoadSettings() {
@@ -383,12 +372,16 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
+    if (!IsBrowserProcess()) {
+        return FALSE;
+    }
+
     Wh_Log(L">");
 
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook,
-                       (void**)&pOriginalCreateWindowExW);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
+                                   &pOriginalCreateWindowExW);
 
     EnumWindows(InitialEnumBrowserWindowsFunc, 0);
 
