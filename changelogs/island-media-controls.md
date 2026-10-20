@@ -1,3 +1,21 @@
+## 1.0.0 ([Oct 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1aece9a6cf5c3aea1d4fa1081d7b0bedbd1364e4/mods/island-media-controls.wh.cpp))
+
+- Improve Windows 11 taskbar placement, including top and vertical taskbars, and add an optional disc-style main island.
+- Redesign the Compact layout and refine Side expansion positioning, reveal direction, and control alignment.
+- Add Transparent and Transparent borderless materials, and refine Mica-like, Acrylic, and Liquid Glass lighting, blur, tint, and light/dark presentation.
+- Expand button styles, use Solid material by default, and offer an optional experimental glass button style.
+- Refine opening, closing, interrupted transitions, hover/press feedback, seeking, progress lighting, and track-change transitions.
+- Fix delayed media refresh, title/artist clipping, collapse artifacts, and clicks on other tray items while the expanded player is open.
+- Simplify the settings interface with contextual layout/material options for Windhawk 2.0.
+- Refresh the mod description with layout animations and consistent material previews.
+
+- Harden unload cleanup for clips, layout handlers, async waits, cached XAML resources, and independent animations.
+- Move steady glow/disc animation off the taskbar rendering callback; reduce idle layout/media work and remove the global low-level mouse hook.
+- Fix grouped integer settings on older Windhawk versions and clarify experimental labels and the NetEase compatibility note.
+
+- Detect taskbar XAML island replacement even when media stays unchanged; correct independent disc rotation and settled side-glow animation ownership/restart.
+- Remove obsolete hook/glow code and unused hidden progress-glow textures.
+
 ## 0.10.55 ([Sep 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/34c05c49402b8bc15fd2bc7241fd1231f0f6435c/mods/island-media-controls.wh.cpp))
 
 - Adds the new unified display mode setting for fullsize, compact, and side expansion layouts.

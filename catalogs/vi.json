@@ -8479,7 +8479,7 @@
         "ratingUsers": 489,
         "reviews": 0,
         "trendingSorting": 11.117622233186749,
-        "updated": 1789409935000,
+        "updated": 1792494006000,
         "users": 28271
       },
       "metadata": {
@@ -8495,7 +8495,7 @@
         ],
         "license": "MIT",
         "name": "Island Media Controls",
-        "version": "0.10.55"
+        "version": "1.0.0"
       }
     },
     "isretailready-false": {
