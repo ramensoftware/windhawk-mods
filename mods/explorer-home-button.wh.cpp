@@ -2,7 +2,7 @@
 // @id              explorer-home-button
 // @name            File Explorer Address Bar Home Button
 // @description     Adds a dedicated "Home" (This PC) button next to the Refresh button in the Windows 11 File Explorer address bar
-// @version         1.0.1
+// @version         1.0.2
 // @author          RobotsNeverDie
 // @github          https://github.com/RBND
 // @homepage        https://github.com/RBND/HomeExplorer
@@ -24,7 +24,7 @@ Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Ref
 - **Exact Visual & Theme Match**: Inherits the native `refreshButton`'s style, dimensions, margins, corner radius, and hover/pressed/focus visual states, dynamically matching Windows 11 Light, Dark, and High Contrast themes.
 - **Active-Tab-Only Navigation**: Uses COM Shell APIs (`IShellWindows`, `IServiceProvider`, `IShellBrowser::BrowseObject`, and `IWebBrowser2::Navigate2`) matched against the active `ShellTabWindowClass` child window so only the currently active tab navigates to **This PC** (`shell:MyComputerFolder` / `::{20D04FE0-3AEA-1069-A2D8-08002B30309D}`).
 - **Configurable Settings**: Customize the target shell location, button placement (before or after the Refresh button), icon glyph (`Home \uE80F` or `Computer \uE770`), and tooltip text (`This PC`).
-- **Clean Lifecycle**: Supports live injection into open File Explorer windows, live settings updates, and clean removal on mod unload without leaking XAML elements or conflicting with other XAML mods.
+- **Clean Lifecycle**: Supports live injection into open File Explorer windows (appearing immediately or on window focus), live settings updates, and clean removal on mod unload without leaking XAML elements or conflicting with other XAML mods.
 */
 // ==/WindhawkModReadme==
 
@@ -75,8 +75,6 @@ Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Ref
 
 #undef GetCurrentTime
 
-#include <winrt/Microsoft.UI.Content.h>
-#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -94,7 +92,7 @@ namespace muxa = winrt::Microsoft::UI::Xaml::Automation;
 namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 namespace muxi = winrt::Microsoft::UI::Xaml::Input;
 
-#define kHomeButtonName L"WindhawkHomeExplorerButton"
+constexpr WCHAR kHomeButtonName[] = L"WindhawkHomeExplorerButton";
 constexpr WCHAR kThisPcClsidPath[] = L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
 constexpr WCHAR kDefaultTargetLocation[] = L"shell:MyComputerFolder";
 constexpr WCHAR kDefaultTooltip[] = L"This PC";
@@ -132,7 +130,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting targetLocation =
         WindhawkUtils::StringSetting::make(L"targetLocation");
-    if (targetLocation.get() && *targetLocation.get()) {
+    if (*targetLocation.get()) {
         s.targetLocation = targetLocation.get();
     } else {
         s.targetLocation = kDefaultTargetLocation;
@@ -140,7 +138,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting placement =
         WindhawkUtils::StringSetting::make(L"placement");
-    if (placement.get() && wcscmp(placement.get(), L"before") == 0) {
+    if (wcscmp(placement.get(), L"before") == 0) {
         s.placement = ButtonPlacement::BeforeRefresh;
     } else {
         s.placement = ButtonPlacement::AfterRefresh;
@@ -148,7 +146,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting iconGlyph =
         WindhawkUtils::StringSetting::make(L"iconGlyph");
-    if (iconGlyph.get() && wcscmp(iconGlyph.get(), L"computer") == 0) {
+    if (wcscmp(iconGlyph.get(), L"computer") == 0) {
         s.iconGlyph = kGlyphComputer;
     } else {
         s.iconGlyph = kGlyphHome;
@@ -156,7 +154,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting tooltip =
         WindhawkUtils::StringSetting::make(L"tooltip");
-    if (tooltip.get() && *tooltip.get()) {
+    if (*tooltip.get()) {
         s.tooltip = tooltip.get();
     } else {
         s.tooltip = kDefaultTooltip;
@@ -393,6 +391,8 @@ struct PendingRefreshRecord {
 
 thread_local std::unordered_map<void*, InjectedButtonRecord> g_injectedButtonsForThread;
 thread_local std::unordered_map<void*, PendingRefreshRecord> g_pendingRefreshForThread;
+thread_local std::unordered_map<void*, mux::FrameworkElement::Loaded_revoker> g_commandBarLoadedForThread;
+thread_local bool g_threadScanned = false;
 
 void* GetElementKey(mux::DependencyObject const& elem) {
     if (!elem) {
@@ -536,9 +536,19 @@ void PositionHomeButtonInCommandBar(muxc::CommandBar const& commandBar,
 
     uint32_t refreshIdx = 0;
     if (commands.IndexOf(refreshButton, refreshIdx)) {
-        uint32_t insertIdx = (placement == ButtonPlacement::BeforeRefresh)
-                                 ? refreshIdx
-                                 : (refreshIdx + 1);
+        uint32_t insertIdx = refreshIdx + 1;
+        if (placement == ButtonPlacement::BeforeRefresh) {
+            insertIdx = refreshIdx;
+        } else {
+            // If stopButton immediately follows refreshButton, insert after stopButton
+            if (refreshIdx + 1 < commands.Size()) {
+                if (auto nextElem = commands.GetAt(refreshIdx + 1).try_as<mux::FrameworkElement>()) {
+                    if (nextElem.Name() == L"stopButton") {
+                        insertIdx = refreshIdx + 2;
+                    }
+                }
+            }
+        }
         if (insertIdx > commands.Size()) {
             insertIdx = commands.Size();
         }
@@ -563,6 +573,7 @@ bool TryInjectHomeButtonForRefreshButton(
     auto existingIt = g_injectedButtonsForThread.find(key);
     if (existingIt != g_injectedButtonsForThread.end()) {
         if (auto existingBtn = existingIt->second.homeButton.get()) {
+            g_threadScanned = true;
             return true;
         }
         g_injectedButtonsForThread.erase(existingIt);
@@ -609,6 +620,7 @@ bool TryInjectHomeButtonForRefreshButton(
 
     g_injectedButtonsForThread.emplace(key, std::move(record));
     g_pendingRefreshForThread.erase(key);
+    g_threadScanned = true;
 
     Wh_Log(L"Injected Home button adjacent to refreshButton (%p)", key);
     return true;
@@ -670,7 +682,7 @@ void InspectXamlElement(mux::UIElement const& element) {
 }
 
 void ScanCurrentThreadForNavigationCommands() {
-    if (g_unloading.load()) {
+    if (g_threadScanned || g_unloading.load()) {
         return;
     }
     try {
@@ -679,7 +691,6 @@ void ScanCurrentThreadForNavigationCommands() {
             if (auto root = element.XamlRoot()) {
                 if (auto content = root.Content()) {
                     InspectXamlElement(content);
-                    return;
                 }
             }
         }
@@ -687,25 +698,7 @@ void ScanCurrentThreadForNavigationCommands() {
     }
 }
 
-void ScheduleCurrentThreadScan() {
-    if (g_unloading.load()) {
-        return;
-    }
-    try {
-        auto dispatcherQueue =
-            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-        if (dispatcherQueue) {
-            dispatcherQueue.TryEnqueue([]() {
-                ScanCurrentThreadForNavigationCommands();
-            });
-            return;
-        }
-    } catch (...) {
-    }
-    ScanCurrentThreadForNavigationCommands();
-}
-
-void UpdateInjectedButtonsForCurrentThread() {
+void UpdateInjectedButtonsForCurrentThread() try {
     const ModSettings settings = GetSettingsSnapshot();
 
     for (auto it = g_injectedButtonsForThread.begin();
@@ -724,9 +717,13 @@ void UpdateInjectedButtonsForCurrentThread() {
                                        settings.placement);
         ++it;
     }
+} catch (...) {
+    Wh_Log(L"Exception in UpdateInjectedButtonsForCurrentThread");
 }
 
-void RemoveInjectedButtonsForCurrentThread() {
+void RemoveInjectedButtonsForCurrentThread() try {
+    std::exchange(g_commandBarLoadedForThread, {});
+
     for (auto& [key, record] : g_injectedButtonsForThread) {
         record.clickRevoker.revoke();
         if (auto cmdBar = record.commandBar.get()) {
@@ -740,6 +737,9 @@ void RemoveInjectedButtonsForCurrentThread() {
     }
     std::exchange(g_injectedButtonsForThread, {});
     std::exchange(g_pendingRefreshForThread, {});
+    g_threadScanned = false;
+} catch (...) {
+    Wh_Log(L"Exception in RemoveInjectedButtonsForCurrentThread");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -766,21 +766,28 @@ void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
             }
         }
 
-        bar.Loaded([](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
-            if (g_unloading.load()) {
-                return;
-            }
-            try {
-                if (auto b = sender.try_as<muxc::CommandBar>()) {
-                    if (auto r = b.XamlRoot()) {
-                        if (auto c = r.Content()) {
-                            InspectXamlElement(c);
-                        }
-                    }
-                }
-            } catch (...) {
-            }
-        });
+        void* barKey = GetElementKey(bar);
+        if (barKey && !g_commandBarLoadedForThread.contains(barKey)) {
+            g_commandBarLoadedForThread.emplace(
+                barKey,
+                bar.Loaded(winrt::auto_revoke,
+                           [](wf::IInspectable const& sender,
+                              mux::RoutedEventArgs const&) {
+                               if (g_unloading.load()) {
+                                   return;
+                               }
+                               try {
+                                   if (auto b = sender.try_as<muxc::CommandBar>()) {
+                                       if (auto r = b.XamlRoot()) {
+                                           if (auto c = r.Content()) {
+                                               InspectXamlElement(c);
+                                           }
+                                       }
+                                   }
+                               } catch (...) {
+                               }
+                           }));
+        }
     } catch (...) {
         Wh_Log(L"Exception in CommandBarManager_CommandBar_Hook: %08X",
                static_cast<unsigned>(winrt::to_hresult()));
@@ -794,14 +801,14 @@ CommandBarControl_OnApplyTemplate_t CommandBarControl_Wave1_OnApplyTemplate_Orig
 void WINAPI CommandBarControl_OnApplyTemplate_Hook(void* pThis) {
     CommandBarControl_OnApplyTemplate_Original(pThis);
     if (!g_unloading.load()) {
-        ScheduleCurrentThreadScan();
+        ScanCurrentThreadForNavigationCommands();
     }
 }
 
 void WINAPI CommandBarControl_Wave1_OnApplyTemplate_Hook(void* pThis) {
     CommandBarControl_Wave1_OnApplyTemplate_Original(pThis);
     if (!g_unloading.load()) {
-        ScheduleCurrentThreadScan();
+        ScanCurrentThreadForNavigationCommands();
     }
 }
 
@@ -813,14 +820,14 @@ CommandBarControl_GotFocusHandler_t CommandBarControl_Wave1_GotFocusHandler_Orig
 void WINAPI CommandBarControl_GotFocusHandler_Hook(void* pThis, void* sender, void* args) {
     CommandBarControl_GotFocusHandler_Original(pThis, sender, args);
     if (!g_unloading.load()) {
-        ScheduleCurrentThreadScan();
+        ScanCurrentThreadForNavigationCommands();
     }
 }
 
 void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis, void* sender, void* args) {
     CommandBarControl_Wave1_GotFocusHandler_Original(pThis, sender, args);
     if (!g_unloading.load()) {
-        ScheduleCurrentThreadScan();
+        ScanCurrentThreadForNavigationCommands();
     }
 }
 
@@ -921,7 +928,7 @@ bool RunFromWindowThread(HWND hWnd,
                          RUN_FROM_WINDOW_THREAD_PROC proc,
                          PVOID procParam) {
     static UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" kHomeButtonName);
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) {
@@ -1009,7 +1016,7 @@ void Wh_ModAfterInit() {
             RunFromWindowThread(
                 hWnd,
                 [](PVOID) {
-                    ScheduleCurrentThreadScan();
+                    ScanCurrentThreadForNavigationCommands();
                 },
                 nullptr);
         }
