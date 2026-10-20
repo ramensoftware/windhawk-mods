@@ -2,7 +2,7 @@
 // @id              windows-10-legacy-flyouts-restorer
 // @name            Windows 10 legacy flyouts on Win11 24H2 restorer
 // @description     This mod restores the Windows 10 network and battery flyouts in the private Windows 10 shell running on Windows 11 24H2+
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
@@ -19,10 +19,8 @@ This mod restores the Windows 10 network and battery flyouts (network icon with 
 icon with the flyout, volume icon) on Windows 11 24H2. It does not patch the Windows 11 shell: it
 runs inside the *private* Windows 10 shell, so it **requires**
 [Windows 10 taskbar on Win11 24H2](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) (by
-Anixx) to be installed and running. In that mod's terminology this mod is the tray half of the
-setup: it uses the same verified copy of the Windows 10 files, the same data folder, and it does
-not start anything by itself. Outside the private shell the mod loads and does nothing: no hook is
-installed, nothing is written, so the Windows 11 shell is never touched.
+Anixx) to be installed and running. Outside the private shell the mod loads and does nothing: no
+hook is installed, nothing is written, so the Windows 11 shell is never touched.
 
 What it does, inside the private shell:
 
@@ -35,12 +33,12 @@ What it does, inside the private shell:
   -> the flyout experience of that icon). Right click, middle click and every other message pass
   through unchanged. The right-click menu of the network icon is built from the two entries
   `pnidui` itself expects, because its menu resource is gone in this build.
-- The flyout window drawn by `ShellExperienceHost.exe` is made to use the Windows 10 template set,
-  otherwise that host tears the flyout down a moment after it has built it.
+- The flyout window drawn by `ShellExperienceHost.exe` is made to use the Windows 10 template set
+  and quick-action button template (`QuickToggleWinuiFluentTemplate` + `90x64` Windows 10 tile
+  metrics), otherwise that host tears the flyout down or renders the three quick-action tiles
+  (Wi-Fi, airplane mode, mobile hotspot) as empty text labels.
 
-Not included on purpose: the three quick-action tiles (Wi-Fi, airplane mode, hotspot) keep the
-stock Windows 11 template, styling and behaviour; the Action Center button and its animation are
-left to dedicated mods.
+Not included on purpose: the Action Center button and its animation are left to dedicated mods.
 
 ## Behaviour worth knowing
 
@@ -51,12 +49,12 @@ left to dedicated mods.
   tray icon. So Win+R with `ms-settings:wifi` in the Windows 10 shell opens the flyout instead of
   the Settings page. This is the point of the mod (that page does not exist in the Windows 10
   shell any more), but it is a global rewrite in that process.
-- **The download stays.** Files are fetched at run time from `msdl.microsoft.com` into the shared
-  store; nothing else is fetched. A failed download is retried with a backoff (1 minute, doubling
-  up to 15), never on every tick.
-- **What is written and where it persists.** The verified files go to the data folder. The tray
-  state backup and one-time marker normally go to this mod's Windhawk storage; if that path is
-  unavailable, the code falls back to the shared data folder. Windhawk removes its mod storage on
+- **The download stays.** Files are fetched at run time from `msdl.microsoft.com` into this mod's
+  own Windhawk storage folder; nothing else is fetched. A failed download is retried with a
+  backoff (1 minute, doubling up to 15), never on every tick.
+- **What is written and where it persists.** Both the verified tray modules and the tray state
+  backup / one-time marker live in this mod's Windhawk storage (`Wh_GetModStoragePath()`), which
+  works with portable installs as well. Windhawk removes its mod storage on
   uninstall, so copy the backup elsewhere first if you may need it later. The "Peek at desktop"
   toggle is process-local: this mod does not write `DisablePreviewDesktop` or `EnableAeroPeek`.
   While active, its registry-query hook supplies the toggled values to the private shell; on normal
@@ -80,8 +78,8 @@ left to dedicated mods.
 
 ## Credits
 
-- [Anixx](https://github.com/Anixx) - the Windows 10 taskbar mod whose verified files and data
-  folder this mod shares, and whose tray-module loading it follows
+- [Anixx](https://github.com/Anixx) - the Windows 10 taskbar mod this mod runs alongside, and
+  whose tray-module loading approach it follows
 - ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11
 */
 // ==/WindhawkModReadme==
@@ -164,8 +162,8 @@ left to dedicated mods.
 // out of, and it described features (a userinit shell redirection, a per-user "Shell" value, a
 // watchdog, an emergency hotkey, the Win+X menu, UWP taskbar buttons) that this mod does not
 // have at all. That misled every reader and every review of it, so it is gone. The pieces this
-// file still borrows the *shape* of are credited where they are used: the tray modules and the
-// store folder come from the Windows 10 taskbar mod by Anixx (win10-taskbar-on-win11-24h2),
+// file still borrows the *shape* of are credited where they are used: the tray-module loading
+// approach follows the Windows 10 taskbar mod by Anixx (win10-taskbar-on-win11-24h2),
 // and the flyout call chain follows what ExplorerPatcher (valinet) documented about the
 // Windows 10 shell.
 
@@ -176,7 +174,8 @@ left to dedicated mods.
 #include <winsock2.h>
 
 #include <windows.h>
-#include <Unknwn.h>
+#include <winver.h>     // VS_VERSION_INFO, VS_FIXEDFILEINFO (excluded by WIN32_LEAN_AND_MEAN)
+#include <unknwn.h>
 #include <oaidl.h>      // IDispatch, DISPID, DISPPARAMS (the toggle of "show desktop")
 #include <combaseapi.h>
 #include <bcrypt.h>
@@ -203,7 +202,13 @@ left to dedicated mods.
 // resolution are written with. No WinRT component header is included: MinGW's
 // toolchain ships winrt/base.h, while the component headers (for example
 // winrt/Windows.UI.Xaml.h) are not there and broke the build.
+#ifdef GetCurrentTime
+#undef GetCurrentTime
+#endif
 #include <winrt/base.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Xaml.h>
 
 #include <algorithm>
 #include <atomic>
@@ -297,10 +302,6 @@ static bool IsLegacyShellProcess();
 // <TimeDateStamp><SizeOfImage> (the "symbol id") instead of by its version. The id is what the
 // URL is built from, the SHA-256 is what the file is checked against; the two together pin one
 // exact build, and no other file name is ever fetched.
-//
-// The build chosen for explorer.exe is 10.0.19039.1, the one
-// "Win10 taskbar on Win11 24H2 or 25H2" (Anixx) downloads: same id, same hash, same folder, so
-// the two mods share a single verified copy whoever needs it first.
 
 // One file of the store: the name it has on disk, the symbol id, the pinned hash.
 struct PinnedFile {
@@ -317,13 +318,6 @@ static const PinnedFile kTrayFiles[] = {
     { L"stobject.dll", L"465AE25A52000", L"7c0037535c4da20ae15b4df9662f9330a989d4e2f36284aac5c9c3bce429e118" },
 };
 
-// explorer.exe 10.0.19039.1 - the private Windows 10 shell, the same file the taskbar mod
-// downloads. It is not loaded here, only made sure to exist: the taskbar mod starts it.
-static const PinnedFile kExplorerFile = {
-    L"explorer.exe", L"7AC6EEC3442000",
-    L"58f78b5f90efc75d6c7d3d85bc8b36983fe410406f217619dbe2384130d65bfe",
-};
-
 // windows.ui.search.dll is deliberately not loaded: the Search submenu changes the standard
 // SearchboxTaskbarMode setting through public Win32 APIs and does not inject a separate Search
 // host. Its verified identity is retained for reference: id = 4D6D1C59e5000,
@@ -332,10 +326,9 @@ static const PinnedFile kExplorerFile = {
 static const wchar_t* kSymbolUrlFmt = L"https://msdl.microsoft.com/download/symbols/%s/%s/%s";
 
 // What the settings amount to, in the only form the rest of the source reads them. The
-// paths are buffers because every file of the store is named after them.
+// path is a buffer because every file of the store is named after it.
 static struct {
-    wchar_t storePath[MAX_PATH];       // the verified files, shared with the taskbar mod
-    wchar_t explorerPath[MAX_PATH];    // storePath\explorer.exe, the private shell
+    wchar_t storePath[MAX_PATH];       // the verified tray modules in this mod's storage
     bool provideTrayDlls;              // download + load pnidui.dll / stobject.dll
     bool requireSignature;             // a file whose signature fails is not used
     int  downloadTimeoutSec;
@@ -7518,25 +7511,78 @@ static bool IsProcessImageName(const wchar_t* path, const wchar_t* expected) noe
     return _wcsicmp(base ? base + 1 : path, expected) == 0;
 }
 
-static bool IsPrivateExplorerProcess() {
-    if (g_realExePath[0] == 0) return false;
-    return _wcsicmp(g_realExePath, g_cfg.explorerPath) == 0;
+static void CaptureRealExePath() noexcept {
+    if (g_realExePath[0] != 0) return;
+
+    wchar_t path[MAX_PATH] = {};
+    DWORD cch = _countof(path);
+    // QueryFullProcessImageNameW asks the kernel directly instead of going through
+    // GetModuleFileNameW(NULL), so it still returns the real on-disk path when this mod is
+    // loaded or reloaded after "Fake Explorer path" has already installed its hook.
+    if (QueryFullProcessImageNameW(GetCurrentProcess(), 0, path, &cch) && path[0]) {
+        wcscpy_s(g_realExePath, path);
+        return;
+    }
+    HMODULE exeModule = GetModuleHandleW(nullptr);
+    if (exeModule && GetModuleFileNameW(exeModule, path, _countof(path)) && path[0]) {
+        wcscpy_s(g_realExePath, path);
+        return;
+    }
+    if (GetModuleFileNameW(nullptr, path, _countof(path)) && path[0]) {
+        wcscpy_s(g_realExePath, path);
+    }
+}
+
+// Secondary, path-independent check: reads the version resource already mapped in memory for
+// the current executable and checks whether a pre-24H2 explorer.exe (Windows 10 or Windows 11
+// 21H2-23H2, build < 26000) is running on a Windows 11 24H2+ system (build >= 26000).
+static bool IsPre24H2ExplorerOn24H2System() noexcept {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return false;
+    using RtlGetVersion_t = LONG(NTAPI*)(PRTL_OSVERSIONINFOW);
+    auto rtlGetVersion = (RtlGetVersion_t)GetProcAddress(ntdll, "RtlGetVersion");
+    if (!rtlGetVersion) return false;
+
+    RTL_OSVERSIONINFOW osvi = {};
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+    if (rtlGetVersion(&osvi) != 0 || osvi.dwBuildNumber < 26000) return false;
+
+    HMODULE exe = GetModuleHandleW(nullptr);
+    if (!exe) return false;
+    HRSRC res = FindResourceW(exe, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (!res) return false;
+    const DWORD resSize = SizeofResource(exe, res);
+    if (resSize < sizeof(VS_FIXEDFILEINFO)) return false;
+    HGLOBAL loaded = LoadResource(exe, res);
+    if (!loaded) return false;
+    const auto* bytes = (const BYTE*)LockResource(loaded);
+    if (!bytes) return false;
+
+    const size_t limit = resSize - sizeof(VS_FIXEDFILEINFO);
+    for (size_t offset = 0; offset <= limit; offset += sizeof(DWORD)) {
+        VS_FIXEDFILEINFO info = {};
+        memcpy(&info, bytes + offset, sizeof(info));
+        if (info.dwSignature == 0xFEEF04BD) {
+            const DWORD major = HIWORD(info.dwFileVersionMS);
+            const DWORD build = HIWORD(info.dwFileVersionLS);
+            return major == 10 && build > 0 && build < 26000;
+        }
+    }
+    return false;
 }
 
 // ---- explorer.exe ---------------------------------------------------------
 
-// The Windows 10 shell is an explorer.exe that is not the system one: the file name alone is
-// not enough, because the Windows 11 shell - and every File Explorer window the user opens in
-// its own process - is an explorer.exe as well. The comparison is therefore made on the full
-// path of the running image.
+// The Windows 10 shell is an explorer.exe that is not the native Windows 11 shell: the file
+// name alone is not enough, because the Windows 11 shell - and every File Explorer window the
+// user opens in its own process - is an explorer.exe as well. Any explorer.exe running outside
+// <Windows>\explorer.exe (whatever folder or portable path the taskbar mod uses) is accepted,
+// with an in-memory binary build check as a fallback.
 static bool IsLegacyShellProcess() {
-    if (g_realExePath[0] == 0) {
-        wchar_t path[MAX_PATH] = {};
-        if (GetModuleFileNameW(nullptr, path, _countof(path))) wcscpy_s(g_realExePath, path);
-    }
+    CaptureRealExePath();
     const wchar_t* path = g_realExePath;
     if (!path[0]) return false;
-    if (IsPrivateExplorerProcess()) return true;
+    if (!IsProcessImageName(path, L"explorer.exe")) return false;
 
     // The full path of the system shell is <Windows>\explorer.exe. GetWindowsDirectoryW is the
     // documented source of <Windows>, with SystemRoot as a fallback. Note the doubled backslash
@@ -7546,7 +7592,9 @@ static bool IsLegacyShellProcess() {
     DWORD dirChars = GetWindowsDirectoryW(windowsDir, _countof(windowsDir));
     if (!dirChars || dirChars >= _countof(windowsDir)) {
         dirChars = GetEnvironmentVariableW(L"SystemRoot", windowsDir, _countof(windowsDir));
-        if (!dirChars || dirChars >= _countof(windowsDir)) return false;
+        if (!dirChars || dirChars >= _countof(windowsDir)) {
+            return IsPre24H2ExplorerOn24H2System();
+        }
     }
     while (dirChars > 0 && windowsDir[dirChars - 1] == L'\\') {
         windowsDir[--dirChars] = L'\0';
@@ -7558,11 +7606,13 @@ static bool IsLegacyShellProcess() {
         pathChars == dirChars + (_countof(kSystemShellTail) - 1) &&
         _wcsnicmp(path, windowsDir, dirChars) == 0 &&
         _wcsicmp(path + dirChars, kSystemShellTail) == 0;
-    if (isSystemShell) return false;
+    if (!isSystemShell) return true;
 
-    // Any other explorer.exe is the private Windows 10 shell of the companion mod
-    // (win10-taskbar-on-win11-24h2), which lives in the store folder, not in <Windows>.
-    return IsProcessImageName(path, L"explorer.exe");
+    return IsPre24H2ExplorerOn24H2System();
+}
+
+static bool IsPrivateExplorerProcess() {
+    return IsLegacyShellProcess();
 }
 
 }
@@ -7572,39 +7622,12 @@ using namespace RestorerTaskbar;
 // ---------------------------------------------------------------------------
 // Where the downloaded Windows 10 files live
 //
-// The folder the Windows 10 taskbar mod by Anixx uses for its own download:
-// %ProgramData%\Windhawk\Engine\ModsWritable\LegacyStore. Both mods then read and write
-// a single set of verified files instead of keeping two copies of the same system
-// binaries: a file already there is reused as soon as it matches this mod's pin, and
-// only what is missing is downloaded into that folder. If the folder cannot be created
-// or written (no rights over ProgramData), this mod's own storage is used as a
-// fallback, so the mod keeps working on its own.
+// Stored inside this mod's own Windhawk storage (Wh_GetModStoragePath()), so the mod works
+// independently of where the companion taskbar mod keeps its files, supports portable
+// Windhawk installs, and leaves nothing behind on uninstall.
 // ---------------------------------------------------------------------------
-static const wchar_t kSharedStorePath[] =
-    L"%ProgramData%\\Windhawk\\Engine\\ModsWritable\\LegacyStore";
-
-static bool DirectoryAcceptsWrites(const wchar_t* dir) {
-    wchar_t probe[MAX_PATH] = {};
-    _snwprintf_s(probe, _countof(probe), _TRUNCATE, L"%s\\.w10er-write-probe", dir);
-    HANDLE file = CreateFileW(probe, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                              FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return false;
-    CloseHandle(file);
-    return true;
-}
-
 static bool ResolveStorePath(wchar_t* out, size_t count) {
     out[0] = 0;
-    wchar_t shared[MAX_PATH] = {};
-    if (ExpandEnvironmentStringsW(kSharedStorePath, shared, _countof(shared)) > 0 && shared[0]) {
-        if (EnsureDirectory(shared) && DirectoryAcceptsWrites(shared)) {
-            Wh_Log(L"[store] shared folder: %s (the same one the Win10 taskbar mod uses)", shared);
-            wcsncpy_s(out, count, shared, _TRUNCATE);
-            return true;
-        }
-        Wh_Log(L"[store] the shared folder is not writable (%s): this mod's own storage is used",
-               shared);
-    }
     wchar_t storage[MAX_PATH] = {};
     if (!Wh_GetModStoragePath(storage, _countof(storage)) || !storage[0]) return false;
     _snwprintf_s(out, count, _TRUNCATE, L"%s\\Win10Shell", storage);
@@ -7613,11 +7636,7 @@ static bool ResolveStorePath(wchar_t* out, size_t count) {
 }
 
 static void LoadFlyoutSettings() {
-    // Data folder: the folder the Windows 10 taskbar mod uses for its own download, so
-    // the two mods share one set of verified files (see ResolveStorePath above).
     if (!ResolveStorePath(g_cfg.storePath, _countof(g_cfg.storePath))) g_cfg.storePath[0] = 0;
-    _snwprintf_s(g_cfg.explorerPath, _countof(g_cfg.explorerPath), _TRUNCATE,
-                 L"%s\\explorer.exe", g_cfg.storePath);
 
     g_cfg.provideTrayDlls = Wh_GetIntSetting(L"ProvideTrayModules") != 0;
     g_cfg.requireSignature = Wh_GetIntSetting(L"RequireSignature") != 0;
@@ -7864,20 +7883,6 @@ static bool PrepareTrayStore() {
         // and the next load of the mod starts from the files that survived on disk.
         if (g_unloading.load(std::memory_order_acquire)) return false;
         if (!EnsureTrayStoreFile(file.name, file.symbolId, file.sha256)) complete = false;
-    }
-    // explorer.exe: the private Windows 10 shell itself. Same symbol-server entry and
-    // same pin the Windows 10 taskbar mod uses, so the file and its locale folder are
-    // shared with it: whoever needs it first downloads it, the other one finds it
-    // verified and does not download it again.
-    if (g_cfg.provideTrayDlls && !g_unloading.load(std::memory_order_acquire)) {
-        wchar_t explorerPath[MAX_PATH] = {};
-        if (EnsureVerifiedFile(g_cfg.storePath, kExplorerFile.name, kExplorerFile.symbolId,
-                               kExplorerFile.sha256, explorerPath, _countof(explorerPath))) {
-            Wh_Log(L"[store] explorer.exe ready (%s)", explorerPath);
-        } else {
-            Wh_Log(L"[store] explorer.exe not available: the private shell cannot start until "
-                   L"the file is there (the Win10 taskbar mod downloads the same one)");
-        }
     }
 
     g_trayStoreReady = complete;
@@ -8469,6 +8474,12 @@ static void OnModuleLoaded(HMODULE module, const wchar_t* text, size_t length) n
             PatchQuickActionsTemplates(module);
             return;
         }
+        if (NameIsModuleNamed(text, length, L"NetworkUX.dll")) {
+            if (g_logs.fetch_add(1) < 8)
+                Wh_Log(L"[flyout-host] NetworkUX.dll is loaded in this host (0x%p)",
+                       (void*)module);
+            return;
+        }
     } catch (...) {
     }
 }
@@ -8486,6 +8497,10 @@ static LONG NTAPI LdrLoadDll_Hook(PWSTR searchPath, PULONG flags, UNICODE_STRING
     } catch (...) {
     }
     return status;
+}
+
+static bool TemplatesPatched() noexcept {
+    return g_patched.load(std::memory_order_acquire);
 }
 
 // Called from Wh_ModInit, inside the ShellExperienceHost.exe branch: hooks are registered
@@ -8508,36 +8523,304 @@ static void Install() noexcept {
 }
 
 }  // namespace FlyoutHostPatch
+
 // ===========================================================================
-// NetworkUxHostPatch (the swap of the button name inside NetworkUX.dll) and NetworkUxSkin
-// (the graphical skin of the resource dictionary) were removed from this mod: see the note
-// in the publishing pull request. The swap of the template set of
-// Windows.UI.QuickActions.dll above (FlyoutHostPatch) stays, because without it the flyout
-// is not built at all on these builds.
+// Windows 10 Quick-Action tiles in the Network flyout (NetworkUX.dll)
+//
+// Once FlyoutHostPatch swaps Windows.UI.QuickActions.dll onto the Windows 10
+// QuickActionTemplates dictionary, "ToggleButtonWinuiFluentTemplate" no longer exists in
+// that dictionary — only "QuickToggleWinuiFluentTemplate" does. Without redirecting that
+// template lookup and updating the page resource dictionary metrics (90x64 tile size and
+// 12,0,0,12 panel margin, matching ExplorerPatcher's HandleLoadedNetworkUX), XAML resolves
+// a null ControlTemplate and renders the three bottom tiles (Wi-Fi, Airplane mode, Mobile
+// hotspot) as bare non-interactive text labels.
+//
+// Instead of patching NetworkUX.dll's IAT or pinning NetworkUX.dll in memory, we hook
+// combase.dll!WindowsCreateStringReference via Wh_SetFunctionHook inside Wh_ModInit():
+// Windhawk applies and removes the hook cleanly with zero module pinning.
 // ===========================================================================
+namespace NetworkUxQuickActions {
+
+namespace wux = winrt::Windows::UI::Xaml;
+
+using WindowsCreateStringReference_t =
+    HRESULT(WINAPI*)(PCWSTR sourceString, UINT32 length, void* hstringHeader, void** string);
+
+static WindowsCreateStringReference_t g_apiSetCreateStringRefOriginal = nullptr;
+static WindowsCreateStringReference_t g_combaseCreateStringRefOriginal = nullptr;
+static constexpr wchar_t kWin11ButtonTemplate[] = L"ToggleButtonWinuiFluentTemplate";
+static constexpr wchar_t kWin10ButtonTemplate[] = L"QuickToggleWinuiFluentTemplate";
+
+static std::atomic<void*> g_patchedValuesDict{nullptr};
+static std::atomic<void*> g_patchedStyleDict{nullptr};
+static std::atomic<int> g_logs{0};
+static std::atomic<int> g_probeLogs{0};
+
+static bool ValueIsOfType(winrt::Windows::Foundation::IInspectable const& value,
+                          const wchar_t* needle) noexcept {
+    try {
+        winrt::hstring name = winrt::get_class_name(value);
+        return name.c_str() && wcsstr(name.c_str(), needle) != nullptr;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool DictionaryHas(wux::ResourceDictionary const& resources, const wchar_t* key) noexcept {
+    try {
+        return resources.HasKey(winrt::box_value(winrt::hstring(key)));
+    } catch (...) {
+        return false;
+    }
+}
+
+static wux::ResourceDictionary FindDictionaryContainingKey(wux::ResourceDictionary const& dict,
+                                                           const wchar_t* key,
+                                                           int depth = 0) noexcept {
+    if (!dict || depth > 4) return nullptr;
+    if (DictionaryHas(dict, key)) return dict;
+    try {
+        for (auto const& merged : dict.MergedDictionaries()) {
+            if (auto found = FindDictionaryContainingKey(merged, key, depth + 1)) {
+                return found;
+            }
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+static bool PutValue(wux::ResourceDictionary const& resources, const wchar_t* key,
+                     winrt::Windows::Foundation::IInspectable const& value,
+                     const wchar_t* typeNeedle, bool insertIfAbsent) noexcept {
+    try {
+        auto boxedKey = winrt::box_value(winrt::hstring(key));
+        if (resources.HasKey(boxedKey)) {
+            if (!ValueIsOfType(resources.Lookup(boxedKey), typeNeedle)) {
+                return false;
+            }
+        } else if (!insertIfAbsent) {
+            return false;
+        }
+        resources.Insert(boxedKey, value);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool PutControlStyleMetrics(wux::ResourceDictionary const& resources) noexcept {
+    try {
+        auto boxedKey = winrt::box_value(winrt::hstring(L"QuickActionControlStyle"));
+        auto style = resources.Lookup(boxedKey).try_as<wux::Style>();
+        if (!style) return false;
+
+        wux::Style targetStyle = style;
+        const bool wasSealed = style.IsSealed();
+        if (wasSealed) {
+            targetStyle = wux::Style(style.TargetType());
+        } else {
+            targetStyle.Setters().Clear();
+        }
+
+        auto setters = targetStyle.Setters();
+        setters.Append(wux::Setter(wux::FrameworkElement::MarginProperty(),
+                                   winrt::box_value(wux::Thickness{4.0, 0.0, 0.0, 4.0})));
+        setters.Append(wux::Setter(wux::FrameworkElement::WidthProperty(),
+                                   winrt::box_value(90.0)));
+        setters.Append(wux::Setter(wux::FrameworkElement::HeightProperty(),
+                                   winrt::box_value(64.0)));
+
+        if (wasSealed) {
+            resources.Insert(boxedKey, targetStyle);
+        }
+
+        Wh_Log(L"[networkux] Windows 10 quick-action button metrics applied "
+               L"(90x64, margin 4,0,0,4, wasSealed=%d)",
+               wasSealed ? 1 : 0);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static void TryApplyDictionaryMetrics() noexcept {
+    if (!GetModuleHandleW(L"NetworkUX.dll")) return;
+
+    try {
+        auto app = wux::Application::Current();
+        if (!app) return;
+        auto rootResources = app.Resources();
+        if (!rootResources) return;
+        void* rootAbi = winrt::get_abi(rootResources);
+
+        if (g_patchedValuesDict.load(std::memory_order_acquire) != rootAbi) {
+            if (auto dict = FindDictionaryContainingKey(rootResources, L"QuickActionPanelMargin")) {
+                int written = 0;
+                if (PutValue(dict, L"QuickActionPanelMargin",
+                             winrt::box_value(wux::Thickness{12.0, 0.0, 0.0, 12.0}),
+                             L"Thickness", false))
+                    ++written;
+                if (PutValue(dict, L"ControlCornerRadius",
+                             winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
+                             L"CornerRadius", true))
+                    ++written;
+                if (PutValue(dict, L"OverlayCornerRadius",
+                             winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
+                             L"CornerRadius", true))
+                    ++written;
+                if (PutValue(dict, L"FocusVisualPrimaryThickness",
+                             winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
+                             L"Thickness", false))
+                    ++written;
+                if (PutValue(dict, L"FocusVisualSecondaryThickness",
+                             winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
+                             L"Thickness", false))
+                    ++written;
+                g_patchedValuesDict.store(rootAbi, std::memory_order_release);
+                Wh_Log(L"[networkux] applied %d Windows 10 resource dictionary value(s)", written);
+            }
+        }
+
+        if (g_patchedStyleDict.load(std::memory_order_acquire) != rootAbi) {
+            if (auto dict = FindDictionaryContainingKey(rootResources, L"QuickActionControlStyle")) {
+                if (PutControlStyleMetrics(dict)) {
+                    g_patchedStyleDict.store(rootAbi, std::memory_order_release);
+                }
+            }
+        }
+    } catch (...) {
+    }
+}
+
+static bool ContainsWideSubstring(PCWSTR hay, UINT32 len, const wchar_t* needle) noexcept {
+    if (!hay || !needle) return false;
+    const size_t nlen = wcslen(needle);
+    if (nlen == 0 || len < nlen) return false;
+    for (size_t i = 0; i + nlen <= len; ++i) {
+        if (_wcsnicmp(hay + i, needle, nlen) == 0) return true;
+    }
+    return false;
+}
+
+static HRESULT HandleCreateStringReference(WindowsCreateStringReference_t original,
+                                           PCWSTR sourceString, UINT32 length,
+                                           void* hstringHeader, void** string) noexcept {
+    if (!original) return E_FAIL;
+
+    // Crucial re-entrancy guard: C++/WinRT calls WindowsCreateStringReference inside
+    // Application::Current(), hstring construction, and Wh_Log formatting.
+    static thread_local bool s_inHook = false;
+    if (s_inHook || g_unloading.load(std::memory_order_acquire) ||
+        !FlyoutHostPatch::TemplatesPatched()) {
+        return original(sourceString, length, hstringHeader, string);
+    }
+
+    struct ReentrancyGuard {
+        bool& active;
+        explicit ReentrancyGuard(bool& flag) noexcept : active(flag) { active = true; }
+        ~ReentrancyGuard() noexcept { active = false; }
+    } guard(s_inHook);
+
+    if (sourceString) {
+        if (length == _countof(kWin11ButtonTemplate) - 1 &&
+            sourceString[0] == L'T' &&
+            wcsncmp(sourceString, kWin11ButtonTemplate, length) == 0) {
+            if (g_logs.fetch_add(1, std::memory_order_relaxed) < 6) {
+                Wh_Log(L"[networkux] remapping ToggleButtonWinuiFluentTemplate -> "
+                       L"QuickToggleWinuiFluentTemplate");
+            }
+            sourceString = kWin10ButtonTemplate;
+            length = static_cast<UINT32>(_countof(kWin10ButtonTemplate) - 1);
+        } else if (length > 0 && length < 96 && GetModuleHandleW(L"NetworkUX.dll") != nullptr &&
+                   g_probeLogs.load(std::memory_order_relaxed) < 12 &&
+                   (ContainsWideSubstring(sourceString, length, L"Template") ||
+                    ContainsWideSubstring(sourceString, length, L"QuickAction"))) {
+            if (g_probeLogs.fetch_add(1, std::memory_order_relaxed) < 12) {
+                Wh_Log(L"[networkux] string ref seen: %.*ls", static_cast<int>(length),
+                       sourceString);
+            }
+        }
+    }
+
+    const HRESULT hr = original(sourceString, length, hstringHeader, string);
+    TryApplyDictionaryMetrics();
+    return hr;
+}
+
+static HRESULT WINAPI ApiSetCreateStringReference_Hook(PCWSTR sourceString, UINT32 length,
+                                                       void* hstringHeader,
+                                                       void** string) noexcept {
+    return HandleCreateStringReference(g_apiSetCreateStringRefOriginal, sourceString, length,
+                                       hstringHeader, string);
+}
+
+static HRESULT WINAPI CombaseCreateStringReference_Hook(PCWSTR sourceString, UINT32 length,
+                                                        void* hstringHeader,
+                                                        void** string) noexcept {
+    return HandleCreateStringReference(g_combaseCreateStringRefOriginal, sourceString, length,
+                                       hstringHeader, string);
+}
+
+static void Install() noexcept {
+    // NetworkUX.dll imports WindowsCreateStringReference from
+    // api-ms-win-core-winrt-string-l1-1-0.dll, which on Windows 11 24H2 resolves via the OS
+    // ApiSetMap to kernelbase.dll!WindowsCreateStringReference (distinct in memory from
+    // combase.dll!WindowsCreateStringReference). Hook the exact ApiSet target AND combase.dll
+    // if distinct so every caller path in ShellExperienceHost.exe is covered cleanly.
+    HMODULE apiSet = LoadLibraryExW(L"api-ms-win-core-winrt-string-l1-1-0.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* apiTarget = apiSet ? reinterpret_cast<void*>(
+                                   GetProcAddress(apiSet, "WindowsCreateStringReference"))
+                             : nullptr;
+
+    HMODULE combase = GetModuleHandleW(L"combase.dll");
+    if (!combase) {
+        combase = LoadLibraryExW(L"combase.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    void* combaseTarget = combase ? reinterpret_cast<void*>(
+                                        GetProcAddress(combase, "WindowsCreateStringReference"))
+                                  : nullptr;
+
+    int hooked = 0;
+    if (apiTarget &&
+        Wh_SetFunctionHook(apiTarget, reinterpret_cast<void*>(ApiSetCreateStringReference_Hook),
+                           reinterpret_cast<void**>(&g_apiSetCreateStringRefOriginal))) {
+        ++hooked;
+        Wh_Log(L"[networkux] ApiSet WindowsCreateStringReference hook armed at 0x%p", apiTarget);
+    }
+    if (combaseTarget && combaseTarget != apiTarget &&
+        Wh_SetFunctionHook(combaseTarget,
+                           reinterpret_cast<void*>(CombaseCreateStringReference_Hook),
+                           reinterpret_cast<void**>(&g_combaseCreateStringRefOriginal))) {
+        ++hooked;
+        Wh_Log(L"[networkux] combase WindowsCreateStringReference hook armed at 0x%p",
+               combaseTarget);
+    }
+    if (hooked == 0) {
+        Wh_Log(L"[networkux] WindowsCreateStringReference hook unavailable");
+    }
+}
+
+}  // namespace NetworkUxQuickActions
+
 BOOL Wh_ModInit() {
     try {
         LoadFlyoutSettings();
 
-        wchar_t exePath[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, exePath, _countof(exePath));
-        if (g_realExePath[0] == 0) wcscpy_s(g_realExePath, exePath);
+        CaptureRealExePath();
         Wh_Log(L"[flyout] init: Windows 10 legacy flyouts restorer");
-        Wh_Log(L"[flyout] process: %s", exePath);
+        Wh_Log(L"[flyout] process: %s", g_realExePath[0] ? g_realExePath : L"(unknown)");
         Wh_Log(L"[flyout] data folder: %s",
                g_cfg.storePath[0] ? g_cfg.storePath : L"(not available)");
 
         // ShellExperienceHost.exe hosts the flyouts this mod draws (network, battery). This
-        // mod is loaded there as well, and in that process only the flyout-host patches (and
-        // optionally the experimental square-corners hook) run: it is not the shell process,
-        // and nothing else of the mod applies to it.
-        // Is the running process this image? The flyout host belongs to another process, so
-        // the name of the image is what tells the two apart.
+        // mod is loaded there as well, and in that process only the flyout-host patches run:
+        // it is not the shell process, and nothing else of the mod applies to it.
         if (IsProcessImageName(g_realExePath, L"ShellExperienceHost.exe")) {
             Wh_Log(L"[flyout] ShellExperienceHost: only the flyout-host patches run here");
-            // This process is the one that draws the flyout: it has to build it the Windows 10
-            // way, otherwise the flyout it shows is torn down again after a moment.
             FlyoutHostPatch::Install();
+            NetworkUxQuickActions::Install();
             return TRUE;
         }
 
