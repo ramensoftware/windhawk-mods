@@ -2,7 +2,7 @@
 // @id              explorer-terminal-admin-alias
 // @name            File Explorer Terminal Admin Aliases
 // @description     Launch elevated or custom terminals (cmd, Windows Terminal, PowerShell) directly from the File Explorer address bar with configurable aliases.
-// @version         1.0.3
+// @version         1.0.4
 // @author          RobotsNeverDie
 // @github          https://github.com/RBND
 // @homepage        https://github.com/RBND/CMD-Admin
@@ -109,7 +109,7 @@ Open the mod's **Settings** tab in Windhawk to:
   $name: "Custom Alias 1 - Target Executable"
   $description: >-
     Executable name or full path (e.g. "code.cmd").
-- custom1_args: '"%DIR%"'
+- custom1_args: "%DIR%"
   $name: "Custom Alias 1 - Arguments"
   $description: >-
     Arguments passed to target. Supports "%DIR%" or "<DIR>" (active directory) and "%ARGS%" or "<ARGS>" (inline arguments).
@@ -179,9 +179,12 @@ static std::wstring Trim(const std::wstring& str) {
     return str.substr(first, (last - first + 1));
 }
 
-// Helper: Read a string setting safely without substituting defaults when user cleared it
+// Helper: Read a string setting safely without substituting non-empty defaults when user intentionally cleared it
 static std::wstring ReadStringSetting(PCWSTR name) {
-    return Trim(WindhawkUtils::StringSetting::make(name).get());
+    PCWSTR val = Wh_GetStringSetting(name);
+    std::wstring result = (val != nullptr) ? val : L"";
+    if (val != nullptr) Wh_FreeStringSetting(val);
+    return Trim(result);
 }
 
 // Helper: Case-insensitive equality
@@ -263,7 +266,7 @@ static std::wstring EscapePowerShellLiteral(const std::wstring& str) {
     escaped.reserve(str.length() + 8);
     for (WCHAR ch : str) {
         escaped.push_back(ch);
-        if (ch == L'\'' || ch == 0x2018 || ch == 0x2019 || ch == 0x201A || ch == 0x201B) {
+        if (ch == L'\'' || ch == (WCHAR)0x2018 || ch == (WCHAR)0x2019 || ch == (WCHAR)0x201A || ch == (WCHAR)0x201B) {
             escaped.push_back(ch); // Double the quote delimiter
         }
     }
@@ -792,15 +795,33 @@ BOOL Wh_ModInit() {
         }
     }
     if (pSearchPathW) {
-        WindhawkUtils::SetFunctionHook(pSearchPathW, SearchPathW_Hook, &SearchPathW_Original);
+        Wh_SetFunctionHook(pSearchPathW, (void*)SearchPathW_Hook, (void**)&SearchPathW_Original);
     }
 
     // Hook PathFindOnPathW
-    WindhawkUtils::SetFunctionHook(PathFindOnPathW, PathFindOnPathW_Hook, &PathFindOnPathW_Original);
+    HMODULE hShlwapi = GetModuleHandle(L"shlwapi.dll");
+    if (!hShlwapi) hShlwapi = LoadLibrary(L"shlwapi.dll");
+    if (hShlwapi) {
+        void* pPathFindOnPathW = (void*)GetProcAddress(hShlwapi, "PathFindOnPathW");
+        if (pPathFindOnPathW) {
+            Wh_SetFunctionHook(pPathFindOnPathW, (void*)PathFindOnPathW_Hook, (void**)&PathFindOnPathW_Original);
+        }
+    }
 
     // Hook ShellExecuteExW and ShellExecuteW
-    WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook, &ShellExecuteExW_Original);
-    WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
+    HMODULE hShell32 = GetModuleHandle(L"shell32.dll");
+    if (!hShell32) hShell32 = LoadLibrary(L"shell32.dll");
+    if (hShell32) {
+        void* pShellExecuteExW = (void*)GetProcAddress(hShell32, "ShellExecuteExW");
+        if (pShellExecuteExW) {
+            Wh_SetFunctionHook(pShellExecuteExW, (void*)ShellExecuteExW_Hook, (void**)&ShellExecuteExW_Original);
+        }
+
+        void* pShellExecuteW = (void*)GetProcAddress(hShell32, "ShellExecuteW");
+        if (pShellExecuteW) {
+            Wh_SetFunctionHook(pShellExecuteW, (void*)ShellExecuteW_Hook, (void**)&ShellExecuteW_Original);
+        }
+    }
 
     return TRUE;
 }
