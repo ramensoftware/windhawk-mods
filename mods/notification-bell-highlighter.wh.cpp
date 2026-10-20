@@ -2,7 +2,7 @@
 // @id              notification-bell-highlighter
 // @name            Notification Bell Highlighter
 // @description     Pulsing, bright overlay with a counter on the taskbar notification bell
-// @version         0.5
+// @version         0.5.2
 // @author          mwalker212
 // @github          https://github.com/mwalker212
 // @include         windhawk.exe
@@ -21,9 +21,9 @@ Settings for shape (circle or square), size, position, colour, pulse rate and co
 Windows 11 only. Tested on 26H2 build 26300.9711.
 
 Limitations:
-Overlay rather than restyled icon
-Primary taskbar only
-Relies on the English accessible name, e.g. "Notifications 1 new notification"
+- Overlay rather than restyled icon, this mod highlights the bell, while 'Taskbar tray system icon tweaks' can hide it.
+- Primary taskbar only.
+- Relies on the English accessible name, e.g. "Notifications 1 new notification".
 */
 // ==/WindhawkModReadme==
 
@@ -56,6 +56,7 @@ Relies on the English accessible name, e.g. "Notifications 1 new notification"
 #include <climits>
 #include <cmath>
 #include <string>
+#include <windhawk_utils.h>
 
 struct Settings {
     int sizePercent = 100;
@@ -92,20 +93,24 @@ static DWORD g_lastFindTick = 0;
 static void LoadSettings() {
     g.sizePercent = Wh_GetIntSetting(L"sizePercent");
     if (g.sizePercent < 50) g.sizePercent = 50;
+    if (g.sizePercent > 300) g.sizePercent = 300;
     g.pulseMs = Wh_GetIntSetting(L"pulseMs");
     if (g.pulseMs < 200) g.pulseMs = 200;
     g.showCount = Wh_GetIntSetting(L"showCount") != 0;
     g.offsetX = Wh_GetIntSetting(L"offsetX");
     g.offsetY = Wh_GetIntSetting(L"offsetY");
 
-    PCWSTR c = Wh_GetStringSetting(L"color");
-    unsigned long v = wcstoul(c, nullptr, 16);
-    Wh_FreeStringSetting(c);
-    g.color = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
-
-    PCWSTR shape = Wh_GetStringSetting(L"shape");
-    g.square = wcscmp(shape, L"square") == 0;
-    Wh_FreeStringSetting(shape);
+    {
+        auto color = WindhawkUtils::StringSetting::make(L"color");
+        const wchar_t* hex = color.get();
+        if (*hex == L'#') hex++;                  // allow "#FF2D2D"
+        unsigned long v = wcstoul(hex, nullptr, 16);
+        g.color = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+    }
+    {
+        auto shape = WindhawkUtils::StringSetting::make(L"shape");
+        g.square = wcscmp(shape.get(), L"square") == 0;
+    }
 }
 
 static int ParseCount(const wchar_t* name) {
@@ -280,6 +285,17 @@ static void RenderOverlay(HWND hwnd, BYTE alpha) {
         }
         GdiFlush();
 
+        // GDI text may leave the alpha byte of glyph pixels at 0, which would
+        // blend them with whatever is behind the overlay. Pixels that GDI
+        // touched have alpha 0 but non-zero colour, so make them opaque.
+        if (g.showCount && g_count > 0) {
+            for (int i = 0; i < size * size; i++) {
+                if ((bits[i] >> 24) == 0 && (bits[i] & 0x00FFFFFF)) {
+                    bits[i] |= 0xFF000000;
+                }
+            }
+        }
+
         g_dibSize = size;
         g_dibCount = g_count;
         g_dibColor = g.color;
@@ -316,8 +332,12 @@ static void Reposition(HWND hwnd, const RECT& rc, int count) {
 
     int h = rc.bottom - rc.top;
     int size = h * g.sizePercent / 100;
-    int x = rc.right - size + g.offsetX;
-    int y = rc.top + (h - size) / 2 + g.offsetY;
+    UINT dpi = g_bellTray ? GetDpiForWindow(g_bellTray) : 96;
+    if (!dpi) dpi = 96;
+    int offX = MulDiv(g.offsetX, dpi, 96);
+    int offY = MulDiv(g.offsetY, dpi, 96);
+    int x = rc.right - size + offX;
+    int y = rc.top + (h - size) / 2 + offY;
 
     g_curSize = size;
     SetWindowPos(hwnd, HWND_TOPMOST, x, y, size, size,
@@ -463,11 +483,11 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    // Reload on the overlay thread so settings aren't read while changing.
-    if (g_thread && g_readyEvent &&
-        WaitForSingleObject(g_readyEvent, 0) == WAIT_OBJECT_0 && g_wnd) {
-        PostMessageW(g_wnd, WM_APP, 0, 0);
-    }
+    // Wait until the overlay thread has finished creating its window, so a
+    // change made during startup isn't dropped. Safe: the overlay thread's
+    // startup doesn't depend on this thread.
+    if (g_readyEvent) WaitForSingleObject(g_readyEvent, INFINITE);
+    if (g_wnd) PostMessageW(g_wnd, WM_APP, 0, 0);
 }
 
 void WhTool_ModUninit() {
