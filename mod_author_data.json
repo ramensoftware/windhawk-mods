@@ -900,6 +900,12 @@
     "githubId": 8126035,
     "homepages": []
   },
+  "https://github.com/issuch": {
+    "author": "Issuch",
+    "github": "https://github.com/Issuch",
+    "githubId": 164121189,
+    "homepages": []
+  },
   "https://github.com/itsprofessional": {
     "author": "ItsProfessional",
     "github": "https://github.com/ItsProfessional",
@@ -1916,6 +1922,14 @@
     "github": "https://github.com/ViNSaNiTY24",
     "githubId": 47107990,
     "homepages": []
+  },
+  "https://github.com/viraj-rgb": {
+    "author": "viraj-rgb",
+    "github": "https://github.com/viraj-rgb",
+    "githubId": 264058400,
+    "homepages": [
+      "https://github.com/viraj-rgb/windhawk-taskbar-cat"
+    ]
   },
   "https://github.com/vitalskib": {
     "author": "VitalS",

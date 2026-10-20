@@ -6365,6 +6365,33 @@
         "version": "0.7.1"
       }
     },
+    "explorer-taskbar-folder-thumbnails": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792504930000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792504930000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Issuch",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid -lgdi32 -lcomctl32 -ladvapi32",
+        "description": "Each File Explorer taskbar button shows a preview of the folder it has open, the way that folder looks in Explorer's own icon view",
+        "github": "https://github.com/Issuch",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Folder thumbnails on taskbar buttons",
+        "version": "1.0"
+      }
+    },
     "explorer-taskbar-overlay-icon": {
       "details": {
         "defaultSorting": 678,
@@ -14458,6 +14485,35 @@
         "name": "Taskbar minimize/restore on scroll",
         "twitter": "https://twitter.com/m417z",
         "version": "1.1.4"
+      }
+    },
+    "taskbar-cat": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792504935000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792504935000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "viraj-rgb",
+        "compilerOptions": "-lgdi32 -lshell32 -lwtsapi32 -ladvapi32 -lcomctl32 -lole32 -luuid -lwinmm",
+        "description": "An orange pixel-art cat that lives on your Windows 11 taskbar: it wanders, naps, grooms, purrs when you hover, hunts butterflies, plays with yarn and reacts to you.",
+        "github": "https://github.com/viraj-rgb",
+        "homepage": "https://github.com/viraj-rgb/windhawk-taskbar-cat",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Cat",
+        "version": "1.0.4"
       }
     },
     "taskbar-centered-start-split-icons": {
