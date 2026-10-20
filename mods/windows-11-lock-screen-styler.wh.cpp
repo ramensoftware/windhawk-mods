@@ -2605,9 +2605,9 @@ wuc::CompositionBrush XamlBlurBrush::CreateEffectBrush()
     {
         float threshold = std::clamp(*m_blackThreshold, 0.005f, 1.0f);
         float op = m_tint.A / 255.0f;
-        float cr = (m_tint.R / 255.0f) * op;
-        float cg = (m_tint.G / 255.0f) * op;
-        float cb = (m_tint.B / 255.0f) * op;
+        float r = m_tint.R / 255.0f;
+        float g = m_tint.G / 255.0f;
+        float b = m_tint.B / 255.0f;
 
         // Stage 1: Compute mask in RGB in [0, 1] while keeping Alpha = 1.0 so
         // premultiplied ColorMatrixEffect does not multiply negative RGB by
@@ -2626,19 +2626,18 @@ wuc::CompositionBrush XamlBlurBrush::CreateEffectBrush()
         m1[16] = 1.0f;   m1[17] = 1.0f;   m1[18] = 1.0f;   m1[19] = 0.0f;
         blackKeyLuma->Name(L"BlackKeyLuma");
 
-        // Stage 2: Convert the non-negative clamped mask in R into premultiplied
-        // RGBA (cr*mask, cg*mask, cb*mask, op*mask), producing the solid tint on
-        // pure black pixels and (0,0,0,0) on bright pixels.
+        // Stage 2: Convert the clamped mask in R into straight RGBA
+        // (r, g, b, op*mask); D2D premultiplies the output by alpha.
         auto blackKeyMask = winrt::make_self<ColorMatrixEffect>();
         blackKeyMask->Source = *blackKeyLuma;
         blackKeyMask->ClampOutput = true;
 
         auto& m2 = blackKeyMask->Matrix;
-        m2[0]  = cr;   m2[1]  = cg;   m2[2]  = cb;   m2[3]  = op;
+        m2[0]  = 0.0f; m2[1]  = 0.0f; m2[2]  = 0.0f; m2[3]  = op;
         m2[4]  = 0.0f; m2[5]  = 0.0f; m2[6]  = 0.0f; m2[7]  = 0.0f;
         m2[8]  = 0.0f; m2[9]  = 0.0f; m2[10] = 0.0f; m2[11] = 0.0f;
         m2[12] = 0.0f; m2[13] = 0.0f; m2[14] = 0.0f; m2[15] = 0.0f;
-        m2[16] = 0.0f; m2[17] = 0.0f; m2[18] = 0.0f; m2[19] = 0.0f;
+        m2[16] = r;    m2[17] = g;    m2[18] = b;    m2[19] = 0.0f;
         blackKeyMask->Name(L"BlackKeyMask");
 
         auto factory = m_compositor.CreateEffectFactory(*blackKeyMask);
@@ -6149,8 +6148,7 @@ std::optional<StyleConstant> ParseStyleConstant(
     return StyleConstant{std::wstring(key), std::move(value)};
 }
 
-StyleConstants LoadStyleConstants(
-    const std::vector<PCWSTR>& themeStyleConstants) {
+StyleConstants LoadStyleConstants() {
     StyleConstants result;
 
     auto addToResult = [&result](StyleConstant sc) {
@@ -6164,12 +6162,6 @@ StyleConstants LoadStyleConstants(
 
         result.insert(insertIndex, std::move(sc));
     };
-
-    for (const auto themeStyleConstant : themeStyleConstants) {
-        if (auto parsed = ParseStyleConstant(themeStyleConstant, result)) {
-            addToResult(std::move(*parsed));
-        }
-    }
 
     for (int i = 0;; i++) {
         string_setting_unique_ptr constantSetting(
@@ -6772,19 +6764,8 @@ void RefreshThemeResourceEntries() {
 }
 
 std::vector<ResourceVariableEntry> ProcessResourceVariablesFromSettings(
-    const StyleConstants& styleConstants,
-    const std::vector<PCWSTR>& themeResourceVariables) {
+    const StyleConstants& styleConstants) {
     std::vector<ResourceVariableEntry> resourceVariables;
-
-    for (const auto& themeResourceVariable : themeResourceVariables) {
-        Wh_Log(L"Processing theme resource variable %s", themeResourceVariable);
-
-        auto parsed =
-            ParseResourceVariable(themeResourceVariable, styleConstants);
-        if (parsed) {
-            resourceVariables.push_back(std::move(*parsed));
-        }
-    }
 
     for (int i = 0;; i++) {
         string_setting_unique_ptr setting(
@@ -6929,32 +6910,35 @@ std::wstring BuildTextForegroundStyle(PCWSTR renderStyleSetting,
                                       std::wstring_view rawColor,
                                       bool blendMode) {
     std::wstring hexColor = NormalizeHexColor(rawColor, L"#FFFFFFFF");
+    double alphaScale = ExtractHexAlphaOpacity(hexColor, 1.0);
 
     if (blendMode || (renderStyleSetting &&
                       _wcsicmp(renderStyleSetting, L"BlackMask") == 0)) {
-        double maskOpacity = ExtractHexAlphaOpacity(hexColor, 1.0);
         return L"Foreground:=<WindhawkBlur BlurAmount=\"0\" TintColor=\"" +
                hexColor + L"\" TintOpacity=\"" +
-               FormatDoubleInvariant(maskOpacity) +
+               FormatDoubleInvariant(alphaScale) +
                L"\" BlackThreshold=\"0.02\" />";
     }
 
     if (renderStyleSetting) {
         if (_wcsicmp(renderStyleSetting, L"FrostedGlass") == 0) {
             return L"Foreground:=<WindhawkBlur BlurAmount=\"20\" TintColor=\"" +
-                   hexColor +
-                   L"\" TintOpacity=\"0.45\" TintLuminosityOpacity=\"0.5\" />";
+                   hexColor + L"\" TintOpacity=\"" +
+                   FormatDoubleInvariant(0.45 * alphaScale) +
+                   L"\" TintLuminosityOpacity=\"0.5\" />";
         }
         if (_wcsicmp(renderStyleSetting, L"CrystalGlass") == 0) {
             return L"Foreground:=<WindhawkBlur BlurAmount=\"12\" TintColor=\"" +
-                   hexColor +
-                   L"\" TintOpacity=\"0.25\" TintSaturation=\"1.6\" "
+                   hexColor + L"\" TintOpacity=\"" +
+                   FormatDoubleInvariant(0.25 * alphaScale) +
+                   L"\" TintSaturation=\"1.6\" "
                    L"NoiseOpacity=\"0.06\" NoiseDensity=\"0.6\" />";
         }
         if (_wcsicmp(renderStyleSetting, L"ChameleonGlass") == 0) {
             return L"Foreground:=<WindhawkBlur BlurAmount=\"28\" TintColor=\"" +
-                   hexColor +
-                   L"\" TintOpacity=\"0.15\" TintSaturation=\"2.4\" />";
+                   hexColor + L"\" TintOpacity=\"" +
+                   FormatDoubleInvariant(0.15 * alphaScale) +
+                   L"\" TintSaturation=\"2.4\" />";
         }
         if (_wcsicmp(renderStyleSetting, L"MetallicChrome") == 0) {
             return L"Foreground:=<LinearGradientBrush StartPoint=\"0,0\" "
@@ -7085,7 +7069,7 @@ void ApplyDirectModuleSettings() {
                 std::to_wstring(timeOffsetY) + L"\" />");
         }
 
-        AddElementCustomizationRules(L"TextBlock#Time",
+        AddElementCustomizationRules(L"StackPanel#TimePanel > TextBlock#Time",
                                      timeStyles);
     }
 
@@ -7094,7 +7078,7 @@ void ApplyDirectModuleSettings() {
         bool dateVisible = Wh_GetIntSetting(L"dateSettings.visible") != 0;
         if (!dateVisible) {
             AddElementCustomizationRules(
-                L"TextBlock#Date",
+                L"StackPanel#TimeAndDatePanel > TextBlock#Date",
                 {L"Visibility=1"});
         } else {
             std::vector<std::wstring> dateStyles;
@@ -7176,7 +7160,7 @@ void ApplyDirectModuleSettings() {
             }
 
             AddElementCustomizationRules(
-                L"TextBlock#Date", dateStyles);
+                L"StackPanel#TimeAndDatePanel > TextBlock#Date", dateStyles);
         }
     }
 
@@ -7199,7 +7183,7 @@ void ApplyDirectModuleSettings() {
 }
 
 void ProcessAllStylesFromSettings() {
-    StyleConstants styleConstants = LoadStyleConstants({});
+    StyleConstants styleConstants = LoadStyleConstants();
 
     // Add dedicated settings rules first so user-defined controlStyles can
     // override any property.
@@ -7224,7 +7208,7 @@ void ProcessAllStylesFromSettings() {
     }
 
     g_resourceVariables =
-        ProcessResourceVariablesFromSettings(styleConstants, {});
+        ProcessResourceVariablesFromSettings(styleConstants);
 }
 
 void UninitializeResourceVariables() {
@@ -7540,10 +7524,23 @@ void Wh_ModAfterInit() {
     }
 }
 
+void WaitForAdviseThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_adviseThreadsMutex);
+        threads.swap(g_adviseThreads);
+    }
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
 void Wh_ModUninit() {
     Wh_Log(L">");
 
     StopImageLoadRetries();
+    WaitForAdviseThreads();
 
     HWND hCoreWnd = GetCoreWnd();
     if (hCoreWnd) {
@@ -7551,20 +7548,12 @@ void Wh_ModUninit() {
         RunFromWindowThread(
             hCoreWnd, [](PVOID) { UninitializeSettingsAndTap(); }, nullptr);
     }
-
-    std::vector<HANDLE> adviseThreads;
-    {
-        std::lock_guard<std::mutex> lock(g_adviseThreadsMutex);
-        adviseThreads = std::move(g_adviseThreads);
-    }
-    for (HANDLE thread : adviseThreads) {
-        WaitForSingleObject(thread, INFINITE);
-        CloseHandle(thread);
-    }
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
+
+    WaitForAdviseThreads();
 
     HWND hCoreWnd = GetCoreWnd();
     if (hCoreWnd) {
@@ -7578,3 +7567,4 @@ void Wh_ModSettingsChanged() {
             nullptr);
     }
 }
+
