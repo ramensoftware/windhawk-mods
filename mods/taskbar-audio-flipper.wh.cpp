@@ -14,7 +14,7 @@
 /*
 # Taskbar Audio Flipper
 
-![The widget on the taskbar, with its Output, Input and Webcam sections](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-audio-flipper/screenshot.png)
+![The widget on the taskbar, with its Output, Input and Webcam sections](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-audio-flipper/screenshot-1.2.png)
 
 A taskbar widget, in the style of the Windows weather widget, for switching audio devices. It has
 up to three sections, which you can each show or hide:
