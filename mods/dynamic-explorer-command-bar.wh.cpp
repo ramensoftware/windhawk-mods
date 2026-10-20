@@ -103,6 +103,7 @@ The **File extension filter** (`matchExtensions`) field lets you display toolbar
 * **`selected` / `any`** — Show whenever at least one item of any kind is highlighted.
 * **`files` / `file`** — Show if regular files are selected (regardless of count).
 * **`folders` / `folder` / `dir`** — Show if folders/directories are selected (regardless of count).
+* **`mixed` / `mixed_selection`** — Show exclusively when both regular files and folders are highlighted at the same time.
 * **`single`** — Show only when exactly 1 item (file or folder) is selected.
 * **`multiple` / `multi`** — Show only when 2 or more items are selected.
 * **`single_file`** *(or `single_files`)* — Show exclusively when exactly 1 regular file is selected.
@@ -115,6 +116,7 @@ The **File extension filter** (`matchExtensions`) field lets you display toolbar
 ### Combining Rules (`OR`, `AND`, and Exclusions)
 
 * **`folders, multi_file`** — Shows when any folder is selected **OR** 2+ files are selected (ideal for batch actions or directory tools).
+* **`files, mixed`** — Shows when regular files are selected **OR** when a mixed bundle of files and folders is selected (hiding only when purely folders or nothing is chosen).
 * **`none, folders`** — Shows in empty directory backgrounds **OR** when folders are selected.
 * **`single_file, single_folder`** — Shows for any single item, but automatically hides on multi-selection.
 * **`files + single`** — Same as `single_file` (uses `+` for strict intersection).
@@ -2105,7 +2107,8 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         if (token == L"folders" || token == L"folder" || token == L"dir" ||
             token == L"directory")
             return summary.folderCount > 0 && summary.fileCount == 0;
-
+        if (token == L"mixed" || token == L"mixed_selection")
+            return summary.fileCount > 0 && summary.folderCount > 0;
         if (token == L"single")
             return summary.count == 1;
         if (token == L"multi" || token == L"multiple")
@@ -2828,56 +2831,10 @@ void RemoveOurButtons(muxc::CommandBar const& commandBar) {
     }
 }
 
-void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
-    for (auto it = g_entries.begin(); it != g_entries.end();) {
-        if (!it->commandBar.get()) {
-            StopSelectionTimer(*it);
-            it = g_entries.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    CommandBarEntry* existingEntry = nullptr;
-    for (auto& ent : g_entries) {
-        if (ent.commandBar.get() == commandBar) {
-            existingEntry = &ent;
-            break;
-        }
-    }
-
-    // If already registered and the timer is actively running, nothing to do
-    if (existingEntry && existingEntry->selectionTimer) {
+void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
+                                 muxc::CommandBar const& commandBar) {
+    if (entry.selectionTimer || g_unloading)
         return;
-    }
-
-    CommandBarEntry& entry =
-        existingEntry ? *existingEntry : g_entries.emplace_back();
-    entry.commandBar = winrt::make_weak(commandBar);
-
-    TrackRevoker(
-        commandBar,
-        commandBar.ActualThemeChanged(
-            winrt::auto_revoke,
-            [](mux::FrameworkElement const& sender, wf::IInspectable const&) {
-                UiCallScope scope;
-                if (g_unloading)
-                    return;
-
-                {
-                    std::lock_guard<std::mutex> lock(g_iconCacheMutex);
-                    g_iconCache.clear();
-                }
-
-                if (auto cb = sender.try_as<muxc::CommandBar>()) {
-                    try {
-                        RemoveOurButtons(cb);
-                        UpdateCommandBar(cb);
-                    } catch (...) {
-                        Wh_Log(L"Error %08X", winrt::to_hresult().value);
-                    }
-                }
-            }));
 
     bool placeOnSecondary;
     bool hasFilters = false;
@@ -2908,15 +2865,17 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
             ? (commandBar.Name() == L"FileExplorerSecondaryCommandBar")
             : (commandBar.Name() == L"FileExplorerCommandBar");
 
-    if (isOurTargetBar && hasFilters) {
-        mux::DispatcherTimer selectionTimer;
-        selectionTimer.Interval(std::chrono::milliseconds(250));
+    if (!isOurTargetBar || !hasFilters)
+        return;
 
-        auto weakBar = winrt::make_weak(commandBar);
+    mux::DispatcherTimer selectionTimer;
+    selectionTimer.Interval(std::chrono::milliseconds(250));
 
-        auto timerToken = selectionTimer.Tick([weakBar, anyLabelHasTokens](
-                                                  wf::IInspectable const&,
-                                                  wf::IInspectable const&) {
+    auto weakBar = winrt::make_weak(commandBar);
+
+    auto timerToken = selectionTimer.Tick(
+        [weakBar, anyLabelHasTokens](wf::IInspectable const&,
+                                     wf::IInspectable const&) {
             UiCallScope scope;
             if (g_unloading)
                 return;
@@ -2945,8 +2904,6 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 !currentEntry->cachedBrowser) {
                 auto browser = GetActiveShellBrowser(hWnd);
 
-                // Re-lookup entry in case g_entries reallocated during COM
-                // calls
                 currentEntry = nullptr;
                 for (auto& ent : g_entries) {
                     if (ent.commandBar.get() == cb) {
@@ -2996,28 +2953,82 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 ctx = GetContextFromView(view.get(), count);
             } else {
                 ctx.shellView = view;
+                ctx.selectionCount = (size_t)(count > 0 ? count : 0);
             }
             UpdateDynamicButtonStates(cb, hWnd, &ctx);
         });
 
-        selectionTimer.Start();
-        entry.selectionTimer = selectionTimer;
-        entry.selectionTickToken = timerToken;
+    selectionTimer.Start();
+    entry.selectionTimer = selectionTimer;
+    entry.selectionTickToken = timerToken;
+}
 
-        TrackRevoker(commandBar,
-                     commandBar.Unloaded(
-                         winrt::auto_revoke, [](wf::IInspectable const& sender,
-                                                mux::RoutedEventArgs const&) {
-                             auto cb = sender.try_as<muxc::CommandBar>();
-                             for (auto& entry : g_entries) {
-                                 if (entry.commandBar.get() == cb) {
-                                     StopSelectionTimer(entry);
-                                     break;
-                                 }
-                             }
-                         }));
+void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
+    for (auto it = g_entries.begin(); it != g_entries.end();) {
+        if (!it->commandBar.get()) {
+            StopSelectionTimer(*it);
+            it = g_entries.erase(it);
+        } else {
+            ++it;
+        }
     }
 
+    CommandBarEntry* existingEntry = nullptr;
+    for (auto& ent : g_entries) {
+        if (ent.commandBar.get() == commandBar) {
+            existingEntry = &ent;
+            break;
+        }
+    }
+
+    if (existingEntry) {
+        if (!existingEntry->selectionTimer) {
+            StartSelectionTimerIfNeeded(*existingEntry, commandBar);
+        }
+        return;
+    }
+
+    CommandBarEntry& entry = g_entries.emplace_back();
+    entry.commandBar = winrt::make_weak(commandBar);
+
+    TrackRevoker(
+        commandBar,
+        commandBar.ActualThemeChanged(
+            winrt::auto_revoke,
+            [](mux::FrameworkElement const& sender, wf::IInspectable const&) {
+                UiCallScope scope;
+                if (g_unloading)
+                    return;
+
+                {
+                    std::lock_guard<std::mutex> lock(g_iconCacheMutex);
+                    g_iconCache.clear();
+                }
+
+                if (auto cb = sender.try_as<muxc::CommandBar>()) {
+                    try {
+                        RemoveOurButtons(cb);
+                        UpdateCommandBar(cb);
+                    } catch (...) {
+                        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+                    }
+                }
+            }));
+
+    TrackRevoker(commandBar,
+                 commandBar.Unloaded(
+                     winrt::auto_revoke, [](wf::IInspectable const& sender,
+                                            mux::RoutedEventArgs const&) {
+                         auto cb = sender.try_as<muxc::CommandBar>();
+                         for (auto& ent : g_entries) {
+                             if (ent.commandBar.get() == cb) {
+                                 StopSelectionTimer(ent);
+                                 break;
+                             }
+                         }
+                     }));
+
+    StartSelectionTimerIfNeeded(entry, commandBar);
     UpdateCommandBar(commandBar);
 }
 
@@ -3596,7 +3607,6 @@ void LoadSettings() {
         if (item.parent.empty())
             continue;
 
-        bool foundParent = false;
         std::function<bool(const std::vector<ActionItem>&)> checkParent =
             [&](const std::vector<ActionItem>& list) -> bool {
             for (const auto& node : list) {
