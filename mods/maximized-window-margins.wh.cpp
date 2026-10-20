@@ -38,6 +38,8 @@ maximized window fits inside it.
 
 ## Gaps between snapped windows
 
+![Gaps between snapped windows](https://raw.githubusercontent.com/mariogomesbarbosa/window-maximized-margin/main/images/snapped-windows.webp)
+
 When two or more windows share the screen through Snap / Snap Layouts (halves,
 thirds, quarters...), the mod keeps the "Gap between snapped windows" between
 them. Edges that touch the screen keep the regular margins.
