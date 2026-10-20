@@ -2,7 +2,7 @@
 // @id              notification-bell-highlighter
 // @name            Notification Bell Highlighter
 // @description     Pulsing, bright overlay with a counter on the taskbar notification bell
-// @version         0.4
+// @version         0.5
 // @author          mwalker212
 // @github          https://github.com/mwalker212
 // @include         windhawk.exe
@@ -14,7 +14,7 @@
 Makes the Windows notification bell more obvious when notifications are waiting.
 Draws a pulsing, bright overlay with an optional counter over the taskbar notification bell when notifications are pending.
 
-Settings for size, position, colour, pulse rate and counter visibility.
+Settings for shape (circle or square), size, position, colour, pulse rate and counter visibility
 
 ![Screenshot](https://raw.githubusercontent.com/mwalker212/windhawk-assets/refs/heads/main/bell-notification.gif)
 
@@ -33,6 +33,11 @@ Relies on the English accessible name, e.g. "Notifications 1 new notification"
   $name: Overlay size (% of taskbar button height)
 - color: "FF2D2D"
   $name: Colour (hex RRGGBB)
+- shape: circle
+  $name: Shape
+  $options:
+  - circle: Circle
+  - square: Square
 - pulseMs: 1100
   $name: Pulse period (milliseconds)
 - showCount: true
@@ -55,6 +60,7 @@ Relies on the English accessible name, e.g. "Notifications 1 new notification"
 struct Settings {
     int sizePercent = 100;
     COLORREF color = RGB(255, 45, 45);
+    bool square = false;
     int pulseMs = 1100;
     bool showCount = true;
     int offsetX = 10;
@@ -76,6 +82,7 @@ static HGDIOBJ g_oldBmp = nullptr;
 static int g_dibSize = 0, g_dibCount = -1;
 static COLORREF g_dibColor = 0;
 static bool g_dibShowCount = false;
+static bool g_dibSquare = false;
 
 // Cached bell element (overlay thread only)
 static IUIAutomationElement* g_bell = nullptr;
@@ -95,6 +102,10 @@ static void LoadSettings() {
     unsigned long v = wcstoul(c, nullptr, 16);
     Wh_FreeStringSetting(c);
     g.color = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+
+    PCWSTR shape = Wh_GetStringSetting(L"shape");
+    g.square = wcscmp(shape, L"square") == 0;
+    Wh_FreeStringSetting(shape);
 }
 
 static int ParseCount(const wchar_t* name) {
@@ -214,7 +225,8 @@ static void RenderOverlay(HWND hwnd, BYTE alpha) {
     if (!g_memDC) g_memDC = CreateCompatibleDC(nullptr);
 
     if (!g_dib || size != g_dibSize || g_count != g_dibCount ||
-        g.color != g_dibColor || g.showCount != g_dibShowCount) {
+        g.color != g_dibColor || g.showCount != g_dibShowCount ||
+        g.square != g_dibSquare) {
         if (g_dib) {
             SelectObject(g_memDC, g_oldBmp);
             DeleteObject(g_dib);
@@ -233,15 +245,18 @@ static void RenderOverlay(HWND hwnd, BYTE alpha) {
         HGDIOBJ prev = SelectObject(g_memDC, g_dib);
         if (!g_oldBmp) g_oldBmp = prev;
 
-        // Anti-aliased filled circle, premultiplied alpha
+        // Filled shape, premultiplied alpha: anti-aliased circle or solid square
         double r = size / 2.0;
         int cr = GetRValue(g.color), cg = GetGValue(g.color), cb = GetBValue(g.color);
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
-                double dx = x + 0.5 - r, dy = y + 0.5 - r;
-                double cov = r - sqrt(dx * dx + dy * dy);
-                if (cov < 0) cov = 0;
-                if (cov > 1) cov = 1;
+                double cov = 1.0;
+                if (!g.square) {
+                    double dx = x + 0.5 - r, dy = y + 0.5 - r;
+                    cov = r - sqrt(dx * dx + dy * dy);
+                    if (cov < 0) cov = 0;
+                    if (cov > 1) cov = 1;
+                }
                 int a = (int)(cov * 255 + 0.5);
                 bits[y * size + x] = (a << 24) | ((cr * a / 255) << 16) |
                                      ((cg * a / 255) << 8) | (cb * a / 255);
@@ -269,6 +284,7 @@ static void RenderOverlay(HWND hwnd, BYTE alpha) {
         g_dibCount = g_count;
         g_dibColor = g.color;
         g_dibShowCount = g.showCount;
+        g_dibSquare = g.square;
     }
 
     SIZE sz = {size, size};
