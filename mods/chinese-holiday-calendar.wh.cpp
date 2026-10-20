@@ -542,15 +542,39 @@ Lịch âm Việt Nam do [@phatMT97](https://github.com/phatMT97) và
       $name: Word to look for
       $name:zh-CN: 要找的词
       $name:vi-VN: Từ cần tìm
+      $description: >-
+        One word, matched anywhere in an event's text. "*" takes every event no other rule
+        matched. A date may be written instead, e.g. "{lunar: d=15}"; see the README.
+      $description:zh-CN: >-
+        一个词，事件文字里包含它就算命中。填 "*" 兜底；也可以填日期，例如
+        "{lunar: d=15}"，写法见 README。
+      $description:vi-VN: >-
+        Một từ, khớp ở bất kỳ đâu trong nội dung sự kiện. "*" nhận mọi sự kiện không quy tắc
+        nào khớp. Có thể viết ngày thay cho từ, ví dụ "{lunar: d=15}"; xem README.
     - color: "#FF5A5A"
       $name: Colour
       $name:zh-CN: 颜色
       $name:vi-VN: Màu
+      $description: >-
+        Text colour (#RRGGBB). Empty sets no colour.
+      $description:zh-CN: >-
+        文字颜色（#RRGGBB）。留空不设置颜色。
+      $description:vi-VN: >-
+        Màu chữ (#RRGGBB). Để trống là không đặt màu.
       #! $format: colorRgb
     - text: "补班"
       $name: Text to show
       $name:zh-CN: 显示的文字
       $name:vi-VN: Chữ hiển thị
+      $description: >-
+        Cell text. "{name}" is the event text; empty uses the cell's own line (the system
+        line, or the Vietnamese date) and only changes the colour.
+      $description:zh-CN: >-
+        日期格显示的文字。"{name}" 是事件原文；留空沿用日期格自己的文字（系统那一行，或
+        越南农历日期），只改颜色。
+      $description:vi-VN: >-
+        Chữ trong ô ngày. "{name}" là nguyên văn sự kiện; để trống là dùng dòng của ô (dòng
+        hệ thống, hoặc ngày âm Việt Nam) và chỉ đổi màu.
   - - word: "休"
       $name: Word to look for
       $name:zh-CN: 要找的词
@@ -1481,6 +1505,37 @@ int32_t ParseDateKey(std::wstring const& text) {
     return MakeDateKey(year, month, day);
 }
 
+// True when a date-time value carries a time of day which is not midnight. An end of
+// "20260103T170000" covers the third of January until five in the afternoon, while one of
+// "20260103T000000" stops where that day begins: the two do not end the same way, so the
+// time is looked at even though the mod only marks whole days. A date without a time is
+// an all-day date and has no time of day.
+bool HasTimeOfDay(std::wstring const& text) {
+    const size_t t = text.find(L'T');
+    if (t == std::wstring::npos) {
+        return false;
+    }
+
+    std::wstring digits;
+    for (size_t i = t + 1; i < text.size() && digits.size() < 6; i++) {
+        if (text[i] >= L'0' && text[i] <= L'9') {
+            digits += text[i];
+        }
+    }
+
+    // Hours and minutes are the shortest form a feed writes; anything shorter is not a
+    // time this can tell apart from midnight.
+    if (digits.size() < 4) {
+        return false;
+    }
+
+    const int hour = (digits[0] - L'0') * 10 + (digits[1] - L'0');
+    const int minute = (digits[2] - L'0') * 10 + (digits[3] - L'0');
+    const int second =
+        digits.size() >= 6 ? (digits[4] - L'0') * 10 + (digits[5] - L'0') : 0;
+    return hour != 0 || minute != 0 || second != 0;
+}
+
 // The next day. The leap rule lives in DaysInMonth, so a 2024-02-29 in the feed is
 // stepped over correctly.
 int32_t NextDateKey(int32_t key) {
@@ -2360,6 +2415,8 @@ bool ParseIcs(std::wstring const& text,
         int32_t start = 0;
         int32_t end = 0;
         bool hasEnd = false;
+        // The end wrote a time of day which is not midnight, so its date is covered.
+        bool endHasTimeOfDay = false;
         int durationDays = 0;
         // A field the mod could not read as what it says it is. No end is guessed for
         // such an event, so it is dropped rather than given one.
@@ -2418,6 +2475,7 @@ bool ParseIcs(std::wstring const& text,
         } else if (name == L"DTEND") {
             event.end = ParseDateKey(value);
             event.hasEnd = true;
+            event.endHasTimeOfDay = HasTimeOfDay(value);
         } else if (name == L"DURATION") {
             // An event may write how long it lasts instead of when it ends. A duration
             // which cannot be read leaves the event with no end the mod knows, and an end
@@ -2485,9 +2543,10 @@ bool ParseIcs(std::wstring const& text,
             continue;
         }
 
-        // Where the event ends, exclusive like a DTEND: the DTEND when it wrote one, the
-        // day its DURATION reaches to when it wrote that instead, and the single day it
-        // starts on when it wrote neither.
+        // Where the event ends, exclusive like a DTEND: an all-day DTEND names the first
+        // day which is not covered, while one which wrote a time other than midnight (say
+        // 17:00) covers the whole of its own date as well. A DURATION reaches to its day
+        // the same way, and an event which wrote neither is its start day.
         int32_t end = 0;
         if (collected.hasEnd) {
             if (collected.end < collected.start) {
@@ -2498,11 +2557,16 @@ bool ParseIcs(std::wstring const& text,
                 droppedRanges++;
                 continue;
             }
-            // A timed event may start and end on the same date (09:00 to 17:00, say).
-            // That is one day here, not an empty range.
-            end = collected.end == collected.start
-                      ? NextDateKey(collected.start)
-                      : collected.end;
+            // A timed event may end on the day it starts (09:00 to 17:00, say): that is
+            // one day here, not an empty range. The same rule follows when the end is on a
+            // later date, so the last date of a timed range is marked as well.
+            if (collected.end == collected.start) {
+                end = NextDateKey(collected.start);
+            } else if (collected.endHasTimeOfDay) {
+                end = NextDateKey(collected.end);
+            } else {
+                end = collected.end;
+            }
         } else if (collected.durationDays > 0) {
             end = collected.start;
             for (int day = 0; day < collected.durationDays && end; day++) {
@@ -3372,31 +3436,43 @@ bool FetchHolidayData() {
     // user expects to see the feed marked with. The address is the one this response
     // was asked for, so a response which arrives after the address was changed is
     // dropped - its data would be the data of an address which is no longer set.
-    // The generation is read before the settings, so a change in between is caught by
-    // the check in StoreHolidays.
-    const uint64_t generation = g_settingsGeneration.load(std::memory_order_relaxed);
-    const std::shared_ptr<const Settings> current = GetSettings();
-    if (NormalizeIcsUrl(current->dataSourceUrl) != url) {
-        Wh_Log(L"The data source changed while the feed was on its way; the "
-               L"response is dropped");
-        return false;
-    }
+    // A change which only touched the rules is not a reason to throw the response away:
+    // the body is marked again with the settings which are current now. The generation is
+    // read before the settings, so a change in between is caught by the check in
+    // StoreHolidays.
+    size_t entryCount = 0;
+    std::shared_ptr<const Settings> current;
+    for (;;) {
+        const uint64_t generation =
+            g_settingsGeneration.load(std::memory_order_relaxed);
+        current = GetSettings();
+        if (NormalizeIcsUrl(current->dataSourceUrl) != url) {
+            Wh_Log(L"The data source changed while the feed was on its way; the "
+                   L"response is dropped");
+            return false;
+        }
 
-    HolidayMap parsed;
-    if (!ParseHolidayData(body, current->rules, parsed, current->removeTexts)) {
-        Wh_Log(L"Failed to parse the holiday data (%zu characters)", body.size());
-        return false;
-    }
+        HolidayMap parsed;
+        if (!ParseHolidayData(body, current->rules, parsed, current->removeTexts)) {
+            Wh_Log(L"Failed to parse the holiday data (%zu characters)", body.size());
+            return false;
+        }
+        entryCount = parsed.size();
 
-    size_t entryCount = parsed.size();
-    // The body is stored with the data even when nothing was marked: the rules are a
-    // setting like any other, and a feed which is read but marks nothing is one which
-    // has to be marked again - from the body - as soon as the rules say so (see
-    // Wh_ModSettingsChanged).
-    if (!StoreHolidays(generation, body, std::move(parsed))) {
-        Wh_Log(L"The settings changed while the feed was being read; the response "
-               L"is dropped");
-        return false;
+        // The body is stored with the data even when nothing was marked: the rules are a
+        // setting like any other, and a feed which is read but marks nothing is one which
+        // has to be marked again - from the body - as soon as the rules say so (see
+        // Wh_ModSettingsChanged).
+        if (StoreHolidays(generation, body, std::move(parsed))) {
+            break;
+        }
+
+        // A setting changed while the body was being marked. The address is still the one
+        // this response was asked for, so the response is the feed of this mod: it is
+        // marked again with the current settings, rather than dropped and asked for again
+        // after the retry delay.
+        Wh_Log(L"The settings changed while the feed was being read; it is marked "
+               L"again with the current settings");
     }
 
     {
