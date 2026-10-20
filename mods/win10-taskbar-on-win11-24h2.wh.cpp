@@ -2,7 +2,7 @@
 // @id              win10-taskbar-on-win11-24h2
 // @name            Win10 taskbar on Win11 24H2 or 25H2
 // @description     Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1.8
+// @version         0.1.9
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
@@ -44,6 +44,8 @@ To customize the clock and tray area, launch legacy tray setup dialog:
 
 `explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}`
 
+To restore the network icon, install this mod: [Restore legacy network tray](https://windhawk.net/mods/restore-legacy-network-tray).
+
 If you want to restart Explorer after its process has been terminated, you should
 run the file userinit.exe from the system directory.
 
@@ -54,16 +56,12 @@ in File Explorer's settings.
 Known issues:
 
 * Notification toasts may cause Explorer to crash, it is recommended to disable notifications. Also, this mod is
-designed to mitigate this issue:
-
-[*Fix 11's notifications crash in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-10-taskbar-notifications).
+designed to mitigate this issue: [*Fix 11's notifications crash in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-10-taskbar-notifications).
 
 * The language switch menu flyout may appear at Explorer's start.
 
 * The keyboard layout indicator displays the language name vertically rather than horizontally.
-To mitigate this, install this mod:
-
-[*Fix language indicator in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator)
+To mitigate this, install this mod: [*Fix language indicator in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator)
 
 * The UWP apps do not appear on the Win10 taskbar.
 
