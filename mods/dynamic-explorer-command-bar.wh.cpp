@@ -80,7 +80,7 @@ The mod supports rich parameter expansions that dynamically resolve the state of
 
 Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.exe "%sel%"`).
 
-> * **Virtual Shell Locations:** Locations such as *This PC*, *Recycle Bin*, and *Control Panel* do not possess a physical filesystem path. For these virtual locations, folder path tokens (`%path%`, `%dir%`, `%d%`, `%p`) automatically fall back to the active user's profile path (`%USERPROFILE%`) to guarantee terminal shells and scripts always launch successfully without syntax errors. Use `%d_name` if you want the native visible title (e.g. `This PC` or `Recycle Bin`).
+> * **Virtual Shell Locations:** Locations such as *This PC*, *Recycle Bin*, and *Control Panel* do not possess a physical filesystem path. For safety, folder path argument tokens (`%path%`, `%dir%`, `%d%`, `%p%`) resolve to an empty string in these views to prevent destructive scripts from unintentionally targeting user directories. The working directory (`%USERPROFILE%`) is still used in the background so applications launch cleanly. Use `%d_name%` to retrieve the native shell title (e.g. `This PC` or `Recycle Bin`).
 > * **UI Labels:** To prevent toolbar buttons from overflowing, multi-item tokens like `%base%`, `%name%`, and `%1%` automatically evaluate to the **first highlighted item's name** rather than full multi-line absolute paths.
 
 ---
@@ -109,7 +109,8 @@ The **File extension filter** (`matchExtensions`) field lets you display toolbar
 * **`multi_file`** *(or `multi_files`)* — Show exclusively when 2 or more regular files are selected.
 * **`single_folder`** *(or `single_folders`)* — Show exclusively when exactly 1 folder is selected.
 * **`multi_folder`** *(or `multi_folders`)* — Show exclusively when 2 or more folders are selected.
-* **`txt, js, cpp`** — Whitelist specific file extensions.
+* **`only <ext>`** *(e.g. `only txt`, `only:cpp`, `only txt, only cpp`)* — Strict whitelist. Shows exclusively when **every single highlighted item** matches one of the specified extensions (vetoes mixed selections and folders).
+* **`txt, js, cpp`** — Standard extension filter (shows if *any* selected file matches).
 
 ### Combining Rules (`OR`, `AND`, and Exclusions)
 
@@ -119,6 +120,7 @@ The **File extension filter** (`matchExtensions`) field lets you display toolbar
 * **`files + single`** — Same as `single_file` (uses `+` for strict intersection).
 * **`folders, multi_file, -zip`** — Matches folders or multiple files, but immediately hides if any item in the selection is a `.zip` file.
 * **`files, hide`** — Kept permanently hidden because `hide` takes absolute precedence over all other tokens.
+* **`only txt, only md`** — Shows when only `.txt` and/or `.md` files are highlighted (hides immediately if a `.png` or folder is included).
 
 ---
 
@@ -224,7 +226,7 @@ To place buttons inside a dropdown menu:
     - parent: ""
     - command: internal:OpenWith
     - parameters: ""
-    - matchExtensions: "files, single"
+    - matchExtensions: "single_file"
     - iconGlyph: "E7AC"
     - hideIcon: false
     - showLabel: true
@@ -1001,6 +1003,13 @@ std::wstring BuildParameters(std::wstring parameters,
         }
     }
 
+    // Clean up any stray %sel_each occurrences first so %sel doesn't match its
+    // prefix
+    ReplacePlaceholder(parameters, L"\"%sel_each%\"", L"");
+    ReplacePlaceholder(parameters, L"%sel_each%", L"");
+    ReplacePlaceholder(parameters, L"\"%sel_each\"", L"");
+    ReplacePlaceholder(parameters, L"%sel_each", L"");
+
     // --- %files (Regular files only) ---
     std::wstring formattedFiles = FormatSelectedItemsQuoted(filesOnly);
     ReplacePlaceholder(parameters, L"\"%files%\"", formattedFiles);
@@ -1108,26 +1117,32 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%d_smart", smartDir);
     }
 
-    // --- %d_name (Folder name of active directory) ---
+    // --- %d_name (Folder display name: prefers native shell title, matches UI
+    // labels) ---
     if (parameters.find(L"%d_name") != std::wstring::npos) {
-        std::wstring dir = effectiveDir;
-        while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
-            dir.pop_back();
-        PCWSTR namePtr = PathFindFileNameW(dir.c_str());
-        std::wstring dName = namePtr ? namePtr : L"";
+        std::wstring dName = context.folderDisplayName;
+        if (dName.empty()) {
+            std::wstring dir = effectiveDir;
+            while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
+                dir.pop_back();
+            PCWSTR namePtr = PathFindFileNameW(dir.c_str());
+            if (namePtr)
+                dName = namePtr;
+        }
         ReplacePlaceholder(parameters, L"\"%d_name%\"", L"\"" + dName + L"\"");
         ReplacePlaceholder(parameters, L"%d_name%", dName);
         ReplacePlaceholder(parameters, L"\"%d_name\"", L"\"" + dName + L"\"");
         ReplacePlaceholder(parameters, L"%d_name", dName);
     }
 
-    // --- %sel% / %f (All selected items) ---
+    // --- %sel% / %f (All selected items: replace with empty string if none
+    // selected instead of dropping parameters) ---
     if (parameters.find(L"%sel") != std::wstring::npos ||
         parameters.find(L"%f") != std::wstring::npos) {
-        if (context.allSelectedPaths.empty())
-            return std::wstring();
         std::wstring formatted =
-            FormatSelectedItemsQuoted(context.allSelectedPaths);
+            context.allSelectedPaths.empty()
+                ? L""
+                : FormatSelectedItemsQuoted(context.allSelectedPaths);
         ReplacePlaceholder(parameters, L"\"%sel%\"", formatted);
         ReplacePlaceholder(parameters, L"%sel%", formatted);
         ReplacePlaceholder(parameters, L"\"%sel\"", formatted);
@@ -1138,44 +1153,53 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%f", formatted);
     }
 
-    // --- %path% / %dir / %d (Active folder path) ---
-    std::wstring quotedPath = QuoteArg(effectiveDir);
+    // --- Physical folder paths (leave empty if navigating virtual shell roots
+    // like This PC/Recycle Bin) ---
+    std::wstring physicalDir = (!context.folderPath.empty() &&
+                                PathFileExistsW(context.folderPath.c_str()))
+                                   ? context.folderPath
+                                   : L"";
+    std::wstring quotedPhysicalPath =
+        physicalDir.empty() ? L"" : QuoteArg(physicalDir);
 
-    ReplacePlaceholder(parameters, L"\"%path%\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%path%", effectiveDir);
-    ReplacePlaceholder(parameters, L"\"%path\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%path", effectiveDir);
+    // --- %path% / %dir / %d ---
+    ReplacePlaceholder(parameters, L"\"%path%\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%path%", physicalDir);
+    ReplacePlaceholder(parameters, L"\"%path\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%path", physicalDir);
 
-    ReplacePlaceholder(parameters, L"\"%dir%\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%dir%", effectiveDir);
-    ReplacePlaceholder(parameters, L"\"%dir\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%dir", effectiveDir);
+    ReplacePlaceholder(parameters, L"\"%dir%\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%dir%", physicalDir);
+    ReplacePlaceholder(parameters, L"\"%dir\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%dir", physicalDir);
 
-    ReplacePlaceholder(parameters, L"\"%d%\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%d%", effectiveDir);
-    ReplacePlaceholder(parameters, L"\"%d\"", quotedPath);
-    ReplacePlaceholder(parameters, L"%d", effectiveDir);
+    ReplacePlaceholder(parameters, L"\"%d%\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%d%", physicalDir);
+    ReplacePlaceholder(parameters, L"\"%d\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%d", physicalDir);
 
     // --- %p / %parent (Parent directory of active tab) ---
     if (parameters.find(L"%p") != std::wstring::npos ||
         parameters.find(L"%parent") != std::wstring::npos) {
-        std::wstring parent = effectiveDir;
-        while (!parent.empty() &&
-               (parent.back() == L'\\' || parent.back() == L'/'))
-            parent.pop_back();
-        std::wstring p;
-        if (parent.length() == 2 && parent[1] == L':') {
-            p = parent + L'\\';
-        } else {
-            size_t slash = parent.find_last_of(L"\\/");
-            if (slash != std::wstring::npos) {
-                p = parent.substr(0, slash);
-                if (p.length() == 2 && p[1] == L':')
-                    p += L'\\';
+        std::wstring p = L"";
+        if (!physicalDir.empty()) {
+            std::wstring parent = physicalDir;
+            while (!parent.empty() &&
+                   (parent.back() == L'\\' || parent.back() == L'/'))
+                parent.pop_back();
+            if (parent.length() == 2 && parent[1] == L':') {
+                p = parent + L'\\';
+            } else {
+                size_t slash = parent.find_last_of(L"\\/");
+                if (slash != std::wstring::npos) {
+                    p = parent.substr(0, slash);
+                    if (p.length() == 2 && p[1] == L':')
+                        p += L'\\';
+                }
             }
         }
 
-        std::wstring quotedParent = QuoteArg(p);
+        std::wstring quotedParent = p.empty() ? L"" : QuoteArg(p);
 
         ReplacePlaceholder(parameters, L"\"%parent%\"", quotedParent);
         ReplacePlaceholder(parameters, L"%parent%", p);
@@ -1223,12 +1247,15 @@ void LaunchItemForWindow(HWND hExplorerWnd,
     std::wstring workingDir =
         GetEffectiveFolderPath(capturedContext.folderPath);
 
-    if (item.parameters.find(L"%sel_each%") != std::wstring::npos) {
+    if (item.parameters.find(L"%sel_each%") != std::wstring::npos ||
+        item.parameters.find(L"%sel_each") != std::wstring::npos) {
         if (capturedContext.allSelectedPaths.empty()) {
             std::wstring param = item.parameters;
             ReplacePlaceholder(param, L"\"%sel_each%\"", L"");
             ReplacePlaceholder(param, L"%sel_each%", L"");
-            ReplacePlaceholder(param, L"%path%", workingDir);
+            ReplacePlaceholder(param, L"\"%sel_each\"", L"");
+            ReplacePlaceholder(param, L"%sel_each", L"");
+            param = BuildParameters(param, capturedContext);
             ExecuteProcess(command, param, workingDir);
             return;
         }
@@ -1952,10 +1979,11 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return true;
     }
 
-    // 1. Parse tokens into negative exclusions and OR branches
     std::vector<std::wstring> orBranches;
     std::vector<std::wstring> negativeTokens;
+    std::vector<std::wstring> onlyExtensions;
 
+    // 1. Parse tokens separated by comma or semicolon
     size_t start = 0;
     while (start < filter.size()) {
         size_t end = filter.find_first_of(L",;", start);
@@ -1968,6 +1996,29 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         if (rawToken.empty())
             continue;
 
+        std::wstring lower = ToLower(rawToken);
+
+        // Absolute override: 'hide' or 'hidden'
+        if (lower == L"hide" || lower == L"hidden")
+            return false;
+
+        // Check for 'only' keyword: e.g. "only txt", "only .txt", "only:txt"
+        if (lower.starts_with(L"only ") || lower.starts_with(L"only:") ||
+            lower.starts_with(L"only=")) {
+            std::wstring extPart = TrimWhitespaceAndQuotes(rawToken.substr(4));
+            if (!extPart.empty() &&
+                (extPart.front() == L':' || extPart.front() == L'='))
+                extPart = TrimWhitespaceAndQuotes(extPart.substr(1));
+            if (!extPart.empty() && extPart.front() == L'.')
+                extPart.erase(extPart.begin());
+
+            if (!extPart.empty()) {
+                onlyExtensions.push_back(ToLower(extPart));
+            }
+            continue;
+        }
+
+        // Negative tokens (-zip, -folder, etc.)
         if (rawToken.front() == L'-' || rawToken.front() == L'~') {
             rawToken.erase(rawToken.begin());
             rawToken = TrimWhitespaceAndQuotes(rawToken);
@@ -1985,31 +2036,36 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         }
     }
 
-    // Helper: checks if a token string represents 'hide'
-    auto isHideToken = [](const std::wstring& s) {
-        std::wstring t = ToLower(TrimWhitespaceAndQuotes(s));
-        return t == L"hide" || t == L"hidden";
-    };
-
-    // --- ABSOLUTE OVERRIDE: HIDE FILTER ---
-    // If 'hide' or 'hidden' is specified anywhere, forcibly keep button hidden
-    for (const auto& branch : orBranches) {
-        if (isHideToken(branch))
+    // 2. HIGHEST PRIORITY: Strict 'only' Whitelist Evaluation
+    if (!onlyExtensions.empty()) {
+        // Must have at least 1 item selected
+        if (summary.count == 0)
             return false;
 
-        // Check if 'hide' exists inside a '+' AND group
-        size_t hStart = 0;
-        while (hStart < branch.size()) {
-            size_t hEnd = branch.find(L'+', hStart);
-            if (hEnd == std::wstring::npos)
-                hEnd = branch.size();
-            if (isHideToken(branch.substr(hStart, hEnd - hStart)))
+        // Folders are strictly disallowed when filtering for 'only <extension>'
+        if (summary.folderCount > 0)
+            return false;
+
+        // EVERY selected file must match one of the specified allowed
+        // extensions
+        for (const auto& ext : summary.extensions) {
+            bool matchesAnyOnly = false;
+            for (const auto& targetExt : onlyExtensions) {
+                if (ext == targetExt) {
+                    matchesAnyOnly = true;
+                    break;
+                }
+            }
+            if (!matchesAnyOnly)
                 return false;
-            hStart = hEnd + 1;
         }
+
+        // If no other branches exist, 'only' check passed
+        if (orBranches.empty())
+            return true;
     }
 
-    // 2. Strict Negative Exclusions (Veto) - applies when items are selected
+    // 3. Strict Negative Exclusions (Veto)
     if (summary.count > 0) {
         for (const auto& ext : summary.extensions) {
             bool isDir = (ext == L"folder");
@@ -2026,62 +2082,45 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return summary.count > 0;
     }
 
+    // 4. Standard atomic token evaluation for remaining branches
     auto evalAtomicToken = [&](std::wstring token) -> bool {
         token = ToLower(TrimWhitespaceAndQuotes(token));
         if (!token.empty() && token.front() == L'.')
             token.erase(token.begin());
 
-        // NONE / EMPTY FILTER (only when 0 items are highlighted)
         if (token == L"none" || token == L"empty" || token == L"nothing" ||
             token == L"unselected") {
             return summary.count == 0;
         }
 
-        // All subsequent checks require at least one item selected
         if (summary.count == 0)
             return false;
 
-        // Universal wildcards (match anything selected, including mixed)
         if (token == L"*" || token == L"any" || token == L"selected")
             return true;
 
-        // Broad Categories: strictly files (0 folders) or strictly folders (0
-        // files)
-        if (token == L"files" || token == L"file") {
+        if (token == L"files" || token == L"file")
             return summary.fileCount > 0 && summary.folderCount == 0;
-        }
-        if (token == L"folders" || token == L"folder" || token == L"dir" ||
-            token == L"directory") {
-            return summary.folderCount > 0 && summary.fileCount == 0;
-        }
 
-        // General item counts (files + folders combined)
+        if (token == L"folders" || token == L"folder" || token == L"dir" ||
+            token == L"directory")
+            return summary.folderCount > 0 && summary.fileCount == 0;
+
         if (token == L"single")
             return summary.count == 1;
         if (token == L"multi" || token == L"multiple")
             return summary.count >= 2;
 
-        // Specific File Counts (strictly files, 0 folders)
-        if (token == L"single_file" || token == L"single_files") {
+        if (token == L"single_file" || token == L"single_files")
             return summary.fileCount == 1 && summary.folderCount == 0;
-        }
-        if (token == L"multi_file" || token == L"multi_files" ||
-            token == L"multiple_files" || token == L"multiple_file") {
+        if (token == L"multi_file" || token == L"multi_files")
             return summary.fileCount >= 2 && summary.folderCount == 0;
-        }
 
-        // Specific Folder Counts (strictly folders, 0 files)
-        if (token == L"single_folder" || token == L"single_folders" ||
-            token == L"single_dir") {
+        if (token == L"single_folder" || token == L"single_folders")
             return summary.folderCount == 1 && summary.fileCount == 0;
-        }
-        if (token == L"multi_folder" || token == L"multi_folders" ||
-            token == L"multiple_folders" || token == L"multiple_folder" ||
-            token == L"multi_dir") {
+        if (token == L"multi_folder" || token == L"multi_folders")
             return summary.folderCount >= 2 && summary.fileCount == 0;
-        }
 
-        // Extension check (strictly regular files matching this extension)
         for (const auto& ext : summary.extensions) {
             if (ext != L"folder" && ext == token)
                 return true;
@@ -2089,7 +2128,6 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return false;
     };
 
-    // 3. Evaluate OR branches (with '+' AND sub-evaluations)
     for (const auto& branch : orBranches) {
         bool branchPassed = true;
         size_t bStart = 0;
@@ -2800,12 +2838,21 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
         }
     }
 
-    for (auto const& entry : g_entries) {
-        if (entry.commandBar.get() == commandBar)
-            return;
+    CommandBarEntry* existingEntry = nullptr;
+    for (auto& ent : g_entries) {
+        if (ent.commandBar.get() == commandBar) {
+            existingEntry = &ent;
+            break;
+        }
     }
 
-    CommandBarEntry entry;
+    // If already registered and the timer is actively running, nothing to do
+    if (existingEntry && existingEntry->selectionTimer) {
+        return;
+    }
+
+    CommandBarEntry& entry =
+        existingEntry ? *existingEntry : g_entries.emplace_back();
     entry.commandBar = winrt::make_weak(commandBar);
 
     TrackRevoker(
@@ -2971,7 +3018,6 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                          }));
     }
 
-    g_entries.push_back(std::move(entry));
     UpdateCommandBar(commandBar);
 }
 
@@ -3543,6 +3589,31 @@ void LoadSettings() {
 
     for (auto& root : rootItems) {
         attachChildren(root);
+    }
+
+    // Identify and log any items whose parent ID was not found
+    for (const auto& item : flatItems) {
+        if (item.parent.empty())
+            continue;
+
+        bool foundParent = false;
+        std::function<bool(const std::vector<ActionItem>&)> checkParent =
+            [&](const std::vector<ActionItem>& list) -> bool {
+            for (const auto& node : list) {
+                if (_wcsicmp(node.id.c_str(), item.parent.c_str()) == 0)
+                    return true;
+                if (checkParent(node.subItems))
+                    return true;
+            }
+            return false;
+        };
+
+        if (!checkParent(rootItems)) {
+            Wh_Log(
+                L"Warning: Item '%s' references unknown parent menu ID '%s' - "
+                L"item will not be visible",
+                item.id.c_str(), item.parent.c_str());
+        }
     }
 
     g_settings.items = std::move(rootItems);
