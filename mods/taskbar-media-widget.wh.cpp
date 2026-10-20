@@ -2,7 +2,7 @@
 // @id taskbar-media-widget
 // @name Taskbar Media Widget
 // @description Compact media controls integrated into the Windows 10/11 taskbar.
-// @version 0.3.0
+// @version 0.3.1
 // @author uMk0
 // @github https://github.com/umk0
 // @license MIT
@@ -23,6 +23,16 @@ tracks the taskbar height automatically. On the classic Windows 10 taskbar,
 including ExplorerPatcher configurations, it uses a DPI-aware Win32 surface
 because that taskbar has no XAML tree.
 
+The native Windows 11 bottom, top, left and right taskbar positions are
+supported. Left and right taskbars use a compact vertical player that keeps
+the artwork, playback time, transport controls and progress inside the bar.
+
+## Screenshots
+
+![Horizontal widget on the top taskbar](https://raw.githubusercontent.com/umk0/windhawk-mods/assets/taskbar-media-widget/horizontal-top.png)
+
+![Compact widget on the left taskbar](https://raw.githubusercontent.com/umk0/windhawk-mods/assets/taskbar-media-widget/vertical.png)
+
 Features:
 
 - album art, title and artist
@@ -34,6 +44,7 @@ Features:
 - a real WASAPI loopback visualizer across the widget background
 - mouse wheel app-volume control with a system-volume fallback
 - compact idle launchers for configured music apps that skip pinned apps
+- automatic layout updates when the taskbar edge or thickness changes
 
 Unlike the existing taskbar media mods, this mod combines a native Windows 11
 tray insertion with a Windows 10/classic-taskbar backend, keeps transport
@@ -170,6 +181,18 @@ enum class ThemeMode {
     Dark,
 };
 
+enum class TaskbarEdge {
+    Unknown,
+    Bottom,
+    Top,
+    Left,
+    Right,
+};
+
+bool IsVerticalTaskbarEdge(TaskbarEdge edge) {
+    return edge == TaskbarEdge::Left || edge == TaskbarEdge::Right;
+}
+
 class ApartmentScope {
 public:
     ApartmentScope() {
@@ -248,6 +271,8 @@ std::atomic<bool> g_uiDirty = false;
 std::atomic<bool> g_taskbarHooksInstalled = false;
 std::atomic<bool> g_modernWidgetAttached = false;
 std::atomic<bool> g_classicBackendStarted = false;
+std::atomic<TaskbarEdge> g_injectedTaskbarEdge = TaskbarEdge::Unknown;
+std::atomic<int> g_injectedTaskbarThicknessPx = 0;
 // Raw pointers are intentional: their destructors must not run during
 // DLL_PROCESS_DETACH while Explorer is shutting down. Normal mod unload still
 // joins and deletes every thread explicitly.
@@ -267,8 +292,12 @@ HWND g_taskbarWnd = nullptr;
 Grid g_widgetGrid{nullptr};
 FrameworkElement g_injectionParent{nullptr};
 int g_widgetColumn = -1;
+int g_widgetRow = -1;
 HWND g_classicWidgetWnd = nullptr;
 ULONGLONG g_backendDetectionStartedTick = 0;
+bool g_verticalWidgetLayout = false;
+double g_verticalWidgetWidth = 40.0;
+double g_verticalSessionHeight = 144.0;
 
 FrameworkElement g_coverContainer{nullptr};
 FrameworkElement g_textContainer{nullptr};
@@ -805,6 +834,54 @@ LayoutMetrics CalculateLayout(double availableHeight) {
     return layout;
 }
 
+void ResetWidgetElementReferences() {
+    g_coverContainer = nullptr;
+    g_textContainer = nullptr;
+    g_rightContainer = nullptr;
+    g_visualizerGrid = nullptr;
+    g_progressGrid = nullptr;
+    g_progressRow = nullptr;
+    g_idlePanel = nullptr;
+    g_coverImage = nullptr;
+    g_titleText = nullptr;
+    g_artistText = nullptr;
+    g_timeText = nullptr;
+    g_prevButton = nullptr;
+    g_playButton = nullptr;
+    g_nextButton = nullptr;
+    g_prevButtonIcon = nullptr;
+    g_playButtonIcon = nullptr;
+    g_nextButtonIcon = nullptr;
+    g_progressHoverTip = nullptr;
+    g_progressToolTipText = nullptr;
+    g_progressTrack = nullptr;
+    g_progressFill = nullptr;
+    g_progressThumb = nullptr;
+    g_titleTransform = nullptr;
+    g_artistTransform = nullptr;
+    g_titleCanvas = nullptr;
+    g_artistCanvas = nullptr;
+    g_visualizerBars.clear();
+    g_loadedThumbnailKey.clear();
+    g_progressHover = false;
+    g_playButtonGlyph.clear();
+    g_prevButtonHover = false;
+    g_playButtonHover = false;
+    g_nextButtonHover = false;
+    g_prevButtonEnabled = true;
+    g_playButtonEnabled = true;
+    g_nextButtonEnabled = true;
+}
+
+double VerticalIdleWidgetHeight() {
+    size_t count = std::min<size_t>(g_idleApps.size(), 6);
+    if (count == 0) {
+        return g_verticalWidgetWidth;
+    }
+
+    return 8.0 + count * g_layout.buttonSize + (count - 1) * 4.0;
+}
+
 double IdleWidgetWidth() {
     size_t count = std::min<size_t>(g_idleApps.size(), 6);
     if (count == 0) {
@@ -921,6 +998,42 @@ HWND FindCurrentProcessTaskbarWnd() {
         return TRUE;
     }, reinterpret_cast<LPARAM>(&result));
     return result;
+}
+
+TaskbarEdge DetectTaskbarEdge(HWND taskbarWnd) {
+    RECT taskbarRect{};
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!taskbarWnd || !GetWindowRect(taskbarWnd, &taskbarRect) ||
+        !GetMonitorInfoW(MonitorFromWindow(taskbarWnd, MONITOR_DEFAULTTONEAREST),
+                         &monitorInfo)) {
+        return TaskbarEdge::Unknown;
+    }
+
+    int width = taskbarRect.right - taskbarRect.left;
+    int height = taskbarRect.bottom - taskbarRect.top;
+    if (height > width) {
+        int leftDistance = std::abs(taskbarRect.left - monitorInfo.rcMonitor.left);
+        int rightDistance =
+            std::abs(monitorInfo.rcMonitor.right - taskbarRect.right);
+        return leftDistance <= rightDistance ? TaskbarEdge::Left
+                                             : TaskbarEdge::Right;
+    }
+
+    int topDistance = std::abs(taskbarRect.top - monitorInfo.rcMonitor.top);
+    int bottomDistance =
+        std::abs(monitorInfo.rcMonitor.bottom - taskbarRect.bottom);
+    return topDistance < bottomDistance ? TaskbarEdge::Top
+                                        : TaskbarEdge::Bottom;
+}
+
+int TaskbarThicknessPx(HWND taskbarWnd, TaskbarEdge edge) {
+    RECT rect{};
+    if (!taskbarWnd || !GetWindowRect(taskbarWnd, &rect)) {
+        return 0;
+    }
+    return IsVerticalTaskbarEdge(edge) ? rect.right - rect.left
+                                       : rect.bottom - rect.top;
 }
 
 bool IsCurrentProcessShellHost() {
@@ -1959,7 +2072,288 @@ void AudioVisualizerThread() {
     CoUninitialize();
 }
 
+Grid BuildVerticalWidgetGrid(double availableWidth) {
+    ResetWidgetElementReferences();
+    g_verticalWidgetLayout = true;
+
+    int width = ClampInt(
+        availableWidth > 0 ? static_cast<int>(std::round(availableWidth)) : 40,
+        32, 80);
+    g_verticalWidgetWidth = width;
+    g_layout = CalculateLayout(g_settings.widgetHeight);
+    g_layout.coverSize =
+        ClampInt(std::min(g_settings.coverSize, width - 8), 18, 34);
+    g_layout.coverRadius =
+        ClampInt(std::min(g_settings.coverRadius, g_layout.coverSize / 3), 0, 14);
+    g_layout.buttonSize =
+        ClampInt(std::min(g_settings.buttonSize, width - 4), 22, 30);
+    g_layout.progressHeight = ClampInt(g_settings.progressHeight, 2, 5);
+    g_layout.progressHoverHeight =
+        ClampInt(g_settings.progressHoverHeight, g_layout.progressHeight, 7);
+    g_layout.timeFont = 9.0;
+    g_verticalSessionHeight =
+        8.0 + g_layout.coverSize + 4.0 + g_layout.buttonSize * 3.0 + 4.0 +
+        14.0 + g_layout.progressHoverHeight;
+    g_layout.widgetHeight = static_cast<int>(std::round(g_verticalSessionHeight));
+
+    Grid wrapper;
+    wrapper.Name(L"TaskbarMediaWidget");
+    wrapper.Width(g_verticalWidgetWidth);
+    wrapper.Height(g_verticalSessionHeight);
+    wrapper.Background(MakeBrush(RGB(0, 0, 0), 1));
+    wrapper.HorizontalAlignment(HorizontalAlignment::Center);
+    wrapper.VerticalAlignment(VerticalAlignment::Center);
+
+    RowDefinition contentRow;
+    contentRow.Height({1.0, GridUnitType::Star});
+    g_progressRow = RowDefinition();
+    g_progressRow.Height(
+        {static_cast<double>(g_layout.progressHoverHeight), GridUnitType::Pixel});
+    wrapper.RowDefinitions().Append(contentRow);
+    wrapper.RowDefinitions().Append(g_progressRow);
+
+    StackPanel sessionPanel;
+    sessionPanel.Name(L"TaskbarMediaWidget_VerticalSession");
+    sessionPanel.Orientation(Orientation::Vertical);
+    sessionPanel.Spacing(1);
+    sessionPanel.HorizontalAlignment(HorizontalAlignment::Center);
+    sessionPanel.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetRow(sessionPanel, 0);
+    wrapper.Children().Append(sessionPanel);
+    g_rightContainer = sessionPanel;
+
+    Border coverClip;
+    coverClip.Width(g_layout.coverSize);
+    coverClip.Height(g_layout.coverSize);
+    coverClip.CornerRadius({static_cast<double>(g_layout.coverRadius),
+                            static_cast<double>(g_layout.coverRadius),
+                            static_cast<double>(g_layout.coverRadius),
+                            static_cast<double>(g_layout.coverRadius)});
+    coverClip.Background(MakeBrush(RGB(46, 62, 82), 120));
+    coverClip.HorizontalAlignment(HorizontalAlignment::Center);
+    coverClip.Margin({0, 1, 0, 2});
+    ToolTipService::SetToolTip(coverClip, box_value(L"Open media app"));
+    coverClip.PointerEntered([](IInspectable const&, PointerRoutedEventArgs const&) {
+        SetPointerCursor(winrt::Windows::UI::Core::CoreCursorType::Hand);
+    });
+    coverClip.PointerExited([](IInspectable const&, PointerRoutedEventArgs const&) {
+        SetPointerCursor(winrt::Windows::UI::Core::CoreCursorType::Arrow);
+    });
+    coverClip.PointerPressed([](IInspectable const&, PointerRoutedEventArgs const& e) {
+        OpenCurrentMediaApp();
+        e.Handled(true);
+    });
+
+    g_coverImage = Image();
+    g_coverImage.Stretch(Stretch::UniformToFill);
+    coverClip.Child(g_coverImage);
+    sessionPanel.Children().Append(coverClip);
+    g_coverContainer = coverClip;
+
+    g_prevButton = MakeButton(L"TaskbarMediaWidget_Previous", L"\xE892",
+                              g_prevButtonIcon, &g_prevButtonHover,
+                              &g_prevButtonEnabled, 1);
+    g_playButton = MakeButton(L"TaskbarMediaWidget_PlayPause", L"\xE768",
+                              g_playButtonIcon, &g_playButtonHover,
+                              &g_playButtonEnabled, 2);
+    g_nextButton = MakeButton(L"TaskbarMediaWidget_Next", L"\xE893",
+                              g_nextButtonIcon, &g_nextButtonHover,
+                              &g_nextButtonEnabled, 3);
+    sessionPanel.Children().Append(g_prevButton);
+    sessionPanel.Children().Append(g_playButton);
+    sessionPanel.Children().Append(g_nextButton);
+
+    g_timeText = TextBlock();
+    g_timeText.FontSize(g_layout.timeFont);
+    g_timeText.FontFamily(FontFamily(L"Segoe UI"));
+    g_timeText.Foreground(MakeBrush(ActiveMutedTextColor()));
+    g_timeText.TextAlignment(TextAlignment::Center);
+    g_timeText.HorizontalAlignment(HorizontalAlignment::Stretch);
+    g_timeText.Margin({0, 1, 0, 0});
+    sessionPanel.Children().Append(g_timeText);
+
+    g_idlePanel = StackPanel();
+    g_idlePanel.Orientation(Orientation::Vertical);
+    g_idlePanel.Spacing(4);
+    g_idlePanel.HorizontalAlignment(HorizontalAlignment::Center);
+    g_idlePanel.VerticalAlignment(VerticalAlignment::Center);
+    g_idlePanel.Margin({0, 4, 0, 4});
+    g_idlePanel.Visibility(Visibility::Collapsed);
+    for (size_t i = 0; i < g_idleApps.size() && i < 6; i++) {
+        g_idlePanel.Children().Append(MakeIdleButton(g_idleApps[i]));
+    }
+    Grid::SetRow(g_idlePanel, 0);
+    wrapper.Children().Append(g_idlePanel);
+
+    g_progressGrid = Grid();
+    g_progressGrid.Height(g_layout.progressHoverHeight);
+    g_progressGrid.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetRow(g_progressGrid, 1);
+    wrapper.Children().Append(g_progressGrid);
+
+    Canvas progressOverlay;
+    progressOverlay.IsHitTestVisible(false);
+    Canvas::SetZIndex(progressOverlay, 20);
+    Grid::SetRowSpan(progressOverlay, 2);
+    wrapper.Children().Append(progressOverlay);
+
+    g_progressHoverTip = Border();
+    g_progressHoverTip.Width(std::max(30.0, g_verticalWidgetWidth - 2.0));
+    g_progressHoverTip.Height(17);
+    g_progressHoverTip.CornerRadius({4, 4, 4, 4});
+    g_progressHoverTip.Visibility(Visibility::Collapsed);
+
+    g_progressToolTipText = TextBlock();
+    g_progressToolTipText.FontFamily(FontFamily(L"Segoe UI"));
+    g_progressToolTipText.FontSize(9.0);
+    g_progressToolTipText.Text(L"0:00");
+    g_progressToolTipText.HorizontalAlignment(HorizontalAlignment::Center);
+    g_progressToolTipText.VerticalAlignment(VerticalAlignment::Center);
+    g_progressToolTipText.TextAlignment(TextAlignment::Center);
+    g_progressHoverTip.Child(g_progressToolTipText);
+    UpdateProgressHoverTipTheme();
+    progressOverlay.Children().Append(g_progressHoverTip);
+
+    g_progressTrack = Border();
+    g_progressTrack.Height(g_layout.progressHeight);
+    g_progressTrack.CornerRadius({4, 4, 4, 4});
+    g_progressTrack.Background(MakeBrush(UseLightTheme() ? RGB(132, 142, 156)
+                                                        : RGB(72, 82, 99),
+                                         120));
+    g_progressTrack.HorizontalAlignment(HorizontalAlignment::Stretch);
+    g_progressTrack.VerticalAlignment(VerticalAlignment::Center);
+    g_progressGrid.Children().Append(g_progressTrack);
+
+    g_progressFill = Border();
+    g_progressFill.Height(g_layout.progressHeight);
+    g_progressFill.CornerRadius({4, 4, 4, 4});
+    g_progressFill.Background(MakeBrush(g_settings.accentColor));
+    g_progressFill.HorizontalAlignment(HorizontalAlignment::Left);
+    g_progressFill.VerticalAlignment(VerticalAlignment::Center);
+    g_progressGrid.Children().Append(g_progressFill);
+
+    g_progressThumb = winrt::Windows::UI::Xaml::Shapes::Ellipse();
+    g_progressThumb.Width(std::max(5, g_layout.progressHoverHeight));
+    g_progressThumb.Height(std::max(5, g_layout.progressHoverHeight));
+    g_progressThumb.Fill(MakeBrush(ProgressThumbColor(g_settings.accentColor)));
+    g_progressThumb.Visibility(Visibility::Collapsed);
+    g_progressThumb.HorizontalAlignment(HorizontalAlignment::Left);
+    g_progressThumb.VerticalAlignment(VerticalAlignment::Center);
+    g_progressGrid.Children().Append(g_progressThumb);
+
+    auto seekAtPointer = [](PointerRoutedEventArgs const& e) {
+        MediaState state;
+        {
+            std::lock_guard lock(g_mediaMutex);
+            state = g_mediaState;
+        }
+        if (!state.canSeek || state.durationMs <= 0 || !g_progressTrack) {
+            return;
+        }
+
+        auto point = e.GetCurrentPoint(g_progressTrack).Position();
+        double width = std::max(1.0, g_progressTrack.ActualWidth());
+        double ratio = ClampDouble(point.X / width, 0.0, 1.0);
+        int64_t targetMs = static_cast<int64_t>(state.durationMs * ratio);
+        int64_t absoluteTargetMs = state.timelineStartMs + targetMs;
+        std::thread([absoluteTargetMs]() {
+            ApartmentScope apartment;
+            GlobalSystemMediaTransportControlsSession session{nullptr};
+            {
+                std::lock_guard lock(g_mediaMutex);
+                session = g_mediaSession;
+            }
+            if (session) {
+                try {
+                    session.TryChangePlaybackPositionAsync(
+                        absoluteTargetMs * 10000)
+                        .get();
+                    g_uiDirty = true;
+                } catch (...) {
+                }
+            }
+        }).detach();
+    };
+
+    g_progressGrid.PointerEntered([](IInspectable const&, PointerRoutedEventArgs const&) {
+        g_progressHover = true;
+        if (g_progressTrack) {
+            g_progressTrack.Height(g_layout.progressHoverHeight);
+        }
+        if (g_progressFill) {
+            g_progressFill.Height(g_layout.progressHoverHeight);
+        }
+        if (g_progressThumb) {
+            g_progressThumb.Visibility(Visibility::Visible);
+        }
+        if (g_progressHoverTip) {
+            g_progressHoverTip.Visibility(Visibility::Visible);
+        }
+    });
+    g_progressGrid.PointerExited([](IInspectable const&, PointerRoutedEventArgs const&) {
+        g_progressHover = false;
+        if (g_progressTrack) {
+            g_progressTrack.Height(g_layout.progressHeight);
+        }
+        if (g_progressFill) {
+            g_progressFill.Height(g_layout.progressHeight);
+        }
+        if (g_progressThumb) {
+            g_progressThumb.Visibility(Visibility::Collapsed);
+        }
+        if (g_progressHoverTip) {
+            g_progressHoverTip.Visibility(Visibility::Collapsed);
+        }
+    });
+    g_progressGrid.PointerMoved([](IInspectable const&, PointerRoutedEventArgs const& e) {
+        if (!g_progressThumb || !g_progressHover) {
+            return;
+        }
+        auto point = e.GetCurrentPoint(g_progressGrid).Position();
+        double width = std::max(1.0, g_progressGrid.ActualWidth());
+        double x = ClampDouble(point.X, 0.0, width);
+        g_progressThumb.Margin({x - g_progressThumb.Width() / 2.0, 0, 0, 0});
+
+        if (g_progressHoverTip && g_progressToolTipText) {
+            MediaState state;
+            {
+                std::lock_guard lock(g_mediaMutex);
+                state = g_mediaState;
+            }
+            if (state.durationMs > 0) {
+                int64_t targetMs =
+                    static_cast<int64_t>(state.durationMs * (x / width));
+                g_progressToolTipText.Text(FormatTime(targetMs));
+            }
+
+            double tipWidth = g_progressHoverTip.Width();
+            double tipHeight = g_progressHoverTip.Height();
+            double left = ClampDouble(x - tipWidth / 2.0, 0.0,
+                                      std::max(0.0, width - tipWidth));
+            double top = std::max(0.0, g_verticalSessionHeight -
+                                           g_layout.progressHoverHeight -
+                                           tipHeight - 1.0);
+            Canvas::SetLeft(g_progressHoverTip, left);
+            Canvas::SetTop(g_progressHoverTip, top);
+        }
+    });
+    g_progressGrid.PointerPressed([seekAtPointer](IInspectable const&,
+                                                  PointerRoutedEventArgs const& e) {
+        seekAtPointer(e);
+        e.Handled(true);
+    });
+
+    wrapper.PointerWheelChanged([](IInspectable const&, PointerRoutedEventArgs const& e) {
+        ChangeVolumeFromWheel(e.GetCurrentPoint(nullptr).Properties().MouseWheelDelta());
+        e.Handled(true);
+    });
+
+    return wrapper;
+}
+
 Grid BuildWidgetGrid(double availableHeight) {
+    ResetWidgetElementReferences();
+    g_verticalWidgetLayout = false;
     g_layout = CalculateLayout(availableHeight);
 
     Grid wrapper;
@@ -1969,14 +2363,6 @@ Grid BuildWidgetGrid(double availableHeight) {
     wrapper.MinHeight(g_layout.widgetHeight);
     wrapper.Background(MakeBrush(RGB(0, 0, 0), 1));
     wrapper.VerticalAlignment(VerticalAlignment::Center);
-    g_playButtonGlyph.clear();
-    g_prevButtonHover = false;
-    g_playButtonHover = false;
-    g_nextButtonHover = false;
-    g_prevButtonEnabled = true;
-    g_playButtonEnabled = true;
-    g_nextButtonEnabled = true;
-
     RowDefinition contentRow;
     contentRow.Height({1.0, GridUnitType::Star});
     g_progressRow = RowDefinition();
@@ -2316,6 +2702,11 @@ Grid BuildWidgetGrid(double availableHeight) {
 void RemoveWidgetGrid() {
     if (!g_injectionParent) {
         g_widgetGrid = nullptr;
+        g_widgetColumn = -1;
+        g_widgetRow = -1;
+        g_injectedTaskbarEdge = TaskbarEdge::Unknown;
+        g_injectedTaskbarThicknessPx = 0;
+        ResetWidgetElementReferences();
         g_modernWidgetAttached = false;
         return;
     }
@@ -2325,6 +2716,7 @@ void RemoveWidgetGrid() {
         auto targetGrid = g_injectionParent.try_as<Grid>();
 
         int removedColumn = -1;
+        int removedRow = -1;
         if (targetPanel) {
             for (int i = static_cast<int>(targetPanel.Children().Size()) - 1;
                  i >= 0; i--) {
@@ -2333,13 +2725,14 @@ void RemoveWidgetGrid() {
                 if (child && child.Name() == L"TaskbarMediaWidget") {
                     if (targetGrid) {
                         removedColumn = Grid::GetColumn(child);
+                        removedRow = Grid::GetRow(child);
                     }
                     targetPanel.Children().RemoveAt(i);
                 }
             }
         }
 
-        if (targetGrid && removedColumn >= 0 &&
+        if (targetGrid && g_widgetColumn >= 0 && removedColumn >= 0 &&
             removedColumn < static_cast<int>(targetGrid.ColumnDefinitions().Size())) {
             for (uint32_t i = 0; i < targetGrid.Children().Size(); i++) {
                 auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
@@ -2349,12 +2742,26 @@ void RemoveWidgetGrid() {
             }
             targetGrid.ColumnDefinitions().RemoveAt(removedColumn);
         }
+        if (targetGrid && g_widgetRow >= 0 && removedRow >= 0 &&
+            removedRow < static_cast<int>(targetGrid.RowDefinitions().Size())) {
+            for (uint32_t i = 0; i < targetGrid.Children().Size(); i++) {
+                auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child && Grid::GetRow(child) > removedRow) {
+                    Grid::SetRow(child, Grid::GetRow(child) - 1);
+                }
+            }
+            targetGrid.RowDefinitions().RemoveAt(removedRow);
+        }
     } catch (...) {
     }
 
     g_widgetGrid = nullptr;
     g_injectionParent = nullptr;
     g_widgetColumn = -1;
+    g_widgetRow = -1;
+    g_injectedTaskbarEdge = TaskbarEdge::Unknown;
+    g_injectedTaskbarThicknessPx = 0;
+    ResetWidgetElementReferences();
     g_modernWidgetAttached = false;
 }
 
@@ -2503,8 +2910,14 @@ void RefreshWidgetContents() {
     bool idleVisible = !state.hasSession && !g_idleApps.empty();
     bool visible = state.hasSession || idleVisible || !g_settings.hideWhenNoMedia;
     g_widgetGrid.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
-    g_widgetGrid.Width(idleVisible ? IdleWidgetWidth()
-                                   : static_cast<double>(g_settings.widgetWidth));
+    if (g_verticalWidgetLayout) {
+        g_widgetGrid.Width(g_verticalWidgetWidth);
+        g_widgetGrid.Height(idleVisible ? VerticalIdleWidgetHeight()
+                                        : g_verticalSessionHeight);
+    } else {
+        g_widgetGrid.Width(idleVisible ? IdleWidgetWidth()
+                                       : static_cast<double>(g_settings.widgetWidth));
+    }
     if (g_progressRow) {
         g_progressRow.Height({idleVisible ? 0.0
                                           : static_cast<double>(
@@ -2549,6 +2962,13 @@ void RefreshWidgetContents() {
 
     std::wstring title = state.title.empty() ? L"No media" : state.title;
     std::wstring artist = state.artist;
+    if (g_verticalWidgetLayout && g_coverContainer) {
+        std::wstring tooltip = title;
+        if (!artist.empty()) {
+            tooltip += L"\n" + artist;
+        }
+        ToolTipService::SetToolTip(g_coverContainer, box_value(tooltip));
+    }
     COLORREF accent = ProgressAccentColor(state);
     if (g_progressFill) {
         g_progressFill.Background(MakeBrush(accent));
@@ -2570,8 +2990,10 @@ void RefreshWidgetContents() {
     }
 
     if (g_timeText) {
-        std::wstring time = FormatTime(EffectivePosition(state)) + L" / " +
-                            FormatTime(state.durationMs);
+        std::wstring time = FormatTime(EffectivePosition(state));
+        if (!g_verticalWidgetLayout) {
+            time += L" / " + FormatTime(state.durationMs);
+        }
         g_timeText.Text(time);
         g_timeText.Foreground(MakeBrush(ActiveMutedTextColor()));
     }
@@ -2629,8 +3051,11 @@ void TickWidgetUi() {
     }
 
     if (g_timeText && state.hasSession) {
-        g_timeText.Text(FormatTime(EffectivePosition(state)) + L" / " +
-                        FormatTime(state.durationMs));
+        std::wstring time = FormatTime(EffectivePosition(state));
+        if (!g_verticalWidgetLayout) {
+            time += L" / " + FormatTime(state.durationMs);
+        }
+        g_timeText.Text(time);
     }
     RefreshProgress(state);
     UpdateVisualizerBars(state);
@@ -2666,34 +3091,58 @@ bool InjectWidgetGrid() {
 
         RemoveWidgetGrid();
 
-        Grid widget = BuildWidgetGrid(targetElement.ActualHeight());
-        widget.Margin({4, 0, 4, 0});
+        TaskbarEdge edge = DetectTaskbarEdge(hwnd);
+        bool vertical = IsVerticalTaskbarEdge(edge);
+        Grid widget = vertical ? BuildVerticalWidgetGrid(targetElement.ActualWidth())
+                               : BuildWidgetGrid(targetElement.ActualHeight());
+        widget.Margin(vertical ? Thickness{0, 4, 0, 4}
+                               : Thickness{4, 0, 4, 0});
 
         int insertCol = -1;
+        int insertRow = -1;
         if (auto targetGrid = targetElement.try_as<Grid>()) {
-            ColumnDefinition column;
-            column.Width({1.0, GridUnitType::Auto});
-
-            insertCol = 0;
-            targetGrid.ColumnDefinitions().InsertAt(insertCol, column);
-            for (uint32_t i = 0; i < targetGrid.Children().Size(); i++) {
-                auto child =
-                    targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child && Grid::GetColumn(child) >= insertCol) {
-                    Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+            if (vertical) {
+                RowDefinition row;
+                row.Height({1.0, GridUnitType::Auto});
+                insertRow = 0;
+                targetGrid.RowDefinitions().InsertAt(insertRow, row);
+                for (uint32_t i = 0; i < targetGrid.Children().Size(); i++) {
+                    auto child =
+                        targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (child && Grid::GetRow(child) >= insertRow) {
+                        Grid::SetRow(child, Grid::GetRow(child) + 1);
+                    }
                 }
-            }
 
-            Grid::SetColumn(widget, insertCol);
+                Grid::SetRow(widget, insertRow);
+            } else {
+                ColumnDefinition column;
+                column.Width({1.0, GridUnitType::Auto});
+                insertCol = 0;
+                targetGrid.ColumnDefinitions().InsertAt(insertCol, column);
+                for (uint32_t i = 0; i < targetGrid.Children().Size(); i++) {
+                    auto child =
+                        targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (child && Grid::GetColumn(child) >= insertCol) {
+                        Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+                    }
+                }
+
+                Grid::SetColumn(widget, insertCol);
+            }
             targetGrid.Children().Append(widget);
         } else {
-            // Newer taskbar builds use a horizontal StackPanel here.
+            // Newer taskbar builds use a StackPanel whose orientation follows
+            // the native taskbar edge.
             targetPanel.Children().InsertAt(0, widget);
         }
 
         g_widgetGrid = widget;
         g_injectionParent = targetElement;
         g_widgetColumn = insertCol;
+        g_widgetRow = insertRow;
+        g_injectedTaskbarEdge = edge;
+        g_injectedTaskbarThicknessPx = TaskbarThicknessPx(hwnd, edge);
         g_modernWidgetAttached = true;
         RefreshWidgetContents();
         return true;
@@ -3742,6 +4191,22 @@ void UiTickThread() {
         HWND hwnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
         if (hwnd) {
             g_taskbarWnd = hwnd;
+            TaskbarEdge currentEdge = DetectTaskbarEdge(hwnd);
+            int currentThickness = TaskbarThicknessPx(hwnd, currentEdge);
+            if (g_modernWidgetAttached.load() &&
+                currentEdge != TaskbarEdge::Unknown &&
+                (currentEdge != g_injectedTaskbarEdge.load() ||
+                 (currentThickness > 0 &&
+                  currentThickness != g_injectedTaskbarThicknessPx.load()))) {
+                RunFromWindowThread(
+                    hwnd,
+                    [](void*) {
+                        RemoveWidgetGrid();
+                        InjectWidgetGrid();
+                    },
+                    nullptr);
+                lastInjectAttempt = now;
+            }
             if (!g_modernWidgetAttached.load() &&
                 now - lastInjectAttempt > 1000) {
                 RunFromWindowThread(hwnd, [](void*) { InjectWidgetGrid(); },
