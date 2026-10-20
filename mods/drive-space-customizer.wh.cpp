@@ -6,7 +6,7 @@
 // @author          iMAboud
 // @github          https://github.com/iMAboud
 // @include         explorer.exe
-// @compilerOptions -std=c++23 -lgdi32 -luxtheme -lshlwapi
+// @compilerOptions -lgdi32 -luxtheme -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -120,7 +120,6 @@ Customizes the storage space label under drives in **This PC** (`X GB free of Y 
 #include <stdio.h>
 #include <wchar.h>
 #include <algorithm>
-#include <format>
 #include <string>
 #include <vector>
 
@@ -454,15 +453,22 @@ static bool ParseStorageValue(const std::wstring& str, double* outBytes, std::ws
 }
 
 static std::wstring FormatBytes(double bytes) {
+    wchar_t buf[64];
     if (bytes >= 1099511627776.0) {
-        return std::format(L"{:.2f} {}", bytes / 1099511627776.0, g_localUnitTB);
+        swprintf_s(buf, L"%.2f %s", bytes / 1099511627776.0, g_localUnitTB.c_str());
+        return buf;
     }
     if (bytes >= 1073741824.0) {
         double gb = bytes / 1073741824.0;
-        if (gb >= 100.0) return std::format(L"{:.0f} {}", gb, g_localUnitGB);
-        return std::format(L"{:.1f} {}", gb, g_localUnitGB);
+        if (gb >= 100.0) {
+            swprintf_s(buf, L"%.0f %s", gb, g_localUnitGB.c_str());
+        } else {
+            swprintf_s(buf, L"%.1f %s", gb, g_localUnitGB.c_str());
+        }
+        return buf;
     }
-    return std::format(L"{:.0f} {}", bytes / 1048576.0, g_localUnitMB);
+    swprintf_s(buf, L"%.0f %s", bytes / 1048576.0, g_localUnitMB.c_str());
+    return buf;
 }
 
 static void ReplaceAll(std::wstring& str, const std::wstring& from, const std::wstring& to) {
@@ -570,8 +576,12 @@ static bool BuildDriveChunks(LPCWSTR lpchText, int cchText, std::vector<RenderCh
     double freePct = 100.0 - usedPct;
 
     std::wstring usedValStr = FormatBytes(usedBytes);
-    std::wstring usedPctStr = std::format(L"{:.0f}%", usedPct);
-    std::wstring freePctStr = std::format(L"{:.0f}%", freePct);
+
+    wchar_t usedPctBuf[16], freePctBuf[16];
+    swprintf_s(usedPctBuf, L"%.0f%%", usedPct);
+    swprintf_s(freePctBuf, L"%.0f%%", freePct);
+    std::wstring usedPctStr = usedPctBuf;
+    std::wstring freePctStr = freePctBuf;
 
     std::wstring orderStr = g_settings.order;
     size_t pos = 0;
