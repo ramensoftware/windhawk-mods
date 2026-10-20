@@ -24,6 +24,7 @@ The version 2.0 is based on the registry findings by the WinClassic user 04mc.
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <cwctype>
 
 // --- Определение структур и функций NTAPI для получения пути ключа реестра ---
 typedef enum _KEY_INFORMATION_CLASS_EXT {
@@ -45,7 +46,6 @@ typedef NTSTATUS(WINAPI* PNtQueryKey)(
 
 PNtQueryKey pNtQueryKey = nullptr;
 
-// Функция для получения полного пути ключа реестра по его HANDLE (HKEY)
 std::wstring GetKeyPath(HKEY hKey) {
     if (!pNtQueryKey) return L"";
 
@@ -64,10 +64,16 @@ std::wstring GetKeyPath(HKEY hKey) {
 // --- Логика подмены ---
 
 #define TARGET_GUID L"{D20EA4E1-3957-11D2-A40B-0C5020524153}"
-// Ищем именно эту подстроку, так как она покрывает как HKLM/HKCU, так и WOW6432Node
 #define TARGET_PATH_INSTANCE L"CLASSES\\CLSID\\" TARGET_GUID L"\\INSTANCE"
 #define TARGET_PATH_INITPROP L"CLASSES\\CLSID\\" TARGET_GUID L"\\INSTANCE\\INITPROPERTYBAG"
 
+// Быстрый фильтр (fast-path), чтобы не нагружать нецелевые запросы к реестру
+bool IsCandidateValueName(LPCWSTR valueName) {
+    return valueName && (_wcsicmp(valueName, L"CLSID") == 0 ||
+                         _wcsicmp(valueName, L"TargetKnownFolder") == 0);
+}
+
+// Медленный путь, вызывается только для целевых параметров
 bool TrySpoofRegistryValue(
     HKEY hKey, 
     LPCWSTR lpValueName, 
@@ -76,26 +82,20 @@ bool TrySpoofRegistryValue(
     LPDWORD lpcbData, 
     LSTATUS& statusOut
 ) {
-    if (!lpValueName) return false;
-
-    // Переводим имя значения в верхний регистр для сравнения
-    std::wstring valName(lpValueName);
-    std::transform(valName.begin(), valName.end(), valName.begin(), ::towupper);
-
     LPCWSTR fakeStr = nullptr;
 
-    if (valName == L"CLSID") {
+    if (_wcsicmp(lpValueName, L"CLSID") == 0) {
         std::wstring path = GetKeyPath(hKey);
         std::transform(path.begin(), path.end(), path.begin(), ::towupper);
         
-        // Проверяем, что путь содержит \Instance, но НЕ содержит \InitPropertyBag (чтобы не было ложных срабатываний на подпапках)
+        // Проверяем \Instance, но исключаем подпапки (например, \InitPropertyBag)
         if (path.find(TARGET_PATH_INSTANCE) != std::wstring::npos && 
             path.find(L"INITPROPERTYBAG") == std::wstring::npos) 
         {
             fakeStr = L"{0E5AAE11-A475-4c5b-AB00-C66DE400274E}";
         }
     }
-    else if (valName == L"TARGETKNOWNFOLDER") {
+    else if (_wcsicmp(lpValueName, L"TargetKnownFolder") == 0) {
         std::wstring path = GetKeyPath(hKey);
         std::transform(path.begin(), path.end(), path.begin(), ::towupper);
         
@@ -104,9 +104,8 @@ bool TrySpoofRegistryValue(
         }
     }
 
-    // Если нашли совпадение - формируем ответ
     if (fakeStr) {
-        DWORD requiredSize = (wcslen(fakeStr) + 1) * sizeof(WCHAR);
+        DWORD requiredSize = (DWORD)(wcslen(fakeStr) + 1) * sizeof(WCHAR);
         
         if (lpType) {
             *lpType = REG_SZ;
@@ -145,10 +144,12 @@ LSTATUS WINAPI RegQueryValueExW_hook(
     LPBYTE lpData, 
     LPDWORD lpcbData
 ) {
-    LSTATUS spoofStatus;
-    if (TrySpoofRegistryValue(hKey, lpValueName, lpType, lpData, lpcbData, spoofStatus)) {
-        Wh_Log(L"Spoofed RegQueryValueExW for value: %s", lpValueName);
-        return spoofStatus;
+    if (IsCandidateValueName(lpValueName)) {
+        LSTATUS spoofStatus;
+        if (TrySpoofRegistryValue(hKey, lpValueName, lpType, lpData, lpcbData, spoofStatus)) {
+            Wh_Log(L"Spoofed RegQueryValueExW for value: %s", lpValueName);
+            return spoofStatus;
+        }
     }
     return RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
 }
@@ -165,11 +166,21 @@ LSTATUS WINAPI RegGetValueW_hook(
     PVOID pvData, 
     LPDWORD pcbData
 ) {
+    if (!IsCandidateValueName(lpValue)) {
+        return RegGetValueW_orig(hKey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    }
+
+    // Проверяем, позволяет ли вызывающий код вернуть строковый тип. 
+    // Если флаг ограничивает типы (например, строго REG_DWORD), сразу отдаём оригиналу.
+    if (!(dwFlags & RRF_RT_REG_SZ)) {
+        return RegGetValueW_orig(hKey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    }
+
     HKEY hTargetKey = hKey;
     bool closedKey = false;
     LSTATUS spoofStatus;
 
-    // Если запрос идёт к подключу, сначала открываем его, чтобы получить правильный Handle для NtQueryKey
+    // Резолв ключа делаем только на медленном пути, когда точно знаем, что ключ целевой
     if (lpSubKey && lpSubKey[0] != L'\0') {
         if (RegOpenKeyExW(hKey, lpSubKey, 0, KEY_QUERY_VALUE, &hTargetKey) == ERROR_SUCCESS) {
             closedKey = true;
@@ -186,10 +197,6 @@ LSTATUS WINAPI RegGetValueW_hook(
 
     if (spoofed) {
         Wh_Log(L"Spoofed RegGetValueW for value: %s", lpValue);
-        // RegGetValueW имеет флаги типов (например, запрещает возвращать REG_SZ). Проверяем это.
-        if ((dwFlags & RRF_RT_REG_SZ) == 0 && (dwFlags & RRF_RT_ANY) == 0) {
-             return ERROR_UNSUPPORTED_TYPE;
-        }
         return spoofStatus;
     }
 
@@ -200,7 +207,6 @@ LSTATUS WINAPI RegGetValueW_hook(
 BOOL Wh_ModInit() {
     Wh_Log(L"Init Explorer Registry Spoofer");
 
-    // Загружаем NtQueryKey для резолва путей
     HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
     if (hNtDll) {
         pNtQueryKey = (PNtQueryKey)GetProcAddress(hNtDll, "NtQueryKey");
@@ -211,7 +217,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Устанавливаем хуки на функции в kernelbase.dll
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         void* pRegQueryValueExW = (void*)GetProcAddress(hKernelBase, "RegQueryValueExW");
@@ -229,8 +234,4 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
-}
-
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit Explorer Registry Spoofer");
 }
