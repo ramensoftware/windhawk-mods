@@ -2,7 +2,7 @@
 // @id              explorer-terminal-admin-alias
 // @name            File Explorer Terminal Admin Aliases
 // @description     Launch elevated or custom terminals (cmd, Windows Terminal, PowerShell) directly from the File Explorer address bar with configurable aliases.
-// @version         1.0.2
+// @version         1.0.3
 // @author          RobotsNeverDie
 // @github          https://github.com/RBND
 // @homepage        https://github.com/RBND/CMD-Admin
@@ -29,7 +29,7 @@ Just like typing `cmd`, `wt`, or `powershell` into File Explorer—but with admi
 - **Directory Preservation**: Accurately preserves the active directory in elevated sessions, handling spaces, special characters, drive roots, and network UNC paths.
 - **Virtual Folder Fallback**: Automatically defaults to `%USERPROFILE%` when launched from virtual folders (e.g., "This PC", "Quick Access", or "Home").
 - **Clean UAC Cancellation**: If you cancel or dismiss the UAC prompt, the mod cleanly suppresses the annoying "Windows cannot find..." error dialog.
-- **Inline Arguments Supported**: Type extra arguments directly in the address bar (e.g. `cmda /k dir` or `wta -p PowerShell`).
+- **Inline Arguments Supported**: Type extra arguments directly in the address bar (e.g. `cmda dir` or `wta -p PowerShell`).
 
 ---
 
@@ -109,10 +109,10 @@ Open the mod's **Settings** tab in Windhawk to:
   $name: "Custom Alias 1 - Target Executable"
   $description: >-
     Executable name or full path (e.g. "code.cmd").
-- custom1_args: "%DIR%"
+- custom1_args: '"%DIR%"'
   $name: "Custom Alias 1 - Arguments"
   $description: >-
-    Arguments passed to the target. "%DIR%" will be replaced by the active directory path.
+    Arguments passed to target. Supports "%DIR%" or "<DIR>" (active directory) and "%ARGS%" or "<ARGS>" (inline arguments).
 - custom1_elevated: false
   $name: "Custom Alias 1 - Run Elevated"
   $description: >-
@@ -130,8 +130,6 @@ Open the mod's **Settings** tab in Windhawk to:
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <string>
-#include <vector>
-#include <algorithm>
 
 struct ModSettings {
     std::wstring cmdAlias;
@@ -181,12 +179,9 @@ static std::wstring Trim(const std::wstring& str) {
     return str.substr(first, (last - first + 1));
 }
 
-// Helper: Read a string setting safely into std::wstring
-static std::wstring ReadStringSetting(PCWSTR name, PCWSTR defaultValue = L"") {
-    PCWSTR val = Wh_GetStringSetting(name);
-    std::wstring result = (val && val[0] != L'\0') ? val : defaultValue;
-    if (val) Wh_FreeStringSetting(val);
-    return Trim(result);
+// Helper: Read a string setting safely without substituting defaults when user cleared it
+static std::wstring ReadStringSetting(PCWSTR name) {
+    return Trim(WindhawkUtils::StringSetting::make(name).get());
 }
 
 // Helper: Case-insensitive equality
@@ -260,64 +255,19 @@ static std::wstring QuotePath(const std::wstring& path) {
     return L"\"" + result + L"\"";
 }
 
-// Helper: URL decoding (%20 -> space, + -> space)
-static std::wstring UrlDecode(const std::wstring& in) {
-    std::wstring out;
-    out.reserve(in.length());
-    for (size_t i = 0; i < in.length(); i++) {
-        if (in[i] == L'%' && i + 2 < in.length()) {
-            WCHAR hex[3] = { in[i+1], in[i+2], L'\0' };
-            WCHAR* end = nullptr;
-            long val = wcstol(hex, &end, 16);
-            if (end && *end == L'\0' && val > 0) {
-                out += (WCHAR)val;
-                i += 2;
-                continue;
-            }
-        } else if (in[i] == L'+') {
-            out += L' ';
-            continue;
-        }
-        out += in[i];
-    }
-    return out;
-}
-
-// Clean raw input from Explorer address bar or browser redirection URL
-static std::wstring CleanAliasInput(const std::wstring& raw) {
-    std::wstring s = Trim(raw);
-    if (s.empty()) return L"";
-
-    // 1. Strip "microsoft-edge:" prefix if present
-    if (s.rfind(L"microsoft-edge:", 0) == 0) {
-        s = s.substr(15);
-    }
-
-    // 2. If it's a search URL (e.g. Bing / Google search: ?q=... or &q=...)
-    size_t qPos = s.find(L"?q=");
-    if (qPos == std::wstring::npos) qPos = s.find(L"&q=");
-    if (qPos != std::wstring::npos) {
-        s = s.substr(qPos + 3);
-        size_t ampPos = s.find(L'&');
-        if (ampPos != std::wstring::npos) {
-            s = s.substr(0, ampPos);
+// Helper: Escape single-quote delimiters for PowerShell -LiteralPath string literal.
+// PowerShell treats ASCII ' (U+0027) as well as typographic single quotes
+// U+2018 (‘), U+2019 (’), U+201A (‚), and U+201B (‛) as string delimiters.
+static std::wstring EscapePowerShellLiteral(const std::wstring& str) {
+    std::wstring escaped;
+    escaped.reserve(str.length() + 8);
+    for (WCHAR ch : str) {
+        escaped.push_back(ch);
+        if (ch == L'\'' || ch == 0x2018 || ch == 0x2019 || ch == 0x201A || ch == 0x201B) {
+            escaped.push_back(ch); // Double the quote delimiter
         }
     }
-
-    // 3. Decode URL characters (%20, +, etc.)
-    s = UrlDecode(s);
-
-    // 4. Strip http://, https://, file:/// prefixes
-    if (s.rfind(L"http://", 0) == 0) s = s.substr(7);
-    else if (s.rfind(L"https://", 0) == 0) s = s.substr(8);
-    else if (s.rfind(L"file:///", 0) == 0) s = s.substr(8);
-
-    // 5. Strip trailing slashes
-    while (!s.empty() && (s.back() == L'/' || s.back() == L'\\')) {
-        s.pop_back();
-    }
-
-    return Trim(s);
+    return escaped;
 }
 
 // Helper: Query active explorer directory from HWND via Shell COM
@@ -398,30 +348,36 @@ static bool GetExplorerWindowFolder(HWND hwnd, std::wstring& outPath) {
 // Load / Reload Settings with exclusive lock
 static void LoadSettings() {
     ModSettings s;
-    s.cmdAlias = ReadStringSetting(L"cmd_alias", L"cmda");
+    s.cmdAlias = ReadStringSetting(L"cmd_alias");
     s.cmdElevated = Wh_GetIntSetting(L"cmd_elevated") != 0;
 
-    s.wtAlias = ReadStringSetting(L"wt_alias", L"wta");
+    s.wtAlias = ReadStringSetting(L"wt_alias");
     s.wtElevated = Wh_GetIntSetting(L"wt_elevated") != 0;
-    s.wtProfile = ReadStringSetting(L"wt_profile", L"");
+    s.wtProfile = ReadStringSetting(L"wt_profile");
     s.wtFallbackCmd = Wh_GetIntSetting(L"wt_fallback_cmd") != 0;
 
-    s.psAlias = ReadStringSetting(L"ps_alias", L"psa");
+    s.psAlias = ReadStringSetting(L"ps_alias");
     s.psElevated = Wh_GetIntSetting(L"ps_elevated") != 0;
 
-    s.pwshAlias = ReadStringSetting(L"pwsh_alias", L"pwsha");
+    s.pwshAlias = ReadStringSetting(L"pwsh_alias");
     s.pwshElevated = Wh_GetIntSetting(L"pwsh_elevated") != 0;
 
-    s.gitBashAlias = ReadStringSetting(L"gitbash_alias", L"");
+    s.gitBashAlias = ReadStringSetting(L"gitbash_alias");
     s.gitBashElevated = Wh_GetIntSetting(L"gitbash_elevated") != 0;
-    s.gitBashPath = ReadStringSetting(L"gitbash_path", L"");
+    s.gitBashPath = ReadStringSetting(L"gitbash_path");
 
-    s.custom1Alias = ReadStringSetting(L"custom1_alias", L"");
-    s.custom1Target = ReadStringSetting(L"custom1_target", L"");
-    s.custom1Args = ReadStringSetting(L"custom1_args", L"%DIR%");
+    s.custom1Alias = ReadStringSetting(L"custom1_alias");
+    s.custom1Target = ReadStringSetting(L"custom1_target");
+    s.custom1Args = ReadStringSetting(L"custom1_args");
+    if (s.custom1Args.empty()) {
+        s.custom1Args = L"\"%DIR%\"";
+    }
     s.custom1Elevated = Wh_GetIntSetting(L"custom1_elevated") != 0;
 
-    s.fallbackPath = ReadStringSetting(L"fallback_path", L"%USERPROFILE%");
+    s.fallbackPath = ReadStringSetting(L"fallback_path");
+    if (s.fallbackPath.empty()) {
+        s.fallbackPath = L"%USERPROFILE%";
+    }
 
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = std::move(s);
@@ -449,8 +405,7 @@ struct MatchedAlias {
 static bool MatchAlias(LPCWSTR lpFile, LPCWSTR lpParameters, MatchedAlias& outMatch, const ModSettings& settings) {
     if (!lpFile || lpFile[0] == L'\0') return false;
 
-    // Clean URL prefixes, search queries, etc.
-    std::wstring fullCommand = CleanAliasInput(lpFile);
+    std::wstring fullCommand = Trim(lpFile);
     if (fullCommand.empty()) return false;
 
     // Separate primary alias token and potential inline arguments
@@ -628,9 +583,13 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
                 executable = L"wt.exe";
                 arguments = L"";
                 if (!settings.wtProfile.empty()) {
-                    arguments += L"-p " + QuotePath(settings.wtProfile) + L" ";
+                    std::wstring wtProfileEscaped = settings.wtProfile;
+                    ReplaceAll(wtProfileEscaped, L";", L"\\;");
+                    arguments += L"-p " + QuotePath(wtProfileEscaped) + L" ";
                 }
-                arguments += L"-d " + quotedTargetDir;
+                std::wstring wtDirEscaped = targetDir;
+                ReplaceAll(wtDirEscaped, L";", L"\\;");
+                arguments += L"-d " + QuotePath(wtDirEscaped);
                 if (!match.extraUserArgs.empty()) {
                     arguments += L" " + match.extraUserArgs;
                 }
@@ -640,8 +599,7 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
 
         case ShellType::PowerShell: {
             executable = L"powershell.exe";
-            std::wstring escapedDir = targetDir;
-            ReplaceAll(escapedDir, L"'", L"''");
+            std::wstring escapedDir = EscapePowerShellLiteral(targetDir);
             if (match.extraUserArgs.empty()) {
                 arguments = L"-NoExit -Command \"Set-Location -LiteralPath '" + escapedDir + L"'\"";
             } else {
@@ -652,8 +610,7 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
 
         case ShellType::PowerShellCore: {
             executable = L"pwsh.exe";
-            std::wstring escapedDir = targetDir;
-            ReplaceAll(escapedDir, L"'", L"''");
+            std::wstring escapedDir = EscapePowerShellLiteral(targetDir);
             if (match.extraUserArgs.empty()) {
                 arguments = L"-NoExit -Command \"Set-Location -LiteralPath '" + escapedDir + L"'\"";
             } else {
@@ -710,7 +667,7 @@ static bool HandleExecution(HWND hwnd, LPCWSTR lpFile, LPCWSTR lpParameters, LPC
 
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_DOENVSUBST;
+    sei.fMask = 0;
     sei.hwnd = hwnd;
     sei.lpVerb = elevate ? L"runas" : L"open";
     sei.lpFile = executable.c_str();
@@ -825,39 +782,25 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Terminal Admin Aliases mod init");
     LoadSettings();
 
-    // Hook SearchPathW
-    HMODULE hKernel32 = GetModuleHandle(L"kernel32.dll");
-    if (hKernel32) {
-        void* pSearchPathW = (void*)GetProcAddress(hKernel32, "SearchPathW");
-        if (pSearchPathW) {
-            Wh_SetFunctionHook(pSearchPathW, (void*)SearchPathW_Hook, (void**)&SearchPathW_Original);
+    // Hook SearchPathW (prefer kernelbase.dll so API-set callers are intercepted directly)
+    HMODULE hKernelbase = GetModuleHandle(L"kernelbase.dll");
+    void* pSearchPathW = hKernelbase ? (void*)GetProcAddress(hKernelbase, "SearchPathW") : nullptr;
+    if (!pSearchPathW) {
+        HMODULE hKernel32 = GetModuleHandle(L"kernel32.dll");
+        if (hKernel32) {
+            pSearchPathW = (void*)GetProcAddress(hKernel32, "SearchPathW");
         }
+    }
+    if (pSearchPathW) {
+        WindhawkUtils::SetFunctionHook(pSearchPathW, SearchPathW_Hook, &SearchPathW_Original);
     }
 
     // Hook PathFindOnPathW
-    HMODULE hShlwapi = GetModuleHandle(L"shlwapi.dll");
-    if (!hShlwapi) hShlwapi = LoadLibrary(L"shlwapi.dll");
-    if (hShlwapi) {
-        void* pPathFindOnPathW = (void*)GetProcAddress(hShlwapi, "PathFindOnPathW");
-        if (pPathFindOnPathW) {
-            Wh_SetFunctionHook(pPathFindOnPathW, (void*)PathFindOnPathW_Hook, (void**)&PathFindOnPathW_Original);
-        }
-    }
+    WindhawkUtils::SetFunctionHook(PathFindOnPathW, PathFindOnPathW_Hook, &PathFindOnPathW_Original);
 
     // Hook ShellExecuteExW and ShellExecuteW
-    HMODULE hShell32 = GetModuleHandle(L"shell32.dll");
-    if (!hShell32) hShell32 = LoadLibrary(L"shell32.dll");
-    if (hShell32) {
-        void* pShellExecuteExW = (void*)GetProcAddress(hShell32, "ShellExecuteExW");
-        if (pShellExecuteExW) {
-            Wh_SetFunctionHook(pShellExecuteExW, (void*)ShellExecuteExW_Hook, (void**)&ShellExecuteExW_Original);
-        }
-
-        void* pShellExecuteW = (void*)GetProcAddress(hShell32, "ShellExecuteW");
-        if (pShellExecuteW) {
-            Wh_SetFunctionHook(pShellExecuteW, (void*)ShellExecuteW_Hook, (void**)&ShellExecuteW_Original);
-        }
-    }
+    WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook, &ShellExecuteExW_Original);
+    WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
 
     return TRUE;
 }
