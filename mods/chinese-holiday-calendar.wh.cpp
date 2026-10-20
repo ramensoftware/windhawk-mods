@@ -1505,15 +1505,13 @@ int32_t ParseDateKey(std::wstring const& text) {
     return MakeDateKey(year, month, day);
 }
 
-// True when a date-time value carries a time of day which is not midnight. An end of
-// "20260103T170000" covers the third of January until five in the afternoon, while one of
-// "20260103T000000" stops where that day begins: the two do not end the same way, so the
-// time is looked at even though the mod only marks whole days. A date without a time is
-// an all-day date and has no time of day.
-bool HasTimeOfDay(std::wstring const& text) {
+// The time of day a value names, in seconds since midnight, and 0 for a date without a
+// time (or a value whose time cannot be read). Midnight is 0 too, which is what an all-day
+// date has: the two end a range the same way.
+int TimeOfDaySeconds(std::wstring const& text) {
     const size_t t = text.find(L'T');
     if (t == std::wstring::npos) {
-        return false;
+        return 0;
     }
 
     std::wstring digits;
@@ -1526,14 +1524,25 @@ bool HasTimeOfDay(std::wstring const& text) {
     // Hours and minutes are the shortest form a feed writes; anything shorter is not a
     // time this can tell apart from midnight.
     if (digits.size() < 4) {
-        return false;
+        return 0;
     }
 
     const int hour = (digits[0] - L'0') * 10 + (digits[1] - L'0');
     const int minute = (digits[2] - L'0') * 10 + (digits[3] - L'0');
     const int second =
         digits.size() >= 6 ? (digits[4] - L'0') * 10 + (digits[5] - L'0') : 0;
-    return hour != 0 || minute != 0 || second != 0;
+    if (hour > 23 || minute > 59 || second > 59) {
+        return 0;
+    }
+    return hour * 3600 + minute * 60 + second;
+}
+
+// True when a value names a time of day other than midnight. An end of "20260103T170000"
+// covers the third of January until five in the afternoon, while one of "20260103T000000"
+// stops where that day begins: the two do not end the same way, so the time is looked at
+// even though the mod only marks whole days.
+bool HasTimeOfDay(std::wstring const& text) {
+    return TimeOfDaySeconds(text) != 0;
 }
 
 // The next day. The leap rule lives in DaysInMonth, so a 2024-02-29 in the feed is
@@ -2250,17 +2259,18 @@ bool ReadNumber(std::wstring const& text, int smallest, int largest, int& value)
     return true;
 }
 
-// The number of days a DURATION names, for an event which writes its end that way instead
-// of with a DTEND. The time part of a duration is below a day and is not counted: the mod
-// reads dates and never looks at a time, so "PT12H" is the day the event starts on. False
-// is a value the mod cannot read, and the event is dropped then rather than given an end
-// nobody wrote.
-bool ParseDurationDays(std::wstring const& text, int& days) {
+// The length a DURATION names, in seconds, for an event which writes its end that way
+// instead of with a DTEND. Weeks, days, hours, minutes and seconds are all read, because
+// where the event ends decides which dates it covers: "P1DT8H" from nine in the morning
+// ends in the afternoon of the next day, and that day is a part of the range. False is a
+// value the mod cannot read, and the event is dropped then rather than given an end nobody
+// wrote.
+bool ParseDurationSeconds(std::wstring const& text, int64_t& seconds) {
     size_t i = 0;
-    if (i < text.size() && (text[i] == L'+' || text[i] == L'-')) {
-        if (text[i] == L'-') {
-            return false;  // an end before the start is not a range
-        }
+    if (i < text.size() && text[i] == L'-') {
+        return false;  // an end before the start is not a range
+    }
+    if (i < text.size() && text[i] == L'+') {
         i++;
     }
     if (i >= text.size() || text[i] != L'P') {
@@ -2268,7 +2278,7 @@ bool ParseDurationDays(std::wstring const& text, int& days) {
     }
     i++;
 
-    int total = 0;
+    int64_t total = 0;
     bool inTimePart = false;
     bool sawSomething = false;
     while (i < text.size()) {
@@ -2289,19 +2299,25 @@ bool ParseDurationDays(std::wstring const& text, int& days) {
             return false;  // a number which is not followed by a part of its own
         }
         const wchar_t part = text[i++];
+        int64_t partSeconds = 0;
         if (part == L'W' && !inTimePart) {
-            total += number * 7;
+            partSeconds = static_cast<int64_t>(number) * 7 * 86400;
         } else if (part == L'D' && !inTimePart) {
-            total += number;
-        } else if ((part == L'H' || part == L'M' || part == L'S') && inTimePart) {
-            // Below a day: the mod reads dates.
+            partSeconds = static_cast<int64_t>(number) * 86400;
+        } else if (part == L'H' && inTimePart) {
+            partSeconds = static_cast<int64_t>(number) * 3600;
+        } else if (part == L'M' && inTimePart) {
+            partSeconds = static_cast<int64_t>(number) * 60;
+        } else if (part == L'S' && inTimePart) {
+            partSeconds = number;
         } else {
             return false;
         }
+        total += partSeconds;
         sawSomething = true;
     }
 
-    days = total;
+    seconds = total;
     return sawSomething;
 }
 
@@ -2413,11 +2429,14 @@ bool ParseIcs(std::wstring const& text,
     // years the feed itself is about, and not over years of the mod's own choosing.
     struct Event {
         int32_t start = 0;
+        // Where the start is in its day, and how long the event lasts when it writes a
+        // DURATION: together they say where it ends, which decides the dates it covers.
+        int startSecondsOfDay = 0;
+        int64_t durationSeconds = 0;
         int32_t end = 0;
         bool hasEnd = false;
         // The end wrote a time of day which is not midnight, so its date is covered.
         bool endHasTimeOfDay = false;
-        int durationDays = 0;
         // A field the mod could not read as what it says it is. No end is guessed for
         // such an event, so it is dropped rather than given one.
         bool broken = false;
@@ -2472,6 +2491,7 @@ bool ParseIcs(std::wstring const& text,
 
         if (name == L"DTSTART") {
             event.start = ParseDateKey(value);
+            event.startSecondsOfDay = TimeOfDaySeconds(value);
         } else if (name == L"DTEND") {
             event.end = ParseDateKey(value);
             event.hasEnd = true;
@@ -2480,7 +2500,7 @@ bool ParseIcs(std::wstring const& text,
             // An event may write how long it lasts instead of when it ends. A duration
             // which cannot be read leaves the event with no end the mod knows, and an end
             // nobody wrote is not guessed at.
-            if (!ParseDurationDays(value, event.durationDays)) {
+            if (!ParseDurationSeconds(value, event.durationSeconds)) {
                 event.broken = true;
             }
         } else if (name == L"SUMMARY") {
@@ -2567,11 +2587,17 @@ bool ParseIcs(std::wstring const& text,
             } else {
                 end = collected.end;
             }
-        } else if (collected.durationDays > 0) {
-            end = collected.start;
-            for (int day = 0; day < collected.durationDays && end; day++) {
-                end = NextDateKey(end);
+        } else if (collected.durationSeconds > 0) {
+            // A duration is added to the time of the start, and where that lands decides
+            // the dates: an end which is not midnight (17:00, say) covers that whole date,
+            // the same way a DTEND with such a time does.
+            const int64_t total =
+                collected.startSecondsOfDay + collected.durationSeconds;
+            int32_t lastDate = collected.start;
+            for (int64_t days = total / 86400; days > 0 && lastDate; days--) {
+                lastDate = NextDateKey(lastDate);
             }
+            end = lastDate && total % 86400 != 0 ? NextDateKey(lastDate) : lastDate;
             if (!end) {
                 droppedRanges++;
                 continue;
