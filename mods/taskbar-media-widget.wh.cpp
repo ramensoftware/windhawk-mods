@@ -91,15 +91,15 @@ the same compact surface.
 - idleApps: "Yandex Music,Spotify,Apple Music"
   $name: Idle apps
   $description: Comma-separated Start menu app names to show when no media session is active. Apps pinned to the taskbar are skipped when possible.
-- marqueeSpeed: 0.55
+- marqueeSpeed: "0.55"
   $name: Marquee speed
-- volumeStep: 0.02
+- volumeStep: "0.02"
   $name: Wheel volume step
   $description: Volume change per mouse wheel notch. The widget tries app volume first and falls back to system volume.
 - visualizerEnabled: true
   $name: Audio visualizer
   $description: Draw a subtle real WASAPI loopback spectrum behind the track text.
-- visualizerOpacity: 0.32
+- visualizerOpacity: "0.32"
   $name: Visualizer opacity
 */
 // ==/WindhawkModSettings==
