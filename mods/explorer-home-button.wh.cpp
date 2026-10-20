@@ -825,7 +825,7 @@ void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis, void* send
 }
 
 bool HookFileExplorerExtensionsSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
         {
             {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
             &CommandBarManager_CommandBar_Original,
@@ -858,7 +858,8 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, fileExplorerExtensionsDllHooks,
+                                   ARRAYSIZE(fileExplorerExtensionsDllHooks))) {
         Wh_Log(L"HookSymbols failed for FileExplorerExtensions.dll");
         return false;
     }
