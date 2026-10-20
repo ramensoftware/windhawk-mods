@@ -1524,6 +1524,10 @@ public:
     // taskbar or for good. Its mouse messages, and the other widgets' notices, come as they are.
     static constexpr UINT kAttachedMessage = WM_APP + 0x200;
     static constexpr UINT kDetachedMessage = WM_APP + 0x201;
+    // Its mouse messages (WM_MOUSEFIRST to WM_MOUSELAST) come as this plus their place in that range,
+    // as a menu's modal loop takes every message in that range from its thread's queue for itself,
+    // even those posted to its other windows.
+    static constexpr UINT kMouseMessage = WM_APP + 0x210;
 
     ~WidgetWindow() { Stop(); }
 
@@ -1653,6 +1657,10 @@ private:
         PostMessageW(input_, kAttachedMessage, (WPARAM)window, 0);
     }
 
+    void PostMouse(UINT message, WPARAM wParam, LPARAM lParam) {
+        PostMessageW(input_, kMouseMessage + (message - WM_MOUSEFIRST), wParam, lParam);
+    }
+
     // Draws the picture last given (on this thread, which owns the window).
     void Show(HWND window, bool notify) {
         HDC screen = GetDC(nullptr);
@@ -1706,7 +1714,7 @@ private:
                 // a time, and the UI thread takes the latest point when it gets to it (TakeMouseMove).
                 self->movePoint_ = lParam;
                 if (!self->movePending_.exchange(true)) {
-                    PostMessageW(self->input_, message, wParam, lParam);
+                    self->PostMouse(message, wParam, lParam);
                 }
                 return 0;
             case WM_MOUSELEAVE:
@@ -1715,10 +1723,10 @@ private:
                 return 0;
             case WM_LBUTTONDOWN:
                 SetCapture(window);  // For dragging.
-                PostMessageW(self->input_, message, wParam, lParam);
+                self->PostMouse(message, wParam, lParam);
                 return 0;
             case WM_LBUTTONUP:
-                PostMessageW(self->input_, message, wParam, lParam);
+                self->PostMouse(message, wParam, lParam);
                 if (GetCapture() == window) {
                     ReleaseCapture();
                 }
@@ -1726,7 +1734,7 @@ private:
             case WM_MBUTTONUP:
             case WM_RBUTTONUP:
             case WM_MOUSEWHEEL:
-                PostMessageW(self->input_, message, wParam, lParam);
+                self->PostMouse(message, wParam, lParam);
                 return 0;
             case WM_CAPTURECHANGED:
             case WM_DPICHANGED_AFTERPARENT:
@@ -2078,6 +2086,9 @@ private:
             SyncLink();
             UpdatePlacement(false);
             return true;
+        }
+        if (message >= WidgetWindow::kMouseMessage && message <= WidgetWindow::kMouseMessage + (WM_MOUSELAST - WM_MOUSEFIRST)) {
+            message = WM_MOUSEFIRST + (message - WidgetWindow::kMouseMessage);  // The widget's, handled below.
         }
         switch (message) {
             case WidgetWindow::kAttachedMessage:
