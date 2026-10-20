@@ -757,19 +757,53 @@ constexpr UINT kTrimClosedMessage = WM_APP + 6;  // lParam is the window.
 // ---------------------------------------------------------------------------
 // Taskbar
 
-HWND TaskbarWindow() {
-    return FindWindowW(L"Shell_TrayWnd", nullptr);
-}
-
 // Whether this is an Explorer process.
 bool InExplorer() {
-    WCHAR path[MAX_PATH];
-    DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) {
+    static const bool inExplorer = []() {
+        WCHAR path[MAX_PATH];
+        DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+        if (length == 0 || length >= MAX_PATH) {
+            return false;
+        }
+        const wchar_t* name = wcsrchr(path, L'\\');
+        return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    }();
+    return inExplorer;
+}
+
+// Whether the process is an Explorer.
+bool IsExplorerProcess(DWORD processId) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
         return false;
     }
-    const wchar_t* name = wcsrchr(path, L'\\');
-    return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    WCHAR path[MAX_PATH];
+    DWORD length = MAX_PATH;
+    bool explorer = false;
+    if (QueryFullProcessImageNameW(process, 0, path, &length)) {
+        const wchar_t* name = wcsrchr(path, L'\\');
+        explorer = _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    }
+    CloseHandle(process);
+    return explorer;
+}
+
+// Explorer's taskbar (in Explorer, this process's own if it has one). Other apps' Shell_TrayWnd
+// windows don't count: taskbar replacements such as RetroBar make one, so tray icons reach them.
+HWND TaskbarWindow() {
+    HWND explorers = nullptr;
+    for (HWND window = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr); window;
+         window = FindWindowExW(nullptr, window, L"Shell_TrayWnd", nullptr)) {
+        DWORD process = 0;
+        GetWindowThreadProcessId(window, &process);
+        if (process == GetCurrentProcessId() && InExplorer()) {
+            return window;
+        }
+        if (!explorers && IsExplorerProcess(process)) {
+            explorers = window;
+        }
+    }
+    return explorers;
 }
 
 // Whether this is an Explorer process for folder windows ("Launch folder windows in a separate
@@ -1006,7 +1040,7 @@ BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
 std::vector<std::pair<int, HWND>> OtherWidgets() {
     std::vector<std::pair<int, HWND>> widgets;
     EnumWindows(AddOtherWidget, (LPARAM)&widgets);
-    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+    if (HWND taskbar = TaskbarWindow()) {
         EnumChildWindows(taskbar, AddOtherWidget, (LPARAM)&widgets);
     }
     return widgets;
@@ -1020,7 +1054,7 @@ HWND FindMember(int member) {
         if (HWND window = FindWindowW(kMembers[member].windowClass, nullptr)) {
             return window;
         }
-        HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        HWND taskbar = TaskbarWindow();
         return taskbar ? FindWindowExW(taskbar, nullptr, kMembers[member].windowClass, nullptr) : nullptr;
     }
     // One added after this widget: by the id it shows.
@@ -1120,8 +1154,9 @@ public:
     // Puts the window in the taskbar, unless it's in one already.
     void Attach(HWND taskbar) { PostThreadMessageW(threadId_, kAttachMessage, 0, (LPARAM)taskbar); }
 
-    // Shows the picture (which this then owns) at the position in the taskbar's client area.
-    void Present(HBITMAP picture, POINT position, SIZE size) {
+    // Shows the picture (which this then owns) at the position in the taskbar's client area. With
+    // notify, the linked widgets are told once it shows (so they see where it is now).
+    void Present(HBITMAP picture, POINT position, SIZE size, bool notify) {
         AcquireSRWLockExclusive(&lock_);
         HBITMAP old = picture_;
         picture_ = picture;
@@ -1132,13 +1167,27 @@ public:
             DeleteObject(old);
         }
         if (HWND window = window_) {
-            PostMessageW(window, kPresentMessage, 0, 0);
+            PostMessageW(window, kPresentMessage, notify, 0);
+        }
+    }
+
+    // The latest point the mouse moved to, when the UI thread gets the move posted to it.
+    LPARAM TakeMouseMove() {
+        movePending_ = false;
+        return movePoint_;
+    }
+
+    // Shows or hides the window; with notify, the linked widgets are told after.
+    void SetVisible(bool visible, bool notify) {
+        if (HWND window = window_) {
+            PostMessageW(window, kVisibleMessage, visible, notify);
         }
     }
 
 private:
     static constexpr UINT kAttachMessage = WM_APP + 0x202;   // To the thread.
     static constexpr UINT kPresentMessage = WM_APP + 0x203;  // To the window.
+    static constexpr UINT kVisibleMessage = WM_APP + 0x204;  // To the window.
 
     static const wchar_t* RegisterWidgetClass() {
         std::vector<std::wstring>& classes = RegisteredClasses();
@@ -1181,9 +1230,10 @@ private:
             PostMessageW(input_, kAttachedMessage, (WPARAM)window, 0);  // There already.
             return;
         }
-        // Layered, as only a layered window draws over the content of the Windows 11 taskbar.
-        HWND window = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOPARENTNOTIFY, windowClass_, kWidgetTitle, WS_CHILD | WS_CLIPSIBLINGS,
-                                      0, 0, 1, 1, taskbar, nullptr, ModuleInstance(), this);
+        // Layered, as only a layered window draws over the content of the Windows 11 taskbar; and
+        // not mirrored when the taskbar is (for right-to-left languages), as it's drawn as it is.
+        HWND window = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOPARENTNOTIFY | WS_EX_NOINHERITLAYOUT, windowClass_, kWidgetTitle,
+                                      WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 1, 1, taskbar, nullptr, ModuleInstance(), this);
         if (window) {
             // Only needed when the app runs as administrator: lets the other widgets' messages
             // through.
@@ -1194,7 +1244,7 @@ private:
     }
 
     // Draws the picture last given (on this thread, which owns the window).
-    void Show(HWND window) {
+    void Show(HWND window, bool notify) {
         HDC screen = GetDC(nullptr);
         HDC memory = CreateCompatibleDC(screen);
         AcquireSRWLockExclusive(&lock_);
@@ -1208,6 +1258,9 @@ private:
         ReleaseSRWLockExclusive(&lock_);
         DeleteDC(memory);
         ReleaseDC(nullptr, screen);
+        if (notify) {
+            WidgetLink::NotifyOthers();
+        }
     }
 
     static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -1224,7 +1277,13 @@ private:
         }
         switch (message) {
             case kPresentMessage:
-                self->Show(window);
+                self->Show(window, wParam != 0);
+                return 0;
+            case kVisibleMessage:
+                ShowWindow(window, wParam ? SW_SHOWNA : SW_HIDE);
+                if (lParam) {
+                    WidgetLink::NotifyOthers();
+                }
                 return 0;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
@@ -1233,7 +1292,12 @@ private:
                     TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, window, 0};
                     self->trackingMouse_ = TrackMouseEvent(&track);
                 }
-                PostMessageW(self->input_, message, wParam, lParam);
+                // Only the latest move matters, as Windows has it for a busy thread: one is posted at
+                // a time, and the UI thread takes the latest point when it gets to it (TakeMouseMove).
+                self->movePoint_ = lParam;
+                if (!self->movePending_.exchange(true)) {
+                    PostMessageW(self->input_, message, wParam, lParam);
+                }
                 return 0;
             case WM_MOUSELEAVE:
                 self->trackingMouse_ = false;
@@ -1276,6 +1340,8 @@ private:
     HANDLE ready_ = nullptr;
     std::atomic<HWND> window_{nullptr};
     bool trackingMouse_ = false;  // On its thread.
+    std::atomic<LPARAM> movePoint_{0};
+    std::atomic<bool> movePending_{false};
     SRWLOCK lock_ = SRWLOCK_INIT;  // For the picture.
     HBITMAP picture_ = nullptr;
     POINT position_{};
@@ -1343,9 +1409,6 @@ public:
         }
     }
 
-    // The widget's window. It's on another thread: for timers, menus and dialogs, use OwnerWindow.
-    HWND Handle() const { return hwnd_; }
-
     // A hidden window of the UI thread, for timers (which come to OnTimer), and to own menus and
     // dialogs.
     HWND OwnerWindow() const { return events_.hwnd_; }
@@ -1381,7 +1444,7 @@ public:
             if (group.order.size() < 2) {
                 // A new group starts where the leftmost of the two widgets is now, in the order
                 // they're in.
-                int left = Visible() ? taskbar_.left + placed_.left : taskbar_.left + std::max(0, offset_);
+                int left = taskbar_.left + (Visible() ? placedOffset_ : std::max(0, offset_));
                 RECT other;
                 bool otherFirst = false;
                 if (WidgetLink::TryGetBounds(member, other)) {
@@ -1487,11 +1550,8 @@ protected:
         // A vertical taskbar (Windows 10 can have one) has no room for it.
         if (!shown_ || !taskbar || !GetWindowRect(taskbar, &bar) || bar.right - bar.left <= bar.bottom - bar.top) {
             if (hwnd_ && visible_) {
-                ShowWindowAsync(hwnd_, SW_HIDE);
+                window_.SetVisible(false, link_.Linked());  // Telling the others, so they close the gap.
                 visible_ = false;
-                if (link_.Linked()) {
-                    WidgetLink::NotifyOthers();  // So they close the gap.
-                }
             }
             OnHidden();
             return;
@@ -1518,7 +1578,7 @@ protected:
         bool linked = link_.Linked();
         if (wasLinked_ && !linked && visible_) {
             // Just unlinked: stay where the group left this widget.
-            offset_ = std::max(0, (int)placed_.left);
+            offset_ = std::max(0, placedOffset_);
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
             }
@@ -1558,22 +1618,24 @@ protected:
             x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
             groupLeft_ = x;
         }
-        // In the taskbar's client area, which starts at its top-left corner.
-        RECT target{x - bar.left, 0, x - bar.left + width, bar.bottom - bar.top};
+        placedOffset_ = x - bar.left;
+        // In the taskbar's client area (mirrored, for right-to-left languages).
+        RECT target{x, bar.top, x + width, bar.bottom};
+        MapWindowPoints(nullptr, taskbar, (POINT*)&target, 2);
 
+        // The other widgets in the group are told once the widget's window has moved, so they move
+        // up against it where it is.
         bool moved = !EqualRect(&target, &placed_) || !visible_;
+        bool notify = moved && linked;
         if (contentChanged || moved || divider != dividerAtLeft_) {
             dividerAtLeft_ = divider;
-            Render(target);
+            Render(target, notify && visible_);
         }
         if (!visible_) {
-            ShowWindowAsync(hwnd_, SW_SHOWNA);
+            window_.SetVisible(true, notify);
             visible_ = true;
         }
         StayOverTaskbarContent();
-        if (moved && linked) {
-            WidgetLink::NotifyOthers();  // So they move up against this widget.
-        }
         OnPlaced();
     }
 
@@ -1632,8 +1694,8 @@ private:
                 return true;
             case WM_TIMER:
                 if (wParam == kPlacementTimer) {
-                    // In an Explorer folder-window process that started while there was no taskbar,
-                    // the mod has nothing to do: it ends.
+                    // In an Explorer process (for folder windows) that started while there was no
+                    // taskbar, and another Explorer has it now, the mod has nothing to do: it ends.
                     if (TaskbarWindow() && !WidgetTaskbar()) {
                         PostQuitMessage(0);
                         return true;
@@ -1669,6 +1731,9 @@ private:
             case WM_DPICHANGED_AFTERPARENT:
                 // The widget's, from its window. Not while a dialog of this thread is open (which
                 // disables this window), as a disabled window gets no mouse input.
+                if (message == WM_MOUSEMOVE) {
+                    lParam = window_.TakeMouseMove();
+                }
                 if (hwnd_ && IsWindowEnabled(events_.hwnd_)) {
                     HandleInput(message, wParam, lParam);
                 }
@@ -1727,10 +1792,10 @@ private:
                     EndDrag();
                 } else if (wasPressed) {
                     POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                    RECT client;
-                    GetClientRect(hwnd_, &client);
-                    // Pressing and sliding off the widget before letting go doesn't click it.
-                    if (PtInRect(&client, point)) {
+                    // Pressing and sliding off the widget before letting go doesn't click it (nor
+                    // does letting go after its window has gone with the taskbar).
+                    RECT client{};
+                    if (GetClientRect(hwnd_, &client) && PtInRect(&client, point)) {
                         OnClick(point, MouseButton::Left);
                     }
                 }
@@ -1822,7 +1887,7 @@ private:
             Render();
             WidgetLink::NotifyOthers();
         } else {
-            offset_ = placed_.left;  // Where it ended up after clamping.
+            offset_ = placedOffset_;  // Where it ended up after clamping.
             Render();
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
@@ -1830,8 +1895,9 @@ private:
         }
     }
 
-    // Draws the widget at the bounds (in the taskbar's client area), for its window to show.
-    void Render(const RECT& bounds) {
+    // Draws the widget at the bounds (in the taskbar's client area), for its window to show; with
+    // notify, the linked widgets are told once it does.
+    void Render(const RECT& bounds, bool notify = false) {
         int width = bounds.right - bounds.left;
         int height = bounds.bottom - bounds.top;
         if (!hwnd_ || width <= 0 || height <= 0) {
@@ -1873,7 +1939,7 @@ private:
             Draw(graphics, width, height, lightTaskbar_);
         }
         GdiFlush();
-        window_.Present(bitmap, {bounds.left, bounds.top}, {width, height});
+        window_.Present(bitmap, {bounds.left, bounds.top}, {width, height}, notify);
     }
 
     // Keeps the widget over the taskbar's own content: the windows Explorer draws the taskbar's
@@ -1901,6 +1967,7 @@ private:
     bool attaching_ = false;
     bool visible_ = false;
     RECT placed_{};  // Where the widget was last drawn, in the taskbar's client area.
+    int placedOffset_ = 0;  // And its distance from the taskbar's left edge.
     bool shown_ = false;
     int offset_ = -1;  // Pixels from the taskbar's left edge; negative means the default position.
     RECT taskbar_{};
@@ -1974,9 +2041,7 @@ public:
     void SetRecording(bool recording) {
         if (recording != recording_) {
             recording_ = recording;
-            if (Handle()) {
-                Render();
-            }
+            Render();  // Once the widget has a window.
         }
     }
 
