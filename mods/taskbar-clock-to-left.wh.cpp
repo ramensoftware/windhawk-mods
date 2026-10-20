@@ -106,7 +106,6 @@ This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -161,7 +160,6 @@ struct FlowElementLayout {
 
 struct TaskbarItemIdentity {
     int index;
-    uintptr_t elementIdentity;
     uintptr_t itemIdentity;
     winrt::Windows::Foundation::IInspectable item{nullptr};
 };
@@ -283,7 +281,6 @@ struct DeferredClockData {
     uint64_t layoutUpdatedRegistration{};
     ULONGLONG layoutUpdatedStartTick;
     uint32_t layoutUpdatedAttempts;
-    int diagnosticAlignment{-1};
     winrt::weak_ref<FrameworkElement> centeredFallbackClock;
 };
 
@@ -736,8 +733,7 @@ std::optional<std::vector<FrameworkElement>> GetRealizedTaskbarElements(
                 Wh_Log(L"[layout] item identity unavailable index=%d error=%08X",
                        i, winrt::to_hresult());
             }
-            itemIdentities->push_back({i,
-                reinterpret_cast<uintptr_t>(winrt::get_abi(child)), itemIdentity, item});
+            itemIdentities->push_back({i, itemIdentity, item});
         }
     }
     if (elements.empty()) {
@@ -774,6 +770,24 @@ std::optional<TaskbarElementSample> CollectTaskbarElements(
     return sample;
 }
 
+bool HasLayoutOnlyTransform(FrameworkElement element, FrameworkElement parent) {
+    auto transform = element.TransformToVisual(parent);
+    auto origin = transform.TransformPoint({0, 0});
+    auto xAxis = transform.TransformPoint({1, 0});
+    auto yAxis = transform.TransformPoint({0, 1});
+    auto offset = element.ActualOffset();
+    return std::isfinite(origin.X) && std::isfinite(origin.Y) &&
+           std::isfinite(offset.x) && std::isfinite(offset.y) &&
+           std::isfinite(xAxis.X) && std::isfinite(xAxis.Y) &&
+           std::isfinite(yAxis.X) && std::isfinite(yAxis.Y) &&
+           std::abs(origin.X - offset.x) <= kLayoutTolerance &&
+           std::abs(origin.Y - offset.y) <= kLayoutTolerance &&
+           std::abs(xAxis.X - origin.X - 1) <= 0.0001 &&
+           std::abs(xAxis.Y - origin.Y) <= 0.0001 &&
+           std::abs(yAxis.X - origin.X) <= 0.0001 &&
+           std::abs(yAxis.Y - origin.Y - 1) <= 0.0001;
+}
+
 std::optional<HorizontalBounds> TryGetLayoutBounds(
     FrameworkElement element, Controls::Grid root, double width) {
     if (!element || !root || !element.IsLoaded() || !root.XamlRoot() ||
@@ -798,21 +812,7 @@ std::optional<HorizontalBounds> TryGetLayoutBounds(
         if (!next) {
             return std::nullopt;
         }
-        auto transform = ancestor.TransformToVisual(next);
-        auto origin = transform.TransformPoint({0, 0});
-        auto xAxis = transform.TransformPoint({1, 0});
-        auto yAxis = transform.TransformPoint({0, 1});
-        auto offset = ancestor.ActualOffset();
-        if (!std::isfinite(origin.X) || !std::isfinite(origin.Y) ||
-            !std::isfinite(offset.x) || !std::isfinite(offset.y) ||
-            !std::isfinite(xAxis.X) || !std::isfinite(xAxis.Y) ||
-            !std::isfinite(yAxis.X) || !std::isfinite(yAxis.Y) ||
-            std::abs(origin.X - offset.x) > kLayoutTolerance ||
-            std::abs(origin.Y - offset.y) > kLayoutTolerance ||
-            std::abs(xAxis.X - origin.X - 1) > 0.0001 ||
-            std::abs(xAxis.Y - origin.Y) > 0.0001 ||
-            std::abs(yAxis.X - origin.X) > 0.0001 ||
-            std::abs(yAxis.Y - origin.Y - 1) > 0.0001) {
+        if (!HasLayoutOnlyTransform(ancestor, next)) {
             return std::nullopt;
         }
         ancestor = next;
@@ -826,6 +826,31 @@ std::optional<HorizontalBounds> TryGetLayoutBounds(
         return std::nullopt;
     }
     HorizontalBounds bounds{origin.X + offset.x, origin.X + offset.x + width};
+    return IsValidHorizontalBounds(bounds) ? std::optional{bounds}
+                                           : std::nullopt;
+}
+
+std::optional<HorizontalBounds> TryGetRepeaterChildBounds(
+    FrameworkElement child, FrameworkElement repeater, Controls::Grid root,
+    std::optional<double> repeaterOriginX, double width) {
+    if (!child || !root || !child.IsLoaded() || !root.XamlRoot() ||
+        child.XamlRoot() != root.XamlRoot() ||
+        child.Visibility() != Visibility::Visible ||
+        !std::isfinite(width) || width <= 0 ||
+        !std::isfinite(child.ActualHeight()) || child.ActualHeight() <= 0) {
+        return std::nullopt;
+    }
+    if (Media::VisualTreeHelper::GetParent(child) != repeater) {
+        return TryGetLayoutBounds(child, root, width);
+    }
+    if (!repeaterOriginX) return std::nullopt;
+    auto offset = child.ActualOffset();
+    if (!std::isfinite(offset.x) || !std::isfinite(offset.y)) {
+        return std::nullopt;
+    }
+    // As in the full path, ignore the child's own Dock transform.
+    HorizontalBounds bounds{*repeaterOriginX + offset.x,
+                            *repeaterOriginX + offset.x + width};
     return IsValidHorizontalBounds(bounds) ? std::optional{bounds}
                                            : std::nullopt;
 }
@@ -981,6 +1006,14 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     if (sample->itemIdentities) {
         snapshot.itemIdentities = *sample->itemIdentities;
     }
+    // The repeater bounds already validated its parent-to-root chain. Validate
+    // the repeater's own hop once; reuse this origin only in this read-only pass.
+    std::optional<double> repeaterOriginX;
+    auto repeaterParent = Media::VisualTreeHelper::GetParent(repeater)
+                              .try_as<FrameworkElement>();
+    if (repeaterParent && HasLayoutOnlyTransform(repeater, repeaterParent)) {
+        repeaterOriginX = repeater.TransformToVisual(root).TransformPoint({0, 0}).X;
+    }
     for (auto child : sample->elements) {
         auto identity = reinterpret_cast<uintptr_t>(winrt::get_abi(child));
         snapshot.childIdentities.push_back(identity);
@@ -991,12 +1024,14 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
                 child.Name() == L"OverflowButton" &&
                 Automation::AutomationProperties::GetAutomationId(child) == L"OverflowButton";
             if (className == L"Taskbar.TaskListButton" || overflow) {
-                auto bounds = TryGetLayoutBounds(child, root, child.ActualWidth());
+                auto bounds = TryGetRepeaterChildBounds(
+                    child, repeater, root, repeaterOriginX, child.ActualWidth());
                 if (bounds && IntersectsViewport(*bounds, {0, snapshot.rootWidth})) {
                     snapshot.flowElements.push_back({identity, *bounds, overflow});
                 }
             } else {
-                auto bounds = TryGetLayoutBounds(child, root, child.ActualWidth());
+                auto bounds = TryGetRepeaterChildBounds(
+                    child, repeater, root, repeaterOriginX, child.ActualWidth());
                 snapshot.unknownVisible |= bounds &&
                     IntersectsViewport(*bounds, {0, snapshot.rootWidth});
             }
@@ -1033,7 +1068,8 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
                 }
             }
             button.contentWidth = width;
-            auto bounds = TryGetLayoutBounds(child, root, width);
+            auto bounds = TryGetRepeaterChildBounds(
+                child, repeater, root, repeaterOriginX, width);
             if (!bounds || !std::isfinite(button.marginLeft)) {
                 return std::nullopt;
             }
@@ -1428,15 +1464,15 @@ std::optional<MovedTrayElementData> ReadApplicationTrayToMove(
 }
 
 std::optional<double> ReadMovedTrayContribution(
-    const MovedClockData& data, const std::optional<MovedTrayElementData>& record, PCWSTR* reason) {
+    Controls::Grid leftHost, bool restoring,
+    const std::optional<MovedTrayElementData>& record, PCWSTR* reason) {
     if (reason) *reason = nullptr;
-    if (!record || data.restoring) return 0;
+    if (!record || restoring) return 0;
     auto reject = [reason](PCWSTR value) -> std::optional<double> {
         if (reason) *reason = value;
         return std::nullopt;
     };
     const auto saved = *record;
-    auto leftHost = data.leftHost;
     auto target = saved.element.get();
     auto parent = saved.originalParent.get().try_as<Controls::Grid>();
     auto column = saved.nativeColumn;
@@ -1495,7 +1531,7 @@ std::optional<double> ReadMovedTrayContribution(
 
 std::optional<double> ReadNotifyIconGroupContribution(
     const MovedClockData& data, PCWSTR* reason = nullptr) {
-    return ReadMovedTrayContribution(data, data.notifyIcons, reason);
+    return ReadMovedTrayContribution(data.leftHost, data.restoring, data.notifyIcons, reason);
 }
 
 double GetReservedTrayLayoutWidth(const MovedClockData& data) {
@@ -1504,13 +1540,12 @@ double GetReservedTrayLayoutWidth(const MovedClockData& data) {
     }
     // Keep only the tray inputs alive across XAML reads, not the vector record.
     double reserved = data.layoutReservedWidth;
-    MovedClockData readState;
-    readState.leftHost = data.leftHost;
-    readState.restoring = data.restoring;
+    auto leftHost = data.leftHost;
+    bool restoring = data.restoring;
     const auto records = {data.controlCenter, data.trayGroup,
                           data.notifyIcons, data.applicationTray};
     for (const auto& record : records) {
-        reserved += ReadMovedTrayContribution(readState, record, nullptr).value_or(0);
+        reserved += ReadMovedTrayContribution(leftHost, restoring, record, nullptr).value_or(0);
     }
     return reserved;
 }
@@ -1714,9 +1749,9 @@ void CancelCenteredViewportProbe(FrameworkElement clock, const wchar_t* reason,
     if (layout) {
         LogLeftHostLayout(*layout, L"centered-viewport-cancelled", reserved);
     }
-    Wh_Log(L"[centered-viewport] cancelled: reason=%s held=%d elapsedMs=%llu "
+    Wh_Log(L"[centered-viewport] cancelled: reason=%s elapsedMs=%llu "
            L"clockWidth=(%.3f,%.3f) viewport=(%.3f,%.3f) expected=(%.3f,%.3f)",
-           reason, 1,
+           reason,
            static_cast<unsigned long long>(GetTickCount64() - probe.startTick),
            layout ? layout->hostWidth : -1.0, probe.baseline.hostWidth,
            layout ? layout->contentLeft : -1.0, layout ? layout->contentWidth : -1.0,
@@ -2250,10 +2285,8 @@ void UpdateLeftHostOffsetForClock(
             PCWSTR reason = nullptr;
             // A read can reenter cleanup; never carry a container pointer across it.
             auto saved = data->*record;
-            MovedClockData readState;
-            readState.leftHost = trackedHost;
             data = nullptr;
-            auto contribution = ReadMovedTrayContribution(readState, saved, &reason);
+            auto contribution = ReadMovedTrayContribution(trackedHost, false, saved, &reason);
             data = FindMovedClockData(clock);
             if (!data || data->restoring || data->leftHost != trackedHost) return;
             if (!(data->*record) || (data->*record)->nativeColumn != saved->nativeColumn) {
@@ -3381,21 +3414,7 @@ void UpdateClockPlacement(FrameworkElement content) {
     if (!ShouldRelocateClock()) {
         RestoreClock(clock);
         RemoveDeferredHandlers(content);
-        bool logAlignment = GetDeferredData(content).diagnosticAlignment != 0;
-        if (logAlignment &&
-            ClockLayoutIsReady(content)) {
-            auto tray = FindAncestor(clock, L"SystemTray.SystemTrayFrame", L"");
-            auto root = tray ? Media::VisualTreeHelper::GetParent(tray)
-                                  .try_as<Controls::Grid>()
-                             : nullptr;
-            if (root) {
-                if (auto current = FindDeferredClockData(content)) {
-                    current->diagnosticAlignment = 0;
-                }
-                        }
-        }
     } else if (content.IsLoaded()) {
-        GetDeferredData(content).diagnosticAlignment = 1;
         RemoveLoadedHandler(content);
         if (ClockIsAlreadyMoved(clock)) {
             RemoveLayoutUpdatedHandler(content);
@@ -4039,7 +4058,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND window, HWND insertAfter, int x, int y,
                     for (const auto* saved : {&data.controlCenter, &data.trayGroup, &data.applicationTray}) {
                         if (!*saved || (*saved)->lastContribution < 0) continue;
                         PCWSTR reason = nullptr;
-                        auto contribution = ReadMovedTrayContribution(data, *saved, &reason);
+                        auto contribution = ReadMovedTrayContribution(
+                            data.leftHost, data.restoring, *saved, &reason);
                         movedGroup |= contribution.has_value() && !reason;
                     }
                     if (movedGroup) arrow = ReadNativeNotifyChevron(data, root);
