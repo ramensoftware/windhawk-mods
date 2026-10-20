@@ -1,9 +1,9 @@
 // ==WindhawkMod==
-// @id              Floating-Taskbar
+// @id              floating-taskbar
 // @name            Floating Taskbar
 // @name:zh-CN      悬浮任务栏
-// @description     Transform Windows 11 taskbar into an independent floating rounded bar. Customize its width, height, bottom spacing, corner radius, background colors and gradients. Blank regions support click-through. Tray menus and Quick Settings remain docked to the bar’s right edge.
-// @description:zh-CN 将Windows 11任务栏转变为独立的浮动圆条。自定义宽度、高度、底部间距、角角半径、背景颜色和渐变。空白区域支持点击。托盘菜单和快速设置仍固定在栏的右侧边缘
+// @description     Turn Win11 taskbar into standalone floating rounded bar.Adjust width,height,bottom gap,corner radius,background color&gradients.Blank areas support click-through.Tray menus and Quick Settings stay anchored to the bar’s right edge.
+// @description:zh-CN 把Win11任务栏变成独立的浮动圆条。调整宽度、高度、底部间隙、角角半径、背景颜色和渐变。空白区域支持点击。托盘菜单和快速设置都固定在栏的右侧边缘
 // @version         2.1.8
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
