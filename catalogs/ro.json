@@ -15622,7 +15622,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792152230000,
+        "updated": 1792468904000,
         "users": 11
       },
       "metadata": {
@@ -15635,7 +15635,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar RDP Launcher",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "taskbar-recent-focus-highlight": {
