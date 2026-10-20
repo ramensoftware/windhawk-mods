@@ -1,3 +1,10 @@
+## 2.20 ([Oct 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/923361163f5e76b969bd13c59cc8d5fc87caa067/mods/classic-webview-pane.wh.cpp))
+
+* Default hyperlink colours to Windows HotTrackingColor / COLOR_HOTLIGHT; preserve explicit custom colours and clarify the English/Russian colour settings.
+* Keep upper background artwork at the full pane width beneath a details scrollbar, matching the divider's clipping behavior.
+* Retain a complete pane while folder-view geometry is temporarily zero during resize, with the existing bounded recovery path.
+* Use the host window's DPI coordinate space for pane layout and spacer sizing, restoring the caller's DPI context afterwards.
+
 ## 2.17 ([Oct 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7d87bb3f48d7cfc2bd2150fc583a4e481fb84a29/mods/classic-webview-pane.wh.cpp))
 
 * Add individually switchable file thumbnails, an image viewer for Pictures/imgview folders, metadata, attributes, multiple-selection details, special-folder templates/actions and background printer updates.

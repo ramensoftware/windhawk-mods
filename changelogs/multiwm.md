@@ -1,3 +1,8 @@
+## 1.13.59 ([Oct 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b039ab01c4b034c0adea8c12b213192e8085bec9/mods/multiwm.wh.cpp))
+
+- added contributing section 
+- added WHAM delimiters for multi-file workflows
+
 ## 1.13.58 ([Oct 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9195db122f6e8340b19d69aa1b776a49930d8434/mods/multiwm.wh.cpp))
 
 - Updated BSP to Dwindle layout with adaptive splits and reversible growth direction.

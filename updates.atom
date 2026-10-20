@@ -2,12 +2,156 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-20T14:02:15.000Z</updated>
+    <updated>2026-10-20T17:01:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MultiWM 1.13.59]]></title>
+        <id>https://windhawk.net/mods/multiwm#b039ab01c4b034c0adea8c12b213192e8085bec9</id>
+        <link href="https://windhawk.net/mods/multiwm"/>
+        <updated>2026-10-20T17:01:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>added contributing section </li>
+<li>added WHAM delimiters for multi-file workflows</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic WebView Pane 2.20]]></title>
+        <id>https://windhawk.net/mods/classic-webview-pane#923361163f5e76b969bd13c59cc8d5fc87caa067</id>
+        <link href="https://windhawk.net/mods/classic-webview-pane"/>
+        <updated>2026-10-20T17:01:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Default hyperlink colours to Windows HotTrackingColor / COLOR_HOTLIGHT; preserve explicit custom colours and clarify the English/Russian colour settings.</li>
+<li>Keep upper background artwork at the full pane width beneath a details scrollbar, matching the divider's clipping behavior.</li>
+<li>Retain a complete pane while folder-view geometry is temporarily zero during resize, with the existing bounded recovery path.</li>
+<li>Use the host window's DPI coordinate space for pane layout and spacer sizing, restoring the caller's DPI context afterwards.</li>
+</ul>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Where I Left It 1.2]]></title>
+        <id>https://windhawk.net/mods/window-geometry-memory#9a8f03ad75e595cf6725ae5fe616dc28cefcaaac</id>
+        <link href="https://windhawk.net/mods/window-geometry-memory"/>
+        <updated>2026-10-20T17:01:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="whereileftit">Where I Left It</h1>
+<p>Remembers where you left each app's window -- its position, its size, and which
+monitor it was on -- and puts it back when the app opens again. It also keeps
+windows that are already open reachable when your display setup changes: a
+monitor going away, a different resolution, docking or undocking, or a
+rotation.</p>
+<h2 id="gettingstarted">Getting started</h2>
+<p>The mod does nothing until you tell it which apps to manage. Open the mod's
+settings, add an executable name (for example <code>notepad.exe</code>) or a full path to
+<strong>Apps to manage</strong>, and save. Only windows belonging to the executables in that
+list are remembered or moved.</p>
+<h2 id="howitbehaves">How it behaves</h2>
+<ul>
+<li>Geometry is captured when you move or resize a window, and when a window
+closes. Move a window where you want it, close it, and it opens there next
+time -- in the same session or after a reboot.</li>
+<li>Maximized and minimized windows are handled as you would expect: a window that
+was maximized comes back maximized, and one that was minimized comes back where
+it was, at its normal size, or maximized if it was maximized before it was
+minimized.</li>
+<li>Saving is per monitor arrangement. A window is restored to the same monitor it
+was on, and after docking or undocking it is mapped to the closest equivalent
+monitor instead of being left off-screen.</li>
+<li><strong>Windows that are already open are moved too.</strong> When the display arrangement
+changes -- a different resolution, docking, a monitor waking up or going away
+-- open tracked windows are mapped from the monitor they were on to the closest
+equivalent monitor that still exists, keeping the same fraction of that
+monitor. Nothing is left stranded on a monitor that is no longer there.</li>
+<li>Moving or resizing a window always wins over anything the mod was doing. If an
+application insists on its own placement, the mod tries once more and then
+stops fighting it.</li>
+<li>Each app's saved geometry can remember its position and its size separately,
+per app, in the settings. With <strong>Restore size</strong> off, a window is placed but not
+resized, so an app that sizes itself to its content keeps that size; with
+<strong>Restore position</strong> off, it is sized where it opened. Both are still recorded
+while off, so switching a box back on brings back the last position or size
+that window had rather than a value frozen at the moment it was switched off.</li>
+</ul>
+<h2 id="outofscopeinv1">Out of scope in v1</h2>
+<ul>
+<li>Moving windows between virtual desktops</li>
+<li>Z-order (stacking order) restore</li>
+<li>Re-scaling what is <em>inside</em> a window when the scale percentage changes. The
+frame is moved and sized; how an app redraws its contents is up to the app.</li>
+<li>A periodic check for monitor changes. The mod reacts to Windows' display-change
+notification and is silent the rest of the time.</li>
+<li>UWP / Store apps that restore their own window placement</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>Elevated windows are not moved.</strong> Windows cannot be repositioned across
+integrity levels: the move is refused with access denied, the mod detects the
+refusal, leaves that window alone for the rest of the session, and records why.
+The window is still tracked, so it is not ignored -- the mod tries. While a
+refusal stands, that window's position is not saved either: your chosen
+position for it is not overwritten by wherever it happened to be sitting.</li>
+<li><strong>Titles are part of how a window is matched.</strong> A window whose title changed
+between sessions falls back to matching by executable, class and ordinal, and
+is only restored when that match is unambiguous. Windows with identical titles
+may be restored to each other's positions.</li>
+<li><strong>A save at close can lose its turn.</strong> The rectangle is read from the window as
+the window is closing, and Windows sometimes has the window out of the way first.
+When that happens nothing is recorded for that close, the diagnostics journal says
+so with a reason, and the window keeps whatever position it was last remembered
+at. Moving the window once by hand records it there and then, and that save is not
+a last-moment read, so this is about windows that are moved by something other than
+you and closed immediately after.</li>
+<li><strong>A window that was minimized when it closed comes back where it was</strong>, at its
+normal size, or maximized if it was maximized before it was minimized. It does
+not come back minimized.</li>
+<li><strong>Stored resolution is not rescaled when DPI changes.</strong> Nothing multiplies a
+stored rectangle by a DPI ratio. After a display change a window is mapped by
+the rules above, which already express it as a fraction of its monitor -- so a
+change of scale percentage on its own leaves windows where they are, because no
+monitor has moved.</li>
+<li><strong>A window is measured against the screen, not against the taskbar.</strong> The
+taskbar is taller in pixels at a larger scale, so a window restored after a
+change of scale percentage can sit partly behind it. Move the window once and
+the new position is what is remembered.</li>
+<li><strong>A maximized window is left where Windows puts it.</strong> While its monitor still
+exists, its maximized state and placement stay Windows' own business -- the mod
+does not move it, and it is not resized by a resolution change. If the monitor
+it was maximized on disappears, it is rescued onto a remaining monitor like any
+other window.</li>
+<li><strong>UWP and Store apps</strong> often restore their own placement and may ignore the
+mod.</li>
+<li>If an application moves its window right after showing, the mod re-applies the
+stored geometry once. Applications that keep overriding it are left alone.</li>
+</ul>
+<h2 id="diagnostics">Diagnostics</h2>
+<p>Turn on <strong>Write a diagnostics journal</strong> in the settings and the mod appends a
+line to <code>window-geometry-journal.txt</code> for every save, restore and decision, with
+the exact rectangle and monitor involved. It is the fastest way to see why a
+particular window was or was not restored, and it is worth attaching to a bug
+report. It is off by default.</p>
+<p>Both files live in a folder named after the signed-in user's SID, inside the mod's
+storage folder. That storage folder is shared by the whole machine and a tool mod
+runs one process per signed-in session, so the folder is created with a protected
+access control list that gives full access to that user, SYSTEM and
+administrators, and to nobody else: two users signed in at once neither overwrite
+each other's saved geometry nor can read each other's window titles. If the mod
+cannot read the user's SID it saves nothing at all -- sharing the data would be
+worse than forgetting it. The journal is a diagnostics aid rather than a history,
+so it is capped: once it passes a megabyte it starts over from empty.</p>]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Cat 1.0.4]]></title>
         <id>https://windhawk.net/mods/taskbar-cat#df5e6b06673d317de585922fcd839f3211a30581</id>
@@ -742,160 +886,6 @@ removes everything it created.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Inactive Menubar Greying 2.0]]></title>
-        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#0782b9afbee6d20f2b3ef9a83d2c0264742beab7</id>
-        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
-        <updated>2026-10-19T16:02:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>fix compatibility with more color schemes</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Independent taskbar per monitor 1.6.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#b0f5bd82a63baa016bb54b8604848c0d287ed9ae</id>
-        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
-        <updated>2026-10-19T12:03:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Windows 10 support (tested on build 19044 with 4 monitors).</li>
-<li>Each taskbar keeps its own order of buttons, also after a restart. New window buttons are added at the end; buttons moved by the user keep their place.</li>
-<li>Drag a pin to another taskbar to move it there, to the place where it's dropped. A shortcut dropped on a taskbar is pinned where it's dropped.</li>
-<li>New option: open a clicked pin's app on the monitor of that taskbar.</li>
-<li>Fixed: the window-move thread could still run while the mod was unloaded.</li>
-</ul>]]></content>
-        <author>
-            <name>2ndSky95</name>
-            <uri>https://github.com/2ndSky95</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Date and Time Format 1.0]]></title>
-        <id>https://windhawk.net/mods/lockscreen-datetime-format#16df35e500e1bc07d675ab1dba52ded2d1cc499f</id>
-        <link href="https://windhawk.net/mods/lockscreen-datetime-format"/>
-        <updated>2026-10-19T10:00:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lockscreendateandtimeformat">Lock Screen Date and Time Format</h1>
-<p>Changes how the Windows lock screen shows the time and the date. The mod only
-changes the <strong>text</strong> of the clock and the date. Fonts, sizes, colors and
-positions are not touched (see <a href="#styling">Styling</a> below).</p>
-<p>Example (Windows default on the left, this mod on the right):</p>
-<p>| Before | After |
-|--------|-------|
-| <img src="https://i.imgur.com/vwH10YW.png" alt="Before" /> | <img src="https://i.imgur.com/2kZgtnm.png" alt="After" /> |</p>
-<p>The clock keeps updating on its own, and choosing the "Windows default"
-options restores the original text.</p>
-<h2 id="settings">Settings</h2>
-<h3 id="clock">Clock</h3>
-<ul>
-<li><p><strong>Clock layout</strong></p></li>
-<li><p><em>Windows default</em>: the clock is left alone.</p></li>
-<li><p><em>Vertical</em>: hours, minutes (and seconds) each on their own line, no
-separator.</p></li>
-<li><p><em>Horizontal with custom separator</em>: everything on one line, joined by the
-separator below.</p></li>
-<li><p><strong>Line spacing (% of font size)</strong>: distance between the lines of a vertical
-clock, as a percentage of the clock font size. Lower is tighter, higher is
-looser, <code>0</code> keeps the font's default. It only has an effect when the clock
-has more than one line. About <code>80</code> to <code>85</code> is a good starting point.</p></li>
-<li><p><strong>Separator (horizontal layout)</strong>: the text placed between hours, minutes
-and seconds. It is plain text, so a colon, a dot, a dash, a space, or even an
-emoji all work.</p>
-<p>Example with an emoji as the separator:</p>
-<p><img src="https://i.imgur.com/HDPAl63.png" alt="Clock with an emoji as the separator" /></p></li>
-<li><p><strong>Hour format</strong>: follow the Windows short time format (the one the lock
-screen shows), or force 24-hour or 12-hour.</p></li>
-<li><p><strong>Leading zero on hours</strong>: show <code>09</code> or <code>9</code>.</p></li>
-<li><p><strong>Show seconds</strong>: also show the seconds (<code>15:19:42</code>). The clock then updates
-every second instead of once a minute. With the vertical layout this gives
-three lines, so you will probably want a smaller font.</p></li>
-<li><p><strong>AM/PM position (12-hour only)</strong>: beside the last unit shown, on its own
-line below, or hidden.</p></li>
-</ul>
-<p>Digits are always shown as <code>0-9</code>, whatever the Windows language is.</p>
-<p><strong>Note:</strong> the line spacing, separator, hour format, leading zero, show seconds
-and AM/PM options only take effect when <strong>Clock layout</strong> is <em>Vertical</em> or
-<em>Horizontal</em>. With <em>Windows default</em> the clock is left completely alone.</p>
-<h3 id="date">Date</h3>
-<ul>
-<li><strong>Date format</strong>: choose one of the presets (for example <code>Fri, 16 Oct</code>,
-<code>Fri 16 Oct 26</code>, <code>16-10-2026</code>, <code>16/10/2026</code>), keep the Windows default, or
-choose <em>Custom</em>.</li>
-<li><strong>Custom date pattern</strong>: only used when the format is <em>Custom</em>. Supported
-letters: <code>d</code> / <code>dd</code> (day), <code>ddd</code> / <code>dddd</code> (weekday name), <code>M</code> / <code>MM</code> (month
-number), <code>MMM</code> / <code>MMMM</code> (month name), <code>yy</code> / <code>yyyy</code> (year). Literal text goes
-in single quotes, for example <code>dddd 'the' d</code>.</li>
-</ul>
-<p>Weekday and month names come from your Windows regional format, so they follow
-that language.</p>
-<h2 id="notesonthe12hourformat">Notes on the 12-hour format</h2>
-<p>AM/PM is placed after the last unit shown: the minutes, or the seconds when
-<strong>Show seconds</strong> is on. The examples below assume seconds are off:</p>
-<ul>
-<li><strong>Vertical layout, AM/PM beside the minutes:</strong> hours on the first line,
-minutes and AM/PM on the second line (<code>03</code> / <code>24 PM</code>).</li>
-<li><strong>Vertical layout, AM/PM below:</strong> three lines (<code>03</code> / <code>24</code> / <code>PM</code>).</li>
-<li><strong>Horizontal layout, AM/PM beside the minutes:</strong> everything on one line
-(<code>03:24 PM</code>). With a very large clock font the line can be wider than the
-space it has, and <code>PM</code> may wrap onto a second line. Use a smaller font, or
-set AM/PM to hidden, if that bothers you.</li>
-<li><strong>AM/PM hidden:</strong> only the hours and minutes are shown.</li>
-</ul>
-<h2 id="styling">Styling</h2>
-<p>This mod does not change fonts, sizes, colors or positions. For that, use the
-<strong>Windows 11 Start Menu Styler</strong> mod with <code>LockApp.exe</code> added to its process
-inclusion list. For example:</p>
-<pre><code>- target: StackPanel#TimePanel &gt; TextBlock#Time
-  styles:
-    - FontSize=350
-    - FontWeight=Bold
-- target: TextBlock#Date
-  styles:
-    - FontSize=28
-</code></pre>
-<p>Example with this mod and the Styler together:</p>
-<p><img src="https://i.imgur.com/FobjRr6.png" alt="Lock screen using this mod together with Windows 11 Start Menu Styler" /></p>
-<p>Making the clock font bigger usually moves the clock; adjust a
-<code>TranslateTransform</code> in the Styler if it ends up off-center.</p>
-<p>Lock the screen with <strong>Win+L</strong> to see the result. Changes in the settings
-apply right away while the lock screen is showing.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The lock screen (<code>LockApp.exe</code>) draws the time and the date in XAML
-<code>TextBlock</code> elements named <code>Time</code> and <code>Date</code>. This mod finds them, builds the
-text itself from the system clock according to your settings, and writes it
-back whenever Windows updates them. Unloading the mod puts Windows' own text
-back.</p>
-<p>The width of the clock is also kept constant, so the date underneath does not
-move sideways when the clock text gets wider or narrower (for example when the
-seconds change, or when AM switches to PM). This is skipped when the clock
-takes up almost the whole width of the screen, because there is no room left
-for it to move and forcing a width could get it cut off.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The mod relies on the internal element names <code>Time</code> and <code>Date</code> in
-<code>LockApp.exe</code>. If a future Windows update renames them, the mod will stop
-finding them.</li>
-<li>Digits are always Latin (<code>0-9</code>). Showing the digits of your own language is
-not supported yet.</li>
-<li>The AM/PM text cannot be made smaller than the clock yet.</li>
-<li>Most fonts have digits of different widths, so with <strong>Show seconds</strong> on, the
-digits inside the clock can shift slightly every second. The date and the
-position of the clock stay where they are, except when the clock takes up
-almost the whole width of the screen. Pick a font with equal-width digits
-in the Styler if that bothers you.</li>
-<li>Tested on Windows 11 25H2 (build 26200.9457). Other versions are untested.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If nothing happens, open the Windhawk log for this mod and lock the screen
-with Win+L. You should see <code>Hook installed on UI thread</code>, <code>Clock format
-attached</code> and <code>Date format attached</code>.</p>]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
         </author>
     </entry>
 </feed>

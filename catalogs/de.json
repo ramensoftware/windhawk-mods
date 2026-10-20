@@ -2783,7 +2783,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791360079000,
+        "updated": 1792515684000,
         "users": 57
       },
       "metadata": {
@@ -2799,7 +2799,7 @@
         ],
         "license": "MIT",
         "name": "Classic WebView Pane",
-        "version": "2.17"
+        "version": "2.20"
       }
     },
     "classic-window-switcher": {
@@ -10053,7 +10053,7 @@
         "ratingUsers": 16,
         "reviews": 1,
         "trendingSorting": 0,
-        "updated": 1791619231000,
+        "updated": 1792515689000,
         "users": 84
       },
       "metadata": {
@@ -10069,7 +10069,7 @@
         ],
         "license": "MIT",
         "name": "MultiWM",
-        "version": "1.13.58"
+        "version": "1.13.59"
       }
     },
     "mute-in-background": {
@@ -17041,7 +17041,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 1, 0, 0, 21],
         "ratingUsers": 22,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.016577171438515687,
         "updated": 1792216904000,
         "users": 748
@@ -19552,6 +19552,31 @@
         "license": "MIT",
         "name": "Window Center & Resize",
         "version": "1.0"
+      }
+    },
+    "window-geometry-memory": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792515679000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792515679000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "metanoid18",
+        "compilerOptions": "-luser32 -ldwmapi -ladvapi32",
+        "description": "Remembers each app's window position and size, restores it when the app opens again, and keeps open windows reachable when your display setup changes",
+        "github": "https://github.com/Metanoid18",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Where I Left It",
+        "version": "1.2"
       }
     },
     "window-opacity": {

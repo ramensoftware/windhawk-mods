@@ -2,12 +2,126 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-20T14:02:15.000Z</updated>
+    <updated>2026-10-20T17:01:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Where I Left It 1.2]]></title>
+        <id>https://windhawk.net/mods/window-geometry-memory#9a8f03ad75e595cf6725ae5fe616dc28cefcaaac</id>
+        <link href="https://windhawk.net/mods/window-geometry-memory"/>
+        <updated>2026-10-20T17:01:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="whereileftit">Where I Left It</h1>
+<p>Remembers where you left each app's window -- its position, its size, and which
+monitor it was on -- and puts it back when the app opens again. It also keeps
+windows that are already open reachable when your display setup changes: a
+monitor going away, a different resolution, docking or undocking, or a
+rotation.</p>
+<h2 id="gettingstarted">Getting started</h2>
+<p>The mod does nothing until you tell it which apps to manage. Open the mod's
+settings, add an executable name (for example <code>notepad.exe</code>) or a full path to
+<strong>Apps to manage</strong>, and save. Only windows belonging to the executables in that
+list are remembered or moved.</p>
+<h2 id="howitbehaves">How it behaves</h2>
+<ul>
+<li>Geometry is captured when you move or resize a window, and when a window
+closes. Move a window where you want it, close it, and it opens there next
+time -- in the same session or after a reboot.</li>
+<li>Maximized and minimized windows are handled as you would expect: a window that
+was maximized comes back maximized, and one that was minimized comes back where
+it was, at its normal size, or maximized if it was maximized before it was
+minimized.</li>
+<li>Saving is per monitor arrangement. A window is restored to the same monitor it
+was on, and after docking or undocking it is mapped to the closest equivalent
+monitor instead of being left off-screen.</li>
+<li><strong>Windows that are already open are moved too.</strong> When the display arrangement
+changes -- a different resolution, docking, a monitor waking up or going away
+-- open tracked windows are mapped from the monitor they were on to the closest
+equivalent monitor that still exists, keeping the same fraction of that
+monitor. Nothing is left stranded on a monitor that is no longer there.</li>
+<li>Moving or resizing a window always wins over anything the mod was doing. If an
+application insists on its own placement, the mod tries once more and then
+stops fighting it.</li>
+<li>Each app's saved geometry can remember its position and its size separately,
+per app, in the settings. With <strong>Restore size</strong> off, a window is placed but not
+resized, so an app that sizes itself to its content keeps that size; with
+<strong>Restore position</strong> off, it is sized where it opened. Both are still recorded
+while off, so switching a box back on brings back the last position or size
+that window had rather than a value frozen at the moment it was switched off.</li>
+</ul>
+<h2 id="outofscopeinv1">Out of scope in v1</h2>
+<ul>
+<li>Moving windows between virtual desktops</li>
+<li>Z-order (stacking order) restore</li>
+<li>Re-scaling what is <em>inside</em> a window when the scale percentage changes. The
+frame is moved and sized; how an app redraws its contents is up to the app.</li>
+<li>A periodic check for monitor changes. The mod reacts to Windows' display-change
+notification and is silent the rest of the time.</li>
+<li>UWP / Store apps that restore their own window placement</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>Elevated windows are not moved.</strong> Windows cannot be repositioned across
+integrity levels: the move is refused with access denied, the mod detects the
+refusal, leaves that window alone for the rest of the session, and records why.
+The window is still tracked, so it is not ignored -- the mod tries. While a
+refusal stands, that window's position is not saved either: your chosen
+position for it is not overwritten by wherever it happened to be sitting.</li>
+<li><strong>Titles are part of how a window is matched.</strong> A window whose title changed
+between sessions falls back to matching by executable, class and ordinal, and
+is only restored when that match is unambiguous. Windows with identical titles
+may be restored to each other's positions.</li>
+<li><strong>A save at close can lose its turn.</strong> The rectangle is read from the window as
+the window is closing, and Windows sometimes has the window out of the way first.
+When that happens nothing is recorded for that close, the diagnostics journal says
+so with a reason, and the window keeps whatever position it was last remembered
+at. Moving the window once by hand records it there and then, and that save is not
+a last-moment read, so this is about windows that are moved by something other than
+you and closed immediately after.</li>
+<li><strong>A window that was minimized when it closed comes back where it was</strong>, at its
+normal size, or maximized if it was maximized before it was minimized. It does
+not come back minimized.</li>
+<li><strong>Stored resolution is not rescaled when DPI changes.</strong> Nothing multiplies a
+stored rectangle by a DPI ratio. After a display change a window is mapped by
+the rules above, which already express it as a fraction of its monitor -- so a
+change of scale percentage on its own leaves windows where they are, because no
+monitor has moved.</li>
+<li><strong>A window is measured against the screen, not against the taskbar.</strong> The
+taskbar is taller in pixels at a larger scale, so a window restored after a
+change of scale percentage can sit partly behind it. Move the window once and
+the new position is what is remembered.</li>
+<li><strong>A maximized window is left where Windows puts it.</strong> While its monitor still
+exists, its maximized state and placement stay Windows' own business -- the mod
+does not move it, and it is not resized by a resolution change. If the monitor
+it was maximized on disappears, it is rescued onto a remaining monitor like any
+other window.</li>
+<li><strong>UWP and Store apps</strong> often restore their own placement and may ignore the
+mod.</li>
+<li>If an application moves its window right after showing, the mod re-applies the
+stored geometry once. Applications that keep overriding it are left alone.</li>
+</ul>
+<h2 id="diagnostics">Diagnostics</h2>
+<p>Turn on <strong>Write a diagnostics journal</strong> in the settings and the mod appends a
+line to <code>window-geometry-journal.txt</code> for every save, restore and decision, with
+the exact rectangle and monitor involved. It is the fastest way to see why a
+particular window was or was not restored, and it is worth attaching to a bug
+report. It is off by default.</p>
+<p>Both files live in a folder named after the signed-in user's SID, inside the mod's
+storage folder. That storage folder is shared by the whole machine and a tool mod
+runs one process per signed-in session, so the folder is created with a protected
+access control list that gives full access to that user, SYSTEM and
+administrators, and to nobody else: two users signed in at once neither overwrite
+each other's saved geometry nor can read each other's window titles. If the mod
+cannot read the user's SID it saves nothing at all -- sharing the data would be
+worse than forgetting it. The journal is a diagnostics aid rather than a history,
+so it is capped: once it passes a megabyte it starts over from empty.</p>]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Cat 1.0.4]]></title>
         <id>https://windhawk.net/mods/taskbar-cat#df5e6b06673d317de585922fcd839f3211a30581</id>
@@ -1151,135 +1265,6 @@ his "Taskbar auto-hide when maximized" mod (all GPL-3.0).</p>]]></content>
         <author>
             <name>Zach Vaughn</name>
             <uri>https://github.com/zachvdev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CoverTabby 0.22.14]]></title>
-        <id>https://windhawk.net/mods/covertabby#6b46d57fa8fbd627be560ae6df9125d71e8dd39c</id>
-        <link href="https://windhawk.net/mods/covertabby"/>
-        <updated>2026-10-17T15:03:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="covertabby">CoverTabby</h1>
-<p>Replaces the alt+tab with a modded kind of the stardock alt tabby's layout.</p>
-<p>By <strong>LTHC (LoreTheHolyChip)</strong>. Version <strong>0.22.14</strong>.</p>
-<p>Win+Tab integration is experimental and disabled by default. Alt+Tab remains enabled.
-Explorer forwards Alt+Tab to the switcher running in Windhawk’s own tool process. No separate application needs to be installed.</p>
-<p>Credits: caliberda (MIT-licensed Alt+Tab Flip 3D renderer), Lone (touchpad integration),
-and the Simple Window Switcher contributors (HID parsing).
-Renderer: https://github.com/ramensoftware/windhawk-mods/blob/main/mods/alt-tab-flip-3d.wh.cpp
-Touchpad source by Lone (Louis047): https://github.com/ramensoftware/windhawk-mods/pull/5396
-Simple Window Switcher credits the GPLv2 upstream sws by valinet: https://github.com/valinet/sws
-CoverTabby is distributed under GPL-2.0-only; MIT terms remain applicable to the renderer portions. License texts are included below in the source.</p>
-<hr />
-<h1 id="styles">Styles</h1>
-<hr />
-<p>| Style | Preview |
-| --- | --- |
-| Tiles — Windowed | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/tiles-windowed.jpg" alt="Tiles — Windowed" /> |
-| Tiles — Fullscreen | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/tiles-full.png" alt="Tiles — Fullscreen" /> |
-| Normal — Windowed | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/normal-windowed.jpg" alt="Normal — Windowed" /> |
-| Normal — Fullscreen | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/normal-full.png" alt="Normal — Fullscreen" /> |
-| Icons only | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/icons-full.jpg" alt="Icons only" /> |
-| No thumbnail | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/list-full.jpg" alt="No thumbnail" /> |
-| Text only | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/text-full.jpg" alt="Text only" /> |
-| Search | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/search-full.jpg" alt="Search" /> |
-| Windows 10/11 Enchanted | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/enchanted-full.png" alt="Windows 10/11 Enchanted" /> |</p>
-<p>These screenshots were captured using a macro. The same macro can generate fresh screenshots whenever I update CoverTabby.</p>
-<p>thanks for using my mod :D</p>
-<p><strong>Windows 11 supported; Windows 10 1607 (build 14393) and newer are experimental and use the built-in Segoe MDL2 Assets icon font.</strong>
-On Windows 10 builds earlier than 20348, live-captured windows can display a yellow capture border because those builds cannot disable it.
-The desktop overview's virtual-desktop management requires Windows 11; on Windows 10, those controls are unavailable.</p>
-<p>Pressing the top grip quickly reveals the real window without starting a drag.
-Move while holding to drag it with its native decorations and a short
-centered popup animation. Resizable windows shrink to the preview size while
-the remaining interface fades out. Releasing the mouse stops the drag.
-A simple click still switches windows. Canceling before dragging restores the
-window's original size, position and minimized/maximized state.
-Minimized and maximized windows are restored to a movable window before the
-drag begins, including minimized windows that would normally restore maximized.
-Drag from the top area of a preview: a standard Windows title bar or system
-menu is not required. Clicking elsewhere selects the window. Custom title bars and borderless application windows keep
-their own decorations. Fixed-size windows keep their native size while moving.
-Minimized windows show a card matching the Windows light/dark theme, with a top
-drag grip and a restore hint. The app icon remains in the icon strip below.
-If CoverTabby previously captured the window, its last preview is kept in memory
-and shown blurred and darkened while minimized. Holding the top grip reveals
-the restored real window with sharp content; moving starts the held drag.
-Windows without a saved preview use the regular theme-colored minimized card.</p>
-<h2 id="modes">Modes</h2>
-<ul>
-<li><strong>Full</strong> fills the monitor. Background Style chooses Blur, Opaque or Transparent.</li>
-<li><strong>Windowed</strong> uses a compact centered popup. Windowed Scale resizes the entire popup.</li>
-</ul>
-<p>Colors, fonts and rounded corners follow Windows 11 automatically.</p>
-<p>Enable <strong>Show Desktop Card</strong> to keep a Desktop item at the end of the carousel.
-Selecting it uses Windows' native Show Desktop action.</p>
-<h2 id="language">Language</h2>
-<p>Language is detected at every start: Italian for an Italian Windows display language, English otherwise. Window titles and custom desktop names keep their original text.</p>
-<h2 id="features">Features</h2>
-<p>Live previews, application icons, grouped windows, Pin / Unpin, hover close
-controls, reflections and smooth animations. Settings cover only the essentials. Hover Behavior offers Show Title, Select Window or None for unselected windows.
-Opening uses a quick stationary fade. On normal selection, the selected preview smoothly resizes and returns to the real window position, starting fast and slowing down at the end. The real window remains visible beneath the topmost overlay throughout this return animation. The background fades in place while the remaining previews, icons and controls slide down and fade. Dragging keeps following the mouse instead.
-Hover Animation offers None, Lift, Enlarge or Lift + Enlarge. It is disabled for
-unselected windows when Hover Behavior is None. Click a preview to activate it.</p>
-<h2 id="search">Search</h2>
-<p>While CoverTabby is open, press <strong>Alt+S</strong>, type a window title or application name, then press <strong>Enter</strong>.
-Search Bar Scale changes the bar, icon and text together. Width adapts automatically.
-Disable Search Bar to remove its reserved space and center the content. Search is unavailable in Windowed mode and Tiles.</p>
-<h2 id="virtualdesktops">Virtual desktops</h2>
-<p>In the Win+Tab overview, desktop cards include the Windows taskbar on the current
-desktop when capture is available, with a themed app bar as the fallback on
-that desktop only. Other desktops do not show a taskbar.
-A left-side app dock offers animated selection and hover labels; minimized windows
-use the separate upper dock. Desktop rename keeps the text caret and animates
-new letters with a quick fade, upward overshoot and smooth settling.
-Drag an app preview or dock icon onto another desktop card to move the window
-there, keeping its original position and size. A simple click activates it.
-Drag it away from the desktop cards to take the real window onto the current
-desktop. Maximized and minimized windows stay unchanged until movement begins,
-then restore to their normal size and follow the held pointer.</p>
-<p>Hover the selected preview to reveal the green desktop icon and label alongside Pin and Close.
-Click it to open CoverTabby's own desktop picker, then choose a desktop to move
-the window there without changing its position or size. The current desktop stays active.
-Use the mouse wheel to scroll the list when there are many desktops.</p>
-<h2 id="processinformation">Process information</h2>
-<p>CPU, RAM and GPU appear below the selected application's icon and refresh approximately every 1.5 seconds while the selection is stable.
-These are metrics for the process owning the selected window, not its child processes.
-RAM shows the working set in MB/GB; its color uses the percentage of physical RAM.
-GPU reports the busiest GPU engine for that process, or N/A when counters are unavailable.
-Usage colors are green up to 10%, white below 35%, yellow below 50%, orange up to 75%, and red above 75%.
-Hover the selected preview to see relative process age at the top right, such as Opened 5 minutes ago. This is process age, not window age.
-The skull button beside Close kills the owning process, including its other windows,
-after a second confirming click within four seconds. Unsaved work will be lost. Close continues to request normal application closure.</p>
-<h2 id="iconcontrols">Icon controls</h2>
-<p>Hover an app icon for a small smooth lift, zoom and Windows accent background.
-Right-click an icon or preview to open CoverTabby's animated menu: Close, Kill,
-and Pin/Unpin. These actions target the clicked window without changing selection.
-Click outside or press Escape to dismiss. Releasing Alt still closes CoverTabby.
-The menu is rendered by CoverTabby and uses Segoe Fluent Icons.</p>
-<h2 id="navigation">Navigation</h2>
-<p>Alt+Tab cycles forward; Shift+Alt+Tab or Alt+` cycles backward.
-The first press selects the next or previous window relative to the active window,
-including when pinned windows change the list order.
-With Group Windows enabled, Up/Down selects a window in the current application.
-Windows from the same application stay consecutive. Switching between them moves
-the stack vertically; Left/Right changes applications horizontally.
-Mouse selection and wheel navigation are also supported.</p>
-<h3 id="performanceandbackground">Performance and background</h3>
-<p>Background Style offers Blur, Opaque and Transparent in Full and Windowed. Transparent Background Opacity controls the tint without applying blur. Background During Energy Saver automatically switches to Opaque or Transparent while Windows saves energy; Keep Selected Background disables this override.</p>
-<p>The selected preview starts first. Other live previews start progressively, and opening waits at most 45 ms for the selected capture after startup. Desktop blur is captured at up to 960 pixels on its longest side. Preview Cache reuses up to twelve 512-pixel snapshots (384 during Energy Saver), updated gradually only while the switcher is open. When closed, captures stop except for a window currently being held and dragged. Dragging, search, groups, controls and animations remain available. VSync is always enabled: the render loop waits on DXGI frame availability with a one-frame queue and has no fixed 60 FPS cap. The actual rate follows the display compositor and available GPU performance.</p>
-<h2 id="precisiontouchpad">Precision touchpad</h2>
-<p>Three fingers starting in the lower third and moving upward open CoverTabby. Continuing that same stroke sideways navigates. Starting in the middle third and moving upward requests normal closure of the selected window while CoverTabby is open. Swipe downward to dismiss; a short three-finger tap selects the current window. Holding still gives animated press feedback. Existing touchpad mouse-click/hold dragging stays available.</p>
-<p>Touchpad from Modern Window Switcher — <strong>Lone</strong>. HID parsing adapted from the downloaded Simple Window Switcher 3.0 source. The gesture controller is used where supported; older Windows builds may require setting native three-finger swipe/tap actions to Nothing in Windows touchpad settings to prevent duplicate system actions. Disable Precision Touchpad Gestures to stop listening to touchpad reports.</p>
-<h2 id="desktopoverview">Desktop overview</h2>
-<p>Hold to Preview is optional and disabled by default. In thumbnail styles, hold Alt on the same selection for five seconds to enlarge its native-resolution live capture to fit the monitor without stretching. Tab slides the enlarged image left; releasing Alt returns it toward the real window. Minimized previews also enlarge; two seconds after reaching full size, their minimized message changes to a playful message.</p>
-<p>While CoverTabby is open, type a letter to focus Search and filter immediately without changing the selected style. Search must be enabled for the current mode. Press Enter to activate a result or Escape to cancel.</p>
-<p>Win+Tab opens the optional desktop overview. Further Tab presses while holding Win select the next desktop; Shift+Tab selects the previous one. Hold Win to Keep Desktop Overview Open is enabled by default: releasing Win activates the selection. Disable it to leave the overview open; touchpad opening remains persistent. Beginning a rename leaves hold mode so typing is possible. Three quick three-finger taps toggle between windows and desktops while CoverTabby is open. A single tap is confirmed after a short 340 ms recognition window. Hover a desktop to reveal its centered name and Alt+Tab-style controls. Rename uses a blue pencil button, Delete uses a red trash button, and their labels expand on hover; Desktop 1 cannot be deleted. Rename supports Enter to save and Escape to cancel. The + button after the last desktop creates a new desktop; deleting a desktop moves its windows to the previous desktop. Desktop cards have equal sizes, stay flat and slide horizontally. Desktop overview always fills the monitor. Panels share Alt+Tab's theme-aware material and controls. Alt+Tab and Alt+` select the next/previous open app on the selected desktop; releasing Alt activates it. Left/right arrows select desktops, and clicking an app or pressing Enter focuses it. Minimized apps appear as an icon dock in a rounded top panel; titles appear only when hovering an icon. The app list follows the shell switcher visibility flag and refreshes while open, excluding retained hidden app windows. Live window captures are loaded incrementally for the selected and adjacent desktops (up to four extra captures, two in energy saver); unavailable frames use saved previews or icons and titles. Click or tap to activate the selected desktop; Escape or a downward swipe cancels.
-Each open HWND is shown as a separate fitted tile inside its desktop card; windows
-from the same application are never grouped or stacked together in this view.</p>
-<p>Each card shows its wallpaper and window layout. Active-window content is live; other desktops reuse available snapshots. Windows without cached content show their application icon and title. At most three small wallpaper textures are loaded at once. Windows' internal desktop contracts vary between builds; unsupported builds show an availability message.</p>]]></content>
-        <author>
-            <name>LTHC</name>
-            <uri>https://github.com/LoreTheHolyChip</uri>
         </author>
     </entry>
 </feed>
