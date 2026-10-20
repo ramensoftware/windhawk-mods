@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         GPL-3.0
-// @compilerOptions -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32
+// @compilerOptions -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32 -ld3d11 -ldxgi -lwindowscodecs
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -32,17 +32,17 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - Adds app and custom-command suggestions for an empty query, shared favorite learning, configurable menu width and height, and settings organized into sections.
 - Adds named custom commands with CMD, Windows PowerShell, PowerShell 7, or a custom shell; optional hidden terminals; and emoji, Windows glyph, image, icon, or executable icons.
 - Adds automatic text and monochrome-icon contrast across the search window, with a fixed-color override. Background sampling pauses during motion and scrolling; unchanged samples reuse the cached color map.
-- Improves image previews with a built-in Windows decoding fallback. With a bottom taskbar, preview cards grow down while they fit search, then align at its bottom and grow upward when taller. Top and side taskbars keep previews top-aligned and growing downward. Crossing that height and changing selections mid-animation remain smooth.
+- Isolates preview extraction and media decoding in a separate Windows worker process, with a built-in image-decoding fallback. With a bottom taskbar, preview cards grow down while they fit search, then align at its bottom and grow upward when taller. Top and side taskbars keep previews top-aligned and growing downward. Crossing that height and changing selections mid-animation remain smooth.
 - Keeps search input and selection when a context menu closes. Typing or Backspace closes the menu and continues the query; Escape closes the menu before clearing search.
-- Defers search UI creation until first use, buffers opening text, and restores native and text-box focus after input handoffs.
+- Defers search UI creation until first use, buffers opening text, waits for the editable IME context before replaying opening keys through Windows native input, and restores native and text-box focus after input handoffs.
 - Supports top and side taskbars, with animations confined to the selected monitor. Right-side taskbars place the preview on the left.
 
 ## Key Features
 
 - **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
-- **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (`ms-settings:`), with sharp shell icons, made at the exact pixel size of your display.
+- **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, Windows Settings categories, and deeper Settings pages (`ms-settings:`), with sharp shell icons, made at the exact pixel size of your display. Obsolete shortcuts are excluded, and optional Windows tools and Control Panel pages are shown only when their destinations are installed and resolvable.
 - **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
-- **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start closes Start and carries the opening text into search. The search bar uses Windows' own search icon.
+- **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start switches immediately without an opening animation and carries the opening text into search. The search bar uses Windows' own search icon.
 - **Windows Search Out of the Way**: `SearchHost.exe` keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
 - **Search Entry Points**: Open search directly with Win+S, the taskbar search icon, Start’s search bar, or an optional custom shortcut. Pressing Win or clicking Start opens Start normally; begin typing to switch into search.
 - **Suggested Apps**: An empty search shows apps and custom commands together, ordered by learned usage when enabled and alphabetically when learning is off. Escape clears the query to suggestions; press it again to close search.
@@ -59,8 +59,8 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
-- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties, approximating custom composition blur brushes with a glass effect. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
-- **No Simulated Keystrokes**: A low-level keyboard hook (`WH_KEYBOARD_LL`) is active while Start, SearchHost, or the search window is in the foreground to capture opening text and context-menu typing. Focus is handled with standard foreground APIs only; the mod never attaches thread input or synthesizes keystrokes.
+- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse a bounded cache. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
+- **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Focus uses standard foreground APIs without attaching thread input.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
 ## Settings Sections
@@ -129,6 +129,8 @@ With a **top, left, or right taskbar**, the preview always aligns with the top o
 
 Click the name, an individual detail value, or the full path to copy it. Copy targets follow the text area, and copying keeps the displayed path unchanged. Select and copy text directly from text/document excerpts. Previews stay hidden throughout drag and drop.
 
+Preview files are processed in a separate, hidden Windows worker using the same mod DLL; no additional preview application is required. Explorer receives only decoded pixels, text, and details. A failed worker leaves the last thumbnail or a file icon, and the next preview request can start a new worker. The worker stops when the preview hides. Large animations are bounded to protect memory use.
+
 Turn off **Play Videos and Animations** to keep previews still, or turn off **File Preview** to hide the card. Hiding the Files panel also hides its previews and stops the mod's Everything file queries; the Everything application itself keeps running.
 
 ## Automatic Text and Icon Contrast
@@ -164,7 +166,7 @@ To add another way to open search, go to **Settings → Apps & Search**, turn on
 | :--- | :--- |
 | **Win+S / Taskbar search icon** | Open the search window directly |
 | **Alternative shortcut (optional)** | Open and focus search using your chosen modifier and key combination |
-| **Type in Start** | Close Start and carry the opening text into search |
+| **Type in Start** | Switch immediately and carry the opening text into search |
 | **Click Start's search bar** | Open and focus the search window |
 | **Up / Down Arrow Keys** | Navigate selection through applications, utility cards, and files |
 | **Tab / Shift + Tab** | Move to the next / previous result, through the apps and on into the files |
@@ -195,7 +197,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - **Everything is reported as not running:** start the Everything application and leave it running in the tray. Its service alone does not provide the search IPC window. Everything 1.4 and 1.5 alpha/beta, including named instances, are supported.
 - **A preview shows only an icon:** enable File Preview. Common image formats have a built-in decoding fallback; specialist formats may require a thumbnail provider, and videos may require a compatible Windows codec. Unavailable or unreadable content falls back to its icon and available properties.
 - **Folder sizes are missing:** enable Everything's **Index folder size** option; see [Folder Sizes in Preview](#folder-sizes-in-preview). The mod does not recursively scan folders to calculate sizes.
-- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Custom composition blur brushes are approximated with a glass effect using their public tint/fallback colors.
+- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Supported static glass effects are captured when Start creates them. Live image/visual sources, animated custom effects, and unsupported effects use an approximation; their appearance may differ.
 - **A custom command does not start:** choose the shell that understands the command. PowerShell 7 and custom shells must already be installed. Hide Terminal hides the shell console; it does not shorten the command's lifetime or hide windows opened by the command.
 
 Tested on **Windows 11 25H2 and 26H2, x86-64**. Other Windows versions and builds, including Insider builds, have not been verified. For a reproducible problem, include the full Windows build, mod version, Everything version and instance name, other Start/search mods, and steps to reproduce it.
@@ -571,6 +573,12 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <appmodel.h>
 #include <filter.h>
 #include <filterr.h>
+#include <msctf.h>
+#include <wincodec.h>
+#include <d3d11.h>
+#include <d2d1_3.h>
+extern "C" HRESULT WINAPI CreateDirect3D11SurfaceFromDXGISurface(IDXGISurface*, IInspectable**);
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <string_view>
 #include <limits>
 #include <atomic>
@@ -1900,286 +1908,231 @@ struct SettingItem {
     const wchar_t* command;
     const wchar_t* area;
     const wchar_t* altNames;
+    const wchar_t* pageGroup = nullptr; // native Settings category, when no public URI exists
+};
+
+// Resolve optional Windows tools once while the background index is rebuilt,
+// never while typing. Canonical Control Panel names can remain documented long
+// after their applets disappear, so ask the installed shell to resolve them.
+class DestinationCheck {
+   public:
+    DestinationCheck() {
+        CoCreateInstance(CLSID_OpenControlPanel, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(panel_.put()));
+    }
+    bool Available(SettingItem const& item) const {
+        std::wstring command = item.command;
+        if (command.starts_with(L"ms-settings:") || command.starts_with(L"windowsdefender:") ||
+            command.starts_with(L"ms-settings-connectabledevices:"))
+            return true; // curated native page routes; Windows handles device-specific content
+        if (command.starts_with(L"control /name ")) {
+            if (!panel_) return true; // an unavailable checker must not hide the entire catalog
+            auto name = command.substr(14);
+            name.resize(name.find(L' ') == std::wstring::npos ? name.size() : name.find(L' '));
+            wchar_t path[4096]{};
+            return SUCCEEDED(panel_->GetPath(name.c_str(), path, std::size(path))) && path[0];
+        }
+        if (command.starts_with(L"control ")) command.erase(0, 8);
+        if (command == L"keyboard") command = L"main.cpl";
+        const DWORD needed = ExpandEnvironmentStringsW(command.c_str(), nullptr, 0);
+        if (!needed || needed > 32768) return false;
+        std::wstring expanded(needed, L'\0');
+        if (!ExpandEnvironmentStringsW(command.c_str(), expanded.data(), needed)) return false;
+        expanded.resize(needed - 1);
+        const auto end = expanded.find_first_of(L" ,");
+        auto file = expanded.substr(0, end);
+        std::replace(file.begin(), file.end(), L'/', L'\\');
+        wchar_t resolved[32768]{};
+        const DWORD length = SearchPathW(nullptr, file.c_str(), nullptr, std::size(resolved), resolved, nullptr);
+        if (!length || length >= std::size(resolved)) return false;
+        const DWORD attributes = GetFileAttributesW(resolved);
+        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
+        // This snap-in is shipped on some Home installations but refuses to run.
+        if (_wcsicmp(file.c_str(), L"lusrmgr.msc") == 0) {
+            DWORD edition = 0;
+            if (GetProductInfo(10, 0, 0, 0, &edition) &&
+                (edition == PRODUCT_CORE || edition == PRODUCT_CORE_N ||
+                 edition == PRODUCT_CORE_SINGLELANGUAGE || edition == PRODUCT_CORE_COUNTRYSPECIFIC))
+                return false;
+        }
+        return true;
+    }
+   private:
+    winrt::com_ptr<IOpenControlPanel> panel_;
 };
 
 inline const std::vector<SettingItem>& GetSettingsList() {
     static const std::vector<SettingItem> kSettings = {
         { L"Settings (Application homepage)", L"ms-settings:", L"Settings", L"Settings app;System settings" },
         { L"Control Panel (Application homepage)", L"control.exe", L"Control Panel", L"" },
-        { L"Access work or school", L"ms-settings:workplace", L"Accounts", L"Workplace" },
+        { L"System", L"ms-settings:system", L"Settings", L"system settings;system category;system settings category" },
+        { L"Accounts", L"ms-settings:accounts", L"Settings", L"account settings;accounts settings;accounts category;user account settings" },
+        { L"Time & language", L"ms-settings:dateandtime", L"Settings", L"time and language;time language;time & language settings;time and language settings;time language settings;language and time", L"SettingsPageGroupTimeRegion" },
+        { L"Apps", L"ms-settings:appsfeatures", L"Settings", L"apps settings;app settings;applications settings;apps category", L"SettingsPageGroupApps" },
+        { L"Gaming", L"ms-settings:gaming-gamebar", L"Settings", L"gaming settings;game settings;gaming category", L"SettingsPageGroupGaming" },
+        { L"Accessibility", L"ms-settings:easeofaccess", L"Settings", L"accessibility settings;ease of access;accessibility category" },
+        { L"Privacy & security", L"ms-settings:privacy", L"Settings", L"privacy and security;privacy security;privacy settings;security settings;privacy & security settings" },
+        { L"Access work or school", L"ms-settings:workplace", L"Accounts", L"Workplace;Workplace provisioning" },
         { L"Email and app accounts", L"ms-settings:emailandaccounts", L"Accounts", L"" },
-        { L"Family and other people", L"ms-settings:otherusers", L"Accounts", L"Other users" },
+        { L"Other users", L"ms-settings:otherusers", L"Accounts", L"family and other people;other users;local users;add user;add account" },
         { L"Set up a kiosk", L"ms-settings:assignedaccess", L"Accounts", L"Assigned access" },
         { L"Sign-in options", L"ms-settings:signinoptions", L"Accounts", L"sign in;sign-in;password;pin;windows hello;fingerprint;face" },
         { L"Sign-in options - Dynamic lock", L"ms-settings:signinoptions-dynamiclock", L"Accounts", L"" },
-        { L"Sync your settings", L"ms-settings:sync", L"Accounts", L"" },
+        { L"Windows backup", L"ms-settings:sync", L"Accounts", L"Backup;Sync your settings" },
         { L"Windows Hello setup - Face", L"ms-settings:signinoptions-launchfaceenrollment", L"Accounts", L"" },
         { L"Windows Hello setup - Fingerprint", L"ms-settings:signinoptions-launchfingerprintenrollment", L"Accounts", L"" },
         { L"Your info", L"ms-settings:yourinfo", L"Accounts", L"" },
-        { L"Apps & Features", L"ms-settings:appsfeatures", L"Apps", L"Uninstall programs;Remove programs;Change programs;Repair programs;apps;apps & features;installed apps;uninstall;remove programs;applications" },
-        { L"App features", L"ms-settings:appsfeatures-app", L"Apps", L"" },
         { L"Apps for websites", L"ms-settings:appsforwebsites", L"Apps", L"" },
-        { L"Default apps", L"ms-settings:defaultapps", L"Apps", L"default apps;default browser;default programs;defaults" },
+        { L"Default apps", L"ms-settings:defaultapps", L"Apps", L"default apps;default browser;default programs;defaults;Default programs" },
         { L"Manage optional features", L"ms-settings:optionalfeatures", L"Apps", L"" },
-        { L"Offline Maps", L"ms-settings:maps", L"Apps", L"" },
-        { L"Offline Maps - Download maps", L"ms-settings:maps-downloadmaps", L"Apps", L"" },
         { L"Startup apps", L"ms-settings:startupapps", L"Apps", L"startup;startup apps;autostart;run on startup" },
         { L"Video playback", L"ms-settings:videoplayback", L"Apps", L"" },
-        { L"Notifications", L"ms-settings:cortana-notifications", L"Cortana", L"" },
-        { L"More details", L"ms-settings:cortana-moredetails", L"Cortana", L"" },
-        { L"Permissions and history", L"ms-settings:cortana-permissions", L"Cortana", L"" },
-        { L"Windows search", L"ms-settings:cortana-windowssearch", L"Cortana", L"Windows search settings" },
-        { L"Cortana - Language", L"ms-settings:cortana-language", L"Cortana", L"Talk" },
-        { L"Cortana", L"ms-settings:cortana", L"Cortana", L"" },
-        { L"Talk to Cortana", L"ms-settings:cortana-talktocortana", L"Cortana", L"" },
-        { L"AutoPlay", L"ms-settings:autoplay", L"Devices", L"" },
-        { L"Bluetooth and other devices", L"ms-settings:bluetooth", L"Devices", L"bluetooth;bt;wireless;pair" },
-        { L"Devices", L"ms-settings:bluetooth", L"Bluetooth & devices", L"Manage devices;Add devices;Bluetooth devices;bluetooth;bt;wireless;pair" },
-        { L"Bluetooth & devices", L"ms-settings:devices", L"Settings", L"Devices;Bluetooth devices;Printers and scanners;Phone Link;Camera;Mouse;Touchpad;Pen and Windows Ink;AutoPlay;USB" },
-        { L"Connected Devices", L"ms-settings:connecteddevices", L"Devices", L"" },
-        { L"Default camera", L"ms-settings:camera", L"Devices", L"camera;webcam" },
-        { L"Mouse and touchpad", L"ms-settings:mousetouchpad", L"Devices", L"mouse;touchpad;cursor;pointer;scroll;touch" },
-        { L"Pen and Windows Ink", L"ms-settings:pen", L"Devices", L"" },
-        { L"Printers and scanners", L"ms-settings:printers", L"Devices", L"printers;printer;scanners;scanner;print;fax" },
-        { L"Touchpad", L"ms-settings:devices-touchpad", L"Devices", L"" },
-        { L"Typing", L"ms-settings:typing", L"Devices", L"typing;keyboard;autocorrect;touch keyboard" },
-        { L"USB", L"ms-settings:usb", L"Devices", L"" },
-        { L"Wheel", L"ms-settings:wheel", L"Devices", L"" },
-        { L"Phone", L"ms-settings:mobile-devices", L"Phone", L"Mobile devices" },
-        { L"Audio", L"ms-settings:easeofaccess-audio", L"Ease of access", L"Mono;Volume;Audio alerts" },
-        { L"Closed captions", L"ms-settings:easeofaccess-closedcaptioning", L"Ease of access", L"" },
-        { L"Color filters", L"ms-settings:easeofaccess-colorfilter", L"Ease of access", L"Inverted colors;Grayscale;Red-green;Blue-yellow;Green week;Red week;deuteranopia;protanopia;tritanopia" },
-        { L"Mouse pointer", L"ms-settings:easeofaccess-mousepointer", L"Ease of access", L"Touch feedback" },
-        { L"Display", L"ms-settings:easeofaccess-display", L"Ease of access", L"Transparency;Animations;Scroll bars;Size" },
-        { L"Eye control", L"ms-settings:easeofaccess-eyecontrol", L"Ease of access", L"" },
-        { L"Fonts", L"ms-settings:fonts", L"Ease of access", L"" },
-        { L"High contrast", L"ms-settings:easeofaccess-highcontrast", L"Ease of access", L"" },
-        { L"Keyboard", L"ms-settings:easeofaccess-keyboard", L"Ease of access", L"Print screen;Shortcuts;On-Screen;Keys;Scroll Lock;Caps Lock;Num Lock" },
-        { L"Magnifier", L"ms-settings:easeofaccess-magnifier", L"Ease of access", L"Zoom" },
-        { L"Mouse", L"ms-settings:easeofaccess-mouse", L"Ease of access", L"Keypad;Touch" },
-        { L"Narrator", L"ms-settings:easeofaccess-narrator", L"Ease of access", L"" },
-        { L"Other options", L"ms-settings:easeofaccess-otheroptions", L"Ease of access", L"" },
-        { L"Speech", L"ms-settings:easeofaccess-speechrecognition", L"Ease of access", L"Recognition;Talk" },
-        { L"Extras", L"ms-settings:extras", L"Extras", L"" },
-        { L"Broadcasting", L"ms-settings:gaming-broadcasting", L"Gaming", L"" },
+        { L"AutoPlay", L"ms-settings:autoplay", L"Bluetooth & devices", L"" },
+        { L"Bluetooth", L"ms-settings:bluetooth", L"Bluetooth & devices", L"bluetooth settings;bluetooth and other devices;bt;pair;pair bluetooth;Bluetooth devices" },
+        { L"Bluetooth & devices", L"ms-settings:devices", L"Settings", L"Devices;Bluetooth devices;Printers and scanners;Phone Link;Camera;Mouse;Touchpad;Pen and Windows Ink;AutoPlay;USB;Connected Devices" },
+        { L"Cameras", L"ms-settings:camera", L"Bluetooth & devices", L"camera;webcam;Default camera" },
+        { L"Mouse and touchpad", L"ms-settings:mousetouchpad", L"Bluetooth & devices", L"mouse;touchpad;cursor;pointer;scroll;touch" },
+        { L"Pen and Windows Ink", L"ms-settings:pen", L"Bluetooth & devices", L"" },
+        { L"Printers and scanners", L"ms-settings:printers", L"Bluetooth & devices", L"printers;printer;scanners;scanner;print;fax" },
+        { L"Touchpad", L"ms-settings:devices-touchpad", L"Bluetooth & devices", L"" },
+        { L"Typing", L"ms-settings:typing", L"Time & language", L"typing;keyboard;autocorrect;touch keyboard" },
+        { L"USB", L"ms-settings:usb", L"Bluetooth & devices", L"" },
+        { L"Wheel", L"ms-settings:wheel", L"Bluetooth & devices", L"" },
+        { L"Mobile devices", L"ms-settings:mobile-devices", L"Phone", L"Mobile devices;Add your phone;Direct open your phone;Phone" },
+        { L"Audio", L"ms-settings:easeofaccess-audio", L"Accessibility", L"Mono;Volume;Audio alerts" },
+        { L"Closed captions", L"ms-settings:easeofaccess-closedcaptioning", L"Accessibility", L"" },
+        { L"Color filters", L"ms-settings:easeofaccess-colorfilter", L"Accessibility", L"Inverted colors;Grayscale;Red-green;Blue-yellow;Green week;Red week;deuteranopia;protanopia;tritanopia" },
+        { L"Mouse pointer", L"ms-settings:easeofaccess-mousepointer", L"Accessibility", L"Touch feedback" },
+        { L"Text size", L"ms-settings:easeofaccess-display", L"Accessibility", L"text size;make text bigger;larger text;accessibility text size;display accessibility" },
+        { L"Eye control", L"ms-settings:easeofaccess-eyecontrol", L"Accessibility", L"" },
+        { L"Fonts", L"ms-settings:fonts", L"Personalization", L"Fonts" },
+        { L"Contrast themes", L"ms-settings:easeofaccess-highcontrast", L"Accessibility", L"high contrast;contrast theme;accessibility contrast" },
+        { L"Keyboard", L"ms-settings:easeofaccess-keyboard", L"Accessibility", L"Print screen;Shortcuts;On-Screen;Keys;Scroll Lock;Caps Lock;Num Lock" },
+        { L"Magnifier", L"ms-settings:easeofaccess-magnifier", L"Accessibility", L"Zoom" },
+        { L"Mouse", L"ms-settings:easeofaccess-mouse", L"Accessibility", L"Keypad;Touch" },
+        { L"Narrator", L"ms-settings:easeofaccess-narrator", L"Accessibility", L"" },
+        { L"Speech accessibility", L"ms-settings:easeofaccess-speechrecognition", L"Accessibility", L"voice access;speech recognition;dictation;voice control" },
         { L"Game bar", L"ms-settings:gaming-gamebar", L"Gaming", L"" },
-        { L"Game DVR", L"ms-settings:gaming-gamedvr", L"Gaming", L"" },
+        { L"Captures", L"ms-settings:gaming-gamedvr", L"Gaming", L"game captures;game dvr;record gameplay;gaming recording;background recording" },
         { L"Game Mode", L"ms-settings:gaming-gamemode", L"Gaming", L"" },
-        { L"Playing a game full screen", L"ms-settings:quietmomentsgame", L"Gaming", L"Quiet moments game" },
-        { L"TruePlay", L"ms-settings:gaming-trueplay", L"Gaming", L"" },
-        { L"Xbox Networking", L"ms-settings:gaming-xboxnetworking", L"Gaming", L"" },
-        { L"Audio and speech", L"ms-settings:holographic-audio", L"Mixed reality", L"Holographic audio" },
-        { L"Environment", L"ms-settings:privacy-holographic-environment", L"Mixed reality", L"Holographic Environment" },
-        { L"Headset display", L"ms-settings:holographic-headset", L"Mixed reality", L"Holographic Headset" },
-        { L"Uninstall", L"ms-settings:holographic-management", L"Mixed reality", L"Holographic Management" },
-        { L"Airplane mode", L"ms-settings:network-airplanemode", L"Network and Internet", L"" },
-        { L"Proximity", L"ms-settings:proximity", L"Network and Internet", L"" },
-        { L"Cellular and SIM", L"ms-settings:network-cellular", L"Network and Internet", L"" },
-        { L"Data usage", L"ms-settings:datausage", L"Network and Internet", L"" },
-        { L"Dial-up", L"ms-settings:network-dialup", L"Network and Internet", L"" },
-        { L"Direct access", L"ms-settings:network-directaccess", L"Network and Internet", L"" },
-        { L"Ethernet", L"ms-settings:network-ethernet", L"Network and Internet", L"DNS;SDNS;SecureDNS;Gateway;DHCP;IP" },
-        { L"Manage known networks", L"ms-settings:network-wifisettings", L"Network and Internet", L"Wi-Fi settings;wifi" },
-        { L"Mobile hotspot", L"ms-settings:network-mobilehotspot", L"Network and Internet", L"hotspot;mobile hotspot;share internet" },
-        { L"NFC", L"ms-settings:nfctransactions", L"Network and Internet", L"NFC Transactions" },
-        { L"Proxy", L"ms-settings:network-proxy", L"Network and Internet", L"proxy;manual proxy;pac" },
-        { L"Network status", L"ms-settings:network-status", L"Network and Internet", L"" },
-        { L"Network", L"ms-settings:network", L"Network and Internet", L"DNS;SDNS;SecureDNS;Gateway;DHCP;IP;network;internet;ethernet;connection" },
-        { L"VPN", L"ms-settings:network-vpn", L"Network and Internet", L"vpn;virtual private network" },
-        { L"Wi-Fi", L"ms-settings:network-wifi", L"Network and Internet", L"Wireless;Metered connection;wifi;wi-fi;wlan;wireless;internet" },
-        { L"Wi-Fi Calling", L"ms-settings:network-wificalling", L"Network and Internet", L"wifi" },
+        { L"Airplane mode", L"ms-settings:network-airplanemode", L"Network & internet", L"Proximity" },
+        { L"Cellular and SIM", L"ms-settings:network-cellular", L"Network & internet", L"" },
+        { L"Data usage", L"ms-settings:datausage", L"Network & internet", L"" },
+        { L"Dial-up", L"ms-settings:network-dialup", L"Network & internet", L"" },
+        { L"Direct access", L"ms-settings:network-directaccess", L"Network & internet", L"" },
+        { L"Ethernet", L"ms-settings:network-ethernet", L"Network & internet", L"ethernet settings;dns;encrypted dns;dns over https;doh;static ip;dhcp;ipv4;ipv6;gateway;subnet mask;ip address" },
+        { L"Manage known networks", L"ms-settings:network-wifisettings", L"Network & internet", L"Wi-Fi settings;wifi" },
+        { L"Mobile hotspot", L"ms-settings:network-mobilehotspot", L"Network & internet", L"hotspot;mobile hotspot;share internet" },
+        { L"Proxy", L"ms-settings:network-proxy", L"Network & internet", L"proxy;manual proxy;pac" },
+        { L"Network & internet", L"ms-settings:network", L"Network & internet", L"network and internet;network settings;internet settings;network status;ethernet;connection;dns;dhcp;ip" },
+        { L"VPN", L"ms-settings:network-vpn", L"Network & internet", L"vpn;virtual private network" },
+        { L"Wi-Fi", L"ms-settings:network-wifi", L"Network & internet", L"Wireless;Metered connection;wifi;wi-fi;wlan;wireless;internet" },
         { L"Background", L"ms-settings:personalization-background", L"Personalization", L"Wallpaper;Picture;Image;wallpaper;background;desktop image;picture" },
         { L"Choose which folders appear on Start", L"ms-settings:personalization-start-places", L"Personalization", L"Start places" },
         { L"Colors", L"ms-settings:colors", L"Personalization", L"Dark mode;Light mode;Dark color;Light color;App color;Taskbar color;Window border" },
-        { L"Glance", L"ms-settings:personalization-glance", L"Personalization", L"" },
         { L"Lock screen", L"ms-settings:lockscreen", L"Personalization", L"Image;Picture;Screen saver;lock screen;lockscreen" },
-        { L"Navigation bar", L"ms-settings:personalization-navbar", L"Personalization", L"" },
-        { L"Personalization (category)", L"ms-settings:personalization", L"Settings", L"personalization;personalize;wallpaper;theme;colors" },
+        { L"Personalization", L"ms-settings:personalization", L"Settings", L"personalization settings;personalize;wallpaper;theme;colors" },
         { L"Start", L"ms-settings:personalization-start", L"Personalization", L"" },
         { L"Taskbar", L"ms-settings:taskbar", L"Personalization", L"taskbar;task bar;taskbar behaviors;unhide taskbar" },
         { L"Themes", L"ms-settings:themes", L"Personalization", L"themes;theme;desktop theme" },
-        { L"Add your phone", L"ms-settings:mobile-devices-addphone", L"Phone", L"" },
-        { L"Direct open your phone", L"ms-settings:mobile-devices-addphone-direct", L"Phone", L"" },
-        { L"Accessory apps", L"ms-settings:privacy-accessoryapps", L"Privacy", L"" },
-        { L"Account info", L"ms-settings:privacy-accountinfo", L"Privacy", L"" },
-        { L"Activity history", L"ms-settings:privacy-activityhistory", L"Privacy", L"" },
-        { L"Advertising ID", L"ms-settings:privacy-advertisingid", L"Privacy", L"" },
-        { L"App diagnostics", L"ms-settings:privacy-appdiagnostics", L"Privacy", L"" },
-        { L"Automatic file downloads", L"ms-settings:privacy-automaticfiledownloads", L"Privacy", L"" },
-        { L"Background Apps", L"ms-settings:privacy-backgroundapps", L"Privacy", L"" },
-        { L"Calendar", L"ms-settings:privacy-calendar", L"Privacy", L"" },
-        { L"Call history", L"ms-settings:privacy-callhistory", L"Privacy", L"" },
-        { L"Camera", L"ms-settings:privacy-webcam", L"Privacy", L"" },
-        { L"Contacts", L"ms-settings:privacy-contacts", L"Privacy", L"" },
-        { L"Documents", L"ms-settings:privacy-documents", L"Privacy", L"" },
-        { L"Email", L"ms-settings:privacy-email", L"Privacy", L"" },
-        { L"Eye tracker", L"ms-settings:privacy-eyetracker", L"Privacy", L"" },
-        { L"Feedback and diagnostics", L"ms-settings:privacy-feedback", L"Privacy", L"" },
-        { L"File system", L"ms-settings:privacy-broadfilesystemaccess", L"Privacy", L"" },
-        { L"General", L"ms-settings:privacy-general", L"Privacy", L"" },
-        { L"Inking and typing", L"ms-settings:privacy-speechtyping", L"Privacy", L"Speech typing" },
-        { L"Location", L"ms-settings:privacy-location", L"Privacy", L"" },
-        { L"Messaging", L"ms-settings:privacy-messaging", L"Privacy", L"" },
-        { L"Microphone", L"ms-settings:privacy-microphone", L"Privacy", L"microphone;mic;record audio" },
-        { L"Motion", L"ms-settings:privacy-motion", L"Privacy", L"" },
-        { L"Notifications", L"ms-settings:privacy-notifications", L"Privacy", L"" },
-        { L"Other devices", L"ms-settings:privacy-customdevices", L"Privacy", L"Custom devices" },
-        { L"Phone calls", L"ms-settings:privacy-phonecalls", L"Privacy", L"" },
-        { L"Pictures", L"ms-settings:privacy-pictures", L"Privacy", L"" },
-        { L"Radios", L"ms-settings:privacy-radios", L"Privacy", L"" },
-        { L"Speech", L"ms-settings:privacy-speech", L"Privacy", L"" },
-        { L"Tasks", L"ms-settings:privacy-tasks", L"Privacy", L"" },
-        { L"Videos", L"ms-settings:privacy-videos", L"Privacy", L"" },
-        { L"Voice activation", L"ms-settings:privacy-voiceactivation", L"Privacy", L"" },
-        { L"Accounts", L"ms-settings:surfacehub-accounts", L"SurfaceHub", L"" },
-        { L"Session cleanup", L"ms-settings:surfacehub-sessioncleanup", L"SurfaceHub", L"" },
-        { L"Team Conferencing", L"ms-settings:surfacehub-calling", L"SurfaceHub", L"calling" },
-        { L"Team device management", L"ms-settings:surfacehub-devicemanagenent", L"SurfaceHub", L"" },
-        { L"Welcome screen", L"ms-settings:surfacehub-welcome", L"SurfaceHub", L"" },
+        { L"Account info", L"ms-settings:privacy-accountinfo", L"Privacy & security", L"" },
+        { L"Activity history", L"ms-settings:privacy-activityhistory", L"Privacy & security", L"" },
+        { L"App diagnostics", L"ms-settings:privacy-appdiagnostics", L"Privacy & security", L"" },
+        { L"Automatic file downloads", L"ms-settings:privacy-automaticfiledownloads", L"Privacy & security", L"" },
+        { L"Calendar", L"ms-settings:privacy-calendar", L"Privacy & security", L"" },
+        { L"Call history", L"ms-settings:privacy-callhistory", L"Privacy & security", L"" },
+        { L"Camera", L"ms-settings:privacy-webcam", L"Privacy & security", L"" },
+        { L"Contacts", L"ms-settings:privacy-contacts", L"Privacy & security", L"" },
+        { L"Documents", L"ms-settings:privacy-documents", L"Privacy & security", L"" },
+        { L"Email", L"ms-settings:privacy-email", L"Privacy & security", L"" },
+        { L"Eye tracker", L"ms-settings:privacy-eyetracker", L"Privacy & security", L"" },
+        { L"Feedback and diagnostics", L"ms-settings:privacy-feedback", L"Privacy & security", L"" },
+        { L"File system", L"ms-settings:privacy-broadfilesystemaccess", L"Privacy & security", L"" },
+        { L"General", L"ms-settings:privacy-general", L"Privacy & security", L"" },
+        { L"Inking and typing", L"ms-settings:privacy-speechtyping", L"Privacy & security", L"Speech typing" },
+        { L"Location", L"ms-settings:privacy-location", L"Privacy & security", L"" },
+        { L"Messaging", L"ms-settings:privacy-messaging", L"Privacy & security", L"" },
+        { L"Microphone", L"ms-settings:privacy-microphone", L"Privacy & security", L"microphone;mic;record audio" },
+        { L"Motion", L"ms-settings:privacy-motion", L"Privacy & security", L"" },
+        { L"Notifications", L"ms-settings:privacy-notifications", L"Privacy & security", L"" },
+        { L"Other devices", L"ms-settings:privacy-customdevices", L"Privacy & security", L"Custom devices" },
+        { L"Phone calls", L"ms-settings:privacy-phonecalls", L"Privacy & security", L"" },
+        { L"Pictures", L"ms-settings:privacy-pictures", L"Privacy & security", L"" },
+        { L"Radios", L"ms-settings:privacy-radios", L"Privacy & security", L"" },
+        { L"Speech", L"ms-settings:privacy-speech", L"Privacy & security", L"" },
+        { L"Tasks", L"ms-settings:privacy-tasks", L"Privacy & security", L"" },
+        { L"Videos", L"ms-settings:privacy-videos", L"Privacy & security", L"" },
+        { L"Voice activation", L"ms-settings:privacy-voiceactivation", L"Privacy & security", L"" },
         { L"About", L"ms-settings:about", L"System", L"RAM;Processor;OS;ID;Edition;Version;about;system info;specs;pc specs;ram;processor;device name" },
         { L"Advanced display settings", L"ms-settings:display-advanced", L"System", L"refresh rate;hz;144hz;165hz;240hz;60hz;display refresh rate;display information;bit depth;color format;dynamic refresh rate" },
-        { L"App volume and device preferences", L"ms-settings:apps-volume", L"System", L"volume mixer;app volume;individual volume;application volume;audio output per app;spatial audio;device preferences" },
-        { L"Battery Saver", L"ms-settings:batterysaver", L"System", L"battery;battery saver;power saving" },
-        { L"Battery Saver settings", L"ms-settings:batterysaver-settings", L"System", L"" },
-        { L"Battery use", L"ms-settings:batterysaver-usagedetails", L"System", L"Battery saver usage details" },
+        { L"Volume mixer", L"ms-settings:apps-volume", L"System", L"app volume;individual volume;application volume;audio output per app;app volume and device preferences" },
         { L"Clipboard", L"ms-settings:clipboard", L"System", L"clipboard;clipboard history;win+v;sync clipboard;clear clipboard data" },
-        { L"Display", L"ms-settings:display", L"System", L"Night light;Blue light;Warmer color;Red eye;display;screen;resolution;monitor;monitors;scale;hdr;refresh rate" },
+        { L"Display", L"ms-settings:display", L"System", L"Night light;Blue light;Warmer color;Red eye;display;screen;resolution;monitor;monitors;scale;hdr;refresh rate;Screen rotation" },
         { L"Default Save Locations", L"ms-settings:savelocations", L"System", L"" },
-        { L"Screen rotation", L"ms-settings:screenrotation", L"System", L"" },
-        { L"Duplicating my display", L"ms-settings:quietmomentspresentation", L"System", L"Presentation" },
-        { L"During these hours", L"ms-settings:quietmomentsscheduled", L"System", L"Scheduled" },
         { L"Encryption", L"ms-settings:deviceencryption", L"System", L"" },
-        { L"Focus assist - Quiet hours", L"ms-settings:quiethours", L"System", L"" },
-        { L"Focus assist - Quiet moments", L"ms-settings:quietmomentshome", L"System", L"" },
+        { L"Focus", L"ms-settings:quiethours", L"System", L"Focus assist - Quiet hours" },
         { L"Graphics settings", L"ms-settings:display-advancedgraphics", L"System", L"graphics;graphics settings;hags;hardware-accelerated gpu scheduling;gpu preference;variable refresh rate;vrr;optimizations for windowed games;auto hdr;high performance gpu" },
-        { L"Messaging", L"ms-settings:messaging", L"System", L"" },
         { L"Multitasking", L"ms-settings:multitasking", L"System", L"multitasking;snap windows;snap layouts;snap assist;title bar window shake;virtual desktops;alt tab;timeline" },
         { L"Night light settings", L"ms-settings:nightlight", L"System", L"night light;blue light filter;warm colors;color temperature;schedule night light" },
-        { L"Phone - Default apps", L"ms-settings:phone-defaultapps", L"System", L"" },
         { L"Projecting to this PC", L"ms-settings:project", L"System", L"" },
-        { L"Shared experience settings", L"ms-settings:crossdevice", L"System", L"Crossdevice;Nearby sharing settings;Share across devices" },
-        { L"Nearby sharing settings", L"ms-settings:crossdevice", L"System", L"Crossdevice;Share across devices;Shared experience settings" },
-        { L"Share across devices", L"ms-settings:crossdevice", L"System", L"Crossdevice;Nearby sharing settings;Shared experience settings" },
-        { L"Tablet mode", L"ms-settings:tabletmode", L"System", L"" },
-        { L"Notifications and actions", L"ms-settings:notifications", L"System", L"notifications;alerts;do not disturb;focus;focus assist;dnd;priority notifications" },
+        { L"Nearby sharing", L"ms-settings:crossdevice", L"System", L"nearby sharing settings;shared experience settings;shared experiences;share across devices;crossdevice" },
+        { L"Notifications", L"ms-settings:notifications", L"System", L"notifications and actions;alerts;do not disturb;priority notifications;notification settings;Playing a game full screen;Quiet moments game;Duplicating my display;Presentation;During these hours;Scheduled" },
         { L"Remote Desktop", L"ms-settings:remotedesktop", L"System", L"remote desktop;enable rdp;allow remote desktop;remote desktop port" },
-        { L"Phone", L"ms-settings:phone", L"System", L"" },
-        { L"Power and sleep", L"ms-settings:powersleep", L"System", L"power;sleep;battery;power & sleep;energy;screen off;standby;power mode;power plan" },
+        { L"Power & battery", L"ms-settings:powersleep", L"System", L"power and battery;power and sleep;power & sleep;sleep settings;battery;energy;screen off;standby;power mode;power plan;Battery Saver;battery saver;power saving;Battery Saver settings;Battery use;Battery saver usage details" },
         { L"Sound", L"ms-settings:sound", L"System", L"sound;audio;volume;speaker;speakers;headphones;mic;microphone;sound settings" },
-        { L"Storage Sense", L"ms-settings:storagesense", L"System", L"storage;disk space;free up space;clean drive;storage sense;cleanup recommendations;temporary files" },
-        { L"Storage policies", L"ms-settings:storagepolicies", L"System", L"" },
-        { L"Date and time", L"ms-settings:dateandtime", L"Time and language", L"date;time;clock;timezone;time zone;set time" },
-        { L"Japan IME settings", L"ms-settings:regionlanguage-jpnime", L"Time and language", L"jpnime" },
-        { L"Region", L"ms-settings:regionformatting", L"Time and language", L"Region formatting" },
-        { L"Keyboard", L"ms-settings:keyboard", L"Time and language", L"" },
-        { L"Regional language", L"ms-settings:regionlanguage", L"Time and language", L"language;region;locale;keyboard language;input language" },
-        { L"Bopomofo IME", L"ms-settings:regionlanguage-bpmfime", L"Time and language", L"bpmf" },
-        { L"Cangjie IME", L"ms-settings:regionlanguage-cangjieime", L"Time and language", L"" },
-        { L"Pinyin IME settings - domain lexicon", L"ms-settings:regionlanguage-chsime-pinyin-domainlexicon", L"Time and language", L"" },
-        { L"Pinyin IME settings - Key configuration", L"ms-settings:regionlanguage-chsime-pinyin-keyconfig", L"Time and language", L"" },
-        { L"Pinyin IME settings - UDP", L"ms-settings:regionlanguage-chsime-pinyin-udp", L"Time and language", L"" },
-        { L"Wubi IME settings - UDP", L"ms-settings:regionlanguage-chsime-wubi-udp", L"Time and language", L"" },
-        { L"Quickime", L"ms-settings:regionlanguage-quickime", L"Time and language", L"" },
-        { L"Pinyin IME settings", L"ms-settings:regionlanguage-chsime-pinyin", L"Time and language", L"" },
-        { L"Speech", L"ms-settings:speech", L"Time and language", L"" },
-        { L"Wubi IME settings", L"ms-settings:regionlanguage-chsime-wubi", L"Time and language", L"" },
-        { L"Activation", L"ms-settings:activation", L"Update and security", L"activation;product key;change product key;windows license;digital license;upgrade windows" },
-        { L"Backup", L"ms-settings:backup", L"Update and security", L"" },
-        { L"Delivery Optimization", L"ms-settings:delivery-optimization", L"Update and security", L"delivery optimization;allow downloads from other pcs;bandwidth limits;peer to peer update" },
-        { L"Find My Device", L"ms-settings:findmydevice", L"Update and security", L"" },
-        { L"For developers", L"ms-settings:developers", L"Update and security", L"developer mode;end task;taskbar end task;sideload apps;remote tools;developer options" },
-        { L"Recovery", L"ms-settings:recovery", L"Update and security", L"recovery;reset this pc;advanced startup;uefi firmware settings;boot to bios;go back;reinstall windows;troubleshoot" },
-        { L"Troubleshoot", L"ms-settings:troubleshoot", L"Update and security", L"" },
-        { L"Windows Security", L"ms-settings:windowsdefender", L"Update and security", L"Windows Defender;Firewall;Virus;Core Isolation;Security Processor;Isolated Browsing;Exploit Protection;windows security;antivirus;defender;virus;threat" },
-        { L"Windows Insider Program", L"ms-settings:windowsinsider", L"Update and security", L"" },
-        { L"Windows Update", L"ms-settings:windowsupdate", L"Update and security", L"windows update;update;updates;patch;check for updates" },
-        { L"Windows Update - Check for updates", L"ms-settings:windowsupdate-action", L"Update and security", L"" },
-        { L"Windows Update - Check for updates", L"ms-settings:windowsupdate", L"Update and security", L"windows update;update;updates;patch;check for updates" },
-        { L"Windows Update - Advanced options", L"ms-settings:windowsupdate-options", L"Update and security", L"windows update options;optional updates;delivery optimization;active hours;metered network update;pause updates" },
-        { L"Windows Update - Restart options", L"ms-settings:windowsupdate-restartoptions", L"Update and security", L"" },
-        { L"Windows Update - View update history", L"ms-settings:windowsupdate-history", L"Update and security", L"update history;view installed updates;uninstall updates;quality updates;driver updates" },
-        { L"Windows Update - View optional updates", L"ms-settings:windowsupdate-optionalupdates", L"Update and security", L"" },
-        { L"Workplace provisioning", L"ms-settings:workplace-provisioning", L"User accounts", L"" },
-        { L"Provisioning", L"ms-settings:provisioning", L"User accounts", L"" },
-        { L"Windows Anywhere", L"ms-settings:windowsanywhere", L"User accounts", L"" },
-        { L"Accessibility Options", L"control access.cpl", L"Ease of access", L"access.cpl" },
-        { L"Action Center", L"control /name Microsoft.ActionCenter", L"System and Security", L"wscui.cpl" },
-        { L"Add Hardware", L"control /name Microsoft.AddHardware", L"Hardware and Sound", L"" },
-        { L"Add or remove programs", L"control appwiz.cpl", L"Hardware and Sound", L"appwiz.cpl;Uninstall programs;Change programs;Repair programs" },
-        { L"Administrative Tools", L"control /name Microsoft.AdministrativeTools", L"System and Security", L"" },
+        { L"Storage", L"ms-settings:storagesense", L"System", L"storage settings;disk space;free up space;clean drive;cleanup recommendations;temporary files" },
+        { L"Storage Sense", L"ms-settings:storagepolicies", L"System", L"storage policies;storage sense settings;automatic cleanup;automatically delete temporary files;recycle bin cleanup" },
+        { L"Date & time", L"ms-settings:dateandtime", L"Time & language", L"date and time;date;time;clock;timezone;time zone;set time" },
+        { L"Japanese IME settings", L"ms-settings:regionlanguage-jpnime", L"Time & language", L"jpnime;Japan IME settings" },
+        { L"Region", L"ms-settings:regionformatting", L"Time & language", L"Region formatting" },
+        { L"Keyboard input settings", L"ms-settings:keyboard", L"Time & language", L"Keyboard" },
+        { L"Language & region", L"ms-settings:regionlanguage", L"Time & language", L"language and region;regional language;language;region;locale;keyboard language;input language;display language;add language" },
+        { L"Bopomofo IME", L"ms-settings:regionlanguage-bpmfime", L"Time & language", L"bpmf" },
+        { L"Cangjie IME", L"ms-settings:regionlanguage-cangjieime", L"Time & language", L"" },
+        { L"Quickime", L"ms-settings:regionlanguage-quickime", L"Time & language", L"" },
+        { L"Pinyin IME settings", L"ms-settings:regionlanguage-chsime-pinyin", L"Time & language", L"Pinyin IME settings - domain lexicon;Pinyin IME settings - Key configuration;Pinyin IME settings - UDP" },
+        { L"Speech", L"ms-settings:speech", L"Time & language", L"" },
+        { L"Wubi IME settings", L"ms-settings:regionlanguage-chsime-wubi", L"Time & language", L"Wubi IME settings - UDP" },
+        { L"Activation", L"ms-settings:activation", L"System", L"activation;product key;change product key;windows license;digital license;upgrade windows" },
+        { L"Delivery Optimization", L"ms-settings:delivery-optimization", L"Windows Update", L"delivery optimization;allow downloads from other pcs;bandwidth limits;peer to peer update" },
+        { L"Find My Device", L"ms-settings:findmydevice", L"Privacy & security", L"" },
+        { L"For developers", L"ms-settings:developers", L"System", L"developer mode;end task;taskbar end task;sideload apps;remote tools;developer options" },
+        { L"Recovery", L"ms-settings:recovery", L"System", L"recovery;reset this pc;advanced startup;uefi firmware settings;boot to bios;go back;reinstall windows;troubleshoot" },
+        { L"Troubleshoot", L"ms-settings:troubleshoot", L"System", L"" },
+        { L"Windows Security", L"ms-settings:windowsdefender", L"Privacy & security", L"Windows Defender;Firewall;Virus;Core Isolation;Security Processor;Isolated Browsing;Exploit Protection;windows security;antivirus;defender;virus;threat" },
+        { L"Windows Insider Program", L"ms-settings:windowsinsider", L"System", L"" },
+        { L"Windows Update", L"ms-settings:windowsupdate", L"Windows Update", L"windows update;update;updates;patch;check for updates;Windows Update - Check for updates" },
+        { L"Windows Update - Advanced options", L"ms-settings:windowsupdate-options", L"Windows Update", L"windows update options;optional updates;delivery optimization;active hours;metered network update;pause updates" },
+        { L"Windows Update - Restart options", L"ms-settings:windowsupdate-restartoptions", L"Windows Update", L"" },
+        { L"Windows Update - View update history", L"ms-settings:windowsupdate-history", L"Windows Update", L"update history;view installed updates;uninstall updates;quality updates;driver updates" },
+        { L"Windows Update - View optional updates", L"ms-settings:windowsupdate-optionalupdates", L"Windows Update", L"" },
+        { L"Security and Maintenance", L"control /name Microsoft.ActionCenter", L"System and Security", L"action center;security and maintenance;maintenance settings;Problem reports and solutions;Security Center" },
+        { L"Add Hardware", L"hdwwiz.exe", L"Hardware and Sound", L"" },
+        { L"Windows Tools", L"control /name Microsoft.AdministrativeTools", L"System and Security", L"administrative tools;windows tools;system tools" },
         { L"AutoPlay", L"control /name Microsoft.AutoPlay", L"Programs", L"" },
         { L"Backup and Restore", L"control /name Microsoft.BackupAndRestore", L"System and Security", L"" },
-        { L"Biometric Devices", L"control /name Microsoft.BiometricDevices", L"Hardware and Sound", L"" },
         { L"BitLocker Drive Encryption", L"control /name Microsoft.BitLockerDriveEncryption", L"System and Security", L"" },
-        { L"Bluetooth devices", L"control /bthprops.cpl", L"Hardware and Sound", L"" },
-        { L"Color management", L"control /name Microsoft.ColorManagement", L"Appearance and Personalization", L"colorcpl.exe;color management;icc profile;icm;monitor color;color profiles;display profile" },
         { L"Credential manager", L"control /name Microsoft.CredentialManager", L"User accounts", L"Password" },
-        { L"Client service for NetWare", L"control nwc.cpl", L"Programs", L"nwc.cpl" },
-        { L"Date and time", L"control /name Microsoft.DateAndTime", L"Clock and Region", L"timedate.cpl;date and time;internet time;clock" },
-        { L"Default location", L"control /name Microsoft.DefaultLocation", L"Clock and Region", L"" },
-        { L"Default programs", L"control /name Microsoft.DefaultPrograms", L"Programs", L"" },
-        { L"Device manager", L"control /name Microsoft.DeviceManager", L"Hardware and Sound", L"hdwwiz.cpl;devmgmt.msc;device manager;devices;hardware" },
-        { L"Devices and printers", L"control /name Microsoft.DevicesAndPrinters", L"Hardware and Sound", L"printers;devices and printers;control printers" },
-        { L"Devices and printers", L"explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", L"Hardware and Sound", L"printers;devices and printers" },
+        { L"Devices and Printers (Classic)", L"explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", L"Hardware and Sound", L"printers;devices and printers;Printers;Devices and Printers (Classic);control printers;classic printers;add printer;printer properties;print queue;Devices and printers;Devices and printers" },
         { L"Ease of access center", L"control /name Microsoft.EaseOfAccessCenter", L"Ease of access", L"" },
         { L"Folder options", L"control /name Microsoft.FolderOptions", L"Appearance and Personalization", L"folder options;file explorer options;show hidden files" },
-        { L"Fonts", L"control /name Microsoft.Fonts", L"Appearance and Personalization", L"" },
-        { L"Game controllers", L"control /name Microsoft.GameControllers", L"Hardware and Sound", L"joy.cpl;game controllers;gamepad;joystick;calibrate controller" },
-        { L"Get programs", L"control /name Microsoft.GetPrograms", L"Programs", L"" },
-        { L"Getting started", L"control /name Microsoft.GettingStarted", L"Control Panel", L"" },
-        { L"Home group", L"control /name Microsoft.HomeGroup", L"Network and Internet", L"" },
         { L"Indexing options", L"control /name Microsoft.IndexingOptions", L"System and Security", L"indexing options;search index;rebuild index" },
-        { L"Infrared", L"control /name Microsoft.Infrared", L"Hardware and Sound", L"irprops.cpl" },
-        { L"Internet options", L"control /name Microsoft.InternetOptions", L"Network and Internet", L"inetcpl.cpl;internet properties;proxy settings;trusted sites;certificates;tls;ssl;connections;lan settings" },
         { L"Mail - Microsoft Exchange or Windows Messaging", L"control mlcfg32.cpl", L"Network and Internet", L"mlcfg32.cpl" },
         { L"Mouse", L"control /name Microsoft.Mouse", L"Hardware and Sound", L"mouse;mouse properties;pointer speed;cursor" },
         { L"Network and sharing center", L"control /name Microsoft.NetworkAndSharingCenter", L"Network and Internet", L"network and sharing;adapter settings;network center" },
         { L"Network Connections (ncpa.cpl)", L"ncpa.cpl", L"Network and Internet", L"ncpa.cpl;network connections;change adapter settings;network adapters;network adapter properties;ethernet properties;wifi properties;ip configuration;dns properties;lan settings;network cards;network control panel" },
-        { L"Network Setup Wizard", L"control netsetup.cpl", L"Network and Internet", L"netsetup.cpl" },
         { L"ODBC Data Source Administrator (32-bit)", L"%windir%/syswow64/odbcad32.exe", L"System and Security", L"odbccp32.cpl" },
         { L"ODBC Data Source Administrator (64-bit)", L"%windir%/system32/odbcad32.exe", L"System and Security", L"" },
         { L"Offline files", L"control /name Microsoft.OfflineFiles", L"Network and Internet", L"" },
-        { L"Parental controls", L"control /name Microsoft.ParentalControls", L"User accounts", L"" },
-        { L"Pen and input devices", L"control /name Microsoft.PenAndInputDevices", L"Hardware and Sound", L"" },
         { L"Pen and touch", L"control /name Microsoft.PenAndTouch", L"Hardware and Sound", L"" },
-        { L"People Near Me", L"control /name Microsoft.PeopleNearMe", L"User accounts", L"" },
-        { L"Performance information and tools", L"control /name Microsoft.PerformanceInformationAndTools", L"System and Security", L"" },
-        { L"Phone and modem - Options", L"control /name Microsoft.PhoneAndModemOptions", L"Network and Internet", L"modem.cpl;telephon.cpl" },
-        { L"Phone and modem", L"control /name Microsoft.PhoneAndModem", L"Network and Internet", L"modem.cpl;telephon.cpl" },
-        { L"Power options", L"control /name Microsoft.PowerOptions", L"System and Security", L"powercfg.cpl" },
-        { L"Printers", L"control /name Microsoft.Printers", L"Hardware and Sound", L"" },
-        { L"Problem reports and solutions", L"control /name Microsoft.ProblemReportsAndSolutions", L"System and Security", L"" },
-        { L"Programs and features", L"control /name Microsoft.ProgramsAndFeatures", L"Programs", L"" },
+        { L"Phone and modem", L"control /name Microsoft.PhoneAndModem", L"Network and Internet", L"modem.cpl;telephon.cpl;Phone and modem - Options" },
         { L"Recovery", L"control /name Microsoft.Recovery", L"System and Security", L"" },
-        { L"Region and language", L"control /name Microsoft.RegionAndLanguage", L"Clock and Region", L"" },
         { L"RemoteApp and desktop connections", L"control /name Microsoft.RemoteAppAndDesktopConnections", L"Network and Internet", L"" },
         { L"Scanners and cameras", L"control /name Microsoft.ScannersAndCameras", L"Hardware and Sound", L"sticpl.cpl" },
-        { L"Scheduled tasks", L"control schedtasks", L"System and Security", L"schedtasks" },
-        { L"Security Center", L"control /name Microsoft.SecurityCenter", L"System and Security", L"" },
-        { L"Sound", L"control /name Microsoft.Sound", L"Hardware and Sound", L"" },
-        { L"Speech recognition", L"control /name Microsoft.SpeechRecognition", L"Ease of access", L"" },
         { L"Sync center", L"control /name Microsoft.SyncCenter", L"System and Security", L"" },
-        { L"System", L"control sysdm.cpl", L"System and Security", L"sysdm.cpl" },
         { L"Tablet PC settings", L"control /name Microsoft.TabletPCSettings", L"System and Security", L"TabletPC.cpl" },
         { L"Text to speech", L"control /name Microsoft.TextToSpeech", L"Ease of access", L"" },
         { L"User accounts", L"control /name Microsoft.UserAccounts", L"User accounts", L"" },
-        { L"Welcome center", L"control /name Microsoft.WelcomeCenter", L"System and Security", L"" },
-        { L"Windows Anytime Upgrade", L"control /name Microsoft.WindowsAnytimeUpgrade", L"System and Security", L"" },
-        { L"Windows CardSpace", L"control /name Microsoft.CardSpace", L"Hardware and Sound", L"" },
-        { L"Windows Defender", L"control /name Microsoft.WindowsDefender", L"System and Security", L"" },
-        { L"Windows Firewall", L"control /name Microsoft.WindowsFirewall", L"System and Security", L"" },
         { L"Windows Mobility Center", L"control /name Microsoft.MobilityCenter", L"Network and Internet", L"" },
-        { L"Display properties", L"control Desk.cpl", L"Hardware and Sound", L"desk.cpl" },
-        { L"FindFast", L"control FindFast.cpl", L"System and Security", L"findfast.cpl" },
-        { L"Regional settings properties", L"control Intl.cpl", L"Ease of access", L"intl.cpl" },
-        { L"Joystick properties", L"control Joy.cpl", L"Hardware and Sound", L"joy.cpl" },
-        { L"Mouse, Fonts, Keyboard, and Printers properties", L"control Main.cpl", L"Hardware and Sound", L"main.cpl" },
-        { L"Multimedia properties", L"control Mmsys.cpl", L"Hardware and Sound", L"mmsys.cpl" },
-        { L"Network properties", L"control Netcpl.cpl", L"Network and Internet", L"netcpl.cpl" },
-        { L"Password properties", L"control Password.cpl", L"User accounts", L"password.cpl" },
-        { L"System properties and Add New Hardware wizard", L"control Sysdm.cpl", L"Hardware and Sound", L"sysdm.cpl" },
-        { L"Desktop themes", L"control Themes.cpl", L"Appearance and Personalization", L"themes.cpl" },
-        { L"Microsoft Mail Post Office", L"control Wgpocpl.cpl", L"Programs", L"wgpocpl.cpl" },
         { L"Change User Account Control settings", L"UserAccountControlSettings.exe", L"System and Security", L"UserAccountControlSettings.exe;User accounts;UAC;uac;user account control;slider;admin prompt" },
         { L"Edit the system environment variables", L"SystemPropertiesAdvanced.exe", L"System and Security", L"Edit environment variables;System variables;Env vars;System env vars;sysdm.cpl;environment variables;env;path;system variables;advanced system settings" },
         { L"Edit environment variables for your account", L"rundll32.exe sysdm.cpl,EditEnvironmentVariables", L"System and Security", L"User environment variables;User variables;Env vars;User env vars;sysdm.cpl" },
@@ -2191,26 +2144,21 @@ inline const std::vector<SettingItem>& GetSettingsList() {
         { L"Certificates - Local Computer", L"certlm.msc", L"Administrative Tools", L"mmc.exe;certlm.msc" },
         { L"Component Services", L"comexp.msc", L"Administrative Tools", L"mmc.exe;comexp.msc;COM-Objects" },
         { L"Computer Management", L"compmgmt.msc", L"Administrative Tools", L"mmc.exe;compmgmt.msc;System Tools;Task Scheduler;Event Viewer;Shared Folders;Network sessions;SMB;Local Users and Groups;Performance Monitor;Device manager;PNP Device;Storage;Disk Management;Create and format hard disk partitions;GPT;MBR;Services;WMI Control;Windows Management Instrumentation" },
-        { L"Device manager", L"devmgmt.msc", L"Administrative Tools", L"mmc.exe;devmgmt.msc;PNP Device" },
+        { L"Device manager", L"devmgmt.msc", L"Administrative Tools", L"mmc.exe;devmgmt.msc;PNP Device;Device manager;hdwwiz.cpl;device manager;devices;hardware" },
         { L"Disk Management", L"diskmgmt.msc", L"Administrative Tools", L"mmc.exe;diskmgmt.msc;Storage;Create and format hard disk partitions;GPT;MBR" },
         { L"Event Viewer", L"eventvwr.msc", L"Administrative Tools", L"mmc.exe;eventvwr.msc" },
         { L"Local Computer Policy", L"gpedit.msc", L"Administrative Tools", L"mmc.exe;gpedit.msc;Group Policy" },
-        { L"IP Security Monitor", L"mmc.exe", L"Administrative Tools", L"mmc.exe" },
-        { L"IP Security Policies on Local Computer", L"mmc.exe", L"Administrative Tools", L"mmc.exe" },
         { L"Local Users and Groups", L"lusrmgr.msc", L"Administrative Tools", L"mmc.exe;lusrmgr.msc" },
         { L"Performance Monitor", L"perfmon.msc", L"Administrative Tools", L"mmc.exe;perfmon.msc" },
         { L"Print Management", L"printmanagement.msc", L"Administrative Tools", L"mmc.exe;printmanagement.msc;Printer Spooler" },
         { L"Resultant Set of Policy", L"rsop.msc", L"Administrative Tools", L"mmc.exe;rsop.msc" },
-        { L"Security Configuration and Analysis", L"secpol.msc", L"Administrative Tools", L"mmc.exe;secpol.msc" },
-        { L"Security Templates", L"mmc.exe", L"Administrative Tools", L"mmc.exe" },
+        { L"Local Security Policy", L"secpol.msc", L"Administrative Tools", L"secpol.msc;security policy;local security policy;user rights assignment;security options" },
         { L"Services", L"services.msc", L"Administrative Tools", L"mmc.exe;services.msc" },
         { L"Shared Folders", L"fsmgmt.msc", L"Administrative Tools", L"mmc.exe;fsmgmt.msc;Network sessions" },
-        { L"Task Scheduler", L"taskschd.msc", L"Administrative Tools", L"mmc.exe;taskschd.msc" },
+        { L"Task Scheduler", L"taskschd.msc", L"Administrative Tools", L"mmc.exe;taskschd.msc;Scheduled tasks;schedtasks" },
         { L"TPM Management", L"tpm.msc", L"Administrative Tools", L"mmc.exe;tpm.msc" },
         { L"Windows Defender Firewall with Advanced Security", L"wf.msc", L"Administrative Tools", L"mmc.exe;WF.msc" },
         { L"WMI Control", L"wmimgmt.msc", L"Administrative Tools", L"mmc.exe;WmiMgmt.msc;Windows Management Instrumentation" },
-
-        // Deep Administrative Tools & Control Applets
         { L"Turn Windows features on or off", L"OptionalFeatures.exe", L"System and Security", L"OptionalFeatures.exe;windows features;optional features;hyper-v;wsl;windows subsystem for linux;iis;sandbox;windows sandbox;telnet;smb1;.net framework;tftp;virtual machine platform;features" },
         { L"System Configuration", L"msconfig.exe", L"Administrative Tools", L"msconfig.exe;msconfig;system configuration;boot options;safe mode;clean boot;services configuration;diagnostic startup;bootloader" },
         { L"Disk Cleanup", L"cleanmgr.exe", L"Administrative Tools", L"cleanmgr.exe;cleanmgr;disk cleanup;free up disk space;clean c drive;delete temp files;recycle bin cleanup;windows update cleanup" },
@@ -2219,18 +2167,17 @@ inline const std::vector<SettingItem>& GetSettingsList() {
         { L"Resource Monitor", L"resmon.exe", L"Administrative Tools", L"resmon.exe;resmon;resource monitor;cpu monitor;memory monitor;disk activity;network activity;handles;modules;processes" },
         { L"Registry Editor", L"regedit.exe", L"Administrative Tools", L"regedit.exe;regedit;registry;reg;hkey_local_machine;hkey_current_user;regedit32" },
         { L"Display Color Calibration", L"dccw.exe", L"Appearance and Personalization", L"dccw.exe;dccw;color calibration;calibrate display;gamma;color balance;brightness;contrast;calibrate monitor" },
-        { L"Color Management", L"colorcpl.exe", L"Appearance and Personalization", L"colorcpl.exe;color management;icc profile;icm;monitor color;color profiles;display profile" },
+        { L"Color Management", L"colorcpl.exe", L"Appearance and Personalization", L"colorcpl.exe;color management;icc profile;icm;monitor color;color profiles;display profile;Color management" },
         { L"Windows Memory Diagnostic", L"mdsched.exe", L"Administrative Tools", L"mdsched.exe;mdsched;memory test;ram test;check ram;memory diagnostic;ram errors" },
-        { L"Sound Control Panel (Legacy)", L"mmsys.cpl", L"Hardware and Sound", L"mmsys.cpl;sound control panel;playback devices;recording devices;stereo mix;audio settings legacy;communications;sounds;exclusive mode;bitrate;sample rate" },
-        { L"Internet Properties", L"inetcpl.cpl", L"Network and Internet", L"inetcpl.cpl;internet options;proxy settings;trusted sites;certificates;tls;ssl;connections;lan settings" },
-        { L"Game Controllers", L"joy.cpl", L"Hardware and Sound", L"joy.cpl;game controllers;gamepad;joystick;calibrate controller;controller test;usb gamepad" },
-        { L"Date and Time (Legacy)", L"timedate.cpl", L"Clock and Region", L"timedate.cpl;date and time;internet time;ntp;sync time;additional clocks;time zone" },
-        { L"Region (Legacy)", L"intl.cpl", L"Clock and Region", L"intl.cpl;region;formats;short date;long date;administrative region;system locale;non-unicode" },
-        { L"Power Options (Legacy)", L"powercfg.cpl", L"System and Security", L"powercfg.cpl;power options;power plan;high performance;ultimate performance;balanced;sleep timer;turn off display;choose what the power button does;fast startup" },
-        { L"Programs and Features (Legacy)", L"appwiz.cpl", L"Programs", L"appwiz.cpl;uninstall a program;programs and features;classic uninstall;installed updates;view installed updates" },
-        { L"System Properties (Legacy)", L"sysdm.cpl", L"System and Security", L"sysdm.cpl;system properties;computer name;hardware;device manager;advanced system settings;system protection;system restore;pagefile;virtual memory;remote" },
-        { L"Windows Defender Firewall (Legacy)", L"firewall.cpl", L"System and Security", L"firewall.cpl;firewall;allow an app through firewall;inbound rules;outbound rules;turn firewall on or off;network firewall" },
-        { L"Devices and Printers (Classic)", L"control printers", L"Hardware and Sound", L"control printers;printers;classic printers;devices and printers;add printer;printer properties;print queue" },
+        { L"Sound Control Panel (Legacy)", L"mmsys.cpl", L"Hardware and Sound", L"mmsys.cpl;sound control panel;playback devices;recording devices;stereo mix;audio settings legacy;communications;sounds;exclusive mode;bitrate;sample rate;Sound;Multimedia properties" },
+        { L"Internet Properties", L"inetcpl.cpl", L"Network and Internet", L"inetcpl.cpl;internet options;proxy settings;trusted sites;certificates;tls;ssl;connections;lan settings;Internet options;internet properties" },
+        { L"Game Controllers", L"joy.cpl", L"Hardware and Sound", L"joy.cpl;game controllers;gamepad;joystick;calibrate controller;controller test;usb gamepad;Game controllers;Joystick properties" },
+        { L"Date and Time (Legacy)", L"timedate.cpl", L"Clock and Region", L"timedate.cpl;date and time;internet time;ntp;sync time;additional clocks;time zone;Date and time;clock" },
+        { L"Region (Legacy)", L"intl.cpl", L"Clock and Region", L"intl.cpl;region;formats;short date;long date;administrative region;system locale;non-unicode;Region and language;Regional settings properties" },
+        { L"Power Options (Legacy)", L"powercfg.cpl", L"System and Security", L"powercfg.cpl;power options;power plan;high performance;ultimate performance;balanced;sleep timer;turn off display;choose what the power button does;fast startup;Power options" },
+        { L"Programs and Features (Legacy)", L"appwiz.cpl", L"Programs", L"appwiz.cpl;uninstall a program;programs and features;classic uninstall;installed updates;view installed updates;Add or remove programs;Uninstall programs;Change programs;Repair programs;Programs and features" },
+        { L"System Properties (Legacy)", L"sysdm.cpl", L"System and Security", L"sysdm.cpl;system properties;computer name;hardware;device manager;advanced system settings;system protection;system restore;pagefile;virtual memory;remote;System Properties;computer properties" },
+        { L"Windows Defender Firewall (Legacy)", L"firewall.cpl", L"System and Security", L"firewall.cpl;firewall;allow an app through firewall;inbound rules;outbound rules;turn firewall on or off;network firewall;Windows Firewall" },
         { L"Remote Desktop Connection", L"mstsc.exe", L"System and Security", L"mstsc.exe;mstsc;remote desktop;rdp;remote connect;terminal services" },
         { L"About Windows (Winver)", L"winver.exe", L"System", L"winver.exe;winver;windows version;os build;build number;windows 11 edition" },
         { L"Performance Options", L"SystemPropertiesPerformance.exe", L"System and Security", L"SystemPropertiesPerformance.exe;performance options;visual effects;adjust for best performance;smooth edges of screen fonts;virtual memory;page file;paging file size" },
@@ -2240,13 +2187,54 @@ inline const std::vector<SettingItem>& GetSettingsList() {
         { L"System Properties - Remote", L"SystemPropertiesRemote.exe", L"System and Security", L"SystemPropertiesRemote.exe;remote desktop;remote assistance;allow remote connections" },
         { L"Data Execution Prevention (DEP)", L"SystemPropertiesDataExecutionPrevention.exe", L"System and Security", L"SystemPropertiesDataExecutionPrevention.exe;dep;data execution prevention;turn on dep" },
         { L"God Mode (All Tasks)", L"explorer.exe shell:::{ED7BA470-8E54-465E-825C-99712043E01C}", L"Administrative Tools", L"god mode;godmode;all tasks;all settings;master control panel;every setting" },
-
-        // Modern Windows 11 Deep Settings URIs
-        { L"Core Isolation (Memory Integrity)", L"ms-settings:coreisolation", L"Update and security", L"ms-settings:coreisolation;core isolation;memory integrity;hvci;hypervisor;vbs;virtualization-based security;driver blacklist;vulnerable driver blocklist;security processor" },
-        { L"Exploit Protection", L"ms-settings:exploitprotection", L"Update and security", L"ms-settings:exploitprotection;exploit protection;dep;cfg;aslr;system exploit protection;mitigations" },
-        { L"Sound Devices & Properties", L"ms-settings:sound-devices", L"System", L"ms-settings:sound-devices;sound devices;output devices;input devices;default playback device;sample rate;bitrate;audio enhancement;audio properties" },
-        { L"Encrypted DNS & IP Settings", L"ms-settings:network-ethernet", L"Network and Internet", L"ms-settings:network-ethernet;dns;encrypted dns;dns over https;doh;static ip;dhcp;ipv4;ipv6;gateway;subnet mask;ip address" },
-        { L"Installed Apps (Windows 11)", L"ms-settings:installed-apps", L"Apps", L"ms-settings:installed-apps;installed apps;uninstall apps;remove apps;installed programs;manage apps" },
+        { L"Core Isolation (Memory Integrity)", L"windowsdefender://coreisolation/", L"Update and security", L"ms-settings:coreisolation;core isolation;memory integrity;hvci;hypervisor;vbs;virtualization-based security;driver blacklist;vulnerable driver blocklist;security processor" },
+        { L"Exploit Protection", L"windowsdefender://exploitprotection/", L"Update and security", L"ms-settings:exploitprotection;exploit protection;dep;cfg;aslr;system exploit protection;mitigations" },
+        { L"All sound devices", L"ms-settings:sound-devices", L"System", L"sound devices;output devices;input devices;audio device properties;enable audio device;disable audio device" },
+        { L"Installed apps", L"ms-settings:installed-apps", L"Apps", L"apps and features;apps & features;uninstall apps;remove apps;installed programs;manage apps;background app permissions;repair apps;reset apps" },
+        { L"Advanced app settings", L"ms-settings:advanced-apps", L"Apps", L"choose where to get apps;app installation settings;archive apps;app execution aliases" },
+        { L"System components", L"ms-settings:systemcomponents", L"System", L"system apps;windows components;built in apps;system components settings" },
+        { L"Family", L"ms-settings:family-group", L"Accounts", L"family settings;family group;family safety;family members" },
+        { L"Passkeys", L"ms-settings:savedpasskeys", L"Accounts", L"passkey settings;saved passkeys;passwordless;manage passkeys" },
+        { L"Security key setup", L"ms-settings:signinoptions-launchsecuritykeyenrollment", L"Accounts", L"security key;fido2;hardware security key;security key enrollment" },
+        { L"Advanced keyboard settings", L"ms-settings:keyboard-advanced", L"Time & language", L"default input method;override input method;input language hotkeys;language bar;different input method for each app" },
+        { L"Text suggestions", L"ms-settings:devicestyping-hwkbtextsuggestions", L"Time & language", L"hardware keyboard text suggestions;typing suggestions;predictive text;multilingual text suggestions" },
+        { L"Korean IME settings", L"ms-settings:regionlanguage-korime", L"Time & language", L"korean keyboard;hangul;korean input method" },
+        { L"Touch", L"ms-settings:devices-touch", L"Bluetooth & devices", L"touch screen;touchscreen;touch gestures;three finger gestures;four finger gestures" },
+        { L"Pen shortcut button", L"ms-settings:pen-button", L"Bluetooth & devices", L"pen button;stylus button;pen shortcuts" },
+        { L"Text input personalization", L"ms-settings:personalization-textinput", L"Personalization", L"input theme;touch keyboard theme;emoji panel theme;voice typing theme" },
+        { L"Customize Copilot key", L"ms-settings:personalization-textinput-copilot-hardwarekey", L"Personalization", L"copilot key;keyboard copilot key;remap copilot key" },
+        { L"Dynamic Lighting", L"ms-settings:personalization-lighting", L"Personalization", L"rgb;rgb lighting;led lighting;keyboard lighting;mouse lighting;dynamic lighting settings" },
+        { L"Text cursor", L"ms-settings:easeofaccess-cursor", L"Accessibility", L"text cursor indicator;text cursor thickness;caret;cursor indicator size" },
+        { L"Visual effects", L"ms-settings:easeofaccess-visualeffects", L"Accessibility", L"animation effects;transparency effects;windows animations;always show scrollbars" },
+        { L"Hearing devices", L"ms-settings:easeofaccess-hearingaids", L"Accessibility", L"hearing aids;hearing assistance;hearing device settings" },
+        { L"HDR", L"ms-settings:display-hdr", L"System", L"hdr settings;high dynamic range;auto hdr;hdr video;hdr calibration" },
+        { L"Default graphics settings", L"ms-settings:display-advancedgraphics-default", L"System", L"hardware accelerated gpu scheduling;hags;variable refresh rate;vrr;windowed game optimizations;default gpu settings" },
+        { L"Default microphone properties", L"ms-settings:sound-defaultinputproperties", L"System", L"microphone properties;input volume;microphone format;microphone enhancements;microphone test" },
+        { L"Default speaker properties", L"ms-settings:sound-defaultoutputproperties", L"System", L"speaker properties;output properties;audio format;spatial sound;audio enhancements" },
+        { L"Energy recommendations", L"ms-settings:energyrecommendations", L"System", L"energy recommendations;save energy;power recommendations;energy efficiency" },
+        { L"Presence sensing", L"ms-settings:presence", L"System", L"presence sensing settings;wake on approach;lock on leave;adaptive dimming" },
+        { L"Cleanup recommendations", L"ms-settings:storagerecommendations", L"System", L"storage recommendations;clean up disk;unused files;unused apps;large files;free disk space" },
+        { L"Disks & volumes", L"ms-settings:disksandvolumes", L"System", L"disks and volumes;disk settings;volume settings;drive properties;manage disks;manage volumes;format volume" },
+        { L"Storage Spaces", L"control /name Microsoft.StorageSpaces", L"System and Security", L"storage spaces;storage pool;create storage pool;manage storage spaces" },
+        { L"Advanced network settings", L"ms-settings:network-advancedsettings", L"Network & internet", L"network adapters;network reset;more network adapter options;adapter settings;advanced network" },
+        { L"Advanced sharing settings", L"ms-settings:network-advancedsharing", L"Network & internet", L"network discovery;file and printer sharing;public folder sharing;password protected sharing;sharing settings" },
+        { L"Downloads folder permissions", L"ms-settings:privacy-downloadsfolder", L"Privacy & security", L"downloads privacy;downloads folder access;downloads permission" },
+        { L"Music library permissions", L"ms-settings:privacy-musiclibrary", L"Privacy & security", L"music privacy;music library access;music permissions" },
+        { L"Screenshot permissions", L"ms-settings:privacy-graphicscaptureprogrammatic", L"Privacy & security", L"screen capture permissions;screenshot access;screenshots privacy;screen recording permissions" },
+        { L"Screenshot border settings", L"ms-settings:privacy-graphicscapturewithoutborder", L"Privacy & security", L"screenshot borders;screen capture border;recording border;screen recording indicator" },
+        { L"Presence sensing permissions", L"ms-settings:privacy-presencesensing", L"Privacy & security", L"presence sensor access;presence sensing privacy;presence permissions" },
+        { L"Search permissions", L"ms-settings:search-permissions", L"Privacy & security", L"search permissions;safe search;safesearch;cloud content search;search history" },
+        { L"Searching Windows", L"ms-settings:search", L"Privacy & security", L"windows search;search indexing;search index;indexing mode;enhanced search;find my files" },
+        { L"Windows Update - Active hours", L"ms-settings:windowsupdate-activehours", L"Windows Update", L"active hours;restart schedule;avoid update restarts" },
+        { L"Windows Update - Uninstall updates", L"ms-settings:windowsupdate-uninstallupdates", L"Windows Update", L"uninstall windows updates;remove windows update;uninstall quality update;remove installed updates" },
+        { L"Delivery Optimization - Advanced options", L"ms-settings:delivery-optimization-advanced", L"Windows Update", L"download bandwidth;upload bandwidth;delivery optimization bandwidth;update download limit;upload limit" },
+        { L"Delivery Optimization - Activity monitor", L"ms-settings:delivery-optimization-activity", L"Windows Update", L"delivery optimization activity;update download statistics;update upload statistics;update bandwidth usage" },
+        { L"Keyboard properties", L"control keyboard", L"Hardware and Sound", L"keyboard repeat delay;keyboard repeat rate;cursor blink rate;keyboard properties" },
+        { L"ClearType Text Tuner", L"cttune.exe", L"Appearance and Personalization", L"cleartype;clear type;font smoothing;text readability;calibrate text" },
+        { L"Reliability Monitor", L"perfmon.exe /rel", L"Administrative Tools", L"reliability history;reliability monitor;stability history;application failures;crash history" },
+        { L"File History", L"control /name Microsoft.FileHistory", L"System and Security", L"file history;back up files;restore personal files;file history backup" },
+        { L"Advanced power settings", L"control powercfg.cpl,,3", L"System and Security", L"advanced power options;advanced power plan;processor power management;usb selective suspend;pci express link state;power plan settings" },
+        { L"Power buttons and lid", L"control /name Microsoft.PowerOptions /page pageGlobalSettings", L"System and Security", L"power button action;close lid;closing lid;lid action;fast startup;choose what power buttons do" },
     };
     return kSettings;
 }
@@ -2303,7 +2291,9 @@ struct App {
     std::vector<std::wstring> aliases; // smart aliases / keywords
     UniquePidl pidl;
     bool isSetting = false;        // true if Windows Setting or Control Panel page
-    std::wstring area;             // Category/Area (e.g. "System", "Devices", "Personalization")
+    std::wstring area;             // Settings category or Control Panel area
+    std::wstring areaLower;
+    std::wstring settingPageGroup; // Native Settings category activation
 };
 
 struct Match {
@@ -2690,6 +2680,12 @@ inline int ScoreApp(const App& app, const std::wstring& q) {
         }
     }
 
+    // A category label is less specific than the name or explicit aliases.
+    // Opening Time & language should rank above every page in that category.
+    if (s < 0 && !app.areaLower.empty() && app.areaLower.find(q) != std::wstring::npos) {
+        s = 75;
+    }
+
     // 12. Fuzzy subsequence match on Name or Exe Name
     if (s < 0) {
         auto isSubsequence = [](const std::wstring& pattern, const std::wstring& text, int& gaps) -> bool {
@@ -2877,12 +2873,16 @@ class Index {
         }
         e->Release();
 
-        // Append Windows Settings
+        // Append only installed, resolvable Windows Settings/tools.
+        settings::DestinationCheck destinations;
         for (const auto& s : settings::GetSettingsList()) {
+            if (!destinations.Available(s)) continue;
             App a;
             a.name = s.name;
             a.targetPath = s.command;
             a.area = s.area;
+            a.areaLower = ToLower(a.area);
+            if (s.pageGroup) a.settingPageGroup = s.pageGroup;
             a.isSetting = true;
             a.nameLower = ToLower(a.name);
             a.targetPathLower = ToLower(a.targetPath);
@@ -2908,9 +2908,7 @@ class Index {
                     }
                 }
             }
-            if (!a.area.empty()) {
-                a.aliases.push_back(ToLower(a.area));
-            }
+            // Area names describe a group, not an exact alias for every child.
 
             fresh.push_back(std::move(a));
         }
@@ -3519,6 +3517,16 @@ class Parser {
    private:
     const std::vector<Token> tokens;
     size_t pos;
+    unsigned depth = 0;
+    class DepthGuard {
+        unsigned& value;
+       public:
+        explicit DepthGuard(unsigned& current) : value(current) {
+            if (value >= 128) throw false;
+            ++value;
+        }
+        ~DepthGuard() { --value; }
+    };
 
     const Token& Current() const {
         return (pos < tokens.size()) ? tokens[pos] : tokens.back();
@@ -3571,6 +3579,7 @@ class Parser {
 
     // Power = Factor ('^' Factor)*
     double ParsePower() {
+        DepthGuard guard(depth);
         double left = ParseFactor();
         if (Current().type == Token::Pow) {
             Consume();
@@ -3582,6 +3591,7 @@ class Parser {
 
     // Factor = ('+' | '-')? Primary
     double ParseFactor() {
+        DepthGuard guard(depth);
         if (Current().type == Token::Plus) {
             Consume();
             return ParseFactor();
@@ -3665,6 +3675,16 @@ inline bool IsStandaloneNumber(const std::wstring& input, double& outNum) {
 }
 
 inline bool EvaluateMath(const std::wstring& input, double& outResult) {
+    // Pasted search text can be arbitrarily long. Bound both parsing and the
+    // recursive percentage syntax before allocating tokens or using the stack.
+    if (input.size() > 4096) return false;
+    static thread_local unsigned depth = 0;
+    if (depth >= 64) return false;
+    struct Scope {
+        unsigned& value;
+        explicit Scope(unsigned& current) : value(current) { ++value; }
+        ~Scope() { --value; }
+    } scope(depth);
     std::wstring trimmed = Trim(input);
     if (trimmed.empty()) return false;
 
@@ -3681,7 +3701,7 @@ inline bool EvaluateMath(const std::wstring& input, double& outResult) {
         };
         if (evalVal(part1, pct) && evalVal(part2, base)) {
             outResult = (pct / 100.0) * base;
-            return true;
+            return std::isfinite(outResult);
         }
     }
 
@@ -3787,6 +3807,7 @@ inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
 } // namespace tools
 
 #include <array>
+#include <future>
 #include <d2d1.h>
 #include <d2d1effects.h>
 #include <winrt/Windows.Graphics.h>
@@ -3869,12 +3890,37 @@ static UINT_PTR SearchAppearanceTimerId() {
     return reinterpret_cast<UINT_PTR>(&identity);
 }
 constexpr ULONG_PTR kSearchWindowAppearanceData = 0x53455354; // 'SEST'
+// Bounded, pointer-free snapshots of public Direct2D effect descriptions.
+// Custom brushes are captured only when their factories/brushes are created.
+// Appearance polling reuses these values; it never captures pixels or recompiles
+// an unchanged material. Unsupported graphs keep the ordinary brush fallback.
+struct SearchEffectValue {
+    uint32_t type = 0, count = 0;
+    float values[20]{};
+    bool operator==(SearchEffectValue const&) const = default;
+};
+struct SearchEffectNode {
+    uint32_t kind = 0, propertyCount = 0, sourceCount = 0, color = 0;
+    GUID id{};
+    wchar_t parameter[32]{};
+    SearchEffectValue properties[4]{};
+    uint32_t sources[4]{};
+    bool operator==(SearchEffectNode const&) const = default;
+};
+struct SearchEffectGraph {
+    uint32_t count = 0;
+    SearchEffectNode nodes[12]{};
+    bool operator==(SearchEffectGraph const&) const = default;
+};
+
 struct SearchBrushData {
     uint32_t kind = 0, color = 0, fallback = 0, count = 0;
     double opacity = 1, tint = 1, luminosity = -1;
     double blur = 3, saturation = 1, points[4]{0,0,1,1};
     uint32_t colors[8]{};
     double offsets[8]{};
+    uint32_t options = 0; // bit 0: AcrylicBrush.AlwaysUseFallback
+    SearchEffectGraph graph;
     bool operator==(SearchBrushData const&) const = default;
 };
 struct SearchSurfaceData {
@@ -3972,7 +4018,7 @@ RECT SearchSlideViewport(RECT const& frame, RECT const& work, SearchTaskbarEdge 
 }
 
 struct SearchAppearanceData {
-    uint32_t version = 7, dark = 1;
+    uint32_t version = 9, dark = 1;
     uint32_t taskbarEdge = static_cast<uint32_t>(SearchTaskbarEdge::Bottom), reserved = 0;
     uint32_t foreground = 0, searchForeground = 0;
     double width = 0, height = 0, edgeGap = 12, alignment = 0.5;
@@ -3980,7 +4026,7 @@ struct SearchAppearanceData {
     double searchCorners[4]{4, 4, 4, 4}, searchThickness[4]{1, 1, 1, 1};
     SearchBrushData background, outline;
     SearchBrushData searchBackground, searchOutline;
-    SearchSurfaceData searchOverlay, header, footer;
+    SearchSurfaceData header, footer;
     SearchSurfaceData menu, menuBorder, menuItem;
     bool operator==(SearchAppearanceData const&) const = default;
 };
@@ -3996,7 +4042,20 @@ void SyncSearchWindowInputForForeground(HWND foreground = GetForegroundWindow())
 void ApplySearchWindowInput();
 bool HasBufferedSearchWindowInput();
 void RefreshSearchUiSettings();
-constexpr UINT kSearchWindowInputMessage = WM_APP + 0x73;
+// Private search-window messages share one sequence to prevent collisions.
+enum SearchWindowMessage : UINT {
+    kSearchWindowLayoutMessage = WM_APP + 0x71,
+    kSearchWindowShowMessage,
+    kSearchWindowInputMessage,
+    kSearchWindowDismissMenuMessage = WM_APP + 0x75,
+    kSearchWindowSlideFrameMessage,
+    kSearchContainerContrastReady,
+    kSearchWindowBeginDragMessage,
+    kSearchWindowDragDoneMessage,
+    kSearchWindowPreviewResultMessage,
+    kSearchWindowPreviewFramesMessage,
+};
+std::wstring g_pendingFileDrag;  // search UI thread only
 void SearchWindowTrace(const wchar_t* message, HRESULT hr);
 void SearchWindowTeardown();
 bool SearchWindowPreTranslate(MSG* message);
@@ -4005,7 +4064,8 @@ void SearchWindowHide();
 void SearchWindowLayout(bool animate = true);
 void SearchWindowStyle();
 void QueueSearchBoxRefocus(bool bodyClick = false);
-bool DismissSearchContextMenu();
+bool DismissSearchContextMenu(bool forPreview = false);
+void PreservePreviewFocusAfterMenu();
 void CaptureStartAppearance(HWND target);
 void RequestStartAppearance();
 void ApplyStartAppearance();
@@ -4121,13 +4181,6 @@ static bool IsSearchHostWindow(HWND hwnd) {
     return match;
 }
 
-// Explorer's helper posts this to the search window when a drag of a result
-// it ran (StartFileDrag) is over: wParam 1 if it was dropped.
-static UINT DragDoneMessage() {
-    static const UINT message = RegisterWindowMessageW(L"StartEverything_DragDone");
-    return message;
-}
-
 // Tracked launch threads for clean unload synchronization across processes
 static std::mutex g_launchHandlesMutex;
 static std::vector<HANDLE> g_launchHandles;
@@ -4197,7 +4250,6 @@ static void WaitForTrackedLaunches() {
 
 static const wchar_t kExplorerHelperClassName[] = L"StartEverything_ExplorerHostClass";
 static const wchar_t kExplorerHelperWindowName[] = L"StartEverything_ExplorerHost";
-static const UINT kExplorerStartDrag = WM_APP + 0x31;
 static const UINT kExplorerSearchShown = WM_APP + 0x32;
 static constexpr UINT_PTR kExplorerSearchStartupTimer = 2;
 static unsigned g_explorerSearchStartupAttempts = 0;  // helper thread only
@@ -4208,7 +4260,6 @@ static constexpr UINT kExplorerUpdateShortcut = WM_APP + 0x34;
 static constexpr int kAlternativeShortcutId = 0x5345;
 static std::atomic<UINT> g_alternativeShortcutDesired{0};
 static std::atomic<UINT> g_alternativeShortcutActive{0};
-static std::wstring g_explorerDragPath;  // helper thread only
 
 static HANDLE g_hExplorerHelperThread = nullptr;
 static DWORD g_explorerHelperThreadId = 0;
@@ -4447,129 +4498,130 @@ static int PrimaryButton() {
     return GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
 }
 
-// Feeds a drag of a result (RunExplorerDrag) the mouse. The button was
-// pressed in Start, and until it is released Windows sends the mouse to the
-// window it was pressed on -- Start's -- whichever window holds the capture:
-// the drag loop here would never hear of the moves or the release. So a
-// thread watches the pointer and tells the loop: a move whenever it has
-// moved, and the release once the button is up, each with where the pointer
-// is -- the loop takes it from the message, as from a real one -- and the
-// loop asks ExplorerDragSource whether to go on.
-struct ExplorerDragFeed {
-    DWORD loopThread = 0;
-    std::atomic<bool> released{false};
-    std::atomic<bool> done{false};
-};
-
-static DWORD WINAPI ExplorerDragFeedThread(LPVOID param) {
-    auto* feed = static_cast<ExplorerDragFeed*>(param);
-    POINT last{LONG_MIN, LONG_MIN};
-    while (!feed->done.load()) {
-        if (!(GetAsyncKeyState(PrimaryButton()) & 0x8000)) {
-            feed->released.store(true);
-        }
-        GUITHREADINFO info{sizeof(info)};
-        HWND loop = GetGUIThreadInfo(feed->loopThread, &info) ? info.hwndCapture : nullptr;
-        POINT pt;
-        if (loop && GetCursorPos(&pt)) {
-            POINT client = pt;
-            ScreenToClient(loop, &client);
-            const LPARAM at = MAKELPARAM(client.x, client.y);
-            if (feed->released.load()) {
-                PostMessageW(loop, WM_LBUTTONUP, 0, at);
-            } else if (pt.x != last.x || pt.y != last.y) {
-                PostMessageW(loop, WM_MOUSEMOVE, MK_LBUTTON, at);
-                last = pt;
-            }
-        }
-        Sleep(feed->released.load() ? 50 : 10);
+// Convert XAML's primary pointer contact into mouse input for OLE. The
+// conversion belongs to the pointer callback, before XAML releases capture.
+static bool PromoteFileDragPointer() {
+    if (!IsMouseInPointerEnabled()) return true;
+    using Convert = BOOL(WINAPI*)();
+    static const Convert convert = [] {
+        HMODULE user = GetModuleHandleW(L"user32.dll");
+        auto function = reinterpret_cast<Convert>(GetProcAddress(user, "ConvertPrimaryPointerToMouseDrag"));
+        // Documented User32 ordinal on Windows 11, for builds without the name.
+        if (!function) function = reinterpret_cast<Convert>(GetProcAddress(user, MAKEINTRESOURCEA(2811)));
+        return function;
+    }();
+    if (!convert) {
+        Wh_Log(L"drag: Windows pointer conversion is unavailable");
+        return false;
     }
-    return 0;
+    SetLastError(ERROR_SUCCESS);
+    const BOOL promoted = convert();
+    Wh_Log(L"drag: native pointer conversion=%d error=%lu", promoted, promoted ? 0 : GetLastError());
+    return promoted != FALSE;
 }
 
-// Ends a drag of a result when the button is up or Escape is pressed. Lives
-// on RunExplorerDrag's stack.
-struct ExplorerDragSource : IDropSource {
-    ExplorerDragFeed* feed;
-    explicit ExplorerDragSource(ExplorerDragFeed* f) : feed(f) {}
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == IID_IUnknown || riid == IID_IDropSource) {
-            *ppv = static_cast<IDropSource*>(this);
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
-    ULONG STDMETHODCALLTYPE Release() override { return 1; }
-    HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape, DWORD) override {
-        if (escape) {
-            return DRAGDROP_S_CANCEL;
-        }
-        if (feed->released.load() || !(GetAsyncKeyState(PrimaryButton()) & 0x8000)) {
-            return DRAGDROP_S_DROP;
-        }
+static void NativeDragTrace(const wchar_t* message) {
+    Wh_Log(L"drag: %ls", message);
+#ifdef START_EVERYTHING_DRAG_DIAGNOSTICS
+    wchar_t path[MAX_PATH]{};
+    DWORD length = GetTempPathW(ARRAYSIZE(path), path);
+    if (!length || length + 36 >= ARRAYSIZE(path)) return;
+    wcscat_s(path, L"StartEverything-native-drag.log");
+    HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    SYSTEMTIME time{};
+    GetLocalTime(&time);
+    wchar_t line[768]{};
+    const int count = swprintf_s(line, L"%02u:%02u:%02u.%03u pid=%lu %ls\r\n", time.wHour,
+                                time.wMinute, time.wSecond, time.wMilliseconds, GetCurrentProcessId(), message);
+    DWORD written = 0;
+    if (count > 0) WriteFile(file, line, count * sizeof(wchar_t), &written, nullptr);
+    CloseHandle(file);
+#endif
+}
+
+class FileDragSource final : public IDropSource, public IDropSourceNotify {
+    ULONG m_refs = 1;
+    HWND m_host;
+    HWND m_target = nullptr;
+public:
+    DWORD lastEffect = DROPEFFECT_NONE;
+    unsigned feedbackCalls = 0;
+    explicit FileDragSource(HWND host) : m_host(host) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (iid == IID_IUnknown || iid == IID_IDropSource)
+            *object = static_cast<IDropSource*>(this);
+        else if (iid == IID_IDropSourceNotify)
+            *object = static_cast<IDropSourceNotify*>(this);
+        else return E_NOINTERFACE;
+        AddRef();
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++m_refs; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG refs = --m_refs;
+        if (!refs) delete this;
+        return refs;
+    }
+    HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape, DWORD keys) override {
+        if (escape || g_quit.load() || !IsWindowVisible(m_host)) return DRAGDROP_S_CANCEL;
+        if (keys & MK_LBUTTON) return S_OK;
+        // Do not drop a file into our own query box or an owned popup.
+        const bool overSearch = m_target &&
+            (GetAncestor(m_target, GA_ROOT) == m_host || GetAncestor(m_target, GA_ROOTOWNER) == m_host);
+        return overSearch ? DRAGDROP_S_CANCEL : DRAGDROP_S_DROP;
+    }
+    HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD effect) override {
+        lastEffect = effect;
+        ++feedbackCalls;
+        return DRAGDROP_S_USEDEFAULTCURSORS;
+    }
+    HRESULT STDMETHODCALLTYPE DragEnterTarget(HWND target) override { m_target = target; return S_OK; }
+    HRESULT STDMETHODCALLTYPE DragLeaveTarget() override { m_target = nullptr; return S_OK; }
 };
 
-// Runs a drag of a result for Start (StartFileDrag) with the shell's own data
-// object and drag loop -- the same as dragging the file in File Explorer: the
-// same formats for whatever it is dropped on, the same picture under the
-// pointer -- but only ever as a copy, so a drag from search can never move a
-// file. Then tells Start how it ended -- dropped, or cancelled with Escape
-// or by letting go over Start itself -- and on a cancel hands it the
-// keyboard back.
-static void RunExplorerDrag(HWND hWnd) {
-    std::wstring path = std::exchange(g_explorerDragPath, std::wstring());
-    if (path.empty()) {
-        return;
-    }
-    HRESULT ole = OleInitialize(nullptr);
-    IShellItem* item = nullptr;
-    IDataObject* data = nullptr;
+// Runs on the search UI thread after the pointer callback has returned.
+// Windows receives real mouse messages from the promoted contact; no polling
+// thread, posted mouse input, or hidden-window activation is needed.
+static void RunFileDrag(HWND host, std::wstring path) {
+    if (path.empty()) return;
+    HRESULT result = E_ABORT;
     DWORD effect = DROPEFFECT_NONE;
-    HRESULT hr = E_FAIL;
-    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item))) && item &&
-        SUCCEEDED(item->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(&data))) && data) {
-        ExplorerDragFeed feed;
-        feed.loopThread = GetCurrentThreadId();
-        ExplorerDragSource source(&feed);
-        if (HANDLE feeder = CreateThread(nullptr, 0, ExplorerDragFeedThread, &feed, 0, nullptr)) {
-            hr = SHDoDragDrop(hWnd, data, &source, DROPEFFECT_COPY, &effect);
-            feed.done.store(true);
-            WaitForSingleObject(feeder, INFINITE);
-            CloseHandle(feeder);
-        }
-        Wh_Log(L"[Explorer] drag: %ls -> %08X, effect %lu", path.c_str(), static_cast<unsigned>(hr), effect);
-    } else {
-        Wh_Log(L"[Explorer] drag: could not open %ls", path.c_str());
-    }
-    if (data) {
-        data->Release();
-    }
-    if (item) {
-        item->Release();
-    }
+    bool accepted = false;
+    unsigned feedbackCalls = 0;
+    const ULONGLONG began = GetTickCount64();
+    NativeDragTrace(L"begin native file drag");
+    const HRESULT ole = OleInitialize(nullptr);
     if (SUCCEEDED(ole)) {
+        try {
+            if (!g_quit.load() && IsWindowVisible(host)) {
+                winrt::com_ptr<IShellItem> item;
+                winrt::com_ptr<IDataObject> data;
+                result = SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(item.put()));
+                if (SUCCEEDED(result)) result = item->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(data.put()));
+                if (SUCCEEDED(result)) {
+                    winrt::com_ptr<FileDragSource> source;
+                    source.attach(new FileDragSource(host));
+                    ReleaseCapture();
+                    result = SHDoDragDrop(host, data.get(), source.get(), DROPEFFECT_COPY, &effect);
+                    // Shell folder copies can return NONE while copying in the
+                    // background. Feedback before the drop still reports COPY.
+                    accepted = ((effect | source->lastEffect) & DROPEFFECT_COPY) != 0;
+                    feedbackCalls = source->feedbackCalls;
+                }
+            }
+        } catch (...) { result = winrt::to_hresult(); }
         OleUninitialize();
-    }
-    // Not the effect: a drop into a folder copies in the background and
-    // reports none.
-    HWND start = g_searchWindowWindow.load();
-    if (!start) start = CachedStartWindow();
-    POINT pt{};
-    GetCursorPos(&pt);
-    HWND under = WindowFromPoint(pt);
-    const bool overStart = start && under && GetAncestor(under, GA_ROOT) == start;
-    const bool dropped = hr == DRAGDROP_S_DROP && !overStart;
-    if (start) {
-        if (!dropped && !IsCloaked(start) && GetForegroundWindow() == hWnd) {
-            SetForegroundWindow(start);
-        }
-        PostMessageW(start, DragDoneMessage(), dropped ? 1 : 0, 0);
-    }
+    } else result = ole;
+    wchar_t summary[256]{};
+    swprintf_s(summary, L"end native file drag result=%08X effect=%lu accepted=%d feedback=%u duration_ms=%llu",
+               static_cast<unsigned>(result), effect, accepted, feedbackCalls, GetTickCount64() - began);
+    NativeDragTrace(summary);
+    if (IsWindow(host)) PostMessageW(host, kSearchWindowDragDoneMessage,
+                                     result == DRAGDROP_S_DROP && accepted ? 1 : 0, 0);
 }
 
 // Removes a packaged app for this user, for Uninstall in an app's menu in
@@ -4722,9 +4774,6 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
     case kExplorerSearchShown:
         if (IsTaskbarProcess() && !SearchActivationSettling()) ArmSearchAloneCheck(kSearchAloneTicks);
         return 0;
-    case kExplorerStartDrag:
-        RunExplorerDrag(hWnd);
-        return 0;
     case WM_TIMER:
         if (wParam == kExplorerSearchStartupTimer) {
             TryInitializeExplorerSearch(hWnd);
@@ -4857,6 +4906,7 @@ static void StopExplorerHelperHost() {
     // The helper thread's teardown waits for launch threads, including one
     // showing an uninstall error: close it first.
     CloseRemovalErrorBox();
+    if (HWND search = g_searchWindowWindow.load()) PostMessageW(search, WM_CANCELMODE, 0, 0);
     if (g_hExplorerHelperWnd && IsWindow(g_hExplorerHelperWnd)) {
         PostMessageW(g_hExplorerHelperWnd, WM_CLOSE, 0, 0);
     }
@@ -5408,7 +5458,6 @@ std::array<double, 4> g_headerCorners{0, 0, 0, 0};
 std::array<double, 4> g_headerThickness{0, 0, 0, 0};
 
 [[clang::no_destroy]] wuxc::Border g_searchBarBorder{nullptr};
-[[clang::no_destroy]] wuxc::Border g_searchBarInnerBorder{nullptr};
 [[clang::no_destroy]] wuxc::Image g_searchBarStrokeImage{nullptr};
 SearchBrushData g_searchBarOutlineBrush{};
 std::array<double, 4> g_searchBarCorners{4, 4, 4, 4};
@@ -5636,6 +5685,9 @@ bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl);
 bool ContextMenuHasFocus();
 bool EscapeBelongsToContextMenu();
 void NoteContextMenuOpening(wf::IInspectable const& sender);
+void UpdateContextMenuPreviewPassThrough();
+void AddPointerHandler(wux::UIElement const& element, wux::RoutedEvent const& event,
+                       wux::Input::PointerEventHandler const& handler);
 void NoteContextMenuClosed(wf::IInspectable const& sender);
 
 static bool g_subclassed = false;
@@ -6915,8 +6967,8 @@ void SetFileSelection(int index, bool fromPointer = false) {
 // which run here on the preview thread in Explorer.
 //
 // Motion plays over the still once it is ready (animatePreview): a video,
-// muted and looping, through XAML's own player; a GIF, which XAML animates
-// itself; an animated WebP, whose frames Windows' WebP decoder hands over
+// muted and looping, decoded in the isolated worker; a GIF or animated
+// WebP, whose decoded frames are sent to the card
 // whole but without their timing, which is read from the file
 // (WebpFrameDurations); a PDF's first pages, a second each. Never sound. All
 // of it stops and is let go the
@@ -6955,12 +7007,9 @@ struct Result {
     std::vector<std::pair<std::wstring, std::wstring>> facts;  // label and value, in the order shown
     std::wstring text;       // the start of a text file or a document, shown where a picture would be
     bool monospace = false;  // the text is a text file's, line for line
-    // Motion over the still (see the module comment). At most one is set.
-    winrt::Windows::Storage::Streams::IRandomAccessStream gif{nullptr};
-    winrt::Windows::Storage::Streams::IRandomAccessStream svg{nullptr};  // drawn by XAML (OpenSvg)
-    double svgAspect = 1.0;                                               // its height over its width
-    winrt::Windows::Storage::StorageFile video{nullptr};
-    std::vector<std::vector<BYTE>> frames;  // an animated WebP, each like pixels
+    bool video = false;  // worker-only media playback
+    bool liveFrame = false;  // a decoded video frame received from the worker
+    std::vector<std::vector<BYTE>> frames;  // GIF/WebP/PDF frames, each like pixels
     std::vector<int> delays;                // milliseconds per frame
 };
 
@@ -6968,6 +7017,9 @@ std::mutex g_mutex;
 std::condition_variable g_wake;
 std::wstring g_request;  // the path to fetch next, or empty
 bool g_quit = false;
+bool g_resetWorker = false;  // protected by g_mutex
+std::atomic<uint64_t> g_generation{0};
+std::atomic<bool> g_motionDispatchQueued{false};
 [[clang::no_destroy]] std::optional<Result> g_result;  // the last fetched, for the XAML thread
 [[clang::no_destroy]] std::optional<Result> g_frames;  // a PDF's pages after its card (ApplyPreviewFrames)
 [[clang::no_destroy]] std::optional<std::thread> g_thread;
@@ -7088,7 +7140,7 @@ inline bool OnFixedDrive(const std::wstring& path) {
     if (path.size() < 3 || path[1] != L':') {
         return false;
     }
-    const wchar_t root[] = {path[0], L':', L'\\', 0};
+        const wchar_t root[] = {path[0], L':', L'\\', 0};
     return GetDriveTypeW(root) == DRIVE_FIXED;
 }
 
@@ -7346,8 +7398,185 @@ inline void DecodeAnimatedWebp(const std::wstring& path, int width, int height, 
     });
 }
 
-// Opens what the card plays over the still, if anything: a GIF for XAML to
-// animate, a video for its player, an animated WebP's frames.
+// Decoders below are called only by the isolated preview process. Explorer
+// receives premultiplied pixels and text, never a file-backed media source.
+struct PreviewWorkerDevice {
+    winrt::com_ptr<ID3D11Device> device;
+    winrt::com_ptr<ID3D11DeviceContext> context;
+    winrt::com_ptr<ID3D11Texture2D> texture, staging;
+    int width = 0, height = 0;
+
+    bool Init(int w, int h) {
+        if (w < 1 || h < 1 || w > 4096 || h > 4096) return false;
+        if (!device) {
+            HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION,
+                device.put(), nullptr, context.put());
+            if (FAILED(hr)) hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION,
+                device.put(), nullptr, context.put());
+            if (FAILED(hr)) return false;
+        }
+        if (texture && width == w && height == h) return true;
+        texture = nullptr;
+        staging = nullptr;
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = w;
+        desc.Height = h;
+        desc.MipLevels = desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        if (FAILED(device->CreateTexture2D(&desc, nullptr, texture.put()))) return false;
+        desc.BindFlags = 0;
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        if (FAILED(device->CreateTexture2D(&desc, nullptr, staging.put()))) return false;
+        width = w;
+        height = h;
+        return true;
+    }
+
+    bool Pixels(std::vector<BYTE>* pixels) {
+        context->CopyResource(staging.get(), texture.get());
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(staging.get(), 0, D3D11_MAP_READ, 0, &mapped))) return false;
+        pixels->resize(static_cast<size_t>(width) * height * 4);
+        for (int y = 0; y < height; ++y)
+            memcpy(pixels->data() + static_cast<size_t>(y) * width * 4,
+                   static_cast<BYTE*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch,
+                   static_cast<size_t>(width) * 4);
+        context->Unmap(staging.get(), 0);
+        return true;
+    }
+};
+
+inline bool RasterizeSvg(std::wstring const& path, int width, int height, Result* result) {
+    PreviewWorkerDevice gpu;
+    if (!gpu.Init(width, height)) return false;
+    auto dxgi = gpu.device.as<IDXGIDevice>();
+    winrt::com_ptr<ID2D1Factory1> factory;
+    winrt::com_ptr<ID2D1Device> device;
+    winrt::com_ptr<ID2D1DeviceContext> base;
+    winrt::com_ptr<ID2D1DeviceContext5> context;
+    winrt::com_ptr<IStream> stream;
+    winrt::com_ptr<ID2D1SvgDocument> document;
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1),
+                                 nullptr, factory.put_void())) ||
+        FAILED(factory->CreateDevice(dxgi.get(), device.put())) ||
+        FAILED(device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, base.put())) ||
+        FAILED(base->QueryInterface(IID_PPV_ARGS(context.put()))) ||
+        FAILED(SHCreateStreamOnFileEx(path.c_str(), STGM_READ | STGM_SHARE_DENY_WRITE,
+                                      FILE_ATTRIBUTE_NORMAL, FALSE, nullptr, stream.put())) ||
+        FAILED(context->CreateSvgDocument(stream.get(), D2D1::SizeF(width, height), document.put()))) return false;
+    winrt::com_ptr<ID2D1SvgElement> root;
+    document->GetRoot(root.put());
+    D2D1_SVG_VIEWBOX box{};
+    double aspect = 1;
+    if (root && SUCCEEDED(root->GetAttributeValue(L"viewBox", D2D1_SVG_ATTRIBUTE_POD_TYPE_VIEWBOX,
+                                                  &box, sizeof(box))) && box.width > 0 && box.height > 0)
+        aspect = std::clamp(static_cast<double>(box.height) / box.width, 0.2, 5.0);
+    else if (root) {
+        D2D1_SVG_LENGTH w{}, h{};
+        if (SUCCEEDED(root->GetAttributeValue(L"width", D2D1_SVG_ATTRIBUTE_POD_TYPE_LENGTH, &w, sizeof(w))) &&
+            SUCCEEDED(root->GetAttributeValue(L"height", D2D1_SVG_ATTRIBUTE_POD_TYPE_LENGTH, &h, sizeof(h))) &&
+            w.value > 0 && h.value > 0) aspect = std::clamp(static_cast<double>(h.value) / w.value, 0.2, 5.0);
+    }
+    const int w = std::max(1, static_cast<int>(std::min<double>(width, height / aspect)));
+    const int h = std::max(1, static_cast<int>(w * aspect));
+    if (!gpu.Init(w, h)) return false;
+    auto surface = gpu.texture.as<IDXGISurface>();
+    winrt::com_ptr<ID2D1Bitmap1> target;
+    const auto props = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    if (FAILED(context->CreateBitmapFromDxgiSurface(surface.get(), &props, target.put()))) return false;
+    const float inset = static_cast<float>(std::min(w, h) * 0.03);
+    document->SetViewportSize(D2D1::SizeF(std::max(1.0f, w - 2 * inset), std::max(1.0f, h - 2 * inset)));
+    context->SetTarget(target.get());
+    context->BeginDraw();
+    context->Clear(D2D1::ColorF(0xF2F2F2));
+    context->SetTransform(D2D1::Matrix3x2F::Translation(inset, inset));
+    context->DrawSvgDocument(document.get());
+    if (FAILED(context->EndDraw()) || !gpu.Pixels(&result->pixels)) return false;
+    result->width = w;
+    result->height = h;
+    return true;
+}
+
+inline bool DecodeGifFrames(std::wstring const& path, int width, int height, Result* result) {
+    winrt::com_ptr<IWICImagingFactory> factory;
+    winrt::com_ptr<IWICBitmapDecoder> decoder;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(factory.put()))) ||
+        FAILED(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
+                                                   WICDecodeMetadataCacheOnDemand, decoder.put()))) return false;
+    UINT count = 0;
+    if (FAILED(decoder->GetFrameCount(&count)) || count < 2 || count > 300) return false;
+    auto number = [](IWICMetadataQueryReader* metadata, PCWSTR key, UINT fallback) {
+        PROPVARIANT value{};
+        UINT result = fallback;
+        if (metadata && SUCCEEDED(metadata->GetMetadataByName(key, &value))) {
+            if (value.vt == VT_UI1) result = value.bVal;
+            if (value.vt == VT_UI2) result = value.uiVal;
+            if (value.vt == VT_UI4) result = value.ulVal;
+        }
+        PropVariantClear(&value);
+        return result;
+    };
+    winrt::com_ptr<IWICMetadataQueryReader> metadata;
+    decoder->GetMetadataQueryReader(metadata.put());
+    UINT canvasW = number(metadata.get(), L"/logscrdesc/Width", 0);
+    UINT canvasH = number(metadata.get(), L"/logscrdesc/Height", 0);
+    if (!canvasW || !canvasH || static_cast<uint64_t>(canvasW) * canvasH * 4 > (64u << 20)) return false;
+    const double fit = std::min({1.0, width / static_cast<double>(canvasW), height / static_cast<double>(canvasH)});
+    const int w = std::max(1, static_cast<int>(canvasW * fit));
+    const int h = std::max(1, static_cast<int>(canvasH * fit));
+    if (static_cast<uint64_t>(w) * h * 4 * count > (64u << 20)) return false;
+    std::vector<BYTE> canvas(static_cast<size_t>(canvasW) * canvasH * 4), previous;
+    std::vector<std::vector<BYTE>> frames;
+    std::vector<int> delays;
+    UINT disposal = 0, lastX = 0, lastY = 0, lastW = 0, lastH = 0;
+    for (UINT index = 0; index < count; ++index) {
+        if (disposal == 2) {
+            for (UINT y = lastY; y < lastY + lastH; ++y)
+                memset(canvas.data() + (static_cast<size_t>(y) * canvasW + lastX) * 4, 0, lastW * 4);
+        } else if (disposal == 3 && previous.size() == canvas.size()) canvas = previous;
+        winrt::com_ptr<IWICBitmapFrameDecode> frame;
+        winrt::com_ptr<IWICMetadataQueryReader> info;
+        winrt::com_ptr<IWICFormatConverter> converter;
+        UINT fw = 0, fh = 0;
+        if (FAILED(decoder->GetFrame(index, frame.put())) || FAILED(frame->GetSize(&fw, &fh))) return false;
+        frame->GetMetadataQueryReader(info.put());
+        const UINT left = number(info.get(), L"/imgdesc/Left", 0), top = number(info.get(), L"/imgdesc/Top", 0);
+        if (!fw || !fh || left >= canvasW || top >= canvasH || fw > canvasW - left || fh > canvasH - top) return false;
+        disposal = number(info.get(), L"/grctlext/Disposal", 0);
+        if (disposal == 3) previous = canvas;
+        if (FAILED(factory->CreateFormatConverter(converter.put())) ||
+            FAILED(converter->Initialize(frame.get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone,
+                                          nullptr, 0, WICBitmapPaletteTypeCustom))) return false;
+        std::vector<BYTE> pixels(static_cast<size_t>(fw) * fh * 4);
+        if (FAILED(converter->CopyPixels(nullptr, fw * 4, static_cast<UINT>(pixels.size()), pixels.data()))) return false;
+        for (UINT y = 0; y < fh; ++y) for (UINT x = 0; x < fw; ++x) {
+            BYTE* dest = canvas.data() + ((static_cast<size_t>(top + y) * canvasW) + left + x) * 4;
+            const BYTE* from = pixels.data() + (static_cast<size_t>(y) * fw + x) * 4;
+            const UINT inverse = 255 - from[3];
+            for (int channel = 0; channel < 4; ++channel)
+                dest[channel] = static_cast<BYTE>(from[channel] + (dest[channel] * inverse + 127) / 255);
+        }
+        frames.push_back(icons::Resample(canvas, canvasW, canvasH, w, h));
+        const UINT delay = number(info.get(), L"/grctlext/Delay", 10) * 10;
+        delays.push_back(delay < 20 ? 100 : static_cast<int>(std::min(delay, 60000u)));
+        lastX = left; lastY = top; lastW = fw; lastH = fh;
+    }
+    result->width = w;
+    result->height = h;
+    result->pixels = frames.front();
+    result->frames = std::move(frames);
+    result->delays = std::move(delays);
+    return true;
+}
+
+// Decode animation frames, or mark a video for playback in the worker.
 inline void FetchMotion(const std::wstring& path, int width, int height, Result* r) {
     const size_t dot = r->name.rfind(L'.');
     if (dot == std::wstring::npos) {
@@ -7357,78 +7586,18 @@ inline void FetchMotion(const std::wstring& path, int width, int height, Result*
     PERCEIVED type = PERCEIVED_TYPE_UNSPECIFIED;
     PERCEIVEDFLAG flags = 0;
     if (ext == L".gif") {
-        RunInMta([&] {
-            auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
-            r->gif = file.OpenReadAsync().get();
-        });
+        DecodeGifFrames(path, width, height, r);
     } else if (ext == L".webp") {
         DecodeAnimatedWebp(path, width, height, r);
     } else if (SUCCEEDED(AssocGetPerceivedType(ext.c_str(), &type, &flags, nullptr)) && type == PERCEIVED_TYPE_VIDEO) {
-        RunInMta([&] { r->video = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get(); });
+        r->video = true;
     }
 }
 
-// An SVG, for XAML's own renderer (SvgImageSource) to draw on the card, and
-// its shape: from the viewBox of its <svg> element, else its width and
-// height, else square.
+// SVGs are rasterized in the worker so Explorer never parses their content.
 inline bool OpenSvg(const std::wstring& path, Result* r) {
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                              OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    char bytes[4096];
-    DWORD read = 0;
-    ReadFile(file, bytes, sizeof(bytes) - 1, &read, nullptr);
-    CloseHandle(file);
-    bytes[read] = 0;
-    const char* tag = strstr(bytes, "<svg");
-    if (!tag) {
-        return false;
-    }
-    const char* end = strchr(tag, '>');
-    const std::string svgTag(tag, end ? end : bytes + read);
-    auto attribute = [&](const char* name) -> std::string {
-        const std::string key = std::string(" ") + name + "=";
-        size_t at = svgTag.find(key);
-        if (at == std::string::npos) {
-            at = svgTag.find(std::string("\n") + name + "=");
-        }
-        if (at == std::string::npos || at + key.size() >= svgTag.size()) {
-            return {};
-        }
-        const char quote = svgTag[at + key.size()];
-        const size_t start = at + key.size() + 1;
-        const size_t close = svgTag.find(quote, start);
-        return close == std::string::npos ? std::string() : svgTag.substr(start, close - start);
-    };
-    double aspect = 0;
-    const std::string viewBox = attribute("viewBox");
-    if (!viewBox.empty()) {
-        double box[4] = {};
-        const char* cursor = viewBox.c_str();
-        for (double& value : box) {
-            char* next = nullptr;
-            value = strtod(cursor, &next);
-            cursor = next;
-            while (*cursor == ',' || *cursor == ' ') {
-                ++cursor;
-            }
-        }
-        if (box[2] > 0 && box[3] > 0) {
-            aspect = box[3] / box[2];
-        }
-    }
-    if (!aspect) {
-        const double width = strtod(attribute("width").c_str(), nullptr);
-        const double height = strtod(attribute("height").c_str(), nullptr);
-        aspect = width > 0 && height > 0 ? height / width : 1;
-    }
-    r->svgAspect = std::clamp(aspect, 0.2, 5.0);
-    RunInMta([&] {
-        r->svg = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get().OpenReadAsync().get();
-    });
-    return r->svg != nullptr;
+    return RasterizeSvg(path, static_cast<int>(kThumbWidth * r->scale),
+                        static_cast<int>(kThumbHeight * r->scale), r);
 }
 
 // The start of a text file -- any: by what is in it, not its name -- as up to
@@ -7579,7 +7748,7 @@ inline bool TrustedDocumentFilter(const std::wstring& extension, CLSID* filter) 
 // The start of a document's text -- Word, Excel, PowerPoint, RTF,
 // OpenDocument -- through the document filter Windows' own search reads it
 // with (TrustedDocumentFilter): Windows has them for these, Office or not.
-// They run here on the preview thread in Explorer, so: only Windows' or
+// They run only in the isolated preview process: only Windows' or
 // Office's, up to 30 MB, the first 1500 characters.
 inline bool ReadDocumentText(const std::wstring& path, const std::wstring& lowerName, std::wstring* text) {
     static const wchar_t* const kDocuments[] = {L".doc", L".docx", L".docm", L".dot", L".dotx", L".rtf",
@@ -7705,13 +7874,15 @@ inline void TypeIcon(const std::wstring& path, int side, Result* r) {
     }
 }
 
-// On the preview thread.
+// Called only by the isolated preview worker.
 inline Result Fetch(const std::wstring& path, double scale, bool animate, everything::Client* everythingClient) {
     Result r;
     r.path = path;
     r.scale = scale;
     const size_t slash = path.find_last_of(L"\\/");
     r.name = slash == std::wstring::npos ? path : path.substr(slash + 1);
+    const auto lowerName = tools::ToLower(r.name);
+    const bool ownRendering = lowerName.ends_with(L".pdf") || lowerName.ends_with(L".svg");
 
     // The details: what File Explorer's details pane shows of it, and what
     // its kind has of its own.
@@ -7754,7 +7925,7 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
             }
 
             // Try the shell thumbnail first, including custom format handlers.
-            if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(factory.put()))) && factory) {
+            if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(factory.put()))) && factory && !ownRendering) {
                 SIZE want{static_cast<LONG>(kThumbWidth * scale), static_cast<LONG>(kThumbHeight * scale)};
                 HBITMAP bitmap = nullptr;
                 if (SUCCEEDED(factory->GetImage(want, SIIGBF_THUMBNAILONLY, &bitmap)) && bitmap) {
@@ -7774,9 +7945,10 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
             }
             item->Release();
         }
-        // Content fallbacks also work when shell item/factory creation fails,
-        // or a provider returns an unreadable bitmap instead of a thumbnail.
-        if (r.pixels.empty()) {
+        // PDF rendering also supplies page counts and page cycling when a
+        // shell provider already returned a static first-page thumbnail.
+        // Other fallbacks cover missing or unreadable shell thumbnails.
+        if (r.pixels.empty() || ownRendering) {
             const int width=static_cast<int>(kThumbWidth*scale),height=static_cast<int>(kThumbHeight*scale);
             const auto lower=tools::ToLower(r.name);
             if (DecodeNativeImage(path,width,height,&r)) {
@@ -7792,7 +7964,7 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
             }
         }
         // Keep custom folder/file icons when no content preview is available.
-        if (r.pixels.empty() && r.text.empty() && !r.svg && factory) {
+        if (r.pixels.empty() && r.text.empty() && factory) {
             const int side=TypeIconPixels(scale);
             HBITMAP bitmap=nullptr;
             if (SUCCEEDED(factory->GetImage(SIZE{side,side},SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,&bitmap)) && bitmap) {
@@ -7828,7 +8000,7 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
             created = FormatDate(attributes.ftCreationTime);
         }
     }
-    if (r.pixels.empty() && r.text.empty() && !r.svg) {
+    if (r.pixels.empty() && r.text.empty()) {
         TypeIcon(path, TypeIconPixels(scale), &r);
     }
     auto add = [&r](const wchar_t* label, const std::wstring& value) {
@@ -7858,6 +8030,364 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
     return r;
 }
 
+constexpr uint32_t kWorkerMagic = 0x53505731;
+constexpr uint32_t kWorkerMaxPacket = 80u << 20;
+enum WorkerPacketKind : uint32_t { WorkerRequest = 1, WorkerStill, WorkerFrames, WorkerVideoFrame, WorkerDone };
+struct WorkerPacketHeader { uint32_t magic, kind, bytes, sequence; };
+
+struct WorkerWriter {
+    std::vector<BYTE> bytes;
+    template<class T> void Pod(T const& value) {
+        if (bytes.size() > kWorkerMaxPacket - sizeof(T)) throw std::length_error("preview packet");
+        const auto* first = reinterpret_cast<BYTE const*>(&value);
+        bytes.insert(bytes.end(), first, first + sizeof(T));
+    }
+    void Blob(std::vector<BYTE> const& value) {
+        if (value.size() > kWorkerMaxPacket || bytes.size() + value.size() + 4 > kWorkerMaxPacket)
+            throw std::length_error("preview bitmap");
+        Pod(static_cast<uint32_t>(value.size()));
+        bytes.insert(bytes.end(), value.begin(), value.end());
+    }
+    void Text(std::wstring const& value) {
+        if (value.size() > 65536) throw std::length_error("preview text");
+        Pod(static_cast<uint32_t>(value.size()));
+        const auto* first = reinterpret_cast<BYTE const*>(value.data());
+        bytes.insert(bytes.end(), first, first + value.size() * sizeof(wchar_t));
+    }
+};
+
+struct WorkerReader {
+    std::vector<BYTE> const& bytes;
+    size_t at = 0;
+    template<class T> T Pod() {
+        if (at > bytes.size() || sizeof(T) > bytes.size() - at) throw std::runtime_error("preview packet");
+        T value;
+        memcpy(&value, bytes.data() + at, sizeof(value));
+        at += sizeof(value);
+        return value;
+    }
+    std::wstring Text() {
+        const uint32_t count = Pod<uint32_t>();
+        if (count > 65536 || at > bytes.size() || count * sizeof(wchar_t) > bytes.size() - at)
+            throw std::runtime_error("preview text");
+        std::wstring value(count, L'\0');
+        memcpy(value.data(), bytes.data() + at, count * sizeof(wchar_t));
+        at += count * sizeof(wchar_t);
+        return value;
+    }
+    std::vector<BYTE> Blob(size_t expected) {
+        const uint32_t count = Pod<uint32_t>();
+        if ((count && count != expected) || at > bytes.size() || count > bytes.size() - at)
+            throw std::runtime_error("preview bitmap");
+        std::vector<BYTE> value(bytes.begin() + at, bytes.begin() + at + count);
+        at += count;
+        return value;
+    }
+};
+
+inline bool WorkerWrite(HANDLE pipe, void const* buffer, size_t size) {
+    const auto* bytes = static_cast<BYTE const*>(buffer);
+    while (size) {
+        DWORD written = 0;
+        if (!WriteFile(pipe, bytes, static_cast<DWORD>(std::min<size_t>(size, 65536)), &written, nullptr) || !written)
+            return false;
+        bytes += written;
+        size -= written;
+    }
+    return true;
+}
+
+inline bool WorkerSend(HANDLE pipe, uint32_t kind, uint32_t sequence, WorkerWriter const& writer) {
+    WorkerPacketHeader header{kWorkerMagic, kind, static_cast<uint32_t>(writer.bytes.size()), sequence};
+    return WorkerWrite(pipe, &header, sizeof(header)) && WorkerWrite(pipe, writer.bytes.data(), writer.bytes.size());
+}
+
+inline WorkerWriter EncodeWorkerResult(Result const& result) {
+    WorkerWriter out;
+    out.Pod(result.width); out.Pod(result.height); out.Pod(result.scale); out.Pod(result.pages);
+    out.Pod(static_cast<uint32_t>(result.monospace));
+    out.Text(result.name); out.Text(result.text);
+    out.Pod(static_cast<uint32_t>(result.facts.size()));
+    for (auto const& fact : result.facts) { out.Text(fact.first); out.Text(fact.second); }
+    out.Blob(result.pixels);
+    out.Pod(static_cast<uint32_t>(result.frames.size()));
+    for (size_t i = 0; i < result.frames.size(); ++i) {
+        out.Pod(i < result.delays.size() ? result.delays[i] : 100);
+        out.Blob(result.frames[i]);
+    }
+    return out;
+}
+
+inline Result DecodeWorkerResult(std::vector<BYTE> const& bytes, std::wstring const& path) {
+    WorkerReader in{bytes};
+    Result result;
+    result.path = path;
+    result.width = in.Pod<int>(); result.height = in.Pod<int>();
+    result.scale = in.Pod<double>(); result.pages = in.Pod<int>();
+    if (result.width < 0 || result.height < 0 || result.width > 4096 || result.height > 4096 ||
+        !std::isfinite(result.scale) || result.scale < 0.5 || result.scale > 8 || result.pages < 0)
+        throw std::runtime_error("preview dimensions");
+    const size_t expected = static_cast<size_t>(result.width) * result.height * 4;
+    result.monospace = in.Pod<uint32_t>() != 0;
+    result.name = in.Text(); result.text = in.Text();
+    const uint32_t facts = in.Pod<uint32_t>();
+    if (facts > 64) throw std::runtime_error("preview facts");
+    for (uint32_t i = 0; i < facts; ++i) {
+        auto label = in.Text();
+        result.facts.emplace_back(std::move(label), in.Text());
+    }
+    result.pixels = in.Blob(expected);
+    const uint32_t frames = in.Pod<uint32_t>();
+    if (frames > 300 || (frames && !expected) || expected * frames > (64u << 20))
+        throw std::runtime_error("preview frames");
+    for (uint32_t i = 0; i < frames; ++i) {
+        const int delay = in.Pod<int>();
+        if (delay < 10 || delay > 60000) throw std::runtime_error("preview delay");
+        result.delays.push_back(delay);
+        auto pixels = in.Blob(expected);
+        if (pixels.size() != expected) throw std::runtime_error("empty preview frame");
+        result.frames.push_back(std::move(pixels));
+    }
+    if (in.at != bytes.size()) throw std::runtime_error("trailing preview data");
+    return result;
+}
+
+inline bool WorkerInputPending(HANDLE pipe) {
+    DWORD available = 0;
+    return !PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr) || available != 0;
+}
+
+// Decoding and GPU readback stay in the worker. Only one preview-sized frame
+// crosses the pipe at a time, at most 24 times per second; audio stays muted.
+inline void WorkerPlayVideo(HANDLE input, HANDLE output, uint32_t sequence, Result const& still) {
+    RunInMta([&] {
+        using winrt::Windows::Media::Playback::MediaPlayer;
+        struct VideoState {
+            winrt::handle ready{CreateEventW(nullptr, FALSE, FALSE, nullptr)};
+            std::atomic<bool> failed{false};
+        };
+        auto state = std::make_shared<VideoState>();
+        if (!state->ready) return;
+        const HANDLE ready = state->ready.get();
+        MediaPlayer player;
+        player.IsVideoFrameServerEnabled(true);
+        player.IsMuted(true);
+        player.IsLoopingEnabled(true);
+        auto frame = player.VideoFrameAvailable(winrt::auto_revoke, [state](auto&&, auto&&) { SetEvent(state->ready.get()); });
+        auto error = player.MediaFailed(winrt::auto_revoke, [state](auto&&, auto&&) { state->failed = true; SetEvent(state->ready.get()); });
+        try {
+            auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(still.path).get();
+            player.Source(winrt::Windows::Media::Core::MediaSource::CreateFromStorageFile(file));
+            player.Play();
+            PreviewWorkerDevice gpu;
+            winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DSurface surface{nullptr};
+            ULONGLONG lastFrame = 0;
+            const ULONGLONG began = GetTickCount64();
+            while (!state->failed && !WorkerInputPending(input)) {
+                if (WaitForSingleObject(ready, 50) != WAIT_OBJECT_0) {
+                    if (!lastFrame && GetTickCount64() - began > 8000) break;
+                    continue;
+                }
+                if (GetTickCount64() - lastFrame < 42) continue;
+                const UINT sourceW = player.PlaybackSession().NaturalVideoWidth();
+                const UINT sourceH = player.PlaybackSession().NaturalVideoHeight();
+                if (!sourceW || !sourceH) continue;
+                const double fit = std::min({1.0, kThumbWidth * still.scale / sourceW,
+                                             kThumbHeight * still.scale / sourceH});
+                const int width = std::max(1, static_cast<int>(sourceW * fit));
+                const int height = std::max(1, static_cast<int>(sourceH * fit));
+                if (!surface || width != gpu.width || height != gpu.height) {
+                    if (!gpu.Init(width, height)) break;
+                    auto dxgi = gpu.texture.as<IDXGISurface>();
+                    winrt::com_ptr<IInspectable> object;
+                    winrt::check_hresult(CreateDirect3D11SurfaceFromDXGISurface(dxgi.get(), object.put()));
+                    surface = object.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DSurface>();
+                }
+                player.CopyFrameToVideoSurface(surface);
+                Result image;
+                image.width = width; image.height = height; image.scale = still.scale;
+                if (!gpu.Pixels(&image.pixels)) break;
+                for (size_t i = 3; i < image.pixels.size(); i += 4) image.pixels[i] = 255;
+                if (!WorkerSend(output, WorkerVideoFrame, sequence, EncodeWorkerResult(image))) break;
+                lastFrame = GetTickCount64();
+            }
+        } catch (...) {}
+        frame.revoke(); error.revoke(); player.Close();
+    });
+}
+
+inline bool WorkerReadBlocking(HANDLE pipe, void* buffer, size_t size) {
+    auto* bytes = static_cast<BYTE*>(buffer);
+    while (size) {
+        DWORD read = 0;
+        if (!ReadFile(pipe, bytes, static_cast<DWORD>(std::min<size_t>(size, 65536)), &read, nullptr) || !read) return false;
+        bytes += read; size -= read;
+    }
+    return true;
+}
+
+inline void PreviewWorkerMain(HANDLE input, HANDLE output) {
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    winrt::init_apartment(winrt::apartment_type::single_threaded);
+    {
+        everything::Client everythingClient(L"WindhawkEverythingIsolatedPreviewReply");
+        const bool haveEverything = everythingClient.Init();
+        WorkerPacketHeader header{};
+        while (WorkerReadBlocking(input, &header, sizeof(header))) {
+            if (header.magic != kWorkerMagic || header.kind != WorkerRequest || header.bytes > 132000) break;
+            std::vector<BYTE> payload(header.bytes);
+            if (!WorkerReadBlocking(input, payload.data(), payload.size())) break;
+            try {
+                WorkerReader request{payload};
+                auto path = request.Text();
+                std::replace(path.begin(), path.end(), L'/', static_cast<wchar_t>(92));
+#ifdef START_EVERYTHING_DRAG_DIAGNOSTICS
+                if (path == L"::test-worker-stall::") Sleep(INFINITE);
+                if (path == L"::test-worker-exit::") ExitProcess(37);
+#endif
+                const double scale = request.Pod<double>();
+                const bool animate = request.Pod<uint32_t>() != 0;
+                if (request.at != payload.size() || path.empty() || path.size() > 32760 ||
+                    !std::isfinite(scale) || scale < 0.5 || scale > 8 || !OnFixedDrive(path)) break;
+                auto result = Fetch(path, scale, animate, haveEverything ? &everythingClient : nullptr);
+                if (!WorkerSend(output, WorkerStill, header.sequence, EncodeWorkerResult(result))) break;
+                if (result.morePages) {
+                    Result pages;
+                    pages.path = path; pages.width = result.width; pages.height = result.height; pages.scale = scale;
+                    RenderPdfFrames(path, result, [&] { return WorkerInputPending(input); }, &pages.frames, &pages.delays);
+                    if (!pages.frames.empty() && !WorkerSend(output, WorkerFrames, header.sequence, EncodeWorkerResult(pages))) break;
+                }
+                if (result.video && animate) WorkerPlayVideo(input, output, header.sequence, result);
+                if (!WorkerSend(output, WorkerDone, header.sequence, WorkerWriter{})) break;
+            } catch (...) {
+                if (!WorkerSend(output, WorkerDone, header.sequence, WorkerWriter{})) break;
+            }
+        }
+    }
+    winrt::uninit_apartment();
+}
+
+class PreviewWorkerClient {
+    HANDLE process_ = nullptr, job_ = nullptr, input_ = nullptr, output_ = nullptr;
+    uint32_t sequence_ = 0;
+public:
+    DWORD ProcessId() const { return process_ ? GetProcessId(process_) : 0; }
+    ~PreviewWorkerClient() { Reset(); }
+    void Reset() {
+        if (job_) { TerminateJobObject(job_, 0); CloseHandle(job_); job_ = nullptr; }
+        if (process_) { WaitForSingleObject(process_, 250); CloseHandle(process_); process_ = nullptr; }
+        if (input_) { CloseHandle(input_); input_ = nullptr; }
+        if (output_) { CloseHandle(output_); output_ = nullptr; }
+    }
+    bool Start() {
+        if (process_ && WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) return true;
+        Reset();
+        SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
+        HANDLE childInput = nullptr, childOutput = nullptr;
+        auto cleanup = [&] {
+            if (childInput) CloseHandle(childInput);
+            if (childOutput) CloseHandle(childOutput);
+        };
+        if (!CreatePipe(&childInput, &input_, &security, 131072) ||
+            !CreatePipe(&output_, &childOutput, &security, 131072)) { cleanup(); Reset(); return false; }
+        SetHandleInformation(input_, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(output_, HANDLE_FLAG_INHERIT, 0);
+        job_ = CreateJobObjectW(nullptr, nullptr);
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+            JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION | JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+        limits.ProcessMemoryLimit = 512ull << 20;
+        if (!job_ || !SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
+            cleanup(); Reset(); return false;
+        }
+        wchar_t module[32768]{}, system[MAX_PATH]{};
+        if (!GetModuleFileNameW(GetCurrentModuleHandle(), module, ARRAYSIZE(module)) ||
+            !GetSystemDirectoryW(system, ARRAYSIZE(system))) { cleanup(); Reset(); return false; }
+        const std::wstring executable = std::wstring(system) + L"/rundll32.exe";
+        std::wstring command = L"\"" + executable + L"\" \"" + module + L"\",StartEverythingPreviewWorker " +
+            std::to_wstring(reinterpret_cast<ULONG_PTR>(childInput)) + L" " +
+            std::to_wstring(reinterpret_cast<ULONG_PTR>(childOutput));
+        // Reuse the runtimes already loaded by Windhawk, including portable
+        // installs. Only this child's environment changes, never Explorer's.
+        std::wstring paths;
+        for (PCWSTR name : {L"windhawk.dll", L"libc++.whl", L"libunwind.whl"}) {
+            wchar_t path[32768]{};
+            if (HMODULE library = GetModuleHandleW(name); library && GetModuleFileNameW(library, path, ARRAYSIZE(path))) {
+                if (auto slash = wcsrchr(path, L'\\')) { *slash = 0; paths += path; paths += L';'; }
+            }
+        }
+        std::vector<wchar_t> environment;
+        if (LPWCH block = GetEnvironmentStringsW()) {
+            for (PCWSTR entry = block; *entry; entry += wcslen(entry) + 1) {
+                std::wstring value(entry);
+                if (_wcsnicmp(entry, L"PATH=", 5) == 0) value = L"PATH=" + paths + (entry + 5);
+                environment.insert(environment.end(), value.begin(), value.end());
+                environment.push_back(0);
+            }
+            FreeEnvironmentStringsW(block);
+        }
+        environment.push_back(0);
+        SIZE_T attributeBytes = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
+        std::vector<BYTE> attributes(attributeBytes);
+        STARTUPINFOEXW startup{};
+        startup.StartupInfo.cb = sizeof(startup);
+        startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+        startup.StartupInfo.wShowWindow = SW_HIDE;
+        startup.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
+        HANDLE handles[]{childInput, childOutput};
+        if (!InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &attributeBytes)) {
+            cleanup(); Reset(); return false;
+        }
+        const bool attributesReady = UpdateProcThreadAttribute(startup.lpAttributeList, 0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles, sizeof(handles), nullptr, nullptr) != FALSE;
+        PROCESS_INFORMATION child{};
+        const BOOL created = attributesReady && CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE,
+            CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            environment.data(), nullptr, &startup.StartupInfo, &child);
+        DeleteProcThreadAttributeList(startup.lpAttributeList);
+        cleanup();
+        if (!created) { Reset(); return false; }
+        process_ = child.hProcess;
+        if (!AssignProcessToJobObject(job_, process_)) {
+            TerminateProcess(process_, 0); CloseHandle(child.hThread); Reset(); return false;
+        }
+        ResumeThread(child.hThread);
+        CloseHandle(child.hThread);
+        return true;
+    }
+    bool Begin(std::wstring const& path, double scale, bool animate) {
+        if (!Start()) return false;
+        WorkerWriter request;
+        request.Text(path); request.Pod(scale); request.Pod(static_cast<uint32_t>(animate));
+        if (!WorkerSend(input_, WorkerRequest, ++sequence_, request)) { Reset(); return false; }
+        return true;
+    }
+    template<class Cancel> bool Read(void* target, size_t size, Cancel const& cancel, ULONGLONG deadline) {
+        auto* bytes = static_cast<BYTE*>(target);
+        while (size) {
+            if (cancel() || GetTickCount64() >= deadline || !process_ || WaitForSingleObject(process_, 0) != WAIT_TIMEOUT)
+                return false;
+            DWORD available = 0, read = 0;
+            if (!PeekNamedPipe(output_, nullptr, 0, nullptr, &available, nullptr)) return false;
+            if (!available) { Sleep(5); continue; }
+            const DWORD amount = static_cast<DWORD>(std::min<size_t>({size, available, 65536}));
+            if (!ReadFile(output_, bytes, amount, &read, nullptr) || !read) return false;
+            bytes += read; size -= read;
+        }
+        return true;
+    }
+    template<class Cancel> bool Next(WorkerPacketHeader* header, std::vector<BYTE>* bytes, Cancel const& cancel) {
+        const ULONGLONG deadline = GetTickCount64() + 12000;
+        if (!Read(header, sizeof(*header), cancel, deadline) || header->magic != kWorkerMagic ||
+            header->sequence != sequence_ || header->bytes > kWorkerMaxPacket ||
+            header->kind < WorkerStill || header->kind > WorkerDone) { Reset(); return false; }
+        bytes->resize(header->bytes);
+        if (!Read(bytes->data(), bytes->size(), cancel, deadline)) { Reset(); return false; }
+        return true;
+    }
+};
+
 }  // namespace preview
 
 // The card, built on first use. XAML thread only.
@@ -7877,98 +8407,87 @@ std::wstring g_previewShownPath;
 std::wstring g_previewWanted;  // the selected file's path, or empty
 
 // What plays over the still. XAML thread only.
-[[clang::no_destroy]] wuxc::MediaPlayerElement g_previewVideo{nullptr};
-[[clang::no_destroy]] winrt::Windows::Media::Playback::MediaPlayer g_previewPlayer{nullptr};
-[[clang::no_destroy]] wuxmi::BitmapImage g_previewGif{nullptr};
-[[clang::no_destroy]] std::optional<wuxmi::BitmapImage::ImageOpened_revoker> g_previewGifOpened;
 [[clang::no_destroy]] wux::DispatcherTimer g_previewFrameTimer{nullptr};
 [[clang::no_destroy]] wuxmi::WriteableBitmap g_previewFrameBitmap{nullptr};
 std::vector<std::vector<BYTE>> g_previewFrames;
 std::vector<int> g_previewDelays;
 size_t g_previewFrame = 0;
-std::atomic<unsigned> g_previewPlayGeneration{0};
 
 void ApplyPreview();
 void ApplyPreviewFrames();
 
 void PreviewThreadMain() {
-    HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    std::optional<everything::Client> everythingClient;
-    everythingClient.emplace(L"WindhawkEverythingPreviewReply");
-    if (!everythingClient->Init()) {
-        everythingClient.reset();
-    }
-    for (;;) {
-        std::wstring path;
-        {
-            std::unique_lock<std::mutex> lock(preview::g_mutex);
-            preview::g_wake.wait(lock, [] { return preview::g_quit || !preview::g_request.empty(); });
-            if (preview::g_quit) {
-                break;
+    const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    {
+        preview::PreviewWorkerClient worker;
+        for (;;) {
+            std::wstring path;
+            uint64_t generation = 0;
+            bool resetWorker = false;
+            {
+                std::unique_lock lock(preview::g_mutex);
+                preview::g_wake.wait(lock, [] { return preview::g_quit || preview::g_resetWorker || !preview::g_request.empty(); });
+                if (preview::g_quit) break;
+                path = std::exchange(preview::g_request, std::wstring());
+                generation = preview::g_generation.load();
+                resetWorker = std::exchange(preview::g_resetWorker, false);
             }
-            path = std::exchange(preview::g_request, std::wstring());
-        }
-        HWND start = GetSearchWindow();
-        UINT dpi = start ? GetDpiForWindow(start) : 0;
-        bool animate = true;
-        {
-            std::lock_guard<std::mutex> lock(g_settingsMutex);
-            animate = g_settings.animatePreview;
-        }
-        preview::Result result =
-            preview::Fetch(path, (dpi ? dpi : 96) / 96.0, animate, everythingClient ? &*everythingClient : nullptr);
-        // The card shows the first page; a PDF's next pages follow. What they
-        // need is taken here, before the result is the XAML thread's.
-        std::optional<preview::Result> still;
-        {
-            std::lock_guard<std::mutex> lock(preview::g_mutex);
-            if (preview::g_quit || !preview::g_request.empty()) {
-                continue;  // stopping, or already outdated
-            }
-            if (result.morePages) {
-                still.emplace();
-                still->path = result.path;
-                still->pixels = result.pixels;
-                still->width = result.width;
-                still->height = result.height;
-            }
-            preview::g_result = std::move(result);
-        }
-        try {
-            if (g_ourBox) {
-                g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
-                                               wuc::DispatchedHandler{[] { ApplyPreview(); }});
-            }
-        } catch (...) {
-        }
-        if (still) {
-            auto moved = [] {
-                std::lock_guard<std::mutex> lock(preview::g_mutex);
-                return preview::g_quit || !preview::g_request.empty();
+            if (resetWorker) worker.Reset();
+            if (path.empty()) continue;
+            auto canceled = [&] {
+                std::lock_guard lock(preview::g_mutex);
+                return preview::g_quit || generation != preview::g_generation.load();
             };
-            preview::RenderPdfFrames(still->path, *still, moved, &still->frames, &still->delays);
-            if (!still->frames.empty()) {
+            HWND host = GetSearchWindow();
+            const UINT dpi = host ? GetDpiForWindow(host) : 96;
+            const double scale = std::clamp((dpi ? dpi : 96) / 96.0, 0.5, 8.0);
+            bool animate;
+            {
+                std::lock_guard lock(g_settingsMutex);
+                animate = g_settings.animatePreview;
+            }
+            bool haveStill = false;
+            auto publish = [&](preview::Result result, bool motion) {
                 {
-                    std::lock_guard<std::mutex> lock(preview::g_mutex);
-                    if (preview::g_quit || !preview::g_request.empty()) {
-                        continue;
-                    }
-                    preview::g_frames = std::move(still);
+                    std::lock_guard lock(preview::g_mutex);
+                    if (preview::g_quit || generation != preview::g_generation.load()) return;
+                    if (motion) preview::g_frames = std::move(result);
+                    else preview::g_result = std::move(result);
                 }
-                try {
-                    if (g_ourBox) {
-                        g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
-                                                       wuc::DispatchedHandler{[] { ApplyPreviewFrames(); }});
+                if (motion) {
+                    if (!preview::g_motionDispatchQueued.exchange(true) &&
+                        !PostMessageW(host, kSearchWindowPreviewFramesMessage, 0, 0))
+                        preview::g_motionDispatchQueued = false;
+                } else PostMessageW(host, kSearchWindowPreviewResultMessage, 0, 0);
+            };
+            try {
+                if (worker.Begin(path, scale, animate)) {
+                    preview::WorkerPacketHeader packet{};
+                    std::vector<BYTE> bytes;
+                    while (worker.Next(&packet, &bytes, canceled)) {
+                        if (packet.kind == preview::WorkerDone) break;
+                        auto result = preview::DecodeWorkerResult(bytes, path);
+                        const bool motion = packet.kind != preview::WorkerStill;
+                        result.liveFrame = packet.kind == preview::WorkerVideoFrame;
+                        if (!motion) haveStill = true;
+                        publish(std::move(result), motion);
                     }
-                } catch (...) {
                 }
+            } catch (...) {
+                worker.Reset();
+            }
+            if (!haveStill && !canceled()) {
+                // A failed decoder gets an icon, not an in-process retry.
+                preview::Result result;
+                result.path = path; result.scale = scale;
+                const size_t slash = path.find_last_of(L"\\/");
+                result.name = slash == std::wstring::npos ? path : path.substr(slash + 1);
+                preview::TypeIcon(path, preview::TypeIconPixels(scale), &result);
+                publish(std::move(result), false);
             }
         }
     }
-    everythingClient.reset();  // its window, on this thread
-    if (SUCCEEDED(comHr)) {
-        CoUninitialize();
-    }
+    if (SUCCEEDED(comHr)) CoUninitialize();
 }
 
 void StopPreviewThread() {
@@ -7985,6 +8504,7 @@ void StopPreviewThread() {
     std::lock_guard<std::mutex> lock(preview::g_mutex);
     preview::g_result.reset();
     preview::g_frames.reset();
+    preview::g_motionDispatchQueued = false;
 }
 
 bool PreviewEnabled() {
@@ -7994,31 +8514,20 @@ bool PreviewEnabled() {
 
 // Stops whatever plays over the still and lets it go.
 void StopPreviewMotion() {
-    g_previewPlayGeneration.fetch_add(1);
-    try {
-        g_previewGifOpened.reset();
-        g_previewGif = nullptr;
-        if (g_previewFrameTimer) {
-            g_previewFrameTimer.Stop();
-        }
-        g_previewFrames.clear();
-        g_previewDelays.clear();
-        g_previewFrameBitmap = nullptr;
-        if (g_previewVideo) {
-            g_previewVideo.Visibility(wux::Visibility::Collapsed);
-            g_previewVideo.SetMediaPlayer(nullptr);
-        }
-        if (g_previewPlayer) {
-            g_previewPlayer.Pause();
-            g_previewPlayer.Source(nullptr);
-            g_previewPlayer.Close();
-            g_previewPlayer = nullptr;
-        }
-    } catch (...) {
-    }
+    if (g_previewFrameTimer) g_previewFrameTimer.Stop();
+    g_previewFrames.clear();
+    g_previewDelays.clear();
+    g_previewFrameBitmap = nullptr;
 }
 
 void HidePreview() {
+    preview::g_generation.fetch_add(1);
+    {
+        std::lock_guard<std::mutex> lock(preview::g_mutex);
+        preview::g_request.clear();
+        preview::g_resetWorker = true;
+    }
+    preview::g_wake.notify_all();
     StopPreviewMotion();
     g_previewWanted.clear();
     try {
@@ -8071,6 +8580,11 @@ void BuildPreviewCard() {
     card.CornerRadius(wux::CornerRadius{0, 0, 0, 0});
     card.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
     card.UseLayoutRounding(false);
+    AddPointerHandler(card, wux::UIElement::PointerPressedEvent(),
+                      [](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
+                          DismissSearchContextMenu(true);
+                          PreservePreviewFocusAfterMenu();
+                      });
     KeepHandler(card, card.SizeChanged(winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const& args) {
         UpdatePreviewCardShape();
         if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview(args.NewSize().Height);
@@ -8087,13 +8601,6 @@ void BuildPreviewCard() {
     image.HorizontalAlignment(wux::HorizontalAlignment::Center);
     image.VerticalAlignment(wux::VerticalAlignment::Center);
     thumbGrid.Children().Append(image);
-    wuxc::MediaPlayerElement video;
-    video.AreTransportControlsEnabled(false);
-    video.Stretch(wuxm::Stretch::Uniform);
-    video.HorizontalAlignment(wux::HorizontalAlignment::Center);
-    video.VerticalAlignment(wux::VerticalAlignment::Center);
-    video.Visibility(wux::Visibility::Collapsed);
-    thumbGrid.Children().Append(video);
     auto thumbText = SearchTextBlock();  // a text file's or a document's start (Result::text)
     thumbText.Margin(wux::ThicknessHelper::FromLengths(10, 8, 10, 8));
     ScaleFont(thumbText, 11);
@@ -8174,11 +8681,11 @@ void BuildPreviewCard() {
     g_previewThumbBox = thumbBox;
     g_previewDetails = details;
     g_previewImage = image;
-    g_previewVideo = video;
     g_previewText = thumbText;
     g_previewName = name;
     g_previewFacts = facts;
     g_previewPath = pathText;
+    UpdateContextMenuPreviewPassThrough();
 }
 
 // Bottom taskbars share the bottom edge for tall previews. Other taskbar
@@ -8241,19 +8748,7 @@ void PositionPreview(double height) {
 
 // Plays a result's motion over the still, already shown at its size.
 void StartPreviewMotion(preview::Result& result) {
-    const unsigned generation = g_previewPlayGeneration.load();
-    if (result.gif) {
-        // Swapped in once loaded, so the still shows until then.
-        wuxmi::BitmapImage gif;
-        gif.DecodePixelWidth(result.width);
-        g_previewGifOpened = gif.ImageOpened(winrt::auto_revoke, [generation](auto&&, auto&&) {
-            if (generation == g_previewPlayGeneration.load() && g_previewGif && g_previewImage) {
-                g_previewImage.Source(g_previewGif);
-            }
-        });
-        g_previewGif = gif;
-        gif.SetSourceAsync(result.gif);
-    } else if (!result.frames.empty()) {
+    if (!result.frames.empty()) {
         g_previewFrames = std::move(result.frames);
         g_previewDelays = std::move(result.delays);
         g_previewFrame = 0;
@@ -8287,60 +8782,41 @@ void StartPreviewMotion(preview::Result& result) {
         }
         g_previewFrameTimer.Interval(std::chrono::milliseconds(g_previewDelays[0]));
         g_previewFrameTimer.Start();
-    } else if (result.video) {
-        // Muted and looping, over the still, which it shows as its poster
-        // until the first frame is ready.
-        namespace playback = winrt::Windows::Media::Playback;
-        playback::MediaPlayer player;
-        player.IsMuted(true);
-        player.IsLoopingEnabled(true);
-        player.AutoPlay(true);
-        g_previewVideo.PosterSource(g_previewImage.Source());
-        g_previewVideo.Visibility(wux::Visibility::Visible);
-        g_previewVideo.Width(g_previewImage.Width());
-        g_previewVideo.Height(g_previewImage.Height());
-        g_previewVideo.SetMediaPlayer(player);
-        g_previewPlayer = player;
-        player.Source(winrt::Windows::Media::Core::MediaSource::CreateFromStorageFile(result.video));
     }
 }
 
-// Drags a result out of the search window, as File Explorer drags a file, by
-// posting the drag request to the helper window on this thread (RunExplorerDrag)
-// once the XAML pointer handler returns.
-//
-// XAML's own drag (CanDrag, StartDragAsync) does not produce a shell file drag
-// for arbitrary paths, and entering SHDoDragDrop directly inside a XAML
-// PointerMoved handler re-enters XAML input routing while the button still holds
-// pointer state. Posting kExplorerStartDrag lets the pointer handler release
-// capture and return first; RunExplorerDrag then runs the shell drag loop on
-// the helper window and notifies the search window when it finishes
-// (DragDoneMessage).
-void StartFileDrag(std::wstring const& path) {
+struct FileDragGesture {
+    std::optional<wf::Point> pressedAt;
+    bool suppressClick = false;
+};
+
+// Called inside the XAML pointer callback while the contact still belongs to
+// this thread. Queue only the OLE loop, after pointer promotion and release.
+bool StartFileDrag(std::wstring const& path, wux::UIElement const& source) {
+    HWND host = g_searchWindowWindow.load();
     bool local = path.size() >= 3 && path[1] == L':' && !PathIsUNCW(path.c_str());
     if (local) {
         const wchar_t root[] = {path[0], L':', L'\\', 0};
         local = GetDriveTypeW(root) != DRIVE_REMOTE && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
     }
-    const bool buttonDown = (GetAsyncKeyState(PrimaryButton()) & 0x8000) != 0;
-    HWND helper = g_hExplorerHelperWnd.load();
-    if (!local || !buttonDown || !helper || !IsWindow(helper)) {
-        Wh_Log(L"drag: not for %ls", path.c_str());
-        return;
-    }
-    ReleaseCapture();  // the row's button holds the mouse
+    if (!local || !host || !IsWindowVisible(host) || g_dragging.load() || g_quit.load() ||
+        !(GetAsyncKeyState(PrimaryButton()) & 0x8000) || !PromoteFileDragPointer()) return false;
+    source.ReleasePointerCaptures();
+    ReleaseCapture();
     g_dragging = true;
-    if (!SetForegroundWindow(helper)) {
+    HidePreview();
+    PauseSearchContainerContrast();
+    g_pendingFileDrag = path;
+    if (!PostMessageW(host, kSearchWindowBeginDragMessage, 0, 0)) {
+        g_pendingFileDrag.clear();
         g_dragging = false;
-        Wh_Log(L"drag: Explorer's helper did not get the foreground");
-        return;
+        QueueSearchBoxRefocus();
+        SchedulePreview();
+        NativeDragTrace(L"could not queue native drag");
+        return false;
     }
-    g_explorerDragPath = path;
-    if (!PostMessageW(helper, kExplorerStartDrag, 0, 0)) {
-        g_explorerDragPath.clear();
-        g_dragging = false;
-        Wh_Log(L"drag: failed to post drag request for %ls", path.c_str());
-    }
+    NativeDragTrace(L"native drag queued after pointer promotion");
+    return true;
 }
 
 // Removes, when destroyed, a handler added with AddHandler -- which C++/WinRT
@@ -8419,7 +8895,7 @@ void ApplyPreview() try {
         result = std::move(preview::g_result);
         preview::g_result.reset();
     }
-    if (!result || result->path != g_previewWanted || !g_isOverlayVisible.load() ||
+    if (!result || result->path != g_previewWanted || !g_isOverlayVisible.load() || g_dragging.load() ||
         g_searchWindowWaitingForStart || g_searchWindowSliding || !g_resultsHost) {
         Wh_Log(L"preview: dropped (%ls)", result ? L"no longer selected" : L"nothing fetched");
         return;
@@ -8458,29 +8934,7 @@ void ApplyPreview() try {
         g_previewImage.Height(result->height / result->scale);
         g_previewThumbBox.Height(std::max(result->height / result->scale, 48.0));
     }
-    // An SVG, drawn by XAML at the display's scale, in a box of its shape, on
-    // a light background: most are dark shapes on nothing.
-    const bool showSvg = !bitmap && result->svg;
-    if (showSvg) {
-        double width = preview::kThumbWidth, height = width * result->svgAspect;
-        if (height > preview::kThumbHeight) {
-            height = preview::kThumbHeight;
-            width = height / result->svgAspect;
-        }
-        height = std::max(height, 48.0);
-        constexpr double kInset = 8;
-        wuxmi::SvgImageSource svg;
-        svg.RasterizePixelWidth((width - 2 * kInset) * result->scale);
-        svg.RasterizePixelHeight((height - 2 * kInset) * result->scale);
-        svg.SetSourceAsync(result->svg);
-        g_previewImage.Source(svg);
-        g_previewImage.Width(width - 2 * kInset);
-        g_previewImage.Height(height - 2 * kInset);
-        g_previewImage.Margin(wux::ThicknessHelper::FromUniformLength(kInset));
-        g_previewThumbBox.Height(height);
-        g_previewThumbBox.Background(MakeBrush(0xF2, 0xFF, 0xFF, 0xFF));
-    }
-    const bool picture = bitmap || showSvg;
+    const bool picture = bitmap != nullptr;
     g_previewImage.Visibility(picture ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     // Text in place of a picture: a text file line for line, in a monospaced
     // font; a document's paragraphs, wrapped. The box is as high as the text.
@@ -8550,8 +9004,9 @@ void ApplyPreview() try {
     Wh_Log(L"preview: failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
 
-// A PDF's next pages, once ready, for the card still showing its first.
+// PDF/animation frames and streamed video pixels, for the current card.
 void ApplyPreviewFrames() try {
+    preview::g_motionDispatchQueued = false;
     std::optional<preview::Result> frames;
     {
         std::lock_guard<std::mutex> lock(preview::g_mutex);
@@ -8559,10 +9014,34 @@ void ApplyPreviewFrames() try {
         preview::g_frames.reset();
     }
     if (!frames || !g_previewPopup || !g_previewPopup.IsOpen() || frames->path != g_previewShownPath ||
-        !g_previewFrames.empty()) {
+        frames->path != g_previewWanted || g_dragging.load()) return;
+    if (frames->liveFrame) {
+        if (frames->width < 1 || frames->height < 1 ||
+            frames->pixels.size() != static_cast<size_t>(frames->width) * frames->height * 4) return;
+        const bool resized = !g_previewFrameBitmap || g_previewFrameBitmap.PixelWidth() != frames->width ||
+                             g_previewFrameBitmap.PixelHeight() != frames->height;
+        if (resized) g_previewFrameBitmap = wuxmi::WriteableBitmap{frames->width, frames->height};
+        auto access = g_previewFrameBitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+        BYTE* pixels = nullptr;
+        if (FAILED(access->Buffer(&pixels)) || !pixels || g_previewFrameBitmap.PixelBuffer().Capacity() < frames->pixels.size()) return;
+        memcpy(pixels, frames->pixels.data(), frames->pixels.size());
+        g_previewFrameBitmap.Invalidate();
+        g_previewImage.Source(g_previewFrameBitmap);
+        g_previewImage.Visibility(wux::Visibility::Visible);
+        if (resized) {
+            const double from = g_previewCard.ActualHeight();
+            g_previewImage.Width(frames->width / frames->scale);
+            g_previewImage.Height(frames->height / frames->scale);
+            g_previewThumbBox.Height(std::max(frames->height / frames->scale, 48.0));
+            g_previewThumbBox.Visibility(wux::Visibility::Visible);
+            g_previewText.Visibility(wux::Visibility::Collapsed);
+            g_previewCard.ClearValue(wux::FrameworkElement::HeightProperty());
+            g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
+            PreviewResize(from, g_previewCard.DesiredSize().Height);
+        }
         return;
     }
-    StartPreviewMotion(*frames);
+    if (g_previewFrames.empty()) StartPreviewMotion(*frames);
 } catch (...) {
 }
 
@@ -8593,6 +9072,7 @@ void SchedulePreview() try {
             Wh_Log(L"preview: fetching %ls", g_previewWanted.c_str());
             {
                 std::lock_guard<std::mutex> lock(preview::g_mutex);
+                preview::g_generation.fetch_add(1);
                 preview::g_request = g_previewWanted;
                 if (!preview::g_thread && !preview::g_quit) {
                     preview::g_thread.emplace(PreviewThreadMain);
@@ -8788,11 +9268,28 @@ bool ContextMenuHasFocus() {
 static std::atomic<bool> g_contextMenuOpen{false};
 static bool g_contextMenuInternalClose = false;
 static bool g_dismissSearchOnMenuClose = false;
+static bool g_contextMenuPreviewClose = false;
 constexpr UINT_PTR kSearchWindowDismissTimer = 0x701;
 [[clang::no_destroy]] winrt::weak_ref<wuxcp::FlyoutBase> g_activeContextFlyout;
 static uint64_t g_contextMenuClosedTick = 0;
 
+// Preview popups can extend outside the native search bounds and can have
+// their own input HWND. Use their XAML placement when classifying clicks.
+bool IsPointInPreview(POINT pt) {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_previewPopup || !g_previewPopup.IsOpen() || !g_previewCard) return false;
+    POINT origin{};
+    if (!ClientToScreen(host, &origin)) return false;
+    const double scale = GetDpiForWindow(host) / 96.0;
+    const double left = origin.x + g_previewPopup.HorizontalOffset() * scale;
+    const double top = origin.y + g_previewPopup.VerticalOffset() * scale;
+    const double width = g_previewCard.ActualWidth() * scale;
+    const double height = g_previewCard.ActualHeight() * scale;
+    return width > 0 && height > 0 && pt.x >= left && pt.x < left + width && pt.y >= top && pt.y < top + height;
+}
+
 bool IsPointInAnySearchThreadWindow(POINT pt) {
+    if (IsPointInPreview(pt)) return true;
     struct Ctx {
         POINT pt;
         bool inside = false;
@@ -8813,11 +9310,21 @@ bool IsPointInAnySearchThreadWindow(POINT pt) {
     return ctx.inside;
 }
 
+void UpdateContextMenuPreviewPassThrough() {
+    if (auto flyout = g_activeContextFlyout.get()) {
+        // Only the preview is click-through: result rows keep normal light
+        // dismissal, so closing a menu cannot also launch an app or file.
+        flyout.OverlayInputPassThroughElement(g_previewCard);
+    }
+}
+
 void NoteContextMenuOpening(wf::IInspectable const& sender) {
     if(auto flyout=sender.try_as<wuxcp::FlyoutBase>()) g_activeContextFlyout=winrt::make_weak(flyout);
     g_contextMenuInternalClose = false;
     g_dismissSearchOnMenuClose = false;
+    g_contextMenuPreviewClose = false;
     g_contextMenuOpen=true;
+    UpdateContextMenuPreviewPassThrough();
 }
 
 void NoteContextMenuClosed(wf::IInspectable const& sender) {
@@ -8827,6 +9334,7 @@ void NoteContextMenuClosed(wf::IInspectable const& sender) {
     g_contextMenuClosedTick=GetTickCount64();
     const bool internalClose = g_contextMenuInternalClose;
     const bool dismissSearch = g_dismissSearchOnMenuClose;
+    const bool previewClose = std::exchange(g_contextMenuPreviewClose, false);
     g_contextMenuInternalClose = false;
     g_dismissSearchOnMenuClose = false;
     HWND host = g_searchWindowWindow.load();
@@ -8834,13 +9342,14 @@ void NoteContextMenuClosed(wf::IInspectable const& sender) {
         return;
     HWND fg = GetForegroundWindow();
     const bool lostForeground = fg && GetWindowThreadProcessId(fg, nullptr) != GetCurrentThreadId();
-    if (!internalClose && !g_dragging && (dismissSearch || lostForeground)) {
+    if (!previewClose && !internalClose && !g_dragging && (dismissSearch || lostForeground)) {
         SearchWindowHide();
         return;
     }
     if (!g_dragging)
         SetTimer(host, kSearchWindowDismissTimer, 70, nullptr);
-    QueueSearchBoxRefocus(true);
+    if (previewClose) PreservePreviewFocusAfterMenu();
+    else QueueSearchBoxRefocus(true);
 }
 
 bool EscapeBelongsToContextMenu() {
@@ -9251,18 +9760,6 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     wuxc::Grid::SetColumn(box, 1);
     searchBarGrid.Children().Append(box);
     g_ourBox = box;
-
-    wuxc::Canvas searchBarInnerCanvas;
-    searchBarInnerCanvas.IsHitTestVisible(false);
-    wuxc::Grid::SetColumn(searchBarInnerCanvas, 0);
-    wuxc::Grid::SetColumnSpan(searchBarInnerCanvas, 2);
-    wuxc::Canvas::SetZIndex(searchBarInnerCanvas, -1);
-    wuxc::Border searchBarInnerBorder;
-    searchBarInnerBorder.IsHitTestVisible(false);
-    searchBarInnerBorder.Visibility(wux::Visibility::Collapsed);
-    searchBarInnerCanvas.Children().Append(searchBarInnerBorder);
-    searchBarGrid.Children().Append(searchBarInnerCanvas);
-    g_searchBarInnerBorder = searchBarInnerBorder;
 
     wuxc::Canvas searchBarStrokeCanvas;
     searchBarStrokeCanvas.IsHitTestVisible(false);
@@ -10305,58 +10802,41 @@ void RenderResults() try {
 
         if (!item.openPath.empty()) {
             std::wstring target = item.openPath;
-            KeepHandler(button, button.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (g_dragging) {
-                    return;  // the release that ends a drag (StartFileDrag)
-                }
+            auto drag = std::make_shared<FileDragGesture>();
+            const auto weakButton = winrt::make_weak(button);
+            KeepHandler(button, button.Click(winrt::auto_revoke, [target, drag](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                if (std::exchange(drag->suppressClick, false) || g_dragging.load()) return;
                 DismissSearchForLaunch([target] { OpenResult(target); });
             }));
-
-            // Dragging the row drags the file (StartFileDrag). A Button takes the
-            // mouse the moment it is pressed and handles the events, so the
-            // press and the moves are watched here, handled or not, and the
-            // drag starts once the pointer has moved a few pixels with the
-            // button down. The Button lets the mouse go then, so no click
-            // follows.
-            auto pressedAt = std::make_shared<std::optional<wf::Point>>();
-            const auto weakButton = winrt::make_weak(button);
             AddPointerHandler(button, wux::UIElement::PointerPressedEvent(),
-                              [pressedAt, weakButton](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& e) {
-                                  auto btn = weakButton.get();
-                                  pressedAt->reset();
-                                  if (btn) {
+                              [drag, weakButton](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& e) {
+                                  drag->pressedAt.reset();
+                                  drag->suppressClick = false;
+                                  if (auto btn = weakButton.get()) {
                                       auto point = e.GetCurrentPoint(btn);
-                                      if (point.Properties().IsLeftButtonPressed()) {
-                                          *pressedAt = point.Position();
-                                      }
+                                      if (point.Properties().IsLeftButtonPressed()) drag->pressedAt = point.Position();
                                   }
                               });
             AddPointerHandler(button, wux::UIElement::PointerMovedEvent(),
-                              [pressedAt, weakButton, target](wf::IInspectable const&,
-                                                              wux::Input::PointerRoutedEventArgs const& e) {
+                              [drag, weakButton, target](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& e) {
                                   auto btn = weakButton.get();
-                                  if (!*pressedAt || !btn) {
-                                      return;
-                                  }
+                                  if (!drag->pressedAt || !btn || g_dragging.load()) return;
                                   auto point = e.GetCurrentPoint(btn);
-                                  if (!point.Properties().IsLeftButtonPressed()) {
-                                      pressedAt->reset();
-                                      return;
-                                  }
-                                  const float dx = point.Position().X - (*pressedAt)->X;
-                                  const float dy = point.Position().Y - (*pressedAt)->Y;
-                                  if (dx * dx + dy * dy < 36) {
-                                      return;
-                                  }
-                                  pressedAt->reset();
-                                  btn.ReleasePointerCaptures();
-                                  HidePreview();
-                                  StartFileDrag(target);
+                                  if (!point.Properties().IsLeftButtonPressed()) { drag->pressedAt.reset(); return; }
+                                  const UINT dpi = GetDpiForWindow(g_searchWindowWindow.load());
+                                  const double scale = dpi / 96.0;
+                                  const double dx = std::abs(point.Position().X - drag->pressedAt->X) * scale;
+                                  const double dy = std::abs(point.Position().Y - drag->pressedAt->Y) * scale;
+                                  if (dx < GetSystemMetricsForDpi(SM_CXDRAG, dpi) &&
+                                      dy < GetSystemMetricsForDpi(SM_CYDRAG, dpi)) return;
+                                  drag->pressedAt.reset();
+                                  drag->suppressClick = true;
+                                  StartFileDrag(target, btn);
                               });
             AddPointerHandler(button, wux::UIElement::PointerReleasedEvent(),
-                              [pressedAt](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
-                                  pressedAt->reset();
-                              });
+                              [drag](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) { drag->pressedAt.reset(); });
+            AddPointerHandler(button, wux::UIElement::PointerCaptureLostEvent(),
+                              [drag](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) { drag->pressedAt.reset(); });
 
             wuxc::MenuFlyout menu;
             KeepHandler(menu, menu.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuOpening(sender); }));
@@ -10874,8 +11354,32 @@ void AddCustomCommandRows(std::vector<Row>* rows,std::vector<CustomCommand> cons
 }
 
 
-void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool asAdmin = false) {
+void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool asAdmin = false,
+                    std::wstring settingPageGroup = L"") {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    // Several category landing pages have no public ms-settings URI. Use the
+    // Settings app's native activation argument; ordinary page URIs remain the
+    // fallback if Windows ever stops accepting a category identifier.
+    if (!settingPageGroup.empty()) {
+        winrt::com_ptr<IApplicationActivationManager> manager;
+        HRESULT hr = CoCreateInstance(CLSID_ApplicationActivationManager, nullptr, CLSCTX_INPROC_SERVER,
+                                      IID_PPV_ARGS(manager.put()));
+        if (SUCCEEDED(hr)) {
+            const std::wstring arguments = L"pagegroup=" + settingPageGroup;
+            DWORD pid = 0;
+            hr = manager->ActivateApplication(
+                L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel",
+                arguments.c_str(), AO_NONE, &pid);
+        }
+        if (SUCCEEDED(hr)) {
+            Wh_Log(L"launched Settings category: %ls", settingPageGroup.c_str());
+            manager = nullptr;
+            if (SUCCEEDED(comHr)) CoUninitialize();
+            return;
+        }
+        Wh_Log(L"Settings category activation failed (%08X): %ls", static_cast<unsigned>(hr), settingPageGroup.c_str());
+    }
 
     bool launched = false;
 
@@ -10917,7 +11421,8 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
 
     // 0. If path is a URI (e.g. ms-settings:, http:, https:) or command:
     if (!path.empty()) {
-        if (path.starts_with(L"ms-settings:") || path.starts_with(L"http:") || path.starts_with(L"https:")) {
+        if (path.starts_with(L"ms-settings:") || path.starts_with(L"windowsdefender:") ||
+            path.starts_with(L"http:") || path.starts_with(L"https:")) {
             if (HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 reinterpret_cast<INT_PTR>(hInst) > 32) {
                 Wh_Log(L"launched URI setting: %ls", path.c_str());
@@ -11804,14 +12309,16 @@ void SearchThreadMain() {
                     apps::RecordUsage(usage,app->nameLower);
                     std::wstring name = app->name;
                     std::wstring targetPath = app->targetPath;
+                    std::wstring settingPageGroup = app->settingPageGroup;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
                     lock.unlock();
                     if (usage) {
                         apps::SaveUsage(*usage);  // this thread's own: no lock needed
                     }
 
-                    SpawnTrackedLaunch([name = std::move(name), targetPath = std::move(targetPath), pidlClone, asAdmin] {
-                        LaunchAppAsync(name, targetPath, pidlClone, asAdmin);
+                    SpawnTrackedLaunch([name = std::move(name), targetPath = std::move(targetPath),
+                                        settingPageGroup = std::move(settingPageGroup), pidlClone, asAdmin] {
+                        LaunchAppAsync(name, targetPath, pidlClone, asAdmin, settingPageGroup);
                         if (pidlClone) {
                             ILFree(pidlClone);
                         }
@@ -12149,6 +12656,7 @@ void SearchThreadMain() {
 void TeardownSearchUi() {
     Wh_Log(L"teardown: tearing down search UI on XAML thread");
     g_contextMenuOpen=false; g_activeContextFlyout={}; g_contextMenuClosedTick=0;
+    g_contextMenuPreviewClose = false;
     // Before anything is dropped: see g_xamlHandlers.
     try {
         g_xamlHandlers.reset();
@@ -12163,7 +12671,6 @@ void TeardownSearchUi() {
         g_previewResizeAnimation = nullptr;
         g_previewTimer = nullptr;
         g_previewFrameTimer = nullptr;
-        g_previewVideo = nullptr;
         g_previewText = nullptr;
         g_previewPopup = nullptr;
         g_previewCard = nullptr;
@@ -12231,7 +12738,6 @@ void TeardownSearchUi() {
     g_appsHeaderStrokeImage = nullptr;
     g_filesHeaderStrokeImage = nullptr;
     g_searchBarBorder = nullptr;
-    g_searchBarInnerBorder = nullptr;
     g_searchBarStrokeImage = nullptr;
     g_divider = nullptr;
     g_footerBorder = nullptr;
@@ -12257,8 +12763,6 @@ void TeardownSearchUi() {
 HWND g_searchWindowChild = nullptr;
 RECT g_searchWindowWork{};
 bool g_searchWindowChanging = false;
-constexpr UINT kSearchWindowLayoutMessage = WM_APP + 0x71;
-constexpr UINT kSearchWindowShowMessage = WM_APP + 0x72;
 
 void SearchWindowTrace(const wchar_t* message, HRESULT hr = S_OK) {
     Wh_Log(L"[SearchWindow] %ls: %08X", message, static_cast<unsigned>(hr));
@@ -12267,10 +12771,12 @@ void SearchWindowTrace(const wchar_t* message, HRESULT hr = S_OK) {
 // Capture the opening text before Start's native type-to-search consumes it.
 // The hook runs on its own message thread: no XAML, I/O, or cross-process
 // SendMessage runs inside it. Only Start/Search and the brief handoff qualify.
-constexpr UINT kSearchWindowDismissMenuMessage = WM_APP + 0x75;
 struct SearchWindowInput {
-    enum Kind { Text, Backspace, Enter, Escape, Show } kind = Text;
+    enum Kind { Text, Backspace, Enter, Escape, Show, NativeKey } kind = Text;
     std::wstring text;
+    UINT key = 0, keyMessage = 0;
+    LPARAM keyParam = 0;
+    HKL layout = nullptr;
 };
 std::mutex g_searchWindowInputMutex;
 std::vector<SearchWindowInput> g_searchWindowInputs;
@@ -12284,8 +12790,10 @@ HANDLE g_searchWindowInputStarted = nullptr;
 DWORD g_searchWindowInputThreadId = 0;
 BYTE g_searchWindowKeyState[256]{}; // input thread only
 bool g_searchWindowSwallowed[256]{};
+bool g_searchWindowNativeKeyDown[256]{};
 bool g_searchWindowDeadKey = false;
 HKL g_searchWindowDeadLayout = nullptr;
+HKL g_searchWindowImeCaptureLayout = nullptr; // input thread only
 
 void ClearSearchWindowDeadKey() {
     if (!g_searchWindowDeadKey) return;
@@ -12317,10 +12825,89 @@ bool QueueSearchWindowInput(HWND host, SearchWindowInput input) {
     return false;
 }
 
+bool SearchUsesIme(HKL layout) {
+    const WORD language = PRIMARYLANGID(LOWORD(reinterpret_cast<ULONG_PTR>(layout)));
+    return language == LANG_CHINESE || language == LANG_JAPANESE || language == LANG_KOREAN;
+}
+
+// XAML can report logical and HWND focus before its text service has attached
+// the editable document. Keep the first IME key buffered through that interval.
+bool SearchWindowImeContextReady() {
+    using GetThreadManager = HRESULT (WINAPI*)(ITfThreadMgr**);
+    const HMODULE module = GetModuleHandleW(L"msctf.dll");
+    const auto getThreadManager = module ? reinterpret_cast<GetThreadManager>(
+        GetProcAddress(module, "TF_GetThreadMgr")) : nullptr;
+    winrt::com_ptr<ITfThreadMgr> manager;
+    winrt::com_ptr<ITfDocumentMgr> document;
+    winrt::com_ptr<ITfContext> context;
+    winrt::com_ptr<ITfContextView> view;
+    return getThreadManager && SUCCEEDED(getThreadManager(manager.put())) && manager &&
+           SUCCEEDED(manager->GetFocus(document.put())) && document &&
+           SUCCEEDED(document->GetTop(context.put())) && context &&
+           SUCCEEDED(context->GetActiveView(view.put())) && view;
+}
+
+HKL SearchWindowInputLayout(HWND foreground) {
+    DWORD thread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
+    GUITHREADINFO info{sizeof(info)};
+    if (thread && GetGUIThreadInfo(thread, &info) && info.hwndFocus) {
+        if (DWORD focusedThread = GetWindowThreadProcessId(info.hwndFocus, nullptr))
+            thread = focusedThread;
+    }
+    return GetKeyboardLayout(thread);
+}
+
+SearchWindowInput NativeSearchKey(const KBDLLHOOKSTRUCT& key, bool down, bool repeated, HKL layout) {
+    SearchWindowInput input;
+    input.kind = SearchWindowInput::NativeKey;
+    input.key = key.vkCode;
+    input.keyMessage = down ? WM_KEYDOWN : WM_KEYUP;
+    input.keyParam = 1 | (static_cast<LPARAM>(key.scanCode & 0xff) << 16) |
+        ((key.flags & LLKHF_EXTENDED) ? (LPARAM{1} << 24) : 0) |
+        (repeated ? (LPARAM{1} << 30) : 0) |
+        (down ? 0 : (LPARAM{3} << 30));
+    input.layout = layout;
+    return input;
+}
+
+// Re-enter opening keys through Windows' native input pipeline. XAML islands
+// can use a different text-service context from the thread's keystroke manager,
+// so manually dispatching WM_KEYDOWN bypasses their active IME.
+constexpr ULONG_PTR kSearchWindowImeReplayTag = 0x5345494d; // 'SEIM'
+
+bool DeliverNativeSearchKey(SearchWindowInput const& input) {
+    const HWND focus = GetFocus();
+    if (!focus || GetForegroundWindow() != GetAncestor(focus, GA_ROOT))
+        return false;
+    // A modifier pressed after the captured letter must not turn its replay
+    // into an unrelated shortcut. Keep the key buffered until it is released.
+    if (input.keyMessage == WM_KEYDOWN &&
+        ((GetAsyncKeyState(VK_CONTROL) | GetAsyncKeyState(VK_MENU) |
+          GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000))
+        return false;
+    if (input.keyMessage == WM_KEYDOWN && input.layout && GetKeyboardLayout(0) != input.layout) {
+        ActivateKeyboardLayout(input.layout, 0);
+        // The new input profile is activated asynchronously. Let its messages
+        // run before replaying a key under the new layout.
+        return false;
+    }
+    INPUT event{};
+    event.type = INPUT_KEYBOARD;
+    event.ki.wScan = static_cast<WORD>((input.keyParam >> 16) & 0xff);
+    event.ki.wVk = event.ki.wScan ? 0 : static_cast<WORD>(input.key);
+    event.ki.dwFlags = (event.ki.wScan ? KEYEVENTF_SCANCODE : 0) |
+        ((input.keyParam & (LPARAM{1} << 24)) ? KEYEVENTF_EXTENDEDKEY : 0) |
+        (input.keyMessage == WM_KEYUP ? KEYEVENTF_KEYUP : 0);
+    event.ki.dwExtraInfo = kSearchWindowImeReplayTag;
+    return SendInput(1, &event, sizeof(event)) == 1;
+}
+
 LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) try {
     if (code != HC_ACTION || g_searchWindowInputStop.load())
         return CallNextHookEx(nullptr, code, message, param);
     const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
+    if (key.dwExtraInfo == kSearchWindowImeReplayTag)
+        return CallNextHookEx(nullptr, code, message, param);
     const UINT vk = key.vkCode;
     if (vk >= 256) return CallNextHookEx(nullptr, code, message, param);
     const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
@@ -12332,6 +12919,22 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
     g_searchWindowKeyState[VK_CONTROL] = (g_searchWindowKeyState[VK_LCONTROL] | g_searchWindowKeyState[VK_RCONTROL]) & 0x80;
     g_searchWindowKeyState[VK_MENU] = (g_searchWindowKeyState[VK_LMENU] | g_searchWindowKeyState[VK_RMENU]) & 0x80;
     if (!down) {
+        if (std::exchange(g_searchWindowNativeKeyDown[vk], false)) {
+            g_searchWindowSwallowed[vk] = false;
+            HWND target = g_searchWindowWindow.load();
+            const HWND foreground = GetForegroundWindow();
+            // A physical release must still reach Windows if the user has
+            // switched away after a replayed key-down. Do not swallow it and
+            // leave the key logically pressed in another application.
+            const bool inHost = target && foreground &&
+                (foreground == target || GetAncestor(foreground, GA_ROOTOWNER) == target);
+            if (!inHost && foreground != CachedStartWindow() && !IsSearchHostWindow(foreground))
+                return CallNextHookEx(nullptr, code, message, param);
+            if (!target) target = g_hExplorerHelperWnd.load();
+            auto input = NativeSearchKey(key, false, true, g_searchWindowImeCaptureLayout ?
+                g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground));
+            if (target && QueueSearchWindowInput(target, std::move(input))) return 1;
+        }
         if (std::exchange(g_searchWindowSwallowed[vk], false)) return 1;
         return CallNextHookEx(nullptr, code, message, param);
     }
@@ -12371,6 +12974,7 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
         GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr);
     if (!inputTarget || (!inShell && !menuActive && !menuTyping && !(host && foreground == host && handoff))) {
         if (!inHost) ClearSearchWindowDeadKey();
+        g_searchWindowImeCaptureLayout = nullptr;
         g_searchWindowSwallowed[vk] = false;
         return CallNextHookEx(nullptr, code, message, param);
     }
@@ -12381,6 +12985,30 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
         ((g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80))
         return CallNextHookEx(nullptr, code, message, param);
 
+    // An IME must see opening keys before character translation. Once focus
+    // has settled, subsequent physical keys use the normal native input path.
+    // The destination thread can still report its previous layout while the
+    // first captured IME key is waiting for focus and profile activation.
+    HKL inputLayout = !inShell && g_searchWindowImeCaptureLayout &&
+        (g_searchWindowBuffered.load() || !g_searchWindowInputReady.load()) ?
+        g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground);
+    const bool editingKey = (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+        (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping);
+    const UINT mappedCharacter = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, inputLayout) & 0xffff;
+    const bool textKey = vk == VK_PROCESSKEY || (mappedCharacter >= 0x20 && mappedCharacter != 0x7f);
+    if (SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
+        auto input = NativeSearchKey(key, true, wasDown, inputLayout);
+        const bool wasMenuTyping = g_searchWindowMenuTyping.load();
+        if (menuActive) g_searchWindowMenuTyping = true;
+        if (QueueSearchWindowInput(inputTarget, std::move(input))) {
+            g_searchWindowImeCaptureLayout = inputLayout;
+            g_searchWindowNativeKeyDown[vk] = true;
+            g_searchWindowSwallowed[vk] = true;
+            return 1;
+        }
+        g_searchWindowMenuTyping = wasMenuTyping;
+        return CallNextHookEx(nullptr, code, message, param);
+    }
     SearchWindowInput input;
     if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
         (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
@@ -12388,8 +13016,7 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
         input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
                      vk == VK_RETURN ? SearchWindowInput::Enter : SearchWindowInput::Escape;
     } else {
-        HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout :
-                     GetKeyboardLayout(GetWindowThreadProcessId(foreground, nullptr));
+        HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout : inputLayout;
         wchar_t chars[8]{};
         int count;
         if (vk == VK_PACKET) {
@@ -12445,6 +13072,8 @@ DWORD WINAPI SearchWindowInputThreadProc(void*) {
     }
     UnhookWindowsHookEx(hook);
     ClearSearchWindowDeadKey();
+    memset(g_searchWindowNativeKeyDown, 0, sizeof(g_searchWindowNativeKeyDown));
+    g_searchWindowImeCaptureLayout = nullptr;
     return 0;
 }
 
@@ -12537,8 +13166,45 @@ void ApplySearchWindowInput() try {
             }
         } else
             SearchWindowShow();
-        for (auto const& input : inputs) {
-            if (input.kind == SearchWindowInput::Text) {
+        const bool nativeKeys = std::any_of(inputs.begin(), inputs.end(), [](auto const& input) {
+            return input.kind == SearchWindowInput::NativeKey;
+        });
+        if (nativeKeys) {
+            const bool requestedFocus = GetForegroundWindow() == host &&
+                (!SearchWindowHasNativeFocus(host) || !g_searchWindowSource.HasFocus() ||
+                 wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot()) != g_ourBox);
+            if (requestedFocus) {
+                SetFocus(g_searchWindowChild);
+                g_searchWindowSource.NavigateFocus(winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationRequest{
+                    winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationReason::First});
+                g_ourBox.Focus(wux::FocusState::Programmatic);
+            }
+            if (!inHost || requestedFocus || GetForegroundWindow() != host ||
+                !SearchWindowHasNativeFocus(host) || !SearchWindowImeContextReady()) {
+                // A Start handoff or new focus needs a UI turn to activate
+                // the text-service document. Preserve every key in order;
+                // the existing focus timer retries when the context is ready.
+                std::lock_guard lock(g_searchWindowInputMutex);
+                g_searchWindowInputs.insert(g_searchWindowInputs.begin(),
+                    std::make_move_iterator(inputs.begin()), std::make_move_iterator(inputs.end()));
+                drained.count = 0;
+                QueueSearchBoxRefocus(true);
+                return;
+            }
+        }
+        for (size_t index = 0; index < inputs.size(); ++index) {
+            auto const& input = inputs[index];
+            if (input.kind == SearchWindowInput::NativeKey) {
+                if (!DeliverNativeSearchKey(input)) {
+                    std::lock_guard lock(g_searchWindowInputMutex);
+                    g_searchWindowInputs.insert(g_searchWindowInputs.begin(),
+                        std::make_move_iterator(inputs.begin() + index),
+                        std::make_move_iterator(inputs.end()));
+                    drained.count = static_cast<unsigned>(index);
+                    QueueSearchBoxRefocus(true);
+                    return;
+                }
+            } else if (input.kind == SearchWindowInput::Text) {
                 const int caret = g_ourBox.SelectionStart();
                 g_ourBox.SelectedText(winrt::hstring{input.text});
                 g_ourBox.SelectionStart(caret + static_cast<int32_t>(input.text.size()));
@@ -12569,12 +13235,21 @@ void ApplySearchWindowInput() try {
                     g_ourBox.Text(L"");
             }
         }
-        if (g_searchWindowMenuTyping.load()) {
+        if (nativeKeys) {
+            // Native replay is asynchronous. Keep its live caret instead of
+            // restoring the position saved before the menu was dismissed.
+            g_searchWindowMenuTyping = false;
+            g_searchWindowMenuCaret = -1;
+            g_searchWindowMenuSelection = 0;
+        } else if (g_searchWindowMenuTyping.load()) {
             g_searchWindowMenuCaret = g_ourBox.SelectionStart();
             g_searchWindowMenuSelection = g_ourBox.SelectionLength();
         }
         wchar_t detail[96]{};
-        swprintf_s(detail, L"opening input delivered, events=%zu length=%u", inputs.size(), g_ourBox.Text().size());
+        swprintf_s(detail, L"opening input delivered, events=%zu native=%zu length=%u", inputs.size(),
+                   std::count_if(inputs.begin(), inputs.end(), [](auto const& input) {
+                       return input.kind == SearchWindowInput::NativeKey;
+                   }), g_ourBox.Text().size());
         SearchWindowTrace(detail);
     }
 } catch (...) {
@@ -12586,7 +13261,6 @@ void ApplySearchWindowInput() try {
 // uses a high-resolution clock at the destination display's refresh rate.
 constexpr UINT_PTR kSearchWindowMotionTimer = 0x702;
 constexpr UINT_PTR kSearchWindowStyleTimer = 0x703;
-constexpr UINT kSearchWindowSlideFrameMessage = WM_APP + 0x76;
 
 double SearchMotionTime() {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -12699,7 +13373,6 @@ RECT g_searchWindowBounds{};
 RECT g_searchWindowLastFrame{};
 bool g_searchWindowClosing = false;
 bool g_searchWindowCloaked = false;
-bool g_searchWindowStartWasOpen = false;
 bool g_searchWindowShellCloseAsked = false;
 ULONGLONG g_searchWindowHandoffStarted = 0;
 ULONGLONG g_searchWindowStartClosedAt = 0;
@@ -12745,6 +13418,13 @@ void TraceSearchWindowFocus(const wchar_t* reason) {
                GetFocus(), g_searchWindowSource && g_searchWindowSource.HasFocus(), g_ourBox && focused == g_ourBox,
                g_previewText && focused == g_previewText);
     SearchWindowTrace(state);
+}
+
+void PreservePreviewFocusAfterMenu() {
+    // Menu opening may already have queued a forced textbox refocus. Allow
+    // a preview excerpt to take focus for selection and Ctrl+C instead.
+    g_searchWindowRefocusBodyClick = false;
+    QueueSearchBoxRefocus();
 }
 
 void QueueSearchBoxRefocus(bool bodyClick) {
@@ -12814,6 +13494,7 @@ void SearchWindowRefocusFrame() try {
         g_searchWindowInputReady = true;
         SearchWindowTrace(L"search native and XAML focus restored");
         stop();
+        if (HasBufferedSearchWindowInput()) PostMessageW(host, kSearchWindowInputMessage, 0, 0);
     }
 } catch (...) {
     SearchWindowTrace(L"search focus restore failed", winrt::to_hresult());
@@ -12842,19 +13523,21 @@ void CheckSearchWindowFocus() try {
     SearchWindowTrace(L"search focus check failed", winrt::to_hresult());
 }
 
-bool DismissSearchContextMenu() try {
+bool DismissSearchContextMenu(bool forPreview) try {
     auto flyout = g_activeContextFlyout.get();
     if (!g_contextMenuOpen && !flyout)
         return false;
     g_contextMenuInternalClose = true;
     g_dismissSearchOnMenuClose = false;
+    g_contextMenuPreviewClose = forPreview;
     if (flyout)
         flyout.Hide();
     else {
         g_contextMenuOpen = false;
         g_contextMenuClosedTick = GetTickCount64();
     }
-    QueueSearchBoxRefocus(true);
+    if (forPreview) PreservePreviewFocusAfterMenu();
+    else QueueSearchBoxRefocus(true);
     return true;
 } catch (...) {
     SearchWindowTrace(L"context menu dismiss failed", winrt::to_hresult());
@@ -12903,11 +13586,6 @@ void SearchWindowStyle() {
     g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
     g_searchBarBorder.BorderBrush(nullptr);
     g_searchBarBorder.Background(light ? MakeBrush(0xCE, 255, 255, 255) : MakeBrush(0x50, 0, 0, 0));
-    if (g_searchBarInnerBorder) {
-        g_searchBarInnerBorder.Background(nullptr);
-        g_searchBarInnerBorder.BorderBrush(nullptr);
-        g_searchBarInnerBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
-    }
     g_searchBarCorners = {4, 4, 4, 4};
     g_searchBarThickness = {1, 1, 1, 1};
     g_searchBarOutlineBrush = {};
@@ -13104,6 +13782,475 @@ bool SearchBrushIsVisible(SearchBrushData const& b) {
     return true;
 }
 
+// Small Direct2D effect graph for Styler glass: blur, optional color adjustment,
+// then a source-over tint. Unlike AcrylicBrush, black retains its specified alpha.
+// Uses the public IGraphicsEffectD2D1Interop ABI (SDK header absent in MinGW).
+struct SearchEffectInterop : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, UINT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT, winrt::impl::abi_t<wf::IPropertyValue>**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT, IUnknown**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT*) = 0;
+};
+
+}  // namespace
+template <>
+inline constexpr winrt::guid winrt::impl::guid_v<SearchEffectInterop>{
+    0x2FC57384, 0xA068, 0x44D7, {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
+namespace {
+namespace searchcomp = winrt::Windows::UI::Composition;
+namespace searcheffect = winrt::Windows::Graphics::Effects;
+
+struct SearchEffect : winrt::implements<SearchEffect, searcheffect::IGraphicsEffect,
+                                        searcheffect::IGraphicsEffectSource, SearchEffectInterop> {
+    GUID id{};
+    winrt::hstring name;
+    std::vector<wf::IInspectable> properties;
+    std::vector<searcheffect::IGraphicsEffectSource> sources;
+    SearchEffect(GUID value) : id(value) {}
+    winrt::hstring Name() const { return name; }
+    void Name(winrt::hstring value) { name = std::move(value); }
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* value) noexcept override {
+        if (!value)
+            return E_POINTER;
+        *value = id;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, UINT*) noexcept override { return E_INVALIDARG; }
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* value) noexcept override {
+        if (!value)
+            return E_POINTER;
+        *value = static_cast<UINT>(properties.size());
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override
+        try {
+        if (!value)
+            return E_POINTER;
+        *value = nullptr;
+        if (index >= properties.size())
+            return E_BOUNDS;
+        winrt::copy_to_abi(properties[index].as<wf::IPropertyValue>(), *reinterpret_cast<void**>(value));
+        return S_OK;
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* value) noexcept override {
+        if (!value)
+            return E_POINTER;
+        *value = static_cast<UINT>(sources.size());
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, IUnknown** value) noexcept override {
+        if (!value)
+            return E_POINTER;
+        *value = nullptr;
+        if (index >= sources.size())
+            return E_BOUNDS;
+        winrt::copy_to_abi(sources[index], *reinterpret_cast<void**>(value));
+        return S_OK;
+    }
+};
+
+bool SearchSupportedEffect(GUID const& id) {
+    return id == CLSID_D2D1GaussianBlur || id == CLSID_D2D1ColorMatrix || id == CLSID_D2D1Flood ||
+           id == CLSID_D2D1Composite || id == CLSID_D2D1Border || id == CLSID_D2D1Saturation ||
+           id == CLSID_D2D1Blend || id == CLSID_D2D1ArithmeticComposite || id == CLSID_D2D1LuminanceToAlpha;
+}
+
+bool CaptureSearchEffectValue(wf::IPropertyValue const& value, SearchEffectValue& out) {
+    out.type = static_cast<uint32_t>(value.Type());
+    switch (value.Type()) {
+    case wf::PropertyType::Single: out.count = 1; out.values[0] = value.GetSingle(); break;
+    case wf::PropertyType::UInt32: {
+        auto v = value.GetUInt32();
+        // Direct2D enum properties are small integers. Reject values that
+        // could not survive the pointer-free representation exactly.
+        if (v > 0xFFFFFF) return false;
+        out.count = 1; out.values[0] = static_cast<float>(v); break;
+    }
+    case wf::PropertyType::Boolean: out.count = 1; out.values[0] = value.GetBoolean() ? 1.f : 0.f; break;
+    case wf::PropertyType::SingleArray: {
+        winrt::com_array<float> values;
+        value.GetSingleArray(values);
+        if (values.empty() || values.size() > std::size(out.values)) return false;
+        out.count = values.size();
+        std::copy(values.begin(), values.end(), out.values); break;
+    }
+    default: return false;
+    }
+    for (uint32_t i = 0; i < out.count; ++i)
+        if (!std::isfinite(out.values[i])) return false;
+    return true;
+}
+
+uint32_t CaptureSearchEffectNode(searcheffect::IGraphicsEffectSource const& source, SearchEffectGraph& graph,
+                                 uint32_t depth = 0) {
+    if (!source || depth >= std::size(graph.nodes)) throw winrt::hresult_invalid_argument();
+    SearchEffectNode node;
+    if (auto parameter = source.try_as<searchcomp::CompositionEffectSourceParameter>()) {
+        auto name = parameter.Name();
+        if (name.empty() || name.size() >= std::size(node.parameter)) throw winrt::hresult_invalid_argument();
+        node.kind = 1;
+        std::copy(name.begin(), name.end(), node.parameter);
+    } else {
+        auto effect = source.as<SearchEffectInterop>();
+        winrt::check_hresult(effect->GetEffectId(&node.id));
+        winrt::check_hresult(effect->GetPropertyCount(&node.propertyCount));
+        winrt::check_hresult(effect->GetSourceCount(&node.sourceCount));
+        if (!SearchSupportedEffect(node.id) || node.propertyCount > std::size(node.properties) ||
+            node.sourceCount > std::size(node.sources)) throw winrt::hresult_invalid_argument();
+        node.kind = 2;
+        for (uint32_t i = 0; i < node.propertyCount; ++i) {
+            wf::IPropertyValue value{nullptr};
+            winrt::check_hresult(effect->GetProperty(i, reinterpret_cast<winrt::impl::abi_t<wf::IPropertyValue>**>(winrt::put_abi(value))));
+            if (!CaptureSearchEffectValue(value, node.properties[i])) throw winrt::hresult_invalid_argument();
+        }
+        for (uint32_t i = 0; i < node.sourceCount; ++i) {
+            winrt::com_ptr<IUnknown> child;
+            winrt::check_hresult(effect->GetSource(i, child.put()));
+            node.sources[i] = CaptureSearchEffectNode(child.as<searcheffect::IGraphicsEffectSource>(), graph, depth + 1);
+        }
+    }
+    if (graph.count >= std::size(graph.nodes)) throw winrt::hresult_invalid_argument();
+    const auto index = graph.count++;
+    graph.nodes[index] = node;
+    return index;
+}
+
+bool ValidSearchEffectGraph(SearchEffectGraph const& graph) {
+    if (!graph.count || graph.count > std::size(graph.nodes)) return false;
+    for (uint32_t i = 0; i < graph.count; ++i) {
+        auto const& node = graph.nodes[i];
+        if (node.kind == 1 || node.kind == 3) {
+            if (!node.parameter[0] || node.parameter[std::size(node.parameter) - 1]) return false;
+            if (node.propertyCount || node.sourceCount) return false;
+        } else if (node.kind == 2) {
+            if (!SearchSupportedEffect(node.id) || node.propertyCount > std::size(node.properties) ||
+                node.sourceCount > std::size(node.sources)) return false;
+            for (uint32_t j = 0; j < node.sourceCount; ++j)
+                if (node.sources[j] >= i) return false; // no forward references or cycles
+            for (uint32_t j = 0; j < node.propertyCount; ++j) {
+                auto const& value = node.properties[j];
+                auto type = static_cast<wf::PropertyType>(value.type);
+                if (!value.count || value.count > std::size(value.values) ||
+                    (type != wf::PropertyType::SingleArray && value.count != 1)) return false;
+                if (type != wf::PropertyType::Single && type != wf::PropertyType::UInt32 &&
+                    type != wf::PropertyType::Boolean && type != wf::PropertyType::SingleArray) return false;
+                for (uint32_t k = 0; k < value.count; ++k)
+                    if (!std::isfinite(value.values[k])) return false;
+                if (type == wf::PropertyType::UInt32 &&
+                    (value.values[0] < 0 || value.values[0] > 0xFFFFFF || std::trunc(value.values[0]) != value.values[0])) return false;
+                if (type == wf::PropertyType::Boolean && value.values[0] != 0 && value.values[0] != 1) return false;
+            }
+        } else return false;
+    }
+    return graph.nodes[graph.count - 1].kind == 2;
+}
+
+struct SearchCapturedMaterial {
+    SearchEffectGraph graph;
+    uint64_t used = 0;
+};
+static std::mutex g_searchMaterialMutex;
+static std::unordered_map<uint32_t, SearchCapturedMaterial> g_searchMaterialCache;
+static uint32_t g_searchMaterialNext = 1;
+static uint64_t g_searchMaterialUse = 0;
+static std::atomic<bool> g_searchMaterialCapture{false};
+
+winrt::hstring const& SearchMaterialProperty() {
+    // Composition factories and brushes do not support weak references.
+    // A private public-API property identifies their bounded CPU snapshot;
+    // the cache retains no COM object, compositor, texture, or effect factory.
+    static const winrt::hstring key{L"_StartEverythingMaterial_" + std::to_wstring(GetTickCount64())};
+    return key;
+}
+
+// The public ICompositor and ICompositionEffectFactory ABI, as declared in the
+// Windows SDK. These hooks do not depend on private XAML objects or offsets.
+using SearchCreateFactory = HRESULT(WINAPI*)(void*, void*, void**);
+using SearchCreateFactoryWithProperties = HRESULT(WINAPI*)(void*, void*, void*, void**);
+using SearchCreateEffectBrush = HRESULT(WINAPI*)(void*, void**);
+static SearchCreateFactory g_searchCreateFactory = nullptr;
+static SearchCreateFactoryWithProperties g_searchCreateFactoryWithProperties = nullptr;
+static SearchCreateEffectBrush g_searchCreateEffectBrush = nullptr;
+
+void NoteSearchEffectFactory(void* source, void* result) noexcept {
+    if (!g_searchMaterialCapture || g_quit || !source || !result) return;
+    try {
+        searcheffect::IGraphicsEffect graphSource{nullptr};
+        winrt::copy_from_abi(graphSource, source);
+        SearchEffectGraph graph;
+        CaptureSearchEffectNode(graphSource.as<searcheffect::IGraphicsEffectSource>(), graph);
+        searchcomp::CompositionEffectFactory factory{nullptr};
+        winrt::copy_from_abi(factory, result);
+        uint32_t token = 0;
+        {
+            std::lock_guard lock(g_searchMaterialMutex);
+            for (auto& [id, entry] : g_searchMaterialCache) {
+                if (entry.graph == graph) { token = id; entry.used = ++g_searchMaterialUse; break; }
+            }
+            if (!token) {
+                if (g_searchMaterialNext > 0xFFFFFF) return;
+                if (g_searchMaterialCache.size() >= 256) {
+                    auto oldest = std::min_element(g_searchMaterialCache.begin(), g_searchMaterialCache.end(),
+                        [](auto const& a, auto const& b) { return a.second.used < b.second.used; });
+                    g_searchMaterialCache.erase(oldest);
+                }
+                token = g_searchMaterialNext++;
+                g_searchMaterialCache.emplace(token, SearchCapturedMaterial{graph, ++g_searchMaterialUse});
+            }
+        }
+        factory.Properties().InsertScalar(SearchMaterialProperty(), static_cast<float>(token));
+    } catch (...) { /* Unknown/custom effects retain the safe appearance fallback. */ }
+}
+HRESULT WINAPI SearchCreateFactoryHook(void* self, void* effect, void** result) {
+    auto hr = g_searchCreateFactory(self, effect, result);
+    if (SUCCEEDED(hr) && result) NoteSearchEffectFactory(effect, *result);
+    return hr;
+}
+HRESULT WINAPI SearchCreateFactoryWithPropertiesHook(void* self, void* effect, void* properties, void** result) {
+    auto hr = g_searchCreateFactoryWithProperties(self, effect, properties, result);
+    if (SUCCEEDED(hr) && result) {
+        try {
+            bool animated = false;
+            if (properties) {
+                winrt::Windows::Foundation::Collections::IIterable<winrt::hstring> names{nullptr};
+                winrt::copy_from_abi(names, properties);
+                animated = names.First().HasCurrent();
+            }
+            if (!animated) NoteSearchEffectFactory(effect, *result);
+            else if (*result) {
+                // Do not retain a static frame of an animated custom graph.
+                searchcomp::CompositionEffectFactory factory{nullptr};
+                winrt::copy_from_abi(factory, *result);
+                factory.Properties().InsertScalar(SearchMaterialProperty(), 0.f);
+            }
+        } catch (...) {}
+    }
+    return hr;
+}
+HRESULT WINAPI SearchCreateEffectBrushHook(void* self, void** result) {
+    auto hr = g_searchCreateEffectBrush(self, result);
+    if (FAILED(hr) || !result || !*result || !g_searchMaterialCapture || g_quit) return hr;
+    try {
+        searchcomp::CompositionEffectFactory factory{nullptr};
+        winrt::copy_from_abi(factory, self);
+        float token = 0;
+        if (factory.Properties().TryGetScalar(SearchMaterialProperty(), token) != searchcomp::CompositionGetValueStatus::Succeeded)
+            return hr;
+        searchcomp::CompositionEffectBrush brush{nullptr};
+        winrt::copy_from_abi(brush, *result);
+        brush.Properties().InsertScalar(SearchMaterialProperty(), token);
+    } catch (...) {}
+    return hr;
+}
+
+bool TryCaptureSearchCompositionBrush(searchcomp::CompositionBrush const& composition, SearchBrushData& data) {
+    if (!composition) return false;
+    if (auto color = composition.try_as<searchcomp::CompositionColorBrush>()) {
+        data.kind = 1;
+        data.color = SearchPackColor(color.Color());
+        return true;
+    }
+    auto brush = composition.try_as<searchcomp::CompositionEffectBrush>();
+    if (!brush) return false;
+    float token = 0;
+    if (brush.Properties().TryGetScalar(SearchMaterialProperty(), token) != searchcomp::CompositionGetValueStatus::Succeeded ||
+        !std::isfinite(token) || token < 1 || token > 0xFFFFFF || std::trunc(token) != token) return false;
+    SearchEffectGraph graph;
+    {
+        std::lock_guard lock(g_searchMaterialMutex);
+        auto entry = g_searchMaterialCache.find(static_cast<uint32_t>(token));
+        if (entry == g_searchMaterialCache.end()) return false;
+        entry->second.used = ++g_searchMaterialUse;
+        graph = entry->second.graph;
+    }
+    // Parameters are assigned after CreateBrush. Inspect them now, including
+    // their actual colors, rather than making assumptions about source names.
+    for (uint32_t i = 0; i < graph.count; ++i) {
+        auto& node = graph.nodes[i];
+        if (node.kind != 1) continue;
+        auto source = brush.GetSourceParameter(node.parameter);
+        if (!source) return false;
+        if (auto color = source.try_as<searchcomp::CompositionColorBrush>()) {
+            node.kind = 3;
+            node.color = SearchPackColor(color.Color());
+        } else if (!source.try_as<searchcomp::CompositionBackdropBrush>()) {
+            return false; // surfaces, images and live visual sources are not transferable
+        }
+    }
+    if (!ValidSearchEffectGraph(graph)) return false;
+    data.kind = 5;
+    data.graph = graph;
+    // Representative values are for diagnostics; rendering uses the unchanged
+    // floating-point effect description, including its original tint alpha.
+    for (uint32_t i = 0; i < graph.count; ++i) {
+        auto const& node = graph.nodes[i];
+        if (node.kind == 2 && node.id == CLSID_D2D1GaussianBlur && node.propertyCount)
+            data.blur = node.properties[0].values[0];
+        if (node.kind == 2 && node.id == CLSID_D2D1Flood && node.propertyCount && node.properties[0].count == 4) {
+            auto v = node.properties[0].values;
+            auto channel = [](float value) { return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255)); };
+            data.color = (channel(v[3]) << 24) | (channel(v[0]) << 16) | (channel(v[1]) << 8) | channel(v[2]);
+        }
+    }
+    return true;
+}
+
+struct SearchCapturedXamlBrush {
+    winrt::weak_ref<wf::IInspectable> owner;
+    void* protectedBrush = nullptr; // non-owning; only used while owner resolves
+    bool captured = false;
+    SearchBrushData data;
+};
+[[clang::no_destroy]] static std::unordered_map<void*, SearchCapturedXamlBrush> g_searchMaterialXaml;
+using SearchCreateXamlBrush = HRESULT(WINAPI*)(void*, void*, void**, void**);
+static SearchCreateXamlBrush g_searchCreateXamlBrush = nullptr;
+
+void NoteSearchXamlBrush(void* outer, void* inner, void* result) noexcept {
+    if (!g_searchMaterialCapture || g_quit || !inner || !result) return;
+    try {
+        wf::IInspectable owner{nullptr}, base{nullptr};
+        winrt::copy_from_abi(owner, outer ? outer : result);
+        winrt::copy_from_abi(base, inner);
+        auto access = base.try_as<wuxm::IXamlCompositionBrushBaseProtected>();
+        if (!access || !owner.try_as<winrt::impl::IWeakReferenceSource>()) return;
+        auto identity = owner.as<IUnknown>();
+        std::lock_guard lock(g_searchMaterialMutex);
+        std::erase_if(g_searchMaterialXaml, [](auto const& item) { return !item.second.owner.get(); });
+        if (g_searchMaterialXaml.size() < 256)
+            g_searchMaterialXaml.insert_or_assign(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(owner), winrt::get_abi(access)});
+    } catch (...) {}
+}
+
+HRESULT WINAPI SearchCreateXamlBrushHook(void* self, void* outer, void** inner, void** result) {
+    auto hr = g_searchCreateXamlBrush(self, outer, inner, result);
+    if (SUCCEEDED(hr) && inner && result) NoteSearchXamlBrush(outer, *inner, *result);
+    return hr;
+}
+
+bool CaptureSearchXamlMaterial(wuxm::XamlCompositionBrushBase const& brush, SearchBrushData& data) {
+    auto identity = brush.as<IUnknown>();
+    auto access = brush.try_as<wuxm::IXamlCompositionBrushBaseProtected>();
+    wf::IInspectable owner{nullptr};
+    if (!access) {
+        std::lock_guard lock(g_searchMaterialMutex);
+        auto entry = g_searchMaterialXaml.find(identity.get());
+        if (entry == g_searchMaterialXaml.end()) return false;
+        owner = entry->second.owner.get();
+        if (!owner || owner.as<IUnknown>().get() != identity.get()) return false;
+        // The public composable factory supplies its base object separately.
+        // This accesses the protected interface on that base, without reading
+        // a derived C++ object or retaining its non-delegating inner object.
+        winrt::copy_from_abi(access, entry->second.protectedBrush);
+    }
+    auto composition = access.CompositionBrush();
+    if (composition) {
+        if (!TryCaptureSearchCompositionBrush(composition, data)) return false;
+        std::lock_guard lock(g_searchMaterialMutex);
+        if (auto entry = g_searchMaterialXaml.find(identity.get()); entry != g_searchMaterialXaml.end()) {
+            entry->second.data = data;
+            entry->second.captured = true;
+        }
+        return true;
+    }
+    // Start may disconnect a custom brush while hidden. Preserve the last
+    // definition for that exact live brush instead of reverting to a guess.
+    std::lock_guard lock(g_searchMaterialMutex);
+    auto cached = g_searchMaterialXaml.find(identity.get());
+    if (cached == g_searchMaterialXaml.end() || !cached->second.captured || !cached->second.owner.get()) return false;
+    const double opacity = data.opacity;
+    const uint32_t fallback = data.fallback;
+    data = cached->second.data;
+    data.opacity = opacity;
+    data.fallback = fallback;
+    return true;
+}
+
+// Hook targets must remain loaded until Windhawk removes the hooks. A fresh
+// Start process may not have loaded XAML/Composition yet; the temporary API
+// discovery thread otherwise releases their last reference before hooks apply.
+static std::array<HMODULE, 4> g_searchMaterialModules{};
+bool SetSearchMaterialHook(size_t index, void* target, void* hook, void** original) {
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<PCWSTR>(target), &module))
+        return false;
+    if (!Wh_SetFunctionHook(target, hook, original)) {
+        FreeLibrary(module);
+        return false;
+    }
+    g_searchMaterialModules[index] = module;
+    return true;
+}
+
+void InitSearchMaterialCapture() noexcept {
+    try {
+        // A temporary dispatcher/compositor obtains public API entry points.
+        // Both are shut down immediately; only hook-target module references remain.
+        std::thread([] {
+            try {
+                winrt::init_apartment(winrt::apartment_type::multi_threaded);
+                auto controller = winrt::Windows::System::DispatcherQueueController::CreateOnDedicatedThread();
+                std::promise<void> complete;
+                auto completed = complete.get_future();
+                if (!controller.DispatcherQueue().TryEnqueue([&] {
+                    try {
+                    searchcomp::Compositor compositor;
+                    auto flood = winrt::make_self<SearchEffect>(CLSID_D2D1Flood);
+                    flood->properties = {wf::PropertyValue::CreateSingleArray({0.f, 0.f, 0.f, 0.f})};
+                    auto factory = compositor.CreateEffectFactory(*flood);
+                    struct CompositorFunctions {
+                        void* inspectable[6];
+                        void* createColorKeyFrameAnimation;
+                        void* createColorBrush;
+                        void* createColorBrushWithColor;
+                        void* createContainerVisual;
+                        void* createCubicBezierEasingFunction;
+                        void* createEffectFactory;
+                        void* createEffectFactoryWithProperties;
+                    };
+                    struct FactoryFunctions { void* inspectable[6]; void* createBrush; };
+                    auto c = *reinterpret_cast<CompositorFunctions**>(winrt::get_abi(compositor));
+                    auto f = *reinterpret_cast<FactoryFunctions**>(winrt::get_abi(factory));
+                    auto xamlFactory = winrt::get_activation_factory<wuxm::XamlCompositionBrushBase, wuxm::IXamlCompositionBrushBaseFactory>();
+                    struct XamlFactoryFunctions { void* inspectable[6]; void* createInstance; };
+                    auto x = *reinterpret_cast<XamlFactoryFunctions**>(winrt::get_abi(xamlFactory));
+                    bool first = SetSearchMaterialHook(0, c->createEffectFactory, reinterpret_cast<void*>(SearchCreateFactoryHook),
+                                                   reinterpret_cast<void**>(&g_searchCreateFactory));
+                    bool second = SetSearchMaterialHook(1, c->createEffectFactoryWithProperties, reinterpret_cast<void*>(SearchCreateFactoryWithPropertiesHook),
+                                                    reinterpret_cast<void**>(&g_searchCreateFactoryWithProperties));
+                    bool third = SetSearchMaterialHook(2, f->createBrush, reinterpret_cast<void*>(SearchCreateEffectBrushHook),
+                                                   reinterpret_cast<void**>(&g_searchCreateEffectBrush));
+                    bool fourth = SetSearchMaterialHook(3, x->createInstance, reinterpret_cast<void*>(SearchCreateXamlBrushHook),
+                                                     reinterpret_cast<void**>(&g_searchCreateXamlBrush));
+                    g_searchMaterialCapture = first && second && third && fourth;
+                    } catch (...) { Wh_Log(L"material API initialization unavailable: %08X", static_cast<unsigned>(winrt::to_hresult())); }
+                    complete.set_value();
+                })) throw winrt::hresult_error(E_FAIL);
+                completed.get();
+                controller.ShutdownQueueAsync().get();
+                winrt::uninit_apartment();
+            } catch (...) { Wh_Log(L"material capture unavailable: %08X", static_cast<unsigned>(winrt::to_hresult())); }
+        }).join();
+    } catch (...) { Wh_Log(L"material capture initialization failed"); }
+}
+
+void StopSearchMaterialCapture() {
+    g_searchMaterialCapture = false;
+    {
+        std::lock_guard lock(g_searchMaterialMutex);
+        g_searchMaterialCache.clear();
+        g_searchMaterialXaml.clear();
+    }
+    // Wh_ModUninit runs after Windhawk has removed every registered hook.
+    for (auto& module : g_searchMaterialModules) {
+        if (module) FreeLibrary(module);
+        module = nullptr;
+    }
+}
+
 SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush, wux::FrameworkElement const& owner = nullptr) {
     SearchBrushData data;
     if (!brush)
@@ -13117,6 +14264,7 @@ SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush, wux::FrameworkEleme
         data.color = SearchPackColor(acrylic.TintColor());
         data.fallback = SearchPackColor(acrylic.FallbackColor());
         data.tint = acrylic.TintOpacity();
+        data.options = acrylic.AlwaysUseFallback() ? 1u : 0u;
         if (auto luminosity = acrylic.TintLuminosityOpacity()) {
             data.luminosity = luminosity.Value();
         }
@@ -13134,53 +14282,28 @@ SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush, wux::FrameworkEleme
             data.offsets[i] = stop.Offset();
         }
     } else if (auto comp = brush.try_as<wuxm::XamlCompositionBrushBase>()) {
-        // Only public data: the brush's FallbackColor and, when another mod
-        // exposes them, the __WhBlur*Proxy_ resources on the owner (read with
-        // try_as, so anything unexpected is simply ignored). The blur amount is
-        // not readable through any public API, so a default is used.
+        data.fallback = SearchPackColor(comp.FallbackColor());
+        try {
+            if (CaptureSearchXamlMaterial(comp, data)) return data;
+        } catch (...) {}
+        // Unknown effects retain an approximation using only their exposed
+        // colors. Preserve transparent tints; never invent a theme's black level.
         data.kind = 4;
         data.blur = 18;
         data.luminosity = 0.0;
-        data.saturation = 1.0;
-        uint32_t fallback = SearchPackColor(comp.FallbackColor());
-        uint32_t tint = fallback;
-        bool foundTintProxy = false;
+        data.color = data.fallback;
         if (owner) {
             try {
                 for (auto const& pair : owner.Resources()) {
                     auto key = winrt::unbox_value_or<winrt::hstring>(pair.Key(), L"");
-                    std::wstring_view keyView{key};
-                    if (keyView.starts_with(L"__WhBlurProxy_")) {
-                        if (auto proxy = pair.Value().try_as<wuxm::SolidColorBrush>()) {
-                            tint = SearchPackColor(proxy.Color());
-                            foundTintProxy = true;
-                        }
-                    } else if (keyView.starts_with(L"__WhBlurFallbackProxy_")) {
-                        if (auto proxy = pair.Value().try_as<wuxm::SolidColorBrush>()) {
-                            fallback = SearchPackColor(proxy.Color());
-                        }
+                    std::wstring_view name{key};
+                    if (auto proxy = pair.Value().try_as<wuxm::SolidColorBrush>()) {
+                        if (name.starts_with(L"__WhBlurProxy_")) data.color = SearchPackColor(proxy.Color());
+                        else if (name.starts_with(L"__WhBlurFallbackProxy_")) data.fallback = SearchPackColor(proxy.Color());
                     }
                 }
-            } catch (...) {
-            }
+            } catch (...) {}
         }
-        const bool isDark = owner ? (owner.ActualTheme() == wux::ElementTheme::Dark) : !IsLightTheme();
-        if (!foundTintProxy) {
-            if (isDark) {
-                tint = 0x40000000u;
-                fallback = 0xFF202020u;
-            } else {
-                tint = 0x80F3F3F3u;
-                fallback = 0xFFF3F3F3u;
-            }
-        } else {
-            if ((tint >> 24) == 0)
-                tint = isDark ? 0x40000000u : 0x80F3F3F3u;
-            if ((fallback >> 24) == 0)
-                fallback = isDark ? 0xFF202020u : 0xFFF3F3F3u;
-        }
-        data.color = tint;
-        data.fallback = fallback | 0xFF000000u;
     }
     return data;
 }
@@ -13324,6 +14447,11 @@ SearchSurfaceData CaptureLiveSurface(wux::FrameworkElement const& element, bool 
         clampFour(data.margin, m.Left, m.Top, m.Right, m.Bottom);
         data.flags |= 32;
     }
+    // XAML applies the surface's own opacity on top of the brush. It is not
+    // part of Brush.Opacity, but must follow a copied background/outline too.
+    const double opacity = std::clamp(element.Opacity(), 0.0, 1.0);
+    data.background.opacity *= opacity;
+    data.outline.opacity *= opacity;
     return data;
 }
 
@@ -13662,82 +14790,10 @@ void RequestStartAppearance() {
                         180, &done);
 }
 
-// Small Direct2D effect graph for Styler glass: blur, optional color adjustment,
-// then a source-over tint. Unlike AcrylicBrush, black retains its specified alpha.
-// Uses the public IGraphicsEffectD2D1Interop ABI (SDK header absent in MinGW).
-struct SearchEffectInterop : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, UINT*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT, winrt::impl::abi_t<wf::IPropertyValue>**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT, IUnknown**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT*) = 0;
-};
-
-}  // namespace
-template <>
-inline constexpr winrt::guid winrt::impl::guid_v<SearchEffectInterop>{
-    0x2FC57384, 0xA068, 0x44D7, {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
-namespace {
-namespace searchcomp = winrt::Windows::UI::Composition;
-namespace searcheffect = winrt::Windows::Graphics::Effects;
-
-struct SearchEffect : winrt::implements<SearchEffect, searcheffect::IGraphicsEffect,
-                                        searcheffect::IGraphicsEffectSource, SearchEffectInterop> {
-    GUID id{};
-    winrt::hstring name;
-    std::vector<wf::IInspectable> properties;
-    std::vector<searcheffect::IGraphicsEffectSource> sources;
-    SearchEffect(GUID value) : id(value) {}
-    winrt::hstring Name() const { return name; }
-    void Name(winrt::hstring value) { name = std::move(value); }
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* value) noexcept override {
-        if (!value)
-            return E_POINTER;
-        *value = id;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, UINT*) noexcept override { return E_INVALIDARG; }
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* value) noexcept override {
-        if (!value)
-            return E_POINTER;
-        *value = static_cast<UINT>(properties.size());
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override
-        try {
-        if (!value)
-            return E_POINTER;
-        *value = nullptr;
-        if (index >= properties.size())
-            return E_BOUNDS;
-        winrt::copy_to_abi(properties[index].as<wf::IPropertyValue>(), *reinterpret_cast<void**>(value));
-        return S_OK;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* value) noexcept override {
-        if (!value)
-            return E_POINTER;
-        *value = static_cast<UINT>(sources.size());
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index, IUnknown** value) noexcept override {
-        if (!value)
-            return E_POINTER;
-        *value = nullptr;
-        if (index >= sources.size())
-            return E_BOUNDS;
-        winrt::copy_to_abi(sources[index], *reinterpret_cast<void**>(value));
-        return S_OK;
-    }
-};
-
 // Container contrast sampling. One small in-memory snapshot per update, with
 // decisions made only from empty container padding. No XAML or disk I/O runs on
 // the worker, and it sleeps completely while search is hidden or animating.
 constexpr UINT_PTR kSearchContainerContrastTimer = 0x706;
-constexpr UINT kSearchContainerContrastReady = WM_APP + 0x77;
 constexpr size_t kSearchContrastMaxContainers = 64;
 constexpr int kSearchContrastStripWidth = 3;
 
@@ -14954,6 +16010,36 @@ void SearchContainerContrastTick() try {
     SearchWindowTrace(L"container color sampling unavailable", winrt::to_hresult());
 }
 
+wf::IInspectable RecreateSearchEffectValue(SearchEffectValue const& value) {
+    switch (static_cast<wf::PropertyType>(value.type)) {
+    case wf::PropertyType::Single: return wf::PropertyValue::CreateSingle(value.values[0]);
+    case wf::PropertyType::UInt32: return wf::PropertyValue::CreateUInt32(static_cast<uint32_t>(value.values[0]));
+    case wf::PropertyType::Boolean: return wf::PropertyValue::CreateBoolean(value.values[0] != 0);
+    case wf::PropertyType::SingleArray:
+        return wf::PropertyValue::CreateSingleArray(winrt::array_view<float const>{value.values, value.values + value.count});
+    default: throw winrt::hresult_invalid_argument();
+    }
+}
+
+searcheffect::IGraphicsEffect RecreateSearchEffectGraph(SearchEffectGraph const& graph) {
+    if (!ValidSearchEffectGraph(graph)) throw winrt::hresult_invalid_argument();
+    std::array<searcheffect::IGraphicsEffectSource, 12> nodes{};
+    for (uint32_t i = 0; i < graph.count; ++i) {
+        auto const& node = graph.nodes[i];
+        if (node.kind == 1 || node.kind == 3) {
+            nodes[i] = searchcomp::CompositionEffectSourceParameter(node.parameter);
+        } else {
+            auto effect = winrt::make_self<SearchEffect>(node.id);
+            for (uint32_t j = 0; j < node.propertyCount; ++j)
+                effect->properties.push_back(RecreateSearchEffectValue(node.properties[j]));
+            for (uint32_t j = 0; j < node.sourceCount; ++j)
+                effect->sources.push_back(nodes[node.sources[j]]);
+            nodes[i] = *effect;
+        }
+    }
+    return nodes[graph.count - 1].as<searcheffect::IGraphicsEffect>();
+}
+
 struct SearchGlassBrush : wuxm::XamlCompositionBrushBaseT<SearchGlassBrush> {
     SearchBrushData data;
     searchcomp::Compositor compositor{nullptr};
@@ -14983,6 +16069,8 @@ struct SearchGlassBrush : wuxm::XamlCompositionBrushBaseT<SearchGlassBrush> {
             }
             // This brush's definition is immutable. Reconnecting it (for
             // example in a preview) needs a new brush, not a new effect graph.
+            if (!factory && data.kind == 5)
+                factory = compositor.CreateEffectFactory(RecreateSearchEffectGraph(data.graph));
             if (!factory) {
                 auto blur = winrt::make_self<SearchEffect>(CLSID_D2D1GaussianBlur);
                 blur->properties = {wf::PropertyValue::CreateSingle(static_cast<float>(data.blur)),
@@ -15037,8 +16125,19 @@ struct SearchGlassBrush : wuxm::XamlCompositionBrushBaseT<SearchGlassBrush> {
                 factory = compositor.CreateEffectFactory(*composite);
             }
             auto effect = factory.CreateBrush();
-            effect.SetSourceParameter(
-                L"Backdrop", hostBackdrop ? compositor.CreateHostBackdropBrush() : compositor.CreateBackdropBrush());
+            if (data.kind == 5) {
+                for (uint32_t i = 0; i < data.graph.count; ++i) {
+                    auto const& node = data.graph.nodes[i];
+                    if (node.kind == 1)
+                        effect.SetSourceParameter(node.parameter, hostBackdrop ? compositor.CreateHostBackdropBrush()
+                                                                             : compositor.CreateBackdropBrush());
+                    else if (node.kind == 3)
+                        effect.SetSourceParameter(node.parameter, compositor.CreateColorBrush(SearchUnpackColor(node.color)));
+                }
+            } else {
+                effect.SetSourceParameter(L"Backdrop", hostBackdrop ? compositor.CreateHostBackdropBrush()
+                                                                   : compositor.CreateBackdropBrush());
+            }
             CompositionBrush(effect);
             if (hostBackdrop)
                 SearchWindowTrace(L"glass composition ready");
@@ -15071,12 +16170,16 @@ wuxm::Brush RecreateSearchBrush(SearchBrushData const& data, bool hostBackdrop =
         wuxm::AcrylicBrush acrylic;
         acrylic.BackgroundSource(hostBackdrop ? wuxm::AcrylicBackgroundSource::HostBackdrop
                                               : wuxm::AcrylicBackgroundSource::Backdrop);
+        acrylic.AlwaysUseFallback((data.options & 1) != 0);
         acrylic.TintColor(SearchUnpackColor(data.color));
         acrylic.FallbackColor(SearchUnpackColor(data.fallback));
         acrylic.TintOpacity(std::clamp(data.tint, 0.0, 1.0));
         if (data.luminosity >= 0)
             acrylic.TintLuminosityOpacity(std::clamp(data.luminosity, 0.0, 1.0));
         brush = acrylic;
+    } else if (data.kind == 5) {
+        if (!ValidSearchEffectGraph(data.graph)) return nullptr;
+        brush = winrt::make<SearchGlassBrush>(data, hostBackdrop);
     } else if (data.kind == 4) {
         if (!std::isfinite(data.blur) || data.blur < 0 || data.blur > 100 || !std::isfinite(data.saturation) ||
             data.saturation < 0 || data.saturation > 10)
@@ -15554,10 +16657,6 @@ void UpdateSearchBarShape() {
         return;
     const double w = g_searchBarBorder.ActualWidth();
     const double h = g_searchBarBorder.ActualHeight();
-    if (g_searchBarInnerBorder && std::isfinite(w) && std::isfinite(h) && w > 1.0 && h > 1.0) {
-        g_searchBarInnerBorder.Width(w);
-        g_searchBarInnerBorder.Height(h);
-    }
     ApplySmoothElementShape(g_searchBarBorder, g_searchBarStrokeImage, w, h, g_searchBarCorners, g_searchBarThickness,
                             g_searchBarOutlineBrush);
 }
@@ -15789,13 +16888,8 @@ wux::Style CopiedMenuPresenterStyle() {
             set(wuxc::Control::BorderBrushProperty(), menuBorder);
     }
 
-    if (surface.flags & 4) {
-        wux::CornerRadius menuCorners = SearchCorners(surface.corners);
-        if (menuCorners.TopLeft <= 0 && menuCorners.TopRight <= 0 && menuCorners.BottomRight <= 0 &&
-            menuCorners.BottomLeft <= 0)
-            menuCorners = wux::CornerRadius{8, 8, 8, 8};
-        set(wuxc::Control::CornerRadiusProperty(), winrt::box_value(menuCorners));
-    }
+    // Keep context menus compact regardless of the search window/theme corners.
+    set(wuxc::Control::CornerRadiusProperty(), winrt::box_value(wux::CornerRadius{8, 8, 8, 8}));
 
     if (surface.flags & 8) {
         set(wuxc::Control::BorderThicknessProperty(), winrt::box_value(SearchThickness(surface.thickness)));
@@ -15952,7 +17046,12 @@ void InitializeCopiedMenu(wuxc::MenuFlyout const& menu) {
             0;
         if (mousePressed) {
             POINT pt{};
-            if (GetCursorPos(&pt) && !IsPointInAnySearchThreadWindow(pt)) {
+            if (GetCursorPos(&pt) && IsPointInPreview(pt)) {
+                g_contextMenuPreviewClose = true;
+                g_dismissSearchOnMenuClose = false;
+                return;
+            }
+            if (!IsPointInAnySearchThreadWindow(pt)) {
                 g_dismissSearchOnMenuClose = true;
                 return;
             }
@@ -16014,7 +17113,7 @@ void ApplyStartAppearance() try {
     g_resultsHost.CornerRadius(
         wux::CornerRadius{g_windowCorners[0], g_windowCorners[1], g_windowCorners[2], g_windowCorners[3]});
 
-    // 2. Search Bar (Primary + 2nd Overlay Layer + D2D Smooth Stroke)
+    // 2. Search Bar (Background + D2D Smooth Stroke)
     if (auto brush = RecreateSearchBrush(appearance.searchBackground))
         g_searchBarBorder.Background(brush);
     g_searchBarBorder.BorderBrush(nullptr);
@@ -16032,24 +17131,6 @@ void ApplyStartAppearance() try {
     }
     g_searchBarThickness = {bounded(appearance.searchThickness[0]), bounded(appearance.searchThickness[1]),
                             bounded(appearance.searchThickness[2]), bounded(appearance.searchThickness[3])};
-    if (!SearchBrushIsVisible(g_searchBarOutlineBrush) && (appearance.searchOverlay.flags & 2)) {
-        g_searchBarOutlineBrush = appearance.searchOverlay.outline;
-        g_searchBarThickness = {bounded(appearance.searchOverlay.thickness[0]),
-                                bounded(appearance.searchOverlay.thickness[1]),
-                                bounded(appearance.searchOverlay.thickness[2]),
-                                bounded(appearance.searchOverlay.thickness[3])};
-    }
-    if (g_searchBarInnerBorder) {
-        if ((appearance.searchOverlay.flags & 1) && SearchBrushIsVisible(appearance.searchOverlay.background)) {
-            g_searchBarInnerBorder.Background(RecreateSearchBrush(appearance.searchOverlay.background));
-            g_searchBarInnerBorder.CornerRadius(wux::CornerRadius{g_searchBarCorners[0], g_searchBarCorners[1],
-                                                                  g_searchBarCorners[2], g_searchBarCorners[3]});
-            g_searchBarInnerBorder.Visibility(wux::Visibility::Visible);
-        } else {
-            g_searchBarInnerBorder.Background(nullptr);
-            g_searchBarInnerBorder.Visibility(wux::Visibility::Collapsed);
-        }
-    }
 
     // 3. Section Headers (Apps & Files Pill / Glass Headers + D2D Smooth Stroke)
     const bool hasHeaderBg = (appearance.header.flags & 1) && SearchBrushIsVisible(appearance.header.background);
@@ -16313,15 +17394,13 @@ void SearchWindowMotionFrame() {
             g_searchWindowStartClosedAt = 0;
         else if (!g_searchWindowStartClosedAt)
             g_searchWindowStartClosedAt = now;
-        const ULONGLONG minimum = g_searchWindowStartWasOpen && SearchWindowAnimationsEnabled() ? 200 : 32;
-        if (closed && now - g_searchWindowHandoffStarted >= minimum && now - g_searchWindowStartClosedAt >= 32) {
+        if (closed && now - g_searchWindowHandoffStarted >= 32 && now - g_searchWindowStartClosedAt >= 32) {
             g_searchWindowWaitingForStart = false;
             KillTimer(host, kSearchWindowMotionTimer);
             StartSearchWindowSlide(0, SearchWindowAnimationsEnabled() ? 240 : 0);
         } else if (!closed && !g_searchWindowShellCloseAsked && now - g_searchWindowHandoffStarted >= 450 &&
                    GetForegroundWindow() == host) {
-            // A cloaked foreground window can leave Start open. Ask the
-            // shell to close it once, after its normal close would have ended.
+            // Ask once if Start did not close after losing the foreground.
             g_searchWindowShellCloseAsked = true;
             if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr))
                 PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
@@ -16350,9 +17429,8 @@ void RunSearchWindowMotion() {
         return;
     SearchWindowMotionFrame();
     if (g_searchWindowWaitingForStart) {
-        if (!SetTimer(host, kSearchWindowMotionTimer, 15, nullptr)) {
+        if (!SetTimer(host, kSearchWindowMotionTimer, 15, nullptr))
             FinishSearchWindowHide();
-        }
     }
 }
 
@@ -16422,17 +17500,21 @@ void SearchWindowShow(std::wstring const& text, bool append) {
             g_ourBox.Text(L"");
             g_dragging = false;
             RequestAppIndexRefresh();
-            if (!wasVisible) {
+            // Typing in Start shows search immediately at its final position,
+            // without waiting for Start's close animation or changing stacking.
+            const bool fromStart = !IsStartMenuClosed();
+            g_searchWindowWaitingForStart = !fromStart;
+            if (fromStart) {
+                SnapSearchWindowSlide(0);
+            } else if (!wasVisible) {
                 const double scale = GetDpiForWindow(host) / 96.0;
                 SnapSearchWindowSlide(
                     SearchHiddenDistance(g_searchWindowBounds, g_searchWindowWork, scale, g_searchTaskbarEdge));
             }
-            g_searchWindowStartWasOpen = !IsStartMenuClosed();
-            g_searchWindowWaitingForStart = true;
             g_searchWindowHandoffStarted = GetTickCount64();
             g_searchWindowStartClosedAt = 0;
             g_searchWindowShellCloseAsked = false;
-            SetSearchWindowCloaked(true);
+            SetSearchWindowCloaked(g_searchWindowWaitingForStart);
             HidePreview();
         }
         if (!text.empty()) {
@@ -16499,12 +17581,11 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
             data->lpData) {
             SearchAppearanceData appearance;
             memcpy(&appearance, data->lpData, sizeof(appearance));
-            if (appearance.version == 7 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) &&
+            if (appearance.version == 9 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) &&
                 std::isfinite(appearance.width) && std::isfinite(appearance.height) && appearance.width >= 0 &&
                 appearance.width <= 4000 && appearance.height >= 0 && appearance.height <= 4000 &&
                 std::isfinite(appearance.edgeGap) && std::isfinite(appearance.alignment) &&
-                ValidSearchSurface(appearance.searchOverlay) && ValidSearchSurface(appearance.header) &&
-                ValidSearchSurface(appearance.footer) &&
+                ValidSearchSurface(appearance.header) && ValidSearchSurface(appearance.footer) &&
                 ValidSearchSurface(appearance.menu) && ValidSearchSurface(appearance.menuBorder) &&
                 ValidSearchSurface(appearance.menuItem)) {
                 if ((appearance.width < 400 || appearance.height < 350) && g_searchAppearance.width >= 400) {
@@ -16549,12 +17630,31 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
         SearchWindowLayout();
         return 0;
     }
-    if (message == DragDoneMessage()) {
+    if (message == kSearchWindowPreviewResultMessage) {
+        ApplyPreview();
+        return 0;
+    }
+    if (message == kSearchWindowPreviewFramesMessage) {
+        ApplyPreviewFrames();
+        return 0;
+    }
+    if (message == kSearchWindowBeginDragMessage) {
+        RunFileDrag(hwnd, std::exchange(g_pendingFileDrag, std::wstring()));
+        return 0;
+    }
+    if (message == kSearchWindowDragDoneMessage) {
         g_dragging = false;
-        if (wParam)
-            SearchWindowHide();
-        else if (IsWindowVisible(hwnd))
-            SearchWindowShow();
+        if (g_quit.load()) return 0;
+        if (wParam) SearchWindowHide();
+        else if (IsWindowVisible(hwnd)) {
+            SetForegroundWindow(hwnd);
+            QueueSearchBoxRefocus();
+            SchedulePreview();
+        }
+        return 0;
+    }
+    if (message == WM_CANCELMODE && g_dragging.load()) {
+        if (HWND capture = GetCapture(); capture && capture != hwnd) SendMessageW(capture, WM_CANCELMODE, 0, 0);
         return 0;
     }
     switch (message) {
@@ -16826,6 +17926,8 @@ void SearchWindowTeardown() {
     if (!g_searchWindowWindow.load())
         return;
     SearchWindowTrace(L"tearing down");
+    g_pendingFileDrag.clear();
+    g_dragging = false;
     StopSearchWindowSlide();
     StopSearchContainerContrast();
     g_searchSlideClock.reset();
@@ -16893,6 +17995,7 @@ void RefreshSearchUiSettings() {
         RescaleFonts(g_resultsHost);
         RescaleFonts(g_previewCard);
         ApplyFilesPanelLayout();
+        HidePreview();  // cancel the worker before applying preview setting changes
         if (g_ourBox) {
             QueueQuery(std::wstring(g_ourBox.Text()));
         }
@@ -16926,6 +18029,7 @@ BOOL Wh_ModInit() {
     }
     if (g_targetProcess == TargetProcess::StartMenu) {
         LoadSettings();
+        InitSearchMaterialCapture();
         return TRUE;
     }
     return FALSE;
@@ -17003,6 +18107,7 @@ void Wh_ModUninit() {
         return;
     }
 
+    StopSearchMaterialCapture();
     StopAttachWatch();
     if (HWND core = g_hCoreWindow.exchange(nullptr); core && IsWindow(core)) {
         DWORD_PTR result = 0;
@@ -17013,3 +18118,76 @@ void Wh_ModUninit() {
     }
     Wh_Log(L"uninit: StartMenuExperienceHost teardown complete");
 }
+
+// A correctly shaped rundll32 entry point keeps the worker in the same source
+// file and compiled DLL. It never calls Windhawk APIs or initializes hooks/UI.
+extern "C" __declspec(dllexport) void CALLBACK StartEverythingPreviewWorker(HWND, HINSTANCE, LPSTR arguments, int) {
+    unsigned long long input = 0, output = 0;
+    char extra = 0;
+    if (!arguments || sscanf(arguments, "%llu %llu %c", &input, &output, &extra) != 2) return;
+    HANDLE read = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(input));
+    HANDLE write = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(output));
+    if (GetFileType(read) != FILE_TYPE_PIPE || GetFileType(write) != FILE_TYPE_PIPE) return;
+    try { preview::PreviewWorkerMain(read, write); } catch (...) {}
+}
+
+#ifdef START_EVERYTHING_DRAG_DIAGNOSTICS
+struct PreviewWorkerTestResult {
+    DWORD stills, frames, width, height, textLength, facts, processId, processStopped, changes, opaque;
+};
+extern "C" __declspec(dllexport) int StartEverythingPreviewTest(PCWSTR path, DWORD mode, PreviewWorkerTestResult* facts) {
+    if (!path || !facts) return 1;
+    *facts = {};
+    preview::PreviewWorkerClient worker;
+    try {
+        if (!worker.Begin(mode == 2 ? L"::test-worker-stall::" : mode == 3 ? L"::test-worker-exit::" : path,
+                          1.0, mode != 1)) return 2;
+        facts->processId = worker.ProcessId();
+        const ULONGLONG began = GetTickCount64();
+        auto cancel = [&] { return GetTickCount64() - began > (mode == 2 ? 100 : 15000); };
+        preview::WorkerPacketHeader header{};
+        std::vector<BYTE> bytes;
+        uint32_t previousHash = 0;
+        auto inspectPixels = [&](std::vector<BYTE> const& pixels) {
+            uint32_t hash = 2166136261u;
+            for (size_t i = 0; i < pixels.size(); ++i) { hash ^= pixels[i]; hash *= 16777619u; }
+            if (previousHash && hash != previousHash) ++facts->changes;
+            previousHash = hash;
+            DWORD opaque = 0;
+            for (size_t i = 3; i < pixels.size(); i += 4) opaque += pixels[i] != 0;
+            facts->opaque = opaque;
+        };
+        while (worker.Next(&header, &bytes, cancel)) {
+            if (header.kind == preview::WorkerDone) break;
+            auto result = preview::DecodeWorkerResult(bytes, path);
+            if (header.kind == preview::WorkerStill) {
+                ++facts->stills;
+                facts->width = result.width; facts->height = result.height;
+                facts->textLength = static_cast<DWORD>(result.text.size());
+                facts->facts = static_cast<DWORD>(result.facts.size());
+                inspectPixels(result.pixels);
+            } else {
+                facts->frames += result.frames.empty() ? 1 : static_cast<DWORD>(result.frames.size());
+                if (result.frames.empty()) inspectPixels(result.pixels);
+            }
+            if (header.kind == preview::WorkerStill) facts->frames += static_cast<DWORD>(result.frames.size());
+            for (auto const& frame : result.frames) inspectPixels(frame);
+            if (facts->frames >= 4) break;
+        }
+        if (mode == 3) {
+            if (!worker.Begin(path, 1.0, false)) return 6;
+            facts->processId = worker.ProcessId();
+            if (!worker.Next(&header, &bytes, cancel) || header.kind != preview::WorkerStill) return 7;
+            auto result = preview::DecodeWorkerResult(bytes, path);
+            facts->stills = 1;
+            facts->width = result.width; facts->height = result.height;
+        }
+        const DWORD pid = facts->processId;
+        worker.Reset();
+        HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+        facts->processStopped = !process || WaitForSingleObject(process, 2000) == WAIT_OBJECT_0;
+        if (process) CloseHandle(process);
+        return mode == 2 ? (facts->processStopped ? 0 : 4) : (facts->stills ? 0 : 3);
+    } catch (...) { return 5; }
+}
+#endif
