@@ -1,9 +1,9 @@
 // ==WindhawkMod==
-// @id              floating-taskbar
+// @id              Floating-Taskbar
 // @name            Floating Taskbar
 // @name:zh-CN      悬浮任务栏
-// @description     Turns the Windows 11 taskbar into a standalone floating rounded bar with configurable width, area height, bottom gap, corner radii, background colors and gradients. Empty areas click through, and tray menus plus Quick Settings stay anchored to the bar's right edge.
-// @description:zh-CN 将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、圆角与背景颜色/渐变；空白区域点击穿透，托盘菜单和快速设置面板对齐悬浮条右端。
+// @description     Transform Windows 11 taskbar into an independent floating rounded bar. Customize its width, height, bottom spacing, corner radius, background colors and gradients. Blank regions support click-through. Tray menus and Quick Settings remain docked to the bar’s right edge.
+// @description:zh-CN 将Windows 11任务栏转变为独立的浮动圆条。自定义宽度、高度、底部间距、角角半径、背景颜色和渐变。空白区域支持点击。托盘菜单和快速设置仍固定在栏的右侧边缘
 // @version         2.1.8
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
@@ -3589,6 +3589,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
+  // explorer.exe,ShellHost.exe,ShellExperienceHost.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
@@ -3793,6 +3794,7 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+  // explorer.exe,ShellHost.exe,ShellExperienceHost.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
@@ -4029,6 +4031,7 @@ void WINAPI PositionContextMenuPopup_Hook(void const* popup,
 }
 
 bool HookSystemTrayDllSymbols(HMODULE module) {
+  // explorer.exe,ShellHost.exe,ShellExperienceHost.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
