@@ -2,7 +2,7 @@
 // @id refined-quick-settings-and-sound
 // @name Refined Quick Settings and Sound
 // @description A "vanilla+" rework of the Windows 11 Quick Settings and Volume mixer panels for daily use
-// @version 0.1.148
+// @version 0.1.149
 // @author HeyOkay
 // @github https://github.com/HeyOkay
 // @include explorer.exe
@@ -62,11 +62,8 @@ customizations are restored when the mod is unloaded.
 - Added labels such as "Sound" and "Input device" are in English.
 - The first Sound opening in each ShellHost process starts with the mixer
   collapsed; subsequent openings remember its state.
-- **Incompatible with Windows 11 Notification Center Styler and UWPSpy** (and
-  other tools that attach to XAML Diagnostics in ShellHost). The mod finds the
-  Quick Settings and Sound pages through XAML Diagnostics, and Windows allows
-  only one diagnostics connection per process. The mod releases it once the
-  pages are found, but reconnects when the shell rebuilds the panel.
+
+Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling this candidate, close and reopen it; restart ShellHost if it is not picked up.
 
 ## Notes
 
@@ -76,9 +73,11 @@ Windhawk log.
 
 ## Credits and license
 
-GPL-3.0-only. The XAML Diagnostics connection approach follows
+GPL-3.0-only. The UI-thread dispatch technique follows
 [m417z's Notification Center Styler](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-notification-center-styler.wh.cpp)
-(GPL-3.0). The hidden-applications parser is adapted from the local
+(GPL-3.0). ControlCenter.dll discovery uses the COM produce-interface pattern
+documented by [Per-monitor brightness](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/per-monitor-brightness.wh.cpp).
+The hidden-applications parser is adapted from the local
 Sound Output Direct and Taller mod (GPL-3.0-only).
 The sliders-horizontal and ethernet-port icons are from
 [Lucide](https://lucide.dev/) (ISC); the license notice is included below
@@ -103,7 +102,6 @@ in this source file.
 #include <windows.h>
 #include <shellapi.h>
 #include <windhawk_utils.h>
-#include <xamlom.h>
 #include <ocidl.h>
 #include <mutex>
 #include <set>
@@ -5921,17 +5919,9 @@ public:
 };
 } // namespace native
 
-// XAML Diagnostics TAP integration, independently implemented using the SDK.
-// Lifecycle/connection approach: m417z Notification Center Styler (GPL-3.0).
+// Public visual-tree discovery from ControlCenter.dll COM-interface hooks.
+// No XAML Diagnostics connection, TAP, or diagnostic instance handles.
 namespace native {
-inline constexpr GUID tapClsid = {
-    0x83110e61, 0x2ad1, 0x41a2, {0x94, 0xae, 0xba, 0x5a, 0x22, 0x17, 0x3b, 0x73}};
-inline constexpr GUID testHooksId = {
-    0x735941a2, 0x3ee3, 0x495a, {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
-struct TestHooks : IUnknown {
-  virtual HRESULT STDMETHODCALLTYPE UnregisterInstance(InstanceHandle) = 0;
-  virtual HRESULT STDMETHODCALLTYPE TryGetDispatcherQueueForObject(InstanceHandle, void **) = 0;
-};
 inline HWND ThreadWindow(DWORD id) {
   std::vector<HWND> found;
   EnumThreadWindows(
@@ -5945,11 +5935,18 @@ inline HWND ThreadWindow(DWORD id) {
         return TRUE;
       },
       reinterpret_cast<LPARAM>(&found));
+  for (auto handle : found) {
+    WCHAR name[96]{};
+    GetClassNameW(handle, name, ARRAYSIZE(name));
+    if (!_wcsicmp(name, L"ControlCenterWindow"))
+      return handle;
+  }
   return found.empty() ? nullptr : found.front();
 }
 inline UINT dispatchMessage = RegisterWindowMessageW(L"Windhawk.SoundNative.Dispatch.2");
 struct Job {
   std::function<void()> action;
+  bool succeeded = false;
 };
 inline std::mutex jobsMutex;
 inline std::map<UINT_PTR, Job *> jobs;
@@ -5968,6 +5965,7 @@ inline LRESULT CALLBACK DispatchHook(int code, WPARAM w, LPARAM l) {
       if (job)
         try {
           job->action();
+          job->succeeded = true;
         } catch (...) {
           Wh_Log(L"UI dispatch: %08X", winrt::to_hresult());
         }
@@ -5980,8 +5978,13 @@ inline bool Dispatch(HWND window, std::function<void()> action) {
   if (!thread)
     return false;
   if (thread == GetCurrentThreadId()) {
-    action();
-    return true;
+    try {
+      action();
+      return true;
+    } catch (...) {
+      Wh_Log(L"UI dispatch: %08X", winrt::to_hresult());
+      return false;
+    }
   }
   auto hook = SetWindowsHookExW(WH_CALLWNDPROC, DispatchHook, module, thread);
   if (!hook)
@@ -5998,24 +6001,38 @@ inline bool Dispatch(HWND window, std::function<void()> action) {
     jobs.erase(cookie);
   }
   UnhookWindowsHookEx(hook);
-  return true;
+  return job.succeeded;
 }
+
 struct Runtime;
-inline void CALLBACK PanelShown(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD,
-                                DWORD);
-inline bool BeginRelease();
-inline bool FinishRelease();
-inline bool Reconnect();
+inline void CALLBACK PanelShown(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);
 inline std::mutex runtimesMutex;
 inline std::map<DWORD, Runtime *> runtimes;
 struct Runtime {
-  HWND window = nullptr;
-  // The UI thread's queue: the unload path reaches the thread through it when
-  // the window handle is gone or stale.
-  winrt::Windows::System::DispatcherQueue queue{nullptr};
-  // While the panel is hidden the maintenance timer stops; showing or
-  // uncloaking the panel window starts it again (WinEvent hooks, UI thread).
+  HWND window = nullptr, pulseWindow = nullptr;
+  winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
   HWINEVENTHOOK showHook = nullptr, uncloakHook = nullptr;
+  X::DispatcherTimer timer{nullptr}, discoveryTimer{nullptr};
+  winrt::event_token tick{}, discoveryTick{};
+  std::vector<winrt::weak_ref<X::FrameworkElement>> discoveryCandidates;
+  unsigned discoveryAttempts = 0;
+  bool busy = false, discovering = false;
+  winrt::weak_ref<X::FrameworkElement> l2frame;
+  int64_t frameToken = 0;
+  std::vector<std::unique_ptr<SoundPage>> pages;
+  std::vector<std::unique_ptr<QuickPage>> quickPages;
+  struct PageWatch {
+    winrt::weak_ref<X::FrameworkElement> page;
+    winrt::event_token loaded{}, layout{};
+  };
+  std::vector<PageWatch> pageWatches;
+  struct ViewWatch {
+    winrt::weak_ref<X::FrameworkElement> view;
+    winrt::event_token loaded{}, layout{};
+  };
+  std::vector<ViewWatch> viewWatches;
+  std::shared_ptr<VolumePulse> volumePulse;
+  bool volumeDuringRefresh = false;
   bool Hidden() const { return !WindowShown(window); }
   void Wake() {
     if (timer && !stopping) {
@@ -6023,26 +6040,74 @@ struct Runtime {
       timer.Start();
     }
   }
-  X::DispatcherTimer timer{nullptr};
-  winrt::event_token tick{};
-  winrt::com_ptr<TestHooks> release;
-  std::set<InstanceHandle> pending;
-  winrt::com_ptr<IXamlDiagnostics> diagnostics;
-  winrt::com_ptr<IVisualTreeService3> properties;
-  std::vector<winrt::weak_ref<X::FrameworkElement>> roots;
-  std::vector<std::unique_ptr<SoundPage>> pages;
-  bool busy = false;
-  // XAML Diagnostics is released completely once the shell's L2Frame (it hosts
-  // every Sound page) and the Quick Settings view are found. While any reference
-  // to IXamlDiagnostics lives, XAML runs the whole process in its debugging mode
-  // (global style/resource/live-tree tables with an entry for every element,
-  // never pruned), and every Sound opening gets slower. The last reference
-  // switches the mode off in XamlDiagnostics' destructor. New Sound pages are
-  // taken from L2Frame.Content changes; the bridge reconnects if the frame goes
-  // away and releases again once everything is found.
-  winrt::weak_ref<X::FrameworkElement> l2frame;
-  int64_t frameToken = 0;
-  bool observing = true, releasing = false;
+  static LRESULT CALLBACK VolumeProc(HWND handle, UINT message, WPARAM w, LPARAM l,
+                                     DWORD_PTR reference) {
+    auto self = reinterpret_cast<Runtime *>(reference);
+    if (message == volumePulseMessage) {
+      if (self->volumePulse)
+        self->volumePulse->queued = false;
+      if (!stopping)
+        try {
+          if (self->busy)
+            self->volumeDuringRefresh = true;
+          else
+            for (auto const &page : self->pages)
+              page->RefreshMasterNow();
+        } catch (...) {
+          Wh_Log(L"MasterPulseError %08X", winrt::to_hresult());
+        }
+      return 0;
+    }
+    if (message == WM_NCDESTROY) {
+      if (self->pulseWindow == handle) {
+        if (self->volumePulse)
+          self->volumePulse->active = false;
+        self->pulseWindow = nullptr;
+      }
+      if (self->window == handle)
+        self->window = nullptr;
+      WindhawkUtils::RemoveWindowSubclassFromAnyThread(handle, VolumeProc);
+    }
+    return DefSubclassProc(handle, message, w, l);
+  }
+  void EnsureVolumePulse() {
+    HWND next = window && IsWindow(window) ? window : ThreadWindow(GetCurrentThreadId());
+    if (!next || GetWindowThreadProcessId(next, nullptr) != GetCurrentThreadId())
+      return;
+    window = next;
+    if (pulseWindow == next && IsWindow(pulseWindow))
+      return;
+    if (volumePulse)
+      volumePulse->active = false;
+    if (pulseWindow && IsWindow(pulseWindow))
+      WindhawkUtils::RemoveWindowSubclassFromAnyThread(pulseWindow, VolumeProc);
+    pulseWindow = nullptr;
+    auto fresh = std::make_shared<VolumePulse>(next);
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(next, VolumeProc,
+                                                       reinterpret_cast<DWORD_PTR>(this))) {
+      fresh->active = false;
+      Wh_Log(L"Could not subclass the Control Center window");
+      return;
+    }
+    pulseWindow = next;
+    volumePulse = std::move(fresh);
+  }
+  explicit Runtime(X::FrameworkElement const &anchor)
+      : window(ThreadWindow(GetCurrentThreadId())), dispatcher(anchor.Dispatcher()) {
+    timer = X::DispatcherTimer();
+    timer.Interval(std::chrono::milliseconds(200));
+    tick = timer.Tick([this](auto &&, auto &&) { Refresh(); });
+    discoveryTimer = X::DispatcherTimer();
+    discoveryTimer.Interval(std::chrono::milliseconds(1));
+    discoveryTick = discoveryTimer.Tick([this](auto &&, auto &&) { DiscoverPending(); });
+    DWORD process = GetCurrentProcessId(), thread = GetCurrentThreadId();
+    showHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, PanelShown, process,
+                               thread, WINEVENT_OUTOFCONTEXT);
+    uncloakHook = SetWinEventHook(0x8018 /*EVENT_OBJECT_UNCLOAKED*/, 0x8018, nullptr, PanelShown,
+                                  process, thread, WINEVENT_OUTOFCONTEXT);
+    std::lock_guard lock(runtimesMutex);
+    runtimes[thread] = this;
+  }
   void OnFrameContent(X::DependencyObject const &sender) {
     auto frame = sender.try_as<C::ContentControl>();
     if (!frame)
@@ -6051,6 +6116,9 @@ struct Runtime {
     if (!page || Class(page).find(L"ControlCenter.FullScreenPage") == std::wstring::npos)
       return;
     WatchPage(page);
+    Wake();
+    if (page.IsLoaded())
+      BeforeDisplay(page, true);
   }
   void WatchFrame(X::FrameworkElement const &frame) {
     if (auto current = l2frame.get(); current && current == frame)
@@ -6078,148 +6146,6 @@ struct Runtime {
     l2frame = nullptr;
     frameToken = 0;
   }
-  // In Refresh (outside any report): release the diagnostics once everything is
-  // found, reconnect if the frame is gone (the shell rebuilt the panel).
-  void Observation() {
-    auto frame = l2frame.get();
-    bool ready = frame && !quickPages.empty();
-    if (observing && ready && !releasing) {
-      if (BeginRelease())
-        releasing = true;
-    } else if (!observing && !frame) {
-      UnwatchFrame();
-      if (Reconnect())
-        observing = true;
-    }
-  }
-  // End of Refresh, after the pending handles were returned: once the watcher has
-  // unadvised, drop every reference, so XamlDiagnostics dies on the UI thread.
-  void FinishObservation() {
-    if (!releasing || !FinishRelease())
-      return;
-    release = nullptr;
-    properties = nullptr;
-    diagnostics = nullptr;
-    releasing = false;
-    observing = false;
-  }
-  // A reconnection (new XamlDiagnostics) reaches an existing Runtime.
-  void Attach(winrt::com_ptr<TestHooks> const &hooks,
-              winrt::com_ptr<IXamlDiagnostics> const &inspect) {
-    if (diagnostics || !inspect)
-      return;
-    release = hooks;
-    diagnostics = inspect;
-    properties = diagnostics.as<IVisualTreeService3>();
-  }
-  std::vector<std::unique_ptr<QuickPage>> quickPages;
-  struct PageWatch {
-    winrt::weak_ref<X::FrameworkElement> page;
-    winrt::event_token loaded, layout;
-  };
-  std::vector<PageWatch> pageWatches;
-  std::shared_ptr<VolumePulse> volumePulse;
-  bool pulseHooked = false, volumeDuringRefresh = false;
-  static LRESULT CALLBACK VolumeProc(HWND window, UINT message, WPARAM w, LPARAM l,
-                                     DWORD_PTR reference) {
-    auto self = reinterpret_cast<Runtime *>(reference);
-    if (message == volumePulseMessage) {
-      if (self->volumePulse)
-        self->volumePulse->queued = false;
-      if (!stopping)
-        try {
-          if (self->busy)
-            self->volumeDuringRefresh = true;
-          else
-            for (auto const &page : self->pages)
-              page->RefreshMasterNow();
-        } catch (...) {
-          Wh_Log(L"MasterPulseError %08X", winrt::to_hresult());
-        }
-      return 0;
-    }
-    if (message == WM_NCDESTROY) {
-      if (self->volumePulse)
-        self->volumePulse->active = false;
-      self->pulseHooked = false;
-      WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, VolumeProc);
-    }
-    return DefSubclassProc(window, message, w, l);
-  }
-  void EnsureVolumePulse() {
-    if (pulseHooked && IsWindow(window))
-      return;
-    window = ThreadWindow(GetCurrentThreadId());
-    if (!window)
-      return;
-    if (volumePulse)
-      volumePulse->active = false;
-    volumePulse = std::make_shared<VolumePulse>(window);
-    pulseHooked = WindhawkUtils::SetWindowSubclassFromAnyThread(window, VolumeProc,
-                                                                reinterpret_cast<DWORD_PTR>(this));
-  }
-  Runtime(winrt::com_ptr<TestHooks> hooks, winrt::com_ptr<IXamlDiagnostics> inspect)
-      : window(ThreadWindow(GetCurrentThreadId())),
-        queue(winrt::Windows::System::DispatcherQueue::GetForCurrentThread()),
-        release(std::move(hooks)),
-        diagnostics(std::move(inspect)), properties(diagnostics.as<IVisualTreeService3>()) {
-    EnsureVolumePulse();
-    timer = X::DispatcherTimer();
-    timer.Interval(std::chrono::milliseconds(200));
-    tick = timer.Tick([this](auto &&, auto &&) { Refresh(); });
-    timer.Start();
-    DWORD process = GetCurrentProcessId();
-    showHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, PanelShown, process,
-                               GetCurrentThreadId(), WINEVENT_OUTOFCONTEXT);
-    uncloakHook = SetWinEventHook(0x8018 /*EVENT_OBJECT_UNCLOAKED*/, 0x8018, nullptr, PanelShown,
-                                  process, GetCurrentThreadId(), WINEVENT_OUTOFCONTEXT);
-    std::lock_guard lock(runtimesMutex);
-    runtimes[GetCurrentThreadId()] = this;
-  }
-  InstanceHandle Handle(IInspectable const &object) {
-    InstanceHandle handle = 0;
-    if (object && diagnostics &&
-        SUCCEEDED(diagnostics->GetHandleFromIInspectable(
-            reinterpret_cast<::IInspectable *>(winrt::get_abi(object)), &handle)) &&
-        handle) {
-      pending.insert(handle);
-      return handle;
-    }
-    return 0;
-  }
-  IInspectable Property(IInspectable const &object, PCWSTR name) {
-    if (!diagnostics || !properties)
-      return nullptr;
-    auto handle = Handle(object);
-    unsigned index = 0;
-    InstanceHandle value = 0;
-    IInspectable result{nullptr};
-    if (!handle || FAILED(properties->GetPropertyIndex(handle, name, &index)) ||
-        FAILED(properties->GetProperty(handle, index, &value)) || !value)
-      return nullptr;
-    pending.insert(value);
-    if (FAILED(diagnostics->GetIInspectableFromHandle(
-            value, reinterpret_cast<::IInspectable **>(winrt::put_abi(result)))))
-      return nullptr;
-    return result;
-  }
-  bool WriteNumber(IInspectable const &object, PCWSTR name, double number) {
-    auto next = NumberLike(Property(object, name), number);
-    if (!next)
-      return false;
-    auto handle = Handle(object), value = Handle(next);
-    unsigned index = 0;
-    if (!handle || !value || FAILED(properties->GetPropertyIndex(handle, name, &index)))
-      return false;
-    auto hr = properties->SetProperty(handle, value, index);
-    return SUCCEEDED(hr);
-  }
-  ModelAccess Access() {
-    return {[this](auto const &object, PCWSTR name) { return Property(object, name); },
-            [this](auto const &object, PCWSTR name, double value) {
-              return WriteNumber(object, name, value);
-            }};
-  }
   void PreparePage(X::FrameworkElement const &page, bool opening) {
     if (!page.IsLoaded() || Retired(page))
       return;
@@ -6234,13 +6160,14 @@ struct Runtime {
     if (!Named(page, L"OutputGroupTitle"))
       return;
     auto pulse = volumePulse;
-    auto patch = std::make_unique<SoundPage>(page, window, Access(), [pulse] {
+    auto patch = std::make_unique<SoundPage>(page, window, ModelAccess{}, [pulse] {
       if (pulse)
         pulse->Post();
     });
     if (patch->Apply()) {
       patch->PrepareInitialLayout();
       pages.push_back(std::move(patch));
+      Wh_Log(L"Sound page attached through ControlCenter symbols");
     }
   }
   void BeforeDisplay(X::FrameworkElement const &page, bool opening) noexcept {
@@ -6337,7 +6264,7 @@ struct Runtime {
         ++it;
       } else
         it = pageWatches.erase(it);
-    // Not here: WatchPage runs inside the tree-change callback. BeforeDisplay
+    // Retirement is deferred until BeforeDisplay or Refresh. BeforeDisplay
     // (Loaded/LayoutUpdated of the new page) and Refresh retire the others.
     newestPage = winrt::make_weak(page);
     auto weak = winrt::make_weak(page);
@@ -6353,51 +6280,131 @@ struct Runtime {
     });
     pageWatches.push_back(std::move(watch));
   }
+
+  void WatchView(X::FrameworkElement const &view) {
+    for (auto it = viewWatches.begin(); it != viewWatches.end();) {
+      if (auto existing = it->view.get()) {
+        if (existing == view)
+          return;
+        ++it;
+      } else
+        it = viewWatches.erase(it);
+    }
+    auto weak = winrt::make_weak(view);
+    auto retry = [this, weak](auto &&, auto &&) {
+      if (stopping || discovering || l2frame.get())
+        return;
+      if (auto view = weak.get())
+        Discover(view);
+    };
+    ViewWatch watch{weak};
+    watch.loaded = view.Loaded(retry);
+    watch.layout = view.LayoutUpdated(retry);
+    viewWatches.push_back(std::move(watch));
+  }
   void Track(X::FrameworkElement const &element) {
-    for (auto const &q : quickPages)
-      q->Dirty();
-    if (Class(element) == L"ControlCenter.ControlCenterView") {
+    auto type = Class(element);
+    if (type == L"ControlCenter.ControlCenterView") {
+      WatchView(element);
       bool known = false;
       for (auto const &q : quickPages)
         if (q->View() == element) {
+          q->Dirty();
           known = true;
           break;
         }
-      if (!known)
-        try {
-          quickPages.push_back(
-              std::make_unique<QuickPage>(element, ThreadWindow(GetCurrentThreadId())));
-          newestQuick = winrt::make_weak(element);
-        } catch (...) {
-          Wh_Log(L"QuickError %08X", winrt::to_hresult());
-        }
-    }
-    if (auto root = element.XamlRoot())
-      if (auto content = root.Content().try_as<X::FrameworkElement>()) {
-        bool exists = false;
-        for (auto const &weak : roots)
-          if (weak.get() == content) {
-            exists = true;
-            break;
-          }
-        if (!exists)
-          roots.push_back(winrt::make_weak(content));
+      if (!known) {
+        quickPages.push_back(std::make_unique<QuickPage>(element, window));
+        newestQuick = winrt::make_weak(element);
+        Wh_Log(L"Control Center view discovered through symbols");
       }
+    }
     if (element.Name() == L"L2Frame")
       WatchFrame(element);
-    auto name = element.Name();
-    if (name == L"OutputGroupTitle" || name == L"AppVolumeLevel" ||
-        Class(element).find(L"ControlCenter.FullScreenPage") != std::wstring::npos) {
-      auto page = element;
-      while (page && Class(page).find(L"ControlCenter.FullScreenPage") == std::wstring::npos)
-        page = Parent(page);
-      if (page) {
-        WatchPage(page);
-        if (name == L"AppVolumeLevel")
-          for (auto const &patch : pages)
-            if (patch->Page() == page)
-              patch->MarkRowsDirty();
+    if (type.find(L"ControlCenter.FullScreenPage") != std::wstring::npos) {
+      WatchPage(element);
+      if (element.IsLoaded())
+        BeforeDisplay(element, false);
+    }
+  }
+  bool Discover(X::FrameworkElement const &element) {
+    if (!element || stopping || discovering)
+      return false;
+    discovering = true;
+    bool found = false;
+    try {
+      auto root = element;
+      if (auto xaml = element.XamlRoot()) {
+        if (auto content = xaml.Content().try_as<X::FrameworkElement>())
+          root = content;
+      } else {
+        for (int depth = 0; depth < 64; ++depth) {
+          auto parent = Parent(root);
+          if (!parent)
+            break;
+          root = parent;
+        }
       }
+      std::vector<X::FrameworkElement> targets;
+      Find(root, [&](auto const &item) {
+        auto type = Class(item);
+        if (type == L"ControlCenter.ControlCenterView" || item.Name() == L"L2Frame" ||
+            type.find(L"ControlCenter.FullScreenPage") != std::wstring::npos)
+          targets.push_back(item);
+        return false;
+      });
+      // Tree traversal finishes before patching anything in that tree.
+      EnsureVolumePulse();
+      for (auto const &target : targets) {
+        Track(target);
+        found = true;
+      }
+      Wake();
+      Refresh();
+    } catch (...) {
+      Wh_Log(L"Control Center discovery: %08X", winrt::to_hresult());
+    }
+    discovering = false;
+    return found;
+  }
+  void QueueDiscovery(X::FrameworkElement const &child) {
+    if (stopping)
+      return;
+    // Connect runs inside InitializeComponent: keep only a weak reference to
+    // its completed child, and never query or retain the half-constructed view.
+    if (discoveryCandidates.size() < 64)
+      discoveryCandidates.push_back(winrt::make_weak(child));
+    if (!discoveryAttempts) {
+      discoveryAttempts = 1;
+      discoveryTimer.Interval(std::chrono::milliseconds(1));
+      discoveryTimer.Start();
+    }
+  }
+  void DiscoverPending() {
+    discoveryTimer.Stop();
+    if (stopping) {
+      discoveryCandidates.clear();
+      discoveryAttempts = 0;
+      return;
+    }
+    auto candidates = std::move(discoveryCandidates);
+    discoveryCandidates.clear();
+    bool found = false;
+    for (auto const &weak : candidates)
+      if (auto child = weak.get())
+        if (Discover(child)) {
+          found = true;
+          break;
+        }
+    if (found || discoveryAttempts++ >= 8) {
+      discoveryCandidates.clear();
+      discoveryAttempts = 0;
+    } else {
+      for (auto &weak : candidates)
+        if (discoveryCandidates.size() < 64)
+          discoveryCandidates.push_back(std::move(weak));
+      discoveryTimer.Interval(std::chrono::milliseconds(16));
+      discoveryTimer.Start();
     }
   }
   void Refresh() {
@@ -6416,53 +6423,20 @@ struct Runtime {
           (*it)->Refresh();
           ++it;
         }
-      if (observing)
-        for (auto const &weak : std::vector(roots)) {
-          auto root = weak.get();
-          if (!root)
-            continue;
-          std::vector<X::FrameworkElement> candidates;
-          Find(root, [&](auto const &e) {
-            if (e.Name() == L"OutputGroupTitle") {
-              auto page = e;
-              while (page &&
-                     Class(page).find(L"ControlCenter.FullScreenPage") == std::wstring::npos)
-                page = Parent(page);
-              if (page && std::find(candidates.begin(), candidates.end(), page) == candidates.end())
-                candidates.push_back(page);
-            }
-            return false;
-          });
-          for (auto const &page : candidates) {
-            WatchPage(page);
-            PreparePage(page, false);
-          }
-        }
       for (auto const &q : quickPages)
         q->Refresh();
-      Observation();
     } catch (...) {
       Wh_Log(L"Native layout: %08X", winrt::to_hresult());
     }
     if (timer) {
-      // Hidden panel: no periodic work once XAML Diagnostics is released and
-      // both show hooks are in place (otherwise a slow 2 s tick remains).
-      bool idle = Hidden();
-      if (idle && !observing && !releasing && showHook && uncloakHook)
+      if (Hidden() && showHook && uncloakHook)
         timer.Stop();
       else {
-        auto interval = std::chrono::milliseconds(idle ? 2000 : pages.empty() ? 1000 : 200);
+        auto interval = std::chrono::milliseconds(Hidden() ? 2000 : 200);
         if (timer.Interval() != winrt::Windows::Foundation::TimeSpan(interval))
           timer.Interval(interval);
       }
     }
-    auto handles = std::move(pending);
-    pending.clear();
-    if (release)
-      for (auto handle : handles)
-        if (handle)
-          release->UnregisterInstance(handle);
-    FinishObservation();
     busy = false;
     if (volumeDuringRefresh) {
       volumeDuringRefresh = false;
@@ -6471,333 +6445,67 @@ struct Runtime {
     }
   }
   void Stop() {
+    if (timer) {
+      timer.Stop();
+      timer.Tick(tick);
+    }
+    if (discoveryTimer) {
+      discoveryTimer.Stop();
+      discoveryTimer.Tick(discoveryTick);
+    }
+    discoveryCandidates.clear();
+    for (auto hook : {showHook, uncloakHook})
+      if (hook)
+        UnhookWinEvent(hook);
+    showHook = uncloakHook = nullptr;
+    if (volumePulse)
+      volumePulse->active = false;
+    if (pulseWindow && IsWindow(pulseWindow))
+      WindhawkUtils::RemoveWindowSubclassFromAnyThread(pulseWindow, VolumeProc);
+    pulseWindow = nullptr;
     UnwatchFrame();
-    modelMembers.clear();
-    for (auto &q : quickPages)
-      q->Restore();
-    quickPages.clear();
+    for (auto const &watch : viewWatches)
+      if (auto view = watch.view.get()) {
+        view.Loaded(watch.loaded);
+        view.LayoutUpdated(watch.layout);
+      }
+    viewWatches.clear();
     for (auto const &watch : pageWatches)
       if (auto page = watch.page.get()) {
         page.Loaded(watch.loaded);
         page.LayoutUpdated(watch.layout);
       }
     pageWatches.clear();
-    if (volumePulse)
-      volumePulse->active = false;
-    if (pulseHooked) {
-      WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, VolumeProc);
-      pulseHooked = false;
-    }
-    {
-      std::lock_guard lock(runtimesMutex);
-      if (auto it = runtimes.find(GetCurrentThreadId()); it != runtimes.end() && it->second == this)
-        runtimes.erase(it);
-    }
-    if (showHook)
-      UnhookWinEvent(showHook);
-    if (uncloakHook)
-      UnhookWinEvent(uncloakHook);
-    showHook = uncloakHook = nullptr;
-    timer.Stop();
-    timer.Tick(tick);
+    for (auto &q : quickPages)
+      q->Restore();
+    quickPages.clear();
     for (auto &page : pages)
       page->Restore();
     pages.clear();
-    if (release)
-      for (auto id : pending)
-        release->UnregisterInstance(id);
-    pending.clear();
-    roots.clear();
+    modelMembers.clear();
     timer = nullptr;
-    properties = nullptr;
-    diagnostics = nullptr;
-    release = nullptr;
+    discoveryTimer = nullptr;
+    std::lock_guard lock(runtimesMutex);
+    if (auto it = runtimes.find(GetCurrentThreadId()); it != runtimes.end() && it->second == this)
+      runtimes.erase(it);
   }
 };
-// Stopped and reset by StopBridge; never destroyed at thread or process exit.
+// UI-thread state is explicitly stopped on unload; no XAML destruction during
+// process/thread termination after the other threads have already disappeared.
 [[clang::no_destroy]] inline thread_local std::unique_ptr<Runtime> runtime;
-// Matched by window class, not by the stored handle: the shell can recreate
-// the panel window while the timer is stopped.
-inline void CALLBACK PanelShown(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD,
+inline void CALLBACK PanelShown(HWINEVENTHOOK, DWORD, HWND handle, LONG object, LONG, DWORD,
                                 DWORD) {
-  if (object != OBJID_WINDOW || !runtime || !window)
+  if (stopping || object != OBJID_WINDOW || !runtime || !handle)
     return;
   WCHAR name[96]{};
-  GetClassNameW(window, name, 96);
+  GetClassNameW(handle, name, ARRAYSIZE(name));
   if (_wcsicmp(name, L"ControlCenterWindow"))
     return;
-  if (runtime->window != window)
-    runtime->window = window;
+  // This is only the visibility handle. EnsureVolumePulse owns pulseWindow.
+  runtime->window = handle;
   runtime->Wake();
 }
-inline thread_local bool compositionDisabled = false;
-class Watcher : public winrt::implements<Watcher, IVisualTreeServiceCallback2, winrt::non_agile> {
-  winrt::com_ptr<IXamlDiagnostics> diagnostics_;
-  winrt::com_ptr<TestHooks> hooks_;
-  HANDLE worker_ = nullptr;
-
-public:
-  explicit Watcher(IUnknown *site) {
-    winrt::com_ptr<IUnknown> unknown;
-    unknown.copy_from(site);
-    diagnostics_ = unknown.as<IXamlDiagnostics>();
-    diagnostics_->QueryInterface(testHooksId, hooks_.put_void());
-  }
-  void Advise() { Switch(true); }
-  // Last step of a release (UI thread, the watcher has unadvised).
-  void Drop() {
-    diagnostics_ = nullptr;
-    hooks_ = nullptr;
-  }
-  std::atomic<bool> advised = false;
-  void Join() {
-    if (worker_) {
-      WaitForSingleObject(worker_, INFINITE);
-      CloseHandle(worker_);
-      worker_ = nullptr;
-    }
-  }
-  // Reports on/off without dropping the diagnostics connection. Runs on its own
-  // thread, never inside a report; a new Advise re-reports the whole tree.
-  // Never waits: Advise re-reports the tree through the UI thread, which may be
-  // the caller. A switch while the previous one still runs is retried later.
-  bool Busy() {
-    if (!worker_)
-      return false;
-    if (WaitForSingleObject(worker_, 0) == WAIT_OBJECT_0) {
-      CloseHandle(worker_);
-      worker_ = nullptr;
-      return false;
-    }
-    return true;
-  }
-  bool Switch(bool on) {
-    if (Busy())
-      return false;
-    if (on == advised)
-      return true;
-    AddRef();
-    worker_ = CreateThread(
-        nullptr, 0,
-        on ? static_cast<LPTHREAD_START_ROUTINE>([](void *p) -> DWORD {
-          auto self = static_cast<Watcher *>(p);
-          compositionDisabled = true;
-          auto hr = self->diagnostics_.as<IVisualTreeService3>()->AdviseVisualTreeChange(self);
-          compositionDisabled = false;
-          self->advised = SUCCEEDED(hr);
-          self->Release();
-          return 0;
-        })
-           : static_cast<LPTHREAD_START_ROUTINE>([](void *p) -> DWORD {
-               auto self = static_cast<Watcher *>(p);
-               self->diagnostics_.as<IVisualTreeService3>()->UnadviseVisualTreeChange(self);
-               self->advised = false;
-               self->Release();
-               return 0;
-             }),
-        this, 0, nullptr);
-    if (!worker_) {
-      Release();
-      return false;
-    }
-    return true;
-  }
-  void Stop() {
-    Join();
-    if (advised) {
-      diagnostics_.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this);
-      advised = false;
-    }
-  }
-  HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element,
-                                               VisualMutationType mutation) noexcept override {
-    try {
-      if (stopping || !diagnostics_)
-        return S_OK;
-      if (!runtime)
-        runtime = std::make_unique<Runtime>(hooks_, diagnostics_);
-      else
-        runtime->Attach(hooks_, diagnostics_);
-      if (mutation == Add) {
-        IInspectable value{nullptr};
-        if (SUCCEEDED(diagnostics_->GetIInspectableFromHandle(
-                element.Handle, reinterpret_cast<::IInspectable **>(winrt::put_abi(value)))))
-          if (auto e = value.try_as<X::FrameworkElement>())
-            runtime->Track(e);
-      }
-      // Every handle a report names is released, the parent of a removal too: the
-      // service creates (and pins) a runtime object for it when none is cached, and
-      // a pinned parent would hold old page subtrees and their bindings.
-      runtime->pending.insert(relation.Parent);
-      runtime->pending.insert(element.Handle);
-    } catch (...) {
-      Wh_Log(L"XAML observation: %08X", winrt::to_hresult());
-    }
-    return S_OK;
-  }
-  HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle, VisualElementState,
-                                                  LPCWSTR) noexcept override {
-    return S_OK;
-  }
-};
-inline std::mutex watcherMutex;
-[[clang::no_destroy]] inline winrt::com_ptr<Watcher> watcher, retiredWatcher;
-// Release in two steps: reports off on the watcher's own thread (never inside a
-// report), then FinishRelease in a later Refresh drops the watcher's references.
-inline bool BeginRelease() {
-  std::lock_guard lock(watcherMutex);
-  if (retiredWatcher || !watcher || !watcher->Switch(false))
-    return false;
-  retiredWatcher = std::move(watcher);
-  return true;
-}
-inline bool FinishRelease() {
-  std::lock_guard lock(watcherMutex);
-  if (!retiredWatcher)
-    return true;
-  if (retiredWatcher->Busy())
-    return false;
-  retiredWatcher->Drop();
-  retiredWatcher = nullptr;
-  return true;
-}
-// The site is not kept: only the watcher and the Runtime hold XamlDiagnostics,
-// so releasing them really destroys it (see Runtime::Observation).
-struct Tap : winrt::implements<Tap, IObjectWithSite, winrt::non_agile> {
-  HRESULT STDMETHODCALLTYPE SetSite(IUnknown *value) noexcept override {
-    try {
-      // InitializeXamlDiagnosticsEx loaded this module once more for the tap:
-      // that reference is dropped for every site, also while stopping, or the
-      // module could not unload.
-      if (value)
-        FreeLibrary(module);
-      // The old watcher is stopped outside the lock: stopping waits for its
-      // worker, which may need the UI thread, and Refresh on the UI thread
-      // takes the same lock.
-      winrt::com_ptr<Watcher> old;
-      {
-        std::lock_guard lock(watcherMutex);
-        old = std::move(watcher);
-      }
-      if (old)
-        old->Stop();
-      if (value && !stopping) {
-        auto fresh = winrt::make_self<Watcher>(value);
-        fresh->Advise();
-        std::lock_guard lock(watcherMutex);
-        watcher = std::move(fresh);
-      }
-      return S_OK;
-    } catch (...) {
-      return winrt::to_hresult();
-    }
-  }
-  HRESULT STDMETHODCALLTYPE GetSite(REFIID, void **result) noexcept override {
-    if (result)
-      *result = nullptr;
-    return E_FAIL;
-  }
-};
-struct Factory : winrt::implements<Factory, IClassFactory, winrt::non_agile> {
-  HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown *outer, REFIID iid,
-                                           void **result) noexcept override {
-    if (!result)
-      return E_POINTER;
-    *result = nullptr;
-    if (outer)
-      return CLASS_E_NOAGGREGATION;
-    try {
-      return winrt::make<Tap>().as(iid, result);
-    } catch (...) {
-      return winrt::to_hresult();
-    }
-  }
-  HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override { return S_OK; }
-};
-inline HANDLE connectionWorker = nullptr, stopEvent = nullptr;
-inline std::atomic<bool> connecting = false;
-inline DWORD WINAPI Connect(void *) {
-  auto xaml = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-  if (!xaml) {
-    connecting = false;
-    return 0;
-  }
-  auto initialize = reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(
-      GetProcAddress(xaml, "InitializeXamlDiagnosticsEx"));
-  WCHAR path[32768]{};
-  GetModuleFileNameW(module, path, 32768);
-  HRESULT result = E_NOINTERFACE;
-  if (initialize)
-    for (unsigned retry = 0; retry < 60 && !stopping; retry++) {
-      for (int i = 1; i <= 10000; i++) {
-        WCHAR name[64];
-        swprintf_s(name, L"VisualDiagConnection%d", i);
-        result = initialize(name, GetCurrentProcessId(), L"", path, tapClsid, nullptr);
-        if (result != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
-          break;
-      }
-      if (SUCCEEDED(result) || result != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
-        break;
-      if (WaitForSingleObject(stopEvent, 500) == WAIT_OBJECT_0)
-        break;
-    }
-  FreeLibrary(xaml);
-  connecting = false;
-  return 0;
-}
-inline void StartBridge() {
-  if (stopping || connecting.exchange(true))
-    return;
-  {
-    std::lock_guard lock(watcherMutex);
-    if (watcher) {
-      connecting = false;
-      return;
-    }
-  }
-  if (connectionWorker) {
-    WaitForSingleObject(connectionWorker, INFINITE);
-    CloseHandle(connectionWorker);
-  }
-  connectionWorker = CreateThread(nullptr, 0, Connect, nullptr, 0, nullptr);
-  if (!connectionWorker)
-    connecting = false;
-}
-// From Refresh on the UI thread: never waits for a connection still running.
-inline bool Reconnect() {
-  if (stopping || connecting)
-    return false;
-  if (connectionWorker && WaitForSingleObject(connectionWorker, 0) != WAIT_OBJECT_0)
-    return false;
-  StartBridge();
-  return true;
-}
 inline void StopBridge() {
-  if (stopEvent)
-    SetEvent(stopEvent);
-  if (connectionWorker) {
-    WaitForSingleObject(connectionWorker, INFINITE);
-    CloseHandle(connectionWorker);
-    connectionWorker = nullptr;
-  }
-  // Watchers are taken out under the lock and stopped outside it: Stop waits
-  // for a worker that may need the UI thread, whose Refresh takes this lock.
-  winrt::com_ptr<Watcher> current, retired;
-  {
-    std::lock_guard lock(watcherMutex);
-    current = std::move(watcher);
-    retired = std::move(retiredWatcher);
-  }
-  // Each watcher is released right after it stops, so the Runtime's reference,
-  // dropped on the UI thread below, is the last one to IXamlDiagnostics.
-  if (current) {
-    current->Stop();
-    current = nullptr;
-  }
-  if (retired) {
-    retired->Stop();
-    retired = nullptr;
-  }
   std::vector<std::pair<DWORD, Runtime *>> copy;
   {
     std::lock_guard lock(runtimesMutex);
@@ -6811,132 +6519,185 @@ inline void StopBridge() {
     }
   };
   for (auto [thread, state] : copy) {
-    HWND window = state->window && IsWindow(state->window) ? state->window : ThreadWindow(thread);
-    if (window && GetWindowThreadProcessId(window, nullptr) == thread && Dispatch(window, stop))
+    auto threadHandle = OpenThread(SYNCHRONIZE, FALSE, thread);
+    bool exited = threadHandle && WaitForSingleObject(threadHandle, 0) == WAIT_OBJECT_0;
+    if (threadHandle)
+      CloseHandle(threadHandle);
+    if (exited) {
+      // Its UI callbacks cannot run; do not release XAML references off-thread.
+      Wh_Log(L"Control Center UI thread %u has exited; retaining its XAML state", thread);
       continue;
-    // No usable window: queue the stop on the thread's DispatcherQueue and
-    // wait for it, so no Runtime (timer, handlers) outlives the module.
-    // Waits without a timeout, like SendMessageW in Dispatch: the queued stop
-    // must not run after the module is gone.
+    }
+    HWND handle = state->pulseWindow && IsWindow(state->pulseWindow) ? state->pulseWindow
+                                                                     : ThreadWindow(thread);
+    if (handle && GetWindowThreadProcessId(handle, nullptr) == thread && Dispatch(handle, stop))
+      continue;
+    auto cleaned = std::make_shared<std::atomic<bool>>(false);
     bool stopped = false;
-    if (auto queue = state->queue)
-      if (auto done = CreateEventW(nullptr, TRUE, FALSE, nullptr)) {
-        if (queue.TryEnqueue([stop, done] {
-              stop();
-              SetEvent(done);
-            }))
-          stopped = WaitForSingleObject(done, INFINITE) == WAIT_OBJECT_0;
-        CloseHandle(done);
+    try {
+      // Keep a local dispatcher reference: stop() destroys the Runtime.
+      if (auto dispatcher = state->dispatcher) {
+        auto operation = dispatcher.RunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::High, [stop, cleaned] {
+              try {
+                stop();
+                *cleaned = true;
+              } catch (...) {
+                Wh_Log(L"Control Center shutdown: %08X", winrt::to_hresult());
+              }
+            });
+        // AsyncStatus becomes Completed after the UI delegate returns. An
+        // event signaled inside the delegate could wake unload too early.
+        // This short wait exists only during unload, never in the background.
+        while (operation.Status() == winrt::Windows::Foundation::AsyncStatus::Started)
+          Sleep(1);
+        stopped = operation.Status() == winrt::Windows::Foundation::AsyncStatus::Completed &&
+                  cleaned->load();
       }
-    if (!stopped)
-      Wh_Log(L"Runtime on thread %u could not be stopped before unload", thread);
-  }
-  {
-    std::lock_guard lock(runtimesMutex);
-    runtimes.clear();
-  }
-  if (stopEvent) {
-    CloseHandle(stopEvent);
-    stopEvent = nullptr;
+    } catch (...) {
+      Wh_Log(L"Control Center shutdown dispatch: %08X", winrt::to_hresult());
+    }
+    if (!stopped) {
+      // Wh_ModUninit cannot refuse unload. In this exceptional failure case,
+      // retain a module reference rather than leave live callbacks unmapped.
+      HMODULE retained = nullptr;
+      GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                         reinterpret_cast<LPCWSTR>(&StopBridge), &retained);
+      Wh_Log(L"Could not stop UI thread %u; keeping module loaded for its callbacks", thread);
+    }
   }
 }
 } // namespace native
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-extern "C" __declspec(dllexport) HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid,
-                                                                  void **result) {
-  if (!result)
-    return E_POINTER;
-  *result = nullptr;
-  if (clsid != native::tapClsid)
-    return CLASS_E_CLASSNOTAVAILABLE;
-  try {
-    return winrt::make<native::Factory>().as(iid, result);
-  } catch (...) {
-    return winrt::to_hresult();
-  }
-}
-extern "C" __declspec(dllexport) HRESULT WINAPI DllCanUnloadNow() {
-  return winrt::get_module_lock() ? S_FALSE : S_OK;
-}
-#pragma clang diagnostic pop
 
 namespace native {
-using OpenKey = decltype(&RegOpenKeyExW);
-inline OpenKey originalOpenKey = nullptr;
-using QueryValue = decltype(&RegQueryValueExW);
-inline QueryValue originalQueryValue = nullptr;
-inline LSTATUS WINAPI OpenKeyHook(HKEY key, LPCWSTR sub, DWORD options, REGSAM access,
-                                  PHKEY result) {
-  auto status = originalOpenKey(key, sub, options, access, result);
-  if (status != ERROR_SUCCESS && compositionDisabled && key == HKEY_LOCAL_MACHINE && sub &&
-      !_wcsicmp(sub, L"Software\\Microsoft\\XAML\\Debug"))
-    return originalOpenKey(key, L"Software\\Microsoft", options, access, result);
-  return status;
-}
-inline LSTATUS WINAPI QueryValueHook(HKEY key, LPCWSTR name, LPDWORD reserved, LPDWORD type,
-                                     LPBYTE data, LPDWORD bytes) {
-  if (!compositionDisabled || !name || _wcsicmp(name, L"DisableCompositionDiag"))
-    return originalQueryValue(key, name, reserved, type, data, bytes);
-  if (type)
-    *type = REG_DWORD;
-  if (data && (!bytes || *bytes < sizeof(DWORD))) {
-    if (bytes)
-      *bytes = sizeof(DWORD);
-    return ERROR_MORE_DATA;
+// Discovery uses only COM produce<> entry points, never the implementation's
+// partially constructed `this`. Pattern validated in ControlCenter.pdb.
+using Focus = int(WINAPI *)(void *, void *);
+using Connect = int(WINAPI *)(void *, int, void *);
+inline Focus originalViewFocus = nullptr, originalPageFocus = nullptr;
+inline Connect originalViewConnect = nullptr, originalPageConnect = nullptr;
+inline std::atomic<int> discoveryState{0}; // 0 waiting, 1 installing, 2 ready, 3 failed
+inline std::mutex discoveryMutex;
+inline std::mutex discoveryInstallMutex;
+inline thread_local bool insideDiscovery = false;
+inline void Discovered(void *object, bool deferred) noexcept {
+  if (!object || stopping || insideDiscovery)
+    return;
+  insideDiscovery = true;
+  try {
+    X::FrameworkElement element{nullptr};
+    if (SUCCEEDED(static_cast<::IUnknown *>(object)->QueryInterface(
+            winrt::guid_of<X::FrameworkElement>(), winrt::put_abi(element))) &&
+        element) {
+      {
+        // Unload crosses this lock before taking the runtime snapshot. It is
+        // never held while the engine waits for work on the UI thread.
+        std::lock_guard lock(discoveryMutex);
+        if (!stopping && !runtime)
+          runtime = std::make_unique<Runtime>(element);
+      }
+      if (!stopping && runtime) {
+        if (deferred)
+          runtime->QueueDiscovery(element);
+        else
+          runtime->Discover(element);
+      }
+    }
+  } catch (...) {
+    Wh_Log(L"ControlCenter symbol callback: %08X", winrt::to_hresult());
   }
-  if (data)
-    *reinterpret_cast<DWORD *>(data) = 1;
-  if (bytes)
-    *bytes = sizeof(DWORD);
-  return ERROR_SUCCESS;
+  insideDiscovery = false;
 }
-inline void WindowCreated(HWND window, LPCWSTR name) {
-  if (window && reinterpret_cast<ULONG_PTR>(name) > 0xffff &&
-      (!_wcsicmp(name, L"ControlCenterWindow") || !_wcsicmp(name, L"Windows.UI.Core.CoreWindow")) &&
-      !runtime)
-    StartBridge();
+inline int WINAPI ViewFocus(void *self, void *args) {
+  auto result = originalViewFocus(self, args);
+  Discovered(self, false);
+  return result;
 }
-using CreateBand = HWND(WINAPI *)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU,
-                                  HINSTANCE, void *, DWORD);
-using CreateBandEx = HWND(WINAPI *)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU,
-                                    HINSTANCE, void *, DWORD, DWORD);
-inline CreateBand originalBand = nullptr;
-inline CreateBandEx originalBandEx = nullptr;
-inline HWND WINAPI Band(DWORD ex, LPCWSTR type, LPCWSTR title, DWORD style, int x, int y, int w,
-                        int h, HWND parent, HMENU menu, HINSTANCE instance, void *param,
-                        DWORD band) {
-  auto window =
-      originalBand(ex, type, title, style, x, y, w, h, parent, menu, instance, param, band);
-  WindowCreated(window, type);
-  return window;
+inline int WINAPI PageFocus(void *self, void *args) {
+  auto result = originalPageFocus(self, args);
+  Discovered(self, false);
+  return result;
 }
-inline HWND WINAPI BandEx(DWORD ex, LPCWSTR type, LPCWSTR title, DWORD style, int x, int y, int w,
-                          int h, HWND parent, HMENU menu, HINSTANCE instance, void *param,
-                          DWORD band, DWORD flags) {
-  auto window = originalBandEx(ex, type, title, style, x, y, w, h, parent, menu, instance, param,
-                               band, flags);
-  WindowCreated(window, type);
-  return window;
+inline int WINAPI ViewConnect(void *self, int id, void *target) {
+  auto result = originalViewConnect(self, id, target);
+  Discovered(target, true);
+  return result;
+}
+inline int WINAPI PageConnect(void *self, int id, void *target) {
+  auto result = originalPageConnect(self, id, target);
+  Discovered(target, true);
+  return result;
+}
+inline bool HookControlCenter(HMODULE controlCenter, bool applyNow) {
+  std::lock_guard installLock(discoveryInstallMutex);
+  if (stopping)
+    return false;
+  int expected = 0;
+  if (!discoveryState.compare_exchange_strong(expected, 1))
+    return expected != 3;
+  WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
+      {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
+       &originalViewFocus,
+       ViewFocus},
+      {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Markup::IComponentConnector>::Connect(int,void *))"},
+       &originalViewConnect,
+       ViewConnect,
+       true},
+      {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::FullScreenPage,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
+       &originalPageFocus,
+       PageFocus,
+       true},
+      {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::FullScreenPage,struct winrt::Windows::UI::Xaml::Markup::IComponentConnector>::Connect(int,void *))"},
+       &originalPageConnect,
+       PageConnect,
+       true},
+  };
+  bool ok = WindhawkUtils::HookSymbols(controlCenter, controlCenterDllHooks,
+                                       ARRAYSIZE(controlCenterDllHooks));
+  if (ok && applyNow)
+    ok = Wh_ApplyHookOperations();
+  discoveryState = ok ? 2 : 3;
+  Wh_Log(L"ControlCenter.dll discovery hooks: %s", ok ? L"ready" : L"failed");
+  return ok;
+}
+using HostLoad = decltype(&LoadLibraryExW);
+inline HostLoad originalHostLoad = nullptr;
+inline HMODULE WINAPI HostLoaded(LPCWSTR path, HANDLE file, DWORD flags) {
+  auto result = originalHostLoad(path, file, flags);
+  if (result && !stopping && discoveryState == 0 &&
+      !(flags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                 LOAD_LIBRARY_AS_IMAGE_RESOURCE)) &&
+      result == GetModuleHandleW(L"ControlCenter.dll"))
+    HookControlCenter(result, true);
+  return result;
 }
 inline bool InitializeHost() {
-  stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-  if (!stopEvent)
+  auto kernel = GetModuleHandleW(L"kernelbase.dll");
+  auto load =
+      kernel ? reinterpret_cast<HostLoad>(GetProcAddress(kernel, "LoadLibraryExW")) : nullptr;
+  if (!load || !WindhawkUtils::SetFunctionHook(load, HostLoaded, &originalHostLoad))
     return false;
-  auto kernel = GetModuleHandleW(L"kernelbase.dll"), user = GetModuleHandleW(L"user32.dll");
-  bool ok = true;
-  ok &= WindhawkUtils::SetFunctionHook(
-      reinterpret_cast<OpenKey>(GetProcAddress(kernel, "RegOpenKeyExW")), OpenKeyHook,
-      &originalOpenKey);
-  ok &= WindhawkUtils::SetFunctionHook(
-      reinterpret_cast<QueryValue>(GetProcAddress(kernel, "RegQueryValueExW")), QueryValueHook,
-      &originalQueryValue);
-  if (auto p = GetProcAddress(user, "CreateWindowInBand"))
-    ok &= WindhawkUtils::SetFunctionHook(reinterpret_cast<CreateBand>(p), Band, &originalBand);
-  if (auto p = GetProcAddress(user, "CreateWindowInBandEx"))
-    ok &=
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<CreateBandEx>(p), BandEx, &originalBandEx);
-  return ok;
+  if (auto controlCenter = GetModuleHandleW(L"ControlCenter.dll"))
+    return HookControlCenter(controlCenter, false);
+  Wh_Log(L"Waiting for ControlCenter.dll to be loaded by the shell");
+  return true;
+}
+inline void AfterHostInit() {
+  // Close the race where the DLL loaded before the load hook was armed.
+  if (!stopping)
+    if (auto controlCenter = GetModuleHandleW(L"ControlCenter.dll"))
+      HookControlCenter(controlCenter, true);
+}
+inline void StopHost() {
+  {
+    std::lock_guard installLock(discoveryInstallMutex);
+    // Finish any symbol installation before the module can be unloaded.
+  }
+  {
+    std::lock_guard lock(discoveryMutex);
+    // stopping is already set by Wh_ModUninit; wait only for runtime creation.
+  }
+  StopBridge();
 }
 } // namespace native
 
@@ -7921,8 +7682,15 @@ inline void Shutdown() {
   // The no_destroy globals give their contents back here, not at process exit.
   {
     std::lock_guard lock(recordsMutex);
-    records.clear();
-    records.shrink_to_fit();
+    if (records.empty())
+      records.shrink_to_fit();
+    else {
+      HMODULE retained = nullptr;
+      GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                          reinterpret_cast<LPCWSTR>(&Shutdown), &retained);
+      Wh_Log(L"Retaining %zu tray records and the module: their UI thread was not reached",
+               records.size());
+    }
   }
   audio.reset();
 }
@@ -7958,14 +7726,14 @@ void Wh_ModAfterInit() {
   if (native::explorer) {
     native::tray::AttachExisting();
   } else
-    native::StartBridge();
+    native::AfterHostInit();
 }
 void Wh_ModUninit() {
   native::stopping = true;
   if (native::explorer) {
     native::tray::Shutdown();
   } else
-    native::StopBridge();
+    native::StopHost();
 }
 BOOL Wh_ModSettingsChanged(BOOL *reload) {
   *reload = TRUE;
