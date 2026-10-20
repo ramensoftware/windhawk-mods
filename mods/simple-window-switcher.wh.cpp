@@ -1058,6 +1058,7 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 // single bounded wait, not a synthetic lift or a foreground retry loop.
 #define SWS_NATIVE_TOUCHPAD_HANDOFF_MS 50u
 #define SWS_KEYBOARD_RAPID_PENDING_MS 125u
+#define SWS_KEYBOARD_HANDOFF_PROBE_MS 50u
 #define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
 #define SWS_RAW_SWIPE_SESSION_PROP L"WindhawkSWSRawSwipeSession"
 #define SWS_RAW_SWIPE_UP_PROP L"WindhawkSWSRawSwipeUp"
@@ -1540,6 +1541,7 @@ static ULONGLONG g_showDelayDeadlineTick = 0;
 static bool g_touchpadInvocation = false;
 static bool g_keyboardPendingForegroundHandoff = false;
 static bool g_keyboardPendingForegroundHandoffSucceeded = false;
+static bool g_keyboardHiddenHandoffAttempted = false;
 // Alt release observed before keyboard foreground handoff; recheck after handoff.
 static bool g_keyboardPendingAltRelease = false;
 static bool g_keyboardHandoffRevealDeferralLogged = false;
@@ -1550,6 +1552,7 @@ enum class KeyboardReleaseSource : unsigned char {
 };
 static KeyboardReleaseSource g_keyboardPendingReleaseSource =
     KeyboardReleaseSource::None;
+static ULONGLONG g_keyboardHandoffProbeTick = 0;
 static bool g_recoveringShellFocus = false;
 static HFONT g_hFont = NULL;
 static HTHEME g_hTheme = NULL;
@@ -1600,6 +1603,7 @@ static bool g_backdropEntranceFadeActive = false;
 static bool g_backdropExitFadeActive = false;
 static bool g_backdropPresentationResolved = false;
 static bool g_backdropSwitcherPresented = false;
+static bool g_backdropPresentationClosing = false;
 
 struct BackdropBuildOutput {
     Gdiplus::Bitmap* bitmap = nullptr;
@@ -2251,11 +2255,14 @@ static void HandleBackdropBuildResult(BackdropBuildResult* result) {
         BackdropBlurUsesWallpaper() &&
         BackdropWallpaperInfoEqual(result->wallpaperInfo,
                                    g_backdropWorkerWallpaperInfo);
-    const bool sessionActive = g_isVisible || g_isPendingShow;
+    const bool sessionActive = (g_isVisible || g_isPendingShow) &&
+                               !g_backdropPresentationClosing &&
+                               !g_isHidingSwitcher;
     const bool current =
         sameGeneration &&
         g_backdropBuildRequested && !g_backdropWorkerShutdown.load(std::memory_order_acquire) &&
         BackdropBlurEnabled() &&
+        !g_backdropPresentationClosing && !g_isHidingSwitcher &&
         (!g_backdropPresentationResolved || sessionActive);
     if ((!current && !cacheableWallpaper) || !result->success) {
         const bool retry = g_backdropBuildRetryPending;
@@ -2291,7 +2298,8 @@ static void HandleBackdropBuildResult(BackdropBuildResult* result) {
     g_backdropBitmapIsWallpaper = result->wallpaper;
     g_backdropBitmapWallpaperInfo = result->wallpaperInfo;
     const bool showLateBackdrop =
-        g_backdropSwitcherPresented && g_isVisible && !g_isHidingSwitcher &&
+        g_backdropSwitcherPresented && g_isVisible &&
+        !g_backdropPresentationClosing && !g_isHidingSwitcher &&
         g_hSwitcher && IsWindowVisible(g_hSwitcher) &&
         (!g_hBackdropWnd || !IsWindowVisible(g_hBackdropWnd));
     SWS_DEBUG_LOG(L"layout",
@@ -2307,6 +2315,7 @@ static void HandleBackdropBuildResult(BackdropBuildResult* result) {
 
 static void RequestBackdropBlurBuild() {
     if (!BackdropBlurEnabled() || g_backdropWorkerShutdown.load(std::memory_order_acquire) ||
+        g_backdropPresentationClosing || g_isHidingSwitcher ||
         (g_backdropPresentationResolved && !g_isVisible && !g_isPendingShow)) {
         return;
     }
@@ -2461,7 +2470,7 @@ static bool BackdropWaitForReadyUntil(ULONGLONG deadline) {
 // on any timer: the caller presents them right after, so a backdrop that is up without
 // a switcher on top of it can never be left behind on screen.
 static void ShowBackdropBlur() {
-    if (!BackdropBlurEnabled()) return;
+    if (!BackdropBlurEnabled() || g_backdropPresentationClosing || g_isHidingSwitcher) return;
     EnsureBackdropWindow();
     if (!g_hBackdropWnd || !g_backdropBitmap || !g_backdropPaintDC) return;
 
@@ -2507,6 +2516,7 @@ static void ShowBackdropBlur() {
 }
 
 static void HideBackdropBlur() {
+    g_backdropPresentationClosing = true;
     g_backdropPresentationResolved = true;
     g_backdropSwitcherPresented = false;
     if (!g_backdropWorkerIsWallpaper || !BackdropBlurUsesWallpaper()) {
@@ -2536,6 +2546,7 @@ static void PrepareBackdropBlur() {
         HideBackdropBlur();
         g_backdropPresentationResolved = false;
     }
+    g_backdropPresentationClosing = false;
     RequestBackdropBlurBuild();
 }
 
@@ -2878,6 +2889,8 @@ static void TapUnassignedKeyForForeground();
 static bool ActivateRawTouchpadWindow();
 static void ReconcileDeferredKeyboardReleaseAfterReveal();
 static PCWSTR KeyboardReleaseSourceName(KeyboardReleaseSource source);
+static bool TryHiddenRapidKeyboardCommit();
+static bool TryCompleteHiddenRapidKeyboardCommit();
 
 static inline int DpiScale(int val, int dpi) { return MulDiv(val, dpi, 96); }
 
@@ -3341,6 +3354,28 @@ static inline float CurrentPresentationAlpha() {
 
 static inline BYTE CurrentPresentationAlphaByte() {
     return (BYTE)roundf(CurrentPresentationAlpha() * 255.0f);
+}
+
+static inline float CurrentPresentationRevealAlpha() {
+    float alpha = 1.0f;
+    if (g_animExitActive) {
+        alpha = g_animExitCurrentAlpha;
+    } else if (g_animEntranceActive || g_animEntranceFrameZeroPending ||
+               g_animEntranceClockPending) {
+        alpha = g_animEntranceCurrentAlpha;
+    }
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    return alpha;
+}
+
+static inline BYTE CurrentPresentationOverlayAlphaByte() {
+    float alpha = ThemeIs(L"none")
+        ? CurrentPresentationAlpha()
+        : CurrentPresentationRevealAlpha();
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    return (BYTE)roundf(alpha * 255.0f);
 }
 
 static inline int GetAnimationOffsetY(UINT dpiY) {
@@ -12275,7 +12310,7 @@ static void PaintSwitcherOverlay() {
     RECT presentationRect = {};
     GetPresentationWindowRect(g_hCloseBtnWnd, &presentationRect);
     POINT ptDst = { presentationRect.left, presentationRect.top };
-    BYTE finalAlpha = CurrentPresentationAlphaByte();
+    BYTE finalAlpha = CurrentPresentationOverlayAlphaByte();
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, finalAlpha, AC_SRC_ALPHA};
     HDC hdcScreen = GetDC(NULL);
     UpdateLayeredWindow(g_hCloseBtnWnd, hdcScreen, &ptDst, &sz, s_cachedOverlayDC, &ptSrc, 0, &bf, ULW_ALPHA);
@@ -12500,8 +12535,10 @@ static void CancelPendingShow() {
     g_touchpadInvocation = false;
     g_keyboardPendingForegroundHandoff = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
+    g_keyboardHiddenHandoffAttempted = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
+    g_keyboardHandoffProbeTick = 0;
     g_keyboardHandoffRevealDeferralLogged = false;
     g_backdropSwitcherPresented = false;
     s_touchpadPending = false;
@@ -13283,9 +13320,6 @@ static void PresentSwitcherWindows() {
                   g_hBackdropWnd && IsWindowVisible(g_hBackdropWnd));
     // All HWNDs must carry frame zero before any of them becomes visible.
     ApplyPresentationWindowOffset();
-    if (g_hCloseBtnWnd) {
-        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
-    }
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     HWND keyboardHandoffSource = nullptr;
     HWND touchpadHandoffSource = nullptr;
@@ -13293,7 +13327,10 @@ static void PresentSwitcherWindows() {
         // The switcher is visible and frame-zero painted before this eligibility
         // request. Do not steal focus during the hidden show-delay period.
         keyboardHandoffSource = GetForegroundWindow();
-        TapUnassignedKeyForForeground();
+        if (!g_keyboardPendingForegroundHandoffSucceeded ||
+            keyboardHandoffSource != g_hSwitcher) {
+            TapUnassignedKeyForForeground();
+        }
     }
     // The window is already topmost from staging. Do not call BringWindowToTop:
     // it can activate the switcher before the single foreground handoff below.
@@ -13351,6 +13388,11 @@ static void PresentSwitcherWindows() {
     // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
     // now so no unpainted white frame is ever composed.
     ShowMirrorSwitchers();
+    // Keep overlay borders and controls behind the main switcher presentation
+    // boundary. Its layered alpha follows the shared reveal timeline below.
+    if (g_hCloseBtnWnd) {
+        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
+    }
 
     if (g_animEntranceActive) {
         StartAnimationTicker();
@@ -13379,6 +13421,12 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
 
     const bool touchpadPending = s_touchpadPending;
     const bool rapidPending = touchpadPending && g_settings.rapidSwitching && !g_isSticky;
+    // Keep rapid keyboard taps hidden while the protected-source handoff waits
+    // for one bounded post-handoff release probe.
+    if (!forceImmediate && g_keyboardPendingForegroundHandoffSucceeded &&
+        g_keyboardPendingAltRelease && TryCompleteHiddenRapidKeyboardCommit()) {
+        return;
+    }
     // A native-only release can precede the deadline while its adoption wait
     // extends past it. Finish that short stroke without flashing the switcher.
     if (touchpadPending && s_nativeTouchpadInvocation.token &&
@@ -14186,6 +14234,9 @@ static void HideSwitcher() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
     }
+    // Hide backdrop before resetting shared animation state. ResetPresentationAnimation()
+    // restores alpha for visible backdrops, so teardown must retire the plate first.
+    HideBackdropBlur();
     // Hide every switcher window before retiring animations or DWM registrations.
     HideSwitcherPresentationWindows();
     StopAnimationTicker();
@@ -14195,7 +14246,6 @@ static void HideSwitcher() {
     ReleaseSavedAppListThumbnails();
     SWS_DEBUG_LOG(L"dwm", L"DWM teardown phase=mirrors");
     DestroyMirrorSwitchers();
-    HideBackdropBlur();
     FreeCachedBuffers();
 
     g_showAllMonitors = false;
@@ -14258,7 +14308,9 @@ static void HideSwitcher() {
     g_isPendingShow = false;
     g_keyboardPendingForegroundHandoff = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
+    g_keyboardHiddenHandoffAttempted = false;
     g_keyboardPendingAltRelease = false;
+    g_keyboardHandoffProbeTick = 0;
     RetireMouseUiSession();
     // UI teardown is not the end of the already-owned tap's mouse pair.
     // The short timer keeps only its input filter alive, never its foreground.
@@ -14501,6 +14553,8 @@ static void ShowDesktop() {
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    g_backdropPresentationClosing = true;
+    g_backdropSwitcherPresented = false;
     CancelTwoFingerTapDismiss();
     ClearStickyTwoFingerTapOwnership();
     g_touchpadTwoFingerCloseActive.store(false);
@@ -14651,6 +14705,88 @@ static void MarkKeyboardReleaseCandidate(KeyboardReleaseSource source) {
 static void ClearKeyboardReleaseCandidate() {
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
+    g_keyboardHandoffProbeTick = 0;
+}
+
+// Rapid keyboard taps from a source that blocks normal key-state handoff can
+// hand off while the pending switcher remains offscreen and fully transparent.
+// Commit waits for one post-handoff release check before activating the target.
+static bool TryHiddenRapidKeyboardCommit() {
+    if (!g_isPendingShow || !g_settings.rapidSwitching || g_isSticky ||
+        !g_keyboardPendingForegroundHandoff || !g_keyboardPendingAltRelease ||
+        g_keyboardHiddenHandoffAttempted ||
+        g_isTouchpadGestureActive || !s_altSessionOwner ||
+        (g_keyboardPendingReleaseSource != KeyboardReleaseSource::Poll &&
+         s_altHeld) || CombinedRawReleasePending() || !g_hSwitcher) {
+        return false;
+    }
+
+    HWND source = GetForegroundWindow();
+    if (!source || IsSwitcherWindow(source)) return false;
+
+    g_keyboardHiddenHandoffAttempted = true;
+    TapUnassignedKeyForForeground();
+    SetLastError(ERROR_SUCCESS);
+    BOOL granted = SetForegroundWindow(g_hSwitcher);
+    DWORD error = granted ? ERROR_SUCCESS : GetLastError();
+    bool active = GetForegroundWindow() == g_hSwitcher;
+    if (active) {
+        SWS_DEBUG_LOG(L"focus",
+                      L"hidden keyboard handoff source=%p set=%d active=1 error=%u",
+                      source, granted, error);
+    } else {
+        Wh_Log(L"SWS: hidden keyboard handoff source=%p set=%d active=0 error=%u",
+               source, granted, error);
+    }
+    if (!active) return false;
+
+    g_keyboardPendingForegroundHandoffSucceeded = true;
+    g_keyboardHandoffProbeTick = GetTickCount64();
+    SWS_DEBUG_LOG(L"focus", L"hidden keyboard handoff pending release source=%s hwnd=%p",
+                  KeyboardReleaseSourceName(g_keyboardPendingReleaseSource), source);
+    return true;
+}
+
+static bool TryCompleteHiddenRapidKeyboardCommit() {
+    if (!g_isPendingShow || !g_keyboardPendingForegroundHandoff ||
+        !g_keyboardPendingForegroundHandoffSucceeded ||
+        !g_keyboardPendingAltRelease || !g_hSwitcher) {
+        return false;
+    }
+
+    if (GetForegroundWindow() != g_hSwitcher) {
+        g_keyboardPendingForegroundHandoffSucceeded = false;
+        SWS_DEBUG_LOG(L"focus", L"hidden keyboard handoff lost before release probe; falling back to visible presentation");
+        KeepAltReleasePolling();
+        return false;
+    }
+
+    const KeyboardReleaseSource source = g_keyboardPendingReleaseSource;
+    const ULONGLONG now = GetTickCount64();
+    if (now < g_keyboardHandoffProbeTick ||
+        now - g_keyboardHandoffProbeTick < SWS_KEYBOARD_HANDOFF_PROBE_MS) {
+        KeepAltReleasePolling();
+        return true;
+    }
+    const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    SWS_DEBUG_LOG(L"focus", L"hidden keyboard release probe source=%s altDown=%d foreground=%p",
+                  KeyboardReleaseSourceName(source), altDown, GetForegroundWindow());
+    if (altDown) {
+        s_altHeld = true;
+        ClearKeyboardReleaseCandidate();
+        SWS_DEBUG_LOG(L"focus", L"hidden keyboard release candidate cancelled; Alt remains held");
+        KeepAltReleasePolling();
+        return false;
+    }
+    s_altHeld = false;
+
+    ClearKeyboardReleaseCandidate();
+    s_commitStarted = true;
+    s_touchpadCommitActivation = true;
+    SWS_DEBUG_LOG(L"focus", L"hidden rapid keyboard commit eligible source=%s",
+                  KeyboardReleaseSourceName(source));
+    StartExitAnimation(true);
+    return true;
 }
 
 static bool DeferKeyboardHandoffCommit() {
@@ -14665,9 +14801,17 @@ static bool DeferKeyboardHandoffCommit() {
                   KeyboardReleaseSourceName(g_keyboardPendingReleaseSource),
                   GetForegroundWindow(),
                   (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+    if (TryHiddenRapidKeyboardCommit()) {
+        if (g_keyboardPendingReleaseSource == KeyboardReleaseSource::ExplicitKeyUp) {
+            TryCompleteHiddenRapidKeyboardCommit();
+        }
+        if (!g_isPendingShow) return true;
+        KeepAltReleasePolling();
+        return true;
+    }
     if (!g_keyboardHandoffRevealDeferralLogged) {
         SWS_DEBUG_LOG(L"focus",
-                      L"deferring protected keyboard release until visible presentation");
+                      L"deferring protected keyboard release until hidden handoff or visible presentation");
         g_keyboardHandoffRevealDeferralLogged = true;
     }
     KeepAltReleasePolling();
@@ -14678,6 +14822,10 @@ static bool TryCommitAfterInputRelease() {
     if (!g_isVisible && !g_isPendingShow) return false;
     AdoptRawThreeFingerState();
     if (s_commitStarted) return true;
+    if (g_isPendingShow && g_keyboardPendingForegroundHandoffSucceeded &&
+        g_keyboardPendingAltRelease && TryCompleteHiddenRapidKeyboardCommit()) {
+        return true;
+    }
     if ((s_altSessionOwner && s_altHeld) || g_isTouchpadGestureActive ||
         CombinedRawReleasePending()) {
         KeepAltReleasePolling();
@@ -19004,6 +19152,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         s_altHeld = true;
         g_keyboardPendingAltRelease = false;
         g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
+        g_keyboardHiddenHandoffAttempted = false;
+        g_keyboardHandoffProbeTick = 0;
         AdoptRawThreeFingerState(true);
 
         if (!g_isVisible && !g_isPendingShow) {
