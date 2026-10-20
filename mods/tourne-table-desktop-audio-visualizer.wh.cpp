@@ -9753,6 +9753,9 @@ bool ComputeVizLayout(VizLayout* out) {
 bool CreateSwapChainResources() {
     HRESULT hr;
 
+    // After a failed rebuild these stay null; the retry timer recreates them and draws again.
+    if (!g_dxgiFactory || !g_dxgiDevice || !g_d2dDevice) return false;
+
     // Monitor and DPI must be resolved before the layout, since bar sizes are
     // DPI-scaled and the box is positioned against the monitor's work area.
     HMONITOR monitor = GetMonitorById(g_settings.monitor - 1);
@@ -17791,6 +17794,8 @@ VizSetup VizParseSetup(const std::wstring& text) {
 // Lays a setup's parts over the settings: each setting in them takes the setup's value or the default,
 // and quick settings in them give way to the setup's own.
 static const size_t kSetupValueMax = 128;
+// The Waterfall Ramp alone can be longer: up to 128 non-ASCII glyphs, an emoji with its FE0F taking 3 units.
+static const size_t kSetupRampMax = 512;
 
 void VizApplySetup(const VizSetup& s, unsigned parts) {
     if (!g_setupLayerLoaded) VizSetupLoad();
@@ -17800,9 +17805,9 @@ void VizApplySetup(const VizSetup& s, unsigned parts) {
                                          [&](const auto& kv) { return (VizQuickPartOf(kv.first) & parts) != 0; }),
                           g_menuOverrides.end());
     for (const auto& kv : s.values) {
-        // No real setting needs more than a few dozen characters. Longer ones only come from a
+        // No other setting needs more than a few dozen characters. Longer ones only come from a
         // hand-made setup and could push the stored values past what is read back on restart.
-        if (kv.second.size() > kSetupValueMax) continue;
+        if (kv.second.size() > (kv.first == L"terminal.ramp" ? kSetupRampMax : kSetupValueMax)) continue;
         if (kv.first.rfind(L"quick.", 0) == 0) {
             std::wstring key = kv.first.substr(6);
             if (!(VizQuickPartOf(key) & parts)) continue;
