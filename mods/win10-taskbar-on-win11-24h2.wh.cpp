@@ -74,14 +74,13 @@ To mitigate this, install this mod: [*Fix language indicator in Win10 taskbar un
 #include <bcrypt.h>
 #include <urlmon.h>
 #include <string>
-
-#pragma comment(lib, "bcrypt.lib")
+#include <vector>
+#include <mutex>
 
 typedef LONG(WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
 REGQUERYVALUEEXW pOriginalRegQueryValueExW;
 
 // SHA-256 of explorer.exe build 7AC6EEC3442000 from msdl.microsoft.com.
-// TODO: replace with the real digest (lowercase hex, 64 chars) before use.
 constexpr wchar_t kExplorerSha256[] =
     L"58f78b5f90efc75d6c7d3d85bc8b36983fe410406f217619dbe2384130d65bfe";
 
@@ -89,16 +88,13 @@ constexpr wchar_t kExplorerSha256[] =
 // long as this process (userinit.exe) is alive. Closed in Wh_ModUninit.
 HANDLE g_explorerFile = INVALID_HANDLE_VALUE;
 
-// One-time setup state, computed on the first "Shell" query and cached for
-// the rest of the process lifetime.
-bool g_setupDone = false;
+std::once_flag g_setupFlag;
 std::wstring g_shellPath;  // empty => fall back to the original shell value
 
 bool ComputeSha256(HANDLE hFile, BYTE out[32]) {
     bool ok = false;
     BCRYPT_ALG_HANDLE hAlg = nullptr;
     BCRYPT_HASH_HANDLE hHash = nullptr;
-    PBYTE hashObject = nullptr;
 
     if (BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) {
         return false;
@@ -111,13 +107,11 @@ bool ComputeSha256(HANDLE hFile, BYTE out[32]) {
         return false;
     }
 
-    hashObject = new (std::nothrow) BYTE[hashObjectSize];
-    if (!hashObject) {
-        BCryptCloseAlgorithmProvider(hAlg, 0);
-        return false;
-    }
+    // std::vector frees itself on every exit path below, no manual delete[].
+    std::vector<BYTE> hashObject(hashObjectSize);
 
-    if (BCryptCreateHash(hAlg, &hHash, hashObject, hashObjectSize, nullptr, 0, 0) == 0) {
+    if (BCryptCreateHash(hAlg, &hHash, hashObject.data(), (ULONG)hashObject.size(),
+                          nullptr, 0, 0) == 0) {
         LARGE_INTEGER pos{};
         pos.QuadPart = 0;
         SetFilePointerEx(hFile, pos, nullptr, FILE_BEGIN);
@@ -139,7 +133,6 @@ bool ComputeSha256(HANDLE hFile, BYTE out[32]) {
         BCryptDestroyHash(hHash);
     }
 
-    delete[] hashObject;
     BCryptCloseAlgorithmProvider(hAlg, 0);
     return ok;
 }
@@ -182,12 +175,30 @@ bool OpenAndVerify(const std::wstring& path, HANDLE* outFile) {
     return true;
 }
 
+// Renames the file referenced by an already-open handle, without opening
+// the path again. Unlike MoveFileExW (which internally reopens the source
+// path with DELETE access), this works even while we hold `file` open with
+// FILE_SHARE_READ only, because no second open of the path is involved.
+// Requires `file` to have been opened with DELETE access.
+bool RenameViaHandle(HANDLE file, const std::wstring& newPath) {
+    size_t nameBytes = newPath.size() * sizeof(wchar_t);
+    std::vector<BYTE> buffer(sizeof(FILE_RENAME_INFO) + nameBytes);
+    FILE_RENAME_INFO* info = reinterpret_cast<FILE_RENAME_INFO*>(buffer.data());
+    info->ReplaceIfExists = TRUE;
+    info->RootDirectory = nullptr;
+    info->FileNameLength = (DWORD)nameBytes;
+    memcpy(info->FileName, newPath.c_str(), nameBytes);
+
+    return SetFileInformationByHandle(file, FileRenameInfo, buffer.data(),
+                                       (DWORD)buffer.size()) != 0;
+}
+
 // Downloads explorer.exe into storageDir\explorer.exe.download, verifies it
-// (one pass over the file), and only then moves it onto finalPath. The
-// handle used for verification stays open across MoveFileExW (renaming on
-// the same volume doesn't touch the file's content or identity), so it's
-// returned to the caller already open and already verified — the hash is
-// never recomputed. Returns false and cleans up the temp file on any
+// once, and renames it onto finalPath through the same handle used for
+// verification (see RenameViaHandle). The handle is returned to the caller
+// already open and already verified: the hash is computed exactly once,
+// and the file never goes without a deny-write handle open on it between
+// the check and the use. Returns false and cleans up the temp file on any
 // failure.
 bool DownloadAndVerify(const std::wstring& storageDir, const std::wstring& finalPath,
                         HANDLE* outFile) {
@@ -205,11 +216,13 @@ bool DownloadAndVerify(const std::wstring& storageDir, const std::wstring& final
         return false;
     }
 
-    // FILE_SHARE_READ (no write sharing) denies writes from the moment we
-    // open the file. The handle stays valid after the rename below, so we
-    // verify once and keep using the same handle — no second hash pass.
-    HANDLE file = CreateFileW(tempPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    // DELETE access is required to rename through this same handle below.
+    // FILE_SHARE_READ only (no FILE_SHARE_DELETE) still denies other
+    // processes the ability to delete, rename or write over this file
+    // while we hold it; it doesn't affect the rename we do ourselves
+    // through the handle.
+    HANDLE file = CreateFileW(tempPath.c_str(), GENERIC_READ | DELETE, FILE_SHARE_READ,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         DeleteFileW(tempPath.c_str());
         return false;
@@ -222,7 +235,7 @@ bool DownloadAndVerify(const std::wstring& storageDir, const std::wstring& final
         return false;
     }
 
-    if (!MoveFileExW(tempPath.c_str(), finalPath.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+    if (!RenameViaHandle(file, finalPath)) {
         Wh_Log(L"Failed to move downloaded explorer.exe into place: %lu", GetLastError());
         CloseHandle(file);
         DeleteFileW(tempPath.c_str());
@@ -262,14 +275,15 @@ void SetupLocaleMui(const std::wstring& storageDir) {
     }
 }
 
-// Runs once per process. Prepares a verified explorer.exe in the mod's
-// storage directory and caches its path in g_shellPath. Leaves g_shellPath
-// empty if a verified file isn't available, so the caller falls back to the
-// default shell. The hash is computed at most once: either by OpenAndVerify
-// (cache hit) or by DownloadAndVerify (cache miss) — never both.
-void EnsureShellReady() {
-    g_setupDone = true;
-
+// Runs once per process (guarded by std::call_once, so concurrent calls to
+// EnsureShellReady from multiple threads don't race). Prepares a verified
+// explorer.exe in the mod's storage directory and caches its path in
+// g_shellPath. Leaves g_shellPath empty if a verified file isn't
+// available, so the caller falls back to the default shell. The hash is
+// computed exactly once per process: either by OpenAndVerify (file already
+// present and valid) or by DownloadAndVerify (freshly downloaded) — never
+// both, and never more than once even under concurrent callers.
+void EnsureShellReadyImpl() {
     wchar_t storageDir[MAX_PATH];
     if (!Wh_GetModStoragePath(storageDir, ARRAYSIZE(storageDir))) {
         Wh_Log(L"Failed to get the mod storage path, using the default shell");
@@ -291,12 +305,14 @@ void EnsureShellReady() {
     SetupLocaleMui(storageDir);
 }
 
+void EnsureShellReady() {
+    std::call_once(g_setupFlag, EnsureShellReadyImpl);
+}
+
 LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
                                   LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
     if (lpValueName && lstrcmpiW(lpValueName, L"Shell") == 0) {
-        if (!g_setupDone) {
-            EnsureShellReady();
-        }
+        EnsureShellReady();
 
         if (!g_shellPath.empty()) {
             if (lpType) {
@@ -304,14 +320,28 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
             }
 
             size_t needed = (g_shellPath.size() + 1) * sizeof(wchar_t);
-            if (lpData && lpcbData && *lpcbData >= needed) {
-                wcscpy_s((wchar_t*)lpData, g_shellPath.size() + 1, g_shellPath.c_str());
+
+            if (!lpcbData) {
+                // No size pointer and no buffer: nothing to report into,
+                // per RegQueryValueExW's contract lpcbData may be NULL only
+                // when lpData is also NULL.
+                return ERROR_SUCCESS;
+            }
+
+            if (!lpData) {
+                // Size query: report the required size and succeed.
                 *lpcbData = (DWORD)needed;
-            } else if (lpcbData) {
+                return ERROR_SUCCESS;
+            }
+
+            if (*lpcbData < needed) {
+                // Buffer too small: report the required size and fail.
                 *lpcbData = (DWORD)needed;
                 return ERROR_MORE_DATA;
             }
 
+            wcscpy_s((wchar_t*)lpData, g_shellPath.size() + 1, g_shellPath.c_str());
+            *lpcbData = (DWORD)needed;
             return ERROR_SUCCESS;
         }
     }
