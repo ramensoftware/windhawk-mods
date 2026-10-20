@@ -16,8 +16,9 @@ jobs:
     # A cheap prefilter, so that an ordinary comment doesn't start a runner. The
     # comment is parsed properly in pr_flow.cjs. Unlike the workflow token, an
     # app token triggers workflows, so the app's own comments, which quote the
-    # commands, are filtered out here too.
+    # commands, are filtered out here too. Forks don't have the app's private key.
     if: >-
+      github.repository == 'ramensoftware/windhawk-mods' &&
       github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       (contains(github.event.comment.body, '/ai-review') ||

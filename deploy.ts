@@ -813,6 +813,7 @@ function enrichCatalog(
                 published: modTimes[id].published,
                 updated: modTimes[id].updated,
                 defaultSorting: 0,
+                trendingSorting: 0,
                 rating: 0,
                 users: 0,
                 ratingUsers: 0,

@@ -1,0 +1,68 @@
+name: Issue mod tags
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+  workflow_dispatch:
+    inputs:
+      issue-number:
+        description: The issue to tag
+        required: true
+        type: number
+
+# The workflow token labels issues, edits their titles and bodies, and comments.
+# The project is updated with PROJECT_PAT, since the workflow token has no access
+# to organization projects. COPILOT_PAT is a personal token with Copilot
+# Requests access, used only by Copilot CLI.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-mod-tags-${{ github.event.issue.number || inputs.issue-number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    # An edit matters only while the issue has no mod label, e.g. after the
+    # opener fills in the mod name. Edits made with the workflow token, like the
+    # author tag, don't trigger workflows.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (!contains(join(github.event.issue.labels.*.name, ' '), 'mod/') &&
+       !contains(github.event.issue.labels.*.name, 'new-mod-idea'))
+    # The secrets are in this environment, so that no other job can use them.
+    # A run isn't a deployment, so none is recorded.
+    environment:
+      name: issue_mod_tags
+      deployment: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Only the tagging script is needed, so the mod sources are skipped.
+          sparse-checkout: .github
+          persist-credentials: false
+
+      # Copilot isn't asked about an edit that leaves the title as is. The version
+      # is pinned because the script relies on its command-line flags. If the
+      # install fails, the issue is still tagged when its title settles the mod.
+      - name: Install Copilot CLI
+        if: github.event.action != 'edited' || github.event.changes.title
+        continue-on-error: true
+        run: npm install --prefix "$RUNNER_TEMP/copilot-cli" @github/copilot@1.0.97
+
+      - name: Tag the issue
+        uses: actions/github-script@v9
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_PAT }}
+          COPILOT_TOKEN: ${{ secrets.COPILOT_PAT }}
+          COPILOT_CLI: ${{ runner.temp }}/copilot-cli/node_modules/.bin/copilot
+        with:
+          retries: 3
+          script: |
+            const tags = require('${{ github.workspace }}/.github/issue_mod_tags.cjs');
+            await tags.handleIssueEvent({ github, getOctokit, context, core });

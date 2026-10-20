@@ -2,10 +2,11 @@
 // @id              minimize-to-tray
 // @name            Minimize to tray
 // @description     Right-click a window's minimize button to hide it in the system tray.
-// @version         1.0
+// @version         1.1
 // @author          0Allu
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/minimize-to-tray
+// @donateUrl       https://ko-fi.com/0allu
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -lshcore
 // @license         MIT
@@ -42,6 +43,13 @@ title bars, such as Steam. A custom rule uses this format:
 The three numeric values are in DPI-independent pixels. `height` is the maximum
 distance below the top of the window, and `min right` / `max right` define the
 button's distance from the right edge.
+
+## Excluded processes
+
+Add executable names (for example `notepad.exe`) to the exclusion list in the
+mod settings to leave their minimize button alone. Right-clicking it then
+should do nothing. Matching is case-insensitive and uses
+the executable file name only.
 
 ## Compatibility
 
@@ -87,6 +95,13 @@ the affected application may need to be restarted manually.
     right|max right. Numeric values are DPI-independent pixels measured from
     the top and right edges of the window. Use * as the window class to match
     any class for the executable.
+
+- excludedProcesses: [""]
+  $name: Excluded processes
+  $description: >-
+    Executable names (for example notepad.exe) for which right-clicking the
+    minimize button keeps its normal behavior. Matching is case-insensitive
+    and uses the file name only.
 */
 // ==/WindhawkModSettings==
 
@@ -195,6 +210,7 @@ bool g_enableCustomTitleBarRules = false;
 int g_maxCustomRuleHeightDip = 0;
 int g_maxCustomRuleRightDip = 0;
 std::vector<CustomTitleBarRule> g_customTitleBarRules;
+std::vector<std::wstring> g_excludedProcesses;
 
 SRWLOCK g_probeLock = SRWLOCK_INIT;
 ProbeRequest g_pendingProbe;
@@ -388,8 +404,8 @@ bool GetProcessImageName(HWND hwnd, std::wstring* fileName) {
     return success;
 }
 
-bool ResolveWindowIdentity(HWND hwnd, CachedWindowIdentity* identity) {
-    if (!identity || !IsCustomRuleWindowEligible(hwnd)) {
+bool ResolveCachedWindowIdentity(HWND hwnd, CachedWindowIdentity* identity) {
+    if (!identity) {
         return false;
     }
 
@@ -436,6 +452,14 @@ bool ResolveWindowIdentity(HWND hwnd, CachedWindowIdentity* identity) {
     g_windowIdentityCache.push_back(entry);
     *identity = std::move(entry);
     return true;
+}
+
+bool ResolveWindowIdentity(HWND hwnd, CachedWindowIdentity* identity) {
+    if (!identity || !IsCustomRuleWindowEligible(hwnd)) {
+        return false;
+    }
+
+    return ResolveCachedWindowIdentity(hwnd, identity);
 }
 
 void PruneWindowIdentityCache() {
@@ -517,6 +541,7 @@ void LoadSettings() {
         Wh_GetIntSetting(L"enableCustomTitleBarRules") != 0;
 
     std::vector<CustomTitleBarRule> customTitleBarRules;
+    std::vector<std::wstring> excludedProcesses;
     int maxCustomRuleHeightDip = 0;
     int maxCustomRuleRightDip = 0;
 
@@ -542,11 +567,31 @@ void LoadSettings() {
         Wh_FreeStringSetting(setting);
     }
 
+    for (int i = 0;; i++) {
+        PCWSTR setting = Wh_GetStringSetting(L"excludedProcesses[%d]", i);
+
+        if (!*setting) {
+            Wh_FreeStringSetting(setting);
+            break;
+        }
+
+        std::wstring name = setting;
+        size_t first = name.find_first_not_of(L" \t\"");
+        size_t last = name.find_last_not_of(L" \t\"");
+
+        if (first != std::wstring::npos) {
+            excludedProcesses.push_back(name.substr(first, last - first + 1));
+        }
+
+        Wh_FreeStringSetting(setting);
+    }
+
     AcquireSRWLockExclusive(&g_detectionLock);
     g_enableCustomTitleBarRules = enableCustomTitleBarRules;
     g_maxCustomRuleHeightDip = maxCustomRuleHeightDip;
     g_maxCustomRuleRightDip = maxCustomRuleRightDip;
     g_customTitleBarRules = std::move(customTitleBarRules);
+    g_excludedProcesses = std::move(excludedProcesses); 
     ReleaseSRWLockExclusive(&g_detectionLock);
 
     AcquireSRWLockExclusive(&g_probeLock);
@@ -758,6 +803,35 @@ bool IsPotentialCaptionClick(HWND hwnd, POINT screenPoint) {
     return false;
 }
 
+bool IsProcessExcluded(HWND hwnd) {
+    AcquireSRWLockShared(&g_detectionLock);
+    bool hasExclusions = !g_excludedProcesses.empty();
+    ReleaseSRWLockShared(&g_detectionLock);
+
+    if (!hasExclusions) {
+        return false;
+    }
+
+    // if process cant be identified (e.g. elevated), dont exclude it
+    CachedWindowIdentity identity;
+    if (!ResolveCachedWindowIdentity(hwnd, &identity)) {
+        return false;
+    }
+
+    bool excluded = false;
+
+    AcquireSRWLockShared(&g_detectionLock);
+    for (const auto& name : g_excludedProcesses) {
+        if (_wcsicmp(identity.executable.c_str(), name.c_str()) == 0) {
+            excluded = true;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_detectionLock);
+
+    return excluded;
+}
+
 HWND FindPotentialCaptionWindow(POINT screenPoint) {
     HWND hwnd = WindowFromPoint(screenPoint);
     if (!hwnd) {
@@ -770,7 +844,15 @@ HWND FindPotentialCaptionWindow(POINT screenPoint) {
         return nullptr;
     }
 
-    return IsPotentialCaptionClick(hwnd, screenPoint) ? hwnd : nullptr;
+    if (!IsPotentialCaptionClick(hwnd, screenPoint)) {
+        return nullptr;
+    }
+
+    if (IsProcessExcluded(hwnd)) {
+        return nullptr;
+    }
+
+    return hwnd;
 }
 
 bool ProbeMinimizeButton(HWND hwnd,

@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win7-open-with-dialog
-// @name            Windows Vista/7 Open With Dialog Restorer
+// @name            Windows Vista/7 "Open with" Dialog Restorer
 // @description     This mod restores the classic Windows Vista/7 "Open with" dialog on Windows 10 and 11
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @license         MIT
@@ -14,7 +14,7 @@
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-# Windows 7 Open With Dialog Recreation
+# Windows 7 "Open With" Dialog Recreation
 
 ## About
 
@@ -85,6 +85,8 @@ default. All other selections open the file once without changing the system def
 
 - **ReactOS** — Inspiration
 - **aubymori** — Inspiration
+- **Budgeto** — Bug reports
+- **Susie Deltarune** — Bug reports
 */
 // ==/WindhawkModReadme==
 
@@ -5485,6 +5487,23 @@ static RowHighlight PaintRowHighlight(HWND list, HDC hdc, const RECT& rc,
 // painting the row and for invalidating it when hover changes, so the
 // invalidated area always matches what actually gets redrawn.
 static bool GetTileFullRect(HWND list, int row, RECT& rc) {
+    // The tiles have a fixed size (LVTVIF_FIXEDSIZE), so the real tile is
+    // the item origin plus that size. The union of the icon and label
+    // rects follows the TEXT width instead, which made every highlight
+    // frame a different width ("half blue, half white" tiles).
+    LVTILEVIEWINFO tileInfo{};
+    tileInfo.cbSize = sizeof(tileInfo);
+    tileInfo.dwMask = LVTVIM_TILESIZE;
+    POINT origin{};
+    if (SendMessageW(list, LVM_GETTILEVIEWINFO, 0,
+                     reinterpret_cast<LPARAM>(&tileInfo)) &&
+        (tileInfo.dwFlags & LVTVIF_FIXEDSIZE) && tileInfo.sizeTile.cx > 0 &&
+        tileInfo.sizeTile.cy > 0 &&
+        ListView_GetItemPosition(list, row, &origin)) {
+        rc = {origin.x, origin.y, origin.x + tileInfo.sizeTile.cx,
+              origin.y + tileInfo.sizeTile.cy};
+        return true;
+    }
     RECT rcIcon{};
     RECT rcLabel{};
     const bool hasIcon =
@@ -5790,37 +5809,91 @@ static void PaintDarkControlFrames(PickerState& state, HDC hdc) {
     }
 }
 
-// Recomputes which list row is hovered and repaints the rows that
-// changed state. Both themes need it now that the light theme also
-// paints its own Windows 7 blue hover frame.
-static void UpdateListHover(PickerState& state, POINT clientPoint) {
-    if (!state.list || !IsWindow(state.list)) return;
-    LVHITTESTINFO hit{};
-    hit.pt = clientPoint;
-    const int row = ListView_HitTest(state.list, &hit);
-    if (row == state.hoverRow) return;
-    const int previous = state.hoverRow;
-    state.hoverRow = row;
+// Hover tracking for the program list.
+//
+// The hovered row used to go stale ("random" blue frames) for three reasons:
+// WM_MOUSELEAVE was only armed when the row changed, so once comctl32
+// cancelled the tracking (a click does that) the frame never cleared; the
+// frame was not refreshed when the list scrolled under a still mouse (wheel,
+// scrollbar, keyboard); and a row of a collapsed group could still be
+// reported by the hit test. A short timer now re-validates the hovered row
+// against the real cursor position for as long as a row is hovered.
+static constexpr UINT_PTR kListHoverTimerId = 0x5E41;
+
+// Row highlights are painted by this dialog, not by comctl32, so a repaint
+// limited to "the item rect" is only as correct as that rect - and in tile
+// view comctl32's own invalidation covers just part of the tile, which left
+// half-painted (blue strip / white top) selection frames. The list is tiny,
+// so every hover, selection and focus change repaints the whole control and
+// each row is then always drawn completely, with no partial clip.
+static void RepaintWholeList(HWND list) {
+    if (list && IsWindow(list)) InvalidateRect(list, nullptr, FALSE);
+}
+
+static bool RowIsVisibleInList(HWND list, int row) {
     RECT rc{};
-    if (previous >= 0 && GetTileFullRect(state.list, previous, rc)) {
-        InvalidateRect(state.list, &rc, FALSE);
-    }
-    if (row >= 0 && GetTileFullRect(state.list, row, rc))
-        InvalidateRect(state.list, &rc, FALSE);
-    if (row >= 0) {
-        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.list, 0};
-        TrackMouseEvent(&tme);
-    }
+    if (!GetTileFullRect(list, row, rc) || IsRectEmpty(&rc)) return false;
+    RECT client{};
+    if (!GetClientRect(list, &client)) return false;
+    RECT visible{};
+    return IntersectRect(&visible, &rc, &client) != FALSE;
 }
 
 static void ClearListHover(PickerState& state) {
+    if (state.list && IsWindow(state.list))
+        KillTimer(state.list, kListHoverTimerId);
     if (state.hoverRow < 0) return;
     const int previous = state.hoverRow;
     state.hoverRow = -1;
     if (!state.list || !IsWindow(state.list)) return;
     RECT rc{};
     if (GetTileFullRect(state.list, previous, rc))
-        InvalidateRect(state.list, &rc, FALSE);
+        RepaintWholeList(state.list);
+}
+
+// Recomputes which list row is hovered and repaints the rows that
+// changed state. Both themes need it now that the light theme also
+// paints its own Windows 7 blue hover frame.
+static void UpdateListHover(PickerState& state, POINT clientPoint) {
+    if (!state.list || !IsWindow(state.list)) return;
+    RECT client{};
+    GetClientRect(state.list, &client);
+    int row = -1;
+    if (PtInRect(&client, clientPoint)) {
+        // Re-arm on every move: comctl32 can cancel the pending leave
+        // notification behind our back, and arming is cheap.
+        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.list, 0};
+        TrackMouseEvent(&tme);
+        LVHITTESTINFO hit{};
+        hit.pt = clientPoint;
+        row = ListView_HitTest(state.list, &hit);
+        if (row >= 0 && !RowIsVisibleInList(state.list, row)) row = -1;
+    }
+    if (row == state.hoverRow) return;
+    const int previous = state.hoverRow;
+    state.hoverRow = row;
+    RECT rc{};
+    if (previous >= 0 && GetTileFullRect(state.list, previous, rc))
+        RepaintWholeList(state.list);
+    if (row >= 0 && GetTileFullRect(state.list, row, rc))
+        RepaintWholeList(state.list);
+    if (row >= 0)
+        SetTimer(state.list, kListHoverTimerId, 60, nullptr);
+    else
+        KillTimer(state.list, kListHoverTimerId);
+}
+
+// Re-derives the hovered row from the real cursor position, for when the
+// list content moved without the mouse moving (scroll, keyboard, resize).
+static void SyncListHoverToCursor(PickerState& state) {
+    if (!state.list || !IsWindow(state.list)) return;
+    POINT pt{};
+    if (!GetCursorPos(&pt) || WindowFromPoint(pt) != state.list) {
+        ClearListHover(state);
+        return;
+    }
+    ScreenToClient(state.list, &pt);
+    UpdateListHover(state, pt);
 }
 
 // Subclass of the program list: the hover frame needs mouse messages
@@ -5839,10 +5912,37 @@ static LRESULT CALLBACK PickerListSubclassProc(HWND window, UINT message,
             }
             break;
         case WM_MOUSELEAVE:
-        case WM_MOUSEWHEEL:
             if (state) ClearListHover(*state);
             break;
+        case WM_MOUSEWHEEL:
+        case WM_VSCROLL:
+        case WM_KEYDOWN:
+        case WM_SIZE: {
+            const LRESULT result =
+                DefSubclassProc(window, message, wParam, lParam);
+            if (state) SyncListHoverToCursor(*state);
+            return result;
+        }
+        case WM_SETFOCUS:
+        case WM_KILLFOCUS: {
+            const LRESULT result =
+                DefSubclassProc(window, message, wParam, lParam);
+            InvalidateRect(window, nullptr, FALSE);
+            return result;
+        }
+        case WM_TIMER:
+            if (wParam == kListHoverTimerId) {
+                if (state) {
+                    if (state->hoverRow < 0)
+                        KillTimer(window, kListHoverTimerId);
+                    else
+                        SyncListHoverToCursor(*state);
+                }
+                return 0;
+            }
+            break;
         case WM_NCDESTROY:
+            KillTimer(window, kListHoverTimerId);
             RemoveWindowSubclass(window, PickerListSubclassProc, idSubclass);
             break;
     }
@@ -6298,6 +6398,27 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             }
             break;
         }
+        case WM_SYSCOMMAND:
+            // The dialog is fixed-size: no resizing or maximizing from the
+            // system menu or the keyboard (Alt+Space).
+            switch (wParam & 0xFFF0) {
+                case SC_SIZE:
+                case SC_MAXIMIZE:
+                    return 0;
+            }
+            break;
+        case WM_NCHITTEST: {
+            // Sizing borders are never hit-tested as such, so the cursor
+            // never turns into a resize arrow.
+            const LRESULT hit = DefWindowProcW(window, message, wParam, lParam);
+            switch (hit) {
+                case HTLEFT: case HTRIGHT: case HTTOP: case HTBOTTOM:
+                case HTTOPLEFT: case HTTOPRIGHT:
+                case HTBOTTOMLEFT: case HTBOTTOMRIGHT:
+                    return HTBORDER;
+            }
+            return hit;
+        }
         case WM_COMMAND:
             if (!state) break;
             if (LOWORD(wParam) == IDOK) {
@@ -6419,7 +6540,23 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                     }
                     break;
                 }
-                if (header->code == LVN_ITEMCHANGED) UpdateSelectionUi(*state);
+                if (header->code == LVN_ITEMCHANGED) {
+                    // comctl32 invalidates only its own item rect, which in
+                    // tile view is smaller than the tile this dialog paints.
+                    // A selection change therefore repainted just the lower
+                    // part of the row (blue strip under a white top half).
+                    // Invalidate the whole tile for the item that changed.
+                    auto changed = reinterpret_cast<NMLISTVIEW*>(lParam);
+                    if (changed->iItem < 0) {
+                        InvalidateRect(state->list, nullptr, FALSE);
+                    } else if (changed->uChanged & LVIF_STATE) {
+                        RECT rcTile{};
+                        if (GetTileFullRect(state->list, changed->iItem,
+                                            rcTile))
+                            RepaintWholeList(state->list);
+                    }
+                    UpdateSelectionUi(*state);
+                }
                 if (header->code == NM_DBLCLK && SelectedIndex(*state) >= 0)
                     SendMessageW(window, WM_COMMAND, IDOK, 0);
                 return 0;
@@ -6836,6 +6973,53 @@ static ComPtr<StandaloneAssocHandler> FindAssocHandlerForSelection(
     return {};
 }
 
+// The ProgId the shell currently stores as the user's choice for an
+// extension (empty when there is none). Used to log whether MakeDefault
+// really changed anything, since it can return S_OK without persisting.
+static std::wstring ReadUserChoiceProgId(const std::wstring& extension) {
+    try {
+        const std::wstring path =
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\" +
+            extension + L"\\UserChoice";
+        wchar_t value[512] = {};
+        DWORD size = sizeof(value) - sizeof(wchar_t);
+        if (RegGetValueW(HKEY_CURRENT_USER, path.c_str(), L"ProgId",
+                         RRF_RT_REG_SZ, nullptr, value, &size) == ERROR_SUCCESS)
+            return value;
+    } catch (...) {
+    }
+    return {};
+}
+
+// MakeDefault can return S_OK and still leave no UserChoice behind (seen
+// on Windows 10/11 for Applications\\<exe> handlers). When there is no
+// UserChoice at all, the per-user class default is what Explorer uses, so
+// point HKCU\\Software\\Classes\\<ext> at the chosen ProgID. An existing
+// UserChoice is hash-protected and is never touched.
+static bool SetUserClassDefaultProgId(const std::wstring& extension,
+                                      const std::wstring& progId) {
+    if (extension.size() <= 1 || progId.empty()) return false;
+    RegKeyOwner progIdKey;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, progId.c_str(), 0, KEY_READ,
+                      progIdKey.Put()) != ERROR_SUCCESS)
+        return false;
+    RegKeyOwner extKey;
+    try {
+        const std::wstring path = L"Software\\Classes\\" + extension;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr, 0,
+                            KEY_READ | KEY_WRITE, nullptr, extKey.Put(),
+                            nullptr) != ERROR_SUCCESS)
+            return false;
+    } catch (...) {
+        return false;
+    }
+    return RegSetValueExW(
+               extKey.Get(), nullptr, 0, REG_SZ,
+               reinterpret_cast<const BYTE*>(progId.c_str()),
+               static_cast<DWORD>((progId.size() + 1) * sizeof(wchar_t))) ==
+           ERROR_SUCCESS;
+}
+
 static HRESULT MakeSelectedDefault(PickerState& state,
                                    HandlerEntry& selected) {
     // Defense in depth: the checkbox is already disabled and cleared for these
@@ -6858,6 +7042,7 @@ static HRESULT MakeSelectedDefault(PickerState& state,
         ? state.associationDescription.c_str()
         : extension.c_str();
 
+    const std::wstring userChoiceBefore = ReadUserChoiceProgId(extension);
     HRESULT shellHr = E_NOTIMPL;
     if (selected.handler) {
         shellHr = selected.handler->MakeDefault(description);
@@ -6899,6 +7084,22 @@ static HRESULT MakeSelectedDefault(PickerState& state,
            L"progId=%s shellHr=0x%08X",
            extension.c_str(), selected.progId.c_str(),
            static_cast<unsigned int>(shellHr));
+    {
+        const std::wstring userChoiceAfter = ReadUserChoiceProgId(extension);
+        Wh_Log(L"Standalone Open With: UserChoice before=%s after=%s",
+               userChoiceBefore.empty() ? L"(none)" : userChoiceBefore.c_str(),
+               userChoiceAfter.empty() ? L"(none)" : userChoiceAfter.c_str());
+        if (SUCCEEDED(shellHr) && userChoiceAfter.empty() &&
+            !selected.progId.empty()) {
+            const bool written =
+                SetUserClassDefaultProgId(extension, selected.progId);
+            Wh_Log(L"Standalone Open With: no UserChoice after MakeDefault, "
+                   L"user class default %s progId=%s",
+                   written ? L"written" : L"NOT written",
+                   selected.progId.c_str());
+            if (!written) shellHr = E_FAIL;
+        }
+    }
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH,
                    nullptr, nullptr);

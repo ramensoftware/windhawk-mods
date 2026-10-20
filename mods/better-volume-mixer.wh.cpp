@@ -2,13 +2,13 @@
 // @id           better-volume-mixer
 // @name         Better Volume Mixer
 // @description  Quickly control master and per-app volume from the system tray
-// @version      1.4.5
+// @version      1.5.4
 // @author       0Allu
 // @github       https://github.com/0Allu
 // @homepage     https://github.com/0Allu/better-volume-mixer
 // @donateUrl    https://ko-fi.com/0allu
 // @include      windhawk.exe
-// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus
+// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -lgdiplus -ld2d1 -ldwrite
 // @license      MIT
 // ==/WindhawkMod==
 
@@ -19,7 +19,7 @@
 A compact volume mixer for Windows 11. Control master volume, individual apps,
 and playback devices directly from the system tray.
 
-![Better Volume Mixer demo](https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/volume-mixer-demo.png)
+![Better Volume Mixer demo](https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer.png)
 
 Click the speaker icon in the system tray to open or close the mixer. If it is
 hidden, open the tray overflow menu and drag the icon onto the taskbar.
@@ -29,8 +29,10 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Master and per-app volume controls
 * Quick playback device switching
 * Mute buttons and middle-click mute
-* Muted master-volume indicator in the mixer and tray
+* Muted master-volume indicator in the mixer
+* Tray icon that shows the master volume level
 * Middle-click the tray icon to toggle master mute
+* Scroll over the tray icon to change master volume
 * Mouse-wheel volume adjustment
 * Exact volume entry
 * Keyboard controls
@@ -42,6 +44,7 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Full-name tooltips for shortened app and device names
 * Compact mode
 * Light, dark, and system themes
+* Windows 11 and Windows 10 visual styles
 * Background transparency, blur, and animations
 * Configurable apps per page
 
@@ -71,12 +74,28 @@ and enable **Hide volume icon** in its settings.
   - system: Follow Windows
   - dark: Dark
   - light: Light
+- visualStyle: windows11
+  $name: Visual style
+  $description: Windows 11 has rounded corners and the Windows 11 slider. Windows 10 has square corners, neutral gray colors, the flat Windows 10 slider with its bar-shaped handle, and no gap above the taskbar. Either style works with every theme.
+  $options:
+  - windows11: Windows 11
+  - windows10: Windows 10
 - backgroundOpacity: 85
   $name: Background opacity
   $description: Background opacity from 0 to 100 percent. Text and controls remain opaque. Blur is applied where supported by Windows.
+- backgroundEffect: blur
+  $name: Background effect
+  $description: What shows through the mixer while background opacity is below 100. Frosted glass blurs the background and evens out its brightness, so text stays readable over anything; lower the background opacity to make it more glassy. Blur only blurs it, and bright backgrounds can wash out the text at low opacity.
+  $options:
+  - glass: Frosted glass
+  - blur: Blur
+  - none: No blur
+- windowBorder: true
+  $name: Window border
+  $description: Show the thin outline that Windows draws around the mixer. Turn off for a borderless look.
 - volumeStep: 5
   $name: Mouse-wheel volume step
-  $description: Percentage points per mouse-wheel step over an app or master-volume row. Valid range is 1 to 20; default is 5.
+  $description: Percentage points per mouse-wheel step over an app or master-volume row, or over the tray icon. Valid range is 1 to 20; default is 5.
 - keyboardControls: false
   $name: Keyboard controls
   $description: Up/Down selects a row, Left/Right changes volume by the mouse-wheel step, and M toggles mute. Works while the mixer is focused. Off by default.
@@ -85,7 +104,7 @@ and enable **Hide volume icon** in its settings.
   $description: Click a percentage to enter a whole number from 0 to 100. Enter applies it; Escape or clicking elsewhere cancels. Off by default.
 - animations: true
   $name: Enable animations
-  $description: Animate opening, hover effects, and volume changes. The Windows animation preference is also respected.
+  $description: Animate opening and closing, hover effects, and volume changes. The mixer opens and closes like the taskbar flyouts of the chosen visual style. The Windows animation preference is also respected.
 - closeWhenFocusIsLost: true
   $name: Close when focus is lost
   $description: Automatically close the mixer when you click somewhere else.
@@ -110,7 +129,7 @@ and enable **Hide volume icon** in its settings.
   - "15": "15"
 - showAllSessions: false
   $name: Show all audio sessions
-  $description: Also show unused or idle audio sessions on other playback devices. Most users can leave this off.
+  $description: Show every audio session separately for each playback device, including unused or idle ones, instead of one row per app. Most users can leave this off.
 - customApps:
   - - app: ""
       $name: App name
@@ -142,6 +161,8 @@ and enable **Hide volume icon** in its settings.
 #include <propsys.h>
 #include <objidl.h>
 #include <gdiplus.h>
+#include <d2d1.h>
+#include <dwrite.h>
 
 #include <algorithm>
 #include <atomic>
@@ -209,10 +230,15 @@ constexpr UINT WM_APP_FINISH_VOLUME_ENTRY = WM_APP + 4;
 constexpr UINT WM_APP_AUDIO_CHANGED = WM_APP + 5;
 constexpr UINT WM_APP_MASTER_STATE_CHANGED = WM_APP + 6;
 constexpr UINT WM_APP_DEFAULT_OUTPUT_CHANGED = WM_APP + 7;
+constexpr UINT WM_APP_TRAY_WHEEL = WM_APP + 8;
 constexpr UINT_PTR TIMER_METERS = 1;
 constexpr UINT_PTR TIMER_REFRESH = 2;
 constexpr UINT_PTR TIMER_CHECK_FOCUS = 3;
 constexpr UINT_PTR TIMER_NAME_TOOLTIP = 4;
+constexpr UINT_PTR TIMER_TRIM = 5;
+constexpr UINT_PTR TIMER_TRAY_WATCH = 6;
+constexpr UINT_PTR TIMER_VOLUME_INDICATOR = 7;
+constexpr UINT VOLUME_INDICATOR_TIME = 1500;
 constexpr UINT NAME_TOOLTIP_DELAY = 1000;
 constexpr UINT TRAY_ICON_ID = 0x4D58;
 // Generated once for this mod. Never regenerate it on startup or on updates.
@@ -240,11 +266,14 @@ struct CustomApp {
 
 struct Settings {
     std::wstring theme = L"system";
+    bool windows10Style = false;
     bool showAllSessions = false;
     bool compactMode = false;
+    bool windowBorder = true;
     bool closeWhenFocusIsLost = true;
     bool animations = true;
     int backgroundOpacity = 85;
+    std::wstring backgroundEffect = L"blur";
     int maxVisibleApps = 7;
     int volumeStep = 5;
     bool keyboardControls = false;
@@ -256,14 +285,13 @@ struct Settings {
 struct Theme {
     COLORREF background;
     COLORREF panel;
-    COLORREF hover;
     COLORREF text;
     COLORREF secondaryText;
-    COLORREF track;
     COLORREF accent;
     COLORREF muted;
     COLORREF divider;
-    COLORREF sliderOutline;
+    COLORREF thumb;
+    COLORREF sliderFill;
 };
 
 struct AppSession {
@@ -271,8 +299,16 @@ struct AppSession {
     std::wstring name;
     std::wstring executablePath;
     std::wstring pinKey;
+    // Per-output pin keys saved before rows were merged across outputs.
+    std::vector<std::wstring> legacyPinKeys;
     bool pinned = false;
     bool active = false;
+    // Set while scanning: whether any session qualifies the row to be shown,
+    // whether a hide rule matched, and which session named and leveled it.
+    bool listed = false;
+    bool hidden = false;
+    int namePriority = -1;
+    int levelPriority = -1;
     float volume = 1.0f;
     bool muted = false;
     HICON icon = nullptr;
@@ -294,8 +330,13 @@ struct AppSession {
             name = std::move(other.name);
             executablePath = std::move(other.executablePath);
             pinKey = std::move(other.pinKey);
+            legacyPinKeys = std::move(other.legacyPinKeys);
             pinned = other.pinned;
             active = other.active;
+            listed = other.listed;
+            hidden = other.hidden;
+            namePriority = other.namePriority;
+            levelPriority = other.levelPriority;
             volume = other.volume;
             muted = other.muted;
             icon = other.icon;
@@ -384,15 +425,26 @@ HFONT g_titleFont;
 HFONT g_bodyFont;
 HFONT g_smallFont;
 HFONT g_symbolFont;
+HFONT g_entryFont; // For the exact volume entry box, which Windows draws.
 ULONG_PTR g_gdiplusToken;
 Gdiplus::Font* g_titleTypography;
 Gdiplus::Font* g_bodyTypography;
 Gdiplus::Font* g_smallTypography;
 
+// Scale of the thumb's accent dot in each pointer state, as used by the
+// native Windows 11 slider.
+constexpr float THUMB_DOT_REST = 0.86f;
+constexpr float THUMB_DOT_HOVER = 1.167f;
+constexpr float THUMB_DOT_PRESSED = 0.71f;
+
+enum class ThumbState { Rest, Hover, Pressed };
+
 struct RowVisual {
     float hover = 0.0f;
     float volume = 0.0f;
     float peak = 0.0f;
+    float thumbDot = THUMB_DOT_REST;
+    ThumbState thumbState = ThumbState::Rest;
     bool initialized = false;
 };
 std::unordered_map<std::wstring, RowVisual> g_rowVisuals;
@@ -401,8 +453,26 @@ bool g_closeHovered;
 int g_hoverPageButton = -1;
 float g_closeHoverAmount;
 float g_frameSeconds = 0.016f;
+// Animation times are AnimationClock() values, in microseconds.
 ULONGLONG g_lastPaintTime;
-ULONGLONG g_openTime;
+ULONGLONG g_openTime;  // Start of the opening animation, while it runs.
+ULONGLONG g_closeTime; // Start of the closing animation, while it runs.
+bool g_openWarmup; // The first frame of the opening animation is still due.
+bool g_closeQueued; // A close was asked for while the flyout was opening.
+ULONGLONG g_frameRenderTime; // When the translucent frame was drawn; 0: none.
+ULONGLONG g_pacedSince;
+// The flyout opens and closes by sliding towards the taskbar edge its tray
+// icon is on. Distances are in pixels, positions in screen coordinates.
+RECT g_restRect{};     // Where the open flyout rests.
+RECT g_slideClip{};    // The flyout is cut off outside this area as it slides.
+int g_slideTravel;     // How far from its resting place a closed flyout is.
+bool g_slideFromAbove; // The taskbar is above the flyout rather than below.
+// Where the running animation set off from and what the last frame showed,
+// so that an interrupted animation carries on from where the flyout is.
+float g_slideStart;
+float g_fadeStart = 1.0f;
+float g_slideOffset;
+float g_fadeOpacity = 1.0f;
 int g_paintMatte = -1; // -1: opaque, 0/1: black/white alpha-recovery pass.
 bool g_transparencyFailed;
 float g_masterPaintVolume;
@@ -414,6 +484,8 @@ UINT g_paintTimerInterval;
 IAudioEndpointVolume* g_endpointVolume;
 EndpointVolumeNotification* g_endpointVolumeCallback;
 bool g_masterIconMuted;
+PCWSTR g_trayIconGlyph;    // The volume glyph the tray icon shows.
+PCWSTR g_symbolFace = L"Segoe MDL2 Assets"; // The icon font in use.
 std::wstring g_endpointName;
 // COM interfaces and icons must never be released by a process-exit destructor.
 // Refresh clears the contents; the UI thread resets storage on controlled exit.
@@ -444,6 +516,8 @@ int g_dpi = 96;
 int g_scrollRow;
 int g_availableAppRows = 15;
 int g_hoverRow = DRAG_NONE;
+bool g_hoverThumb; // The pointer is over the slider thumb of g_hoverRow.
+POINT g_pointer{}; // Last pointer position, in client coordinates.
 int g_dragRow = DRAG_NONE;
 bool g_mouseTracking;
 bool g_audioAvailable;
@@ -453,6 +527,8 @@ bool g_showRequestPending;
 bool g_closeRequestPending;
 bool g_trayPressKnown;
 bool g_trayPressWasVisible;
+std::atomic<bool> g_trayWheelArmed; // Listening to the wheel over the tray icon.
+int g_trayWheelRemainder;  // Wheel movement short of a whole step.
 bool g_showingMixer;
 bool g_outputMenuOpen;
 bool g_sourceMenuOpen;
@@ -476,6 +552,8 @@ int g_volumeEntryRow = DRAG_NONE;
 ULONG_PTR g_volumeEntryGeneration;
 constexpr PCWSTR VOLUME_ENTRY_CLASS = L"WindhawkBetterVolumeMixerEntry";
 constexpr PCWSTR NAME_TOOLTIP_CLASS = L"WindhawkBetterVolumeMixerTooltip";
+constexpr PCWSTR VOLUME_INDICATOR_CLASS = L"WindhawkBetterVolumeMixerIndicator";
+HWND g_volumeIndicator;
 
 void SelectRow(int row) {
     g_selectedRow = row;
@@ -501,6 +579,15 @@ void RestoreSelectedRow() {
 
 int Scale(int value) {
     return MulDiv(value, g_dpi, 96);
+}
+
+bool IsWindows10Style() {
+    return g_settings.windows10Style;
+}
+
+// Corner radius for the current visual style: the Windows 10 style is square.
+int Radius(int value) {
+    return IsWindows10Style() ? 0 : Scale(value);
 }
 
 int ClampInt(int value, int minimum, int maximum) {
@@ -530,6 +617,9 @@ void LoadSettings() {
     if (g_settings.theme != L"dark" && g_settings.theme != L"light") {
         g_settings.theme = L"system";
     }
+    WindhawkUtils::StringSetting style =
+        WindhawkUtils::StringSetting::make(L"visualStyle");
+    g_settings.windows10Style = wcscmp(style.get(), L"windows10") == 0;
 
     g_settings.showAllSessions =
         Wh_GetIntSetting(L"showAllSessions") != 0;
@@ -537,10 +627,18 @@ void LoadSettings() {
         Wh_GetIntSetting(L"closeWhenFocusIsLost") != 0;
     g_settings.animations = Wh_GetIntSetting(L"animations") != 0;
     g_settings.backgroundOpacity = ClampInt(Wh_GetIntSetting(L"backgroundOpacity"), 0, 100);
+    WindhawkUtils::StringSetting effect =
+        WindhawkUtils::StringSetting::make(L"backgroundEffect");
+    g_settings.backgroundEffect = effect.get();
+    if (g_settings.backgroundEffect != L"glass" &&
+        g_settings.backgroundEffect != L"none") {
+        g_settings.backgroundEffect = L"blur";
+    }
     WindhawkUtils::StringSetting pageSize =
         WindhawkUtils::StringSetting::make(L"maxVisibleApps");
     g_settings.maxVisibleApps = ClampInt(_wtoi(pageSize.get()), 1, 15);
     g_settings.compactMode = Wh_GetIntSetting(L"compactMode") != 0;
+    g_settings.windowBorder = Wh_GetIntSetting(L"windowBorder") != 0;
     g_settings.keyboardControls = Wh_GetIntSetting(L"keyboardControls") != 0;
     g_settings.exactVolumeEntry = Wh_GetIntSetting(L"exactVolumeEntry") != 0;
     g_settings.volumeStep =
@@ -571,6 +669,7 @@ void LoadSettings() {
 enum class AccentState : int {
     Disabled = 0,
     BlurBehind = 3,
+    AcrylicBlurBehind = 4,
 };
 
 struct AccentPolicy {
@@ -599,16 +698,44 @@ void ApplyBackdropBlur(HWND hWnd) {
         return;
     }
 
-    bool enable = g_settings.backgroundOpacity < 100 && !g_transparencyFailed;
+    bool transparent = g_settings.backgroundOpacity < 100 && !g_transparencyFailed;
+    bool blur = transparent && g_settings.backgroundEffect != L"none";
     AccentPolicy policy{};
-    policy.state = enable ? AccentState::BlurBehind : AccentState::Disabled;
+    WindowCompositionAttributeData data{19, &policy, sizeof(policy)};  // WCA_ACCENT_POLICY.
 
-    // WCA_ACCENT_POLICY. Keep the backdrop untinted here because the mixer
-    // already paints its own theme-aware translucent background on top.
-    WindowCompositionAttributeData data{19, &policy, sizeof(policy)};
-    if (!setWindowCompositionAttribute(hWnd, &data) && enable) {
+    if (blur && g_settings.backgroundEffect == L"glass") {
+        // Acrylic blurs the backdrop and also pulls its brightness towards
+        // the tint, so a bright or busy background cannot wash out the text.
+        // The tint is nearly clear (ABGR, alpha 1; 0 would disable the
+        // effect): the mixer paints its own translucent background on top,
+        // which is what backgroundOpacity controls.
+        policy.state = AccentState::AcrylicBlurBehind;
+        policy.flags = 2;  // Use gradientColor as the tint.
+        policy.gradientColor = 0x01000000 | (g_theme.background & 0x00FFFFFF);
+        if (setWindowCompositionAttribute(hWnd, &data)) {
+            return;
+        }
+        Wh_Log(L"Mixer: frosted glass backdrop unavailable; using plain blur");
+        policy = {};
+    }
+
+    // Keep the plain blur untinted, because the mixer already paints its own
+    // theme-aware translucent background on top.
+    policy.state = blur ? AccentState::BlurBehind : AccentState::Disabled;
+    if (!setWindowCompositionAttribute(hWnd, &data) && blur) {
         Wh_Log(L"Mixer: backdrop blur unavailable; using transparency without blur");
     }
+}
+
+// Windows 11 rounds the window on request and outlines it with a thin border
+// unless told not to.
+void ApplyWindowFrame(HWND hWnd) {
+    // DWMWA_WINDOW_CORNER_PREFERENCE: DWMWCP_DONOTROUND or DWMWCP_ROUND.
+    DWORD corner = IsWindows10Style() ? 1 : 2;
+    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
+    // DWMWA_BORDER_COLOR: DWMWA_COLOR_DEFAULT or DWMWA_COLOR_NONE.
+    COLORREF color = g_settings.windowBorder ? 0xFFFFFFFF : 0xFFFFFFFE;
+    DwmSetWindowAttribute(hWnd, 34, &color, sizeof(color));
 }
 
 void ApplyTransparencyStyle(HWND hWnd) {
@@ -643,7 +770,163 @@ UINT ChoosePaintInterval(bool motion, bool animating, bool audio) {
 void UpdatePaintTimer(HWND hWnd) {
     if (!IsWindowVisible(hWnd)) return;
     SetPaintTimer(hWnd, ChoosePaintInterval(g_motionEnabled,
-        g_frameAnimating || g_openTime || g_dragRow != DRAG_NONE, g_frameHasAudio));
+        g_frameAnimating || g_openTime || g_closeTime || g_dragRow != DRAG_NONE,
+        g_frameHasAudio));
+}
+
+// Microseconds from a steady high-resolution clock. GetTickCount64 advances
+// in steps of about 16 ms, which is too coarse to time animation frames.
+ULONGLONG AnimationClock() {
+    static const LONGLONG frequency = [] {
+        LARGE_INTEGER value;
+        QueryPerformanceFrequency(&value);
+        return value.QuadPart;
+    }();
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    return static_cast<ULONGLONG>(counter.QuadPart / frequency * 1000000 +
+                                  counter.QuadPart % frequency * 1000000 / frequency);
+}
+
+// Call after presenting a frame. Timer messages arrive on a coarse and uneven
+// 15 or 31 ms cadence, which makes short animations stutter. While something
+// is animating, wait for the compositor to show this frame and then request
+// the next one straight away, so frames follow the display's refresh rate.
+void PaceAnimation(HWND hWnd) {
+    if (g_openWarmup) {
+        // The first frame after opening is slow, because caches are cold, and
+        // was presented fully transparent. Start the animation only now.
+        g_openWarmup = false;
+        if (g_openTime) g_openTime = AnimationClock();
+    }
+    if (!g_motionEnabled || !(g_frameAnimating || g_openTime || g_closeTime) ||
+        !IsWindowVisible(hWnd)) {
+        g_pacedSince = 0;
+        return;
+    }
+    // Paint messages outrank timer messages. Should an animation ever fail
+    // to settle, fall back to the paint timer rather than starve the others.
+    ULONGLONG now = AnimationClock();
+    if (!g_pacedSince) g_pacedSince = now;
+    if (now - g_pacedSince < 2000000 && SUCCEEDED(DwmFlush())) {
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
+}
+
+// Windows 11's entrance curve, cubic-bezier(0, 0, 0, 1): quick off the mark,
+// then a long settle. Its exit curve, cubic-bezier(1, 0, 1, 1), is the same
+// motion run backwards.
+float EntranceEase(float progress) {
+    float t = std::cbrt(progress);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+struct FlyoutFrame {
+    float offset; // Distance from the resting place, towards the taskbar.
+    float opacity;
+    bool finished;
+};
+
+// The taskbar flyouts of Windows 11 slide all the way out from the taskbar's
+// edge and back again, without fading. Those of Windows 10 fade in while they
+// slide a short distance, and close without an animation (see HideMixer).
+FlyoutFrame FlyoutFrameAt(ULONGLONG now) {
+    bool closing = g_closeTime != 0;
+    bool windows10 = IsWindows10Style();
+    ULONGLONG start = closing ? g_closeTime : g_openTime;
+    float offset = closing ? static_cast<float>(g_slideTravel) : 0.0f;
+    if (!start || !g_motionEnabled) return {offset, 1.0f, true};
+    float duration = closing ? 167000.0f : windows10 ? 370000.0f : 250000.0f;
+    float progress = now > start
+        ? ClampVolume(static_cast<float>(now - start) / duration) : 0.0f;
+    float eased = closing ? 1.0f - EntranceEase(1.0f - progress)
+        : windows10 ? 1.0f - std::pow(1.0f - progress, 5.0f)
+        : EntranceEase(progress);
+    return {g_slideStart + (offset - g_slideStart) * eased,
+            g_fadeStart + (1.0f - g_fadeStart) * eased, progress >= 1.0f};
+}
+
+// The part of the flyout that shows when it is `offset` pixels away from its
+// resting place, and where that part starts within the flyout.
+RECT FlyoutBounds(float offset, POINT* origin) {
+    int shift = static_cast<int>(std::lround(offset));
+    RECT whole = g_restRect;
+    OffsetRect(&whole, 0, g_slideFromAbove ? -shift : shift);
+    RECT shown = whole;
+    if (!IntersectRect(&shown, &whole, &g_slideClip)) shown = whole;
+    *origin = {shown.left - whole.left, shown.top - whole.top};
+    return shown;
+}
+
+// Moves an opaque flyout's window to where this frame of the animation has
+// it, and returns where the window starts within the flyout. A translucent
+// flyout is moved along with its contents instead; see PaintTransparentMixer.
+POINT PlaceFlyoutFrame(HWND hWnd, const FlyoutFrame& frame) {
+    POINT origin{};
+    RECT bounds = FlyoutBounds(frame.offset, &origin);
+    SetWindowPos(hWnd, nullptr, bounds.left, bounds.top, bounds.right - bounds.left,
+                 bounds.bottom - bounds.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    g_slideOffset = frame.offset;
+    g_fadeOpacity = frame.opacity;
+    return origin;
+}
+
+// Puts the window in the flyout's resting place, whole.
+void RestFlyoutWindow(HWND hWnd) {
+    UINT flags = SWP_NOOWNERZORDER | SWP_NOACTIVATE;
+    if (IsRectEmpty(&g_restRect)) flags |= SWP_NOMOVE | SWP_NOSIZE;
+    SetWindowPos(hWnd, HWND_TOPMOST, g_restRect.left, g_restRect.top,
+                 g_restRect.right - g_restRect.left,
+                 g_restRect.bottom - g_restRect.top, flags);
+}
+
+// Ends the opening animation with the flyout in place.
+void SettleFlyout(HWND hWnd) {
+    g_openTime = 0;
+    g_openWarmup = false;
+    g_slideOffset = 0.0f;
+    g_fadeOpacity = 1.0f;
+    RestFlyoutWindow(hWnd);
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
+void CompleteHide(HWND hWnd);
+void HideMixer(HWND hWnd);
+void HideVolumeIndicator(HWND owner);
+
+// Jumps to the end of whichever of the two animations is running.
+void FinishFlyoutMotion(HWND hWnd) {
+    if (g_closeTime) {
+        CompleteHide(hWnd);
+    } else if (g_openTime) {
+        SettleFlyout(hWnd);
+    }
+}
+
+// Like the taskbar's own flyouts, the mixer finishes opening before it
+// closes. Call after a frame, to carry out a close that had to wait.
+void RunQueuedClose(HWND hWnd) {
+    if (g_closeQueued && !g_openTime) {
+        g_closeQueued = false;
+        HideMixer(hWnd);
+    }
+}
+
+// The flyout's whole size. Its window can be cut short while it slides.
+RECT MixerContentRect(HWND hWnd) {
+    RECT rect{};
+    if (g_openTime || g_closeTime) {
+        rect.right = g_restRect.right - g_restRect.left;
+        rect.bottom = g_restRect.bottom - g_restRect.top;
+    } else {
+        GetClientRect(hWnd, &rect);
+    }
+    return rect;
+}
+
+// Open as far as the user is concerned: on screen and not on its way out.
+bool MixerOpen(HWND hWnd) {
+    return IsWindowVisible(hWnd) && !g_closeTime;
 }
 
 void UpdateMotionPreference(HWND hWnd) {
@@ -651,7 +934,7 @@ void UpdateMotionPreference(HWND hWnd) {
     SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0);
     g_motionEnabled = g_settings.animations && enabled;
     if (!g_motionEnabled) {
-        g_openTime = 0;
+        FinishFlyoutMotion(hWnd);
     }
     if (IsWindowVisible(hWnd)) {
         SetPaintTimer(hWnd, g_motionEnabled ? 16 : 80);
@@ -666,6 +949,22 @@ bool WindowsUsesLightTheme() {
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
     return result == ERROR_SUCCESS && value != 0;
+}
+
+// AccentPalette holds eight RGBA entries, ordered from the lightest shade to
+// the darkest, with the base accent color at index 3. Windows 11 controls use
+// a lighter shade (1) on dark surfaces and a darker one (4) on light surfaces.
+bool ReadAccentShade(int index, COLORREF* color) {
+    BYTE palette[32];
+    DWORD size = sizeof(palette);
+    LSTATUS result = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+        L"AccentPalette", RRF_RT_REG_BINARY, nullptr, palette, &size);
+    if (result != ERROR_SUCCESS || size < sizeof(palette)) return false;
+    const BYTE* shade = palette + index * 4;
+    *color = RGB(shade[0], shade[1], shade[2]);
+    return true;
 }
 
 void ClearTextCache();
@@ -684,15 +983,39 @@ void UpdateTheme() {
                      (colorization >> 8) & 0xFF,
                      colorization & 0xFF);
     }
+    // Prefer the shade the native controls use; keep the DWM color otherwise.
+    ReadAccentShade(light ? 4 : 1, &accent);
+    // Windows 10 sliders use the base accent color in both themes.
+    COLORREF sliderFill = accent;
+    if (IsWindows10Style()) ReadAccentShade(3, &sliderFill);
 
+    if (IsWindows10Style()) {
+        // The neutral grays of the Windows 10 flyouts.
+        if (light) {
+            g_theme = {RGB(230, 230, 230), RGB(242, 242, 242),
+                       RGB(0, 0, 0), RGB(95, 95, 95),
+                       accent, RGB(120, 120, 120), RGB(204, 204, 204),
+                       RGB(255, 255, 255), sliderFill};
+        } else {
+            g_theme = {RGB(31, 31, 31), RGB(43, 43, 43),
+                       RGB(255, 255, 255), RGB(170, 170, 170),
+                       accent, RGB(140, 140, 140), RGB(60, 60, 60),
+                       RGB(69, 69, 69), sliderFill};
+        }
+        return;
+    }
+
+    // The slider thumb uses the native Windows 11 solid control color.
     if (light) {
-        g_theme = {RGB(247, 248, 250), RGB(255, 255, 255), RGB(235, 238, 242),
-                   RGB(27, 31, 38), RGB(98, 105, 117), RGB(218, 223, 230),
-                   accent, RGB(115, 122, 134), RGB(228, 231, 236), RGB(170, 175, 182)};
+        g_theme = {RGB(247, 248, 250), RGB(255, 255, 255),
+                   RGB(27, 31, 38), RGB(98, 105, 117),
+                   accent, RGB(115, 122, 134), RGB(228, 231, 236),
+                   RGB(255, 255, 255), sliderFill};
     } else {
-        g_theme = {RGB(27, 29, 34), RGB(38, 41, 48), RGB(45, 49, 57),
-                   RGB(242, 244, 248), RGB(159, 168, 183), RGB(65, 72, 84),
-                   accent, RGB(138, 146, 159), RGB(48, 53, 62), RGB(22, 24, 29)};
+        g_theme = {RGB(27, 29, 34), RGB(38, 41, 48),
+                   RGB(242, 244, 248), RGB(159, 168, 183),
+                   accent, RGB(138, 146, 159), RGB(48, 53, 62),
+                   RGB(69, 69, 69), sliderFill};
     }
 }
 
@@ -718,6 +1041,10 @@ void DeleteFonts() {
         DeleteObject(g_smallFont);
         g_smallFont = nullptr;
     }
+    if (g_entryFont) {
+        DeleteObject(g_entryFont);
+        g_entryFont = nullptr;
+    }
 }
 
 Gdiplus::Font* CreateTypographyFont(PCWSTR preferredFamily, float pixels) {
@@ -737,12 +1064,33 @@ Gdiplus::Font* CreateTypographyFont(PCWSTR preferredFamily, float pixels) {
     return nullptr; // DrawLabel retains a GDI fallback.
 }
 
+int CALLBACK FontFound(const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM found) {
+    *reinterpret_cast<bool*>(found) = true;
+    return 0;
+}
+
+bool FontInstalled(PCWSTR face) {
+    LOGFONTW request{};
+    request.lfCharSet = DEFAULT_CHARSET;
+    lstrcpynW(request.lfFaceName, face, LF_FACESIZE);
+    bool found = false;
+    HDC dc = GetDC(nullptr);
+    EnumFontFamiliesExW(dc, &request, FontFound, reinterpret_cast<LPARAM>(&found), 0);
+    ReleaseDC(nullptr, dc);
+    return found;
+}
+
 void CreateFonts(HWND hWnd) {
     DeleteFonts();
     g_dpi = static_cast<int>(GetDpiForWindow(hWnd));
     if (!g_dpi) {
         g_dpi = 96;
     }
+
+    // Windows 10 does not come with the Windows 11 icon font. Its own has the
+    // same icons at the same code points; without it, they would be missing.
+    bool fluentIcons = !IsWindows10Style() && FontInstalled(L"Segoe Fluent Icons");
+    g_symbolFace = fluentIcons ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
 
     g_titleFont = CreateFontW(
         -MulDiv(15, g_dpi, 72), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
@@ -759,12 +1107,22 @@ void CreateFonts(HWND hWnd) {
     g_symbolFont = CreateFontW(
         -MulDiv(13, g_dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe Fluent Icons");
+        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, g_symbolFace);
+    // The entry box is an ordinary opaque window, so it can have ClearType,
+    // and the same family and size as the percentage it replaces. Plain
+    // antialiasing renders Segoe UI unevenly at this size.
+    bool variableText = !IsWindows10Style() && FontInstalled(L"Segoe UI Variable Text");
+    g_entryFont = CreateFontW(
+        -MulDiv(14, g_dpi, 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        variableText ? L"Segoe UI Variable Text" : L"Segoe UI");
     if (g_gdiplusToken) {
         float density = g_dpi / 96.0f;
+        PCWSTR textFamily = IsWindows10Style() ? L"Segoe UI" : L"Segoe UI Variable Text";
         g_titleTypography = CreateTypographyFont(L"Segoe UI Semibold", 20.0f * density);
-        g_bodyTypography = CreateTypographyFont(L"Segoe UI Variable Text", 14.0f * density);
-        g_smallTypography = CreateTypographyFont(L"Segoe UI Variable Text", 12.0f * density);
+        g_bodyTypography = CreateTypographyFont(textFamily, 14.0f * density);
+        g_smallTypography = CreateTypographyFont(textFamily, 12.0f * density);
     }
 }
 
@@ -1030,6 +1388,13 @@ void ToggleSourcePin(HWND window, int row) {
     bool pinned = !(*g_apps)[row].pinned;
     BOOL saved = pinned ? Wh_SetIntValue(key.c_str(), 1)
                         : Wh_DeleteValue(key.c_str());
+    if (!pinned) {
+        // A merged row can still be pinned through its older per-output keys.
+        for (const auto& legacy : (*g_apps)[row].legacyPinKeys) {
+            saved |= Wh_DeleteValue(legacy.c_str());
+        }
+        (*g_apps)[row].legacyPinKeys.clear();
+    }
     if (!saved) {
         Wh_Log(L"Mixer: could not save source pin");
         return;
@@ -1516,7 +1881,8 @@ void PruneDefaultVolumes(bool completeScan) {
 }
 
 bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
-                          bool buildRows) {
+                          bool buildRows,
+                          std::unordered_map<std::wstring, size_t>& groups) {
     std::wstring endpointName = ReadEndpointName(device);
     std::wstring endpointId = endpointName;
     LPWSTR rawEndpointId = nullptr;
@@ -1545,9 +1911,6 @@ bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
         return false;
     }
 
-    // This map is scoped to a single device. Do not merge volume controls
-    // across outputs, or merge unknown-PID sessions into System sounds.
-    std::unordered_map<std::wstring, size_t> groupByProcess;
     int count = 0;
     hr = sessions->GetCount(&count);
     bool complete = SUCCEEDED(hr);
@@ -1606,8 +1969,23 @@ bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
 
         std::wstring displayName = GetSessionDisplayName(control, processId,
                                                          systemSounds, &processPath);
-        std::wstring pinKey = SourcePinKey(processPath, displayName, endpointId, systemSounds);
+        // A name the session supplied beats the executable-name fallback.
+        int namePriority =
+            displayName != BaseNameWithoutExtension(processPath) ? 1 : 0;
+        // Like the Windows volume mixer, show one row per app: sessions of
+        // the same executable are merged, including across outputs, where
+        // audio routers leave idle duplicates behind. System sounds, sessions
+        // without a readable path, and everything when showAllSessions is on,
+        // stay scoped to their own output.
+        bool scoped = g_settings.showAllSessions || systemSounds ||
+                      processPath.empty();
+        std::wstring outputPinKey =
+            SourcePinKey(processPath, displayName, endpointId, systemSounds);
+        std::wstring pinKey = scoped
+            ? outputPinKey : SourcePinKey(processPath, displayName, L"", false);
         bool pinned = buildRows && Wh_GetIntValue(pinKey.c_str(), 0) != 0;
+        bool legacyPinned = buildRows && !scoped &&
+                            Wh_GetIntValue(outputPinKey.c_str(), 0) != 0;
         LPWSTR rawInstanceId = nullptr;
         std::wstring instanceId;
         if (SUCCEEDED(control2->GetSessionInstanceIdentifier(&rawInstanceId)) &&
@@ -1625,62 +2003,75 @@ bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
         ApplyDefaultVolume(custom, instanceId, volume);
         // Build identity before applying the alias, so renaming keeps pins and
         // keyboard selection attached to the original source.
-        if (custom && !custom->displayName.empty()) displayName = custom->displayName;
+        if (custom && !custom->displayName.empty()) {
+            displayName = custom->displayName;
+            namePriority = 2;
+        }
         bool include = ShouldIncludeSession(state, instanceId, isDefault);
-        if (!buildRows || hidden || (!include && !pinned)) {
+        if (!buildRows) {
             volume->Release();
             control2->Release();
             control->Release();
             continue;
         }
 
-        std::wstring groupKey;
-        if (systemSounds) {
-            groupKey = L"system";
-        } else if (SUCCEEDED(processResult) && processId) {
-            groupKey = L"pid:" + std::to_wstring(processId);
-        } else {
-            groupKey = L"session:" + std::to_wstring(i);
+        // The pin key already identifies the executable, per output when the
+        // row is scoped. Sessions without a readable path are only grouped by
+        // process, and are never merged into System sounds.
+        std::wstring groupKey = pinKey;
+        if (!systemSounds && processPath.empty()) {
+            groupKey = (SUCCEEDED(processResult) && processId
+                ? L"pid:" + std::to_wstring(processId)
+                : L"session:" + std::to_wstring(i)) + L"|" + endpointId;
         }
 
-        size_t groupIndex;
-        auto existing = groupByProcess.find(groupKey);
-        if (existing == groupByProcess.end()) {
-            AppSession app;
-            app.processId = processId;
-            app.executablePath = std::move(processPath);
-            app.pinKey = std::move(pinKey);
-            app.pinned = pinned;
-            app.active = state == AudioSessionStateActive;
-            app.name = std::move(displayName);
+        // Every session joins its row, so the slider also reaches sessions
+        // that would not be listed on their own. Rows nothing qualifies are
+        // dropped once all outputs are scanned.
+        auto existing = groups.find(groupKey);
+        if (existing == groups.end()) {
+            AppSession created;
+            created.processId = processId;
+            created.executablePath = processPath;
+            created.pinKey = pinKey;
             if (diagnostics) {
                 Wh_Log(L"Mixer: app '%s', PID=%lu, active=%d, output='%s'",
-                       app.name.c_str(), processId, app.active,
-                       endpointName.c_str());
+                       displayName.c_str(), processId,
+                       state == AudioSessionStateActive, endpointName.c_str());
             }
-            if (!isDefault) {
+            existing = groups.emplace(groupKey, g_apps->size()).first;
+            g_apps->push_back(std::move(created));
+        }
+        AppSession& app = (*g_apps)[existing->second];
+        app.listed |= include || pinned || legacyPinned;
+        app.hidden |= hidden;
+        app.pinned |= pinned || legacyPinned;
+        if (legacyPinned) app.legacyPinKeys.push_back(std::move(outputPinKey));
+        app.active |= state == AudioSessionStateActive;
+        if (namePriority > app.namePriority) {
+            app.namePriority = namePriority;
+            app.name = displayName;
+            if (scoped && !isDefault) {
                 app.name += L" [" + endpointName + L"]";
             }
-            app.icon = GetExecutableIcon(app.executablePath);
+        }
+        // Show the level of the session that is most likely audible.
+        int levelPriority = state == AudioSessionStateActive ? 2
+                            : isDefault ? 1 : 0;
+        if (levelPriority > app.levelPriority) {
+            app.levelPriority = levelPriority;
             volume->GetMasterVolume(&app.volume);
             BOOL muted = FALSE;
             volume->GetMute(&muted);
             app.muted = muted != FALSE;
-            app.volumeControls.push_back(volume);
-            groupIndex = g_apps->size();
-            groupByProcess[groupKey] = groupIndex;
-            g_apps->push_back(std::move(app));
-        } else {
-            groupIndex = existing->second;
-            (*g_apps)[groupIndex].active |= state == AudioSessionStateActive;
-            (*g_apps)[groupIndex].volumeControls.push_back(volume);
         }
+        app.volumeControls.push_back(volume);
 
         IAudioMeterInformation* meter = nullptr;
         if (SUCCEEDED(control->QueryInterface(__uuidof(IAudioMeterInformation),
                                               reinterpret_cast<void**>(&meter))) &&
             meter) {
-            (*g_apps)[groupIndex].meters.push_back(meter);
+            app.meters.push_back(meter);
         }
 
         control2->Release();
@@ -1734,6 +2125,7 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
     }
 
     bool completeScan = true;
+    std::unordered_map<std::wstring, size_t> groups;
     IMMDeviceCollection* devices = nullptr;
     hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices);
     if (SUCCEEDED(hr) && devices) {
@@ -1754,7 +2146,10 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
                 isDefault = !defaultId.empty() && defaultId == id;
                 CoTaskMemFree(id);
             }
-            if (!AppendDeviceSessions(device, isDefault, diagnostics, buildRows)) completeScan = false;
+            if (!AppendDeviceSessions(device, isDefault, diagnostics, buildRows,
+                                      groups)) {
+                completeScan = false;
+            }
             device->Release();
         }
         devices->Release();
@@ -1766,7 +2161,8 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
         }
         // Preserve default-device functionality if collection enumeration fails.
         if (defaultDevice) {
-            AppendDeviceSessions(defaultDevice, true, diagnostics, buildRows);
+            AppendDeviceSessions(defaultDevice, true, diagnostics, buildRows,
+                                 groups);
         }
     }
     if (defaultDevice) {
@@ -1778,6 +2174,12 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
     g_liveDefaultSessions.clear();
     PrunePlaybackHistory();
 
+    std::erase_if(*g_apps, [](const AppSession& app) {
+        return !app.listed || app.hidden;
+    });
+    for (auto& app : *g_apps) {
+        app.icon = GetExecutableIcon(app.executablePath);
+    }
     std::stable_sort(g_apps->begin(), g_apps->end(), AppSortOrder);
 
     RestoreSelectedRow();
@@ -1879,22 +2281,28 @@ bool IsCompact() {
 }
 
 int HeaderHeight() {
-    return Scale(IsCompact() ? 46 : 92);
+    return Scale(IsCompact() ? 48 : 82);
 }
 
 int RowHeight() {
-    return Scale(IsCompact() ? 52 : 68);
+    // Compact Windows 10 rows are taller to fit the bar-shaped thumb.
+    if (IsCompact()) return Scale(IsWindows10Style() ? 56 : 48);
+    return Scale(62);
 }
 
+// Between master volume and the apps: a faint line in compact mode, the
+// "Applications" heading otherwise.
 int SectionGap() {
-    return Scale(IsCompact() ? 24 : 30);
+    return Scale(IsCompact() ? 10 : 26);
 }
 
 int FooterHeight(bool paged) {
+    // Without page buttons, the footer leaves as much room under the last
+    // row as there is beside the rows: its 10 plus the 2 a row ends short.
     if (IsCompact()) {
-        return Scale(paged ? 44 : 8);
+        return Scale(paged ? 42 : 10);
     }
-    return Scale(paged ? 52 : 12);
+    return Scale(paged ? 48 : 10);
 }
 
 int RowTop(int visibleRow) {
@@ -1903,25 +2311,26 @@ int RowTop(int visibleRow) {
 }
 
 int PopupWidth() {
-    return Scale(IsCompact() ? 380 : 420);
+    return Scale(IsCompact() ? 360 : 400);
 }
 
 RECT TitleRect(int width) {
-    return {Scale(24), Scale(15), width - Scale(60), Scale(45)};
+    return {Scale(24), Scale(11), width - Scale(60), Scale(39)};
 }
 
 RECT CloseButtonRect(int width) {
     if (IsCompact()) {
-        return {width - Scale(44), Scale(8), width - Scale(16), Scale(36)};
+        return {width - Scale(44), Scale(12), width - Scale(16), Scale(40)};
     }
-    return {width - Scale(52), Scale(14), width - Scale(20), Scale(46)};
+    return {width - Scale(52), Scale(9), width - Scale(20), Scale(41)};
 }
 
 RECT OutputPickerRect(int width) {
     if (IsCompact()) {
-        return {Scale(12), Scale(8), width - Scale(52), Scale(36)};
+        // As far from the top edge as from the side.
+        return {Scale(12), Scale(12), width - Scale(52), Scale(40)};
     }
-    return {Scale(12), Scale(52), width - Scale(12), Scale(82)};
+    return {Scale(12), Scale(44), width - Scale(12), Scale(74)};
 }
 
 RECT DeviceNameRect(int width) {
@@ -1989,63 +2398,105 @@ RECT PageButtonRect(bool next, const RECT& client) {
 RECT IconTileRectForRow(int visibleRow) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
-        return {Scale(22), top + Scale(10), Scale(52), top + Scale(40)};
+        int offset = Scale(IsWindows10Style() ? 12 : 8);
+        return {Scale(22), top + offset, Scale(52), top + offset + Scale(30)};
     }
-    return {Scale(22), top + Scale(13), Scale(58), top + Scale(49)};
+    return {Scale(22), top + Scale(12), Scale(58), top + Scale(48)};
 }
 
 RECT NameRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
-        return {Scale(62), top + Scale(3), clientWidth - Scale(132),
-                top + Scale(27)};
+        return {Scale(62), top + Scale(2), clientWidth - Scale(132),
+                top + Scale(26)};
     }
-    return {Scale(68), top + Scale(9), clientWidth - Scale(132),
-            top + Scale(33)};
+    return {Scale(68), top + Scale(7), clientWidth - Scale(132),
+            top + Scale(31)};
 }
 
 RECT PercentRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
         if (visibleRow == 0) {
-            return {clientWidth - Scale(100), top + Scale(3),
-                    clientWidth - Scale(50), top + Scale(27)};
+            return {clientWidth - Scale(100), top + Scale(2),
+                    clientWidth - Scale(50), top + Scale(26)};
         }
-        return {clientWidth - Scale(124), top + Scale(3),
-                clientWidth - Scale(76), top + Scale(27)};
+        return {clientWidth - Scale(124), top + Scale(2),
+                clientWidth - Scale(76), top + Scale(26)};
     }
-    return {clientWidth - Scale(124), top + Scale(9),
-            clientWidth - Scale(78), top + Scale(33)};
+    return {clientWidth - Scale(124), top + Scale(7),
+            clientWidth - Scale(78), top + Scale(31)};
 }
 
 RECT SliderRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
-        return {Scale(62), top + Scale(31), clientWidth - Scale(28),
-                top + Scale(39)};
+        int offset = Scale(IsWindows10Style() ? 36 : 30);
+        return {Scale(62), top + offset, clientWidth - Scale(28),
+                top + offset + Scale(8)};
     }
-    return {Scale(68), top + Scale(42), clientWidth - Scale(78),
-            top + Scale(50)};
+    return {Scale(68), top + Scale(38), clientWidth - Scale(78),
+            top + Scale(46)};
 }
 
 RECT MuteRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
-        return {clientWidth - Scale(46), top + Scale(3),
-                clientWidth - Scale(22), top + Scale(27)};
+        return {clientWidth - Scale(46), top + Scale(2),
+                clientWidth - Scale(22), top + Scale(26)};
     }
-    return {clientWidth - Scale(58), top + Scale(visibleRow ? 32 : 22),
-            clientWidth - Scale(22), top + Scale(visibleRow ? 64 : 58)};
+    return {clientWidth - Scale(58), top + Scale(visibleRow ? 28 : 12),
+            clientWidth - Scale(22), top + Scale(visibleRow ? 58 : 48)};
 }
 
 RECT PinRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
-        return {clientWidth - Scale(72), top + Scale(3),
-                clientWidth - Scale(48), top + Scale(27)};
+        return {clientWidth - Scale(72), top + Scale(2),
+                clientWidth - Scale(48), top + Scale(26)};
     }
     return {clientWidth - Scale(56), top + Scale(1),
-            clientWidth - Scale(24), top + Scale(29)};
+            clientWidth - Scale(24), top + Scale(28)};
+}
+
+// Outer thumb size in pixels: the round Windows 11 thumb, border included, or
+// the bar-shaped Windows 10 one.
+float SliderThumbWidth() {
+    return (IsWindows10Style() ? 8.0f : 20.0f) * g_dpi / 96.0f;
+}
+
+float SliderThumbHeight() {
+    return (IsWindows10Style() ? 24.0f : 20.0f) * g_dpi / 96.0f;
+}
+
+// Distance from either end of the rail to the thumb's center at 0% and 100%.
+// As in the native sliders, the thumb stays within the rail instead of being
+// centered on its ends. The solid surface of the Windows 11 thumb still
+// overlaps each end by a pixel, so no sliver of the rail shows through its
+// translucent border.
+float SliderThumbInset() {
+    float half = SliderThumbWidth() * 0.5f;
+    return IsWindows10Style() ? half : half - 2.0f * g_dpi / 96.0f;
+}
+
+// Horizontal center of the thumb for a volume in the 0 to 1 range.
+float SliderThumbCenter(const RECT& slider, float volume) {
+    float inset = SliderThumbInset();
+    float travel = std::max(
+        0.0f, static_cast<float>(slider.right - slider.left) - 2.0f * inset);
+    return slider.left + inset + travel * ClampVolume(volume);
+}
+
+bool SliderThumbContains(const RECT& slider, float volume, POINT point) {
+    float dx = point.x + 0.5f - SliderThumbCenter(slider, volume);
+    float dy = point.y + 0.5f - (slider.top + slider.bottom) * 0.5f;
+    if (IsWindows10Style()) {
+        // The bar is narrow, so allow a little slack on either side.
+        return std::abs(dx) <= SliderThumbWidth() * 0.5f + 2.0f * g_dpi / 96.0f &&
+               std::abs(dy) <= SliderThumbHeight() * 0.5f;
+    }
+    float radius = SliderThumbWidth() * 0.5f;
+    return dx * dx + dy * dy <= radius * radius;
 }
 
 RECT SliderHitRect(int visibleRow, int clientWidth) {
@@ -2193,7 +2644,8 @@ void BeginVolumeEntry(HWND owner, int row) {
         return;
     }
     SendMessageW(g_volumeEdit, EM_SETLIMITTEXT, 16, 0);
-    SendMessageW(g_volumeEdit, WM_SETFONT, reinterpret_cast<WPARAM>(g_bodyFont), TRUE);
+    SendMessageW(g_volumeEdit, WM_SETFONT,
+                 reinterpret_cast<WPARAM>(g_entryFont ? g_entryFont : g_bodyFont), TRUE);
     float volume = row == DRAG_MASTER ? GetMasterVolume() : (*g_apps)[row].volume;
     std::wstring text = std::to_wstring(static_cast<int>(volume * 100.0f + 0.5f));
     SetWindowTextW(g_volumeEdit, text.c_str());
@@ -2245,8 +2697,10 @@ void ApplyVolumeFromPoint(HWND hWnd, int row, int x) {
     RECT client;
     GetClientRect(hWnd, &client);
     RECT slider = SliderRectForRow(VisibleRowForDataRow(row), client.right);
-    float value = static_cast<float>(x - slider.left) /
-                  static_cast<float>(slider.right - slider.left);
+    float inset = SliderThumbInset();
+    float travel = static_cast<float>(slider.right - slider.left) - 2.0f * inset;
+    if (travel <= 0.0f) return;
+    float value = (static_cast<float>(x - slider.left) - inset) / travel;
     SetRowVolume(row, value);
     InvalidateRect(hWnd, nullptr, FALSE);
 }
@@ -2258,6 +2712,11 @@ void FillSolidRect(HDC dc, const RECT& rect, COLORREF color) {
 }
 
 void DrawRoundedRect(HDC dc, const RECT& rect, int radius, COLORREF color) {
+    if (radius <= 0) {
+        // Unlike RoundRect with a null pen, this fills the last row and column.
+        FillSolidRect(dc, rect, color);
+        return;
+    }
     HBRUSH brush = CreateSolidBrush(color);
     HPEN pen = CreatePen(PS_NULL, 0, color);
     HGDIOBJ oldBrush = SelectObject(dc, brush);
@@ -2410,19 +2869,12 @@ bool DrawSmoothLabel(HDC dc, const std::wstring& text, const RECT& rect,
     return blend(*cache.labels.back());
 }
 
-// allowSmooth lets a caller opt out of the cached GDI+ supersampled renderer
-// for text it knows will rarely repeat between frames (see the percentage
-// label of an actively dragged row below). Caching by exact string is only a
-// win when the string is likely to recur; when it isn't, every call would
-// still pay for a full supersampled rasterization, just to populate a cache
-// entry that is unlikely to ever be reused.
 void DrawLabel(HDC dc, const std::wstring& text, RECT rect, HFONT font,
-               COLORREF color, UINT format, bool percentage = false,
-               bool allowSmooth = true) {
+               COLORREF color, UINT format, bool percentage = false) {
     Gdiplus::Font* typography = font == g_titleFont ? g_titleTypography :
         font == g_bodyFont ? g_bodyTypography :
         font == g_smallFont ? g_smallTypography : nullptr;
-    if (allowSmooth && typography && typography->GetLastStatus() == Gdiplus::Ok &&
+    if (typography && typography->GetLastStatus() == Gdiplus::Ok &&
         DrawSmoothLabel(dc, text, rect, font, typography, color, format, percentage)) return;
     HGDIOBJ oldFont = SelectObject(dc, font);
     SetTextColor(dc, color);
@@ -2597,7 +3049,7 @@ void ApplyNameTooltipWindowStyle() {
     if (GetWindowRect(g_nameTooltip, &bounds)) {
         int width = bounds.right - bounds.left;
         int height = bounds.bottom - bounds.top;
-        int radius = Scale(8);
+        int radius = Radius(8);
 
         HRGN region = CreateRoundRectRgn(
             0, 0, width + 1, height + 1, radius, radius);
@@ -2732,12 +3184,32 @@ COLORREF IconColor() {
         : g_theme.secondaryText;
 }
 
-void DrawSurface(HDC dc, const RECT& rect, int radius, COLORREF color) {
+// Share of the text color laid over a hovered surface. A highlight that reads
+// well on an opaque background all but disappears on a translucent one, so it
+// grows stronger as the background opacity drops.
+float HoverStrength() {
+    float opacity = g_settings.backgroundOpacity < 100 && !g_transparencyFailed
+        ? g_settings.backgroundOpacity / 100.0f : 1.0f;
+    float opaque = g_lightTheme ? 0.055f : 0.05f;
+    float clear = g_lightTheme ? 0.11f : 0.085f;
+    return clear + (opaque - clear) * opacity;
+}
+
+// Resolves a surface color for the current paint pass: the base color at the
+// background opacity, with `highlight` (0 for none, 1 for a full hover) laid
+// over it at a strength that does not fade with the background.
+COLORREF SurfaceColor(COLORREF base, float highlight) {
     if (g_paintMatte >= 0) {
-        color = MixColor(g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0),
-                         color, g_settings.backgroundOpacity / 100.0f);
+        base = MixColor(g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0),
+                        base, g_settings.backgroundOpacity / 100.0f);
     }
-    DrawRoundedRect(dc, rect, radius, color);
+    return highlight > 0.0f
+        ? MixColor(base, g_theme.text, HoverStrength() * highlight) : base;
+}
+
+void DrawSurface(HDC dc, const RECT& rect, int radius, COLORREF color,
+                 float highlight = 0.0f) {
+    DrawRoundedRect(dc, rect, radius, SurfaceColor(color, highlight));
 }
 
 float EaseTowards(float current, float target, float speed) {
@@ -2750,7 +3222,7 @@ float EaseTowards(float current, float target, float speed) {
 }
 
 void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
-                bool muted, float hover) {
+                bool muted, float thumbDot, ThumbState thumbState) {
     std::optional<Gdiplus::Graphics> graphics;
     if (g_gdiplusToken) {
         graphics.emplace(dc);
@@ -2761,9 +3233,14 @@ void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
         }
     }
 
-    auto capsule = [&](float x, float y, float width, float height, COLORREF color) {
+    auto capsule = [&](float x, float y, float width, float height, COLORREF color,
+                       BYTE alpha = 255) {
         if (width <= 0.0f || height <= 0.0f) return;
         float diameter = std::min(width, height);
+        if (!graphics && alpha < 255) {
+            // GDI cannot blend, so approximate against the mixer background.
+            color = MixColor(g_theme.background, color, alpha / 255.0f);
+        }
         if (graphics) {
             Gdiplus::GraphicsPath path;
             path.AddArc(x, y, diameter, diameter, 180.0f, 90.0f);
@@ -2773,7 +3250,7 @@ void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
             path.AddArc(x, y + height - diameter, diameter, diameter, 90.0f, 90.0f);
             path.CloseFigure();
             Gdiplus::SolidBrush brush(Gdiplus::Color(
-                255, GetRValue(color), GetGValue(color), GetBValue(color)));
+                alpha, GetRValue(color), GetGValue(color), GetBValue(color)));
             graphics->FillPath(&brush, &path);
         } else {
             RECT bounds = {static_cast<LONG>(std::lround(x)),
@@ -2790,55 +3267,96 @@ void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
     float left = static_cast<float>(rect.left);
     float width = static_cast<float>(rect.right - rect.left);
     if (width <= 0.0f) return;
-    float trackHeight = 5.5f * density;
+    bool windows10 = IsWindows10Style();
+    float thumbDiameter = SliderThumbWidth();
+    float thumbHeight = SliderThumbHeight();
+    float thumbRadius = thumbDiameter * 0.5f;
+    float trackHeight = (windows10 ? 2.0f : 4.0f) * density;
     float trackTop = centerY - trackHeight * 0.5f;
-    float fillWidth = width * ClampVolume(volume);
-    float thumbX = left + fillWidth;
+    float thumbX = SliderThumbCenter(rect, volume);
 
-    COLORREF inactiveTrack = MixColor(g_theme.track, g_theme.panel, 0.15f);
-    COLORREF activeTrack = muted
-        ? MixColor(g_theme.muted, g_theme.track, 0.35f)
-        : g_theme.accent;
-    capsule(left, trackTop, width, trackHeight, inactiveTrack);
-    capsule(left, trackTop, fillWidth, trackHeight, activeTrack);
+    // The native rail is a translucent overlay rather than a fixed gray, so
+    // it adapts to whatever is behind it. A muted row dims both parts of the
+    // rail, like a disabled native slider, with the filled part still distinct.
+    // The Windows 10 rail is fainter and brightens under the pointer.
+    COLORREF overlay = g_lightTheme ? RGB(0, 0, 0) : RGB(255, 255, 255);
+    BYTE railAlpha = muted ? (g_lightTheme ? 0x51 : 0x3F)
+                           : (g_lightTheme ? 0x72 : 0x8B);
+    if (windows10) {
+        railAlpha = muted ? 0x33 : thumbState == ThumbState::Hover ? 0x99 : 0x66;
+    }
+    COLORREF activeTrack = muted ? g_theme.muted : g_theme.sliderFill;
+    capsule(left, trackTop, width, trackHeight, overlay, railAlpha);
+    capsule(left, trackTop, thumbX - left, trackHeight, activeTrack);
 
     if (!muted && peak > 0.01f) {
-        float meterTop = trackTop + trackHeight + 6.0f * density;
-        capsule(left, meterTop, width * ClampVolume(peak), 3.0f * density,
-                MixColor(g_theme.accent, g_theme.text, 0.15f));
+        // Compact rows have no room below the thumb, so their meter runs
+        // directly under the rail and passes behind the thumb.
+        float meterTop = IsCompact() ? trackTop + trackHeight + density
+                                     : centerY + thumbHeight * 0.5f + density;
+        capsule(left, meterTop, width * ClampVolume(peak),
+                (IsCompact() ? 2.0f : 3.0f) * density,
+                MixColor(g_theme.sliderFill, g_theme.text, 0.15f));
     }
 
-    float thumbDiameter = 14.0f * density;
-    float thumbRadius = thumbDiameter * 0.5f;
-    // Lift the outer thumb only slightly from the normal theme surfaces so it
-    // stays visible without becoming noticeably bright.
-    COLORREF thumbOutline = MixColor(g_theme.sliderOutline, g_theme.text, 0.12f);
-    COLORREF thumbSurface = MixColor(g_theme.panel, g_theme.text, 0.12f);
-    if (g_paintMatte >= 0) {
-        COLORREF matte = g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0);
-        // Keep only a slight translucency effect. The outer thumb should remain
-        // clearly visible even when the mixer background is very transparent.
-        float opacity = 0.96f +
-            (g_settings.backgroundOpacity / 100.0f) * 0.04f;
-        thumbOutline = MixColor(matte, thumbOutline, opacity);
-        thumbSurface = MixColor(matte, thumbSurface, opacity);
+    if (windows10) {
+        // The Windows 10 thumb is a flat bar in the accent color. It turns
+        // near-white (near-black in the light theme) under the pointer, and
+        // gray while it is held.
+        COLORREF thumb = activeTrack;
+        if (!muted && thumbState == ThumbState::Hover) {
+            thumb = g_lightTheme ? RGB(23, 23, 23) : RGB(242, 242, 242);
+        } else if (!muted && thumbState == ThumbState::Pressed) {
+            thumb = g_lightTheme ? RGB(204, 204, 204) : RGB(118, 118, 118);
+        }
+        capsule(thumbX - thumbRadius, centerY - thumbHeight * 0.5f,
+                thumbDiameter, thumbHeight, thumb);
+        return;
     }
-    capsule(thumbX - thumbRadius, centerY - thumbRadius,
-            thumbDiameter, thumbDiameter, thumbOutline);
-    float gripDiameter = thumbDiameter - 2.0f * density;
-    capsule(thumbX - gripDiameter * 0.5f, centerY - gripDiameter * 0.5f,
-            gripDiameter, gripDiameter, thumbSurface);
-    float insetDiameter = (8.0f + 4.0f * ClampVolume(hover)) * density;
-    capsule(thumbX - insetDiameter * 0.5f, centerY - insetDiameter * 0.5f,
-            insetDiameter, insetDiameter, activeTrack);
+
+    // The outer thumb is a solid control surface, so it stays opaque at any
+    // background opacity. Only the accent dot reacts to the pointer. Its 1px
+    // border is a faint overlay that is slightly stronger along one edge.
+    float surfaceDiameter = thumbDiameter - 2.0f * density;
+    if (graphics) {
+        float top = centerY - thumbRadius;
+        BYTE red = GetRValue(overlay), green = GetGValue(overlay),
+             blue = GetBValue(overlay);
+        Gdiplus::LinearGradientBrush border(
+            Gdiplus::PointF(0.0f, top - 1.0f),
+            Gdiplus::PointF(0.0f, top + thumbDiameter + 1.0f),
+            Gdiplus::Color(g_lightTheme ? 0x0F : 0x18, red, green, blue),
+            Gdiplus::Color(g_lightTheme ? 0x29 : 0x12, red, green, blue));
+        Gdiplus::GraphicsPath ring; // Alternate fill leaves the middle empty.
+        ring.AddEllipse(thumbX - thumbRadius, top, thumbDiameter, thumbDiameter);
+        ring.AddEllipse(thumbX - surfaceDiameter * 0.5f,
+                        centerY - surfaceDiameter * 0.5f,
+                        surfaceDiameter, surfaceDiameter);
+        graphics->FillPath(&border, &ring);
+    }
+    capsule(thumbX - surfaceDiameter * 0.5f, centerY - surfaceDiameter * 0.5f,
+            surfaceDiameter, surfaceDiameter, g_theme.thumb);
+    float dotDiameter = thumbDiameter * 0.6f * thumbDot;
+    capsule(thumbX - dotDiameter * 0.5f, centerY - dotDiameter * 0.5f,
+            dotDiameter, dotDiameter, activeTrack);
 }
 
-void DrawMuteButton(HDC dc, int visibleRow, int clientWidth, bool muted) {
+// Same level thresholds as the speaker icon in the Windows volume flyout.
+PCWSTR VolumeGlyph(float volume, bool muted) {
+    if (muted) return L"\uE74F";
+    int percent = static_cast<int>(volume * 100.0f + 0.5f);
+    return percent == 0 ? L"\uE992" : percent < 33 ? L"\uE993" :
+           percent < 66 ? L"\uE994" : L"\uE995";
+}
+
+// rowColor and rowHighlight describe the row surface behind the button.
+void DrawMuteButton(HDC dc, int visibleRow, int clientWidth, bool muted,
+                    float volume, COLORREF rowColor, float rowHighlight) {
     RECT button = MuteRectForRow(visibleRow, clientWidth);
     if (muted) {
-        DrawSurface(dc, button, Scale(8), g_theme.hover);
+        DrawSurface(dc, button, Radius(8), rowColor, rowHighlight + 1.0f);
     }
-    DrawLabel(dc, muted ? L"\uE74F" : L"\uE767", button, g_symbolFont,
+    DrawLabel(dc, VolumeGlyph(volume, muted), button, g_symbolFont,
               muted ? g_theme.accent : IconColor(),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
@@ -2879,8 +3397,24 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     }
     if (g_paintMatte != 1) {
         float targetHover = g_hoverRow == dataRow ? 1.0f : 0.0f;
+        // The accent dot grows while the pointer is over the thumb and shrinks
+        // while the thumb is held. Test against the thumb as it is drawn, so
+        // the state stays right when the volume changes under a still pointer.
+        visual.thumbState = ThumbState::Rest;
+        if (g_dragRow == dataRow) {
+            visual.thumbState = ThumbState::Pressed;
+        } else if (g_dragRow == DRAG_NONE && g_hoverRow == dataRow &&
+                   SliderThumbContains(SliderRectForRow(visibleRow, clientWidth),
+                                       visual.volume, g_pointer)) {
+            visual.thumbState = ThumbState::Hover;
+        }
+        float targetThumbDot =
+            visual.thumbState == ThumbState::Pressed ? THUMB_DOT_PRESSED :
+            visual.thumbState == ThumbState::Hover ? THUMB_DOT_HOVER : THUMB_DOT_REST;
         g_frameAnimating |= std::abs(visual.hover - targetHover) >= 0.001f ||
-                            std::abs(visual.volume - volume) >= 0.001f;
+                            std::abs(visual.volume - volume) >= 0.001f ||
+                            std::abs(visual.thumbDot - targetThumbDot) >= 0.001f;
+        visual.thumbDot = EaseTowards(visual.thumbDot, targetThumbDot, 18.0f);
         g_frameHasAudio |= peak > 0.005f || visual.peak > 0.005f;
         visual.hover = EaseTowards(visual.hover, g_hoverRow == dataRow ? 1.0f : 0.0f, 18.0f);
         visual.volume = g_dragRow == dataRow ? volume : EaseTowards(visual.volume, volume, 22.0f);
@@ -2888,16 +3422,16 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     }
     RECT rowRect = {Scale(12), top, clientWidth - Scale(12), top + RowHeight() - Scale(2)};
     COLORREF base = master ? g_theme.panel : g_theme.background;
-    DrawSurface(dc, rowRect, Scale(16), MixColor(base, g_theme.hover, visual.hover));
+    DrawSurface(dc, rowRect, Radius(16), base, visual.hover);
 
     if (g_settings.keyboardControls && g_selectedRow == dataRow) {
         RECT marker{Scale(14), top + Scale(12), Scale(17),
                     top + RowHeight() - Scale(14)};
-        DrawRoundedRect(dc, marker, Scale(3), g_theme.accent);
+        DrawRoundedRect(dc, marker, Radius(3), g_theme.accent);
     }
 
     RECT iconTile = IconTileRectForRow(visibleRow);
-    DrawSurface(dc, iconTile, Scale(10),
+    DrawSurface(dc, iconTile, Radius(10),
                     master ? g_theme.background : g_theme.panel);
     if (icon) {
         int iconSize = Scale(24);
@@ -2918,19 +3452,17 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     swprintf_s(percent, L"%d%%",
                static_cast<int>(volume * 100.0f + 0.5f));
     RECT percentRect = PercentRectForRow(visibleRow, clientWidth);
-    // While this row's slider is being dragged, the percentage changes on
-    // almost every frame, so a cache keyed on the exact string is a
-    // guaranteed miss. Falling back to plain GDI text here avoids paying for
-    // a full supersampled GDI+ rasterization on every frame of the drag.
-    bool draggingThisRow = g_dragRow == dataRow;
+    // The percentages have a cache of their own: there are only 101 of them,
+    // so even a slider being dragged soon finds its label already drawn.
     DrawLabel(dc, percent, percentRect, g_bodyFont,
               muted ? g_theme.secondaryText : g_theme.text,
-              DT_RIGHT | DT_VCENTER | DT_SINGLELINE, /*percentage=*/true,
-              /*allowSmooth=*/!draggingThisRow);
+              DT_RIGHT | DT_VCENTER | DT_SINGLELINE, /*percentage=*/true);
 
+    // In compact mode the thumb can reach the mute button's highlight, so the
+    // slider is drawn on top of it.
+    DrawMuteButton(dc, visibleRow, clientWidth, muted, volume, base, visual.hover);
     DrawSlider(dc, SliderRectForRow(visibleRow, clientWidth), visual.volume,
-               visual.peak, muted, visual.hover);
-    DrawMuteButton(dc, visibleRow, clientWidth, muted);
+               visual.peak, muted, visual.thumbDot, visual.thumbState);
     if (!master) {
         RECT pin = PinRectForRow(visibleRow, clientWidth);
         bool pinned = (*g_apps)[dataRow].pinned;
@@ -2943,7 +3475,7 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
 void RenderMixerContents(HDC dc, const RECT& client) {
     if (g_paintMatte >= 0) {
         FillSolidRect(dc, client, g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0));
-        DrawSurface(dc, client, Scale(20), g_theme.background);
+        DrawSurface(dc, client, Radius(20), g_theme.background);
     } else {
         FillSolidRect(dc, client, g_theme.background);
     }
@@ -2954,10 +3486,9 @@ void RenderMixerContents(HDC dc, const RECT& client) {
     }
 
     RECT pickerRect = OutputPickerRect(client.right);
-    COLORREF outputPickerColor = g_outputHovered || g_outputMenuOpen
-        ? MixColor(g_theme.hover, RGB(0, 0, 0), 0.12f)
-        : MixColor(g_theme.panel, RGB(0, 0, 0), 0.15f);
-    DrawSurface(dc, pickerRect, Scale(16), outputPickerColor);
+    DrawSurface(dc, pickerRect, Radius(16),
+                MixColor(g_theme.panel, RGB(0, 0, 0), 0.15f),
+                g_outputHovered || g_outputMenuOpen ? 1.0f : 0.0f);
     RECT deviceIconRect = {pickerRect.left + Scale(8), pickerRect.top,
                            pickerRect.left + Scale(34), pickerRect.bottom};
     DrawLabel(dc, L"\uE7F5", deviceIconRect, g_symbolFont, IconColor(),
@@ -2977,8 +3508,7 @@ void RenderMixerContents(HDC dc, const RECT& client) {
                                      (g_closeHovered ? 1.0f : 0.0f)) >= 0.001f;
         g_closeHoverAmount = EaseTowards(g_closeHoverAmount, g_closeHovered ? 1.0f : 0.0f, 18.0f);
     }
-    DrawSurface(dc, closeRect, Scale(8),
-                    MixColor(g_theme.background, g_theme.hover, g_closeHoverAmount));
+    DrawSurface(dc, closeRect, Radius(8), g_theme.background, g_closeHoverAmount);
     DrawLabel(dc, L"\uE8BB", closeRect, g_symbolFont, IconColor(),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
@@ -2991,14 +3521,21 @@ void RenderMixerContents(HDC dc, const RECT& client) {
     } else {
         DrawAudioRow(dc, 0, DRAG_MASTER, client.right);
 
-        RECT section = {Scale(24),
-                        HeaderHeight() + RowHeight() + Scale(IsCompact() ? 3 : 5),
-                        client.right - Scale(24),
-                        RowTop(1) - Scale(IsCompact() ? 2 : 3)};
-        DrawLabel(dc, L"Applications", section, g_smallFont, g_theme.secondaryText,
-                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-        DrawLabel(dc, std::to_wstring(g_apps->size()), section, g_smallFont,
-                  g_theme.secondaryText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+        if (IsCompact()) {
+            // Halfway between the master row's surface, which ends 2 pixels
+            // short of the next row, and the first app row.
+            int middle = (HeaderHeight() + RowHeight() - Scale(2) + RowTop(1)) / 2;
+            RECT line = {Scale(24), middle, client.right - Scale(24),
+                         middle + std::max(1, Scale(1))};
+            FillSolidRect(dc, line, g_theme.divider);
+        } else {
+            RECT section = {Scale(24), HeaderHeight() + RowHeight() + Scale(5),
+                            client.right - Scale(24), RowTop(1) - Scale(3)};
+            DrawLabel(dc, L"Applications", section, g_smallFont, g_theme.secondaryText,
+                      DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            DrawLabel(dc, std::to_wstring(g_apps->size()), section, g_smallFont,
+                      g_theme.secondaryText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+        }
 
         if (g_apps->empty()) {
             RECT empty = {Scale(24), RowTop(1) + Scale(8),
@@ -3020,7 +3557,9 @@ void RenderMixerContents(HDC dc, const RECT& client) {
         for (bool next : {false, true}) {
             RECT button = PageButtonRect(next, client);
             bool hovered = g_hoverPageButton == (next ? 1 : 0);
-            DrawRoundedRect(dc, button, Scale(8), hovered ? g_theme.hover : g_theme.panel);
+            DrawRoundedRect(dc, button, Radius(8), hovered
+                ? MixColor(g_theme.panel, g_theme.text, HoverStrength())
+                : g_theme.panel);
             DrawLabel(dc, next ? L"Next" : L"Previous", button, g_smallFont,
                       g_theme.text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
@@ -3097,60 +3636,106 @@ DWORD RecoverPixelAlpha(DWORD black, DWORD white) {
     return result;
 }
 
-bool PaintTransparentMixer(HWND window, const RECT& client, ULONGLONG now) {
-    if (!g_blackFrame.Ensure(client.right, client.bottom) ||
-        !g_whiteFrame.Ensure(client.right, client.bottom)) return false;
-    // GDI does not preserve alpha. Draw the same scene against black and white
-    // mattes to recover per-pixel coverage, including antialiased text/icons.
-    // Only surfaces use backgroundOpacity; foreground primitives stay opaque.
-    g_paintMatte = 0;
-    RenderMixerContents(g_blackFrame.dc, client);
-    g_paintMatte = 1;
-    RenderMixerContents(g_whiteFrame.dc, client);
-    g_paintMatte = -1;
-    GdiFlush();
-    float reveal = g_openTime && g_motionEnabled
-        ? ClampVolume(static_cast<float>(now - g_openTime) / 160.0f) : 1.0f;
-    reveal = 1.0f - std::pow(1.0f - reveal, 3.0f);
-    int offset = static_cast<int>(Scale(8) * (1.0f - reveal));
-    for (int y = client.bottom - 1; y >= 0; --y) {
-        for (int x = 0; x < client.right; ++x) {
-            size_t destination = static_cast<size_t>(y) * client.right + x;
-            if (y < offset) {
-                g_blackFrame.pixels[destination] = 0;
-            } else {
-                size_t source = static_cast<size_t>(y - offset) * client.right + x;
-                g_blackFrame.pixels[destination] = RecoverPixelAlpha(
-                    g_blackFrame.pixels[source], g_whiteFrame.pixels[source]);
-            }
+// Drawing the mixer is what a frame costs; moving a drawn frame is nearly
+// free. A closing flyout therefore keeps the picture it has, and an opening
+// one redraws only as often as the level meters update.
+bool CanReuseTransparentFrame(const RECT& client, ULONGLONG now) {
+    return g_frameRenderTime && !g_openWarmup && g_blackFrame.dc &&
+        g_blackFrame.width == client.right && g_blackFrame.height == client.bottom &&
+        (g_closeTime || (g_openTime && now - g_frameRenderTime < 33000));
+}
+
+bool PaintTransparentMixer(HWND window, const RECT& client, ULONGLONG now,
+                           bool reuse = false) {
+    if (!reuse) {
+        g_frameRenderTime = 0;
+        if (!g_blackFrame.Ensure(client.right, client.bottom) ||
+            !g_whiteFrame.Ensure(client.right, client.bottom)) return false;
+        // GDI does not preserve alpha. Draw the same scene against black and
+        // white mattes to recover per-pixel coverage, including antialiased
+        // text/icons. Only surfaces use backgroundOpacity; foreground
+        // primitives stay opaque.
+        g_paintMatte = 0;
+        RenderMixerContents(g_blackFrame.dc, client);
+        g_paintMatte = 1;
+        RenderMixerContents(g_whiteFrame.dc, client);
+        g_paintMatte = -1;
+        GdiFlush();
+        size_t count = static_cast<size_t>(client.right) * client.bottom;
+        for (size_t i = 0; i < count; ++i) {
+            g_blackFrame.pixels[i] = RecoverPixelAlpha(g_blackFrame.pixels[i],
+                                                       g_whiteFrame.pixels[i]);
         }
+        g_frameRenderTime = now;
     }
     POINT origin{};
     SIZE size{client.right, client.bottom};
-    BLENDFUNCTION blend{AC_SRC_OVER, 0, static_cast<BYTE>(255 * reveal), AC_SRC_ALPHA};
-    BOOL result = UpdateLayeredWindow(window, nullptr, nullptr, &size,
-                                     g_blackFrame.dc, &origin, 0, &blend, ULW_ALPHA);
-    if (reveal >= 1.0f) g_openTime = 0;
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    if (!g_openTime && !g_closeTime) {
+        return UpdateLayeredWindow(window, nullptr, nullptr, &size, g_blackFrame.dc,
+                                   &origin, 0, &blend, ULW_ALPHA) != FALSE;
+    }
+    // Opening or closing: the frame also moves the window and fades it.
+    FlyoutFrame frame = FlyoutFrameAt(now);
+    RECT bounds = FlyoutBounds(frame.offset, &origin);
+    POINT position{bounds.left, bounds.top};
+    size = {bounds.right - bounds.left, bounds.bottom - bounds.top};
+    // The first frame after opening stays invisible; see PaceAnimation.
+    blend.SourceConstantAlpha = g_openWarmup
+        ? 0 : static_cast<BYTE>(255.0f * ClampVolume(frame.opacity));
+    BOOL result = UpdateLayeredWindow(window, nullptr, &position, &size, g_blackFrame.dc,
+                                     &origin, 0, &blend, ULW_ALPHA);
+    g_slideOffset = frame.offset;
+    g_fadeOpacity = frame.opacity;
+    if (g_openTime && frame.finished && !g_openWarmup) SettleFlyout(window);
     return result != FALSE;
 }
 
 void PaintMixer(HWND hWnd) {
+    ULONGLONG now = AnimationClock();
+    if (g_openWarmup && g_openTime) g_openTime = now;
+    if (g_closeTime && FlyoutFrameAt(now).finished) {
+        ValidateRect(hWnd, nullptr);
+        CompleteHide(hWnd);
+        return;
+    }
+    bool transparent = g_settings.backgroundOpacity < 100 && !g_transparencyFailed;
+    if (transparent) {
+        RECT content = MixerContentRect(hWnd);
+        if (CanReuseTransparentFrame(content, now) &&
+            PaintTransparentMixer(hWnd, content, now, true)) {
+            ValidateRect(hWnd, nullptr);
+            RunQueuedClose(hWnd);
+            PaceAnimation(hWnd);
+            return;
+        }
+    }
     g_frameAnimating = false;
     g_frameHasAudio = false;
-    ULONGLONG now = GetTickCount64();
     g_frameSeconds = g_lastPaintTime
-        ? std::min(0.05f, static_cast<float>(now - g_lastPaintTime) / 1000.0f) : 0.016f;
+        ? std::min(0.05f, static_cast<float>(now - g_lastPaintTime) / 1000000.0f)
+        : 0.016f;
     g_lastPaintTime = now;
     if (g_rowVisuals.size() > 256) g_rowVisuals.clear();
+    POINT origin{};
+    bool arrived = false;
+    if (!transparent && (g_openTime || g_closeTime)) {
+        // An opaque flyout is an ordinary window: it slides by being moved,
+        // and it cannot fade.
+        FlyoutFrame frame = FlyoutFrameAt(now);
+        origin = PlaceFlyoutFrame(hWnd, frame);
+        arrived = g_openTime && frame.finished && !g_openWarmup;
+    }
     PAINTSTRUCT paint;
     HDC windowDc = BeginPaint(hWnd, &paint);
-    RECT client;
-    GetClientRect(hWnd, &client);
+    RECT client = MixerContentRect(hWnd);
     if (client.right <= 0 || client.bottom <= 0) { EndPaint(hWnd, &paint); return; }
-    if (g_settings.backgroundOpacity < 100 && !g_transparencyFailed) {
+    if (transparent) {
         if (PaintTransparentMixer(hWnd, client, now)) {
             UpdatePaintTimer(hWnd);
             EndPaint(hWnd, &paint);
+            RunQueuedClose(hWnd);
+            PaceAnimation(hWnd);
             return;
         }
         Wh_Log(L"Mixer: transparent rendering failed, using opaque background, error %lu", GetLastError());
@@ -3168,43 +3753,21 @@ void PaintMixer(HWND hWnd) {
     }
     HGDIOBJ oldBitmap = SelectObject(dc, bitmap);
     RenderMixerContents(dc, client);
-
-    float reveal = g_openTime && g_motionEnabled
-        ? ClampVolume(static_cast<float>(now - g_openTime) / 160.0f) : 1.0f;
-    reveal = 1.0f - std::pow(1.0f - reveal, 3.0f);
-    if (reveal < 1.0f) {
-        HDC composite = CreateCompatibleDC(windowDc);
-        HBITMAP frame = CreateCompatibleBitmap(windowDc, client.right, client.bottom);
-        if (composite && frame) {
-            HGDIOBJ oldFrame = SelectObject(composite, frame);
-            FillSolidRect(composite, client, g_theme.background);
-            int offset = static_cast<int>(Scale(8) * (1.0f - reveal));
-            BLENDFUNCTION blend = {AC_SRC_OVER, 0,
-                static_cast<BYTE>(255.0f * reveal), 0};
-            if (AlphaBlend(composite, 0, offset, client.right, client.bottom - offset,
-                           dc, 0, 0, client.right, client.bottom - offset, blend)) {
-                BitBlt(windowDc, 0, 0, client.right, client.bottom, composite, 0, 0, SRCCOPY);
-            } else {
-                BitBlt(windowDc, 0, 0, client.right, client.bottom, dc, 0, 0, SRCCOPY);
-            }
-            SelectObject(composite, oldFrame);
-        } else {
-            BitBlt(windowDc, 0, 0, client.right, client.bottom, dc, 0, 0, SRCCOPY);
-        }
-        if (frame) DeleteObject(frame);
-        if (composite) DeleteDC(composite);
-    } else {
-        g_openTime = 0;
-        BitBlt(windowDc, 0, 0, client.right, client.bottom, dc, 0, 0, SRCCOPY);
-    }
+    BitBlt(windowDc, 0, 0, client.right - origin.x, client.bottom - origin.y, dc,
+           origin.x, origin.y, SRCCOPY);
     SelectObject(dc, oldBitmap);
     DeleteObject(bitmap);
     DeleteDC(dc);
     UpdatePaintTimer(hWnd);
     EndPaint(hWnd, &paint);
+    if (arrived) SettleFlyout(hWnd);
+    RunQueuedClose(hWnd);
+    PaceAnimation(hWnd);
 }
 
 void ResizeMixer(HWND hWnd) {
+    // A sliding flyout takes its size from PositionMixer with its next frame.
+    if (g_openTime || g_closeTime) return;
     RECT windowRect;
     GetWindowRect(hWnd, &windowRect);
     SetWindowPos(hWnd, nullptr, windowRect.left, windowRect.top, PopupWidth(),
@@ -3232,7 +3795,8 @@ void PositionMixer(HWND hWnd) {
     MONITORINFO info = {sizeof(info)};
     GetMonitorInfoW(monitor, &info);
 
-    int gap = Scale(8);
+    // The taskbar flyouts of Windows 10 sit directly on the taskbar.
+    int gap = IsWindows10Style() ? 0 : Scale(8);
     g_availableAppRows = AppRowsForHeight(info.rcWork.bottom - info.rcWork.top - 2 * gap);
     ClampPageOffset();
     int width = PopupWidth();
@@ -3245,6 +3809,26 @@ void PositionMixer(HWND hWnd) {
     }
     x = ClampInt(x, info.rcWork.left, std::max(info.rcWork.left, info.rcWork.right - width));
     y = ClampInt(y, info.rcWork.top, std::max(info.rcWork.top, info.rcWork.bottom - height));
+
+    // The flyout slides out from the taskbar's edge and is cut off there, so
+    // that nothing of it shows over or through the taskbar. Where the tray
+    // icon is not in a taskbar that takes up screen space (the taskbar hides
+    // itself, or the icon is in the overflow), that edge is the icon's own.
+    g_restRect = {x, y, x + width, y + height};
+    g_slideFromAbove = y + height / 2 > (anchor.top + anchor.bottom) / 2;
+    int edge = g_slideFromAbove
+        ? std::max<int>(info.rcWork.top, std::min<int>(y, anchor.bottom))
+        : std::min<int>(info.rcWork.bottom, std::max<int>(y + height, anchor.top));
+    g_slideClip = {LONG_MIN / 2, LONG_MIN / 2, LONG_MAX / 2, LONG_MAX / 2};
+    (g_slideFromAbove ? g_slideClip.top : g_slideClip.bottom) = edge;
+    // A closed flyout is past that edge: all of it in the Windows 11 style, a
+    // short way in the Windows 10 style. Windows cannot round the corners of
+    // a window only a few pixels tall, so a strip of the flyout stays put.
+    int hidden = g_slideFromAbove ? y + height - edge : edge - y;
+    int travel = IsWindows10Style() ? Scale(50) : hidden;
+    g_slideTravel = std::max(std::min(travel, hidden - Scale(20)), 0);
+    // While the flyout slides, each frame puts the window where it belongs.
+    if (g_openTime || g_closeTime) return;
 
     RECT current = {};
     if (!GetWindowRect(hWnd, &current) || current.left != x || current.top != y ||
@@ -3260,12 +3844,21 @@ void ShowMixer(HWND hWnd) {
     }
     g_showingMixer = true;
     KillTimer(hWnd, TIMER_CHECK_FOCUS);
-    bool opening = !IsWindowVisible(hWnd);
+    HideVolumeIndicator(hWnd);
+    g_closeQueued = false;
+    bool opening = !MixerOpen(hWnd);
+    bool turning = false;
     if (opening) {
         SelectRow(DRAG_MASTER);
         RefreshAudioSessions(hWnd, true);
         UpdateMotionPreference(hWnd);
-        g_openTime = g_motionEnabled ? GetTickCount64() : 0;
+        // A flyout that is still closing turns around where it is.
+        turning = g_closeTime != 0;
+        g_closeTime = 0;
+        g_openTime = g_motionEnabled ? AnimationClock() : 0;
+        g_openWarmup = g_openTime && !turning;
+        KillTimer(hWnd, TIMER_TRIM);
+        g_pacedSince = 0;
         g_lastPaintTime = 0;
         g_hoverRow = DRAG_NONE;
         g_closeHovered = false;
@@ -3273,6 +3866,23 @@ void ShowMixer(HWND hWnd) {
         g_rowVisuals.clear();
     }
     PositionMixer(hWnd);
+    if (opening && g_openTime) {
+        g_slideStart = turning ? g_slideOffset : static_cast<float>(g_slideTravel);
+        g_fadeStart = turning ? g_fadeOpacity : IsWindows10Style() ? 0.8f : 1.0f;
+    }
+    if (opening && g_settings.backgroundOpacity < 100 && !g_transparencyFailed) {
+        // A hidden layered window keeps its last frame, and its backdrop
+        // effect appears the moment the window is shown. Present the first
+        // frame before showing the window, which is fully transparent when
+        // animating, so neither can flash in the final position ahead of the
+        // opening animation.
+        RECT client = MixerContentRect(hWnd);
+        if (client.right > 0 && client.bottom > 0) {
+            PaintTransparentMixer(hWnd, client, g_openTime);
+        }
+    } else if (opening && g_openTime) {
+        PlaceFlyoutFrame(hWnd, FlyoutFrameAt(g_openTime));
+    }
     ShowWindow(hWnd, SW_SHOWNORMAL);
     SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
     SetPaintTimer(hWnd, g_motionEnabled ? 16 : 80);
@@ -3307,16 +3917,53 @@ void QueueShowMixer(HWND hWnd) {
 
 void RememberTrayPress(HWND hWnd) {
     g_trayPressKnown = true;
-    g_trayPressWasVisible = IsWindowVisible(hWnd) != FALSE;
+    g_trayPressWasVisible = MixerOpen(hWnd);
 }
 
 void QueueTrayToggle(HWND hWnd, bool keyboard) {
     // The taskbar can take focus and dismiss the popup before mouse-up.
     // Use its visibility at mouse-down, so a closing click cannot reopen it.
     bool close = !keyboard && g_trayPressKnown
-        ? g_trayPressWasVisible : IsWindowVisible(hWnd) != FALSE;
+        ? g_trayPressWasVisible : MixerOpen(hWnd);
     g_trayPressKnown = false;
+    // Like the taskbar's own flyouts, the mixer finishes opening or closing
+    // before the icon toggles it again.
+    if (g_openTime || g_closeTime) {
+        if (g_openTime) {
+            // Pressing the icon took the focus away. Take it back, or the
+            // mixer would close for having lost it.
+            KillTimer(hWnd, TIMER_CHECK_FOCUS);
+            if (SetForegroundWindow(hWnd)) {
+                SetFocus(hWnd);
+            } else if (g_settings.closeWhenFocusIsLost) {
+                SetTimer(hWnd, TIMER_CHECK_FOCUS, 150, nullptr);
+            }
+        }
+        return;
+    }
     QueueMixerAction(hWnd, close);
+}
+
+// Frees what only an open mixer needs: its frame buffers and drawn text.
+void TrimMixerMemory() {
+    g_blackFrame.Reset();
+    g_whiteFrame.Reset();
+    ClearTextCache();
+}
+
+// Takes the flyout off screen, once any closing animation has run.
+void CompleteHide(HWND hWnd) {
+    KillTimer(hWnd, TIMER_METERS);
+    g_paintTimerInterval = 0;
+    g_openTime = 0;
+    g_closeTime = 0;
+    g_openWarmup = false;
+    g_closeQueued = false;
+    ShowWindow(hWnd, SW_HIDE);
+    RestFlyoutWindow(hWnd);
+    // Reopening soon is much cheaper with the buffers and text still at
+    // hand, so keep them for a little while.
+    if (!SetTimer(hWnd, TIMER_TRIM, 10000, nullptr)) TrimMixerMemory();
 }
 
 void HideMixer(HWND hWnd) {
@@ -3324,18 +3971,30 @@ void HideMixer(HWND hWnd) {
     CancelNameTooltip(hWnd);
     g_showRequestPending = false;
     KillTimer(hWnd, TIMER_CHECK_FOCUS);
-    KillTimer(hWnd, TIMER_METERS);
     KillTimer(hWnd, TIMER_REFRESH);
-    g_paintTimerInterval = 0;
-    g_openTime = 0;
     g_dragRow = DRAG_NONE;
     if (GetCapture() == hWnd) {
         ReleaseCapture();
     }
-    ShowWindow(hWnd, SW_HIDE);
-    g_blackFrame.Reset();
-    g_whiteFrame.Reset();
-    ClearTextCache();
+    if (g_closeTime) return; // Already on its way out.
+    // Nothing of a flyout that has yet to show its first frame can be seen,
+    // and the taskbar flyouts of Windows 10 close without an animation.
+    if (!g_motionEnabled || !IsWindowVisible(hWnd) || g_openWarmup ||
+        IsWindows10Style()) {
+        CompleteHide(hWnd);
+        return;
+    }
+    // A flyout that is still opening closes once it has arrived.
+    if (g_openTime) {
+        g_closeQueued = true;
+        return;
+    }
+    g_slideStart = 0.0f;
+    g_fadeStart = 1.0f;
+    g_closeTime = AnimationClock();
+    g_pacedSince = 0;
+    SetPaintTimer(hWnd, 16);
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 enum class TrayAction { None, Open, Menu, ToggleMute };
@@ -3363,6 +4022,20 @@ TrayAction GetTrayAction(UINT event, bool version4) {
 }
 
 void AddTrayIcon(HWND hWnd) {
+    // Windows also announces a new taskbar when the old one's icons have
+    // survived, such as after a display scaling change. Adding the icon again
+    // then fails, and the fallback below would add a second icon under the
+    // other identity. Remove whatever is registered first; this also clears
+    // an icon left behind by an instance that did not exit cleanly.
+    NOTIFYICONDATAW stale = {};
+    stale.cbSize = sizeof(stale);
+    stale.hWnd = hWnd;
+    stale.uID = TRAY_ICON_ID;
+    Shell_NotifyIconW(NIM_DELETE, &stale);
+    stale.uFlags = NIF_GUID;
+    stale.guidItem = MIXER_TRAY_GUID;
+    Shell_NotifyIconW(NIM_DELETE, &stale);
+
     g_trayVersion4 = false;
     g_trayUsesGuid = true;
     NOTIFYICONDATAW data = {};
@@ -3404,6 +4077,262 @@ void RemoveTrayIcon(HWND hWnd) {
     data.uFlags = g_trayUsesGuid ? NIF_GUID : 0;
     if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
     Shell_NotifyIconW(NIM_DELETE, &data);
+}
+
+// While the mixer is closed, changing master volume from the tray icon shows
+// the result in a small indicator above the icon, which soon goes away again.
+PixelBuffer g_indicatorBlack, g_indicatorWhite;
+
+void DrawVolumeIndicator(HDC dc, const RECT& client, float volume, bool muted) {
+    if (g_paintMatte >= 0) {
+        FillSolidRect(dc, client, g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0));
+        DrawSurface(dc, client, Radius(20), g_theme.background);
+    } else {
+        FillSolidRect(dc, client, g_theme.background);
+    }
+    RECT glyph{Scale(12), 0, Scale(40), client.bottom};
+    DrawLabel(dc, VolumeGlyph(volume, muted), glyph, g_symbolFont, IconColor(),
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    WCHAR percent[16];
+    swprintf_s(percent, L"%d%%", static_cast<int>(volume * 100.0f + 0.5f));
+    RECT text{client.right - Scale(58), 0, client.right - Scale(14), client.bottom};
+    DrawLabel(dc, percent, text, g_bodyFont, muted ? g_theme.secondaryText : g_theme.text,
+              DT_RIGHT | DT_VCENTER | DT_SINGLELINE, /*percentage=*/true);
+    int middle = client.bottom / 2;
+    RECT rail{Scale(50), middle - Scale(2), client.right - Scale(68), middle + Scale(2)};
+    DrawRoundedRect(dc, rail, Radius(2), MixColor(g_theme.background, g_theme.text, 0.3f));
+    RECT fill = rail;
+    fill.right = rail.left + static_cast<int>(std::lround((rail.right - rail.left) * volume));
+    if (fill.right > fill.left) {
+        DrawRoundedRect(dc, fill, Radius(2), muted ? g_theme.muted : g_theme.sliderFill);
+    }
+}
+
+// Draws the indicator the way the mixer is drawn: against black and against
+// white to recover its translucency, or opaque.
+void PaintVolumeIndicator(int width, int height) {
+    if (!g_indicatorBlack.Ensure(width, height) ||
+        !g_indicatorWhite.Ensure(width, height)) return;
+    RECT client{0, 0, width, height};
+    float volume = GetMasterVolume();
+    bool muted = GetMasterMuted();
+    bool transparent = g_settings.backgroundOpacity < 100 && !g_transparencyFailed;
+    g_paintMatte = transparent ? 0 : -1;
+    DrawVolumeIndicator(g_indicatorBlack.dc, client, volume, muted);
+    if (transparent) {
+        g_paintMatte = 1;
+        DrawVolumeIndicator(g_indicatorWhite.dc, client, volume, muted);
+    }
+    g_paintMatte = -1;
+    GdiFlush();
+    size_t count = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < count; ++i) {
+        DWORD black = g_indicatorBlack.pixels[i];
+        g_indicatorBlack.pixels[i] = transparent
+            ? RecoverPixelAlpha(black, g_indicatorWhite.pixels[i])
+            : 0xFF000000u | (black & 0x00FFFFFFu);
+    }
+    POINT origin{};
+    SIZE size{width, height};
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(g_volumeIndicator, nullptr, nullptr, &size, g_indicatorBlack.dc,
+                        &origin, 0, &blend, ULW_ALPHA);
+}
+
+void HideVolumeIndicator(HWND owner) {
+    KillTimer(owner, TIMER_VOLUME_INDICATOR);
+    if (g_volumeIndicator && IsWindowVisible(g_volumeIndicator)) {
+        ShowWindow(g_volumeIndicator, SW_HIDE);
+    }
+}
+
+void ShowVolumeIndicator(HWND owner) {
+    if (IsWindowVisible(owner)) return; // The mixer itself shows the volume.
+    RECT anchor{};
+    if (!GetTrayIconRect(&anchor)) return;
+    if (!g_volumeIndicator) {
+        g_volumeIndicator = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED |
+                WS_EX_TRANSPARENT,
+            VOLUME_INDICATOR_CLASS, L"", WS_POPUP, 0, 0, 1, 1, owner, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
+        if (!g_volumeIndicator) return;
+    }
+    // Placed like the mixer: above the icon, or below it on a top taskbar.
+    MONITORINFO info = {sizeof(info)};
+    GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST), &info);
+    int width = Scale(220), height = Scale(48);
+    int gap = IsWindows10Style() ? 0 : Scale(8);
+    int x = (anchor.left + anchor.right - width) / 2;
+    int y = anchor.top - height - gap;
+    if (y < info.rcWork.top) y = anchor.bottom + gap;
+    x = ClampInt(x, info.rcWork.left, std::max(info.rcWork.left, info.rcWork.right - width));
+    y = ClampInt(y, info.rcWork.top, std::max(info.rcWork.top, info.rcWork.bottom - height));
+    SetWindowPos(g_volumeIndicator, HWND_TOPMOST, x, y, width, height,
+                 SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    ApplyWindowFrame(g_volumeIndicator);
+    ApplyBackdropBlur(g_volumeIndicator);
+    PaintVolumeIndicator(width, height);
+    if (!IsWindowVisible(g_volumeIndicator)) {
+        ShowWindow(g_volumeIndicator, SW_SHOWNOACTIVATE);
+    }
+    SetTimer(owner, TIMER_VOLUME_INDICATOR, VOLUME_INDICATOR_TIME, nullptr);
+}
+
+LRESULT CALLBACK VolumeIndicatorProc(HWND window, UINT message, WPARAM wParam,
+                                     LPARAM lParam) {
+    if (message == WM_NCHITTEST) return HTTRANSPARENT;
+    if (message == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+// Tray icons get no mouse-wheel messages. While the pointer is over the icon,
+// watch the mouse through a low-level hook instead, which works whatever has
+// the focus and leaves the wheel working as usual everywhere else. Hooking
+// only then keeps every move of the mouse from waking the mixer up.
+//
+// Windows holds up the mouse input of the whole system until a low-level hook
+// returns, and calls it on the thread that set it. So the hook lives on a
+// thread that does nothing else, never waiting for the UI thread while it
+// paints a frame or refreshes the sessions.
+//
+// The taskbar reports the pointer moving onto the icon, but not always, so a
+// slow timer also watches for it. Once armed, the hook itself notices the
+// pointer leaving. Both test against a cached rect of the icon; the taskbar
+// is asked for it again only when it may have changed.
+constexpr UINT WM_TRAY_HOOK_ARM = WM_APP + 1; // Thread message. wParam: 1 arm, 0 disarm.
+constexpr ULONGLONG TRAY_RECT_LIFETIME = 5000;
+
+SRWLOCK g_trayIconRectLock = SRWLOCK_INIT;
+RECT g_trayIconRect{};         // Read by the hook thread, under the lock.
+ULONGLONG g_trayIconRectTime;  // When the rect was last asked for.
+HANDLE g_trayHookThread;
+DWORD g_trayHookThreadId;
+
+void ForgetTrayIconRect() {
+    g_trayIconRectTime = 0;
+}
+
+// The taskbar says the pointer is over the icon when it reports a move, so a
+// rect that does not hold the pointer then may be out of date.
+bool PointerOverTrayIcon(bool taskbarSaysOver) {
+    POINT cursor{};
+    if (!GetCursorPos(&cursor)) return false;
+    AcquireSRWLockShared(&g_trayIconRectLock);
+    RECT rect = g_trayIconRect;
+    ReleaseSRWLockShared(&g_trayIconRectLock);
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG age = now - g_trayIconRectTime;
+    if (!g_trayIconRectTime || age > TRAY_RECT_LIFETIME ||
+        (taskbarSaysOver && !PtInRect(&rect, cursor) && age > 100)) {
+        if (!GetTrayIconRect(&rect)) SetRectEmpty(&rect);
+        AcquireSRWLockExclusive(&g_trayIconRectLock);
+        g_trayIconRect = rect;
+        ReleaseSRWLockExclusive(&g_trayIconRectLock);
+        g_trayIconRectTime = now;
+    }
+    return PtInRect(&rect, cursor);
+}
+
+// Runs on the hook thread, so it only looks at the pointer and posts.
+LRESULT CALLBACK TrayWheelHook(int code, WPARAM message, LPARAM data) {
+    if (code == HC_ACTION && (message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL)) {
+        auto* mouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+        AcquireSRWLockShared(&g_trayIconRectLock);
+        bool over = PtInRect(&g_trayIconRect, mouse->pt);
+        ReleaseSRWLockShared(&g_trayIconRectLock);
+        if (!over) {
+            PostThreadMessageW(GetCurrentThreadId(), WM_TRAY_HOOK_ARM, 0, 0);
+        } else if (message == WM_MOUSEWHEEL) {
+            if (HWND window = g_hWnd.load()) {
+                PostMessageW(window, WM_APP_TRAY_WHEEL,
+                             static_cast<WPARAM>(static_cast<SHORT>(HIWORD(mouse->mouseData))),
+                             0);
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, code, message, data);
+}
+
+DWORD WINAPI TrayHookThreadProc(LPVOID readyEvent) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    MSG message;
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // Create the queue.
+    SetEvent(static_cast<HANDLE>(readyEvent));
+    HHOOK hook = nullptr;
+    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+        if (message.message != WM_TRAY_HOOK_ARM) continue;
+        if (message.wParam && !hook) {
+            hook = SetWindowsHookExW(WH_MOUSE_LL, TrayWheelHook, GetModuleHandleW(nullptr), 0);
+            if (hook) {
+                g_trayWheelArmed = true;
+                Wh_Log(L"Mixer: pointer over the tray icon, listening to the wheel");
+            } else {
+                Wh_Log(L"Mixer: tray icon scrolling unavailable, error %lu", GetLastError());
+            }
+        } else if (!message.wParam && hook) {
+            UnhookWindowsHookEx(hook);
+            hook = nullptr;
+            g_trayWheelArmed = false;
+            Wh_Log(L"Mixer: pointer left the tray icon");
+        }
+    }
+    if (hook) UnhookWindowsHookEx(hook);
+    g_trayWheelArmed = false;
+    return 0;
+}
+
+void StartTrayHookThread() {
+    HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ready) return;
+    g_trayHookThread = CreateThread(nullptr, 0, TrayHookThreadProc, ready, 0, &g_trayHookThreadId);
+    if (g_trayHookThread) {
+        WaitForSingleObject(ready, INFINITE);
+    } else {
+        g_trayHookThreadId = 0;
+        Wh_Log(L"Mixer: tray icon scrolling unavailable, error %lu", GetLastError());
+    }
+    CloseHandle(ready);
+}
+
+void StopTrayHookThread() {
+    if (!g_trayHookThread) return;
+    PostThreadMessageW(g_trayHookThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_trayHookThread, INFINITE);
+    CloseHandle(g_trayHookThread);
+    g_trayHookThread = nullptr;
+    g_trayHookThreadId = 0;
+}
+
+void ArmTrayWheel() {
+    if (g_trayWheelArmed || !g_trayHookThreadId) return;
+    g_trayWheelRemainder = 0;
+    PostThreadMessageW(g_trayHookThreadId, WM_TRAY_HOOK_ARM, 1, 0);
+}
+
+void DisarmTrayWheel() {
+    if (g_trayHookThreadId) PostThreadMessageW(g_trayHookThreadId, WM_TRAY_HOOK_ARM, 0, 0);
+}
+
+// Runs on TIMER_TRAY_WATCH, for the moves onto the icon the taskbar misses.
+void WatchTrayPointer() {
+    if (!g_trayWheelArmed && PointerOverTrayIcon(false)) ArmTrayWheel();
+}
+
+// Changes master volume by the mouse-wheel step for each notch. High-resolution
+// wheels report fractions of a notch, which add up.
+void ScrollMasterVolume(HWND hWnd, int delta) {
+    g_trayWheelRemainder += delta;
+    int notches = g_trayWheelRemainder / WHEEL_DELTA;
+    if (!notches) return;
+    g_trayWheelRemainder -= notches * WHEEL_DELTA;
+    SetRowVolume(DRAG_MASTER,
+                 GetMasterVolume() + notches * g_settings.volumeStep / 100.0f);
+    if (IsWindowVisible(hWnd)) {
+        InvalidateRect(hWnd, nullptr, FALSE);
+    } else {
+        ShowVolumeIndicator(hWnd);
+    }
 }
 
 bool SpeakerShapeContains(float x, float y, bool includeWaves = true) {
@@ -3534,33 +4463,142 @@ HICON LoadMixerIcon(int pixels, bool tray = false, bool muted = false) {
                                          pixels, pixels, 0));
 }
 
-void RefreshIconSizes(HWND hWnd) {
+// Draws a volume glyph as an icon the way the taskbar draws its own icons:
+// with DirectWrite, at regular weight, with grayscale antialiasing. Compared
+// with the Windows 11 wifi icon, this matches it nearly pixel for pixel.
+HICON CreateGlyphIcon(int pixels, PCWSTR glyph, COLORREF color) {
+    // Created once and kept for the life of the process.
+    static ID2D1Factory* d2d = [] {
+        ID2D1Factory* factory = nullptr;
+        D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &factory);
+        return factory;
+    }();
+    static IDWriteFactory* dwrite = [] {
+        IDWriteFactory* factory = nullptr;
+        DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                            reinterpret_cast<IUnknown**>(&factory));
+        return factory;
+    }();
+    if (!d2d || !dwrite) return nullptr;
+
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = pixels;
+    info.bmiHeader.biHeight = -pixels;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (!bitmap || !bits || !dc) {
+        if (bitmap) DeleteObject(bitmap);
+        if (dc) DeleteDC(dc);
+        return nullptr;
+    }
+    HGDIOBJ previous = SelectObject(dc, bitmap);
+
+    // White on black: the brightness of each pixel is the glyph's coverage.
+    bool drawn = false;
+    ID2D1DCRenderTarget* target = nullptr;
+    IDWriteTextFormat* format = nullptr;
+    ID2D1SolidColorBrush* brush = nullptr;
+    D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96.0f, 96.0f);
+    RECT area{0, 0, pixels, pixels};
+    if (SUCCEEDED(d2d->CreateDCRenderTarget(&properties, &target)) &&
+        SUCCEEDED(target->BindDC(dc, &area)) &&
+        SUCCEEDED(dwrite->CreateTextFormat(g_symbolFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                                           static_cast<float>(pixels), L"", &format)) &&
+        SUCCEEDED(target->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &brush))) {
+        format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        target->BeginDraw();
+        target->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f));
+        target->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)), format,
+                         D2D1::RectF(0.0f, 0.0f, static_cast<float>(pixels),
+                                     static_cast<float>(pixels)),
+                         brush, D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+        drawn = SUCCEEDED(target->EndDraw());
+    }
+    if (brush) brush->Release();
+    if (format) format->Release();
+    if (target) target->Release();
+    SelectObject(dc, previous);
+    DeleteDC(dc);
+    if (!drawn) {
+        DeleteObject(bitmap);
+        return nullptr;
+    }
+
+    DWORD ink = (static_cast<DWORD>(GetRValue(color)) << 16) |
+                (static_cast<DWORD>(GetGValue(color)) << 8) | GetBValue(color);
+    auto pixelsOut = static_cast<DWORD*>(bits);
+    for (size_t i = 0; i < static_cast<size_t>(pixels) * pixels; ++i) {
+        DWORD p = pixelsOut[i];
+        DWORD coverage = std::max({(p >> 16) & 255u, (p >> 8) & 255u, p & 255u});
+        pixelsOut[i] = (coverage << 24) | ink;
+    }
+    std::vector<BYTE> maskBits(((pixels + 15) / 16) * 2 * pixels, 0);
+    HBITMAP mask = CreateBitmap(pixels, pixels, 1, 1, maskBits.data());
+    HICON icon = nullptr;
+    if (mask) {
+        ICONINFO iconInfo{};
+        iconInfo.fIcon = TRUE;
+        iconInfo.hbmColor = bitmap;
+        iconInfo.hbmMask = mask;
+        icon = CreateIconIndirect(&iconInfo);
+        DeleteObject(mask);
+    }
+    DeleteObject(bitmap);
+    return icon;
+}
+
+// The tray icon shows the volume level like the Windows volume icon does:
+// muted, silent, low, medium or high.
+HICON CreateTrayIcon(float volume, bool muted) {
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     UINT trayDpi = taskbar ? GetDpiForWindow(taskbar) : 96;
-    if (!trayDpi) {
-        trayDpi = 96;
+    if (!trayDpi) trayDpi = 96;
+    int pixels = std::max(16, GetSystemMetricsForDpi(SM_CXSMICON, trayDpi));
+    DWORD light = 0, size = sizeof(light);
+    RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+    COLORREF color = light ? RGB(30, 32, 36) : RGB(248, 249, 252);
+    if (HICON icon = CreateGlyphIcon(pixels, VolumeGlyph(volume, muted), color)) {
+        return icon;
     }
+    return LoadMixerIcon(pixels, true, muted);
+}
+
+void SetTrayIcon(HWND hWnd, HICON tray) {
+    if (!tray) return;
+    if (g_hWnd.load() == hWnd) {
+        NOTIFYICONDATAW data = {};
+        data.cbSize = sizeof(data);
+        data.hWnd = hWnd;
+        data.uID = TRAY_ICON_ID;
+        if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
+        data.uFlags = NIF_ICON | (g_trayUsesGuid ? NIF_GUID : 0);
+        data.hIcon = tray;
+        if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
+            Wh_Log(L"Mixer: tray icon update failed");
+        }
+    }
+    if (g_trayIcon) DestroyIcon(g_trayIcon);
+    g_trayIcon = tray;
+}
+
+void RefreshIconSizes(HWND hWnd) {
     bool muted = GetMasterMuted();
-    int trayPixels = GetSystemMetricsForDpi(SM_CXSMICON, trayDpi);
-    HICON tray = LoadMixerIcon(std::max(16, trayPixels), true, muted);
-    if (tray) {
-        if (g_hWnd.load() == hWnd) {
-            NOTIFYICONDATAW data = {};
-            data.cbSize = sizeof(data);
-            data.hWnd = hWnd;
-            data.uID = TRAY_ICON_ID;
-            if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
-            data.uFlags = NIF_ICON | (g_trayUsesGuid ? NIF_GUID : 0);
-            data.hIcon = tray;
-            if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
-                Wh_Log(L"Mixer: tray DPI icon update failed");
-            }
-        }
-        if (g_trayIcon) {
-            DestroyIcon(g_trayIcon);
-        }
-        g_trayIcon = tray;
-    }
+    float volume = GetMasterVolume();
+    SetTrayIcon(hWnd, CreateTrayIcon(volume, muted));
+    g_trayIconGlyph = VolumeGlyph(volume, muted);
     HICON master = LoadMixerIcon(Scale(24), false, muted);
     if (master) {
         if (g_masterIcon) {
@@ -3577,30 +4615,19 @@ void RefreshIconSizes(HWND hWnd) {
     }
 }
 
+// Called on every change of master volume, so it redraws only what changed:
+// the tray icon when the volume crosses into another level, the master row
+// icon when mute changes.
 void RefreshMasterIcons(HWND hWnd, bool force) {
     bool muted = GetMasterMuted();
+    float volume = GetMasterVolume();
+    PCWSTR glyph = VolumeGlyph(volume, muted);
+    if (force || !g_trayIconGlyph || wcscmp(glyph, g_trayIconGlyph) != 0) {
+        SetTrayIcon(hWnd, CreateTrayIcon(volume, muted));
+        g_trayIconGlyph = glyph;
+    }
     if (!force && muted == g_masterIconMuted) {
         return;
-    }
-
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    UINT trayDpi = taskbar ? GetDpiForWindow(taskbar) : 96;
-    if (!trayDpi) trayDpi = 96;
-    int trayPixels = GetSystemMetricsForDpi(SM_CXSMICON, trayDpi);
-    HICON tray = LoadMixerIcon(std::max(16, trayPixels), true, muted);
-    if (tray) {
-        if (g_hWnd.load() == hWnd) {
-            NOTIFYICONDATAW data = {};
-            data.cbSize = sizeof(data);
-            data.hWnd = hWnd;
-            data.uID = TRAY_ICON_ID;
-            if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
-            data.uFlags = NIF_ICON | (g_trayUsesGuid ? NIF_GUID : 0);
-            data.hIcon = tray;
-            Shell_NotifyIconW(NIM_MODIFY, &data);
-        }
-        if (g_trayIcon) DestroyIcon(g_trayIcon);
-        g_trayIcon = tray;
     }
 
     HICON master = LoadMixerIcon(Scale(24), false, muted);
@@ -3747,6 +4774,29 @@ void OpenSystemPage(PCWSTR uri) {
     ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+// The strip of the screen that the taskbar takes up, if `point` is in it.
+// `horizontal` tells whether that strip runs along the top or bottom edge.
+bool TaskbarStripAt(POINT point, RECT* strip, bool* horizontal) {
+    MONITORINFO info = {sizeof(info)};
+    if (!GetMonitorInfoW(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &info)) {
+        return false;
+    }
+    *strip = info.rcMonitor;
+    *horizontal = point.y >= info.rcWork.bottom || point.y < info.rcWork.top;
+    if (point.y >= info.rcWork.bottom) {
+        strip->top = info.rcWork.bottom;
+    } else if (point.y < info.rcWork.top) {
+        strip->bottom = info.rcWork.top;
+    } else if (point.x >= info.rcWork.right) {
+        strip->left = info.rcWork.right;
+    } else if (point.x < info.rcWork.left) {
+        strip->right = info.rcWork.left;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 void ShowTrayMenu(HWND hWnd, int x, int y) {
     if (g_sourceMenuOpen || g_outputMenuOpen) return;
 
@@ -3771,10 +4821,18 @@ void ShowTrayMenu(HWND hWnd, int x, int y) {
                 MENU_CLASSIC_SOUND,
                 L"Sound control panel");
 
+    // Keep the menu clear of the taskbar. While the Start menu is open,
+    // Windows draws the taskbar in front of menus, which would hide the part
+    // of the menu that overlaps it.
+    TPMPARAMS avoid = {sizeof(avoid)};
+    bool horizontal = true;
+    bool onTaskbar = TaskbarStripAt({x, y}, &avoid.rcExclude, &horizontal);
+    UINT flags = TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON;
+    if (onTaskbar) flags |= horizontal ? TPM_VERTICAL : TPM_HORIZONTAL;
+
     SetForegroundWindow(hWnd);
-    UINT command = TrackPopupMenu(
-        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
-        x, y, 0, hWnd, nullptr);
+    UINT command = static_cast<UINT>(TrackPopupMenuEx(
+        menu, flags, x, y, hWnd, onTaskbar ? &avoid : nullptr));
 
     PostMessageW(hWnd, WM_NULL, 0, 0);
     DestroyMenu(menu);
@@ -4006,8 +5064,17 @@ void HandlePointerMove(HWND hWnd, POINT point) {
         InvalidateRect(hWnd, nullptr, FALSE);
     }
     int row = RowFromPoint(point);
-    if (row != g_hoverRow) {
+    bool thumbHovered = false;
+    if (row != DRAG_NONE) {
+        RECT slider = SliderRectForRow(VisibleRowForDataRow(row), client.right);
+        float volume = row == DRAG_MASTER ? g_masterPaintVolume
+                                          : (*g_apps)[row].volume;
+        thumbHovered = SliderThumbContains(slider, volume, point);
+    }
+    g_pointer = point;
+    if (row != g_hoverRow || thumbHovered != g_hoverThumb) {
         g_hoverRow = row;
+        g_hoverThumb = thumbHovered;
         InvalidateRect(hWnd, nullptr, FALSE);
     }
 
@@ -4025,8 +5092,29 @@ void HandlePointerMove(HWND hWnd, POINT point) {
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                             LPARAM lParam) {
     if (message == g_taskbarCreatedMessage && g_taskbarCreatedMessage) {
+        ForgetTrayIconRect();
         AddTrayIcon(hWnd);
         return 0;
+    }
+
+    // A flyout on its way out no longer reacts to input. One that is still
+    // on its way in is put in place first, and takes a click where the
+    // pointer then is over it.
+    if (g_closeTime) {
+        if ((message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) ||
+            (message >= WM_KEYFIRST && message <= WM_KEYLAST) ||
+            message == WM_CONTEXTMENU) {
+            return 0;
+        }
+    } else if (g_openTime && (message == WM_LBUTTONDOWN || message == WM_MBUTTONDOWN ||
+                              message == WM_MOUSEWHEEL || message == WM_CONTEXTMENU)) {
+        SettleFlyout(hWnd);
+        if (message == WM_LBUTTONDOWN || message == WM_MBUTTONDOWN) {
+            DWORD position = GetMessagePos();
+            POINT point = {GET_X_LPARAM(position), GET_Y_LPARAM(position)};
+            ScreenToClient(hWnd, &point);
+            lParam = MAKELPARAM(point.x, point.y);
+        }
     }
 
     switch (message) {
@@ -4047,8 +5135,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
 
             RefreshIconSizes(hWnd);
             ApplyTransparencyStyle(hWnd);
-            DWORD corner = 2;  // DWMWCP_ROUND.
-            DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
+            ApplyWindowFrame(hWnd);
             if (HasDefaultVolumeRules()) {
                 RefreshAudioSessions(hWnd);
                 StartDefaultVolumeNotifications(hWnd);
@@ -4086,6 +5173,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (event == WM_LBUTTONDOWN || event == WM_LBUTTONDBLCLK) {
                 RememberTrayPress(hWnd);
             }
+            if (event == WM_MOUSEMOVE && !g_trayWheelArmed && PointerOverTrayIcon(true)) {
+                ArmTrayWheel();
+            }
             TrayAction action = GetTrayAction(event, g_trayVersion4);
             if (action != TrayAction::None) {
                 Wh_Log(L"Mixer: tray action event=0x%X", event);
@@ -4093,6 +5183,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (action == TrayAction::ToggleMute) {
                 ToggleRowMute(DRAG_MASTER);
                 InvalidateRect(hWnd, nullptr, FALSE);
+                ShowVolumeIndicator(hWnd);
             } else if (action == TrayAction::Open) {
                 QueueTrayToggle(hWnd, event == NIN_KEYSELECT);
             } else if (action == TrayAction::Menu) {
@@ -4130,7 +5221,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
 
         case WM_APP_AUDIO_CHANGED:
             g_audioUiRefreshPosted.store(false);
-            if (IsWindowVisible(hWnd)) {
+            if (MixerOpen(hWnd)) {
                 RefreshAudioSessions(hWnd);
                 PositionMixer(hWnd);
                 POINT point{};
@@ -4157,7 +5248,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 return 0;
             }
             bool canRefresh =
-                IsWindowVisible(hWnd) && g_dragRow == DRAG_NONE &&
+                MixerOpen(hWnd) && g_dragRow == DRAG_NONE &&
                 !g_volumeEntry;
             if (canRefresh) {
                 RefreshAudioSessions(hWnd);
@@ -4171,11 +5262,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         }
 
         case WM_APP_RELOAD_SETTINGS:
+            FinishFlyoutMotion(hWnd);
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
             SelectRow(DRAG_MASTER);
             StopDefaultVolumeNotifications();
             LoadSettings();
+            CreateFonts(hWnd);  // The visual style selects the font families.
             if (IsWindowVisible(hWnd)) {
                 SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
             } else {
@@ -4183,9 +5276,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             StartDefaultVolumeNotifications(hWnd);
             g_transparencyFailed = false;
-            ApplyTransparencyStyle(hWnd);
-            UpdateMotionPreference(hWnd);
+            // The frosted glass backdrop is tinted with the theme color.
             UpdateTheme();
+            ApplyTransparencyStyle(hWnd);
+            ApplyWindowFrame(hWnd);
+            UpdateMotionPreference(hWnd);
             RefreshIconSizes(hWnd);
             RefreshAudioSessions(hWnd);
             ResizeMixer(hWnd);
@@ -4200,13 +5295,26 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 ShowNameTooltip(hWnd);
                 return 0;
             }
+            if (wParam == TIMER_VOLUME_INDICATOR) {
+                HideVolumeIndicator(hWnd);
+                return 0;
+            }
+            if (wParam == TIMER_TRAY_WATCH) {
+                WatchTrayPointer();
+                return 0;
+            }
+            if (wParam == TIMER_TRIM) {
+                KillTimer(hWnd, TIMER_TRIM);
+                if (!IsWindowVisible(hWnd)) TrimMixerMemory();
+                return 0;
+            }
             if (wParam == TIMER_CHECK_FOCUS) {
                 KillTimer(hWnd, TIMER_CHECK_FOCUS);
                 HWND foreground = GetForegroundWindow();
                 bool mixerOwnsFocus = foreground == hWnd ||
                     (foreground && GetAncestor(foreground, GA_ROOTOWNER) == hWnd);
                 if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen &&
-                    !g_sourceMenuOpen && g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd) &&
+                    !g_sourceMenuOpen && g_settings.closeWhenFocusIsLost && MixerOpen(hWnd) &&
                     !mixerOwnsFocus && GetCapture() != hWnd) {
                     Wh_Log(L"Mixer: closing after confirmed focus loss");
                     HideMixer(hWnd);
@@ -4214,12 +5322,19 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 return 0;
             }
             if (wParam == TIMER_METERS && IsWindowVisible(hWnd)) {
+                // Paint messages drive the opening and closing animations.
+                // Should they ever stop coming, do not leave the flyout
+                // stranded half way.
+                ULONGLONG sliding = g_closeTime ? g_closeTime : g_openTime;
+                if (sliding && AnimationClock() - sliding > 1000000) {
+                    FinishFlyoutMotion(hWnd);
+                }
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
             if (wParam == TIMER_REFRESH) {
                 // KillTimer doesn't remove a timer message already in the queue.
-                if (IsWindowVisible(hWnd)) {
+                if (MixerOpen(hWnd)) {
                     RefreshAudioSessions(hWnd);
                     PositionMixer(hWnd);
                     POINT point{};
@@ -4249,11 +5364,17 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
         }
 
+        // The hook only sends the wheel while the pointer is on the icon.
+        case WM_APP_TRAY_WHEEL:
+            ScrollMasterVolume(hWnd, static_cast<SHORT>(wParam));
+            return 0;
+
         case WM_MOUSELEAVE:
             CancelNameTooltip(hWnd);
             g_outputHovered = false;
             g_mouseTracking = false;
             g_hoverRow = DRAG_NONE;
+            g_hoverThumb = false;
             g_closeHovered = false;
             g_hoverPageButton = -1;
             InvalidateRect(hWnd, nullptr, FALSE);
@@ -4261,7 +5382,6 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
 
         case WM_LBUTTONDOWN: {
             CancelNameTooltip(hWnd);
-            g_openTime = 0;
             FinishVolumeEntry(hWnd, false, false);
             SetFocus(hWnd);
             POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
@@ -4421,7 +5541,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (LOWORD(wParam) != WA_INACTIVE) {
                 KillTimer(hWnd, TIMER_CHECK_FOCUS);
             } else if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen && !g_sourceMenuOpen &&
-                g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd)) {
+                g_settings.closeWhenFocusIsLost && MixerOpen(hWnd)) {
                 // Capture intent even if activation arrives before the tray's
                 // mouse-down callback. Focus dismissal remains independent.
                 POINT cursor = {};
@@ -4452,6 +5572,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                                  L"ImmersiveColorSet") == 0;
             if (g_settings.theme == L"system" || immersiveColorChanged) {
                 UpdateTheme();
+                ApplyBackdropBlur(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             if (immersiveColorChanged) {
@@ -4468,6 +5589,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             break;
 
         case WM_DPICHANGED: {
+            FinishFlyoutMotion(hWnd);
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
             g_dpi = HIWORD(wParam);
@@ -4504,12 +5626,25 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 DestroyWindow(g_nameTooltip);
                 g_nameTooltip = nullptr;
             }
+            KillTimer(hWnd, TIMER_VOLUME_INDICATOR);
+            if (g_volumeIndicator) {
+                DestroyWindow(g_volumeIndicator);
+                g_volumeIndicator = nullptr;
+            }
+            g_indicatorBlack.Reset();
+            g_indicatorWhite.Reset();
             g_blackFrame.Reset();
             g_whiteFrame.Reset();
             KillTimer(hWnd, TIMER_METERS);
             KillTimer(hWnd, TIMER_REFRESH);
             KillTimer(hWnd, TIMER_CHECK_FOCUS);
+            KillTimer(hWnd, TIMER_TRIM);
             g_showRequestPending = false;
+            g_openTime = 0;
+            g_closeTime = 0;
+            g_closeQueued = false;
+            KillTimer(hWnd, TIMER_TRAY_WATCH);
+            DisarmTrayWheel();
             RemoveTrayIcon(hWnd);
             ReleaseAudioData();
             g_activatedSessions.clear();
@@ -4556,7 +5691,9 @@ DWORD WINAPI ThreadProc(LPVOID) {
 
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
-    windowClass.style = CS_DBLCLKS | CS_DROPSHADOW;
+    // No CS_DROPSHADOW: that shadow stays behind when the flyout slides open,
+    // and Windows 11 gives a rounded window a shadow of its own.
+    windowClass.style = CS_DBLCLKS;
     windowClass.lpfnWndProc = WindowProc;
     windowClass.hInstance = GetModuleHandleW(nullptr);
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -4602,12 +5739,23 @@ DWORD WINAPI ThreadProc(LPVOID) {
         return 1;
     }
 
+    // Without its class, the volume indicator simply never shows.
+    WNDCLASSEXW indicatorClass{};
+    indicatorClass.cbSize = sizeof(indicatorClass);
+    indicatorClass.lpfnWndProc = VolumeIndicatorProc;
+    indicatorClass.hInstance = windowClass.hInstance;
+    indicatorClass.lpszClassName = VOLUME_INDICATOR_CLASS;
+    if (!RegisterClassExW(&indicatorClass)) {
+        Wh_Log(L"Mixer: volume indicator unavailable, error %lu", GetLastError());
+    }
+
     HWND hWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WINDOW_CLASS_NAME, L"Volume mixer",
         WS_POPUP, 0, 0, 420, 400, nullptr, nullptr, windowClass.hInstance,
         nullptr);
     if (!hWnd) {
         Wh_Log(L"CreateWindowExW failed, error %u", GetLastError());
+        UnregisterClassW(VOLUME_INDICATOR_CLASS, windowClass.hInstance);
         UnregisterClassW(NAME_TOOLTIP_CLASS, windowClass.hInstance);
         UnregisterClassW(VOLUME_ENTRY_CLASS, windowClass.hInstance);
         UnregisterClassW(WINDOW_CLASS_NAME, windowClass.hInstance);
@@ -4625,6 +5773,8 @@ DWORD WINAPI ThreadProc(LPVOID) {
     g_hWnd.store(hWnd);
     Wh_Log(L"Mixer: window created, HWND=%p", static_cast<void*>(hWnd));
     AddTrayIcon(hWnd);
+    StartTrayHookThread();
+    SetTimer(hWnd, TIMER_TRAY_WATCH, 500, nullptr);
     SetEvent(g_windowReadyEvent);
 
     MSG message;
@@ -4650,7 +5800,9 @@ DWORD WINAPI ThreadProc(LPVOID) {
 
     if (IsWindow(hWnd)) DestroyWindow(hWnd);
     g_hWnd.store(nullptr);
+    StopTrayHookThread();
     g_apps.reset();
+    UnregisterClassW(VOLUME_INDICATOR_CLASS, windowClass.hInstance);
     UnregisterClassW(NAME_TOOLTIP_CLASS, windowClass.hInstance);
     UnregisterClassW(VOLUME_ENTRY_CLASS, windowClass.hInstance);
     UnregisterClassW(WINDOW_CLASS_NAME, windowClass.hInstance);

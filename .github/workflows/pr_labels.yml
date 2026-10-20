@@ -26,6 +26,8 @@ concurrency:
 
 jobs:
   run:
+    # Forks don't have the app's private key.
+    if: github.repository == 'ramensoftware/windhawk-mods'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
