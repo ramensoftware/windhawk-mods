@@ -4631,6 +4631,28 @@
         "version": "1.0.1"
       }
     },
+    "discrete-touchpad-wheel": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792476294000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792476294000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "yezhiyi9670",
+        "compilerOptions": "-luser32",
+        "description": "Converts continuous precision-touchpad (or high-resolution mouse wheel) scrolling into discrete mouse wheel events for legacy apps that ignore the scroll magnitude and scroll uncontrollably fast",
+        "github": "https://github.com/yezhiyi9670",
+        "license": "GPL-3.0",
+        "name": "Discrete Touchpad Wheel",
+        "version": "0.1.0"
+      }
+    },
     "disk-pie-chart": {
       "details": {
         "defaultSorting": 36600,

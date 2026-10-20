@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-20T05:02:53.000Z</updated>
+    <updated>2026-10-20T06:04:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Discrete Touchpad Wheel 0.1.0]]></title>
+        <id>https://windhawk.net/mods/discrete-touchpad-wheel#b5c44d4feb241ab6c18b6d01d76c67ad7bebb65d</id>
+        <link href="https://windhawk.net/mods/discrete-touchpad-wheel"/>
+        <updated>2026-10-20T06:04:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="discretetouchpadwheel">Discrete Touchpad Wheel</h1>
+<blockquote>
+  <p><strong>IMPORTANT</strong></p>
+  <p>This mod does NOTHING by default. You need to add the apps you intend to
+  affect to the <strong>Custom process inclusion list</strong> in the mod's Advanced
+  settings.</p>
+</blockquote>
+<p>Windows precision touchpads (as well as certain mice with high-resolution
+wheels) report scrolling as a continuous stream of wheel
+messages, each carrying a signed delta (a magnitude). Modern apps scroll the
+page accurately according to the delta, which produces smooth
+scrolling. Some legacy apps ignore the magnitude and treat every message as one
+full wheel notch, which makes scrolling uncontrollably fast.</p>
+<p>This mod swallows those continuous wheel messages and accumulates their deltas
+per scroll target, then emits a real discrete <code>WM_MOUSEWHEEL</code> / <code>WM_MOUSEHWHEEL</code>
+event only once the accumulated magnitude reaches the configured threshold. The
+result is normal, predictable scrolling in the affected apps.</p>
+<h2 id="enablingthemodforanapp">Enabling the mod for an app</h2>
+<p>This mod does not target any process by default. To apply it to an app, open the
+mod's <strong>Advanced</strong> tab in Windhawk and add the process name (for example
+<code>notepad.exe</code>) to the <strong>Custom process inclusion list</strong>. The change takes effect
+after saving.</p>
+<p>Because the mod runs inside each targeted process, the accumulator state is
+naturally scoped per app, and apps that are not on the list are never touched.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Vertical threshold</strong> — accumulated vertical magnitude required before one
+discrete wheel event is emitted. <code>120</code> is one standard wheel notch.</li>
+<li><strong>Horizontal threshold</strong> — same, for horizontal scrolling.</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Only apps that receive scrolling through the Win32 message queue can be
+handled. Apps using Direct Manipulation bypass the queue entirely.</li>
+<li>Apps that already handle continuous deltas correctly should not be added to
+the inclusion list, or their scrolling will be coarsened.</li>
+</ul>]]></content>
+        <author>
+            <name>yezhiyi9670</name>
+            <uri>https://github.com/yezhiyi9670</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Sandbox: close without confirmation 1.1]]></title>
         <id>https://windhawk.net/mods/windows-sandbox-close-no-confirm#ffc0a69d0cfb2cd03a55b7f38ccfb773108b2912</id>
@@ -1145,75 +1192,6 @@ by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content
         <author>
             <name>Choihyunseok1</name>
             <uri>https://github.com/Choihyunseok1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[What When Where Notes 1.3.2]]></title>
-        <id>https://windhawk.net/mods/what-when-where-notes#42b2e0d8841f564a666a6130fbf89d4929e0af53</id>
-        <link href="https://windhawk.net/mods/what-when-where-notes"/>
-        <updated>2026-10-16T17:01:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="whatwhenwherenotes">What When Where Notes</h1>
-<p>A customizable desktop note overlay for Windows, powered by Windhawk.
-Organize reminders in three editable parts: <strong>What - When - Where</strong>.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="taskoverviewandstatusindicators">Task overview and status indicators</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/status-yellow.png" alt="Task overview with numbered notes, gray red and green status circles, and completed tasks struck through" /></p>
-<h3 id="customcolorsandrowhighlighting">Custom colors and row highlighting</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/green-hover.png" alt="Green notes, pink heading and highlighted task row" /></p>
-<h3 id="editnotesdirectlyonthedesktop">Edit notes directly on the desktop</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/edit-note.png" alt="Editing the WHERE field inside the desktop overlay" /></p>
-<h3 id="rightclickcolorandtransparencymenu">Right-click color and transparency menu</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/color-transparency-menu.png" alt="Context menu for changing note color and transparency" /></p>
-<h2 id="taskstatusindicators">Task status indicators</h2>
-<p>Click the colored circle next to a task to change its state:</p>
-<ul>
-<li>⚪ <strong>Gray — Open:</strong> The task has not been started.</li>
-<li>🔴 <strong>Red — In Progress:</strong> Work on the task is underway.</li>
-<li>🟢 <strong>Green — Completed:</strong> What, When and Where are struck through.</li>
-</ul>
-<p><strong>Cycle:</strong> ⚪ Open → 🔴 In Progress → 🟢 Completed → ⚪ Open. Each task's status is saved across Windhawk restarts.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Up to <strong>14 numbered note rows</strong> with independently editable What, When and Where fields.</li>
-<li>Optional centered title, adjustable fonts, spacing and colors.</li>
-<li>Three status states for each row: <strong>gray</strong> (open), <strong>red</strong> (in progress), and <strong>green</strong> (done). Completed notes are struck through.</li>
-<li>Add rows, remove the last row, or delete a selected row.</li>
-<li>Move the overlay with a configurable drag-mode hotkey.</li>
-<li>Adjustable transparency and note color; optional always-on-top behavior.</li>
-<li>Saved notes, row statuses, position and display preferences persist across restarts.</li>
-</ul>
-<h2 id="usingthenotes">Using the notes</h2>
-<ul>
-<li><strong>Click</strong> a What, When or Where field to edit it. Press <strong>Enter</strong> to save or <strong>Esc</strong> to cancel. Leaving the edit field also saves.</li>
-<li>Click <strong>+</strong> to add a row (up to the configured maximum) or <strong>-</strong> to remove the last row.</li>
-<li>Click the <strong>X</strong> next to a row to delete that row. At least one row is kept.</li>
-<li>Click a <strong>status circle</strong> to cycle through open, in progress and done.</li>
-<li><strong>Right-click</strong> the overlay to open the color and transparency menu.</li>
-<li><strong>Mouse wheel</strong> over the overlay to scale it in 10% steps (20% to 320%); <strong>middle-click</strong> to reset the scale.</li>
-<li>Press <strong>Ctrl+Alt+N</strong> by default to toggle drag mode, then drag the overlay with the left mouse button. Press the hotkey again to exit drag mode.</li>
-</ul>
-<h2 id="configuration">Configuration</h2>
-<p>Open <strong>Settings</strong> to customize the initial position, always-on-top mode, title, the three default note fields, separators, maximum row count, fonts, colors, default transparency, default scale, and the drag hotkey.</p>
-<p><strong>Note:</strong> Existing edited notes and saved display preferences are stored separately from the initial defaults. Changing a default does not automatically overwrite previously saved note rows. A previously dragged position is preserved when changing unrelated options. Editing X/Y settings explicitly moves the overlay to those new coordinates.</p>
-<h2 id="technicalinformation">Technical information</h2>
-<ul>
-<li>Designed for <strong>Windows / Windhawk</strong>.</li>
-<li>Runs as a Windhawk <strong>tool mod</strong>, using a dedicated <code>windhawk.exe</code> helper process.</li>
-<li>The overlay is implemented with the Windows API and GDI.</li>
-<li>Source code and license: <a href="https://github.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD">GitHub repository</a>.</li>
-</ul>
-<h2 id="projectbackgroundandrelationtoeasynotes">Project background and relation to Easy Notes</h2>
-<p>This mod is an independent Windows/Windhawk implementation inspired by the
-original ToDoLite / What When Where Rainmeter project by the same author:
-https://forum.rainmeter.net/viewtopic.php?t=42543#p215957</p>
-<p>Unlike free-form desktop sticky notes, this mod displays a structured three-field
-task list (What / When / Where) with distinct Open / In Progress / Completed
-states. The current version is intentionally focused on that workflow.</p>
-<h2 id="author">Author</h2>
-<p><strong>SilverAmd</strong></p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>

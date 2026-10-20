@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-20T05:03:01.000Z</updated>
+    <updated>2026-10-20T06:04:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Discrete Touchpad Wheel 0.1.0]]></title>
+        <id>https://windhawk.net/mods/discrete-touchpad-wheel#b5c44d4feb241ab6c18b6d01d76c67ad7bebb65d</id>
+        <link href="https://windhawk.net/mods/discrete-touchpad-wheel"/>
+        <updated>2026-10-20T06:04:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="discretetouchpadwheel">Discrete Touchpad Wheel</h1>
+<blockquote>
+  <p><strong>IMPORTANT</strong></p>
+  <p>This mod does NOTHING by default. You need to add the apps you intend to
+  affect to the <strong>Custom process inclusion list</strong> in the mod's Advanced
+  settings.</p>
+</blockquote>
+<p>Windows precision touchpads (as well as certain mice with high-resolution
+wheels) report scrolling as a continuous stream of wheel
+messages, each carrying a signed delta (a magnitude). Modern apps scroll the
+page accurately according to the delta, which produces smooth
+scrolling. Some legacy apps ignore the magnitude and treat every message as one
+full wheel notch, which makes scrolling uncontrollably fast.</p>
+<p>This mod swallows those continuous wheel messages and accumulates their deltas
+per scroll target, then emits a real discrete <code>WM_MOUSEWHEEL</code> / <code>WM_MOUSEHWHEEL</code>
+event only once the accumulated magnitude reaches the configured threshold. The
+result is normal, predictable scrolling in the affected apps.</p>
+<h2 id="enablingthemodforanapp">Enabling the mod for an app</h2>
+<p>This mod does not target any process by default. To apply it to an app, open the
+mod's <strong>Advanced</strong> tab in Windhawk and add the process name (for example
+<code>notepad.exe</code>) to the <strong>Custom process inclusion list</strong>. The change takes effect
+after saving.</p>
+<p>Because the mod runs inside each targeted process, the accumulator state is
+naturally scoped per app, and apps that are not on the list are never touched.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Vertical threshold</strong> — accumulated vertical magnitude required before one
+discrete wheel event is emitted. <code>120</code> is one standard wheel notch.</li>
+<li><strong>Horizontal threshold</strong> — same, for horizontal scrolling.</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Only apps that receive scrolling through the Win32 message queue can be
+handled. Apps using Direct Manipulation bypass the queue entirely.</li>
+<li>Apps that already handle continuous deltas correctly should not be added to
+the inclusion list, or their scrolling will be coarsened.</li>
+</ul>]]></content>
+        <author>
+            <name>yezhiyi9670</name>
+            <uri>https://github.com/yezhiyi9670</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Disappearing Icon Fix for Windows 11 1.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11#21f2428e07c6783f78ea7b0a3b3038ab2ee3c6f6</id>
@@ -631,38 +678,6 @@ Taskbar Labels mod by m417z (taskbar-thread dispatch helpers).</p>]]></content>
         <author>
             <name>yorii</name>
             <uri>https://github.com/yoriichi111012</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Smoke 1.2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-smoke#1d75df2dd28eee3ed9223f8f32c46e07f7feb4b7</id>
-        <link href="https://windhawk.net/mods/taskbar-smoke"/>
-        <updated>2026-10-19T05:04:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarsmoke">Taskbar Smoke</h1>
-<p>Draws a transparent, click-through overlay with animated dark smoke around the
-Windows 11 taskbar.</p>
-<p><img src="https://raw.githubusercontent.com/xxsoulxx/taskbar-smoke/main/taskbar-smoke.gif" alt="Taskbar Smoke" /></p>
-<ul>
-<li><strong>Five smoke styles:</strong> a real-time fluid simulation (the smoke rises, swirls
-and drifts over the edge), a classic layered texture smoke, and three tuned
-variants of the fluid smoke.</li>
-<li><strong>Reacts to the mouse:</strong> moving the cursor across the taskbar pushes the smoke
-aside; it flows back on its own.</li>
-<li><strong>Eight colors</strong> (violet, pink, light blue, ice blue, green, gold, orange,
-red), plus the Windows accent color or a slow rainbow cycle. An optional
-<strong>second color</strong> blends along each pill, from left to right.</li>
-<li><strong>Opacity</strong> in seven steps (17% to 150%), <strong>density</strong>, <strong>speed</strong>, <strong>tone</strong>
-(dark smoke or light glow), <strong>halo thickness</strong> and <strong>mouse reach</strong>.</li>
-<li>Optional small dark clouds slowly rising from the taskbar.</li>
-<li>Follows auto-hide, hides in fullscreen apps, settings apply instantly.</li>
-</ul>
-<p>Works best with a dark, pill-shaped taskbar theme (e.g. Windows 11 Taskbar
-Styler); the smoke follows the taskbar's button groups. Runs in its own process
-(tool mod), Explorer is not modified.</p>
-<p>Limitations: primary taskbar only, designed for a bottom-docked taskbar.</p>]]></content>
-        <author>
-            <name>Rubicus</name>
-            <uri>https://github.com/xxsoulxx</uri>
         </author>
     </entry>
 </feed>
