@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win8-network-flyout-restorer
 // @name            Windows 8 Network Flyout Restorer
-// @description     This mod restores the classic Windows 8 DirectUI Network Flyout (van.dll) on Windows 10 and Windows 11 (24H2+ included)
+// @description     Restores the Windows 8 Network Flyout; uses native System32 VAN when available and verified MSDL components otherwise
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -13,86 +13,80 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 8 Network Flyout Restorer (Win11 24H2 x64)
+# Windows 8 Network Flyout Restorer
 
-> **Best-effort mod:** Windows 11 24H2 (`26100+`) permanently removed `van.dll`, `pnidui.dll`,
-> `wlanmm.dll`, `wlanconn.dll`, `dot3mm.dll`, `rasmm.dll`, `datusage.dll` and
-> `SetProxyCredential.dll` from `System32`. This mod brings back the classic Windows 8 DirectUI
-> side-pane Network Flyout (`ShowVAN`) inside `explorer.exe` on a best-effort basis; future
-> Windows updates may change internal shell or DirectUI behavior.
-
-Restores the fast, lightweight **Windows 8 / 8.1 Network Flyout (`van.dll`)** and the classic
-**Network system tray icon (`pnidui.dll`)** on **Windows 11 24H2 64-bit (`10.0.26100.x`)**,
-without touching `C:\Windows\System32` and without UAC elevation.
-
-## What it restores
-
-- **Windows 8 DirectUI Network Flyout (`van.dll!ShowVAN`)** — side flyout with Wi-Fi networks,
-  Ethernet adapters, VPN / Dial-up connections, Airplane mode toggle, signal bars and inline
-  WPA2 / WPA3 / Enterprise password prompts (`wlanconn.dll` + `xwizards.dll`).
-- **Classic Network tray icon (`pnidui.dll`)** — left click opens (or toggles) the Windows 8
-  flyout; right click opens network options. If the classic icon cannot be hosted, the mod
-  automatically shows its own **live fallback tray icon** (Network List Manager status) so a
-  clickable network icon is always available.
-- **Permissive first-run setup** — downloads the required genuine Microsoft `x64` binaries from
-  the official **Microsoft Symbol Server** (`msdl.microsoft.com`) into the mod's private
-  storage folder, then hydrates them (re-embeds the missing `.mun` resources, strips the MUI
-  split and embeds localized `it-IT` / `en-US` strings). Every file is structurally validated
-  (`MZ` + `PE\0\0` + `x64` machine). SHA-256 digests are checked and logged; by default a
-  mismatch is only a warning (set *Strict artifact verification* to make it fatal).
-  `WinVerifyTrust` runs as **diagnostic telemetry only**, because MSDL binaries are
-  catalog-signed and do not carry an embedded Authenticode signature.
-- **Multi-explorer coordination** — all `explorer.exe` instances share a named provisioning
-  mutex and generation-based cache folders, so a second `explorer.exe` never fights the first
-  over half-written files. Only the `explorer.exe` that owns the taskbar (`Shell_TrayWnd`)
-  hosts the tray icon; the others forward flyout requests to it through a registered window
-  message. If the taskbar owner changes (restart / crash), hosting automatically migrates.
-- **Four trigger layers** — (1) `WindowsCreateString` interception of the modern
-  `Windows.Internal.ShellExperience.NetworkFlyout` activation, (2) a mouse hook that hit-tests
-  clicks on the system network icon rectangle, (3) subclassing of the classic `pnidui.dll`
-  tray icon window, (4) `ms-availablenetworks:` URI interception — plus an optional
-  `Win+Shift+N` hotkey.
+Restores the Windows 8-style network panel from the taskbar network icon.
+The panel provides access to Wi-Fi networks, wired connections, VPN connections
+and Airplane mode, where supported by Windows and the installed hardware.
 
 ## Requirements
 
-- Windows 11 24H2 x64 (`10.0.26100`+), Windhawk 1.4+.
-- Internet access on first load (Microsoft Symbol Server). Subsequent starts use the cache
-  with zero network traffic.
+- 64-bit Windows 10 (build 17763 or later) or Windows 11.
+- Windhawk 1.4 or later.
+- An internet connection for the first download, if additional components are needed.
 
-## Notes
+## How it works
 
-- All COM registrations this mod needs are written to per-user
-  `HKCU\Software\Classes\CLSID` (tagged with a `WindhawkWin8Van` marker and removed when the
-  last mod instance unloads). No `HKLM` writes, no admin rights.
-- The flyout UI language follows the Windows display language (Italian / English), or can be
-  forced in settings.
+Compatible Windows components already on the computer are used when available.
+Otherwise, the required Microsoft components are downloaded from Microsoft's
+Symbol Server and kept in Windhawk's private storage. System files are not replaced.
+Compatibility depends on the Windows build; the panel may not work on every system.
+
+Downloaded files are checked with SHA-256 before use. Damaged cached downloads are
+replaced automatically when possible. If verification still fails, the downloaded
+panel remains inactive rather than loading an unverified file.
+
+## Options
+
+The classic network icon is optional and disabled by default. If enabling it
+causes Explorer to restart, leave it disabled and use the alternative network icon.
+The settings control the classic network icon, the optional Win+Shift+N shortcut
+and the panel language. The downloaded panel supports English, Italian, Spanish,
+French and Brazilian Portuguese. When built-in Windows components are used, their
+original Windows language is retained. Restart Explorer after changing the panel language.
+
+## Privacy and system changes
+
+The mod does not change the system's network-panel setting or create system-wide
+COM registrations. Registry access needed by the downloaded panel is redirected
+to a separate area owned by the mod in the current user's registry. This area is
+normally removed when the last active instance stops. After a crash or forced
+shutdown, temporary entries may remain until a later successful cleanup.
+Downloaded components remain cached to avoid downloading them at every start.
+
+## Troubleshooting
+
+If the panel does not open, check the internet connection and Windhawk's mod log.
+An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
+restores the normal Windows behavior. If shutdown gets stuck, some resources may
+be kept until Explorer exits to avoid unloading code that is still running.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enableLegacyTrayIcon: true
+- enableLegacyTrayIcon: false
   $name: "Enable classic network tray icon (pnidui.dll)"
-  $description: "Hosts the classic Windows network status icon in the notification area so left-clicking opens the Windows 8 Network Flyout. If it cannot be hosted, a built-in fallback icon with live status is shown instead."
+  $description: "Hosts the classic network icon in the downloaded fallback mode. Native ReplaceVan mode uses the system icon; if no clickable network icon exists, a live fallback icon is shown."
 - interceptAvailableNetworksUri: true
   $name: "Redirect ms-availablenetworks to Windows 8 flyout"
-  $description: "Intercepts ms-availablenetworks URI launches inside explorer.exe (shortcuts, taskbar triggers, ExplorerPatcher ReplaceVan=2) and opens van.dll instead."
+  $description: "Intercepts ms-availablenetworks URI launches inside explorer.exe and opens the native or verified fallback VAN runtime."
 - uiLanguage: auto
   $name: "Flyout UI language"
-  $description: "Language used for hydrated DirectUI network strings and connection prompts."
+  $description: "Language used for hydrated fallback strings and connection prompts; native mode uses Windows resources."
   $options:
-  - auto: "Automatic (match Windows display language - Italian / English)"
+  - auto: "Automatic (match Windows UI language; unsupported languages fall back to English)"
   - it: "Italiano"
   - en: "English"
+  - es: "Español"
+  - fr: "Français"
+  - pt: "Português (Brasil)"
 - hideDuplicateWlanAdapters: false
   $name: "Hide secondary virtual Wi-Fi adapters"
   $description: "Filters extra virtual WLAN interfaces beyond the primary adapter inside the flyout when virtual hotspot or container adapters duplicate entries."
 - enableHotkey: false
   $name: "Enable Win+Shift+N hotkey"
   $description: "Registers a global Win+Shift+N shortcut that opens (or closes) the Windows 8 Network Flyout."
-- strictVerification: false
-  $name: "Strict artifact verification"
-  $description: "Requires exact SHA-256 digests for every downloaded Microsoft Symbol Server file. When off (default), files are accepted if they are structurally valid x64 PE images and digest mismatches are only logged as warnings."
 */
 // ==/WindhawkModSettings==
 
@@ -102,6 +96,7 @@ using std::nullptr_t;
 
 #include <windows.h>
 #include <bcrypt.h>
+#include <wincrypt.h>
 #include <sddl.h>
 #include <commctrl.h>
 #include <netlistmgr.h>
@@ -129,9 +124,9 @@ using std::nullptr_t;
 #include <vector>
 
 #if defined(__clang__)
-#define WH_NO_DESTROY [[clang::no_destroy]]
+#define WIN8_NET_NO_DESTROY [[clang::no_destroy]]
 #else
-#define WH_NO_DESTROY
+#define WIN8_NET_NO_DESTROY
 #endif
 
 namespace {
@@ -210,12 +205,16 @@ constexpr size_t kRuntimeDllCount = ARRAYSIZE(kRuntimeDllNames);
 // Hydrated runtime images live in versioned generation folders so that a
 // re-hydration never has to overwrite a DLL that a running explorer.exe still
 // has mapped (that always fails with a sharing violation on a mapped image).
-constexpr const wchar_t* kHydrationStampName = L"hydrated_v1_1_1.txt";
+constexpr const wchar_t* kHydrationStampName = L"hydrated_v1_2_1_integrity.txt";
+constexpr const wchar_t* kHydrationManifestName = L"runtime.sha256";
 constexpr const wchar_t* kVirtualRegRootSubkey =
+    L"Software\\Windhawk\\Mods\\win8-network-flyout-restorer\\VirtualRegistry";
+constexpr const wchar_t* kLegacyVirtualRegRootSubkey =
     L"Software\\Windhawk\\Mods\\windows-8-network-flyout-restorer\\VirtualRegistry";
 constexpr const wchar_t* kInstancePidValueName = L"InstancePids";
 constexpr const wchar_t* kComMarkerValueName = L"WindhawkWin8Van";
 constexpr const wchar_t* kProvisionMutexName = L"Local\\Windhawk_Win8NetworkFlyout_ProvisionMutex";
+constexpr const wchar_t* kOverlayMutexName = L"Local\\Windhawk_Win8NetworkFlyout_OverlayMutex";
 constexpr const wchar_t* kVanHostWndClassName = L"WindhawkWin8VanHostWnd";
 constexpr const wchar_t* kVanCtrlWndClassName = L"WindhawkWin8VanCtrlWnd";
 constexpr const wchar_t* kVanIpcMessageName = L"Windhawk.Win8NetworkFlyout.Show";
@@ -386,317 +385,1516 @@ constexpr DWORD kXwComponentTypePage = 3;
 // that the symbol server does not serve, and the 22621 van.dll/wlanmm.dll
 // have every UI resource stripped into .mun files. The English texts below
 // are the authentic Microsoft resource strings for these modules (dumped from
-// the original resource sections); the Italian column provides the it-IT
-// hydration. DirectUI font descriptors (e.g. "11;semibold;none;segoe ui")
-// must never be translated.
+// the original resource sections); the five columns provide best-effort
+// en/it/es/fr/pt hydration. DirectUI font descriptors (e.g.
+// "11;semibold;none;segoe ui") must never be translated.
 // ===========================================================================
 struct LocalizedResourceEntry {
     const wchar_t* moduleLower;
     UINT id;
-    const wchar_t* enText;
-    const wchar_t* itText;
+    std::array<const wchar_t*, 5> text;  // EN, IT, ES, FR, PT
 };
 
 constexpr LocalizedResourceEntry kHydratedStrings[] = {
-    // --- Mandatory DirectUI font specs (DO NOT translate syntax!) ---
-    {L"van.dll", 2200, L"11;normal;none;segoe ui", L"11;normal;none;segoe ui"},
-    {L"van.dll", 2201, L"11;semibold;none;segoe ui", L"11;semibold;none;segoe ui"},
-    {L"van.dll", 2203, L"16;semilight;none;segoe ui", L"16;semilight;none;segoe ui"},
-    {L"wlanconn.dll", 2101, L"11;semibold;none;segoe ui", L"11;semibold;none;segoe ui"},
-    {L"setproxycredential.dll", 18420, L"11;semibold;none;segoe ui", L"11;semibold;none;segoe ui"},
-    {L"setproxycredential.dll", 18421, L"11;normal;none;segoe ui", L"11;normal;none;segoe ui"},
-
-    // --- van.dll flyout headers, states, buttons, airplane mode ---
-    {L"van.dll", 2001, L"No connections are available", L"Nessuna connessione disponibile"},
-    {L"van.dll", 2002, L"Connections are available", L"Connessioni disponibili"},
-    {L"van.dll", 2003, L"Discovering networks...", L"Individuazione delle reti in corso..."},
-    {L"van.dll", 2005, L"Not connected", L"Non connesso"},
-    {L"van.dll", 2007, L"Unified Connection Manager", L"Unified Connection Manager"},
-    {L"van.dll", 2008, L"Please select a network first before creating a connection profile.",
-     L"Selezionare prima una rete per creare un profilo di connessione."},
-    {L"van.dll", 2009, L"Not connected - Connections are available",
-     L"Non connesso - Connessioni disponibili"},
-    {L"van.dll", 2010, L"Not connected - No connections are available",
-     L"Non connesso - Nessuna connessione disponibile"},
-    {L"van.dll", 2012, L"Information sent over this network might be visible to others.",
-     L"Le informazioni inviate su questa rete potrebbero essere visibili ad altri utenti."},
-    {L"van.dll", 2013, L"Connections", L"Connessioni"},
-    {L"van.dll", 2014, L"No networks found", L"Nessuna rete trovata"},
-    {L"van.dll", 2015, L" (Off)", L" (disattivata)"},
-    {L"van.dll", 2016, L"Airplane mode", L"Modalit\x00e0 aereo"},
-    {L"van.dll", 2017, L"On", L"Attivata"},
-    {L"van.dll", 2018, L"Off", L"Disattivata"},
-    {L"van.dll", 2102, L"Troubleshoot", L"Risoluzione dei problemi"},
-    {L"van.dll", 2103, L"Networks", L"Reti"},
-    {L"van.dll", 2300, L"Connect", L"Connetti"},
-    {L"van.dll", 2301, L"Disconnect", L"Disconnetti"},
-    {L"van.dll", 2302, L"Turn off wireless", L"Disattiva wireless"},
-    {L"van.dll", 2303, L"Diagnose", L"Diagnostica"},
-    {L"van.dll", 2304, L"Status", L"Stato"},
-    {L"van.dll", 2305, L"Properties", L"Propriet\x00e0"},
-    {L"van.dll", 2400, L"Connect To", L"Connessione a"},
-    {L"van.dll", 2401,
-     L"Shows available wireless networks and dial-up and VPN connections that you can connect to.",
-     L"Mostra le reti wireless disponibili e le connessioni remote e VPN a cui \x00e8 possibile "
-     L"connettersi."},
-    {L"van.dll", 2402, L"Open Without Diagnostics", L"Apri senza diagnostica"},
-    {L"van.dll", 3001, L"&Connect", L"&Connetti"},
-    {L"van.dll", 3002, L"&Disconnect", L"&Disconnetti"},
-    {L"van.dll", 3003, L"Connect automatically", L"Connetti automaticamente"},
-    {L"van.dll", 3011, L"Internet access", L"Accesso a Internet"},
-    {L"van.dll", 3012, L"No Internet access", L"Nessun accesso a Internet"},
-    {L"van.dll", 3013, L"Internet and domain access", L"Accesso Internet e al dominio"},
-    {L"van.dll", 3014, L"Domain access only", L"Solo accesso al dominio"},
-    {L"van.dll", 3015, L"No network access", L"Nessun accesso alla rete"},
-    {L"van.dll", 3020, L"Action needed", L"Azione richiesta"},
-    {L"van.dll", 3021, L"Connected", L"Connesso"},
-    {L"van.dll", 3022, L"Limited", L"Limitato"},
-    {L"van.dll", 3100, L"This is a new router that has not been configured.",
-     L"Si tratta di un nuovo router non configurato."},
-    {L"van.dll", 3101, L"&Configure", L"&Configura"},
-    {L"van.dll", 3102, L"Configure", L"Configura"},
-    {L"van.dll", 4001, L"View Available Networks", L"Visualizza reti disponibili"},
-    {L"van.dll", 4005, L"Media Manager List", L"Elenco gestori supporti"},
-    {L"van.dll", 4006, L"Network Category Header", L"Intestazione categoria di rete"},
-    {L"van.dll", 4007, L"Available Network List", L"Elenco reti disponibili"},
-    {L"van.dll", 4010, L"Configure", L"Configura"},
-    {L"van.dll", 4011, L"Connect", L"Connetti"},
-    {L"van.dll", 4012, L"Disconnect", L"Disconnetti"},
-    {L"van.dll", 4013, L"Connect automatically checkbox",
-     L"Casella di controllo Connetti automaticamente"},
-    {L"van.dll", 4014, L"%1!s! %2!s!", L"%1!s! %2!s!"},
-    {L"van.dll", 4015, L"%1!s! %2!s!, %3!s!", L"%1!s! %2!s!, %3!s!"},
-    {L"van.dll", 4017, L"Signal strength: %1!d! bar out of 5",
-     L"Intensit\x00e0 del segnale: %1!d! barra su 5"},
-    {L"van.dll", 4018, L"Signal strength: %1!d! 'bars' out of 5",
-     L"Intensit\x00e0 del segnale: %1!d! barre su 5"},
-    {L"van.dll", 4019, L"Link Pane", L"Riquadro collegamento"},
-    {L"van.dll", 4025, L"Connected Network List", L"Elenco reti connesse"},
-    {L"van.dll", 4030, L"Connect to a Network", L"Connessione a una rete"},
-    {L"van.dll", 4031, L"Disconnect from a Network", L"Disconnessione da una rete"},
-    {L"van.dll", 4032, L"Not Connectable", L"Non connettibile"},
-    {L"van.dll", 4033, L"Configure a Network", L"Configurazione di una rete"},
-    {L"van.dll", 5001, L"View Connection Settings", L"Visualizza impostazioni connessione"},
-
-    // --- wlanconn.dll inline password / credential / hidden SSID prompts ---
-    {L"wlanconn.dll", 550, L"Connect to a Network", L"Connessione a una rete"},
-    {L"wlanconn.dll", 551, L"Disconnect from a Network", L"Disconnessione da una rete"},
-    {L"wlanconn.dll", 552, L"Not Connectable", L"Non connettibile"},
-    {L"wlanconn.dll", 553, L"Connect", L"Connetti"},
-    {L"wlanconn.dll", 554, L"Disconnect", L"Disconnetti"},
-    {L"wlanconn.dll", 555, L"&Connect", L"&Connetti"},
-    {L"wlanconn.dll", 556, L"&Disconnect", L"&Disconnetti"},
-    {L"wlanconn.dll", 557, L"Connection not available", L"Connessione non disponibile"},
-    {L"wlanconn.dll", 558, L"Other people might be able to see info you send over this network",
-     L"Altri utenti potrebbero visualizzare le informazioni inviate su questa rete"},
-    {L"wlanconn.dll", 559, L"Connect automatically checkbox",
-     L"Casella di controllo Connetti automaticamente"},
-    {L"wlanconn.dll", 560, L"Connect automatically", L"Connetti automaticamente"},
-    {L"wlanconn.dll", 562, L"Connecting to the network is taking longer than usual",
-     L"La connessione alla rete richiede pi\x00f9 tempo del previsto"},
-    {L"wlanconn.dll", 563, L"Name", L"Nome"},
-    {L"wlanconn.dll", 564, L"Open web browser", L"Apri il browser Web"},
-    {L"wlanconn.dll", 565, L"No, open a web browser to complete the connection",
-     L"No, aprire il browser Web per completare la connessione"},
-    {L"wlanconn.dll", 570, L"Wireless network name", L"Nome della rete wireless"},
-    {L"wlanconn.dll", 571, L"User name", L"Nome utente"},
-    {L"wlanconn.dll", 572, L"Password", L"Password"},
-    {L"wlanconn.dll", 573,
-     L"To try again, tap or click the link below to complete the connection or re-enter your "
-     L"user name and password.",
-     L"Per riprovare, toccare o fare clic sul collegamento seguente per completare la "
-     L"connessione oppure reimmettere nome utente e password."},
-    {L"wlanconn.dll", 574, L"View error details", L"Visualizza dettagli errore"},
-    {L"wlanconn.dll", 575, L"Hide error details", L"Nascondi dettagli errore"},
-    {L"wlanconn.dll", 576, L"Can\x2019t connect", L"Impossibile connettersi"},
-    {L"wlanconn.dll", 577, L"The user name or password didn\x2019t work. Please check it and try again.",
-     L"Nome utente o password non validi. Controllare e riprovare."},
-    {L"wlanconn.dll", 578, L"Something went wrong. Please try again.",
-     L"Si \x00e8 verificato un errore. Riprovare."},
-    {L"wlanconn.dll", 579, L"There wasn\x2019t a response. Please try again.",
-     L"Nessuna risposta. Riprovare."},
-    {L"wlanconn.dll", 580, L"A message from your wireless provider:",
-     L"Messaggio dal provider di servizi wireless:"},
-    {L"wlanconn.dll", 590, L"Estimated usage", L"Utilizzo stimato"},
-    {L"wlanconn.dll", 591, L"Reset", L"Reimposta"},
-    {L"wlanconn.dll", 592, L"User name", L"Nome utente"},
-    {L"wlanconn.dll", 593, L"Password", L"Password"},
-    {L"wlanconn.dll", 594, L"Proxy server: %1", L"Server proxy: %1"},
-    {L"wlanconn.dll", 595, L"The username or password didn\x2019t work. Please try again.",
-     L"Nome utente o password non validi. Riprovare."},
-    {L"wlanconn.dll", 596, L"Your proxy server sign-in info is required.",
-     L"Sono necessarie le informazioni di accesso al server proxy."},
-    {L"wlanconn.dll", 597, L"Continue", L"Continua"},
-    {L"wlanconn.dll", 598,
-     L"Some information changed since the last time you connected. We need additional "
-     L"information to complete the connection.",
-     L"Alcune informazioni sono state modificate dall'ultima connessione. Per completare la "
-     L"connessione sono necessarie informazioni aggiuntive."},
-    {L"wlanconn.dll", 599, L"Your proxy server sign-in info is required to connect to %1.",
-     L"Per connettersi a %1 sono necessarie le informazioni di accesso al server proxy."},
-    {L"wlanconn.dll", 1000, L"C&lose", L"&Chiudi"},
-    {L"wlanconn.dll", 1001, L"Checking network requirements",
-     L"Verifica dei requisiti di rete in corso"},
-    {L"wlanconn.dll", 1002, L"Connecting", L"Connessione in corso"},
-    {L"wlanconn.dll", 1006, L"Can\x2019t connect to this network",
-     L"Impossibile connettersi a questa rete"},
-    {L"wlanconn.dll", 1008, L"Verifying and connecting", L"Verifica e connessione in corso"},
-    {L"wlanconn.dll", 1013, L"The connection is limited", L"La connessione \x00e8 limitata"},
-    {L"wlanconn.dll", 1014, L"We can\x2019t connect to the Internet right now. Please try again.",
-     L"Non \x00e8 possibile connettersi a Internet in questo momento. Riprovare."},
-    {L"wlanconn.dll", 1023, L"Enter the name (SSID) for the network",
-     L"Immettere il nome (SSID) della rete"},
-    {L"wlanconn.dll", 1027, L"Invalid Network Name", L"Nome di rete non valido"},
-    {L"wlanconn.dll", 1029, L"Reinsert your wireless network adapter",
-     L"Reinserire la scheda di rete wireless"},
-    {L"wlanconn.dll", 1030, L"Can\x2019t connect because the wireless network adapter was removed.",
-     L"Impossibile connettersi perch\x00e9 la scheda di rete wireless \x00e8 stata rimossa."},
-    {L"wlanconn.dll", 1031, L"Sign in to connect", L"Accedere per connettersi"},
-    {L"wlanconn.dll", 1032, L"Close", L"Chiudi"},
-    {L"wlanconn.dll", 1033, L"Sign in", L"Accedi"},
-    {L"wlanconn.dll", 1036, L"Help me solve connection problems",
-     L"Guida per la risoluzione dei problemi di connessione"},
-    {L"wlanconn.dll", 1039, L"Your device is locked. Unlock it, and then try again.",
-     L"Il dispositivo \x00e8 bloccato. Sbloccarlo e quindi riprovare."},
-    {L"wlanconn.dll", 1040,
-     L"Windows can\x2019t authenticate your connection right now. Please try again later.",
-     L"Windows non \x00e8 in grado di autenticare la connessione in questo momento. Riprovare "
-     L"pi\x00f9 tardi."},
-    {L"wlanconn.dll", 1041, L"Authentication failed", L"Autenticazione non riuscita"},
-    {L"wlanconn.dll", 1042, L"Do you have a user name and password for this Wi-Fi hotspot?",
-     L"Si dispone di nome utente e password per questo hotspot Wi-Fi?"},
-    {L"wlanconn.dll", 1043,
-     L"Your network administrator doesn\x2019t allow simultaneous connections to your workplace "
-     L"network and another network.",
-     L"L'amministratore di rete non consente connessioni simultanee alla rete aziendale e a "
-     L"un'altra rete."},
-    {L"wlanconn.dll", 1044, L"Sign-in info for proxy server",
-     L"Informazioni di accesso per il server proxy"},
-    {L"wlanconn.dll", 1046, L"Sign in to connect to %1", L"Accedere per connettersi a %1"},
-    {L"wlanconn.dll", 1047, L"Forget network", L"Dimentica rete"},
-    {L"wlanconn.dll", 1100, L"Can\x2019t set up mobile hotspot.",
-     L"Impossibile configurare l'hotspot mobile."},
-    {L"wlanconn.dll", 1101, L"To enable sharing, contact your mobile operator to activate this feature.",
-     L"Per abilitare la condivisione, contattare l'operatore di telefonia mobile per attivare "
-     L"questa funzionalit\x00e0."},
-    {L"wlanconn.dll", 1102, L"Can\x2019t connect to mobile broadband.",
-     L"Impossibile connettersi alla rete a banda larga mobile."},
-    {L"wlanconn.dll", 1103, L"Can\x2019t connect to mobile broadband while roaming.",
-     L"Impossibile connettersi alla rete a banda larga mobile durante il roaming."},
-    {L"wlanconn.dll", 5000, L"Connect to a network wizard",
-     L"Procedura guidata Connessione a una rete"},
-
-    // --- wlanmm.dll Wi-Fi media manager strings ---
-    {L"wlanmm.dll", 150, L"Security Type", L"Tipo di sicurezza"},
-    {L"wlanmm.dll", 200, L"Your network administrator has blocked you from connecting to this network.",
-     L"L'amministratore di rete ha bloccato la connessione a questa rete."},
-    {L"wlanmm.dll", 201, L"The capability of your network adapter does not match the requirements of this network.",
-     L"Le funzionalit\x00e0 della scheda di rete non corrispondono ai requisiti di questa rete."},
-    {L"wlanmm.dll", 202,
-     L"The settings saved on this computer for the network do not match the requirements of the network.",
-     L"Le impostazioni salvate nel computer per la rete non corrispondono ai requisiti della "
-     L"rete."},
-    {L"wlanmm.dll", 203, L"Connecting", L"Connessione in corso"},
-    {L"wlanmm.dll", 205, L"Acquiring IP Address", L"Acquisizione dell'indirizzo IP in corso"},
-    {L"wlanmm.dll", 206, L"Limited access", L"Accesso limitato"},
-    {L"wlanmm.dll", 207, L"Connected", L"Connesso"},
-    {L"wlanmm.dll", 208, L"Connected", L"Connesso"},
-    {L"wlanmm.dll", 209, L"Disconnecting", L"Disconnessione in corso"},
-    {L"wlanmm.dll", 210, L"Waiting for users", L"In attesa di utenti"},
-    {L"wlanmm.dll", 211, L"This connection is not allowed by your administrator.",
-     L"Questa connessione non \x00e8 consentita dall'amministratore."},
-    {L"wlanmm.dll", 299, L"802.11 Available Network Manager", L"Gestore reti disponibili 802.11"},
-    {L"wlanmm.dll", 300, L"Wi-Fi", L"Wi-Fi"},
-    {L"wlanmm.dll", 306, L"SSID", L"SSID"},
-    {L"wlanmm.dll", 307, L"Hidden network", L"Rete nascosta"},
-    {L"wlanmm.dll", 308, L"Non broadcast", L"Non broadcast"},
-    {L"wlanmm.dll", 400, L"Unknown", L"Sconosciuto"},
-    {L"wlanmm.dll", 450, L"Type", L"Tipo"},
-    {L"wlanmm.dll", 601, L"Show estimated data usage", L"Mostra utilizzo dati stimato"},
-    {L"wlanmm.dll", 602, L"Hide estimated data usage", L"Nascondi utilizzo dati stimato"},
-    {L"wlanmm.dll", 603, L"Set as metered connection", L"Imposta come connessione a consumo"},
-    {L"wlanmm.dll", 604, L"Set as non-metered connection",
-     L"Imposta come connessione non a consumo"},
-    {L"wlanmm.dll", 605, L"Forget this network", L"Dimentica questa rete"},
-    {L"wlanmm.dll", 5000, L"Unknown Authentication", L"Autenticazione sconosciuta"},
-    {L"wlanmm.dll", 5001, L"Unsecured", L"Non protetta"},
-    {L"wlanmm.dll", 5004, L"WPA-PSK", L"WPA-PSK"},
-    {L"wlanmm.dll", 5005, L"WPA2", L"WPA2"},
-    {L"wlanmm.dll", 5006, L"WPA2-PSK", L"WPA2-PSK"},
-    {L"wlanmm.dll", 5007, L"802.1x", L"802.1x"},
-    {L"wlanmm.dll", 5010, L"Unknown Encryption", L"Crittografia sconosciuta"},
-    {L"wlanmm.dll", 5011, L"None", L"Nessuna"},
-    {L"wlanmm.dll", 5013, L"TKIP", L"TKIP"},
-
-    // --- dot3mm.dll wired media manager strings ---
-    {L"dot3mm.dll", 300, L"Wired", L"Ethernet"},
-
-    // --- rasmm.dll VPN / Dial-up media manager strings ---
-    {L"rasmm.dll", 204, L"Connecting", L"Connessione in corso"},
-    {L"rasmm.dll", 205, L"Disconnecting", L"Disconnessione in corso"},
-    {L"rasmm.dll", 206, L"Connected", L"Connesso"},
-    {L"rasmm.dll", 207, L"Connected", L"Connesso"},
-    {L"rasmm.dll", 208, L"Connected", L"Connesso"},
-    {L"rasmm.dll", 209, L"Connected", L"Connesso"},
-    {L"rasmm.dll", 210,
-     L"This connection is not available because there is a problem with your modem or network adapter.",
-     L"La connessione non \x00e8 disponibile perch\x00e9 si \x00e8 verificato un problema con il "
-     L"modem o la scheda di rete."},
-    {L"rasmm.dll", 211, L"Dormant", L"Inattiva"},
-    {L"rasmm.dll", 212, L"Dormant", L"Inattiva"},
-    {L"rasmm.dll", 213, L"Action needed", L"Azione richiesta"},
-    {L"rasmm.dll", 214, L"Unable to set up VPN Connection.",
-     L"Impossibile impostare la connessione VPN."},
-    {L"rasmm.dll", 300, L"Dial-up and VPN", L"Connessioni remote e VPN"},
-    {L"rasmm.dll", 301, L"This connection requires an active Internet connection.",
-     L"Per questa connessione \x00e8 necessaria una connessione Internet attiva."},
-    {L"rasmm.dll", 302,
-     L"Your network administrator has blocked you from connecting to this network.",
-     L"L'amministratore di rete ha bloccato la connessione a questa rete."},
-    {L"rasmm.dll", 310, L"Dial-up and VPN", L"Connessioni remote e VPN"},
-    {L"rasmm.dll", 501, L"Clear saved sign-in info", L"Cancella le informazioni di accesso salvate"},
-
-    // --- datusage.dll estimated data usage strings ---
-    {L"datusage.dll", 101, L"%1 since a moment ago", L"%1 da un istante"},
-    {L"datusage.dll", 102, L"%1 since 1 minute ago", L"%1 da 1 minuto"},
-    {L"datusage.dll", 103, L"%1 since %2!d! minutes ago", L"%1 da %2!d! minuti"},
-    {L"datusage.dll", 104, L"%1 since 1 hour ago", L"%1 da 1 ora"},
-    {L"datusage.dll", 105, L"%1 since %2!d! hours ago", L"%1 da %2!d! ore"},
-    {L"datusage.dll", 106, L"%1 since 1 day ago", L"%1 da 1 giorno"},
-    {L"datusage.dll", 107, L"%1 since %2!d! days ago", L"%1 da %2!d! giorni"},
-    {L"datusage.dll", 108, L"%1 during last 60 days", L"%1 negli ultimi 60 giorni"},
-    {L"datusage.dll", 111, L"%s MB", L"%s MB"},
-    {L"datusage.dll", 112, L"%s GB", L"%s GB"},
-    {L"datusage.dll", 113, L"%s TB", L"%s TB"},
-    {L"datusage.dll", 115, L"Over 1000 TB", L"Oltre 1000 TB"},
-
-    // --- SetProxyCredential.dll proxy credential prompt strings ---
-    {L"setproxycredential.dll", 18401, L"Networks", L"Reti"},
-    {L"setproxycredential.dll", 18402, L"Enter proxy server credentials",
-     L"Immettere le credenziali del server proxy"},
-    {L"setproxycredential.dll", 18403, L"User name", L"Nome utente"},
-    {L"setproxycredential.dll", 18404, L"Password", L"Password"},
-    {L"setproxycredential.dll", 18405, L"Proxy server: %1", L"Server proxy: %1"},
-    {L"setproxycredential.dll", 18406, L"The username or password was incorrect. Please try again.",
-     L"Nome utente o password non corretti. Riprovare."},
-    {L"setproxycredential.dll", 18408, L"Cancel", L"Annulla"},
-    {L"setproxycredential.dll", 18409, L"Checking network requirements",
-     L"Verifica dei requisiti di rete in corso"},
-    {L"setproxycredential.dll", 18410, L"SPCPage", L"SPCPage"},
-
-    // --- pnidui.dll classic tray tooltip strings ---
-    {L"pnidui.dll", 2, L"Not connected - No connections are available",
-     L"Non connesso - Nessuna connessione disponibile"},
-    {L"pnidui.dll", 8, L"Internet access", L"Accesso a Internet"},
-    {L"pnidui.dll", 15, L"Connection status - Unknown", L"Stato connessione - Sconosciuto"},
-    {L"pnidui.dll", 35, L"No Internet access", L"Nessun accesso a Internet"},
-    {L"pnidui.dll", 38, L"Not connected - Connections are available",
-     L"Non connesso - Connessioni disponibili"},
-    {L"pnidui.dll", 47, L"Windows Networking", L"Rete di Windows"},
-    {L"pnidui.dll", 48, L"Network System Icon", L"Icona di sistema Rete"},
-    {L"pnidui.dll", 60, L"Not connected - Wireless communication is turned off",
-     L"Non connesso - Comunicazione wireless disattivata"},
-    {L"pnidui.dll", 3011, L"Network System Icon", L"Icona di sistema Rete"},
+    // Font descriptors and localized strings. Font syntax is invariant across locales.
+    {L"van.dll", 2200, {
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+    }},
+    {L"van.dll", 2201, {
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+    }},
+    {L"van.dll", 2203, {
+        L"16;semilight;none;segoe ui",
+        L"16;semilight;none;segoe ui",
+        L"16;semilight;none;segoe ui",
+        L"16;semilight;none;segoe ui",
+        L"16;semilight;none;segoe ui",
+    }},
+    {L"wlanconn.dll", 2101, {
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+    }},
+    {L"setproxycredential.dll", 18420, {
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+        L"11;semibold;none;segoe ui",
+    }},
+    {L"setproxycredential.dll", 18421, {
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+        L"11;normal;none;segoe ui",
+    }},
+    // --- van.dll flyout strings ---
+    {L"van.dll", 2001, {
+        L"No connections are available",
+        L"Nessuna connessione disponibile",
+        L"No hay conexiones disponibles",
+        L"Aucune connexion disponible",
+        L"Nenhuma conex\u00e3o dispon\u00edvel",
+    }},
+    {L"van.dll", 2002, {
+        L"Connections are available",
+        L"Connessioni disponibili",
+        L"Hay conexiones disponibles",
+        L"Des connexions sont disponibles",
+        L"H\u00e1 conex\u00f5es dispon\u00edveis",
+    }},
+    {L"van.dll", 2003, {
+        L"Discovering networks...",
+        L"Individuazione delle reti in corso...",
+        L"Detectando redes...",
+        L"D\u00e9tection des r\u00e9seaux...",
+        L"Detectando redes...",
+    }},
+    {L"van.dll", 2005, {
+        L"Not connected",
+        L"Non connesso",
+        L"No conectado",
+        L"Non connect\u00e9",
+        L"N\u00e3o conectado",
+    }},
+    {L"van.dll", 2007, {
+        L"Unified Connection Manager",
+        L"Unified Connection Manager",
+        L"Unified Connection Manager",
+        L"Unified Connection Manager",
+        L"Unified Connection Manager",
+    }},
+    {L"van.dll", 2008, {
+        L"Please select a network first before creating a connection profile.",
+        L"Selezionare prima una rete per creare un profilo di connessione.",
+        L"Seleccione primero una red antes de crear un perfil de conexi\u00f3n.",
+        L"S\u00e9lectionnez d'abord un r\u00e9seau avant de cr\u00e9er un profil de connexion.",
+        L"Selecione primeiro uma rede antes de criar um perfil de conex\u00e3o.",
+    }},
+    {L"van.dll", 2009, {
+        L"Not connected - Connections are available",
+        L"Non connesso - Connessioni disponibili",
+        L"No conectado: hay conexiones disponibles",
+        L"Non connect\u00e9 : des connexions sont disponibles",
+        L"N\u00e3o conectado: h\u00e1 conex\u00f5es dispon\u00edveis",
+    }},
+    {L"van.dll", 2010, {
+        L"Not connected - No connections are available",
+        L"Non connesso - Nessuna connessione disponibile",
+        L"No conectado: no hay conexiones disponibles",
+        L"Non connect\u00e9 : aucune connexion disponible",
+        L"N\u00e3o conectado: nenhuma conex\u00e3o dispon\u00edvel",
+    }},
+    {L"van.dll", 2012, {
+        L"Information sent over this network might be visible to others.",
+        L"Le informazioni inviate su questa rete potrebbero essere visibili ad altri utenti.",
+        L"La informaci\u00f3n enviada por esta red podr\u00eda ser visible para otras personas.",
+        L"Les informations envoy\u00e9es sur ce r\u00e9seau peuvent \u00eatre visibles par d'autres.",
+        L"As informa\u00e7\u00f5es enviadas nesta rede podem ser vis\u00edveis para outras pessoas.",
+    }},
+    {L"van.dll", 2013, {
+        L"Connections",
+        L"Connessioni",
+        L"Conexiones",
+        L"Connexions",
+        L"Conex\u00f5es",
+    }},
+    {L"van.dll", 2014, {
+        L"No networks found",
+        L"Nessuna rete trovata",
+        L"No se encontraron redes",
+        L"Aucun r\u00e9seau trouv\u00e9",
+        L"Nenhuma rede encontrada",
+    }},
+    {L"van.dll", 2015, {
+        L" (Off)",
+        L" (disattivata)",
+        L" (Desactivado)",
+        L" (D\u00e9sactiv\u00e9)",
+        L" (Desativado)",
+    }},
+    {L"van.dll", 2016, {
+        L"Airplane mode",
+        L"Modalit\u00e0 aereo",
+        L"Modo avi\u00f3n",
+        L"Mode avion",
+        L"Modo avi\u00e3o",
+    }},
+    {L"van.dll", 2017, {
+        L"On",
+        L"Attivata",
+        L"Activado",
+        L"Activ\u00e9",
+        L"Ativado",
+    }},
+    {L"van.dll", 2018, {
+        L"Off",
+        L"Disattivata",
+        L"Desactivado",
+        L"D\u00e9sactiv\u00e9",
+        L"Desativado",
+    }},
+    {L"van.dll", 2102, {
+        L"Troubleshoot",
+        L"Risoluzione dei problemi",
+        L"Solucionar problemas",
+        L"R\u00e9soudre les probl\u00e8mes",
+        L"Solucionar problemas",
+    }},
+    {L"van.dll", 2103, {
+        L"Networks",
+        L"Reti",
+        L"Redes",
+        L"R\u00e9seaux",
+        L"Redes",
+    }},
+    {L"van.dll", 2300, {
+        L"Connect",
+        L"Connetti",
+        L"Conectar",
+        L"Se connecter",
+        L"Conectar",
+    }},
+    {L"van.dll", 2301, {
+        L"Disconnect",
+        L"Disconnetti",
+        L"Desconectar",
+        L"Se d\u00e9connecter",
+        L"Desconectar",
+    }},
+    {L"van.dll", 2302, {
+        L"Turn off wireless",
+        L"Disattiva wireless",
+        L"Desactivar la conexi\u00f3n inal\u00e1mbrica",
+        L"D\u00e9sactiver le sans fil",
+        L"Desativar sem fio",
+    }},
+    {L"van.dll", 2303, {
+        L"Diagnose",
+        L"Diagnostica",
+        L"Diagnosticar",
+        L"Diagnostiquer",
+        L"Diagnosticar",
+    }},
+    {L"van.dll", 2304, {
+        L"Status",
+        L"Stato",
+        L"Estado",
+        L"\u00c9tat",
+        L"Status",
+    }},
+    {L"van.dll", 2305, {
+        L"Properties",
+        L"Propriet\u00e0",
+        L"Propiedades",
+        L"Propri\u00e9t\u00e9s",
+        L"Propriedades",
+    }},
+    {L"van.dll", 2400, {
+        L"Connect To",
+        L"Connessione a",
+        L"Conectar a",
+        L"Se connecter \u00e0",
+        L"Conectar-se a",
+    }},
+    {L"van.dll", 2401, {
+        L"Shows available wireless networks and dial-up and VPN connections that you can connect to.",
+        L"Mostra le reti wireless disponibili e le connessioni remote e VPN a cui \u00e8 "
+        L"possibile connettersi.",
+        L"Muestra las redes inal\u00e1mbricas disponibles y las conexiones de acceso telef\u00f3nico "
+        L"y VPN a las que puede conectarse.",
+        L"Affiche les r\u00e9seaux sans fil disponibles et les connexions d'acc\u00e8s \u00e0 distance et "
+        L"VPN auxquelles vous pouvez vous connecter.",
+        L"Mostra as redes sem fio dispon\u00edveis e as conex\u00f5es dial-up e VPN \u00e0s quais voc\u00ea "
+        L"pode se conectar.",
+    }},
+    {L"van.dll", 2402, {
+        L"Open Without Diagnostics",
+        L"Apri senza diagnostica",
+        L"Abrir sin diagn\u00f3stico",
+        L"Ouvrir sans diagnostic",
+        L"Abrir sem diagn\u00f3stico",
+    }},
+    {L"van.dll", 3001, {
+        L"&Connect",
+        L"&Connetti",
+        L"&Conectar",
+        L"&Se connecter",
+        L"&Conectar",
+    }},
+    {L"van.dll", 3002, {
+        L"&Disconnect",
+        L"&Disconnetti",
+        L"&Desconectar",
+        L"&Se d\u00e9connecter",
+        L"&Desconectar",
+    }},
+    {L"van.dll", 3003, {
+        L"Connect automatically",
+        L"Connetti automaticamente",
+        L"Conectar autom\u00e1ticamente",
+        L"Se connecter automatiquement",
+        L"Conectar automaticamente",
+    }},
+    {L"van.dll", 3011, {
+        L"Internet access",
+        L"Accesso a Internet",
+        L"Acceso a Internet",
+        L"Acc\u00e8s Internet",
+        L"Acesso \u00e0 Internet",
+    }},
+    {L"van.dll", 3012, {
+        L"No Internet access",
+        L"Nessun accesso a Internet",
+        L"Sin acceso a Internet",
+        L"Pas d'acc\u00e8s Internet",
+        L"Sem acesso \u00e0 Internet",
+    }},
+    {L"van.dll", 3013, {
+        L"Internet and domain access",
+        L"Accesso Internet e al dominio",
+        L"Acceso a Internet y al dominio",
+        L"Acc\u00e8s \u00e0 Internet et au domaine",
+        L"Acesso \u00e0 Internet e ao dom\u00ednio",
+    }},
+    {L"van.dll", 3014, {
+        L"Domain access only",
+        L"Solo accesso al dominio",
+        L"Solo acceso al dominio",
+        L"Acc\u00e8s au domaine uniquement",
+        L"Somente acesso ao dom\u00ednio",
+    }},
+    {L"van.dll", 3015, {
+        L"No network access",
+        L"Nessun accesso alla rete",
+        L"Sin acceso a la red",
+        L"Pas d'acc\u00e8s r\u00e9seau",
+        L"Sem acesso \u00e0 rede",
+    }},
+    {L"van.dll", 3020, {
+        L"Action needed",
+        L"Azione richiesta",
+        L"Se necesita acci\u00f3n",
+        L"Action requise",
+        L"A\u00e7\u00e3o necess\u00e1ria",
+    }},
+    {L"van.dll", 3021, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"van.dll", 3022, {
+        L"Limited",
+        L"Limitato",
+        L"Limitado",
+        L"Limit\u00e9",
+        L"Limitado",
+    }},
+    {L"van.dll", 3100, {
+        L"This is a new router that has not been configured.",
+        L"Si tratta di un nuovo router non configurato.",
+        L"Este es un router nuevo que no se ha configurado.",
+        L"Il s'agit d'un nouveau routeur qui n'a pas \u00e9t\u00e9 configur\u00e9.",
+        L"Este \u00e9 um roteador novo que ainda n\u00e3o foi configurado.",
+    }},
+    {L"van.dll", 3101, {
+        L"&Configure",
+        L"&Configura",
+        L"&Configurar",
+        L"&Configurer",
+        L"&Configurar",
+    }},
+    {L"van.dll", 3102, {
+        L"Configure",
+        L"Configura",
+        L"Configurar",
+        L"Configurer",
+        L"Configurar",
+    }},
+    {L"van.dll", 4001, {
+        L"View Available Networks",
+        L"Visualizza reti disponibili",
+        L"Ver redes disponibles",
+        L"Afficher les r\u00e9seaux disponibles",
+        L"Exibir redes dispon\u00edveis",
+    }},
+    {L"van.dll", 4005, {
+        L"Media Manager List",
+        L"Elenco gestori supporti",
+        L"Lista de administradores de medios",
+        L"Liste des gestionnaires de m\u00e9dias",
+        L"Lista de gerenciadores de m\u00eddia",
+    }},
+    {L"van.dll", 4006, {
+        L"Network Category Header",
+        L"Intestazione categoria di rete",
+        L"Encabezado de categor\u00eda de red",
+        L"En-t\u00eate de cat\u00e9gorie de r\u00e9seau",
+        L"Cabe\u00e7alho de categoria de rede",
+    }},
+    {L"van.dll", 4007, {
+        L"Available Network List",
+        L"Elenco reti disponibili",
+        L"Lista de redes disponibles",
+        L"Liste des r\u00e9seaux disponibles",
+        L"Lista de redes dispon\u00edveis",
+    }},
+    {L"van.dll", 4010, {
+        L"Configure",
+        L"Configura",
+        L"Configurar",
+        L"Configurer",
+        L"Configurar",
+    }},
+    {L"van.dll", 4011, {
+        L"Connect",
+        L"Connetti",
+        L"Conectar",
+        L"Se connecter",
+        L"Conectar",
+    }},
+    {L"van.dll", 4012, {
+        L"Disconnect",
+        L"Disconnetti",
+        L"Desconectar",
+        L"Se d\u00e9connecter",
+        L"Desconectar",
+    }},
+    {L"van.dll", 4013, {
+        L"Connect automatically checkbox",
+        L"Casella di controllo Connetti automaticamente",
+        L"Casilla de verificaci\u00f3n Conectar autom\u00e1ticamente",
+        L"Case \u00e0 cocher Se connecter automatiquement",
+        L"Caixa de sele\u00e7\u00e3o Conectar automaticamente",
+    }},
+    {L"van.dll", 4014, {
+        L"%1!s! %2!s!",
+        L"%1!s! %2!s!",
+        L"%1!s! %2!s!",
+        L"%1!s! %2!s!",
+        L"%1!s! %2!s!",
+    }},
+    {L"van.dll", 4015, {
+        L"%1!s! %2!s!, %3!s!",
+        L"%1!s! %2!s!, %3!s!",
+        L"%1!s! %2!s!, %3!s!",
+        L"%1!s! %2!s!, %3!s!",
+        L"%1!s! %2!s!, %3!s!",
+    }},
+    {L"van.dll", 4017, {
+        L"Signal strength: %1!d! bar out of 5",
+        L"Intensit\u00e0 del segnale: %1!d! barra su 5",
+        L"Intensidad de la se\u00f1al: %1!d! barra de 5",
+        L"Intensit\u00e9 du signal : %1!d! barre sur 5",
+        L"Intensidade do sinal: %1!d! barra de 5",
+    }},
+    {L"van.dll", 4018, {
+        L"Signal strength: %1!d! 'bars' out of 5",
+        L"Intensit\u00e0 del segnale: %1!d! barre su 5",
+        L"Intensidad de la se\u00f1al: %1!d! barras de 5",
+        L"Intensit\u00e9 du signal : %1!d! barres sur 5",
+        L"Intensidade do sinal: %1!d! barras de 5",
+    }},
+    {L"van.dll", 4019, {
+        L"Link Pane",
+        L"Riquadro collegamento",
+        L"Panel de v\u00ednculo",
+        L"Volet de liaison",
+        L"Painel de link",
+    }},
+    {L"van.dll", 4025, {
+        L"Connected Network List",
+        L"Elenco reti connesse",
+        L"Lista de redes conectadas",
+        L"Liste des r\u00e9seaux connect\u00e9s",
+        L"Lista de redes conectadas",
+    }},
+    {L"van.dll", 4030, {
+        L"Connect to a Network",
+        L"Connessione a una rete",
+        L"Conectarse a una red",
+        L"Se connecter \u00e0 un r\u00e9seau",
+        L"Conectar-se a uma rede",
+    }},
+    {L"van.dll", 4031, {
+        L"Disconnect from a Network",
+        L"Disconnessione da una rete",
+        L"Desconectarse de una red",
+        L"Se d\u00e9connecter d'un r\u00e9seau",
+        L"Desconectar-se de uma rede",
+    }},
+    {L"van.dll", 4032, {
+        L"Not Connectable",
+        L"Non connettibile",
+        L"No conectable",
+        L"Non connectable",
+        L"N\u00e3o conect\u00e1vel",
+    }},
+    {L"van.dll", 4033, {
+        L"Configure a Network",
+        L"Configurazione di una rete",
+        L"Configurar una red",
+        L"Configurer un r\u00e9seau",
+        L"Configurar uma rede",
+    }},
+    {L"van.dll", 5001, {
+        L"View Connection Settings",
+        L"Visualizza impostazioni connessione",
+        L"Ver configuraci\u00f3n de conexi\u00f3n",
+        L"Afficher les param\u00e8tres de connexion",
+        L"Exibir configura\u00e7\u00f5es de conex\u00e3o",
+    }},
+    // --- wlanconn.dll connection prompts ---
+    {L"wlanconn.dll", 550, {
+        L"Connect to a Network",
+        L"Connessione a una rete",
+        L"Conectarse a una red",
+        L"Se connecter \u00e0 un r\u00e9seau",
+        L"Conectar-se a uma rede",
+    }},
+    {L"wlanconn.dll", 551, {
+        L"Disconnect from a Network",
+        L"Disconnessione da una rete",
+        L"Desconectarse de una red",
+        L"Se d\u00e9connecter d'un r\u00e9seau",
+        L"Desconectar-se de uma rede",
+    }},
+    {L"wlanconn.dll", 552, {
+        L"Not Connectable",
+        L"Non connettibile",
+        L"No conectable",
+        L"Non connectable",
+        L"N\u00e3o conect\u00e1vel",
+    }},
+    {L"wlanconn.dll", 553, {
+        L"Connect",
+        L"Connetti",
+        L"Conectar",
+        L"Se connecter",
+        L"Conectar",
+    }},
+    {L"wlanconn.dll", 554, {
+        L"Disconnect",
+        L"Disconnetti",
+        L"Desconectar",
+        L"Se d\u00e9connecter",
+        L"Desconectar",
+    }},
+    {L"wlanconn.dll", 555, {
+        L"&Connect",
+        L"&Connetti",
+        L"&Conectar",
+        L"&Se connecter",
+        L"&Conectar",
+    }},
+    {L"wlanconn.dll", 556, {
+        L"&Disconnect",
+        L"&Disconnetti",
+        L"&Desconectar",
+        L"&Se d\u00e9connecter",
+        L"&Desconectar",
+    }},
+    {L"wlanconn.dll", 557, {
+        L"Connection not available",
+        L"Connessione non disponibile",
+        L"Conexi\u00f3n no disponible",
+        L"Connexion non disponible",
+        L"Conex\u00e3o n\u00e3o dispon\u00edvel",
+    }},
+    {L"wlanconn.dll", 558, {
+        L"Other people might be able to see info you send over this network",
+        L"Altri utenti potrebbero visualizzare le informazioni inviate su questa rete",
+        L"Es posible que otras personas puedan ver la informaci\u00f3n que env\u00eda por esta red",
+        L"D'autres personnes peuvent voir les informations que vous envoyez sur ce r\u00e9seau",
+        L"Outras pessoas podem ver as informa\u00e7\u00f5es que voc\u00ea envia nesta rede",
+    }},
+    {L"wlanconn.dll", 559, {
+        L"Connect automatically checkbox",
+        L"Casella di controllo Connetti automaticamente",
+        L"Casilla de verificaci\u00f3n Conectar autom\u00e1ticamente",
+        L"Case \u00e0 cocher Se connecter automatiquement",
+        L"Caixa de sele\u00e7\u00e3o Conectar automaticamente",
+    }},
+    {L"wlanconn.dll", 560, {
+        L"Connect automatically",
+        L"Connetti automaticamente",
+        L"Conectar autom\u00e1ticamente",
+        L"Se connecter automatiquement",
+        L"Conectar automaticamente",
+    }},
+    {L"wlanconn.dll", 562, {
+        L"Connecting to the network is taking longer than usual",
+        L"La connessione alla rete richiede pi\u00f9 tempo del previsto",
+        L"La conexi\u00f3n a la red est\u00e1 tardando m\u00e1s de lo habitual",
+        L"La connexion au r\u00e9seau prend plus de temps que d'habitude",
+        L"A conex\u00e3o \u00e0 rede est\u00e1 demorando mais que o normal",
+    }},
+    {L"wlanconn.dll", 563, {
+        L"Name",
+        L"Nome",
+        L"Nombre",
+        L"Nom",
+        L"Nome",
+    }},
+    {L"wlanconn.dll", 564, {
+        L"Open web browser",
+        L"Apri il browser Web",
+        L"Abrir el explorador web",
+        L"Ouvrir le navigateur web",
+        L"Abrir o navegador da Web",
+    }},
+    {L"wlanconn.dll", 565, {
+        L"No, open a web browser to complete the connection",
+        L"No, aprire il browser Web per completare la connessione",
+        L"No, abrir un explorador web para completar la conexi\u00f3n",
+        L"Non, ouvrir un navigateur web pour terminer la connexion",
+        L"N\u00e3o, abrir um navegador da Web para concluir a conex\u00e3o",
+    }},
+    {L"wlanconn.dll", 570, {
+        L"Wireless network name",
+        L"Nome della rete wireless",
+        L"Nombre de la red inal\u00e1mbrica",
+        L"Nom du r\u00e9seau sans fil",
+        L"Nome da rede sem fio",
+    }},
+    {L"wlanconn.dll", 571, {
+        L"User name",
+        L"Nome utente",
+        L"Nombre de usuario",
+        L"Nom d'utilisateur",
+        L"Nome de usu\u00e1rio",
+    }},
+    {L"wlanconn.dll", 572, {
+        L"Password",
+        L"Password",
+        L"Contrase\u00f1a",
+        L"Mot de passe",
+        L"Senha",
+    }},
+    {L"wlanconn.dll", 573, {
+        L"To try again, tap or click the link below to complete the connection or re-enter "
+        L"your user name and password.",
+        L"Per riprovare, toccare o fare clic sul collegamento seguente per completare la "
+        L"connessione oppure reimmettere nome utente e password.",
+        L"Para volver a intentarlo, pulse o haga clic en el v\u00ednculo siguiente para "
+        L"completar la conexi\u00f3n o vuelva a escribir el nombre de usuario y la contrase\u00f1a.",
+        L"Pour r\u00e9essayer, appuyez ou cliquez sur le lien ci-dessous pour terminer la "
+        L"connexion ou entrez \u00e0 nouveau votre nom d'utilisateur et votre mot de passe.",
+        L"Para tentar novamente, toque ou clique no link abaixo para concluir a conex\u00e3o ou "
+        L"digite novamente seu nome de usu\u00e1rio e senha.",
+    }},
+    {L"wlanconn.dll", 574, {
+        L"View error details",
+        L"Visualizza dettagli errore",
+        L"Ver detalles del error",
+        L"Afficher les d\u00e9tails de l'erreur",
+        L"Exibir detalhes do erro",
+    }},
+    {L"wlanconn.dll", 575, {
+        L"Hide error details",
+        L"Nascondi dettagli errore",
+        L"Ocultar detalles del error",
+        L"Masquer les d\u00e9tails de l'erreur",
+        L"Ocultar detalhes do erro",
+    }},
+    {L"wlanconn.dll", 576, {
+        L"Can\u2019t connect",
+        L"Impossibile connettersi",
+        L"No se puede conectar",
+        L"Impossible de se connecter",
+        L"N\u00e3o \u00e9 poss\u00edvel conectar",
+    }},
+    {L"wlanconn.dll", 577, {
+        L"The user name or password didn\u2019t work. Please check it and try again.",
+        L"Nome utente o password non validi. Controllare e riprovare.",
+        L"El nombre de usuario o la contrase\u00f1a no son correctos. Compru\u00e9belos y vuelva a intentarlo.",
+        L"Le nom d'utilisateur ou le mot de passe n'a pas fonctionn\u00e9. V\u00e9rifiez-le et r\u00e9essayez.",
+        L"O nome de usu\u00e1rio ou a senha n\u00e3o funcionaram. Verifique e tente novamente.",
+    }},
+    {L"wlanconn.dll", 578, {
+        L"Something went wrong. Please try again.",
+        L"Si \u00e8 verificato un errore. Riprovare.",
+        L"Algo sali\u00f3 mal. Int\u00e9ntelo de nuevo.",
+        L"Un probl\u00e8me est survenu. Veuillez r\u00e9essayer.",
+        L"Algo deu errado. Tente novamente.",
+    }},
+    {L"wlanconn.dll", 579, {
+        L"There wasn\u2019t a response. Please try again.",
+        L"Nessuna risposta. Riprovare.",
+        L"No hubo respuesta. Int\u00e9ntelo de nuevo.",
+        L"Il n'y a pas eu de r\u00e9ponse. Veuillez r\u00e9essayer.",
+        L"N\u00e3o houve resposta. Tente novamente.",
+    }},
+    {L"wlanconn.dll", 580, {
+        L"A message from your wireless provider:",
+        L"Messaggio dal provider di servizi wireless:",
+        L"Un mensaje de su proveedor de servicios inal\u00e1mbricos:",
+        L"Un message de votre fournisseur de services sans fil :",
+        L"Uma mensagem do seu provedor de servi\u00e7os sem fio:",
+    }},
+    {L"wlanconn.dll", 590, {
+        L"Estimated usage",
+        L"Utilizzo stimato",
+        L"Uso estimado",
+        L"Utilisation estim\u00e9e",
+        L"Uso estimado",
+    }},
+    {L"wlanconn.dll", 591, {
+        L"Reset",
+        L"Reimposta",
+        L"Restablecer",
+        L"R\u00e9initialiser",
+        L"Redefinir",
+    }},
+    {L"wlanconn.dll", 592, {
+        L"User name",
+        L"Nome utente",
+        L"Nombre de usuario",
+        L"Nom d'utilisateur",
+        L"Nome de usu\u00e1rio",
+    }},
+    {L"wlanconn.dll", 593, {
+        L"Password",
+        L"Password",
+        L"Contrase\u00f1a",
+        L"Mot de passe",
+        L"Senha",
+    }},
+    {L"wlanconn.dll", 594, {
+        L"Proxy server: %1",
+        L"Server proxy: %1",
+        L"Servidor proxy: %1",
+        L"Serveur proxy : %1",
+        L"Servidor proxy: %1",
+    }},
+    {L"wlanconn.dll", 595, {
+        L"The username or password didn\u2019t work. Please try again.",
+        L"Nome utente o password non validi. Riprovare.",
+        L"El nombre de usuario o la contrase\u00f1a no son correctos. Int\u00e9ntelo de nuevo.",
+        L"Le nom d'utilisateur ou le mot de passe n'a pas fonctionn\u00e9. Veuillez r\u00e9essayer.",
+        L"O nome de usu\u00e1rio ou a senha n\u00e3o funcionaram. Tente novamente.",
+    }},
+    {L"wlanconn.dll", 596, {
+        L"Your proxy server sign-in info is required.",
+        L"Sono necessarie le informazioni di accesso al server proxy.",
+        L"Se requiere la informaci\u00f3n de inicio de sesi\u00f3n del servidor proxy.",
+        L"Les informations de connexion au serveur proxy sont requises.",
+        L"As informa\u00e7\u00f5es de logon do servidor proxy s\u00e3o necess\u00e1rias.",
+    }},
+    {L"wlanconn.dll", 597, {
+        L"Continue",
+        L"Continua",
+        L"Continuar",
+        L"Continuer",
+        L"Continuar",
+    }},
+    {L"wlanconn.dll", 598, {
+        L"Some information changed since the last time you connected. We need additional "
+        L"information to complete the connection.",
+        L"Alcune informazioni sono state modificate dall'ultima connessione. Per completare "
+        L"la connessione sono necessarie informazioni aggiuntive.",
+        L"Alguna informaci\u00f3n ha cambiado desde la \u00faltima vez que se conect\u00f3. Necesitamos "
+        L"informaci\u00f3n adicional para completar la conexi\u00f3n.",
+        L"Certaines informations ont chang\u00e9 depuis votre derni\u00e8re connexion. Nous avons "
+        L"besoin d'informations suppl\u00e9mentaires pour terminer la connexion.",
+        L"Algumas informa\u00e7\u00f5es foram alteradas desde a \u00faltima vez que voc\u00ea se conectou. "
+        L"Precisamos de informa\u00e7\u00f5es adicionais para concluir a conex\u00e3o.",
+    }},
+    {L"wlanconn.dll", 599, {
+        L"Your proxy server sign-in info is required to connect to %1.",
+        L"Per connettersi a %1 sono necessarie le informazioni di accesso al server proxy.",
+        L"Se requiere la informaci\u00f3n de inicio de sesi\u00f3n del servidor proxy para conectarse a %1.",
+        L"Les informations de connexion au serveur proxy sont requises pour se connecter \u00e0 %1.",
+        L"As informa\u00e7\u00f5es de logon do servidor proxy s\u00e3o necess\u00e1rias para se conectar a %1.",
+    }},
+    {L"wlanconn.dll", 1000, {
+        L"C&lose",
+        L"&Chiudi",
+        L"C&errar",
+        L"F&ermer",
+        L"F&echar",
+    }},
+    {L"wlanconn.dll", 1001, {
+        L"Checking network requirements",
+        L"Verifica dei requisiti di rete in corso",
+        L"Comprobando los requisitos de red",
+        L"V\u00e9rification de la configuration r\u00e9seau",
+        L"Verificando os requisitos de rede",
+    }},
+    {L"wlanconn.dll", 1002, {
+        L"Connecting",
+        L"Connessione in corso",
+        L"Conectando",
+        L"Connexion en cours",
+        L"Conectando",
+    }},
+    {L"wlanconn.dll", 1006, {
+        L"Can\u2019t connect to this network",
+        L"Impossibile connettersi a questa rete",
+        L"No se puede conectar a esta red",
+        L"Impossible de se connecter \u00e0 ce r\u00e9seau",
+        L"N\u00e3o \u00e9 poss\u00edvel conectar a esta rede",
+    }},
+    {L"wlanconn.dll", 1008, {
+        L"Verifying and connecting",
+        L"Verifica e connessione in corso",
+        L"Comprobando y conectando",
+        L"V\u00e9rification et connexion en cours",
+        L"Verificando e conectando",
+    }},
+    {L"wlanconn.dll", 1013, {
+        L"The connection is limited",
+        L"La connessione \u00e8 limitata",
+        L"La conexi\u00f3n es limitada",
+        L"La connexion est limit\u00e9e",
+        L"A conex\u00e3o \u00e9 limitada",
+    }},
+    {L"wlanconn.dll", 1014, {
+        L"We can\u2019t connect to the Internet right now. Please try again.",
+        L"Non \u00e8 possibile connettersi a Internet in questo momento. Riprovare.",
+        L"No podemos conectarnos a Internet en este momento. Int\u00e9ntelo de nuevo.",
+        L"Nous ne pouvons pas nous connecter \u00e0 Internet pour le moment. Veuillez r\u00e9essayer.",
+        L"N\u00e3o \u00e9 poss\u00edvel conectar \u00e0 Internet agora. Tente novamente.",
+    }},
+    {L"wlanconn.dll", 1023, {
+        L"Enter the name (SSID) for the network",
+        L"Immettere il nome (SSID) della rete",
+        L"Escriba el nombre (SSID) de la red",
+        L"Entrez le nom (SSID) du r\u00e9seau",
+        L"Digite o nome (SSID) da rede",
+    }},
+    {L"wlanconn.dll", 1027, {
+        L"Invalid Network Name",
+        L"Nome di rete non valido",
+        L"Nombre de red no v\u00e1lido",
+        L"Nom de r\u00e9seau non valide",
+        L"Nome de rede inv\u00e1lido",
+    }},
+    {L"wlanconn.dll", 1029, {
+        L"Reinsert your wireless network adapter",
+        L"Reinserire la scheda di rete wireless",
+        L"Vuelva a insertar el adaptador de red inal\u00e1mbrica",
+        L"R\u00e9ins\u00e9rez votre carte r\u00e9seau sans fil",
+        L"Reinsira o adaptador de rede sem fio",
+    }},
+    {L"wlanconn.dll", 1030, {
+        L"Can\u2019t connect because the wireless network adapter was removed.",
+        L"Impossibile connettersi perch\u00e9 la scheda di rete wireless \u00e8 stata rimossa.",
+        L"No se puede conectar porque se quit\u00f3 el adaptador de red inal\u00e1mbrica.",
+        L"Impossible de se connecter car la carte r\u00e9seau sans fil a \u00e9t\u00e9 retir\u00e9e.",
+        L"N\u00e3o \u00e9 poss\u00edvel conectar porque o adaptador de rede sem fio foi removido.",
+    }},
+    {L"wlanconn.dll", 1031, {
+        L"Sign in to connect",
+        L"Accedere per connettersi",
+        L"Iniciar sesi\u00f3n para conectarse",
+        L"Se connecter pour vous connecter",
+        L"Entrar para conectar",
+    }},
+    {L"wlanconn.dll", 1032, {
+        L"Close",
+        L"Chiudi",
+        L"Cerrar",
+        L"Fermer",
+        L"Fechar",
+    }},
+    {L"wlanconn.dll", 1033, {
+        L"Sign in",
+        L"Accedi",
+        L"Iniciar sesi\u00f3n",
+        L"Se connecter",
+        L"Entrar",
+    }},
+    {L"wlanconn.dll", 1036, {
+        L"Help me solve connection problems",
+        L"Guida per la risoluzione dei problemi di connessione",
+        L"Ay\u00fadame a solucionar problemas de conexi\u00f3n",
+        L"Aidez-moi \u00e0 r\u00e9soudre les probl\u00e8mes de connexion",
+        L"Ajudar-me a resolver problemas de conex\u00e3o",
+    }},
+    {L"wlanconn.dll", 1039, {
+        L"Your device is locked. Unlock it, and then try again.",
+        L"Il dispositivo \u00e8 bloccato. Sbloccarlo e quindi riprovare.",
+        L"El dispositivo est\u00e1 bloqueado. Desbloqu\u00e9elo y vuelva a intentarlo.",
+        L"Votre appareil est verrouill\u00e9. D\u00e9verrouillez-le, puis r\u00e9essayez.",
+        L"Seu dispositivo est\u00e1 bloqueado. Desbloqueie-o e tente novamente.",
+    }},
+    {L"wlanconn.dll", 1040, {
+        L"Windows can\u2019t authenticate your connection right now. Please try again later.",
+        L"Windows non \u00e8 in grado di autenticare la connessione in questo momento. Riprovare pi\u00f9 tardi.",
+        L"Windows no puede autenticar la conexi\u00f3n en este momento. Int\u00e9ntelo de nuevo m\u00e1s tarde.",
+        L"Windows ne peut pas authentifier votre connexion pour le moment. R\u00e9essayez plus tard.",
+        L"O Windows n\u00e3o pode autenticar sua conex\u00e3o agora. Tente novamente mais tarde.",
+    }},
+    {L"wlanconn.dll", 1041, {
+        L"Authentication failed",
+        L"Autenticazione non riuscita",
+        L"Error de autenticaci\u00f3n",
+        L"\u00c9chec de l'authentification",
+        L"Falha na autentica\u00e7\u00e3o",
+    }},
+    {L"wlanconn.dll", 1042, {
+        L"Do you have a user name and password for this Wi-Fi hotspot?",
+        L"Si dispone di nome utente e password per questo hotspot Wi-Fi?",
+        L"\u00bfTiene un nombre de usuario y una contrase\u00f1a para este punto de acceso Wi-Fi?",
+        L"Disposez-vous d'un nom d'utilisateur et d'un mot de passe pour ce point d'acc\u00e8s Wi-Fi ?",
+        L"Voc\u00ea tem um nome de usu\u00e1rio e uma senha para este hotspot Wi-Fi?",
+    }},
+    {L"wlanconn.dll", 1043, {
+        L"Your network administrator doesn\u2019t allow simultaneous connections to your "
+        L"workplace network and another network.",
+        L"L'amministratore di rete non consente connessioni simultanee alla rete aziendale "
+        L"e a un'altra rete.",
+        L"El administrador de red no permite conexiones simult\u00e1neas a la red del trabajo y a otra red.",
+        L"Votre administrateur r\u00e9seau n'autorise pas les connexions simultan\u00e9es \u00e0 votre "
+        L"r\u00e9seau professionnel et \u00e0 un autre r\u00e9seau.",
+        L"O administrador de rede n\u00e3o permite conex\u00f5es simult\u00e2neas \u00e0 rede do trabalho e a outra rede.",
+    }},
+    {L"wlanconn.dll", 1044, {
+        L"Sign-in info for proxy server",
+        L"Informazioni di accesso per il server proxy",
+        L"Informaci\u00f3n de inicio de sesi\u00f3n para el servidor proxy",
+        L"Informations de connexion pour le serveur proxy",
+        L"Informa\u00e7\u00f5es de logon para o servidor proxy",
+    }},
+    {L"wlanconn.dll", 1046, {
+        L"Sign in to connect to %1",
+        L"Accedere per connettersi a %1",
+        L"Inicie sesi\u00f3n para conectarse a %1",
+        L"Connectez-vous pour vous connecter \u00e0 %1",
+        L"Entre para se conectar a %1",
+    }},
+    {L"wlanconn.dll", 1047, {
+        L"Forget network",
+        L"Dimentica rete",
+        L"Olvidar red",
+        L"Oublier le r\u00e9seau",
+        L"Esquecer rede",
+    }},
+    {L"wlanconn.dll", 1100, {
+        L"Can\u2019t set up mobile hotspot.",
+        L"Impossibile configurare l'hotspot mobile.",
+        L"No se puede configurar el punto de acceso m\u00f3vil.",
+        L"Impossible de configurer le partage de connexion mobile.",
+        L"N\u00e3o \u00e9 poss\u00edvel configurar o hotspot m\u00f3vel.",
+    }},
+    {L"wlanconn.dll", 1101, {
+        L"To enable sharing, contact your mobile operator to activate this feature.",
+        L"Per abilitare la condivisione, contattare l'operatore di telefonia mobile per "
+        L"attivare questa funzionalit\u00e0.",
+        L"Para habilitar el uso compartido, p\u00f3ngase en contacto con su operador m\u00f3vil para "
+        L"activar esta caracter\u00edstica.",
+        L"Pour activer le partage, contactez votre op\u00e9rateur mobile pour activer cette fonctionnalit\u00e9.",
+        L"Para habilitar o compartilhamento, contate sua operadora de celular para ativar "
+        L"este recurso.",
+    }},
+    {L"wlanconn.dll", 1102, {
+        L"Can\u2019t connect to mobile broadband.",
+        L"Impossibile connettersi alla rete a banda larga mobile.",
+        L"No se puede conectar a la banda ancha m\u00f3vil.",
+        L"Impossible de se connecter \u00e0 la large bande mobile.",
+        L"N\u00e3o \u00e9 poss\u00edvel conectar \u00e0 banda larga m\u00f3vel.",
+    }},
+    {L"wlanconn.dll", 1103, {
+        L"Can\u2019t connect to mobile broadband while roaming.",
+        L"Impossibile connettersi alla rete a banda larga mobile durante il roaming.",
+        L"No se puede conectar a la banda ancha m\u00f3vil durante la itinerancia.",
+        L"Impossible de se connecter \u00e0 la large bande mobile en itin\u00e9rance.",
+        L"N\u00e3o \u00e9 poss\u00edvel conectar \u00e0 banda larga m\u00f3vel em roaming.",
+    }},
+    {L"wlanconn.dll", 5000, {
+        L"Connect to a network wizard",
+        L"Procedura guidata Connessione a una rete",
+        L"Asistente para conectarse a una red",
+        L"Assistant Se connecter \u00e0 un r\u00e9seau",
+        L"Assistente para conectar-se a uma rede",
+    }},
+    // --- wlanmm.dll Wi-Fi strings ---
+    {L"wlanmm.dll", 150, {
+        L"Security Type",
+        L"Tipo di sicurezza",
+        L"Tipo de seguridad",
+        L"Type de s\u00e9curit\u00e9",
+        L"Tipo de seguran\u00e7a",
+    }},
+    {L"wlanmm.dll", 200, {
+        L"Your network administrator has blocked you from connecting to this network.",
+        L"L'amministratore di rete ha bloccato la connessione a questa rete.",
+        L"El administrador de red le ha bloqueado la conexi\u00f3n a esta red.",
+        L"Votre administrateur r\u00e9seau vous a emp\u00each\u00e9 de vous connecter \u00e0 ce r\u00e9seau.",
+        L"O administrador de rede bloqueou voc\u00ea de se conectar a esta rede.",
+    }},
+    {L"wlanmm.dll", 201, {
+        L"The capability of your network adapter does not match the requirements of this network.",
+        L"Le funzionalit\u00e0 della scheda di rete non corrispondono ai requisiti di questa rete.",
+        L"La funcionalidad del adaptador de red no coincide con los requisitos de la red.",
+        L"Les fonctionnalit\u00e9s de votre carte r\u00e9seau ne correspondent pas aux exigences de ce r\u00e9seau.",
+        L"Os recursos do adaptador de rede n\u00e3o correspondem aos requisitos desta rede.",
+    }},
+    {L"wlanmm.dll", 202, {
+        L"The settings saved on this computer for the network do not match the requirements "
+        L"of the network.",
+        L"Le impostazioni salvate nel computer per la rete non corrispondono ai requisiti della rete.",
+        L"La configuraci\u00f3n guardada en este equipo para la red no coincide con los "
+        L"requisitos de la red.",
+        L"Les param\u00e8tres enregistr\u00e9s sur cet ordinateur pour le r\u00e9seau ne correspondent pas "
+        L"aux exigences du r\u00e9seau.",
+        L"As configura\u00e7\u00f5es salvas neste computador para a rede n\u00e3o correspondem aos "
+        L"requisitos da rede.",
+    }},
+    {L"wlanmm.dll", 203, {
+        L"Connecting",
+        L"Connessione in corso",
+        L"Conectando",
+        L"Connexion en cours",
+        L"Conectando",
+    }},
+    {L"wlanmm.dll", 205, {
+        L"Acquiring IP Address",
+        L"Acquisizione dell'indirizzo IP in corso",
+        L"Obteniendo direcci\u00f3n IP",
+        L"Obtention de l'adresse IP",
+        L"Obtendo endere\u00e7o IP",
+    }},
+    {L"wlanmm.dll", 206, {
+        L"Limited access",
+        L"Accesso limitato",
+        L"Acceso limitado",
+        L"Acc\u00e8s limit\u00e9",
+        L"Acesso limitado",
+    }},
+    {L"wlanmm.dll", 207, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"wlanmm.dll", 208, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"wlanmm.dll", 209, {
+        L"Disconnecting",
+        L"Disconnessione in corso",
+        L"Desconectando",
+        L"D\u00e9connexion en cours",
+        L"Desconectando",
+    }},
+    {L"wlanmm.dll", 210, {
+        L"Waiting for users",
+        L"In attesa di utenti",
+        L"Esperando a los usuarios",
+        L"En attente d'utilisateurs",
+        L"Aguardando usu\u00e1rios",
+    }},
+    {L"wlanmm.dll", 211, {
+        L"This connection is not allowed by your administrator.",
+        L"Questa connessione non \u00e8 consentita dall'amministratore.",
+        L"El administrador no permite esta conexi\u00f3n.",
+        L"Cette connexion n'est pas autoris\u00e9e par votre administrateur.",
+        L"Esta conex\u00e3o n\u00e3o \u00e9 permitida pelo administrador.",
+    }},
+    {L"wlanmm.dll", 299, {
+        L"802.11 Available Network Manager",
+        L"Gestore reti disponibili 802.11",
+        L"Administrador de redes disponibles 802.11",
+        L"Gestionnaire de r\u00e9seaux disponibles 802.11",
+        L"Gerenciador de redes dispon\u00edveis 802.11",
+    }},
+    {L"wlanmm.dll", 300, {
+        L"Wi-Fi",
+        L"Wi-Fi",
+        L"Wi-Fi",
+        L"Wi-Fi",
+        L"Wi-Fi",
+    }},
+    {L"wlanmm.dll", 306, {
+        L"SSID",
+        L"SSID",
+        L"SSID",
+        L"SSID",
+        L"SSID",
+    }},
+    {L"wlanmm.dll", 307, {
+        L"Hidden network",
+        L"Rete nascosta",
+        L"Red oculta",
+        L"R\u00e9seau masqu\u00e9",
+        L"Rede oculta",
+    }},
+    {L"wlanmm.dll", 308, {
+        L"Non broadcast",
+        L"Non broadcast",
+        L"No difundida",
+        L"Non diffus\u00e9",
+        L"N\u00e3o transmitida",
+    }},
+    {L"wlanmm.dll", 400, {
+        L"Unknown",
+        L"Sconosciuto",
+        L"Desconocido",
+        L"Inconnu",
+        L"Desconhecido",
+    }},
+    {L"wlanmm.dll", 450, {
+        L"Type",
+        L"Tipo",
+        L"Tipo",
+        L"Type",
+        L"Tipo",
+    }},
+    {L"wlanmm.dll", 601, {
+        L"Show estimated data usage",
+        L"Mostra utilizzo dati stimato",
+        L"Mostrar uso estimado de datos",
+        L"Afficher l'utilisation estim\u00e9e des donn\u00e9es",
+        L"Mostrar uso estimado de dados",
+    }},
+    {L"wlanmm.dll", 602, {
+        L"Hide estimated data usage",
+        L"Nascondi utilizzo dati stimato",
+        L"Ocultar uso estimado de datos",
+        L"Masquer l'utilisation estim\u00e9e des donn\u00e9es",
+        L"Ocultar uso estimado de dados",
+    }},
+    {L"wlanmm.dll", 603, {
+        L"Set as metered connection",
+        L"Imposta come connessione a consumo",
+        L"Establecer como conexi\u00f3n de uso medido",
+        L"D\u00e9finir comme connexion limit\u00e9e",
+        L"Definir como conex\u00e3o limitada",
+    }},
+    {L"wlanmm.dll", 604, {
+        L"Set as non-metered connection",
+        L"Imposta come connessione non a consumo",
+        L"Establecer como conexi\u00f3n no de uso medido",
+        L"D\u00e9finir comme connexion non limit\u00e9e",
+        L"Definir como conex\u00e3o n\u00e3o limitada",
+    }},
+    {L"wlanmm.dll", 605, {
+        L"Forget this network",
+        L"Dimentica questa rete",
+        L"Olvidar esta red",
+        L"Oublier ce r\u00e9seau",
+        L"Esquecer esta rede",
+    }},
+    {L"wlanmm.dll", 5000, {
+        L"Unknown Authentication",
+        L"Autenticazione sconosciuta",
+        L"Autenticaci\u00f3n desconocida",
+        L"Authentification inconnue",
+        L"Autentica\u00e7\u00e3o desconhecida",
+    }},
+    {L"wlanmm.dll", 5001, {
+        L"Unsecured",
+        L"Non protetta",
+        L"No segura",
+        L"Non s\u00e9curis\u00e9",
+        L"N\u00e3o protegida",
+    }},
+    {L"wlanmm.dll", 5004, {
+        L"WPA-PSK",
+        L"WPA-PSK",
+        L"WPA-PSK",
+        L"WPA-PSK",
+        L"WPA-PSK",
+    }},
+    {L"wlanmm.dll", 5005, {
+        L"WPA2",
+        L"WPA2",
+        L"WPA2",
+        L"WPA2",
+        L"WPA2",
+    }},
+    {L"wlanmm.dll", 5006, {
+        L"WPA2-PSK",
+        L"WPA2-PSK",
+        L"WPA2-PSK",
+        L"WPA2-PSK",
+        L"WPA2-PSK",
+    }},
+    {L"wlanmm.dll", 5007, {
+        L"802.1x",
+        L"802.1x",
+        L"802.1x",
+        L"802.1x",
+        L"802.1x",
+    }},
+    {L"wlanmm.dll", 5010, {
+        L"Unknown Encryption",
+        L"Crittografia sconosciuta",
+        L"Cifrado desconocido",
+        L"Chiffrement inconnu",
+        L"Criptografia desconhecida",
+    }},
+    {L"wlanmm.dll", 5011, {
+        L"None",
+        L"Nessuna",
+        L"Ninguno",
+        L"Aucun",
+        L"Nenhum",
+    }},
+    {L"wlanmm.dll", 5013, {
+        L"TKIP",
+        L"TKIP",
+        L"TKIP",
+        L"TKIP",
+        L"TKIP",
+    }},
+    // --- dot3mm.dll wired networking ---
+    {L"dot3mm.dll", 300, {
+        L"Wired",
+        L"Ethernet",
+        L"Cable",
+        L"Filaire",
+        L"Com fio",
+    }},
+    // --- rasmm.dll VPN / dial-up ---
+    {L"rasmm.dll", 204, {
+        L"Connecting",
+        L"Connessione in corso",
+        L"Conectando",
+        L"Connexion en cours",
+        L"Conectando",
+    }},
+    {L"rasmm.dll", 205, {
+        L"Disconnecting",
+        L"Disconnessione in corso",
+        L"Desconectando",
+        L"D\u00e9connexion en cours",
+        L"Desconectando",
+    }},
+    {L"rasmm.dll", 206, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"rasmm.dll", 207, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"rasmm.dll", 208, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"rasmm.dll", 209, {
+        L"Connected",
+        L"Connesso",
+        L"Conectado",
+        L"Connect\u00e9",
+        L"Conectado",
+    }},
+    {L"rasmm.dll", 210, {
+        L"This connection is not available because there is a problem with your modem or "
+        L"network adapter.",
+        L"La connessione non \u00e8 disponibile perch\u00e9 si \u00e8 verificato un problema con il modem "
+        L"o la scheda di rete.",
+        L"Esta conexi\u00f3n no est\u00e1 disponible porque hay un problema con el m\u00f3dem o el adaptador de red.",
+        L"Cette connexion n'est pas disponible car un probl\u00e8me est survenu avec votre modem "
+        L"ou votre carte r\u00e9seau.",
+        L"Esta conex\u00e3o n\u00e3o est\u00e1 dispon\u00edvel porque h\u00e1 um problema com o modem ou o adaptador de rede.",
+    }},
+    {L"rasmm.dll", 211, {
+        L"Dormant",
+        L"Inattiva",
+        L"Inactiva",
+        L"Inactive",
+        L"Inativa",
+    }},
+    {L"rasmm.dll", 212, {
+        L"Dormant",
+        L"Inattiva",
+        L"Inactiva",
+        L"Inactive",
+        L"Inativa",
+    }},
+    {L"rasmm.dll", 213, {
+        L"Action needed",
+        L"Azione richiesta",
+        L"Se necesita acci\u00f3n",
+        L"Action requise",
+        L"A\u00e7\u00e3o necess\u00e1ria",
+    }},
+    {L"rasmm.dll", 214, {
+        L"Unable to set up VPN Connection.",
+        L"Impossibile impostare la connessione VPN.",
+        L"No se puede configurar la conexi\u00f3n VPN.",
+        L"Impossible de configurer la connexion VPN.",
+        L"N\u00e3o \u00e9 poss\u00edvel configurar a conex\u00e3o VPN.",
+    }},
+    {L"rasmm.dll", 300, {
+        L"Dial-up and VPN",
+        L"Connessioni remote e VPN",
+        L"Acceso telef\u00f3nico y VPN",
+        L"Acc\u00e8s \u00e0 distance et VPN",
+        L"Discagem e VPN",
+    }},
+    {L"rasmm.dll", 301, {
+        L"This connection requires an active Internet connection.",
+        L"Per questa connessione \u00e8 necessaria una connessione Internet attiva.",
+        L"Esta conexi\u00f3n requiere una conexi\u00f3n a Internet activa.",
+        L"Cette connexion n\u00e9cessite une connexion Internet active.",
+        L"Esta conex\u00e3o requer uma conex\u00e3o \u00e0 Internet ativa.",
+    }},
+    {L"rasmm.dll", 302, {
+        L"Your network administrator has blocked you from connecting to this network.",
+        L"L'amministratore di rete ha bloccato la connessione a questa rete.",
+        L"El administrador de red le ha bloqueado la conexi\u00f3n a esta red.",
+        L"Votre administrateur r\u00e9seau vous a emp\u00each\u00e9 de vous connecter \u00e0 ce r\u00e9seau.",
+        L"O administrador de rede bloqueou voc\u00ea de se conectar a esta rede.",
+    }},
+    {L"rasmm.dll", 310, {
+        L"Dial-up and VPN",
+        L"Connessioni remote e VPN",
+        L"Acceso telef\u00f3nico y VPN",
+        L"Acc\u00e8s \u00e0 distance et VPN",
+        L"Discagem e VPN",
+    }},
+    {L"rasmm.dll", 501, {
+        L"Clear saved sign-in info",
+        L"Cancella le informazioni di accesso salvate",
+        L"Borrar la informaci\u00f3n de inicio de sesi\u00f3n guardada",
+        L"Effacer les informations de connexion enregistr\u00e9es",
+        L"Limpar as informa\u00e7\u00f5es de logon salvas",
+    }},
+    // --- datusage.dll data usage ---
+    {L"datusage.dll", 101, {
+        L"%1 since a moment ago",
+        L"%1 da un istante",
+        L"%1 desde hace un momento",
+        L"%1 depuis un instant",
+        L"%1 h\u00e1 pouco",
+    }},
+    {L"datusage.dll", 102, {
+        L"%1 since 1 minute ago",
+        L"%1 da 1 minuto",
+        L"%1 desde hace 1 minuto",
+        L"%1 depuis 1 minute",
+        L"%1 h\u00e1 1 minuto",
+    }},
+    {L"datusage.dll", 103, {
+        L"%1 since %2!d! minutes ago",
+        L"%1 da %2!d! minuti",
+        L"%1 desde hace %2!d! minutos",
+        L"%1 depuis %2!d! minutes",
+        L"%1 h\u00e1 %2!d! minutos",
+    }},
+    {L"datusage.dll", 104, {
+        L"%1 since 1 hour ago",
+        L"%1 da 1 ora",
+        L"%1 desde hace 1 hora",
+        L"%1 depuis 1 heure",
+        L"%1 h\u00e1 1 hora",
+    }},
+    {L"datusage.dll", 105, {
+        L"%1 since %2!d! hours ago",
+        L"%1 da %2!d! ore",
+        L"%1 desde hace %2!d! horas",
+        L"%1 depuis %2!d! heures",
+        L"%1 h\u00e1 %2!d! horas",
+    }},
+    {L"datusage.dll", 106, {
+        L"%1 since 1 day ago",
+        L"%1 da 1 giorno",
+        L"%1 desde hace 1 d\u00eda",
+        L"%1 depuis 1 jour",
+        L"%1 h\u00e1 1 dia",
+    }},
+    {L"datusage.dll", 107, {
+        L"%1 since %2!d! days ago",
+        L"%1 da %2!d! giorni",
+        L"%1 desde hace %2!d! d\u00edas",
+        L"%1 depuis %2!d! jours",
+        L"%1 h\u00e1 %2!d! dias",
+    }},
+    {L"datusage.dll", 108, {
+        L"%1 during last 60 days",
+        L"%1 negli ultimi 60 giorni",
+        L"%1 durante los \u00faltimos 60 d\u00edas",
+        L"%1 au cours des 60 derniers jours",
+        L"%1 nos \u00faltimos 60 dias",
+    }},
+    {L"datusage.dll", 111, {
+        L"%s MB",
+        L"%s MB",
+        L"%s MB",
+        L"%s Mo",
+        L"%s MB",
+    }},
+    {L"datusage.dll", 112, {
+        L"%s GB",
+        L"%s GB",
+        L"%s GB",
+        L"%s Go",
+        L"%s GB",
+    }},
+    {L"datusage.dll", 113, {
+        L"%s TB",
+        L"%s TB",
+        L"%s TB",
+        L"%s To",
+        L"%s TB",
+    }},
+    {L"datusage.dll", 115, {
+        L"Over 1000 TB",
+        L"Oltre 1000 TB",
+        L"M\u00e1s de 1000 TB",
+        L"Plus de 1000 To",
+        L"Mais de 1000 TB",
+    }},
+    // --- setproxycredential.dll proxy prompt ---
+    {L"setproxycredential.dll", 18401, {
+        L"Networks",
+        L"Reti",
+        L"Redes",
+        L"R\u00e9seaux",
+        L"Redes",
+    }},
+    {L"setproxycredential.dll", 18402, {
+        L"Enter proxy server credentials",
+        L"Immettere le credenziali del server proxy",
+        L"Escriba las credenciales del servidor proxy",
+        L"Entrez les informations d'identification du serveur proxy",
+        L"Digite as credenciais do servidor proxy",
+    }},
+    {L"setproxycredential.dll", 18403, {
+        L"User name",
+        L"Nome utente",
+        L"Nombre de usuario",
+        L"Nom d'utilisateur",
+        L"Nome de usu\u00e1rio",
+    }},
+    {L"setproxycredential.dll", 18404, {
+        L"Password",
+        L"Password",
+        L"Contrase\u00f1a",
+        L"Mot de passe",
+        L"Senha",
+    }},
+    {L"setproxycredential.dll", 18405, {
+        L"Proxy server: %1",
+        L"Server proxy: %1",
+        L"Servidor proxy: %1",
+        L"Serveur proxy : %1",
+        L"Servidor proxy: %1",
+    }},
+    {L"setproxycredential.dll", 18406, {
+        L"The username or password was incorrect. Please try again.",
+        L"Nome utente o password non corretti. Riprovare.",
+        L"El nombre de usuario o la contrase\u00f1a no son correctos. Int\u00e9ntelo de nuevo.",
+        L"Le nom d'utilisateur ou le mot de passe est incorrect. Veuillez r\u00e9essayer.",
+        L"O nome de usu\u00e1rio ou a senha est\u00e3o incorretos. Tente novamente.",
+    }},
+    {L"setproxycredential.dll", 18408, {
+        L"Cancel",
+        L"Annulla",
+        L"Cancelar",
+        L"Annuler",
+        L"Cancelar",
+    }},
+    {L"setproxycredential.dll", 18409, {
+        L"Checking network requirements",
+        L"Verifica dei requisiti di rete in corso",
+        L"Comprobando los requisitos de red",
+        L"V\u00e9rification de la configuration r\u00e9seau",
+        L"Verificando os requisitos de rede",
+    }},
+    {L"setproxycredential.dll", 18410, {
+        L"SPCPage",
+        L"SPCPage",
+        L"SPCPage",
+        L"SPCPage",
+        L"SPCPage",
+    }},
+    // --- pnidui.dll tray strings ---
+    {L"pnidui.dll", 2, {
+        L"Not connected - No connections are available",
+        L"Non connesso - Nessuna connessione disponibile",
+        L"No conectado: no hay conexiones disponibles",
+        L"Non connect\u00e9 : aucune connexion disponible",
+        L"N\u00e3o conectado: nenhuma conex\u00e3o dispon\u00edvel",
+    }},
+    {L"pnidui.dll", 8, {
+        L"Internet access",
+        L"Accesso a Internet",
+        L"Acceso a Internet",
+        L"Acc\u00e8s Internet",
+        L"Acesso \u00e0 Internet",
+    }},
+    {L"pnidui.dll", 15, {
+        L"Connection status - Unknown",
+        L"Stato connessione - Sconosciuto",
+        L"Estado de conexi\u00f3n: desconocido",
+        L"\u00c9tat de la connexion : inconnu",
+        L"Status da conex\u00e3o: desconhecido",
+    }},
+    {L"pnidui.dll", 35, {
+        L"No Internet access",
+        L"Nessun accesso a Internet",
+        L"Sin acceso a Internet",
+        L"Pas d'acc\u00e8s Internet",
+        L"Sem acesso \u00e0 Internet",
+    }},
+    {L"pnidui.dll", 38, {
+        L"Not connected - Connections are available",
+        L"Non connesso - Connessioni disponibili",
+        L"No conectado: hay conexiones disponibles",
+        L"Non connect\u00e9 : des connexions sont disponibles",
+        L"N\u00e3o conectado: h\u00e1 conex\u00f5es dispon\u00edveis",
+    }},
+    {L"pnidui.dll", 47, {
+        L"Windows Networking",
+        L"Rete di Windows",
+        L"Redes de Windows",
+        L"Mise en r\u00e9seau Windows",
+        L"Rede do Windows",
+    }},
+    {L"pnidui.dll", 48, {
+        L"Network System Icon",
+        L"Icona di sistema Rete",
+        L"Icono del sistema Red",
+        L"Ic\u00f4ne syst\u00e8me R\u00e9seau",
+        L"\u00cdcone do sistema Rede",
+    }},
+    {L"pnidui.dll", 60, {
+        L"Not connected - Wireless communication is turned off",
+        L"Non connesso - Comunicazione wireless disattivata",
+        L"No conectado: la comunicaci\u00f3n inal\u00e1mbrica est\u00e1 desactivada",
+        L"Non connect\u00e9 : la communication sans fil est d\u00e9sactiv\u00e9e",
+        L"N\u00e3o conectado: a comunica\u00e7\u00e3o sem fio est\u00e1 desativada",
+    }},
+    {L"pnidui.dll", 3011, {
+        L"Network System Icon",
+        L"Icona di sistema Rete",
+        L"Icono del sistema Red",
+        L"Ic\u00f4ne syst\u00e8me R\u00e9seau",
+        L"\u00cdcone do sistema Rede",
+    }},
 };
 constexpr size_t kHydratedStringCount = ARRAYSIZE(kHydratedStrings);
 
@@ -707,6 +1905,9 @@ enum class UiLangMode : int {
     Auto = 0,
     Italian = 1,
     English = 2,
+    Spanish = 3,
+    French = 4,
+    Portuguese = 5,
 };
 enum class HostRole : int {
     Undetermined = 0,
@@ -714,15 +1915,19 @@ enum class HostRole : int {
     Secondary = 2,
 };
 
-std::atomic<bool> g_enableLegacyTrayIcon{true};
+std::atomic<bool> g_enableLegacyTrayIcon{false};
 std::atomic<bool> g_interceptAvailableNetworksUri{true};
 std::atomic<int> g_uiLangMode{static_cast<int>(UiLangMode::Auto)};
 std::atomic<bool> g_hideDuplicateWlanAdapters{false};
 std::atomic<bool> g_enableHotkey{false};
-std::atomic<bool> g_strictVerification{false};
+
 
 std::atomic<bool> g_shuttingDown{false};
 std::atomic<bool> g_vanStoreReady{false};
+std::atomic<bool> g_registryOverlayReady{false};
+std::atomic<bool> g_nativeSystemVan{false};
+std::atomic<bool> g_overlayInstanceRegistered{false};
+std::atomic<bool> g_unloadSafetyFailure{false};
 std::atomic<DWORD> g_staThreadId{0};
 std::atomic<int> g_hostRole{static_cast<int>(HostRole::Undetermined)};
 std::atomic<ULONGLONG> g_lastShowVanTick{0};
@@ -735,14 +1940,21 @@ std::atomic<HINTERNET> g_winhttpSession{nullptr};
 // Precomputed full store paths, published (via the g_vanStoreReady release
 // store) exactly once before the hooks start redirecting, then read-only.
 // This lets Hook_LdrLoadDll stay 100% stack-based and lock-free.
-WH_NO_DESTROY WCHAR g_managedFullPaths[kRuntimeDllCount][600] = {};
+WIN8_NET_NO_DESTROY WCHAR g_managedFullPaths[kRuntimeDllCount][600] = {};
 
-WH_NO_DESTROY std::mutex g_stateMutex;
-WH_NO_DESTROY std::filesystem::path g_vanStoreBaseDir;   // ...\VanStore
-WH_NO_DESTROY std::filesystem::path g_rawCacheDir;       // ...\MsdlRawCache
-WH_NO_DESTROY std::filesystem::path g_vanStoreDir;       // ...\VanStore\gen_N
-WH_NO_DESTROY std::vector<HMODULE> g_loadedVanModules;
-WH_NO_DESTROY std::wstring g_hkcuNtPrefix;               // "\Registry\User\S-1-5-..."
+WIN8_NET_NO_DESTROY std::mutex g_stateMutex;
+WIN8_NET_NO_DESTROY std::filesystem::path g_vanStoreBaseDir;   // ...\VanStore
+WIN8_NET_NO_DESTROY std::filesystem::path g_rawCacheDir;       // ...\MsdlRawCache
+WIN8_NET_NO_DESTROY std::filesystem::path g_vanStoreDir;       // hydrated generation or System32
+WIN8_NET_NO_DESTROY std::filesystem::path g_nativeSystemDir;
+WIN8_NET_NO_DESTROY std::vector<HMODULE> g_loadedVanModules;
+// Published after LoadLibrary returns; hook-side caller checks never take a
+// mutex or enter the loader to identify a module.
+std::atomic<ULONG_PTR> g_managedImageBegin[kRuntimeDllCount]{};
+std::atomic<ULONG_PTR> g_managedImageEnd[kRuntimeDllCount]{};
+
+WIN8_NET_NO_DESTROY std::vector<HANDLE> g_verifiedRuntimeFileHandles;
+WIN8_NET_NO_DESTROY std::wstring g_hkcuNtPrefix;               // "\Registry\User\S-1-5-..."
 
 HANDLE g_stopEvent = nullptr;
 HANDLE g_workerThread = nullptr;
@@ -750,6 +1962,7 @@ HANDLE g_workerThread = nullptr;
 // modules must then stay loaded (leak) to avoid use-after-free crashes.
 std::atomic<bool> g_workerStillRunning{false};
 HANDLE g_provisionMutex = nullptr;
+HANDLE g_overlayMutex = nullptr;
 DLL_DIRECTORY_COOKIE g_dllDirectoryCookie = nullptr;
 UINT g_wmShowVanIpc = 0;
 HMODULE g_vanModule = nullptr;
@@ -790,6 +2003,8 @@ ShutdownVAN_t g_pfnShutdownVAN = nullptr;
 // ntdll helpers resolved at init (no import-lib dependency needed).
 using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
 using NtOpenKeyEx_t = NTSTATUS(NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG);
+using NtCreateKey_t = NTSTATUS(NTAPI*)(
+    PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG, PUNICODE_STRING, ULONG, PULONG);
 using NtQueryKey_t = NTSTATUS(NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
 NtOpenKey_t g_pfnNtOpenKey = nullptr;
 NtOpenKeyEx_t g_pfnNtOpenKeyEx = nullptr;
@@ -821,6 +2036,33 @@ struct ScopedHookGuard {
             g_inHookGuard = false;
         }
     }
+};
+
+class ScopedOverlayMutex {
+  public:
+    ScopedOverlayMutex(HANDLE mutex, DWORD timeoutMs) noexcept : m_mutex(mutex) {
+        if (!m_mutex) {
+            return;
+        }
+        const DWORD result = WaitForSingleObject(m_mutex, timeoutMs);
+        m_locked = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
+        if (result == WAIT_ABANDONED) {
+            Wh_Log(L"Overlay mutex was abandoned; PID and registry state will be validated "
+                   L"conservatively before cleanup");
+        }
+    }
+    ~ScopedOverlayMutex() noexcept {
+        if (m_locked) {
+            ReleaseMutex(m_mutex);
+        }
+    }
+    ScopedOverlayMutex(const ScopedOverlayMutex&) = delete;
+    ScopedOverlayMutex& operator=(const ScopedOverlayMutex&) = delete;
+    bool locked() const noexcept { return m_locked; }
+
+  private:
+    HANDLE m_mutex = nullptr;
+    bool m_locked = false;
 };
 
 // ===========================================================================
@@ -860,23 +2102,57 @@ std::wstring GuidToUpperBraceString(const GUID& guid) {
     return std::wstring(buf);
 }
 
-bool IsEffectiveItalian() noexcept {
+int GetEffectiveLanguageIndex() noexcept {
     switch (static_cast<UiLangMode>(g_uiLangMode.load(std::memory_order_relaxed))) {
         case UiLangMode::Italian:
-            return true;
+            return 1;
         case UiLangMode::English:
-            return false;
+            return 0;
+        case UiLangMode::Spanish:
+            return 2;
+        case UiLangMode::French:
+            return 3;
+        case UiLangMode::Portuguese:
+            return 4;
         case UiLangMode::Auto:
         default:
-            return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
+            switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+                case LANG_ITALIAN: return 1;
+                case LANG_SPANISH: return 2;
+                case LANG_FRENCH: return 3;
+                case LANG_PORTUGUESE: return 4;
+                default: return 0;
+            }
     }
 }
 
-const wchar_t* GetHydratedStringFor(const wchar_t* moduleLower, UINT id, bool italian) noexcept {
+const wchar_t* GetLanguageCode(int languageIndex) noexcept {
+    static constexpr const wchar_t* kLanguageCodes[] = {
+        L"en", L"it", L"es", L"fr", L"pt",
+    };
+    if (languageIndex < 0 || languageIndex >= static_cast<int>(ARRAYSIZE(kLanguageCodes))) {
+        return L"en";
+    }
+    return kLanguageCodes[languageIndex];
+}
+
+int GetLanguageIndexFromCode(const wchar_t* code) noexcept {
+    if (!code) return -1;
+    if (_wcsicmp(code, L"en") == 0) return 0;
+    if (_wcsicmp(code, L"it") == 0) return 1;
+    if (_wcsicmp(code, L"es") == 0) return 2;
+    if (_wcsicmp(code, L"fr") == 0) return 3;
+    if (_wcsicmp(code, L"pt") == 0) return 4;
+    return -1;
+}
+
+const wchar_t* GetHydratedStringFor(
+    const wchar_t* moduleLower, UINT id, int languageIndex) noexcept {
+    if (languageIndex < 0 || languageIndex >= 5) languageIndex = 0;
     for (size_t i = 0; i < kHydratedStringCount; ++i) {
         const LocalizedResourceEntry& e = kHydratedStrings[i];
         if (e.id == id && _wcsicmp(e.moduleLower, moduleLower) == 0) {
-            return italian ? e.itText : e.enText;
+            return e.text[static_cast<size_t>(languageIndex)];
         }
     }
     return nullptr;
@@ -887,14 +2163,29 @@ void LoadModSettings() {
         Wh_GetIntSetting(L"enableLegacyTrayIcon") != 0, std::memory_order_relaxed);
     g_interceptAvailableNetworksUri.store(
         Wh_GetIntSetting(L"interceptAvailableNetworksUri") != 0, std::memory_order_relaxed);
-    g_uiLangMode.store(
-        Wh_GetIntSetting(L"uiLanguage"), std::memory_order_relaxed);
+
+    // uiLanguage is a string option in the Windhawk settings block; reading it
+    // as an integer silently leaves the selection at Auto for every value.
+    PCWSTR uiLanguage = Wh_GetStringSetting(L"uiLanguage");
+    UiLangMode languageMode = UiLangMode::Auto;
+    if (_wcsicmp(uiLanguage, L"it") == 0) {
+        languageMode = UiLangMode::Italian;
+    } else if (_wcsicmp(uiLanguage, L"en") == 0) {
+        languageMode = UiLangMode::English;
+    } else if (_wcsicmp(uiLanguage, L"es") == 0) {
+        languageMode = UiLangMode::Spanish;
+    } else if (_wcsicmp(uiLanguage, L"fr") == 0) {
+        languageMode = UiLangMode::French;
+    } else if (_wcsicmp(uiLanguage, L"pt") == 0) {
+        languageMode = UiLangMode::Portuguese;
+    }
+    Wh_FreeStringSetting(uiLanguage);
+    g_uiLangMode.store(static_cast<int>(languageMode), std::memory_order_relaxed);
+
     g_hideDuplicateWlanAdapters.store(
         Wh_GetIntSetting(L"hideDuplicateWlanAdapters") != 0, std::memory_order_relaxed);
     g_enableHotkey.store(
         Wh_GetIntSetting(L"enableHotkey") != 0, std::memory_order_relaxed);
-    g_strictVerification.store(
-        Wh_GetIntSetting(L"strictVerification") != 0, std::memory_order_relaxed);
 }
 
 // Lookup hydrated runtime DLL name if `rawName` targets one of the 8 VAN DLLs.
@@ -930,13 +2221,47 @@ std::filesystem::path GetManagedDllPath(const wchar_t* canonicalName) {
     return g_vanStoreDir / canonicalName;
 }
 
+void PublishManagedImage(HMODULE module, const wchar_t* canonicalName) noexcept {
+    if (!module || !canonicalName) return;
+    const auto* base = reinterpret_cast<const BYTE*>(module);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0) return;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE || !nt->OptionalHeader.SizeOfImage) return;
+    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+        if (_wcsicmp(canonicalName, kRuntimeDllNames[i]) == 0) {
+            const ULONG_PTR begin = reinterpret_cast<ULONG_PTR>(module);
+            g_managedImageEnd[i].store(begin + nt->OptionalHeader.SizeOfImage,
+                                      std::memory_order_relaxed);
+            g_managedImageBegin[i].store(begin, std::memory_order_release);
+            break;
+        }
+    }
+}
+
+bool IsCallerManagedVanModule(void* address) noexcept {
+    const ULONG_PTR caller = reinterpret_cast<ULONG_PTR>(address);
+    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+        const ULONG_PTR begin = g_managedImageBegin[i].load(std::memory_order_acquire);
+        if (begin && caller >= begin &&
+            caller < g_managedImageEnd[i].load(std::memory_order_relaxed)) return true;
+    }
+    return false;
+}
+
+bool IsManagedVanCallContext(void* caller) noexcept {
+    const DWORD sta = g_staThreadId.load(std::memory_order_acquire);
+    return (sta != 0 && GetCurrentThreadId() == sta) || IsCallerManagedVanModule(caller);
+}
+
 HMODULE LoadManagedDll(const wchar_t* canonicalName) {
     const std::filesystem::path fullPath = GetManagedDllPath(canonicalName);
     ScopedHookGuard guard;
     HMODULE hMod = LoadLibraryExW(
         fullPath.c_str(), nullptr,
-        LOAD_WITH_ALTERED_SEARCH_PATH | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hMod) {
+        PublishManagedImage(hMod, canonicalName);
         std::lock_guard<std::mutex> lock(g_stateMutex);
         if (std::find(g_loadedVanModules.begin(), g_loadedVanModules.end(), hMod) ==
             g_loadedVanModules.end()) {
@@ -974,109 +2299,279 @@ FnPtr ResolveVanExport(HMODULE hMod, const char* plainName, int ordinal,
     return ResolveExportAddress<FnPtr>(hMod, decoratedName);
 }
 
-// ===========================================================================
-// Permissive artifact validation
-// -------------------------------------------------------------------------
-// Requirements (all modes): structurally valid x64 PE image
-//   (size >= 4096, 'MZ', 'PE\0\0', IMAGE_FILE_MACHINE_AMD64, PE32+ optional
-//   header). SHA-256 digests are always computed and logged; in permissive
-//   mode (default) a mismatch is a warning, in strict mode it is fatal.
-// WinVerifyTrust runs as diagnostic telemetry only: MSDL binaries are
-// catalog-signed and return TRUST_E_NOSIGNATURE (0x800B0100) because the
-// build-time catalog is not present on the user's machine.
-// ===========================================================================
-bool IsPe64File(const std::filesystem::path& path) {
-    HANDLE hFile = CreateFileW(
-        path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) {
+// ReplaceVan=2 can use the operating system's own VAN stack without MSDL
+// downloads on builds that still ship a loadable System32 van.dll. The build
+// cutoff is only one conservative guard: every expected runtime component and
+// the required exports are checked as well. This avoids treating "pre-23H2"
+// as a sufficient compatibility test (25346 is the documented removal build).
+bool DetectNativeVanSupport(std::filesystem::path* outSystemDirectory, DWORD* outBuild) {
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+    auto pRtlGetVersion = hNtdll ? reinterpret_cast<RtlGetVersion_t>(
+        GetProcAddress(hNtdll, "RtlGetVersion")) : nullptr;
+    OSVERSIONINFOW version{};
+    version.dwOSVersionInfoSize = sizeof(version);
+    if (!pRtlGetVersion || pRtlGetVersion(&version) != 0 || version.dwMajorVersion != 10) {
+        Wh_Log(L"Native VAN route unavailable: could not identify a supported Windows 10/11 build");
         return false;
     }
+    if (outBuild) {
+        *outBuild = version.dwBuildNumber;
+    }
+    if (version.dwBuildNumber < 17763 || version.dwBuildNumber >= 25346) {
+        Wh_Log(L"Native VAN route unavailable on Windows build %lu (supported probe range: "
+               L"17763..25345)", static_cast<unsigned long>(version.dwBuildNumber));
+        return false;
+    }
+
+    WCHAR systemDirectory[MAX_PATH]{};
+    const UINT systemDirectoryLength = GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory));
+    if (systemDirectoryLength == 0 || systemDirectoryLength >= ARRAYSIZE(systemDirectory)) {
+        Wh_Log(L"Native VAN route unavailable: GetSystemDirectoryW failed (%lu)", GetLastError());
+        return false;
+    }
+    const std::filesystem::path systemDir(systemDirectory);
+
+    for (const wchar_t* dll : kRuntimeDllNames) {
+        const std::filesystem::path componentPath = systemDir / dll;
+        const DWORD attributes = GetFileAttributesW(componentPath.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"Native VAN route unavailable: System32 component %s is missing", dll);
+            return false;
+        }
+    }
+
+    HMODULE hVan = LoadLibraryExW(L"van.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hVan) {
+        Wh_Log(L"Native VAN route unavailable: System32 van.dll failed to load (%lu)", GetLastError());
+        return false;
+    }
+    const bool exportsAvailable = GetProcAddress(hVan, "ShowVAN") != nullptr &&
+                                  GetProcAddress(hVan, "HideVAN") != nullptr;
+    FreeLibrary(hVan);
+    if (!exportsAvailable) {
+        Wh_Log(L"Native VAN route unavailable: van.dll lacks the expected ShowVAN/HideVAN exports");
+        return false;
+    }
+
+    if (outSystemDirectory) {
+        *outSystemDirectory = systemDir;
+    }
+    Wh_Log(L"Native ReplaceVan=2 path is available on build %lu (%s)",
+           static_cast<unsigned long>(version.dwBuildNumber), systemDir.c_str());
+    return true;
+}
+
+// ===========================================================================
+// Pinned artifact validation
+// ---------------------------------------------------------------------------
+// Every downloaded MSDL image must be a structurally valid x64 PE and match
+// its compiled-in SHA-256 pin. Verification opens the file with sharing that
+// permits readers only; holding that handle prevents writes, replacement and
+// deletion between validation and copying/loading.
+// WinVerifyTrust is diagnostic only: MSDL binaries are catalog-signed and do
+// not carry an embedded Authenticode signature.
+// ===========================================================================
+struct ScopedFileHandle {
+    HANDLE value = INVALID_HANDLE_VALUE;
+
+    ScopedFileHandle() = default;
+    explicit ScopedFileHandle(HANDLE h) : value(h) {}
+    ~ScopedFileHandle() { reset(); }
+    ScopedFileHandle(const ScopedFileHandle&) = delete;
+    ScopedFileHandle& operator=(const ScopedFileHandle&) = delete;
+    ScopedFileHandle(ScopedFileHandle&& other) noexcept : value(other.release()) {}
+    ScopedFileHandle& operator=(ScopedFileHandle&& other) noexcept {
+        if (this != &other) {
+            reset(other.release());
+        }
+        return *this;
+    }
+
+    bool valid() const noexcept { return value != nullptr && value != INVALID_HANDLE_VALUE; }
+    HANDLE get() const noexcept { return value; }
+    HANDLE release() noexcept {
+        HANDLE h = value;
+        value = INVALID_HANDLE_VALUE;
+        return h;
+    }
+    void reset(HANDLE h = INVALID_HANDLE_VALUE) noexcept {
+        if (valid()) {
+            CloseHandle(value);
+        }
+        value = h;
+    }
+};
+
+bool IsPe64Handle(HANDLE hFile) {
+    if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    LARGE_INTEGER fileSize{};
+    if (!GetFileSizeEx(hFile, &fileSize) || fileSize.QuadPart < 4096) {
+        return false;
+    }
+
+    LARGE_INTEGER zero{};
+    if (!SetFilePointerEx(hFile, zero, nullptr, FILE_BEGIN)) {
+        return false;
+    }
+
     // Stack buffer only - this must stay cheap and loader-lock friendly.
     BYTE head[1024]{};
     DWORD bytesRead = 0;
-    bool ok = false;
-    if (ReadFile(hFile, head, sizeof(head), &bytesRead, nullptr) && bytesRead >= 0x200) {
-        const WORD* w = reinterpret_cast<const WORD*>(head);
-        if (w[0] == 0x5A4D) {  // 'MZ'
-            DWORD e_lfanew = *reinterpret_cast<const DWORD*>(head + 0x3C);
-            if (e_lfanew + 6 + sizeof(IMAGE_FILE_HEADER) + 2 <= bytesRead) {
-                const BYTE* pe = head + e_lfanew;
-                if (memcmp(pe, "PE\0\0", 4) == 0) {
-                    const IMAGE_FILE_HEADER* fh =
-                        reinterpret_cast<const IMAGE_FILE_HEADER*>(pe + 4);
-                    if (fh->Machine == IMAGE_FILE_MACHINE_AMD64 &&
-                        fh->SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER64)) {
-                        const WORD optMagic =
-                            *reinterpret_cast<const WORD*>(pe + 4 + sizeof(IMAGE_FILE_HEADER));
-                        ok = (optMagic == 0x20B);  // PE32+ magic
-                    }
-                }
-            }
-        }
-    }
-    CloseHandle(hFile);
-
-    if (ok) {
-        std::error_code ec;
-        if (std::filesystem::file_size(path, ec) < 4096) {
-            ok = false;
-        }
-    }
-    return ok;
-}
-
-bool ComputeFileSha256Hex(const std::filesystem::path& filePath, std::wstring& outUpperHex) {
-    HANDLE hFile = CreateFileW(
-        filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) {
+    if (!ReadFile(hFile, head, sizeof(head), &bytesRead, nullptr) || bytesRead < 0x200) {
         return false;
     }
 
-    BCRYPT_ALG_HANDLE hAlg = nullptr;
-    BCRYPT_HASH_HANDLE hHash = nullptr;
-    bool ok = false;
+    const WORD mz = *reinterpret_cast<const WORD*>(head);
+    if (mz != 0x5A4D) {  // 'MZ'
+        return false;
+    }
+    const DWORD peOffset = *reinterpret_cast<const DWORD*>(head + 0x3C);
+    constexpr size_t kMinimumPeHeader = 4 + sizeof(IMAGE_FILE_HEADER) + sizeof(WORD);
+    if (peOffset > bytesRead || bytesRead - peOffset < kMinimumPeHeader) {
+        return false;
+    }
 
-    if (BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0)) &&
-        BCRYPT_SUCCESS(BCryptCreateHash(hAlg, &hHash, nullptr, 0, nullptr, 0, 0))) {
-        std::vector<BYTE> buffer(64 * 1024);
-        DWORD bytesRead = 0;
-        bool readOk = true;
-        while (ReadFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size()), &bytesRead,
-                        nullptr)) {
-            if (bytesRead == 0) {
-                break;
-            }
-            if (!BCRYPT_SUCCESS(BCryptHashData(hHash, buffer.data(), bytesRead, 0))) {
-                readOk = false;
-                break;
-            }
+    const BYTE* pe = head + peOffset;
+    if (memcmp(pe, "PE\0\0", 4) != 0) {
+        return false;
+    }
+    const auto* fileHeader = reinterpret_cast<const IMAGE_FILE_HEADER*>(pe + 4);
+    if (fileHeader->Machine != IMAGE_FILE_MACHINE_AMD64 ||
+        fileHeader->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64)) {
+        return false;
+    }
+    const WORD optionalMagic = *reinterpret_cast<const WORD*>(
+        pe + 4 + sizeof(IMAGE_FILE_HEADER));
+    return optionalMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
+}
+
+bool IsPe64File(const std::filesystem::path& path) {
+    ScopedFileHandle file(CreateFileW(
+        path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+    return file.valid() && IsPe64Handle(file.get());
+}
+
+// CNG first; CryptoAPI is a compatibility fallback, never a verification bypass.
+// Both backends hash the entire file from offset zero and reject read failures.
+bool ComputeFileSha256Hex(HANDLE hFile, std::wstring& outUpperHex) noexcept {
+    outUpperHex.clear();
+    if (!hFile || hFile == INVALID_HANDLE_VALUE) return false;
+    struct HashResources {
+        BCRYPT_ALG_HANDLE algorithm = nullptr;
+        BCRYPT_HASH_HANDLE hash = nullptr;
+        HCRYPTPROV provider = 0;
+        HCRYPTHASH legacyHash = 0;
+        ~HashResources() {
+            if (hash) BCryptDestroyHash(hash);
+            if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
+            if (legacyHash) CryptDestroyHash(legacyHash);
+            if (provider) CryptReleaseContext(provider, 0);
         }
-
+    } resources;
+    LARGE_INTEGER zero{};
+    try {
         std::array<BYTE, 32> digest{};
-        if (readOk &&
-            BCRYPT_SUCCESS(BCryptFinishHash(hHash, digest.data(),
-                                            static_cast<ULONG>(digest.size()), 0))) {
-            static constexpr wchar_t kHex[] = L"0123456789ABCDEF";
-            outUpperHex.clear();
-            outUpperHex.reserve(64);
-            for (BYTE b : digest) {
-                outUpperHex.push_back(kHex[(b >> 4) & 0xF]);
-                outUpperHex.push_back(kHex[b & 0xF]);
+        std::array<BYTE, 64 * 1024> buffer{};
+        bool complete = false;
+        for (int backend = 0; backend < 2 && !complete; ++backend) {
+            if (!SetFilePointerEx(hFile, zero, nullptr, FILE_BEGIN)) return false;
+            if (backend == 0) {
+                if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(
+                        &resources.algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0)) ||
+                    !BCRYPT_SUCCESS(BCryptCreateHash(resources.algorithm,
+                        &resources.hash, nullptr, 0, nullptr, 0, 0))) {
+                    Wh_Log(L"SHA-256 CNG initialization failed; trying CryptoAPI");
+                    continue;
+                }
+            } else {
+                Wh_Log(L"Retrying SHA-256 with the Windows CryptoAPI backend");
+                if (!CryptAcquireContextW(&resources.provider, nullptr,
+                        MS_ENH_RSA_AES_PROV_W, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) ||
+                    !CryptCreateHash(resources.provider, CALG_SHA_256, 0, 0,
+                        &resources.legacyHash)) return false;
             }
-            ok = true;
+            bool hashOk = true;
+            for (;;) {
+                DWORD bytesRead = 0;
+                if (!ReadFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size()),
+                              &bytesRead, nullptr)) {
+                    Wh_Log(L"SHA-256 file read failed (%lu)", GetLastError());
+                    SetFilePointerEx(hFile, zero, nullptr, FILE_BEGIN);
+                    return false;
+                }
+                if (bytesRead == 0) break;
+                hashOk = backend == 0
+                    ? BCRYPT_SUCCESS(BCryptHashData(resources.hash, buffer.data(), bytesRead, 0))
+                    : !!CryptHashData(resources.legacyHash, buffer.data(), bytesRead, 0);
+                if (!hashOk) break;
+            }
+            if (!hashOk) continue;
+            DWORD digestSize = static_cast<DWORD>(digest.size());
+            complete = backend == 0
+                ? BCRYPT_SUCCESS(BCryptFinishHash(resources.hash, digest.data(), digestSize, 0))
+                : (!!CryptGetHashParam(resources.legacyHash, HP_HASHVAL,
+                       digest.data(), &digestSize, 0) && digestSize == digest.size());
         }
+        if (!complete || !SetFilePointerEx(hFile, zero, nullptr, FILE_BEGIN)) return false;
+        static constexpr wchar_t hex[] = L"0123456789ABCDEF";
+        std::wstring result(64, L'0');
+        for (size_t i = 0; i < digest.size(); ++i) {
+            result[2 * i] = hex[digest[i] >> 4];
+            result[2 * i + 1] = hex[digest[i] & 15];
+        }
+        outUpperHex.swap(result);
+        return true;
+    } catch (...) {
+        // C++ allocation/library exceptions only: no SEH or access-violation recovery.
+        Wh_Log(L"C++ exception while computing SHA-256; file rejected");
+        SetFilePointerEx(hFile, zero, nullptr, FILE_BEGIN);
+        outUpperHex.clear();
+        return false;
+    }
+}
+
+bool OpenVerifiedFile(
+    const std::filesystem::path& path, const wchar_t* expectedSha256,
+    ScopedFileHandle* keepOpen, std::wstring* actualHash = nullptr) {
+    ScopedFileHandle file(CreateFileW(
+        path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+    if (!file.valid()) {
+        Wh_Log(L"Could not open %s for pinned read-only verification (%lu)",
+               path.filename().c_str(), GetLastError());
+        return false;
     }
 
-    if (hHash) {
-        BCryptDestroyHash(hHash);
+    if (!IsPe64Handle(file.get())) {
+        Wh_Log(L"PE64 structural validation rejected %s", path.filename().c_str());
+        return false;
     }
-    if (hAlg) {
-        BCryptCloseAlgorithmProvider(hAlg, 0);
+
+    std::wstring computedHash;
+    if (!ComputeFileSha256Hex(file.get(), computedHash)) {
+        Wh_Log(L"Could not compute mandatory SHA-256 of %s (%lu)",
+               path.filename().c_str(), GetLastError());
+        return false;
     }
-    CloseHandle(hFile);
-    return ok;
+
+    if (expectedSha256 && _wcsicmp(computedHash.c_str(), expectedSha256) != 0) {
+        Wh_Log(L"SHA-256 pin mismatch on %s (got %s, expected %s)",
+               path.filename().c_str(), computedHash.c_str(), expectedSha256);
+        return false;
+    }
+
+    if (actualHash) {
+        *actualHash = std::move(computedHash);
+    }
+    if (keepOpen) {
+        *keepOpen = std::move(file);
+    }
+    return true;
 }
 
 // Diagnostic-only Authenticode check. MSDL files are catalog-signed, so this
@@ -1113,42 +2608,14 @@ struct VerifyOutcome {
 };
 
 VerifyOutcome CheckArtifactFile(const std::filesystem::path& path, const wchar_t* expectedSha256) {
-    VerifyOutcome out{false, false};
-    std::error_code ec;
-    if (!std::filesystem::exists(path, ec)) {
-        return out;
+    if (!expectedSha256 || wcslen(expectedSha256) != 64) return {false, false};
+    for (const wchar_t* c = expectedSha256; *c; ++c) {
+        if (!((*c >= L'0' && *c <= L'9') || (*c >= L'a' && *c <= L'f') ||
+              (*c >= L'A' && *c <= L'F'))) return {false, false};
     }
-
-    if (!IsPe64File(path)) {
-        Wh_Log(L"PE64 structural validation rejected %s", path.filename().c_str());
-        return out;
-    }
-
-    std::wstring actualHex;
-    if (!ComputeFileSha256Hex(path, actualHex)) {
-        Wh_Log(L"WARNING: could not compute SHA-256 of %s (%lu) - accepting valid x64 PE image",
-               path.filename().c_str(), GetLastError());
-        out.ok = !g_strictVerification.load(std::memory_order_relaxed);
-        return out;
-    }
-
-    if (_wcsicmp(actualHex.c_str(), expectedSha256) == 0) {
-        out.ok = true;
-        out.shaMatched = true;
-        return out;
-    }
-
-    if (g_strictVerification.load(std::memory_order_relaxed)) {
-        Wh_Log(L"Strict verification: SHA-256 mismatch on %s (got %s, expected %s)",
-               path.filename().c_str(), actualHex.c_str(), expectedSha256);
-        return out;
-    }
-
-    Wh_Log(L"WARNING: SHA-256 mismatch on %s (got %s, expected %s). The file is a structurally "
-           L"valid x64 PE image; accepting it in permissive mode.",
-           path.filename().c_str(), actualHex.c_str(), expectedSha256);
-    out.ok = true;
-    return out;
+    ScopedFileHandle file;
+    const bool ok = OpenVerifiedFile(path, expectedSha256, &file);
+    return {ok, ok};  // A successful result always means the exact SHA-256 pin matched.
 }
 
 // ===========================================================================
@@ -1394,7 +2861,7 @@ BOOL CALLBACK EnumMuiNameCollectProc(
 bool HydrateRuntimePe(
     const std::filesystem::path& targetPePath,
     const wchar_t* canonicalModuleLower,
-    bool useItalian,
+    int languageIndex,
     const std::filesystem::path* optionalDonorPe) {
     // Collect existing "MUI" manifest resources so hydration can remove the
     // MUI split - without this the loader keeps looking for <dll>.mui files
@@ -1410,13 +2877,15 @@ bool HydrateRuntimePe(
 
     // Standard Win32 RT_STRING layout: bundle N holds string IDs
     // N*16 .. N*16+15 (bundle id = stringId / 16 + 1, slot = stringId % 16).
+    const size_t safeLanguageIndex =
+        (languageIndex >= 0 && languageIndex < 5) ? static_cast<size_t>(languageIndex) : 0;
     std::map<UINT, std::array<std::wstring, 16>> bundles;
     for (size_t i = 0; i < kHydratedStringCount; ++i) {
         const LocalizedResourceEntry& e = kHydratedStrings[i];
         if (_wcsicmp(e.moduleLower, canonicalModuleLower) == 0) {
             const UINT bundleId = (e.id / 16u) + 1u;
             const UINT slot = e.id % 16u;
-            bundles[bundleId][slot] = useItalian ? e.itText : e.enText;
+            bundles[bundleId][slot] = e.text[safeLanguageIndex];
         }
     }
 
@@ -1505,6 +2974,38 @@ constexpr HydrationSpec kHydrationSpecs[] = {
     {L"raw_22621_SetProxyCredential.dll", L"SetProxyCredential.dll", nullptr, nullptr},
 };
 
+const MsdlArtifact* FindMsdlArtifact(const wchar_t* localRawName) {
+    if (!localRawName) {
+        return nullptr;
+    }
+    for (const auto& artifact : kMsdlArtifacts) {
+        if (_wcsicmp(artifact.localRawName, localRawName) == 0) {
+            return &artifact;
+        }
+    }
+    return nullptr;
+}
+
+bool CopyVerifiedRawArtifact(const wchar_t* localRawName, const std::filesystem::path& destination) {
+    const MsdlArtifact* artifact = FindMsdlArtifact(localRawName);
+    if (!artifact) {
+        Wh_Log(L"No compiled-in hash pin for raw source %s", localRawName ? localRawName : L"(null)");
+        return false;
+    }
+
+    const std::filesystem::path source = g_rawCacheDir / artifact->localRawName;
+    ScopedFileHandle verifiedSource;
+    if (!OpenVerifiedFile(source, artifact->expectedSha256, &verifiedSource)) {
+        Wh_Log(L"Refusing to copy unverified raw artifact %s", localRawName);
+        return false;
+    }
+    if (!CopyFileW(source.c_str(), destination.c_str(), FALSE)) {
+        Wh_Log(L"CopyFileW failed (%lu) for verified source %s", GetLastError(), localRawName);
+        return false;
+    }
+    return true;
+}
+
 std::filesystem::path GenDirPath(int gen) {
     std::wstring name;
     name.reserve(24);
@@ -1528,7 +3029,141 @@ bool IsGenDirComplete(const std::filesystem::path& dir) {
     return true;
 }
 
-bool ReadHydrationStamp(int& outGen, bool& outItalian) {
+bool ReadHydrationManifest(
+    const std::filesystem::path& dir,
+    std::array<std::wstring, kRuntimeDllCount>& outHashes) {
+    ScopedFileHandle file(CreateFileW(
+        (dir / kHydrationManifestName).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+    if (!file.valid()) {
+        return false;
+    }
+
+    WCHAR buffer[2048]{};
+    DWORD bytesRead = 0;
+    if (!ReadFile(file.get(), buffer, sizeof(buffer) - sizeof(WCHAR), &bytesRead, nullptr) ||
+        bytesRead == 0 || bytesRead % sizeof(WCHAR) != 0 ||
+        bytesRead >= sizeof(buffer) - sizeof(WCHAR)) {
+        return false;
+    }
+    buffer[bytesRead / sizeof(WCHAR)] = L'\0';
+
+    std::array<bool, kRuntimeDllCount> seen{};
+    WCHAR* context = nullptr;
+    for (WCHAR* line = wcstok_s(buffer, L"\r\n", &context); line;
+         line = wcstok_s(nullptr, L"\r\n", &context)) {
+        WCHAR* separator = wcschr(line, L'=');
+        if (!separator) {
+            return false;
+        }
+        *separator = L'\0';
+        const wchar_t* hash = separator + 1;
+        if (wcslen(hash) != 64) {
+            return false;
+        }
+        for (const wchar_t* pHash = hash; *pHash; ++pHash) {
+            if (!iswxdigit(*pHash)) {
+                return false;
+            }
+        }
+
+        bool matched = false;
+        for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+            if (_wcsicmp(line, kRuntimeDllNames[i]) == 0) {
+                if (seen[i]) {
+                    return false;
+                }
+                outHashes[i] = hash;
+                seen[i] = true;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            return false;
+        }
+    }
+
+    return std::all_of(seen.begin(), seen.end(), [](bool value) { return value; });
+}
+
+bool WriteHydrationManifest(const std::filesystem::path& dir) {
+    std::wstring contents;
+    for (const wchar_t* dll : kRuntimeDllNames) {
+        ScopedFileHandle file;
+        std::wstring hash;
+        if (!OpenVerifiedFile(dir / dll, nullptr, &file, &hash) || hash.size() != 64) {
+            Wh_Log(L"Could not hash hydrated runtime image %s", dll);
+            return false;
+        }
+        contents += dll;
+        contents += L'=';
+        contents += hash;
+        contents += L"\r\n";
+    }
+
+    const std::filesystem::path manifestPath = dir / kHydrationManifestName;
+    const std::filesystem::path tempPath = dir / (std::wstring(kHydrationManifestName) +
+        L".tmp." + std::to_wstring(GetCurrentProcessId()));
+    ScopedFileHandle file(CreateFileW(
+        tempPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+        nullptr));
+    if (!file.valid()) {
+        Wh_Log(L"Could not create hydrated image manifest (%lu)", GetLastError());
+        return false;
+    }
+
+    const size_t bytesToWrite = contents.size() * sizeof(wchar_t);
+    DWORD bytesWritten = 0;
+    const BOOL writeOk = bytesToWrite <= MAXDWORD &&
+        WriteFile(file.get(), contents.data(), static_cast<DWORD>(bytesToWrite),
+                  &bytesWritten, nullptr) &&
+        bytesWritten == bytesToWrite && FlushFileBuffers(file.get());
+    file.reset();
+    if (!writeOk || !MoveFileExW(
+            tempPath.c_str(), manifestPath.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        Wh_Log(L"Could not publish hydrated image manifest (%lu)", GetLastError());
+        DeleteFileW(tempPath.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool VerifyHydratedGeneration(
+    const std::filesystem::path& dir, std::vector<HANDLE>* outLockedHandles) {
+    std::array<std::wstring, kRuntimeDllCount> expectedHashes{};
+    if (!ReadHydrationManifest(dir, expectedHashes)) {
+        Wh_Log(L"Hydrated generation has no valid SHA-256 manifest");
+        return false;
+    }
+
+    std::vector<HANDLE> lockedHandles;
+    lockedHandles.reserve(kRuntimeDllCount);
+    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+        ScopedFileHandle file;
+        if (!OpenVerifiedFile(
+                dir / kRuntimeDllNames[i], expectedHashes[i].c_str(), &file)) {
+            for (HANDLE handle : lockedHandles) {
+                CloseHandle(handle);
+            }
+            Wh_Log(L"Hydrated generation verification failed for %s", kRuntimeDllNames[i]);
+            return false;
+        }
+        lockedHandles.push_back(file.release());
+    }
+
+    if (outLockedHandles) {
+        *outLockedHandles = std::move(lockedHandles);
+    } else {
+        for (HANDLE handle : lockedHandles) {
+            CloseHandle(handle);
+        }
+    }
+    return true;
+}
+
+bool ReadHydrationStamp(int& outGen, int& outLanguageIndex) {
     const std::filesystem::path stampPath = g_vanStoreBaseDir / kHydrationStampName;
     HANDLE hFile = CreateFileW(
         stampPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -1546,9 +3181,8 @@ bool ReadHydrationStamp(int& outGen, bool& outItalian) {
     buf[bytesRead / sizeof(WCHAR)] = L'\0';
 
     outGen = 0;
-    outItalian = false;
+    outLanguageIndex = -1;
     bool haveGen = false;
-    bool haveLang = false;
     WCHAR* ctx = nullptr;
     for (WCHAR* line = wcstok_s(buf, L"\r\n", &ctx); line;
          line = wcstok_s(nullptr, L"\r\n", &ctx)) {
@@ -1556,18 +3190,17 @@ bool ReadHydrationStamp(int& outGen, bool& outItalian) {
             outGen = _wtoi(line + 4);
             haveGen = true;
         } else if (StartsWithInsensitive(line, L"lang=")) {
-            outItalian = StartsWithInsensitive(line + 5, L"it");
-            haveLang = true;
+            outLanguageIndex = GetLanguageIndexFromCode(line + 5);
         }
     }
-    return haveGen && haveLang && outGen >= 1 && outGen <= 50;
+    return haveGen && outLanguageIndex >= 0 && outGen >= 1 && outGen <= 50;
 }
 
-bool WriteHydrationStamp(int gen, bool italian) {
+bool WriteHydrationStamp(int gen, int languageIndex) {
     const std::filesystem::path stampPath = g_vanStoreBaseDir / kHydrationStampName;
     WCHAR buf[64]{};
     int n = swprintf(buf, ARRAYSIZE(buf), L"gen=%d\r\nlang=%s\r\n", gen,
-                     italian ? L"it" : L"en");
+                     GetLanguageCode(languageIndex));
     if (n <= 0) {
         return false;
     }
@@ -1602,14 +3235,22 @@ bool EnsureRawArtifact(const MsdlArtifact& art, const std::wstring& pidTidSuffix
 
     const std::filesystem::path tmpPath =
         g_rawCacheDir / (std::wstring(art.localRawName) + L".part." + pidTidSuffix);
-    Wh_Log(L"Downloading %s from MSDL...", art.msdlRelativeUrl);
-    if (!DownloadMsdlFile(art.msdlRelativeUrl, tmpPath)) {
-        Wh_Log(L"Failed downloading %s", art.msdlRelativeUrl);
-        return false;
-    }
-    if (!CheckArtifactFile(tmpPath, art.expectedSha256).ok) {
+    bool verifiedDownload = false;
+    for (int attempt = 1; attempt <= 2; ++attempt) {
+        if (g_shuttingDown.load(std::memory_order_acquire)) break;
         DeleteFileW(tmpPath.c_str());
-        Wh_Log(L"Verification rejected downloaded %s", art.localRawName);
+        Wh_Log(L"Downloading %s from MSDL (attempt %d/2)...", art.msdlRelativeUrl, attempt);
+        if (DownloadMsdlFile(art.msdlRelativeUrl, tmpPath) &&
+            CheckArtifactFile(tmpPath, art.expectedSha256).ok) {
+            verifiedDownload = true;
+            break;
+        }
+        Wh_Log(L"Download or SHA-256 verification failed for %s (attempt %d/2)",
+               art.localRawName, attempt);
+        DeleteFileW(tmpPath.c_str());
+    }
+    if (!verifiedDownload) {
+        DeleteFileW(tmpPath.c_str());
         return false;
     }
 
@@ -1627,7 +3268,7 @@ bool EnsureRawArtifact(const MsdlArtifact& art, const std::wstring& pidTidSuffix
         }
         return false;
     }
-    return true;
+    return CheckArtifactFile(rawPath, art.expectedSha256).ok;
 }
 
 void CleanupOldGenerations(int keepGen) {
@@ -1657,24 +3298,36 @@ bool TryUseGeneration(int gen) {
     if (!IsGenDirComplete(dir)) {
         return false;
     }
+
+    std::vector<HANDLE> verifiedHandles;
+    if (!VerifyHydratedGeneration(dir, &verifiedHandles)) {
+        return false;
+    }
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
+        for (HANDLE handle : g_verifiedRuntimeFileHandles) {
+            if (handle && handle != INVALID_HANDLE_VALUE) {
+                CloseHandle(handle);
+            }
+        }
+        g_verifiedRuntimeFileHandles.clear();
+        g_verifiedRuntimeFileHandles.swap(verifiedHandles);
         g_vanStoreDir = dir;
     }
     return true;
 }
 
 bool EnsureVanStoreProvisioned() {
-    const bool useItalian = IsEffectiveItalian();
+    const int languageIndex = GetEffectiveLanguageIndex();
 
     // Fast path (no mutex): valid stamp + complete generation folder.
     {
         int gen = 0;
-        bool stampItalian = false;
-        if (ReadHydrationStamp(gen, stampItalian) && stampItalian == useItalian &&
-            TryUseGeneration(gen)) {
+        int stampLanguageIndex = -1;
+        if (ReadHydrationStamp(gen, stampLanguageIndex) &&
+            stampLanguageIndex == languageIndex && TryUseGeneration(gen)) {
             Wh_Log(L"Hydrated VanStore cache already valid (generation %d, lang=%s)", gen,
-                   stampItalian ? L"it" : L"en");
+                   GetLanguageCode(stampLanguageIndex));
             return true;
         }
     }
@@ -1695,9 +3348,9 @@ bool EnsureVanStoreProvisioned() {
     do {
         // Another explorer.exe may have finished provisioning while we waited.
         int gen = 0;
-        bool stampItalian = false;
-        if (ReadHydrationStamp(gen, stampItalian) && stampItalian == useItalian &&
-            TryUseGeneration(gen)) {
+        int stampLanguageIndex = -1;
+        if (ReadHydrationStamp(gen, stampLanguageIndex) &&
+            stampLanguageIndex == languageIndex && TryUseGeneration(gen)) {
             Wh_Log(L"Another explorer.exe finished provisioning (generation %d) - reusing it",
                    gen);
             success = true;
@@ -1762,13 +3415,13 @@ bool EnsureVanStoreProvisioned() {
                 hydrateOk = false;
                 break;
             }
-            const std::filesystem::path src = g_rawCacheDir / spec.rawSource;
             const std::filesystem::path dstTmp = targetDir /
                 (std::wstring(spec.runtimeDest) + L".building." + pidTidSuffix);
             const std::filesystem::path dstFinal = targetDir / spec.runtimeDest;
 
-            if (!CopyFileW(src.c_str(), dstTmp.c_str(), FALSE)) {
-                Wh_Log(L"CopyFileW failed (%lu) for %s", GetLastError(), spec.runtimeDest);
+            if (!CopyVerifiedRawArtifact(spec.rawSource, dstTmp)) {
+                Wh_Log(L"Refusing to hydrate unverified source %s for %s",
+                       spec.rawSource, spec.runtimeDest);
                 hydrateOk = false;
                 break;
             }
@@ -1783,7 +3436,19 @@ bool EnsureVanStoreProvisioned() {
             const std::wstring lowerName = ToLowerAscii(spec.runtimeDest);
             bool hydrated = false;
             const wchar_t* lastBaseName = spec.rawSource;
-            if (HydrateRuntimePe(dstTmp, lowerName.c_str(), useItalian, donorPtr)) {
+            ScopedFileHandle donorVerification;
+            bool donorVerified = true;
+            if (donorPtr) {
+                const MsdlArtifact* donorArtifact = FindMsdlArtifact(spec.donorRaw);
+                donorVerified = donorArtifact && OpenVerifiedFile(
+                    *donorPtr, donorArtifact->expectedSha256, &donorVerification);
+                if (!donorVerified) {
+                    Wh_Log(L"Refusing unverified donor %s for %s", spec.donorRaw,
+                           spec.runtimeDest);
+                }
+            }
+            if (donorVerified &&
+                HydrateRuntimePe(dstTmp, lowerName.c_str(), languageIndex, donorPtr)) {
                 hydrated = true;
             } else {
                 DeleteFileW(dstTmp.c_str());
@@ -1793,9 +3458,8 @@ bool EnsureVanStoreProvisioned() {
                     // Alternate base whose own embedded resources make the
                     // donor transplant unnecessary (van.dll: 17763 base).
                     lastBaseName = spec.altRawSource;
-                    const std::filesystem::path altSrc = g_rawCacheDir / spec.altRawSource;
-                    if (CopyFileW(altSrc.c_str(), dstTmp.c_str(), FALSE) &&
-                        HydrateRuntimePe(dstTmp, lowerName.c_str(), useItalian, nullptr)) {
+                    if (CopyVerifiedRawArtifact(spec.altRawSource, dstTmp) &&
+                        HydrateRuntimePe(dstTmp, lowerName.c_str(), languageIndex, nullptr)) {
                         hydrated = true;
                         Wh_Log(L"Hydration succeeded with alternate base %s for %s",
                                spec.altRawSource, spec.runtimeDest);
@@ -1804,12 +3468,11 @@ bool EnsureVanStoreProvisioned() {
                     }
                 }
                 if (!hydrated) {
-                    // Permissive last resort: a plain raw copy keeps COM,
+                    // Verified raw fallback: a plain raw copy keeps COM,
                     // exports and (for 17763 bases) the embedded resources
                     // alive; string lookups then fall back to the
                     // LoadStringW hook safety net.
-                    const std::filesystem::path lastSrc = g_rawCacheDir / lastBaseName;
-                    if (CopyFileW(lastSrc.c_str(), dstTmp.c_str(), FALSE)) {
+                    if (CopyVerifiedRawArtifact(lastBaseName, dstTmp)) {
                         hydrated = true;
                         Wh_Log(L"WARNING: using unhydrated raw copy of %s for %s",
                                lastBaseName, spec.runtimeDest);
@@ -1861,8 +3524,14 @@ bool EnsureVanStoreProvisioned() {
             break;
         }
 
-        // 3. Publish the stamp + switch this process over to the new folder.
-        if (!WriteHydrationStamp(newGen, useItalian)) {
+        // 3. Record every hydrated image digest before publishing the generation.
+        //    The raw MSDL pins above are the trust anchor; this manifest detects
+        //    corruption/tampering of the generated cache before it is loaded.
+        if (!WriteHydrationManifest(targetDir)) {
+            Wh_Log(L"Failed writing hydrated image SHA-256 manifest");
+            break;
+        }
+        if (!WriteHydrationStamp(newGen, languageIndex)) {
             Wh_Log(L"Failed writing hydration stamp");
             break;
         }
@@ -1870,7 +3539,7 @@ bool EnsureVanStoreProvisioned() {
             break;
         }
         Wh_Log(L"VanStore provisioning and PE hydration completed (generation %d, lang=%s)",
-               newGen, useItalian ? L"it" : L"en");
+               newGen, GetLanguageCode(languageIndex));
         CleanupOldGenerations(newGen);
         success = true;
     } while (false);
@@ -1894,18 +3563,17 @@ bool EnsureVanStoreProvisioned() {
 }
 
 // ===========================================================================
-// Per-user registry overlay + real HKCU COM registrations
+// Private per-user registry overlay (registry writes stay out of system/COM keys)
 // -------------------------------------------------------------------------
-// Everything is written under HKCU (zero UAC, zero HKLM writes):
-//   1. <overlay>\Control_VAN\{manager CLSID}  - Active/Ordinal/PreLogon/...
-//      plus the master {8B9D20EE-...} key with the 100/200/300 ordinal map,
-//   2. <overlay>\XWizards\... - seeded from the real HKLM tree + our
-//      task/page component graph,
-//   3. <overlay>\CLSID\{...} - mirror used to satisfy HKCR/HKLM-style
-//      lookups through the registry hooks,
-//   4. REAL HKCU\Software\Classes\CLSID\{...}\InProcServer32 entries so COM
-//      activation succeeds natively even without the hooks. Every key we own
-//      is tagged with a WindhawkWin8Van marker and removed at unload.
+// In fallback mode, registry state created by this mod lives in the mod-owned
+// HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry tree,
+// backing selected legacy HKLM/HKCR paths. Win32 and native key opens/creates for
+// those paths are redirected; write-capable opens fail closed if the overlay is
+// unavailable. Normally it is removed when the last tracked fallback instance
+// unloads. The mod issues no direct HKLM or live COM registration writes: managed
+// classes are resolved by the in-proc CoGetClassObject/CoCreateInstance hooks.
+// Legacy marker-tagged COM entries are deleted only after the old PID state proves
+// no older Explorer process can still be using them.
 // ===========================================================================
 void RegWriteSz(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName,
                 const std::wstring& value, DWORD type = REG_SZ) {
@@ -1960,34 +3628,36 @@ void WriteXwLink(
     RegWriteDword(hOverlayRoot, parentKey, L"Class Type", parentType);
 }
 
-void WriteRealHkcuComRegistration(const GUID& clsid, const wchar_t* dllFullPath,
-                                  const wchar_t* threadingModel, const wchar_t* description) {
+bool RemoveLegacyTaggedHkcuComRegistration(const GUID& clsid) {
     const std::wstring guidStr = GuidToUpperBraceString(clsid);
     const std::wstring base = L"Software\\Classes\\CLSID\\" + guidStr;
-    RegWriteSz(HKEY_CURRENT_USER, base, nullptr, description);
-    RegWriteSz(HKEY_CURRENT_USER, base, kComMarkerValueName, L"1");
-    RegWriteSz(HKEY_CURRENT_USER, base + L"\\InProcServer32", nullptr, dllFullPath);
-    RegWriteSz(HKEY_CURRENT_USER, base + L"\\InProcServer32", L"ThreadingModel", threadingModel);
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, KEY_QUERY_VALUE, &hKey) !=
+        ERROR_SUCCESS) {
+        return false;
+    }
+
+    wchar_t marker[8]{};
+    DWORD size = sizeof(marker);
+    DWORD type = 0;
+    const bool tagged =
+        RegQueryValueExW(hKey, kComMarkerValueName, nullptr, &type,
+                         reinterpret_cast<BYTE*>(marker), &size) == ERROR_SUCCESS &&
+        type == REG_SZ && wcscmp(marker, L"1") == 0;
+    RegCloseKey(hKey);
+    return tagged && RegDeleteTreeW(HKEY_CURRENT_USER, base.c_str()) == ERROR_SUCCESS;
 }
 
-void DeleteRealHkcuComRegistration(const GUID& clsid) {
-    const std::wstring guidStr = GuidToUpperBraceString(clsid);
-    const std::wstring base = L"Software\\Classes\\CLSID\\" + guidStr;
-    // Only delete when the marker is present so user-created keys survive.
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, KEY_QUERY_VALUE, &hKey) ==
-        ERROR_SUCCESS) {
-        wchar_t marker[8]{};
-        DWORD size = sizeof(marker);
-        DWORD type = 0;
-        bool tagged =
-            RegQueryValueExW(hKey, kComMarkerValueName, nullptr, &type,
-                             reinterpret_cast<BYTE*>(marker), &size) == ERROR_SUCCESS &&
-            type == REG_SZ;
-        RegCloseKey(hKey);
-        if (tagged) {
-            RegDeleteTreeW(HKEY_CURRENT_USER, base.c_str());
-        }
+void RemoveLegacyTaggedHkcuComRegistrations() {
+    ScopedHookGuard guard;
+    size_t removed = 0;
+    for (const auto& entry : kInProcComTable) {
+        removed += RemoveLegacyTaggedHkcuComRegistration(entry.clsid) ? 1 : 0;
+    }
+    removed += RemoveLegacyTaggedHkcuComRegistration(CLSID_PopupWindowFactory) ? 1 : 0;
+    if (removed != 0) {
+        Wh_Log(L"Removed %llu marker-tagged COM key(s) left by an older mod version",
+               static_cast<unsigned long long>(removed));
     }
 }
 
@@ -2109,36 +3779,7 @@ bool PopulateVirtualRegistryOverlay() {
 
     RegCloseKey(hOverlayRoot);
 
-    // 4. Real per-user COM registrations (native COM activation support).
-    for (const auto& entry : kInProcComTable) {
-        WriteRealHkcuComRegistration(
-            entry.clsid, (g_vanStoreDir / entry.dllBaseName).wstring().c_str(),
-            entry.threadingModel, entry.description);
-    }
-
-    // 4b. Conditional: CLSID_PopupWindowFactory (Windows.UI.Immersive.dll) is
-    //     required by CFlyoutListUi::CreateCharmWindow. Register a per-user
-    //     fallback only when the OS itself has no registration.
-    {
-        HKEY hKey = nullptr;
-        const std::wstring check = L"CLSID\\" + GuidToUpperBraceString(CLSID_PopupWindowFactory) +
-                                   L"\\InProcServer32";
-        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, check.c_str(), 0, KEY_QUERY_VALUE, &hKey) !=
-            ERROR_SUCCESS) {
-            WCHAR immersivePath[MAX_PATH * 2]{};
-            if (ExpandEnvironmentStringsW(L"%SystemRoot%\\System32\\Windows.UI.Immersive.dll",
-                                          immersivePath,
-                                          ARRAYSIZE(immersivePath)) > 0) {
-                WriteRealHkcuComRegistration(
-                    CLSID_PopupWindowFactory, immersivePath, L"Both",
-                    L"Windows.UI.Immersive Popup Window Factory");
-                Wh_Log(L"Registered per-user CLSID_PopupWindowFactory fallback "
-                       L"(missing from HKCR on this system)");
-            }
-        } else {
-            RegCloseKey(hKey);
-        }
-    }
+    Wh_Log(L"Virtual registry overlay populated; COM classes are served by in-process hooks");
 
     return true;
 }
@@ -2146,147 +3787,308 @@ bool PopulateVirtualRegistryOverlay() {
 // ---------------------------------------------------------------------------
 // Instance tracking (crash-healing PID list stored in the overlay root) so
 // registry artifacts are only removed when the LAST mod instance unloads.
+// All callers hold g_overlayMutex; unknown/malformed PID state fails closed.
 // ---------------------------------------------------------------------------
-void PruneAndAddInstancePid() {
+enum class TrackedPidState { Dead, Live, Unknown };
+
+TrackedPidState QueryTrackedPidState(DWORD pid) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        const DWORD error = GetLastError();
+        return error == ERROR_INVALID_PARAMETER ? TrackedPidState::Dead
+                                                : TrackedPidState::Unknown;
+    }
+    DWORD exitCode = 0;
+    const BOOL queried = GetExitCodeProcess(process, &exitCode);
+    CloseHandle(process);
+    if (!queried) {
+        return TrackedPidState::Unknown;
+    }
+    return exitCode == STILL_ACTIVE ? TrackedPidState::Live : TrackedPidState::Dead;
+}
+
+bool ReadTrackedPidList(HKEY hKey, std::wstring& outPids) {
+    wchar_t buffer[4096]{};
+    DWORD size = sizeof(buffer);
+    DWORD type = 0;
+    const LSTATUS status = RegQueryValueExW(
+        hKey, kInstancePidValueName, nullptr, &type,
+        reinterpret_cast<BYTE*>(buffer), &size);
+    if (status == ERROR_FILE_NOT_FOUND) {
+        outPids.clear();
+        return true;
+    }
+    if (status != ERROR_SUCCESS || type != REG_SZ || size < sizeof(wchar_t) ||
+        size > sizeof(buffer) || size % sizeof(wchar_t) != 0) {
+        return false;
+    }
+
+    const size_t charCount = size / sizeof(wchar_t);
+    if (buffer[charCount - 1] != L'\0' ||
+        (charCount > 1 &&
+         std::find(buffer, buffer + charCount - 1, L'\0') != buffer + charCount - 1)) {
+        return false;
+    }
+    outPids.assign(buffer, charCount - 1);
+    return true;
+}
+
+bool ParseTrackedPidToken(std::wstring_view token, DWORD& outPid) {
+    if (token.empty()) {
+        return false;
+    }
+    ULONGLONG value = 0;
+    for (wchar_t ch : token) {
+        if (ch < L'0' || ch > L'9') {
+            return false;
+        }
+        const DWORD digit = static_cast<DWORD>(ch - L'0');
+        if (value > (static_cast<ULONGLONG>(MAXDWORD) - digit) / 10) {
+            return false;
+        }
+        value = value * 10 + digit;
+    }
+    if (value == 0) {
+        return false;
+    }
+    outPid = static_cast<DWORD>(value);
+    return true;
+}
+
+bool ParseTrackedPidList(const std::wstring& text, std::vector<DWORD>& outPids) {
+    outPids.clear();
+    size_t start = 0;
+    while (start < text.size()) {
+        const size_t delimiter = text.find(L';', start);
+        const size_t end = delimiter == std::wstring::npos ? text.size() : delimiter;
+        DWORD pid = 0;
+        if (!ParseTrackedPidToken(std::wstring_view(text).substr(start, end - start), pid)) {
+            return false;
+        }
+        outPids.push_back(pid);
+        if (delimiter == std::wstring::npos) {
+            break;
+        }
+        start = delimiter + 1;
+    }
+    return true;  // A single trailing semicolon is allowed.
+}
+
+bool AppendTrackedPid(std::wstring& text, DWORD pid) {
+    const std::wstring value = std::to_wstring(pid) + L';';
+    constexpr size_t kMaxPidListChars = 4095;
+    if (text.size() + value.size() > kMaxPidListChars) {
+        return false;
+    }
+    text += value;
+    return true;
+}
+
+bool WriteTrackedPidList(HKEY hKey, const std::wstring& text) {
+    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    if (bytes > MAXDWORD) {
+        return false;
+    }
+    return RegSetValueExW(
+               hKey, kInstancePidValueName, 0, REG_SZ,
+               reinterpret_cast<const BYTE*>(text.c_str()), static_cast<DWORD>(bytes)) ==
+           ERROR_SUCCESS;
+}
+
+bool PruneAndAddInstancePid() {
     ScopedHookGuard guard;
     HKEY hKey = nullptr;
     if (RegCreateKeyExW(
             HKEY_CURRENT_USER, kVirtualRegRootSubkey, 0, nullptr, REG_OPTION_NON_VOLATILE,
             KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
-        return;
+        return false;
     }
 
-    wchar_t existing[4096]{};
-    DWORD size = sizeof(existing) - sizeof(wchar_t);
-    DWORD type = 0;
-    if (RegQueryValueExW(
-            hKey, kInstancePidValueName, nullptr, &type,
-            reinterpret_cast<BYTE*>(existing), &size) != ERROR_SUCCESS ||
-        type != REG_SZ) {
-        existing[0] = L'\0';
+    std::wstring existing;
+    std::vector<DWORD> pids;
+    if (!ReadTrackedPidList(hKey, existing) || !ParseTrackedPidList(existing, pids)) {
+        RegCloseKey(hKey);
+        Wh_Log(L"Overlay PID list is unreadable or malformed; refusing to overwrite it");
+        return false;
     }
 
-    wchar_t updated[4096]{};
-    size_t pos = 0;
     const DWORD myPid = GetCurrentProcessId();
-
-    // Keep only PIDs that are still alive.
-    wchar_t* ctx = nullptr;
-    for (wchar_t* tok = wcstok_s(existing, L";", &ctx); tok;
-         tok = wcstok_s(nullptr, L";", &ctx)) {
-        DWORD pid = static_cast<DWORD>(wcstoul(tok, nullptr, 10));
-        if (pid == 0 || pid == myPid) {
+    std::wstring updated;
+    std::vector<DWORD> retained;
+    for (DWORD pid : pids) {
+        if (pid == myPid ||
+            std::find(retained.begin(), retained.end(), pid) != retained.end()) {
             continue;
         }
-        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (!hProc) {
-            continue;  // dead or inaccessible explorer - drop it
+        const TrackedPidState state = QueryTrackedPidState(pid);
+        if (state != TrackedPidState::Dead) {
+            if (!AppendTrackedPid(updated, pid)) {
+                RegCloseKey(hKey);
+                return false;
+            }
+            retained.push_back(pid);
+            if (state == TrackedPidState::Unknown) {
+                Wh_Log(L"Could not determine whether tracked PID %lu is alive; retaining it",
+                       static_cast<unsigned long>(pid));
+            }
         }
-        CloseHandle(hProc);
-        int n = swprintf(updated + pos, ARRAYSIZE(updated) - pos, L"%lu;", pid);
-        if (n <= 0) {
-            break;
-        }
-        pos += static_cast<size_t>(n);
     }
-    swprintf(updated + pos, ARRAYSIZE(updated) - pos, L"%lu;", myPid);
+    if (!AppendTrackedPid(updated, myPid)) {
+        RegCloseKey(hKey);
+        return false;
+    }
 
-    RegSetValueExW(
-        hKey, kInstancePidValueName, 0, REG_SZ, reinterpret_cast<const BYTE*>(updated),
-        static_cast<DWORD>((wcslen(updated) + 1) * sizeof(wchar_t)));
+    const bool written = WriteTrackedPidList(hKey, updated);
     RegCloseKey(hKey);
+    return written;
 }
 
 bool RemoveInstancePidAndCheckLast() {
     ScopedHookGuard guard;
     HKEY hKey = nullptr;
-    if (RegCreateKeyExW(
-            HKEY_CURRENT_USER, kVirtualRegRootSubkey, 0, nullptr, REG_OPTION_NON_VOLATILE,
-            KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
-        return false;  // conservative: assume other instances exist
+    if (RegOpenKeyExW(
+            HKEY_CURRENT_USER, kVirtualRegRootSubkey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE,
+            &hKey) != ERROR_SUCCESS) {
+        return false;
     }
 
-    wchar_t existing[4096]{};
-    DWORD size = sizeof(existing) - sizeof(wchar_t);
-    DWORD type = 0;
-    if (RegQueryValueExW(
-            hKey, kInstancePidValueName, nullptr, &type,
-            reinterpret_cast<BYTE*>(existing), &size) != ERROR_SUCCESS ||
-        type != REG_SZ) {
+    std::wstring existing;
+    std::vector<DWORD> pids;
+    if (!ReadTrackedPidList(hKey, existing) || !ParseTrackedPidList(existing, pids)) {
         RegCloseKey(hKey);
-        return true;
+        Wh_Log(L"Overlay PID list is unreadable or malformed; preserving registry overlay");
+        return false;
     }
 
-    wchar_t updated[4096]{};
-    size_t pos = 0;
-    bool othersAlive = false;
     const DWORD myPid = GetCurrentProcessId();
-
-    wchar_t* ctx = nullptr;
-    for (wchar_t* tok = wcstok_s(existing, L";", &ctx); tok;
-         tok = wcstok_s(nullptr, L";", &ctx)) {
-        DWORD pid = static_cast<DWORD>(wcstoul(tok, nullptr, 10));
-        if (pid == 0 || pid == myPid) {
+    bool foundThisPid = false;
+    std::wstring updated;
+    std::vector<DWORD> retained;
+    for (DWORD pid : pids) {
+        if (pid == myPid) {
+            foundThisPid = true;
             continue;
         }
-        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (!hProc) {
+        if (std::find(retained.begin(), retained.end(), pid) != retained.end()) {
             continue;
         }
-        CloseHandle(hProc);
-        othersAlive = true;
-        int n = swprintf(updated + pos, ARRAYSIZE(updated) - pos, L"%lu;", pid);
-        if (n <= 0) {
-            break;
+        const TrackedPidState state = QueryTrackedPidState(pid);
+        if (state != TrackedPidState::Dead) {
+            if (!AppendTrackedPid(updated, pid)) {
+                RegCloseKey(hKey);
+                return false;
+            }
+            retained.push_back(pid);
+            if (state == TrackedPidState::Unknown) {
+                Wh_Log(L"Could not determine whether tracked PID %lu is alive; preserving overlay",
+                       static_cast<unsigned long>(pid));
+            }
         }
-        pos += static_cast<size_t>(n);
     }
 
-    if (othersAlive) {
-        RegSetValueExW(
-            hKey, kInstancePidValueName, 0, REG_SZ,
-            reinterpret_cast<const BYTE*>(updated),
-            static_cast<DWORD>((wcslen(updated) + 1) * sizeof(wchar_t)));
-    } else {
-        RegDeleteValueW(hKey, kInstancePidValueName);
+    if (!foundThisPid) {
+        RegCloseKey(hKey);
+        Wh_Log(L"Current PID was absent from the overlay marker; refusing to delete shared state");
+        return false;
     }
+
+    if (!updated.empty()) {
+        const bool written = WriteTrackedPidList(hKey, updated);
+        RegCloseKey(hKey);
+        if (!written) {
+            Wh_Log(L"Could not update the remaining overlay PID list; preserving registry state");
+        }
+        return false;
+    }
+
+    const LSTATUS deleteStatus = RegDeleteValueW(hKey, kInstancePidValueName);
     RegCloseKey(hKey);
-    return !othersAlive;
+    return deleteStatus == ERROR_SUCCESS;
 }
+
+bool CleanupStaleLegacyVirtualRegistryRoot();
 
 void CleanupRegistryArtifacts() {
     ScopedHookGuard guard;
-    // Overlay tree.
-    RegDeleteTreeW(HKEY_CURRENT_USER, kVirtualRegRootSubkey);
-    // Tagged per-user COM registrations (marker-checked, never blanket).
-    for (const auto& entry : kInProcComTable) {
-        DeleteRealHkcuComRegistration(entry.clsid);
+    const LSTATUS status = RegDeleteTreeW(HKEY_CURRENT_USER, kVirtualRegRootSubkey);
+    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"Could not remove private virtual registry overlay (%ld); it may remain", status);
+        return;
     }
-    DeleteRealHkcuComRegistration(CLSID_PopupWindowFactory);
-    Wh_Log(L"Registry overlay and tagged HKCU COM registrations removed");
+
+    if (CleanupStaleLegacyVirtualRegistryRoot()) {
+        RemoveLegacyTaggedHkcuComRegistrations();
+    } else {
+        Wh_Log(L"Legacy registry PID state is not provably stale; preserving marker-tagged "
+               L"HKCU COM entries from older versions");
+    }
+    Wh_Log(L"Private virtual registry overlay removed");
+}
+
+bool CleanupStaleLegacyVirtualRegistryRoot() {
+    ScopedHookGuard guard;
+    HKEY hKey = nullptr;
+    const LSTATUS openStatus = RegOpenKeyExW(
+        HKEY_CURRENT_USER, kLegacyVirtualRegRootSubkey, 0, KEY_QUERY_VALUE, &hKey);
+    if (openStatus == ERROR_FILE_NOT_FOUND || openStatus == ERROR_PATH_NOT_FOUND) {
+        return true;  // No prior overlay can be in use.
+    }
+    if (openStatus != ERROR_SUCCESS) {
+        return false;
+    }
+
+    std::wstring pidText;
+    std::vector<DWORD> pids;
+    const bool parsed = ReadTrackedPidList(hKey, pidText) &&
+                        ParseTrackedPidList(pidText, pids);
+    RegCloseKey(hKey);
+    if (!parsed || pids.empty()) {
+        // Without a valid, nonempty marker, ownership cannot be established.
+        return false;
+    }
+
+    for (DWORD pid : pids) {
+        // Even our own PID is treated as live here: an older mod image in this
+        // process might still own a callback or COM object during an update.
+        if (QueryTrackedPidState(pid) != TrackedPidState::Dead) {
+            return false;
+        }
+    }
+
+    const LSTATUS deleteStatus =
+        RegDeleteTreeW(HKEY_CURRENT_USER, kLegacyVirtualRegRootSubkey);
+    if (deleteStatus == ERROR_SUCCESS || deleteStatus == ERROR_FILE_NOT_FOUND ||
+        deleteStatus == ERROR_PATH_NOT_FOUND) {
+        Wh_Log(L"Removed a stale legacy virtual-registry subtree after confirming all tracked "
+               L"Explorer PIDs were gone");
+        return true;
+    }
+    Wh_Log(L"Could not remove the stale legacy virtual-registry subtree (%ld)", deleteStatus);
+    return false;
 }
 
 // ===========================================================================
-// Registry path mapping: Win32 (RegOpenKeyExW/A) + NT (NtOpenKey/NtOpenKeyEx)
+// Registry path mapping: Win32 open/create + NT NtOpenKey/NtOpenKeyEx/NtCreateKey
 // ===========================================================================
 struct OverlayPrefixMap {
     const wchar_t* regPrefix;   // queried subkey prefix (case-insensitive)
     const wchar_t* overlaySub;  // overlay subkey it maps to
-    bool trailingSep;           // prefix already ends with a separator
 };
 
-// HKLM-prefixed lookups map into the overlay; HKCR/HKCU CLSID lookups map to
-// the overlay mirror (the real HKCU\Software\Classes\CLSID registrations
-// exist in parallel and satisfy native COM activation on their own).
+// Selected HKLM accesses and the managed CLSID mirror are redirected into the
+// private overlay. Native COM activation is handled separately by the hooks.
 constexpr OverlayPrefixMap kHklmOverlayMaps[] = {
-    {L"SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN", false},
-    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", L"XWizards", false},
-    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN", L"Software_VAN", false},
-    {L"SOFTWARE\\Classes\\CLSID\\", L"CLSID\\", true},
+    {L"SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN"},
+    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", L"XWizards"},
+    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN", L"Software_VAN"},
+    {L"SOFTWARE\\Classes\\CLSID", L"CLSID"},
 };
 constexpr OverlayPrefixMap kHkcrOverlayMaps[] = {
-    {L"CLSID\\", L"CLSID\\", true},
-    {L"Software\\Classes\\CLSID\\", L"CLSID\\", true},
+    {L"CLSID", L"CLSID"},
+    {L"Software\\Classes\\CLSID", L"CLSID"},
+};
+constexpr OverlayPrefixMap kHkcuOverlayMaps[] = {
+    {L"Software\\Classes\\CLSID", L"CLSID"},
 };
 
 // Stack-only overlay path builder (loader-lock friendly).
@@ -2299,9 +4101,12 @@ bool BuildOverlayPath(HKEY hKey, const wchar_t* subKey, wchar_t* out, size_t cch
     if (hKey == HKEY_LOCAL_MACHINE) {
         maps = kHklmOverlayMaps;
         mapCount = ARRAYSIZE(kHklmOverlayMaps);
-    } else if (hKey == HKEY_CLASSES_ROOT || hKey == HKEY_CURRENT_USER) {
+    } else if (hKey == HKEY_CLASSES_ROOT) {
         maps = kHkcrOverlayMaps;
         mapCount = ARRAYSIZE(kHkcrOverlayMaps);
+    } else if (hKey == HKEY_CURRENT_USER) {
+        maps = kHkcuOverlayMaps;
+        mapCount = ARRAYSIZE(kHkcuOverlayMaps);
     } else {
         return false;
     }
@@ -2334,10 +4139,19 @@ bool BuildOverlayPath(HKEY hKey, const wchar_t* subKey, wchar_t* out, size_t cch
 using RegOpenKeyExW_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, DWORD, REGSAM, PHKEY);
 RegOpenKeyExW_t g_origRegOpenKeyExW = nullptr;
 
+constexpr ACCESS_MASK kRegistryWriteAccessMask =
+    KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK | DELETE | WRITE_DAC | WRITE_OWNER |
+    MAXIMUM_ALLOWED;
+
+bool HasRegistryWriteAccess(ACCESS_MASK desiredAccess) noexcept {
+    return (desiredAccess & kRegistryWriteAccessMask) != 0;
+}
+
 LSTATUS WINAPI Hook_RegOpenKeyExW(
     HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
     if (phkResult && lpSubKey && lpSubKey[0] &&
-        g_vanStoreReady.load(std::memory_order_acquire) && !g_inHookGuard) {
+        g_registryOverlayReady.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t mapped[1024];
         if (BuildOverlayPath(hKey, lpSubKey, mapped, ARRAYSIZE(mapped))) {
             ScopedHookGuard guard;
@@ -2346,7 +4160,12 @@ LSTATUS WINAPI Hook_RegOpenKeyExW(
             if (st == ERROR_SUCCESS) {
                 return st;  // genuine kernel HKEY - RegNotifyChangeKeyValue works
             }
-            // Permissive: fall through to the original call on any miss.
+            // Preserve read-only fallback behavior, but never hand out a live
+            // system/class key for a write-capable request when its overlay is
+            // missing or inaccessible.
+            if (HasRegistryWriteAccess(samDesired)) {
+                return st;
+            }
         }
     }
     return g_origRegOpenKeyExW(hKey, lpSubKey, ulOptions, samDesired, phkResult);
@@ -2358,7 +4177,8 @@ RegOpenKeyExA_t g_origRegOpenKeyExA = nullptr;
 LSTATUS WINAPI Hook_RegOpenKeyExA(
     HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
     if (phkResult && lpSubKey && lpSubKey[0] &&
-        g_vanStoreReady.load(std::memory_order_acquire) && !g_inHookGuard) {
+        g_registryOverlayReady.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t subWide[512];
         int n = MultiByteToWideChar(CP_ACP, 0, lpSubKey, -1, subWide, ARRAYSIZE(subWide));
         if (n > 0) {
@@ -2370,85 +4190,153 @@ LSTATUS WINAPI Hook_RegOpenKeyExA(
                 if (st == ERROR_SUCCESS) {
                     return st;
                 }
+                if (HasRegistryWriteAccess(samDesired)) {
+                    return st;
+                }
             }
         }
     }
     return g_origRegOpenKeyExA(hKey, lpSubKey, ulOptions, samDesired, phkResult);
 }
 
+using RegCreateKeyExW_t = LSTATUS(WINAPI*)(
+    HKEY, LPCWSTR, DWORD, LPWSTR, DWORD, REGSAM, LPSECURITY_ATTRIBUTES, PHKEY, LPDWORD);
+RegCreateKeyExW_t g_origRegCreateKeyExW = nullptr;
+
+LSTATUS WINAPI Hook_RegCreateKeyExW(
+    HKEY hKey, LPCWSTR lpSubKey, DWORD reserved, LPWSTR lpClass, DWORD options,
+    REGSAM samDesired, LPSECURITY_ATTRIBUTES securityAttributes, PHKEY phkResult,
+    LPDWORD disposition) {
+    if (phkResult && lpSubKey && g_registryOverlayReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
+        wchar_t mapped[1024];
+        if (BuildOverlayPath(hKey, lpSubKey, mapped, ARRAYSIZE(mapped))) {
+            ScopedHookGuard guard;
+            // A mapped create must never fall through to the live HKLM/HKCR
+            // key, even if the private overlay cannot be written.
+            return g_origRegCreateKeyExW(
+                HKEY_CURRENT_USER, mapped, reserved, lpClass, options, samDesired,
+                securityAttributes, phkResult, disposition);
+        }
+    }
+    return g_origRegCreateKeyExW(
+        hKey, lpSubKey, reserved, lpClass, options, samDesired, securityAttributes,
+        phkResult, disposition);
+}
+
+using RegCreateKeyExA_t = LSTATUS(WINAPI*)(
+    HKEY, LPCSTR, DWORD, LPSTR, DWORD, REGSAM, LPSECURITY_ATTRIBUTES, PHKEY, LPDWORD);
+RegCreateKeyExA_t g_origRegCreateKeyExA = nullptr;
+
+LSTATUS WINAPI Hook_RegCreateKeyExA(
+    HKEY hKey, LPCSTR lpSubKey, DWORD reserved, LPSTR lpClass, DWORD options,
+    REGSAM samDesired, LPSECURITY_ATTRIBUTES securityAttributes, PHKEY phkResult,
+    LPDWORD disposition) {
+    if (phkResult && lpSubKey && g_registryOverlayReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
+        wchar_t subWide[512];
+        const int wideCount = MultiByteToWideChar(
+            CP_ACP, 0, lpSubKey, -1, subWide, ARRAYSIZE(subWide));
+        if (wideCount > 0) {
+            wchar_t mapped[1024];
+            if (BuildOverlayPath(hKey, subWide, mapped, ARRAYSIZE(mapped))) {
+                char mappedAnsi[4096];
+                const int ansiCount = WideCharToMultiByte(
+                    CP_ACP, 0, mapped, -1, mappedAnsi, ARRAYSIZE(mappedAnsi), nullptr, nullptr);
+                if (ansiCount <= 0) {
+                    const DWORD error = GetLastError();
+                    return error ? static_cast<LSTATUS>(error) : ERROR_NO_UNICODE_TRANSLATION;
+                }
+                ScopedHookGuard guard;
+                return g_origRegCreateKeyExA(
+                    HKEY_CURRENT_USER, mappedAnsi, reserved, lpClass, options, samDesired,
+                    securityAttributes, phkResult, disposition);
+            }
+        }
+    }
+    return g_origRegCreateKeyExA(
+        hKey, lpSubKey, reserved, lpClass, options, samDesired, securityAttributes,
+        phkResult, disposition);
+}
+
 // ---------------------------------------------------------------------------
-// RegGetValueW hook: keep the managed pnidui/van modules convinced that the
-// classic tray is NOT replaced (ReplaceVan == 0). ExplorerPatcher-style
-// setups write ReplaceVan=1 to suppress the legacy network tray icon; the
-// community restore-legacy-network-tray mod neutralizes the same value via
-// an IAT patch. The override only fires when the caller is one of our
-// managed (VanStore) modules, so Explorer and other processes are unaffected.
+// RegGetValueW virtualization for ReplaceVan.
 // ---------------------------------------------------------------------------
+// The native route presents ReplaceVan=2 only to reads of this exact key from
+// this explorer.exe process. No HKLM/HKCU value is created or modified. When
+// using downloaded/hydrated modules, their own pnidui code continues to see 0
+// so the managed classic tray is not suppressed by a third-party ReplaceVan=1.
 using RegGetValueW_t =
     LONG(WINAPI*)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
 RegGetValueW_t g_origRegGetValueW = nullptr;
 
-bool IsCallerManagedVanModule(void* returnAddress) noexcept {
-    if (!returnAddress) {
-        return false;
+constexpr wchar_t kReplaceVanSettingsSubKey[] =
+    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Control Panel\\Settings\\Network";
+
+
+LONG ReturnVirtualReplaceVanDword(
+    DWORD value, DWORD flags, LPDWORD type, PVOID data, LPDWORD dataSize) {
+    if ((flags & RRF_RT_REG_DWORD) == 0 && (flags & RRF_RT_ANY) != 0) {
+        return ERROR_UNSUPPORTED_TYPE;
     }
-    HMODULE hCaller = nullptr;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            static_cast<LPCWSTR>(returnAddress), &hCaller) ||
-        !hCaller) {
-        return false;
+    if (data && !dataSize) {
+        return ERROR_INVALID_PARAMETER;
     }
-    // Only short critical sections that never call back into registry APIs
-    // hold this mutex, so acquiring it here cannot deadlock.
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    return std::find(
-               g_loadedVanModules.begin(), g_loadedVanModules.end(), hCaller) !=
-           g_loadedVanModules.end();
+    if (data && *dataSize < sizeof(value)) {
+        *dataSize = sizeof(value);
+        return ERROR_MORE_DATA;
+    }
+    if (type) {
+        *type = REG_DWORD;
+    }
+    if (data) {
+        memcpy(data, &value, sizeof(value));
+    }
+    if (dataSize) {
+        *dataSize = sizeof(value);
+    }
+    return ERROR_SUCCESS;
 }
 
 LONG WINAPI Hook_RegGetValueW(
     HKEY hkey, LPCWSTR subKey, LPCWSTR value, DWORD flags, LPDWORD type,
     PVOID data, LPDWORD dataSize) {
-    if (value && _wcsicmp(value, L"ReplaceVan") == 0 && g_origRegGetValueW &&
+    if (value && _wcsicmp(value, L"ReplaceVan") == 0 &&
+        (hkey == HKEY_LOCAL_MACHINE || hkey == HKEY_CURRENT_USER) && subKey &&
+        _wcsicmp(subKey, kReplaceVanSettingsSubKey) == 0 &&
+        g_nativeSystemVan.load(std::memory_order_acquire)) {
+        return ReturnVirtualReplaceVanDword(2, flags, type, data, dataSize);
+    }
+
+    if (value && _wcsicmp(value, L"ReplaceVan") == 0 &&
+        (hkey == HKEY_LOCAL_MACHINE || hkey == HKEY_CURRENT_USER) && subKey &&
+        _wcsicmp(subKey, kReplaceVanSettingsSubKey) == 0 &&
+        g_origRegGetValueW && !g_nativeSystemVan.load(std::memory_order_acquire) &&
         IsCallerManagedVanModule(__builtin_return_address(0))) {
-        if (type) {
-            *type = REG_DWORD;
-        }
-        if (data && dataSize && *dataSize < sizeof(DWORD)) {
-            *dataSize = sizeof(DWORD);
-            return ERROR_MORE_DATA;
-        }
-        if (data) {
-            *reinterpret_cast<DWORD*>(data) = 0;  // 0 = keep the classic tray
-        }
-        if (dataSize) {
-            *dataSize = sizeof(DWORD);
-        }
-        return ERROR_SUCCESS;
+        return ReturnVirtualReplaceVanDword(0, flags, type, data, dataSize);
     }
     return g_origRegGetValueW(hkey, subKey, value, flags, type, data, dataSize);
 }
 
 // ---------------------------------------------------------------------------
-// NT-level redirection (stack-only, no heap, no locks)
+// NT-level open/create redirection (stack-only, no heap, no locks)
 // ---------------------------------------------------------------------------
 bool BuildRedirectedNtKeyPath(
     const wchar_t* fullPath, size_t fullPathLen, wchar_t* out, size_t cchOut,
     USHORT* outLengthBytes) {
     struct NtPrefixMap {
         const wchar_t* from;
-        const wchar_t* to;  // overlay-relative
-        bool trailingSep;
+        const wchar_t* to;  // overlay-relative path component
     };
     static constexpr NtPrefixMap kMaps[] = {
-        {L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN", false},
+        {L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN"},
         {L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards",
-         L"XWizards", false},
+         L"XWizards"},
         {L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN",
-         L"Software_VAN", false},
-        {L"\\Registry\\Machine\\SOFTWARE\\Classes\\CLSID\\", L"CLSID\\", true},
+         L"Software_VAN"},
+        {L"\\Registry\\Machine\\SOFTWARE\\Classes\\CLSID", L"CLSID"},
     };
 
     for (const NtPrefixMap& m : kMaps) {
@@ -2463,22 +4351,46 @@ bool BuildRedirectedNtKeyPath(
             continue;
         }
 
-        int n = swprintf(out, cchOut, L"%s\\%s%s%s", g_hkcuNtPrefix.c_str(), m.to,
-                         atEnd ? L"" : L"\\",
-                         atEnd ? L"" : (fullPath + fromLen));
+        const wchar_t* suffix = atEnd ? L"" : fullPath + fromLen;
+        int n = swprintf(out, cchOut, L"%s\\%s\\%s%s", g_hkcuNtPrefix.c_str(),
+                         kVirtualRegRootSubkey, m.to, suffix);
         if (n <= 0) {
             return false;
         }
         *outLengthBytes = static_cast<USHORT>(n * sizeof(wchar_t));
         return true;
     }
+
+    // Also redirect the per-user half of HKCR when a native caller addresses
+    // HKCU\Software\Classes\CLSID directly. Keep this stack-only because
+    // the hook may run while loader-related locks are held.
+    static constexpr wchar_t kHkcuClsidSuffix[] = L"\\Software\\Classes\\CLSID";
+    const size_t hkcuPrefixLen = g_hkcuNtPrefix.size();
+    const size_t clsidSuffixLen = ARRAYSIZE(kHkcuClsidSuffix) - 1;
+    if (hkcuPrefixLen != 0 && fullPathLen >= hkcuPrefixLen + clsidSuffixLen &&
+        StartsWithInsensitive(std::wstring_view(fullPath, fullPathLen), g_hkcuNtPrefix) &&
+        _wcsnicmp(fullPath + hkcuPrefixLen, kHkcuClsidSuffix, clsidSuffixLen) == 0) {
+        const size_t matchedLen = hkcuPrefixLen + clsidSuffixLen;
+        const bool atEnd = fullPathLen == matchedLen;
+        const bool boundary = atEnd || fullPath[matchedLen] == L'\\';
+        if (boundary) {
+            const wchar_t* suffix = atEnd ? L"" : fullPath + matchedLen;
+            int n = swprintf(out, cchOut, L"%s\\%s\\CLSID%s", g_hkcuNtPrefix.c_str(),
+                             kVirtualRegRootSubkey, suffix);
+            if (n <= 0) {
+                return false;
+            }
+            *outLengthBytes = static_cast<USHORT>(n * sizeof(wchar_t));
+            return true;
+        }
+    }
     return false;
 }
 
 // Builds the absolute NT path for an OBJECT_ATTRIBUTES (handles both absolute
-// names and RootDirectory-relative opens) and, if it targets one of our
+// names and RootDirectory-relative key operations) and, if it targets one of our
 // virtualized keys, writes the redirected HKCU NT path into `outPath`.
-bool TryBuildRedirectedNtOpenPath(
+bool TryBuildRedirectedNtKeyPath(
     POBJECT_ATTRIBUTES objectAttributes, wchar_t* outPath, size_t cchOut,
     USHORT* outLengthBytes) {
     if (!objectAttributes || !objectAttributes->ObjectName ||
@@ -2499,7 +4411,7 @@ bool TryBuildRedirectedNtOpenPath(
         if (!g_pfnNtQueryKey) {
             return false;
         }
-        BYTE queryBuf[1024];
+        alignas(ULONG) BYTE queryBuf[1024];
         ULONG returned = 0;
         NTSTATUS st = g_pfnNtQueryKey(
             objectAttributes->RootDirectory, kKeyNameInformationClass, queryBuf,
@@ -2513,7 +4425,10 @@ bool TryBuildRedirectedNtOpenPath(
         // NameLength is in bytes; compare character counts against the buffer
         // capacity (ARRAYSIZE is already in wchar_t units).
         const size_t rootLen = nameInfo->NameLength / sizeof(wchar_t);
-        if (nameInfo->NameLength == 0 ||
+        if (returned < offsetof(WhKeyNameInformation, Name) ||
+            nameInfo->NameLength > sizeof(queryBuf) - offsetof(WhKeyNameInformation, Name) ||
+            nameInfo->NameLength > returned - offsetof(WhKeyNameInformation, Name) ||
+            nameInfo->NameLength == 0 ||
             nameInfo->NameLength % sizeof(wchar_t) != 0 ||
             rootLen + static_cast<size_t>(nameLen) + 2 > ARRAYSIZE(full)) {
             return false;
@@ -2536,15 +4451,91 @@ bool TryBuildRedirectedNtOpenPath(
     return BuildRedirectedNtKeyPath(full, nameLen, outPath, cchOut, outLengthBytes);
 }
 
+// RegSetValueExA/W and native writers ultimately use NtSetValueKey. A key
+// opened before our hooks were enabled must not bypass path redirection.
+// Genuine overlay handles retain all standard registry API behavior; no fake HKEYs.
+using NtSetValueKey_t = NTSTATUS(NTAPI*)(HANDLE, PUNICODE_STRING, ULONG, ULONG, PVOID, ULONG);
+NtSetValueKey_t g_origNtSetValueKey = nullptr;
+
+NTSTATUS NTAPI Hook_NtSetValueKey(HANDLE key, PUNICODE_STRING valueName,
+    ULONG titleIndex, ULONG type, PVOID data, ULONG dataSize) {
+    if (!g_inHookGuard && g_registryOverlayReady.load(std::memory_order_acquire) &&
+        g_pfnNtQueryKey && !g_hkcuNtPrefix.empty() &&
+        (GetCurrentThreadId() == g_staThreadId.load(std::memory_order_acquire) ||
+         IsCallerManagedVanModule(__builtin_return_address(0)))) {
+        // Scope the extra stale-handle guard to the mod's STA/direct managed
+        // native callers, not arbitrary Explorer components using real keys.
+        alignas(ULONG) BYTE nameBuffer[4096];
+        ULONG returned = 0;
+        const NTSTATUS query = g_pfnNtQueryKey(key, kKeyNameInformationClass,
+            nameBuffer, sizeof(nameBuffer), &returned);
+        if (query == 0) {
+            const auto* info = reinterpret_cast<const WhKeyNameInformation*>(nameBuffer);
+            const size_t header = offsetof(WhKeyNameInformation, Name);
+            if (info->NameLength <= sizeof(nameBuffer) - header &&
+                info->NameLength % sizeof(wchar_t) == 0) {
+                wchar_t redirected[2200];
+                USHORT length = 0;
+                if (BuildRedirectedNtKeyPath(info->Name,
+                        info->NameLength / sizeof(wchar_t), redirected,
+                        ARRAYSIZE(redirected), &length)) {
+                    // Do not silently grant rights by reopening a read-only real
+                    // handle against our writable overlay. Deny stale real handles;
+                    // callers must reopen through the ordinary redirection hooks.
+                    return static_cast<NTSTATUS>(0xC0000022L); // STATUS_ACCESS_DENIED
+                }
+            }
+        }
+    }
+    return g_origNtSetValueKey(key, valueName, titleIndex, type, data, dataSize);
+}
+
+NtCreateKey_t g_origNtCreateKey = nullptr;
+
+NTSTATUS NTAPI Hook_NtCreateKey(
+    PHANDLE KeyHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
+    ULONG TitleIndex, PUNICODE_STRING Class, ULONG CreateOptions, PULONG Disposition) {
+    if (KeyHandle && g_registryOverlayReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard && !g_hkcuNtPrefix.empty() &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
+        wchar_t redirected[1100];
+        USHORT redirectedLen = 0;
+        if (TryBuildRedirectedNtKeyPath(
+                ObjectAttributes, redirected, ARRAYSIZE(redirected), &redirectedLen)) {
+            ScopedHookGuard guard;
+            UNICODE_STRING us{};
+            us.Buffer = redirected;
+            us.Length = redirectedLen;
+            us.MaximumLength = redirectedLen + sizeof(wchar_t);
+
+            OBJECT_ATTRIBUTES oa{};
+            oa.Length = sizeof(oa);
+            oa.ObjectName = &us;
+            oa.Attributes = ObjectAttributes->Attributes;
+            oa.SecurityDescriptor = ObjectAttributes->SecurityDescriptor;
+            oa.SecurityQualityOfService = ObjectAttributes->SecurityQualityOfService;
+
+            // Never fall back to the original target after a mapped create
+            // fails; that could write into a live machine/class registration.
+            return g_origNtCreateKey(
+                KeyHandle, DesiredAccess, &oa, TitleIndex, Class, CreateOptions, Disposition);
+        }
+    }
+    return g_origNtCreateKey(
+        KeyHandle, DesiredAccess, ObjectAttributes, TitleIndex, Class, CreateOptions,
+        Disposition);
+}
+
 NtOpenKey_t g_origNtOpenKey = nullptr;
 
 NTSTATUS NTAPI Hook_NtOpenKey(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
                               POBJECT_ATTRIBUTES ObjectAttributes) {
-    if (KeyHandle && g_vanStoreReady.load(std::memory_order_acquire) &&
-        !g_inHookGuard && !g_hkcuNtPrefix.empty()) {
+    if (KeyHandle && g_registryOverlayReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard && !g_hkcuNtPrefix.empty() &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t redirected[1100];
         USHORT redirectedLen = 0;
-        if (TryBuildRedirectedNtOpenPath(
+        if (TryBuildRedirectedNtKeyPath(
                 ObjectAttributes, redirected, ARRAYSIZE(redirected), &redirectedLen)) {
             ScopedHookGuard guard;
             UNICODE_STRING us{};
@@ -2563,7 +4554,11 @@ NTSTATUS NTAPI Hook_NtOpenKey(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
             if (NT_SUCCESS(st)) {
                 return st;  // real kernel HKEY into our HKCU overlay
             }
-            // Permissive: fall back to the original open.
+            // Read-only lookups may still consult the system key. A write-capable
+            // open must fail closed instead of returning a live machine key.
+            if (HasRegistryWriteAccess(DesiredAccess)) {
+                return st;
+            }
         }
     }
     return g_origNtOpenKey(KeyHandle, DesiredAccess, ObjectAttributes);
@@ -2573,11 +4568,12 @@ NtOpenKeyEx_t g_origNtOpenKeyEx = nullptr;
 
 NTSTATUS NTAPI Hook_NtOpenKeyEx(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
                                 POBJECT_ATTRIBUTES ObjectAttributes, ULONG OpenOptions) {
-    if (KeyHandle && g_vanStoreReady.load(std::memory_order_acquire) &&
-        !g_inHookGuard && !g_hkcuNtPrefix.empty()) {
+    if (KeyHandle && g_registryOverlayReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard && !g_hkcuNtPrefix.empty() &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t redirected[1100];
         USHORT redirectedLen = 0;
-        if (TryBuildRedirectedNtOpenPath(
+        if (TryBuildRedirectedNtKeyPath(
                 ObjectAttributes, redirected, ARRAYSIZE(redirected), &redirectedLen)) {
             ScopedHookGuard guard;
             UNICODE_STRING us{};
@@ -2594,6 +4590,9 @@ NTSTATUS NTAPI Hook_NtOpenKeyEx(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
 
             NTSTATUS st = g_origNtOpenKeyEx(KeyHandle, DesiredAccess, &oa, OpenOptions);
             if (NT_SUCCESS(st)) {
+                return st;
+            }
+            if (HasRegistryWriteAccess(DesiredAccess)) {
                 return st;
             }
         }
@@ -2613,7 +4612,9 @@ LdrLoadDll_t g_origLdrLoadDll = nullptr;
 NTSTATUS NTAPI Hook_LdrLoadDll(
     PWSTR DllPath, PULONG DllCharacteristics, PUNICODE_STRING DllName, PHANDLE DllHandle) {
     if (DllName && DllName->Buffer && DllHandle &&
-        g_vanStoreReady.load(std::memory_order_acquire) && !g_inHookGuard) {
+        g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         const wchar_t* buf = DllName->Buffer;
         const USHORT totalLen = DllName->Length / sizeof(wchar_t);
 
@@ -2658,7 +4659,9 @@ using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t g_origLoadLibraryExW = nullptr;
 
 HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
-    if (lpLibFileName && g_vanStoreReady.load(std::memory_order_acquire) && !g_inHookGuard) {
+    if (lpLibFileName && g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         if (const wchar_t* managed = MatchManagedDllCanonicalName(lpLibFileName)) {
             ScopedHookGuard guard;
             const std::filesystem::path target = GetManagedDllPath(managed);
@@ -2666,15 +4669,22 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
             if ((effectiveFlags & (LOAD_LIBRARY_AS_DATAFILE |
                                    LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
                                    LOAD_LIBRARY_AS_IMAGE_RESOURCE)) == 0) {
-                // Full path + altered search: dependencies resolve from the
-                // VanStore folder (all 8 hydrated DLLs live there).
-                effectiveFlags &= ~LOAD_LIBRARY_SEARCH_SYSTEM32;
-                effectiveFlags |= LOAD_WITH_ALTERED_SEARCH_PATH;
+                // Use the target DLL's own directory plus System32 and any
+                // AddDllDirectory paths. Avoid combining the incompatible
+                // LOAD_WITH_ALTERED_SEARCH_PATH flag with LOAD_LIBRARY_SEARCH_*.
+                effectiveFlags &= ~(LOAD_WITH_ALTERED_SEARCH_PATH |
+                                    LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32 |
+                                    LOAD_LIBRARY_SEARCH_USER_DIRS |
+                                    LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                effectiveFlags |= LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                                  LOAD_LIBRARY_SEARCH_SYSTEM32;
             }
             HMODULE hMod = g_origLoadLibraryExW(target.c_str(), hFile, effectiveFlags);
             if (hMod && (effectiveFlags & (LOAD_LIBRARY_AS_DATAFILE |
                                            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
                                            LOAD_LIBRARY_AS_IMAGE_RESOURCE)) == 0) {
+                PublishManagedImage(hMod, managed);
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 if (std::find(g_loadedVanModules.begin(), g_loadedVanModules.end(), hMod) ==
                     g_loadedVanModules.end()) {
@@ -2691,7 +4701,9 @@ using LoadLibraryW_t = HMODULE(WINAPI*)(LPCWSTR);
 LoadLibraryW_t g_origLoadLibraryW = nullptr;
 
 HMODULE WINAPI Hook_LoadLibraryW(LPCWSTR lpLibFileName) {
-    if (lpLibFileName && g_vanStoreReady.load(std::memory_order_acquire) && !g_inHookGuard) {
+    if (lpLibFileName && g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         if (const wchar_t* managed = MatchManagedDllCanonicalName(lpLibFileName)) {
             return LoadManagedDll(managed);
         }
@@ -2723,17 +4735,60 @@ HRESULT TryGetInProcManagedClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv
 using CoGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, DWORD, LPVOID, REFIID, LPVOID*);
 CoGetClassObject_t g_origCoGetClassObject = nullptr;
 
+HRESULT TryGetPopupWindowFactoryClassObject(REFIID riid, LPVOID* ppv) {
+    if (!ppv) {
+        return E_POINTER;
+    }
+    *ppv = nullptr;
+
+    // Keep a module reference for the lifetime of Explorer; class objects may
+    // outlive the hook call that obtained them.
+    static HMODULE hImmersive = []() -> HMODULE {
+        HMODULE h = GetModuleHandleW(L"Windows.UI.Immersive.dll");
+        if (!h) {
+            h = LoadLibraryExW(
+                L"Windows.UI.Immersive.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
+        return h;
+    }();
+    if (!hImmersive) {
+        const DWORD error = GetLastError();
+        return HRESULT_FROM_WIN32(error ? error : ERROR_MOD_NOT_FOUND);
+    }
+
+    using DllGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, REFIID, LPVOID*);
+    auto pfn = reinterpret_cast<DllGetClassObject_t>(
+        GetProcAddress(hImmersive, "DllGetClassObject"));
+    return pfn ? pfn(CLSID_PopupWindowFactory, riid, ppv) : CLASS_E_CLASSNOTAVAILABLE;
+}
+
 HRESULT WINAPI Hook_CoGetClassObject(
     REFCLSID rclsid, DWORD dwClsContext, LPVOID pvReserved, REFIID riid, LPVOID* ppv) {
-    if (ppv && g_vanStoreReady.load(std::memory_order_acquire) &&
-        !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard) {
+    if (ppv && (dwClsContext & CLSCTX_INPROC_SERVER) != 0 && g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) &&
+        !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         ScopedHookGuard guard;
         HRESULT hr = TryGetInProcManagedClassObject(rclsid, riid, ppv);
         if (SUCCEEDED(hr)) {
             return hr;
         }
     }
-    return g_origCoGetClassObject(rclsid, dwClsContext, pvReserved, riid, ppv);
+
+    HRESULT hr = g_origCoGetClassObject(rclsid, dwClsContext, pvReserved, riid, ppv);
+    if (FAILED(hr) && ppv && IsEqualGUID(rclsid, CLSID_PopupWindowFactory) &&
+        (dwClsContext & CLSCTX_INPROC_SERVER) != 0 &&
+        g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) &&
+        !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
+        ScopedHookGuard guard;
+        HRESULT fallback = TryGetPopupWindowFactoryClassObject(riid, ppv);
+        if (SUCCEEDED(fallback)) {
+            return fallback;
+        }
+    }
+    return hr;
 }
 
 using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
@@ -2741,8 +4796,10 @@ CoCreateInstance_t g_origCoCreateInstance = nullptr;
 
 HRESULT WINAPI Hook_CoCreateInstance(
     REFCLSID rclsid, LPUNKNOWN pUnkOuter, DWORD dwClsContext, REFIID riid, LPVOID* ppv) {
-    if (ppv && g_vanStoreReady.load(std::memory_order_acquire) &&
-        !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard) {
+    if (ppv && (dwClsContext & CLSCTX_INPROC_SERVER) != 0 && g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) &&
+        !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
         ScopedHookGuard guard;
         IClassFactory* pFactory = nullptr;
         if (SUCCEEDED(TryGetInProcManagedClassObject(
@@ -2753,7 +4810,24 @@ HRESULT WINAPI Hook_CoCreateInstance(
             return hr;
         }
     }
-    return g_origCoCreateInstance(rclsid, pUnkOuter, dwClsContext, riid, ppv);
+
+    HRESULT hr = g_origCoCreateInstance(rclsid, pUnkOuter, dwClsContext, riid, ppv);
+    if (FAILED(hr) && ppv && IsEqualGUID(rclsid, CLSID_PopupWindowFactory) &&
+        (dwClsContext & CLSCTX_INPROC_SERVER) != 0 &&
+        g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_nativeSystemVan.load(std::memory_order_acquire) &&
+        !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
+        IsManagedVanCallContext(__builtin_return_address(0))) {
+        ScopedHookGuard guard;
+        IClassFactory* pFactory = nullptr;
+        HRESULT factoryHr = TryGetPopupWindowFactoryClassObject(
+            IID_IClassFactory, reinterpret_cast<void**>(&pFactory));
+        if (SUCCEEDED(factoryHr) && pFactory) {
+            hr = pFactory->CreateInstance(pUnkOuter, riid, ppv);
+            pFactory->Release();
+        }
+    }
+    return hr;
 }
 
 // ===========================================================================
@@ -2777,11 +4851,11 @@ int WINAPI Hook_LoadStringW(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int 
         return 0;
     }
 
-    const bool useIt = IsEffectiveItalian();
+    const int languageIndex = GetEffectiveLanguageIndex();
     for (size_t i = 0; i < kHydratedStringCount; ++i) {
         const LocalizedResourceEntry& e = kHydratedStrings[i];
         if (e.id == uID && _wcsicmp(e.moduleLower, managed) == 0) {
-            const wchar_t* text = useIt ? e.itText : e.enText;
+            const wchar_t* text = e.text[static_cast<size_t>(languageIndex)];
             const size_t len = wcslen(text);
             const size_t toCopy = (std::min<size_t>)(len, static_cast<size_t>(cchBufferMax - 1));
             memcpy(lpBuffer, text, toCopy * sizeof(wchar_t));
@@ -2796,17 +4870,18 @@ int WINAPI Hook_LoadStringW(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int 
 // Flyout invocation & cross-explorer routing
 // ===========================================================================
 bool IsVanFlyoutWindowVisible() noexcept {
-    // Classic Windows 8 VAN side-pane window classes hosted inside explorer.exe
+    // Classic Windows 8 VAN side-pane window classes hosted inside explorer.exe.
+    // Include the visible title in each supported UI language so the toggle
+    // continues to work after selecting Spanish, French or Portuguese.
     for (const wchar_t* cls : {L"VANUIFrame", L"NativeHWNDHost", L"DirectUIHWND"}) {
-        HWND hWnd = FindWindowExW(nullptr, nullptr, cls, L"Networks");
-        if (!hWnd) {
-            hWnd = FindWindowExW(nullptr, nullptr, cls, L"Reti");
-        }
-        if (hWnd && IsWindowVisible(hWnd)) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hWnd, &pid);
-            if (pid == GetCurrentProcessId()) {
-                return true;
+        for (const wchar_t* title : {L"Networks", L"Reti", L"Redes", L"Réseaux"}) {
+            HWND hWnd = FindWindowExW(nullptr, nullptr, cls, title);
+            if (hWnd && IsWindowVisible(hWnd)) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(hWnd, &pid);
+                if (pid == GetCurrentProcessId()) {
+                    return true;
+                }
             }
         }
     }
@@ -2888,23 +4963,26 @@ void RequestShowVanFlyout(bool allowToggleClose) {
 // ===========================================================================
 // pnidui.dll tray icon subclassing (classic icon click layer)
 // ===========================================================================
-HWND g_pnidTrayHwnd = nullptr;
-UINT g_pnidTrayCallbackMsg = 0;
+std::atomic<HWND> g_pnidTrayHwnd{nullptr};
+std::atomic<UINT> g_pnidTrayCallbackMsg{0};
 
 // Matches WindhawkUtils::WH_SUBCLASSPROC: (HWND, UINT, WPARAM, LPARAM,
-// DWORD_PTR dwRefData). The wrapper removes the subclass itself on
-// WM_NCDESTROY, so no manual RemoveWindowSubclass is needed here.
+// DWORD_PTR dwRefData). The wrapper removes the subclass on WM_NCDESTROY;
+// explicit removal is also performed during normal teardown.
 LRESULT CALLBACK PnidTrayWndSubclassProc(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR /*dwRefData*/) {
     if (uMsg == WM_NCDESTROY) {
-        if (g_pnidTrayHwnd == hWnd) {
-            g_pnidTrayHwnd = nullptr;
-            g_pnidTrayCallbackMsg = 0;
+        HWND expected = hWnd;
+        if (g_pnidTrayHwnd.compare_exchange_strong(
+                expected, nullptr, std::memory_order_acq_rel)) {
+            g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
         }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    if (g_pnidTrayCallbackMsg != 0 && uMsg == g_pnidTrayCallbackMsg) {
+    const UINT callbackMessage = g_pnidTrayCallbackMsg.load(std::memory_order_acquire);
+    if (!g_shuttingDown.load(std::memory_order_acquire) && callbackMessage != 0 &&
+        uMsg == callbackMessage) {
         const UINT notifyEvent = LOWORD(lParam);
         if (notifyEvent == WM_LBUTTONUP || notifyEvent == NIN_SELECT ||
             notifyEvent == NIN_KEYSELECT || notifyEvent == WM_LBUTTONDBLCLK) {
@@ -2916,6 +4994,19 @@ LRESULT CALLBACK PnidTrayWndSubclassProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+void RemovePnidTraySubclass() {
+    const HWND hWnd = g_pnidTrayHwnd.exchange(nullptr, std::memory_order_acq_rel);
+    g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
+    if (!hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+    // This Windhawk helper returns void, not BOOL. It synchronously asks
+    // the owning window thread to remove the subclass; there is no result
+    // value to negate or use as a success/failure test.
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+        hWnd, PnidTrayWndSubclassProc);
+}
+
 using Shell_NotifyIconW_t = BOOL(WINAPI*)(DWORD, PNOTIFYICONDATAW);
 Shell_NotifyIconW_t g_origShell_NotifyIconW = nullptr;
 
@@ -2923,17 +5014,22 @@ BOOL WINAPI Hook_Shell_NotifyIconW(DWORD dwMessage, PNOTIFYICONDATAW lpData) {
     if (lpData && lpData->hWnd &&
         (dwMessage == NIM_ADD || dwMessage == NIM_MODIFY) &&
         (lpData->uFlags & NIF_MESSAGE) && lpData->uCallbackMessage != 0 &&
-        g_vanStoreReady.load(std::memory_order_acquire)) {
+        g_vanStoreReady.load(std::memory_order_acquire) &&
+        !g_shuttingDown.load(std::memory_order_acquire)) {
         const HWND hFallback = g_fallbackTrayHwnd.load(std::memory_order_acquire);
         if (lpData->hWnd != hFallback) {
             // pnidui.dll's CLSID_NetworkTray registers its callback window
             // from the STA worker thread of this process.
             const DWORD staTid = g_staThreadId.load(std::memory_order_acquire);
             if (staTid != 0 && GetCurrentThreadId() == staTid) {
-                g_pnidTrayHwnd = lpData->hWnd;
-                g_pnidTrayCallbackMsg = lpData->uCallbackMessage;
-                WindhawkUtils::SetWindowSubclassFromAnyThread(
-                    lpData->hWnd, PnidTrayWndSubclassProc, 0);
+                g_pnidTrayCallbackMsg.store(lpData->uCallbackMessage, std::memory_order_release);
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                        lpData->hWnd, PnidTrayWndSubclassProc, 0)) {
+                    g_pnidTrayHwnd.store(lpData->hWnd, std::memory_order_release);
+                } else {
+                    g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
+                    Wh_Log(L"Could not subclass the pnidui tray callback window");
+                }
             }
         }
     }
@@ -3064,6 +5160,45 @@ constexpr UINT kFallbackTrayIconUid = 0x56414E32;  // 'VAN2'
 constexpr GUID kFallbackTrayIconGuid = {
     0x6B1D8A44, 0x37C2, 0x4E20, {0x8F, 0x0D, 0x9A, 0x11, 0x08, 0x6A, 0x1F, 0x33}};
 
+bool RegisterOwnedWindowClass(
+    const wchar_t* className, HINSTANCE instance, WNDPROC windowProc) {
+    if (!className || !instance || !windowProc) {
+        return false;
+    }
+
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = windowProc;
+    wc.hInstance = instance;
+    wc.lpszClassName = className;
+    if (RegisterClassW(&wc) != 0) {
+        return true;
+    }
+    if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        return false;
+    }
+
+    // Never blindly reuse an existing class: after a bad unload its WndProc
+    // could point into an unmapped mod image. Reuse only an exact registration.
+    WNDCLASSW existing{};
+    return GetClassInfoW(instance, className, &existing) &&
+           existing.hInstance == instance && existing.lpfnWndProc == windowProc;
+}
+
+void UnregisterOwnedWindowClass(const wchar_t* className, HINSTANCE instance) {
+    if (!className || !instance) {
+        return;
+    }
+    if (UnregisterClassW(className, instance)) {
+        return;
+    }
+    const DWORD error = GetLastError();
+    if (error != ERROR_CLASS_DOES_NOT_EXIST) {
+        g_unloadSafetyFailure.store(true, std::memory_order_release);
+        Wh_Log(L"UnregisterClassW(%s) failed (%lu); the mod image must stay mapped",
+               className, error);
+    }
+}
+
 class FallbackTrayIcon {
   public:
     bool Start() {
@@ -3072,15 +5207,22 @@ class FallbackTrayIcon {
         }
 
         HMODULE hMod = nullptr;
-        GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&FallbackTrayIcon::WndProc), &hMod);
-
-        WNDCLASSW wc{};
-        wc.lpfnWndProc = &FallbackTrayIcon::WndProc;
-        wc.hInstance = hMod;
-        wc.lpszClassName = kFallbackTrayWndClass;
-        RegisterClassW(&wc);
+        if (!GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(&FallbackTrayIcon::WndProc), &hMod) ||
+            !hMod) {
+            Wh_Log(L"Could not resolve the mod instance for the fallback tray class");
+            return false;
+        }
+        m_hInstance = hMod;
+        if (!RegisterOwnedWindowClass(
+                kFallbackTrayWndClass, m_hInstance, &FallbackTrayIcon::WndProc)) {
+            Wh_Log(L"Fallback tray window class registration failed (%lu)", GetLastError());
+            m_hInstance = nullptr;
+            return false;
+        }
+        m_classRegistered = true;
 
         // A hidden top-level (not message-only) window: tray context menus
         // need SetForegroundWindow to dismiss properly.
@@ -3144,6 +5286,11 @@ class FallbackTrayIcon {
             DestroyWindow(m_hwnd);
             m_hwnd = nullptr;
         }
+        if (m_classRegistered) {
+            UnregisterOwnedWindowClass(kFallbackTrayWndClass, m_hInstance);
+            m_classRegistered = false;
+            m_hInstance = nullptr;
+        }
     }
 
     void RefreshStatus() {
@@ -3167,7 +5314,7 @@ class FallbackTrayIcon {
         if (!internet) {
             stringId = anyConnection ? 35 : 2;  // "No Internet access" / "Not connected..."
         }
-        const wchar_t* tip = GetHydratedStringFor(L"pnidui.dll", stringId, IsEffectiveItalian());
+        const wchar_t* tip = GetHydratedStringFor(L"pnidui.dll", stringId, GetEffectiveLanguageIndex());
         if (!tip) {
             tip = L"Network";
         }
@@ -3233,12 +5380,18 @@ class FallbackTrayIcon {
     }
 
     static void ShowContextMenu(HWND hWnd) {
-        const bool it = IsEffectiveItalian();
+        static constexpr const wchar_t* kOpenLabels[] = {
+            L"Open network flyout", L"Apri riquadro reti", L"Abrir panel de redes",
+            L"Ouvrir le volet Réseau", L"Abrir painel de rede",
+        };
+        static constexpr const wchar_t* kSettingsLabels[] = {
+            L"Network settings", L"Impostazioni di rete", L"Configuración de red",
+            L"Paramètres réseau", L"Configurações de rede",
+        };
+        const int languageIndex = GetEffectiveLanguageIndex();
         HMENU menu = CreatePopupMenu();
-        AppendMenuW(
-            menu, MF_STRING, 1, it ? L"Apri riquadro reti" : L"Open network flyout");
-        AppendMenuW(
-            menu, MF_STRING, 2, it ? L"Impostazioni di rete" : L"Network settings");
+        AppendMenuW(menu, MF_STRING, 1, kOpenLabels[languageIndex]);
+        AppendMenuW(menu, MF_STRING, 2, kSettingsLabels[languageIndex]);
         SetForegroundWindow(hWnd);
         POINT pt{};
         GetCursorPos(&pt);
@@ -3258,6 +5411,8 @@ class FallbackTrayIcon {
     HWND m_hwnd = nullptr;
     HICON m_icon = nullptr;
     INetworkListManager* m_nlm = nullptr;
+    HINSTANCE m_hInstance = nullptr;
+    bool m_classRegistered = false;
     bool m_added = false;
 };
 
@@ -3303,6 +5458,7 @@ class NetworkTrayHostController {
             return;
         }
         BYTE* base = reinterpret_cast<BYTE*>(m_trayContext);
+        Wh_Log(L"Starting optional legacy pnidui tray object");
         hr = pTray->Activate(4, base + 0x18, base + 0x10);
         if (FAILED(hr)) {
             Wh_Log(L"NetworkTray Start(4) returned 0x%08lX",
@@ -3321,12 +5477,7 @@ class NetworkTrayHostController {
         if (!m_trayObject) {
             return;
         }
-        if (g_pnidTrayHwnd && IsWindow(g_pnidTrayHwnd)) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                g_pnidTrayHwnd, PnidTrayWndSubclassProc);
-        }
-        g_pnidTrayHwnd = nullptr;
-        g_pnidTrayCallbackMsg = 0;
+        RemovePnidTraySubclass();
 
         // CNwSSO::Stop() tears the tray icon down cleanly.
         m_trayObject->Cleanup();
@@ -3353,6 +5504,8 @@ class NetworkTrayHostController {
 NetworkTrayHostController g_trayHostController;
 FallbackTrayIcon g_fallbackTrayIcon;
 HWND g_staCtrlWnd = nullptr;
+HMODULE g_staClassModule = nullptr;
+bool g_staClassRegistered[2] = {false, false};
 bool g_hotkeyRegistered = false;
 int g_hostMissCount = 0;
 
@@ -3392,20 +5545,59 @@ LRESULT CALLBACK VanStaWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 HWND CreateStaWindow(const wchar_t* className) {
-    HMODULE hMod = nullptr;
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCWSTR>(&VanStaWndProc), &hMod);
+    int classIndex = -1;
+    if (_wcsicmp(className, kVanHostWndClassName) == 0) {
+        classIndex = 0;
+    } else if (_wcsicmp(className, kVanCtrlWndClassName) == 0) {
+        classIndex = 1;
+    }
+    if (classIndex < 0) {
+        Wh_Log(L"Refusing to create an STA window with an unknown class");
+        return nullptr;
+    }
 
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = &VanStaWndProc;
-    wc.hInstance = hMod;
-    wc.lpszClassName = className;
-    RegisterClassW(&wc);
+    HMODULE hMod = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&VanStaWndProc), &hMod) ||
+        !hMod) {
+        Wh_Log(L"Could not resolve the mod instance for STA window class %s", className);
+        return nullptr;
+    }
+    if (g_staClassModule && g_staClassModule != hMod) {
+        Wh_Log(L"STA window class module changed unexpectedly");
+        return nullptr;
+    }
+
+    if (!g_staClassRegistered[classIndex]) {
+        if (!RegisterOwnedWindowClass(className, hMod, &VanStaWndProc)) {
+            Wh_Log(L"STA window class registration failed for %s (%lu)",
+                   className, GetLastError());
+            return nullptr;
+        }
+        g_staClassModule = hMod;
+        g_staClassRegistered[classIndex] = true;
+    }
 
     // Message-only window: timers, hotkeys and IPC messages only.
     return CreateWindowExW(
         0, className, L"", WS_OVERLAPPED, 0, 0, 0, 0, HWND_MESSAGE, nullptr, hMod, nullptr);
+}
+
+void UnregisterStaWindowClasses() {
+    if (!g_staClassModule) {
+        return;
+    }
+    if (g_staClassRegistered[0]) {
+        UnregisterOwnedWindowClass(kVanHostWndClassName, g_staClassModule);
+        g_staClassRegistered[0] = false;
+    }
+    if (g_staClassRegistered[1]) {
+        UnregisterOwnedWindowClass(kVanCtrlWndClassName, g_staClassModule);
+        g_staClassRegistered[1] = false;
+    }
+    g_staClassModule = nullptr;
 }
 
 bool InstallTrayMouseHook() {
@@ -3453,7 +5645,8 @@ void ApplyHotkeyRegistration() {
 }
 
 void SyncTrayHostingOnSta() {
-    const bool wantClassic = g_enableLegacyTrayIcon.load(std::memory_order_relaxed);
+    const bool wantClassic = g_enableLegacyTrayIcon.load(std::memory_order_relaxed) &&
+                             !g_nativeSystemVan.load(std::memory_order_acquire);
     if (wantClassic && !g_trayHostController.IsActive()) {
         g_trayHostController.Start();
     } else if (!wantClassic && g_trayHostController.IsActive()) {
@@ -3546,48 +5739,99 @@ void ReevaluateHostingOnSta() {
 DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     const bool comInitialized = SUCCEEDED(hrCom);
+    if (!comInitialized) {
+        Wh_Log(L"STA COM initialization failed (0x%08lX); panel remains inactive",
+               static_cast<unsigned long>(hrCom));
+        return 0;
+    }
+    Wh_Log(L"Startup diagnostics: caller-scoped hooks; STA COM initialized");
 
     MSG dummyMsg{};
     PeekMessageW(&dummyMsg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    // 1. Provision the shared VanStore (coordinated via the named mutex).
-    if (!EnsureVanStoreProvisioned() || g_shuttingDown.load(std::memory_order_acquire)) {
-        Wh_Log(L"VanStore not ready - flyout restorer staying passive this session");
+    // 1. Prefer a compatible System32 VAN stack; only download/hydrate MSDL
+    //    components when the native capability probe rejected this build.
+    const bool nativeMode = g_nativeSystemVan.load(std::memory_order_acquire);
+    const bool provisioned = [&]() noexcept {
+        if (nativeMode) return true;
+        try {
+            return EnsureVanStoreProvisioned();
+        } catch (...) {
+            Wh_Log(L"C++ exception during provisioning; downloaded panel remains inactive");
+            return false;
+        }
+    }();
+    if ((!provisioned) ||
+        g_shuttingDown.load(std::memory_order_acquire)) {
+        Wh_Log(L"VAN runtime not ready - flyout restorer staying passive this session");
         if (comInitialized) {
             CoUninitialize();
         }
         return 0;
     }
 
-    // 2. Publish precomputed full paths, then flip g_vanStoreReady.
+    // 2. Publish all full paths and the STA thread id before enabling hooks.
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         for (size_t i = 0; i < kRuntimeDllCount; ++i) {
             const std::filesystem::path full = g_vanStoreDir / kRuntimeDllNames[i];
-            const std::wstring& s = full.wstring();
+            const std::wstring s = full.wstring();
             const size_t n = (std::min<size_t>)(s.size(), 599);
             memcpy(g_managedFullPaths[i], s.c_str(), n * sizeof(wchar_t));
             g_managedFullPaths[i][n] = L'\0';
         }
-        g_vanStoreReady.store(true, std::memory_order_release);
         g_staThreadId.store(GetCurrentThreadId(), std::memory_order_release);
     }
-    Wh_Log(L"VanStore ready at %s", g_vanStoreDir.c_str());
-
-    // 3. Registry overlay + real per-user COM registrations (idempotent).
-    if (!PopulateVirtualRegistryOverlay()) {
-        Wh_Log(L"WARNING: virtual registry overlay population failed");
+    if (nativeMode) {
+        Wh_Log(L"Native System32 VAN runtime ready at %s", g_vanStoreDir.c_str());
+    } else {
+        Wh_Log(L"Verified VanStore ready at %s", g_vanStoreDir.c_str());
     }
-    PruneAndAddInstancePid();
 
-    // 4. Let LoadLibrary* resolve sub-DLLs straight from the VanStore.
-    {
-        const std::filesystem::path dir = GetManagedDllPath(L"van.dll").parent_path();
-        g_dllDirectoryCookie = AddDllDirectory(dir.c_str());
-        if (g_dllDirectoryCookie) {
-            Wh_Log(L"AddDllDirectory(VanStore) active");
+    // 3. The downloaded route needs its private COM/XWizards overlay. Native
+    //    ReplaceVan mode leaves persistent registry state unchanged; only the
+    //    exact RegGetValueW result is virtualized in-process.
+    if (!nativeMode) {
+        ScopedOverlayMutex overlayLock(g_overlayMutex, 5000);
+        if (!overlayLock.locked()) {
+            Wh_Log(L"Could not acquire the overlay mutex; staying passive rather than using "
+                   L"untracked registry state");
+            g_staThreadId.store(0, std::memory_order_release);
+            if (comInitialized) {
+                CoUninitialize();
+            }
+            return 0;
         }
+        if (!PruneAndAddInstancePid()) {
+            Wh_Log(L"Overlay PID tracking failed; staying passive and leaving the overlay "
+                   L"untouched for later recovery");
+            g_staThreadId.store(0, std::memory_order_release);
+            if (comInitialized) {
+                CoUninitialize();
+            }
+            return 0;
+        }
+        g_overlayInstanceRegistered.store(true, std::memory_order_release);
+        if (!PopulateVirtualRegistryOverlay()) {
+            Wh_Log(L"Virtual registry overlay population failed; staying passive; tracked "
+                   L"state will be removed or retained according to the PID list");
+            g_staThreadId.store(0, std::memory_order_release);
+            if (comInitialized) {
+                CoUninitialize();
+            }
+            return 0;
+        }
+        g_registryOverlayReady.store(true, std::memory_order_release);
     }
+    g_vanStoreReady.store(true, std::memory_order_release);
+    Wh_Log(L"Managed runtime enabled; classic tray requested=%d (disable it for crash isolation)",
+           g_enableLegacyTrayIcon.load(std::memory_order_relaxed) ? 1 : 0);
+
+    // 4. Managed images are loaded by absolute path with
+    // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32.
+    // Do not add a private legacy directory to Explorer's process-wide DLL
+    // search list: unrelated shell extensions must not resolve DLLs from it.
+    Wh_Log(L"Private DLL resolution enabled without process-wide AddDllDirectory");
 
     // 5. Host election: wait (max ~12s) for the taskbar to be created, then
     //    host only if this explorer.exe owns Shell_TrayWnd.
@@ -3656,6 +5900,7 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
     }
     g_trayHostController.Stop();
     g_fallbackTrayIcon.Stop();
+    RemovePnidTraySubclass();
     if (g_staCtrlWnd) {
         KillTimer(g_staCtrlWnd, kStaTimerHostReeval);
         KillTimer(g_staCtrlWnd, kStaTimerFallbackRefresh);
@@ -3667,11 +5912,16 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
         g_pfnHideVAN();
     }
     if (g_pfnShutdownVAN) {
-        g_pfnShutdownVAN();  // joins the internal RunVANUI thread
+        // This export joins van.dll's internal UI thread and can block on some
+        // Windows builds. Wh_ModUninit has a bounded wait and pins the mod
+        // image on timeout; it never terminates this thread unsafely.
+        g_pfnShutdownVAN();
     }
 
+    UnregisterStaWindowClasses();
     g_hostRole.store(static_cast<int>(HostRole::Undetermined), std::memory_order_release);
     g_vanStoreReady.store(false, std::memory_order_release);
+    g_registryOverlayReady.store(false, std::memory_order_release);
     g_staThreadId.store(0, std::memory_order_release);
 
     if (comInitialized) {
@@ -3687,7 +5937,18 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) {
 // Windhawk lifecycle
 // ===========================================================================
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Windows 8 Network Flyout Restorer v1.1.2...");
+    Wh_Log(L"Initializing Windows 8 Network Flyout Restorer v1.0.0...");
+
+    // Install the required write guard before allocating mod-owned resources.
+    HMODULE registryNtdll = GetModuleHandleW(L"ntdll.dll");
+    const auto setValue = registryNtdll
+        ? GetProcAddress(registryNtdll, "NtSetValueKey") : nullptr;
+    if (!setValue || !Wh_SetFunctionHook(
+            reinterpret_cast<void*>(setValue), reinterpret_cast<void*>(Hook_NtSetValueKey),
+            reinterpret_cast<void**>(&g_origNtSetValueKey))) {
+        Wh_Log(L"Required registry write protection could not be installed");
+        return FALSE;
+    }
 
     LoadModSettings();
 
@@ -3702,6 +5963,29 @@ BOOL Wh_ModInit() {
         g_vanStoreBaseDir = std::filesystem::path(storageRoot) / L"VanStore";
         g_rawCacheDir = std::filesystem::path(storageRoot) / L"MsdlRawCache";
         g_vanStoreDir = g_vanStoreBaseDir / L"gen_1";
+        g_nativeSystemDir.clear();
+    }
+
+    g_vanStoreReady.store(false, std::memory_order_release);
+    g_registryOverlayReady.store(false, std::memory_order_release);
+    g_overlayInstanceRegistered.store(false, std::memory_order_release);
+    g_workerStillRunning.store(false, std::memory_order_release);
+    g_unloadSafetyFailure.store(false, std::memory_order_release);
+    g_pnidTrayHwnd.store(nullptr, std::memory_order_release);
+    g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
+
+    std::filesystem::path nativeSystemDir;
+    DWORD nativeBuild = 0;
+    if (DetectNativeVanSupport(&nativeSystemDir, &nativeBuild)) {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        g_nativeSystemDir = nativeSystemDir;
+        g_vanStoreDir = nativeSystemDir;
+        g_nativeSystemVan.store(true, std::memory_order_release);
+        Wh_Log(L"Using native System32 VAN components on build %lu; downloads will be skipped",
+               static_cast<unsigned long>(nativeBuild));
+    } else {
+        g_nativeSystemVan.store(false, std::memory_order_release);
+        Wh_Log(L"Native VAN capability probe failed; verified MSDL fallback will be used");
     }
 
     g_shuttingDown.store(false, std::memory_order_release);
@@ -3717,10 +6001,39 @@ BOOL Wh_ModInit() {
         g_wmShowVanIpc = WM_APP + 0x390;
     }
 
-    // Cross-explorer provisioning mutex (abandoned instances are recovered).
-    g_provisionMutex = CreateMutexW(nullptr, FALSE, kProvisionMutexName);
-    if (!g_provisionMutex) {
-        Wh_Log(L"CreateMutexW(provision) failed (%lu)", GetLastError());
+    if (!g_nativeSystemVan.load(std::memory_order_acquire)) {
+        // Cross-explorer provisioning mutex (abandoned instances are recovered).
+        g_provisionMutex = CreateMutexW(nullptr, FALSE, kProvisionMutexName);
+        if (!g_provisionMutex) {
+            Wh_Log(L"CreateMutexW(provision) failed (%lu); refusing unsafe fallback init",
+                   GetLastError());
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+            return FALSE;
+        }
+        // PID registration, overlay population, and last-instance cleanup must
+        // be serialized across every Explorer process using this overlay.
+        g_overlayMutex = CreateMutexW(nullptr, FALSE, kOverlayMutexName);
+        if (!g_overlayMutex) {
+            Wh_Log(L"CreateMutexW(overlay) failed (%lu); refusing unsafe fallback init",
+                   GetLastError());
+            CloseHandle(g_provisionMutex);
+            g_provisionMutex = nullptr;
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+            return FALSE;
+        }
+    }
+    if (g_overlayMutex) {
+        ScopedOverlayMutex legacyCleanupLock(g_overlayMutex, 5000);
+        if (legacyCleanupLock.locked()) {
+            CleanupStaleLegacyVirtualRegistryRoot();
+        } else {
+            Wh_Log(L"Could not acquire the overlay mutex for legacy-tree cleanup; leaving it "
+                   L"for a later safe pass");
+        }
+    } else {
+        CleanupStaleLegacyVirtualRegistryRoot();
     }
 
     // Resolve ntdll helpers + capture the NT path of HKCU (e.g.
@@ -3739,14 +6052,15 @@ BOOL Wh_ModInit() {
         if (g_pfnNtQueryKey) {
             HKEY hKey = nullptr;
             const LONG openRes =
-                RegOpenKeyExW(HKEY_CURRENT_USER, nullptr, 0, KEY_QUERY_VALUE, &hKey);
+                RegOpenKeyExW(HKEY_CURRENT_USER, L"Software", 0, KEY_QUERY_VALUE, &hKey);
             if (openRes != ERROR_SUCCESS) {
-                Wh_Log(L"Prefix capture: RegOpenKeyExW(HKCU) failed with %ld", openRes);
+                Wh_Log(L"Prefix capture: RegOpenKeyExW(HKCU\\Software) failed with %ld", openRes);
             } else {
                 BYTE buf[1024];
                 ULONG returned = 0;
-                // KeyNameInformation returns {ULONG NameLength; WCHAR Name[]}
-                // with the full NT path, e.g. "\Registry\User\S-1-5-21-...".
+                // Query a real child key handle, then trim the known suffix to
+                // recover the HKCU root path. A null subkey can return a pseudo-handle
+                // that NtQueryKey rejects with STATUS_INVALID_HANDLE.
                 const NTSTATUS querySt = g_pfnNtQueryKey(
                     hKey, kKeyNameInformationClass, buf, sizeof(buf), &returned);
                 if (querySt != 0) {
@@ -3760,6 +6074,17 @@ BOOL Wh_ModInit() {
                         nameInfo->NameLength <= sizeof(buf) - sizeof(ULONG)) {
                         g_hkcuNtPrefix.assign(
                             nameInfo->Name, nameInfo->NameLength / sizeof(wchar_t));
+                        static constexpr wchar_t kSoftwareSuffix[] = L"\\Software";
+                        constexpr size_t kSuffixLength = ARRAYSIZE(kSoftwareSuffix) - 1;
+                        if (g_hkcuNtPrefix.size() >= kSuffixLength &&
+                            _wcsicmp(g_hkcuNtPrefix.c_str() +
+                                         g_hkcuNtPrefix.size() - kSuffixLength,
+                                     kSoftwareSuffix) == 0) {
+                            g_hkcuNtPrefix.resize(g_hkcuNtPrefix.size() - kSuffixLength);
+                        } else {
+                            g_hkcuNtPrefix.clear();
+                            Wh_Log(L"Prefix capture: HKCU\\Software suffix was unexpected");
+                        }
                     } else {
                         Wh_Log(L"Prefix capture: NtQueryKey returned invalid "
                                L"NameLength %lu",
@@ -3824,15 +6149,27 @@ BOOL Wh_ModInit() {
     if (hKernelBase || hAdvapi32) {
         RegOpenKeyExW_t pRegOpenW = nullptr;
         RegOpenKeyExA_t pRegOpenA = nullptr;
+        RegCreateKeyExW_t pRegCreateW = nullptr;
+        RegCreateKeyExA_t pRegCreateA = nullptr;
         if (hKernelBase) {
             pRegOpenW = ResolveExportAddress<RegOpenKeyExW_t>(hKernelBase, "RegOpenKeyExW");
             pRegOpenA = ResolveExportAddress<RegOpenKeyExA_t>(hKernelBase, "RegOpenKeyExA");
+            pRegCreateW =
+                ResolveExportAddress<RegCreateKeyExW_t>(hKernelBase, "RegCreateKeyExW");
+            pRegCreateA =
+                ResolveExportAddress<RegCreateKeyExA_t>(hKernelBase, "RegCreateKeyExA");
         }
         if (!pRegOpenW && hAdvapi32) {
             pRegOpenW = ResolveExportAddress<RegOpenKeyExW_t>(hAdvapi32, "RegOpenKeyExW");
         }
         if (!pRegOpenA && hAdvapi32) {
             pRegOpenA = ResolveExportAddress<RegOpenKeyExA_t>(hAdvapi32, "RegOpenKeyExA");
+        }
+        if (!pRegCreateW && hAdvapi32) {
+            pRegCreateW = ResolveExportAddress<RegCreateKeyExW_t>(hAdvapi32, "RegCreateKeyExW");
+        }
+        if (!pRegCreateA && hAdvapi32) {
+            pRegCreateA = ResolveExportAddress<RegCreateKeyExA_t>(hAdvapi32, "RegCreateKeyExA");
         }
         if (pRegOpenW) {
             WindhawkUtils::SetFunctionHook(
@@ -3841,6 +6178,14 @@ BOOL Wh_ModInit() {
         if (pRegOpenA) {
             WindhawkUtils::SetFunctionHook(
                 pRegOpenA, Hook_RegOpenKeyExA, &g_origRegOpenKeyExA);
+        }
+        if (pRegCreateW) {
+            WindhawkUtils::SetFunctionHook(
+                pRegCreateW, Hook_RegCreateKeyExW, &g_origRegCreateKeyExW);
+        }
+        if (pRegCreateA) {
+            WindhawkUtils::SetFunctionHook(
+                pRegCreateA, Hook_RegCreateKeyExA, &g_origRegCreateKeyExA);
         }
         RegGetValueW_t pRegGetValueW = nullptr;
         if (hKernelBase) {
@@ -3883,6 +6228,12 @@ BOOL Wh_ModInit() {
         if (pNtOpenKeyEx) {
             WindhawkUtils::SetFunctionHook(
                 pNtOpenKeyEx, Hook_NtOpenKeyEx, &g_origNtOpenKeyEx);
+        }
+        NtCreateKey_t pNtCreateKey = reinterpret_cast<NtCreateKey_t>(
+            reinterpret_cast<void*>(GetProcAddress(hNtdll, "NtCreateKey")));
+        if (pNtCreateKey) {
+            WindhawkUtils::SetFunctionHook(
+                pNtCreateKey, Hook_NtCreateKey, &g_origNtCreateKey);
         }
     }
 
@@ -3951,28 +6302,45 @@ void Wh_ModBeforeUninit() {
     AbortWinHttpSession();
 }
 
-void Wh_ModSettingsChanged() {
-    const bool prevIt = IsEffectiveItalian();
+void Wh_ModSettingsChanged() try {
+    const int previousLanguage = GetEffectiveLanguageIndex();
     LoadModSettings();
-    const bool nowIt = IsEffectiveItalian();
+    const int currentLanguage = GetEffectiveLanguageIndex();
 
     const DWORD tid = g_staThreadId.load(std::memory_order_acquire);
     if (tid != 0) {
         PostThreadMessageW(tid, WM_APP_SYNC_TRAY, 0, 0);
     }
 
-    if (prevIt != nowIt) {
-        // Invalidate the hydration stamp so the next explorer.exe start
-        // provisions a new generation with the new language. The in-memory
-        // LoadStringW fallback switches immediately.
+    if (previousLanguage != currentLanguage &&
+        !g_nativeSystemVan.load(std::memory_order_acquire)) {
+        // The live fallback tray labels switch immediately. Downloaded
+        // resources are rebuilt for the new language after Explorer restarts.
         std::error_code ec;
         std::filesystem::remove(g_vanStoreBaseDir / kHydrationStampName, ec);
-        Wh_Log(L"Flyout language changed - hydration stamp invalidated for next start");
+        Wh_Log(L"Flyout language changed to %s - hydration stamp invalidated",
+               GetLanguageCode(currentLanguage));
     }
+} catch (...) {
+    Wh_Log(L"C++ exception while applying settings; restart Explorer before retrying");
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Windows 8 Network Flyout Restorer...");
+
+    auto keepModImageMapped = []() -> bool {
+        HMODULE hMod = nullptr;
+        const LPCWSTR modAddress = reinterpret_cast<LPCWSTR>(&Wh_ModUninit);
+        if (GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                modAddress, &hMod)) {
+            return true;  // Pinned until Explorer exits.
+        }
+        // Conservative fallback: take an additional reference and intentionally
+        // retain it. Windhawk's later FreeLibrary cannot unmap the image.
+        return GetModuleHandleExW(
+                   GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, modAddress, &hMod) != FALSE;
+    };
 
     g_shuttingDown.store(true, std::memory_order_release);
     if (g_stopEvent) {
@@ -3982,31 +6350,66 @@ void Wh_ModUninit() {
     if (tid != 0) {
         PostThreadMessageW(tid, WM_QUIT, 0, 0);
     }
+    AbortWinHttpSession();
 
     if (g_workerThread) {
         const DWORD workerWait = WaitForSingleObject(g_workerThread, 15000);
         if (workerWait != WAIT_OBJECT_0) {
-            g_workerStillRunning = true;
-            Wh_Log(L"WARNING: STA worker did not exit within 15s - managed VAN "
-                   L"modules will stay loaded (a controlled leak until process "
-                   L"exit is far safer than unloading a library while its "
-                   L"threads run)");
+            g_workerStillRunning.store(true, std::memory_order_release);
+            const bool keptMapped = keepModImageMapped();
+            if (!keptMapped) {
+                Wh_Log(L"CRITICAL: could not pin/add a reference to the mod image; "
+                       L"waiting without returning to prevent an unsafe unload");
+                // An unload with a running worker is never a safe fallback.
+                for (;;) {
+                    const DWORD waitResult = WaitForSingleObject(g_workerThread, INFINITE);
+                    if (waitResult == WAIT_OBJECT_0) {
+                        break;
+                    }
+                    Sleep(1000);
+                }
+                g_workerStillRunning.store(false, std::memory_order_release);
+            } else {
+                Wh_Log(L"STA worker did not exit within 15s (often blocked in "
+                       L"ShutdownVAN). The mod image is pinned and every resource it "
+                       L"could still touch is intentionally retained; no thread is "
+                       L"terminated and no live DLL/class is unloaded.");
+                CloseHandle(g_workerThread);
+                g_workerThread = nullptr;
+                return;
+            }
         }
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
 
-    AbortWinHttpSession();
+    // A callback/class teardown failure is another reason not to let Windhawk
+    // unmap this image. Keep the process-local resources alive as a last resort.
+    if (g_unloadSafetyFailure.load(std::memory_order_acquire)) {
+        if (keepModImageMapped()) {
+            Wh_Log(L"Window callback/class teardown was incomplete; the mod image and "
+                   L"runtime resources are retained until Explorer exits");
+            return;
+        }
+        Wh_Log(L"CRITICAL: could not retain the mod image after failed callback teardown; "
+               L"blocking unload for safety");
+        Sleep(INFINITE);
+    }
 
     if (g_dllDirectoryCookie) {
         RemoveDllDirectory(g_dllDirectoryCookie);
         g_dllDirectoryCookie = nullptr;
     }
 
-    // Registry artifacts are shared by every explorer.exe carrying the mod:
-    // only the last live instance may remove them.
-    if (RemoveInstancePidAndCheckLast()) {
-        CleanupRegistryArtifacts();
+    // Only the last tracked fallback-overlay instance may remove this tree.
+    if (g_overlayInstanceRegistered.exchange(false, std::memory_order_acq_rel)) {
+        ScopedOverlayMutex overlayLock(g_overlayMutex, 5000);
+        if (!overlayLock.locked()) {
+            Wh_Log(L"Could not acquire the overlay mutex during unload; keeping the PID marker "
+                   L"and registry subtree for later recovery");
+        } else if (RemoveInstancePidAndCheckLast()) {
+            CleanupRegistryArtifacts();
+        }
     }
 
     if (g_provisionMutex) {
@@ -4017,33 +6420,40 @@ void Wh_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
+    if (g_overlayMutex) {
+        CloseHandle(g_overlayMutex);
+        g_overlayMutex = nullptr;
+    }
 
     g_pfnShowVAN = nullptr;
     g_pfnHideVAN = nullptr;
     g_pfnShutdownVAN = nullptr;
     g_vanModule = nullptr;
 
-    if (g_workerStillRunning) {
-        // The STA worker (and possibly van.dll's internal RunVANUI thread) may
-        // still be executing inside these modules: FreeLibrary here would be a
-        // guaranteed use-after-free crash in explorer.exe. Keep them mapped
-        // until the process exits.
+    ScopedHookGuard guard;
+    std::vector<HMODULE> modulesToFree;
+    std::vector<HANDLE> verifiedFilesToClose;
+    {
         std::lock_guard<std::mutex> lock(g_stateMutex);
-        g_loadedVanModules.clear();
-        Wh_Log(L"Skipping managed module unload after worker timeout");
-    } else {
-        ScopedHookGuard guard;
-        std::vector<HMODULE> modulesToFree;
-        {
-            std::lock_guard<std::mutex> lock(g_stateMutex);
-            modulesToFree.swap(g_loadedVanModules);
+        modulesToFree.swap(g_loadedVanModules);
+        verifiedFilesToClose.swap(g_verifiedRuntimeFileHandles);
+    }
+    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+        g_managedImageBegin[i].store(0, std::memory_order_release);
+        g_managedImageEnd[i].store(0, std::memory_order_relaxed);
+    }
+    for (auto it = modulesToFree.rbegin(); it != modulesToFree.rend(); ++it) {
+        if (*it) {
+            FreeLibrary(*it);
         }
-        for (auto it = modulesToFree.rbegin(); it != modulesToFree.rend(); ++it) {
-            if (*it) {
-                FreeLibrary(*it);
-            }
+    }
+    for (HANDLE handle : verifiedFilesToClose) {
+        if (handle && handle != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle);
         }
     }
 
+    g_vanStoreReady.store(false, std::memory_order_release);
+    g_registryOverlayReady.store(false, std::memory_order_release);
     Wh_Log(L"Windows 8 Network Flyout Restorer unloaded cleanly");
 }
