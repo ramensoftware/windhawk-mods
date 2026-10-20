@@ -2,12 +2,69 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-20T08:01:40.000Z</updated>
+    <updated>2026-10-20T10:45:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Backspace Navigation 0.1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-backspace-navigation#41e578e0715b0be3571f6ff0ffade2555da6c83b</id>
+        <link href="https://windhawk.net/mods/explorer-backspace-navigation"/>
+        <updated>2026-10-20T10:45:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerbackspacenavigation">Explorer Backspace Navigation</h1>
+<p>Explorer normally uses Backspace to revisit the previous location. If that
+folder has been deleted or moved, it can show a "Location is not available"
+error instead of taking you to the parent folder.</p>
+<p><img src="https://raw.githubusercontent.com/nerdworldDE/windhawk-mods/f212e7dc239e5de9377ef68ffe9b3aab8e7d39fb/explorer-backspace-navigation.png" alt="Explorer's &quot;Location is not available&quot; error for a missing folder in navigation history" /></p>
+<p>The screenshot shows the standard Explorer error this mod's missing-folder
+fallback is designed to avoid.</p>
+<p>Choose how unmodified <strong>Backspace</strong> navigates in File Explorer:</p>
+<ul>
+<li><strong>Always go to the parent folder</strong> (enabled by default): Backspace behaves
+like Alt+Up, regardless of navigation history. For example, from
+<code>C:\test\foo</code> it opens <code>C:\test</code>, even after visiting <code>C:\test\foo\bar</code>.</li>
+<li><strong>Switch disabled</strong>: Keep Explorer's normal history navigation. Before
+opening the previous location, check whether its filesystem folder still
+exists. If it was deleted, renamed, or moved, open the
+parent of the <strong>current</strong> folder instead. Other history entries are not
+searched or removed.</li>
+</ul>
+<p>If several ancestors have been deleted, the mod chooses the nearest existing
+ancestor. At the Shell Desktop root there is no parent, so Backspace does
+nothing in the first mode.</p>
+<p>Renaming, typing in the address/search bars, and dialogs keep their normal
+Backspace behavior. Shortcuts using Ctrl, Alt, Shift, or the Windows key,
+as well as the Back/Forward buttons, are unaffected. Settings apply immediately.</p>
+<h2 id="scopeandcompatibility">Scope and compatibility</h2>
+<p>Intended for 64-bit Windows 10 and Windows 11 Explorer, including tabbed
+windows. The browser is obtained through IShellWindows and matched to the
+focused tab or folder view. If it cannot be matched, native processing is kept.
+The mod does not maintain a separate history.</p>
+<p>Initial user testing of version 0.1.1 reported working behavior after enabling
+the mod. Broader Windows-build and scenario coverage remains to be validated.
+The mod requires ExplorerFrame's
+<code>CShellBrowser::_MayTranslateAccelerator</code> symbol. If it is unavailable,
+initialization fails with a log message. Internal C++ object addresses are
+never used as COM interface pointers.</p>
+<p>History checks cover absolute filesystem paths and file URLs, including
+Unicode and UNC paths. Virtual locations such as Home, This PC, searches,
+and archive views keep normal history navigation. If history cannot be read,
+the URL is not understood, or the existence check is inconclusive (for example,
+access denied), Explorer keeps its normal behavior. Such failures are not
+treated as proof that the folder was deleted.</p>
+<p>Checks use normal filesystem I/O, so an unresponsive network location can
+delay the key press. A folder can also disappear between the check and
+Explorer opening it; this mod does not suppress unrelated error dialogs.</p>
+<p>Enable this mod's debug logging in Windhawk to diagnose missing symbols,
+history-service failures, and navigation results. No files, history entries,
+or Explorer registry preferences are changed by the mod.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Disk Icon 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-disk-icon#c84800058b9b877ac7238e4dc33139a190b372e1</id>
@@ -748,20 +805,6 @@ attached</code> and <code>Date format attached</code>.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 2.0]]></title>
-        <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#4d9eb477f62d70d767d5721e9a6b5fa915fadfdd</id>
-        <link href="https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar"/>
-        <updated>2026-10-19T08:13:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Massive rewrite by <a href="https://github.com/piknockyou">piknockyou</a></li>
-<li>Add options for icon spacing inside the flyout</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

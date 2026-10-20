@@ -2,12 +2,69 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-20T08:01:40.000Z</updated>
+    <updated>2026-10-20T10:45:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Backspace Navigation 0.1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-backspace-navigation#41e578e0715b0be3571f6ff0ffade2555da6c83b</id>
+        <link href="https://windhawk.net/mods/explorer-backspace-navigation"/>
+        <updated>2026-10-20T10:45:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerbackspacenavigation">Explorer Backspace Navigation</h1>
+<p>Explorer normally uses Backspace to revisit the previous location. If that
+folder has been deleted or moved, it can show a "Location is not available"
+error instead of taking you to the parent folder.</p>
+<p><img src="https://raw.githubusercontent.com/nerdworldDE/windhawk-mods/f212e7dc239e5de9377ef68ffe9b3aab8e7d39fb/explorer-backspace-navigation.png" alt="Explorer's &quot;Location is not available&quot; error for a missing folder in navigation history" /></p>
+<p>The screenshot shows the standard Explorer error this mod's missing-folder
+fallback is designed to avoid.</p>
+<p>Choose how unmodified <strong>Backspace</strong> navigates in File Explorer:</p>
+<ul>
+<li><strong>Always go to the parent folder</strong> (enabled by default): Backspace behaves
+like Alt+Up, regardless of navigation history. For example, from
+<code>C:\test\foo</code> it opens <code>C:\test</code>, even after visiting <code>C:\test\foo\bar</code>.</li>
+<li><strong>Switch disabled</strong>: Keep Explorer's normal history navigation. Before
+opening the previous location, check whether its filesystem folder still
+exists. If it was deleted, renamed, or moved, open the
+parent of the <strong>current</strong> folder instead. Other history entries are not
+searched or removed.</li>
+</ul>
+<p>If several ancestors have been deleted, the mod chooses the nearest existing
+ancestor. At the Shell Desktop root there is no parent, so Backspace does
+nothing in the first mode.</p>
+<p>Renaming, typing in the address/search bars, and dialogs keep their normal
+Backspace behavior. Shortcuts using Ctrl, Alt, Shift, or the Windows key,
+as well as the Back/Forward buttons, are unaffected. Settings apply immediately.</p>
+<h2 id="scopeandcompatibility">Scope and compatibility</h2>
+<p>Intended for 64-bit Windows 10 and Windows 11 Explorer, including tabbed
+windows. The browser is obtained through IShellWindows and matched to the
+focused tab or folder view. If it cannot be matched, native processing is kept.
+The mod does not maintain a separate history.</p>
+<p>Initial user testing of version 0.1.1 reported working behavior after enabling
+the mod. Broader Windows-build and scenario coverage remains to be validated.
+The mod requires ExplorerFrame's
+<code>CShellBrowser::_MayTranslateAccelerator</code> symbol. If it is unavailable,
+initialization fails with a log message. Internal C++ object addresses are
+never used as COM interface pointers.</p>
+<p>History checks cover absolute filesystem paths and file URLs, including
+Unicode and UNC paths. Virtual locations such as Home, This PC, searches,
+and archive views keep normal history navigation. If history cannot be read,
+the URL is not understood, or the existence check is inconclusive (for example,
+access denied), Explorer keeps its normal behavior. Such failures are not
+treated as proof that the folder was deleted.</p>
+<p>Checks use normal filesystem I/O, so an unresponsive network location can
+delay the key press. A folder can also disappear between the check and
+Explorer opening it; this mod does not suppress unrelated error dialogs.</p>
+<p>Enable this mod's debug logging in Windhawk to diagnose missing symbols,
+history-service failures, and navigation results. No files, history entries,
+or Explorer registry preferences are changed by the mod.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Disk Icon 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-disk-icon#c84800058b9b877ac7238e4dc33139a190b372e1</id>
@@ -1171,89 +1228,6 @@ the focused window is.</li>
         <author>
             <name>tafadias</name>
             <uri>https://github.com/tafadias</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 UAC Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-uac-recreation#328b64ade45664ed8b24a65c00c8f241643e9b1d</id>
-        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
-        <updated>2026-10-17T13:30:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781uacrecreation">Windows 7/8.1 UAC Recreation</h1>
-<p>This mod recreates the Windows 7 and 8.1 classic UAC interface on Windows 10 and 11. It changes only the presentation: Windows retains control of consent, authentication, and the secure desktop.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Four themes: Windows 7 Basic, custom Aero, Windows 8.1, and Windows 10 (1507–1607).</li>
-<li>It restores the native prompt if the recreation fails; never makes an elevation decision.</li>
-<li>It leaves system files, settings, and credential prompts untouched.</li>
-<li>It matches the banner and shield to Windows' publisher verdict.</li>
-<li>Ithows the requesting program's icon and native prompt details when available.</li>
-</ul>
-<h2 id="emergencyshortcut">Emergency shortcut</h2>
-<p>Press <code>Ctrl+Shift+F10</code> to close the recreated dialog and return to the native prompt without approving or denying the request.</p>
-<h2 id="themes">Themes</h2>
-<h3 id="windows7basic">Windows 7 (Basic)</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uac.PNG" alt="Windows 7 UAC prompt" /></p>
-<h3 id="windows7aero">Windows 7 Aero</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uacaero.PNG" alt="Windows 7 Aero UAC prompt" /></p>
-<h3 id="windows81">Windows 8.1</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81uac.PNG" alt="Windows 8.1 UAC prompt" /></p>
-<h3 id="windows1015071607">Windows 10 (1507–1607)</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uac.PNG" alt="Windows 10 UAC prompt" /></p>
-<h2 id="installation">Installation</h2>
-<p>Windhawk excludes <code>consent.exe</code> by default. To enable the mod:</p>
-<ol>
-<li>Open <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
-<li>Add <code>consent.exe</code> to the <strong>Process inclusion list</strong>.</li>
-<li>Install and enable the mod.</li>
-</ol>
-<p>Without this change, the mod has no effect.</p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Description |
-|---|---|
-| <strong>Dialog skin</strong> | Choose one of the four themes. |
-| <strong>Replace the UAC prompt</strong> | Replace the prompt or observe it and log events. |
-| <strong>Which apps get the Classic UAC prompt</strong> | Apply to all apps, only listed apps, or all except listed apps. |
-| <strong>App list</strong> | Semicolon-separated application names for the filter above. |
-| <strong>Button style</strong> | Use the system button or the mod's Aero-style button. |
-| <strong>Which shield is shown</strong> | Choose automatic, verified, question, or exclamation. |
-| <strong>Banner colour</strong> | Choose automatic, blue, yellow, or red; manual choices can only make the prompt more cautious. |
-| <strong>The Windows prompt, while the Windows 7 one is on screen</strong> | Move the native prompt off-screen or hide it. |
-| <strong>Read the elevation request</strong> | Read request details to show the app icon and "File origin". |
-| <strong>How long to wait for the prompt</strong> | Wait time, in milliseconds, before leaving the native prompt unchanged. |
-| <strong>Watchdog</strong> | Close the recreated dialog after this many seconds without a response. |
-| <strong>Panic hotkey</strong> | Shortcut to restore the native prompt; default: <code>Ctrl+Shift+F10</code>. |
-| <strong>Extra Yes/No key</strong> | Optional Alt+letter shortcut forwarded to the original prompt. |
-| <strong>Debug log</strong> | Record mod activity. |
-| <strong>Write a diagnostics dump</strong> | Write diagnostics; the mod runs in observation mode. |
-| <strong>Write the raw elevation request to the log</strong> | Log the raw request, which may include file and user names. |
-| <strong>How the prompt is found</strong> | Choose desktop watchers (recommended), polling, or hook only. |</p>
-<h2 id="behaviorandlimitations">Behavior and limitations</h2>
-<ul>
-<li>The banner follows the native publisher row. The shield follows the selected theme and Windows' verdict; the mod never upgrades an unknown or unverified publisher to verified.</li>
-<li>Publisher checks use the file's Authenticode signature or its Windows catalog when applicable. The native verdict is not overridden.</li>
-<li>Regedit is shown by its localized name only after Windows confirms the system file's signature.</li>
-<li>Details that cannot be read from the native prompt are omitted, not guessed.</li>
-<li>A XAML candidate without a Win32 edit control may be moved off-screen briefly during UI Automation classification.</li>
-<li>Logs and diagnostic files can contain prompt text, command lines, file names, and user names. Enable them only when needed.</li>
-</ul>
-<h2 id="testedsystems">Tested systems</h2>
-<p>The modification has been tested on the following systems:</p>
-<ul>
-<li>Windows 10 21H2</li>
-<li>Windows 11 24H2</li>
-<li>Windows 11 25H2</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>AdministratoX</strong> — Windows 11 24H2/25H2 testing</li>
-<li><strong>Microsoft</strong> — Documentation</li>
-<li><strong>m417z</strong> — Technical reference and review</li>
-</ul>
-<h2 id="reportingissues">Reporting issues</h2>
-<p>If there are anomalies, please report them to the author. It is recommended to include the debug log and, if needed, the diagnostic file.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

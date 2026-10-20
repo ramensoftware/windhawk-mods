@@ -1283,7 +1283,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 0, 7],
         "ratingUsers": 7,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0,
         "updated": 1792328536000,
         "users": 73
@@ -4748,7 +4748,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 1, 1, 4, 35],
         "ratingUsers": 41,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 2.1000571232626357,
         "updated": 1790510673000,
         "users": 1796
@@ -5403,6 +5403,34 @@
         ],
         "name": "Explorer 32px Icons",
         "version": "1.0.0"
+      }
+    },
+    "explorer-backspace-navigation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792493152000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792493152000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nerdworld",
+        "compilerOptions": "-lshell32 -lshlwapi -lole32 -loleaut32 -luuid",
+        "description": "Go up with Backspace, or keep history navigation with a parent-folder fallback for missing folders",
+        "github": "https://github.com/nerdworldDE",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Backspace Navigation",
+        "version": "0.1.1"
       }
     },
     "explorer-breadcrumb-mclick-newtab": {
