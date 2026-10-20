@@ -2,12 +2,124 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-20T06:04:54.000Z</updated>
+    <updated>2026-10-20T08:01:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Disk Icon 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-disk-icon#c84800058b9b877ac7238e4dc33139a190b372e1</id>
+        <link href="https://windhawk.net/mods/desktop-disk-icon"/>
+        <updated>2026-10-20T08:01:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopdiskiconu">Desktop Disk Icon / 桌面显示U盘图标</h1>
+<blockquote>
+  <p>中文描述在下方，请继续向下滚动查看。
+  English first; the Chinese section is at the bottom.</p>
+</blockquote>
+<p>Renders external storage devices as native Windows desktop icons, in a manner comparable to how
+mounted volumes appear on the macOS desktop.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Covers USB flash drives, external hard disks and SSDs, optical media (CD/DVD/Blu-ray and
+mounted ISO images), floppy disks and memory cards.</li>
+<li>Only volumes are shown, matching macOS: phones (MTP/PTP, iPhone) are not mounted as volumes
+and therefore never appear on the desktop.</li>
+<li>Icons are taken from the volume itself. The shell derives them from the volume label,
+<code>autorun.inf</code> or the device description; the mod never substitutes its own icons.</li>
+<li>Icon names combine the volume label with the drive letter. When the label is empty, the
+device type name reported by the shell is used, for example <code>U 盘 (F)</code> or <code>CD-ROM (H)</code>.</li>
+</ul>
+<p><img src="https://i.imgur.com/oTo4VIr.png" alt="Desktop icons" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>By default the mod registers a shell namespace item for each drive. Such an item belongs to the
+same category of desktop objects as "This PC" and "Recycle Bin": no <code>.lnk</code> file is created on
+the desktop and no shortcut arrow is drawn. The item is registered through the shell's built-in
+delegated folder (<code>InProcServer32</code> is <code>shell32.dll</code>, <code>Instance\InitPropertyBag\TargetFolderPath</code>
+is the volume), so the shell uses its own folder object: no mod code is loaded by the shell or by
+any other process, and the item behaves exactly like a built-in folder.</p>
+<p>The mod runs inside <code>explorer.exe</code>, listens for the shell's drive and media change
+notifications, and additionally polls at a configurable interval. Every synchronization pass
+brings the desktop icons in line with the devices that are currently attached.</p>
+<h2 id="cleanupbehaviour">Cleanup behaviour</h2>
+<ul>
+<li><strong>Nothing is written to the system registry.</strong> The item definitions live in a private hive
+(<code>RegLoadAppKey</code>) inside the mod's storage, and four registry read hooks redirect Explorer's
+reads of <code>Desktop\NameSpace</code> and <code>Software\Classes\CLSID</code> to that hive. The items therefore exist
+only inside Explorer and vanish as soon as the mod is unloaded.</li>
+<li>The bookkeeping values the shell writes under <code>Shell Extensions\Cached</code> are removed on unload.</li>
+<li>Unplugging a device deletes the corresponding item; disabling or uninstalling the mod deletes
+every item created by it.</li>
+<li>The mod only acts in the Explorer process that owns the desktop window; other <code>explorer.exe</code>
+instances (folder windows in a separate process, <code>explorer.exe /select,</code> and similar short-lived
+processes) are skipped, so the hooks never run there and those windows do not show the items.</li>
+<li>Updating the mod takes effect immediately; no Explorer restart is required, because the item is
+served by the shell itself.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>External hard disks are recognised by bus type (USB, IEEE 1394, SD/MMC, virtual). Disks attached
+through Thunderbolt or eSATA that report an internal bus may not be recognised; internal disks are
+never shown.</li>
+<li>Portable devices (MTP/PTP, and phones in general) are not shown, because they are not volumes.</li>
+<li>Removing a device deletes its icon immediately; there is no eject command. Use the system tray
+safe-removal function before unplugging.</li>
+<li>If plugging or unplugging a disk does not update the desktop, set the polling interval to about
+10 seconds in the settings.</li>
+</ul>
+<h2 id="links">Links</h2>
+<ul>
+<li>GitHub: <a href="https://github.com/AomiRaku/desktop-disk-icon">https://github.com/AomiRaku/desktop-disk-icon</a></li>
+</ul>
+<hr />
+<h1 id="">中文部分</h1>
+<h2 id="-1">功能</h2>
+<ul>
+<li>覆盖 USB 闪存盘、外接硬盘与固态硬盘、光盘（CD/DVD/蓝光及已挂载的 ISO 映像）、软盘、
+存储卡。</li>
+<li>只显示「卷」，与 macOS 一致：手机（MTP/PTP、iPhone）不会被挂载成卷，因此不会出现在桌面。</li>
+<li>图标取自磁盘本身，由系统依据卷标、<code>autorun.inf</code> 或设备描述提供，模组不做替换。</li>
+<li>图标名称由卷标与盘符组合而成；卷标为空时采用系统提供的设备类型名称，
+例如 <code>U 盘 (F)</code>、<code>CD-ROM (H)</code>。</li>
+</ul>
+<h2 id="-2">实现方式</h2>
+<p>默认情况下，模组为每个驱动器注册一个 shell 命名空间项，与“此电脑”“回收站”属于同一类桌面
+对象：桌面不产生 <code>.lnk</code> 文件，也不显示快捷方式箭头。该项通过 shell 自带的委托文件夹注册
+（<code>InProcServer32</code> 为 <code>shell32.dll</code>，<code>Instance\InitPropertyBag\TargetFolderPath</code> 为该卷根
+目录），因此使用的是系统自己的文件夹对象：shell 与其他进程都不会加载模组代码，行为与系统
+内置文件夹完全一致。</p>
+<p>模组运行于 <code>explorer.exe</code>，监听 shell 的驱动器与介质变更通知，并以定时轮询作为补充；
+每次同步均使桌面图标与当前设备状态保持一致。</p>
+<h2 id="-3">清理行为</h2>
+<ul>
+<li><strong>不写系统注册表。</strong> 项的定义放在模组存储目录下的私有 hive 中（<code>RegLoadAppKey</code>），并用 4 个
+注册表读取 hook 把资源管理器对 <code>Desktop\NameSpace</code> 与 <code>Software\Classes\CLSID</code> 的读取重定向
+到该 hive。因此这些项只存在于资源管理器内部，模组卸载后立即消失。</li>
+<li>资源管理器写进 <code>Shell Extensions\Cached</code> 的书签值会在卸载时清除。</li>
+<li>拔出设备时删除对应项；禁用或卸载模组时删除全部由本模组创建的项目。</li>
+<li>模组只在拥有桌面窗口的资源管理器进程中工作；其他 <code>explorer.exe</code> 实例（在单独进程中打开
+文件夹窗口、<code>explorer.exe /select,</code> 等短命进程）会被跳过：hook 不会装在那里，那些窗口也
+不会显示这些项。</li>
+<li>更新模组即时生效，无需重启资源管理器（项本身由系统实现）。</li>
+</ul>
+<h2 id="-4">已知限制</h2>
+<ul>
+<li>外接硬盘依据设备总线类型识别（USB、IEEE 1394、SD/MMC、虚拟）；雷雳或 eSATA 接口且被报告为
+内置总线的硬盘可能无法识别，内置磁盘始终不会显示。</li>
+<li>便携设备（MTP/PTP 及手机）不显示，因为它们不是卷。</li>
+<li>拔出设备时直接移除图标，不提供弹出操作；请沿用系统托盘中的安全删除功能。</li>
+<li>若插拔磁盘后桌面未更新，可在设置中将轮询间隔设为 10 秒左右。</li>
+</ul>
+<h2 id="-5">相关链接</h2>
+<ul>
+<li>GitHub：<a href="https://github.com/AomiRaku/desktop-disk-icon">https://github.com/AomiRaku/desktop-disk-icon</a></li>
+</ul>]]></content>
+        <author>
+            <name>Raku Inkyetta</name>
+            <uri>https://github.com/AomiRaku</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Discrete Touchpad Wheel 0.1.0]]></title>
         <id>https://windhawk.net/mods/discrete-touchpad-wheel#b5c44d4feb241ab6c18b6d01d76c67ad7bebb65d</id>
@@ -1142,56 +1254,6 @@ the focused window is.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Sticky Notes: Alt+Tab group 1.1.1]]></title>
-        <id>https://windhawk.net/mods/sticky-notes-alt-tab-group#4487102abb2aa126c83ea826c028e098d74e8383</id>
-        <link href="https://windhawk.net/mods/sticky-notes-alt-tab-group"/>
-        <updated>2026-10-17T13:04:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="stickynotesalttabgroup">Sticky Notes: Alt+Tab group</h1>
-<p>Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.</p>
-<ul>
-<li>Show one representative Sticky Notes window in Alt+Tab.</li>
-<li>Switch to Sticky Notes to bring all its open windows on the current virtual
-desktop forward together.</li>
-<li>Minimized notes are restored; closed notes are not opened.</li>
-<li>Switching from another application by clicking a note or its taskbar button
-also brings the open notes forward.</li>
-<li>Use compact Sticky Notes previews, with a default maximum source size of
-260 by 160 pixels while preserving the aspect ratio.</li>
-<li>Other shell views that use the same thumbnail factory can also use this
-compact source size. The shell controls the final display scale.</li>
-<li>Matching uses the note window's extended frame bounds.</li>
-<li>Keep note contents, window sizes, positions, and ownership unchanged.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11, x64, with the standard XAML Alt+Tab switcher.</li>
-<li>Locally tested on Windows 11 25H2, build 26200.9457, Windhawk 1.7.3,
-and Microsoft Sticky Notes 6.1.4.0.</li>
-<li>Other Windows builds and the newer OneNote-based Sticky Notes experience
-have not been tested.</li>
-<li>Uses private shell symbols, which may change after Windows updates.</li>
-<li>Tested alongside Alt+Tab per monitor 1.2 with its cursor-monitor filter.</li>
-<li>That mod's monitor filtering still applies. Notes restored after selection
-can be on any monitor on the current virtual desktop.</li>
-<li>Disabling this mod restores the normal switcher behavior.</li>
-<li>Do not enable both a local copy and the catalog version simultaneously.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Preview maximum width / height</strong>: maximum reported Sticky Notes thumbnail
-source dimensions. Values at or below zero use the defaults (260 / 160).</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The Alt+Tab visibility-filtering approach is adapted from
-<a href="https://windhawk.net/mods/alt-tab-per-monitor">Alt+Tab per monitor</a> by L3r0y and
-<a href="https://windhawk.net/mods/alt-tab-hide-ghost-windows">Alt+Tab: Hide ghost windows</a>
-by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content>
-        <author>
-            <name>Choihyunseok1</name>
-            <uri>https://github.com/Choihyunseok1</uri>
         </author>
     </entry>
 </feed>

@@ -3856,6 +3856,31 @@
         "version": "1.0.0"
       }
     },
+    "desktop-disk-icon": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792483300000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792483300000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Raku Inkyetta",
+        "compilerOptions": "-lole32 -lshell32 -luuid -ladvapi32",
+        "description": "Displays external storage devices as native desktop icons",
+        "github": "https://github.com/AomiRaku",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Desktop Disk Icon",
+        "version": "1.0.0"
+      }
+    },
     "desktop-draggable-widgets": {
       "details": {
         "defaultSorting": 4536,
