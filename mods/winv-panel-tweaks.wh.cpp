@@ -2,7 +2,7 @@
 // @id              winv-panel-tweaks
 // @name            Win+V Panel Tweaks
 // @description     Resize the Win+V clipboard / Win+. emoji panel and hide the tabs you don't use (Emoji, GIF, Kaomoji, Symbols, Most recently used)
-// @version         1.0.0
+// @version         1.0.1
 // @author          jayll1303
 // @github          https://github.com/jayll1303
 // @license         MIT
@@ -26,7 +26,7 @@ settings.
 
 The panel is normally 360 x 400 (in display-scaled pixels). Width and height
 are scaled separately, e.g. width 150% and height 100% gives 540 x 400.
-Windows still keeps the panel within the space available on screen. A new
+The panel never grows past the usable area of the screen it opens on. A new
 size applies the next time the panel opens.
 
 By default the items keep their normal size, so a taller panel shows more
@@ -42,8 +42,11 @@ Emoji even when the Emoji tab is hidden).
 ## How it works
 
 The panel is drawn by TextInputHost.exe. Its size is computed in
-`InputApp.dll`, which the mod hooks using Microsoft's public symbols, so the
-first start after installing may take a moment while Windhawk downloads them.
+`InputApp.dll`, and capped by a limit that `TextInput.dll` reports (360 x 418
+by default), so a bigger panel needs that limit raised too. The mod hooks both
+using Microsoft's public symbols, so the first start after installing, and the
+first start after a Windows update, may take a moment while Windhawk downloads
+them.
 
 The tab strip lives in a web page hosted in a WebView inside the panel. The
 same hook finds that WebView each time the panel opens and runs a small script
@@ -95,6 +98,7 @@ Source and research notes: https://github.com/jayll1303/WindowsClipboardMods
 
 #include <algorithm>
 #include <atomic>
+#include <cfloat>
 #include <mutex>
 #include <string>
 
@@ -412,7 +416,32 @@ void WINAPI ReleaseWebViewOnPanelThread(PVOID param) {
 // callers, TryShow and OnAvailableSizeChanged, pass Size::Empty, whose negative
 // width means "use the default": 360 wide, and the title row (32) plus 368
 // high. A non-negative size would be used as is. Either way the result is
-// capped by the space available on screen.
+// capped by the TextInputViewAvailableSize that the shell reports for the
+// panel's position type, which is 360 x 418, so a bigger size needs that cap
+// raised too. It is read through the IMapView that TextInput.dll implements,
+// both by ResetControlSize and, later, when the shell places the panel.
+
+// The size the last ResetControlSize asked for, or 0 when the panel keeps its
+// default size.
+std::atomic<float> g_requestedWidth = 0;
+std::atomic<float> g_requestedHeight = 0;
+
+// The usable area of the monitor the panel opens on, in DIPs.
+wf::Size GetWorkAreaSize() {
+    HMONITOR monitor =
+        MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info = {sizeof(info)};
+    if (!monitor || !GetMonitorInfo(monitor, &info)) {
+        return {FLT_MAX, FLT_MAX};
+    }
+    float scale = 1;
+    if (GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) !=
+        DPI_AWARENESS_UNAWARE) {
+        scale = GetDpiForSystem() / 96.0f;
+    }
+    return {(info.rcWork.right - info.rcWork.left) / scale,
+            (info.rcWork.bottom - info.rcWork.top) / scale};
+}
 
 using ResetControlSize_t = void(WINAPI*)(void* pThis, wf::Size size);
 ResetControlSize_t ResetControlSize_Original;
@@ -421,13 +450,17 @@ void WINAPI ResetControlSize_Hook(void* pThis, wf::Size size) {
     int heightPercent = g_panelHeightPercent;
     Wh_Log(L"ResetControlSize %.1f x %.1f, scale %d%% x %d%%", size.Width,
            size.Height, widthPercent, heightPercent);
-    if (widthPercent != 100 || heightPercent != 100) {
+    bool resized = widthPercent != 100 || heightPercent != 100;
+    if (resized) {
         if (size.Width < 0) {
             size = {kDefaultPanelWidth, kDefaultPanelHeight};
         }
         size.Width *= widthPercent / 100.0f;
         size.Height *= heightPercent / 100.0f;
     }
+
+    g_requestedWidth = resized ? size.Width : 0;
+    g_requestedHeight = resized ? size.Height : 0;
     ResetControlSize_Original(pThis, size);
 
     try {
@@ -437,9 +470,61 @@ void WINAPI ResetControlSize_Hook(void* pThis, wf::Size size) {
     }
 }
 
+// TextInputViewAvailableSize starts with two Windows::Foundation::Size, both
+// holding the available size.
+struct AvailableSize {
+    wf::Size size[2];
+};
+
+using AvailableSizeLookup_t = HRESULT(WINAPI*)(void* pThis,
+                                               int key,
+                                               AvailableSize* result);
+AvailableSizeLookup_t AvailableSizeLookup_Original;
+HRESULT WINAPI AvailableSizeLookup_Hook(void* pThis,
+                                        int key,
+                                        AvailableSize* result) {
+    HRESULT hr = AvailableSizeLookup_Original(pThis, key, result);
+    if (SUCCEEDED(hr) && g_requestedWidth > 0) {
+        wf::Size workArea = GetWorkAreaSize();
+        float width = std::min(g_requestedWidth.load(), workArea.Width);
+        float height = std::min(g_requestedHeight.load(), workArea.Height);
+        for (auto& size : result->size) {
+            size.Width = std::max(size.Width, width);
+            size.Height = std::max(size.Height, height);
+        }
+    }
+    return hr;
+}
+
+bool HookTextInput() {
+    HMODULE module = GetModuleHandle(L"TextInput.dll");
+    if (!module) {
+        Wh_Log(L"TextInput.dll isn't loaded, the panel can't grow past its "
+               L"default size");
+        return false;
+    }
+    // clang-format off
+    WindhawkUtils::SYMBOL_HOOK textInputDllHooks[] = {
+        {
+            {LR"(?__abi_Windows_Foundation_Collections_?$IMapView@W4TextInputViewPositionType@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@VTextInputViewAvailableSize@23456@____abi_Lookup@?Q?$IMapView@W4TextInputViewPositionType@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@VTextInputViewAvailableSize@23456@@Collections@Foundation@Windows@@?$MapView@W4TextInputViewPositionType@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@VTextInputViewAvailableSize@23456@U?$less@W4TextInputViewPositionType@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@@std@@$00$00@2Platform@@UE$AAAJW4TextInputViewPositionType@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@PEAVTextInputViewAvailableSize@89Experiences@ComposableShell@WindowsInternal@@@Z)"},
+            &AvailableSizeLookup_Original,
+            AvailableSizeLookup_Hook,
+        },
+    };
+    // clang-format on
+    if (!WindhawkUtils::HookSymbols(module, textInputDllHooks,
+                                    ARRAYSIZE(textInputDllHooks))) {
+        Wh_Log(L"Couldn't hook TextInput.dll, the panel can't grow past its "
+               L"default size");
+        return false;
+    }
+    return true;
+}
+
 std::atomic<bool> g_inputAppHooked;
 
 bool HookInputApp(HMODULE module) {
+    HookTextInput();
     // clang-format off
     WindhawkUtils::SYMBOL_HOOK inputAppDllHooks[] = {
         {
