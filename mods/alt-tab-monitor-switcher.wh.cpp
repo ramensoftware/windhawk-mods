@@ -2,9 +2,9 @@
 // @id              alt-tab-monitor-switcher
 // @name            Alt+Tab monitor switcher
 // @name:ko         Alt+Tab 디스플레이 전환
-// @description     Cycle monitor-specific native Alt+Tab lists with D while holding Alt, without moving the cursor.
-// @description:ko  Alt+Tab에서 Alt를 누른 채 D로 디스플레이별 창 목록을 전환합니다.
-// @version         1.0.1
+// @description     Start Alt+Tab on the focused app's monitor, then hold Alt and press D to cycle monitor-specific window lists.
+// @description:ko  현재 활성 앱의 화면에서 Alt+Tab을 시작하고, Alt를 누른 채 D로 디스플레이별 창 목록을 전환합니다.
+// @version         1.0.2
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
@@ -17,8 +17,9 @@
 /*
 # Alt+Tab monitor switcher
 
-Keep holding **Alt** after opening **Alt+Tab**, then press **D** to switch to
-another monitor's window list. The cursor stays where it is.
+**Alt+Tab starts on the focused application's monitor**, regardless of where the
+mouse is. Keep holding **Alt**, then press **D** to switch to another monitor's
+window list. Moving the mouse doesn't change the selected monitor.
 
 ## What this adds to Alt+Tab per monitor
 
@@ -26,14 +27,15 @@ another monitor's window list. The cursor stays where it is.
 monitor using the cursor's position. Its Win+Alt+Tab shortcut can show windows
 from all monitors together.
 
-This mod adds **keyboard selection of the monitor during the same Alt+Tab
-session**. Pressing D moves the switcher to the next monitor and shows only that
-monitor's windows. You can browse a different display without moving the mouse
-or searching through one combined list of every window.
+This mod starts from the **focused application's monitor** and adds **keyboard
+selection of the monitor during the same Alt+Tab session**. Pressing D moves the
+switcher to the next monitor and shows only that monitor's windows. The selected
+monitor stays fixed until you press D or close the switcher. You can browse a
+different display without moving the mouse or searching through a combined list.
 
 ## Controls
 
-- Press **Alt+Tab** to show windows on the cursor's monitor.
+- Press **Alt+Tab** to show windows on the focused application's monitor.
   - Keep holding **Alt** and press **D** to switch to the next monitor.
   - Press **Shift+D** to switch to the previous monitor.
   - Use **Tab**, **Shift+Tab**, or the arrow keys to select a window.
@@ -44,7 +46,8 @@ or searching through one combined list of every window.
 - Monitors are ordered from left to right, then top to bottom.
   - Monitors without windows in the native Alt+Tab list are skipped.
 - The cursor and application windows are never moved.
-  - Each new Alt+Tab session starts with the configured cursor/primary behavior.
+  - Each new Alt+Tab session starts from the focused application's monitor.
+    - Starting from the cursor's monitor is an optional setting.
 - D is intercepted only while using the native switcher or changing monitors.
   - Normal D and Alt+D shortcuts in applications keep working.
 
@@ -58,16 +61,16 @@ Windows functions. Other Alt+Tab replacements are not supported.
 
 Both Alt+Tab and Win+Alt+Tab can be independently configured with:
 
-- **Display location**: Primary monitor or monitor where cursor is located.
-- **Windows to show**: All monitors, cursor's monitor only, or cursor's monitor
-  with an exception for the primary monitor (shows all windows when cursor is on
-  the primary monitor).
+- **Display location**: Primary monitor or the session's selected monitor.
+- **Windows to show**: All monitors, the selected monitor only, or the selected
+  monitor with an exception for the primary monitor.
 
 ## 한국어
 
 기존 **Alt+Tab per monitor**는 마우스 커서가 있는 화면을 기준으로 창 목록을
-보여줍니다. 이 모드는 **Alt를 누른 채 D로 대상 디스플레이를 직접 전환**할 수
-있습니다. 마우스를 옮기거나 모든 화면의 창을 한 목록에서 찾을 필요가 없습니다.
+보여줍니다. 이 모드는 **현재 활성 프로그램이 있는 화면에서 시작**하고,
+**Alt를 누른 채 D로 대상 디스플레이를 직접 전환**합니다. 목록을 연 상태에서
+마우스를 다른 화면으로 옮겨도 대상 화면은 바뀌지 않습니다.
 
 - **Alt+Tab**으로 창 목록을 연 뒤 **Alt를 계속 누릅니다**.
   - **D**: 다음 디스플레이의 창 목록으로 전환합니다.
@@ -91,36 +94,47 @@ session handling are added by this mod.
 
 // ==WindhawkModSettings==
 /*
+- initialMonitorSource: activeWindow
+  $name: Initial monitor
+  $name:ko: 시작 디스플레이 기준
+  $description: Captured when Alt+Tab opens; mouse movement never changes an open session.
+  $description:ko: Alt+Tab을 열 때만 결정합니다. 열린 동안 마우스를 옮겨도 화면이 바뀌지 않습니다.
+  $options:
+  - activeWindow: Focused application's monitor (recommended)
+  - cursor: Monitor where cursor is located
+  $options:ko:
+  - activeWindow: 현재 활성 프로그램이 있는 화면 (권장)
+  - cursor: 마우스 커서가 있는 화면
 - enableMonitorCycling: true
   $name: Enable D / Shift+D monitor switching
   $name:ko: D / Shift+D 디스플레이 전환 사용
   $description: Switch monitors while the native Alt+Tab switcher is open.
   $description:ko: Alt+Tab 목록에서 Alt를 누른 채 D로 화면을 전환합니다.
-- altTabLocation: cursor
+- altTabLocation: selectedMonitor
   $name: "Alt+Tab: Display location"
   $name:ko: "Alt+Tab: 표시할 화면"
   $description: Choose which monitor the Alt+Tab switcher appears on
   $description:ko: 처음 Alt+Tab 목록을 표시할 화면을 선택합니다.
   $options:
-  - cursor: Monitor where cursor is located
+  - selectedMonitor: Session's selected monitor
   - primary: Primary monitor
   $options:ko:
-  - cursor: 마우스 커서가 있는 화면
+  - selectedMonitor: 현재 세션에서 선택한 화면
   - primary: 주 디스플레이
-- altTabWindows: cursorMonitor
+- altTabWindows: selectedMonitor
   $name: "Alt+Tab: Windows to show"
   $name:ko: "Alt+Tab: 표시할 창"
   $description: Choose which windows to show when using Alt+Tab
   $description:ko: 처음 Alt+Tab 목록에 포함할 창을 선택합니다.
   $options:
-  - cursorMonitor: Windows from the monitor where cursor is located
+  - selectedMonitor: Windows from the selected monitor
   - allMonitors: Windows from all monitors
-  - cursorMonitorExceptPrimary: >-
-      Windows from cursor's monitor, but all windows when on primary
+  - selectedMonitorExceptPrimary: >-
+      Windows from the selected monitor, but all windows when on primary
   $options:ko:
-  - cursorMonitor: 커서가 있는 화면의 창만
+  - selectedMonitor: 선택한 화면의 창만
   - allMonitors: 모든 화면의 창
-  - cursorMonitorExceptPrimary: 커서 화면의 창만, 주 디스플레이에서는 모든 창
+  - selectedMonitorExceptPrimary: 선택한 화면의 창만, 주 디스플레이에서는 모든 창
 - winAltTabLocation: primary
   $name: "Win+Alt+Tab: Display location"
   $name:ko: "Win+Alt+Tab: 표시할 화면"
@@ -129,10 +143,10 @@ session handling are added by this mod.
   $description:ko: Win+Alt+Tab 목록을 표시할 화면을 선택합니다.
   $options:
   - primary: Primary monitor
-  - cursor: Monitor where cursor is located
+  - selectedMonitor: Session's selected monitor
   $options:ko:
   - primary: 주 디스플레이
-  - cursor: 마우스 커서가 있는 화면
+  - selectedMonitor: 현재 세션에서 선택한 화면
 - winAltTabWindows: allMonitors
   $name: "Win+Alt+Tab: Windows to show"
   $name:ko: "Win+Alt+Tab: 표시할 창"
@@ -140,13 +154,13 @@ session handling are added by this mod.
   $description:ko: Win+Alt+Tab 목록에 포함할 창을 선택합니다.
   $options:
   - allMonitors: Windows from all monitors
-  - cursorMonitor: Windows from the monitor where cursor is located
-  - cursorMonitorExceptPrimary: >-
-      Windows from cursor's monitor, but all windows when on primary
+  - selectedMonitor: Windows from the selected monitor
+  - selectedMonitorExceptPrimary: >-
+      Windows from the selected monitor, but all windows when on primary
   $options:ko:
   - allMonitors: 모든 화면의 창
-  - cursorMonitor: 커서가 있는 화면의 창만
-  - cursorMonitorExceptPrimary: 커서 화면의 창만, 주 디스플레이에서는 모든 창
+  - selectedMonitor: 선택한 화면의 창만
+  - selectedMonitorExceptPrimary: 선택한 화면의 창만, 주 디스플레이에서는 모든 창
 */
 // ==/WindhawkModSettings==
 
@@ -178,6 +192,7 @@ struct {
 } g_settings;
 
 std::atomic<bool> g_enableMonitorCycling;
+std::atomic<bool> g_initialMonitorFromCursor;
 std::atomic<HMONITOR> g_monitorOverride;
 std::atomic<HMONITOR> g_sessionMonitor;
 std::atomic<bool> g_filterByMonitor;
@@ -202,9 +217,21 @@ HMONITOR GetTargetMonitor() {
             return monitor;
         }
     }
-    POINT cursor{};
-    GetCursorPos(&cursor);
-    return MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    if (HMONITOR monitor = g_sessionMonitor.load()) {
+        MONITORINFO info{sizeof(info)};
+        if (GetMonitorInfo(monitor, &info)) return monitor;
+    }
+    return MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY);
+}
+
+HMONITOR CaptureInitialMonitor(HWND foreground) {
+    if (g_initialMonitorFromCursor) {
+        POINT cursor{};
+        if (GetCursorPos(&cursor)) {
+            return MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+        }
+    }
+    return MonitorFromWindow(foreground, MONITOR_DEFAULTTOPRIMARY);
 }
 
 bool IsSwitcherForeground() {
@@ -323,8 +350,8 @@ LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
         !IsSwitcherForeground()) {
         g_monitorOverride = nullptr;
         g_switcherWindow = nullptr;
-        g_sessionMonitor = GetTargetMonitor();
         g_returnWindow = GetForegroundWindow();
+        g_sessionMonitor = CaptureInitialMonitor(g_returnWindow);
         g_stickySession = GetAsyncKeyState(VK_CONTROL) < 0;
         g_sessionActive = true;
     }
@@ -788,15 +815,11 @@ HRESULT CreateInstanceHook(std::function<HRESULT()> original) {
     ReleaseSRWLockExclusive(&g_seenMonitorsLock);
 
     if (windows == WindowsToShow::cursorMonitorExceptPrimary) {
-        POINT pt;
-        if (GetCursorPos(&pt)) {
-            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO monInfo;
-            monInfo.cbSize = sizeof(MONITORINFO);
-            if (GetMonitorInfo(hMon, &monInfo) &&
-                (monInfo.dwFlags & MONITORINFOF_PRIMARY)) {
-                g_filterByMonitor = false;
-            }
+        HMONITOR hMon = GetTargetMonitor();
+        MONITORINFO monInfo{sizeof(monInfo)};
+        if (GetMonitorInfo(hMon, &monInfo) &&
+            (monInfo.dwFlags & MONITORINFOF_PRIMARY)) {
+            g_filterByMonitor = false;
         }
     }
 
@@ -891,12 +914,16 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
 
 void LoadSettings() {
     g_enableMonitorCycling = Wh_GetIntSetting(L"enableMonitorCycling") != 0;
+    PCWSTR initialSource = Wh_GetStringSetting(L"initialMonitorSource");
+    g_initialMonitorFromCursor = wcscmp(initialSource, L"cursor") == 0;
+    Wh_FreeStringSetting(initialSource);
     auto loadLocation = [](PCWSTR name, Location defaultVal) {
         PCWSTR val = Wh_GetStringSetting(name);
         Location result = defaultVal;
         if (wcscmp(val, L"primary") == 0) {
             result = Location::primary;
-        } else if (wcscmp(val, L"cursor") == 0) {
+        } else if (wcscmp(val, L"selectedMonitor") == 0 ||
+                   wcscmp(val, L"cursor") == 0) {
             result = Location::cursor;
         }
         Wh_FreeStringSetting(val);
@@ -908,9 +935,11 @@ void LoadSettings() {
         WindowsToShow result = defaultVal;
         if (wcscmp(val, L"allMonitors") == 0) {
             result = WindowsToShow::allMonitors;
-        } else if (wcscmp(val, L"cursorMonitor") == 0) {
+        } else if (wcscmp(val, L"selectedMonitor") == 0 ||
+                   wcscmp(val, L"cursorMonitor") == 0) {
             result = WindowsToShow::cursorMonitor;
-        } else if (wcscmp(val, L"cursorMonitorExceptPrimary") == 0) {
+        } else if (wcscmp(val, L"selectedMonitorExceptPrimary") == 0 ||
+                   wcscmp(val, L"cursorMonitorExceptPrimary") == 0) {
             result = WindowsToShow::cursorMonitorExceptPrimary;
         }
         Wh_FreeStringSetting(val);
