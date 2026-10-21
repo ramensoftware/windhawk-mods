@@ -9435,7 +9435,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 2, 10],
         "ratingUsers": 12,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 17.2,
         "updated": 1792134095000,
         "users": 172
@@ -20321,7 +20321,7 @@
         "ratingUsers": 11,
         "reviews": 0,
         "trendingSorting": 17.3,
-        "updated": 1792152240000,
+        "updated": 1792573423000,
         "users": 173
       },
       "metadata": {
@@ -20329,7 +20329,7 @@
           "x86-64"
         ],
         "author": "jayll1303",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore",
         "description": "Resize the Win+V clipboard / Win+. emoji panel and hide the tabs you don't use (Emoji, GIF, Kaomoji, Symbols, Most recently used)",
         "github": "https://github.com/jayll1303",
         "include": [
@@ -20337,7 +20337,7 @@
         ],
         "license": "MIT",
         "name": "Win+V Panel Tweaks",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "winver-custom-text": {

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-21T04:04:03.000Z</updated>
+    <updated>2026-10-21T09:03:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.1]]></title>
+        <id>https://windhawk.net/mods/winv-panel-tweaks#fa237ad2838057507501b6cb820b423eeda333ad</id>
+        <link href="https://windhawk.net/mods/winv-panel-tweaks"/>
+        <updated>2026-10-21T09:03:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixes the panel size setting having no effect above 100%: the limit Windows reports for the panel is now raised to the requested size.</li>
+<li>The panel never grows past the usable area of the screen it opens on.</li>
+<li>The mod now also hooks <code>TextInput.dll</code>, so the first start after installing or after a Windows update may take a moment while symbols download.</li>
+</ul>]]></content>
+        <author>
+            <name>jayll1303</name>
+            <uri>https://github.com/jayll1303</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mawaqit Prayer Clock 0.7.1]]></title>
         <id>https://windhawk.net/mods/windhawk-mawaqit#b1d6e84f9facc94d8e6be50ff78a9b13396f6b9e</id>
@@ -807,19 +822,6 @@ than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 reco
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Date and Time Format 1.0.1]]></title>
-        <id>https://windhawk.net/mods/lockscreen-datetime-format#df8be5c8cee075752072f68c2c0638eb077d71e8</id>
-        <link href="https://windhawk.net/mods/lockscreen-datetime-format"/>
-        <updated>2026-10-19T20:41:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Readme update: replaced images that failed to load, updated the Styling example, and added a Screenshots section.</li>
-</ul>]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
         </author>
     </entry>
 </feed>
