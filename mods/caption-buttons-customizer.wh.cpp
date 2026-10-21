@@ -104,7 +104,7 @@ Use *Hide window icon and title* to hide only the icon, only the title, or both.
 
 ## 8. Icon responds to click and double-click
 
-By default, Windows treats the window icon as a button: clicking it opens the window menu (Restore, Move, Size, Minimize, Maximize and Close), and double-clicking it closes the window. While this option is on, the menu opens after a short delay (up to 250 ms), so a double-click can be told apart from a single click. This can get in the way and double-clicking it closes the window. This can get in the way when *Icon and title alignment* is set to Center, because the icon then sits in the middle of the title bar, where it's easy to double-click by accident and close the window. Turn off *Icon responds to click and double-click* to prevent that. The icon then behaves like an empty part of the title bar: you can drag the window by it, and double-clicking it maximizes or restores the window.
+By default, Windows treats the window icon as a button: clicking it opens the window menu (Restore, Move, Size, Minimize, Maximize and Close), and double-clicking it closes the window. While this option is on, the menu opens after a short delay (up to 250 ms), so a double-click can be told apart from a single click. This can get in the way when *Icon and title alignment* is set to Center, because the icon then sits in the middle of the title bar, where it's easy to double-click by accident and close the window. Turn off *Icon responds to click and double-click* to prevent that. The icon then behaves like an empty part of the title bar: you can drag the window by it, and double-clicking it maximizes or restores the window.
 
 ![Window menu](https://i.imgur.com/dEM6EiY.png)
 
@@ -216,7 +216,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
     $name: Restart dwm.exe when the mod is unloaded
     $description: "Off (recommended): the painted glyphs stay until dwm.exe restarts, so after the mod is turned off a button can look wrong or be missing. On: dwm.exe is terminated when the mod is unloaded (disable, recompile, Windhawk restart) so the original glyphs come back; the screen flickers briefly and apps stay open. dwm.exe is never restarted twice within 30 seconds."
   $name: Button style
-  $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.  
+  $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.
 - titleText:
   - titleAlign: left
     $name: Icon and title alignment
@@ -388,7 +388,7 @@ static void LoadExclusions();
 static void LoadSettings() {
     g_settings.moveButtons = Wh_GetIntSetting(L"buttons.moveButtons") != 0;
     g_settings.leftMargin = Clamp(Wh_GetIntSetting(L"buttons.leftMargin"), 0, 300);
-    g_settings.tighten = Clamp(Wh_GetIntSetting(L"buttons.buttonTighten"), 0, 40);    
+    g_settings.tighten = Clamp(Wh_GetIntSetting(L"buttons.buttonTighten"), 0, 40);
     g_settings.explorerMargin = Clamp(Wh_GetIntSetting(L"explorerTabs.buttonsExtraMargin"), -50, 300);
     g_settings.order = GetChoice(L"buttons.order", kOrderKeys, 3);
     g_settings.showDialogClose = Wh_GetIntSetting(L"buttons.showDialogClose") != 0;
@@ -750,7 +750,7 @@ static void StoreWinLayout(void* win, const int* l, const int* r, int band, HWND
     e.hwnd = hwnd;
     e.band = band;
     e.valid = true;
-    e.iconSet = false; e.iconL = 0; e.iconR = 0;    
+    e.iconSet = false; e.iconL = 0; e.iconR = 0;
     ReleaseSRWLockExclusive(&g_layoutLock);
 }
 
@@ -1155,7 +1155,7 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     t_seq.rightMargin = rightMargin;
     t_seq.winW = winW;
     t_seq.hwnd = hwndUsed;
-    t_seq.win = pThis;    
+    t_seq.win = pThis;
     t_seq.closeOnly = closeOnly;
 
     int dpi = 0;
@@ -1175,7 +1175,7 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     for (int t = 1; t <= 3; t++) {
         br[t] = winW - t_seq.outBefore[t];
         bl[t] = br[t] - w[t];
-        if (T > 0 && w[t] > 0) { bl[t] += T / 2; br[t] -= T - T / 2; }   // hit slot = narrower than the 46px visual        
+        if (T > 0 && w[t] > 0) { bl[t] += T / 2; br[t] -= T - T / 2; }   // hit slot = narrower than the 46px visual
     }
     StoreWinLayout(pThis, bl, br, b + a + 2, hwndUsed);
 
@@ -1286,31 +1286,37 @@ static void OnTitleUpdated_Hook(void* pThis) {
     if (pre && t_posDepth == 0 && !t_relayout) DoRelayout(pThis, L"OnTitleUpdated-post");
 }
 
-// Menu ikon ditunda sebentar. Kalau klik kedua (double-click) datang sebelum
-// waktunya habis, menu dibatalkan dan window langsung ditutup.
-static volatile LONG g_menuGen = 0;
-struct MenuReq { HWND hw; int x, y; LONG gen; DWORD delay; };
+// The icon menu is delayed briefly. If a second click (double-click) arrives
+// before the timer fires, the menu is cancelled and the window is closed instead.
+#ifndef WM_POPUPSYSTEMMENU
+#define WM_POPUPSYSTEMMENU 0x0313
+#endif
 
-static DWORD WINAPI MenuThread(LPVOID p) {
-    MenuReq* r = (MenuReq*)p;
-    Sleep(r->delay);
-    if (r->gen == g_menuGen && !g_unloading && IsWindow(r->hw)) {
-        PostMessageW(r->hw, 0x0313, 0,
-                     (LPARAM)(((r->y & 0xFFFF) << 16) | (r->x & 0xFFFF)));
-    }
-    free(r);
-    return 0;
+static PTP_TIMER g_menuTimer;
+static SRWLOCK g_menuLock = SRWLOCK_INIT;
+static HWND g_menuHwnd;
+static POINT g_menuPt;
+
+static VOID CALLBACK MenuTimerCallback(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+    AcquireSRWLockExclusive(&g_menuLock);
+    HWND hw = g_menuHwnd;
+    POINT pt = g_menuPt;
+    g_menuHwnd = nullptr;
+    ReleaseSRWLockExclusive(&g_menuLock);
+    if (hw && !g_unloading && IsWindow(hw))
+        PostMessageW(hw, WM_POPUPSYSTEMMENU, 0, MAKELPARAM(pt.x, pt.y));
 }
 
 static void QueueIconMenu(HWND hw, int x, int y) {
-    MenuReq* r = (MenuReq*)malloc(sizeof(MenuReq));
-    if (!r) return;
-    r->hw = hw; r->x = x; r->y = y;
-    r->gen = InterlockedIncrement(&g_menuGen);
+    if (!g_menuTimer) return;
+    AcquireSRWLockExclusive(&g_menuLock);
+    g_menuHwnd = hw;
+    g_menuPt = {x, y};
+    ReleaseSRWLockExclusive(&g_menuLock);
     UINT dc = GetDoubleClickTime();
-    r->delay = dc > 250 ? 250 : dc;   // ubah 250 kalau mau menu lebih cepat/lambat
-    HANDLE t = CreateThread(nullptr, 0, MenuThread, r, 0, nullptr);
-    if (t) CloseHandle(t); else free(r);
+    LONGLONG due = -(LONGLONG)(dc > 250 ? 250 : dc) * 10000;   // relative, 100 ns units; change 250 for a faster/slower menu
+    FILETIME ft = {(DWORD)due, (DWORD)(due >> 32)};
+    SetThreadpoolTimer(g_menuTimer, &ft, 0, 0);
 }
 
 // ---------------- hit-test fix ----------------
@@ -1361,20 +1367,20 @@ static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsign
                    pt->x, pt->y, code, il, ir, (int)onIcon, (int)g_settings.iconClickable, b0);
             static bool s_down = false;
             static ULONGLONG s_lastMenu = 0;
-            static ULONGLONG s_lastDown = 0;            
-            bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+            static ULONGLONG s_lastDown = 0;
+            bool down = (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000) != 0;
             ULONGLONG nowTick = GetTickCount64();
             bool within = (nowTick - s_lastMenu) <= (ULONGLONG)GetDoubleClickTime();
             bool newPress = down && (!s_down || (nowTick - s_lastDown) > 100);
-            bool dblIcon = false;            
-            if (down) s_lastDown = nowTick;            
+            bool dblIcon = false;
+            if (down) s_lastDown = nowTick;
             if (g_settings.iconClickable && onIcon && newPress) {
                 HWND hw = GetWinHwnd(pThis);
                 if (within) {
-                    // klik kedua di ikon = double-click -> tutup window
+                    // second click on the icon = double-click -> close the window
                     s_lastMenu = 0;
-                    InterlockedIncrement(&g_menuGen);   // batalkan menu yang tertunda                    
-                    dblIcon = true;   // biar Windows sendiri yang menutup (HTSYSMENU)
+                    AcquireSRWLockExclusive(&g_menuLock); g_menuHwnd = nullptr; ReleaseSRWLockExclusive(&g_menuLock);   // cancel the pending menu
+                    dblIcon = true;   // let Windows close it itself (HTSYSMENU)
                 } else {
                     s_lastMenu = nowTick;
                     RECT wr;
@@ -1386,8 +1392,8 @@ static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsign
                 }
             }
             s_down = down;
-            if (dblIcon) { *pFlags = 3; code = 3; }   // klik kedua: double-click ikon = close
-            else { *pFlags = 2; code = 2; }           // selain itu caption, termasuk ikon
+            if (dblIcon) { *pFlags = 3; code = 3; }   // second click: double-click on the icon = close
+            else { *pFlags = 2; code = 2; }           // everything else is caption, including the icon
         }
     }
     int type = (code == 20) ? 3 : (code == 9) ? 2 : (code == 8) ? 1 : 0;
@@ -1472,7 +1478,7 @@ static void TL_LoadSettings() {
     g_debug = Wh_GetIntSetting(L"debugLog") ? 1 : 0;
     PCWSTR style = Wh_GetStringSetting(L"buttonStyle.style");
     g_tlEnabled = (style && wcscmp(style, L"windows") != 0 && !g_painterBroken) ? 1 : 0;
-    g_styleCustom = (style && wcscmp(style, L"custom") == 0) ? 1 : 0;    
+    g_styleCustom = (style && wcscmp(style, L"custom") == 0) ? 1 : 0;
     Wh_FreeStringSetting(style);
     g_restartOnUnload = Wh_GetIntSetting(L"buttonStyle.restartDwmOnUnload") ? 1 : 0;
 
@@ -1562,10 +1568,13 @@ static DWORD WINAPI ActivateNudgeThread(LPVOID) {
 
     // Pick a visible window that this mod laid out (a normal caption window, not a frame host)
     HWND target = nullptr;
+    HWND fg = GetForegroundWindow();
     AcquireSRWLockShared(&g_layoutLock);
     for (auto& p : g_winLayouts) {
         HWND h = p.second.hwnd;
-        if (p.second.valid && h && IsWindow(h) && IsWindowVisible(h) && !IsIconic(h)) { target = h; break; }
+        if (!(p.second.valid && h && IsWindow(h) && IsWindowVisible(h) && !IsIconic(h))) continue;
+        if (h == fg) { target = h; break; }   // prefer the foreground window
+        if (!target) target = h;              // otherwise the first usable one
     }
     ReleaseSRWLockShared(&g_layoutLock);
 
@@ -1679,6 +1688,12 @@ static int MiddleRoleLocked(const void* const* fam, float f, unsigned w, unsigne
         if (self || !GlyphStillValid(g)) continue;
         return g.role == 1 ? 3 : 1;
     }
+    // No sibling yet. The active set (f ~ 1.0) is built for the window that just became
+    // active, so the foreground window tells whether this set is restore or maximize.
+    if (f > 0.7f) {
+        HWND fg = GetForegroundWindow();
+        if (fg && IsZoomed(fg)) return 3;
+    }
     return 1;
 }
 
@@ -1708,7 +1723,7 @@ static void CorrectRole(const void* bmp, int role) {
                 if (midRole < 0) midRole = MiddleRoleLocked(fam, g_gl[i].f, g_gl[i].sz[0], g_gl[i].sz[1]);
                 want = midRole;
             } else if (g_gl[i].sz[0] > g_gl[i].sz[1]) {
-                continue;   // glyph lebar tidak boleh jadi minimize
+                continue;   // a wide glyph must not become minimize
             }
             if (cur == want) continue;
             g_gl[i].role = want;
@@ -1725,6 +1740,13 @@ static void AddExtent(const void* obj) {
     const unsigned* d = (const unsigned*)obj;
     if (d[22] > 0 && d[22] < 4096 && (int)d[22] > g_extR) g_extR = (int)d[22];
     if (d[23] > 0 && d[23] < 8192 && (int)d[23] > g_extB) g_extB = (int)d[23];
+}
+
+// Caller holds g_glLock.
+static bool HeightIsLiveLocked(unsigned h) {
+    for (int i = 0; i < g_glN; i++)
+        if (g_gl[i].sz[1] == h && GlyphStillValid(g_gl[i])) return true;
+    return false;
 }
 
 static bool RegisterPair(const void* a, const void* b, float f) {
@@ -1761,7 +1783,12 @@ static bool RegisterPair(const void* a, const void* b, float f) {
     }
     if (!found && g_arrCount + 2 <= 192) {
         unsigned hNow = ((const unsigned*)vb[0])[7];
-        if (g_curSet >= 0 && hNow != g_curSetH) g_dpiChanged = 1;   // glyph size changed = DPI changed
+        if (g_curSet >= 0 && hNow != g_curSetH) {
+            // Only a height with no live registered glyph counts as a DPI change
+            AcquireSRWLockShared(&g_glLock);
+            if (!HeightIsLiveLocked(hNow)) g_dpiChanged = 1;
+            ReleaseSRWLockShared(&g_glLock);
+        }
         if (g_curSet < 0 || g_curSetCount >= 3 || f != g_curSetF || hNow != g_curSetH) {
             g_curSet++;
             g_curSetCount = 0;
@@ -1779,8 +1806,7 @@ static bool RegisterPair(const void* a, const void* b, float f) {
             int cellKind = KindFromCell(movedRc[20], movedRc[21]);
             bool wide = movedRc[6] > movedRc[7];
             if (cellKind == 0 && !wide) role = 0;
-            else if (cellKind == 1) { role = 3; fromCell = true; }
-            else if (cellKind == 2) { role = 1; fromCell = true; }
+            else if (cellKind == 1 || cellKind == 2) role = 1;   // middle button: maximize vs restore is decided below, not from the old cell
             else if (wide && role == 0) role = 1;
         }
         // The second glyph of a set that is not close is the middle button
@@ -1820,7 +1846,7 @@ static bool RegisterPair(const void* a, const void* b, float f) {
                 g.sz[0] = d[6]; g.sz[1] = d[7];
                 g.a0 = va[0];
                 g.vt = *(void* const*)vb[i];
-                g.f = f;                
+                g.f = f;
                 MoveToCell(g);
             }
         }
@@ -1843,9 +1869,9 @@ static bool RegisterPair(const void* a, const void* b, float f) {
                 if (!g_nudgeThread || WaitForSingleObject(g_nudgeThread, 0) == WAIT_OBJECT_0) {
                     if (g_nudgeThread) CloseHandle(g_nudgeThread);
                     g_nudgeThread = CreateThread(nullptr, 0, ActivateNudgeThread, nullptr, 0, nullptr);
-                }                
+                }
             }
-        }               
+        }
     }
     return isNew;
 }
@@ -1900,7 +1926,7 @@ static bool InSymbol(int role, float ux, float uy) {
 }
 
 static void RenderGlyph(BYTE* px, int w, int h, int role, int state) {
-    if (role == 3) role = 1;   // restore uses the maximize colors    
+    if (role == 3) role = 1;   // restore uses the maximize colors
     if (role < 0 || role > 2) role = 0;
     int bg[3], sym[3];
     for (int i = 0; i < 3; i++) {
@@ -1910,7 +1936,7 @@ static void RenderGlyph(BYTE* px, int w, int h, int role, int state) {
     bool drawSym = (state == 1 || state == 2);
     float cx = w / 2.0f, cy = h / 2.0f;
     float rad = (w < h ? w : h) / 2.0f - 0.25f;
-    float k = 12.0f / (float)(w < h ? w : h);   // keeps the x / - / + symbols proportional at high DPI    
+    float k = 12.0f / (float)(w < h ? w : h);   // keeps the x / - / + symbols proportional at high DPI
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int nBg = 0, nSym = 0;
@@ -3130,7 +3156,7 @@ static void LoadUser32Procs() {
         g_pGetDpiForSystem = (GetDpiForSystem_t)GetProcAddress(user32, "GetDpiForSystem");
         g_pSPIForDpi = (SPIForDpi_t)GetProcAddress(user32, "SystemParametersInfoForDpi");
         g_pInternalGetWindowText = (InternalGetWindowText_t)GetProcAddress(user32, "InternalGetWindowText");
-        g_pIsHungAppWindow = (IsHungAppWindow_t)GetProcAddress(user32, "IsHungAppWindow");        
+        g_pIsHungAppWindow = (IsHungAppWindow_t)GetProcAddress(user32, "IsHungAppWindow");
     }
 }
 
@@ -3170,7 +3196,7 @@ static unsigned long long LayoutSignature() {
     unsigned long long h = 1469598103934665603ull;
     h = Fnv(h, (unsigned long long)(long long)g_settings.moveButtons);
     h = Fnv(h, (unsigned long long)(long long)g_settings.leftMargin);
-    h = Fnv(h, (unsigned long long)(long long)g_settings.tighten);    
+    h = Fnv(h, (unsigned long long)(long long)g_settings.tighten);
     h = Fnv(h, (unsigned long long)(long long)g_settings.explorerMargin);
     h = Fnv(h, (unsigned long long)(long long)g_settings.order);
     h = Fnv(h, (unsigned long long)(long long)g_settings.showDialogClose);
@@ -3280,7 +3306,7 @@ void Wh_ModAfterInit() {
         RequestDwmRefresh();         // windows that are already open get the new layout right away
         if (g_tlEnabled && g_styleCustom) {
             g_iconWaitThread = CreateThread(nullptr, 0, IconWaitThread, nullptr, 0, nullptr);
-        }        
+        }
     }
 }
 
@@ -3296,9 +3322,15 @@ void Wh_ModUninit() {
         CloseHandle(g_iconWaitThread);
         g_iconWaitThread = nullptr;
     }
+    if (g_menuTimer) {
+        SetThreadpoolTimer(g_menuTimer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(g_menuTimer, TRUE);
+        CloseThreadpoolTimer(g_menuTimer);
+        g_menuTimer = nullptr;
+    }
     if (g_nudgeThread) {
         InterlockedExchange(&g_unloading, 1);
-        WaitForSingleObject(g_nudgeThread, 3000);
+        WaitForSingleObject(g_nudgeThread, INFINITE);   // the thread checks g_unloading every 100 ms and sends at most two 300 ms messages
         CloseHandle(g_nudgeThread);
         g_nudgeThread = nullptr;
     }
@@ -3352,6 +3384,7 @@ BOOL Wh_ModInit() {
 
     HMODULE udwm = GetModuleHandleW(L"udwm.dll");
     if (!udwm) return FALSE;
+    g_menuTimer = CreateThreadpoolTimer(MenuTimerCallback, nullptr, nullptr);
 
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         // ---- Layout ----
@@ -3390,13 +3423,13 @@ BOOL Wh_ModInit() {
           (void**)&ImgSetSize_Orig, (void*)ImgSetSize_Hook, true },
         { { LR"(private: void __cdecl CButton::UpdateAtlasPositionAndSize(void))" },
           (void**)&UpdatePos_Orig, (void*)UpdatePos_Hook, true },
-  
+
         // Address only (no hook): called by PaintAtlas
         { { LR"(private: long __cdecl CBitmapSource::Update(struct IWICBitmap *))" },
           (void**)&g_updateBmp, nullptr, true },
         // Frees of glyph objects: drop them from our registries
         { { LR"(protected: virtual __cdecl CBitmapSource::~CBitmapSource(void))" },
-          (void**)&BmpDtor_Orig, (void*)BmpDtor_Hook, true },          
+          (void**)&BmpDtor_Orig, (void*)BmpDtor_Hook, true },
     };
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
@@ -3404,6 +3437,6 @@ BOOL Wh_ModInit() {
     DeriveHwndOffset();
 
     if (!g_updateBmp) Wh_Log(L"CBitmapSource::Update not found, custom button styles will not be painted");
-    if (!BmpDtor_Orig) Wh_Log(L"CBitmapSource destructor not found, freed glyph objects are not tracked");     
+    if (!BmpDtor_Orig) Wh_Log(L"CBitmapSource destructor not found, freed glyph objects are not tracked");
     return ok;
 }
