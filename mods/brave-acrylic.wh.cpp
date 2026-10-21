@@ -2,13 +2,14 @@
 // @id              brave-acrylic
 // @name            Brave Acrylic
 // @description     Alpha: Acrylic toolbar and vertical tabs for Brave; requires Translucent Windows
-// @version         2.8.2
+// @version         2.8.3
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @homepage        https://github.com/bardelyne/brave-acrylic
 // @license         MIT
 // @architecture    x86-64
 // @include         brave.exe
+// @compilerOptions -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -38,10 +39,6 @@ Brave Acrylic makes selected toolbar and vertical-tab backgrounds transparent so
 4. Close all Brave windows normally and reopen Brave.
 
 > **Seeing two sets of minimize, maximize, and close buttons?** Enable Brave's **Use compact mode** option in Appearance. The same fix is explained in the mod's Settings tab.
-
-### Install from source
-
-Open [brave-acrylic.wh.cpp](https://github.com/bardelyne/brave-acrylic/blob/main/brave-acrylic.wh.cpp), choose **Raw**, and copy the source. In Windhawk, open **Create a new mod**, replace the editor contents with that source, then compile and install it. No additional headers or DLLs are needed.
 
 ## Advanced setup
 
@@ -100,7 +97,7 @@ The [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/do
 4. **Remove matching paint and clear old pixels.** Exact listed opaque colors become transparent. An allowlist of browser containers is cleared on repaint so previous tab labels and backgrounds do not leave trails. Interactive child views are not blanket-cleared.
 5. **Let Translucent Windows supply the backdrop.** Brave Acrylic leaves window styles, fullscreen transitions, and backdrop selection alone. Its GPU hook only adjusts compatible RGBA composition surfaces; HWND, YUV, and protected-video surfaces keep their original settings.
 
-Function addresses are cached in Windhawk’s per-mod storage for the exact `chrome.dll` build and rechecked before use. The named-color table is checked once per browser launch. There is no screenshot polling, webpage injection, or recurring full-module scan.
+Function addresses and the toolbar table entry are cached in Windhawk’s per-mod storage for the exact `chrome.dll` build and rechecked before use. A valid cache avoids scanning the full named-color table again. There is no screenshot polling, webpage injection, or recurring full-module scan.
 
 Function discovery is local: **no Brave debug-symbol download is used**.
 
@@ -166,6 +163,7 @@ BOOL Wh_ModInit() {
 #else
 
 #include <dxgi1_2.h>
+#include <shellapi.h>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -598,10 +596,25 @@ static bool ReadColorName(const ReadOnlyImage& image, size_t row,
     return false;
 }
 
-static int FindToolbarColorId(HMODULE mod) {
+static int ReadToolbarColorId(const ReadOnlyImage& image, size_t row) {
+    if ((row & 7) || row < 16 || !image.Contains(row - 16, 48)) return -1;
+    unsigned long long id, previous, next;
+    size_t name, length, neighborName, neighborLength;
+    if (!ReadColorName(image, row, &id, &name, &length) ||
+        length != sizeof("kColorToolbar") - 1 ||
+        memcmp(image.base + name, "kColorToolbar", sizeof("kColorToolbar")) ||
+        !ReadColorName(image, row - 16, &previous, &neighborName, &neighborLength) ||
+        !ReadColorName(image, row + 16, &next, &neighborName, &neighborLength) ||
+        previous + 1 != id || id + 1 != next) return -1;
+    return static_cast<int>(id);
+}
+
+static int FindToolbarColorId(HMODULE mod, size_t* rowRva = nullptr) {
+    if (rowRva) *rowRva = 0;
     ReadOnlyImage image{};
     if (!GetReadOnlyImage(mod, &image)) return -1;
     int found = -1;
+    size_t foundRow = 0;
     for (unsigned i = 0; i < image.count; ++i) {
         const auto& section = image.sections[i];
         const size_t start = section.VirtualAddress;
@@ -613,21 +626,15 @@ static int FindToolbarColorId(HMODULE mod) {
             unsigned long long id;
             memcpy(&id, image.base + row, 8);
             if (!id || id >= 0x10000) continue;
-            size_t name, length;
-            if (!ReadColorName(image, row, &id, &name, &length) ||
-                length != sizeof("kColorToolbar") - 1 ||
-                memcmp(image.base + name, "kColorToolbar", sizeof("kColorToolbar")))
-                continue;
-            unsigned long long previous, next;
-            size_t neighborName, neighborLength;
-            if (!ReadColorName(image, row - 16, &previous, &neighborName, &neighborLength) ||
-                !ReadColorName(image, row + 16, &next, &neighborName, &neighborLength) ||
-                previous + 1 != id || id + 1 != next) continue;
+            const int toolbarId = ReadToolbarColorId(image, row);
+            if (toolbarId < 0) continue;
             // Duplicate tables are normal, but disagreeing definitions are unsafe.
-            if (found >= 0 && found != static_cast<int>(id)) return -1;
-            found = static_cast<int>(id);
+            if (found >= 0 && found != toolbarId) return -1;
+            found = toolbarId;
+            foundRow = row;
         }
     }
+    if (found >= 0 && rowRva) *rowRva = foundRow;
     return found;
 }
 
@@ -728,15 +735,16 @@ struct SignatureCache {
     unsigned int count;
     unsigned int reserved;
     unsigned long long rva[kRequiredFunctions];
+    unsigned long long toolbarRowRva;
     char version[64];
 };
-static_assert(sizeof(SignatureCache) == 120);
+static_assert(sizeof(SignatureCache) == 128);
 
 static unsigned long long BuildKey(HMODULE module) {
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
         reinterpret_cast<const unsigned char*>(module) + dos->e_lfanew);
-    constexpr unsigned long long signatureRevision = 13;
+    constexpr unsigned long long signatureRevision = 14;
     return ((static_cast<unsigned long long>(nt->FileHeader.TimeDateStamp) << 32) ^
             nt->OptionalHeader.SizeOfImage) + signatureRevision;
 }
@@ -755,7 +763,8 @@ static void GetBraveVersion(HMODULE module, char* output, size_t size) {
 }
 
 static bool LoadCache(unsigned long long key, size_t* rva, int count,
-                      char* previousVersion, size_t previousSize) {
+                      size_t* toolbarRowRva, char* previousVersion, size_t previousSize) {
+    *toolbarRowRva = 0;
     if (previousVersion && previousSize) previousVersion[0] = 0;
     if (count != kRequiredFunctions) return false;
     SignatureCache cache{};
@@ -767,16 +776,19 @@ static bool LoadCache(unsigned long long key, size_t* rva, int count,
     }
     if (cache.key != key) return false;
     for (int i = 0; i < count; ++i) rva[i] = static_cast<size_t>(cache.rva[i]);
+    *toolbarRowRva = static_cast<size_t>(cache.toolbarRowRva);
     return true;
 }
 
-static void SaveCache(unsigned long long key, const char* version, const size_t* rva, int count) {
+static void SaveCache(unsigned long long key, const char* version, const size_t* rva, int count,
+                      size_t toolbarRowRva) {
     if (count != kRequiredFunctions) return;
     SignatureCache cache{};
     cache.key = key;
     cache.count = count;
     std::snprintf(cache.version, sizeof(cache.version), "%s", version && *version ? version : "?");
     for (int i = 0; i < count; ++i) cache.rva[i] = rva[i];
+    cache.toolbarRowRva = toolbarRowRva;
     if (!Wh_SetBinaryValue(L"signatureCache", &cache, sizeof(cache))) {
         Wh_Log(L"Could not save the signature cache; the next launch will rescan");
     }
@@ -802,7 +814,15 @@ static bool ResolveBySignature(HMODULE module) {
     char version[64]{}, previousVersion[64]{};
     GetBraveVersion(module, version, sizeof(version));
     size_t rva[kRequiredFunctions]{};
-    bool cached = LoadCache(key, rva, kRequiredFunctions, previousVersion, sizeof(previousVersion));
+    size_t toolbarRowRva = 0;
+    int toolbarId = -1;
+    bool cached = LoadCache(key, rva, kRequiredFunctions, &toolbarRowRva,
+                            previousVersion, sizeof(previousVersion));
+    if (cached) {
+        ReadOnlyImage image{};
+        if (GetReadOnlyImage(module, &image)) toolbarId = ReadToolbarColorId(image, toolbarRowRva);
+        if (toolbarId < 0) cached = false;
+    }
     if (cached) {
         for (int i = 0; i < kRequiredFunctions; ++i) {
             if (!rva[i] || rva[i] < textRva || rva[i] - textRva > textSize ||
@@ -816,6 +836,11 @@ static bool ResolveBySignature(HMODULE module) {
     }
     if (!cached) {
         if (previousVersion[0]) Wh_Log(L"Cached Brave %S needs revalidation for %S", previousVersion, version);
+        toolbarId = FindToolbarColorId(module, &toolbarRowRva);
+        if (toolbarId < 0) {
+            Wh_Log(L"Toolbar colour table missing or ambiguous; transparency stays off");
+            return false;
+        }
         ScanHit hits[kRequiredFunctions]{};
         if (!ScanAll(module, text, textSize, signatures, kRequiredFunctions, hits)) return false;
         for (int i = 0; i < kRequiredFunctions; ++i) {
@@ -827,6 +852,8 @@ static bool ResolveBySignature(HMODULE module) {
         }
     }
 
+    s_toolbarColorId = toolbarId;
+    Wh_Log(L"per-window theme guard: kColorToolbar ID=%d", s_toolbarColorId);
     pCanvasDrawColor = reinterpret_cast<DrawColor_t>(base + rva[2]);
     pViewGetClassNameW = reinterpret_cast<ViewGetClassNameW_t>(base + rva[3]);
     pViewGetColorProvider = reinterpret_cast<ViewGetColorProvider_t>(base + rva[4]);
@@ -839,21 +866,11 @@ static bool ResolveBySignature(HMODULE module) {
         Wh_Log(L"Required paint hooks could not be registered; transparency stays off");
         return false;
     }
-    if (!cached) SaveCache(key, version, rva, kRequiredFunctions);
+    if (!cached) SaveCache(key, version, rva, kRequiredFunctions, toolbarRowRva);
     Wh_Log(L"%s: %d/%d resolved in %u ms (Brave %S)",
            cached ? L"signature cache" : L"signature scan", kRequiredFunctions, kRequiredFunctions,
            GetTickCount() - started, version);
     return true;
-}
-
-static bool InstallChromeHooks(HMODULE module) {
-    s_toolbarColorId = FindToolbarColorId(module);
-    if (s_toolbarColorId < 0) {
-        Wh_Log(L"Toolbar colour table missing or ambiguous; transparency stays off");
-        return false;
-    }
-    Wh_Log(L"per-window theme guard: kColorToolbar ID=%d", s_toolbarColorId);
-    return ResolveBySignature(module);
 }
 
 // Installation and shutdown share a barrier. No hook can be registered/applied
@@ -862,7 +879,7 @@ static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
     if (!module || s_chromeAttempted.exchange(true, std::memory_order_acq_rel)) return false;
     AcquireSRWLockExclusive(&s_initLock);
     bool installed = false;
-    if (!s_stopping && InstallChromeHooks(module)) {
+    if (!s_stopping && ResolveBySignature(module)) {
         if (applyNow) {
             installed = Wh_ApplyHookOperations() != FALSE;
             s_transparencyReady.store(installed, std::memory_order_release);
@@ -885,7 +902,8 @@ static bool IsExecutableLibraryLoad(DWORD flags) {
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
     const HMODULE module = pOrigLoadLibraryExW(name, file, flags);
     const DWORD error = GetLastError();
-    if (module && IsExecutableLibraryLoad(flags) && module == GetModuleHandleW(L"chrome.dll")) {
+    if (!s_chromeAttempted.load(std::memory_order_acquire) && module &&
+        IsExecutableLibraryLoad(flags) && module == GetModuleHandleW(L"chrome.dll")) {
         // Chrome's caller cannot use the new module until this hook returns.
         TryInstallChromeHooks(module, true);
     }
@@ -893,10 +911,27 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags
     return module;
 }
 
+enum class ProcessRole { Browser, Gpu, Other };
+
+static ProcessRole GetProcessRole() {
+    int count = 0;
+    auto* arguments = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!arguments) return ProcessRole::Other;
+    ProcessRole role = ProcessRole::Browser;
+    for (int i = 1; i < count; ++i) {
+        if (!wcscmp(arguments[i], L"--")) break;
+        if (!wcsncmp(arguments[i], L"--type=", 7)) {
+            role = !wcscmp(arguments[i] + 7, L"gpu-process") ? ProcessRole::Gpu : ProcessRole::Other;
+        }
+    }
+    LocalFree(arguments);
+    return role;
+}
+
 BOOL Wh_ModInit() {
-    const auto command = GetCommandLineW();
-    if (wcsstr(command, L"--type=gpu-process")) return InstallGpuHooks();
-    if (wcsstr(command, L"--type=")) return FALSE;
+    const auto role = GetProcessRole();
+    if (role == ProcessRole::Gpu) return InstallGpuHooks();
+    if (role != ProcessRole::Browser) return FALSE;
     s_isBrowserProcess = true;
     LoadModSettings();
 
