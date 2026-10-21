@@ -6,6 +6,7 @@
 // @author          MrAlexFreeman
 // @github          https://github.com/MrAlexFreeman/deepseek-balance-tray
 // @license         MIT
+// @architecture    x86-64
 // @include         explorer.exe
 // @compilerOptions -lwinhttp
 // ==/WindhawkMod==
@@ -26,6 +27,8 @@ Works in `explorer.exe` on Windows 10 and Windows 11 with the stock taskbar.
 Networking uses the built-in WinHTTP stack and JSON/XML parsing is hand-written,
 so there are no external dependencies.
 
+![screenshot](https://raw.githubusercontent.com/MrAlexFreeman/deepseek-balance-tray/main/screenshots/clock.png)
+
 ## How it works
 
 * The mod hooks `GetTimeFormatEx` / `GetDateFormatEx` from `kernelbase.dll` —
@@ -45,7 +48,8 @@ so there are no external dependencies.
 * **DeepSeek API key** — `sk-...` key stored in Windhawk's mod settings on this
   PC. Leave it empty to use the `DEEPSEEK_API_KEY` environment variable.
 * **Refresh interval** — how often to poll the API, in minutes.
-* **Currency prefix** — text before the amount in native mode (`$`, `¥`, ...).
+* **Currency prefix** — text before the amount in native mode; empty means the
+  currency symbol (`¥` for CNY, `$` for USD).
 * **Currency** — which `balance_infos` entry to use: `auto` (first non-zero),
   `CNY` or `USD`.
 * **Clock line** — append to the bottom (date) line or the top (time) line.
@@ -60,6 +64,11 @@ so there are no external dependencies.
 * The API key is stored in plain text in the mod settings: Windhawk has no
   secret setting type. The key is only sent to `api.deepseek.com` and is never
   logged; no other endpoints are contacted except `www.cbr.ru` in `RUB` mode.
+  In a regular (non-portable) Windhawk install the settings are machine-wide,
+  so every Windows account on this PC shares the same key.
+* Do not enable this mod together with Taskbar Clock Customization: both hook
+  the same formatting functions of the clock, and that mod replaces the line
+  text, so only one of them can win. Pick one of the two.
 */
 // ==/WindhawkModReadme==
 
@@ -76,11 +85,12 @@ so there are no external dependencies.
   $description: >-
     How often to poll the API. Values below 1 are treated as 1, values above
     1440 as 1440 (one day).
-- formatPrefix: "$"
+- formatPrefix: ""
   $name: Currency prefix
   $description: >-
-    Text printed before the amount in native mode, for example "$" gives
-    "$12.34". Can be "¥", "CNY " or empty.
+    Text printed before the amount in native mode. Leave empty to use the
+    currency symbol ("¥" for CNY, "$" for USD); set it explicitly for anything
+    else, for example "CNY " or "$".
 - currency: auto
   $name: Currency
   $description: >-
@@ -115,17 +125,17 @@ so there are no external dependencies.
 
 #include <windows.h>
 #include <winhttp.h>
-#include <winternl.h>
 
 #include <atomic>
 #include <cstring>
 #include <cwctype>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 namespace {
 
@@ -168,7 +178,13 @@ ULONGLONG g_rubRatesFetchedAt = 0;
 double g_rubPerUnit = 0.0;          // курс текущей валюты (0 — неизвестен)
 
 // Фоновый поток, событие его пробуждения и флаг остановки.
-std::thread g_workerThread;
+//
+// [[clang::no_destroy]] обязателен: Windhawk не вызывает Wh_ModUninit, когда
+// завершается сам Explorer (перезапуск, выход из системы, выключение). Если
+// std::thread к этому моменту всё ещё joinable, его деструктор вызывает
+// std::terminate() и роняет Explorer. Поэтому объект вообще не должен
+// разрушаться при завершении процесса.
+[[clang::no_destroy]] std::optional<std::thread> g_workerThread;
 HANDLE g_wakeEvent = nullptr;       // guarded by g_stateMutex
 std::atomic<bool> g_stopRequested{false};
 
@@ -265,6 +281,21 @@ std::wstring FormatRubles(double rubles) {
     }
 
     return (negative ? L"-≈" : L"≈") + grouped + L" ₽";
+}
+
+// Символ валюты по её коду. Используется, когда префикс валюты не задан:
+// тогда для CNY выводится "¥", для USD — "$", иначе код валюты.
+std::wstring CurrencySymbol(const std::wstring& code) {
+    if (_wcsicmp(code.c_str(), L"CNY") == 0) {
+        return L"¥";
+    }
+    if (_wcsicmp(code.c_str(), L"USD") == 0) {
+        return L"$";
+    }
+    if (_wcsicmp(code.c_str(), L"RUB") == 0) {
+        return L"₽";
+    }
+    return code.empty() ? std::wstring() : code + L" ";
 }
 
 // Обрезает длинный текст для Wh_Log: в лог не должны попадать переводы строк
@@ -384,8 +415,14 @@ void RebuildSuffixLocked() {
         // Пересчёт по курсу ЦБ: " | ≈1 061 ₽".
         g_clockSuffix += FormatRubles(g_amountValue * g_rubPerUnit);
     } else {
-        // Нативная валюта (или курс ещё не получен): " | CNY 86.37".
-        g_clockSuffix += g_settings.prefix;
+        // Нативная валюта (или курс ещё не получен): " | ¥86.37".
+        // Пустой префикс означает «взять символ по коду валюты».
+        std::wstring prefix = g_settings.prefix;
+        if (prefix.empty()) {
+            prefix = CurrencySymbol(g_currency);
+        }
+
+        g_clockSuffix += prefix;
         g_clockSuffix += g_amount;
     }
 }
@@ -1133,7 +1170,9 @@ void FetchAndUpdate() {
     }
 
     // Курс нужен до пересборки строки, но сеть — строго без блокировки.
-    if (wantRubles) {
+    // Проверяем флаг остановки между двумя запросами: иначе выгрузка мода
+    // ждала бы ещё и запрос к ЦБ.
+    if (wantRubles && !g_stopRequested.load(std::memory_order_acquire)) {
         EnsureRubRates();
     }
 
@@ -1197,7 +1236,7 @@ bool StartWorker() {
     // std::thread здесь безопасен: Wh_ModInit вызывается не из DllMain,
     // загрузчик уже отпустил loader lock.
     try {
-        g_workerThread = std::thread(WorkerProc);
+        g_workerThread.emplace(WorkerProc);
     } catch (...) {
         CloseHandle(g_wakeEvent);
         g_wakeEvent = nullptr;
@@ -1222,8 +1261,9 @@ void StopWorker() {
 
     // join() дождётся завершения текущего запроса, но не дольше таймаутов
     // WinHTTP (максимум ~8 секунд на приём ответа).
-    if (g_workerThread.joinable()) {
-        g_workerThread.join();
+    if (g_workerThread) {
+        g_workerThread->join();
+        g_workerThread.reset();
     }
 
     std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -1246,6 +1286,11 @@ void StopWorker() {
 // сбросится слишком рано.
 
 thread_local int g_clockUpdateDepth = 0;
+
+// Windows 10 за одно обновление форматирует дату дважды: сначала строку
+// даты, потом строку дня недели. Баланс дописываем только к первой, иначе он
+// появился бы на обеих строках.
+thread_local int g_dateFormatCalls = 0;
 
 // RAII-счётчик: если внутри форматирования часов случится исключение или
 // ранний выход, глубина всё равно вернётся к прежнему значению, и суффикс не
@@ -1285,10 +1330,18 @@ int AppendClockSuffix(int result, LPWSTR buffer, int cchBuffer) {
     // Контракт Get*FormatEx: возвращаемое значение включает завершающий ноль.
     const int newLength = (result - 1) + static_cast<int>(suffix.size()) + 1;
 
-    // Вызов «узнать размер» (cch == 0) или слишком маленький буфер: сообщаем
-    // требуемый размер, пусть вызывающий код повторит вызов.
-    if (!buffer || cchBuffer < newLength) {
+    // Вызов «узнать размер»: сообщаем требуемый размер, чтобы вызывающий код
+    // сам выделил буфер.
+    if (cchBuffer == 0) {
         return newLength;
+    }
+
+    // Буфера не хватает: оставляем исходный текст нетронутым и возвращаем
+    // исходную длину. Возвращать здесь newLength нельзя — некоторые
+    // вызывающие считают возвращённое значение числом записанных символов и
+    // прочитали бы за пределами своего буфера.
+    if (!buffer || cchBuffer < newLength) {
+        return result;
     }
 
     memcpy(buffer + (result - 1), suffix.c_str(),
@@ -1356,6 +1409,11 @@ int WINAPI GetDateFormatEx_Hook(LPCWSTR lpLocaleName,
         return result;
     }
 
+    // Дописываем только к первой дате за обновление (см. g_dateFormatCalls).
+    if (g_dateFormatCalls++ != 0) {
+        return result;
+    }
+
     return AppendClockSuffix(result, lpDateStr, cchDate);
 }
 
@@ -1370,6 +1428,7 @@ RefreshIcon_t RefreshIcon2_Original = nullptr;
 // Обернув его, мы точно знаем: всё, что форматируется внутри, — это часы.
 void WINAPI RefreshIcon_Hook(void* pThis, void* clockUpdate) {
     ClockUpdateScope scope;
+    g_dateFormatCalls = 0;
     RefreshIcon_Original(pThis, clockUpdate);
 }
 
@@ -1377,6 +1436,7 @@ void WINAPI RefreshIcon_Hook(void* pThis, void* clockUpdate) {
 // (появился с фича-флагом 38762814).
 void WINAPI RefreshIcon2_Hook(void* pThis, void* clockUpdate) {
     ClockUpdateScope scope;
+    g_dateFormatCalls = 0;
     RefreshIcon2_Original(pThis, clockUpdate);
 }
 
@@ -1391,6 +1451,7 @@ UpdateTextStringsIfNecessary_t UpdateTextStringsIfNecessary_Original = nullptr;
 // следующего обновления в миллисекундах — возвращаем её без изменений.
 unsigned int WINAPI UpdateTextStringsIfNecessary_Hook(void* pThis, bool* param) {
     ClockUpdateScope scope;
+    g_dateFormatCalls = 0;
     return UpdateTextStringsIfNecessary_Original(pThis, param);
 }
 
@@ -1398,51 +1459,9 @@ unsigned int WINAPI UpdateTextStringsIfNecessary_Hook(void* pThis, bool* param) 
 // 9. Поиск внутренних символов и установка хуков
 // ---------------------------------------------------------------------------
 
-// Перебирает символы модуля через публичный API Windhawk. Аналог
-// WindhawkUtils::HookSymbols, но без подключения windhawk_utils.h — мод
-// остаётся самодостаточным.
-void* FindSymbol(HMODULE module, PCWSTR undecoratedName) {
-    WH_FIND_SYMBOL findData{};
-
-    HANDLE search = Wh_FindFirstSymbol(module, nullptr, &findData);
-    if (!search) {
-        return nullptr;
-    }
-
-    void* address = nullptr;
-
-    do {
-        if (findData.symbol && _wcsicmp(findData.symbol, undecoratedName) == 0) {
-            address = findData.address;
-            break;
-        }
-    } while (Wh_FindNextSymbol(search, &findData));
-
-    Wh_FindCloseSymbol(search);
-    return address;
-}
-
-bool HookSymbol(HMODULE module,
-                PCWSTR undecoratedName,
-                void* hookFunction,
-                void** originalFunction,
-                bool optional = false) {
-    void* address = FindSymbol(module, undecoratedName);
-    if (!address) {
-        if (!optional) {
-            Wh_Log(L"Symbol not found: %s", undecoratedName);
-        }
-        return false;
-    }
-
-    if (!Wh_SetFunctionHook(address, hookFunction, originalFunction)) {
-        Wh_Log(L"Wh_SetFunctionHook failed: %s", undecoratedName);
-        return false;
-    }
-
-    Wh_Log(L"Hooked: %s", undecoratedName);
-    return true;
-}
+// Символы ищутся через WindhawkUtils::HookSymbols: утилита кэширует
+// найденные адреса и не перечитывает PDB модуля при каждом поиске, в отличие
+// от ручного перебора Wh_FindFirstSymbol/Wh_FindNextSymbol.
 
 std::atomic<bool> g_systemTrayHooked{false};
 
@@ -1459,33 +1478,33 @@ bool IsSystemTrayModuleName(PCWSTR path) {
            _wcsicmp(baseName, L"ExplorerExtensions.dll") == 0;
 }
 
-// Подключает RefreshIcon в конкретном модуле. Возвращает true, если хотя бы
-// один из вариантов найден: на разных сборках Windows 11 классы лежат в
-// разных модулях и имеют разные имена.
+// Подключает RefreshIcon в конкретном модуле. На разных сборках Windows 11
+// классы лежат в разных модулях, поэтому вызывающий код перебирает их.
 bool HookSystemTraySymbols(HMODULE module) {
-    bool hooked = false;
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+            &RefreshIcon_Original,
+            RefreshIcon_Hook,
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel2::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+            &RefreshIcon2_Original,
+            RefreshIcon2_Hook,
+            /* optional */ true,  // Added with feature flag 38762814.
+        },
+    };
 
-    if (HookSymbol(
-            module,
-            LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))",
-            reinterpret_cast<void*>(&RefreshIcon_Hook),
-            reinterpret_cast<void**>(&RefreshIcon_Original))) {
-        hooked = true;
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols (system tray) failed");
+        return false;
     }
 
-    if (HookSymbol(
-            module,
-            LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel2::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))",
-            reinterpret_cast<void*>(&RefreshIcon2_Hook),
-            reinterpret_cast<void**>(&RefreshIcon2_Original),
-            /* optional */ true)) {
-        hooked = true;
-    }
-
-    return hooked;
+    return true;
 }
 
-// Пробует все известные модули, в которых живут часы Windows 11.
+// Пробует известные модули, в которых живут часы Windows 11. SystemTray.dll
+// появился в новых сборках, до этого типы жили в Taskbar.View.dll.
 bool TryHookSystemTray() {
     HMODULE modules[] = {
         GetModuleHandleW(L"SystemTray.dll"),
@@ -1505,11 +1524,21 @@ bool TryHookSystemTray() {
 // Windows 10: часы — обычная кнопка в MSTaskSwWClass, её строки
 // пересчитывает ClockButton::UpdateTextStringsIfNecessary.
 bool HookWin10Clock() {
-    return HookSymbol(
-        GetModuleHandleW(nullptr),
-        LR"(private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary(bool *))",
-        reinterpret_cast<void*>(&UpdateTextStringsIfNecessary_Hook),
-        reinterpret_cast<void**>(&UpdateTextStringsIfNecessary_Original));
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+        {
+            {LR"(private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary(bool *))"},
+            &UpdateTextStringsIfNecessary_Original,
+            UpdateTextStringsIfNecessary_Hook,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(GetModuleHandleW(nullptr), explorerExeHooks,
+                                    ARRAYSIZE(explorerExeHooks))) {
+        Wh_Log(L"HookSymbols (ClockButton) failed");
+        return false;
+    }
+
+    return true;
 }
 
 bool HookFormattingFunctions() {
@@ -1520,30 +1549,28 @@ bool HookFormattingFunctions() {
         return false;
     }
 
-    auto getTimeFormatEx =
-        reinterpret_cast<GetTimeFormatEx_t>(GetProcAddress(kernelBase, "GetTimeFormatEx"));
+    auto getTimeFormatEx = reinterpret_cast<decltype(&GetTimeFormatEx)>(
+        GetProcAddress(kernelBase, "GetTimeFormatEx"));
     if (!getTimeFormatEx) {
         Wh_Log(L"GetTimeFormatEx not found");
         return false;
     }
 
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(getTimeFormatEx),
-                            reinterpret_cast<void*>(&GetTimeFormatEx_Hook),
-                            reinterpret_cast<void**>(&GetTimeFormatEx_Original))) {
+    if (!WindhawkUtils::SetFunctionHook(getTimeFormatEx, GetTimeFormatEx_Hook,
+                                        &GetTimeFormatEx_Original)) {
         Wh_Log(L"Cannot hook GetTimeFormatEx");
         return false;
     }
 
-    auto getDateFormatEx =
-        reinterpret_cast<GetDateFormatEx_t>(GetProcAddress(kernelBase, "GetDateFormatEx"));
+    auto getDateFormatEx = reinterpret_cast<decltype(&GetDateFormatEx)>(
+        GetProcAddress(kernelBase, "GetDateFormatEx"));
     if (!getDateFormatEx) {
         Wh_Log(L"GetDateFormatEx not found");
         return false;
     }
 
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(getDateFormatEx),
-                            reinterpret_cast<void*>(&GetDateFormatEx_Hook),
-                            reinterpret_cast<void**>(&GetDateFormatEx_Original))) {
+    if (!WindhawkUtils::SetFunctionHook(getDateFormatEx, GetDateFormatEx_Hook,
+                                        &GetDateFormatEx_Original)) {
         Wh_Log(L"Cannot hook GetDateFormatEx");
         return false;
     }
@@ -1569,14 +1596,19 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     // SystemTray.dll (новые сборки) или Taskbar.View.dll (22H2) загружаются
     // при старте оболочки. Если мод инициализировался раньше, хук ловит
     // момент загрузки и вешает RefreshIcon уже на живой модуль.
-    if (module && IsSystemTrayModuleName(lpLibFileName) &&
-        !g_systemTrayHooked.load(std::memory_order_acquire)) {
-        if (HookSystemTraySymbols(module)) {
-            g_systemTrayHooked.store(true, std::memory_order_release);
+    if (module && IsSystemTrayModuleName(lpLibFileName)) {
+        // compare_exchange защищает от гонки с Wh_ModAfterInit: только один
+        // поток выполняет поиск символов и установку хуков.
+        bool expected = false;
 
-            // Хуки, зарегистрированные после Wh_ModInit, применяются только
-            // явным вызовом Wh_ApplyHookOperations.
-            Wh_ApplyHookOperations();
+        if (g_systemTrayHooked.compare_exchange_strong(expected, true)) {
+            if (!HookSystemTraySymbols(module)) {
+                g_systemTrayHooked.store(false, std::memory_order_release);
+            } else {
+                // Хуки, зарегистрированные после Wh_ModInit, применяются
+                // только явным вызовом Wh_ApplyHookOperations.
+                Wh_ApplyHookOperations();
+            }
         }
     }
 
@@ -1595,9 +1627,8 @@ bool HookLateModuleLoading() {
         return false;
     }
 
-    return Wh_SetFunctionHook(reinterpret_cast<void*>(loadLibraryExW),
-                              reinterpret_cast<void*>(&LoadLibraryExW_Hook),
-                              reinterpret_cast<void**>(&LoadLibraryExW_Original)) != FALSE;
+    return WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                          &LoadLibraryExW_Original) != FALSE;
 }
 
 // ---------------------------------------------------------------------------
@@ -1689,14 +1720,19 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    if (g_systemTrayHooked.load(std::memory_order_acquire)) {
+    // Только один поток выполняет поиск символов: compare_exchange защищает
+    // от одновременной работы с LoadLibraryExW_Hook.
+    bool expected = false;
+    if (!g_systemTrayHooked.compare_exchange_strong(expected, true)) {
         return;
     }
 
-    if (TryHookSystemTray()) {
-        g_systemTrayHooked.store(true, std::memory_order_release);
-        Wh_ApplyHookOperations();
+    if (!TryHookSystemTray()) {
+        g_systemTrayHooked.store(false, std::memory_order_release);
+        return;
     }
+
+    Wh_ApplyHookOperations();
 }
 
 void Wh_ModUninit() {
