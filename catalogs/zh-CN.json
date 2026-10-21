@@ -10771,6 +10771,30 @@
         "version": "1.0.0"
       }
     },
+    "notification-bell-highlighter": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792594889000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792594889000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mwalker212",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lgdi32 -lshell32",
+        "description": "Pulsing, bright overlay with a counter on the taskbar notification bell",
+        "github": "https://github.com/mwalker212",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Notification Bell Highlighter",
+        "version": "0.5.2"
+      }
+    },
     "notifications-placement": {
       "details": {
         "defaultSorting": 179370,
@@ -13646,7 +13670,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 1, 4, 23],
         "ratingUsers": 28,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 44.7,
         "updated": 1792310681000,
         "users": 447
@@ -18555,7 +18579,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": -0.3963460328597651,
-        "updated": 1785788739000,
+        "updated": 1792594898000,
         "users": 409
       },
       "metadata": {
@@ -18563,14 +18587,14 @@
           "x86-64"
         ],
         "author": "Anixx",
-        "compilerOptions": "-lurlmon",
-        "description": "Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
+        "compilerOptions": "-lurlmon -lbcrypt",
+        "description": "Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, 26H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
         "github": "https://github.com/Anixx",
         "include": [
           "userinit.exe"
         ],
-        "name": "Win10 taskbar on Win11 24H2 or 25H2",
-        "version": "0.1.8"
+        "name": "Win10 taskbar on Win11 24H2 or later",
+        "version": "0.3.0"
       }
     },
     "win10-taskbar-per-app-volume-control": {

@@ -1,3 +1,9 @@
+## 0.3.0 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/60fe84cec4c9dfd974d3dcbdd22cc2cadbb73106/mods/win10-taskbar-on-win11-24h2.wh.cpp))
+
+* Add a link to readme for restoring the network icon
+* Save the downloaded file in a local mod's data folder to avoid interference with other mods
+* Verify the checksum of the old taskbar file
+
 ## 0.1.8 ([Aug 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3ab9b84f90335f699a88178f3b1c486bc1876ab9/mods/win10-taskbar-on-win11-24h2.wh.cpp))
 
 Added a mitigation note for notification toast crashes and linked to relevant fixes.
