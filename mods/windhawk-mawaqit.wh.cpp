@@ -2,7 +2,7 @@
 // @id              windhawk-mawaqit
 // @name            Mawaqit Prayer Clock
 // @description     Mawaqit prayer clock with live countdown, multi-monitor taskbar support, prayer schedule popup, and customizable themes.
-// @version         0.7.0
+// @version         0.7.1
 // @author          HHeitlager
 // @github          https://github.com/hheitlager
 // @include         explorer.exe
@@ -10,101 +10,76 @@
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lwinhttp
 // ==/WindhawkMod==
 
+
 // ==WindhawkModReadme==
 /*
 # Mawaqit Prayer Clock
-Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.
 
+## Bring your daily prayer times to the Windows 11 taskbar.
+Mawaqit Prayer Clock displays the next prayer, its scheduled time, and a live countdown directly on your taskbar.
+Click the clock to view today's full prayer schedule, using prayer times published by your selected mosque on [Mawaqit](https://mawaqit.net).
 
 ## Features
-- Upcoming prayer name, scheduled time, and live countdown
-- Clickable or hover-opened prayer-schedule popup with taskbar slide animation and optional auto-close timer
-- 13 appearance themes, including Windows / System, Traditional Islamic, Catppuccin Mocha, Emberveil, Dracula, Nord, Gruvbox Dark, Tokyo Night, Solarized Dark and Light, and Custom
-- Independent custom colors for the pill and popup
-- Visibility switches for the prayer label, countdown, and popup
-- Five selectable taskbar positions, including experimental dynamic centering
-- Native XAML taskbar integration with reserved layout space for anchored positions
-- Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size
-- Background schedule updates through native WinHTTP, with configurable refresh interval
-- Live settings updates without restarting Explorer
-
+- **Prayer times at a glance** - See the next prayer and how much time remains.
+- **Daily prayer schedule** - Click or hover over the clock to view today's prayer times and Iqamah delays.
+- **Personalize your clock** - Choose from 13 themes, customize colors, and adjust its appearance.
+- **Flexible taskbar placement** - Choose where the clock appears, including on multiple monitors.
+- **Customizable popup** - Adjust its appearance, transparency, and display options.
 
 ## Screenshots
-Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.
+Choose a style that matches your Windows desktop.
 
-Windows System Default | Traditional Islamic |
+| Windows / System | Traditional Islamic |
 |:---:|:---:|
-![Windows](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png) | ![Traditional](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png) |
+| ![Windows](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default-v071.png) | ![Traditional](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic-v071.png) |
 
 | Catppuccin Mocha | Emberveil |
 |:---:|:---:|
-| ![Catppuccin](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png) | ![Emberveil](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png) |
-
+| ![Catppuccin](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppuccin-Mocha-v071.png) | ![Emberveil](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil-v071.png) |
 
 ## Desktop Integration
-See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
-![Desktop](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop.png)
+See how Mawaqit Prayer Clock looks on a customized Windows 11 desktop.
 
+![Desktop](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop-v071.png)
 
-## Configuration
-- Choose a mosque identifier or Mawaqit URL in Settings.
-  Search for your nearby mosque via e.g. [Google](https://www.google.com/search?q=mawaqit+mosque+near+me). 
-  Accepted inputs include a bare mosque identifier and the full URL:
-  - ![UrlExample](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Mosque-Identifier.png)
-- Select an appearance theme and customize the widget as desired.
-- Custom color settings only apply when the Custom theme is selected.
-- Set popup auto-close to 0 to keep the popup open until dismissed.
-- Optional hover opening uses a configurable mouse-leave delay (500 ms by default).
+## Getting Started
+**1. Find your mosque**
+Visit [Mawaqit](https://mawaqit.net/) or [search Google for a Mawaqit mosque near you](https://www.google.com/search?q=mawaqit+mosque+near+me). Open your mosque's Mawaqit page.
 
+**2. Configure your mosque**
+Copy the full page URL or its mosque ID (the last part of the URL) into the mod's **Mosque** setting.
 
-## Release candidate 0.7.0
-Unifies taskbar positioning under General. Position for primary and secondary
-monitors. Secondary center and after-icons use a non-layout-affecting overlay;
-before-icons reserves a real slot in the taskbar icon container.
-Unsupported tray anchors fall back to the known-working tray slot.
-Popup placement remains monitor-aware. The multi-monitor behavior has passed the author’s 26-check regression suite.
-Some positioning modes may be constrained by crowded or narrow taskbars.
+![Where to find the mosque ID](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Mosque-Identifier.png)
 
+**3. Make it yours**
+Choose your preferred theme and taskbar position. You're ready!
 
-## Network access and cached schedules
-This mod intentionally uses Mawaqit’s published mosque-specific prayer times rather
-than locally calculated astronomical times, preserving mosque-specific adjustments.
+## Good to Know
+- **Windows 11 only.** Supports primary and secondary monitors.
+- **Internet access.** The mod connects to Mawaqit to retrieve your mosque's published prayer times and stores a local copy for reuse.
+- **No account required.** Simply select your mosque.
+- **Mosque-specific schedules.** Prayer times reflect the schedule and adjustments published by your selected mosque.
 
-This mod connects to **https://mawaqit.net** over HTTPS to retrieve the public
-prayer schedule for the mosque identifier configured in Settings. The request
-is an HTTP GET for `https://mawaqit.net/<language>/<mosque-identifier>`;
-no account or authentication is required. The server can observe the request
-and normal connection information such as your IP address.
+## More Information
+For additional screenshots, troubleshooting, technical details, and release information, visit the [GitHub project](https://github.com/hheitlager/windhawk-mawaqit).
 
-The schedule is stored in Windhawk's mod-specific storage. A valid cached
-schedule is reused when Explorer restarts, until the configured refresh interval
-expires (24 hours by default; adjustable from 1 to 168 hours). The mod also
-requests a fresh schedule when the mosque or refresh interval changes.
-If a download fails, it retries after one hour. An empty, expired, mismatched,
-or unusable cache causes a download at startup. The mod reads schedule data
-from the public Mawaqit webpage, so changes to that page can interrupt updates.
+### Network access and privacy
+The mod retrieves your selected mosque's published prayer schedule from Mawaqit over HTTPS and caches it locally. Mawaqit can see your IP address and selected mosque identifier when the schedule is requested. No account is required.
+For refresh behavior, caching details, and technical implementation, see the [project documentation](https://github.com/hheitlager/windhawk-mawaqit).
 
-
-## More information
-For installation instructions, additional screenshots,
-troubleshooting, and release information, visit:
-
-[GitHub Project](https://github.com/hheitlager/windhawk-mawaqit)
-
-
-## Compatibility and credits
-Windows 11 only. Taskbar XAML integration adapted from Windhawk’s
-[taskbar-folder-menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp) (MIT).
-
+## Credits and Acknowledgements
+- Mawaqit Prayer Clock is an independent, open-source community project built for [Windhawk](https://windhawk.net).
+- Special thanks to the Windhawk community and the developers whose work helped inspire this mod, including the contributors to [Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp).
+- Additional acknowledgements and third-party license information can be found in the project's [GitHub repository](https://github.com/hheitlager/windhawk-mawaqit).
 
 ## License
 MIT License.
-
 
 ## Disclaimer
 This is an unofficial community project and is not affiliated with or endorsed by Mawaqit.
 */
 // ==/WindhawkModReadme==
+
 
 // ==WindhawkModSettings==
 /*
@@ -119,6 +94,7 @@ This is an unofficial community project and is not affiliated with or endorsed b
     - catppuccin: Catppuccin Mocha
     - emberveil: Emberveil
     - emberveil-midnight: Emberveil Midnight
+    - emberveil-daybreak: Emberveil Daybreak
     - emerald-mosque: Emerald Mosque
     - dracula: Dracula
     - nord: Nord
@@ -136,38 +112,28 @@ This is an unofficial community project and is not affiliated with or endorsed b
     - before-icons: Before taskbar icons
     - after-icons: After taskbar icons
     - center: Dynamic center (experimental)
-  - ShowPrimaryMonitor: true
-    $name: Show clock on primary monitor
-  - ShowSecondaryMonitors: true
-    $name: Show clock on secondary monitors
   $name: General
 - Display:
   - ShowNextPrayer: true
     $name: Show next prayer
   - ShowCountdown: true
     $name: Show countdown
-  - EnablePopup: true
-    $name: Show popup
-  - OpenPopupOnHover: false
-    $name: Open popup when hovering over clock
-    $description: Open without clicking. The popup closes after the cursor leaves both clock and popup.
-  - HoverCloseDelayMs: 500
-    $name: Hover popup close delay (milliseconds)
-    $description: Delay after leaving the clock and popup (0–5000 ms).
-  - PopupAutoCloseSeconds: 5
-    $name: Popup auto-close (seconds, 0 = disabled)
-    $description: Automatically close popup after 1–300 seconds. Opening it again resets the timer.
-  $name: Display and popup settings
-- AdvancedCustomization:
-  - ModSettingsAdvanced:
-    - RefreshHours: 24
-      $name: Refresh interval (hours)
-      $description: Choose how often the prayer schedule is updated from Mawaqit (1–168 hours).
-    $name: Mod settings
+  - ShowIqamahTime: true
+    $name: Show Iqamah time
+    $description: Show the mosque's Iqamah delay (+N minutes) next to the countdown and each prayer in the popup.
+  - ShowFajrWindowCountdown: false
+    $name: Show Shuruq and Imsak
+    $description: Include Shuruq (sunrise) and, when provided by your mosque, Imsak in the popup schedule. After Fajr begins, the countdown shows the time remaining until Shuruq. Imsak is informational and does not start a prayer countdown. Disabled by default.
+  - ShowPrimaryMonitor: true
+    $name: Show clock on primary monitor
+  - ShowSecondaryMonitors: true
+    $name: Show clock on secondary monitors
+  $name: Display settings
+- Advanced:
   - LayoutSettings:
-    - Width: 200
-      $name: Width
-      $description: Choose how wide the clock appears (180–400 px). Values outside this range use 200 px.
+    - Width: 0
+      $name: Width (0 = Auto)
+      $description: Set to 0 to size the clock automatically for its text, font size and padding; or choose a fixed width of 180–400 px.
     - PillHeight: 0
       $name: Height
       $description: Set to 0 to adjust automatically to the taskbar, or choose a height between 1 and 100 px.
@@ -183,37 +149,99 @@ This is an unofficial community project and is not affiliated with or endorsed b
     - CornerRadius: 13
       $name: Corner radius
       $description: Choose how rounded the clock's corners appear (0–30 px). Set to 0 for square corners; higher values create rounder corners.
+    - BackgroundStyle: solid
+      $name: Background style
+      $description: Choose the clock background material. Blur and Acrylic are experimental and depend on Windows composition support.
+      $options:
+      - solid: Solid
+      - transparent: Transparent
+      - blur: Blur (experimental)
+      - acrylic: Acrylic (experimental)
+    - BackgroundOpacity: 100
+      $name: Background opacity (%)
+      $description: Pill background opacity from 0 (fully transparent) to 100 (opaque). Transparent keeps the pill transparent but uses a subtle acrylic-tinted popup for readability. Blur and Acrylic may interpret opacity differently.
+    - ShowPillBorder: false
+      $name: Show pill border
+      $description: Draw a 1 px border using the theme countdown accent (or the custom border color).
+    - TextShadow: false
+      $name: Pill text shadow
+      $description: Add a subtle dark shadow behind the pill text for readability on transparent or blurred taskbars. Does not affect the popup.
     - FontSize: 15
       $name: Fontsize
       $description: Adjust the clock's text size (10–24 px). This does not affect the popup.
+    - IqamahFontScale: 80
+      $name: Iqamah font scale (%)
+      $description: Size of the Iqamah suffix relative to the pill font (50–100%, default 80%).
     $name: Layout settings
+  - PopupAppearanceSettings:
+    - EnablePopup: true
+      $name: Show popup
+    - OpenPopupOnHover: false
+      $name: Open popup when hovering over clock
+      $description: Open without clicking. The popup closes after the cursor leaves both clock and popup.
+    - HoverCloseDelayMs: 500
+      $name: Hover popup close delay (milliseconds)
+      $description: Delay after leaving the clock and popup (0–5000 ms).
+    - PopupAutoCloseSeconds: 5
+      $name: Popup auto-close (seconds, 0 = disabled)
+      $description: Automatically close popup after 1–300 seconds. Opening it again resets the timer.
+    - BackgroundStyle: follow-pill
+      $name: Popup background material
+      $description: Choose the popup material independently of the taskbar pill. Follow pill preserves the previous behavior.
+      $options:
+      - follow-pill: Follow pill
+      - solid: Solid
+      - transparent: Transparent
+      - blur: Blur (experimental)
+      - acrylic: Acrylic (experimental)
+    - BackgroundOpacity: -1
+      $name: Popup background opacity (%)
+      $description: -1 follows the pill opacity (legacy behavior); 0–100 sets the popup independently. For Transparent, Blur and Acrylic this controls the backdrop tint strength.
+    - ShowBorder: true
+      $name: Show popup border
+    - ShowSeparators: true
+      $name: Show popup separators
+    $name: Popup appearance
   - CustomThemeSettings:
-    - CustomPillBackground: "#211E32"
+    - PillBackground: ""
       $name: Pill background
-    - CustomPillText: "#F5E6C8"
+    - PillText: ""
       $name: Pill prayer text
-    - CustomPillSeparator: "#B8A98A"
+    - PillSeparator: ""
       $name: Pill separator
-    - CustomPillCountdown: "#FFBC5E"
+    - PillCountdown: ""
       $name: Pill countdown
-    - CustomPopupBackground: "#1D1D2D"
+    - PillIqamah: ""
+      $name: Pill Iqamah
+      $description: Optional hex color for the Iqamah suffix; empty inherits the resolved countdown color.
+    - PillBorder: ""
+      $name: Pill border color
+      $description: Optional hex override; empty uses the countdown accent color.
+    - PopupBackground: ""
       $name: Popup background
-    - CustomPopupBorder: "#3B3B58"
+    - PopupBorder: ""
       $name: Popup border
-    - CustomPopupText: "#D3D0E8"
+    - PopupText: ""
       $name: Popup main text
-    - CustomPopupMuted: "#B8B3D1"
+    - PopupMuted: ""
       $name: Popup secondary text
-    - CustomPopupRule: "#424158"
+    - PopupRule: ""
       $name: Popup dividers
-    - CustomPopupFooter: "#A29DBB"
+    - PopupFooter: ""
       $name: Popup footer
     $name: Custom theme settings
-  $name: Advanced customization
+    $description: Optional color overrides for any selected theme. Empty fields inherit the selected palette. Non-empty overrides remain active when switching themes until cleared.
+  - ModSettingsAdvanced:
+    - RefreshHours: 24
+      $name: Refresh interval (hours)
+      $description: Choose how often the prayer schedule is updated from Mawaqit (1–168 hours).
+    $name: Mod settings
+  $name: Advanced
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <dwmapi.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -1379,6 +1407,23 @@ struct Http
     Http& operator=(const Http&) = delete;
 };
 
+// Network access and cached schedules
+//
+// The mod retrieves the selected mosque's public prayer schedule
+// using an HTTPS GET request to:
+//   https://mawaqit.net/<language>/<mosque-identifier>
+//
+// Mawaqit can observe the requesting IP address and selected
+// mosque identifier. No Mawaqit account is required.
+//
+// Schedules are cached locally in Windhawk-managed mod storage.
+// Normal refresh: every RefreshHours hours (default: 24).
+// Failed download: retry after approximately one hour.
+// Mosque or refresh interval changed: request a fresh schedule.
+// Cache format upgrade to v4: download a fresh schedule once.
+//
+// Network requests use WinHTTP over HTTPS with redirects disabled.
+// The maximum accepted response size is 8 MB.
 static std::string fetch(const std::wstring& path)
 {
     Http session(WinHttpOpen(L"EmberveilMawaqit/0.5", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
@@ -1527,6 +1572,14 @@ static bool Run(const std::wstring& mosque, unsigned long long expectedGeneratio
     const J& cal = root.key("calendar");
     if (cal.kind != J::Arr || cal.a.size() != 12)
         fail("Calendar must have 12 months");
+    // Iqamah is optional. Respect the mosque's explicit enable flag.
+    const auto enabledIt = root.o.find("iqamaEnabled");
+    const bool iqamaEnabled = enabledIt != root.o.end() &&
+                              enabledIt->second.s == "true";
+    const auto iqamaIt = root.o.find("iqamaCalendar");
+    const J* iqamaCal = iqamaEnabled && iqamaIt != root.o.end() &&
+                        iqamaIt->second.kind == J::Arr && iqamaIt->second.a.size() == 12
+                            ? &iqamaIt->second : nullptr;
     const J& nameVal = root.key("name");
     const J& tzVal = root.key("timezone");
     if (tzVal.kind != J::Str || tzVal.s.empty())
@@ -1537,7 +1590,7 @@ static bool Run(const std::wstring& mosque, unsigned long long expectedGeneratio
     GetLocalTime(&now);
     int year = now.wYear;
     std::ostringstream sched;
-    sched << "# Emberveil Mawaqit schedule v1\n# Source: https://mawaqit.net" << narrow(path)
+    sched << "# Emberveil Mawaqit schedule v4\n# Source: https://mawaqit.net" << narrow(path)
           << "\n# Year: " << year << "\n";
     for (int m = 1; m <= 12; m++)
     {
@@ -1547,15 +1600,74 @@ static bool Run(const std::wstring& mosque, unsigned long long expectedGeneratio
         for (int d = 1; d <= days(year, m); d++)
         {
             const J& entry = month.key(std::to_string(d));
-            if (entry.kind != J::Arr || entry.a.size() != 6)
+            if (entry.kind != J::Arr || (entry.a.size() != 6 && entry.a.size() != 7))
                 fail("Invalid calendar day");
+            // Seven-entry calendars include Imsak before Fajr and Shuruq.
+            // Six-entry calendars begin with Fajr and Shuruq.
+            const bool hasImsak = entry.a.size() == 7;
             sched << date(year, m, d);
             for (int i : {0, 2, 3, 4, 5})
             {
-                const J& t = entry.idx(i);
+                const J& t = entry.idx(i + (hasImsak ? 1 : 0));
                 if (t.kind != J::Str || !validTime(t.s))
                     fail("Invalid prayer time");
                 sched << '|' << t.s;
+            }
+            // Five optional Iqamah values follow the five prayer times.
+            // Preserve +N or HH:mm; invalid/missing values become empty fields.
+            const J* iqamaDay = nullptr;
+            if (iqamaCal)
+            {
+                const J& iqamaMonth = iqamaCal->idx(m - 1);
+                if (iqamaMonth.kind == J::Obj)
+                {
+                    auto it = iqamaMonth.o.find(std::to_string(d));
+                    if (it != iqamaMonth.o.end() && it->second.kind == J::Arr &&
+                        it->second.a.size() == 5)
+                        iqamaDay = &it->second;
+                }
+            }
+            for (int i = 0; i < 5; ++i)
+            {
+                sched << '|';
+                if (!iqamaDay)
+                {
+                    sched << '-';
+                    continue;
+                }
+                const J& value = iqamaDay->idx(i);
+                if (value.kind != J::Str)
+                {
+                    sched << '-';
+                    continue;
+                }
+                const std::string& raw = value.s;
+                bool relative = raw.size() >= 2 && raw.size() <= 4 && raw[0] == '+' &&
+                    std::all_of(raw.begin() + 1, raw.end(), [](char c) {
+                        return c >= '0' && c <= '9';
+                    });
+                if ((relative && std::stoi(raw.substr(1)) <= 180) || validTime(raw))
+                    sched << raw;
+                else
+                    sched << '-';
+            }
+            // Shuruq follows Fajr; seven-entry calendars have an Imsak prefix.
+            const J& sunrise = entry.idx(hasImsak ? 2 : 1);
+            if (sunrise.kind != J::Str || !validTime(sunrise.s))
+                fail("Invalid Shuruq time");
+            sched << '|' << sunrise.s;
+            // Append optional Imsak after the existing v3 fields.
+            sched << '|';
+            if (hasImsak)
+            {
+                const J& imsak = entry.idx(0);
+                if (imsak.kind != J::Str || !validTime(imsak.s))
+                    fail("Invalid Imsak time");
+                sched << imsak.s;
+            }
+            else
+            {
+                sched << '-';
             }
             sched << '\n';
         }
@@ -1661,11 +1773,57 @@ struct Prayer
 {
     std::wstring name;
     int minute;
+    int iqamahDelay = -1; // -1 = unavailable, otherwise minutes after adhan.
 };
+static bool g_showIqamah = true;
+static bool g_showFajrWindowCountdown = false;
+static int g_shuruqMinute = -1;
+static int g_imsakMinute = -1;
+static int ParseIqamahDelay(const std::wstring& raw, int prayerMinute)
+{
+    if (raw.size() >= 2 && raw.size() <= 4 && raw[0] == L'+')
+    {
+        int delay = 0;
+        for (size_t i = 1; i < raw.size(); ++i)
+        {
+            if (raw[i] < L'0' || raw[i] > L'9')
+                return -1;
+            delay = delay * 10 + (raw[i] - L'0');
+        }
+        return delay <= 180 ? delay : -1;
+    }
+    if (raw.size() == 5 && raw[2] == L':' &&
+        raw[0] >= L'0' && raw[0] <= L'2' && raw[1] >= L'0' && raw[1] <= L'9' &&
+        raw[3] >= L'0' && raw[3] <= L'5' && raw[4] >= L'0' && raw[4] <= L'9')
+    {
+        int h = (raw[0] - L'0') * 10 + raw[1] - L'0';
+        if (h > 23)
+            return -1;
+        int absolute = h * 60 + (raw[3] - L'0') * 10 + raw[4] - L'0';
+        int delay = (absolute - prayerMinute + 1440) % 1440;
+        return delay <= 180 ? delay : -1;
+    }
+    return -1;
+}
+static std::wstring IqamahSuffix(const Prayer& prayer)
+{
+    return g_showIqamah && prayer.iqamahDelay >= 0
+        ? L"+" + std::to_wstring(prayer.iqamahDelay) : L"";
+}
 static const wchar_t* kNames[] = {L"Fajr", L"Dhuhr", L"Asr", L"Maghrib", L"Isha"};
 static std::wstring g_label = L"Loading schedule", g_countdown = L"--:--";
+static std::wstring g_iqamahSuffix;
+static bool g_showCountdown = true;
+static std::wstring PillCountdown()
+{
+    return g_countdown;
+}
+static std::wstring PillIqamah()
+{
+    return g_showCountdown && g_showIqamah ? g_iqamahSuffix : L"";
+}
 static std::wstring g_loadedDate;
-static std::vector<Prayer> g_today, g_tomorrow;
+static std::vector<Prayer> g_yesterday, g_today, g_tomorrow;
 
 static std::wstring DateKey(const SYSTEMTIME& t)
 {
@@ -1824,10 +1982,67 @@ static bool ParseDay(const std::wstring& line, const std::wstring& date, std::ve
             return false;
         result.push_back({kNames[i], hour * 60 + minute});
     }
+    // v1 caches contain only prayer times; v2 adds five Iqamah fields.
     if (std::getline(s, item, L'|'))
-        return false;
+    {
+        result[0].iqamahDelay = ParseIqamahDelay(item, result[0].minute);
+        for (int i = 1; i < 5; ++i)
+        {
+            if (!std::getline(s, item, L'|'))
+                return false;
+            result[i].iqamahDelay = ParseIqamahDelay(item, result[i].minute);
+        }
+        // v3 adds Shuruq; newer caches optionally append Imsak.
+        if (std::getline(s, item, L'|'))
+        {
+            if (std::getline(s, item, L'|') && std::getline(s, item, L'|'))
+                return false;
+        }
+    }
     out = result;
     return true;
+}
+
+static int ParseShuruq(const std::wstring& line)
+{
+    // v3: date | five adhan times | five Iqamah fields | Shuruq.
+    std::vector<std::wstring> fields;
+    std::wistringstream stream(line);
+    std::wstring part;
+    while (std::getline(stream, part, L'|'))
+        fields.push_back(part);
+    if (fields.size() != 12 && fields.size() != 13)
+        return -1;
+    const std::wstring& time = fields[11];
+    if (time.size() != 5 || time[2] != L':' ||
+        time[0] < L'0' || time[0] > L'2' ||
+        time[1] < L'0' || time[1] > L'9' ||
+        time[3] < L'0' || time[3] > L'5' ||
+        time[4] < L'0' || time[4] > L'9')
+        return -1;
+    int hour = (time[0] - L'0') * 10 + (time[1] - L'0');
+    return hour <= 23 ? hour * 60 + (time[3] - L'0') * 10 + time[4] - L'0' : -1;
+}
+
+static int ParseImsak(const std::wstring& line)
+{
+    // date | five adhan | five Iqamah | Shuruq | optional Imsak.
+    std::vector<std::wstring> fields;
+    std::wistringstream stream(line);
+    std::wstring part;
+    while (std::getline(stream, part, L'|'))
+        fields.push_back(part);
+    if (fields.size() != 13)
+        return -1;
+    const std::wstring& time = fields[12];
+    if (time.size() != 5 || time[2] != L':' ||
+        time[0] < L'0' || time[0] > L'2' ||
+        time[1] < L'0' || time[1] > L'9' ||
+        time[3] < L'0' || time[3] > L'5' ||
+        time[4] < L'0' || time[4] > L'9')
+        return -1;
+    int hour = (time[0] - L'0') * 10 + time[1] - L'0';
+    return hour <= 23 ? hour * 60 + (time[3] - L'0') * 10 + time[4] - L'0' : -1;
 }
 
 static void LoadSchedule(const SYSTEMTIME& now)
@@ -1835,13 +2050,18 @@ static void LoadSchedule(const SYSTEMTIME& now)
     std::wstring today = DateKey(now);
     if (today == g_loadedDate)
         return;
-    SYSTEMTIME next = now;
     FILETIME ft;
-    SystemTimeToFileTime(&next, &ft);
+    SystemTimeToFileTime(&now, &ft);
     ULARGE_INTEGER v;
     v.LowPart = ft.dwLowDateTime;
     v.HighPart = ft.dwHighDateTime;
-    v.QuadPart += 864000000000ULL;
+    SYSTEMTIME previous, next;
+    v.QuadPart -= 864000000000ULL;
+    ft.dwLowDateTime = v.LowPart;
+    ft.dwHighDateTime = v.HighPart;
+    FileTimeToSystemTime(&ft, &previous);
+    std::wstring yesterday = DateKey(previous);
+    v.QuadPart += 2ULL * 864000000000ULL;
     ft.dwLowDateTime = v.LowPart;
     ft.dwHighDateTime = v.HighPart;
     FileTimeToSystemTime(&ft, &next);
@@ -1851,19 +2071,29 @@ static void LoadSchedule(const SYSTEMTIME& now)
     if (!file)
         return;
     std::wstring line;
-    std::vector<Prayer> a, b;
+    std::vector<Prayer> previousDay, a, b;
+    int sunrise = -1;
+    int imsak = -1;
     while (std::getline(file, line))
     {
-        if (a.empty())
-            ParseDay(line, today, a);
+        if (previousDay.empty())
+            ParseDay(line, yesterday, previousDay);
+        if (a.empty() && ParseDay(line, today, a))
+        {
+            sunrise = ParseShuruq(line);
+            imsak = ParseImsak(line);
+        }
         if (b.empty())
             ParseDay(line, tomorrow, b);
-        if (!a.empty() && !b.empty())
+        if (!previousDay.empty() && !a.empty() && !b.empty())
             break;
     }
     if (a.size() != 5)
         return;
+    g_yesterday = previousDay;
     g_today = a;
+    g_shuruqMinute = sunrise;
+    g_imsakMinute = imsak;
     g_tomorrow = b;
     g_loadedDate = today;
 }
@@ -1873,6 +2103,7 @@ static void UpdateCountdown()
     SYSTEMTIME now;
     GetLocalTime(&now);
     LoadSchedule(now);
+    g_iqamahSuffix.clear();
     if (g_today.empty())
     {
         g_label = L"Schedule unavailable";
@@ -1880,6 +2111,67 @@ static void UpdateCountdown()
         return;
     }
     int nowSec = now.wHour * 3600 + now.wMinute * 60 + now.wSecond;
+    if (g_showFajrWindowCountdown && g_shuruqMinute >= 0 &&
+        !g_today.empty() && nowSec >= g_today.front().minute * 60 &&
+        nowSec < g_shuruqMinute * 60)
+    {
+        int sec = g_shuruqMinute * 60 - nowSec;
+        wchar_t label[80], count[32];
+        swprintf(label, 80, L"Fajr ends at %02d:%02d",
+                 g_shuruqMinute / 60, g_shuruqMinute % 60);
+        swprintf(count, 32, L"-%d:%02d:%02d", sec / 3600, (sec / 60) % 60, sec % 60);
+        g_label = label;
+        g_countdown = count;
+        return;
+    }
+    // After midnight, yesterday's Isha may still be awaiting its scheduled Iqamah.
+    // Use only the cached source schedule; never synthesize a missing Iqamah.
+    if (g_yesterday.size() == 5)
+    {
+        const auto& isha = g_yesterday.back();
+        if (isha.iqamahDelay > 0)
+        {
+            int adhanSec = isha.minute * 60;
+            int iqamahSec = adhanSec + isha.iqamahDelay * 60;
+            int nextAdhanSec = 86400 + g_today.front().minute * 60;
+            iqamahSec = std::min(iqamahSec, nextAdhanSec);
+            int currentSec = 86400 + nowSec;
+            if (iqamahSec > 86400 && currentSec < iqamahSec)
+            {
+                int iqamahMinute = (isha.minute + isha.iqamahDelay) % 1440;
+                wchar_t label[80];
+                swprintf(label, 80, L"%ls  %02d:%02d", isha.name.c_str(),
+                         iqamahMinute / 60, iqamahMinute % 60);
+                g_label = label;
+                g_countdown = L"--:--";
+                return;
+            }
+        }
+    }
+    // Keep the current prayer active from its Adhan until its scheduled Iqamah.
+    // This is schedule-driven and independent of the Iqamah display preference.
+    // Missing/invalid Iqamah data preserves the existing Adhan-to-Adhan behavior.
+    for (size_t i = 0; i < g_today.size(); ++i)
+    {
+        const auto& p = g_today[i];
+        if (p.iqamahDelay <= 0)
+            continue;
+        int adhanSec = p.minute * 60;
+        int iqamahSec = adhanSec + p.iqamahDelay * 60;
+        // Do not keep a prayer active past the following scheduled Adhan.
+        if (i + 1 < g_today.size())
+            iqamahSec = std::min(iqamahSec, g_today[i + 1].minute * 60);
+        if (nowSec >= adhanSec && nowSec < iqamahSec)
+        {
+            int iqamahMinute = (p.minute + p.iqamahDelay) % 1440;
+            wchar_t label[80];
+            swprintf(label, 80, L"%ls  %02d:%02d", p.name.c_str(),
+                     iqamahMinute / 60, iqamahMinute % 60);
+            g_label = label;
+            g_countdown = L"--:--";
+            return;
+        }
+    }
     for (const auto& p : g_today)
     {
         int sec = p.minute * 60 - nowSec;
@@ -1887,9 +2179,10 @@ static void UpdateCountdown()
         {
             wchar_t label[80], count[32];
             swprintf(label, 80, L"%ls  %02d:%02d", p.name.c_str(), p.minute / 60, p.minute % 60);
-            swprintf(count, 32, L"%02d:%02d:%02d", sec / 3600, (sec / 60) % 60, sec % 60);
+            swprintf(count, 32, L"-%d:%02d:%02d", sec / 3600, (sec / 60) % 60, sec % 60);
             g_label = label;
             g_countdown = count;
+            g_iqamahSuffix = IqamahSuffix(p);
             return;
         }
     }
@@ -1899,9 +2192,10 @@ static void UpdateCountdown()
         int sec = 86400 - nowSec + p.minute * 60;
         wchar_t label[80], count[32];
         swprintf(label, 80, L"%ls  %02d:%02d", p.name.c_str(), p.minute / 60, p.minute % 60);
-        swprintf(count, 32, L"%02d:%02d:%02d", sec / 3600, (sec / 60) % 60, sec % 60);
+        swprintf(count, 32, L"-%d:%02d:%02d", sec / 3600, (sec / 60) % 60, sec % 60);
         g_label = label;
         g_countdown = count;
+        g_iqamahSuffix = IqamahSuffix(p);
     }
     else
     {
@@ -1939,15 +2233,83 @@ static Insets ParseInsets(const std::wstring& value, int minVal, int maxVal)
     }
     return result;
 }
-static int g_width = 200, g_pillHeight = 0, g_trayGap = 5, g_cornerRadius = 13, g_fontSize = 15;
+static int g_width = 0, g_pillHeight = 0, g_trayGap = 5, g_cornerRadius = 13, g_fontSize = 15;
+static int g_iqamahFontScale = 80;
 static Insets g_margins{}, g_padding{};
 static std::wstring g_theme = L"system";
+static std::wstring g_backgroundStyle = L"solid";
+static int g_backgroundOpacity = 100;
+static bool g_pillTextShadow = false;
+static bool g_showPillBorder = false;
+// Popup options are independent of the XAML pill. -1 inherits legacy opacity.
+static std::wstring g_popupBackgroundStyle = L"follow-pill";
+static int g_popupBackgroundOpacity = -1;
+static bool g_popupShowBorder = true, g_popupShowSeparators = true;
+static const std::wstring& PopupMaterial()
+{
+    return g_popupBackgroundStyle == L"follow-pill" ? g_backgroundStyle : g_popupBackgroundStyle;
+}
+static int PopupOpacity()
+{
+    return g_popupBackgroundOpacity < 0 ? g_backgroundOpacity : g_popupBackgroundOpacity;
+}
 static std::wstring g_position = L"before-tray";
 static bool g_showPrimaryMonitor = true, g_showSecondaryMonitors = true;
 struct PillPalette
 {
     winrt::Windows::UI::Color background, foreground, countdown, separator;
 };
+// Taskbar pill background material is independent from popup composition.
+// XAML AcrylicBrush may render FallbackColor when hosted inside Explorer's taskbar.
+static Brush CreatePillBackground(winrt::Windows::UI::Color color)
+{
+    if (g_backgroundStyle == L"transparent" || g_backgroundOpacity == 0)
+        return nullptr;
+    const double opacity = (double)g_backgroundOpacity / 100.0;
+    if (g_backgroundStyle == L"blur" || g_backgroundStyle == L"acrylic")
+    {
+        try
+        {
+            AcrylicBrush material;
+            // Backdrop is used because HostBackdrop may render as a solid
+            // fallback inside Explorer. Tint strengths distinguish the materials.
+            auto source = AcrylicBackgroundSource::Backdrop;
+            material.BackgroundSource(source);
+            material.TintColor(color);
+            material.TintOpacity(g_backgroundStyle == L"blur" ? 0.12 * opacity
+                                                              : 0.45 * opacity);
+            material.Opacity(opacity);
+            material.FallbackColor(color);
+            Brush assigned = material;
+            auto actual = assigned.try_as<AcrylicBrush>();
+            Wh_Log(L"[Mawaqit][PillMaterial] requested=%s opacity=%d "
+                   L"acrylicBrush=%d source=%s tintOpacity=%.3f "
+                   L"brushOpacity=%.3f fallback=#%02X%02X%02X",
+                   g_backgroundStyle.c_str(), g_backgroundOpacity,
+                   actual ? 1 : 0,
+                   source == AcrylicBackgroundSource::Backdrop ? L"Backdrop" : L"HostBackdrop",
+                   material.TintOpacity(), material.Opacity(),
+                   (unsigned)color.R, (unsigned)color.G, (unsigned)color.B);
+            return assigned;
+        }
+        catch (winrt::hresult_error const& e)
+        {
+            Wh_Log(L"[Mawaqit][PillMaterial] %s acrylic failed HRESULT=0x%08X: %s; "
+                   L"using solid fallback", g_backgroundStyle.c_str(),
+                   (unsigned)e.code().value, e.message().c_str());
+        }
+        catch (...)
+        {
+            Wh_Log(L"[Mawaqit][PillMaterial] %s acrylic failed (unknown exception); "
+                   L"using solid fallback", g_backgroundStyle.c_str());
+        }
+    }
+    SolidColorBrush brush;
+    brush.Color(color);
+    brush.Opacity(opacity);
+    return brush;
+}
+
 static winrt::Windows::UI::Color Rgb(unsigned c)
 {
     return winrt::Windows::UI::Color{255, (uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c};
@@ -1977,6 +2339,28 @@ static unsigned ReadCustomHex(PCWSTR key, unsigned fallback)
                                RGB((fallback >> 16) & 255, (fallback >> 8) & 255, fallback & 255));
     return (unsigned)GetRValue(c) << 16 | (unsigned)GetGValue(c) << 8 | GetBValue(c);
 }
+// Empty or invalid overrides inherit the selected theme. All colors are RGB hex.
+static bool TryThemeOverride(PCWSTR key, unsigned& rgb)
+{
+    const std::wstring value = ReadSetting(key);
+    if (value.size() != 7 || value[0] != L'#')
+        return false;
+    for (size_t i = 1; i < value.size(); ++i)
+        if (!((value[i] >= L'0' && value[i] <= L'9') ||
+              (value[i] >= L'a' && value[i] <= L'f') ||
+              (value[i] >= L'A' && value[i] <= L'F')))
+            return false;
+    COLORREF color = ParseThemeHex(value, RGB(0, 0, 0));
+    rgb = (unsigned)GetRValue(color) << 16 |
+          (unsigned)GetGValue(color) << 8 | GetBValue(color);
+    return true;
+}
+static COLORREF OverridePopupColor(PCWSTR key, COLORREF base)
+{
+    unsigned rgb = 0;
+    return TryThemeOverride(key, rgb) ? RGB((rgb >> 16) & 255,
+                                           (rgb >> 8) & 255, rgb & 255) : base;
+}
 static bool WindowsLightMode()
 {
     HKEY key = nullptr;
@@ -1990,16 +2374,18 @@ static bool WindowsLightMode()
     RegCloseKey(key);
     return result == ERROR_SUCCESS && value != 0;
 }
-static PillPalette ResolvePillPalette(const std::wstring& theme)
+static PillPalette ResolvePillPaletteBase(const std::wstring& theme)
 {
     if (theme == L"traditional")
         return {Rgb(0x123D34), Rgb(0xF5EAD3), Rgb(0xE4C784), Rgb(0xC9B789)};
     if (theme == L"catppuccin")
         return {Rgb(0x211E32), Rgb(0xCDD6F4), Rgb(0xCFA1FF), Rgb(0xA6ADC8)};
     if (theme == L"emberveil")
-        return {Rgb(0x211E32), Rgb(0xF5E6C8), Rgb(0xFFBC5E), Rgb(0xB8A98A)};
+        return {Rgb(0x171B20), Rgb(0xF5E6C8), Rgb(0xFFBC5E), Rgb(0xD9A441)};
     if (theme == L"emberveil-midnight")
         return {Rgb(0x0A0C0E), Rgb(0xF5E6C8), Rgb(0xFFBC5E), Rgb(0xB8A98A)};
+    if (theme == L"emberveil-daybreak")
+        return {Rgb(0xFFF2D8), Rgb(0x1A1F26), Rgb(0xB87924), Rgb(0x8A642D)};
     if (theme == L"emerald-mosque")
         return {Rgb(0x102B27), Rgb(0xF3E8CF), Rgb(0xD4AF70), Rgb(0xB6C9BD)};
     if (theme == L"dracula")
@@ -2015,21 +2401,43 @@ static PillPalette ResolvePillPalette(const std::wstring& theme)
     if (theme == L"solarized-light")
         return {Rgb(0xFDF6E3), Rgb(0x586E75), Rgb(0x268BD2), Rgb(0x93A1A1)};
     if (theme == L"custom")
-        return {Rgb(ReadCustomHex(L"AdvancedCustomization.CustomThemeSettings.CustomPillBackground",
+        return {Rgb(ReadCustomHex(L"Advanced.CustomThemeSettings.PillBackground",
                                   0x211E32)),
-                Rgb(ReadCustomHex(L"AdvancedCustomization.CustomThemeSettings.CustomPillText",
+                Rgb(ReadCustomHex(L"Advanced.CustomThemeSettings.PillText",
                                   0xF5E6C8)),
-                Rgb(ReadCustomHex(L"AdvancedCustomization.CustomThemeSettings.CustomPillCountdown",
+                Rgb(ReadCustomHex(L"Advanced.CustomThemeSettings.PillCountdown",
                                   0xFFBC5E)),
-                Rgb(ReadCustomHex(L"AdvancedCustomization.CustomThemeSettings.CustomPillSeparator",
+                Rgb(ReadCustomHex(L"Advanced.CustomThemeSettings.PillSeparator",
                                   0xB8A98A))};
     COLORREF c = GetSysColor(COLOR_HIGHLIGHT);
     auto accent = winrt::Windows::UI::Color{255, GetRValue(c), GetGValue(c), GetBValue(c)};
-    if (WindowsLightMode())
-        return {Rgb(0xF2F2F2), Rgb(0x202020), accent, Rgb(0x666666)};
-    return {Rgb(0x292929), Rgb(0xF4F4F4), accent, Rgb(0xB8B8B8)};
+    // Windows/System Default: accent-colored pill with a contrasting foreground.
+    // Preserve the previous transparent-pill treatment when no background is drawn.
+    if (g_backgroundStyle == L"transparent" || g_backgroundOpacity == 0)
+    {
+        if (WindowsLightMode())
+            return {Rgb(0xF2F2F2), Rgb(0x202020), accent, Rgb(0x666666)};
+        return {Rgb(0x292929), Rgb(0xF4F4F4), accent, Rgb(0xB8B8B8)};
+    }
+    // The accent-filled Windows/System pill deliberately uses white text.
+    // Users choosing a very light accent can adjust the text in custom overrides.
+    return {accent, Rgb(0xFFFFFF), Rgb(0xFFFFFF), Rgb(0xFFFFFF)};
 }
-static bool g_showNext = true, g_showCountdown = true, g_enablePopup = true;
+static PillPalette ResolvePillPalette(const std::wstring& theme)
+{
+    auto palette = ResolvePillPaletteBase(theme);
+    unsigned rgb = 0;
+    if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillBackground", rgb))
+        palette.background = Rgb(rgb);
+    if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillText", rgb))
+        palette.foreground = Rgb(rgb);
+    if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillCountdown", rgb))
+        palette.countdown = Rgb(rgb);
+    if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillSeparator", rgb))
+        palette.separator = Rgb(rgb);
+    return palette;
+}
+static bool g_showNext = true, g_enablePopup = true;
 static std::atomic<int> g_popupAutoCloseSeconds{5};
 static ULONGLONG g_popupAutoCloseDeadline = 0;
 static bool g_openPopupOnHover = false;
@@ -2046,6 +2454,10 @@ static HANDLE g_countdownWorker = nullptr;
 static void UpdateClockOnUiThread();
 [[clang::no_destroy]] static TextBlock g_prayerText{nullptr};
 [[clang::no_destroy]] static TextBlock g_countdownText{nullptr};
+[[clang::no_destroy]] static TextBlock g_iqamahText{nullptr};
+[[clang::no_destroy]] static TextBlock g_iqamahShadow{nullptr};
+[[clang::no_destroy]] static TextBlock g_prayerShadow{nullptr};
+[[clang::no_destroy]] static TextBlock g_countdownShadow{nullptr};
 [[clang::no_destroy]] static Grid g_pill{nullptr};
 static HWND g_popup = nullptr;
 static winrt::event_token g_tapToken{};
@@ -2064,21 +2476,21 @@ struct PopupColors
 {
     COLORREF bg, border, text, muted, rule, footer;
 };
-static PopupColors PopupTheme()
+static PopupColors PopupThemeBase()
 {
     if (g_theme == L"custom")
         return {PopupRgb(ReadCustomHex(
-                    L"AdvancedCustomization.CustomThemeSettings.CustomPopupBackground", 0x1D1D2D)),
+                    L"Advanced.CustomThemeSettings.PopupBackground", 0x1D1D2D)),
                 PopupRgb(ReadCustomHex(
-                    L"AdvancedCustomization.CustomThemeSettings.CustomPopupBorder", 0x3B3B58)),
-                PopupRgb(ReadCustomHex(L"AdvancedCustomization.CustomThemeSettings.CustomPopupText",
+                    L"Advanced.CustomThemeSettings.PopupBorder", 0x3B3B58)),
+                PopupRgb(ReadCustomHex(L"Advanced.CustomThemeSettings.PopupText",
                                        0xD3D0E8)),
                 PopupRgb(ReadCustomHex(
-                    L"AdvancedCustomization.CustomThemeSettings.CustomPopupMuted", 0xB8B3D1)),
-                PopupRgb(ReadCustomHex(L"AdvancedCustomization.CustomThemeSettings.CustomPopupRule",
+                    L"Advanced.CustomThemeSettings.PopupMuted", 0xB8B3D1)),
+                PopupRgb(ReadCustomHex(L"Advanced.CustomThemeSettings.PopupRule",
                                        0x424158)),
                 PopupRgb(ReadCustomHex(
-                    L"AdvancedCustomization.CustomThemeSettings.CustomPopupFooter", 0xA29DBB))};
+                    L"Advanced.CustomThemeSettings.PopupFooter", 0xA29DBB))};
     if (g_theme == L"traditional")
         return {PopupRgb(0x102F29), PopupRgb(0x527361), PopupRgb(0xF5EAD3),
                 PopupRgb(0xC9B789), PopupRgb(0x527361), PopupRgb(0xE4C784)};
@@ -2086,11 +2498,14 @@ static PopupColors PopupTheme()
         return {PopupRgb(0x302D47), PopupRgb(0x58536F), PopupRgb(0xCDD6F4),
                 PopupRgb(0xA6ADC8), PopupRgb(0x58536F), PopupRgb(0xB4BEFE)};
     if (g_theme == L"emberveil")
-        return {PopupRgb(0x1D1D2D), PopupRgb(0x3B3B58), PopupRgb(0xD3D0E8),
-                PopupRgb(0xB8B3D1), PopupRgb(0x424158), PopupRgb(0xA29DBB)};
+        return {PopupRgb(0x171B20), PopupRgb(0x212832), PopupRgb(0xF5E6C8),
+                PopupRgb(0xF5E6C8), PopupRgb(0x212832), PopupRgb(0xD9A441)};
     if (g_theme == L"emberveil-midnight")
         return {PopupRgb(0x101418), PopupRgb(0x353A3E), PopupRgb(0xF5E6C8),
                 PopupRgb(0xB8A98A), PopupRgb(0x353A3E), PopupRgb(0xFFBC5E)};
+    if (g_theme == L"emberveil-daybreak")
+        return {PopupRgb(0xF5E6C8), PopupRgb(0xE2CFA8), PopupRgb(0x1A1F26),
+                PopupRgb(0x6F624F), PopupRgb(0xE2CFA8), PopupRgb(0xB87924)};
     if (g_theme == L"emerald-mosque")
         return {PopupRgb(0x102B27), PopupRgb(0x386057), PopupRgb(0xF3E8CF),
                 PopupRgb(0xB6C9BD), PopupRgb(0x386057), PopupRgb(0xD4AF70)};
@@ -2118,64 +2533,387 @@ static PopupColors PopupTheme()
     return {PopupRgb(0x202020), PopupRgb(0x505050), PopupRgb(0xF4F4F4),
             PopupRgb(0xB8B8B8), PopupRgb(0x505050), GetSysColor(COLOR_HIGHLIGHT)};
 }
+static PopupColors PopupTheme()
+{
+    auto colors = PopupThemeBase();
+    colors.bg = OverridePopupColor(L"Advanced.CustomThemeSettings.PopupBackground", colors.bg);
+    colors.border = OverridePopupColor(L"Advanced.CustomThemeSettings.PopupBorder", colors.border);
+    colors.text = OverridePopupColor(L"Advanced.CustomThemeSettings.PopupText", colors.text);
+    colors.muted = OverridePopupColor(L"Advanced.CustomThemeSettings.PopupMuted", colors.muted);
+    colors.rule = OverridePopupColor(L"Advanced.CustomThemeSettings.PopupRule", colors.rule);
+    colors.footer = OverridePopupColor(L"Advanced.CustomThemeSettings.PopupFooter", colors.footer);
+    return colors;
+}
+// The popup uses layered alpha only for translucent Solid. Transparent
+// uses its own lightly tinted acrylic backdrop; the XAML pill is untouched.
+static bool PopupUsesLayeredAlpha()
+{
+    return PopupMaterial() == L"solid" && PopupOpacity() < 100;
+}
+
+static void ConfigurePopupAlpha(HWND hwnd)
+{
+    const bool layered = PopupUsesLayeredAlpha();
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    const LONG_PTR wanted = layered ? (style | WS_EX_LAYERED) : (style & ~WS_EX_LAYERED);
+    if (style != wanted)
+    {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, wanted);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                         SWP_FRAMECHANGED);
+    }
+}
+
+// Popup backdrop uses the dynamically resolved Windows accent API.
+// Keep the GDI foreground rendering path independent of composition support.
+struct MawaqitAccentPolicy
+{
+    int state;
+    int flags;
+    DWORD gradientColor;
+    int animationId;
+};
+struct MawaqitWindowCompositionAttributeData
+{
+    int attribute;
+    PVOID data;
+    SIZE_T size;
+};
+static void ConfigurePopupComposition(HWND hwnd)
+{
+    if (!hwnd) return;
+    using SetComposition = BOOL (WINAPI*)(HWND, MawaqitWindowCompositionAttributeData*);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    auto setComposition = user32 ? reinterpret_cast<SetComposition>(
+        GetProcAddress(user32, "SetWindowCompositionAttribute")) : nullptr;
+    if (!setComposition)
+    {
+        Wh_Log(L"[Mawaqit][PopupBackdrop] Composition API unavailable; using GDI popup rendering");
+        return;
+    }
+    // ACCENT_DISABLED=0, BLURBEHIND=3, ACRYLICBLURBEHIND=4.
+    // Gradient is AABBGGRR (alpha is the high byte).
+    const bool blur = PopupMaterial() == L"blur";
+    const bool acrylic = PopupMaterial() == L"acrylic";
+    const bool transparent = PopupMaterial() == L"transparent";
+    MawaqitAccentPolicy policy{};
+    policy.state = blur ? 3 : (acrylic || transparent) ? 4 : 0;
+    // ACCENT_POLICY gradientColor is AABBGGRR. Use a neutral dark surface
+    // instead of the purple fallback tint, matching Windows 11 dark flyouts.
+    // Acrylic gets a stronger tint for legibility; Blur stays more translucent.
+    // These are intentionally popup-only: XAML pill brushes are unchanged.
+    policy.gradientColor = acrylic ? 0xCC272020 :
+                           transparent ? 0x50272020 :
+                           blur ? 0x60272020 : 0;
+    unsigned tintRgb = 0;
+    if (policy.state != 0 &&
+        TryThemeOverride(L"Advanced.CustomThemeSettings.PopupBackground", tintRgb))
+    {
+        // ACCENT_POLICY expects AABBGGRR, not AARRGGBB. Preserve each
+        // material's existing alpha while overriding only the tint RGB.
+        policy.gradientColor = (policy.gradientColor & 0xFF000000u) |
+                               ((tintRgb & 0xFFu) << 16) |
+                               (tintRgb & 0x00FF00u) |
+                               ((tintRgb >> 16) & 0xFFu);
+    }
+    // The high byte controls tint strength; preserve the original appearance
+    // whenever opacity inherits the pill's setting.
+    if (policy.state != 0 && g_popupBackgroundOpacity >= 0)
+    {
+        const DWORD baseAlpha = (policy.gradientColor >> 24) & 0xFFu;
+        const DWORD alpha = (baseAlpha * static_cast<DWORD>(PopupOpacity()) + 50u) / 100u;
+        policy.gradientColor = (policy.gradientColor & 0x00FFFFFFu) | (alpha << 24);
+    }
+    MawaqitWindowCompositionAttributeData data{19, &policy, sizeof(policy)};
+    SetLastError(0);
+    const BOOL ok = setComposition(hwnd, &data);
+    if (!ok)
+        Wh_Log(L"[Mawaqit][PopupBackdrop] Composition rejected style=%ls accent=%d "
+               L"error=%lu; retaining GDI popup rendering",
+               PopupMaterial().c_str(), policy.state, GetLastError());
+    else
+        Wh_Log(L"[Mawaqit][PopupBackdrop] style=%ls accent=%d "
+               L"gradient=0x%08lX; GDI foreground retained",
+               PopupMaterial().c_str(), policy.state,
+               static_cast<unsigned long>(policy.gradientColor));
+}
+
+// DWM accent backdrops use Windows' standard rounded-corner geometry.
+// Keep Transparent, Blur and Acrylic popup geometry at 8 DIP for
+// consistent corners. Solid retains the configurable radius.
+// Transparent now uses the popup-only accent composition path.
+static int PopupRadiusDip()
+{
+    return (PopupMaterial() == L"transparent" ||
+            PopupMaterial() == L"blur" ||
+            PopupMaterial() == L"acrylic")
+               ? 8 : std::max(0, g_cornerRadius);
+}
+
+static void ConfigurePopupDwmCorners(HWND hwnd)
+{
+    if (!hwnd || (PopupMaterial() != L"blur" &&
+                  PopupMaterial() != L"acrylic" &&
+                  PopupMaterial() != L"transparent"))
+        return;
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    if (!dwm)
+        return;
+    using DwmSetAttribute = HRESULT (WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+    auto setAttribute = reinterpret_cast<DwmSetAttribute>(
+        GetProcAddress(dwm, "DwmSetWindowAttribute"));
+    if (setAttribute)
+    {
+        constexpr DWORD kCornerPreferenceAttribute = 33;
+        constexpr DWORD kRound = 2; // DWMWCP_ROUND, Windows-defined radius.
+        const HRESULT hr = setAttribute(hwnd, kCornerPreferenceAttribute,
+                                        &kRound, sizeof(kRound));
+        if (FAILED(hr))
+            Wh_Log(L"[Mawaqit][Popup] DWM rounding failed: 0x%08lX",
+                   static_cast<unsigned long>(hr));
+    }
+    FreeLibrary(dwm);
+}
+
+static int PopupCornerRadiusPx(int width, int height, UINT dpi)
+{
+    const int scaled = MulDiv(PopupRadiusDip(), static_cast<int>(dpi ? dpi : 96), 96);
+    return std::clamp(scaled, 0, std::min(width, height) / 2);
+}
+
+// Measure the mosque name with the same GDI font and width used for painting.
+// Bound extreme names to five lines so a malformed title cannot consume the screen.
+static int PopupMosqueNameHeight()
+{
+    HDC dc = GetDC(nullptr);
+    if (!dc)
+        return 20;
+    HFONT font = CreateFontW(-15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    HGDIOBJ oldFont = font ? SelectObject(dc, font) : nullptr;
+    TEXTMETRICW metrics{};
+    GetTextMetricsW(dc, &metrics);
+    const int lineHeight = std::max(1, static_cast<int>(metrics.tmHeight + metrics.tmExternalLeading));
+    RECT bounds{0, 0, 242, 0};
+    DrawTextW(dc, g_mosqueName.c_str(), -1, &bounds,
+              DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    if (font)
+    {
+        SelectObject(dc, oldFont);
+        DeleteObject(font);
+    }
+    ReleaseDC(nullptr, dc);
+    return std::clamp(static_cast<int>(bounds.bottom - bounds.top), lineHeight, lineHeight * 5);
+}
+
+struct PopupGeometry
+{
+    int nameHeight;
+    int topRule;
+    int firstRow;
+    int bottomRule;
+    int height;
+};
+
+static PopupGeometry GetPopupGeometry()
+{
+    constexpr int nameTop = 12;
+    constexpr int headerGap = 18;
+    constexpr int rowGap = 18;
+    constexpr int rowHeight = 22;
+    constexpr int scheduleBottomGap = 18;
+    constexpr int footerHeight = 42;
+    PopupGeometry layout{};
+    layout.nameHeight = PopupMosqueNameHeight();
+    // GDI's measured rectangle includes extra font leading for wrapped lines.
+    // Compensate optically without changing the single-line header spacing.
+    // Keep a minimum gap for long names (up to five lines).
+    const int estimatedLines = std::clamp((layout.nameHeight + 17) / 18, 1, 5);
+    const int opticalHeaderGap = std::max(8, headerGap - 4 * (estimatedLines - 1));
+    const bool hijri = !g_hijriDate.empty();
+    layout.topRule = nameTop + layout.nameHeight + (hijri ? 22 : 0) + opticalHeaderGap;
+    layout.firstRow = layout.topRule + rowGap;
+    const int optionalRows = g_showFajrWindowCountdown ?
+        1 + (g_imsakMinute >= 0 ? 1 : 0) : 0;
+    layout.bottomRule = layout.firstRow + (5 + optionalRows) * rowHeight + scheduleBottomGap;
+    layout.height = layout.bottomRule + footerHeight;
+    return layout;
+}
+
+static int PopupLogicalHeight()
+{
+    return GetPopupGeometry().height;
+}
+
 static void PaintPrayerPopup(HWND hwnd)
 {
     PAINTSTRUCT ps{};
     HDC dc = BeginPaint(hwnd, &ps);
     if (!dc)
         return;
+    // Render the popup into an off-screen GDI bitmap first.
+    // Opaque styles use the original GDI rendering path; translucent Solid
+    // uses a 32-bit DIB to supply per-pixel alpha to UpdateLayeredWindow.
+    RECT pixelClient{};
+    GetClientRect(hwnd, &pixelClient);
+    const int pixelWidth = pixelClient.right - pixelClient.left;
+    const int pixelHeight = pixelClient.bottom - pixelClient.top;
+    if (pixelWidth <= 0 || pixelHeight <= 0)
+    {
+        EndPaint(hwnd, &ps);
+        return;
+    }
+    const bool layered = PopupUsesLayeredAlpha();
+    HDC bufferDc = CreateCompatibleDC(dc);
+    HBITMAP bitmap = nullptr;
+    void* dibPixels = nullptr;
+    if (bufferDc && layered)
+    {
+        BITMAPINFO bi{};
+        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth = pixelWidth;
+        bi.bmiHeader.biHeight = -pixelHeight; // top-down BGRA
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        bitmap = CreateDIBSection(bufferDc, &bi, DIB_RGB_COLORS, &dibPixels, nullptr, 0);
+    }
+    else if (bufferDc)
+        bitmap = CreateCompatibleBitmap(dc, pixelWidth, pixelHeight);
+    if (!bufferDc || !bitmap)
+    {
+        if (bitmap) DeleteObject(bitmap);
+        if (bufferDc) DeleteDC(bufferDc);
+        Wh_Log(L"[Mawaqit][PopupAlpha] buffer allocation failed; using direct GDI");
+        bufferDc = nullptr;
+        bitmap = nullptr;
+    }
+    HGDIOBJ previousBitmap = bitmap ? SelectObject(bufferDc, bitmap) : nullptr;
+    HDC renderDc = bufferDc ? bufferDc : dc;
     // Draw in a fixed 270x252 logical coordinate space. The GDI viewport
     // scales the entire popup, including text, consistently with its DPI size.
     RECT client{};
     GetClientRect(hwnd, &client);
-    int savedDc = SaveDC(dc);
-    SetMapMode(dc, MM_ANISOTROPIC);
-    SetWindowExtEx(dc, 270, 252, nullptr);
-    SetViewportExtEx(dc, client.right - client.left, client.bottom - client.top, nullptr);
-    RECT r{0, 0, 270, 252};
+    int savedDc = SaveDC(renderDc);
+    SetMapMode(renderDc, MM_ANISOTROPIC);
+    SetWindowExtEx(renderDc, 270, PopupLogicalHeight(), nullptr);
+    SetViewportExtEx(renderDc, client.right - client.left, client.bottom - client.top, nullptr);
+    RECT r{0, 0, 270, PopupLogicalHeight()};
     auto colors = PopupTheme();
     HBRUSH bg = CreateSolidBrush(colors.bg);
-    FillRect(dc, &r, bg);
+    FillRect(renderDc, &r, bg);
     DeleteObject(bg);
-    HPEN border = CreatePen(PS_SOLID, 1, colors.border);
-    HGDIOBJ prevPen = SelectObject(dc, border);
-    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
-    Rectangle(dc, 0, 0, r.right, r.bottom);
-    SelectObject(dc, oldBrush);
-    SelectObject(dc, prevPen);
-    DeleteObject(border);
-    SetBkMode(dc, TRANSPARENT);
+    // Draw the outline just INSIDE the clipped popup region. Drawing
+    // on the outermost pixel row/column caused GDI's non-antialiased stroke
+    // to be cut by SetWindowRgn, leaving uneven/square corner fragments.
+    // Keep the geometry in the same 270x252 logical viewport as the content.
+    constexpr int borderInset = 1;
+    const int logicalRadius = std::clamp(PopupRadiusDip(), 0,
+                                         static_cast<int>(std::min(r.right, r.bottom) / 2));
+    const int innerRadius = std::max(0, logicalRadius - borderInset);
+    HPEN border = g_popupShowBorder ? CreatePen(PS_SOLID, 1, colors.border) : nullptr;
+    if (border)
+    {
+        HGDIOBJ prevPen = SelectObject(renderDc, border);
+        HGDIOBJ oldBrush = SelectObject(renderDc, GetStockObject(NULL_BRUSH));
+        const int left = borderInset;
+        const int top = borderInset;
+        const int right = r.right - borderInset;
+        const int bottom = r.bottom - borderInset;
+        if (innerRadius == 0)
+            Rectangle(renderDc, left, top, right, bottom);
+        else
+            RoundRect(renderDc, left, top, right, bottom,
+                      innerRadius * 2, innerRadius * 2);
+        SelectObject(renderDc, oldBrush);
+        SelectObject(renderDc, prevPen);
+        DeleteObject(border);
+    }
+    SetBkMode(renderDc, TRANSPARENT);
     HFONT font = CreateFontW(-15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                              DEFAULT_PITCH, L"Segoe UI");
-    HGDIOBJ oldFont = SelectObject(dc, font);
+    HGDIOBJ oldFont = SelectObject(renderDc, font);
     auto line = [&](const std::wstring& value, int left, int top, int right, int height,
                     COLORREF color, UINT flags)
     {
         RECT rect{left, top, right, top + height};
-        SetTextColor(dc, color);
-        DrawTextW(dc, value.c_str(), -1, &rect,
+        SetTextColor(renderDc, color);
+        DrawTextW(renderDc, value.c_str(), -1, &rect,
                   flags | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
     };
-    RECT nameRect{14, 9, r.right - 14, 53};
-    SetTextColor(dc, colors.text);
-    DrawTextW(dc, g_mosqueName.c_str(), -1, &nameRect,
-              DT_CENTER | DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
+    const PopupGeometry layout = GetPopupGeometry();
+    RECT nameRect{14, 12, r.right - 14, 12 + layout.nameHeight};
+    SetTextColor(renderDc, colors.text);
+    DrawTextW(renderDc, g_mosqueName.c_str(), -1, &nameRect,
+              DT_CENTER | DT_WORDBREAK | DT_NOPREFIX | DT_WORD_ELLIPSIS);
     bool hijri = !g_hijriDate.empty();
     if (hijri)
-        line(g_hijriDate, 14, 54, r.right - 14, 19, colors.muted, DT_CENTER);
-    int topRule = hijri ? 85 : 65, bottomRule = r.bottom - 34;
-    HPEN rule = CreatePen(PS_SOLID, 1, colors.rule);
-    prevPen = SelectObject(dc, rule);
-    MoveToEx(dc, 12, topRule, nullptr);
-    LineTo(dc, r.right - 12, topRule);
-    MoveToEx(dc, 12, bottomRule, nullptr);
-    LineTo(dc, r.right - 12, bottomRule);
-    SelectObject(dc, prevPen);
-    DeleteObject(rule);
-    int firstRow = topRule + 12 + ((bottomRule - 12) - (topRule + 12) - 5 * 25) / 2;
-    for (int i = 0; i < 5; i++)
+        line(g_hijriDate, 14, nameRect.bottom + 4, r.right - 14, 18, colors.muted, DT_CENTER);
+    const int topRule = layout.topRule, bottomRule = layout.bottomRule;
+    if (g_popupShowSeparators)
     {
+        HPEN rule = CreatePen(PS_SOLID, 1, colors.rule);
+        if (rule)
+        {
+            HGDIOBJ prevRulePen = SelectObject(renderDc, rule);
+            MoveToEx(renderDc, 12, topRule, nullptr);
+            LineTo(renderDc, r.right - 12, topRule);
+            MoveToEx(renderDc, 12, bottomRule, nullptr);
+            LineTo(renderDc, r.right - 12, bottomRule);
+            SelectObject(renderDc, prevRulePen);
+            DeleteObject(rule);
+        }
+    }
+    // Keep informational Imsak/Shuruq times in the same Adhan column as
+    // prayers whenever an Iqamah suffix column is present.
+    bool hasIqamahColumn = g_showIqamah;
+    if (hasIqamahColumn)
+    {
+        hasIqamahColumn = false;
+        for (const auto& prayer : g_today)
+        {
+            if (!IqamahSuffix(prayer).empty())
+            {
+                hasIqamahColumn = true;
+                break;
+            }
+        }
+    }
+    const int adhanColumnRight = hasIqamahColumn ? r.right - 66 : r.right - 20;
+    const bool showImsak = g_showFajrWindowCountdown && g_imsakMinute >= 0;
+    const int rowCount = 5 + (g_showFajrWindowCountdown ? 1 : 0) + (showImsak ? 1 : 0);
+    const int firstRow = layout.firstRow;
+    for (int row = 0; row < rowCount; row++)
+    {
+        if (showImsak && row == 0)
+        {
+            wchar_t time[16];
+            swprintf(time, 16, L"%02d:%02d", g_imsakMinute / 60, g_imsakMinute % 60);
+            const int y = firstRow + row * 22;
+            line(L"Imsak", 20, y, r.right - 20, 21, colors.text, DT_LEFT);
+            line(time, 20, y, adhanColumnRight, 21, colors.text, DT_RIGHT);
+            continue;
+        }
+        const int prayerRow = row - (showImsak ? 1 : 0);
+        if (g_showFajrWindowCountdown && prayerRow == 1)
+        {
+            std::wstring sunrise = L"--:--";
+            if (g_shuruqMinute >= 0)
+            {
+                wchar_t b[16];
+                swprintf(b, 16, L"%02d:%02d", g_shuruqMinute / 60, g_shuruqMinute % 60);
+                sunrise = b;
+            }
+            int y = firstRow + row * 22;
+            line(L"Shuruq", 20, y, r.right - 20, 21, colors.text, DT_LEFT);
+            // Align Shuruq with the Adhan-time column; keep Iqamah column blank.
+            line(sunrise, 20, y, adhanColumnRight, 21, colors.text, DT_RIGHT);
+            continue;
+        }
+        int i = g_showFajrWindowCountdown && prayerRow > 1 ? prayerRow - 1 : prayerRow;
         std::wstring time = L"--:--";
         if (i < (int)g_today.size())
         {
@@ -2183,15 +2921,76 @@ static void PaintPrayerPopup(HWND hwnd)
             swprintf(b, 16, L"%02d:%02d", g_today[i].minute / 60, g_today[i].minute % 60);
             time = b;
         }
-        int y = firstRow + i * 25;
+        int y = firstRow + row * 22;
         line(kNames[i], 20, y, r.right - 20, 23, colors.text, DT_LEFT);
-        line(time, 20, y, r.right - 20, 23, colors.text, DT_RIGHT);
+        if (i < (int)g_today.size() && !IqamahSuffix(g_today[i]).empty())
+        {
+            line(time, 20, y, r.right - 66, 23, colors.text, DT_RIGHT);
+            line(IqamahSuffix(g_today[i]), r.right - 65, y, r.right - 20, 23,
+                 colors.muted, DT_RIGHT);
+        }
+        else
+            line(time, 20, y, r.right - 20, 23, colors.text, DT_RIGHT);
     }
-    line(g_label + L" - in " + g_countdown, 12, bottomRule + 5, r.right - 12, 24, colors.footer,
-         DT_CENTER);
-    SelectObject(dc, oldFont);
+    std::wstring footerCountdown = g_countdown;
+    if (footerCountdown != L"--:--" && !footerCountdown.empty() && footerCountdown.front() == L'-')
+        footerCountdown.erase(0, 1);
+
+    line(g_label + L" in " + footerCountdown, 12, bottomRule + 8, r.right - 12, 24,
+        colors.footer, DT_CENTER);
+    SelectObject(renderDc, oldFont);
     DeleteObject(font);
-    RestoreDC(dc, savedDc);
+    RestoreDC(renderDc, savedDc);
+    if (bufferDc)
+    {
+        if (layered && dibPixels)
+        {
+            // GDI writes RGB but not useful alpha. Reconstruct approximate
+            // foreground coverage from the rendered pixel versus theme BG.
+            // Preserve contrasting foreground pixels while fading the background.
+            // Matching foreground/background RGB cannot be distinguished here.
+            const COLORREF bgColor = colors.bg;
+            const int bgR = GetRValue(bgColor), bgG = GetGValue(bgColor);
+            const int bgB = GetBValue(bgColor);
+            // Layered alpha is used only by translucent Solid popups.
+            const int bgAlpha =
+                std::max(0, std::min(255, (PopupOpacity() * 255 + 50) / 100));
+            auto* pixels = static_cast<unsigned char*>(dibPixels);
+            for (int i = 0; i < pixelWidth * pixelHeight; ++i)
+            {
+                unsigned char* p = pixels + i * 4; // BGRA
+                const int dB = std::abs((int)p[0] - bgB);
+                const int dG = std::abs((int)p[1] - bgG);
+                const int dR = std::abs((int)p[2] - bgR);
+                // Differences are a conservative estimate of foreground
+                // coverage. The exact text pixels stay fully opaque.
+                const int difference = std::max(dR, std::max(dG, dB));
+                const int coverage = difference == 0 ? 0 :
+                    std::min(255, difference * 4);
+                const int alpha = bgAlpha + ((255 - bgAlpha) * coverage + 127) / 255;
+                // Convert the original GDI RGB into premultiplied BGRA.
+                // This preserves solid glyph pixels and softens antialias edges.
+                p[0] = (unsigned char)((p[0] * alpha + 127) / 255);
+                p[1] = (unsigned char)((p[1] * alpha + 127) / 255);
+                p[2] = (unsigned char)((p[2] * alpha + 127) / 255);
+                p[3] = (unsigned char)alpha;
+            }
+            RECT wr{};
+            GetWindowRect(hwnd, &wr);
+            POINT dst{wr.left, wr.top}, src{0, 0};
+            SIZE size{pixelWidth, pixelHeight};
+            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+            if (!UpdateLayeredWindow(hwnd, nullptr, &dst, &size, bufferDc, &src,
+                                     0, &blend, ULW_ALPHA))
+                Wh_Log(L"[Mawaqit][PopupAlpha] UpdateLayeredWindow failed: %lu",
+                       GetLastError());
+        }
+        else
+            BitBlt(dc, 0, 0, pixelWidth, pixelHeight, bufferDc, 0, 0, SRCCOPY);
+        SelectObject(bufferDc, previousBitmap);
+        DeleteObject(bitmap);
+        DeleteDC(bufferDc);
+    }
     EndPaint(hwnd, &ps);
 }
 // The popup is an activatable flyout: Windows notifies it when focus leaves.
@@ -2455,7 +3254,8 @@ static void DestroyPrayerPopup()
             g_popupClassRegistered = true;
         }
 
-        g_popup = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, g_popupClassName,
+        g_popup = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+                                  g_popupClassName,
                                   L"Mawaqit Prayer Times", WS_POPUP, 0, 0, 270, 252, nullptr,
                                   nullptr, wc.hInstance, nullptr);
 
@@ -2487,8 +3287,8 @@ static void DestroyPrayerPopup()
     if (!dpi)
         dpi = 96;
     const double scale = static_cast<double>(dpi) / 96.0;
-    const int w = MulDiv(270, dpi, 96), h = MulDiv(252, dpi, 96);
-    const int edgeGap = MulDiv(5, dpi, 96);
+    const int w = MulDiv(270, dpi, 96), h = MulDiv(PopupLogicalHeight(), dpi, 96);
+    const int edgeGap = MulDiv(11, dpi, 96);
     const int screenMargin = MulDiv(4, dpi, 96);
     bool top = bar.top <= monitor.top + 10;
     int x = bar.left + (bar.right - bar.left - w) / 2;
@@ -2511,12 +3311,10 @@ static void DestroyPrayerPopup()
                       std::min<int>(x, monitor.right - w - screenMargin));
     y = std::max<int>(monitor.top + screenMargin,
                       std::min<int>(y, monitor.bottom - h - screenMargin));
-    // Clip the Win32 popup itself, not only its painted background.
-    // The region is owned by the window after a successful SetWindowRgn call.
-
-    HRGN rounded = CreateRoundRectRgn(0, 0, w + 1, h + 1, MulDiv(18, dpi, 96), MulDiv(18, dpi, 96));
-    if (rounded && !SetWindowRgn(g_popup, rounded, FALSE))
-        DeleteObject(rounded);
+    // Apply the final popup geometry before configuring its composition surface
+    // so accent backdrops respect the rounded window region. Solid retains
+    // its layered-alpha path; Transparent uses a lighter acrylic tint.
+    ConfigurePopupAlpha(g_popup);
 
     // Animate the whole native window, leaving its paint/layout and themes unchanged.
     StopPopupAnimation();
@@ -2527,8 +3325,29 @@ static void DestroyPrayerPopup()
     g_popupHeight = h;
     g_popupSlideDistance = top ? -MulDiv(22, dpi, 96) : MulDiv(22, dpi, 96);
     g_popupStartY = g_popupMotionEnabled ? y + g_popupSlideDistance : y;
+    // Size first: a region installed on an old-sized HWND can disagree with
+    // the composition surface when the window is resized or shown again.
     SetWindowPos(g_popup, HWND_TOPMOST, x, g_popupStartY, w, h,
                  SWP_SHOWWINDOW | (hover ? SWP_NOACTIVATE : 0));
+    const int popupRadius = PopupCornerRadiusPx(w, h, dpi);
+    HRGN rounded = popupRadius == 0
+        ? CreateRectRgn(0, 0, w, h)
+        : CreateRoundRectRgn(0, 0, w, h, popupRadius * 2, popupRadius * 2);
+    if (rounded)
+    {
+        if (!SetWindowRgn(g_popup, rounded, TRUE))
+        {
+            Wh_Log(L"[Mawaqit][PopupCorners] SetWindowRgn failed: %lu", GetLastError());
+            DeleteObject(rounded);
+        }
+        else
+            Wh_Log(L"[Mawaqit][Popup] style=%ls radius=%d DIP (%d px), dpi=%u",
+                   PopupMaterial().c_str(), PopupRadiusDip(), popupRadius, dpi);
+    }
+    ConfigurePopupDwmCorners(g_popup);
+    ConfigurePopupComposition(g_popup);
+    InvalidateRect(g_popup, nullptr, FALSE);
+    UpdateWindow(g_popup);
     if (g_popupMotionEnabled)
     {
         g_popupAnimating = true;
@@ -2786,7 +3605,16 @@ static Panel ResolvePositionParent(int& slotIndex)
 // Keep the overlay centered until the live application repeater reaches it,
 // then translate right, stopping before the tray. Windows icon layout and
 // overflow behavior remain unchanged.
-static int g_centerDiagnosticCount = 0;
+// UI-thread-only diagnostic state; centering still recalculates on every tick.
+struct CenterDiagnosticState
+{
+    bool valid = false;
+    bool awaitingButtons = false;
+    double values[9]{};
+    bool room = false;
+};
+static CenterDiagnosticState g_centerDiagnostic;
+
 static void UpdateDynamicCenterOnUiThread()
 {
     if (g_position != L"center" || !g_pill)
@@ -2832,8 +3660,11 @@ static void UpdateDynamicCenterOnUiThread()
         // repeater for occupied space; defer visibility until the next tick.
         if (measuredButtons == 0)
         {
-            Wh_Log(L"[Mawaqit] Center awaiting realized buttons: repeaterW=%.1f children=%d",
-                   repeater.ActualWidth(), count);
+            if (!g_centerDiagnostic.awaitingButtons)
+                Wh_Log(L"[Mawaqit] Center awaiting realized buttons: repeaterW=%.1f children=%d",
+                       repeater.ActualWidth(), count);
+            g_centerDiagnostic.awaitingButtons = true;
+            g_centerDiagnostic.valid = false;
             g_pill.Visibility(Visibility::Collapsed);
             return;
         }
@@ -2843,15 +3674,28 @@ static void UpdateDynamicCenterOnUiThread()
         // If the available region is exhausted, hide rather than overlap the
         // system tray or the application buttons. This does not force overflow.
         bool room = maximumLeft >= centeredLeft && wantedLeft <= maximumLeft;
-        if (g_centerDiagnosticCount < 12)
+        const double diagnosticValues[] = {
+            grid.ActualWidth(), appOrigin.X, repeater.ActualWidth(), appRight,
+            trayOrigin.X, pillWidth, centeredLeft, wantedLeft, maximumLeft};
+        bool layoutChanged = !g_centerDiagnostic.valid ||
+                             g_centerDiagnostic.room != room;
+        for (size_t i = 0; i < 9 && !layoutChanged; ++i)
+            layoutChanged = !std::isfinite(diagnosticValues[i]) ||
+                            !std::isfinite(g_centerDiagnostic.values[i]) ||
+                            std::abs(diagnosticValues[i] - g_centerDiagnostic.values[i]) >= 0.5;
+        if (layoutChanged)
         {
             Wh_Log(
                 L"[Mawaqit] Center layout: root=%.1f repeaterX=%.1f repeaterW=%.1f appRight=%.1f "
                 L"trayX=%.1f pillW=%.1f centered=%.1f wanted=%.1f max=%.1f room=%d",
                 grid.ActualWidth(), appOrigin.X, repeater.ActualWidth(), appRight, trayOrigin.X,
                 pillWidth, centeredLeft, wantedLeft, maximumLeft, room ? 1 : 0);
-            ++g_centerDiagnosticCount;
+            for (size_t i = 0; i < 9; ++i)
+                g_centerDiagnostic.values[i] = diagnosticValues[i];
+            g_centerDiagnostic.room = room;
+            g_centerDiagnostic.valid = true;
         }
+        g_centerDiagnostic.awaitingButtons = false;
         g_pill.Visibility(room ? Visibility::Visible : Visibility::Collapsed);
         double left = std::min(wantedLeft, maximumLeft);
         if (room)
@@ -2955,6 +3799,10 @@ struct SecondaryClockInstance
     winrt::weak_ref<Grid> pill;
     winrt::weak_ref<TextBlock> prayer;
     winrt::weak_ref<TextBlock> countdown;
+    winrt::weak_ref<TextBlock> iqamah;
+    winrt::weak_ref<TextBlock> iqamahShadow;
+    winrt::weak_ref<TextBlock> prayerShadow;
+    winrt::weak_ref<TextBlock> countdownShadow;
     slot::Lease lease{};
     winrt::event_token tapToken{};
     bool tapRegistered = false;
@@ -2964,6 +3812,77 @@ struct SecondaryClockInstance
 static std::vector<SecondaryClockInstance> g_secondaryClocks;
 static constexpr wchar_t kSecondarySlotName[] = L"MawaqitSecondaryClockSlot";
 static constexpr wchar_t kSecondaryLeaseName[] = L"MawaqitSecondaryClockLease";
+
+// The shadow is a second, non-hit-testable TextBlock underneath the actual text.
+// It is offset by 1 DIP, with no effect on the foreground color or pill opacity.
+static Grid MakePillTextWithShadow(TextBlock const& foreground, TextBlock& shadow)
+{
+    Grid layer;
+    layer.VerticalAlignment(VerticalAlignment::Center);
+    shadow = TextBlock();
+    shadow.FontSize(foreground.FontSize());
+    shadow.VerticalAlignment(VerticalAlignment::Center);
+    shadow.Margin(foreground.Margin());
+    shadow.IsHitTestVisible(false);
+    shadow.Opacity(0.50);
+    SolidColorBrush ink;
+    ink.Color(winrt::Windows::UI::Color{255, 0, 0, 0});
+    shadow.Foreground(ink);
+    TranslateTransform offset;
+    offset.X(0.75);
+    offset.Y(1.0);
+    shadow.RenderTransform(offset);
+    layer.Children().Append(shadow);
+    layer.Children().Append(foreground);
+    return layer;
+}
+
+static TextBlock MakeIqamahText(winrt::Windows::UI::Color countdownColor)
+{
+    TextBlock iqamah;
+    iqamah.FontSize((double)g_fontSize * g_iqamahFontScale / 100.0);
+    iqamah.VerticalAlignment(VerticalAlignment::Center);
+    iqamah.Margin({3, 0, 5, 0});
+    unsigned rgb;
+    if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillIqamah", rgb))
+        countdownColor = Rgb(rgb);
+    SolidColorBrush brush;
+    brush.Color(countdownColor);
+    iqamah.Foreground(brush);
+    return iqamah;
+}
+
+// Auto width is measured in XAML DIPs on the taskbar UI thread. Use representative
+// maximum-length countdown and Iqamah strings so the pill does not jitter each second.
+// Fixed widths bypass this calculation entirely.
+static double EffectivePillWidth()
+{
+    if (g_width != 0)
+        return (double)g_width;
+
+    auto measure = [](std::wstring const& value, double fontSize) -> double
+    {
+        TextBlock sample;
+        sample.FontSize(fontSize);
+        sample.Text(value);
+        sample.Measure(winrt::Windows::Foundation::Size{10000.0f, 1000.0f});
+        return sample.DesiredSize().Width;
+    };
+
+    double width = (double)g_padding.left + g_padding.right;
+    if (g_showNext)
+        width += measure(g_label.size() > 7 ? g_label : L"Maghrib", (double)g_fontSize) + 9.0;
+    if (g_theme == L"custom" && g_showNext && g_showCountdown)
+        width += measure(L"|", (double)g_fontSize);
+    if (g_showCountdown)
+    {
+        width += measure(L"-23:59:59", (double)g_fontSize) + 9.0;
+        if (g_showIqamah)
+            width += measure(L"+180", (double)g_fontSize * g_iqamahFontScale / 100.0) + 8.0;
+    }
+    // Leave a small allowance for glyph rounding, borders, and the shadow offset.
+    return std::max(32.0, std::ceil(width + 4.0));
+}
 
 static void RemoveSecondaryClocksOnUiThread()
 {
@@ -3147,17 +4066,35 @@ static void EnsureSecondaryClocksOnUiThread()
         {
             Grid box;
             box.Name(kSecondarySlotName);
-            box.Width((double)g_width + g_trayGap);
+            box.Width(EffectivePillWidth() + g_trayGap);
             box.Height(g_pillHeight > 0 ? (double)g_pillHeight : 30.0);
             box.VerticalAlignment(VerticalAlignment::Center);
             Border surface;
             auto palette = ResolvePillPalette(g_theme);
-            SolidColorBrush bg;
-            bg.Color(palette.background);
-            surface.Background(bg);
+            surface.Background(CreatePillBackground(palette.background));
+            if (g_showPillBorder)
+            {
+                unsigned int borderRgb;
+                auto borderColor = palette.countdown;
+                if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillBorder", borderRgb))
+                    borderColor = Rgb(borderRgb);
+                surface.BorderBrush(winrt::Windows::UI::Xaml::Media::SolidColorBrush(borderColor));
+                surface.BorderThickness({1, 1, 1, 1});
+            }
             double r = (double)g_cornerRadius;
             surface.CornerRadius({r, r, r, r});
             surface.Margin({0, 0, (double)g_trayGap, 0});
+            // Match the primary pill's visual margins and position corrections.
+            // Keep the native secondary taskbar slot unchanged.
+            double positionOffsetX = 0.0;
+            if (g_position == L"after-tray")
+                positionOffsetX = -5.0;
+            else if (g_position == L"before-icons")
+                positionOffsetX = 5.0;
+            TranslateTransform offset;
+            offset.X((double)(g_margins.left - g_margins.right) + positionOffsetX);
+            offset.Y((double)(g_margins.top - g_margins.bottom));
+            surface.RenderTransform(offset);
             surface.Padding({(double)g_padding.left, (double)g_padding.top, (double)g_padding.right,
                              (double)g_padding.bottom});
             StackPanel content;
@@ -3178,8 +4115,23 @@ static void EnsureSecondaryClocksOnUiThread()
             SolidColorBrush accent;
             accent.Color(palette.countdown);
             countdown.Foreground(accent);
-            content.Children().Append(prayer);
-            if (g_theme == L"custom")
+            TextBlock iqamah = MakeIqamahText(palette.countdown);
+            TextBlock iqamahShadow{nullptr};
+            TextBlock prayerShadow{nullptr};
+            TextBlock countdownShadow{nullptr};
+            // Hidden components must not reserve margins or shadow-layer space.
+            prayer.Visibility(g_showNext ? Visibility::Visible : Visibility::Collapsed);
+            countdown.Visibility(g_showCountdown ? Visibility::Visible : Visibility::Collapsed);
+            iqamah.Visibility((g_showCountdown && g_showIqamah) ? Visibility::Visible : Visibility::Collapsed);
+            if (g_pillTextShadow)
+            {
+                auto layer = MakePillTextWithShadow(prayer, prayerShadow);
+                layer.Visibility(g_showNext ? Visibility::Visible : Visibility::Collapsed);
+                content.Children().Append(layer);
+            }
+            else
+                content.Children().Append(prayer);
+            if (g_theme == L"custom" && g_showNext && g_showCountdown)
             {
                 TextBlock separator;
                 separator.Text(L"|");
@@ -3189,7 +4141,22 @@ static void EnsureSecondaryClocksOnUiThread()
                 separator.Foreground(separatorBrush);
                 content.Children().Append(separator);
             }
-            content.Children().Append(countdown);
+            if (g_pillTextShadow)
+            {
+                auto layer = MakePillTextWithShadow(countdown, countdownShadow);
+                layer.Visibility(g_showCountdown ? Visibility::Visible : Visibility::Collapsed);
+                content.Children().Append(layer);
+            }
+            else
+                content.Children().Append(countdown);
+            if (g_pillTextShadow)
+            {
+                auto layer = MakePillTextWithShadow(iqamah, iqamahShadow);
+                layer.Visibility((g_showCountdown && g_showIqamah) ? Visibility::Visible : Visibility::Collapsed);
+                content.Children().Append(layer);
+            }
+            else
+                content.Children().Append(iqamah);
             surface.Child(content);
             box.Children().Append(surface);
             if (overlay)
@@ -3231,8 +4198,15 @@ static void EnsureSecondaryClocksOnUiThread()
             instance.parent = parent;
             instance.prayer = prayer;
             instance.countdown = countdown;
+            instance.iqamah = iqamah;
+            instance.iqamahShadow = iqamahShadow;
+            instance.prayerShadow = prayerShadow;
+            instance.countdownShadow = countdownShadow;
             prayer.Text(g_showNext ? g_label : L"");
-            countdown.Text(g_showCountdown ? g_countdown : L"");
+            countdown.Text(g_showCountdown ? PillCountdown() : L"");
+            iqamah.Text(PillIqamah());
+            if (iqamahShadow)
+                iqamahShadow.Text(PillIqamah());
             g_secondaryClocks.push_back(std::move(instance));
             Wh_Log(L"[Mawaqit][Monitor] Secondary clock inserted on %s hwnd=%p",
                    record.device.c_str(), record.hwnd);
@@ -3283,7 +4257,18 @@ static void UpdateSecondaryClocksOnUiThread()
         if (auto prayer = instance.prayer.get())
             prayer.Text(g_showNext ? g_label : L"");
         if (auto countdown = instance.countdown.get())
-            countdown.Text(g_showCountdown ? g_countdown : L"");
+            countdown.Text(g_showCountdown ? PillCountdown() : L"");
+        if (auto iqamah = instance.iqamah.get())
+            iqamah.Text(PillIqamah());
+        if (auto shadow = instance.iqamahShadow.get())
+            shadow.Text(PillIqamah());
+        if (auto shadow = instance.prayerShadow.get())
+            shadow.Text(g_showNext ? g_label : L"");
+        if (auto shadow = instance.countdownShadow.get())
+            shadow.Text(g_showCountdown ? PillCountdown() : L"");
+        if (g_width == 0)
+            if (auto pill = instance.pill.get())
+                pill.Width(EffectivePillWidth() + g_trayGap);
         if ((g_position == L"center" || g_position == L"after-icons") && instance.pill.get())
         {
             try
@@ -3349,7 +4334,7 @@ static void UpdateSecondaryClocksOnUiThread()
 static void RemoveOnUiThread()
 {
     RemoveSecondaryClocksOnUiThread();
-    g_centerDiagnosticCount = 0;
+    g_centerDiagnostic = {};
     g_afterIconsDiagnosticCount = 0;
     DestroyPrayerPopup();
     if (g_pill)
@@ -3399,6 +4384,10 @@ static void RemoveOnUiThread()
     g_lease = {};
     g_prayerText = nullptr;
     g_countdownText = nullptr;
+    g_iqamahText = nullptr;
+    g_iqamahShadow = nullptr;
+    g_prayerShadow = nullptr;
+    g_countdownShadow = nullptr;
     g_pill = nullptr;
 }
 
@@ -3439,7 +4428,7 @@ static void InsertOnUiThread()
     double dpi = 96.0;
     if (auto wnd = taskwin::FindCurrentProcessTaskbarWnd())
         dpi = (double)GetDpiForWindow(wnd);
-    double widthDip = (double)g_width;
+    double widthDip = EffectivePillWidth();
     Grid box;
     box.Name(kSlotName);
     box.Width(widthDip + (double)g_trayGap);
@@ -3447,16 +4436,29 @@ static void InsertOnUiThread()
     box.HorizontalAlignment(HorizontalAlignment::Center);
     box.VerticalAlignment(VerticalAlignment::Center);
     auto palette = ResolvePillPalette(g_theme);
-    SolidColorBrush background;
-    background.Color(palette.background);
     Border pillSurface;
-    pillSurface.Background(background);
+    pillSurface.Background(CreatePillBackground(palette.background));
+    if (g_showPillBorder)
+    {
+        unsigned int borderRgb;
+        auto borderColor = palette.countdown;
+        if (TryThemeOverride(L"Advanced.CustomThemeSettings.PillBorder", borderRgb))
+            borderColor = Rgb(borderRgb);
+        pillSurface.BorderBrush(winrt::Windows::UI::Xaml::Media::SolidColorBrush(borderColor));
+        pillSurface.BorderThickness({1, 1, 1, 1});
+    }
     double radius = (double)g_cornerRadius;
     pillSurface.CornerRadius({radius, radius, radius, radius});
     pillSurface.Margin({0, 0, (double)g_trayGap, 0});
     // Position offsets are visual only; the native slot remains reserved.
+    // Add subtle position-specific spacing without overriding custom margins.
+    double positionOffsetX = 0.0;
+    if (g_position == L"after-tray")
+        positionOffsetX = -5.0; // Equivalent to additional margins: 5, 0, 10, 0.
+    else if (g_position == L"before-icons")
+        positionOffsetX = 5.0; // Equivalent to additional margins: 10, 0, 5, 0.
     TranslateTransform offset;
-    offset.X((double)(g_margins.left - g_margins.right));
+    offset.X((double)(g_margins.left - g_margins.right) + positionOffsetX);
     offset.Y((double)(g_margins.top - g_margins.bottom));
     pillSurface.RenderTransform(offset);
     pillSurface.Padding({(double)g_padding.left, (double)g_padding.top, (double)g_padding.right,
@@ -3484,8 +4486,23 @@ static void InsertOnUiThread()
     countdown.Foreground(accent);
     prayer.Text(L"Loading...");
     countdown.Text(L"--:--");
-    content.Children().Append(prayer);
-    if (g_theme == L"custom")
+    TextBlock iqamah = MakeIqamahText(palette.countdown);
+    TextBlock iqamahShadow{nullptr};
+    TextBlock prayerShadow{nullptr};
+    TextBlock countdownShadow{nullptr};
+    // Hidden components must not reserve margins or shadow-layer space.
+    prayer.Visibility(g_showNext ? Visibility::Visible : Visibility::Collapsed);
+    countdown.Visibility(g_showCountdown ? Visibility::Visible : Visibility::Collapsed);
+    iqamah.Visibility((g_showCountdown && g_showIqamah) ? Visibility::Visible : Visibility::Collapsed);
+    if (g_pillTextShadow)
+    {
+        auto layer = MakePillTextWithShadow(prayer, prayerShadow);
+        layer.Visibility(g_showNext ? Visibility::Visible : Visibility::Collapsed);
+        content.Children().Append(layer);
+    }
+    else
+        content.Children().Append(prayer);
+    if (g_theme == L"custom" && g_showNext && g_showCountdown)
     {
         TextBlock separator;
         separator.Text(L"|");
@@ -3497,7 +4514,22 @@ static void InsertOnUiThread()
         separator.Foreground(separatorBrush);
         content.Children().Append(separator);
     }
-    content.Children().Append(countdown);
+    if (g_pillTextShadow)
+    {
+        auto layer = MakePillTextWithShadow(countdown, countdownShadow);
+        layer.Visibility(g_showCountdown ? Visibility::Visible : Visibility::Collapsed);
+        content.Children().Append(layer);
+    }
+    else
+        content.Children().Append(countdown);
+    if (g_pillTextShadow)
+    {
+        auto layer = MakePillTextWithShadow(iqamah, iqamahShadow);
+        layer.Visibility((g_showCountdown && g_showIqamah) ? Visibility::Visible : Visibility::Collapsed);
+        content.Children().Append(layer);
+    }
+    else
+        content.Children().Append(iqamah);
     pillSurface.Child(content);
     box.Children().Append(pillSurface);
     if (g_position == L"center" || g_position == L"after-icons")
@@ -3584,6 +4616,10 @@ static void InsertOnUiThread()
     }
     g_prayerText = prayer;
     g_countdownText = countdown;
+    g_iqamahText = iqamah;
+    g_iqamahShadow = iqamahShadow;
+    g_prayerShadow = prayerShadow;
+    g_countdownShadow = countdownShadow;
     Wh_Log(L"[Mawaqit] Text controls attached, prayer=%d countdown=%d", g_prayerText ? 1 : 0,
            g_countdownText ? 1 : 0);
     g_parent = parent;
@@ -3606,7 +4642,14 @@ static void InsertOnUiThread()
     UpdateCountdown();
     UpdateSecondaryClocksOnUiThread();
     prayer.Text(g_showNext ? g_label : L"");
-    countdown.Text(g_showCountdown ? g_countdown : L"");
+    countdown.Text(g_showCountdown ? PillCountdown() : L"");
+    iqamah.Text(PillIqamah());
+    if (iqamahShadow)
+        iqamahShadow.Text(PillIqamah());
+    if (prayerShadow)
+        prayerShadow.Text(g_showNext ? g_label : L"");
+    if (countdownShadow)
+        countdownShadow.Text(g_showCountdown ? PillCountdown() : L"");
     Wh_Log(L"[Mawaqit] Native XAML position %s inserted: %d physical px, %.1f DIP, DPI %.0f",
            g_position.c_str(), g_width, widthDip, dpi);
 }
@@ -3761,7 +4804,17 @@ static void UpdateClockOnUiThread()
     if (prayer)
         prayer.Text(g_showNext ? g_label : L"");
     if (countdown)
-        countdown.Text(g_showCountdown ? g_countdown : L"");
+        countdown.Text(g_showCountdown ? PillCountdown() : L"");
+    if (g_iqamahText)
+        g_iqamahText.Text(PillIqamah());
+    if (g_iqamahShadow)
+        g_iqamahShadow.Text(PillIqamah());
+    if (g_prayerShadow)
+        g_prayerShadow.Text(g_showNext ? g_label : L"");
+    if (g_countdownShadow)
+        g_countdownShadow.Text(g_showCountdown ? PillCountdown() : L"");
+    if (g_width == 0 && g_pill)
+        g_pill.Width(EffectivePillWidth() + g_trayGap);
     UpdateDynamicCenterOnUiThread();
     UpdateAfterIconsOnUiThread();
     UpdateSecondaryClocksOnUiThread();
@@ -3818,6 +4871,10 @@ static DWORD FreshScheduleCacheRemainingMs(const std::wstring& mosque, int hours
         std::wstring schedulePath = dir + L"\\schedule.txt";
         std::ifstream schedule(schedulePath.c_str(), std::ios::binary);
         if (!schedule)
+            return 0;
+        std::string header;
+        if (!std::getline(schedule, header) ||
+            header != "# Emberveil Mawaqit schedule v4")
             return 0;
         std::string today = NativeUpdater::date(now.wYear, now.wMonth, now.wDay) + "|";
         bool found = false;
@@ -3950,6 +5007,7 @@ static DWORD WINAPI ScheduleWorker(void*)
                 [](void*)
                 {
                     g_loadedDate.clear();
+                    g_yesterday.clear();
                     g_today.clear();
                     g_tomorrow.clear();
                     LoadMetadata();
@@ -3978,34 +5036,56 @@ static void LoadModSettings()
         position != L"center")
         position = L"before-tray";
     g_position = position;
-    g_showPrimaryMonitor = Wh_GetIntSetting(L"General.ShowPrimaryMonitor") != 0;
-    g_showSecondaryMonitors = Wh_GetIntSetting(L"General.ShowSecondaryMonitors") != 0;
+    g_showPrimaryMonitor = Wh_GetIntSetting(L"Display.ShowPrimaryMonitor") != 0;
+    g_showSecondaryMonitors = Wh_GetIntSetting(L"Display.ShowSecondaryMonitors") != 0;
     Wh_Log(L"[Mawaqit][Monitor] Visibility: primary=%d secondary=%d unified-position=%s",
            g_showPrimaryMonitor ? 1 : 0, g_showSecondaryMonitors ? 1 : 0, g_position.c_str());
     auto theme = ReadSetting(L"General.Theme");
     if (theme != L"traditional" && theme != L"catppuccin" && theme != L"emberveil" &&
-        theme != L"emberveil-midnight" && theme != L"emerald-mosque" && theme != L"dracula" &&
+        theme != L"emberveil-midnight" && theme != L"emberveil-daybreak" &&
+        theme != L"emerald-mosque" && theme != L"dracula" &&
         theme != L"nord" && theme != L"gruvbox" && theme != L"tokyo-night" &&
         theme != L"solarized-dark" && theme != L"solarized-light" && theme != L"custom")
         theme = L"system";
     g_theme = theme;
-    int width = Wh_GetIntSetting(L"AdvancedCustomization.LayoutSettings.Width");
-    g_width = (width >= 180 && width <= 400) ? width : 200;
-    int height = Wh_GetIntSetting(L"AdvancedCustomization.LayoutSettings.PillHeight");
+    auto backgroundStyle = ReadSetting(L"Advanced.LayoutSettings.BackgroundStyle");
+    if (backgroundStyle != L"transparent" && backgroundStyle != L"blur" &&
+        backgroundStyle != L"acrylic")
+        backgroundStyle = L"solid";
+    g_backgroundStyle = backgroundStyle;
+    g_pillTextShadow = Wh_GetIntSetting(L"Advanced.LayoutSettings.TextShadow") != 0;
+    g_showPillBorder = Wh_GetIntSetting(L"Advanced.LayoutSettings.ShowPillBorder") != 0;
+    g_backgroundOpacity = std::clamp(
+        Wh_GetIntSetting(L"Advanced.LayoutSettings.BackgroundOpacity"), 0, 100);
+    auto popupStyle = ReadSetting(L"Advanced.PopupAppearanceSettings.BackgroundStyle");
+    if (popupStyle != L"solid" && popupStyle != L"transparent" &&
+        popupStyle != L"blur" && popupStyle != L"acrylic")
+        popupStyle = L"follow-pill";
+    g_popupBackgroundStyle = popupStyle;
+    g_popupBackgroundOpacity = std::clamp(
+        Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.BackgroundOpacity"), -1, 100);
+    g_popupShowBorder = Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.ShowBorder") != 0;
+    g_popupShowSeparators = Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.ShowSeparators") != 0;
+
+    int width = Wh_GetIntSetting(L"Advanced.LayoutSettings.Width");
+    g_width = (width == 0 || (width >= 180 && width <= 400)) ? width : 0;
+    int height = Wh_GetIntSetting(L"Advanced.LayoutSettings.PillHeight");
     g_pillHeight = (height >= 0 && height <= 100) ? height : 0;
-    int gap = Wh_GetIntSetting(L"AdvancedCustomization.LayoutSettings.TrayGap");
+    int gap = Wh_GetIntSetting(L"Advanced.LayoutSettings.TrayGap");
     g_trayGap = (gap >= 0 && gap <= 100) ? gap : 5;
-    int radius = Wh_GetIntSetting(L"AdvancedCustomization.LayoutSettings.CornerRadius");
+    int radius = Wh_GetIntSetting(L"Advanced.LayoutSettings.CornerRadius");
     g_cornerRadius = (radius >= 0 && radius <= 30) ? radius : 13;
-    int font = Wh_GetIntSetting(L"AdvancedCustomization.LayoutSettings.FontSize");
+    int font = Wh_GetIntSetting(L"Advanced.LayoutSettings.FontSize");
     g_fontSize = (font >= 10 && font <= 24) ? font : 15;
-    PCWSTR marginSetting = Wh_GetStringSetting(L"AdvancedCustomization.LayoutSettings.Margins");
+    int iqamahScale = Wh_GetIntSetting(L"Advanced.LayoutSettings.IqamahFontScale");
+    g_iqamahFontScale = std::clamp(iqamahScale, 50, 100);
+    PCWSTR marginSetting = Wh_GetStringSetting(L"Advanced.LayoutSettings.Margins");
     if (marginSetting)
     {
         g_margins = ParseInsets(marginSetting, -100, 100);
         Wh_FreeStringSetting(marginSetting);
     }
-    PCWSTR paddingSetting = Wh_GetStringSetting(L"AdvancedCustomization.LayoutSettings.Padding");
+    PCWSTR paddingSetting = Wh_GetStringSetting(L"Advanced.LayoutSettings.Padding");
     if (paddingSetting)
     {
         g_padding = ParseInsets(paddingSetting, 0, 100);
@@ -4013,16 +5093,18 @@ static void LoadModSettings()
     }
     g_showNext = Wh_GetIntSetting(L"Display.ShowNextPrayer") != 0;
     g_showCountdown = Wh_GetIntSetting(L"Display.ShowCountdown") != 0;
-    g_enablePopup = Wh_GetIntSetting(L"Display.EnablePopup") != 0;
-    g_openPopupOnHover = Wh_GetIntSetting(L"Display.OpenPopupOnHover") != 0;
-    g_hoverCloseDelayMs = std::clamp(Wh_GetIntSetting(L"Display.HoverCloseDelayMs"), 0, 5000);
-    int autoClose = std::clamp(Wh_GetIntSetting(L"Display.PopupAutoCloseSeconds"), 0, 300);
+    g_showIqamah = Wh_GetIntSetting(L"Display.ShowIqamahTime") != 0;
+    g_showFajrWindowCountdown = Wh_GetIntSetting(L"Display.ShowFajrWindowCountdown") != 0;
+    g_enablePopup = Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.EnablePopup") != 0;
+    g_openPopupOnHover = Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.OpenPopupOnHover") != 0;
+    g_hoverCloseDelayMs = std::clamp(Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.HoverCloseDelayMs"), 0, 5000);
+    int autoClose = std::clamp(Wh_GetIntSetting(L"Advanced.PopupAppearanceSettings.PopupAutoCloseSeconds"), 0, 300);
     g_popupAutoCloseSeconds.store(autoClose);
     Wh_Log(L"[Mawaqit] Popup auto-close configured: %d seconds", autoClose);
     std::wstring mosque = ReadSetting(L"General.Mosque");
     if (mosque.empty())
         mosque = L"al-haram-makkah-saudi-arabia";
-    int hours = Wh_GetIntSetting(L"AdvancedCustomization.ModSettingsAdvanced.RefreshHours");
+    int hours = Wh_GetIntSetting(L"Advanced.ModSettingsAdvanced.RefreshHours");
     if (hours < 1 || hours > 168)
         hours = 24;
     AcquireSRWLockExclusive(&g_settingsLock);
@@ -4050,7 +5132,19 @@ BOOL Wh_ModInit()
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_refreshEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_stopEvent || !g_refreshEvent)
+    {
+        if (g_refreshEvent)
+        {
+            CloseHandle(g_refreshEvent);
+            g_refreshEvent = nullptr;
+        }
+        if (g_stopEvent)
+        {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
         return FALSE;
+    }
     folder_menus_dispatch::SetExceptionLogger(LogException);
     if (!taskxaml::HookTaskbarSymbols(
             []()
@@ -4061,6 +5155,10 @@ BOOL Wh_ModInit()
             }))
     {
         Wh_Log(L"[Mawaqit] Failed to hook taskbar symbols");
+        CloseHandle(g_refreshEvent);
+        g_refreshEvent = nullptr;
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
         return FALSE;
     }
     return TRUE;
