@@ -80,6 +80,7 @@ clock in the Windows 11 taskbar, like the week numbers in Outlook.
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
+// For Popup::Child() on the result of VisualTreeHelper::GetOpenPopups().
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -91,7 +92,6 @@ clock in the Windows 11 taskbar, like the week numbers in Outlook.
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -104,6 +104,20 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
 
+// 0 = the week containing 1 January is week 1, 1 = first full week,
+// 2 = first four-day week.
+int RegionalFirstWeekRule() {
+    WCHAR value[4];
+    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTWEEKOFYEAR, value,
+                        ARRAYSIZE(value))) {
+        int rule = value[0] - L'0';
+        if (rule >= 0 && rule <= 2) {
+            return rule;
+        }
+    }
+    return 0;
+}
+
 enum class WeekNumbering { Iso, System };
 
 struct Settings {
@@ -113,6 +127,8 @@ struct Settings {
     double columnWidth = 24;
     double fontSize = 11;
     double opacity = 1;
+    // LOCALE_IFIRSTWEEKOFYEAR, read once instead of for every calendar row.
+    int firstWeekRule = 0;
 };
 
 std::mutex g_settingsMutex;
@@ -126,22 +142,18 @@ Settings GetSettings() {
 void LoadSettings() {
     Settings s;
 
-    PCWSTR numbering = Wh_GetStringSetting(L"weekNumbering");
+    auto numbering = WindhawkUtils::StringSetting::make(L"weekNumbering");
     s.weekNumbering = wcscmp(numbering, L"system") == 0 ? WeekNumbering::System
                                                         : WeekNumbering::Iso;
-    Wh_FreeStringSetting(numbering);
 
-    PCWSTR headerText = Wh_GetStringSetting(L"headerText");
-    s.headerText = headerText;
-    Wh_FreeStringSetting(headerText);
+    s.headerText = WindhawkUtils::StringSetting::make(L"headerText").get();
     if (s.headerText.empty()) {
         s.headerText =
             PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_GERMAN ? L"KW" : L"Wk";
     }
 
-    PCWSTR color = Wh_GetStringSetting(L"color");
+    auto color = WindhawkUtils::StringSetting::make(L"color");
     s.accentColor = wcscmp(color, L"text") != 0;
-    Wh_FreeStringSetting(color);
 
     int columnWidth = Wh_GetIntSetting(L"columnWidth");
     s.columnWidth = columnWidth >= 10 && columnWidth <= 60 ? columnWidth : 24;
@@ -151,6 +163,8 @@ void LoadSettings() {
 
     int opacity = Wh_GetIntSetting(L"opacity");
     s.opacity = (opacity >= 5 && opacity <= 100 ? opacity : 100) / 100.0;
+
+    s.firstWeekRule = RegionalFirstWeekRule();
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -219,23 +233,15 @@ int RegionalWeek(int days, int firstDayOfWeek, int rule) {
     return RegionalWeek(jan1 - 1, firstDayOfWeek, rule);
 }
 
-int RegionalFirstWeekRule() {
-    WCHAR value[4];
-    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTWEEKOFYEAR, value,
-                        ARRAYSIZE(value))) {
-        int rule = value[0] - L'0';
-        if (rule >= 0 && rule <= 2) {
-            return rule;
-        }
-    }
-    return 0;
-}
-
 // The week number of the calendar row which starts on rowStartDays.
-int WeekNumberOfRow(int rowStartDays, int firstDayOfWeek, WeekNumbering numbering) {
+int WeekNumberOfRow(int rowStartDays,
+                    int firstDayOfWeek,
+                    WeekNumbering numbering,
+                    int firstWeekRule) {
     if (numbering == WeekNumbering::Iso) {
-        // The row covers six or seven days of exactly one ISO week: the one
-        // containing the row's Monday.
+        // A row starting on Monday is exactly one ISO week. With another first
+        // day of the week the row spans two ISO weeks, and the one containing
+        // the row's Monday has the most days in it (at least five).
         const int toMonday = (1 - WeekdayFromDays(rowStartDays) + 7) % 7;
         return IsoWeek(rowStartDays + toMonday);
     }
@@ -244,7 +250,7 @@ int WeekNumberOfRow(int rowStartDays, int firstDayOfWeek, WeekNumbering numberin
     // every day of the row has the same number. The last day of the row is
     // used so that the row containing 1 January is week 1 with the "week
     // containing 1 January" rule.
-    return RegionalWeek(rowStartDays + 6, firstDayOfWeek, RegionalFirstWeekRule());
+    return RegionalWeek(rowStartDays + 6, firstDayOfWeek, firstWeekRule);
 }
 
 // CalendarViewDayItem.Date carries no time zone. Depending on how the shell
@@ -310,16 +316,14 @@ struct CalendarState {
     winrt::event_token overlaySizeChangedToken{};
 };
 
-thread_local std::vector<std::unique_ptr<CalendarState>> t_calendars;
+// The event handlers of a calendar hold weak pointers to its state, so a state
+// which is dropped can't be used by a handler which is still subscribed.
+thread_local std::vector<std::shared_ptr<CalendarState>> t_calendars;
 thread_local wuc::CoreWindow t_coreWindow{nullptr};
 thread_local winrt::event_token t_visibilityChangedToken{};
 thread_local winrt::weak_ref<wux::FrameworkElement> t_layoutRoot;
 thread_local winrt::event_token t_layoutUpdatedToken{};
 thread_local ULONGLONG t_lastScanTick = 0;
-
-// The windows whose threads have state of this mod, for cleanup.
-std::mutex g_threadWindowsMutex;
-std::unordered_map<DWORD, HWND> g_threadWindows;
 
 template <typename T>
 T FindByName(wux::DependencyObject const& root, PCWSTR name, int depth = 0) {
@@ -447,7 +451,7 @@ void Reposition(CalendarState& state) {
 
     const double overlayHeight = overlay.ActualHeight();
     const int firstDayOfWeek = static_cast<int>(calendar.FirstDayOfWeek());
-    const WeekNumbering numbering = GetSettings().weekNumbering;
+    const Settings settings = GetSettings();
 
     // The column makes the panel narrower, but the day cells keep their size.
     // Their horizontal margin is reduced so that they still fit, otherwise the
@@ -497,7 +501,8 @@ void Reposition(CalendarState& state) {
 
         auto label = GetLabel(state, overlay, used++);
         auto text = label.Child().as<wuxc::TextBlock>();
-        auto week = std::to_wstring(WeekNumberOfRow(days, firstDayOfWeek, numbering));
+        auto week = std::to_wstring(WeekNumberOfRow(
+            days, firstDayOfWeek, settings.weekNumbering, settings.firstWeekRule));
         if (text.Text() != week) {
             text.Text(week);
         }
@@ -521,7 +526,11 @@ void Reposition(CalendarState& state) {
     }
 }
 
-void SafeReposition(CalendarState* state) {
+void SafeReposition(std::weak_ptr<CalendarState> const& weakState) {
+    auto state = weakState.lock();
+    if (!state) {
+        return;
+    }
     try {
         Reposition(*state);
     } catch (...) {
@@ -550,7 +559,7 @@ bool AttachCalendar(wuxc::CalendarView const& calendar) {
     Wh_Log(L"Attaching to calendar, first day of week %d",
            static_cast<int>(calendar.FirstDayOfWeek()));
 
-    auto state = std::make_unique<CalendarState>();
+    auto state = std::make_shared<CalendarState>();
     state->calendar = winrt::make_weak(calendar);
     state->monthView = winrt::make_weak(monthView);
     state->weekDayNames = winrt::make_weak(weekDayNames);
@@ -594,21 +603,21 @@ bool AttachCalendar(wuxc::CalendarView const& calendar) {
     monthView.Children().Append(overlay);
     monthView.Children().Append(header);
 
-    CalendarState* rawState = state.get();
+    std::weak_ptr<CalendarState> weakState = state;
     state->viewChangingToken = scrollViewer.ViewChanging(
-        [rawState](auto const&, auto const&) { SafeReposition(rawState); });
+        [weakState](auto const&, auto const&) { SafeReposition(weakState); });
     state->viewChangedToken = scrollViewer.ViewChanged(
-        [rawState](auto const&, auto const&) { SafeReposition(rawState); });
+        [weakState](auto const&, auto const&) { SafeReposition(weakState); });
     state->panelLayoutUpdatedToken = panel.LayoutUpdated(
-        [rawState](auto const&, auto const&) { SafeReposition(rawState); });
+        [weakState](auto const&, auto const&) { SafeReposition(weakState); });
     state->overlaySizeChangedToken = overlay.SizeChanged(
-        [rawState](auto const& sender, wux::SizeChangedEventArgs const& args) {
+        [weakState](auto const& sender, wux::SizeChangedEventArgs const& args) {
             // Hide labels of rows which are scrolled partly out of view.
             wuxm::RectangleGeometry clip;
             clip.Rect({0, 0, static_cast<float>(args.NewSize().Width),
                        static_cast<float>(args.NewSize().Height)});
             sender.template as<wux::UIElement>().Clip(clip);
-            SafeReposition(rawState);
+            SafeReposition(weakState);
         });
 
     ApplySettings(*state);
@@ -695,8 +704,18 @@ void ScanForCalendars() {
         return;
     }
 
-    // Calendars which were destroyed took their elements with them.
-    std::erase_if(t_calendars, [](auto const& state) { return !state->calendar.get(); });
+    // Drop the state of destroyed calendars. Their template parts can outlive
+    // them, so the handlers on the parts which are still alive are revoked.
+    std::erase_if(t_calendars, [](auto const& state) {
+        if (state->calendar.get()) {
+            return false;
+        }
+        try {
+            DetachCalendar(*state);
+        } catch (...) {
+        }
+        return true;
+    });
 
     std::vector<wuxc::CalendarView> calendars;
     size_t budget = 20000;
@@ -741,7 +760,7 @@ void OnLayoutUpdated() {
     }
 }
 
-void InitializeForCurrentThread(HWND hWnd) {
+void InitializeForCurrentThread() {
     wux::Window window = nullptr;
     try {
         window = wux::Window::Current();
@@ -749,11 +768,6 @@ void InitializeForCurrentThread(HWND hWnd) {
     }
     if (!window) {
         return;
-    }
-
-    {
-        std::lock_guard lock(g_threadWindowsMutex);
-        g_threadWindows[GetCurrentThreadId()] = hWnd;
     }
 
     try {
@@ -767,6 +781,12 @@ void InitializeForCurrentThread(HWND hWnd) {
                             return;
                         }
                         try {
+                            // The regional setting can have changed since.
+                            {
+                                const int rule = RegionalFirstWeekRule();
+                                std::lock_guard lock(g_settingsMutex);
+                                g_settings.firstWeekRule = rule;
+                            }
                             if (!HasLiveCalendar()) {
                                 ScanForCalendars();
                             }
@@ -816,7 +836,8 @@ void UninitializeForCurrentThread() {
         } catch (...) {
         }
     }
-    t_calendars.clear();
+    // Assigned rather than cleared, to free the vector's buffer as well.
+    t_calendars = {};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -869,9 +890,21 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procPa
     return true;
 }
 
-// One window per thread of this process: the XAML state of the mod is per
-// thread.
-std::vector<HWND> GetThreadWindows() {
+// The windows which can host the calendar: the CoreWindows of
+// ShellExperienceHost and the ControlCenterWindow of ShellHost.
+bool IsFlyoutWindow(HWND hWnd) {
+    WCHAR className[32];
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+    return _wcsicmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+           _wcsicmp(className, L"ControlCenterWindow") == 0;
+}
+
+// The current flyout windows of this process, one per thread: the state of
+// the mod is per thread. Every thread which can have state of the mod or a
+// pending initialization timer has such a window.
+std::vector<HWND> GetFlyoutWindows() {
     struct Param {
         std::unordered_set<DWORD> threads;
         std::vector<HWND> windows;
@@ -883,7 +916,7 @@ std::vector<HWND> GetThreadWindows() {
             DWORD processId = 0;
             DWORD threadId = GetWindowThreadProcessId(hWnd, &processId);
             if (threadId && processId == GetCurrentProcessId() &&
-                param.threads.insert(threadId).second) {
+                IsFlyoutWindow(hWnd) && param.threads.insert(threadId).second) {
                 param.windows.push_back(hWnd);
             }
             return TRUE;
@@ -893,17 +926,6 @@ std::vector<HWND> GetThreadWindows() {
     return param.windows;
 }
 
-std::vector<HWND> GetInitializedThreadWindows() {
-    std::vector<HWND> windows;
-    std::lock_guard lock(g_threadWindowsMutex);
-    for (auto const& [threadId, hWnd] : g_threadWindows) {
-        if (IsWindow(hWnd)) {
-            windows.push_back(hWnd);
-        }
-    }
-    return windows;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Hooks
 
@@ -911,26 +933,27 @@ std::atomic<bool> g_unloading{false};
 
 // Initialization is deferred to the thread's message loop, so that it doesn't
 // run in the middle of whatever is showing the window.
-thread_local HWND t_pendingInitWindow = nullptr;
 thread_local UINT_PTR t_pendingInitTimer = 0;
 
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original;
 
-// Catches flyout windows which are created after the mod was loaded.
+// Catches flyout windows which are created after the mod was loaded. Once a
+// thread is set up, later shows are handled by its VisibilityChanged and
+// LayoutUpdated handlers.
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     BOOL result = ShowWindow_Original(hWnd, nCmdShow);
 
-    if (nCmdShow != SW_HIDE && !g_unloading &&
-        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
-        t_pendingInitWindow = hWnd;
+    if (nCmdShow != SW_HIDE && !g_unloading && !t_layoutRoot.get() &&
+        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId() &&
+        IsFlyoutWindow(hWnd)) {
         if (!t_pendingInitTimer) {
             t_pendingInitTimer =
                 SetTimer(nullptr, 0, 50, [](HWND, UINT, UINT_PTR idEvent, DWORD) {
                     KillTimer(nullptr, idEvent);
                     t_pendingInitTimer = 0;
                     if (!g_unloading) {
-                        InitializeForCurrentThread(t_pendingInitWindow);
+                        InitializeForCurrentThread();
                     }
                 });
         }
@@ -959,11 +982,8 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    for (HWND hWnd : GetThreadWindows()) {
-        RunFromWindowThread(
-            hWnd,
-            [](PVOID param) { InitializeForCurrentThread(static_cast<HWND>(param)); },
-            hWnd);
+    for (HWND hWnd : GetFlyoutWindows()) {
+        RunFromWindowThread(hWnd, [](PVOID) { InitializeForCurrentThread(); }, nullptr);
     }
 }
 
@@ -975,7 +995,7 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    for (HWND hWnd : GetInitializedThreadWindows()) {
+    for (HWND hWnd : GetFlyoutWindows()) {
         RunFromWindowThread(
             hWnd,
             [](PVOID) {
@@ -994,7 +1014,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    for (HWND hWnd : GetInitializedThreadWindows()) {
+    for (HWND hWnd : GetFlyoutWindows()) {
         RunFromWindowThread(hWnd, [](PVOID) { RefreshCalendars(); }, nullptr);
     }
 }
