@@ -7972,18 +7972,6 @@ static std::wstring DetailsKeyHelpText() {
     }
 }
 
-static HelpRow kHelpNavRows[] = {
-    {L"Alt + Space", L"Open or close the bar"},
-    {L"↑ / ↓", L"Move through the results"},
-    {L"Enter", L"Open the selected item"},
-    {L"Esc", L"Close the details panel, then the bar"},
-};
-
-static HelpRow kHelpActionRows[] = {
-    {L"Ctrl + I", L"Actions and details (configurable)"},
-    {L"Ctrl + R", L"Rebuild the app index"},
-};
-
 static const HelpRow kHelpPrefixRows[] = {
     {L"?", L"Search the web"},
     {L"g: b: d: y: w:", L"Search on a specific engine"},
@@ -8100,14 +8088,21 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
 
     if (g_helpPage == 0) {
-        static std::wstring hotkeyText, detailsText;
-        hotkeyText = HotkeyHelpText();
-        detailsText = DetailsKeyHelpText();
-        kHelpNavRows[0].key = hotkeyText.c_str();
-        kHelpActionRows[0].key = detailsText.c_str();
+        const std::wstring hotkey = HotkeyHelpText();
+        const std::wstring details = DetailsKeyHelpText();
+        const HelpRow navRows[] = {
+            {hotkey.c_str(), L"Open or close the bar"},
+            {L"↑ / ↓", L"Move through the results"},
+            {L"Enter", L"Open the selected item"},
+            {L"Esc", L"Close the details panel, then the bar"},
+        };
+        const HelpRow actionRows[] = {
+            {details.c_str(), L"Actions and details (configurable)"},
+            {L"Ctrl + R", L"Rebuild the app index"},
+        };
         const HelpSection left[] = {
-            {L"GETTING AROUND", kHelpNavRows, ARRAYSIZE(kHelpNavRows)},
-            {L"ACTIONS", kHelpActionRows, ARRAYSIZE(kHelpActionRows)},
+            {L"GETTING AROUND", navRows, ARRAYSIZE(navRows)},
+            {L"ACTIONS", actionRows, ARRAYSIZE(actionRows)},
             {L"PREFIXES", kHelpPrefixRows, ARRAYSIZE(kHelpPrefixRows)},
             {L"CALCULATOR", kHelpCalcRows, ARRAYSIZE(kHelpCalcRows)},
         };
