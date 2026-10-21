@@ -70,6 +70,11 @@ What it deliberately does not do is fight for the top:
   rest of the session.
 * **Turning the rule off takes the window back down.** The mod only ever lowers a
   bit it set itself, so an app that pins its own windows is never affected.
+* **The same goes for opacity.** The mod records the windows it made translucent,
+  so changing the level takes effect on windows that are already open, and
+  clearing the level, deleting the rule or turning the mod off puts them back to
+  fully opaque. Only windows the mod faded itself are touched: an app that draws
+  its own transparency is never made opaque by this.
 
 One consequence worth knowing before you pin something: a topmost window stays
 above whatever you switch to with Alt+Tab, so if the pinned window covers most of
@@ -169,8 +174,10 @@ what the mod decided and why. Every line is prefixed with what it is doing:
 * `SETTLE` -- whether the window stayed where the rule put it, was put back once,
   or was left alone because the app kept moving it.
 * `OVERRIDE` -- you moved a window yourself; the mod has let go of it.
-* `OPACITY` -- the level that was set, or that the window was left alone because
-  it is already translucent.
+* `OPACITY` -- what happened to the level, and why: `applied`, `already-there`,
+  `already-layered` (the app draws its own transparency, left alone), `failed`
+  (the window refused the change), `app-cleared` (the app removed the style
+  itself), `withdrawn` (the rule stopped asking, or the mod was turned off).
 * `MONITOR-SKIP` -- a rule names a monitor that is not there.
 * `TOPMOST` -- what happened to the z-order, and why: `applied`, `already-there`,
   `overridden`, `minimized`, `refused`, `yielded` (a fullscreen app took the
@@ -320,8 +327,9 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
 //   withdrawal are all issued. Always SWP_ASYNCWINDOWPOS and always
 //   SWP_NOACTIVATE: a rule must never steal focus or deadlock against a window
 //   owned by another thread.
-// * One SetLayeredWindowAttributes and one SetWindowLongPtrW, both for opacity,
-//   and only on a window that is not already layered.
+// * Two SetLayeredWindowAttributes and two SetWindowLongPtrW, both for opacity:
+//   one pair sets the level on a window the app has not layered itself, the other
+//   takes it back. A window the app layered itself is never touched.
 // * No timer except the settle poll, which is armed only while a move is
 //   settling and killed when the last one is. The mod is idle otherwise.
 // * No polling, no sleeping, no PeekMessage loop, no persistence. Rules are
@@ -1305,6 +1313,34 @@ static TopmostDecision DecideTopmost(bool ruleWantsOn, bool isTopmost,
     return TopmostDecision::Claim;
 }
 
+// What to do about a rule's opacity for one window. Three answers, and the split
+// matters for the same reason it does for topmost: the mod may only undo what it
+// itself set, so it has to know whether the layered style on this window is its
+// own or the application's.
+enum class OpacityDecision {
+    Apply,          // set the style and the value, and record the value
+    AlreadyThere,   // the mod set this exact value; nothing to do
+    SkipAppLayered, // the application layered this window itself: not ours
+};
+
+// `ours` is the window being in the mod's own record, `currentAlpha` is the value
+// that record holds, and `styleSet` says whether the window still carries the
+// layered style right now -- an application is free to clear it, and a window
+// whose style was cleared has to be layered again whatever the value says.
+static OpacityDecision DecideOpacity(bool styleSet, bool ours, int currentAlpha,
+                                     int wantedAlpha) {
+    if (!styleSet) {
+        return OpacityDecision::Apply;
+    }
+    if (!ours) {
+        return OpacityDecision::SkipAppLayered;
+    }
+    if (currentAlpha == wantedAlpha) {
+        return OpacityDecision::AlreadyThere;
+    }
+    return OpacityDecision::Apply;
+}
+
 // Does this window rectangle cover this monitor? "Cover" is containment, not
 // equality, deliberately: a maximized window with an auto-hide taskbar is the
 // monitor plus about eight pixels of invisible resize border per side, so an
@@ -1517,7 +1553,7 @@ static bool g_diagnosticsLog = false;
 // Journalled at startup so a stale build is visible immediately: a journal that
 // looks complete but was written by the previous copy of the mod has cost a
 // round of diagnosis before.
-static constexpr PCWSTR kJournalBuild = L"r4-2026-10-20";
+static constexpr PCWSTR kJournalBuild = L"r5-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -2013,6 +2049,19 @@ static std::unordered_map<HWND, std::wstring> g_topmostWindows;
 // survives the yield: the mod still owns the bit and puts it back.
 static std::unordered_set<HWND> g_yieldedWindows;
 
+// Windows whose layered style this mod added, with the alpha it set. The value is
+// kept so a reapply pass can say "already-there" instead of reporting a fresh
+// change on every sweep, and so that releasing the opacity knows what it owns.
+// A window the application layered by itself is never in here -- the mod does not
+// touch those at all, because a flat alpha on a per-pixel-alpha window renders
+// wrong.
+struct OpacityRecord {
+    int alpha = 255;
+    std::wstring exeName;
+};
+
+static std::unordered_map<HWND, OpacityRecord> g_opacityWindows;
+
 static UINT_PTR g_settleTimer = 0;
 
 static void EnsureSettleTimer() {
@@ -2108,6 +2157,15 @@ static void JournalTopmost(const std::wstring& exeName, int ruleIndex,
         (source ? source : L"none") + L" result=" + result + L" state=" + state);
 }
 
+static void JournalOpacity(const std::wstring& exeName, int ruleIndex,
+                           PCWSTR source, PCWSTR result, int alpha) {
+    AppendDiagnosticsJournal(
+        std::wstring(L"OPACITY exe=") + exeName + L" rule=" +
+        std::to_wstring(ruleIndex) + L" source=" +
+        (source ? source : L"none") + L" result=" + result + L" alpha=" +
+        std::to_wstring(alpha));
+}
+
 // Records a claim and says so. Only ever called after the mod itself flipped the
 // bit from clear to set.
 static void ClaimTopmost(HWND hwnd, const std::wstring& exeName, int ruleIndex,
@@ -2176,32 +2234,113 @@ static void ReleaseAllTopmost(PCWSTR source) {
 
 // Opacity through the layered-window style.
 //
-// A window that is ALREADY layered is left alone. It is almost certainly using
-// per-pixel alpha (every modern custom-chrome app does), and setting a flat
-// alpha on it replaces that with a uniform translucency -- which renders wrong,
-// in a way that looks like the app's bug. Journaled as a skip rather than
-// silently doing the wrong thing.
+// A window that was ALREADY layered when the mod first saw it is left alone. It
+// is almost certainly using per-pixel alpha (every modern custom-chrome app
+// does), and setting a flat alpha on it replaces that with a uniform
+// translucency -- which renders wrong, in a way that looks like the app's bug.
+// Journaled as a skip rather than silently doing the wrong thing.
+//
+// A window the mod layered itself is a different case: the style is the mod's,
+// so the value is the mod's to change and to take back. Without the record, an
+// edited opacity would be read as "already layered, not mine" and silently
+// ignored -- which is exactly what version 1.0 did.
 static void ApplyOpacity(HWND hwnd, int alpha, const WindowFacts& facts,
-                         int ruleIndex) {
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                         int ruleIndex, PCWSTR source) {
+    const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    auto mine = g_opacityWindows.find(hwnd);
+    const bool ours = mine != g_opacityWindows.end();
+    const bool styleSet = (exStyle & WS_EX_LAYERED) != 0;
 
-    if (exStyle & WS_EX_LAYERED) {
-        AppendDiagnosticsJournal(L"OPACITY exe=" + facts.exeName + L" rule=" +
-                                 std::to_wstring(ruleIndex) + L" alpha=" +
-                                 std::to_wstring(alpha) +
-                                 L" state=already-layered");
+    const OpacityDecision decision =
+        DecideOpacity(styleSet, ours, ours ? mine->second.alpha : 0, alpha);
+
+    if (decision == OpacityDecision::SkipAppLayered) {
+        JournalOpacity(facts.exeName, ruleIndex, source, L"already-layered",
+                       alpha);
         return;
     }
 
-    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+    if (!styleSet) {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+    }
     SetLayeredWindowAttributes(hwnd, 0, (BYTE)alpha, LWA_ALPHA);
 
-    // No re-assert, deliberately: if the app clears the style later, that is the
-    // app's decision about its own window. The journal records what was set, so
-    // "the opacity went back" has an answer.
-    AppendDiagnosticsJournal(L"OPACITY exe=" + facts.exeName + L" rule=" +
-                             std::to_wstring(ruleIndex) + L" alpha=" +
-                             std::to_wstring(alpha) + L" state=applied");
+    // An elevated window refuses both of those through UIPI. Recording it as the
+    // mod's would mean claiming a change that was never made, and later
+    // "withdrawing" it, which would be a lie in the journal.
+    if (!(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+        JournalOpacity(facts.exeName, ruleIndex, source, L"failed", alpha);
+        return;
+    }
+    g_opacityWindows[hwnd] = OpacityRecord{alpha, facts.exeName};
+
+    // No re-assert, deliberately: if the application clears the style later,
+    // that is the application's decision about its own window. The journal
+    // records what was set, so "the opacity went back" has an answer.
+    JournalOpacity(facts.exeName, ruleIndex, source,
+                   decision == OpacityDecision::AlreadyThere ? L"already-there"
+                                                             : L"applied",
+                   alpha);
+}
+
+// The layering is the mod's, so taking it back is the mod's job too. Same
+// principle as WithdrawTopmost: only a window in the record is touched, so an
+// application that fades its own windows is never made opaque by this.
+//
+// Restoring means alpha 255 and the style gone, which is the state the window was
+// in before the mod layered it: a window only enters the record on the branch
+// where the style was clear.
+static void WithdrawOpacity(HWND hwnd, const std::wstring& exeName,
+                            int ruleIndex, PCWSTR source) {
+    auto mine = g_opacityWindows.find(hwnd);
+    if (mine == g_opacityWindows.end()) {
+        return;
+    }
+    if (!IsWindow(hwnd)) {
+        g_opacityWindows.erase(mine);
+        return;
+    }
+
+    const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (!(exStyle & WS_EX_LAYERED)) {
+        // The application cleared the style first. Nothing to undo, and nothing
+        // left to own.
+        g_opacityWindows.erase(mine);
+        JournalOpacity(exeName, ruleIndex, source, L"app-cleared", 255);
+        return;
+    }
+
+    SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE,
+                      GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+
+    // Same rule as WithdrawTopmost: a change that was refused is not a change.
+    // The record stays, so the next pass tries again, and the journal says
+    // "failed" rather than claiming a window is opaque when it is not.
+    if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED) {
+        JournalOpacity(exeName, ruleIndex, source, L"failed", 255);
+        return;
+    }
+
+    g_opacityWindows.erase(mine);
+    JournalOpacity(exeName, ruleIndex, source, L"withdrawn", 255);
+}
+
+// The opacity counterpart of ReleaseAllTopmost, called from the same places. A
+// window left translucent after the mod is turned off is worse than a window
+// left pinned: there is no obvious way for a user to fix it by hand.
+static void ReleaseAllOpacity(PCWSTR source) {
+    std::vector<std::pair<HWND, std::wstring>> windows;
+    windows.reserve(g_opacityWindows.size());
+    for (const auto& entry : g_opacityWindows) {
+        windows.emplace_back(entry.first, entry.second.exeName);
+    }
+    for (const auto& entry : windows) {
+        WithdrawOpacity(entry.first, entry.second, -1, source);
+    }
+    // WithdrawOpacity erases as it goes; this covers a window that was not a
+    // window any more, which is erased above without a line.
+    g_opacityWindows.clear();
 }
 
 // Which monitor a fullscreen app is covering right now, or -1. The foreground
@@ -2296,6 +2435,13 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
     const bool wantTopmost = actions.topmost == L"on";
     if (!wantTopmost) {
         WithdrawTopmost(hwnd, facts.exeName, ruleIndex, source);
+    }
+
+    // Same reasoning, same place: a rule that stops asking for a level gives back
+    // the level it set, before any early return below can skip it. Deleting a
+    // rule, or blanking its opacity, has to put the window back to opaque.
+    if (actions.opacity.empty()) {
+        WithdrawOpacity(hwnd, facts.exeName, ruleIndex, source);
     }
 
     RuleRect current;
@@ -2446,7 +2592,7 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
     if (!actions.opacity.empty()) {
         int alpha = 0;
         if (ParseOpacityValue(actions.opacity, alpha)) {
-            ApplyOpacity(hwnd, alpha, facts, ruleIndex);
+            ApplyOpacity(hwnd, alpha, facts, ruleIndex, source);
         }
     }
 }
@@ -2514,6 +2660,11 @@ static void ProcessSettleTick() {
                 break;
 
             case SettleDecision::Retry: {
+                // Copied before the move: the erase below frees the node, and the
+                // journal line after it used to read ruleIndex straight out of
+                // the freed entry. The string is built whether or not the journal
+                // is on, so this was a use-after-free on every refused retry.
+                const int ruleIndex = pending->second.ruleIndex;
                 const DWORD error =
                     ApplyWindowPos(hwnd, &pending->second.target, nullptr);
                 pending->second.retriesLeft--;
@@ -2524,10 +2675,9 @@ static void ProcessSettleTick() {
                     g_unwritableWindows.insert(hwnd);
                     g_pendingApplies.erase(pending);
                 }
-                AppendDiagnosticsJournal(
-                    L"SETTLE state=retry rule=" +
-                    std::to_wstring(pending->second.ruleIndex) + L" error=" +
-                    std::to_wstring((unsigned long)error));
+                AppendDiagnosticsJournal(L"SETTLE state=retry rule=" +
+                                         std::to_wstring(ruleIndex) + L" error=" +
+                                         std::to_wstring((unsigned long)error));
                 break;
             }
 
@@ -2649,8 +2799,10 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     JournalNoMatch(facts.exeName, facts.title);
 
     // A rule that no longer matches this window is a rule that no longer asks
-    // for it to be on top, so a claim the mod made goes back down here too.
+    // for it to be on top, or for it to be translucent, so anything the mod set
+    // goes back here too.
     WithdrawTopmost(hwnd, facts.exeName, -1, source);
+    WithdrawOpacity(hwnd, facts.exeName, -1, source);
 
     // A window with no title yet is not decided either: the title is the last of
     // its facts to settle, so a rule that matches on the title would have missed
@@ -2772,6 +2924,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
         g_unwritableWindows.erase(hwnd);
         g_topmostWindows.erase(hwnd);
         g_yieldedWindows.erase(hwnd);
+        g_opacityWindows.erase(hwnd);
         g_deferredWindows.erase(hwnd);
         return;
     }
@@ -2889,6 +3042,7 @@ static void ApplySettingsOnEventThread(bool initial) {
         // skipped in this branch, so the release has to happen here or a deleted
         // rule would leave its windows pinned until they were closed.
         ReleaseAllTopmost(L"no-rules");
+        ReleaseAllOpacity(L"no-rules");
         Wh_Log(L"[RULES] no rules configured; nothing will be matched. A rule "
                L"entry with every field blank ends the list of rules, and the "
                L"settings template ships exactly that entry -- fill it in to "
@@ -2940,6 +3094,7 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
 
         case kMsgShutdown:
             ReleaseAllTopmost(L"shutdown");
+            ReleaseAllOpacity(L"shutdown");
             UninstallHooks();
             if (g_settleTimer) {
                 KillTimer(hwnd, kSettleTimerId);
@@ -2954,6 +3109,7 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             g_unwritableWindows.clear();
             g_topmostWindows.clear();
             g_yieldedWindows.clear();
+            g_opacityWindows.clear();
             g_deferredWindows.clear();
             g_monitors.clear();
             g_noMatchCounts.clear();
