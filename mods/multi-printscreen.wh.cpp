@@ -4,9 +4,9 @@
 // @name:id-ID      Multi PrintScreen
 // @description     Paste several screenshots one by one with a repeated Ctrl+V (FIFO). Works in every app. No Win+V menu, no AutoHotkey.
 // @description:id-ID 🇮🇩 Tempel beberapa screenshot satu per satu hanya dengan Ctrl+V berulang (FIFO). Berlaku di semua aplikasi. Tanpa menu Win+V, tanpa AutoHotkey.
-// @version         1.0.0
-// @author          @sharexza
-// @github          https://github.com/raviadityasetiawan-oss
+// @version         1.0.2
+// @author          sharexza
+// @github          https://github.com/sharexza
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lshell32
 // ==/WindhawkMod==
