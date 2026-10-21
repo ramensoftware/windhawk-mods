@@ -34,9 +34,9 @@ not, the first press mutes them all.
 
 Browsers and Electron apps such as Discord play sound from a helper process
 instead of the process that owns the window. The mod therefore includes the
-app's background child processes too. A child process with its own window is
-treated as a separate app and left alone. For example, a media player launched
-from a terminal keeps playing when you mute the terminal.
+app's background child processes too. A child process with its own visible
+window is treated as a separate app and left alone. For example, a media player
+launched from a terminal keeps playing when you mute the terminal.
 
 ## Hotkey
 
@@ -54,6 +54,11 @@ key, joined by `+`, for example `Ctrl+Alt+M`, `Win+Shift+F9` or `Pause`.
 Windows gives a hotkey to only one program at a time, and other apps stop
 receiving that key combination. If the hotkey does nothing, another program may
 already own it. Turn on logging in the mod's Advanced tab to see why.
+
+The default, Ctrl+Alt+M, also takes Word's Insert Comment shortcut. On keyboard
+layouts with an AltGr key, Windows treats AltGr as Ctrl+Alt, so AltGr+M (`µ` on
+German layouts) stops typing its character. Choose another hotkey if you need
+either.
 
 ## Using the keyboard's Mute key
 
@@ -74,6 +79,11 @@ Keyboard software that reassigns the Mute key can stop it from sending
 
 * A browser is muted as a whole, not tab by tab. The Volume Mixer shows it the
   same way.
+* An app started from the focused app and hidden in the tray, with no visible
+  window, counts as part of the focused app. For example, a music player
+  started from a launcher and minimized to the tray is muted along with the
+  launcher. Windows gives no reliable way to tell such an app from the hidden
+  helper processes that browsers and Electron apps play their sound through.
 * Windows remembers an app's mute setting. An app you muted is still muted the
   next time it starts; press the hotkey or use the Volume Mixer to unmute it.
 * Pressing the hotkey on the desktop, the taskbar or a File Explorer window does
@@ -97,6 +107,7 @@ Keyboard software that reassigns the Mute key can stop it from sending
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
 #include <tlhelp32.h>
+#include <windhawk_utils.h>
 #include <wrl/client.h>
 
 #include <cwctype>
@@ -110,7 +121,8 @@ Keyboard software that reassigns the Mute key can stop it from sending
 using Microsoft::WRL::ComPtr;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Pure logic. tests/mute-focused-window.test.cpp covers these functions.
+// Pure logic, covered by the unit tests in the development repository linked
+// above.
 
 struct Hotkey {
     UINT modifiers;  // MOD_* flags, without MOD_NOREPEAT.
@@ -288,10 +300,20 @@ std::optional<Hotkey> ParseHotkey(std::wstring_view text) {
     return hotkey;
 }
 
+// Whether a top-level window shows that its process is an app of its own: one
+// that would appear on the taskbar or in Alt+Tab, being visible, unowned and
+// not a tool window. Hidden windows don't count, even captioned ones: the
+// Chromium, Electron and WebView2 processes above an app's audio process own
+// hidden captioned windows, so counting them would cut that audio off. An app
+// hidden in the tray therefore counts as part of the app that started it.
+bool IsAppWindow(bool visible, bool owned, LONG_PTR exStyle) {
+    return visible && !owned && !(exStyle & WS_EX_TOOLWINDOW);
+}
+
 // Returns the processes whose audio counts as the focused app's: the root and
-// its descendants, except that a descendant which owns its own top-level window
-// is a separate app and is skipped along with its own children. Browsers and
-// Electron apps play audio from such windowless child processes.
+// its descendants, except that a descendant which owns an app window (see
+// IsAppWindow) is a separate app and is skipped along with its own children.
+// Browsers and Electron apps play audio from child processes without one.
 std::unordered_set<DWORD> CollectProcessFamily(
     DWORD rootId,
     const std::vector<ProcessInfo>& processes,
@@ -451,9 +473,10 @@ std::vector<ProcessInfo> SnapshotProcesses() {
     return processes;
 }
 
-BOOL CALLBACK AddWindowOwnerId(HWND window, LPARAM ownerIds) {
-    if (IsWindowVisible(window) && !GetWindow(window, GW_OWNER) &&
-        !(GetWindowLongPtr(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) {
+BOOL CALLBACK AddAppWindowOwnerId(HWND window, LPARAM ownerIds) {
+    if (IsAppWindow(IsWindowVisible(window),
+                    GetWindow(window, GW_OWNER) != nullptr,
+                    GetWindowLongPtr(window, GWL_EXSTYLE))) {
         DWORD processId = 0;
         GetWindowThreadProcessId(window, &processId);
         reinterpret_cast<std::unordered_set<DWORD>*>(ownerIds)->insert(
@@ -462,11 +485,10 @@ BOOL CALLBACK AddWindowOwnerId(HWND window, LPARAM ownerIds) {
     return TRUE;
 }
 
-// Processes owning a window that would appear on the taskbar or Alt+Tab: one
-// that is visible, has no owner and isn't a tool window.
-std::unordered_set<DWORD> GetWindowOwnerIds() {
+// Processes owning an app window (see IsAppWindow).
+std::unordered_set<DWORD> GetAppWindowOwnerIds() {
     std::unordered_set<DWORD> ownerIds;
-    EnumWindows(AddWindowOwnerId, reinterpret_cast<LPARAM>(&ownerIds));
+    EnumWindows(AddAppWindowOwnerId, reinterpret_cast<LPARAM>(&ownerIds));
     return ownerIds;
 }
 
@@ -612,7 +634,8 @@ ToggleResult ToggleFocusedAppMute() {
     }
 
     SessionSearch search = FindSessionVolumes(
-        CollectProcessFamily(rootId, SnapshotProcesses(), GetWindowOwnerIds()));
+        CollectProcessFamily(rootId, SnapshotProcesses(),
+                             GetAppWindowOwnerIds()));
     if (search.volumes.empty()) {
         ToggleResult result = ResultForNoSessions(search.complete);
         if (result == ToggleResult::kFailed) {
@@ -645,18 +668,17 @@ void LoadSettings() {
     g_systemMuteFallback = Wh_GetIntSetting(L"systemMuteFallback") != 0;
 
     UnregisterHotKey(nullptr, kHotkeyId);
-    PCWSTR text = Wh_GetStringSetting(L"hotkey");
-    if (std::optional<Hotkey> hotkey = ParseHotkey(text)) {
+    auto text = WindhawkUtils::StringSetting::make(L"hotkey");
+    if (std::optional<Hotkey> hotkey = ParseHotkey(text.get())) {
         if (!RegisterHotKey(nullptr, kHotkeyId,
                             hotkey->modifiers | MOD_NOREPEAT,
                             hotkey->virtualKey)) {
-            Wh_Log(L"Can't register hotkey %s, error %u", text,
+            Wh_Log(L"Can't register hotkey %s, error %u", text.get(),
                    GetLastError());
         }
     } else {
-        Wh_Log(L"Invalid hotkey: %s", text);
+        Wh_Log(L"Invalid hotkey: %s", text.get());
     }
-    Wh_FreeStringSetting(text);
 }
 
 DWORD WINAPI HotkeyThreadProc(LPVOID readyEvent) {
