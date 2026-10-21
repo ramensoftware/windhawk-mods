@@ -2402,8 +2402,10 @@ class Database {
         if (size <= 0 || size > 32768) return false;
         std::string utf8(size, '\0');
         if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path.c_str(), -1, utf8.data(), size, nullptr, nullptr)) return false;
-        // READONLY | NOMUTEX | PRIVATECACHE. Never checkpoint or alter Windows' catalog.
-        if (open_(utf8.c_str(), &db_, 0x1 | 0x8000 | 0x40000, nullptr) != 0) return false;
+        // Never checkpoint or alter Windows' catalog.
+        if (open_(utf8.c_str(), &db_,
+                  kSqliteOpenReadOnly | kSqliteOpenNoMutex | kSqliteOpenPrivateCache,
+                  nullptr) != kSqliteOk) return false;
         busy_(db_, 25);
         started_ = GetTickCount64();
         progress_(db_, 1000, [](void* self) -> int {
@@ -2417,15 +2419,15 @@ class Database {
     bool Query(const char* sql, size_t limit, Callback callback) {
         if (!db_) return false;
         sqlite3_stmt* stmt = nullptr;
-        if (prepare_(db_, sql, -1, &stmt, nullptr) != 0) { if (stmt) finalize_(stmt); return false; }
+        if (prepare_(db_, sql, -1, &stmt, nullptr) != kSqliteOk) { if (stmt) finalize_(stmt); return false; }
         struct Cleanup { sqlite3_stmt* value; int (*finish)(sqlite3_stmt*); ~Cleanup() { finish(value); } } cleanup{stmt, finalize_};
         size_t rows = 0;
         int result;
-        while ((result = step_(stmt)) == 100) {
+        while ((result = step_(stmt)) == kSqliteRow) {
             if (++rows > limit) break;
             callback(stmt);
         }
-        return result == 101 && rows <= limit;
+        return result == kSqliteDone && rows <= limit;
     }
     std::wstring Text(sqlite3_stmt* stmt, int column, size_t max = 4096) const {
         const auto* data = static_cast<const wchar_t*>(text_(stmt, column));
@@ -2435,6 +2437,14 @@ class Database {
         return value.find(L'\0') == value.npos ? value : std::wstring{};
     }
    private:
+    // Stable SQLite ABI values; winsqlite3.dll is loaded without SQLite headers.
+    static constexpr int kSqliteOk = 0;
+    static constexpr int kSqliteRow = 100;
+    static constexpr int kSqliteDone = 101;
+    static constexpr int kSqliteOpenReadOnly = 0x00000001;
+    static constexpr int kSqliteOpenNoMutex = 0x00008000;
+    static constexpr int kSqliteOpenPrivateCache = 0x00040000;
+
     HMODULE module_ = nullptr;
     sqlite3* db_ = nullptr;
     ULONGLONG started_ = 0;
