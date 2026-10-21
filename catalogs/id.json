@@ -9401,20 +9401,20 @@
         "ratingUsers": 12,
         "reviews": 1,
         "trendingSorting": 17.2,
-        "updated": 1792134095000,
+        "updated": 1792580493000,
         "users": 172
       },
       "metadata": {
         "author": "Mário Barbosa",
-        "compilerOptions": "-lshcore",
-        "description": "Leaves a configurable gap around maximized windows, macOS style, by shrinking the desktop work area",
+        "compilerOptions": "-lshcore -ldwmapi",
+        "description": "Leaves a configurable gap around maximized windows and between snapped windows, macOS style",
         "github": "https://github.com/mariogomesbarbosa",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Maximized Window Margins",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "menu-tooltip-slide-animation": {
@@ -13270,6 +13270,32 @@
         ],
         "name": "Small Tray Icons on Touch",
         "version": "1.0.0"
+      }
+    },
+    "smart-process-priority-ram-optimizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792580488000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792580488000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "gilnett",
+        "compilerOptions": "-lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof",
+        "description": "Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.",
+        "donateUrl": "https://ko-fi.com/gilnet",
+        "github": "https://github.com/gilnett",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Smart Process Priority & RAM Optimizer",
+        "version": "1.0.1"
       }
     },
     "smooth-desktop-icons-auto-hide": {
