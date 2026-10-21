@@ -2,12 +2,187 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-20T17:01:19.000Z</updated>
+    <updated>2026-10-21T10:04:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multi PrintScreen 1.0.0]]></title>
+        <id>https://windhawk.net/mods/multi-printscreen#842c9b8b730cab3a5c6fad2c222817b02ec95724</id>
+        <link href="https://windhawk.net/mods/multi-printscreen"/>
+        <updated>2026-10-21T10:04:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="multiprintscreen">Multi PrintScreen</h1>
+<p>Take several screenshots in a row (Win+Shift+S, PrintScreen, …), then press
+<strong>Ctrl+V</strong> repeatedly in a target app: the <strong>first</strong> screenshot is pasted first,
+the <strong>second</strong> on the next Ctrl+V, and so on (First In, First Out).</p>
+<p>How it works (short version):</p>
+<ul>
+<li>A hidden window in a dedicated tool process listens for clipboard changes
+(<code>AddClipboardFormatListener</code>) and copies pure screenshot payloads
+(CF_DIB and PNG) into a private FIFO queue.</li>
+<li>Only pure screenshots are queued. Copying anything else (text, Excel cells,
+files, HTML) automatically clears the queue so Ctrl+V never interferes with
+normal copy/paste.</li>
+<li>A low-level keyboard hook swallows Ctrl+V (in any application) when the
+queue is not empty, puts the oldest screenshot onto the clipboard, then
+re-sends a marked V keystroke so the app pastes it.</li>
+<li>Windows Clipboard History (Win+V) duplicates are suppressed for re-injected
+pastes.</li>
+<li>When the queue is empty, Ctrl+V behaves completely normally.</li>
+</ul>
+<p>Runs as a dedicated tool process in Windhawk. Nothing is injected into explorer.exe
+or into the apps you paste into, so there is nothing to marshal across processes.</p>
+<p>Memory limits:</p>
+<ul>
+<li>Total queue memory is capped at 128 MB (the oldest screenshots are dropped if
+this budget is exceeded). Individual image payloads above 32 MB are skipped.</li>
+</ul>
+<p>Note: When pasting, the physical 'V' keystroke is swallowed while the image is
+restored to the clipboard, then re-injected. Very fast typing immediately after
+Ctrl+V may occasionally land before the pasted image.</p>]]></content>
+        <author>
+            <name>@sharexza</name>
+            <uri>https://github.com/raviadityasetiawan-oss</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 11 2.0.15]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#d66466c25b0eeda4428a0294b2726ec94b9c4276</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-10-21T10:04:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="modernrundialoguiforwindows11">Modern Run Dialog UI For Windows 11</h1>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/screenshot1.png" alt="Modern Run Dialog UI Preview" /></p>
+<p>Modern Run Dialog UI Preview</p>
+<hr />
+<h2 id="english">🌐 English</h2>
+<p><strong>Modern Run Dialog UI For Windows 11</strong> replaces the classic Win32 <strong>Run (<code>Win + R</code>)</strong> dialog with a sleek, borderless <strong>Fluent Design / Command Palette</strong> interface tailored for Windows 11.</p>
+<h3 id="keyfeatures">✨ Key Features</h3>
+<ul>
+<li><p><strong>Fluent UI & Acrylic Blur:</strong></p></li>
+<li><p>Completely removes the classic title bar and legacy window frames while preserving native Windows 11 rounded corners.</p></li>
+<li><p>Full-window <strong>Acrylic Blur</strong> background with customizable opacity.</p></li>
+<li><p><strong>GDI+ 32-bit ARGB (Premultiplied Alpha)</strong> rendering engine with crisp system <strong>Segoe UI</strong> typography and full Per-Monitor DPI scaling.</p></li>
+<li><p><strong>Smart History List:</strong></p></li>
+<li><p>Displays up to <strong>5 recently executed commands</strong> right above the input bar.</p></li>
+<li><p>Automatically extracts <strong>native application icons</strong> and <strong>friendly application names</strong> in the <code>command - App Name</code> format.</p></li>
+<li><p>Shows the <strong>last executed timestamp</strong> next to the history clock icon on each row (stored cleanly in Windhawk mod storage).</p></li>
+<li><p>Supports single-click to fill the input box, double-click to execute immediately, or <strong>Up / Down (<code>↑</code> / <code>↓</code>)</strong> arrow keys to cycle through history.</p></li>
+<li><p><strong>Modern Input Bar & Action Buttons:</strong></p></li>
+<li><p>Borderless single-line input box with automatic horizontal scrolling for long file paths.</p></li>
+<li><p><strong>Browse Button (<code>Browse 📁</code>):</strong> Opens the native Windows file picker (<code>*.exe</code>, <code>*.bat</code>, <code>*.cmd</code>, <code>*.msc</code>, <code>*.cpl</code>) and inserts the full path into the input bar.</p></li>
+<li><p><strong>Run (<code>Run ↵</code>) & Exit (<code>Exit ✕</code>) Buttons:</strong> High-contrast Fluent accent buttons with smooth hover and press states.</p></li>
+<li><p><strong>Quality-of-Life Fixes:</strong></p></li>
+<li><p><strong>Taskbar Icon Click to Minimize / Restore:</strong> Click the Run icon on the Taskbar to minimize (hide) or restore the Run window like a normal app.</p></li>
+<li><p><strong><code>Win + R</code> Toggle:</strong> Pressing <code>Win + R</code> while the Run dialog is open will immediately close it (or restore it if minimized).</p></li>
+<li><p><strong>Flawless IME Input:</strong> Works seamlessly with Windows IME (Vietnamese Telex/VNI, CJK) and Unikey without composition glitches.</p></li>
+<li><p><strong>Multilingual Interface:</strong></p></li>
+<li><p>Automatically detects the Windows UI language or lets you manually choose from 10 languages.</p></li>
+</ul>
+<hr />
+<h2 id="tingvit">🇻🇳 Tiếng Việt</h2>
+<p><strong>Modern Run Dialog UI For Windows 11</strong> thay thế hộp thoại <strong>Run (<code>Win + R</code>)</strong> cổ điển bằng giao diện <strong>Fluent Design / Command Palette</strong> hiện đại, không viền và trong suốt chuẩn Windows 11.</p>
+<h3 id="tnhnngnibt">✨ Tính năng nổi bật</h3>
+<ul>
+<li><p><strong>Giao diện Fluent & Kính mờ (Acrylic Blur):</strong></p></li>
+<li><p>Loại bỏ thanh tiêu đề và khung viền cổ điển, giữ góc bo tròn tự nhiên của Windows 11.</p></li>
+<li><p>Làm mờ nền trong suốt (<strong>Acrylic Blur</strong>) toàn cửa sổ, tùy chỉnh độ trong suốt linh hoạt.</p></li>
+<li><p>Kết xuất đồ họa bằng <strong>GDI+ 32-bit ARGB</strong> với phông chữ hệ thống <strong>Segoe UI</strong> sắc nét, hỗ trợ tự động co giãn theo DPI trên từng màn hình.</p></li>
+<li><p><strong>Lịch sử thông minh:</strong></p></li>
+<li><p>Hiển thị tối đa <strong>5 lệnh chạy gần nhất</strong> kèm biểu tượng gốc và tên ứng dụng (<code>lệnh - Tên ứng dụng</code>).</p></li>
+<li><p>Hiển thị <strong>thời gian chạy lệnh gần nhất</strong> ngay bên cạnh biểu tượng đồng hồ ở mỗi dòng.</p></li>
+<li><p>Hỗ trợ bấm chọn nhanh, nhấp đúp để chạy ngay, hoặc dùng phím <strong>Lên / Xuống (<code>↑</code> / <code>↓</code>)</strong>.</p></li>
+<li><p><strong>Thanh nhập liệu & Nút chức năng:</strong></p></li>
+<li><p>Ô nhập lệnh không viền, tự cuộn ngang khi đường dẫn dài.</p></li>
+<li><p><strong>Nút Duyệt (<code>Duyệt 📁</code>):</strong> Mở hộp thoại chọn tệp hệ thống (<code>*.exe</code>, <code>*.bat</code>, <code>*.cmd</code>, <code>*.msc</code>, <code>*.cpl</code>) và đưa đường dẫn lên thanh nhập.</p></li>
+<li><p><strong>Nút Chạy (<code>Chạy ↵</code>) & Thoát (<code>Thoát ✕</code>):</strong> Nổi bật, trực quan với hiệu ứng chuyển màu khi rê chuột.</p></li>
+<li><p><strong>Cải tiến trải nghiệm (Quality-of-Life):</strong></p></li>
+<li><p><strong>Bấm icon Taskbar để Ẩn / Mở cửa sổ:</strong> Cho phép click vào icon Run dưới thanh Taskbar để thu nhỏ hoặc khôi phục cửa sổ.</p></li>
+<li><p><strong>Nhấn <code>Win + R</code> để đóng nhanh:</strong> Nhấn lại <code>Win + R</code> khi hộp thoại đang mở sẽ lập tức đóng hoặc khôi phục cửa sổ.</p></li>
+<li><p><strong>Tương thích hoàn hảo bộ gõ Tiếng Việt (IME):</strong> Hoạt động mượt mà với Unikey, EVKey và bộ gõ Windows, không bị lỗi khung trắng đè chữ.</p></li>
+<li><p><strong>Hỗ trợ Đa ngôn ngữ:</strong></p></li>
+<li><p>Tự động nhận diện ngôn ngữ Windows hoặc tùy chọn cố định 10 ngôn ngữ.</p></li>
+</ul>]]></content>
+        <author>
+            <name>caotu2k5</name>
+            <uri>https://github.com/caotu2k5</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Charms Bar Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-charms-bar-recreation#328bb6c97e345a873450e686596eae2c9dd4a6c6</id>
+        <link href="https://windhawk.net/mods/win8-charms-bar-recreation"/>
+        <updated>2026-10-21T10:04:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881charmsbarrecreation">Windows 8/8.1 Charms Bar Recreation</h1>
+<p>This mod recreates the classic Windows 8/8.1 Charms Bar on Windows 10 and 11.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="windows881styledcharmsbar">Windows 8/8.1-styled Charms Bar</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8charmsnormal.PNG" alt="win8charmsnormal" /></p>
+<h3 id="windows8betastyledcharmsbar">Windows 8 beta-styled Charms Bar</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betacharms.PNG" alt="win8betacharms" /></p>
+<h2 id="aboutthemod">About the mod</h2>
+<p>It recreates the five charms (Search, Share, Start, Devices, Settings) with Win+C and edge activation, keyboard and touch input, multi-monitor placement, and a clock/status flyout. Suggestions are welcome. Tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+Note: This is a best effort modification. Layout, colors, icons and animations are heavily inspired by Windows 8/8.1. Share, Devices and the Second screen panel are recreations on Windows 10/11, not the original code.</p>
+<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
+<p>| Shortcut | Action |
+| --- | --- |
+| Win+C | Opens the Charms Bar |
+| Right-edge mouse gesture | Opens the Charms Bar |
+| Esc | Closes the rail or an open pane |
+| Click outside | Closes the rail or an open pane |</p>
+<p>While a charm pane is open:</p>
+<p>| Shortcut | Action |
+| --- | --- |
+| Win+C | Closes the current pane first |
+| Esc | Closes the current pane |
+| Click outside | Closes the current pane |</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Charms Bar enabled</strong>: turns the Charms Bar on or off. Share is always included.</li>
+<li><strong>In-mod language</strong>: English, Italian, German, French, Spanish, Japanese, Portuguese, Russian, Chinese
+(Simplified) or Korean. The choice applies to the rail, the charm panes and the Project panel alike.</li>
+<li><strong>Activation mode</strong>: full right edge, top-right corner, Win+C, or combinations.</li>
+<li><strong>Hide after choosing a charm</strong>: closes the Charms Bar after a charm is activated. Turn off to leave it open.</li>
+<li><strong>Close on outside click or focus change</strong>: light-dismiss behavior.</li>
+<li><strong>Animate show and hide</strong>: enables pane motion. Windows' own <em>Settings > Accessibility > Visual effects >
+Animation effects</em> switch is always honoured: when it is off, the rail and the panes appear and disappear
+instantly even if this setting is on.</li>
+<li><strong>Start logo style</strong>: Windows 8/8.1 logo (system accent) or the Windows 8 Build 8102 beta logo.</li>
+<li><strong>Charms Bar icons</strong>: Windows 8/8.1 icons, or the Windows 8 Build 8102 beta set for Search, Share, Devices and Settings. The Start logo is set separately.</li>
+<li><strong>Enable rail transparency</strong>: optional subtle rail transparency.</li>
+<li><strong>Show clock and system status flyout</strong>: shows or hides the clock and status flyout.</li>
+<li><strong>Settings pane color</strong>: system accent or dark background for the Settings, Devices and Share panes.</li>
+<li><strong>Settings charm</strong>: recreated Windows 8-style pane or native Win+I.</li>
+<li><strong>Search charm target</strong>: automatic or Windows search. Automatic opens the companion
+<em>Windows 8/8.1 Search Charm Recreation</em> panel when that mod is installed, otherwise it sends the
+Windows shortcut.</li>
+<li><strong>Search hand-off shortcut</strong>: automatic, Win+S, or Win+Q. Used only when the target is Windows search.</li>
+<li><strong>Share fallback behavior</strong>: automatic, Windows Share UI, Win+H, or mail/clipboard.</li>
+<li><strong>Display Switch panel title, color and custom color</strong>: see the project flyout settings at the end of the settings page.</li>
+</ul>
+<h2 id="performance">Performance</h2>
+<p>Live system data (volume, brightness, network, battery) is read only while a pane or flyout is open. Rendering falls back to native GDI if GDI+ startup fails.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 version 1809 or later (64-bit), with DWM enabled (default on Windows)</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The Charms Bar appears on the main monitor, where all five charms are displayed.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Icepenguins101 - Technical Inspiration </li>
+<li>AdministratoX - Testing on Windows 11 25H2 and providing feedback</li>
+<li>Kiyaku - Providing feedback</li>
+<li>CharmsBarReloaded project - Wi-Fi PNGs and battery silhouettes (GPL-3.0, license-compatible)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Where I Left It 1.2]]></title>
         <id>https://windhawk.net/mods/window-geometry-memory#9a8f03ad75e595cf6725ae5fe616dc28cefcaaac</id>
@@ -1096,175 +1271,6 @@ combine" but blind to combined groups.</li>
         <author>
             <name>grn15RenS</name>
             <uri>https://github.com/grn15RenS</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Network Speed in Bytes 1.1]]></title>
-        <id>https://windhawk.net/mods/taskmgr-network-bytes#2995b1cd1f98d682ad5b13863523536d0bd58f6d</id>
-        <link href="https://windhawk.net/mods/taskmgr-network-bytes"/>
-        <updated>2026-10-18T10:02:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskmanagernetworkspeedinbytes">Task Manager Network Speed in Bytes</h1>
-<p>Task Manager reports network throughput in <strong>bits</strong> per second (Kbps, Mbps,
-Gbps), while browsers, download managers and Task Manager's own disk graphs use
-<strong>bytes</strong> per second. This mod converts every network rate to bytes:</p>
-<p>| Where | Before | After |
-|---|---|---|
-| Performance → Ethernet / Wi-Fi: Send / Receive | <code>8.0 Kbps</code> | <code>1.0 KB/s</code> |
-| Performance sidebar | <code>S: 0 R: 8.0 Kbps</code> | <code>S: 0 R: 1.0 KB/s</code> |
-| Performance graph scale labels | <code>500 Kbps</code> / <code>450 Kbps</code> | <code>62.5 KB/s</code> / <code>56.3 KB/s</code> |
-| Processes / Users tabs, Network column | <code>0.1 Mbps</code>, <code>2.4 Mbps</code> | <code>12.5 KB/s</code>, <code>300 KB/s</code> |
-| View network details → Link speed | <code>1 Gbps</code> | <code>125 MB/s</code> |</p>
-<p>The Processes column switches unit per value: KB/s below 1 MB/s, MB/s above.
-Units are decimal (1 KB = 1000 bytes), like Task Manager's disk rates.</p>
-<p>By default the units are always the English <code>KB/s</code>, <code>MB/s</code> and <code>GB/s</code>,
-whatever Task Manager's display language is. The <strong>Unit names</strong> setting can
-switch them to Task Manager's own translated names instead (the ones its disk
-rates use).</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod needs the debug symbols of <code>taskmgr.exe</code>. Windhawk downloads them
-(about 20 MB) the first time Task Manager starts after the mod is installed —
-wait for the "Loading symbols" popup to reach 100%.</li>
-<li>Restart Task Manager after enabling or disabling the mod. Graph scale labels
-are cached until the graph rescales.</li>
-<li>The graph keeps Task Manager's original scale steps, which are round numbers
-in bits, so some labels are uneven in bytes (<code>54 Mbps</code> → <code>6.75 MB/s</code>).</li>
-</ul>]]></content>
-        <author>
-            <name>Nehoray-Bitan</name>
-            <uri>https://github.com/Nehoray-Bitan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Overflow List 0.1.8.8]]></title>
-        <id>https://windhawk.net/mods/tray-overflow-list#16fecfa1f6771b87beb01f13b26bedb7b3693506</id>
-        <link href="https://windhawk.net/mods/tray-overflow-list"/>
-        <updated>2026-10-18T10:02:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="trayoverflowlist">Tray Overflow List</h1>
-<p>Displays hidden Windows 11 tray icons as a vertical list, with icons on the left
-and application names on the right.</p>
-<p><img src="https://raw.githubusercontent.com/HeyOkay/TrayOverflowList/70bedeeab69d9ac2a1f9c486ffe8ac594fa06fd6/docs/images/preview.png" alt="Tray Overflow List
-preview" /></p>
-<p>The original tray controls handle clicks, context menus, and dragging. The mod
-preserves the native flyout background and derives its width from the original
-grid measurements. Long lists scroll
-vertically, and long names are shortened with an ellipsis.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Row height</strong> defaults to 33 pixels. Set it to 0 to keep the native height;
-custom heights are applied from 20 pixels upward.</li>
-<li><strong>Hidden name suffixes</strong> defaults to <code>.Root, .App, .Runner</code>. Listed endings
-are removed from the end of labels without regard to case. For example,
-<code>WhatsApp.Root</code> becomes <code>WhatsApp</code>. Leave the setting empty to keep the
-original names. Dots inside names and unlisted endings are preserved.</li>
-</ul>
-<p>Changing settings reloads the mod to restore the native layout first. Reopen
-the flyout to apply the new settings.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested on Windows 11 26H2 build 26300.9457, x64, with an English Windows
-interface. Other Windows builds and display languages have not been verified.
-This mod uses internal tray interfaces, so Windows updates can affect
-compatibility.</p>
-<p>System Tray Folders and Taskbar tray icon spacing and grid change the same
-flyout geometry. Disable them when investigating layout problems.</p>]]></content>
-        <author>
-            <name>HeyOkay</name>
-            <uri>https://github.com/HeyOkay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Style Dock 1.0]]></title>
-        <id>https://windhawk.net/mods/macos-style-dock#c89ca2c9981682990720394ed651bcc0d5d717d5</id>
-        <link href="https://windhawk.net/mods/macos-style-dock"/>
-        <updated>2026-10-18T08:04:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="macosstyledock">MacOS Style Dock</h1>
-<p>Turns the Windows 11 taskbar into a dock with the look and feel of macOS,
-while it keeps working the way Windows does. It restyles the real taskbar
-rather than replacing it, so pinned apps, jump lists, thumbnails, dragging
-files onto apps and rearranging your apps all work as usual. (Unlike
-"Taskbar Dock Animation", which magnifies the stock taskbar's icons, and "Mac
-Island &amp; Dock", which replaces the taskbar with a separate dock window.)</p>
-<p><img src="https://i.imgur.com/z2GaRW8.gif" alt="The dock in action" /></p>
-<h2 id="thelook">The look</h2>
-<ul>
-<li><strong>A frosted glass dock.</strong> Your icons sit on a rounded plate of blurred,
-tinted glass with a thin edge, floating just above the bottom of the
-screen, in place of the taskbar's flat background. It's dark, light, or
-follows your Windows theme.</li>
-<li><strong>Bigger icons, no boxes.</strong> Icons are shown larger, without the square
-highlight Windows draws behind them on hover or for the active app.</li>
-<li><strong>Sharp at any size.</strong> Icons are loaded at the size they're shown at when
-fully magnified, so they stay crisp as they grow.</li>
-<li><strong>Running indicators.</strong> A small dot under each running app, just above
-the bottom of the dock.</li>
-<li><strong>Dividers.</strong> Thin lines separate Start, Task View and File Explorer from
-your other apps, and your apps from the Recycle Bin.</li>
-<li><strong>A tidier system tray.</strong> The clock, notifications and tray icons on the
-right keep a fixed size and position, with even margins from the screen
-edges, whatever size the dock is.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li><strong>Magnification.</strong> Icons grow as the pointer passes over them, smoothly
-falling off with distance, and push their neighbors aside. As on a Mac,
-the dock grows from one end: with the pointer right of its middle, its
-left end stays put and its right end moves, and the other way around. The
-dock shrinks back as soon as the pointer leaves it.</li>
-<li><strong>Over your windows.</strong> Maximized windows reach down to the top of the
-dock, and magnified icons rise over them. Windows still keeps the dock's
-own strip of the screen free.</li>
-<li><strong>A fixed order.</strong> Start comes first, then Task View, then File Explorer,
-a divider, and the rest of your apps. Whenever File Explorer is pinned or
-open, it keeps its spot next to the divider and can't be dragged
-elsewhere; your other apps can be rearranged as usual.</li>
-<li><strong>Jump lists in the right place.</strong> Right-click menus open above the icon
-you clicked.</li>
-<li><strong>A Recycle Bin</strong> at the right end of the dock, using Windows' own icon,
-which shows whether it's empty or full. Click it to open it, drag files
-onto it to delete them (they can be restored), or right-click it to open
-or empty it.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Dock Panel:</strong> the size of the icons and dock, and the dock's color
-(System, Dark or Light), tint and blur.</li>
-<li><strong>Magnification:</strong> how much icons grow, how far from the pointer they
-grow, how long the animation takes, and whether icons magnify over
-maximized windows. With that turned off, the space above the dock is kept
-free for magnified icons instead, so maximized windows get a little less
-of the screen.</li>
-<li><strong>Dock Items:</strong> the divider after File Explorer, and the Recycle Bin.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11 only, with the taskbar at the bottom of the screen.</li>
-<li>x64 PCs only for now; ARM64 isn't supported yet.</li>
-<li>The "Small taskbar buttons" setting isn't supported.</li>
-<li>Leave Windows' "Automatically hide the taskbar" setting off. While
-"Magnify over windows" is on, the mod turns it on behind the scenes (and
-keeps the taskbar from hiding), and puts it back as it was when the
-setting or the mod is turned off. If the mod can't put it back, for
-example when Windhawk is uninstalled while Explorer isn't running, turn it
-off yourself in Windows' taskbar settings.</li>
-<li>Icons are loaded at high resolution on Windows 11 with the October 2024
-update (KB5044384) or later. On older builds, magnified icons are blurrier.</li>
-<li>Not designed to be used with other taskbar mods. In particular, it sets
-the taskbar's height and icon size, lays out and animates its icons
-itself, and places their right-click menus, so don't combine it with
-"Taskbar height and icon size", "Taskbar Dock Animation", "Taskbar Dock
-Animation Plus", "Mac Island &amp; Dock", "Taskbar Multirow" or "Start button
-always on the left".</li>
-<li>If Windows' Smart App Control is on, it blocks this mod (as it does all
-Windhawk mods), because the mod is compiled on your PC and isn't signed.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The taskbar height code is based on m417z's "Taskbar height and icon size"
-mod. The way it handles dragging icons and places right-click menus follows
-his "Taskbar Multirow" mod, and the way it keeps the taskbar shown follows
-his "Taskbar auto-hide when maximized" mod (all GPL-3.0).</p>]]></content>
-        <author>
-            <name>Zach Vaughn</name>
-            <uri>https://github.com/zachvdev</uri>
         </author>
     </entry>
 </feed>

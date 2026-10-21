@@ -2,12 +2,187 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-21T09:03:43.000Z</updated>
+    <updated>2026-10-21T10:04:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multi PrintScreen 1.0.0]]></title>
+        <id>https://windhawk.net/mods/multi-printscreen#842c9b8b730cab3a5c6fad2c222817b02ec95724</id>
+        <link href="https://windhawk.net/mods/multi-printscreen"/>
+        <updated>2026-10-21T10:04:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="multiprintscreen">Multi PrintScreen</h1>
+<p>Take several screenshots in a row (Win+Shift+S, PrintScreen, …), then press
+<strong>Ctrl+V</strong> repeatedly in a target app: the <strong>first</strong> screenshot is pasted first,
+the <strong>second</strong> on the next Ctrl+V, and so on (First In, First Out).</p>
+<p>How it works (short version):</p>
+<ul>
+<li>A hidden window in a dedicated tool process listens for clipboard changes
+(<code>AddClipboardFormatListener</code>) and copies pure screenshot payloads
+(CF_DIB and PNG) into a private FIFO queue.</li>
+<li>Only pure screenshots are queued. Copying anything else (text, Excel cells,
+files, HTML) automatically clears the queue so Ctrl+V never interferes with
+normal copy/paste.</li>
+<li>A low-level keyboard hook swallows Ctrl+V (in any application) when the
+queue is not empty, puts the oldest screenshot onto the clipboard, then
+re-sends a marked V keystroke so the app pastes it.</li>
+<li>Windows Clipboard History (Win+V) duplicates are suppressed for re-injected
+pastes.</li>
+<li>When the queue is empty, Ctrl+V behaves completely normally.</li>
+</ul>
+<p>Runs as a dedicated tool process in Windhawk. Nothing is injected into explorer.exe
+or into the apps you paste into, so there is nothing to marshal across processes.</p>
+<p>Memory limits:</p>
+<ul>
+<li>Total queue memory is capped at 128 MB (the oldest screenshots are dropped if
+this budget is exceeded). Individual image payloads above 32 MB are skipped.</li>
+</ul>
+<p>Note: When pasting, the physical 'V' keystroke is swallowed while the image is
+restored to the clipboard, then re-injected. Very fast typing immediately after
+Ctrl+V may occasionally land before the pasted image.</p>]]></content>
+        <author>
+            <name>@sharexza</name>
+            <uri>https://github.com/raviadityasetiawan-oss</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 11 2.0.15]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#d66466c25b0eeda4428a0294b2726ec94b9c4276</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-10-21T10:04:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="modernrundialoguiforwindows11">Modern Run Dialog UI For Windows 11</h1>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/screenshot1.png" alt="Modern Run Dialog UI Preview" /></p>
+<p>Modern Run Dialog UI Preview</p>
+<hr />
+<h2 id="english">🌐 English</h2>
+<p><strong>Modern Run Dialog UI For Windows 11</strong> replaces the classic Win32 <strong>Run (<code>Win + R</code>)</strong> dialog with a sleek, borderless <strong>Fluent Design / Command Palette</strong> interface tailored for Windows 11.</p>
+<h3 id="keyfeatures">✨ Key Features</h3>
+<ul>
+<li><p><strong>Fluent UI & Acrylic Blur:</strong></p></li>
+<li><p>Completely removes the classic title bar and legacy window frames while preserving native Windows 11 rounded corners.</p></li>
+<li><p>Full-window <strong>Acrylic Blur</strong> background with customizable opacity.</p></li>
+<li><p><strong>GDI+ 32-bit ARGB (Premultiplied Alpha)</strong> rendering engine with crisp system <strong>Segoe UI</strong> typography and full Per-Monitor DPI scaling.</p></li>
+<li><p><strong>Smart History List:</strong></p></li>
+<li><p>Displays up to <strong>5 recently executed commands</strong> right above the input bar.</p></li>
+<li><p>Automatically extracts <strong>native application icons</strong> and <strong>friendly application names</strong> in the <code>command - App Name</code> format.</p></li>
+<li><p>Shows the <strong>last executed timestamp</strong> next to the history clock icon on each row (stored cleanly in Windhawk mod storage).</p></li>
+<li><p>Supports single-click to fill the input box, double-click to execute immediately, or <strong>Up / Down (<code>↑</code> / <code>↓</code>)</strong> arrow keys to cycle through history.</p></li>
+<li><p><strong>Modern Input Bar & Action Buttons:</strong></p></li>
+<li><p>Borderless single-line input box with automatic horizontal scrolling for long file paths.</p></li>
+<li><p><strong>Browse Button (<code>Browse 📁</code>):</strong> Opens the native Windows file picker (<code>*.exe</code>, <code>*.bat</code>, <code>*.cmd</code>, <code>*.msc</code>, <code>*.cpl</code>) and inserts the full path into the input bar.</p></li>
+<li><p><strong>Run (<code>Run ↵</code>) & Exit (<code>Exit ✕</code>) Buttons:</strong> High-contrast Fluent accent buttons with smooth hover and press states.</p></li>
+<li><p><strong>Quality-of-Life Fixes:</strong></p></li>
+<li><p><strong>Taskbar Icon Click to Minimize / Restore:</strong> Click the Run icon on the Taskbar to minimize (hide) or restore the Run window like a normal app.</p></li>
+<li><p><strong><code>Win + R</code> Toggle:</strong> Pressing <code>Win + R</code> while the Run dialog is open will immediately close it (or restore it if minimized).</p></li>
+<li><p><strong>Flawless IME Input:</strong> Works seamlessly with Windows IME (Vietnamese Telex/VNI, CJK) and Unikey without composition glitches.</p></li>
+<li><p><strong>Multilingual Interface:</strong></p></li>
+<li><p>Automatically detects the Windows UI language or lets you manually choose from 10 languages.</p></li>
+</ul>
+<hr />
+<h2 id="tingvit">🇻🇳 Tiếng Việt</h2>
+<p><strong>Modern Run Dialog UI For Windows 11</strong> thay thế hộp thoại <strong>Run (<code>Win + R</code>)</strong> cổ điển bằng giao diện <strong>Fluent Design / Command Palette</strong> hiện đại, không viền và trong suốt chuẩn Windows 11.</p>
+<h3 id="tnhnngnibt">✨ Tính năng nổi bật</h3>
+<ul>
+<li><p><strong>Giao diện Fluent & Kính mờ (Acrylic Blur):</strong></p></li>
+<li><p>Loại bỏ thanh tiêu đề và khung viền cổ điển, giữ góc bo tròn tự nhiên của Windows 11.</p></li>
+<li><p>Làm mờ nền trong suốt (<strong>Acrylic Blur</strong>) toàn cửa sổ, tùy chỉnh độ trong suốt linh hoạt.</p></li>
+<li><p>Kết xuất đồ họa bằng <strong>GDI+ 32-bit ARGB</strong> với phông chữ hệ thống <strong>Segoe UI</strong> sắc nét, hỗ trợ tự động co giãn theo DPI trên từng màn hình.</p></li>
+<li><p><strong>Lịch sử thông minh:</strong></p></li>
+<li><p>Hiển thị tối đa <strong>5 lệnh chạy gần nhất</strong> kèm biểu tượng gốc và tên ứng dụng (<code>lệnh - Tên ứng dụng</code>).</p></li>
+<li><p>Hiển thị <strong>thời gian chạy lệnh gần nhất</strong> ngay bên cạnh biểu tượng đồng hồ ở mỗi dòng.</p></li>
+<li><p>Hỗ trợ bấm chọn nhanh, nhấp đúp để chạy ngay, hoặc dùng phím <strong>Lên / Xuống (<code>↑</code> / <code>↓</code>)</strong>.</p></li>
+<li><p><strong>Thanh nhập liệu & Nút chức năng:</strong></p></li>
+<li><p>Ô nhập lệnh không viền, tự cuộn ngang khi đường dẫn dài.</p></li>
+<li><p><strong>Nút Duyệt (<code>Duyệt 📁</code>):</strong> Mở hộp thoại chọn tệp hệ thống (<code>*.exe</code>, <code>*.bat</code>, <code>*.cmd</code>, <code>*.msc</code>, <code>*.cpl</code>) và đưa đường dẫn lên thanh nhập.</p></li>
+<li><p><strong>Nút Chạy (<code>Chạy ↵</code>) & Thoát (<code>Thoát ✕</code>):</strong> Nổi bật, trực quan với hiệu ứng chuyển màu khi rê chuột.</p></li>
+<li><p><strong>Cải tiến trải nghiệm (Quality-of-Life):</strong></p></li>
+<li><p><strong>Bấm icon Taskbar để Ẩn / Mở cửa sổ:</strong> Cho phép click vào icon Run dưới thanh Taskbar để thu nhỏ hoặc khôi phục cửa sổ.</p></li>
+<li><p><strong>Nhấn <code>Win + R</code> để đóng nhanh:</strong> Nhấn lại <code>Win + R</code> khi hộp thoại đang mở sẽ lập tức đóng hoặc khôi phục cửa sổ.</p></li>
+<li><p><strong>Tương thích hoàn hảo bộ gõ Tiếng Việt (IME):</strong> Hoạt động mượt mà với Unikey, EVKey và bộ gõ Windows, không bị lỗi khung trắng đè chữ.</p></li>
+<li><p><strong>Hỗ trợ Đa ngôn ngữ:</strong></p></li>
+<li><p>Tự động nhận diện ngôn ngữ Windows hoặc tùy chọn cố định 10 ngôn ngữ.</p></li>
+</ul>]]></content>
+        <author>
+            <name>caotu2k5</name>
+            <uri>https://github.com/caotu2k5</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Charms Bar Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-charms-bar-recreation#328bb6c97e345a873450e686596eae2c9dd4a6c6</id>
+        <link href="https://windhawk.net/mods/win8-charms-bar-recreation"/>
+        <updated>2026-10-21T10:04:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881charmsbarrecreation">Windows 8/8.1 Charms Bar Recreation</h1>
+<p>This mod recreates the classic Windows 8/8.1 Charms Bar on Windows 10 and 11.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="windows881styledcharmsbar">Windows 8/8.1-styled Charms Bar</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8charmsnormal.PNG" alt="win8charmsnormal" /></p>
+<h3 id="windows8betastyledcharmsbar">Windows 8 beta-styled Charms Bar</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betacharms.PNG" alt="win8betacharms" /></p>
+<h2 id="aboutthemod">About the mod</h2>
+<p>It recreates the five charms (Search, Share, Start, Devices, Settings) with Win+C and edge activation, keyboard and touch input, multi-monitor placement, and a clock/status flyout. Suggestions are welcome. Tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+Note: This is a best effort modification. Layout, colors, icons and animations are heavily inspired by Windows 8/8.1. Share, Devices and the Second screen panel are recreations on Windows 10/11, not the original code.</p>
+<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
+<p>| Shortcut | Action |
+| --- | --- |
+| Win+C | Opens the Charms Bar |
+| Right-edge mouse gesture | Opens the Charms Bar |
+| Esc | Closes the rail or an open pane |
+| Click outside | Closes the rail or an open pane |</p>
+<p>While a charm pane is open:</p>
+<p>| Shortcut | Action |
+| --- | --- |
+| Win+C | Closes the current pane first |
+| Esc | Closes the current pane |
+| Click outside | Closes the current pane |</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Charms Bar enabled</strong>: turns the Charms Bar on or off. Share is always included.</li>
+<li><strong>In-mod language</strong>: English, Italian, German, French, Spanish, Japanese, Portuguese, Russian, Chinese
+(Simplified) or Korean. The choice applies to the rail, the charm panes and the Project panel alike.</li>
+<li><strong>Activation mode</strong>: full right edge, top-right corner, Win+C, or combinations.</li>
+<li><strong>Hide after choosing a charm</strong>: closes the Charms Bar after a charm is activated. Turn off to leave it open.</li>
+<li><strong>Close on outside click or focus change</strong>: light-dismiss behavior.</li>
+<li><strong>Animate show and hide</strong>: enables pane motion. Windows' own <em>Settings > Accessibility > Visual effects >
+Animation effects</em> switch is always honoured: when it is off, the rail and the panes appear and disappear
+instantly even if this setting is on.</li>
+<li><strong>Start logo style</strong>: Windows 8/8.1 logo (system accent) or the Windows 8 Build 8102 beta logo.</li>
+<li><strong>Charms Bar icons</strong>: Windows 8/8.1 icons, or the Windows 8 Build 8102 beta set for Search, Share, Devices and Settings. The Start logo is set separately.</li>
+<li><strong>Enable rail transparency</strong>: optional subtle rail transparency.</li>
+<li><strong>Show clock and system status flyout</strong>: shows or hides the clock and status flyout.</li>
+<li><strong>Settings pane color</strong>: system accent or dark background for the Settings, Devices and Share panes.</li>
+<li><strong>Settings charm</strong>: recreated Windows 8-style pane or native Win+I.</li>
+<li><strong>Search charm target</strong>: automatic or Windows search. Automatic opens the companion
+<em>Windows 8/8.1 Search Charm Recreation</em> panel when that mod is installed, otherwise it sends the
+Windows shortcut.</li>
+<li><strong>Search hand-off shortcut</strong>: automatic, Win+S, or Win+Q. Used only when the target is Windows search.</li>
+<li><strong>Share fallback behavior</strong>: automatic, Windows Share UI, Win+H, or mail/clipboard.</li>
+<li><strong>Display Switch panel title, color and custom color</strong>: see the project flyout settings at the end of the settings page.</li>
+</ul>
+<h2 id="performance">Performance</h2>
+<p>Live system data (volume, brightness, network, battery) is read only while a pane or flyout is open. Rendering falls back to native GDI if GDI+ startup fails.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 version 1809 or later (64-bit), with DWM enabled (default on Windows)</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The Charms Bar appears on the main monitor, where all five charms are displayed.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Icepenguins101 - Technical Inspiration </li>
+<li>AdministratoX - Testing on Windows 11 25H2 and providing feedback</li>
+<li>Kiyaku - Providing feedback</li>
+<li>CharmsBarReloaded project - Wi-Fi PNGs and battery silhouettes (GPL-3.0, license-compatible)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.1]]></title>
         <id>https://windhawk.net/mods/winv-panel-tweaks#fa237ad2838057507501b6cb820b423eeda333ad</id>
@@ -687,141 +862,6 @@ https://winclassic.net/post/40623</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Snipper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-snipper#737ac0bd8a791ba491e35dadcda50eda00c1d3e2</id>
-        <link href="https://windhawk.net/mods/taskbar-snipper"/>
-        <updated>2026-10-20T05:02:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarsnipper">Taskbar Snipper</h1>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-snipper/screenshot.png" alt="The screenshot and record buttons on the taskbar" /></p>
-<p>Press <strong>Print Screen</strong>, or click the screenshot button on the taskbar, to select part of the
-screen. A toolbox opens right above the selection to mark it up with a pencil, lines, arrows, boxes
-and text, in any color and thickness. When you're done, click anywhere outside the selection (or
-press <strong>Enter</strong>), and the screenshot is copied to the clipboard, saved to a folder, or both, as you
-choose in the mod's settings.</p>
-<p>Press <strong>Win+Shift+R</strong>, or click the record button, to record part of the screen as a video. When
-you stop, trim its start and end, then copy or save it.</p>
-<h2 id="selecting">Selecting</h2>
-<ul>
-<li><strong>Drag</strong> to select an area. The screen stays as it was when you pressed Print Screen.</li>
-<li><strong>Click</strong> a window to select all of it, or the desktop to select the whole display.</li>
-<li><strong>Esc</strong> or <strong>right-click</strong> cancels.</li>
-</ul>
-<h2 id="thetoolbox">The toolbox</h2>
-<ul>
-<li><strong>Select</strong> (V), <strong>Pencil</strong> (P), <strong>Line</strong> (L), <strong>Arrow</strong> (A), <strong>Box</strong> (B) and <strong>Text</strong> (T). Drag
-inside the selection to draw; hold <strong>Shift</strong> to keep a line or arrow to 45° steps, or a box
-square. A click with the pencil makes a dot. With Text, click where the text goes and type;
-<strong>Enter</strong> starts a new line, and <strong>Esc</strong> or a click elsewhere finishes it.</li>
-<li><strong>Colors</strong>: eight at hand, and the last swatch picks any color.</li>
-<li><strong>Thickness</strong>: <strong>−</strong> and <strong>+</strong>, or the mouse wheel. Text gets bigger with it too.</li>
-<li><strong>Undo</strong> (Ctrl+Z), <strong>Copy</strong> (Ctrl+C), <strong>Save</strong> (Ctrl+S) and <strong>Close</strong> (Esc).</li>
-</ul>
-<p><strong>Copy</strong> and <strong>Save</strong> do just that. Clicking outside the selection or pressing Enter does what the
-<strong>When you're done</strong> setting says: copy, save, or both. Screenshots are saved as PNG files named by
-the date and time, in Windows' Screenshots folder (in Pictures) unless you choose another. A note
-in the corner of the screen says what happened; click it to show a saved screenshot in File
-Explorer.</p>
-<h2 id="movingandchangingmarks">Moving and changing marks</h2>
-<ul>
-<li>Whatever tool is in hand, <strong>drag</strong> anything already drawn to move it; the pointer turns into a
-four-way arrow over it. The <strong>Select</strong> tool only selects and moves, for when you'd rather not
-draw by accident.</li>
-<li><strong>Click</strong> a mark to select it. Its color and thickness show in the toolbox, and changing them
-changes the mark. The <strong>arrow keys</strong> nudge it (with <strong>Shift</strong>, 10 pixels at a time), <strong>Delete</strong>
-removes it, and <strong>Esc</strong> lets go of it.</li>
-<li>To change text, click it with the Text tool, or click it again once it's selected.</li>
-<li>Undo takes back moves and changes too.</li>
-</ul>
-<h2 id="recordingthescreen">Recording the screen</h2>
-<ul>
-<li>Press <strong>Win+Shift+R</strong>, click the record button, or choose <strong>Record the screen</strong> from the buttons'
-menu. Select an area as for a screenshot, then click <strong>Start recording</strong> (or press <strong>Enter</strong>).
-Recording starts after a 3-second countdown.</li>
-<li>While recording, a red line marks the area and a bar beside it shows the time; neither is in the
-video. To stop, click the <strong>stop</strong> square on the bar or the record button, or press
-<strong>Win+Shift+R</strong> again. The bar's <strong>X</strong> throws the recording away.</li>
-<li>The recording then opens to trim it. Drag the handles at either end of the strip of frames to cut
-off its start and end, and click the strip to see any moment. <strong>Space</strong> plays the part kept, the
-<strong>arrow keys</strong> step a frame at a time (a second with <strong>Shift</strong>), and <strong>I</strong> and <strong>O</strong> set the start
-and end at the frame shown.</li>
-<li><strong>Copy</strong> (Ctrl+C) puts the video on the clipboard, to paste into a chat, an email or a folder.
-<strong>Save</strong> (Ctrl+S) saves it in Windows' Screen Recordings folder (in Videos) unless you choose
-another.</li>
-<li>Recordings are MP4 videos (H.264, without sound) of up to 30 frames a second, with the mouse
-pointer.</li>
-</ul>
-<h2 id="thebuttons">The buttons</h2>
-<p>The screenshot and record buttons sit on the taskbar like the Windows weather widget: click one to
-take a screenshot or record, right-click them for their menu, and drag them to move them along the
-taskbar. <strong>Which buttons</strong> in the mod's settings shows both, or just one of them, and <strong>Buttons on
-the taskbar</strong> turns them off; the shortcuts work either way.</p>
-<p>The menu opens the screenshots and recordings folders, and <strong>Choose the screenshots folder…</strong> and
-<strong>Choose the recordings folder…</strong> pick others. The folders can be set in the mod's settings too;
-whichever you changed last is used.</p>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png" alt="Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar" /></p>
-<p>From the left: <a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a>,
-<a href="https://windhawk.net/mods/taskbar-audio-flipper">Taskbar Audio Flipper</a> and
-<a href="https://windhawk.net/mods/taskbar-rdp-launcher">Taskbar RDP Launcher</a>.</p>
-<p>With the Taskbar Audio Flipper or Taskbar RDP Launcher mod running too, their widgets can be joined
-with the buttons into one: right-click any of them, open <strong>Link widgets</strong>, and choose <strong>Link with</strong>
-the other. Linked, they sit side by side with a divider between them, and dragging any of them
-moves them all; <strong>Move this widget left</strong> and <strong>right</strong> change their order.</p>
-<p>Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
-later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
-unlinked.</p>
-<h2 id="goodtoknow">Good to know</h2>
-<ul>
-<li>Only Print Screen on its own is taken over. Alt+Print Screen, Win+Print Screen and Win+Shift+S
-work as usual, and turning the mod off gives Print Screen back to Windows. Win+Shift+R is taken
-over while <strong>Win+Shift+R records the screen</strong> is on in the settings.</li>
-<li>While a program running as administrator is in front, Windows doesn't let the mod see Print
-Screen or Win+Shift+R, so Windows handles them as usual.</li>
-<li>The tool, color and thickness you used last are remembered.</li>
-<li>A recording closed without copying or saving it is deleted; the window asks first. If the mod
-turns off (or Windows signs out) while recording, or with a recording still open, the recording
-goes to the recordings folder: right away when that's on the same drive as Windhawk's mod storage,
-otherwise the next time the mod starts.</li>
-<li>Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
-mod's storage (in a folder only you can open), and go with the mod.</li>
-<li>Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
-than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 records up to 4K.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Audio Flipper 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-flipper#0559a0e550149979f1896abf7be76c006b5594b7</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
-        <updated>2026-10-20T05:02:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Devices are shown with a Fluent icon for their kind (speakers, headphones, headset, monitor or microphone) in the taskbar's color, like the rest of Windows 11, struck through while muted. The webcam's icon is a Fluent glyph too. The icons chosen in the Sound control panel are no longer shown, and <strong>Rename or change device icons…</strong> is now <strong>Rename devices…</strong>.</li>
-<li>The widget links with up to two others now: Taskbar RDP Launcher and the new Taskbar Snipper. <strong>Link widgets</strong> in the right-click menu has <strong>Link with</strong> for each of them, and <strong>Move this widget left</strong> and <strong>right</strong> to put them in order. A link made with Taskbar RDP Launcher in 1.0 carries over.</li>
-<li>The readme shows the three widgets linked, with links to each mod.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar RDP Launcher 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-rdp-launcher#f6432c021584bf08d3ee6629ab47de33ecd7452a</id>
-        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
-        <updated>2026-10-20T04:01:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The widget links with up to two others now: Taskbar Audio Flipper and the new Taskbar Snipper. <strong>Link widgets</strong> in the right-click menu has <strong>Link with</strong> for each of them, and <strong>Move this widget left</strong> and <strong>right</strong> to put them in order. A link made with Taskbar Audio Flipper in 1.0 carries over.</li>
-<li>Fluent icons from the Windows icon font (Segoe Fluent Icons, or Segoe MDL2 Assets on Windows 10), like the taskbar's own: This PC for the computer, a monitor with the number on its screen for each display button, and a check mark in the display picker.</li>
-<li>The readme shows the three widgets linked, with links to each mod.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>
