@@ -1485,7 +1485,8 @@ DWORD GetIntegrityLevel(HANDLE process) {
         return 0;
     }
     DWORD level = 0;
-    DWORD buffer[32];
+    alignas(TOKEN_MANDATORY_LABEL) BYTE
+        buffer[sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE];
     DWORD size = 0;
     if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
                             &size)) {
