@@ -154,11 +154,18 @@ a title match with `^` or `$`.
 
 ## Diagnostics
 
-**Write a diagnostics journal** appends to `window-rules-journal.txt` in this
-mod's storage folder, and is capped at 1 MB (past that it starts again from
-empty, with a line saying so). It is **off by default**; turn it on when a rule
-does something you did not expect, or when reporting a bug, and the file will say
-what the mod decided and why. Every line is prefixed with what it is doing:
+**Write a diagnostics journal** appends to `window-rules-journal.txt` in a folder
+of your own: `<Windhawk mod storage>\<your SID>`, created with an access control
+list that gives full access to you, to SYSTEM and to administrators, and to nobody
+else. Journal lines carry executable names and window titles, and the shared mod
+storage folder is readable by every account on the machine, so the file is kept
+where only you can read it. If that folder cannot be created the journal is simply
+not written; the mod itself is unaffected.
+
+The journal is capped at 1 MB (past that it starts again from empty, with a line
+saying so). It is **off by default**; turn it on when a rule does something you
+did not expect, or when reporting a bug, and the file will say what the mod decided
+and why. Every line is prefixed with what it is doing:
 
 * `RULES-LOADED` and `RULE-LOADED` -- the rules as the mod understood them, with
   any problem it found in a rule, so a typo is visible instead of silent.
@@ -199,11 +206,12 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
 - diagnosticsLog: false
   $name: Write a diagnostics journal
   $description: >-
-    Appends a line to window-rules-journal.txt in this mod's storage folder for
-    every decision: which rule matched which window, which field decided it,
-    which windows were rejected before matching, and what happened to the
-    z-order. Off by default; turn it on when a rule does something you did not
-    expect, or when reporting a bug. The file is capped at 1 MB.
+    Appends a line to window-rules-journal.txt for every decision: which rule
+    matched which window, which field decided it, which windows were rejected
+    before matching, and what happened to the z-order. The file lives in a folder
+    only your Windows account can read, because its lines contain window titles.
+    Off by default; turn it on when a rule does something you did not expect, or
+    when reporting a bug. The file is capped at 1 MB.
 - rules:
   - - name: ""
       $name: Rule name
@@ -349,10 +357,8 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
 
 static constexpr PCWSTR kJournalFileName = L"window-rules-journal.txt";
 
-// A top-level window, not message-only: this one only has to receive posted
-// messages today, but WM_DISPLAYCHANGE is a broadcast and message-only windows
-// do not receive broadcasts, so the choice is made now rather than after a
-// milestone discovers it.
+// A top-level window, not message-only, because WM_DISPLAYCHANGE is a broadcast
+// and message-only windows do not receive broadcasts.
 static constexpr PCWSTR kMessageWindowClassName =
     L"WindhawkWindowRulesMessageWnd";
 
@@ -363,8 +369,8 @@ static constexpr UINT kMsgShutdown = WM_APP + 2;
 
 // Processes whose windows are never matched, checked before anything else.
 //
-// Same list as an app-rules mod needs, for the same reason: the shell and the DWM own their own
-// windows, and placing or styling them fights the shell's own layout decisions.
+// The shell and the DWM own their own windows, and placing or styling one fights
+// the shell's own layout decisions.
 // windhawk.exe is excluded so the mod never matches Windhawk's own windows.
 static constexpr PCWSTR kExcludedProcesses[] = {
     L"windhawk.exe",
@@ -1010,10 +1016,9 @@ static long AbsLong(long value) {
     return value < 0 ? -value : value;
 }
 
-// Mod 1's tolerance, same value and same reason: two pixels is "where it already
-// is", so the mod does not issue a move that would only flicker and restart an
-// animation. Without this, re-applying on a settings save would nudge every
-// matched window on every save.
+// Two pixels is "where it already is", so the mod does not issue a move that
+// would only flicker and restart an animation. Without this, re-applying on a
+// settings save would nudge every matched window on every save.
 static constexpr long kApplyTolerancePixels = 2;
 
 static bool RectsWithinTolerance(const RuleRect& a, const RuleRect& b,
@@ -1035,12 +1040,11 @@ struct TargetPlan {
 
 // The position is relative to the top-left of the target monitor, not to the
 // desktop. Absolute coordinates would break the moment the user docks, undocks,
-// or adds a monitor above the primary -- the hard case this mod's
-// users to think in monitor-relative terms, so the sibling mod agreeing with it
-// matters more than being literally what the mouse is at.
+// or adds a monitor above the primary, because the same numbers would then point
+// somewhere else on the desk.
 //
-// A negative value is allowed: the user may ask for a window to hang off the
-// edge: a window the user placed off an edge is allowed to stay there.
+// A negative value is allowed: a window the user placed off an edge is allowed to
+// stay there.
 static TargetPlan ComputeTargetPlan(const RuleRect& current,
                                     const RuleRect& monitor,
                                     const std::wstring& position,
@@ -1236,15 +1240,16 @@ enum class ApplyDecision {
     Proceed,
     AlreadyThere,
     Overridden,   // the user moved it; their intent outranks the rule
-    Minimized,    // not this milestone's business to restore what the user minimized
+    Minimized,    // a minimized window has no rectangle worth applying to
     Refused,      // a previous move was refused (elevated window); do not retry
 };
 
 // Order matters and is deliberate. A refusal is permanent for the session, so it
-// is checked first: retrying a refused window on every event is the behaviour mod
-// 1 removed. Then the user's override, then the minimization, then "already
-// there" -- which is checked last so that a window that is both already there and
-// overridden is reported as overridden, which is the more useful fact.
+// is checked first: retrying a refused window on every event would be a journal
+// full of identical failures. Then the user's override, then the minimization,
+// then "already there" -- which is checked last so that a window that is both
+// already there and overridden is reported as overridden, which is the more
+// useful fact.
 static ApplyDecision DecideApply(bool overridden, bool refused, bool minimized,
                                  bool alreadyThere) {
     if (refused) {
@@ -1266,7 +1271,7 @@ static ApplyDecision DecideApply(bool overridden, bool refused, bool minimized,
 //
 // The topmost bit is sticky: once set, activating an ordinary window does not
 // take it away. What it does answer to is another topmost window (the taskbar,
-// another pinned app) and the application itself. That is why this milestone
+// another pinned app) and the application itself. That is why this mod
 // re-asserts nothing on a foreground change and re-pins nothing an app cleared:
 // the only thing it does with the foreground is step aside for a fullscreen app
 // on the same monitor, and step back when that app is gone.
@@ -1387,7 +1392,7 @@ enum class YieldDecision {
 // The order matters here for the same reason it does in DecideApply: a window
 // this mod demoted must never be demoted again, and a window whose bit the app
 // cleared must never be re-pinned on the next activation -- that would be the
-// fight the whole milestone exists to avoid.
+// fight this mod exists to avoid.
 static YieldDecision DecideYield(bool claimed, bool yielded, bool topmostBitSet,
                                  bool overridden, int windowMonitor,
                                  int coveredMonitor) {
@@ -1423,9 +1428,9 @@ enum class SettleDecision {
     GiveUp  // out of time; leave it alone
 };
 
-// One retry, then stop: the same "never fight the user or the app" rule that
-// settled on, and the reason an application that repositions itself on every show
-// is left alone rather than fought forever.
+// One retry, then stop: the same "never fight the user or the app" rule the
+// rest of the mod follows, and the reason an application that repositions itself
+// on every show is left alone rather than fought forever.
 static constexpr int kRetriesPerApply = 1;
 static constexpr unsigned long long kSettleWindowMs = 800;
 
@@ -1453,6 +1458,27 @@ static SettleDecision DecideSettle(bool atTarget, int retriesLeft,
     return SettleDecision::Wait;
 }
 
+// The SID text the per-user folder is named after.
+//
+// Plain arithmetic over values the caller has already read, so the half that can
+// be wrong is a pure function with unit tests over it. ConvertSidToStringW would
+// do the same job and allocates a string the caller then has to free; this way the
+// rendering is checked by the unit tests rather than trusted.
+//
+// An identifier authority larger than 32 bits is rendered in hexadecimal by the
+// SID documentation. A process token's authority is 5 on every installation this
+// mod runs on, so that rendering is unreachable here and this keeps one decimal
+// path.
+static std::wstring FormatSidString(unsigned revision, unsigned long long authority,
+                                    const std::vector<unsigned long>& subAuthorities) {
+    std::wstring text = L"S-" + std::to_wstring(revision) + L"-" +
+                        std::to_wstring(authority);
+    for (unsigned long sub : subAuthorities) {
+        text += L"-" + std::to_wstring(sub);
+    }
+    return text;
+}
+
 // <<< RULES_CORE <<<
 
 // Outside the pure-core region above: nothing in the matching layer calls it, and
@@ -1475,12 +1501,16 @@ static std::vector<RuleActions> g_ruleActions;
 static bool ReadStringSetting(PCWSTR key, std::wstring& out) {
     PCWSTR value = Wh_GetStringSetting(key);
     // Windhawk hands back an EMPTY STRING for a settings key that is not there,
-    // not a null pointer. Treating "empty" as "present" made the loop below run
-    // forever when it was first run on a real desktop: the thread spun inside LoadRules and
-    // never reached the code that installs the hook, so the mod started, wrote
-    // its build line and then did nothing at all. Emptiness is the only signal
-    // there is, and it is also what a blank field means, so the two agree.
-    if (!*value) {
+    // and treating "empty" as "present" once made the loop below run forever on
+    // the mod's own event thread: it spun inside LoadRules and never reached the
+    // code that installs the hook, so the mod started, wrote its build line and
+    // then did nothing at all. Emptiness is the only signal there is, and it is
+    // also what a blank field means, so the two agree.
+    //
+    // The null test stays. It costs nothing, and this is the one reader where
+    // getting the contract wrong has already cost a debugging session; the
+    // geometry-memory mod guards here the same way.
+    if (!value || !*value) {
         Wh_FreeStringSetting(value);
         return false;
     }
@@ -1559,7 +1589,7 @@ static bool g_diagnosticsLog = false;
 // Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
 // numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
 // of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r6-2026-10-21";
+static constexpr PCWSTR kJournalBuild = L"r9-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -1580,16 +1610,278 @@ static std::string WideToUtf8(const std::wstring& text) {
     return out;
 }
 
-static bool BuildJournalPath(PWSTR buffer, size_t bufferSize) {
-    size_t len = Wh_GetModStoragePath(buffer, bufferSize);
-    if (len == 0 || len + 1 >= bufferSize) {
+// --- Per-user storage -------------------------------------------------------
+//
+// Wh_GetModStoragePath is one folder for the whole machine, and the journal holds
+// executable names and window titles: "RULE-NONE exe=... title=\"<a document name>\"".
+// A file is readable by whoever can open the folder it is in, and the shared
+// storage folder is writable and readable by every account on the machine. A SID
+// in a file name would not change that; it would only name the file after its
+// reader.
+//
+// So the journal lives in <storage>\<SID>, created with a protected access control
+// list that gives full access to this user, to SYSTEM and to administrators, and
+// that inherits nothing from the folder it sits in. What is inside is private by
+// construction, whatever the files are called.
+//
+// The list is built from access-control entries rather than parsed from an SDDL
+// string: same three entries as the SDDL form, without a string-to-descriptor
+// conversion on a path that runs at startup.
+
+struct UserTokenSid {
+    std::vector<BYTE> bytes;
+    std::wstring text;
+};
+
+static std::wstring SidToString(PSID sid) {
+    if (!sid) {
+        return std::wstring();
+    }
+    const SID* parsed = reinterpret_cast<const SID*>(sid);
+    // A pointer into a token buffer: a count this large can only mean the buffer
+    // is not what it claims to be.
+    if (parsed->SubAuthorityCount > 15) {
+        return std::wstring();
+    }
+
+    unsigned long long authority = 0;
+    for (int i = 0; i < 6; i++) {
+        authority = (authority << 8) | parsed->IdentifierAuthority.Value[i];
+    }
+
+    std::vector<unsigned long> subAuthorities;
+    subAuthorities.reserve(parsed->SubAuthorityCount);
+    for (unsigned i = 0; i < parsed->SubAuthorityCount; i++) {
+        subAuthorities.push_back(parsed->SubAuthority[i]);
+    }
+
+    return FormatSidString(parsed->Revision, authority, subAuthorities);
+}
+
+// This user's SID in both forms the mod needs: the bytes, for the folder's access
+// control list, and the text, for its name. Read once and cached.
+static const UserTokenSid& CurrentUserTokenSid() {
+    static bool attempted = false;
+    static UserTokenSid cached;
+
+    if (attempted) {
+        return cached;
+    }
+    attempted = true;
+
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"OpenProcessToken failed (error %lu)", GetLastError());
+        return cached;
+    }
+
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    if (size > 0) {
+        std::vector<BYTE> buffer(size);
+        if (GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+            auto* user = reinterpret_cast<TOKEN_USER*>(buffer.data());
+            if (user->User.Sid) {
+                const DWORD sidLength = GetLengthSid(user->User.Sid);
+                if (sidLength > 0 && sidLength <= size) {
+                    const BYTE* first =
+                        reinterpret_cast<const BYTE*>(user->User.Sid);
+                    cached.bytes.assign(first, first + sidLength);
+                    cached.text = SidToString(user->User.Sid);
+                }
+            }
+        }
+    }
+
+    CloseHandle(token);
+    return cached;
+}
+
+// Full access for this user, SYSTEM and administrators, and for nobody else. The
+// last two because Windhawk has to be able to remove the folder along with the
+// mod.
+static bool BuildPrivateAcl(const std::vector<BYTE>& userSid,
+                            bool inheritToChildren,
+                            std::vector<BYTE>& aclBuffer) {
+    if (userSid.empty()) {
         return false;
     }
-    if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                   kJournalFileName) < 0) {
+
+    const DWORD allowEntrySize =
+        sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + SECURITY_MAX_SID_SIZE;
+    aclBuffer.assign(sizeof(ACL) + 3 * allowEntrySize + 32, 0);
+
+    PACL acl = reinterpret_cast<PACL>(aclBuffer.data());
+    if (!InitializeAcl(acl, (DWORD)aclBuffer.size(), ACL_REVISION)) {
         return false;
     }
+
+    const DWORD aceFlags = inheritToChildren
+                               ? (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)
+                               : 0;
+
+    if (!AddAccessAllowedAceEx(acl, ACL_REVISION, aceFlags, FILE_ALL_ACCESS,
+                               reinterpret_cast<PSID>(
+                                   const_cast<BYTE*>(userSid.data())))) {
+        return false;
+    }
+
+    const WELL_KNOWN_SID_TYPE wellKnownSids[] = {WinLocalSystemSid,
+                                                 WinBuiltinAdministratorsSid};
+    for (WELL_KNOWN_SID_TYPE type : wellKnownSids) {
+        BYTE sidBuffer[SECURITY_MAX_SID_SIZE];
+        DWORD sidSize = sizeof(sidBuffer);
+        if (!CreateWellKnownSid(type, nullptr, sidBuffer, &sidSize)) {
+            return false;
+        }
+        if (!AddAccessAllowedAceEx(acl, ACL_REVISION, aceFlags, FILE_ALL_ACCESS,
+                                   reinterpret_cast<PSID>(sidBuffer))) {
+            return false;
+        }
+    }
+
     return true;
+}
+
+// Whether an existing folder is safe to write into.
+//
+// This user owning it is the case to establish: the storage folder it lives in is
+// writable by every account, so another user could create this folder first with
+// a list of their own, and everything written inside would inherit it. SYSTEM and
+// administrators are accepted too, because an elevated tool process creates
+// objects owned by the Administrators group rather than by the account.
+static bool FolderIsSafe(const std::wstring& path,
+                         const std::vector<BYTE>& userSid) {
+    DWORD needed = 0;
+    GetFileSecurityW(path.c_str(), OWNER_SECURITY_INFORMATION, nullptr, 0,
+                     &needed);
+    if (needed == 0) {
+        return false;
+    }
+
+    std::vector<BYTE> descriptor(needed);
+    if (!GetFileSecurityW(path.c_str(), OWNER_SECURITY_INFORMATION,
+                          reinterpret_cast<PSECURITY_DESCRIPTOR>(
+                              descriptor.data()),
+                          needed, &needed)) {
+        return false;
+    }
+
+    PSID owner = nullptr;
+    BOOL defaulted = FALSE;
+    if (!GetSecurityDescriptorOwner(
+            reinterpret_cast<PSECURITY_DESCRIPTOR>(descriptor.data()), &owner,
+            &defaulted) ||
+        !owner) {
+        return false;
+    }
+
+    PSID user = reinterpret_cast<PSID>(const_cast<BYTE*>(userSid.data()));
+    return EqualSid(owner, user) != FALSE ||
+           IsWellKnownSid(owner, WinBuiltinAdministratorsSid) != FALSE ||
+           IsWellKnownSid(owner, WinLocalSystemSid) != FALSE;
+}
+
+static bool EnsurePrivateFolder(const std::wstring& path,
+                                const std::vector<BYTE>& userSid) {
+    std::vector<BYTE> aclBuffer;
+    if (!BuildPrivateAcl(userSid, /*inheritToChildren=*/true, aclBuffer)) {
+        Wh_Log(L"could not build the private folder's access control list");
+        return false;
+    }
+
+    SECURITY_DESCRIPTOR descriptor{};
+    if (!InitializeSecurityDescriptor(&descriptor,
+                                      SECURITY_DESCRIPTOR_REVISION) ||
+        !SetSecurityDescriptorDacl(&descriptor, TRUE,
+                                   reinterpret_cast<PACL>(aclBuffer.data()),
+                                   FALSE) ||
+        // The list above and nothing else: without the protected bit the entries
+        // inherited from the shared storage folder would be merged into it, and
+        // every user on the machine would be back in.
+        !SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED,
+                                      SE_DACL_PROTECTED) ||
+        // Named explicitly rather than left to the token's default owner, which
+        // is the Administrators group whenever the tool process runs elevated.
+        !SetSecurityDescriptorOwner(
+            &descriptor,
+            reinterpret_cast<PSID>(const_cast<BYTE*>(userSid.data())),
+            FALSE)) {
+        Wh_Log(L"could not build the private folder's security descriptor");
+        return false;
+    }
+
+    SECURITY_ATTRIBUTES attributes{sizeof(attributes), &descriptor, FALSE};
+    if (CreateDirectoryW(path.c_str(), &attributes)) {
+        return true;
+    }
+
+    const DWORD error = GetLastError();
+    if (error == ERROR_ALREADY_EXISTS) {
+        // Not an error in itself: the folder may be this user's from an earlier
+        // start. It is an error if somebody else got there first.
+        if (FolderIsSafe(path, userSid)) {
+            return true;
+        }
+        Wh_Log(L"%s already exists and is not this user's; the journal will not "
+               L"be written", path.c_str());
+        return false;
+    }
+
+    Wh_Log(L"could not create %s (error %lu); the journal will not be written",
+           path.c_str(), error);
+    return false;
+}
+
+// This user's folder, created on first use. Empty means "not available", and the
+// journal is then simply not written.
+//
+// Resolved from WhTool_ModInit before the event thread exists, so the folder and
+// the SID behind it are set up by one thread; everything else only reads the
+// result.
+static const std::wstring& UserDataFolder() {
+    static bool attempted = false;
+    static std::wstring cached;
+
+    if (attempted) {
+        return cached;
+    }
+    attempted = true;
+
+    const UserTokenSid& sid = CurrentUserTokenSid();
+    if (sid.text.empty()) {
+        // Without a SID there is no folder that can be made private. The mod
+        // still works; it just has no journal, rather than putting window titles
+        // somewhere every account on the machine can read.
+        Wh_Log(L"the user SID could not be read; there will be no diagnostics "
+               L"journal");
+        return cached;
+    }
+
+    WCHAR storage[MAX_PATH];
+    const size_t len = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+    if (len == 0 || len + 1 >= ARRAYSIZE(storage)) {
+        Wh_Log(L"failed to get the mod storage path");
+        return cached;
+    }
+
+    std::wstring folder = storage;
+    folder += L"\\";
+    folder += sid.text;
+
+    if (EnsurePrivateFolder(folder, sid.bytes)) {
+        cached = std::move(folder);
+    }
+    return cached;
+}
+
+static bool BuildJournalPath(PWSTR buffer, size_t bufferSize) {
+    const std::wstring& folder = UserDataFolder();
+    if (folder.empty()) {
+        return false;
+    }
+    return swprintf_s(buffer, bufferSize, L"%s\\%s", folder.c_str(),
+                      kJournalFileName) >= 0;
 }
 
 // Never fails loudly: a diagnostics write that cannot happen must not affect
@@ -2023,10 +2315,10 @@ static constexpr UINT_PTR kSettleTimerId = 1;
 static std::unordered_map<HWND, PendingApply> g_pendingApplies;
 
 // The user moved a window: their intent outranks the rule for the rest of the
-// session. Nothing re-applies to a window in this set, and
-// no rule reasserts -- the whole project's first principle is that the computer
-// must not fight the person using it. A "always put it back" mode would be a
-// different feature and would need to be asked for explicitly.
+// session. Nothing re-applies to a window in this set and no rule reasserts --
+// the first principle is that the computer must not fight the person using it.
+// An "always put it back" mode would be a different feature and would have to be
+// asked for explicitly.
 static std::unordered_set<HWND> g_overriddenWindows;
 
 // A move that Windows refused: the window is elevated and this process may not
@@ -2078,7 +2370,7 @@ static void EnsureSettleTimer() {
     }
     // Armed on the mod's own message window: a timer armed on a window owned by
     // another process fails and returns 0, which would silently disable the
-    // settle poll. Same trap as in the settle state machine.
+    // settle poll for the rest of the session.
     g_settleTimer = SetTimer(target, kSettleTimerId, kSettleTickMs, nullptr);
 }
 
@@ -2706,11 +2998,10 @@ static void ProcessSettleTick() {
 
 // --- Re-applying after a settings change ------------------------------------
 
-// Mod 1's relayout iterates its known-window cache; this cannot. Mod 2 has no
-// allowlist, so "the windows the mod knows about" is not a set it maintains --
-// it evaluates whatever appears in front of it. A settings change therefore has
-// to sweep the desktop, or a rule edited while its app is already open would
-// appear to do nothing until the app was restarted.
+// This mod has no allowlist, so "the windows the mod knows about" is not a set
+// it maintains -- it evaluates whatever appears in front of it. A settings change
+// therefore has to sweep the desktop, or a rule edited while its app is already
+// open would appear to do nothing until the app was restarted.
 struct ReapplyStats {
     int considered = 0;
     int applied = 0;
@@ -2936,8 +3227,9 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
     if (event == EVENT_SYSTEM_MOVESIZEEND) {
         // The user has just placed this window by hand. Their intent outranks
         // the rule for the rest of the session -- the project's first principle,
-        // and the same override the geometry-memory mod applies. Only windows a rule governs are
-        // recorded, so dragging an unrelated window writes nothing.
+        // and the same override the geometry-memory mod applies. Only windows a
+        // rule governs are recorded, so dragging an unrelated window writes
+        // nothing.
         if (g_evaluatedWindows.count(hwnd) || g_pendingApplies.count(hwnd)) {
             g_pendingApplies.erase(hwnd);
             if (g_overriddenWindows.insert(hwnd).second) {
@@ -3061,7 +3353,8 @@ static void ApplySettingsOnEventThread(bool initial) {
     // watch it happen" is the expectation a rules engine sets, and requiring a
     // restart to see an edit would be a surprise. NOT at startup, though: turning
     // the mod on must not move windows the user did not ask about, which is the
-    // same call the geometry-memory mod makes when it is enabled with windows already open.
+    // same call the geometry-memory mod makes when it is enabled with windows
+    // already open.
     if (initial) {
         AppendDiagnosticsJournal(L"REAPPLY-PASS windows=0 applied=0 skipped=initial");
         return;
@@ -3088,8 +3381,8 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             // A rearrangement changes what "monitor 1" and "primary" mean, so the
             // cache is refreshed. Nothing is moved here: a display change is not a
             // reason to re-apply a rule to windows the user did not touch, and
-            // the geometry-memory mod already owns the "a monitor went away" behaviour for its own
-            // remembered geometry.
+            // the geometry-memory mod owns the "a monitor went away" behaviour for
+            // its own remembered geometry.
             RefreshMonitorViews();
             AppendDiagnosticsJournal(
                 L"DISPLAYCHANGE monitors=" + std::to_wstring(g_monitors.size()));
@@ -3177,6 +3470,12 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"init");
+
+    // Before the event thread exists, so this user's private folder and the SID
+    // behind it are set up by one thread and everything after only reads them.
+    // Nothing depends on it succeeding: no folder means no journal, and the mod
+    // itself works either way.
+    UserDataFolder();
 
     g_eventThread = CreateThread(nullptr, 0, EventThreadProc, nullptr, 0,
                                  nullptr);
