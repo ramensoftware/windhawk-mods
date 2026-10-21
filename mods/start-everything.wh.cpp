@@ -27,6 +27,8 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 
 ## Version 2.0 Changes
 
+- Adds 50 left-to-right interface languages, automatic Windows display-language detection, and a manual language override. Calculator and conversion input support language-independent symbols.
+- Preserves captured Start backgrounds across mod updates and off/on cycles, including while Start is hidden.
 - Discovers searchable Settings names and keywords from Windows' local database and navigation metadata, cached in memory. Keeps additional Windows tools and falls back to the built-in list if native data is unavailable.
 - Search runs in its own Windows 11 window, opened directly with Win+S, the taskbar search icon, an optional custom shortcut, or by typing in Start. Start itself still opens normally.
 - Copies Start's measured size, alignment, background, rounded corners, and supported Start Menu Styler appearance. Root context menus and submenus receive their copied style before appearing.
@@ -50,8 +52,8 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Custom Commands**: Add named commands to Apps, choose CMD, Windows PowerShell, PowerShell 7, or a custom shell, and optionally hide the terminal. Icons accept emoji, pasted Windows icon glyphs, Unicode codes, and local image, icon, or app paths. Commands also appear in empty-search suggestions.
 - **Optional Files Panel**: Hide the Files panel and pause Everything file queries. With automatic sizing, search becomes half as wide. Apps, settings, custom commands, and utilities remain available.
 - **Custom Menu Size**: Set your own menu width and height, or turn the toggle off to follow Start's size. Dimensions follow Windows display scaling and stay within the screen's available area.
-- **Inline Calculator**: Type a sum (e.g. `100 * 5`, `sqrt(144)`, `15% of 200`, `2^10`) and the result shows above the apps; large and small results show in scientific notation too (`= 99000`, `= 9.9e4`). Press Enter to copy it.
-- **Unit Converter**: Type `100 km` to see it in the usual units of its kind, all on one line first, or `100 km to mi` (also `in`, `->`, `=`) for just one; `255 hex` or `0xFF` for other bases. It knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with `.` or `,` as the decimal point, and each kind has its color. A number alone, or one in a name (`2024 report`, `3d`), is left to the search. Add units it does not know in the settings, and have them convert back too (Reciprocal).
+- **Inline Calculator**: Type a sum (e.g. `100 * 5`, `sqrt(144)`, `15% * 200`, `2^10`) and the result shows above the apps; large and small results show in scientific notation too (`= 99000`, `= 9.9e4`). Press Enter to copy it.
+- **Unit Converter**: Type `100 km` to see it in the usual units of its kind, all on one line first, or `100 km → mi` (also `in`, `->`, `=`) for just one; `255 hex` or `0xFF` for other bases. It knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with `.` or `,` as the decimal point, and each kind has its color. A number alone, or one in a name (`2024 report`, `3d`), is left to the search. Add units it does not know in the settings, and have them convert back too (Reciprocal).
 - **Network Interface Inspector**: Type `/ip` to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
 - **Full Right-Click Context Menu**: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy name (files/folders), Copy path, Open file location, or Uninstall (apps). Escape closes the menu; typing closes it and continues the query.
 - **Native Properties Dialogs**: Properties opens through `explorer.exe`, the same dialog as in File Explorer.
@@ -60,7 +62,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
-- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse a bounded cache. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
+- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse a bounded cache, and captured definitions survive mod updates and off/on cycles, including while Start is hidden. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
 - **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Focus uses standard foreground APIs without attaching thread input.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
@@ -70,12 +72,34 @@ The mod's Settings page groups related options together:
 
 | Section | Options |
 | :--- | :--- |
-| **Appearance** | Text size and color, keyboard shortcut hints, and custom menu dimensions |
+| **Appearance** | Display language, text size and color, keyboard shortcut hints, and custom menu dimensions |
 | **Apps & Search** | App result limit, favorite learning, search delay, and an optional keyboard shortcut |
 | **Files & Preview** | Files panel, file result limit, previews, animation, and excluded paths |
 | **Web Search** | Default search engine and keyword shortcuts |
 | **Custom Commands** | Named commands, icons, shells, and terminal visibility |
 | **Custom Unit Conversions** | Units, formulas, categories, and reciprocal conversion |
+
+## Interface Language
+
+Open **Settings → Appearance → Display Language** and choose **Auto** or one of the 50 included left-to-right language options. Auto follows the Windows display language; unsupported languages use English. The search bar, headings, hints, context menus, preview labels and utility messages are translated. The layout remains left-to-right.
+
+Languages: Afrikaans, Albanian, Armenian, Bengali, Bosnian, Bulgarian, Catalan, Chinese (Simplified and Traditional), Croatian, Czech, Danish, Dutch, English, Estonian, Filipino, Finnish, French, Georgian, German, Greek, Hindi, Hungarian, Icelandic, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Macedonian, Malay, Norwegian Bokmål, Polish, Portuguese (Brazil and Portugal), Romanian, Russian, Serbian (Latin), Slovak, Slovenian, Spanish, Swahili, Swedish, Tamil, Telugu, Thai, Turkish, Ukrainian and Vietnamese.
+
+Translations are bundled and work offline. Changing this option does not change the keyboard layout or Windows regional formats. Windows-provided application and Settings names retain their native Windows language. Windhawk settings descriptions and the documentation remain in English.
+
+Use symbols for calculations and conversions:
+
+| Input | Result |
+| :--- | :--- |
+| `10% * 7` or `10% × 7` | `0.7` |
+| `7 * 10%` | `0.7` |
+| `200 * (1 + 10%)` | `220` |
+| `8 ÷ 2`, `5 − 2`, `√(144)` | `4`, `3`, `12` |
+| `2 * π` | About `6.283185` |
+| `1,5 * 2` | `3` |
+| `100 km → mi` or `100 km = mi` | About `62.137119 mi` |
+
+A postfix `%` divides by 100. Binary remainder remains available as `10 % 3` (result `1`); use parentheses for a signed divisor, such as `10 % (-3)`. Existing English expressions such as `15% of 200`, function names such as `sqrt`, and `to` conversions still work. Both `.` and `,` mean a decimal point; thousands separators are not supported. Unit symbols and mathematical notation do not change with the interface language.
 
 ## Custom Commands
 
@@ -185,10 +209,10 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 
 | Command | Description | Example | Enter Action |
 | :--- | :--- | :--- | :--- |
-| `<sum>` | Calculation | `100 * 5`<br>`sqrt(144)`<br>`15% of 200` | Copies the result |
+| `<sum>` | Calculation | `100 * 5`<br>`√(144)`<br>`15% × 200` | Copies the result |
 | `<number> hex`, `0xFF`, `0b1010` | The number in other bases (digits grouped: `0b111 1111 1111`) | `2047 hex`<br>`0x7FF` | Copies the hex value |
 | `<number> <unit>` | The number in the usual units of its kind, all on one line first | `100 km`<br>`32 f`<br>`1,5 kg` | Copies the selected one |
-| `<number> <unit> to <unit>` | Just that conversion (also `in`, `->`, `=`) | `100 km to mi`<br>`100 mbps to MB/s` | Copies the result |
+| `<number> <unit> → <unit>` | Just that conversion (also `to`, `in`, `->`, `=`) | `100 km → mi`<br>`100 mbps → MB/s` | Copies the result |
 | `/ip` | Lists all active Wi-Fi, Ethernet, and VPN adapters with IP, subnet, gateway, and adapter name | `/ip` | Copies selected IP address to clipboard |
 | `?<query>` | Searches the web using the default search engine URL | `?weather today` | Opens search in default web browser |
 | `?<shortcut> <query>` | Searches specific service using configured shortcut keyword | `?yt lofi hip hop`<br>`?gh windhawk` | Opens query on target service |
@@ -198,20 +222,77 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - **Everything is reported as not running:** start the Everything application and leave it running in the tray. Its service alone does not provide the search IPC window. Everything 1.4 and 1.5 alpha/beta, including named instances, are supported.
 - **A preview shows only an icon:** enable File Preview. Common image formats have a built-in decoding fallback; specialist formats may require a thumbnail provider, and videos may require a compatible Windows codec. Unavailable or unreadable content falls back to its icon and available properties.
 - **Folder sizes are missing:** enable Everything's **Index folder size** option; see [Folder Sizes in Preview](#folder-sizes-in-preview). The mod does not recursively scan folders to calculate sizes.
-- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Supported static glass effects are captured when Start creates them. Live image/visual sources, animated custom effects, and unsupported effects use an approximation; their appearance may differ.
+- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Supported static glass effects are captured when Start creates them. If a custom style was already applied before the mod loaded, reapply the current Start Menu Styler theme once so its material can be captured. Captured definitions then survive mod updates and off/on cycles. Live image/visual sources, animated custom effects, and unsupported effects use an approximation; their appearance may differ.
 - **A custom command does not start:** choose the shell that understands the command. PowerShell 7 and custom shells must already be installed. Hide Terminal hides the shell console; it does not shorten the command's lifetime or hide windows opened by the command.
 
 Tested on **Windows 11 25H2 and 26H2, x86-64**. Other Windows versions and builds, including Insider builds, have not been verified. For a reproducible problem, include the full Windows build, mod version, Everything version and instance name, other Start/search mods, and steps to reproduce it.
+
 ## Upgrading from 1.x
 
 Version 2.0 organizes settings into collapsible sections. Windhawk does not transfer preferences from the old flat setting names to these sections automatically. Before upgrading from 1.x, save your settings or note your choices, then reapply them in the new sections after updating. This includes web search shortcuts and excluded path patterns. Custom commands and custom unit conversions keep their existing setting names.
-
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - appearance:
+  # ==DisplayLanguageOptions==
+  - language: auto
+    $name: Display Language
+    $description: Language of the search window, menus, previews and utility messages. Auto follows the Windows display language; unsupported languages use English. Only left-to-right languages are supported. Windows-provided app and Settings names keep their Windows language.
+    $options:
+    - auto: Auto (Windows display language)
+    - en: "English"
+    - af: "Afrikaans"
+    - bg: "Български"
+    - bn: "বাংলা"
+    - bs: "Bosanski"
+    - ca: "Català"
+    - cs: "Čeština"
+    - da: "Dansk"
+    - de: "Deutsch"
+    - el: "Ελληνικά"
+    - es: "Español"
+    - et: "Eesti"
+    - fi: "Suomi"
+    - fil: "Filipino"
+    - fr: "Français"
+    - hi: "हिन्दी"
+    - hr: "Hrvatski"
+    - hu: "Magyar"
+    - hy: "Հայերեն"
+    - id: "Bahasa Indonesia"
+    - is: "Íslenska"
+    - it: "Italiano"
+    - ja: "日本語"
+    - ka: "ქართული"
+    - ko: "한국어"
+    - lt: "Lietuvių"
+    - lv: "Latviešu"
+    - mk: "Македонски"
+    - ms: "Bahasa Melayu"
+    - nb: "Norsk bokmål"
+    - nl: "Nederlands"
+    - pl: "Polski"
+    - pt-BR: "Português (Brasil)"
+    - pt-PT: "Português (Portugal)"
+    - ro: "Română"
+    - ru: "Русский"
+    - sk: "Slovenčina"
+    - sl: "Slovenščina"
+    - sq: "Shqip"
+    - sr-Latn: "Srpski (latinica)"
+    - sv: "Svenska"
+    - sw: "Kiswahili"
+    - ta: "தமிழ்"
+    - te: "తెలుగు"
+    - th: "ไทย"
+    - tr: "Türkçe"
+    - uk: "Українська"
+    - vi: "Tiếng Việt"
+    - zh-Hans: "简体中文"
+    - zh-Hant: "繁體中文"
+  # ==/DisplayLanguageOptions==
   - textScale: 100
     $name: Text Size (%)
     $description: Size of the search panel's text, as a percentage of the usual (80 to 150, default 100).
@@ -582,6 +663,7 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <d3d11.h>
 #include <d2d1_3.h>
 #include <string_view>
+#include <initializer_list>
 #include <limits>
 #include <atomic>
 #include <chrono>
@@ -592,6 +674,5617 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <optional>
 #include <stdexcept>
 #include <thread>
+
+// ==StartEverythingLocalization==
+// Generated by scripts/embed-locales.mjs. Edit locales/*.json, then regenerate.
+namespace i18n {
+enum class Key {
+    SearchAnything,
+    Apps,
+    SuggestedApps,
+    Files,
+    Settings,
+    Application,
+    CustomCommand,
+    Shortcut,
+    Calculator,
+    Converter,
+    Network,
+    WebSearch,
+    EverythingSearch,
+    NotRunning,
+    Matches,
+    Shown,
+    CopyHint,
+    CopyResultHint,
+    CopyIpHint,
+    BrowserHint,
+    Select,
+    Next,
+    Open,
+    Admin,
+    Menu,
+    Close,
+    Run,
+    SearchBrowser,
+    RunAdmin,
+    CopyClipboard,
+    CopyCommand,
+    CopySearchLink,
+    OpenLocation,
+    CopyPath,
+    DesktopShortcut,
+    Properties,
+    Uninstall,
+    Terminal,
+    CommandPrompt,
+    Administrator,
+    Cut,
+    Copy,
+    CopyName,
+    NoApps,
+    Refine,
+    TypeFiles,
+    FilesAppear,
+    NoFiles,
+    NoItems,
+    NoNetwork,
+    CheckNetwork,
+    Type,
+    Size,
+    Contains,
+    Dimensions,
+    Length,
+    Pages,
+    FrameRate,
+    Bitrate,
+    Artist,
+    Album,
+    Title,
+    Author,
+    Description,
+    Version,
+    Company,
+    Camera,
+    Taken,
+    Modified,
+    Created,
+    Folder,
+    File,
+    Items,
+    Bytes,
+    Mass,
+    Temperature,
+    Speed,
+    Area,
+    Volume,
+    Data,
+    DataRate,
+    Time,
+    Pressure,
+    Energy,
+    Power,
+    Angle,
+    Frequency,
+    BaseRadix,
+    Conversion,
+    Scientific,
+    UninstallPrompt,
+    UninstallFailed,
+    ProtectedApp,
+    ShellMissing,
+    SystemDirMissing,
+    ShellArguments,
+    CommandTooLong,
+    CopyValue,
+    OpenService,
+    SearchService,
+    SearchWeb,
+    Error,
+    Subnet,
+    Gateway,
+    Count
+};
+struct Locale {
+    const wchar_t* tag;
+    const wchar_t* text[static_cast<size_t>(Key::Count)];
+};
+inline constexpr Locale kLocales[] = {
+    {L"en", {
+        L"Search Anything", // SearchAnything
+        L"Apps", // Apps
+        L"Suggested apps", // SuggestedApps
+        L"Files", // Files
+        L"Settings", // Settings
+        L"Application", // Application
+        L"Custom command", // CustomCommand
+        L"Shortcut", // Shortcut
+        L"Calculator", // Calculator
+        L"Unit Converter", // Converter
+        L"Network Interfaces", // Network
+        L"Web Search", // WebSearch
+        L"Everything Search", // EverythingSearch
+        L"Everything (not running)", // NotRunning
+        L"Matches", // Matches
+        L"Shown", // Shown
+        L"Press Enter to copy", // CopyHint
+        L"Press Enter to copy result", // CopyResultHint
+        L"Press Enter to copy IP", // CopyIpHint
+        L"Press Enter to search in browser", // BrowserHint
+        L"Select", // Select
+        L"Next", // Next
+        L"Open", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Close", // Close
+        L"Run", // Run
+        L"Search in browser", // SearchBrowser
+        L"Run as administrator", // RunAdmin
+        L"Copy to clipboard", // CopyClipboard
+        L"Copy command", // CopyCommand
+        L"Copy search link", // CopySearchLink
+        L"Open file location", // OpenLocation
+        L"Copy path", // CopyPath
+        L"Create desktop shortcut", // DesktopShortcut
+        L"Properties", // Properties
+        L"Uninstall", // Uninstall
+        L"Open in terminal", // Terminal
+        L"Command Prompt", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Cut", // Cut
+        L"Copy", // Copy
+        L"Copy name", // CopyName
+        L"No matching applications", // NoApps
+        L"Check files or refine your query", // Refine
+        L"Type to search files", // TypeFiles
+        L"Files and folders will appear here", // FilesAppear
+        L"No matching files", // NoFiles
+        L"Everything index returned 0 items", // NoItems
+        L"No active network interfaces", // NoNetwork
+        L"Check your Wi-Fi, Ethernet, or VPN connection", // CheckNetwork
+        L"Type", // Type
+        L"Size", // Size
+        L"Contains", // Contains
+        L"Dimensions", // Dimensions
+        L"Length", // Length
+        L"Pages", // Pages
+        L"Frame rate", // FrameRate
+        L"Bitrate", // Bitrate
+        L"Artist", // Artist
+        L"Album", // Album
+        L"Title", // Title
+        L"Author", // Author
+        L"Description", // Description
+        L"Version", // Version
+        L"Company", // Company
+        L"Camera", // Camera
+        L"Taken", // Taken
+        L"Modified", // Modified
+        L"Created", // Created
+        L"File folder", // Folder
+        L"File", // File
+        L"Items", // Items
+        L"bytes", // Bytes
+        L"Mass", // Mass
+        L"Temperature", // Temperature
+        L"Speed", // Speed
+        L"Area", // Area
+        L"Volume", // Volume
+        L"Data", // Data
+        L"Data rate", // DataRate
+        L"Time", // Time
+        L"Pressure", // Pressure
+        L"Energy", // Energy
+        L"Power", // Power
+        L"Angle", // Angle
+        L"Frequency", // Frequency
+        L"Number bases", // BaseRadix
+        L"Conversion", // Conversion
+        L"Scientific notation", // Scientific
+        L"{0} and its related info will be uninstalled.", // UninstallPrompt
+        L"Could not uninstall {0}.\n\n{1}", // UninstallFailed
+        L"It is not installed for this account, or it is part of Windows.", // ProtectedApp
+        L"Shell not found: {0}. Check the command settings.", // ShellMissing
+        L"Could not find the Windows system directory.", // SystemDirMissing
+        L"Shell arguments must contain {command} once as a separate, unquoted argument.", // ShellArguments
+        L"This command exceeds the Windows command-line length limit.", // CommandTooLong
+        L"Copy: {0}", // CopyValue
+        L"Open {0}", // OpenService
+        L"Search {0} for “{1}”", // SearchService
+        L"Search the web", // SearchWeb
+        L"Error", // Error
+        L"Subnet", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"af", {
+        L"Soek enigiets", // SearchAnything
+        L"Toepassings", // Apps
+        L"Voorgestelde toepassings", // SuggestedApps
+        L"Lêers", // Files
+        L"Instellings", // Settings
+        L"Toepassing", // Application
+        L"Pasgemaakte opdrag", // CustomCommand
+        L"Kortpad", // Shortcut
+        L"Sakrekenaar", // Calculator
+        L"Eenheidsomskakelaar", // Converter
+        L"Netwerkkoppelvlakke", // Network
+        L"Websoektog", // WebSearch
+        L"Everything-soektog", // EverythingSearch
+        L"Everything (loop nie)", // NotRunning
+        L"Resultate", // Matches
+        L"Gewys", // Shown
+        L"Enter om te kopieer", // CopyHint
+        L"Enter om resultaat te kopieer", // CopyResultHint
+        L"Enter om IP te kopieer", // CopyIpHint
+        L"Enter om in blaaier te soek", // BrowserHint
+        L"Kies", // Select
+        L"Volgende", // Next
+        L"Maak oop", // Open
+        L"Admin", // Admin
+        L"Kieslys", // Menu
+        L"Sluit", // Close
+        L"Voer uit", // Run
+        L"Soek in blaaier", // SearchBrowser
+        L"Voer as administrateur uit", // RunAdmin
+        L"Kopieer na knipbord", // CopyClipboard
+        L"Kopieer opdrag", // CopyCommand
+        L"Kopieer soekskakel", // CopySearchLink
+        L"Maak lêerligging oop", // OpenLocation
+        L"Kopieer pad", // CopyPath
+        L"Skep werkskermkortpad", // DesktopShortcut
+        L"Eienskappe", // Properties
+        L"Deïnstalleer", // Uninstall
+        L"Maak in terminaal oop", // Terminal
+        L"Opdragprompt", // CommandPrompt
+        L"Administrateur", // Administrator
+        L"Knip", // Cut
+        L"Kopieer", // Copy
+        L"Kopieer naam", // CopyName
+        L"Geen ooreenstemmende toepassings nie", // NoApps
+        L"Gaan lêers na of verfyn jou soektog", // Refine
+        L"Tik om lêers te soek", // TypeFiles
+        L"Lêers en vouers sal hier verskyn", // FilesAppear
+        L"Geen ooreenstemmende lêers nie", // NoFiles
+        L"Everything-indeks het geen items opgelewer nie", // NoItems
+        L"Geen aktiewe netwerkkoppelvlakke nie", // NoNetwork
+        L"Gaan jou Wi-Fi-, Ethernet- of VPN-verbinding na", // CheckNetwork
+        L"Tipe", // Type
+        L"Grootte", // Size
+        L"Bevat", // Contains
+        L"Afmetings", // Dimensions
+        L"Duur", // Length
+        L"Bladsye", // Pages
+        L"Raamtempo", // FrameRate
+        L"Bistempo", // Bitrate
+        L"Kunstenaar", // Artist
+        L"Album", // Album
+        L"Titel", // Title
+        L"Outeur", // Author
+        L"Beskrywing", // Description
+        L"Weergawe", // Version
+        L"Maatskappy", // Company
+        L"Kamera", // Camera
+        L"Geneem", // Taken
+        L"Gewysig", // Modified
+        L"Geskep", // Created
+        L"Lêervouer", // Folder
+        L"Lêer", // File
+        L"Items", // Items
+        L"grepe", // Bytes
+        L"Massa", // Mass
+        L"Temperatuur", // Temperature
+        L"Spoed", // Speed
+        L"Oppervlakte", // Area
+        L"Volume", // Volume
+        L"Data", // Data
+        L"Datatempo", // DataRate
+        L"Tyd", // Time
+        L"Druk", // Pressure
+        L"Energie", // Energy
+        L"Drywing", // Power
+        L"Hoek", // Angle
+        L"Frekwensie", // Frequency
+        L"Getalbasisse", // BaseRadix
+        L"Omskakeling", // Conversion
+        L"Wetenskaplike notasie", // Scientific
+        L"{0} en verwante inligting sal gedeïnstalleer word.", // UninstallPrompt
+        L"Kon nie {0} deïnstalleer nie.\n\n{1}", // UninstallFailed
+        L"Nie vir hierdie rekening geïnstalleer nie, of deel van Windows.", // ProtectedApp
+        L"Opdragdop nie gevind nie: {0}. Gaan die opdraginstellings na.", // ShellMissing
+        L"Kon nie die Windows-stelselgids vind nie.", // SystemDirMissing
+        L"Argumente moet {command} presies een keer as ’n aparte argument sonder aanhalingstekens bevat.", // ShellArguments
+        L"Hierdie opdrag oorskry die Windows-opdragreëllengtebeperking.", // CommandTooLong
+        L"Kopieer: {0}", // CopyValue
+        L"Maak {0} oop", // OpenService
+        L"Soek vir “{1}” op {0}", // SearchService
+        L"Soek op die web", // SearchWeb
+        L"Fout", // Error
+        L"Subnet", // Subnet
+        L"Poort", // Gateway
+    }},
+    {L"bg", {
+        L"Търсене навсякъде", // SearchAnything
+        L"Приложения", // Apps
+        L"Предложени приложения", // SuggestedApps
+        L"Файлове", // Files
+        L"Настройки", // Settings
+        L"Приложение", // Application
+        L"Персонализирана команда", // CustomCommand
+        L"Пряк път", // Shortcut
+        L"Калкулатор", // Calculator
+        L"Преобразуване на единици", // Converter
+        L"Мрежови интерфейси", // Network
+        L"Търсене в интернет", // WebSearch
+        L"Търсене с Everything", // EverythingSearch
+        L"Everything (не работи)", // NotRunning
+        L"Резултати", // Matches
+        L"Показани", // Shown
+        L"Enter за копиране", // CopyHint
+        L"Enter за копиране на резултата", // CopyResultHint
+        L"Enter за копиране на IP", // CopyIpHint
+        L"Enter за търсене в браузъра", // BrowserHint
+        L"Избор", // Select
+        L"Следващ", // Next
+        L"Отваряне", // Open
+        L"Админ", // Admin
+        L"Меню", // Menu
+        L"Затваряне", // Close
+        L"Изпълнение", // Run
+        L"Търсене в браузъра", // SearchBrowser
+        L"Изпълнение като администратор", // RunAdmin
+        L"Копиране в клипборда", // CopyClipboard
+        L"Копиране на командата", // CopyCommand
+        L"Копиране на връзката за търсене", // CopySearchLink
+        L"Отваряне на местоположението", // OpenLocation
+        L"Копиране на пътя", // CopyPath
+        L"Създаване на пряк път на работния плот", // DesktopShortcut
+        L"Свойства", // Properties
+        L"Деинсталиране", // Uninstall
+        L"Отваряне в терминал", // Terminal
+        L"Команден прозорец", // CommandPrompt
+        L"Администратор", // Administrator
+        L"Изрязване", // Cut
+        L"Копиране", // Copy
+        L"Копиране на името", // CopyName
+        L"Няма съответстващи приложения", // NoApps
+        L"Проверете файловете или уточнете търсенето", // Refine
+        L"Пишете за търсене на файлове", // TypeFiles
+        L"Тук ще се показват файлове и папки", // FilesAppear
+        L"Няма съответстващи файлове", // NoFiles
+        L"Индексът на Everything не върна елементи", // NoItems
+        L"Няма активни мрежови интерфейси", // NoNetwork
+        L"Проверете връзката с Wi-Fi, Ethernet или VPN", // CheckNetwork
+        L"Тип", // Type
+        L"Размер", // Size
+        L"Съдържа", // Contains
+        L"Размери", // Dimensions
+        L"Продължителност", // Length
+        L"Страници", // Pages
+        L"Кадрова честота", // FrameRate
+        L"Побитова скорост", // Bitrate
+        L"Изпълнител", // Artist
+        L"Албум", // Album
+        L"Заглавие", // Title
+        L"Автор", // Author
+        L"Описание", // Description
+        L"Версия", // Version
+        L"Фирма", // Company
+        L"Камера", // Camera
+        L"Заснето", // Taken
+        L"Променено", // Modified
+        L"Създадено", // Created
+        L"Папка с файлове", // Folder
+        L"Файл", // File
+        L"Елементи", // Items
+        L"байта", // Bytes
+        L"Маса", // Mass
+        L"Температура", // Temperature
+        L"Скорост", // Speed
+        L"Площ", // Area
+        L"Обем", // Volume
+        L"Данни", // Data
+        L"Скорост на данните", // DataRate
+        L"Време", // Time
+        L"Налягане", // Pressure
+        L"Енергия", // Energy
+        L"Мощност", // Power
+        L"Ъгъл", // Angle
+        L"Честота", // Frequency
+        L"Бройни системи", // BaseRadix
+        L"Преобразуване", // Conversion
+        L"Научен запис", // Scientific
+        L"{0} и свързаната информация ще бъдат деинсталирани.", // UninstallPrompt
+        L"Неуспешно деинсталиране на {0}.\n\n{1}", // UninstallFailed
+        L"Не е инсталирано за този акаунт или е част от Windows.", // ProtectedApp
+        L"Командният интерпретатор не е намерен: {0}. Проверете настройките на командата.", // ShellMissing
+        L"Системната директория на Windows не е намерена.", // SystemDirMissing
+        L"Аргументите трябва да съдържат {command} точно веднъж като отделен аргумент без кавички.", // ShellArguments
+        L"Командата надвишава ограничението за дължина на командния ред на Windows.", // CommandTooLong
+        L"Копиране: {0}", // CopyValue
+        L"Отваряне на {0}", // OpenService
+        L"Търсене на „{1}“ в {0}", // SearchService
+        L"Търсене в интернет", // SearchWeb
+        L"Грешка", // Error
+        L"Подмрежа", // Subnet
+        L"Шлюз", // Gateway
+    }},
+    {L"bn", {
+        L"সবকিছু খুঁজুন", // SearchAnything
+        L"অ্যাপ", // Apps
+        L"প্রস্তাবিত অ্যাপ", // SuggestedApps
+        L"ফাইল", // Files
+        L"সেটিংস", // Settings
+        L"অ্যাপ্লিকেশন", // Application
+        L"নিজস্ব কমান্ড", // CustomCommand
+        L"শর্টকাট", // Shortcut
+        L"ক্যালকুলেটর", // Calculator
+        L"একক রূপান্তরকারী", // Converter
+        L"নেটওয়ার্ক ইন্টারফেস", // Network
+        L"ওয়েব অনুসন্ধান", // WebSearch
+        L"Everything অনুসন্ধান", // EverythingSearch
+        L"Everything (চলছে না)", // NotRunning
+        L"মিল", // Matches
+        L"দেখানো হয়েছে", // Shown
+        L"কপি করতে Enter চাপুন", // CopyHint
+        L"ফলাফল কপি করতে Enter চাপুন", // CopyResultHint
+        L"IP কপি করতে Enter চাপুন", // CopyIpHint
+        L"ব্রাউজারে খুঁজতে Enter চাপুন", // BrowserHint
+        L"নির্বাচন", // Select
+        L"পরবর্তী", // Next
+        L"খুলুন", // Open
+        L"অ্যাডমিন", // Admin
+        L"মেনু", // Menu
+        L"বন্ধ করুন", // Close
+        L"চালান", // Run
+        L"ব্রাউজারে খুঁজুন", // SearchBrowser
+        L"প্রশাসক হিসেবে চালান", // RunAdmin
+        L"ক্লিপবোর্ডে কপি করুন", // CopyClipboard
+        L"কমান্ড কপি করুন", // CopyCommand
+        L"অনুসন্ধানের লিংক কপি করুন", // CopySearchLink
+        L"ফাইলের অবস্থান খুলুন", // OpenLocation
+        L"পথ কপি করুন", // CopyPath
+        L"ডেস্কটপ শর্টকাট তৈরি করুন", // DesktopShortcut
+        L"বৈশিষ্ট্য", // Properties
+        L"আনইনস্টল করুন", // Uninstall
+        L"টার্মিনালে খুলুন", // Terminal
+        L"কমান্ড প্রম্পট", // CommandPrompt
+        L"প্রশাসক", // Administrator
+        L"কাটুন", // Cut
+        L"কপি করুন", // Copy
+        L"নাম কপি করুন", // CopyName
+        L"কোনো মিলে যাওয়া অ্যাপ্লিকেশন নেই", // NoApps
+        L"ফাইল দেখুন বা অনুসন্ধান নির্দিষ্ট করুন", // Refine
+        L"ফাইল খুঁজতে টাইপ করুন", // TypeFiles
+        L"এখানে ফাইল ও ফোল্ডার দেখা যাবে", // FilesAppear
+        L"কোনো মিলে যাওয়া ফাইল নেই", // NoFiles
+        L"Everything সূচক কোনো আইটেম ফেরত দেয়নি", // NoItems
+        L"কোনো সক্রিয় নেটওয়ার্ক ইন্টারফেস নেই", // NoNetwork
+        L"আপনার Wi-Fi, ইথারনেট বা VPN সংযোগ পরীক্ষা করুন", // CheckNetwork
+        L"ধরন", // Type
+        L"আকার", // Size
+        L"বিষয়বস্তু", // Contains
+        L"মাত্রা", // Dimensions
+        L"সময়কাল", // Length
+        L"পৃষ্ঠা", // Pages
+        L"ফ্রেমের হার", // FrameRate
+        L"বিটরেট", // Bitrate
+        L"শিল্পী", // Artist
+        L"অ্যালবাম", // Album
+        L"শিরোনাম", // Title
+        L"লেখক", // Author
+        L"বিবরণ", // Description
+        L"সংস্করণ", // Version
+        L"কোম্পানি", // Company
+        L"ক্যামেরা", // Camera
+        L"তোলা হয়েছে", // Taken
+        L"পরিবর্তিত", // Modified
+        L"তৈরি হয়েছে", // Created
+        L"ফাইল ফোল্ডার", // Folder
+        L"ফাইল", // File
+        L"আইটেম", // Items
+        L"বাইট", // Bytes
+        L"ভর", // Mass
+        L"তাপমাত্রা", // Temperature
+        L"বেগ", // Speed
+        L"ক্ষেত্রফল", // Area
+        L"আয়তন", // Volume
+        L"ডেটা", // Data
+        L"ডেটার হার", // DataRate
+        L"সময়", // Time
+        L"চাপ", // Pressure
+        L"শক্তি", // Energy
+        L"ক্ষমতা", // Power
+        L"কোণ", // Angle
+        L"কম্পাঙ্ক", // Frequency
+        L"সংখ্যার ভিত্তি", // BaseRadix
+        L"রূপান্তর", // Conversion
+        L"বৈজ্ঞানিক সংকেত", // Scientific
+        L"{0} এবং সংশ্লিষ্ট তথ্য আনইনস্টল করা হবে।", // UninstallPrompt
+        L"{0} আনইনস্টল করা যায়নি।\n\n{1}", // UninstallFailed
+        L"এটি এই অ্যাকাউন্টে ইনস্টল করা নেই বা Windows-এর অংশ।", // ProtectedApp
+        L"শেল পাওয়া যায়নি: {0}। কমান্ডের সেটিংস দেখুন।", // ShellMissing
+        L"Windows সিস্টেম ডিরেক্টরি পাওয়া যায়নি।", // SystemDirMissing
+        L"শেল আর্গুমেন্টে {command} ঠিক একবার আলাদা আর্গুমেন্ট হিসেবে উদ্ধৃতি চিহ্ন ছাড়া থাকতে হবে।", // ShellArguments
+        L"এই কমান্ড Windows কমান্ড লাইনের দৈর্ঘ্যসীমা ছাড়িয়েছে।", // CommandTooLong
+        L"কপি করুন: {0}", // CopyValue
+        L"{0} খুলুন", // OpenService
+        L"{0}-এ “{1}” খুঁজুন", // SearchService
+        L"ওয়েবে খুঁজুন", // SearchWeb
+        L"ত্রুটি", // Error
+        L"সাবনেট", // Subnet
+        L"গেটওয়ে", // Gateway
+    }},
+    {L"bs", {
+        L"Pretraži sve", // SearchAnything
+        L"Aplikacije", // Apps
+        L"Predložene aplikacije", // SuggestedApps
+        L"Datoteke", // Files
+        L"Postavke", // Settings
+        L"Aplikacija", // Application
+        L"Prilagođena naredba", // CustomCommand
+        L"Prečica", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Pretvarač jedinica", // Converter
+        L"Mrežni interfejsi", // Network
+        L"Web-pretraga", // WebSearch
+        L"Everything pretraga", // EverythingSearch
+        L"Everything (nije pokrenut)", // NotRunning
+        L"Podudaranja", // Matches
+        L"Prikazano", // Shown
+        L"Enter za kopiranje", // CopyHint
+        L"Enter za kopiranje rezultata", // CopyResultHint
+        L"Enter za kopiranje IP-a", // CopyIpHint
+        L"Enter za pretragu u pregledniku", // BrowserHint
+        L"Odaberi", // Select
+        L"Sljedeće", // Next
+        L"Otvori", // Open
+        L"Admin", // Admin
+        L"Meni", // Menu
+        L"Zatvori", // Close
+        L"Pokreni", // Run
+        L"Pretraži u pregledniku", // SearchBrowser
+        L"Pokreni kao administrator", // RunAdmin
+        L"Kopiraj u međuspremnik", // CopyClipboard
+        L"Kopiraj naredbu", // CopyCommand
+        L"Kopiraj vezu pretrage", // CopySearchLink
+        L"Otvori lokaciju datoteke", // OpenLocation
+        L"Kopiraj putanju", // CopyPath
+        L"Napravi prečicu na radnoj površini", // DesktopShortcut
+        L"Svojstva", // Properties
+        L"Deinstaliraj", // Uninstall
+        L"Otvori u terminalu", // Terminal
+        L"Komandna linija", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Izreži", // Cut
+        L"Kopiraj", // Copy
+        L"Kopiraj naziv", // CopyName
+        L"Nema odgovarajućih aplikacija", // NoApps
+        L"Provjerite datoteke ili suzite pretragu", // Refine
+        L"Unesite tekst za pretragu datoteka", // TypeFiles
+        L"Datoteke i fascikle će se pojaviti ovdje", // FilesAppear
+        L"Nema odgovarajućih datoteka", // NoFiles
+        L"Everything indeks nije vratio stavke", // NoItems
+        L"Nema aktivnih mrežnih interfejsa", // NoNetwork
+        L"Provjerite Wi-Fi, Ethernet ili VPN vezu", // CheckNetwork
+        L"Tip", // Type
+        L"Veličina", // Size
+        L"Sadrži", // Contains
+        L"Dimenzije", // Dimensions
+        L"Trajanje", // Length
+        L"Stranice", // Pages
+        L"Broj kadrova", // FrameRate
+        L"Brzina protoka", // Bitrate
+        L"Izvođač", // Artist
+        L"Album", // Album
+        L"Naslov", // Title
+        L"Autor", // Author
+        L"Opis", // Description
+        L"Verzija", // Version
+        L"Kompanija", // Company
+        L"Kamera", // Camera
+        L"Snimljeno", // Taken
+        L"Izmijenjeno", // Modified
+        L"Kreirano", // Created
+        L"Fascikla datoteka", // Folder
+        L"Datoteka", // File
+        L"Stavke", // Items
+        L"bajtova", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Brzina", // Speed
+        L"Površina", // Area
+        L"Zapremina", // Volume
+        L"Podaci", // Data
+        L"Brzina podataka", // DataRate
+        L"Vrijeme", // Time
+        L"Pritisak", // Pressure
+        L"Energija", // Energy
+        L"Snaga", // Power
+        L"Ugao", // Angle
+        L"Frekvencija", // Frequency
+        L"Brojevni sistemi", // BaseRadix
+        L"Konverzija", // Conversion
+        L"Naučni zapis", // Scientific
+        L"{0} i povezane informacije bit će deinstalirani.", // UninstallPrompt
+        L"Nije moguće deinstalirati {0}.\n\n{1}", // UninstallFailed
+        L"Nije instalirano za ovaj račun ili je dio sistema Windows.", // ProtectedApp
+        L"Komandni interpreter nije pronađen: {0}. Provjerite postavke naredbe.", // ShellMissing
+        L"Sistemska fascikla Windows nije pronađena.", // SystemDirMissing
+        L"Argumenti moraju sadržavati {command} tačno jednom kao zaseban argument bez navodnika.", // ShellArguments
+        L"Naredba premašuje ograničenje dužine komandne linije Windows.", // CommandTooLong
+        L"Kopiraj: {0}", // CopyValue
+        L"Otvori {0}", // OpenService
+        L"Traži „{1}” na {0}", // SearchService
+        L"Pretraži web", // SearchWeb
+        L"Greška", // Error
+        L"Podmreža", // Subnet
+        L"Mrežni prolaz", // Gateway
+    }},
+    {L"ca", {
+        L"Cerca qualsevol cosa", // SearchAnything
+        L"Aplicacions", // Apps
+        L"Aplicacions suggerides", // SuggestedApps
+        L"Fitxers", // Files
+        L"Configuració", // Settings
+        L"Aplicació", // Application
+        L"Ordre personalitzada", // CustomCommand
+        L"Drecera", // Shortcut
+        L"Calculadora", // Calculator
+        L"Convertidor d’unitats", // Converter
+        L"Interfícies de xarxa", // Network
+        L"Cerca al web", // WebSearch
+        L"Cerca d’Everything", // EverythingSearch
+        L"Everything (no s’executa)", // NotRunning
+        L"Coincidències", // Matches
+        L"Mostrats", // Shown
+        L"Retorn per copiar", // CopyHint
+        L"Retorn per copiar el resultat", // CopyResultHint
+        L"Retorn per copiar la IP", // CopyIpHint
+        L"Retorn per cercar al navegador", // BrowserHint
+        L"Selecciona", // Select
+        L"Següent", // Next
+        L"Obre", // Open
+        L"Admin", // Admin
+        L"Menú", // Menu
+        L"Tanca", // Close
+        L"Executa", // Run
+        L"Cerca al navegador", // SearchBrowser
+        L"Executa com a administrador", // RunAdmin
+        L"Copia al porta-retalls", // CopyClipboard
+        L"Copia l’ordre", // CopyCommand
+        L"Copia l’enllaç de cerca", // CopySearchLink
+        L"Obre la ubicació del fitxer", // OpenLocation
+        L"Copia el camí", // CopyPath
+        L"Crea una drecera a l’escriptori", // DesktopShortcut
+        L"Propietats", // Properties
+        L"Desinstal·la", // Uninstall
+        L"Obre al terminal", // Terminal
+        L"Indicador d’ordres", // CommandPrompt
+        L"Administrador", // Administrator
+        L"Retalla", // Cut
+        L"Copia", // Copy
+        L"Copia el nom", // CopyName
+        L"Cap aplicació coincident", // NoApps
+        L"Comproveu els fitxers o concreteu la cerca", // Refine
+        L"Escriviu per cercar fitxers", // TypeFiles
+        L"Els fitxers i les carpetes apareixeran aquí", // FilesAppear
+        L"Cap fitxer coincident", // NoFiles
+        L"L’índex d’Everything no ha retornat elements", // NoItems
+        L"Cap interfície de xarxa activa", // NoNetwork
+        L"Comproveu la connexió Wi-Fi, Ethernet o VPN", // CheckNetwork
+        L"Tipus", // Type
+        L"Mida", // Size
+        L"Conté", // Contains
+        L"Dimensions", // Dimensions
+        L"Durada", // Length
+        L"Pàgines", // Pages
+        L"Freqüència de fotogrames", // FrameRate
+        L"Taxa de bits", // Bitrate
+        L"Artista", // Artist
+        L"Àlbum", // Album
+        L"Títol", // Title
+        L"Autor", // Author
+        L"Descripció", // Description
+        L"Versió", // Version
+        L"Empresa", // Company
+        L"Càmera", // Camera
+        L"Capturat", // Taken
+        L"Modificat", // Modified
+        L"Creat", // Created
+        L"Carpeta de fitxers", // Folder
+        L"Fitxer", // File
+        L"Elements", // Items
+        L"bytes", // Bytes
+        L"Massa", // Mass
+        L"Temperatura", // Temperature
+        L"Velocitat", // Speed
+        L"Àrea", // Area
+        L"Volum", // Volume
+        L"Dades", // Data
+        L"Velocitat de dades", // DataRate
+        L"Temps", // Time
+        L"Pressió", // Pressure
+        L"Energia", // Energy
+        L"Potència", // Power
+        L"Angle", // Angle
+        L"Freqüència", // Frequency
+        L"Bases numèriques", // BaseRadix
+        L"Conversió", // Conversion
+        L"Notació científica", // Scientific
+        L"Es desinstal·laran {0} i la informació relacionada.", // UninstallPrompt
+        L"No s’ha pogut desinstal·lar {0}.\n\n{1}", // UninstallFailed
+        L"No està instal·lat per a aquest compte o forma part del Windows.", // ProtectedApp
+        L"No s’ha trobat l’intèrpret: {0}. Comproveu la configuració de l’ordre.", // ShellMissing
+        L"No s’ha trobat el directori de sistema del Windows.", // SystemDirMissing
+        L"Els arguments han de contenir {command} un sol cop com a argument separat i sense cometes.", // ShellArguments
+        L"Aquesta ordre supera el límit de longitud de la línia d’ordres del Windows.", // CommandTooLong
+        L"Copia: {0}", // CopyValue
+        L"Obre {0}", // OpenService
+        L"Cerca «{1}» a {0}", // SearchService
+        L"Cerca al web", // SearchWeb
+        L"Error", // Error
+        L"Subxarxa", // Subnet
+        L"Passarel·la", // Gateway
+    }},
+    {L"cs", {
+        L"Hledat vše", // SearchAnything
+        L"Aplikace", // Apps
+        L"Doporučené aplikace", // SuggestedApps
+        L"Soubory", // Files
+        L"Nastavení", // Settings
+        L"Aplikace", // Application
+        L"Vlastní příkaz", // CustomCommand
+        L"Zástupce", // Shortcut
+        L"Kalkulačka", // Calculator
+        L"Převodník jednotek", // Converter
+        L"Síťová rozhraní", // Network
+        L"Hledání na webu", // WebSearch
+        L"Hledání Everything", // EverythingSearch
+        L"Everything (není spuštěn)", // NotRunning
+        L"Výsledky", // Matches
+        L"Zobrazeno", // Shown
+        L"Enter pro kopírování", // CopyHint
+        L"Enter pro zkopírování výsledku", // CopyResultHint
+        L"Enter pro zkopírování IP", // CopyIpHint
+        L"Enter pro hledání v prohlížeči", // BrowserHint
+        L"Vybrat", // Select
+        L"Další", // Next
+        L"Otevřít", // Open
+        L"Správce", // Admin
+        L"Nabídka", // Menu
+        L"Zavřít", // Close
+        L"Spustit", // Run
+        L"Hledat v prohlížeči", // SearchBrowser
+        L"Spustit jako správce", // RunAdmin
+        L"Kopírovat do schránky", // CopyClipboard
+        L"Kopírovat příkaz", // CopyCommand
+        L"Kopírovat odkaz hledání", // CopySearchLink
+        L"Otevřít umístění souboru", // OpenLocation
+        L"Kopírovat cestu", // CopyPath
+        L"Vytvořit zástupce na ploše", // DesktopShortcut
+        L"Vlastnosti", // Properties
+        L"Odinstalovat", // Uninstall
+        L"Otevřít v terminálu", // Terminal
+        L"Příkazový řádek", // CommandPrompt
+        L"Správce", // Administrator
+        L"Vyjmout", // Cut
+        L"Kopírovat", // Copy
+        L"Kopírovat název", // CopyName
+        L"Žádné odpovídající aplikace", // NoApps
+        L"Zkontrolujte soubory nebo upřesněte hledání", // Refine
+        L"Začněte psát a vyhledejte soubory", // TypeFiles
+        L"Zde se zobrazí soubory a složky", // FilesAppear
+        L"Žádné odpovídající soubory", // NoFiles
+        L"Index Everything nevrátil žádné položky", // NoItems
+        L"Žádná aktivní síťová rozhraní", // NoNetwork
+        L"Zkontrolujte připojení Wi-Fi, Ethernet nebo VPN", // CheckNetwork
+        L"Typ", // Type
+        L"Velikost", // Size
+        L"Obsahuje", // Contains
+        L"Rozměry", // Dimensions
+        L"Délka", // Length
+        L"Stránky", // Pages
+        L"Snímková frekvence", // FrameRate
+        L"Datový tok", // Bitrate
+        L"Interpret", // Artist
+        L"Album", // Album
+        L"Název", // Title
+        L"Autor", // Author
+        L"Popis", // Description
+        L"Verze", // Version
+        L"Společnost", // Company
+        L"Fotoaparát", // Camera
+        L"Pořízeno", // Taken
+        L"Změněno", // Modified
+        L"Vytvořeno", // Created
+        L"Složka souborů", // Folder
+        L"Soubor", // File
+        L"Položky", // Items
+        L"bajtů", // Bytes
+        L"Hmotnost", // Mass
+        L"Teplota", // Temperature
+        L"Rychlost", // Speed
+        L"Plocha", // Area
+        L"Objem", // Volume
+        L"Data", // Data
+        L"Rychlost dat", // DataRate
+        L"Čas", // Time
+        L"Tlak", // Pressure
+        L"Energie", // Energy
+        L"Výkon", // Power
+        L"Úhel", // Angle
+        L"Frekvence", // Frequency
+        L"Číselné soustavy", // BaseRadix
+        L"Převod", // Conversion
+        L"Vědecký zápis", // Scientific
+        L"{0} a související informace budou odinstalovány.", // UninstallPrompt
+        L"Nepodařilo se odinstalovat {0}.\n\n{1}", // UninstallFailed
+        L"Není nainstalováno pro tento účet nebo je součástí Windows.", // ProtectedApp
+        L"Příkazový interpret nebyl nalezen: {0}. Zkontrolujte nastavení příkazu.", // ShellMissing
+        L"Systémový adresář Windows nebyl nalezen.", // SystemDirMissing
+        L"Argumenty musí obsahovat {command} právě jednou jako samostatný argument bez uvozovek.", // ShellArguments
+        L"Příkaz překračuje limit délky příkazového řádku Windows.", // CommandTooLong
+        L"Kopírovat: {0}", // CopyValue
+        L"Otevřít {0}", // OpenService
+        L"Hledat „{1}“ v {0}", // SearchService
+        L"Hledat na webu", // SearchWeb
+        L"Chyba", // Error
+        L"Podsíť", // Subnet
+        L"Brána", // Gateway
+    }},
+    {L"da", {
+        L"Søg efter alt", // SearchAnything
+        L"Apps", // Apps
+        L"Foreslåede apps", // SuggestedApps
+        L"Filer", // Files
+        L"Indstillinger", // Settings
+        L"Program", // Application
+        L"Egen kommando", // CustomCommand
+        L"Genvej", // Shortcut
+        L"Lommeregner", // Calculator
+        L"Enhedsomregner", // Converter
+        L"Netværksgrænseflader", // Network
+        L"Websøgning", // WebSearch
+        L"Everything-søgning", // EverythingSearch
+        L"Everything (kører ikke)", // NotRunning
+        L"Resultater", // Matches
+        L"Vist", // Shown
+        L"Tryk Enter for at kopiere", // CopyHint
+        L"Tryk Enter for at kopiere resultatet", // CopyResultHint
+        L"Tryk Enter for at kopiere IP", // CopyIpHint
+        L"Tryk Enter for at søge i browseren", // BrowserHint
+        L"Vælg", // Select
+        L"Næste", // Next
+        L"Åbn", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Luk", // Close
+        L"Kør", // Run
+        L"Søg i browser", // SearchBrowser
+        L"Kør som administrator", // RunAdmin
+        L"Kopiér til udklipsholder", // CopyClipboard
+        L"Kopiér kommando", // CopyCommand
+        L"Kopiér søgelink", // CopySearchLink
+        L"Åbn filplacering", // OpenLocation
+        L"Kopiér sti", // CopyPath
+        L"Opret skrivebordsgenvej", // DesktopShortcut
+        L"Egenskaber", // Properties
+        L"Fjern", // Uninstall
+        L"Åbn i terminal", // Terminal
+        L"Kommandoprompt", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Klip", // Cut
+        L"Kopiér", // Copy
+        L"Kopiér navn", // CopyName
+        L"Ingen matchende programmer", // NoApps
+        L"Kontrollér filer eller afgræns søgningen", // Refine
+        L"Skriv for at søge efter filer", // TypeFiles
+        L"Filer og mapper vises her", // FilesAppear
+        L"Ingen matchende filer", // NoFiles
+        L"Everything-indekset fandt ingen elementer", // NoItems
+        L"Ingen aktive netværksgrænseflader", // NoNetwork
+        L"Kontrollér din Wi-Fi-, Ethernet- eller VPN-forbindelse", // CheckNetwork
+        L"Type", // Type
+        L"Størrelse", // Size
+        L"Indeholder", // Contains
+        L"Dimensioner", // Dimensions
+        L"Varighed", // Length
+        L"Sider", // Pages
+        L"Billedhastighed", // FrameRate
+        L"Bithastighed", // Bitrate
+        L"Kunstner", // Artist
+        L"Album", // Album
+        L"Titel", // Title
+        L"Forfatter", // Author
+        L"Beskrivelse", // Description
+        L"Version", // Version
+        L"Firma", // Company
+        L"Kamera", // Camera
+        L"Taget", // Taken
+        L"Ændret", // Modified
+        L"Oprettet", // Created
+        L"Filmappe", // Folder
+        L"Fil", // File
+        L"Elementer", // Items
+        L"byte", // Bytes
+        L"Masse", // Mass
+        L"Temperatur", // Temperature
+        L"Hastighed", // Speed
+        L"Areal", // Area
+        L"Rumfang", // Volume
+        L"Data", // Data
+        L"Datahastighed", // DataRate
+        L"Tid", // Time
+        L"Tryk", // Pressure
+        L"Energi", // Energy
+        L"Effekt", // Power
+        L"Vinkel", // Angle
+        L"Frekvens", // Frequency
+        L"Talsystemer", // BaseRadix
+        L"Omregning", // Conversion
+        L"Videnskabelig notation", // Scientific
+        L"{0} og de tilhørende oplysninger fjernes.", // UninstallPrompt
+        L"Kunne ikke fjerne {0}.\n\n{1}", // UninstallFailed
+        L"Ikke installeret for denne konto eller en del af Windows.", // ProtectedApp
+        L"Kommandofortolkeren blev ikke fundet: {0}. Kontrollér kommandoindstillingerne.", // ShellMissing
+        L"Kunne ikke finde Windows-systemmappen.", // SystemDirMissing
+        L"Argumenterne skal indeholde {command} én gang som et separat argument uden anførselstegn.", // ShellArguments
+        L"Denne kommando overskrider Windows maksimale kommandolinjelængde.", // CommandTooLong
+        L"Kopiér: {0}", // CopyValue
+        L"Åbn {0}", // OpenService
+        L"Søg efter »{1}« på {0}", // SearchService
+        L"Søg på nettet", // SearchWeb
+        L"Fejl", // Error
+        L"Undernet", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"de", {
+        L"Alles durchsuchen", // SearchAnything
+        L"Apps", // Apps
+        L"Vorgeschlagene Apps", // SuggestedApps
+        L"Dateien", // Files
+        L"Einstellungen", // Settings
+        L"Anwendung", // Application
+        L"Eigener Befehl", // CustomCommand
+        L"Verknüpfung", // Shortcut
+        L"Rechner", // Calculator
+        L"Einheitenumrechner", // Converter
+        L"Netzwerkschnittstellen", // Network
+        L"Websuche", // WebSearch
+        L"Everything-Suche", // EverythingSearch
+        L"Everything (nicht gestartet)", // NotRunning
+        L"Treffer", // Matches
+        L"Angezeigt", // Shown
+        L"Mit Eingabe kopieren", // CopyHint
+        L"Mit Eingabe Ergebnis kopieren", // CopyResultHint
+        L"Mit Eingabe IP kopieren", // CopyIpHint
+        L"Mit Eingabe im Browser suchen", // BrowserHint
+        L"Auswählen", // Select
+        L"Weiter", // Next
+        L"Öffnen", // Open
+        L"Admin", // Admin
+        L"Menü", // Menu
+        L"Schließen", // Close
+        L"Ausführen", // Run
+        L"Im Browser suchen", // SearchBrowser
+        L"Als Administrator ausführen", // RunAdmin
+        L"In Zwischenablage kopieren", // CopyClipboard
+        L"Befehl kopieren", // CopyCommand
+        L"Suchlink kopieren", // CopySearchLink
+        L"Dateipfad öffnen", // OpenLocation
+        L"Pfad kopieren", // CopyPath
+        L"Desktopverknüpfung erstellen", // DesktopShortcut
+        L"Eigenschaften", // Properties
+        L"Deinstallieren", // Uninstall
+        L"Im Terminal öffnen", // Terminal
+        L"Eingabeaufforderung", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Ausschneiden", // Cut
+        L"Kopieren", // Copy
+        L"Namen kopieren", // CopyName
+        L"Keine passenden Anwendungen", // NoApps
+        L"Dateien prüfen oder Suche eingrenzen", // Refine
+        L"Zum Suchen von Dateien tippen", // TypeFiles
+        L"Dateien und Ordner werden hier angezeigt", // FilesAppear
+        L"Keine passenden Dateien", // NoFiles
+        L"Everything-Index lieferte keine Einträge", // NoItems
+        L"Keine aktiven Netzwerkschnittstellen", // NoNetwork
+        L"WLAN-, Ethernet- oder VPN-Verbindung prüfen", // CheckNetwork
+        L"Typ", // Type
+        L"Größe", // Size
+        L"Enthält", // Contains
+        L"Abmessungen", // Dimensions
+        L"Dauer", // Length
+        L"Seiten", // Pages
+        L"Bildrate", // FrameRate
+        L"Bitrate", // Bitrate
+        L"Interpret", // Artist
+        L"Album", // Album
+        L"Titel", // Title
+        L"Autor", // Author
+        L"Beschreibung", // Description
+        L"Version", // Version
+        L"Unternehmen", // Company
+        L"Kamera", // Camera
+        L"Aufgenommen", // Taken
+        L"Geändert", // Modified
+        L"Erstellt", // Created
+        L"Dateiordner", // Folder
+        L"Datei", // File
+        L"Elemente", // Items
+        L"Bytes", // Bytes
+        L"Masse", // Mass
+        L"Temperatur", // Temperature
+        L"Geschwindigkeit", // Speed
+        L"Fläche", // Area
+        L"Volumen", // Volume
+        L"Daten", // Data
+        L"Datenrate", // DataRate
+        L"Zeit", // Time
+        L"Druck", // Pressure
+        L"Energie", // Energy
+        L"Leistung", // Power
+        L"Winkel", // Angle
+        L"Frequenz", // Frequency
+        L"Zahlensysteme", // BaseRadix
+        L"Umrechnung", // Conversion
+        L"Wissenschaftliche Schreibweise", // Scientific
+        L"{0} und die zugehörigen Informationen werden deinstalliert.", // UninstallPrompt
+        L"{0} konnte nicht deinstalliert werden.\n\n{1}", // UninstallFailed
+        L"Für dieses Konto nicht installiert oder Bestandteil von Windows.", // ProtectedApp
+        L"Shell nicht gefunden: {0}. Befehlseinstellungen prüfen.", // ShellMissing
+        L"Windows-Systemverzeichnis nicht gefunden.", // SystemDirMissing
+        L"Shellargumente müssen {command} einmal als separates Argument ohne Anführungszeichen enthalten.", // ShellArguments
+        L"Dieser Befehl überschreitet die maximale Windows-Befehlszeilenlänge.", // CommandTooLong
+        L"Kopieren: {0}", // CopyValue
+        L"{0} öffnen", // OpenService
+        L"In {0} nach „{1}“ suchen", // SearchService
+        L"Im Web suchen", // SearchWeb
+        L"Fehler", // Error
+        L"Subnetz", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"el", {
+        L"Αναζήτηση παντού", // SearchAnything
+        L"Εφαρμογές", // Apps
+        L"Προτεινόμενες εφαρμογές", // SuggestedApps
+        L"Αρχεία", // Files
+        L"Ρυθμίσεις", // Settings
+        L"Εφαρμογή", // Application
+        L"Προσαρμοσμένη εντολή", // CustomCommand
+        L"Συντόμευση", // Shortcut
+        L"Αριθμομηχανή", // Calculator
+        L"Μετατροπέας μονάδων", // Converter
+        L"Διασυνδέσεις δικτύου", // Network
+        L"Αναζήτηση ιστού", // WebSearch
+        L"Αναζήτηση Everything", // EverythingSearch
+        L"Everything (δεν εκτελείται)", // NotRunning
+        L"Αποτελέσματα", // Matches
+        L"Εμφανίζονται", // Shown
+        L"Enter για αντιγραφή", // CopyHint
+        L"Enter για αντιγραφή αποτελέσματος", // CopyResultHint
+        L"Enter για αντιγραφή IP", // CopyIpHint
+        L"Enter για αναζήτηση στο πρόγραμμα περιήγησης", // BrowserHint
+        L"Επιλογή", // Select
+        L"Επόμενο", // Next
+        L"Άνοιγμα", // Open
+        L"Διαχειρ.", // Admin
+        L"Μενού", // Menu
+        L"Κλείσιμο", // Close
+        L"Εκτέλεση", // Run
+        L"Αναζήτηση στο πρόγραμμα περιήγησης", // SearchBrowser
+        L"Εκτέλεση ως διαχειριστής", // RunAdmin
+        L"Αντιγραφή στο πρόχειρο", // CopyClipboard
+        L"Αντιγραφή εντολής", // CopyCommand
+        L"Αντιγραφή συνδέσμου αναζήτησης", // CopySearchLink
+        L"Άνοιγμα θέσης αρχείου", // OpenLocation
+        L"Αντιγραφή διαδρομής", // CopyPath
+        L"Δημιουργία συντόμευσης στην επιφάνεια εργασίας", // DesktopShortcut
+        L"Ιδιότητες", // Properties
+        L"Κατάργηση εγκατάστασης", // Uninstall
+        L"Άνοιγμα στο τερματικό", // Terminal
+        L"Γραμμή εντολών", // CommandPrompt
+        L"Διαχειριστής", // Administrator
+        L"Αποκοπή", // Cut
+        L"Αντιγραφή", // Copy
+        L"Αντιγραφή ονόματος", // CopyName
+        L"Δεν βρέθηκαν αντίστοιχες εφαρμογές", // NoApps
+        L"Ελέγξτε τα αρχεία ή περιορίστε την αναζήτηση", // Refine
+        L"Πληκτρολογήστε για αναζήτηση αρχείων", // TypeFiles
+        L"Εδώ θα εμφανίζονται αρχεία και φάκελοι", // FilesAppear
+        L"Δεν βρέθηκαν αντίστοιχα αρχεία", // NoFiles
+        L"Το ευρετήριο Everything δεν επέστρεψε στοιχεία", // NoItems
+        L"Δεν υπάρχουν ενεργές διασυνδέσεις δικτύου", // NoNetwork
+        L"Ελέγξτε τη σύνδεση Wi-Fi, Ethernet ή VPN", // CheckNetwork
+        L"Τύπος", // Type
+        L"Μέγεθος", // Size
+        L"Περιέχει", // Contains
+        L"Διαστάσεις", // Dimensions
+        L"Διάρκεια", // Length
+        L"Σελίδες", // Pages
+        L"Ρυθμός καρέ", // FrameRate
+        L"Ρυθμός μετάδοσης", // Bitrate
+        L"Καλλιτέχνης", // Artist
+        L"Άλμπουμ", // Album
+        L"Τίτλος", // Title
+        L"Συντάκτης", // Author
+        L"Περιγραφή", // Description
+        L"Έκδοση", // Version
+        L"Εταιρεία", // Company
+        L"Κάμερα", // Camera
+        L"Λήψη", // Taken
+        L"Τροποποιήθηκε", // Modified
+        L"Δημιουργήθηκε", // Created
+        L"Φάκελος αρχείων", // Folder
+        L"Αρχείο", // File
+        L"Στοιχεία", // Items
+        L"byte", // Bytes
+        L"Μάζα", // Mass
+        L"Θερμοκρασία", // Temperature
+        L"Ταχύτητα", // Speed
+        L"Εμβαδόν", // Area
+        L"Όγκος", // Volume
+        L"Δεδομένα", // Data
+        L"Ρυθμός δεδομένων", // DataRate
+        L"Χρόνος", // Time
+        L"Πίεση", // Pressure
+        L"Ενέργεια", // Energy
+        L"Ισχύς", // Power
+        L"Γωνία", // Angle
+        L"Συχνότητα", // Frequency
+        L"Αριθμητικά συστήματα", // BaseRadix
+        L"Μετατροπή", // Conversion
+        L"Επιστημονική γραφή", // Scientific
+        L"Το {0} και οι σχετικές πληροφορίες θα καταργηθούν.", // UninstallPrompt
+        L"Δεν ήταν δυνατή η κατάργηση του {0}.\n\n{1}", // UninstallFailed
+        L"Δεν είναι εγκατεστημένο για αυτόν τον λογαριασμό ή αποτελεί μέρος των Windows.", // ProtectedApp
+        L"Δεν βρέθηκε κέλυφος: {0}. Ελέγξτε τις ρυθμίσεις της εντολής.", // ShellMissing
+        L"Δεν βρέθηκε ο κατάλογος συστήματος των Windows.", // SystemDirMissing
+        L"Τα ορίσματα πρέπει να περιέχουν το {command} μία φορά ως ξεχωριστό όρισμα χωρίς εισαγωγικά.", // ShellArguments
+        L"Η εντολή υπερβαίνει το όριο μήκους γραμμής εντολών των Windows.", // CommandTooLong
+        L"Αντιγραφή: {0}", // CopyValue
+        L"Άνοιγμα {0}", // OpenService
+        L"Αναζήτηση «{1}» στο {0}", // SearchService
+        L"Αναζήτηση στον ιστό", // SearchWeb
+        L"Σφάλμα", // Error
+        L"Υποδίκτυο", // Subnet
+        L"Πύλη", // Gateway
+    }},
+    {L"es", {
+        L"Buscar cualquier cosa", // SearchAnything
+        L"Aplicaciones", // Apps
+        L"Aplicaciones sugeridas", // SuggestedApps
+        L"Archivos", // Files
+        L"Configuración", // Settings
+        L"Aplicación", // Application
+        L"Comando personalizado", // CustomCommand
+        L"Acceso directo", // Shortcut
+        L"Calculadora", // Calculator
+        L"Conversor de unidades", // Converter
+        L"Interfaces de red", // Network
+        L"Búsqueda web", // WebSearch
+        L"Búsqueda de Everything", // EverythingSearch
+        L"Everything (sin ejecutar)", // NotRunning
+        L"Coincidencias", // Matches
+        L"Mostrados", // Shown
+        L"Pulsa Intro para copiar", // CopyHint
+        L"Pulsa Intro para copiar el resultado", // CopyResultHint
+        L"Pulsa Intro para copiar la IP", // CopyIpHint
+        L"Pulsa Intro para buscar en el navegador", // BrowserHint
+        L"Seleccionar", // Select
+        L"Siguiente", // Next
+        L"Abrir", // Open
+        L"Admin", // Admin
+        L"Menú", // Menu
+        L"Cerrar", // Close
+        L"Ejecutar", // Run
+        L"Buscar en el navegador", // SearchBrowser
+        L"Ejecutar como administrador", // RunAdmin
+        L"Copiar al portapapeles", // CopyClipboard
+        L"Copiar comando", // CopyCommand
+        L"Copiar enlace de búsqueda", // CopySearchLink
+        L"Abrir ubicación del archivo", // OpenLocation
+        L"Copiar ruta", // CopyPath
+        L"Crear acceso directo en el escritorio", // DesktopShortcut
+        L"Propiedades", // Properties
+        L"Desinstalar", // Uninstall
+        L"Abrir en terminal", // Terminal
+        L"Símbolo del sistema", // CommandPrompt
+        L"Administrador", // Administrator
+        L"Cortar", // Cut
+        L"Copiar", // Copy
+        L"Copiar nombre", // CopyName
+        L"No hay aplicaciones coincidentes", // NoApps
+        L"Comprueba los archivos o precisa la búsqueda", // Refine
+        L"Escribe para buscar archivos", // TypeFiles
+        L"Los archivos y las carpetas aparecerán aquí", // FilesAppear
+        L"No hay archivos coincidentes", // NoFiles
+        L"El índice de Everything no devolvió elementos", // NoItems
+        L"No hay interfaces de red activas", // NoNetwork
+        L"Comprueba la conexión Wi-Fi, Ethernet o VPN", // CheckNetwork
+        L"Tipo", // Type
+        L"Tamaño", // Size
+        L"Contiene", // Contains
+        L"Dimensiones", // Dimensions
+        L"Duración", // Length
+        L"Páginas", // Pages
+        L"Fotogramas por segundo", // FrameRate
+        L"Tasa de bits", // Bitrate
+        L"Artista", // Artist
+        L"Álbum", // Album
+        L"Título", // Title
+        L"Autor", // Author
+        L"Descripción", // Description
+        L"Versión", // Version
+        L"Empresa", // Company
+        L"Cámara", // Camera
+        L"Capturado", // Taken
+        L"Modificado", // Modified
+        L"Creado", // Created
+        L"Carpeta de archivos", // Folder
+        L"Archivo", // File
+        L"Elementos", // Items
+        L"bytes", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Velocidad", // Speed
+        L"Área", // Area
+        L"Volumen", // Volume
+        L"Datos", // Data
+        L"Velocidad de datos", // DataRate
+        L"Tiempo", // Time
+        L"Presión", // Pressure
+        L"Energía", // Energy
+        L"Potencia", // Power
+        L"Ángulo", // Angle
+        L"Frecuencia", // Frequency
+        L"Bases numéricas", // BaseRadix
+        L"Conversión", // Conversion
+        L"Notación científica", // Scientific
+        L"Se desinstalarán {0} y sus datos relacionados.", // UninstallPrompt
+        L"No se pudo desinstalar {0}.\n\n{1}", // UninstallFailed
+        L"No está instalado para esta cuenta o forma parte de Windows.", // ProtectedApp
+        L"No se encontró el intérprete: {0}. Revisa la configuración del comando.", // ShellMissing
+        L"No se encontró el directorio del sistema Windows.", // SystemDirMissing
+        L"Los argumentos deben incluir {command} una sola vez como argumento independiente y sin comillas.", // ShellArguments
+        L"Este comando supera la longitud máxima de línea de comandos de Windows.", // CommandTooLong
+        L"Copiar: {0}", // CopyValue
+        L"Abrir {0}", // OpenService
+        L"Buscar «{1}» en {0}", // SearchService
+        L"Buscar en la web", // SearchWeb
+        L"Error", // Error
+        L"Subred", // Subnet
+        L"Puerta de enlace", // Gateway
+    }},
+    {L"et", {
+        L"Otsi kõike", // SearchAnything
+        L"Rakendused", // Apps
+        L"Soovitatud rakendused", // SuggestedApps
+        L"Failid", // Files
+        L"Sätted", // Settings
+        L"Rakendus", // Application
+        L"Kohandatud käsk", // CustomCommand
+        L"Otsetee", // Shortcut
+        L"Kalkulaator", // Calculator
+        L"Ühikute teisendaja", // Converter
+        L"Võrguliidesed", // Network
+        L"Veebiotsing", // WebSearch
+        L"Everything-otsing", // EverythingSearch
+        L"Everything (ei tööta)", // NotRunning
+        L"Vasted", // Matches
+        L"Näidatud", // Shown
+        L"Kopeerimiseks vajuta Enter", // CopyHint
+        L"Tulemuse kopeerimiseks vajuta Enter", // CopyResultHint
+        L"IP kopeerimiseks vajuta Enter", // CopyIpHint
+        L"Brauseris otsimiseks vajuta Enter", // BrowserHint
+        L"Vali", // Select
+        L"Järgmine", // Next
+        L"Ava", // Open
+        L"Haldur", // Admin
+        L"Menüü", // Menu
+        L"Sulge", // Close
+        L"Käivita", // Run
+        L"Otsi brauseris", // SearchBrowser
+        L"Käivita administraatorina", // RunAdmin
+        L"Kopeeri lõikelauale", // CopyClipboard
+        L"Kopeeri käsk", // CopyCommand
+        L"Kopeeri otsingulink", // CopySearchLink
+        L"Ava faili asukoht", // OpenLocation
+        L"Kopeeri tee", // CopyPath
+        L"Loo töölaua otsetee", // DesktopShortcut
+        L"Atribuudid", // Properties
+        L"Desinstalli", // Uninstall
+        L"Ava terminalis", // Terminal
+        L"Käsuviip", // CommandPrompt
+        L"Administraator", // Administrator
+        L"Lõika", // Cut
+        L"Kopeeri", // Copy
+        L"Kopeeri nimi", // CopyName
+        L"Sobivaid rakendusi pole", // NoApps
+        L"Vaata faile või täpsusta otsingut", // Refine
+        L"Failide otsimiseks alusta tippimist", // TypeFiles
+        L"Siia ilmuvad failid ja kaustad", // FilesAppear
+        L"Sobivaid faile pole", // NoFiles
+        L"Everything-indeks ei tagastanud üksusi", // NoItems
+        L"Aktiivseid võrguliideseid pole", // NoNetwork
+        L"Kontrolli Wi-Fi-, Etherneti- või VPN-ühendust", // CheckNetwork
+        L"Tüüp", // Type
+        L"Maht", // Size
+        L"Sisaldab", // Contains
+        L"Mõõtmed", // Dimensions
+        L"Kestus", // Length
+        L"Leheküljed", // Pages
+        L"Kaadrisagedus", // FrameRate
+        L"Bitikiirus", // Bitrate
+        L"Esitaja", // Artist
+        L"Album", // Album
+        L"Pealkiri", // Title
+        L"Autor", // Author
+        L"Kirjeldus", // Description
+        L"Versioon", // Version
+        L"Ettevõte", // Company
+        L"Kaamera", // Camera
+        L"Pildistatud", // Taken
+        L"Muudetud", // Modified
+        L"Loodud", // Created
+        L"Failikaust", // Folder
+        L"Fail", // File
+        L"Üksused", // Items
+        L"baiti", // Bytes
+        L"Mass", // Mass
+        L"Temperatuur", // Temperature
+        L"Kiirus", // Speed
+        L"Pindala", // Area
+        L"Ruumala", // Volume
+        L"Andmed", // Data
+        L"Andmekiirus", // DataRate
+        L"Aeg", // Time
+        L"Rõhk", // Pressure
+        L"Energia", // Energy
+        L"Võimsus", // Power
+        L"Nurk", // Angle
+        L"Sagedus", // Frequency
+        L"Arvusüsteemid", // BaseRadix
+        L"Teisendus", // Conversion
+        L"Teaduslik esitus", // Scientific
+        L"{0} ja sellega seotud teave desinstallitakse.", // UninstallPrompt
+        L"Rakendust {0} ei saanud desinstallida.\n\n{1}", // UninstallFailed
+        L"Pole sellele kontole installitud või on Windowsi osa.", // ProtectedApp
+        L"Käsutõlki ei leitud: {0}. Kontrolli käsu sätteid.", // ShellMissing
+        L"Windowsi süsteemikataloogi ei leitud.", // SystemDirMissing
+        L"Argumendid peavad sisaldama {command} täpselt üks kord eraldi jutumärkideta argumendina.", // ShellArguments
+        L"Käsk ületab Windowsi käsurea pikkuse piirangu.", // CommandTooLong
+        L"Kopeeri: {0}", // CopyValue
+        L"Ava {0}", // OpenService
+        L"Otsi teenusest {0}: „{1}”", // SearchService
+        L"Otsi veebist", // SearchWeb
+        L"Tõrge", // Error
+        L"Alamvõrk", // Subnet
+        L"Lüüs", // Gateway
+    }},
+    {L"fi", {
+        L"Hae mitä tahansa", // SearchAnything
+        L"Sovellukset", // Apps
+        L"Ehdotetut sovellukset", // SuggestedApps
+        L"Tiedostot", // Files
+        L"Asetukset", // Settings
+        L"Sovellus", // Application
+        L"Oma komento", // CustomCommand
+        L"Pikakuvake", // Shortcut
+        L"Laskin", // Calculator
+        L"Yksikkömuunnin", // Converter
+        L"Verkkoliitännät", // Network
+        L"Verkkohaku", // WebSearch
+        L"Everything-haku", // EverythingSearch
+        L"Everything (ei käynnissä)", // NotRunning
+        L"Osumat", // Matches
+        L"Näytetty", // Shown
+        L"Kopioi Enterillä", // CopyHint
+        L"Kopioi tulos Enterillä", // CopyResultHint
+        L"Kopioi IP Enterillä", // CopyIpHint
+        L"Hae selaimessa Enterillä", // BrowserHint
+        L"Valitse", // Select
+        L"Seuraava", // Next
+        L"Avaa", // Open
+        L"Ylläpito", // Admin
+        L"Valikko", // Menu
+        L"Sulje", // Close
+        L"Suorita", // Run
+        L"Hae selaimessa", // SearchBrowser
+        L"Suorita järjestelmänvalvojana", // RunAdmin
+        L"Kopioi leikepöydälle", // CopyClipboard
+        L"Kopioi komento", // CopyCommand
+        L"Kopioi hakulinkki", // CopySearchLink
+        L"Avaa tiedoston sijainti", // OpenLocation
+        L"Kopioi polku", // CopyPath
+        L"Luo työpöydän pikakuvake", // DesktopShortcut
+        L"Ominaisuudet", // Properties
+        L"Poista asennus", // Uninstall
+        L"Avaa päätteessä", // Terminal
+        L"Komentokehote", // CommandPrompt
+        L"Järjestelmänvalvoja", // Administrator
+        L"Leikkaa", // Cut
+        L"Kopioi", // Copy
+        L"Kopioi nimi", // CopyName
+        L"Ei vastaavia sovelluksia", // NoApps
+        L"Tarkista tiedostot tai tarkenna hakua", // Refine
+        L"Kirjoita hakeaksesi tiedostoja", // TypeFiles
+        L"Tiedostot ja kansiot näkyvät tässä", // FilesAppear
+        L"Ei vastaavia tiedostoja", // NoFiles
+        L"Everything-hakemisto ei palauttanut kohteita", // NoItems
+        L"Ei aktiivisia verkkoliitäntöjä", // NoNetwork
+        L"Tarkista Wi-Fi-, Ethernet- tai VPN-yhteys", // CheckNetwork
+        L"Tyyppi", // Type
+        L"Koko", // Size
+        L"Sisältää", // Contains
+        L"Mitat", // Dimensions
+        L"Kesto", // Length
+        L"Sivut", // Pages
+        L"Kuvataajuus", // FrameRate
+        L"Bittinopeus", // Bitrate
+        L"Esittäjä", // Artist
+        L"Albumi", // Album
+        L"Nimi", // Title
+        L"Tekijä", // Author
+        L"Kuvaus", // Description
+        L"Versio", // Version
+        L"Yritys", // Company
+        L"Kamera", // Camera
+        L"Otettu", // Taken
+        L"Muokattu", // Modified
+        L"Luotu", // Created
+        L"Tiedostokansio", // Folder
+        L"Tiedosto", // File
+        L"Kohteet", // Items
+        L"tavua", // Bytes
+        L"Massa", // Mass
+        L"Lämpötila", // Temperature
+        L"Nopeus", // Speed
+        L"Pinta-ala", // Area
+        L"Tilavuus", // Volume
+        L"Data", // Data
+        L"Tiedonsiirtonopeus", // DataRate
+        L"Aika", // Time
+        L"Paine", // Pressure
+        L"Energia", // Energy
+        L"Teho", // Power
+        L"Kulma", // Angle
+        L"Taajuus", // Frequency
+        L"Lukujärjestelmät", // BaseRadix
+        L"Muunnos", // Conversion
+        L"Tieteellinen esitysmuoto", // Scientific
+        L"{0} ja siihen liittyvät tiedot poistetaan.", // UninstallPrompt
+        L"Kohteen {0} asennusta ei voitu poistaa.\n\n{1}", // UninstallFailed
+        L"Ei asennettu tälle tilille tai osa Windowsia.", // ProtectedApp
+        L"Komentotulkkia ei löytynyt: {0}. Tarkista komennon asetukset.", // ShellMissing
+        L"Windowsin järjestelmähakemistoa ei löytynyt.", // SystemDirMissing
+        L"Argumenttien on sisällettävä {command} kerran erillisenä argumenttina ilman lainausmerkkejä.", // ShellArguments
+        L"Komento ylittää Windowsin komentorivin pituusrajan.", // CommandTooLong
+        L"Kopioi: {0}", // CopyValue
+        L"Avaa {0}", // OpenService
+        L"Hae palvelusta {0}: ”{1}”", // SearchService
+        L"Hae verkosta", // SearchWeb
+        L"Virhe", // Error
+        L"Aliverkko", // Subnet
+        L"Yhdyskäytävä", // Gateway
+    }},
+    {L"fil", {
+        L"Maghanap ng anuman", // SearchAnything
+        L"Mga app", // Apps
+        L"Mga iminungkahing app", // SuggestedApps
+        L"Mga file", // Files
+        L"Mga setting", // Settings
+        L"Application", // Application
+        L"Pasadyang command", // CustomCommand
+        L"Shortcut", // Shortcut
+        L"Calculator", // Calculator
+        L"Pang-convert ng yunit", // Converter
+        L"Mga interface ng network", // Network
+        L"Paghahanap sa web", // WebSearch
+        L"Paghahanap sa Everything", // EverythingSearch
+        L"Everything (hindi tumatakbo)", // NotRunning
+        L"Mga tugma", // Matches
+        L"Ipinakita", // Shown
+        L"Enter para kopyahin", // CopyHint
+        L"Enter para kopyahin ang resulta", // CopyResultHint
+        L"Enter para kopyahin ang IP", // CopyIpHint
+        L"Enter para maghanap sa browser", // BrowserHint
+        L"Piliin", // Select
+        L"Susunod", // Next
+        L"Buksan", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Isara", // Close
+        L"Patakbuhin", // Run
+        L"Maghanap sa browser", // SearchBrowser
+        L"Patakbuhin bilang administrator", // RunAdmin
+        L"Kopyahin sa clipboard", // CopyClipboard
+        L"Kopyahin ang command", // CopyCommand
+        L"Kopyahin ang link sa paghahanap", // CopySearchLink
+        L"Buksan ang lokasyon ng file", // OpenLocation
+        L"Kopyahin ang path", // CopyPath
+        L"Gumawa ng shortcut sa desktop", // DesktopShortcut
+        L"Mga katangian", // Properties
+        L"I-uninstall", // Uninstall
+        L"Buksan sa terminal", // Terminal
+        L"Command Prompt", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Gupitin", // Cut
+        L"Kopyahin", // Copy
+        L"Kopyahin ang pangalan", // CopyName
+        L"Walang tumugmang application", // NoApps
+        L"Tingnan ang mga file o linawin ang paghahanap", // Refine
+        L"Mag-type para maghanap ng mga file", // TypeFiles
+        L"Lalabas dito ang mga file at folder", // FilesAppear
+        L"Walang tumugmang file", // NoFiles
+        L"Walang ibinalik na item ang index ng Everything", // NoItems
+        L"Walang aktibong interface ng network", // NoNetwork
+        L"Suriin ang koneksyon sa Wi-Fi, Ethernet, o VPN", // CheckNetwork
+        L"Uri", // Type
+        L"Laki", // Size
+        L"Nilalaman", // Contains
+        L"Mga dimensyon", // Dimensions
+        L"Tagal", // Length
+        L"Mga pahina", // Pages
+        L"Bilis ng frame", // FrameRate
+        L"Bitrate", // Bitrate
+        L"Artist", // Artist
+        L"Album", // Album
+        L"Pamagat", // Title
+        L"May-akda", // Author
+        L"Paglalarawan", // Description
+        L"Bersyon", // Version
+        L"Kumpanya", // Company
+        L"Kamera", // Camera
+        L"Kinuha", // Taken
+        L"Binago", // Modified
+        L"Ginawa", // Created
+        L"Folder ng mga file", // Folder
+        L"File", // File
+        L"Mga item", // Items
+        L"byte", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Bilis", // Speed
+        L"Lawak", // Area
+        L"Dami", // Volume
+        L"Data", // Data
+        L"Bilis ng data", // DataRate
+        L"Oras", // Time
+        L"Presyon", // Pressure
+        L"Enerhiya", // Energy
+        L"Lakas", // Power
+        L"Anggulo", // Angle
+        L"Dalas", // Frequency
+        L"Mga base ng numero", // BaseRadix
+        L"Pag-convert", // Conversion
+        L"Siyentipikong notasyon", // Scientific
+        L"Ia-uninstall ang {0} at ang kaugnay na impormasyon nito.", // UninstallPrompt
+        L"Hindi ma-uninstall ang {0}.\n\n{1}", // UninstallFailed
+        L"Hindi naka-install para sa account na ito o bahagi ito ng Windows.", // ProtectedApp
+        L"Hindi nakita ang shell: {0}. Suriin ang mga setting ng command.", // ShellMissing
+        L"Hindi nakita ang system directory ng Windows.", // SystemDirMissing
+        L"Dapat may {command} nang isang beses bilang hiwalay na argument na walang panipi.", // ShellArguments
+        L"Lumampas ang command sa limitasyon ng haba ng command line ng Windows.", // CommandTooLong
+        L"Kopyahin: {0}", // CopyValue
+        L"Buksan ang {0}", // OpenService
+        L"Hanapin ang “{1}” sa {0}", // SearchService
+        L"Maghanap sa web", // SearchWeb
+        L"Error", // Error
+        L"Subnet", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"fr", {
+        L"Tout rechercher", // SearchAnything
+        L"Applications", // Apps
+        L"Applications suggérées", // SuggestedApps
+        L"Fichiers", // Files
+        L"Paramètres", // Settings
+        L"Application", // Application
+        L"Commande personnalisée", // CustomCommand
+        L"Raccourci", // Shortcut
+        L"Calculatrice", // Calculator
+        L"Convertisseur d’unités", // Converter
+        L"Interfaces réseau", // Network
+        L"Recherche web", // WebSearch
+        L"Recherche Everything", // EverythingSearch
+        L"Everything (non démarré)", // NotRunning
+        L"Résultats", // Matches
+        L"Affichés", // Shown
+        L"Entrée pour copier", // CopyHint
+        L"Entrée pour copier le résultat", // CopyResultHint
+        L"Entrée pour copier l’IP", // CopyIpHint
+        L"Entrée pour rechercher dans le navigateur", // BrowserHint
+        L"Sélectionner", // Select
+        L"Suivant", // Next
+        L"Ouvrir", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Fermer", // Close
+        L"Exécuter", // Run
+        L"Rechercher dans le navigateur", // SearchBrowser
+        L"Exécuter en tant qu’administrateur", // RunAdmin
+        L"Copier dans le presse-papiers", // CopyClipboard
+        L"Copier la commande", // CopyCommand
+        L"Copier le lien de recherche", // CopySearchLink
+        L"Ouvrir l’emplacement du fichier", // OpenLocation
+        L"Copier le chemin", // CopyPath
+        L"Créer un raccourci sur le bureau", // DesktopShortcut
+        L"Propriétés", // Properties
+        L"Désinstaller", // Uninstall
+        L"Ouvrir dans le terminal", // Terminal
+        L"Invite de commandes", // CommandPrompt
+        L"Administrateur", // Administrator
+        L"Couper", // Cut
+        L"Copier", // Copy
+        L"Copier le nom", // CopyName
+        L"Aucune application correspondante", // NoApps
+        L"Vérifiez les fichiers ou affinez la recherche", // Refine
+        L"Saisissez pour rechercher des fichiers", // TypeFiles
+        L"Les fichiers et dossiers apparaîtront ici", // FilesAppear
+        L"Aucun fichier correspondant", // NoFiles
+        L"L’index Everything n’a renvoyé aucun élément", // NoItems
+        L"Aucune interface réseau active", // NoNetwork
+        L"Vérifiez votre connexion Wi-Fi, Ethernet ou VPN", // CheckNetwork
+        L"Type", // Type
+        L"Taille", // Size
+        L"Contient", // Contains
+        L"Dimensions", // Dimensions
+        L"Durée", // Length
+        L"Pages", // Pages
+        L"Fréquence d’images", // FrameRate
+        L"Débit binaire", // Bitrate
+        L"Artiste", // Artist
+        L"Album", // Album
+        L"Titre", // Title
+        L"Auteur", // Author
+        L"Description", // Description
+        L"Version", // Version
+        L"Société", // Company
+        L"Appareil photo", // Camera
+        L"Prise de vue", // Taken
+        L"Modifié", // Modified
+        L"Créé", // Created
+        L"Dossier de fichiers", // Folder
+        L"Fichier", // File
+        L"Éléments", // Items
+        L"octets", // Bytes
+        L"Masse", // Mass
+        L"Température", // Temperature
+        L"Vitesse", // Speed
+        L"Surface", // Area
+        L"Volume", // Volume
+        L"Données", // Data
+        L"Débit de données", // DataRate
+        L"Temps", // Time
+        L"Pression", // Pressure
+        L"Énergie", // Energy
+        L"Puissance", // Power
+        L"Angle", // Angle
+        L"Fréquence", // Frequency
+        L"Bases numériques", // BaseRadix
+        L"Conversion", // Conversion
+        L"Notation scientifique", // Scientific
+        L"{0} et les informations associées seront désinstallés.", // UninstallPrompt
+        L"Impossible de désinstaller {0}.\n\n{1}", // UninstallFailed
+        L"Non installé pour ce compte ou fait partie de Windows.", // ProtectedApp
+        L"Interpréteur introuvable : {0}. Vérifiez les paramètres de la commande.", // ShellMissing
+        L"Répertoire système Windows introuvable.", // SystemDirMissing
+        L"Les arguments doivent contenir {command} une seule fois comme argument distinct, sans guillemets.", // ShellArguments
+        L"Cette commande dépasse la longueur maximale de ligne de commande Windows.", // CommandTooLong
+        L"Copier : {0}", // CopyValue
+        L"Ouvrir {0}", // OpenService
+        L"Rechercher « {1} » sur {0}", // SearchService
+        L"Rechercher sur le web", // SearchWeb
+        L"Erreur", // Error
+        L"Sous-réseau", // Subnet
+        L"Passerelle", // Gateway
+    }},
+    {L"hi", {
+        L"कुछ भी खोजें", // SearchAnything
+        L"ऐप्स", // Apps
+        L"सुझाए गए ऐप्स", // SuggestedApps
+        L"फ़ाइलें", // Files
+        L"सेटिंग्स", // Settings
+        L"ऐप्लिकेशन", // Application
+        L"कस्टम कमांड", // CustomCommand
+        L"शॉर्टकट", // Shortcut
+        L"कैलकुलेटर", // Calculator
+        L"इकाई परिवर्तक", // Converter
+        L"नेटवर्क इंटरफ़ेस", // Network
+        L"वेब खोज", // WebSearch
+        L"Everything खोज", // EverythingSearch
+        L"Everything (चल नहीं रहा)", // NotRunning
+        L"मिलान", // Matches
+        L"दिखाए गए", // Shown
+        L"कॉपी करने के लिए Enter दबाएँ", // CopyHint
+        L"परिणाम कॉपी करने के लिए Enter दबाएँ", // CopyResultHint
+        L"IP कॉपी करने के लिए Enter दबाएँ", // CopyIpHint
+        L"ब्राउज़र में खोजने के लिए Enter दबाएँ", // BrowserHint
+        L"चुनें", // Select
+        L"अगला", // Next
+        L"खोलें", // Open
+        L"व्यवस्थापक", // Admin
+        L"मेनू", // Menu
+        L"बंद करें", // Close
+        L"चलाएँ", // Run
+        L"ब्राउज़र में खोजें", // SearchBrowser
+        L"व्यवस्थापक के रूप में चलाएँ", // RunAdmin
+        L"क्लिपबोर्ड पर कॉपी करें", // CopyClipboard
+        L"कमांड कॉपी करें", // CopyCommand
+        L"खोज लिंक कॉपी करें", // CopySearchLink
+        L"फ़ाइल का स्थान खोलें", // OpenLocation
+        L"पथ कॉपी करें", // CopyPath
+        L"डेस्कटॉप शॉर्टकट बनाएँ", // DesktopShortcut
+        L"गुण", // Properties
+        L"अनइंस्टॉल करें", // Uninstall
+        L"टर्मिनल में खोलें", // Terminal
+        L"कमांड प्रॉम्प्ट", // CommandPrompt
+        L"व्यवस्थापक", // Administrator
+        L"काटें", // Cut
+        L"कॉपी करें", // Copy
+        L"नाम कॉपी करें", // CopyName
+        L"कोई मेल खाने वाला ऐप्लिकेशन नहीं", // NoApps
+        L"फ़ाइलें देखें या खोज को अधिक सटीक बनाएँ", // Refine
+        L"फ़ाइलें खोजने के लिए टाइप करें", // TypeFiles
+        L"फ़ाइलें और फ़ोल्डर यहाँ दिखेंगे", // FilesAppear
+        L"कोई मेल खाने वाली फ़ाइल नहीं", // NoFiles
+        L"Everything सूचकांक से कोई आइटम नहीं मिला", // NoItems
+        L"कोई सक्रिय नेटवर्क इंटरफ़ेस नहीं", // NoNetwork
+        L"अपना Wi-Fi, ईथरनेट या VPN कनेक्शन जाँचें", // CheckNetwork
+        L"प्रकार", // Type
+        L"आकार", // Size
+        L"सामग्री", // Contains
+        L"आयाम", // Dimensions
+        L"अवधि", // Length
+        L"पृष्ठ", // Pages
+        L"फ़्रेम दर", // FrameRate
+        L"बिट दर", // Bitrate
+        L"कलाकार", // Artist
+        L"एल्बम", // Album
+        L"शीर्षक", // Title
+        L"लेखक", // Author
+        L"विवरण", // Description
+        L"संस्करण", // Version
+        L"कंपनी", // Company
+        L"कैमरा", // Camera
+        L"लिया गया", // Taken
+        L"संशोधित", // Modified
+        L"बनाया गया", // Created
+        L"फ़ाइल फ़ोल्डर", // Folder
+        L"फ़ाइल", // File
+        L"आइटम", // Items
+        L"बाइट", // Bytes
+        L"द्रव्यमान", // Mass
+        L"तापमान", // Temperature
+        L"गति", // Speed
+        L"क्षेत्रफल", // Area
+        L"आयतन", // Volume
+        L"डेटा", // Data
+        L"डेटा दर", // DataRate
+        L"समय", // Time
+        L"दाब", // Pressure
+        L"ऊर्जा", // Energy
+        L"शक्ति", // Power
+        L"कोण", // Angle
+        L"आवृत्ति", // Frequency
+        L"संख्या आधार", // BaseRadix
+        L"रूपांतरण", // Conversion
+        L"वैज्ञानिक संकेतन", // Scientific
+        L"{0} और उसकी संबंधित जानकारी अनइंस्टॉल हो जाएगी।", // UninstallPrompt
+        L"{0} को अनइंस्टॉल नहीं किया जा सका।\n\n{1}", // UninstallFailed
+        L"यह इस खाते के लिए इंस्टॉल नहीं है या Windows का हिस्सा है।", // ProtectedApp
+        L"शेल नहीं मिला: {0}। कमांड की सेटिंग्स जाँचें।", // ShellMissing
+        L"Windows सिस्टम निर्देशिका नहीं मिली।", // SystemDirMissing
+        L"शेल आर्ग्युमेंट में {command} ठीक एक बार, अलग और बिना उद्धरण चिह्न वाले आर्ग्युमेंट के रूप में होना चाहिए।", // ShellArguments
+        L"यह कमांड Windows कमांड-लाइन की लंबाई सीमा से अधिक है।", // CommandTooLong
+        L"कॉपी करें: {0}", // CopyValue
+        L"{0} खोलें", // OpenService
+        L"{0} पर “{1}” खोजें", // SearchService
+        L"वेब पर खोजें", // SearchWeb
+        L"त्रुटि", // Error
+        L"सबनेट", // Subnet
+        L"गेटवे", // Gateway
+    }},
+    {L"hr", {
+        L"Pretraži sve", // SearchAnything
+        L"Aplikacije", // Apps
+        L"Predložene aplikacije", // SuggestedApps
+        L"Datoteke", // Files
+        L"Postavke", // Settings
+        L"Aplikacija", // Application
+        L"Prilagođena naredba", // CustomCommand
+        L"Prečac", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Pretvarač jedinica", // Converter
+        L"Mrežna sučelja", // Network
+        L"Web-pretraživanje", // WebSearch
+        L"Everything pretraživanje", // EverythingSearch
+        L"Everything (nije pokrenut)", // NotRunning
+        L"Podudaranja", // Matches
+        L"Prikazano", // Shown
+        L"Enter za kopiranje", // CopyHint
+        L"Enter za kopiranje rezultata", // CopyResultHint
+        L"Enter za kopiranje IP-a", // CopyIpHint
+        L"Enter za pretraživanje u pregledniku", // BrowserHint
+        L"Odaberi", // Select
+        L"Sljedeće", // Next
+        L"Otvori", // Open
+        L"Admin", // Admin
+        L"Izbornik", // Menu
+        L"Zatvori", // Close
+        L"Pokreni", // Run
+        L"Pretraži u pregledniku", // SearchBrowser
+        L"Pokreni kao administrator", // RunAdmin
+        L"Kopiraj u međuspremnik", // CopyClipboard
+        L"Kopiraj naredbu", // CopyCommand
+        L"Kopiraj poveznicu pretraživanja", // CopySearchLink
+        L"Otvori mjesto datoteke", // OpenLocation
+        L"Kopiraj putanju", // CopyPath
+        L"Stvori prečac na radnoj površini", // DesktopShortcut
+        L"Svojstva", // Properties
+        L"Deinstaliraj", // Uninstall
+        L"Otvori u terminalu", // Terminal
+        L"Naredbeni redak", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Izreži", // Cut
+        L"Kopiraj", // Copy
+        L"Kopiraj naziv", // CopyName
+        L"Nema odgovarajućih aplikacija", // NoApps
+        L"Provjerite datoteke ili suzite pretraživanje", // Refine
+        L"Upišite tekst za pretraživanje datoteka", // TypeFiles
+        L"Datoteke i mape pojavit će se ovdje", // FilesAppear
+        L"Nema odgovarajućih datoteka", // NoFiles
+        L"Everything indeks nije vratio stavke", // NoItems
+        L"Nema aktivnih mrežnih sučelja", // NoNetwork
+        L"Provjerite Wi-Fi, Ethernet ili VPN vezu", // CheckNetwork
+        L"Vrsta", // Type
+        L"Veličina", // Size
+        L"Sadrži", // Contains
+        L"Dimenzije", // Dimensions
+        L"Trajanje", // Length
+        L"Stranice", // Pages
+        L"Broj sličica", // FrameRate
+        L"Brzina prijenosa", // Bitrate
+        L"Izvođač", // Artist
+        L"Album", // Album
+        L"Naslov", // Title
+        L"Autor", // Author
+        L"Opis", // Description
+        L"Verzija", // Version
+        L"Tvrtka", // Company
+        L"Kamera", // Camera
+        L"Snimljeno", // Taken
+        L"Izmijenjeno", // Modified
+        L"Stvoreno", // Created
+        L"Mapa datoteka", // Folder
+        L"Datoteka", // File
+        L"Stavke", // Items
+        L"bajtova", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Brzina", // Speed
+        L"Površina", // Area
+        L"Volumen", // Volume
+        L"Podaci", // Data
+        L"Brzina podataka", // DataRate
+        L"Vrijeme", // Time
+        L"Tlak", // Pressure
+        L"Energija", // Energy
+        L"Snaga", // Power
+        L"Kut", // Angle
+        L"Frekvencija", // Frequency
+        L"Brojevni sustavi", // BaseRadix
+        L"Pretvorba", // Conversion
+        L"Znanstveni zapis", // Scientific
+        L"{0} i povezane informacije bit će deinstalirani.", // UninstallPrompt
+        L"Nije moguće deinstalirati {0}.\n\n{1}", // UninstallFailed
+        L"Nije instalirano za ovaj račun ili je dio sustava Windows.", // ProtectedApp
+        L"Ljuska nije pronađena: {0}. Provjerite postavke naredbe.", // ShellMissing
+        L"Sistemska mapa sustava Windows nije pronađena.", // SystemDirMissing
+        L"Argumenti moraju sadržavati {command} točno jednom kao zaseban argument bez navodnika.", // ShellArguments
+        L"Naredba premašuje ograničenje duljine naredbenog retka sustava Windows.", // CommandTooLong
+        L"Kopiraj: {0}", // CopyValue
+        L"Otvori {0}", // OpenService
+        L"Traži „{1}” na {0}", // SearchService
+        L"Pretraži web", // SearchWeb
+        L"Pogreška", // Error
+        L"Podmreža", // Subnet
+        L"Pristupnik", // Gateway
+    }},
+    {L"hu", {
+        L"Keresés mindenben", // SearchAnything
+        L"Alkalmazások", // Apps
+        L"Javasolt alkalmazások", // SuggestedApps
+        L"Fájlok", // Files
+        L"Beállítások", // Settings
+        L"Alkalmazás", // Application
+        L"Egyéni parancs", // CustomCommand
+        L"Parancsikon", // Shortcut
+        L"Számológép", // Calculator
+        L"Mértékegység-átváltó", // Converter
+        L"Hálózati adapterek", // Network
+        L"Webes keresés", // WebSearch
+        L"Everything-keresés", // EverythingSearch
+        L"Everything (nem fut)", // NotRunning
+        L"Találatok", // Matches
+        L"Megjelenítve", // Shown
+        L"Enter a másoláshoz", // CopyHint
+        L"Enter az eredmény másolásához", // CopyResultHint
+        L"Enter az IP másolásához", // CopyIpHint
+        L"Enter a böngészős kereséshez", // BrowserHint
+        L"Kijelölés", // Select
+        L"Következő", // Next
+        L"Megnyitás", // Open
+        L"Admin", // Admin
+        L"Menü", // Menu
+        L"Bezárás", // Close
+        L"Futtatás", // Run
+        L"Keresés a böngészőben", // SearchBrowser
+        L"Futtatás rendszergazdaként", // RunAdmin
+        L"Másolás a vágólapra", // CopyClipboard
+        L"Parancs másolása", // CopyCommand
+        L"Keresési hivatkozás másolása", // CopySearchLink
+        L"Fájl helyének megnyitása", // OpenLocation
+        L"Elérési út másolása", // CopyPath
+        L"Asztali parancsikon létrehozása", // DesktopShortcut
+        L"Tulajdonságok", // Properties
+        L"Eltávolítás", // Uninstall
+        L"Megnyitás terminálban", // Terminal
+        L"Parancssor", // CommandPrompt
+        L"Rendszergazda", // Administrator
+        L"Kivágás", // Cut
+        L"Másolás", // Copy
+        L"Név másolása", // CopyName
+        L"Nincs megfelelő alkalmazás", // NoApps
+        L"Nézze meg a fájlokat, vagy pontosítsa a keresést", // Refine
+        L"Gépeljen a fájlkereséshez", // TypeFiles
+        L"Itt jelennek meg a fájlok és mappák", // FilesAppear
+        L"Nincs megfelelő fájl", // NoFiles
+        L"Az Everything-index nem adott vissza elemeket", // NoItems
+        L"Nincs aktív hálózati adapter", // NoNetwork
+        L"Ellenőrizze a Wi-Fi-, Ethernet- vagy VPN-kapcsolatot", // CheckNetwork
+        L"Típus", // Type
+        L"Méret", // Size
+        L"Tartalmaz", // Contains
+        L"Képméret", // Dimensions
+        L"Időtartam", // Length
+        L"Oldalak", // Pages
+        L"Képkockasebesség", // FrameRate
+        L"Bitráta", // Bitrate
+        L"Előadó", // Artist
+        L"Album", // Album
+        L"Cím", // Title
+        L"Szerző", // Author
+        L"Leírás", // Description
+        L"Verzió", // Version
+        L"Vállalat", // Company
+        L"Fényképezőgép", // Camera
+        L"Készítve", // Taken
+        L"Módosítva", // Modified
+        L"Létrehozva", // Created
+        L"Fájlmappa", // Folder
+        L"Fájl", // File
+        L"Elemek", // Items
+        L"bájt", // Bytes
+        L"Tömeg", // Mass
+        L"Hőmérséklet", // Temperature
+        L"Sebesség", // Speed
+        L"Terület", // Area
+        L"Térfogat", // Volume
+        L"Adat", // Data
+        L"Adatsebesség", // DataRate
+        L"Idő", // Time
+        L"Nyomás", // Pressure
+        L"Energia", // Energy
+        L"Teljesítmény", // Power
+        L"Szög", // Angle
+        L"Frekvencia", // Frequency
+        L"Számrendszerek", // BaseRadix
+        L"Átváltás", // Conversion
+        L"Tudományos jelölés", // Scientific
+        L"A(z) {0} és a kapcsolódó adatok eltávolításra kerülnek.", // UninstallPrompt
+        L"A(z) {0} eltávolítása nem sikerült.\n\n{1}", // UninstallFailed
+        L"Nincs telepítve ehhez a fiókhoz, vagy a Windows része.", // ProtectedApp
+        L"A parancsértelmező nem található: {0}. Ellenőrizze a parancs beállításait.", // ShellMissing
+        L"A Windows rendszerkönyvtára nem található.", // SystemDirMissing
+        L"Az argumentumokban a {command} egyszer, külön argumentumként, idézőjelek nélkül szerepeljen.", // ShellArguments
+        L"A parancs meghaladja a Windows parancssori hosszkorlátját.", // CommandTooLong
+        L"Másolás: {0}", // CopyValue
+        L"{0} megnyitása", // OpenService
+        L"„{1}” keresése itt: {0}", // SearchService
+        L"Keresés a weben", // SearchWeb
+        L"Hiba", // Error
+        L"Alhálózat", // Subnet
+        L"Átjáró", // Gateway
+    }},
+    {L"hy", {
+        L"Որոնել ամեն ինչ", // SearchAnything
+        L"Հավելվածներ", // Apps
+        L"Առաջարկվող հավելվածներ", // SuggestedApps
+        L"Ֆայլեր", // Files
+        L"Կարգավորումներ", // Settings
+        L"Հավելված", // Application
+        L"Հատուկ հրաման", // CustomCommand
+        L"Դյուրանցում", // Shortcut
+        L"Հաշվիչ", // Calculator
+        L"Միավորների փոխարկիչ", // Converter
+        L"Ցանցային միջերեսներ", // Network
+        L"Վեբ որոնում", // WebSearch
+        L"Everything որոնում", // EverythingSearch
+        L"Everything (չի աշխատում)", // NotRunning
+        L"Համընկնումներ", // Matches
+        L"Ցուցադրված", // Shown
+        L"Enter՝ պատճենելու համար", // CopyHint
+        L"Enter՝ արդյունքը պատճենելու համար", // CopyResultHint
+        L"Enter՝ IP-ն պատճենելու համար", // CopyIpHint
+        L"Enter՝ դիտարկիչում որոնելու համար", // BrowserHint
+        L"Ընտրել", // Select
+        L"Հաջորդը", // Next
+        L"Բացել", // Open
+        L"Ադմին", // Admin
+        L"Ընտրացանկ", // Menu
+        L"Փակել", // Close
+        L"Գործարկել", // Run
+        L"Որոնել դիտարկիչում", // SearchBrowser
+        L"Գործարկել որպես ադմինիստրատոր", // RunAdmin
+        L"Պատճենել սեղմատախտակին", // CopyClipboard
+        L"Պատճենել հրամանը", // CopyCommand
+        L"Պատճենել որոնման հղումը", // CopySearchLink
+        L"Բացել ֆայլի տեղադրությունը", // OpenLocation
+        L"Պատճենել ուղին", // CopyPath
+        L"Ստեղծել դյուրանցում աշխատասեղանին", // DesktopShortcut
+        L"Հատկություններ", // Properties
+        L"Ապատեղադրել", // Uninstall
+        L"Բացել տերմինալում", // Terminal
+        L"Հրամանի տող", // CommandPrompt
+        L"Ադմինիստրատոր", // Administrator
+        L"Կտրել", // Cut
+        L"Պատճենել", // Copy
+        L"Պատճենել անունը", // CopyName
+        L"Համապատասխան հավելվածներ չկան", // NoApps
+        L"Ստուգեք ֆայլերը կամ ճշգրտեք որոնումը", // Refine
+        L"Մուտքագրեք՝ ֆայլեր որոնելու համար", // TypeFiles
+        L"Ֆայլերն ու պանակները կհայտնվեն այստեղ", // FilesAppear
+        L"Համապատասխան ֆայլեր չկան", // NoFiles
+        L"Everything ցուցիչը տարրեր չի վերադարձրել", // NoItems
+        L"Ակտիվ ցանցային միջերեսներ չկան", // NoNetwork
+        L"Ստուգեք Wi-Fi, Ethernet կամ VPN կապը", // CheckNetwork
+        L"Տեսակ", // Type
+        L"Չափ", // Size
+        L"Պարունակում է", // Contains
+        L"Չափեր", // Dimensions
+        L"Տևողություն", // Length
+        L"Էջեր", // Pages
+        L"Կադրերի հաճախություն", // FrameRate
+        L"Բիթային արագություն", // Bitrate
+        L"Կատարող", // Artist
+        L"Ալբոմ", // Album
+        L"Վերնագիր", // Title
+        L"Հեղինակ", // Author
+        L"Նկարագրություն", // Description
+        L"Տարբերակ", // Version
+        L"Ընկերություն", // Company
+        L"Տեսախցիկ", // Camera
+        L"Նկարված", // Taken
+        L"Փոփոխված", // Modified
+        L"Ստեղծված", // Created
+        L"Ֆայլերի պանակ", // Folder
+        L"Ֆայլ", // File
+        L"Տարրեր", // Items
+        L"բայթ", // Bytes
+        L"Զանգված", // Mass
+        L"Ջերմաստիճան", // Temperature
+        L"Արագություն", // Speed
+        L"Մակերես", // Area
+        L"Ծավալ", // Volume
+        L"Տվյալներ", // Data
+        L"Տվյալների արագություն", // DataRate
+        L"Ժամանակ", // Time
+        L"Ճնշում", // Pressure
+        L"Էներգիա", // Energy
+        L"Հզորություն", // Power
+        L"Անկյուն", // Angle
+        L"Հաճախություն", // Frequency
+        L"Թվային համակարգեր", // BaseRadix
+        L"Փոխարկում", // Conversion
+        L"Գիտական գրառում", // Scientific
+        L"{0}-ը և հարակից տեղեկությունները կապատեղադրվեն։", // UninstallPrompt
+        L"Չհաջողվեց ապատեղադրել {0}-ը։\n\n{1}", // UninstallFailed
+        L"Տեղադրված չէ այս հաշվի համար կամ Windows-ի մաս է։", // ProtectedApp
+        L"Հրամանային միջավայրը չի գտնվել՝ {0}։ Ստուգեք հրամանի կարգավորումները։", // ShellMissing
+        L"Windows-ի համակարգային պանակը չի գտնվել։", // SystemDirMissing
+        L"Փաստարկները պետք է պարունակեն {command} ճիշտ մեկ անգամ՝ որպես առանձին փաստարկ առանց չակերտների։", // ShellArguments
+        L"Այս հրամանը գերազանցում է Windows-ի հրամանի տողի երկարության սահմանը։", // CommandTooLong
+        L"Պատճենել՝ {0}", // CopyValue
+        L"Բացել {0}-ը", // OpenService
+        L"Որոնել «{1}»՝ {0}-ում", // SearchService
+        L"Որոնել վեբում", // SearchWeb
+        L"Սխալ", // Error
+        L"Ենթացանց", // Subnet
+        L"Դարպաս", // Gateway
+    }},
+    {L"id", {
+        L"Cari apa saja", // SearchAnything
+        L"Aplikasi", // Apps
+        L"Aplikasi yang disarankan", // SuggestedApps
+        L"Berkas", // Files
+        L"Pengaturan", // Settings
+        L"Aplikasi", // Application
+        L"Perintah khusus", // CustomCommand
+        L"Pintasan", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Pengonversi satuan", // Converter
+        L"Antarmuka jaringan", // Network
+        L"Pencarian web", // WebSearch
+        L"Pencarian Everything", // EverythingSearch
+        L"Everything (tidak berjalan)", // NotRunning
+        L"Hasil", // Matches
+        L"Ditampilkan", // Shown
+        L"Enter untuk menyalin", // CopyHint
+        L"Enter untuk menyalin hasil", // CopyResultHint
+        L"Enter untuk menyalin IP", // CopyIpHint
+        L"Enter untuk mencari di peramban", // BrowserHint
+        L"Pilih", // Select
+        L"Berikutnya", // Next
+        L"Buka", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Tutup", // Close
+        L"Jalankan", // Run
+        L"Cari di peramban", // SearchBrowser
+        L"Jalankan sebagai administrator", // RunAdmin
+        L"Salin ke papan klip", // CopyClipboard
+        L"Salin perintah", // CopyCommand
+        L"Salin tautan pencarian", // CopySearchLink
+        L"Buka lokasi berkas", // OpenLocation
+        L"Salin jalur", // CopyPath
+        L"Buat pintasan desktop", // DesktopShortcut
+        L"Properti", // Properties
+        L"Copot pemasangan", // Uninstall
+        L"Buka di terminal", // Terminal
+        L"Prompt Perintah", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Potong", // Cut
+        L"Salin", // Copy
+        L"Salin nama", // CopyName
+        L"Tidak ada aplikasi yang cocok", // NoApps
+        L"Periksa berkas atau persempit pencarian", // Refine
+        L"Ketik untuk mencari berkas", // TypeFiles
+        L"Berkas dan folder akan muncul di sini", // FilesAppear
+        L"Tidak ada berkas yang cocok", // NoFiles
+        L"Indeks Everything tidak menghasilkan item", // NoItems
+        L"Tidak ada antarmuka jaringan aktif", // NoNetwork
+        L"Periksa koneksi Wi-Fi, Ethernet, atau VPN Anda", // CheckNetwork
+        L"Jenis", // Type
+        L"Ukuran", // Size
+        L"Berisi", // Contains
+        L"Dimensi", // Dimensions
+        L"Durasi", // Length
+        L"Halaman", // Pages
+        L"Laju bingkai", // FrameRate
+        L"Laju bit", // Bitrate
+        L"Artis", // Artist
+        L"Album", // Album
+        L"Judul", // Title
+        L"Penulis", // Author
+        L"Deskripsi", // Description
+        L"Versi", // Version
+        L"Perusahaan", // Company
+        L"Kamera", // Camera
+        L"Diambil", // Taken
+        L"Diubah", // Modified
+        L"Dibuat", // Created
+        L"Folder berkas", // Folder
+        L"Berkas", // File
+        L"Item", // Items
+        L"byte", // Bytes
+        L"Massa", // Mass
+        L"Suhu", // Temperature
+        L"Kecepatan", // Speed
+        L"Luas", // Area
+        L"Volume", // Volume
+        L"Data", // Data
+        L"Laju data", // DataRate
+        L"Waktu", // Time
+        L"Tekanan", // Pressure
+        L"Energi", // Energy
+        L"Daya", // Power
+        L"Sudut", // Angle
+        L"Frekuensi", // Frequency
+        L"Basis bilangan", // BaseRadix
+        L"Konversi", // Conversion
+        L"Notasi ilmiah", // Scientific
+        L"{0} dan informasi terkait akan dicopot.", // UninstallPrompt
+        L"Tidak dapat mencopot {0}.\n\n{1}", // UninstallFailed
+        L"Tidak dipasang untuk akun ini atau merupakan bagian dari Windows.", // ProtectedApp
+        L"Shell tidak ditemukan: {0}. Periksa pengaturan perintah.", // ShellMissing
+        L"Direktori sistem Windows tidak ditemukan.", // SystemDirMissing
+        L"Argumen shell harus berisi {command} tepat sekali sebagai argumen terpisah tanpa tanda kutip.", // ShellArguments
+        L"Perintah ini melebihi batas panjang baris perintah Windows.", // CommandTooLong
+        L"Salin: {0}", // CopyValue
+        L"Buka {0}", // OpenService
+        L"Cari “{1}” di {0}", // SearchService
+        L"Cari di web", // SearchWeb
+        L"Kesalahan", // Error
+        L"Subnet", // Subnet
+        L"Gerbang", // Gateway
+    }},
+    {L"is", {
+        L"Leita að hverju sem er", // SearchAnything
+        L"Forrit", // Apps
+        L"Tillögur að forritum", // SuggestedApps
+        L"Skrár", // Files
+        L"Stillingar", // Settings
+        L"Forrit", // Application
+        L"Sérsniðin skipun", // CustomCommand
+        L"Flýtileið", // Shortcut
+        L"Reiknivél", // Calculator
+        L"Einingabreytir", // Converter
+        L"Netviðmót", // Network
+        L"Vefleit", // WebSearch
+        L"Everything-leit", // EverythingSearch
+        L"Everything (ekki í gangi)", // NotRunning
+        L"Niðurstöður", // Matches
+        L"Sýnt", // Shown
+        L"Ýttu á Enter til að afrita", // CopyHint
+        L"Ýttu á Enter til að afrita niðurstöðu", // CopyResultHint
+        L"Ýttu á Enter til að afrita IP", // CopyIpHint
+        L"Ýttu á Enter til að leita í vafra", // BrowserHint
+        L"Velja", // Select
+        L"Næsta", // Next
+        L"Opna", // Open
+        L"Stjórnandi", // Admin
+        L"Valmynd", // Menu
+        L"Loka", // Close
+        L"Keyra", // Run
+        L"Leita í vafra", // SearchBrowser
+        L"Keyra sem stjórnandi", // RunAdmin
+        L"Afrita á klippiborð", // CopyClipboard
+        L"Afrita skipun", // CopyCommand
+        L"Afrita leitartengil", // CopySearchLink
+        L"Opna staðsetningu skrár", // OpenLocation
+        L"Afrita slóð", // CopyPath
+        L"Búa til flýtileið á skjáborði", // DesktopShortcut
+        L"Eiginleikar", // Properties
+        L"Fjarlægja", // Uninstall
+        L"Opna í skjáhermi", // Terminal
+        L"Skipanalína", // CommandPrompt
+        L"Stjórnandi", // Administrator
+        L"Klippa", // Cut
+        L"Afrita", // Copy
+        L"Afrita heiti", // CopyName
+        L"Engin samsvarandi forrit", // NoApps
+        L"Athugaðu skrár eða þrengdu leitina", // Refine
+        L"Skrifaðu til að leita að skrám", // TypeFiles
+        L"Skrár og möppur birtast hér", // FilesAppear
+        L"Engar samsvarandi skrár", // NoFiles
+        L"Everything-skráin skilaði engum atriðum", // NoItems
+        L"Engin virk netviðmót", // NoNetwork
+        L"Athugaðu Wi-Fi-, Ethernet- eða VPN-tenginguna", // CheckNetwork
+        L"Gerð", // Type
+        L"Stærð", // Size
+        L"Inniheldur", // Contains
+        L"Mál", // Dimensions
+        L"Lengd", // Length
+        L"Síður", // Pages
+        L"Rammatíðni", // FrameRate
+        L"Bitahraði", // Bitrate
+        L"Flytjandi", // Artist
+        L"Plata", // Album
+        L"Titill", // Title
+        L"Höfundur", // Author
+        L"Lýsing", // Description
+        L"Útgáfa", // Version
+        L"Fyrirtæki", // Company
+        L"Myndavél", // Camera
+        L"Tekið", // Taken
+        L"Breytt", // Modified
+        L"Búið til", // Created
+        L"Skráamappa", // Folder
+        L"Skrá", // File
+        L"Atriði", // Items
+        L"bæti", // Bytes
+        L"Massi", // Mass
+        L"Hitastig", // Temperature
+        L"Hraði", // Speed
+        L"Flatarmál", // Area
+        L"Rúmmál", // Volume
+        L"Gögn", // Data
+        L"Gagnaflutningshraði", // DataRate
+        L"Tími", // Time
+        L"Þrýstingur", // Pressure
+        L"Orka", // Energy
+        L"Afl", // Power
+        L"Horn", // Angle
+        L"Tíðni", // Frequency
+        L"Talnakerfi", // BaseRadix
+        L"Umreikningur", // Conversion
+        L"Vísindalegur ritháttur", // Scientific
+        L"{0} og tengdar upplýsingar verða fjarlægðar.", // UninstallPrompt
+        L"Ekki tókst að fjarlægja {0}.\n\n{1}", // UninstallFailed
+        L"Ekki uppsett fyrir þennan reikning eða hluti af Windows.", // ProtectedApp
+        L"Skipanatúlkur fannst ekki: {0}. Athugaðu stillingar skipunar.", // ShellMissing
+        L"Kerfismappa Windows fannst ekki.", // SystemDirMissing
+        L"Viðföng verða að innihalda {command} einu sinni sem sérstakt viðfang án gæsalappa.", // ShellArguments
+        L"Þessi skipun fer yfir lengdarmörk skipanalínu Windows.", // CommandTooLong
+        L"Afrita: {0}", // CopyValue
+        L"Opna {0}", // OpenService
+        L"Leita að „{1}“ á {0}", // SearchService
+        L"Leita á vefnum", // SearchWeb
+        L"Villa", // Error
+        L"Undirnet", // Subnet
+        L"Gátt", // Gateway
+    }},
+    {L"it", {
+        L"Cerca qualsiasi cosa", // SearchAnything
+        L"App", // Apps
+        L"App suggerite", // SuggestedApps
+        L"File", // Files
+        L"Impostazioni", // Settings
+        L"Applicazione", // Application
+        L"Comando personalizzato", // CustomCommand
+        L"Collegamento", // Shortcut
+        L"Calcolatrice", // Calculator
+        L"Convertitore di unità", // Converter
+        L"Interfacce di rete", // Network
+        L"Ricerca web", // WebSearch
+        L"Ricerca Everything", // EverythingSearch
+        L"Everything (non in esecuzione)", // NotRunning
+        L"Risultati", // Matches
+        L"Visualizzati", // Shown
+        L"Invio per copiare", // CopyHint
+        L"Invio per copiare il risultato", // CopyResultHint
+        L"Invio per copiare l’IP", // CopyIpHint
+        L"Invio per cercare nel browser", // BrowserHint
+        L"Seleziona", // Select
+        L"Avanti", // Next
+        L"Apri", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Chiudi", // Close
+        L"Esegui", // Run
+        L"Cerca nel browser", // SearchBrowser
+        L"Esegui come amministratore", // RunAdmin
+        L"Copia negli appunti", // CopyClipboard
+        L"Copia comando", // CopyCommand
+        L"Copia link di ricerca", // CopySearchLink
+        L"Apri percorso file", // OpenLocation
+        L"Copia percorso", // CopyPath
+        L"Crea collegamento sul desktop", // DesktopShortcut
+        L"Proprietà", // Properties
+        L"Disinstalla", // Uninstall
+        L"Apri nel terminale", // Terminal
+        L"Prompt dei comandi", // CommandPrompt
+        L"Amministratore", // Administrator
+        L"Taglia", // Cut
+        L"Copia", // Copy
+        L"Copia nome", // CopyName
+        L"Nessuna applicazione corrispondente", // NoApps
+        L"Controlla i file o affina la ricerca", // Refine
+        L"Digita per cercare file", // TypeFiles
+        L"File e cartelle appariranno qui", // FilesAppear
+        L"Nessun file corrispondente", // NoFiles
+        L"L’indice Everything non ha restituito elementi", // NoItems
+        L"Nessuna interfaccia di rete attiva", // NoNetwork
+        L"Controlla la connessione Wi-Fi, Ethernet o VPN", // CheckNetwork
+        L"Tipo", // Type
+        L"Dimensione", // Size
+        L"Contiene", // Contains
+        L"Dimensioni", // Dimensions
+        L"Durata", // Length
+        L"Pagine", // Pages
+        L"Frequenza fotogrammi", // FrameRate
+        L"Bitrate", // Bitrate
+        L"Artista", // Artist
+        L"Album", // Album
+        L"Titolo", // Title
+        L"Autore", // Author
+        L"Descrizione", // Description
+        L"Versione", // Version
+        L"Azienda", // Company
+        L"Fotocamera", // Camera
+        L"Acquisito", // Taken
+        L"Modificato", // Modified
+        L"Creato", // Created
+        L"Cartella di file", // Folder
+        L"File", // File
+        L"Elementi", // Items
+        L"byte", // Bytes
+        L"Massa", // Mass
+        L"Temperatura", // Temperature
+        L"Velocità", // Speed
+        L"Area", // Area
+        L"Volume", // Volume
+        L"Dati", // Data
+        L"Velocità dati", // DataRate
+        L"Tempo", // Time
+        L"Pressione", // Pressure
+        L"Energia", // Energy
+        L"Potenza", // Power
+        L"Angolo", // Angle
+        L"Frequenza", // Frequency
+        L"Basi numeriche", // BaseRadix
+        L"Conversione", // Conversion
+        L"Notazione scientifica", // Scientific
+        L"{0} e le informazioni correlate verranno disinstallati.", // UninstallPrompt
+        L"Impossibile disinstallare {0}.\n\n{1}", // UninstallFailed
+        L"Non è installato per questo account o fa parte di Windows.", // ProtectedApp
+        L"Shell non trovata: {0}. Controlla le impostazioni del comando.", // ShellMissing
+        L"Directory di sistema Windows non trovata.", // SystemDirMissing
+        L"Gli argomenti devono contenere {command} una sola volta come argomento separato senza virgolette.", // ShellArguments
+        L"Questo comando supera la lunghezza massima della riga di comando Windows.", // CommandTooLong
+        L"Copia: {0}", // CopyValue
+        L"Apri {0}", // OpenService
+        L"Cerca “{1}” su {0}", // SearchService
+        L"Cerca sul web", // SearchWeb
+        L"Errore", // Error
+        L"Sottorete", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"ja", {
+        L"すべてを検索", // SearchAnything
+        L"アプリ", // Apps
+        L"おすすめのアプリ", // SuggestedApps
+        L"ファイル", // Files
+        L"設定", // Settings
+        L"アプリケーション", // Application
+        L"カスタムコマンド", // CustomCommand
+        L"ショートカット", // Shortcut
+        L"電卓", // Calculator
+        L"単位変換", // Converter
+        L"ネットワークインターフェイス", // Network
+        L"ウェブ検索", // WebSearch
+        L"Everything 検索", // EverythingSearch
+        L"Everything（実行されていません）", // NotRunning
+        L"一致件数", // Matches
+        L"表示件数", // Shown
+        L"Enter でコピー", // CopyHint
+        L"Enter で結果をコピー", // CopyResultHint
+        L"Enter で IP をコピー", // CopyIpHint
+        L"Enter でブラウザー検索", // BrowserHint
+        L"選択", // Select
+        L"次へ", // Next
+        L"開く", // Open
+        L"管理者", // Admin
+        L"メニュー", // Menu
+        L"閉じる", // Close
+        L"実行", // Run
+        L"ブラウザーで検索", // SearchBrowser
+        L"管理者として実行", // RunAdmin
+        L"クリップボードにコピー", // CopyClipboard
+        L"コマンドをコピー", // CopyCommand
+        L"検索リンクをコピー", // CopySearchLink
+        L"ファイルの場所を開く", // OpenLocation
+        L"パスをコピー", // CopyPath
+        L"デスクトップにショートカットを作成", // DesktopShortcut
+        L"プロパティ", // Properties
+        L"アンインストール", // Uninstall
+        L"ターミナルで開く", // Terminal
+        L"コマンドプロンプト", // CommandPrompt
+        L"管理者", // Administrator
+        L"切り取り", // Cut
+        L"コピー", // Copy
+        L"名前をコピー", // CopyName
+        L"一致するアプリケーションはありません", // NoApps
+        L"ファイルを確認するか検索を絞り込んでください", // Refine
+        L"入力してファイルを検索", // TypeFiles
+        L"ファイルとフォルダーがここに表示されます", // FilesAppear
+        L"一致するファイルはありません", // NoFiles
+        L"Everything のインデックスから項目が返されませんでした", // NoItems
+        L"有効なネットワークインターフェイスはありません", // NoNetwork
+        L"Wi-Fi、イーサネット、VPN 接続を確認してください", // CheckNetwork
+        L"種類", // Type
+        L"サイズ", // Size
+        L"内容", // Contains
+        L"寸法", // Dimensions
+        L"長さ", // Length
+        L"ページ数", // Pages
+        L"フレームレート", // FrameRate
+        L"ビットレート", // Bitrate
+        L"アーティスト", // Artist
+        L"アルバム", // Album
+        L"タイトル", // Title
+        L"作成者", // Author
+        L"説明", // Description
+        L"バージョン", // Version
+        L"会社", // Company
+        L"カメラ", // Camera
+        L"撮影日時", // Taken
+        L"更新日時", // Modified
+        L"作成日時", // Created
+        L"ファイルフォルダー", // Folder
+        L"ファイル", // File
+        L"項目", // Items
+        L"バイト", // Bytes
+        L"質量", // Mass
+        L"温度", // Temperature
+        L"速度", // Speed
+        L"面積", // Area
+        L"体積", // Volume
+        L"データ", // Data
+        L"データ転送速度", // DataRate
+        L"時間", // Time
+        L"圧力", // Pressure
+        L"エネルギー", // Energy
+        L"電力", // Power
+        L"角度", // Angle
+        L"周波数", // Frequency
+        L"進数", // BaseRadix
+        L"変換", // Conversion
+        L"科学表記", // Scientific
+        L"{0} と関連情報がアンインストールされます。", // UninstallPrompt
+        L"{0} をアンインストールできませんでした。\n\n{1}", // UninstallFailed
+        L"このアカウントにはインストールされていないか、Windows の一部です。", // ProtectedApp
+        L"シェルが見つかりません: {0}。コマンド設定を確認してください。", // ShellMissing
+        L"Windows のシステムディレクトリが見つかりません。", // SystemDirMissing
+        L"シェル引数には、引用符で囲まない独立した引数として {command} を 1 回だけ含めてください。", // ShellArguments
+        L"このコマンドは Windows のコマンドライン長の上限を超えています。", // CommandTooLong
+        L"コピー: {0}", // CopyValue
+        L"{0} を開く", // OpenService
+        L"{0} で「{1}」を検索", // SearchService
+        L"ウェブを検索", // SearchWeb
+        L"エラー", // Error
+        L"サブネット", // Subnet
+        L"ゲートウェイ", // Gateway
+    }},
+    {L"ka", {
+        L"ყველაფრის ძებნა", // SearchAnything
+        L"აპები", // Apps
+        L"შემოთავაზებული აპები", // SuggestedApps
+        L"ფაილები", // Files
+        L"პარამეტრები", // Settings
+        L"აპლიკაცია", // Application
+        L"მორგებული ბრძანება", // CustomCommand
+        L"მალსახმობი", // Shortcut
+        L"კალკულატორი", // Calculator
+        L"ერთეულების კონვერტერი", // Converter
+        L"ქსელის ინტერფეისები", // Network
+        L"ვებძიება", // WebSearch
+        L"Everything ძიება", // EverythingSearch
+        L"Everything (არ არის გაშვებული)", // NotRunning
+        L"შედეგები", // Matches
+        L"ნაჩვენებია", // Shown
+        L"კოპირებისთვის Enter", // CopyHint
+        L"შედეგის კოპირებისთვის Enter", // CopyResultHint
+        L"IP-ის კოპირებისთვის Enter", // CopyIpHint
+        L"ბრაუზერში ძებნისთვის Enter", // BrowserHint
+        L"არჩევა", // Select
+        L"შემდეგი", // Next
+        L"გახსნა", // Open
+        L"ადმინი", // Admin
+        L"მენიუ", // Menu
+        L"დახურვა", // Close
+        L"გაშვება", // Run
+        L"ბრაუზერში ძებნა", // SearchBrowser
+        L"ადმინისტრატორად გაშვება", // RunAdmin
+        L"ბუფერში კოპირება", // CopyClipboard
+        L"ბრძანების კოპირება", // CopyCommand
+        L"ძიების ბმულის კოპირება", // CopySearchLink
+        L"ფაილის მდებარეობის გახსნა", // OpenLocation
+        L"გზის კოპირება", // CopyPath
+        L"სამუშაო მაგიდაზე მალსახმობის შექმნა", // DesktopShortcut
+        L"თვისებები", // Properties
+        L"წაშლა", // Uninstall
+        L"ტერმინალში გახსნა", // Terminal
+        L"ბრძანების სტრიქონი", // CommandPrompt
+        L"ადმინისტრატორი", // Administrator
+        L"ამოჭრა", // Cut
+        L"კოპირება", // Copy
+        L"სახელის კოპირება", // CopyName
+        L"შესაბამისი აპლიკაციები ვერ მოიძებნა", // NoApps
+        L"შეამოწმეთ ფაილები ან დააზუსტეთ ძიება", // Refine
+        L"აკრიფეთ ფაილების მოსაძებნად", // TypeFiles
+        L"ფაილები და საქაღალდეები აქ გამოჩნდება", // FilesAppear
+        L"შესაბამისი ფაილები ვერ მოიძებნა", // NoFiles
+        L"Everything-ის ინდექსმა ელემენტები ვერ დააბრუნა", // NoItems
+        L"აქტიური ქსელის ინტერფეისები არ არის", // NoNetwork
+        L"შეამოწმეთ Wi-Fi, Ethernet ან VPN კავშირი", // CheckNetwork
+        L"ტიპი", // Type
+        L"ზომა", // Size
+        L"შიგთავსი", // Contains
+        L"განზომილებები", // Dimensions
+        L"ხანგრძლივობა", // Length
+        L"გვერდები", // Pages
+        L"კადრების სიხშირე", // FrameRate
+        L"ბიტური სიჩქარე", // Bitrate
+        L"შემსრულებელი", // Artist
+        L"ალბომი", // Album
+        L"სათაური", // Title
+        L"ავტორი", // Author
+        L"აღწერა", // Description
+        L"ვერსია", // Version
+        L"კომპანია", // Company
+        L"კამერა", // Camera
+        L"გადაღებულია", // Taken
+        L"შეცვლილია", // Modified
+        L"შექმნილია", // Created
+        L"ფაილების საქაღალდე", // Folder
+        L"ფაილი", // File
+        L"ელემენტები", // Items
+        L"ბაიტი", // Bytes
+        L"მასა", // Mass
+        L"ტემპერატურა", // Temperature
+        L"სიჩქარე", // Speed
+        L"ფართობი", // Area
+        L"მოცულობა", // Volume
+        L"მონაცემები", // Data
+        L"მონაცემთა სიჩქარე", // DataRate
+        L"დრო", // Time
+        L"წნევა", // Pressure
+        L"ენერგია", // Energy
+        L"სიმძლავრე", // Power
+        L"კუთხე", // Angle
+        L"სიხშირე", // Frequency
+        L"რიცხვითი სისტემები", // BaseRadix
+        L"გარდაქმნა", // Conversion
+        L"სამეცნიერო აღნიშვნა", // Scientific
+        L"{0} და დაკავშირებული ინფორმაცია წაიშლება.", // UninstallPrompt
+        L"{0}-ის წაშლა ვერ მოხერხდა.\n\n{1}", // UninstallFailed
+        L"ამ ანგარიშისთვის არ არის დაყენებული ან Windows-ის ნაწილია.", // ProtectedApp
+        L"ბრძანების ინტერპრეტატორი ვერ მოიძებნა: {0}. შეამოწმეთ ბრძანების პარამეტრები.", // ShellMissing
+        L"Windows-ის სისტემური საქაღალდე ვერ მოიძებნა.", // SystemDirMissing
+        L"არგუმენტები უნდა შეიცავდეს {command}-ს ზუსტად ერთხელ, ცალკე არგუმენტად, ბრჭყალების გარეშე.", // ShellArguments
+        L"ბრძანება აჭარბებს Windows-ის ბრძანების სტრიქონის სიგრძის ზღვარს.", // CommandTooLong
+        L"კოპირება: {0}", // CopyValue
+        L"{0}-ის გახსნა", // OpenService
+        L"„{1}“-ის ძებნა {0}-ში", // SearchService
+        L"ვებში ძებნა", // SearchWeb
+        L"შეცდომა", // Error
+        L"ქვექსელი", // Subnet
+        L"კარიბჭე", // Gateway
+    }},
+    {L"ko", {
+        L"모든 항목 검색", // SearchAnything
+        L"앱", // Apps
+        L"추천 앱", // SuggestedApps
+        L"파일", // Files
+        L"설정", // Settings
+        L"응용 프로그램", // Application
+        L"사용자 지정 명령", // CustomCommand
+        L"바로 가기", // Shortcut
+        L"계산기", // Calculator
+        L"단위 변환기", // Converter
+        L"네트워크 인터페이스", // Network
+        L"웹 검색", // WebSearch
+        L"Everything 검색", // EverythingSearch
+        L"Everything (실행 중 아님)", // NotRunning
+        L"일치 항목", // Matches
+        L"표시 항목", // Shown
+        L"Enter로 복사", // CopyHint
+        L"Enter로 결과 복사", // CopyResultHint
+        L"Enter로 IP 복사", // CopyIpHint
+        L"Enter로 브라우저에서 검색", // BrowserHint
+        L"선택", // Select
+        L"다음", // Next
+        L"열기", // Open
+        L"관리자", // Admin
+        L"메뉴", // Menu
+        L"닫기", // Close
+        L"실행", // Run
+        L"브라우저에서 검색", // SearchBrowser
+        L"관리자 권한으로 실행", // RunAdmin
+        L"클립보드에 복사", // CopyClipboard
+        L"명령 복사", // CopyCommand
+        L"검색 링크 복사", // CopySearchLink
+        L"파일 위치 열기", // OpenLocation
+        L"경로 복사", // CopyPath
+        L"바탕 화면 바로 가기 만들기", // DesktopShortcut
+        L"속성", // Properties
+        L"제거", // Uninstall
+        L"터미널에서 열기", // Terminal
+        L"명령 프롬프트", // CommandPrompt
+        L"관리자", // Administrator
+        L"잘라내기", // Cut
+        L"복사", // Copy
+        L"이름 복사", // CopyName
+        L"일치하는 응용 프로그램 없음", // NoApps
+        L"파일을 확인하거나 검색어를 구체화하세요", // Refine
+        L"입력하여 파일 검색", // TypeFiles
+        L"파일과 폴더가 여기에 표시됩니다", // FilesAppear
+        L"일치하는 파일 없음", // NoFiles
+        L"Everything 인덱스에서 항목을 반환하지 않았습니다", // NoItems
+        L"활성 네트워크 인터페이스 없음", // NoNetwork
+        L"Wi-Fi, 이더넷 또는 VPN 연결을 확인하세요", // CheckNetwork
+        L"유형", // Type
+        L"크기", // Size
+        L"포함", // Contains
+        L"해상도", // Dimensions
+        L"길이", // Length
+        L"페이지", // Pages
+        L"프레임 속도", // FrameRate
+        L"비트 전송률", // Bitrate
+        L"음악가", // Artist
+        L"앨범", // Album
+        L"제목", // Title
+        L"작성자", // Author
+        L"설명", // Description
+        L"버전", // Version
+        L"회사", // Company
+        L"카메라", // Camera
+        L"촬영 날짜", // Taken
+        L"수정 날짜", // Modified
+        L"만든 날짜", // Created
+        L"파일 폴더", // Folder
+        L"파일", // File
+        L"항목", // Items
+        L"바이트", // Bytes
+        L"질량", // Mass
+        L"온도", // Temperature
+        L"속도", // Speed
+        L"면적", // Area
+        L"부피", // Volume
+        L"데이터", // Data
+        L"데이터 속도", // DataRate
+        L"시간", // Time
+        L"압력", // Pressure
+        L"에너지", // Energy
+        L"전력", // Power
+        L"각도", // Angle
+        L"주파수", // Frequency
+        L"진법", // BaseRadix
+        L"변환", // Conversion
+        L"과학적 표기법", // Scientific
+        L"{0} 및 관련 정보가 제거됩니다.", // UninstallPrompt
+        L"{0}을(를) 제거할 수 없습니다.\n\n{1}", // UninstallFailed
+        L"이 계정에 설치되어 있지 않거나 Windows의 일부입니다.", // ProtectedApp
+        L"셸을 찾을 수 없습니다: {0}. 명령 설정을 확인하세요.", // ShellMissing
+        L"Windows 시스템 디렉터리를 찾을 수 없습니다.", // SystemDirMissing
+        L"셸 인수에는 따옴표 없이 별도의 인수로 {command}가 한 번만 포함되어야 합니다.", // ShellArguments
+        L"이 명령은 Windows 명령줄 길이 제한을 초과합니다.", // CommandTooLong
+        L"복사: {0}", // CopyValue
+        L"{0} 열기", // OpenService
+        L"{0}에서 “{1}” 검색", // SearchService
+        L"웹 검색", // SearchWeb
+        L"오류", // Error
+        L"서브넷", // Subnet
+        L"게이트웨이", // Gateway
+    }},
+    {L"lt", {
+        L"Ieškoti visko", // SearchAnything
+        L"Programos", // Apps
+        L"Siūlomos programos", // SuggestedApps
+        L"Failai", // Files
+        L"Parametrai", // Settings
+        L"Programa", // Application
+        L"Pasirinktinė komanda", // CustomCommand
+        L"Nuoroda", // Shortcut
+        L"Skaičiuotuvas", // Calculator
+        L"Vienetų keitiklis", // Converter
+        L"Tinklo sąsajos", // Network
+        L"Paieška žiniatinklyje", // WebSearch
+        L"Everything paieška", // EverythingSearch
+        L"Everything (nepaleista)", // NotRunning
+        L"Atitiktys", // Matches
+        L"Rodoma", // Shown
+        L"Enter – kopijuoti", // CopyHint
+        L"Enter – kopijuoti rezultatą", // CopyResultHint
+        L"Enter – kopijuoti IP", // CopyIpHint
+        L"Enter – ieškoti naršyklėje", // BrowserHint
+        L"Pasirinkti", // Select
+        L"Kitas", // Next
+        L"Atidaryti", // Open
+        L"Admin", // Admin
+        L"Meniu", // Menu
+        L"Uždaryti", // Close
+        L"Vykdyti", // Run
+        L"Ieškoti naršyklėje", // SearchBrowser
+        L"Vykdyti administratoriaus teisėmis", // RunAdmin
+        L"Kopijuoti į mainų sritį", // CopyClipboard
+        L"Kopijuoti komandą", // CopyCommand
+        L"Kopijuoti paieškos nuorodą", // CopySearchLink
+        L"Atidaryti failo vietą", // OpenLocation
+        L"Kopijuoti kelią", // CopyPath
+        L"Kurti darbalaukio nuorodą", // DesktopShortcut
+        L"Ypatybės", // Properties
+        L"Pašalinti", // Uninstall
+        L"Atidaryti terminale", // Terminal
+        L"Komandinė eilutė", // CommandPrompt
+        L"Administratorius", // Administrator
+        L"Iškirpti", // Cut
+        L"Kopijuoti", // Copy
+        L"Kopijuoti pavadinimą", // CopyName
+        L"Atitinkančių programų nėra", // NoApps
+        L"Patikrinkite failus arba patikslinkite paiešką", // Refine
+        L"Rašykite, norėdami ieškoti failų", // TypeFiles
+        L"Čia bus rodomi failai ir aplankai", // FilesAppear
+        L"Atitinkančių failų nėra", // NoFiles
+        L"Everything indeksas nepateikė elementų", // NoItems
+        L"Aktyvių tinklo sąsajų nėra", // NoNetwork
+        L"Patikrinkite Wi-Fi, Ethernet arba VPN ryšį", // CheckNetwork
+        L"Tipas", // Type
+        L"Dydis", // Size
+        L"Turinys", // Contains
+        L"Matmenys", // Dimensions
+        L"Trukmė", // Length
+        L"Puslapiai", // Pages
+        L"Kadrų dažnis", // FrameRate
+        L"Sparta bitais", // Bitrate
+        L"Atlikėjas", // Artist
+        L"Albumas", // Album
+        L"Pavadinimas", // Title
+        L"Autorius", // Author
+        L"Aprašas", // Description
+        L"Versija", // Version
+        L"Įmonė", // Company
+        L"Fotoaparatas", // Camera
+        L"Nufotografuota", // Taken
+        L"Modifikuota", // Modified
+        L"Sukurta", // Created
+        L"Failų aplankas", // Folder
+        L"Failas", // File
+        L"Elementai", // Items
+        L"baitų", // Bytes
+        L"Masė", // Mass
+        L"Temperatūra", // Temperature
+        L"Greitis", // Speed
+        L"Plotas", // Area
+        L"Tūris", // Volume
+        L"Duomenys", // Data
+        L"Duomenų sparta", // DataRate
+        L"Laikas", // Time
+        L"Slėgis", // Pressure
+        L"Energija", // Energy
+        L"Galia", // Power
+        L"Kampas", // Angle
+        L"Dažnis", // Frequency
+        L"Skaičiavimo sistemos", // BaseRadix
+        L"Konvertavimas", // Conversion
+        L"Mokslinis žymėjimas", // Scientific
+        L"{0} ir susijusi informacija bus pašalinta.", // UninstallPrompt
+        L"Nepavyko pašalinti {0}.\n\n{1}", // UninstallFailed
+        L"Neįdiegta šiai paskyrai arba yra Windows dalis.", // ProtectedApp
+        L"Komandų interpretatorius nerastas: {0}. Patikrinkite komandos parametrus.", // ShellMissing
+        L"Windows sistemos katalogas nerastas.", // SystemDirMissing
+        L"Argumentuose turi būti {command} tik vieną kartą kaip atskiras argumentas be kabučių.", // ShellArguments
+        L"Ši komanda viršija Windows komandinės eilutės ilgio ribą.", // CommandTooLong
+        L"Kopijuoti: {0}", // CopyValue
+        L"Atidaryti {0}", // OpenService
+        L"Ieškoti „{1}“ naudojant {0}", // SearchService
+        L"Ieškoti žiniatinklyje", // SearchWeb
+        L"Klaida", // Error
+        L"Potinklis", // Subnet
+        L"Šliuzas", // Gateway
+    }},
+    {L"lv", {
+        L"Meklēt visu", // SearchAnything
+        L"Lietotnes", // Apps
+        L"Ieteiktās lietotnes", // SuggestedApps
+        L"Faili", // Files
+        L"Iestatījumi", // Settings
+        L"Lietotne", // Application
+        L"Pielāgota komanda", // CustomCommand
+        L"Saīsne", // Shortcut
+        L"Kalkulators", // Calculator
+        L"Mērvienību pārveidotājs", // Converter
+        L"Tīkla saskarnes", // Network
+        L"Meklēšana tīmeklī", // WebSearch
+        L"Everything meklēšana", // EverythingSearch
+        L"Everything (nedarbojas)", // NotRunning
+        L"Atbilstības", // Matches
+        L"Parādīti", // Shown
+        L"Enter, lai kopētu", // CopyHint
+        L"Enter, lai kopētu rezultātu", // CopyResultHint
+        L"Enter, lai kopētu IP", // CopyIpHint
+        L"Enter, lai meklētu pārlūkā", // BrowserHint
+        L"Atlasīt", // Select
+        L"Nākamais", // Next
+        L"Atvērt", // Open
+        L"Admin", // Admin
+        L"Izvēlne", // Menu
+        L"Aizvērt", // Close
+        L"Palaist", // Run
+        L"Meklēt pārlūkā", // SearchBrowser
+        L"Palaist kā administratoram", // RunAdmin
+        L"Kopēt starpliktuvē", // CopyClipboard
+        L"Kopēt komandu", // CopyCommand
+        L"Kopēt meklēšanas saiti", // CopySearchLink
+        L"Atvērt faila atrašanās vietu", // OpenLocation
+        L"Kopēt ceļu", // CopyPath
+        L"Izveidot darbvirsmas saīsni", // DesktopShortcut
+        L"Rekvizīti", // Properties
+        L"Atinstalēt", // Uninstall
+        L"Atvērt terminālī", // Terminal
+        L"Komandu uzvedne", // CommandPrompt
+        L"Administrators", // Administrator
+        L"Izgriezt", // Cut
+        L"Kopēt", // Copy
+        L"Kopēt nosaukumu", // CopyName
+        L"Nav atbilstošu lietotņu", // NoApps
+        L"Pārbaudiet failus vai precizējiet meklējumu", // Refine
+        L"Rakstiet, lai meklētu failus", // TypeFiles
+        L"Šeit tiks parādīti faili un mapes", // FilesAppear
+        L"Nav atbilstošu failu", // NoFiles
+        L"Everything indekss neatgrieza vienumus", // NoItems
+        L"Nav aktīvu tīkla saskarņu", // NoNetwork
+        L"Pārbaudiet Wi-Fi, Ethernet vai VPN savienojumu", // CheckNetwork
+        L"Tips", // Type
+        L"Lielums", // Size
+        L"Satur", // Contains
+        L"Izmēri", // Dimensions
+        L"Ilgums", // Length
+        L"Lappuses", // Pages
+        L"Kadru ātrums", // FrameRate
+        L"Bitu ātrums", // Bitrate
+        L"Izpildītājs", // Artist
+        L"Albums", // Album
+        L"Nosaukums", // Title
+        L"Autors", // Author
+        L"Apraksts", // Description
+        L"Versija", // Version
+        L"Uzņēmums", // Company
+        L"Kamera", // Camera
+        L"Uzņemts", // Taken
+        L"Modificēts", // Modified
+        L"Izveidots", // Created
+        L"Failu mape", // Folder
+        L"Fails", // File
+        L"Vienumi", // Items
+        L"baiti", // Bytes
+        L"Masa", // Mass
+        L"Temperatūra", // Temperature
+        L"Ātrums", // Speed
+        L"Laukums", // Area
+        L"Tilpums", // Volume
+        L"Dati", // Data
+        L"Datu ātrums", // DataRate
+        L"Laiks", // Time
+        L"Spiediens", // Pressure
+        L"Enerģija", // Energy
+        L"Jauda", // Power
+        L"Leņķis", // Angle
+        L"Frekvence", // Frequency
+        L"Skaitīšanas sistēmas", // BaseRadix
+        L"Pārvēršana", // Conversion
+        L"Zinātniskais pieraksts", // Scientific
+        L"{0} un saistītā informācija tiks atinstalēta.", // UninstallPrompt
+        L"Neizdevās atinstalēt {0}.\n\n{1}", // UninstallFailed
+        L"Nav instalēta šim kontam vai ir Windows daļa.", // ProtectedApp
+        L"Čaula nav atrasta: {0}. Pārbaudiet komandas iestatījumus.", // ShellMissing
+        L"Windows sistēmas direktorijs nav atrasts.", // SystemDirMissing
+        L"Argumentos jābūt {command} tieši vienu reizi kā atsevišķam argumentam bez pēdiņām.", // ShellArguments
+        L"Šī komanda pārsniedz Windows komandrindas garuma ierobežojumu.", // CommandTooLong
+        L"Kopēt: {0}", // CopyValue
+        L"Atvērt {0}", // OpenService
+        L"Meklēt “{1}” pakalpojumā {0}", // SearchService
+        L"Meklēt tīmeklī", // SearchWeb
+        L"Kļūda", // Error
+        L"Apakštīkls", // Subnet
+        L"Vārteja", // Gateway
+    }},
+    {L"mk", {
+        L"Пребарај сè", // SearchAnything
+        L"Апликации", // Apps
+        L"Предложени апликации", // SuggestedApps
+        L"Датотеки", // Files
+        L"Поставки", // Settings
+        L"Апликација", // Application
+        L"Приспособена команда", // CustomCommand
+        L"Кратенка", // Shortcut
+        L"Калкулатор", // Calculator
+        L"Претворач на единици", // Converter
+        L"Мрежни интерфејси", // Network
+        L"Веб-пребарување", // WebSearch
+        L"Everything пребарување", // EverythingSearch
+        L"Everything (не е вклучен)", // NotRunning
+        L"Совпаѓања", // Matches
+        L"Прикажани", // Shown
+        L"Enter за копирање", // CopyHint
+        L"Enter за копирање на резултатот", // CopyResultHint
+        L"Enter за копирање на IP", // CopyIpHint
+        L"Enter за пребарување во прелистувач", // BrowserHint
+        L"Избери", // Select
+        L"Следно", // Next
+        L"Отвори", // Open
+        L"Админ", // Admin
+        L"Мени", // Menu
+        L"Затвори", // Close
+        L"Изврши", // Run
+        L"Пребарај во прелистувач", // SearchBrowser
+        L"Изврши како администратор", // RunAdmin
+        L"Копирај во меморијата", // CopyClipboard
+        L"Копирај команда", // CopyCommand
+        L"Копирај врска за пребарување", // CopySearchLink
+        L"Отвори ја локацијата на датотеката", // OpenLocation
+        L"Копирај патека", // CopyPath
+        L"Создај кратенка на работната површина", // DesktopShortcut
+        L"Својства", // Properties
+        L"Деинсталирај", // Uninstall
+        L"Отвори во терминал", // Terminal
+        L"Командна линија", // CommandPrompt
+        L"Администратор", // Administrator
+        L"Исечи", // Cut
+        L"Копирај", // Copy
+        L"Копирај име", // CopyName
+        L"Нема соодветни апликации", // NoApps
+        L"Проверете ги датотеките или прецизирајте го пребарувањето", // Refine
+        L"Пишувајте за пребарување датотеки", // TypeFiles
+        L"Тука ќе се појават датотеки и папки", // FilesAppear
+        L"Нема соодветни датотеки", // NoFiles
+        L"Индексот на Everything не врати ставки", // NoItems
+        L"Нема активни мрежни интерфејси", // NoNetwork
+        L"Проверете ја врската Wi-Fi, Ethernet или VPN", // CheckNetwork
+        L"Тип", // Type
+        L"Големина", // Size
+        L"Содржи", // Contains
+        L"Димензии", // Dimensions
+        L"Времетраење", // Length
+        L"Страници", // Pages
+        L"Стапка на кадри", // FrameRate
+        L"Битска стапка", // Bitrate
+        L"Изведувач", // Artist
+        L"Албум", // Album
+        L"Наслов", // Title
+        L"Автор", // Author
+        L"Опис", // Description
+        L"Верзија", // Version
+        L"Компанија", // Company
+        L"Камера", // Camera
+        L"Снимено", // Taken
+        L"Изменето", // Modified
+        L"Создадено", // Created
+        L"Папка со датотеки", // Folder
+        L"Датотека", // File
+        L"Ставки", // Items
+        L"бајти", // Bytes
+        L"Маса", // Mass
+        L"Температура", // Temperature
+        L"Брзина", // Speed
+        L"Површина", // Area
+        L"Волумен", // Volume
+        L"Податоци", // Data
+        L"Брзина на податоци", // DataRate
+        L"Време", // Time
+        L"Притисок", // Pressure
+        L"Енергија", // Energy
+        L"Моќност", // Power
+        L"Агол", // Angle
+        L"Фреквенција", // Frequency
+        L"Бројни системи", // BaseRadix
+        L"Претворање", // Conversion
+        L"Научен запис", // Scientific
+        L"{0} и поврзаните информации ќе бидат деинсталирани.", // UninstallPrompt
+        L"Не може да се деинсталира {0}.\n\n{1}", // UninstallFailed
+        L"Не е инсталирано за оваа сметка или е дел од Windows.", // ProtectedApp
+        L"Командниот интерпретатор не е пронајден: {0}. Проверете ги поставките на командата.", // ShellMissing
+        L"Системската папка на Windows не е пронајдена.", // SystemDirMissing
+        L"Аргументите мора да содржат {command} точно еднаш како посебен аргумент без наводници.", // ShellArguments
+        L"Командата го надминува ограничувањето за должина на командната линија на Windows.", // CommandTooLong
+        L"Копирај: {0}", // CopyValue
+        L"Отвори {0}", // OpenService
+        L"Пребарај „{1}“ на {0}", // SearchService
+        L"Пребарај на веб", // SearchWeb
+        L"Грешка", // Error
+        L"Подмрежа", // Subnet
+        L"Мрежен премин", // Gateway
+    }},
+    {L"ms", {
+        L"Cari apa sahaja", // SearchAnything
+        L"Aplikasi", // Apps
+        L"Aplikasi dicadangkan", // SuggestedApps
+        L"Fail", // Files
+        L"Tetapan", // Settings
+        L"Aplikasi", // Application
+        L"Perintah tersuai", // CustomCommand
+        L"Pintasan", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Penukar unit", // Converter
+        L"Antara muka rangkaian", // Network
+        L"Carian web", // WebSearch
+        L"Carian Everything", // EverythingSearch
+        L"Everything (tidak berjalan)", // NotRunning
+        L"Padanan", // Matches
+        L"Dipaparkan", // Shown
+        L"Enter untuk menyalin", // CopyHint
+        L"Enter untuk menyalin hasil", // CopyResultHint
+        L"Enter untuk menyalin IP", // CopyIpHint
+        L"Enter untuk mencari dalam pelayar", // BrowserHint
+        L"Pilih", // Select
+        L"Seterusnya", // Next
+        L"Buka", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Tutup", // Close
+        L"Jalankan", // Run
+        L"Cari dalam pelayar", // SearchBrowser
+        L"Jalankan sebagai pentadbir", // RunAdmin
+        L"Salin ke papan klip", // CopyClipboard
+        L"Salin perintah", // CopyCommand
+        L"Salin pautan carian", // CopySearchLink
+        L"Buka lokasi fail", // OpenLocation
+        L"Salin laluan", // CopyPath
+        L"Cipta pintasan desktop", // DesktopShortcut
+        L"Sifat", // Properties
+        L"Nyahpasang", // Uninstall
+        L"Buka dalam terminal", // Terminal
+        L"Gesaan Perintah", // CommandPrompt
+        L"Pentadbir", // Administrator
+        L"Potong", // Cut
+        L"Salin", // Copy
+        L"Salin nama", // CopyName
+        L"Tiada aplikasi sepadan", // NoApps
+        L"Semak fail atau perincikan carian", // Refine
+        L"Taip untuk mencari fail", // TypeFiles
+        L"Fail dan folder akan dipaparkan di sini", // FilesAppear
+        L"Tiada fail sepadan", // NoFiles
+        L"Indeks Everything tidak mengembalikan item", // NoItems
+        L"Tiada antara muka rangkaian aktif", // NoNetwork
+        L"Semak sambungan Wi-Fi, Ethernet atau VPN anda", // CheckNetwork
+        L"Jenis", // Type
+        L"Saiz", // Size
+        L"Mengandungi", // Contains
+        L"Dimensi", // Dimensions
+        L"Tempoh", // Length
+        L"Halaman", // Pages
+        L"Kadar bingkai", // FrameRate
+        L"Kadar bit", // Bitrate
+        L"Artis", // Artist
+        L"Album", // Album
+        L"Tajuk", // Title
+        L"Pengarang", // Author
+        L"Perihalan", // Description
+        L"Versi", // Version
+        L"Syarikat", // Company
+        L"Kamera", // Camera
+        L"Diambil", // Taken
+        L"Diubah suai", // Modified
+        L"Dicipta", // Created
+        L"Folder fail", // Folder
+        L"Fail", // File
+        L"Item", // Items
+        L"bait", // Bytes
+        L"Jisim", // Mass
+        L"Suhu", // Temperature
+        L"Kelajuan", // Speed
+        L"Luas", // Area
+        L"Isi padu", // Volume
+        L"Data", // Data
+        L"Kadar data", // DataRate
+        L"Masa", // Time
+        L"Tekanan", // Pressure
+        L"Tenaga", // Energy
+        L"Kuasa", // Power
+        L"Sudut", // Angle
+        L"Frekuensi", // Frequency
+        L"Asas nombor", // BaseRadix
+        L"Penukaran", // Conversion
+        L"Notasi saintifik", // Scientific
+        L"{0} dan maklumat berkaitan akan dinyahpasang.", // UninstallPrompt
+        L"Tidak dapat menyahpasang {0}.\n\n{1}", // UninstallFailed
+        L"Tidak dipasang untuk akaun ini atau sebahagian daripada Windows.", // ProtectedApp
+        L"Cangkerang tidak ditemui: {0}. Semak tetapan perintah.", // ShellMissing
+        L"Direktori sistem Windows tidak ditemui.", // SystemDirMissing
+        L"Argumen mesti mengandungi {command} tepat sekali sebagai argumen berasingan tanpa tanda petikan.", // ShellArguments
+        L"Perintah ini melebihi had panjang baris perintah Windows.", // CommandTooLong
+        L"Salin: {0}", // CopyValue
+        L"Buka {0}", // OpenService
+        L"Cari “{1}” di {0}", // SearchService
+        L"Cari di web", // SearchWeb
+        L"Ralat", // Error
+        L"Subnet", // Subnet
+        L"Get laluan", // Gateway
+    }},
+    {L"nb", {
+        L"Søk etter alt", // SearchAnything
+        L"Apper", // Apps
+        L"Foreslåtte apper", // SuggestedApps
+        L"Filer", // Files
+        L"Innstillinger", // Settings
+        L"Program", // Application
+        L"Egendefinert kommando", // CustomCommand
+        L"Snarvei", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Enhetsomregner", // Converter
+        L"Nettverksgrensesnitt", // Network
+        L"Nettsøk", // WebSearch
+        L"Everything-søk", // EverythingSearch
+        L"Everything (kjører ikke)", // NotRunning
+        L"Treff", // Matches
+        L"Vist", // Shown
+        L"Trykk Enter for å kopiere", // CopyHint
+        L"Trykk Enter for å kopiere resultatet", // CopyResultHint
+        L"Trykk Enter for å kopiere IP", // CopyIpHint
+        L"Trykk Enter for å søke i nettleseren", // BrowserHint
+        L"Velg", // Select
+        L"Neste", // Next
+        L"Åpne", // Open
+        L"Admin", // Admin
+        L"Meny", // Menu
+        L"Lukk", // Close
+        L"Kjør", // Run
+        L"Søk i nettleseren", // SearchBrowser
+        L"Kjør som administrator", // RunAdmin
+        L"Kopier til utklippstavlen", // CopyClipboard
+        L"Kopier kommando", // CopyCommand
+        L"Kopier søkelenke", // CopySearchLink
+        L"Åpne filplassering", // OpenLocation
+        L"Kopier bane", // CopyPath
+        L"Opprett snarvei på skrivebordet", // DesktopShortcut
+        L"Egenskaper", // Properties
+        L"Avinstaller", // Uninstall
+        L"Åpne i terminal", // Terminal
+        L"Ledetekst", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Klipp ut", // Cut
+        L"Kopier", // Copy
+        L"Kopier navn", // CopyName
+        L"Ingen samsvarende programmer", // NoApps
+        L"Se etter filer eller avgrens søket", // Refine
+        L"Skriv for å søke etter filer", // TypeFiles
+        L"Filer og mapper vises her", // FilesAppear
+        L"Ingen samsvarende filer", // NoFiles
+        L"Everything-indeksen ga ingen elementer", // NoItems
+        L"Ingen aktive nettverksgrensesnitt", // NoNetwork
+        L"Kontroller Wi-Fi-, Ethernet- eller VPN-tilkoblingen", // CheckNetwork
+        L"Type", // Type
+        L"Størrelse", // Size
+        L"Inneholder", // Contains
+        L"Dimensjoner", // Dimensions
+        L"Varighet", // Length
+        L"Sider", // Pages
+        L"Bildefrekvens", // FrameRate
+        L"Bithastighet", // Bitrate
+        L"Artist", // Artist
+        L"Album", // Album
+        L"Tittel", // Title
+        L"Forfatter", // Author
+        L"Beskrivelse", // Description
+        L"Versjon", // Version
+        L"Firma", // Company
+        L"Kamera", // Camera
+        L"Tatt", // Taken
+        L"Endret", // Modified
+        L"Opprettet", // Created
+        L"Filmappe", // Folder
+        L"Fil", // File
+        L"Elementer", // Items
+        L"byte", // Bytes
+        L"Masse", // Mass
+        L"Temperatur", // Temperature
+        L"Hastighet", // Speed
+        L"Areal", // Area
+        L"Volum", // Volume
+        L"Data", // Data
+        L"Datahastighet", // DataRate
+        L"Tid", // Time
+        L"Trykk", // Pressure
+        L"Energi", // Energy
+        L"Effekt", // Power
+        L"Vinkel", // Angle
+        L"Frekvens", // Frequency
+        L"Tallsystemer", // BaseRadix
+        L"Omregning", // Conversion
+        L"Vitenskapelig notasjon", // Scientific
+        L"{0} og tilhørende informasjon avinstalleres.", // UninstallPrompt
+        L"Kunne ikke avinstallere {0}.\n\n{1}", // UninstallFailed
+        L"Ikke installert for denne kontoen eller en del av Windows.", // ProtectedApp
+        L"Kommandoskallet ble ikke funnet: {0}. Kontroller kommandoinnstillingene.", // ShellMissing
+        L"Fant ikke Windows-systemmappen.", // SystemDirMissing
+        L"Argumentene må inneholde {command} én gang som et eget argument uten anførselstegn.", // ShellArguments
+        L"Kommandoen overskrider Windows maksimale kommandolinjelengde.", // CommandTooLong
+        L"Kopier: {0}", // CopyValue
+        L"Åpne {0}", // OpenService
+        L"Søk etter «{1}» på {0}", // SearchService
+        L"Søk på nettet", // SearchWeb
+        L"Feil", // Error
+        L"Delnett", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"nl", {
+        L"Alles doorzoeken", // SearchAnything
+        L"Apps", // Apps
+        L"Voorgestelde apps", // SuggestedApps
+        L"Bestanden", // Files
+        L"Instellingen", // Settings
+        L"Toepassing", // Application
+        L"Eigen opdracht", // CustomCommand
+        L"Snelkoppeling", // Shortcut
+        L"Rekenmachine", // Calculator
+        L"Eenheden omrekenen", // Converter
+        L"Netwerkinterfaces", // Network
+        L"Zoeken op internet", // WebSearch
+        L"Everything zoeken", // EverythingSearch
+        L"Everything (niet actief)", // NotRunning
+        L"Resultaten", // Matches
+        L"Getoond", // Shown
+        L"Enter om te kopiëren", // CopyHint
+        L"Enter om resultaat te kopiëren", // CopyResultHint
+        L"Enter om IP te kopiëren", // CopyIpHint
+        L"Enter om in browser te zoeken", // BrowserHint
+        L"Selecteren", // Select
+        L"Volgende", // Next
+        L"Openen", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Sluiten", // Close
+        L"Uitvoeren", // Run
+        L"Zoeken in browser", // SearchBrowser
+        L"Als administrator uitvoeren", // RunAdmin
+        L"Naar klembord kopiëren", // CopyClipboard
+        L"Opdracht kopiëren", // CopyCommand
+        L"Zoeklink kopiëren", // CopySearchLink
+        L"Bestandslocatie openen", // OpenLocation
+        L"Pad kopiëren", // CopyPath
+        L"Bureaubladsnelkoppeling maken", // DesktopShortcut
+        L"Eigenschappen", // Properties
+        L"Verwijderen", // Uninstall
+        L"Openen in terminal", // Terminal
+        L"Opdrachtprompt", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Knippen", // Cut
+        L"Kopiëren", // Copy
+        L"Naam kopiëren", // CopyName
+        L"Geen overeenkomende toepassingen", // NoApps
+        L"Controleer bestanden of verfijn uw zoekopdracht", // Refine
+        L"Typ om bestanden te zoeken", // TypeFiles
+        L"Bestanden en mappen verschijnen hier", // FilesAppear
+        L"Geen overeenkomende bestanden", // NoFiles
+        L"Everything-index heeft geen items gevonden", // NoItems
+        L"Geen actieve netwerkinterfaces", // NoNetwork
+        L"Controleer uw wifi-, Ethernet- of VPN-verbinding", // CheckNetwork
+        L"Type", // Type
+        L"Grootte", // Size
+        L"Bevat", // Contains
+        L"Afmetingen", // Dimensions
+        L"Duur", // Length
+        L"Pagina’s", // Pages
+        L"Framesnelheid", // FrameRate
+        L"Bitsnelheid", // Bitrate
+        L"Artiest", // Artist
+        L"Album", // Album
+        L"Titel", // Title
+        L"Auteur", // Author
+        L"Beschrijving", // Description
+        L"Versie", // Version
+        L"Bedrijf", // Company
+        L"Camera", // Camera
+        L"Opgenomen", // Taken
+        L"Gewijzigd", // Modified
+        L"Gemaakt", // Created
+        L"Bestandsmap", // Folder
+        L"Bestand", // File
+        L"Items", // Items
+        L"bytes", // Bytes
+        L"Massa", // Mass
+        L"Temperatuur", // Temperature
+        L"Snelheid", // Speed
+        L"Oppervlakte", // Area
+        L"Volume", // Volume
+        L"Gegevens", // Data
+        L"Gegevenssnelheid", // DataRate
+        L"Tijd", // Time
+        L"Druk", // Pressure
+        L"Energie", // Energy
+        L"Vermogen", // Power
+        L"Hoek", // Angle
+        L"Frequentie", // Frequency
+        L"Talstelsels", // BaseRadix
+        L"Omrekening", // Conversion
+        L"Wetenschappelijke notatie", // Scientific
+        L"{0} en de bijbehorende gegevens worden verwijderd.", // UninstallPrompt
+        L"Kan {0} niet verwijderen.\n\n{1}", // UninstallFailed
+        L"Niet geïnstalleerd voor dit account of onderdeel van Windows.", // ProtectedApp
+        L"Shell niet gevonden: {0}. Controleer de opdrachtinstellingen.", // ShellMissing
+        L"Kan de Windows-systeemmap niet vinden.", // SystemDirMissing
+        L"Shellargumenten moeten {command} eenmaal bevatten als afzonderlijk argument zonder aanhalingstekens.", // ShellArguments
+        L"Deze opdracht overschrijdt de maximale Windows-opdrachtregellengte.", // CommandTooLong
+        L"Kopiëren: {0}", // CopyValue
+        L"{0} openen", // OpenService
+        L"Zoek op {0} naar “{1}”", // SearchService
+        L"Zoeken op internet", // SearchWeb
+        L"Fout", // Error
+        L"Subnet", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"pl", {
+        L"Szukaj wszystkiego", // SearchAnything
+        L"Aplikacje", // Apps
+        L"Sugerowane aplikacje", // SuggestedApps
+        L"Pliki", // Files
+        L"Ustawienia", // Settings
+        L"Aplikacja", // Application
+        L"Własne polecenie", // CustomCommand
+        L"Skrót", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Konwerter jednostek", // Converter
+        L"Interfejsy sieciowe", // Network
+        L"Wyszukiwanie w sieci", // WebSearch
+        L"Wyszukiwanie Everything", // EverythingSearch
+        L"Everything (nie działa)", // NotRunning
+        L"Wyniki", // Matches
+        L"Wyświetlone", // Shown
+        L"Enter, aby skopiować", // CopyHint
+        L"Enter, aby skopiować wynik", // CopyResultHint
+        L"Enter, aby skopiować IP", // CopyIpHint
+        L"Enter, aby wyszukać w przeglądarce", // BrowserHint
+        L"Wybierz", // Select
+        L"Dalej", // Next
+        L"Otwórz", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Zamknij", // Close
+        L"Uruchom", // Run
+        L"Szukaj w przeglądarce", // SearchBrowser
+        L"Uruchom jako administrator", // RunAdmin
+        L"Kopiuj do schowka", // CopyClipboard
+        L"Kopiuj polecenie", // CopyCommand
+        L"Kopiuj link wyszukiwania", // CopySearchLink
+        L"Otwórz lokalizację pliku", // OpenLocation
+        L"Kopiuj ścieżkę", // CopyPath
+        L"Utwórz skrót na pulpicie", // DesktopShortcut
+        L"Właściwości", // Properties
+        L"Odinstaluj", // Uninstall
+        L"Otwórz w terminalu", // Terminal
+        L"Wiersz polecenia", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Wytnij", // Cut
+        L"Kopiuj", // Copy
+        L"Kopiuj nazwę", // CopyName
+        L"Brak pasujących aplikacji", // NoApps
+        L"Sprawdź pliki lub sprecyzuj wyszukiwanie", // Refine
+        L"Wpisz, aby wyszukać pliki", // TypeFiles
+        L"Tutaj pojawią się pliki i foldery", // FilesAppear
+        L"Brak pasujących plików", // NoFiles
+        L"Indeks Everything nie zwrócił elementów", // NoItems
+        L"Brak aktywnych interfejsów sieciowych", // NoNetwork
+        L"Sprawdź połączenie Wi-Fi, Ethernet lub VPN", // CheckNetwork
+        L"Typ", // Type
+        L"Rozmiar", // Size
+        L"Zawiera", // Contains
+        L"Wymiary", // Dimensions
+        L"Długość", // Length
+        L"Strony", // Pages
+        L"Liczba klatek na sekundę", // FrameRate
+        L"Szybkość transmisji", // Bitrate
+        L"Wykonawca", // Artist
+        L"Album", // Album
+        L"Tytuł", // Title
+        L"Autor", // Author
+        L"Opis", // Description
+        L"Wersja", // Version
+        L"Firma", // Company
+        L"Aparat", // Camera
+        L"Data wykonania", // Taken
+        L"Zmodyfikowano", // Modified
+        L"Utworzono", // Created
+        L"Folder plików", // Folder
+        L"Plik", // File
+        L"Elementy", // Items
+        L"bajtów", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Prędkość", // Speed
+        L"Powierzchnia", // Area
+        L"Objętość", // Volume
+        L"Dane", // Data
+        L"Szybkość danych", // DataRate
+        L"Czas", // Time
+        L"Ciśnienie", // Pressure
+        L"Energia", // Energy
+        L"Moc", // Power
+        L"Kąt", // Angle
+        L"Częstotliwość", // Frequency
+        L"Systemy liczbowe", // BaseRadix
+        L"Konwersja", // Conversion
+        L"Notacja naukowa", // Scientific
+        L"{0} i powiązane informacje zostaną odinstalowane.", // UninstallPrompt
+        L"Nie można odinstalować {0}.\n\n{1}", // UninstallFailed
+        L"Nie zainstalowano dla tego konta lub jest to część systemu Windows.", // ProtectedApp
+        L"Nie znaleziono powłoki: {0}. Sprawdź ustawienia polecenia.", // ShellMissing
+        L"Nie znaleziono katalogu systemowego Windows.", // SystemDirMissing
+        L"Argumenty muszą zawierać {command} dokładnie raz jako osobny argument bez cudzysłowów.", // ShellArguments
+        L"To polecenie przekracza limit długości wiersza polecenia Windows.", // CommandTooLong
+        L"Kopiuj: {0}", // CopyValue
+        L"Otwórz {0}", // OpenService
+        L"Wyszukaj „{1}” w {0}", // SearchService
+        L"Szukaj w sieci", // SearchWeb
+        L"Błąd", // Error
+        L"Podsieć", // Subnet
+        L"Brama", // Gateway
+    }},
+    {L"pt-br", {
+        L"Pesquisar qualquer coisa", // SearchAnything
+        L"Aplicativos", // Apps
+        L"Aplicativos sugeridos", // SuggestedApps
+        L"Arquivos", // Files
+        L"Configurações", // Settings
+        L"Aplicativo", // Application
+        L"Comando personalizado", // CustomCommand
+        L"Atalho", // Shortcut
+        L"Calculadora", // Calculator
+        L"Conversor de unidades", // Converter
+        L"Interfaces de rede", // Network
+        L"Pesquisa na web", // WebSearch
+        L"Pesquisa do Everything", // EverythingSearch
+        L"Everything (não está em execução)", // NotRunning
+        L"Resultados", // Matches
+        L"Exibidos", // Shown
+        L"Enter para copiar", // CopyHint
+        L"Enter para copiar o resultado", // CopyResultHint
+        L"Enter para copiar o IP", // CopyIpHint
+        L"Enter para pesquisar no navegador", // BrowserHint
+        L"Selecionar", // Select
+        L"Próximo", // Next
+        L"Abrir", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Fechar", // Close
+        L"Executar", // Run
+        L"Pesquisar no navegador", // SearchBrowser
+        L"Executar como administrador", // RunAdmin
+        L"Copiar para a área de transferência", // CopyClipboard
+        L"Copiar comando", // CopyCommand
+        L"Copiar link de pesquisa", // CopySearchLink
+        L"Abrir local do arquivo", // OpenLocation
+        L"Copiar caminho", // CopyPath
+        L"Criar atalho na área de trabalho", // DesktopShortcut
+        L"Propriedades", // Properties
+        L"Desinstalar", // Uninstall
+        L"Abrir no terminal", // Terminal
+        L"Prompt de Comando", // CommandPrompt
+        L"Administrador", // Administrator
+        L"Recortar", // Cut
+        L"Copiar", // Copy
+        L"Copiar nome", // CopyName
+        L"Nenhum aplicativo correspondente", // NoApps
+        L"Verifique os arquivos ou refine a pesquisa", // Refine
+        L"Digite para pesquisar arquivos", // TypeFiles
+        L"Arquivos e pastas aparecerão aqui", // FilesAppear
+        L"Nenhum arquivo correspondente", // NoFiles
+        L"O índice do Everything não retornou itens", // NoItems
+        L"Nenhuma interface de rede ativa", // NoNetwork
+        L"Verifique sua conexão Wi-Fi, Ethernet ou VPN", // CheckNetwork
+        L"Tipo", // Type
+        L"Tamanho", // Size
+        L"Contém", // Contains
+        L"Dimensões", // Dimensions
+        L"Duração", // Length
+        L"Páginas", // Pages
+        L"Taxa de quadros", // FrameRate
+        L"Taxa de bits", // Bitrate
+        L"Artista", // Artist
+        L"Álbum", // Album
+        L"Título", // Title
+        L"Autor", // Author
+        L"Descrição", // Description
+        L"Versão", // Version
+        L"Empresa", // Company
+        L"Câmera", // Camera
+        L"Capturado", // Taken
+        L"Modificado", // Modified
+        L"Criado", // Created
+        L"Pasta de arquivos", // Folder
+        L"Arquivo", // File
+        L"Itens", // Items
+        L"bytes", // Bytes
+        L"Massa", // Mass
+        L"Temperatura", // Temperature
+        L"Velocidade", // Speed
+        L"Área", // Area
+        L"Volume", // Volume
+        L"Dados", // Data
+        L"Taxa de dados", // DataRate
+        L"Tempo", // Time
+        L"Pressão", // Pressure
+        L"Energia", // Energy
+        L"Potência", // Power
+        L"Ângulo", // Angle
+        L"Frequência", // Frequency
+        L"Bases numéricas", // BaseRadix
+        L"Conversão", // Conversion
+        L"Notação científica", // Scientific
+        L"{0} e suas informações relacionadas serão desinstalados.", // UninstallPrompt
+        L"Não foi possível desinstalar {0}.\n\n{1}", // UninstallFailed
+        L"Não está instalado nesta conta ou faz parte do Windows.", // ProtectedApp
+        L"Shell não encontrado: {0}. Verifique as configurações do comando.", // ShellMissing
+        L"Não foi possível encontrar o diretório de sistema do Windows.", // SystemDirMissing
+        L"Os argumentos devem conter {command} uma única vez como argumento separado e sem aspas.", // ShellArguments
+        L"Este comando excede o limite de comprimento da linha de comando do Windows.", // CommandTooLong
+        L"Copiar: {0}", // CopyValue
+        L"Abrir {0}", // OpenService
+        L"Pesquisar “{1}” em {0}", // SearchService
+        L"Pesquisar na web", // SearchWeb
+        L"Erro", // Error
+        L"Sub-rede", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"pt-pt", {
+        L"Pesquisar tudo", // SearchAnything
+        L"Aplicações", // Apps
+        L"Aplicações sugeridas", // SuggestedApps
+        L"Ficheiros", // Files
+        L"Definições", // Settings
+        L"Aplicação", // Application
+        L"Comando personalizado", // CustomCommand
+        L"Atalho", // Shortcut
+        L"Calculadora", // Calculator
+        L"Conversor de unidades", // Converter
+        L"Interfaces de rede", // Network
+        L"Pesquisa na Web", // WebSearch
+        L"Pesquisa Everything", // EverythingSearch
+        L"Everything (não está em execução)", // NotRunning
+        L"Resultados", // Matches
+        L"Apresentados", // Shown
+        L"Prima Enter para copiar", // CopyHint
+        L"Prima Enter para copiar o resultado", // CopyResultHint
+        L"Prima Enter para copiar o IP", // CopyIpHint
+        L"Prima Enter para pesquisar no navegador", // BrowserHint
+        L"Selecionar", // Select
+        L"Seguinte", // Next
+        L"Abrir", // Open
+        L"Admin", // Admin
+        L"Menu", // Menu
+        L"Fechar", // Close
+        L"Executar", // Run
+        L"Pesquisar no navegador", // SearchBrowser
+        L"Executar como administrador", // RunAdmin
+        L"Copiar para a área de transferência", // CopyClipboard
+        L"Copiar comando", // CopyCommand
+        L"Copiar ligação de pesquisa", // CopySearchLink
+        L"Abrir localização do ficheiro", // OpenLocation
+        L"Copiar caminho", // CopyPath
+        L"Criar atalho no ambiente de trabalho", // DesktopShortcut
+        L"Propriedades", // Properties
+        L"Desinstalar", // Uninstall
+        L"Abrir no terminal", // Terminal
+        L"Linha de Comandos", // CommandPrompt
+        L"Administrador", // Administrator
+        L"Cortar", // Cut
+        L"Copiar", // Copy
+        L"Copiar nome", // CopyName
+        L"Nenhuma aplicação correspondente", // NoApps
+        L"Verifique os ficheiros ou refine a pesquisa", // Refine
+        L"Escreva para pesquisar ficheiros", // TypeFiles
+        L"Os ficheiros e pastas aparecerão aqui", // FilesAppear
+        L"Nenhum ficheiro correspondente", // NoFiles
+        L"O índice Everything não devolveu itens", // NoItems
+        L"Nenhuma interface de rede ativa", // NoNetwork
+        L"Verifique a ligação Wi-Fi, Ethernet ou VPN", // CheckNetwork
+        L"Tipo", // Type
+        L"Tamanho", // Size
+        L"Contém", // Contains
+        L"Dimensões", // Dimensions
+        L"Duração", // Length
+        L"Páginas", // Pages
+        L"Taxa de fotogramas", // FrameRate
+        L"Taxa de bits", // Bitrate
+        L"Artista", // Artist
+        L"Álbum", // Album
+        L"Título", // Title
+        L"Autor", // Author
+        L"Descrição", // Description
+        L"Versão", // Version
+        L"Empresa", // Company
+        L"Câmara", // Camera
+        L"Capturado", // Taken
+        L"Modificado", // Modified
+        L"Criado", // Created
+        L"Pasta de ficheiros", // Folder
+        L"Ficheiro", // File
+        L"Itens", // Items
+        L"bytes", // Bytes
+        L"Massa", // Mass
+        L"Temperatura", // Temperature
+        L"Velocidade", // Speed
+        L"Área", // Area
+        L"Volume", // Volume
+        L"Dados", // Data
+        L"Taxa de dados", // DataRate
+        L"Tempo", // Time
+        L"Pressão", // Pressure
+        L"Energia", // Energy
+        L"Potência", // Power
+        L"Ângulo", // Angle
+        L"Frequência", // Frequency
+        L"Bases numéricas", // BaseRadix
+        L"Conversão", // Conversion
+        L"Notação científica", // Scientific
+        L"{0} e as informações associadas serão desinstalados.", // UninstallPrompt
+        L"Não foi possível desinstalar {0}.\n\n{1}", // UninstallFailed
+        L"Não está instalado nesta conta ou faz parte do Windows.", // ProtectedApp
+        L"Interpretador não encontrado: {0}. Verifique as definições do comando.", // ShellMissing
+        L"Não foi possível encontrar o diretório de sistema do Windows.", // SystemDirMissing
+        L"Os argumentos devem conter {command} uma única vez como argumento separado e sem aspas.", // ShellArguments
+        L"Este comando excede o comprimento máximo da linha de comandos do Windows.", // CommandTooLong
+        L"Copiar: {0}", // CopyValue
+        L"Abrir {0}", // OpenService
+        L"Pesquisar «{1}» em {0}", // SearchService
+        L"Pesquisar na Web", // SearchWeb
+        L"Erro", // Error
+        L"Sub-rede", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"ro", {
+        L"Caută orice", // SearchAnything
+        L"Aplicații", // Apps
+        L"Aplicații sugerate", // SuggestedApps
+        L"Fișiere", // Files
+        L"Setări", // Settings
+        L"Aplicație", // Application
+        L"Comandă personalizată", // CustomCommand
+        L"Comandă rapidă", // Shortcut
+        L"Calculator", // Calculator
+        L"Convertor de unități", // Converter
+        L"Interfețe de rețea", // Network
+        L"Căutare pe web", // WebSearch
+        L"Căutare Everything", // EverythingSearch
+        L"Everything (nu rulează)", // NotRunning
+        L"Rezultate", // Matches
+        L"Afișate", // Shown
+        L"Enter pentru a copia", // CopyHint
+        L"Enter pentru a copia rezultatul", // CopyResultHint
+        L"Enter pentru a copia IP-ul", // CopyIpHint
+        L"Enter pentru căutare în browser", // BrowserHint
+        L"Selectează", // Select
+        L"Următorul", // Next
+        L"Deschide", // Open
+        L"Admin", // Admin
+        L"Meniu", // Menu
+        L"Închide", // Close
+        L"Execută", // Run
+        L"Caută în browser", // SearchBrowser
+        L"Execută ca administrator", // RunAdmin
+        L"Copiază în clipboard", // CopyClipboard
+        L"Copiază comanda", // CopyCommand
+        L"Copiază linkul de căutare", // CopySearchLink
+        L"Deschide locația fișierului", // OpenLocation
+        L"Copiază calea", // CopyPath
+        L"Creează comandă rapidă pe desktop", // DesktopShortcut
+        L"Proprietăți", // Properties
+        L"Dezinstalează", // Uninstall
+        L"Deschide în terminal", // Terminal
+        L"Linie de comandă", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Decupează", // Cut
+        L"Copiază", // Copy
+        L"Copiază numele", // CopyName
+        L"Nicio aplicație corespunzătoare", // NoApps
+        L"Verifică fișierele sau rafinează căutarea", // Refine
+        L"Tastează pentru a căuta fișiere", // TypeFiles
+        L"Fișierele și folderele vor apărea aici", // FilesAppear
+        L"Niciun fișier corespunzător", // NoFiles
+        L"Indexul Everything nu a returnat elemente", // NoItems
+        L"Nicio interfață de rețea activă", // NoNetwork
+        L"Verifică conexiunea Wi-Fi, Ethernet sau VPN", // CheckNetwork
+        L"Tip", // Type
+        L"Dimensiune", // Size
+        L"Conține", // Contains
+        L"Dimensiuni", // Dimensions
+        L"Durată", // Length
+        L"Pagini", // Pages
+        L"Frecvență cadre", // FrameRate
+        L"Rată de biți", // Bitrate
+        L"Artist", // Artist
+        L"Album", // Album
+        L"Titlu", // Title
+        L"Autor", // Author
+        L"Descriere", // Description
+        L"Versiune", // Version
+        L"Companie", // Company
+        L"Aparat foto", // Camera
+        L"Fotografiat", // Taken
+        L"Modificat", // Modified
+        L"Creat", // Created
+        L"Folder de fișiere", // Folder
+        L"Fișier", // File
+        L"Elemente", // Items
+        L"octeți", // Bytes
+        L"Masă", // Mass
+        L"Temperatură", // Temperature
+        L"Viteză", // Speed
+        L"Arie", // Area
+        L"Volum", // Volume
+        L"Date", // Data
+        L"Rată de date", // DataRate
+        L"Timp", // Time
+        L"Presiune", // Pressure
+        L"Energie", // Energy
+        L"Putere", // Power
+        L"Unghi", // Angle
+        L"Frecvență", // Frequency
+        L"Baze numerice", // BaseRadix
+        L"Conversie", // Conversion
+        L"Notație științifică", // Scientific
+        L"{0} și informațiile asociate vor fi dezinstalate.", // UninstallPrompt
+        L"Nu s-a putut dezinstala {0}.\n\n{1}", // UninstallFailed
+        L"Nu este instalat pentru acest cont sau face parte din Windows.", // ProtectedApp
+        L"Interpretorul nu a fost găsit: {0}. Verifică setările comenzii.", // ShellMissing
+        L"Directorul de sistem Windows nu a fost găsit.", // SystemDirMissing
+        L"Argumentele trebuie să conțină {command} o singură dată ca argument separat, fără ghilimele.", // ShellArguments
+        L"Comanda depășește limita de lungime a liniei de comandă Windows.", // CommandTooLong
+        L"Copiază: {0}", // CopyValue
+        L"Deschide {0}", // OpenService
+        L"Caută „{1}” pe {0}", // SearchService
+        L"Caută pe web", // SearchWeb
+        L"Eroare", // Error
+        L"Subrețea", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"ru", {
+        L"Искать всё", // SearchAnything
+        L"Приложения", // Apps
+        L"Рекомендуемые приложения", // SuggestedApps
+        L"Файлы", // Files
+        L"Параметры", // Settings
+        L"Приложение", // Application
+        L"Своя команда", // CustomCommand
+        L"Ярлык", // Shortcut
+        L"Калькулятор", // Calculator
+        L"Конвертер единиц", // Converter
+        L"Сетевые интерфейсы", // Network
+        L"Поиск в интернете", // WebSearch
+        L"Поиск Everything", // EverythingSearch
+        L"Everything (не запущен)", // NotRunning
+        L"Совпадения", // Matches
+        L"Показано", // Shown
+        L"Enter — копировать", // CopyHint
+        L"Enter — копировать результат", // CopyResultHint
+        L"Enter — копировать IP", // CopyIpHint
+        L"Enter — искать в браузере", // BrowserHint
+        L"Выбрать", // Select
+        L"Далее", // Next
+        L"Открыть", // Open
+        L"Админ", // Admin
+        L"Меню", // Menu
+        L"Закрыть", // Close
+        L"Выполнить", // Run
+        L"Искать в браузере", // SearchBrowser
+        L"Запуск от имени администратора", // RunAdmin
+        L"Копировать в буфер обмена", // CopyClipboard
+        L"Копировать команду", // CopyCommand
+        L"Копировать ссылку поиска", // CopySearchLink
+        L"Открыть расположение файла", // OpenLocation
+        L"Копировать путь", // CopyPath
+        L"Создать ярлык на рабочем столе", // DesktopShortcut
+        L"Свойства", // Properties
+        L"Удалить", // Uninstall
+        L"Открыть в терминале", // Terminal
+        L"Командная строка", // CommandPrompt
+        L"Администратор", // Administrator
+        L"Вырезать", // Cut
+        L"Копировать", // Copy
+        L"Копировать имя", // CopyName
+        L"Нет подходящих приложений", // NoApps
+        L"Проверьте файлы или уточните запрос", // Refine
+        L"Введите текст для поиска файлов", // TypeFiles
+        L"Здесь появятся файлы и папки", // FilesAppear
+        L"Нет подходящих файлов", // NoFiles
+        L"Индекс Everything не вернул элементов", // NoItems
+        L"Нет активных сетевых интерфейсов", // NoNetwork
+        L"Проверьте подключение Wi-Fi, Ethernet или VPN", // CheckNetwork
+        L"Тип", // Type
+        L"Размер", // Size
+        L"Содержит", // Contains
+        L"Размеры", // Dimensions
+        L"Длительность", // Length
+        L"Страницы", // Pages
+        L"Частота кадров", // FrameRate
+        L"Битрейт", // Bitrate
+        L"Исполнитель", // Artist
+        L"Альбом", // Album
+        L"Название", // Title
+        L"Автор", // Author
+        L"Описание", // Description
+        L"Версия", // Version
+        L"Компания", // Company
+        L"Камера", // Camera
+        L"Дата съёмки", // Taken
+        L"Изменён", // Modified
+        L"Создан", // Created
+        L"Папка с файлами", // Folder
+        L"Файл", // File
+        L"Элементы", // Items
+        L"байт", // Bytes
+        L"Масса", // Mass
+        L"Температура", // Temperature
+        L"Скорость", // Speed
+        L"Площадь", // Area
+        L"Объём", // Volume
+        L"Данные", // Data
+        L"Скорость передачи", // DataRate
+        L"Время", // Time
+        L"Давление", // Pressure
+        L"Энергия", // Energy
+        L"Мощность", // Power
+        L"Угол", // Angle
+        L"Частота", // Frequency
+        L"Системы счисления", // BaseRadix
+        L"Преобразование", // Conversion
+        L"Научная запись", // Scientific
+        L"Приложение {0} и связанные данные будут удалены.", // UninstallPrompt
+        L"Не удалось удалить {0}.\n\n{1}", // UninstallFailed
+        L"Не установлено для этой учётной записи или является частью Windows.", // ProtectedApp
+        L"Оболочка не найдена: {0}. Проверьте параметры команды.", // ShellMissing
+        L"Не удалось найти системную папку Windows.", // SystemDirMissing
+        L"Аргументы должны содержать {command} ровно один раз как отдельный аргумент без кавычек.", // ShellArguments
+        L"Команда превышает ограничение длины командной строки Windows.", // CommandTooLong
+        L"Копировать: {0}", // CopyValue
+        L"Открыть {0}", // OpenService
+        L"Найти «{1}» в {0}", // SearchService
+        L"Искать в интернете", // SearchWeb
+        L"Ошибка", // Error
+        L"Подсеть", // Subnet
+        L"Шлюз", // Gateway
+    }},
+    {L"sk", {
+        L"Hľadať všetko", // SearchAnything
+        L"Aplikácie", // Apps
+        L"Navrhované aplikácie", // SuggestedApps
+        L"Súbory", // Files
+        L"Nastavenia", // Settings
+        L"Aplikácia", // Application
+        L"Vlastný príkaz", // CustomCommand
+        L"Odkaz", // Shortcut
+        L"Kalkulačka", // Calculator
+        L"Prevodník jednotiek", // Converter
+        L"Sieťové rozhrania", // Network
+        L"Vyhľadávanie na webe", // WebSearch
+        L"Vyhľadávanie Everything", // EverythingSearch
+        L"Everything (nie je spustený)", // NotRunning
+        L"Výsledky", // Matches
+        L"Zobrazené", // Shown
+        L"Enter na kopírovanie", // CopyHint
+        L"Enter na skopírovanie výsledku", // CopyResultHint
+        L"Enter na skopírovanie IP", // CopyIpHint
+        L"Enter na vyhľadávanie v prehliadači", // BrowserHint
+        L"Vybrať", // Select
+        L"Ďalej", // Next
+        L"Otvoriť", // Open
+        L"Správca", // Admin
+        L"Ponuka", // Menu
+        L"Zavrieť", // Close
+        L"Spustiť", // Run
+        L"Hľadať v prehliadači", // SearchBrowser
+        L"Spustiť ako správca", // RunAdmin
+        L"Kopírovať do schránky", // CopyClipboard
+        L"Kopírovať príkaz", // CopyCommand
+        L"Kopírovať odkaz vyhľadávania", // CopySearchLink
+        L"Otvoriť umiestnenie súboru", // OpenLocation
+        L"Kopírovať cestu", // CopyPath
+        L"Vytvoriť odkaz na ploche", // DesktopShortcut
+        L"Vlastnosti", // Properties
+        L"Odinštalovať", // Uninstall
+        L"Otvoriť v termináli", // Terminal
+        L"Príkazový riadok", // CommandPrompt
+        L"Správca", // Administrator
+        L"Vystrihnúť", // Cut
+        L"Kopírovať", // Copy
+        L"Kopírovať názov", // CopyName
+        L"Žiadne zodpovedajúce aplikácie", // NoApps
+        L"Skontrolujte súbory alebo spresnite vyhľadávanie", // Refine
+        L"Začnite písať a vyhľadajte súbory", // TypeFiles
+        L"Tu sa zobrazia súbory a priečinky", // FilesAppear
+        L"Žiadne zodpovedajúce súbory", // NoFiles
+        L"Index Everything nevrátil žiadne položky", // NoItems
+        L"Žiadne aktívne sieťové rozhrania", // NoNetwork
+        L"Skontrolujte pripojenie Wi-Fi, Ethernet alebo VPN", // CheckNetwork
+        L"Typ", // Type
+        L"Veľkosť", // Size
+        L"Obsahuje", // Contains
+        L"Rozmery", // Dimensions
+        L"Dĺžka", // Length
+        L"Strany", // Pages
+        L"Snímková frekvencia", // FrameRate
+        L"Bitová rýchlosť", // Bitrate
+        L"Interpret", // Artist
+        L"Album", // Album
+        L"Názov", // Title
+        L"Autor", // Author
+        L"Popis", // Description
+        L"Verzia", // Version
+        L"Spoločnosť", // Company
+        L"Fotoaparát", // Camera
+        L"Nasnímané", // Taken
+        L"Upravené", // Modified
+        L"Vytvorené", // Created
+        L"Priečinok súborov", // Folder
+        L"Súbor", // File
+        L"Položky", // Items
+        L"bajtov", // Bytes
+        L"Hmotnosť", // Mass
+        L"Teplota", // Temperature
+        L"Rýchlosť", // Speed
+        L"Plocha", // Area
+        L"Objem", // Volume
+        L"Dáta", // Data
+        L"Rýchlosť dát", // DataRate
+        L"Čas", // Time
+        L"Tlak", // Pressure
+        L"Energia", // Energy
+        L"Výkon", // Power
+        L"Uhol", // Angle
+        L"Frekvencia", // Frequency
+        L"Číselné sústavy", // BaseRadix
+        L"Prevod", // Conversion
+        L"Vedecký zápis", // Scientific
+        L"{0} a súvisiace informácie sa odinštalujú.", // UninstallPrompt
+        L"Nepodarilo sa odinštalovať {0}.\n\n{1}", // UninstallFailed
+        L"Nie je nainštalované pre tento účet alebo je súčasťou Windows.", // ProtectedApp
+        L"Príkazový interpret sa nenašiel: {0}. Skontrolujte nastavenia príkazu.", // ShellMissing
+        L"Systémový adresár Windows sa nenašiel.", // SystemDirMissing
+        L"Argumenty musia obsahovať {command} práve raz ako samostatný argument bez úvodzoviek.", // ShellArguments
+        L"Príkaz prekračuje limit dĺžky príkazového riadka Windows.", // CommandTooLong
+        L"Kopírovať: {0}", // CopyValue
+        L"Otvoriť {0}", // OpenService
+        L"Hľadať „{1}“ v {0}", // SearchService
+        L"Hľadať na webe", // SearchWeb
+        L"Chyba", // Error
+        L"Podsieť", // Subnet
+        L"Brána", // Gateway
+    }},
+    {L"sl", {
+        L"Išči vse", // SearchAnything
+        L"Aplikacije", // Apps
+        L"Predlagane aplikacije", // SuggestedApps
+        L"Datoteke", // Files
+        L"Nastavitve", // Settings
+        L"Aplikacija", // Application
+        L"Ukaz po meri", // CustomCommand
+        L"Bližnjica", // Shortcut
+        L"Računalo", // Calculator
+        L"Pretvornik enot", // Converter
+        L"Omrežni vmesniki", // Network
+        L"Spletno iskanje", // WebSearch
+        L"Iskanje Everything", // EverythingSearch
+        L"Everything (se ne izvaja)", // NotRunning
+        L"Zadetki", // Matches
+        L"Prikazano", // Shown
+        L"Enter za kopiranje", // CopyHint
+        L"Enter za kopiranje rezultata", // CopyResultHint
+        L"Enter za kopiranje IP-ja", // CopyIpHint
+        L"Enter za iskanje v brskalniku", // BrowserHint
+        L"Izberi", // Select
+        L"Naprej", // Next
+        L"Odpri", // Open
+        L"Skrbnik", // Admin
+        L"Meni", // Menu
+        L"Zapri", // Close
+        L"Zaženi", // Run
+        L"Išči v brskalniku", // SearchBrowser
+        L"Zaženi kot skrbnik", // RunAdmin
+        L"Kopiraj v odložišče", // CopyClipboard
+        L"Kopiraj ukaz", // CopyCommand
+        L"Kopiraj povezavo iskanja", // CopySearchLink
+        L"Odpri mesto datoteke", // OpenLocation
+        L"Kopiraj pot", // CopyPath
+        L"Ustvari bližnjico na namizju", // DesktopShortcut
+        L"Lastnosti", // Properties
+        L"Odstrani", // Uninstall
+        L"Odpri v terminalu", // Terminal
+        L"Ukazni poziv", // CommandPrompt
+        L"Skrbnik", // Administrator
+        L"Izreži", // Cut
+        L"Kopiraj", // Copy
+        L"Kopiraj ime", // CopyName
+        L"Ni ustreznih aplikacij", // NoApps
+        L"Preverite datoteke ali zožite iskanje", // Refine
+        L"Vnesite besedilo za iskanje datotek", // TypeFiles
+        L"Tukaj bodo prikazane datoteke in mape", // FilesAppear
+        L"Ni ustreznih datotek", // NoFiles
+        L"Indeks Everything ni vrnil elementov", // NoItems
+        L"Ni aktivnih omrežnih vmesnikov", // NoNetwork
+        L"Preverite povezavo Wi-Fi, Ethernet ali VPN", // CheckNetwork
+        L"Vrsta", // Type
+        L"Velikost", // Size
+        L"Vsebuje", // Contains
+        L"Mere", // Dimensions
+        L"Trajanje", // Length
+        L"Strani", // Pages
+        L"Hitrost sličic", // FrameRate
+        L"Bitna hitrost", // Bitrate
+        L"Izvajalec", // Artist
+        L"Album", // Album
+        L"Naslov", // Title
+        L"Avtor", // Author
+        L"Opis", // Description
+        L"Različica", // Version
+        L"Podjetje", // Company
+        L"Fotoaparat", // Camera
+        L"Posneto", // Taken
+        L"Spremenjeno", // Modified
+        L"Ustvarjeno", // Created
+        L"Mapa datotek", // Folder
+        L"Datoteka", // File
+        L"Elementi", // Items
+        L"bajtov", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Hitrost", // Speed
+        L"Površina", // Area
+        L"Prostornina", // Volume
+        L"Podatki", // Data
+        L"Hitrost podatkov", // DataRate
+        L"Čas", // Time
+        L"Tlak", // Pressure
+        L"Energija", // Energy
+        L"Moč", // Power
+        L"Kot", // Angle
+        L"Frekvenca", // Frequency
+        L"Številski sistemi", // BaseRadix
+        L"Pretvorba", // Conversion
+        L"Znanstveni zapis", // Scientific
+        L"{0} in povezane informacije bodo odstranjene.", // UninstallPrompt
+        L"Ni bilo mogoče odstraniti {0}.\n\n{1}", // UninstallFailed
+        L"Ni nameščeno za ta račun ali je del sistema Windows.", // ProtectedApp
+        L"Lupina ni najdena: {0}. Preverite nastavitve ukaza.", // ShellMissing
+        L"Sistemska mapa Windows ni najdena.", // SystemDirMissing
+        L"Argumenti morajo vsebovati {command} natanko enkrat kot ločen argument brez narekovajev.", // ShellArguments
+        L"Ukaz presega omejitev dolžine ukazne vrstice Windows.", // CommandTooLong
+        L"Kopiraj: {0}", // CopyValue
+        L"Odpri {0}", // OpenService
+        L"Išči »{1}« v {0}", // SearchService
+        L"Išči po spletu", // SearchWeb
+        L"Napaka", // Error
+        L"Podomrežje", // Subnet
+        L"Prehod", // Gateway
+    }},
+    {L"sq", {
+        L"Kërko gjithçka", // SearchAnything
+        L"Aplikacionet", // Apps
+        L"Aplikacione të sugjeruara", // SuggestedApps
+        L"Skedarët", // Files
+        L"Cilësimet", // Settings
+        L"Aplikacion", // Application
+        L"Komandë e personalizuar", // CustomCommand
+        L"Shkurtore", // Shortcut
+        L"Llogaritëse", // Calculator
+        L"Konvertues njësish", // Converter
+        L"Ndërfaqet e rrjetit", // Network
+        L"Kërkim në ueb", // WebSearch
+        L"Kërkim Everything", // EverythingSearch
+        L"Everything (nuk po ekzekutohet)", // NotRunning
+        L"Përputhje", // Matches
+        L"Të shfaqura", // Shown
+        L"Enter për të kopjuar", // CopyHint
+        L"Enter për të kopjuar rezultatin", // CopyResultHint
+        L"Enter për të kopjuar IP-në", // CopyIpHint
+        L"Enter për të kërkuar në shfletues", // BrowserHint
+        L"Përzgjidh", // Select
+        L"Tjetri", // Next
+        L"Hap", // Open
+        L"Admin", // Admin
+        L"Meny", // Menu
+        L"Mbyll", // Close
+        L"Ekzekuto", // Run
+        L"Kërko në shfletues", // SearchBrowser
+        L"Ekzekuto si administrator", // RunAdmin
+        L"Kopjo në kujtesën e fragmenteve", // CopyClipboard
+        L"Kopjo komandën", // CopyCommand
+        L"Kopjo lidhjen e kërkimit", // CopySearchLink
+        L"Hap vendndodhjen e skedarit", // OpenLocation
+        L"Kopjo shtegun", // CopyPath
+        L"Krijo shkurtore në desktop", // DesktopShortcut
+        L"Vetitë", // Properties
+        L"Çinstalo", // Uninstall
+        L"Hap në terminal", // Terminal
+        L"Rreshti i komandës", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Prit", // Cut
+        L"Kopjo", // Copy
+        L"Kopjo emrin", // CopyName
+        L"Asnjë aplikacion që përputhet", // NoApps
+        L"Kontrolloni skedarët ose përmirësoni kërkimin", // Refine
+        L"Shkruani për të kërkuar skedarë", // TypeFiles
+        L"Skedarët dhe dosjet do të shfaqen këtu", // FilesAppear
+        L"Asnjë skedar që përputhet", // NoFiles
+        L"Indeksi Everything nuk ktheu elemente", // NoItems
+        L"Asnjë ndërfaqe rrjeti aktive", // NoNetwork
+        L"Kontrolloni lidhjen Wi-Fi, Ethernet ose VPN", // CheckNetwork
+        L"Lloji", // Type
+        L"Madhësia", // Size
+        L"Përmban", // Contains
+        L"Përmasat", // Dimensions
+        L"Kohëzgjatja", // Length
+        L"Faqet", // Pages
+        L"Shpejtësia e kuadrove", // FrameRate
+        L"Shpejtësia e biteve", // Bitrate
+        L"Artisti", // Artist
+        L"Albumi", // Album
+        L"Titulli", // Title
+        L"Autori", // Author
+        L"Përshkrimi", // Description
+        L"Versioni", // Version
+        L"Kompania", // Company
+        L"Kamera", // Camera
+        L"Shkrepur", // Taken
+        L"Ndryshuar", // Modified
+        L"Krijuar", // Created
+        L"Dosje skedarësh", // Folder
+        L"Skedar", // File
+        L"Elemente", // Items
+        L"bajt", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Shpejtësia", // Speed
+        L"Sipërfaqja", // Area
+        L"Vëllimi", // Volume
+        L"Të dhëna", // Data
+        L"Shpejtësia e të dhënave", // DataRate
+        L"Koha", // Time
+        L"Presioni", // Pressure
+        L"Energjia", // Energy
+        L"Fuqia", // Power
+        L"Këndi", // Angle
+        L"Frekuenca", // Frequency
+        L"Bazat numerike", // BaseRadix
+        L"Konvertim", // Conversion
+        L"Shënim shkencor", // Scientific
+        L"{0} dhe të dhënat përkatëse do të çinstalohen.", // UninstallPrompt
+        L"Nuk mund të çinstalohet {0}.\n\n{1}", // UninstallFailed
+        L"Nuk është instaluar për këtë llogari ose është pjesë e Windows.", // ProtectedApp
+        L"Interpretuesi nuk u gjet: {0}. Kontrolloni cilësimet e komandës.", // ShellMissing
+        L"Dosja e sistemit Windows nuk u gjet.", // SystemDirMissing
+        L"Argumentet duhet të përmbajnë {command} vetëm një herë si argument më vete pa thonjëza.", // ShellArguments
+        L"Kjo komandë tejkalon kufirin e gjatësisë së rreshtit të komandës në Windows.", // CommandTooLong
+        L"Kopjo: {0}", // CopyValue
+        L"Hap {0}", // OpenService
+        L"Kërko “{1}” në {0}", // SearchService
+        L"Kërko në ueb", // SearchWeb
+        L"Gabim", // Error
+        L"Nënrrjeti", // Subnet
+        L"Porta hyrëse", // Gateway
+    }},
+    {L"sr-latn", {
+        L"Pretraži sve", // SearchAnything
+        L"Aplikacije", // Apps
+        L"Predložene aplikacije", // SuggestedApps
+        L"Datoteke", // Files
+        L"Podešavanja", // Settings
+        L"Aplikacija", // Application
+        L"Prilagođena komanda", // CustomCommand
+        L"Prečica", // Shortcut
+        L"Kalkulator", // Calculator
+        L"Pretvarač jedinica", // Converter
+        L"Mrežni interfejsi", // Network
+        L"Veb-pretraga", // WebSearch
+        L"Everything pretraga", // EverythingSearch
+        L"Everything (nije pokrenut)", // NotRunning
+        L"Poklapanja", // Matches
+        L"Prikazano", // Shown
+        L"Enter za kopiranje", // CopyHint
+        L"Enter za kopiranje rezultata", // CopyResultHint
+        L"Enter za kopiranje IP-a", // CopyIpHint
+        L"Enter za pretragu u pregledaču", // BrowserHint
+        L"Izaberi", // Select
+        L"Sledeće", // Next
+        L"Otvori", // Open
+        L"Admin", // Admin
+        L"Meni", // Menu
+        L"Zatvori", // Close
+        L"Pokreni", // Run
+        L"Pretraži u pregledaču", // SearchBrowser
+        L"Pokreni kao administrator", // RunAdmin
+        L"Kopiraj u ostavu", // CopyClipboard
+        L"Kopiraj komandu", // CopyCommand
+        L"Kopiraj vezu pretrage", // CopySearchLink
+        L"Otvori lokaciju datoteke", // OpenLocation
+        L"Kopiraj putanju", // CopyPath
+        L"Napravi prečicu na radnoj površini", // DesktopShortcut
+        L"Svojstva", // Properties
+        L"Deinstaliraj", // Uninstall
+        L"Otvori u terminalu", // Terminal
+        L"Komandna linija", // CommandPrompt
+        L"Administrator", // Administrator
+        L"Iseci", // Cut
+        L"Kopiraj", // Copy
+        L"Kopiraj ime", // CopyName
+        L"Nema odgovarajućih aplikacija", // NoApps
+        L"Proverite datoteke ili suzite pretragu", // Refine
+        L"Unesite tekst za pretragu datoteka", // TypeFiles
+        L"Datoteke i fascikle će se pojaviti ovde", // FilesAppear
+        L"Nema odgovarajućih datoteka", // NoFiles
+        L"Everything indeks nije vratio stavke", // NoItems
+        L"Nema aktivnih mrežnih interfejsa", // NoNetwork
+        L"Proverite Wi-Fi, Ethernet ili VPN vezu", // CheckNetwork
+        L"Tip", // Type
+        L"Veličina", // Size
+        L"Sadrži", // Contains
+        L"Dimenzije", // Dimensions
+        L"Trajanje", // Length
+        L"Stranice", // Pages
+        L"Broj kadrova", // FrameRate
+        L"Brzina protoka", // Bitrate
+        L"Izvođač", // Artist
+        L"Album", // Album
+        L"Naslov", // Title
+        L"Autor", // Author
+        L"Opis", // Description
+        L"Verzija", // Version
+        L"Kompanija", // Company
+        L"Kamera", // Camera
+        L"Snimljeno", // Taken
+        L"Izmenjeno", // Modified
+        L"Napravljeno", // Created
+        L"Fascikla datoteka", // Folder
+        L"Datoteka", // File
+        L"Stavke", // Items
+        L"bajtova", // Bytes
+        L"Masa", // Mass
+        L"Temperatura", // Temperature
+        L"Brzina", // Speed
+        L"Površina", // Area
+        L"Zapremina", // Volume
+        L"Podaci", // Data
+        L"Brzina podataka", // DataRate
+        L"Vreme", // Time
+        L"Pritisak", // Pressure
+        L"Energija", // Energy
+        L"Snaga", // Power
+        L"Ugao", // Angle
+        L"Frekvencija", // Frequency
+        L"Brojevni sistemi", // BaseRadix
+        L"Konverzija", // Conversion
+        L"Naučni zapis", // Scientific
+        L"{0} i povezane informacije biće deinstalirani.", // UninstallPrompt
+        L"Nije moguće deinstalirati {0}.\n\n{1}", // UninstallFailed
+        L"Nije instalirano za ovaj nalog ili je deo sistema Windows.", // ProtectedApp
+        L"Komandni interpreter nije pronađen: {0}. Proverite podešavanja komande.", // ShellMissing
+        L"Sistemska fascikla Windows nije pronađena.", // SystemDirMissing
+        L"Argumenti moraju sadržati {command} tačno jednom kao zaseban argument bez navodnika.", // ShellArguments
+        L"Komanda premašuje ograničenje dužine komandne linije Windows.", // CommandTooLong
+        L"Kopiraj: {0}", // CopyValue
+        L"Otvori {0}", // OpenService
+        L"Traži „{1}” na {0}", // SearchService
+        L"Pretraži veb", // SearchWeb
+        L"Greška", // Error
+        L"Podmreža", // Subnet
+        L"Mrežni prolaz", // Gateway
+    }},
+    {L"sv", {
+        L"Sök efter allt", // SearchAnything
+        L"Appar", // Apps
+        L"Föreslagna appar", // SuggestedApps
+        L"Filer", // Files
+        L"Inställningar", // Settings
+        L"Program", // Application
+        L"Eget kommando", // CustomCommand
+        L"Genväg", // Shortcut
+        L"Kalkylator", // Calculator
+        L"Enhetsomvandlare", // Converter
+        L"Nätverksgränssnitt", // Network
+        L"Webbsökning", // WebSearch
+        L"Everything-sökning", // EverythingSearch
+        L"Everything (körs inte)", // NotRunning
+        L"Träffar", // Matches
+        L"Visade", // Shown
+        L"Tryck Retur för att kopiera", // CopyHint
+        L"Tryck Retur för att kopiera resultatet", // CopyResultHint
+        L"Tryck Retur för att kopiera IP", // CopyIpHint
+        L"Tryck Retur för att söka i webbläsaren", // BrowserHint
+        L"Välj", // Select
+        L"Nästa", // Next
+        L"Öppna", // Open
+        L"Admin", // Admin
+        L"Meny", // Menu
+        L"Stäng", // Close
+        L"Kör", // Run
+        L"Sök i webbläsaren", // SearchBrowser
+        L"Kör som administratör", // RunAdmin
+        L"Kopiera till Urklipp", // CopyClipboard
+        L"Kopiera kommando", // CopyCommand
+        L"Kopiera söklänk", // CopySearchLink
+        L"Öppna filsökväg", // OpenLocation
+        L"Kopiera sökväg", // CopyPath
+        L"Skapa skrivbordsgenväg", // DesktopShortcut
+        L"Egenskaper", // Properties
+        L"Avinstallera", // Uninstall
+        L"Öppna i terminal", // Terminal
+        L"Kommandotolken", // CommandPrompt
+        L"Administratör", // Administrator
+        L"Klipp ut", // Cut
+        L"Kopiera", // Copy
+        L"Kopiera namn", // CopyName
+        L"Inga matchande program", // NoApps
+        L"Kontrollera filer eller förfina sökningen", // Refine
+        L"Skriv för att söka efter filer", // TypeFiles
+        L"Filer och mappar visas här", // FilesAppear
+        L"Inga matchande filer", // NoFiles
+        L"Everything-indexet gav inga objekt", // NoItems
+        L"Inga aktiva nätverksgränssnitt", // NoNetwork
+        L"Kontrollera din Wi-Fi-, Ethernet- eller VPN-anslutning", // CheckNetwork
+        L"Typ", // Type
+        L"Storlek", // Size
+        L"Innehåller", // Contains
+        L"Dimensioner", // Dimensions
+        L"Längd", // Length
+        L"Sidor", // Pages
+        L"Bildfrekvens", // FrameRate
+        L"Bithastighet", // Bitrate
+        L"Artist", // Artist
+        L"Album", // Album
+        L"Titel", // Title
+        L"Författare", // Author
+        L"Beskrivning", // Description
+        L"Version", // Version
+        L"Företag", // Company
+        L"Kamera", // Camera
+        L"Tagen", // Taken
+        L"Ändrad", // Modified
+        L"Skapad", // Created
+        L"Filmapp", // Folder
+        L"Fil", // File
+        L"Objekt", // Items
+        L"byte", // Bytes
+        L"Massa", // Mass
+        L"Temperatur", // Temperature
+        L"Hastighet", // Speed
+        L"Area", // Area
+        L"Volym", // Volume
+        L"Data", // Data
+        L"Datahastighet", // DataRate
+        L"Tid", // Time
+        L"Tryck", // Pressure
+        L"Energi", // Energy
+        L"Effekt", // Power
+        L"Vinkel", // Angle
+        L"Frekvens", // Frequency
+        L"Talbaser", // BaseRadix
+        L"Omvandling", // Conversion
+        L"Grundpotensform", // Scientific
+        L"{0} och dess relaterade information avinstalleras.", // UninstallPrompt
+        L"Kunde inte avinstallera {0}.\n\n{1}", // UninstallFailed
+        L"Inte installerat för detta konto eller en del av Windows.", // ProtectedApp
+        L"Kommandoskalet hittades inte: {0}. Kontrollera kommandoinställningarna.", // ShellMissing
+        L"Kunde inte hitta Windows systemmapp.", // SystemDirMissing
+        L"Argumenten måste innehålla {command} en gång som ett separat argument utan citattecken.", // ShellArguments
+        L"Kommandot överskrider Windows maximala kommandoradslängd.", // CommandTooLong
+        L"Kopiera: {0}", // CopyValue
+        L"Öppna {0}", // OpenService
+        L"Sök efter ”{1}” på {0}", // SearchService
+        L"Sök på webben", // SearchWeb
+        L"Fel", // Error
+        L"Undernät", // Subnet
+        L"Gateway", // Gateway
+    }},
+    {L"sw", {
+        L"Tafuta chochote", // SearchAnything
+        L"Programu", // Apps
+        L"Programu zinazopendekezwa", // SuggestedApps
+        L"Faili", // Files
+        L"Mipangilio", // Settings
+        L"Programu", // Application
+        L"Amri maalumu", // CustomCommand
+        L"Njia ya mkato", // Shortcut
+        L"Kikokotoo", // Calculator
+        L"Kibadilisha vipimo", // Converter
+        L"Violesura vya mtandao", // Network
+        L"Utafutaji wa wavuti", // WebSearch
+        L"Utafutaji wa Everything", // EverythingSearch
+        L"Everything (haifanyi kazi)", // NotRunning
+        L"Matokeo", // Matches
+        L"Zilizoonyeshwa", // Shown
+        L"Bonyeza Enter kunakili", // CopyHint
+        L"Bonyeza Enter kunakili jibu", // CopyResultHint
+        L"Bonyeza Enter kunakili IP", // CopyIpHint
+        L"Bonyeza Enter kutafuta kwenye kivinjari", // BrowserHint
+        L"Chagua", // Select
+        L"Inayofuata", // Next
+        L"Fungua", // Open
+        L"Msimamizi", // Admin
+        L"Menyu", // Menu
+        L"Funga", // Close
+        L"Endesha", // Run
+        L"Tafuta kwenye kivinjari", // SearchBrowser
+        L"Endesha kama msimamizi", // RunAdmin
+        L"Nakili kwenye ubao wa kunakili", // CopyClipboard
+        L"Nakili amri", // CopyCommand
+        L"Nakili kiungo cha utafutaji", // CopySearchLink
+        L"Fungua mahali pa faili", // OpenLocation
+        L"Nakili njia", // CopyPath
+        L"Unda njia ya mkato kwenye eneo kazi", // DesktopShortcut
+        L"Sifa", // Properties
+        L"Sanidua", // Uninstall
+        L"Fungua kwenye terminali", // Terminal
+        L"Kidokezo cha Amri", // CommandPrompt
+        L"Msimamizi", // Administrator
+        L"Kata", // Cut
+        L"Nakili", // Copy
+        L"Nakili jina", // CopyName
+        L"Hakuna programu zinazolingana", // NoApps
+        L"Angalia faili au boresha utafutaji", // Refine
+        L"Andika ili kutafuta faili", // TypeFiles
+        L"Faili na folda zitaonekana hapa", // FilesAppear
+        L"Hakuna faili zinazolingana", // NoFiles
+        L"Faharasa ya Everything haikurudisha vipengee", // NoItems
+        L"Hakuna violesura vya mtandao vinavyofanya kazi", // NoNetwork
+        L"Angalia muunganisho wa Wi-Fi, Ethernet au VPN", // CheckNetwork
+        L"Aina", // Type
+        L"Ukubwa", // Size
+        L"Ina", // Contains
+        L"Vipimo", // Dimensions
+        L"Muda", // Length
+        L"Kurasa", // Pages
+        L"Kasi ya fremu", // FrameRate
+        L"Kasi ya biti", // Bitrate
+        L"Msanii", // Artist
+        L"Albamu", // Album
+        L"Kichwa", // Title
+        L"Mwandishi", // Author
+        L"Maelezo", // Description
+        L"Toleo", // Version
+        L"Kampuni", // Company
+        L"Kamera", // Camera
+        L"Ilipigwa", // Taken
+        L"Ilibadilishwa", // Modified
+        L"Iliundwa", // Created
+        L"Folda ya faili", // Folder
+        L"Faili", // File
+        L"Vipengee", // Items
+        L"baiti", // Bytes
+        L"Uzito", // Mass
+        L"Joto", // Temperature
+        L"Kasi", // Speed
+        L"Eneo", // Area
+        L"Ujazo", // Volume
+        L"Data", // Data
+        L"Kasi ya data", // DataRate
+        L"Wakati", // Time
+        L"Shinikizo", // Pressure
+        L"Nishati", // Energy
+        L"Nguvu", // Power
+        L"Pembe", // Angle
+        L"Marudio", // Frequency
+        L"Misingi ya namba", // BaseRadix
+        L"Ubadilishaji", // Conversion
+        L"Uandishi wa kisayansi", // Scientific
+        L"{0} na taarifa zake zinazohusiana zitasaniduliwa.", // UninstallPrompt
+        L"Imeshindikana kusanidua {0}.\n\n{1}", // UninstallFailed
+        L"Haijasakinishwa kwa akaunti hii au ni sehemu ya Windows.", // ProtectedApp
+        L"Kikalimani cha amri hakikupatikana: {0}. Angalia mipangilio ya amri.", // ShellMissing
+        L"Saraka ya mfumo wa Windows haikupatikana.", // SystemDirMissing
+        L"Hoja lazima ziwe na {command} mara moja kama hoja tofauti bila alama za kunukuu.", // ShellArguments
+        L"Amri hii inazidi kikomo cha urefu wa mstari wa amri wa Windows.", // CommandTooLong
+        L"Nakili: {0}", // CopyValue
+        L"Fungua {0}", // OpenService
+        L"Tafuta “{1}” kwenye {0}", // SearchService
+        L"Tafuta kwenye wavuti", // SearchWeb
+        L"Hitilafu", // Error
+        L"Mtandao mdogo", // Subnet
+        L"Lango", // Gateway
+    }},
+    {L"ta", {
+        L"அனைத்தையும் தேடுங்கள்", // SearchAnything
+        L"பயன்பாடுகள்", // Apps
+        L"பரிந்துரைக்கப்பட்ட பயன்பாடுகள்", // SuggestedApps
+        L"கோப்புகள்", // Files
+        L"அமைப்புகள்", // Settings
+        L"பயன்பாடு", // Application
+        L"தனிப்பயன் கட்டளை", // CustomCommand
+        L"குறுக்குவழி", // Shortcut
+        L"கணிப்பான்", // Calculator
+        L"அலகு மாற்றி", // Converter
+        L"பிணைய இடைமுகங்கள்", // Network
+        L"இணையத் தேடல்", // WebSearch
+        L"Everything தேடல்", // EverythingSearch
+        L"Everything (இயங்கவில்லை)", // NotRunning
+        L"பொருத்தங்கள்", // Matches
+        L"காட்டப்பட்டவை", // Shown
+        L"நகலெடுக்க Enter அழுத்தவும்", // CopyHint
+        L"முடிவை நகலெடுக்க Enter அழுத்தவும்", // CopyResultHint
+        L"IP-ஐ நகலெடுக்க Enter அழுத்தவும்", // CopyIpHint
+        L"உலாவியில் தேட Enter அழுத்தவும்", // BrowserHint
+        L"தேர்ந்தெடு", // Select
+        L"அடுத்து", // Next
+        L"திற", // Open
+        L"நிர்வாகி", // Admin
+        L"பட்டி", // Menu
+        L"மூடு", // Close
+        L"இயக்கு", // Run
+        L"உலாவியில் தேடு", // SearchBrowser
+        L"நிர்வாகியாக இயக்கு", // RunAdmin
+        L"கிளிப்போர்டுக்கு நகலெடு", // CopyClipboard
+        L"கட்டளையை நகலெடு", // CopyCommand
+        L"தேடல் இணைப்பை நகலெடு", // CopySearchLink
+        L"கோப்பின் இருப்பிடத்தைத் திற", // OpenLocation
+        L"பாதையை நகலெடு", // CopyPath
+        L"பணிமேடைக் குறுக்குவழியை உருவாக்கு", // DesktopShortcut
+        L"பண்புகள்", // Properties
+        L"நிறுவல் நீக்கு", // Uninstall
+        L"முனையத்தில் திற", // Terminal
+        L"கட்டளை வரி", // CommandPrompt
+        L"நிர்வாகி", // Administrator
+        L"வெட்டு", // Cut
+        L"நகலெடு", // Copy
+        L"பெயரை நகலெடு", // CopyName
+        L"பொருந்தும் பயன்பாடுகள் இல்லை", // NoApps
+        L"கோப்புகளைப் பார்க்கவும் அல்லது தேடலைக் குறுக்கவும்", // Refine
+        L"கோப்புகளைத் தேட தட்டச்சு செய்யவும்", // TypeFiles
+        L"கோப்புகளும் கோப்புறைகளும் இங்கே தோன்றும்", // FilesAppear
+        L"பொருந்தும் கோப்புகள் இல்லை", // NoFiles
+        L"Everything அட்டவணை உருப்படிகள் எதையும் வழங்கவில்லை", // NoItems
+        L"செயலில் உள்ள பிணைய இடைமுகங்கள் இல்லை", // NoNetwork
+        L"Wi-Fi, ஈதர்நெட் அல்லது VPN இணைப்பைச் சரிபார்க்கவும்", // CheckNetwork
+        L"வகை", // Type
+        L"அளவு", // Size
+        L"உள்ளடக்கம்", // Contains
+        L"பரிமாணங்கள்", // Dimensions
+        L"கால அளவு", // Length
+        L"பக்கங்கள்", // Pages
+        L"சட்டக வீதம்", // FrameRate
+        L"பிட் வீதம்", // Bitrate
+        L"கலைஞர்", // Artist
+        L"ஆல்பம்", // Album
+        L"தலைப்பு", // Title
+        L"ஆசிரியர்", // Author
+        L"விளக்கம்", // Description
+        L"பதிப்பு", // Version
+        L"நிறுவனம்", // Company
+        L"கேமரா", // Camera
+        L"எடுக்கப்பட்டது", // Taken
+        L"மாற்றப்பட்டது", // Modified
+        L"உருவாக்கப்பட்டது", // Created
+        L"கோப்புக் கோப்புறை", // Folder
+        L"கோப்பு", // File
+        L"உருப்படிகள்", // Items
+        L"பைட்டுகள்", // Bytes
+        L"நிறை", // Mass
+        L"வெப்பநிலை", // Temperature
+        L"வேகம்", // Speed
+        L"பரப்பளவு", // Area
+        L"கனவளவு", // Volume
+        L"தரவு", // Data
+        L"தரவு வீதம்", // DataRate
+        L"நேரம்", // Time
+        L"அழுத்தம்", // Pressure
+        L"ஆற்றல்", // Energy
+        L"திறன்", // Power
+        L"கோணம்", // Angle
+        L"அதிர்வெண்", // Frequency
+        L"எண் அடிமானங்கள்", // BaseRadix
+        L"மாற்றம்", // Conversion
+        L"அறிவியல் குறியீடு", // Scientific
+        L"{0} மற்றும் தொடர்புடைய தகவல்கள் நிறுவல் நீக்கப்படும்.", // UninstallPrompt
+        L"{0}-ஐ நிறுவல் நீக்க முடியவில்லை.\n\n{1}", // UninstallFailed
+        L"இந்தக் கணக்கில் நிறுவப்படவில்லை அல்லது Windows-இன் ஒரு பகுதியாகும்.", // ProtectedApp
+        L"ஷெல் கிடைக்கவில்லை: {0}. கட்டளையின் அமைப்புகளைச் சரிபார்க்கவும்.", // ShellMissing
+        L"Windows கணினி அடைவு கிடைக்கவில்லை.", // SystemDirMissing
+        L"ஷெல் மதிப்புருக்களில் {command} ஒருமுறை மட்டும் தனியாகவும் மேற்கோள் குறிகள் இல்லாமலும் இருக்க வேண்டும்.", // ShellArguments
+        L"இந்தக் கட்டளை Windows கட்டளை வரியின் நீள வரம்பை மீறுகிறது.", // CommandTooLong
+        L"நகலெடு: {0}", // CopyValue
+        L"{0}-ஐ திற", // OpenService
+        L"{0}-இல் “{1}” தேடு", // SearchService
+        L"இணையத்தில் தேடு", // SearchWeb
+        L"பிழை", // Error
+        L"துணைப் பிணையம்", // Subnet
+        L"நுழைவாயில்", // Gateway
+    }},
+    {L"te", {
+        L"ఏదైనా వెతకండి", // SearchAnything
+        L"యాప్\u200cలు", // Apps
+        L"సూచించిన యాప్\u200cలు", // SuggestedApps
+        L"ఫైల్\u200cలు", // Files
+        L"సెట్టింగ్\u200cలు", // Settings
+        L"అప్లికేషన్", // Application
+        L"అనుకూల ఆదేశం", // CustomCommand
+        L"సత్వరమార్గం", // Shortcut
+        L"కాలిక్యులేటర్", // Calculator
+        L"యూనిట్ కన్వర్టర్", // Converter
+        L"నెట్\u200cవర్క్ ఇంటర్\u200cఫేస్\u200cలు", // Network
+        L"వెబ్ శోధన", // WebSearch
+        L"Everything శోధన", // EverythingSearch
+        L"Everything (రన్ కావడం లేదు)", // NotRunning
+        L"సరిపోలికలు", // Matches
+        L"చూపినవి", // Shown
+        L"కాపీ చేయడానికి Enter నొక్కండి", // CopyHint
+        L"ఫలితాన్ని కాపీ చేయడానికి Enter నొక్కండి", // CopyResultHint
+        L"IPని కాపీ చేయడానికి Enter నొక్కండి", // CopyIpHint
+        L"బ్రౌజర్\u200cలో వెతకడానికి Enter నొక్కండి", // BrowserHint
+        L"ఎంచుకోండి", // Select
+        L"తదుపరి", // Next
+        L"తెరవండి", // Open
+        L"అడ్మిన్", // Admin
+        L"మెనూ", // Menu
+        L"మూసివేయండి", // Close
+        L"అమలు చేయండి", // Run
+        L"బ్రౌజర్\u200cలో వెతకండి", // SearchBrowser
+        L"నిర్వాహకునిగా అమలు చేయండి", // RunAdmin
+        L"క్లిప్\u200cబోర్డ్\u200cకు కాపీ చేయండి", // CopyClipboard
+        L"ఆదేశాన్ని కాపీ చేయండి", // CopyCommand
+        L"శోధన లింక్\u200cను కాపీ చేయండి", // CopySearchLink
+        L"ఫైల్ స్థానాన్ని తెరవండి", // OpenLocation
+        L"మార్గాన్ని కాపీ చేయండి", // CopyPath
+        L"డెస్క్\u200cటాప్ సత్వరమార్గం సృష్టించండి", // DesktopShortcut
+        L"లక్షణాలు", // Properties
+        L"అన్\u200cఇన్\u200cస్టాల్ చేయండి", // Uninstall
+        L"టెర్మినల్\u200cలో తెరవండి", // Terminal
+        L"కమాండ్ ప్రాంప్ట్", // CommandPrompt
+        L"నిర్వాహకుడు", // Administrator
+        L"కత్తిరించండి", // Cut
+        L"కాపీ చేయండి", // Copy
+        L"పేరును కాపీ చేయండి", // CopyName
+        L"సరిపోలే అప్లికేషన్\u200cలు లేవు", // NoApps
+        L"ఫైల్\u200cలను చూడండి లేదా శోధనను మెరుగుపరచండి", // Refine
+        L"ఫైల్\u200cలను వెతకడానికి టైప్ చేయండి", // TypeFiles
+        L"ఫైల్\u200cలు మరియు ఫోల్డర్\u200cలు ఇక్కడ కనిపిస్తాయి", // FilesAppear
+        L"సరిపోలే ఫైల్\u200cలు లేవు", // NoFiles
+        L"Everything సూచిక ఏ అంశాలను ఇవ్వలేదు", // NoItems
+        L"సక్రియ నెట్\u200cవర్క్ ఇంటర్\u200cఫేస్\u200cలు లేవు", // NoNetwork
+        L"మీ Wi-Fi, ఈథర్నెట్ లేదా VPN కనెక్షన్\u200cను తనిఖీ చేయండి", // CheckNetwork
+        L"రకం", // Type
+        L"పరిమాణం", // Size
+        L"అంశాలు", // Contains
+        L"కొలతలు", // Dimensions
+        L"నిడివి", // Length
+        L"పేజీలు", // Pages
+        L"ఫ్రేమ్ రేటు", // FrameRate
+        L"బిట్ రేటు", // Bitrate
+        L"కళాకారుడు", // Artist
+        L"ఆల్బమ్", // Album
+        L"శీర్షిక", // Title
+        L"రచయిత", // Author
+        L"వివరణ", // Description
+        L"సంస్కరణ", // Version
+        L"కంపెనీ", // Company
+        L"కెమెరా", // Camera
+        L"తీసిన తేదీ", // Taken
+        L"సవరించిన తేదీ", // Modified
+        L"సృష్టించిన తేదీ", // Created
+        L"ఫైల్ ఫోల్డర్", // Folder
+        L"ఫైల్", // File
+        L"అంశాలు", // Items
+        L"బైట్\u200cలు", // Bytes
+        L"ద్రవ్యరాశి", // Mass
+        L"ఉష్ణోగ్రత", // Temperature
+        L"వేగం", // Speed
+        L"వైశాల్యం", // Area
+        L"ఘనపరిమాణం", // Volume
+        L"డేటా", // Data
+        L"డేటా రేటు", // DataRate
+        L"సమయం", // Time
+        L"పీడనం", // Pressure
+        L"శక్తి", // Energy
+        L"సామర్థ్యం", // Power
+        L"కోణం", // Angle
+        L"పౌనఃపున్యం", // Frequency
+        L"సంఖ్యా ఆధారాలు", // BaseRadix
+        L"మార్పిడి", // Conversion
+        L"శాస్త్రీయ సంజ్ఞామానం", // Scientific
+        L"{0} మరియు సంబంధిత సమాచారం అన్\u200cఇన్\u200cస్టాల్ చేయబడతాయి.", // UninstallPrompt
+        L"{0}ని అన్\u200cఇన్\u200cస్టాల్ చేయలేకపోయాము.\n\n{1}", // UninstallFailed
+        L"ఈ ఖాతాకు ఇన్\u200cస్టాల్ చేయబడలేదు లేదా Windowsలో భాగం.", // ProtectedApp
+        L"షెల్ కనుగొనబడలేదు: {0}. ఆదేశ సెట్టింగ్\u200cలను తనిఖీ చేయండి.", // ShellMissing
+        L"Windows సిస్టమ్ డైరెక్టరీ కనుగొనబడలేదు.", // SystemDirMissing
+        L"షెల్ ఆర్గ్యుమెంట్లలో {command} ఒకసారి మాత్రమే, ప్రత్యేక ఆర్గ్యుమెంట్\u200cగా, కొటేషన్ గుర్తులు లేకుండా ఉండాలి.", // ShellArguments
+        L"ఈ ఆదేశం Windows కమాండ్-లైన్ పొడవు పరిమితిని మించింది.", // CommandTooLong
+        L"కాపీ చేయండి: {0}", // CopyValue
+        L"{0}ని తెరవండి", // OpenService
+        L"{0}లో “{1}” కోసం వెతకండి", // SearchService
+        L"వెబ్\u200cలో వెతకండి", // SearchWeb
+        L"లోపం", // Error
+        L"సబ్\u200cనెట్", // Subnet
+        L"గేట్\u200cవే", // Gateway
+    }},
+    {L"th", {
+        L"ค้นหาทุกอย่าง", // SearchAnything
+        L"แอป", // Apps
+        L"แอปที่แนะนำ", // SuggestedApps
+        L"ไฟล์", // Files
+        L"การตั้งค่า", // Settings
+        L"แอปพลิเคชัน", // Application
+        L"คำสั่งกำหนดเอง", // CustomCommand
+        L"ทางลัด", // Shortcut
+        L"เครื่องคิดเลข", // Calculator
+        L"ตัวแปลงหน่วย", // Converter
+        L"อินเทอร์เฟซเครือข่าย", // Network
+        L"ค้นหาเว็บ", // WebSearch
+        L"ค้นหาด้วย Everything", // EverythingSearch
+        L"Everything (ไม่ได้ทำงาน)", // NotRunning
+        L"ผลลัพธ์ที่ตรงกัน", // Matches
+        L"แสดงแล้ว", // Shown
+        L"กด Enter เพื่อคัดลอก", // CopyHint
+        L"กด Enter เพื่อคัดลอกผลลัพธ์", // CopyResultHint
+        L"กด Enter เพื่อคัดลอก IP", // CopyIpHint
+        L"กด Enter เพื่อค้นหาในเบราว์เซอร์", // BrowserHint
+        L"เลือก", // Select
+        L"ถัดไป", // Next
+        L"เปิด", // Open
+        L"ผู้ดูแล", // Admin
+        L"เมนู", // Menu
+        L"ปิด", // Close
+        L"เรียกใช้", // Run
+        L"ค้นหาในเบราว์เซอร์", // SearchBrowser
+        L"เรียกใช้ในฐานะผู้ดูแลระบบ", // RunAdmin
+        L"คัดลอกไปยังคลิปบอร์ด", // CopyClipboard
+        L"คัดลอกคำสั่ง", // CopyCommand
+        L"คัดลอกลิงก์ค้นหา", // CopySearchLink
+        L"เปิดตำแหน่งไฟล์", // OpenLocation
+        L"คัดลอกเส้นทาง", // CopyPath
+        L"สร้างทางลัดบนเดสก์ท็อป", // DesktopShortcut
+        L"คุณสมบัติ", // Properties
+        L"ถอนการติดตั้ง", // Uninstall
+        L"เปิดในเทอร์มินัล", // Terminal
+        L"พร้อมท์คำสั่ง", // CommandPrompt
+        L"ผู้ดูแลระบบ", // Administrator
+        L"ตัด", // Cut
+        L"คัดลอก", // Copy
+        L"คัดลอกชื่อ", // CopyName
+        L"ไม่มีแอปพลิเคชันที่ตรงกัน", // NoApps
+        L"ตรวจสอบไฟล์หรือปรับคำค้นหา", // Refine
+        L"พิมพ์เพื่อค้นหาไฟล์", // TypeFiles
+        L"ไฟล์และโฟลเดอร์จะแสดงที่นี่", // FilesAppear
+        L"ไม่มีไฟล์ที่ตรงกัน", // NoFiles
+        L"ดัชนี Everything ไม่ส่งคืนรายการ", // NoItems
+        L"ไม่มีอินเทอร์เฟซเครือข่ายที่ใช้งานอยู่", // NoNetwork
+        L"ตรวจสอบการเชื่อมต่อ Wi-Fi, Ethernet หรือ VPN", // CheckNetwork
+        L"ชนิด", // Type
+        L"ขนาด", // Size
+        L"ประกอบด้วย", // Contains
+        L"มิติ", // Dimensions
+        L"ระยะเวลา", // Length
+        L"หน้า", // Pages
+        L"อัตราเฟรม", // FrameRate
+        L"อัตราบิต", // Bitrate
+        L"ศิลปิน", // Artist
+        L"อัลบั้ม", // Album
+        L"ชื่อเรื่อง", // Title
+        L"ผู้เขียน", // Author
+        L"คำอธิบาย", // Description
+        L"เวอร์ชัน", // Version
+        L"บริษัท", // Company
+        L"กล้อง", // Camera
+        L"วันที่ถ่าย", // Taken
+        L"วันที่แก้ไข", // Modified
+        L"วันที่สร้าง", // Created
+        L"โฟลเดอร์ไฟล์", // Folder
+        L"ไฟล์", // File
+        L"รายการ", // Items
+        L"ไบต์", // Bytes
+        L"มวล", // Mass
+        L"อุณหภูมิ", // Temperature
+        L"ความเร็ว", // Speed
+        L"พื้นที่", // Area
+        L"ปริมาตร", // Volume
+        L"ข้อมูล", // Data
+        L"อัตราข้อมูล", // DataRate
+        L"เวลา", // Time
+        L"ความดัน", // Pressure
+        L"พลังงาน", // Energy
+        L"กำลัง", // Power
+        L"มุม", // Angle
+        L"ความถี่", // Frequency
+        L"ฐานตัวเลข", // BaseRadix
+        L"การแปลง", // Conversion
+        L"สัญกรณ์วิทยาศาสตร์", // Scientific
+        L"{0} และข้อมูลที่เกี่ยวข้องจะถูกถอนการติดตั้ง", // UninstallPrompt
+        L"ไม่สามารถถอนการติดตั้ง {0} ได้\n\n{1}", // UninstallFailed
+        L"ไม่ได้ติดตั้งสำหรับบัญชีนี้ หรือเป็นส่วนหนึ่งของ Windows", // ProtectedApp
+        L"ไม่พบเชลล์: {0} โปรดตรวจสอบการตั้งค่าคำสั่ง", // ShellMissing
+        L"ไม่พบไดเรกทอรีระบบ Windows", // SystemDirMissing
+        L"อาร์กิวเมนต์ของเชลล์ต้องมี {command} เพียงครั้งเดียว เป็นอาร์กิวเมนต์แยกโดยไม่มีเครื่องหมายคำพูด", // ShellArguments
+        L"คำสั่งนี้ยาวเกินขีดจำกัดบรรทัดคำสั่งของ Windows", // CommandTooLong
+        L"คัดลอก: {0}", // CopyValue
+        L"เปิด {0}", // OpenService
+        L"ค้นหา “{1}” ใน {0}", // SearchService
+        L"ค้นหาเว็บ", // SearchWeb
+        L"ข้อผิดพลาด", // Error
+        L"เครือข่ายย่อย", // Subnet
+        L"เกตเวย์", // Gateway
+    }},
+    {L"tr", {
+        L"Her şeyi ara", // SearchAnything
+        L"Uygulamalar", // Apps
+        L"Önerilen uygulamalar", // SuggestedApps
+        L"Dosyalar", // Files
+        L"Ayarlar", // Settings
+        L"Uygulama", // Application
+        L"Özel komut", // CustomCommand
+        L"Kısayol", // Shortcut
+        L"Hesap makinesi", // Calculator
+        L"Birim dönüştürücü", // Converter
+        L"Ağ arabirimleri", // Network
+        L"Web araması", // WebSearch
+        L"Everything araması", // EverythingSearch
+        L"Everything (çalışmıyor)", // NotRunning
+        L"Eşleşmeler", // Matches
+        L"Gösterilen", // Shown
+        L"Kopyalamak için Enter", // CopyHint
+        L"Sonucu kopyalamak için Enter", // CopyResultHint
+        L"IP’yi kopyalamak için Enter", // CopyIpHint
+        L"Tarayıcıda aramak için Enter", // BrowserHint
+        L"Seç", // Select
+        L"Sonraki", // Next
+        L"Aç", // Open
+        L"Yönetici", // Admin
+        L"Menü", // Menu
+        L"Kapat", // Close
+        L"Çalıştır", // Run
+        L"Tarayıcıda ara", // SearchBrowser
+        L"Yönetici olarak çalıştır", // RunAdmin
+        L"Panoya kopyala", // CopyClipboard
+        L"Komutu kopyala", // CopyCommand
+        L"Arama bağlantısını kopyala", // CopySearchLink
+        L"Dosya konumunu aç", // OpenLocation
+        L"Yolu kopyala", // CopyPath
+        L"Masaüstü kısayolu oluştur", // DesktopShortcut
+        L"Özellikler", // Properties
+        L"Kaldır", // Uninstall
+        L"Terminalde aç", // Terminal
+        L"Komut İstemi", // CommandPrompt
+        L"Yönetici", // Administrator
+        L"Kes", // Cut
+        L"Kopyala", // Copy
+        L"Adı kopyala", // CopyName
+        L"Eşleşen uygulama yok", // NoApps
+        L"Dosyalara bakın veya aramayı daraltın", // Refine
+        L"Dosya aramak için yazın", // TypeFiles
+        L"Dosya ve klasörler burada görünecek", // FilesAppear
+        L"Eşleşen dosya yok", // NoFiles
+        L"Everything dizini öğe döndürmedi", // NoItems
+        L"Etkin ağ arabirimi yok", // NoNetwork
+        L"Wi-Fi, Ethernet veya VPN bağlantınızı kontrol edin", // CheckNetwork
+        L"Tür", // Type
+        L"Boyut", // Size
+        L"İçerik", // Contains
+        L"Boyutlar", // Dimensions
+        L"Süre", // Length
+        L"Sayfalar", // Pages
+        L"Kare hızı", // FrameRate
+        L"Bit hızı", // Bitrate
+        L"Sanatçı", // Artist
+        L"Albüm", // Album
+        L"Başlık", // Title
+        L"Yazar", // Author
+        L"Açıklama", // Description
+        L"Sürüm", // Version
+        L"Şirket", // Company
+        L"Kamera", // Camera
+        L"Çekilme", // Taken
+        L"Değiştirilme", // Modified
+        L"Oluşturulma", // Created
+        L"Dosya klasörü", // Folder
+        L"Dosya", // File
+        L"Öğeler", // Items
+        L"bayt", // Bytes
+        L"Kütle", // Mass
+        L"Sıcaklık", // Temperature
+        L"Hız", // Speed
+        L"Alan", // Area
+        L"Hacim", // Volume
+        L"Veri", // Data
+        L"Veri hızı", // DataRate
+        L"Zaman", // Time
+        L"Basınç", // Pressure
+        L"Enerji", // Energy
+        L"Güç", // Power
+        L"Açı", // Angle
+        L"Frekans", // Frequency
+        L"Sayı tabanları", // BaseRadix
+        L"Dönüşüm", // Conversion
+        L"Bilimsel gösterim", // Scientific
+        L"{0} ve ilgili bilgileri kaldırılacak.", // UninstallPrompt
+        L"{0} kaldırılamadı.\n\n{1}", // UninstallFailed
+        L"Bu hesap için yüklü değil veya Windows’un bir parçası.", // ProtectedApp
+        L"Kabuk bulunamadı: {0}. Komut ayarlarını kontrol edin.", // ShellMissing
+        L"Windows sistem dizini bulunamadı.", // SystemDirMissing
+        L"Kabuk bağımsız değişkenleri, {command} ifadesini tırnaksız ve ayrı bir bağımsız değişken olarak bir kez içermelidir.", // ShellArguments
+        L"Bu komut Windows komut satırı uzunluk sınırını aşıyor.", // CommandTooLong
+        L"Kopyala: {0}", // CopyValue
+        L"{0} aç", // OpenService
+        L"{0} üzerinde “{1}” ara", // SearchService
+        L"Web’de ara", // SearchWeb
+        L"Hata", // Error
+        L"Alt ağ", // Subnet
+        L"Ağ geçidi", // Gateway
+    }},
+    {L"uk", {
+        L"Шукати все", // SearchAnything
+        L"Програми", // Apps
+        L"Рекомендовані програми", // SuggestedApps
+        L"Файли", // Files
+        L"Параметри", // Settings
+        L"Програма", // Application
+        L"Власна команда", // CustomCommand
+        L"Ярлик", // Shortcut
+        L"Калькулятор", // Calculator
+        L"Конвертер одиниць", // Converter
+        L"Мережеві інтерфейси", // Network
+        L"Пошук в інтернеті", // WebSearch
+        L"Пошук Everything", // EverythingSearch
+        L"Everything (не запущено)", // NotRunning
+        L"Збіги", // Matches
+        L"Показано", // Shown
+        L"Enter — копіювати", // CopyHint
+        L"Enter — копіювати результат", // CopyResultHint
+        L"Enter — копіювати IP", // CopyIpHint
+        L"Enter — шукати в браузері", // BrowserHint
+        L"Вибрати", // Select
+        L"Далі", // Next
+        L"Відкрити", // Open
+        L"Адмін", // Admin
+        L"Меню", // Menu
+        L"Закрити", // Close
+        L"Виконати", // Run
+        L"Шукати в браузері", // SearchBrowser
+        L"Запустити від імені адміністратора", // RunAdmin
+        L"Копіювати в буфер обміну", // CopyClipboard
+        L"Копіювати команду", // CopyCommand
+        L"Копіювати посилання пошуку", // CopySearchLink
+        L"Відкрити розташування файлу", // OpenLocation
+        L"Копіювати шлях", // CopyPath
+        L"Створити ярлик на робочому столі", // DesktopShortcut
+        L"Властивості", // Properties
+        L"Видалити", // Uninstall
+        L"Відкрити в терміналі", // Terminal
+        L"Командний рядок", // CommandPrompt
+        L"Адміністратор", // Administrator
+        L"Вирізати", // Cut
+        L"Копіювати", // Copy
+        L"Копіювати ім’я", // CopyName
+        L"Немає відповідних програм", // NoApps
+        L"Перевірте файли або уточніть запит", // Refine
+        L"Введіть текст для пошуку файлів", // TypeFiles
+        L"Тут з’являться файли й папки", // FilesAppear
+        L"Немає відповідних файлів", // NoFiles
+        L"Індекс Everything не повернув елементів", // NoItems
+        L"Немає активних мережевих інтерфейсів", // NoNetwork
+        L"Перевірте з’єднання Wi-Fi, Ethernet або VPN", // CheckNetwork
+        L"Тип", // Type
+        L"Розмір", // Size
+        L"Містить", // Contains
+        L"Розміри", // Dimensions
+        L"Тривалість", // Length
+        L"Сторінки", // Pages
+        L"Частота кадрів", // FrameRate
+        L"Бітрейт", // Bitrate
+        L"Виконавець", // Artist
+        L"Альбом", // Album
+        L"Назва", // Title
+        L"Автор", // Author
+        L"Опис", // Description
+        L"Версія", // Version
+        L"Компанія", // Company
+        L"Камера", // Camera
+        L"Знято", // Taken
+        L"Змінено", // Modified
+        L"Створено", // Created
+        L"Папка з файлами", // Folder
+        L"Файл", // File
+        L"Елементи", // Items
+        L"байт", // Bytes
+        L"Маса", // Mass
+        L"Температура", // Temperature
+        L"Швидкість", // Speed
+        L"Площа", // Area
+        L"Об’єм", // Volume
+        L"Дані", // Data
+        L"Швидкість даних", // DataRate
+        L"Час", // Time
+        L"Тиск", // Pressure
+        L"Енергія", // Energy
+        L"Потужність", // Power
+        L"Кут", // Angle
+        L"Частота", // Frequency
+        L"Системи числення", // BaseRadix
+        L"Перетворення", // Conversion
+        L"Науковий запис", // Scientific
+        L"Програму {0} і пов’язані дані буде видалено.", // UninstallPrompt
+        L"Не вдалося видалити {0}.\n\n{1}", // UninstallFailed
+        L"Не встановлено для цього облікового запису або є частиною Windows.", // ProtectedApp
+        L"Оболонку не знайдено: {0}. Перевірте параметри команди.", // ShellMissing
+        L"Не вдалося знайти системну папку Windows.", // SystemDirMissing
+        L"Аргументи мають містити {command} рівно один раз як окремий аргумент без лапок.", // ShellArguments
+        L"Команда перевищує обмеження довжини командного рядка Windows.", // CommandTooLong
+        L"Копіювати: {0}", // CopyValue
+        L"Відкрити {0}", // OpenService
+        L"Знайти «{1}» у {0}", // SearchService
+        L"Шукати в інтернеті", // SearchWeb
+        L"Помилка", // Error
+        L"Підмережа", // Subnet
+        L"Шлюз", // Gateway
+    }},
+    {L"vi", {
+        L"Tìm kiếm mọi thứ", // SearchAnything
+        L"Ứng dụng", // Apps
+        L"Ứng dụng gợi ý", // SuggestedApps
+        L"Tệp", // Files
+        L"Cài đặt", // Settings
+        L"Ứng dụng", // Application
+        L"Lệnh tùy chỉnh", // CustomCommand
+        L"Lối tắt", // Shortcut
+        L"Máy tính", // Calculator
+        L"Đổi đơn vị", // Converter
+        L"Giao diện mạng", // Network
+        L"Tìm trên web", // WebSearch
+        L"Tìm với Everything", // EverythingSearch
+        L"Everything (chưa chạy)", // NotRunning
+        L"Kết quả", // Matches
+        L"Đã hiển thị", // Shown
+        L"Nhấn Enter để sao chép", // CopyHint
+        L"Nhấn Enter để sao chép kết quả", // CopyResultHint
+        L"Nhấn Enter để sao chép IP", // CopyIpHint
+        L"Nhấn Enter để tìm trong trình duyệt", // BrowserHint
+        L"Chọn", // Select
+        L"Tiếp", // Next
+        L"Mở", // Open
+        L"Quản trị", // Admin
+        L"Menu", // Menu
+        L"Đóng", // Close
+        L"Chạy", // Run
+        L"Tìm trong trình duyệt", // SearchBrowser
+        L"Chạy với quyền quản trị", // RunAdmin
+        L"Sao chép vào bảng nhớ tạm", // CopyClipboard
+        L"Sao chép lệnh", // CopyCommand
+        L"Sao chép liên kết tìm kiếm", // CopySearchLink
+        L"Mở vị trí tệp", // OpenLocation
+        L"Sao chép đường dẫn", // CopyPath
+        L"Tạo lối tắt trên màn hình", // DesktopShortcut
+        L"Thuộc tính", // Properties
+        L"Gỡ cài đặt", // Uninstall
+        L"Mở trong terminal", // Terminal
+        L"Dấu nhắc lệnh", // CommandPrompt
+        L"Quản trị viên", // Administrator
+        L"Cắt", // Cut
+        L"Sao chép", // Copy
+        L"Sao chép tên", // CopyName
+        L"Không có ứng dụng phù hợp", // NoApps
+        L"Kiểm tra tệp hoặc thu hẹp tìm kiếm", // Refine
+        L"Nhập để tìm tệp", // TypeFiles
+        L"Tệp và thư mục sẽ xuất hiện tại đây", // FilesAppear
+        L"Không có tệp phù hợp", // NoFiles
+        L"Chỉ mục Everything không trả về mục nào", // NoItems
+        L"Không có giao diện mạng đang hoạt động", // NoNetwork
+        L"Kiểm tra kết nối Wi-Fi, Ethernet hoặc VPN", // CheckNetwork
+        L"Loại", // Type
+        L"Kích thước", // Size
+        L"Chứa", // Contains
+        L"Kích thước ảnh", // Dimensions
+        L"Thời lượng", // Length
+        L"Số trang", // Pages
+        L"Tốc độ khung hình", // FrameRate
+        L"Tốc độ bit", // Bitrate
+        L"Nghệ sĩ", // Artist
+        L"Album", // Album
+        L"Tiêu đề", // Title
+        L"Tác giả", // Author
+        L"Mô tả", // Description
+        L"Phiên bản", // Version
+        L"Công ty", // Company
+        L"Máy ảnh", // Camera
+        L"Ngày chụp", // Taken
+        L"Ngày sửa", // Modified
+        L"Ngày tạo", // Created
+        L"Thư mục tệp", // Folder
+        L"Tệp", // File
+        L"Mục", // Items
+        L"byte", // Bytes
+        L"Khối lượng", // Mass
+        L"Nhiệt độ", // Temperature
+        L"Tốc độ", // Speed
+        L"Diện tích", // Area
+        L"Thể tích", // Volume
+        L"Dữ liệu", // Data
+        L"Tốc độ dữ liệu", // DataRate
+        L"Thời gian", // Time
+        L"Áp suất", // Pressure
+        L"Năng lượng", // Energy
+        L"Công suất", // Power
+        L"Góc", // Angle
+        L"Tần số", // Frequency
+        L"Hệ cơ số", // BaseRadix
+        L"Chuyển đổi", // Conversion
+        L"Ký hiệu khoa học", // Scientific
+        L"{0} và thông tin liên quan sẽ được gỡ cài đặt.", // UninstallPrompt
+        L"Không thể gỡ cài đặt {0}.\n\n{1}", // UninstallFailed
+        L"Chưa cài cho tài khoản này hoặc là một phần của Windows.", // ProtectedApp
+        L"Không tìm thấy shell: {0}. Kiểm tra cài đặt lệnh.", // ShellMissing
+        L"Không tìm thấy thư mục hệ thống Windows.", // SystemDirMissing
+        L"Đối số phải chứa {command} đúng một lần dưới dạng đối số riêng, không có dấu ngoặc kép.", // ShellArguments
+        L"Lệnh này vượt quá giới hạn độ dài dòng lệnh Windows.", // CommandTooLong
+        L"Sao chép: {0}", // CopyValue
+        L"Mở {0}", // OpenService
+        L"Tìm “{1}” trên {0}", // SearchService
+        L"Tìm kiếm trên web", // SearchWeb
+        L"Lỗi", // Error
+        L"Mạng con", // Subnet
+        L"Cổng mạng", // Gateway
+    }},
+    {L"zh-hans", {
+        L"搜索所有内容", // SearchAnything
+        L"应用", // Apps
+        L"推荐应用", // SuggestedApps
+        L"文件", // Files
+        L"设置", // Settings
+        L"应用程序", // Application
+        L"自定义命令", // CustomCommand
+        L"快捷方式", // Shortcut
+        L"计算器", // Calculator
+        L"单位换算", // Converter
+        L"网络接口", // Network
+        L"网页搜索", // WebSearch
+        L"Everything 搜索", // EverythingSearch
+        L"Everything（未运行）", // NotRunning
+        L"匹配结果", // Matches
+        L"已显示", // Shown
+        L"按 Enter 复制", // CopyHint
+        L"按 Enter 复制结果", // CopyResultHint
+        L"按 Enter 复制 IP", // CopyIpHint
+        L"按 Enter 在浏览器中搜索", // BrowserHint
+        L"选择", // Select
+        L"下一个", // Next
+        L"打开", // Open
+        L"管理员", // Admin
+        L"菜单", // Menu
+        L"关闭", // Close
+        L"运行", // Run
+        L"在浏览器中搜索", // SearchBrowser
+        L"以管理员身份运行", // RunAdmin
+        L"复制到剪贴板", // CopyClipboard
+        L"复制命令", // CopyCommand
+        L"复制搜索链接", // CopySearchLink
+        L"打开文件位置", // OpenLocation
+        L"复制路径", // CopyPath
+        L"创建桌面快捷方式", // DesktopShortcut
+        L"属性", // Properties
+        L"卸载", // Uninstall
+        L"在终端中打开", // Terminal
+        L"命令提示符", // CommandPrompt
+        L"管理员", // Administrator
+        L"剪切", // Cut
+        L"复制", // Copy
+        L"复制名称", // CopyName
+        L"没有匹配的应用", // NoApps
+        L"查看文件或调整搜索内容", // Refine
+        L"输入以搜索文件", // TypeFiles
+        L"文件和文件夹将显示在此处", // FilesAppear
+        L"没有匹配的文件", // NoFiles
+        L"Everything 索引未返回任何项目", // NoItems
+        L"没有活动的网络接口", // NoNetwork
+        L"请检查 Wi-Fi、以太网或 VPN 连接", // CheckNetwork
+        L"类型", // Type
+        L"大小", // Size
+        L"包含", // Contains
+        L"尺寸", // Dimensions
+        L"时长", // Length
+        L"页数", // Pages
+        L"帧率", // FrameRate
+        L"比特率", // Bitrate
+        L"艺术家", // Artist
+        L"专辑", // Album
+        L"标题", // Title
+        L"作者", // Author
+        L"说明", // Description
+        L"版本", // Version
+        L"公司", // Company
+        L"相机", // Camera
+        L"拍摄时间", // Taken
+        L"修改时间", // Modified
+        L"创建时间", // Created
+        L"文件夹", // Folder
+        L"文件", // File
+        L"项目", // Items
+        L"字节", // Bytes
+        L"质量", // Mass
+        L"温度", // Temperature
+        L"速度", // Speed
+        L"面积", // Area
+        L"体积", // Volume
+        L"数据", // Data
+        L"数据速率", // DataRate
+        L"时间", // Time
+        L"压力", // Pressure
+        L"能量", // Energy
+        L"功率", // Power
+        L"角度", // Angle
+        L"频率", // Frequency
+        L"数制", // BaseRadix
+        L"换算", // Conversion
+        L"科学记数法", // Scientific
+        L"将卸载 {0} 及其相关信息。", // UninstallPrompt
+        L"无法卸载 {0}。\n\n{1}", // UninstallFailed
+        L"未为此账户安装，或属于 Windows 系统组件。", // ProtectedApp
+        L"找不到 Shell：{0}。请检查命令设置。", // ShellMissing
+        L"找不到 Windows 系统目录。", // SystemDirMissing
+        L"Shell 参数必须包含且仅包含一次 {command}，作为不加引号的独立参数。", // ShellArguments
+        L"此命令超出了 Windows 命令行长度限制。", // CommandTooLong
+        L"复制：{0}", // CopyValue
+        L"打开 {0}", // OpenService
+        L"在 {0} 中搜索“{1}”", // SearchService
+        L"搜索网页", // SearchWeb
+        L"错误", // Error
+        L"子网", // Subnet
+        L"网关", // Gateway
+    }},
+    {L"zh-hant", {
+        L"搜尋所有內容", // SearchAnything
+        L"應用程式", // Apps
+        L"建議的應用程式", // SuggestedApps
+        L"檔案", // Files
+        L"設定", // Settings
+        L"應用程式", // Application
+        L"自訂命令", // CustomCommand
+        L"捷徑", // Shortcut
+        L"小算盤", // Calculator
+        L"單位換算", // Converter
+        L"網路介面", // Network
+        L"網頁搜尋", // WebSearch
+        L"Everything 搜尋", // EverythingSearch
+        L"Everything（未執行）", // NotRunning
+        L"符合結果", // Matches
+        L"已顯示", // Shown
+        L"按 Enter 複製", // CopyHint
+        L"按 Enter 複製結果", // CopyResultHint
+        L"按 Enter 複製 IP", // CopyIpHint
+        L"按 Enter 在瀏覽器中搜尋", // BrowserHint
+        L"選取", // Select
+        L"下一個", // Next
+        L"開啟", // Open
+        L"管理員", // Admin
+        L"選單", // Menu
+        L"關閉", // Close
+        L"執行", // Run
+        L"在瀏覽器中搜尋", // SearchBrowser
+        L"以系統管理員身分執行", // RunAdmin
+        L"複製到剪貼簿", // CopyClipboard
+        L"複製命令", // CopyCommand
+        L"複製搜尋連結", // CopySearchLink
+        L"開啟檔案位置", // OpenLocation
+        L"複製路徑", // CopyPath
+        L"建立桌面捷徑", // DesktopShortcut
+        L"內容", // Properties
+        L"解除安裝", // Uninstall
+        L"在終端機中開啟", // Terminal
+        L"命令提示字元", // CommandPrompt
+        L"系統管理員", // Administrator
+        L"剪下", // Cut
+        L"複製", // Copy
+        L"複製名稱", // CopyName
+        L"沒有符合的應用程式", // NoApps
+        L"查看檔案或調整搜尋內容", // Refine
+        L"輸入以搜尋檔案", // TypeFiles
+        L"檔案與資料夾會顯示在此處", // FilesAppear
+        L"沒有符合的檔案", // NoFiles
+        L"Everything 索引未傳回任何項目", // NoItems
+        L"沒有使用中的網路介面", // NoNetwork
+        L"請檢查 Wi-Fi、乙太網路或 VPN 連線", // CheckNetwork
+        L"類型", // Type
+        L"大小", // Size
+        L"包含", // Contains
+        L"尺寸", // Dimensions
+        L"長度", // Length
+        L"頁數", // Pages
+        L"畫面播放速率", // FrameRate
+        L"位元速率", // Bitrate
+        L"演出者", // Artist
+        L"專輯", // Album
+        L"標題", // Title
+        L"作者", // Author
+        L"描述", // Description
+        L"版本", // Version
+        L"公司", // Company
+        L"相機", // Camera
+        L"拍攝時間", // Taken
+        L"修改時間", // Modified
+        L"建立時間", // Created
+        L"檔案資料夾", // Folder
+        L"檔案", // File
+        L"項目", // Items
+        L"位元組", // Bytes
+        L"質量", // Mass
+        L"溫度", // Temperature
+        L"速度", // Speed
+        L"面積", // Area
+        L"體積", // Volume
+        L"資料", // Data
+        L"資料速率", // DataRate
+        L"時間", // Time
+        L"壓力", // Pressure
+        L"能量", // Energy
+        L"功率", // Power
+        L"角度", // Angle
+        L"頻率", // Frequency
+        L"進位制", // BaseRadix
+        L"換算", // Conversion
+        L"科學記號", // Scientific
+        L"將解除安裝 {0} 及其相關資訊。", // UninstallPrompt
+        L"無法解除安裝 {0}。\n\n{1}", // UninstallFailed
+        L"未為此帳戶安裝，或屬於 Windows 系統元件。", // ProtectedApp
+        L"找不到 Shell：{0}。請檢查命令設定。", // ShellMissing
+        L"找不到 Windows 系統目錄。", // SystemDirMissing
+        L"Shell 引數必須包含且僅包含一次 {command}，作為未加引號的獨立引數。", // ShellArguments
+        L"此命令超過 Windows 命令列長度限制。", // CommandTooLong
+        L"複製：{0}", // CopyValue
+        L"開啟 {0}", // OpenService
+        L"在 {0} 中搜尋「{1}」", // SearchService
+        L"搜尋網頁", // SearchWeb
+        L"錯誤", // Error
+        L"子網路", // Subnet
+        L"閘道", // Gateway
+    }},
+};
+inline std::atomic<const Locale*> g_locale{&kLocales[0]};
+
+inline std::wstring NormalizeTag(std::wstring_view tag) {
+    if (tag.size() >= LOCALE_NAME_MAX_LENGTH) return {};
+    std::wstring normalized(tag);
+    for (auto& c : normalized) {
+        if (c == L'_') c = L'-';
+        if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
+    }
+    return normalized;
+}
+
+inline const Locale* Resolve(std::wstring_view requested) {
+    std::wstring tag = NormalizeTag(requested);
+    if (tag == L"zh" || tag == L"zh-cn" || tag == L"zh-sg" || tag == L"zh-chs") tag = L"zh-hans";
+    if (tag == L"zh-tw" || tag == L"zh-hk" || tag == L"zh-mo" || tag == L"zh-cht") tag = L"zh-hant";
+    if (tag == L"pt") tag = L"pt-pt";
+    if (tag == L"no" || tag.starts_with(L"no-no")) tag = L"nb";
+    if (tag == L"tl" || tag.starts_with(L"tl-")) tag = L"fil";
+    while (!tag.empty()) {
+        for (const auto& locale : kLocales) if (tag == locale.tag) return &locale;
+        const size_t dash = tag.rfind(L'-');
+        if (dash == std::wstring::npos) break;
+        tag.resize(dash);
+    }
+    return &kLocales[0];
+}
+
+inline void Load(std::wstring_view requested) {
+    const Locale* locale;
+    if (requested.empty() || NormalizeTag(requested) == L"auto") {
+        wchar_t name[LOCALE_NAME_MAX_LENGTH]{};
+        const LCID id = MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT);
+        locale = LCIDToLocaleName(id, name, ARRAYSIZE(name), 0) ? Resolve(name) : &kLocales[0];
+    } else {
+        locale = Resolve(requested);
+    }
+    g_locale.store(locale, std::memory_order_release);
+}
+
+inline const wchar_t* Text(Key key) {
+    return g_locale.load(std::memory_order_acquire)->text[static_cast<size_t>(key)];
+}
+
+inline const wchar_t* Tag() { return g_locale.load(std::memory_order_acquire)->tag; }
+
+// Replace only placeholders from the template; user values are never reparsed.
+inline std::wstring Format(Key key, std::initializer_list<std::wstring_view> arguments) {
+    std::wstring_view pattern = Text(key);
+    std::wstring result;
+    result.reserve(pattern.size() + 32);
+    for (size_t i = 0; i < pattern.size();) {
+        if (i + 2 < pattern.size() && pattern[i] == L'{' && pattern[i + 2] == L'}' &&
+            pattern[i + 1] >= L'0' && pattern[i + 1] <= L'9') {
+            const size_t index = pattern[i + 1] - L'0';
+            if (index < arguments.size()) {
+                result.append(*(arguments.begin() + index));
+                i += 3;
+                continue;
+            }
+        }
+        result.push_back(pattern[i++]);
+    }
+    return result;
+}
+
+// Only use this for mod-owned labels. Names, paths, Windows-provided text and
+// internal category/ranking identifiers stay unchanged.
+inline std::wstring Label(std::wstring_view english) {
+    static constexpr struct { const wchar_t* english; Key key; } labels[] = {
+        {L"Admin", Key::Admin},
+        {L"Administrator", Key::Administrator},
+        {L"Album", Key::Album},
+        {L"Angle", Key::Angle},
+        {L"Application", Key::Application},
+        {L"Apps", Key::Apps},
+        {L"Area", Key::Area},
+        {L"Artist", Key::Artist},
+        {L"Author", Key::Author},
+        {L"Base Radix", Key::BaseRadix},
+        {L"Bitrate", Key::Bitrate},
+        {L"Calculator", Key::Calculator},
+        {L"Camera", Key::Camera},
+        {L"Check files or refine your query", Key::Refine},
+        {L"Check your Wi-Fi, Ethernet, or VPN connection", Key::CheckNetwork},
+        {L"Close", Key::Close},
+        {L"Command Prompt", Key::CommandPrompt},
+        {L"Company", Key::Company},
+        {L"Contains", Key::Contains},
+        {L"Conversion", Key::Conversion},
+        {L"Copy", Key::Copy},
+        {L"Copy command", Key::CopyCommand},
+        {L"Copy name", Key::CopyName},
+        {L"Copy path", Key::CopyPath},
+        {L"Copy search link", Key::CopySearchLink},
+        {L"Copy to clipboard", Key::CopyClipboard},
+        {L"Copy: {0}", Key::CopyValue},
+        {L"Could not find the Windows system directory.", Key::SystemDirMissing},
+        {L"Could not uninstall {0}.\n\n{1}", Key::UninstallFailed},
+        {L"Create desktop shortcut", Key::DesktopShortcut},
+        {L"Created", Key::Created},
+        {L"Custom command", Key::CustomCommand},
+        {L"Cut", Key::Cut},
+        {L"Data", Key::Data},
+        {L"Data rate", Key::DataRate},
+        {L"Description", Key::Description},
+        {L"Dimensions", Key::Dimensions},
+        {L"Energy", Key::Energy},
+        {L"Error", Key::Error},
+        {L"Everything (not running)", Key::NotRunning},
+        {L"Everything Search", Key::EverythingSearch},
+        {L"Everything index returned 0 items", Key::NoItems},
+        {L"File", Key::File},
+        {L"File folder", Key::Folder},
+        {L"Files", Key::Files},
+        {L"Files and folders will appear here", Key::FilesAppear},
+        {L"Folder", Key::Folder},
+        {L"Frame rate", Key::FrameRate},
+        {L"Frequency", Key::Frequency},
+        {L"Gateway", Key::Gateway},
+        {L"It is not installed for this account, or it is part of Windows.", Key::ProtectedApp},
+        {L"Items", Key::Items},
+        {L"Length", Key::Length},
+        {L"Mass", Key::Mass},
+        {L"Matches", Key::Matches},
+        {L"Menu", Key::Menu},
+        {L"Modified", Key::Modified},
+        {L"Network Interfaces", Key::Network},
+        {L"Next", Key::Next},
+        {L"No active network interfaces", Key::NoNetwork},
+        {L"No matching applications", Key::NoApps},
+        {L"No matching files", Key::NoFiles},
+        {L"Number bases", Key::BaseRadix},
+        {L"Open", Key::Open},
+        {L"Open file location", Key::OpenLocation},
+        {L"Open in terminal", Key::Terminal},
+        {L"Open {0}", Key::OpenService},
+        {L"Pages", Key::Pages},
+        {L"Power", Key::Power},
+        {L"Press Enter to copy", Key::CopyHint},
+        {L"Press Enter to copy IP", Key::CopyIpHint},
+        {L"Press Enter to copy result", Key::CopyResultHint},
+        {L"Press Enter to search in browser", Key::BrowserHint},
+        {L"Pressure", Key::Pressure},
+        {L"Properties", Key::Properties},
+        {L"Run", Key::Run},
+        {L"Run as administrator", Key::RunAdmin},
+        {L"Scientific notation", Key::Scientific},
+        {L"Search Anything", Key::SearchAnything},
+        {L"Search in browser", Key::SearchBrowser},
+        {L"Search the web", Key::SearchWeb},
+        {L"Search {0} for “{1}”", Key::SearchService},
+        {L"Select", Key::Select},
+        {L"Settings", Key::Settings},
+        {L"Shell arguments must contain {command} once as a separate, unquoted argument.", Key::ShellArguments},
+        {L"Shell not found: {0}. Check the command settings.", Key::ShellMissing},
+        {L"Shortcut", Key::Shortcut},
+        {L"Shown", Key::Shown},
+        {L"Size", Key::Size},
+        {L"Speed", Key::Speed},
+        {L"Subnet", Key::Subnet},
+        {L"Suggested apps", Key::SuggestedApps},
+        {L"Taken", Key::Taken},
+        {L"Temperature", Key::Temperature},
+        {L"This command exceeds the Windows command-line length limit.", Key::CommandTooLong},
+        {L"Time", Key::Time},
+        {L"Title", Key::Title},
+        {L"Type", Key::Type},
+        {L"Type to search files", Key::TypeFiles},
+        {L"Uninstall", Key::Uninstall},
+        {L"Unit Converter", Key::Converter},
+        {L"Version", Key::Version},
+        {L"Volume", Key::Volume},
+        {L"Web Search", Key::WebSearch},
+        {L"bytes", Key::Bytes},
+        {L"{0} and its related info will be uninstalled.", Key::UninstallPrompt},
+    };
+    size_t first = 0, last = ARRAYSIZE(labels);
+    while (first < last) {
+        const size_t middle = first + (last - first) / 2;
+        const int order = english.compare(labels[middle].english);
+        if (!order) return Text(labels[middle].key);
+        if (order < 0) last = middle; else first = middle + 1;
+    }
+    return std::wstring(english);
+}
+
+inline std::wstring Subtitle(std::wstring_view text) {
+    constexpr std::wstring_view prefix = L"Settings \u2022 ";
+    if (text.starts_with(prefix)) return std::wstring(Text(Key::Settings)) + L" \u2022 " + std::wstring(text.substr(prefix.size()));
+    return Label(text);
+}
+} // namespace i18n
+// ==/StartEverythingLocalization==
 
 inline HMODULE GetCurrentModuleHandle() {
     HMODULE module = nullptr;
@@ -3662,15 +9355,15 @@ inline std::vector<LocalIPv4Info> GetLocalIPv4Addresses() {
                 wchar_t ipBuf[64];
                 swprintf_s(ipBuf, L"%u.%u.%u.%u", b1, b2, b3, b4);
 
-                std::wstring type = L"Local IPv4";
+                std::wstring type = L"IPv4";
                 if (b1 == 192 && b2 == 168) {
                     type = L"Wi-Fi / LAN (192.168.x.x)";
                 } else if (b1 == 10) {
-                    type = L"Private Network (10.x.x.x)";
+                    type = L"IPv4 (10.x.x.x)";
                 } else if (b1 == 172 && (b2 >= 16 && b2 <= 31)) {
-                    type = L"Private Network (172.16.x.x)";
+                    type = L"IPv4 (172.16.x.x)";
                 } else if (b1 == 26) {
-                    type = L"Virtual Network / VPN";
+                    type = L"VPN";
                 }
 
                 list.push_back({ipBuf, type});
@@ -3755,7 +9448,7 @@ inline std::vector<NetworkInterfaceInfo> GetNetworkInterfaces() {
                 L"",
                 L"",
                 fb.adapterType,
-                L"Local IPv4",
+                L"IPv4",
                 L"\uE701"
             });
         }
@@ -3803,7 +9496,7 @@ inline std::wstring Trim(const std::wstring& str) {
 namespace detail {
 
 struct Token {
-    enum Type { Number, Plus, Minus, Mul, Div, Mod, Pow, LParen, RParen, End, Ident } type;
+    enum Type { Number, Plus, Minus, Mul, Div, Mod, Percent, Pow, LParen, RParen, End, Ident } type;
     double value = 0.0;
     std::wstring text;
 };
@@ -3839,10 +9532,10 @@ inline std::vector<Token> Tokenize(const std::wstring& expr) {
             }
         }
 
-        // Numbers: digits or '.' followed by digit
-        if (iswdigit(c) || (c == L'.' && i + 1 < n && iswdigit(expr[i + 1]))) {
+        // Both decimal separators are accepted; grouping separators are not.
+        if (iswdigit(c) || ((c == L'.' || c == L',') && i + 1 < n && iswdigit(expr[i + 1]))) {
             size_t start = i;
-            while (i < n && (iswdigit(expr[i]) || expr[i] == L'.')) i++;
+            while (i < n && (iswdigit(expr[i]) || expr[i] == L'.' || expr[i] == L',')) i++;
             // Scientific notation: e+10, e-5
             if (i < n && (expr[i] == L'e' || expr[i] == L'E')) {
                 i++;
@@ -3850,16 +9543,18 @@ inline std::vector<Token> Tokenize(const std::wstring& expr) {
                 while (i < n && iswdigit(expr[i])) i++;
             }
             std::wstring numStr = expr.substr(start, i - start);
+            std::replace(numStr.begin(), numStr.end(), L',', L'.');
             wchar_t* pEnd = nullptr;
             double val = wcstod(numStr.c_str(), &pEnd);
+            if (pEnd == numStr.c_str() || *pEnd || !std::isfinite(val)) return {};
             tokens.push_back({Token::Number, val, L""});
             continue;
         }
 
         // Operators & Parens
         if (c == L'+') { tokens.push_back({Token::Plus}); i++; continue; }
-        if (c == L'-') { tokens.push_back({Token::Minus}); i++; continue; }
-        if (c == L'*') { tokens.push_back({Token::Mul}); i++; continue; }
+        if (c == L'-' || c == L'\u2212') { tokens.push_back({Token::Minus}); i++; continue; }
+        if (c == L'*' || c == L'\u00D7' || c == L'\u00B7') { tokens.push_back({Token::Mul}); i++; continue; }
         if (c == L'x' || c == L'X') {
             // Can be multiply if preceded by a number or closing paren, and followed by whitespace or number
             if (!tokens.empty() && (tokens.back().type == Token::Number || tokens.back().type == Token::RParen)) {
@@ -3868,8 +9563,10 @@ inline std::vector<Token> Tokenize(const std::wstring& expr) {
                 continue;
             }
         }
-        if (c == L'/') { tokens.push_back({Token::Div}); i++; continue; }
+        if (c == L'/' || c == L'\u00F7') { tokens.push_back({Token::Div}); i++; continue; }
         if (c == L'%') { tokens.push_back({Token::Mod}); i++; continue; }
+        if (c == L'\u03C0') { tokens.push_back({Token::Number, 3.14159265358979323846}); i++; continue; }
+        if (c == L'\u221A') { tokens.push_back({Token::Ident, 0.0, L"sqrt"}); i++; continue; }
         if (c == L'^') { tokens.push_back({Token::Pow}); i++; continue; }
         if (c == L'(') { tokens.push_back({Token::LParen}); i++; continue; }
         if (c == L')') { tokens.push_back({Token::RParen}); i++; continue; }
@@ -3894,6 +9591,14 @@ inline std::vector<Token> Tokenize(const std::wstring& expr) {
     }
 
     tokens.push_back({Token::End});
+    // Keep binary remainder (10 % 3), but allow postfix percentages (10% * 7).
+    // A following operand selects remainder; an operator/end selects percent.
+    for (size_t j = 0; j + 1 < tokens.size(); ++j) {
+        if (tokens[j].type != Token::Mod) continue;
+        const auto next = tokens[j + 1].type;
+        if (next != Token::Number && next != Token::Ident && next != Token::LParen)
+            tokens[j].type = Token::Percent;
+    }
     return tokens;
 }
 
@@ -3997,7 +9702,12 @@ class Parser {
             Consume();
             return -ParseFactor();
         }
-        return ParsePrimary();
+        double value = ParsePrimary();
+        if (Current().type == Token::Percent) {
+            Consume();
+            value /= 100.0;
+        }
+        return value;
     }
 
     // Primary = Number | '(' Expression ')' | Ident '(' Expression ')'
@@ -5052,7 +10762,7 @@ static bool AcceptPackageRemoval(std::wstring family) {
                 }
             }
             if (!found) {
-                error = L"It is not installed for this account, or it is part of Windows.";
+                error = i18n::Text(i18n::Key::ProtectedApp);
             }
         } catch (winrt::hresult_error const& e) {
             error = e.message().c_str();
@@ -5060,7 +10770,7 @@ static bool AcceptPackageRemoval(std::wstring family) {
         Wh_Log(L"[Explorer] uninstall %ls: %ls", family.c_str(), error.empty() ? L"removed" : error.c_str());
         if (!error.empty() && !g_quit.load()) {
             g_removalBoxThread.store(GetCurrentThreadId());
-            MessageBoxW(nullptr, (L"Couldn't uninstall " + name + L".\n\n" + error).c_str(), name.c_str(),
+            MessageBoxW(nullptr, i18n::Format(i18n::Key::UninstallFailed,{name,error}).c_str(), name.c_str(),
                         MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
             g_removalBoxThread.store(0);
         }
@@ -5586,6 +11296,8 @@ std::atomic<bool> g_forgetUsage{false};
 
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
+    auto language = WindhawkUtils::StringSetting::make(L"appearance.language");
+    i18n::Load(language.get());
 
     auto shortcutModifiers = WindhawkUtils::StringSetting::make(L"search.shortcutModifiers");
     auto shortcutKey = WindhawkUtils::StringSetting::make(L"search.shortcutKey");
@@ -6792,11 +12504,11 @@ void ConfirmUninstall(wux::FrameworkElement const& anchor, std::wstring const& n
     wuxc::StackPanel panel;
     panel.MaxWidth(300);
     auto text = SearchTextBlock();
-    text.Text(winrt::hstring{name + L" and its related info will be uninstalled."});
+    text.Text(winrt::hstring{i18n::Format(i18n::Key::UninstallPrompt,{name})});
     text.TextWrapping(wux::TextWrapping::Wrap);
     panel.Children().Append(text);
     wuxc::Button confirm;
-    confirm.Content(winrt::box_value(L"Uninstall"));
+    confirm.Content(winrt::box_value(i18n::Text(i18n::Key::Uninstall)));
     confirm.HorizontalAlignment(wux::HorizontalAlignment::Right);
     confirm.Margin(wux::ThicknessHelper::FromLengths(0, 12, 0, 0));
     try {
@@ -6990,25 +12702,23 @@ bool PrepareCustomCommand(std::wstring const& command,CustomCommandShell shell,b
     *launch={}; error->clear();
     wchar_t system[MAX_PATH]{};
     if(!GetSystemDirectoryW(system,ARRAYSIZE(system))) {
-        *error=L"Couldn't find the Windows system directory.";
+        *error=i18n::Text(i18n::Key::SystemDirMissing);
         return false;
     }
     launch->executable=CustomCommandExecutable(system,shell,customExecutable);
     const DWORD attributes=launch->executable.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(launch->executable.c_str());
     if(attributes==INVALID_FILE_ATTRIBUTES || (attributes&FILE_ATTRIBUTE_DIRECTORY)) {
-        *error=shell==CustomCommandShell::PowerShell7 ? L"PowerShell 7 wasn't found. Install it, or set its executable using Custom shell."
-            : shell==CustomCommandShell::Custom ? L"Custom shell wasn't found. Check Shell Executable in this command's settings."
-            : L"The selected shell wasn't found. Choose another shell.";
+        *error=i18n::Format(i18n::Key::ShellMissing,{shell==CustomCommandShell::PowerShell7 ? L"PowerShell 7" : customExecutable.empty() ? L"CMD / PowerShell" : customExecutable});
         return false;
     }
     const auto arguments=shell==CustomCommandShell::Custom ? ExpandCustomShellEnvironment(customArguments) : std::wstring();
     launch->parameters=CustomCommandParameters(command,shell,hideTerminal,arguments);
     if(launch->parameters.empty()) {
-        *error=L"Shell Arguments must contain {command} once as a separate argument, without quotes around it.";
+        *error=i18n::Text(i18n::Key::ShellArguments);
         return false;
     }
     if(launch->executable.size()+launch->parameters.size()+4>=32767) {
-        *error=L"This command exceeds the Windows command-line length limit.";
+        *error=i18n::Text(i18n::Key::CommandTooLong);
         return false;
     }
     launch->directory=ExpandCustomShellEnvironment(L"%USERPROFILE%");
@@ -7456,7 +13166,7 @@ inline std::wstring ByteSize(ULONGLONG bytes) {
 }
 
 inline std::wstring ItemCount(DWORD count, bool more) {
-    return std::to_wstring(count) + (more ? L"+" : L"") + (count == 1 && !more ? L" item" : L" items");
+    return std::to_wstring(count) + (more ? L"+" : L"");
 }
 
 // A folder's size and how many items it holds directly, from Everything's
@@ -8660,7 +14370,7 @@ void BuildPreviewCard() {
     name.TextWrapping(wux::TextWrapping::Wrap);
     name.MaxLines(2);
     name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-    detailsStack.Children().Append(PreviewCopyButton(name,L"Copy name"));
+    detailsStack.Children().Append(PreviewCopyButton(name,i18n::Text(i18n::Key::CopyName)));
 
     // The details, label and value (ApplyPreview fills them in).
     wuxc::Grid facts;
@@ -8683,7 +14393,7 @@ void BuildPreviewCard() {
     pathText.TextWrapping(wux::TextWrapping::Wrap);
     pathText.MaxLines(3);
     pathText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-    detailsStack.Children().Append(PreviewCopyButton(pathText,L"Copy path"));
+    detailsStack.Children().Append(PreviewCopyButton(pathText,i18n::Text(i18n::Key::CopyPath)));
     cardGrid.Children().Append(stack);
 
     wuxc::Canvas previewStrokeCanvas;
@@ -8999,6 +14709,8 @@ void ApplyPreview() try {
     if (bitmap) {
         StartPreviewMotion(*result);
     }
+    g_previewCard.Language(i18n::Tag());
+    g_previewCard.FlowDirection(wux::FlowDirection::LeftToRight);
     g_previewName.Text(winrt::hstring{result->name});
     g_previewFacts.Children().Clear();
     g_previewFacts.RowDefinitions().Clear();
@@ -9007,18 +14719,20 @@ void ApplyPreview() try {
         row.Height(wux::GridLengthHelper::Auto());
         g_previewFacts.RowDefinitions().Append(row);
         auto label = SearchTextBlock();
-        label.Text(winrt::hstring{result->facts[i].first});
+        label.Text(winrt::hstring{i18n::Label(result->facts[i].first)});
+        label.MaxWidth(Fs(96));
+        label.TextWrapping(wux::TextWrapping::Wrap);
         ScaleFont(label, 12);
         label.Opacity(0.55);
         wuxc::Grid::SetRow(label, static_cast<int32_t>(i));
         g_previewFacts.Children().Append(label);
         auto value = SearchTextBlock();
-        value.Text(winrt::hstring{result->facts[i].second});
+        value.Text(winrt::hstring{result->facts[i].first == L"Type" ? i18n::Label(result->facts[i].second) : result->facts[i].second});
         ScaleFont(value, 12);
         value.TextWrapping(wux::TextWrapping::Wrap);
         value.MaxLines(2);
         value.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-        auto copyValue=PreviewCopyButton(value,L"Copy " + result->facts[i].first);
+        auto copyValue=PreviewCopyButton(value,i18n::Format(i18n::Key::CopyValue,{i18n::Label(result->facts[i].first)}));
         wuxc::Grid::SetRow(copyValue,static_cast<int32_t>(i));
         wuxc::Grid::SetColumn(copyValue,1);
         g_previewFacts.Children().Append(copyValue);
@@ -9610,6 +15324,8 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::Grid root;
     root.Name(L"WindhawkEverythingResults");
+    root.Language(i18n::Tag());
+    root.FlowDirection(wux::FlowDirection::LeftToRight);
     root.Margin(wux::ThicknessHelper::FromUniformLength(0));
     root.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
     root.VerticalAlignment(wux::VerticalAlignment::Stretch);
@@ -9673,7 +15389,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::TextBox box;
     box.Name(L"WindhawkStartSearchBox");
-    box.PlaceholderText(L"Search Anything");
+    box.PlaceholderText(i18n::Text(i18n::Key::SearchAnything));
     box.VerticalAlignment(wux::VerticalAlignment::Center);
     box.VerticalContentAlignment(wux::VerticalAlignment::Center);
     ScaleFont(box, 14);
@@ -9965,7 +15681,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     leftStatus.Children().Append(boltIcon);
 
     auto statusText = SearchTextBlock();
-    statusText.Text(L"Everything Search");
+    statusText.Text(i18n::Text(i18n::Key::EverythingSearch));
     ScaleFont(statusText, 11);
     statusText.Opacity(0.5);
     statusText.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -10002,7 +15718,10 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         pair.Children().Append(keyBadge);
 
         auto actionBlock = SearchTextBlock();
-        actionBlock.Text(winrt::hstring{action});
+        actionBlock.Text(winrt::hstring{i18n::Label(action)});
+        actionBlock.MaxWidth(Fs(58));
+        actionBlock.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        wuxc::ToolTipService::SetToolTip(actionBlock, winrt::box_value(i18n::Label(action)));
         ScaleFont(actionBlock, 10.5);
         actionBlock.Opacity(0.45);
         actionBlock.Margin(wux::ThicknessHelper::FromLengths(4, 0, 0, 0));
@@ -10129,36 +15848,36 @@ void RenderResults() try {
         g_footerStatus.TextWrapping(wux::TextWrapping::NoWrap);
         wuxc::ToolTipService::SetToolTip(g_footerStatus,nullptr);
         if (suggestions) {
-            g_footerStatus.Text(filesVisible ? L"Suggested apps" : L"Apps");
+            g_footerStatus.Text(i18n::Text(filesVisible ? i18n::Key::SuggestedApps : i18n::Key::Apps));
         } else if(!filesVisible) {
-            g_footerStatus.Text(L"Apps");
+            g_footerStatus.Text(i18n::Text(i18n::Key::Apps));
         } else if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
-            std::wstring statusStr = L"Network Interfaces \u2022 " + std::to_wstring(appNames.size()) + L" active \u2022 Press Enter to copy IP";
+            std::wstring statusStr = std::wstring(i18n::Text(i18n::Key::Network))+L" \u2022 "+std::to_wstring(appNames.size())+L" \u2022 "+i18n::Text(i18n::Key::CopyIpHint);
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE88E") {
-            std::wstring statusStr = L"Unit Converter \u2022 " + std::to_wstring(appNames.size()) + L" conversions \u2022 Press Enter to copy";
+            std::wstring statusStr = std::wstring(i18n::Text(i18n::Key::Converter))+L" \u2022 "+std::to_wstring(appNames.size())+L" \u2022 "+i18n::Text(i18n::Key::CopyHint);
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE1D0") {
-            std::wstring statusStr = L"Calculator \u2022 Press Enter to copy result";
+            std::wstring statusStr = std::wstring(i18n::Text(i18n::Key::Calculator))+L" \u2022 "+i18n::Text(i18n::Key::CopyResultHint);
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else if (!appNames.empty() && appNames[0].appIndex < 0 &&
                    (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:"))) {
-            std::wstring statusStr = L"Web Search \u2022 Press Enter to search in default browser";
+            std::wstring statusStr = std::wstring(i18n::Text(i18n::Key::WebSearch))+L" \u2022 "+i18n::Text(i18n::Key::BrowserHint);
             if (!files.empty()) {
-                statusStr += L" (" + std::to_wstring(files.size()) + L" files matched)";
+                statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Files))+L": "+std::to_wstring(files.size())+L")";
             }
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else {
             std::wstring statusStr;
             if (everything::FindIpcWindow()) {
-                statusStr = L"Everything \u2022 " + std::to_wstring(total) + L" matches";
+                statusStr = L"Everything \u2022 "+std::wstring(i18n::Text(i18n::Key::Matches))+L": "+std::to_wstring(total);
                 if (!appNames.empty() || !files.empty()) {
-                    statusStr += L" (" + std::to_wstring(appNames.size()) + L" apps, " + std::to_wstring(files.size()) + L" files shown)";
+                    statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Apps))+L": "+std::to_wstring(appNames.size())+L", "+i18n::Text(i18n::Key::Files)+L": "+std::to_wstring(files.size())+L")";
                 }
             } else {
-                statusStr = L"Everything (not running)";
+                statusStr = i18n::Text(i18n::Key::NotRunning);
                 if (!appNames.empty()) {
-                    statusStr += L" \u2022 " + std::to_wstring(appNames.size()) + L" apps shown";
+                    statusStr += L" \u2022 "+std::wstring(i18n::Text(i18n::Key::Apps))+L": "+std::to_wstring(appNames.size());
                 }
             }
             g_footerStatus.Text(winrt::hstring{statusStr});
@@ -10237,20 +15956,20 @@ void RenderResults() try {
                       (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:")));
     if (auto target = g_appsHeaderContent ? g_appsHeaderContent : g_appsHeaderHolder) {
         if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
-            target.Child(makeHeader(L"NETWORK INTERFACES", L"\uE701", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(i18n::Text(i18n::Key::Network), L"\uE701", static_cast<int>(appNames.size())));
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE88E") {
-            target.Child(makeHeader(L"UNIT CONVERTER", L"\uE88E", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(i18n::Text(i18n::Key::Converter), L"\uE88E", static_cast<int>(appNames.size())));
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE1D0") {
-            target.Child(makeHeader(L"CALCULATOR", L"\uE1D0", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(i18n::Text(i18n::Key::Calculator), L"\uE1D0", static_cast<int>(appNames.size())));
         } else if (isWebMode) {
-            target.Child(makeHeader(L"WEB SEARCH", L"\uE774", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(i18n::Text(i18n::Key::WebSearch), L"\uE774", static_cast<int>(appNames.size())));
         } else {
-            target.Child(makeHeader(suggestions ? L"SUGGESTED APPS" : L"APPS", L"\uE71D", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(i18n::Text(suggestions ? i18n::Key::SuggestedApps : i18n::Key::Apps), L"\uE71D", static_cast<int>(appNames.size())));
         }
     }
-    std::wstring filesBadge = std::to_wstring(files.size()) + L" of " + std::to_wstring(total);
+    std::wstring filesBadge = std::to_wstring(files.size()) + L" / " + std::to_wstring(total);
     if (auto target = g_filesHeaderContent ? g_filesHeaderContent : g_filesHeaderHolder) {
-        target.Child(makeHeader(L"FILES", L"\uE8B7", static_cast<int>(files.size()), filesBadge));
+        target.Child(makeHeader(i18n::Text(i18n::Key::Files), L"\uE8B7", static_cast<int>(files.size()), filesBadge));
     }
 
     auto makeAppCard = [](const Row& item) -> AppCardUI {
@@ -10347,7 +16066,7 @@ void RenderResults() try {
 
         if (!item.subtitle.empty()) {
             auto sub = SearchTextBlock();
-            sub.Text(winrt::hstring{item.subtitle});
+            sub.Text(winrt::hstring{i18n::Subtitle(item.subtitle)});
             sub.Opacity(0.45);
             ScaleFont(sub, 10.5);
             sub.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
@@ -10420,7 +16139,7 @@ void RenderResults() try {
             if (flyout.Items().Size() > 0) return;
             if (!item.copyText.empty()) {
                 wuxc::MenuFlyoutItem copyItem;
-                copyItem.Text(L"Copy to clipboard");
+                copyItem.Text(i18n::Text(i18n::Key::CopyClipboard));
                 auto copyIcon = SearchFontIcon();
                 copyIcon.Glyph(L"\uE8C8");
                 copyItem.Icon(copyIcon);
@@ -10434,7 +16153,7 @@ void RenderResults() try {
                 const bool isCommandItem = !item.commandLine.empty();
 
                 wuxc::MenuFlyoutItem openItem;
-                openItem.Text(isCommandItem ? L"Run" : isWebItem ? L"Search in browser" : L"Open");
+                openItem.Text(i18n::Text(isCommandItem ? i18n::Key::Run : isWebItem ? i18n::Key::SearchBrowser : i18n::Key::Open));
                 auto openIcon = SearchFontIcon();
                 openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
                 openItem.Icon(openIcon);
@@ -10452,7 +16171,7 @@ void RenderResults() try {
 
                 if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
                     wuxc::MenuFlyoutItem adminItem;
-                    adminItem.Text(L"Run as administrator");
+                    adminItem.Text(i18n::Text(i18n::Key::RunAdmin));
                     auto adminIcon = SearchFontIcon();
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
@@ -10471,7 +16190,7 @@ void RenderResults() try {
 
                 if (isCommandItem) {
                     wuxc::MenuFlyoutItem copyCommand;
-                    copyCommand.Text(L"Copy command");
+                    copyCommand.Text(i18n::Text(i18n::Key::CopyCommand));
                     auto copyIcon = SearchFontIcon();
                     copyIcon.Glyph(L"\uE8C8");
                     copyCommand.Icon(copyIcon);
@@ -10482,7 +16201,7 @@ void RenderResults() try {
                 } else if (isWebItem) {
                     std::wstring webUrl = item.openPath;
                     wuxc::MenuFlyoutItem copyUrlItem;
-                    copyUrlItem.Text(L"Copy search link");
+                    copyUrlItem.Text(i18n::Text(i18n::Key::CopySearchLink));
                     auto copyIcon = SearchFontIcon();
                     copyIcon.Glyph(L"\uE8C8");
                     copyUrlItem.Icon(copyIcon);
@@ -10506,7 +16225,7 @@ void RenderResults() try {
 
                         if (!filePath.empty()) {
                             wuxc::MenuFlyoutItem locItem;
-                            locItem.Text(L"Open file location");
+                            locItem.Text(i18n::Text(i18n::Key::OpenLocation));
                             auto locIcon = SearchFontIcon();
                             locIcon.Glyph(L"\uE838");
                             locItem.Icon(locIcon);
@@ -10516,7 +16235,7 @@ void RenderResults() try {
                             flyout.Items().Append(locItem);
 
                             wuxc::MenuFlyoutItem copyPathItem;
-                            copyPathItem.Text(L"Copy path");
+                            copyPathItem.Text(i18n::Text(i18n::Key::CopyPath));
                             auto copyPathIcon = SearchFontIcon();
                             copyPathIcon.Glyph(L"\uE71B");
                             copyPathItem.Icon(copyPathIcon);
@@ -10530,7 +16249,7 @@ void RenderResults() try {
                         // shortcut keeps the original's arguments.
                         std::wstring shortcutTarget = isFile ? locTarget : L"shell:AppsFolder\\" + locTarget;
                         wuxc::MenuFlyoutItem shortcutItem;
-                        shortcutItem.Text(L"Create desktop shortcut");
+                        shortcutItem.Text(i18n::Text(i18n::Key::DesktopShortcut));
                         auto shortcutIcon = SearchFontIcon();
                         shortcutIcon.Glyph(L"\uE7C5");
                         shortcutItem.Icon(shortcutIcon);
@@ -10544,7 +16263,7 @@ void RenderResults() try {
                             flyout.Items().Append(sep2);
 
                             wuxc::MenuFlyoutItem propItem;
-                            propItem.Text(L"Properties");
+                            propItem.Text(i18n::Text(i18n::Key::Properties));
                             auto propIcon = SearchFontIcon();
                             propIcon.Glyph(L"\uE946");
                             propItem.Icon(propIcon);
@@ -10572,7 +16291,7 @@ void RenderResults() try {
                             flyout.Items().Append(sep3);
 
                             wuxc::MenuFlyoutItem uninstallItem;
-                            uninstallItem.Text(L"Uninstall");
+                            uninstallItem.Text(i18n::Text(i18n::Key::Uninstall));
                             auto uninstallIcon = SearchFontIcon();
                             uninstallIcon.Glyph(L"\uE74D");
                             uninstallItem.Icon(uninstallIcon);
@@ -10630,7 +16349,7 @@ void RenderResults() try {
         emptyStack.Children().Append(emptyIcon);
 
         auto emptyTitle = SearchTextBlock();
-        emptyTitle.Text(L"No matching applications");
+        emptyTitle.Text(i18n::Text(i18n::Key::NoApps));
         ScaleFont(emptyTitle, 11.5);
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
@@ -10638,7 +16357,7 @@ void RenderResults() try {
         emptyStack.Children().Append(emptyTitle);
 
         auto emptySubtitle = SearchTextBlock();
-        emptySubtitle.Text(L"Check files or refine your query");
+        emptySubtitle.Text(i18n::Text(i18n::Key::Refine));
         ScaleFont(emptySubtitle, 10.5);
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -10788,7 +16507,7 @@ void RenderResults() try {
 
         if (!item.subtitle.empty()) {
             auto sub = SearchTextBlock();
-            sub.Text(winrt::hstring{item.subtitle});
+            sub.Text(winrt::hstring{i18n::Subtitle(item.subtitle)});
             sub.Opacity(0.45);
             ScaleFont(sub, 10.5);
             sub.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
@@ -10879,7 +16598,7 @@ void RenderResults() try {
                 auto flyout = sender.as<wuxc::MenuFlyout>();
                 if (flyout.Items().Size() > 0) return;
                 wuxc::MenuFlyoutItem openItem;
-                openItem.Text(L"Open");
+                openItem.Text(i18n::Text(i18n::Key::Open));
                 auto openIcon = SearchFontIcon();
                 openIcon.Glyph(L"\uE8A7");
                 openItem.Icon(openIcon);
@@ -10890,7 +16609,7 @@ void RenderResults() try {
 
                 if (CanElevatePath(target)) {
                     wuxc::MenuFlyoutItem adminItem;
-                    adminItem.Text(L"Run as administrator");
+                    adminItem.Text(i18n::Text(i18n::Key::RunAdmin));
                     auto adminIcon = SearchFontIcon();
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
@@ -10902,12 +16621,12 @@ void RenderResults() try {
 
                 if (isFolder) {
                     wuxc::MenuFlyoutSubItem termSub;
-                    termSub.Text(L"Open in terminal");
+                    termSub.Text(i18n::Text(i18n::Key::Terminal));
                     auto termIcon = SearchFontIcon();
                     termIcon.Glyph(L"\uE756");
                     termSub.Icon(termIcon);
 
-                    auto addTermItem = [&](const wchar_t* label, bool isPowerShell, bool asAdmin) {
+                    auto addTermItem = [&](const std::wstring& label, bool isPowerShell, bool asAdmin) {
                         wuxc::MenuFlyoutItem termItem;
                         termItem.Text(winrt::hstring{label});
                         auto icon = SearchFontIcon();
@@ -10920,10 +16639,10 @@ void RenderResults() try {
                         termSub.Items().Append(termItem);
                     };
 
-                    addTermItem(L"Command Prompt", false, false);
-                    addTermItem(L"Command Prompt (Administrator)", false, true);
+                    addTermItem(i18n::Text(i18n::Key::CommandPrompt), false, false);
+                    addTermItem(std::wstring(i18n::Text(i18n::Key::CommandPrompt))+L" ("+i18n::Text(i18n::Key::Administrator)+L")", false, true);
                     addTermItem(L"PowerShell", true, false);
-                    addTermItem(L"PowerShell (Administrator)", true, true);
+                    addTermItem(std::wstring(L"PowerShell (")+i18n::Text(i18n::Key::Administrator)+L")", true, true);
 
                     flyout.Items().Append(termSub);
                 }
@@ -10932,7 +16651,7 @@ void RenderResults() try {
                 flyout.Items().Append(sep1);
 
                 wuxc::MenuFlyoutItem cutItem;
-                cutItem.Text(L"Cut");
+                cutItem.Text(i18n::Text(i18n::Key::Cut));
                 auto cutIcon = SearchFontIcon();
                 cutIcon.Glyph(L"\uE8C6");
                 cutItem.Icon(cutIcon);
@@ -10942,7 +16661,7 @@ void RenderResults() try {
                 flyout.Items().Append(cutItem);
 
                 wuxc::MenuFlyoutItem copyItem;
-                copyItem.Text(L"Copy");
+                copyItem.Text(i18n::Text(i18n::Key::Copy));
                 auto copyIcon = SearchFontIcon();
                 copyIcon.Glyph(L"\uE8C8");
                 copyItem.Icon(copyIcon);
@@ -10952,7 +16671,7 @@ void RenderResults() try {
                 flyout.Items().Append(copyItem);
 
                 wuxc::MenuFlyoutItem copyNameItem;
-                copyNameItem.Text(L"Copy name");
+                copyNameItem.Text(i18n::Text(i18n::Key::CopyName));
                 auto copyNameIcon = SearchFontIcon(); copyNameIcon.Glyph(L"\uE8D2");
                 copyNameItem.Icon(copyNameIcon);
                 KeepHandler(copyNameItem,copyNameItem.Click(winrt::auto_revoke,[title](wf::IInspectable const&,wux::RoutedEventArgs const&) {
@@ -10961,7 +16680,7 @@ void RenderResults() try {
                 flyout.Items().Append(copyNameItem);
 
                 wuxc::MenuFlyoutItem copyPathItem;
-                copyPathItem.Text(L"Copy path");
+                copyPathItem.Text(i18n::Text(i18n::Key::CopyPath));
                 auto copyPathIcon = SearchFontIcon();
                 copyPathIcon.Glyph(L"\uE71B");
                 copyPathItem.Icon(copyPathIcon);
@@ -10974,7 +16693,7 @@ void RenderResults() try {
                 flyout.Items().Append(sep2);
 
                 wuxc::MenuFlyoutItem locItem;
-                locItem.Text(L"Open file location");
+                locItem.Text(i18n::Text(i18n::Key::OpenLocation));
                 auto locIcon = SearchFontIcon();
                 locIcon.Glyph(L"\uE838");
                 locItem.Icon(locIcon);
@@ -10984,7 +16703,7 @@ void RenderResults() try {
                 flyout.Items().Append(locItem);
 
                 wuxc::MenuFlyoutItem shortcutItem;
-                shortcutItem.Text(L"Create desktop shortcut");
+                shortcutItem.Text(i18n::Text(i18n::Key::DesktopShortcut));
                 auto shortcutIcon = SearchFontIcon();
                 shortcutIcon.Glyph(L"\uE7C5");
                 shortcutItem.Icon(shortcutIcon);
@@ -10997,7 +16716,7 @@ void RenderResults() try {
                 flyout.Items().Append(sep3);
 
                 wuxc::MenuFlyoutItem propItem;
-                propItem.Text(L"Properties");
+                propItem.Text(i18n::Text(i18n::Key::Properties));
                 auto propIcon = SearchFontIcon();
                 propIcon.Glyph(L"\uE946");
                 propItem.Icon(propIcon);
@@ -11041,7 +16760,7 @@ void RenderResults() try {
         emptyStack.Children().Append(emptyIcon);
 
         auto emptyTitle = SearchTextBlock();
-        emptyTitle.Text(suggestions ? L"Type to search files" : L"No matching files");
+        emptyTitle.Text(i18n::Text(suggestions ? i18n::Key::TypeFiles : i18n::Key::NoFiles));
         ScaleFont(emptyTitle, 11.5);
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
@@ -11049,7 +16768,7 @@ void RenderResults() try {
         emptyStack.Children().Append(emptyTitle);
 
         auto emptySubtitle = SearchTextBlock();
-        emptySubtitle.Text(suggestions ? L"Files and folders will appear here" : L"Everything index returned 0 items");
+        emptySubtitle.Text(i18n::Text(suggestions ? i18n::Key::FilesAppear : i18n::Key::NoItems));
         ScaleFont(emptySubtitle, 10.5);
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -12013,13 +17732,13 @@ inline void CustomRows(double number, const std::wstring& unit, const std::vecto
         if (SameUnit(unit, c.fromUnit) && tools::EvaluateConversionFormula(c.formula, number, out)) {
             const std::wstring result = Format(out) + L" " + c.toUnit;
             rows->push_back(MakeRow(Format(number) + L" " + c.fromUnit + L" = " + result,
-                                    c.category + kDot + L"Press Enter to copy " + result, result, kConvertGlyph,
+                                    i18n::Label(c.category) + kDot + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 "+result, result, kConvertGlyph,
                                     KindColor(c.category)));
         }
         if (c.reciprocal && SameUnit(unit, c.toUnit) && Invert(c.formula, number, &out)) {
             const std::wstring result = Format(out) + L" " + c.fromUnit;
             rows->push_back(MakeRow(Format(number) + L" " + c.toUnit + L" = " + result,
-                                    c.category + kDot + L"Press Enter to copy " + result, result, kConvertGlyph,
+                                    i18n::Label(c.category) + kDot + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 "+result, result, kConvertGlyph,
                                     KindColor(c.category)));
         }
     }
@@ -12053,7 +17772,7 @@ inline void RadixRows(double number, std::vector<Row>* rows) {
     const std::wstring hexText = std::wstring(L"0x") + (wcslen(hex) > 8 ? Grouped(hex, 4) : hex);
     rows->push_back(MakeRow(Format(number) + L" = " + hexText + L" (Hex) = 0b" + Grouped(bin, 4) + L" (Bin) = 0o" + oct +
                                 L" (Oct)",
-                            std::wstring(L"Base Radix") + kDot + L"Press Enter to copy 0x" + hex,
+                            std::wstring(i18n::Text(i18n::Key::BaseRadix)) + kDot + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 0x"+hex,
                             std::wstring(L"0x") + hex, kConvertGlyph, KindColor(L"Base Radix")));
 }
 
@@ -12136,12 +17855,12 @@ inline bool ConversionRows(double number, const std::wstring& text, const std::v
             for (const std::wstring& result : results) {
                 all += L" = " + result;
             }
-            rows->push_back(MakeRow(all, from->kind + std::wstring(kDot) + L"Press Enter to copy this line", all,
+            rows->push_back(MakeRow(all, i18n::Label(from->kind) + std::wstring(kDot) + i18n::Text(i18n::Key::CopyHint), all,
                                     kConvertGlyph, color));
         }
         for (const std::wstring& result : results) {
             rows->push_back(MakeRow(source + L" = " + result,
-                                    from->kind + std::wstring(kDot) + L"Press Enter to copy " + result, result,
+                                    i18n::Label(from->kind) + std::wstring(kDot) + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 "+result, result,
                                     kConvertGlyph, color));
         }
     }
@@ -12204,12 +17923,11 @@ inline std::vector<Row> Rows(const std::wstring& input) {
     }
     double value = 0;
     if (used < arg.size() && !LooksLikeName(arg) && tools::EvaluateMath(arg, value)) {  // a sum, not a number alone
-        rows.push_back(MakeRow(L"= " + Format(value), arg + kDot + L"Press Enter to copy result", Format(value),
+        rows.push_back(MakeRow(L"= " + Format(value), arg + kDot + i18n::Text(i18n::Key::CopyResultHint), Format(value),
                                kCalcGlyph));
         if (Large(value)) {
             rows.push_back(MakeRow(L"= " + Scientific(value),
-                                   std::wstring(L"Scientific notation") + kDot + L"Press Enter to copy " +
-                                       Scientific(value),
+                                   std::wstring(i18n::Text(i18n::Key::Scientific)) + kDot + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 "+Scientific(value),
                                    Scientific(value), kCalcGlyph));
         }
     }
@@ -12517,8 +18235,8 @@ void SearchThreadMain() {
             auto ifaces = tools::GetNetworkInterfaces();
             if (ifaces.empty()) {
                 Row r;
-                r.title = L"No Active Network Interfaces";
-                r.subtitle = L"Check your Wi-Fi, Ethernet, or VPN connection";
+                r.title = i18n::Text(i18n::Key::NoNetwork);
+                r.subtitle = i18n::Text(i18n::Key::CheckNetwork);
                 r.customGlyph = L"\uE701";
                 r.canRunAsAdmin = false;
                 r.appIndex = static_cast<int>(lastHits.size());
@@ -12529,9 +18247,9 @@ void SearchThreadMain() {
                     Row r;
                     r.title = iface.ip;
                     std::wstring sub = iface.typeLabel + L": " + iface.adapterName;
-                    if (!iface.mask.empty()) sub += L" \u2022 Subnet: " + iface.mask;
-                    if (!iface.gateway.empty()) sub += L" \u2022 GW: " + iface.gateway;
-                    r.subtitle = sub + L" \u2022 Press Enter to copy";
+                    if (!iface.mask.empty()) sub += L" \u2022 "+std::wstring(i18n::Text(i18n::Key::Subnet))+L": "+iface.mask;
+                    if (!iface.gateway.empty()) sub += L" \u2022 "+std::wstring(i18n::Text(i18n::Key::Gateway))+L": "+iface.gateway;
+                    r.subtitle = sub + L" \u2022 "+i18n::Text(i18n::Key::CopyHint);
                     r.copyText = iface.ip;
                     r.customGlyph = iface.glyph;
                     r.canRunAsAdmin = false;
@@ -12544,16 +18262,16 @@ void SearchThreadMain() {
             Row webRow;
             if (explicitWeb.queryTerm.empty()) {
                 if (explicitWeb.isShortcut) {
-                    webRow.title = L"Open " + explicitWeb.serviceName;
+                    webRow.title = i18n::Format(i18n::Key::OpenService,{explicitWeb.serviceName});
                     webRow.subtitle = explicitWeb.serviceName + L" \u2022 " + explicitWeb.homeUrl;
                 } else {
-                    webRow.title = L"Search the web";
-                    webRow.subtitle = explicitWeb.serviceName + L" Search";
+                    webRow.title = i18n::Text(i18n::Key::SearchWeb);
+                    webRow.subtitle = explicitWeb.serviceName;
                 }
                 webRow.openPath = explicitWeb.homeUrl;
             } else {
-                webRow.title = L"Search " + explicitWeb.serviceName + L" for \"" + explicitWeb.queryTerm + L"\"";
-                webRow.subtitle = explicitWeb.serviceName + L" Search \u2022 " + explicitWeb.queryTerm;
+                webRow.title = i18n::Format(i18n::Key::SearchService,{explicitWeb.serviceName,explicitWeb.queryTerm});
+                webRow.subtitle = explicitWeb.serviceName + L" \u2022 " + explicitWeb.queryTerm;
                 webRow.openPath = explicitWeb.searchUrl;
             }
             webRow.canRunAsAdmin = false;
@@ -13622,7 +19340,7 @@ void SearchWindowStyle() {
     if (g_filesHeaderHolder)
         g_filesHeaderHolder.Background(nullptr);
     ScaleFont(g_ourBox, 14);
-    g_ourBox.PlaceholderText(L"Search Anything");
+    g_ourBox.PlaceholderText(i18n::Text(i18n::Key::SearchAnything));
     g_ourBox.Padding(wux::ThicknessHelper::FromUniformLength(0));
     auto searchGrid = g_searchBarBorder.Child().as<wuxc::Grid>();
     auto searchIcon = searchGrid.Children().GetAt(0).as<wux::FrameworkElement>();
@@ -13990,6 +19708,151 @@ winrt::hstring const& SearchMaterialProperty() {
     return key;
 }
 
+// Factories and brushes can outlive a mod update. Keep the pointer-free
+// definition on their native property set as well as in our fast local cache.
+// Comment is diagnostic metadata only; it does not change the material.
+// No callback, mod-owned COM object, file, or old DLL is kept alive.
+static constexpr std::wstring_view kSearchMaterialSnapshot = L"\n[StartEverything.Material.v1.464:";
+static_assert(sizeof(SearchEffectNode) == 464);
+
+std::wstring EncodeSearchMaterialSnapshot(SearchEffectGraph const& graph, std::wstring text = {}) {
+        if (!ValidSearchEffectGraph(graph)) return {};
+        auto previous = text.rfind(kSearchMaterialSnapshot);
+        if (previous != std::wstring::npos && text.back() == L']') text.resize(previous);
+        if (text.size() > 4096) return {}; // preserve unusually large third-party annotations
+        text += kSearchMaterialSnapshot;
+        const size_t length = sizeof(graph.count) + graph.count * sizeof(SearchEffectNode);
+        auto bytes = reinterpret_cast<unsigned char const*>(&graph);
+        static constexpr wchar_t hex[] = L"0123456789abcdef";
+        text.reserve(text.size() + length * 2 + 1);
+        for (size_t i = 0; i < length; ++i) {
+            text += hex[bytes[i] >> 4];
+            text += hex[bytes[i] & 15];
+        }
+        text += L']';
+        return text;
+}
+
+void SaveSearchMaterialSnapshot(searchcomp::CompositionPropertySet const& properties,
+                                SearchEffectGraph const& graph) noexcept {
+    try {
+        auto text = EncodeSearchMaterialSnapshot(graph, std::wstring{properties.Comment()});
+        if (!text.empty()) properties.Comment(text);
+    } catch (...) { /* Metadata failure must never affect Start's own brush. */ }
+}
+
+bool DecodeSearchMaterialSnapshot(std::wstring_view text, SearchEffectGraph& graph) noexcept {
+    try {
+        const auto start = text.rfind(kSearchMaterialSnapshot);
+        if (start == std::wstring_view::npos || text.back() != L']') return false;
+        const auto encoded = text.substr(start + kSearchMaterialSnapshot.size(),
+                                         text.size() - start - kSearchMaterialSnapshot.size() - 1);
+        if (encoded.size() < sizeof(uint32_t) * 2 || encoded.size() > sizeof(SearchEffectGraph) * 2 ||
+            encoded.size() % 2) return false;
+        SearchEffectGraph candidate{};
+        auto bytes = reinterpret_cast<unsigned char*>(&candidate);
+        auto nibble = [](wchar_t ch) -> int {
+            if (ch >= L'0' && ch <= L'9') return ch - L'0';
+            if (ch >= L'a' && ch <= L'f') return ch - L'a' + 10;
+            return -1;
+        };
+        for (size_t i = 0; i < encoded.size() / 2; ++i) {
+            const int a = nibble(encoded[i * 2]), b = nibble(encoded[i * 2 + 1]);
+            if (a < 0 || b < 0) return false;
+            bytes[i] = static_cast<unsigned char>((a << 4) | b);
+        }
+        if (candidate.count > std::size(candidate.nodes) ||
+            encoded.size() != (sizeof(candidate.count) + candidate.count * sizeof(SearchEffectNode)) * 2 ||
+            !ValidSearchEffectGraph(candidate)) return false;
+        graph = candidate;
+        return true;
+    } catch (...) { return false; }
+}
+
+bool LoadSearchMaterialSnapshot(searchcomp::CompositionPropertySet const& properties,
+                                SearchEffectGraph& graph) noexcept {
+    try {
+        const auto text = properties.Comment();
+        return DecodeSearchMaterialSnapshot(std::wstring_view{text}, graph);
+    } catch (...) { return false; }
+}
+
+// A disconnected XAML brush can outlive both its composition brush and our
+// DLL. A native attached property keeps its last definition on that exact
+// live XAML object. The root retains only a native DependencyProperty with no
+// callback or reference to mod code; replacing a theme brush replaces its data.
+wux::DependencyProperty SearchXamlMaterialSnapshotProperty() {
+    auto window = wux::Window::Current();
+    auto root = window && window.Content() ? window.Content().try_as<wux::FrameworkElement>() : nullptr;
+    if (!root) return nullptr;
+    auto resources = root.Resources();
+    const auto key = winrt::box_value(L"_StartEverything.MaterialSnapshotProperty.v1");
+    if (resources.HasKey(key)) return resources.Lookup(key).try_as<wux::DependencyProperty>();
+    auto property = wux::DependencyProperty::RegisterAttached(L"StartEverythingMaterialSnapshotV1",
+        {L"String", wux::Interop::TypeKind::Primitive},
+        {L"Windows.UI.Xaml.Media.Brush", wux::Interop::TypeKind::Metadata}, wux::PropertyMetadata{nullptr});
+    resources.Insert(key, property);
+    return property;
+}
+
+void SaveSearchXamlMaterialSnapshot(wuxm::XamlCompositionBrushBase const& brush,
+                                   SearchEffectGraph const& graph) noexcept {
+    try {
+        if (auto property = SearchXamlMaterialSnapshotProperty()) {
+            auto text = EncodeSearchMaterialSnapshot(graph);
+            if (!text.empty()) brush.SetValue(property, winrt::box_value(text));
+        }
+    } catch (...) {}
+}
+
+bool LoadSearchXamlMaterialSnapshot(wuxm::XamlCompositionBrushBase const& brush,
+                                   SearchEffectGraph& graph) noexcept {
+    try {
+        if (auto property = SearchXamlMaterialSnapshotProperty()) {
+            auto text = winrt::unbox_value_or<winrt::hstring>(brush.GetValue(property), L"");
+            return DecodeSearchMaterialSnapshot(std::wstring_view{text}, graph);
+        }
+    } catch (...) {}
+    return false;
+}
+
+uint32_t CacheSearchMaterialGraph(SearchEffectGraph const& graph) {
+    std::lock_guard lock(g_searchMaterialMutex);
+    for (auto& [id, entry] : g_searchMaterialCache) {
+        if (entry.graph == graph) { entry.used = ++g_searchMaterialUse; return id; }
+    }
+    if (g_searchMaterialNext > 0xFFFFFF) return 0;
+    if (g_searchMaterialCache.size() >= 256) {
+        auto oldest = std::min_element(g_searchMaterialCache.begin(), g_searchMaterialCache.end(),
+            [](auto const& a, auto const& b) { return a.second.used < b.second.used; });
+        g_searchMaterialCache.erase(oldest);
+    }
+    const auto token = g_searchMaterialNext++;
+    g_searchMaterialCache.emplace(token, SearchCapturedMaterial{graph, ++g_searchMaterialUse});
+    return token;
+}
+
+bool FindSearchMaterialGraph(searchcomp::CompositionPropertySet const& properties, SearchEffectGraph& graph) {
+    float token = 0;
+    if (properties.TryGetScalar(SearchMaterialProperty(), token) == searchcomp::CompositionGetValueStatus::Succeeded) {
+        if (!std::isfinite(token) || token < 1 || token > 0xFFFFFF || std::trunc(token) != token) return false;
+        std::lock_guard lock(g_searchMaterialMutex);
+        auto entry = g_searchMaterialCache.find(static_cast<uint32_t>(token));
+        if (entry != g_searchMaterialCache.end()) {
+            entry->second.used = ++g_searchMaterialUse;
+            graph = entry->second.graph;
+            return true;
+        }
+    }
+    // Only a cache miss reads the native snapshot. Subsequent polls use the
+    // same fast token lookup as before, including after cache eviction.
+    if (!LoadSearchMaterialSnapshot(properties, graph)) return false;
+    if (auto id = CacheSearchMaterialGraph(graph))
+        properties.InsertScalar(SearchMaterialProperty(), static_cast<float>(id));
+    Wh_Log(L"material definition recovered after reload/cache miss (%u nodes)", graph.count);
+    return true;
+}
+
 // The public ICompositor and ICompositionEffectFactory ABI, as declared in the
 // Windows SDK. These hooks do not depend on private XAML objects or offsets.
 using SearchCreateFactory = HRESULT(WINAPI*)(void*, void*, void**);
@@ -14008,24 +19871,9 @@ void NoteSearchEffectFactory(void* source, void* result) noexcept {
         CaptureSearchEffectNode(graphSource.as<searcheffect::IGraphicsEffectSource>(), graph);
         searchcomp::CompositionEffectFactory factory{nullptr};
         winrt::copy_from_abi(factory, result);
-        uint32_t token = 0;
-        {
-            std::lock_guard lock(g_searchMaterialMutex);
-            for (auto& [id, entry] : g_searchMaterialCache) {
-                if (entry.graph == graph) { token = id; entry.used = ++g_searchMaterialUse; break; }
-            }
-            if (!token) {
-                if (g_searchMaterialNext > 0xFFFFFF) return;
-                if (g_searchMaterialCache.size() >= 256) {
-                    auto oldest = std::min_element(g_searchMaterialCache.begin(), g_searchMaterialCache.end(),
-                        [](auto const& a, auto const& b) { return a.second.used < b.second.used; });
-                    g_searchMaterialCache.erase(oldest);
-                }
-                token = g_searchMaterialNext++;
-                g_searchMaterialCache.emplace(token, SearchCapturedMaterial{graph, ++g_searchMaterialUse});
-            }
-        }
-        factory.Properties().InsertScalar(SearchMaterialProperty(), static_cast<float>(token));
+        if (auto token = CacheSearchMaterialGraph(graph))
+            factory.Properties().InsertScalar(SearchMaterialProperty(), static_cast<float>(token));
+        SaveSearchMaterialSnapshot(factory.Properties(), graph);
     } catch (...) { /* Unknown/custom effects retain the safe appearance fallback. */ }
 }
 HRESULT WINAPI SearchCreateFactoryHook(void* self, void* effect, void** result) {
@@ -14060,14 +19908,32 @@ HRESULT WINAPI SearchCreateEffectBrushHook(void* self, void** result) {
     try {
         searchcomp::CompositionEffectFactory factory{nullptr};
         winrt::copy_from_abi(factory, self);
-        float token = 0;
-        if (factory.Properties().TryGetScalar(SearchMaterialProperty(), token) != searchcomp::CompositionGetValueStatus::Succeeded)
-            return hr;
+        SearchEffectGraph graph;
+        if (!FindSearchMaterialGraph(factory.Properties(), graph)) return hr;
         searchcomp::CompositionEffectBrush brush{nullptr};
         winrt::copy_from_abi(brush, *result);
-        brush.Properties().InsertScalar(SearchMaterialProperty(), token);
+        if (auto token = CacheSearchMaterialGraph(graph))
+            brush.Properties().InsertScalar(SearchMaterialProperty(), static_cast<float>(token));
+        SaveSearchMaterialSnapshot(brush.Properties(), graph);
     } catch (...) {}
     return hr;
+}
+
+void DescribeSearchMaterialGraph(SearchEffectGraph const& graph, SearchBrushData& data) {
+    data.kind = 5;
+    data.graph = graph;
+    // Representative values are for diagnostics; rendering uses the unchanged
+    // floating-point effect description, including its original tint alpha.
+    for (uint32_t i = 0; i < graph.count; ++i) {
+        auto const& node = graph.nodes[i];
+        if (node.kind == 2 && node.id == CLSID_D2D1GaussianBlur && node.propertyCount)
+            data.blur = node.properties[0].values[0];
+        if (node.kind == 2 && node.id == CLSID_D2D1Flood && node.propertyCount && node.properties[0].count == 4) {
+            auto v = node.properties[0].values;
+            auto channel = [](float value) { return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255)); };
+            data.color = (channel(v[3]) << 24) | (channel(v[0]) << 16) | (channel(v[1]) << 8) | channel(v[2]);
+        }
+    }
 }
 
 bool TryCaptureSearchCompositionBrush(searchcomp::CompositionBrush const& composition, SearchBrushData& data) {
@@ -14079,17 +19945,8 @@ bool TryCaptureSearchCompositionBrush(searchcomp::CompositionBrush const& compos
     }
     auto brush = composition.try_as<searchcomp::CompositionEffectBrush>();
     if (!brush) return false;
-    float token = 0;
-    if (brush.Properties().TryGetScalar(SearchMaterialProperty(), token) != searchcomp::CompositionGetValueStatus::Succeeded ||
-        !std::isfinite(token) || token < 1 || token > 0xFFFFFF || std::trunc(token) != token) return false;
     SearchEffectGraph graph;
-    {
-        std::lock_guard lock(g_searchMaterialMutex);
-        auto entry = g_searchMaterialCache.find(static_cast<uint32_t>(token));
-        if (entry == g_searchMaterialCache.end()) return false;
-        entry->second.used = ++g_searchMaterialUse;
-        graph = entry->second.graph;
-    }
+    if (!FindSearchMaterialGraph(brush.Properties(), graph)) return false;
     // Parameters are assigned after CreateBrush. Inspect them now, including
     // their actual colors, rather than making assumptions about source names.
     for (uint32_t i = 0; i < graph.count; ++i) {
@@ -14105,20 +19962,7 @@ bool TryCaptureSearchCompositionBrush(searchcomp::CompositionBrush const& compos
         }
     }
     if (!ValidSearchEffectGraph(graph)) return false;
-    data.kind = 5;
-    data.graph = graph;
-    // Representative values are for diagnostics; rendering uses the unchanged
-    // floating-point effect description, including its original tint alpha.
-    for (uint32_t i = 0; i < graph.count; ++i) {
-        auto const& node = graph.nodes[i];
-        if (node.kind == 2 && node.id == CLSID_D2D1GaussianBlur && node.propertyCount)
-            data.blur = node.properties[0].values[0];
-        if (node.kind == 2 && node.id == CLSID_D2D1Flood && node.propertyCount && node.properties[0].count == 4) {
-            auto v = node.properties[0].values;
-            auto channel = [](float value) { return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255)); };
-            data.color = (channel(v[3]) << 24) | (channel(v[0]) << 16) | (channel(v[1]) << 8) | channel(v[2]);
-        }
-    }
+    DescribeSearchMaterialGraph(graph, data);
     return true;
 }
 
@@ -14175,23 +20019,48 @@ bool CaptureSearchXamlMaterial(wuxm::XamlCompositionBrushBase const& brush, Sear
     auto composition = access.CompositionBrush();
     if (composition) {
         if (!TryCaptureSearchCompositionBrush(composition, data)) return false;
-        std::lock_guard lock(g_searchMaterialMutex);
-        if (auto entry = g_searchMaterialXaml.find(identity.get()); entry != g_searchMaterialXaml.end()) {
-            entry->second.data = data;
-            entry->second.captured = true;
+        bool changed = true;
+        {
+            std::lock_guard lock(g_searchMaterialMutex);
+            auto entry = g_searchMaterialXaml.find(identity.get());
+            if (entry == g_searchMaterialXaml.end() && g_searchMaterialXaml.size() < 256)
+                entry = g_searchMaterialXaml.emplace(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(brush.as<wf::IInspectable>())}).first;
+            if (entry != g_searchMaterialXaml.end()) {
+                changed = !entry->second.captured || !(entry->second.data == data);
+                entry->second.data = data;
+                entry->second.captured = true;
+            }
         }
+        if (changed && data.kind == 5) SaveSearchXamlMaterialSnapshot(brush, data.graph);
         return true;
     }
     // Start may disconnect a custom brush while hidden. Preserve the last
-    // definition for that exact live brush instead of reverting to a guess.
-    std::lock_guard lock(g_searchMaterialMutex);
-    auto cached = g_searchMaterialXaml.find(identity.get());
-    if (cached == g_searchMaterialXaml.end() || !cached->second.captured || !cached->second.owner.get()) return false;
-    const double opacity = data.opacity;
-    const uint32_t fallback = data.fallback;
-    data = cached->second.data;
-    data.opacity = opacity;
-    data.fallback = fallback;
+    // definition for that exact live brush, including through DLL reloads.
+    {
+        std::lock_guard lock(g_searchMaterialMutex);
+        auto cached = g_searchMaterialXaml.find(identity.get());
+        if (cached != g_searchMaterialXaml.end() && cached->second.captured && cached->second.owner.get()) {
+            const double opacity = data.opacity;
+            const uint32_t fallback = data.fallback;
+            data = cached->second.data;
+            data.opacity = opacity;
+            data.fallback = fallback;
+            return true;
+        }
+    }
+    SearchEffectGraph saved;
+    if (!LoadSearchXamlMaterialSnapshot(brush, saved)) return false;
+    DescribeSearchMaterialGraph(saved, data);
+    {
+        std::lock_guard lock(g_searchMaterialMutex);
+        if (g_searchMaterialXaml.size() < 256) {
+            SearchCapturedXamlBrush entry{winrt::make_weak(brush.as<wf::IInspectable>())};
+            entry.captured = true;
+            entry.data = data;
+            g_searchMaterialXaml.insert_or_assign(identity.get(), std::move(entry));
+        }
+    }
+    Wh_Log(L"disconnected XAML material recovered after reload (%u nodes)", saved.count);
     return true;
 }
 
@@ -17477,7 +23346,7 @@ void SearchWindowLayout(bool animate) {
                 g_selectedApp = g_selectedFile = -1;
                 g_filesColumnActive = false;
             }
-            g_footerStatus.Text(FilesPanelVisible() ? L"Suggested apps" : L"Apps");
+            g_footerStatus.Text(i18n::Text(FilesPanelVisible() ? i18n::Key::SuggestedApps : i18n::Key::Apps));
         }
         RunSearchWindowMotion();
     } catch (...) {
@@ -18013,7 +23882,21 @@ void RefreshSearchUiSettings() {
             }
             g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
         }
+        g_resultsHost.Language(i18n::Tag());
+        g_resultsHost.FlowDirection(wux::FlowDirection::LeftToRight);
+        if (g_footerHints) {
+            constexpr i18n::Key keys[] = {i18n::Key::Select,i18n::Key::Next,i18n::Key::Open,i18n::Key::Admin,i18n::Key::Menu,i18n::Key::Close};
+            for (uint32_t i=0; i<g_footerHints.Children().Size() && i<ARRAYSIZE(keys); ++i) {
+                auto pair=g_footerHints.Children().GetAt(i).as<wuxc::StackPanel>();
+                if (pair.Children().Size()>1) {
+                    auto label=pair.Children().GetAt(1).as<wuxc::TextBlock>();
+                    label.Text(i18n::Text(keys[i]));
+                    wuxc::ToolTipService::SetToolTip(label,winrt::box_value(i18n::Text(keys[i])));
+                }
+            }
+        }
         if (g_ourBox) {
+            g_ourBox.PlaceholderText(i18n::Text(i18n::Key::SearchAnything));
             ScaleFont(g_ourBox, 14);
         }
         if (g_searchBarBorder) {
