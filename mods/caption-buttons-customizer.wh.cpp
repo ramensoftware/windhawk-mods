@@ -141,7 +141,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 - When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open).
 - Until dwm.exe restarts, a button can look wrong or be missing after the mod is turned off. For example, the maximize button can go missing if the mod was turned on while a window was maximized and turned off before it was restored.
 - dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.
-- After you change display scaling, the screen may flicker briefly while the buttons are redrawn.
+- After you change display scaling, the screen may flicker briefly while the buttons are redrawn. If the buttons of a window stay blank, click that window once; Windows only creates the active-window button images when a window becomes active.
 - The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.
 - When the mod is turned on or off, or when a layout, exclusion, color or style setting changes, DWM is asked to refresh itself so that open windows get the new layout; no window is resized. Changing the debug log does not trigger a refresh.
 - If you report a bug, turn on *Write debug log* and attach the Windhawk log output.
@@ -1798,9 +1798,8 @@ static bool RegisterPair(const void* a, const void* b, float f) {
         set = g_curSet;
         int idx = g_curSetCount++;
         role = DetectRole(va[0], vb[0], idx == 1 ? 1 : 0);
-        // A glyph that an earlier session already moved to its cell (y >= 808) keeps its role:
-        // the cell column says which button it is (0 minimize, 1 restore, 2 maximize, 3 close)
-        bool fromCell = false;
+        // A glyph that an earlier session already moved to its cell (y >= 808): only the
+        // minimize cell and the wide shape are trusted. Maximize vs restore is decided below.
         if (role != 2) {
             const unsigned* movedRc = (const unsigned*)vb[0];
             int cellKind = KindFromCell(movedRc[20], movedRc[21]);
@@ -1812,7 +1811,7 @@ static bool RegisterPair(const void* a, const void* b, float f) {
         // The second glyph of a set that is not close is the middle button
         if (idx == 1 && role == 0) role = 1;
         // Middle button: maximize (role 1) or restore (role 3)
-        if (role == 1 && !fromCell) {
+        if (role == 1) {
             AcquireSRWLockShared(&g_glLock);
             role = MiddleRoleLocked(vb, f, ((const unsigned*)vb[0])[6], ((const unsigned*)vb[0])[7]);
             ReleaseSRWLockShared(&g_glLock);
@@ -3384,7 +3383,6 @@ BOOL Wh_ModInit() {
 
     HMODULE udwm = GetModuleHandleW(L"udwm.dll");
     if (!udwm) return FALSE;
-    g_menuTimer = CreateThreadpoolTimer(MenuTimerCallback, nullptr, nullptr);
 
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         // ---- Layout ----
@@ -3433,6 +3431,7 @@ BOOL Wh_ModInit() {
     };
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
+    if (ok) g_menuTimer = CreateThreadpoolTimer(MenuTimerCallback, nullptr, nullptr);    
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
     DeriveHwndOffset();
 
