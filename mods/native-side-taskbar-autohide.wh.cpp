@@ -77,7 +77,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_61970341>::__private_IsEnabled(void))"},
             &FeatureIsEnabled_Original,
@@ -85,7 +85,7 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(taskbarDll, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(taskbarDll, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Could not hook native taskbar auto-hide feature check");
         return FALSE;
     }
