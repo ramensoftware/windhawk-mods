@@ -2,7 +2,7 @@
 // @id              custom-cached-context-menu
 // @name            Custom Cached Context Menu
 // @description     Instantly-opening cached Explorer context menu that is fully customizable: themes, layout, colors, animations, rules, and custom commands.
-// @version         1.0.0
+// @version         1.1.0
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshlwapi -luuid -lcomctl32 -ladvapi32 -lgdi32 -luxtheme -lversion -ld3d11 -ld2d1 -ldwrite -ldcomp
@@ -60,6 +60,7 @@ and discovers extension items in the background, so repeated opens are instant.
 | Menu mode | Custom (recommended) | Custom draws the self-rendered menu and falls back to the classic menu after repeated failures; Classic always uses the owner-drawn menu. |
 | Theme | Custom (menu.ini) | Loads the appearance from `<mod storage>\themes\<name>.ini` (created from the bundled preset on first use). `menu.ini` is never modified by theme selection. |
 | Show classic menu item | on | Adds a "Show classic menu" entry at the bottom of the menu. |
+| Top action bar | off | Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only. |
 | Warm-up extensions | common list | Comma-separated file types pre-built at Explorer startup. |
 | Warm-up delay | 5 s | Delay before background warm-up starts. |
 | Clear cache | off | Turn on to delete cached models; they rebuild on next use. |
@@ -70,7 +71,7 @@ and discovers extension items in the background, so repeated opens are instant.
 | Move third-party handlers | on | Moves third-party shell extension entries into the More options submenu. |
 | Keep in the main menu | empty | Comma-separated labels or verbs that stay in the main menu. |
 | More options submenu label | `More options` | Label of that submenu. |
-| Windows items to move | common list | Comma-separated labels or verbs of Windows items to move into the submenu. |
+| Windows items to move | common list | Comma-separated labels or verbs of Windows items to move into the submenu. Verbs (e.g. `setdesktopwallpaper`) match on every language; labels match the menu's display language. GUID-verb commands accept aliases: `openterminal`, `editwithphotos`, `editwithpaint`, `editwithnotepad`. |
 | Settings hotkey | empty | Optional global hotkey that opens the settings menu (for example `Ctrl+Alt+M`). |
 
 ## Configuration
@@ -118,23 +119,23 @@ MIT
   $name: Theme
   $description: Loads the appearance from <storage>\themes\<name>.ini (created from the bundled preset on first use). menu.ini is never modified.
   $options:
-  - Custom (menu.ini): Use menu.ini as-is
-  - Windows 11 Dark: Fluent dark with translucent blur
-  - Windows 11 Light: Fluent light with translucent blur
-  - Windows 10 Dark: Flat dark, square corners
-  - Windows 10 Light: Flat light, square corners
-  - Nord: Arctic blue-grey palette
-  - Dracula: Purple and green dark palette
-  - Solarized Dark: Low-contrast teal dark palette
-  - Gruvbox Dark: Warm retro dark palette
-  - One Dark: Atom-style dark palette
-  - Cyberpunk: Neon yellow, cyan, and magenta on near-black
-  - Synthwave: Retro purple and pink with teal accents
-  - Terminal Green: Phosphor terminal green on black
-  - Amber CRT: Amber terminal on black
-  - Tokyo Night: Blue night palette with violet accents
-  - AMOLED Black: True black, no blur or shadow
-  - High Contrast: White on black, thick border
+  - Custom (menu.ini): Custom (menu.ini)
+  - Windows 11 Dark: Windows 11 Dark
+  - Windows 11 Light: Windows 11 Light
+  - Windows 10 Dark: Windows 10 Dark
+  - Windows 10 Light: Windows 10 Light
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: High Contrast
 - menuMode: "custom"
   $name: Menu mode
   $description: Custom draws the self-rendered menu and falls back to the classic menu after repeated failures. Classic always uses the owner-drawn menu.
@@ -150,6 +151,9 @@ MIT
 - showMoreOptionsItem: true
   $name: Show classic menu item
   $description: Add a "Show classic menu" entry at the bottom of the replacement menu.
+- topBar: false
+  $name: Top action bar
+  $description: Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only.
 - submenuDelayMs: 150
   $name: Submenu open delay
   $description: Milliseconds before a hovered submenu opens while the replacement menu is shown. 0 opens instantly; -1 keeps the Windows setting.
@@ -159,9 +163,9 @@ MIT
 - advancedSubmenuThirdParty: true
   $name: Move third-party handlers
   $description: Move third-party shell extension entries into the More options submenu.
-- advancedSubmenuItems: "Share, Add to Favorites, Cast to Device, Give access to, Restore previous versions, Pin to Start, Pin to Quick access, Open in Terminal"
+- advancedSubmenuItems: "Windows.ModernShare, pintohomefile, casttodevice, Give access to, PreviousVersions, pintostartscreen, pintohome, openterminal, setdesktopwallpaper"
   $name: Windows items to move
-  $description: Comma-separated labels or verbs of Windows items to move into the submenu.
+  $description: Comma-separated labels or verbs of Windows items to move into the submenu. Verbs (for example setdesktopwallpaper) match on every language; labels match the menu's display language. GUID-verb commands also accept the aliases openterminal, editwithphotos, editwithpaint and editwithnotepad.
 - advancedSubmenuExclude: ""
   $name: Keep in the main menu
   $description: Comma-separated third-party labels or verbs that stay in the main menu instead of moving into the submenu.
@@ -265,6 +269,7 @@ struct Settings {
     std::wstring settingsHotkey;
     int menuMode = 0;
     bool showMoreOptionsItem = true;
+    bool topBar = false;
     int submenuDelayMs = 150;
     int warmupDelaySeconds = 5;
     bool clearCache = false;
@@ -395,6 +400,7 @@ void LoadSettings() {
     next.menuMode = _wcsicmp(menuMode.get(), L"classic") == 0 ? 1 : 0;
 
     next.showMoreOptionsItem = Wh_GetIntSetting(L"showMoreOptionsItem") != 0;
+    next.topBar = Wh_GetIntSetting(L"topBar") != 0;
     next.submenuDelayMs = Wh_GetIntSetting(L"submenuDelayMs");
     next.warmupDelaySeconds = Wh_GetIntSetting(L"warmupDelaySeconds");
     next.clearCache = Wh_GetIntSetting(L"clearCache") != 0;
@@ -557,6 +563,7 @@ enum ModelFlags : uint32_t {
     kModelHasOffset = 1u << 7,
     kModelWarmup = 1u << 8,
     kModelThirdParty = 1u << 9,
+    kModelTopBar = 1u << 10,
 };
 
 // Settings-UI controls attached to menu items. ControlKind::None is an
@@ -605,6 +612,8 @@ struct MenuItem {
     // Transient display overrides (not serialized): per-item label and marker.
     std::wstring displayLabel;
     int markerOverride = -1;
+    // Top action bar position: index in the fixed bar order, -1 for list items.
+    int topBarOrder = -1;
     // Built-in action for ActionKind::Builtin.
     BuiltinAction builtinAction = BuiltinAction::None;
     // Sort/group field index into kShellPropertyKeys, and sort direction.
@@ -689,6 +698,39 @@ void PruneMenuItems(std::vector<MenuItem>& items) {
     });
 }
 
+// Common actions that Windows' own menu shows as an icon bar on the side
+// nearest the cursor. The order here is the bar's left-to-right order.
+constexpr const wchar_t* kTopBarVerbs[] = {
+    L"cut", L"copy", L"paste", L"rename", L"delete"};
+
+// Marks the top-level items that belong in the top action bar. Disabled
+// actions stay in the list (the Windows 11 menu hides them from the bar).
+// Idempotent: clears previous marks first.
+void MarkTopBarActions(std::vector<MenuItem>& items, bool enabled) {
+    for (MenuItem& item : items) {
+        item.flags &= ~kModelTopBar;
+        item.topBarOrder = -1;
+    }
+    if (!enabled) {
+        return;
+    }
+    for (size_t i = 0; i < ARRAYSIZE(kTopBarVerbs); ++i) {
+        for (MenuItem& item : items) {
+            if (item.kind != ItemKind::Command ||
+                (item.flags & kModelDisabled) != 0 ||
+                item.canonicalVerb.empty()) {
+                continue;
+            }
+            if (_wcsicmp(item.canonicalVerb.c_str(), kTopBarVerbs[i]) != 0) {
+                continue;
+            }
+            item.flags |= kModelTopBar;
+            item.topBarOrder = static_cast<int>(i);
+            break;
+        }
+    }
+}
+
 bool EqualsIgnoreCase(const std::wstring& left, const std::wstring& right) {
     return !left.empty() && !right.empty() &&
            _wcsicmp(left.c_str(), right.c_str()) == 0;
@@ -722,6 +764,13 @@ bool IsKnownWindowsVerb(const std::wstring& verb) {
         L"viewlist",   L"viewdetails",   L"pintohome",   L"pintohomefile",
         L"pintostartscreen", L"previousversions", L"windows.modernshare",
         L"casttodevice", L"giveaccess",  L"share",       L"includeinlibrary",
+        L"setdesktopwallpaper", L"rotate90", L"rotate270",
+        // Windows' modern shell commands (Open in Terminal, Edit with
+        // Photos/Paint/Notepad) expose their class GUIDs as verbs.
+        L"{9F156763-7844-4DC4-B2B1-901F640F5155}",
+        L"{BFE0E2A4-C70C-4AD7-AC3D-10D1ECEBB5B4}",
+        L"{2430F218-B743-4FD6-97BF-5C76541B4AE9}",
+        L"{CA6CC9F1-867A-481E-951E-A28C5E4F01EA}",
     };
     for (const wchar_t* known : kVerbs) {
         if (_wcsicmp(verb.c_str(), known) == 0) {
@@ -731,13 +780,39 @@ bool IsKnownWindowsVerb(const std::wstring& verb) {
     return false;
 }
 
+// Friendly aliases for Windows' modern shell commands, whose canonical verbs
+// are class GUIDs. They work wherever labels or verbs are accepted.
+struct VerbAlias {
+    const wchar_t* alias;
+    const wchar_t* verb;
+};
+
+constexpr VerbAlias kVerbAliases[] = {
+    {L"openterminal", L"{9F156763-7844-4DC4-B2B1-901F640F5155}"},
+    {L"editwithphotos", L"{BFE0E2A4-C70C-4AD7-AC3D-10D1ECEBB5B4}"},
+    {L"editwithpaint", L"{2430F218-B743-4FD6-97BF-5C76541B4AE9}"},
+    {L"editwithnotepad", L"{CA6CC9F1-867A-481E-951E-A28C5E4F01EA}"},
+};
+
+// Resolves a token that names a known alias to its canonical verb; returns the
+// token unchanged when it is not an alias.
+std::wstring ResolveVerbAlias(const std::wstring& token) {
+    for (const VerbAlias& alias : kVerbAliases) {
+        if (_wcsicmp(alias.alias, token.c_str()) == 0) {
+            return alias.verb;
+        }
+    }
+    return token;
+}
+
 // Windows extras (configured list or a known Windows verb) sort above
 // third-party handlers inside the More options submenu.
 bool IsBuiltinExtra(const MenuItem& item,
                     const std::vector<std::wstring>& windowsItems) {
     for (const std::wstring& token : windowsItems) {
         if (LabelsMatchIgnoreCase(item.label, token) ||
-            EqualsIgnoreCase(item.canonicalVerb, token)) {
+            EqualsIgnoreCase(item.canonicalVerb, token) ||
+            EqualsIgnoreCase(item.canonicalVerb, ResolveVerbAlias(token))) {
             return true;
         }
     }
@@ -1343,7 +1418,7 @@ struct Appearance {
     float fontSize = 11.0f;
     int itemHeight = 28;
     int iconSize = 16;
-    int padding = 6;
+    int padding = 4;
     uint32_t separator = 0x18FFFFFF;
     uint32_t hoverBackground = 0x14FFFFFF;
     uint32_t pressedBackground = 0x22FFFFFF;
@@ -1875,7 +1950,16 @@ bool ParseCornerRadii(const std::wstring& value, CornerRadii& radii) {
 enum class SettingType : uint8_t { Bool, Int, Color, Font, Enum, IntList, EffectList };
 
 // The build's schema version; bump when a row is added.
-constexpr int kConfigSchemaVersion = 8;
+constexpr int kConfigSchemaVersion = 9;
+
+// v9 tightened the default padding from 6 to 4. Configs and theme files
+// written by older versions carry the old default as an explicit value; it is
+// migrated once, while a value the user changed is left alone.
+constexpr int kLegacyDefaultPadding = 6;
+inline bool ShouldMigratePadding(int sourceVersion, int padding) {
+    return sourceVersion < kConfigSchemaVersion &&
+           padding == kLegacyDefaultPadding;
+}
 
 struct ConfigSchemaEntry {
     const wchar_t* section;
@@ -1916,9 +2000,9 @@ const ConfigSchemaEntry kAppearanceSchema[] = {
      L"Per-corner radii; overrides cornerRadius.", 1, true},
     {L"appearance", L"borderWidth", L"Layout", SettingType::Int, L"1", nullptr, 0, 64,
      L"Border width in pixels (0 hides it).", 1, false},
-    {L"appearance", L"padding", L"Layout", SettingType::Int, L"6", nullptr, 0, 256,
+    {L"appearance", L"padding", L"Layout", SettingType::Int, L"4", nullptr, 0, 256,
      L"Base padding inside the panel.", 1, false},
-    {L"appearance", L"itemPadding", L"Layout", SettingType::Int, L"6", nullptr, 0, 256,
+    {L"appearance", L"itemPadding", L"Layout", SettingType::Int, L"4", nullptr, 0, 256,
      L"Horizontal inset of item content; defaults to padding.", 1, true},
     {L"appearance", L"verticalPadding", L"Layout", SettingType::Int, L"4", nullptr, 0, 256,
      L"Padding above and below the items.", 1, false},
@@ -2843,12 +2927,23 @@ bool ParseRulesConfig(const std::wstring& text, RulesConfig& out,
         for (const auto& pair : lightValues) {
             ApplyAppearanceValue(config.lightAppearance, pair.first, pair.second, nullptr);
         }
+        // The variant inherits the canonical appearance, so an old default
+        // copied into it must migrate as well; the file rewrite fixes the
+        // stored value and this keeps the first session consistent.
+        if (ShouldMigratePadding(config.schemaVersion,
+                                 config.lightAppearance.padding)) {
+            config.lightAppearance.padding = 4;
+        }
     }
     config.hasDarkAppearance = hasDark;
     if (hasDark) {
         config.darkAppearance = config.appearance;
         for (const auto& pair : darkValues) {
             ApplyAppearanceValue(config.darkAppearance, pair.first, pair.second, nullptr);
+        }
+        if (ShouldMigratePadding(config.schemaVersion,
+                                 config.darkAppearance.padding)) {
+            config.darkAppearance.padding = 4;
         }
     }
 
@@ -3450,8 +3545,30 @@ std::wstring EmitCanonicalConfig(const CanonicalSource& source, int toVersion) {
     return out;
 }
 
+// Applies versioned value migrations to a parsed canonical source. The source
+// version comes from the file's [meta]; texts without one predate versioning
+// and are treated as legacy.
+void MigrateCanonicalSource(CanonicalSource& source, int sourceVersion) {
+    if (sourceVersion >= kConfigSchemaVersion) {
+        return;
+    }
+    const std::wstring legacy = std::to_wstring(kLegacyDefaultPadding);
+    auto migrate = [&legacy](
+                       std::unordered_map<std::wstring, std::wstring>& values) {
+        const auto it = values.find(L"padding");
+        if (it != values.end() && it->second == legacy) {
+            it->second = L"4";
+        }
+    };
+    migrate(source.baseValues);
+    migrate(source.lightValues);
+    migrate(source.darkValues);
+}
+
 std::wstring CanonicalizeConfig(const std::wstring& text, int toVersion) {
-    return EmitCanonicalConfig(SplitConfigForCanonical(text), toVersion);
+    CanonicalSource source = SplitConfigForCanonical(text);
+    MigrateCanonicalSource(source, ReadSchemaVersion(text));
+    return EmitCanonicalConfig(source, toVersion);
 }
 
 // One change for CanonicalizeConfigWithOverrides: a set in a section, or a
@@ -3470,6 +3587,7 @@ std::wstring CanonicalizeConfigWithOverrides(
     const std::wstring& text, int toVersion,
     const std::vector<ConfigOverride>& overrides) {
     CanonicalSource source = SplitConfigForCanonical(text);
+    MigrateCanonicalSource(source, ReadSchemaVersion(text));
     for (const ConfigOverride& change : overrides) {
         std::unordered_map<std::wstring, std::wstring>* values = nullptr;
         const std::wstring section = ToLowerCopy(change.section);
@@ -4394,6 +4512,12 @@ private:
             Wh_Log(L"menu.ini:%d: warning: %s", warning.line,
                    warning.message.c_str());
         }
+        if (ShouldMigratePadding(parsed.schemaVersion,
+                                 parsed.appearance.padding)) {
+            // v9: migrate the old default padding so it reaches existing
+            // installs; a value the user changed is left alone.
+            parsed.appearance.padding = 4;
+        }
         if (outWarnings) {
             *outWarnings = warnings;
         }
@@ -4479,7 +4603,8 @@ bool MatchesAnyToken(const MenuItem& item,
                      const std::vector<std::wstring>& tokens) {
     for (const std::wstring& token : tokens) {
         if (LabelsMatchIgnoreCase(item.label, token) ||
-            EqualsIgnoreCase(item.canonicalVerb, token)) {
+            EqualsIgnoreCase(item.canonicalVerb, token) ||
+            EqualsIgnoreCase(item.canonicalVerb, ResolveVerbAlias(token))) {
             return true;
         }
     }
@@ -5032,6 +5157,13 @@ std::wstring CanonicalAppearanceBlock(const std::wstring& configText) {
         CanonicalizeConfig(configText, kConfigSchemaVersion));
 }
 
+// Theme files carry the schema version so value migrations run once, the same
+// way menu.ini does.
+std::wstring ThemeFileText(const std::wstring& appearanceBlock) {
+    return L"[meta]\nschemaVersion = " +
+           std::to_wstring(kConfigSchemaVersion) + L"\n\n" + appearanceBlock;
+}
+
 // Canonical, complete [appearance] block for a theme: canonicalizing the
 // preset snippet fills every missing key from the schema defaults, and only
 // the appearance section is kept.
@@ -5351,7 +5483,14 @@ private:
                    combinedWarnings[i].message.c_str());
         }
 
-        const std::wstring canonical = CanonicalAppearanceBlock(combined);
+        if (ShouldMigratePadding(ReadSchemaVersion(combined),
+                                 effective.appearance.padding)) {
+            // Migrate the old default padding once; the rewrite below stamps
+            // the file with the current schema version.
+            effective.appearance.padding = 4;
+        }
+        const std::wstring canonical =
+            ThemeFileText(CanonicalAppearanceBlock(combined));
         const bool writeSafe = !fileExists || hasFile;
         if (writeSafe && !canonical.empty() &&
             (!hasFile || fileText != canonical)) {
@@ -6411,7 +6550,7 @@ std::wstring BuildThemeTextWithChanges(
     const std::wstring combined = presetSnippet + L"\n" + fileText;
     const std::wstring canonical = CanonicalizeConfigWithOverrides(
         combined, kConfigSchemaVersion, changes);
-    return ExtractAppearanceBlock(canonical);
+    return ThemeFileText(ExtractAppearanceBlock(canonical));
 }
 
 
@@ -6460,7 +6599,7 @@ struct LayoutMetrics {
     int itemHeight = 28;
     int separatorHeight = 7;
     int iconSize = 16;
-    int padding = 6;
+    int padding = 4;
     int gutterWidth = 22;
     int submenuArrowWidth = 16;
     int cornerRadius = 8;
@@ -6478,7 +6617,7 @@ struct LayoutMetrics {
     int shadowOffsetY = 4;
     int blurPasses = 2;
     int verticalPadding = 4;
-    int itemPadding = 6;
+    int itemPadding = 4;
     int separatorSpacing = 0;
     int minWidth = 0;
     int maxWidth = 0;
@@ -6606,6 +6745,7 @@ struct LayoutItemResources {
 
 struct LayoutItem {
     RECT rect = {};
+    bool topBarCell = false;
     RECT gutterRect = {};
     RECT markerRect = {};
     RECT iconRect = {};
@@ -6687,15 +6827,69 @@ int EstimateTextWidth(const wchar_t* label, size_t length,
            4;
 }
 
+// The icon's left inset, mirrored on the right for right-aligned content
+// (submenu chevrons and control columns) so both sides line up.
+inline int ContentSideInset(const LayoutMetrics& metrics) {
+    return metrics.padding + metrics.markerWidth + metrics.padding / 2;
+}
+
+void FillInvocation(const MenuItem& item, LayoutItem& layout) {
+    layout.invocation.id = item.id;
+    layout.invocation.action = item.action;
+    layout.invocation.viewAction = item.viewAction;
+    layout.invocation.verbOffset = item.verbOffset;
+    layout.invocation.sortIndex = item.sortIndex;
+    layout.invocation.customCommandIndex = item.customCommandIndex;
+    layout.invocation.newIndex = item.newIndex;
+    layout.invocation.canonicalVerb = item.canonicalVerb;
+    layout.invocation.targetPath = item.targetPath;
+    layout.invocation.hasOffset = (item.flags & kModelHasOffset) != 0;
+}
+
 LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
                              const LayoutMetrics& metrics,
-                             TextMeasureFn measure = nullptr) {
+                             TextMeasureFn measure = nullptr,
+                             bool barAtBottom = false) {
     LayoutPanel panel;
     const int markerLeft = metrics.itemPadding;
-    const int iconLeft =
-        metrics.padding + metrics.markerWidth + metrics.padding / 2;
+    const int iconLeft = ContentSideInset(metrics);
+    const int rightInset = iconLeft;
     const int textLeft = iconLeft + metrics.iconSize + metrics.padding;
-    const int textGap = metrics.padding;
+
+    // Top action bar items get their own row; the list skips them and
+    // collapses the separators they leave behind.
+    std::vector<const MenuItem*> barItems;
+    std::vector<const MenuItem*> listItems;
+    for (const MenuItem& item : items) {
+        if ((item.flags & kModelTopBar) != 0) {
+            barItems.push_back(&item);
+            continue;
+        }
+        if (item.kind == ItemKind::Separator &&
+            (listItems.empty() ||
+             listItems.back()->kind == ItemKind::Separator)) {
+            continue;
+        }
+        listItems.push_back(&item);
+    }
+    while (!listItems.empty() &&
+           listItems.back()->kind == ItemKind::Separator) {
+        listItems.pop_back();
+    }
+    std::stable_sort(barItems.begin(), barItems.end(),
+                     [](const MenuItem* left, const MenuItem* right) {
+                         return left->topBarOrder < right->topBarOrder;
+                     });
+    const bool hasBar = !barItems.empty();
+    // The label layout centers the text in a box of metrics.itemHeight, so the
+    // cell reserves the visible line and places the box around it.
+    const int barPad = metrics.verticalPadding + 4;
+    const int barGap = 4;
+    const int barTextLine = static_cast<int>(metrics.fontSize * 1.33f) + 1;
+    const int barHeight =
+        barPad + metrics.iconSize + barGap + barTextLine + barPad;
+    const int separatorRow =
+        metrics.separatorHeight + 2 * metrics.separatorSpacing;
 
     auto measureText = [&](const std::wstring& text) {
         return text.empty()
@@ -6740,9 +6934,19 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
         return metrics.itemHeight;
     };
 
-    int y = metrics.verticalPadding;
+    int rowsHeight = 0;
     int contentWidth = 0;
-    for (const MenuItem& item : items) {
+    // The bar's width is the sum of its cells, each with roomy sides.
+    const int barCellPad = metrics.padding * 2 + 4;
+    const int barCellMin = metrics.iconSize * 3 + 8;
+    for (const MenuItem* item : barItems) {
+        const std::wstring& measureLabel =
+            item->displayLabel.empty() ? item->label : item->displayLabel;
+        contentWidth += std::max(measureText(measureLabel) + 2 * barCellPad,
+                                 barCellMin);
+    }
+    for (const MenuItem* itemPtr : listItems) {
+        const MenuItem& item = *itemPtr;
         const int height = rowHeight(item);
         if (item.kind != ItemKind::Separator) {
             const std::wstring& measureLabel =
@@ -6755,9 +6959,9 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
             const int labelGap = reserve > 0 ? 12 : 0;
             contentWidth =
                 std::max(contentWidth, textLeft + textWidth + arrowSpace +
-                                           labelGap + reserve + textGap);
+                                           labelGap + reserve + rightInset);
         }
-        y += height;
+        rowsHeight += height;
     }
     int panelWidth = std::max(contentWidth, 80);
     if (metrics.minWidth > 0) {
@@ -6768,10 +6972,81 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
         panelWidth =
             std::min(panelWidth, std::max(metrics.maxWidth, contentWidth));
     }
-    panel.size = {panelWidth, y + metrics.verticalPadding};
+    int panelHeight =
+        metrics.verticalPadding + rowsHeight + metrics.verticalPadding;
+    if (hasBar) {
+        // The bar replaces the padding on its side; a separator divides it
+        // from the list. Both sides give the same total height.
+        panelHeight = barHeight +
+                      (listItems.empty() ? 0 : separatorRow) + rowsHeight +
+                      metrics.verticalPadding;
+    }
+    panel.size = {panelWidth, panelHeight};
+
+    auto appendTopBar = [&](int top) {
+        const int count = static_cast<int>(barItems.size());
+        const int cellWidth = panelWidth / count;
+        for (int i = 0; i < count; ++i) {
+            const MenuItem& item = *barItems[i];
+            const int left = i * cellWidth;
+            const int right =
+                i + 1 == count ? panelWidth : (i + 1) * cellWidth;
+            LayoutItem cell{};
+            cell.topBarCell = true;
+            cell.kind = item.kind;
+            cell.label =
+                item.displayLabel.empty() ? item.label : item.displayLabel;
+            cell.iconRef = item.iconRef;
+            cell.iconPixels = item.iconPixels;
+            if (cell.iconRef.empty() && cell.iconPixels.empty()) {
+                // Captured menus (e.g. the navigation pane) carry no bitmaps;
+                // fall back to the named glyph for the verb.
+                std::wstring glyph;
+                if (ResolveNamedIcon(item.canonicalVerb, glyph)) {
+                    cell.iconRef = L"@glyph:" + glyph;
+                }
+            }
+            cell.flags = item.flags;
+            cell.textColor = (item.flags & kModelDisabled)
+                                 ? metrics.disabledTextColor
+                                 : metrics.textColor;
+            cell.hoverTextColor = metrics.textColor;
+            cell.markerStyle = static_cast<int>(MarkerStyle::None);
+            FillInvocation(item, cell);
+            cell.rect = {left, top, right, top + barHeight};
+            const int iconX = left + (right - left - metrics.iconSize) / 2;
+            const int iconY = top + barPad;
+            cell.iconRect = {iconX, iconY, iconX + metrics.iconSize,
+                             iconY + metrics.iconSize};
+            const int textWidth = measureText(cell.label);
+            const int textX = left + (right - left - textWidth) / 2;
+            // Place the box so the centered label sits below the icon.
+            const int textCenter =
+                iconY + metrics.iconSize + barGap + barTextLine / 2;
+            const int textY = textCenter - metrics.itemHeight / 2;
+            cell.textRect = {textX, textY, textX + textWidth,
+                             textY + metrics.itemHeight};
+            panel.items.push_back(std::move(cell));
+        }
+    };
+    auto appendSeparatorRow = [&](int top) {
+        LayoutItem separator{};
+        separator.kind = ItemKind::Separator;
+        separator.rect = {0, top, panelWidth, top + separatorRow};
+        panel.items.push_back(std::move(separator));
+    };
 
     int offset = metrics.verticalPadding;
-    for (const MenuItem& item : items) {
+    if (hasBar && !barAtBottom) {
+        appendTopBar(0);
+        offset = barHeight;
+        if (!listItems.empty()) {
+            appendSeparatorRow(offset);
+            offset += separatorRow;
+        }
+    }
+    for (const MenuItem* itemPtr : listItems) {
+        const MenuItem& item = *itemPtr;
         LayoutItem layout{};
         layout.kind = item.kind;
         layout.label = item.displayLabel.empty() ? item.label : item.displayLabel;
@@ -6781,16 +7056,7 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
         layout.textColor = (item.flags & kModelDisabled) ? metrics.disabledTextColor
                                                          : metrics.textColor;
         layout.hoverTextColor = metrics.textColor;
-        layout.invocation.id = item.id;
-        layout.invocation.action = item.action;
-        layout.invocation.viewAction = item.viewAction;
-        layout.invocation.verbOffset = item.verbOffset;
-        layout.invocation.sortIndex = item.sortIndex;
-        layout.invocation.customCommandIndex = item.customCommandIndex;
-        layout.invocation.newIndex = item.newIndex;
-        layout.invocation.canonicalVerb = item.canonicalVerb;
-        layout.invocation.targetPath = item.targetPath;
-        layout.invocation.hasOffset = (item.flags & kModelHasOffset) != 0;
+        FillInvocation(item, layout);
 
         const int height = rowHeight(item);
         layout.rect = {0, offset, panel.size.cx, offset + height};
@@ -6810,7 +7076,8 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
             const int arrowSpace =
                 item.kind == ItemKind::Submenu ? metrics.submenuArrowWidth : 0;
             layout.textRect = {textLeft, offset,
-                               panel.size.cx - textGap - arrowSpace, offset + height};
+                               panel.size.cx - rightInset - arrowSpace,
+                               offset + height};
         }
 
         if (item.control.kind != ControlKind::None) {
@@ -6823,7 +7090,7 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
             // text, swatch, field) left of it so they never overlap.
             const int arrowSpace =
                 item.kind == ItemKind::Submenu ? metrics.submenuArrowWidth : 0;
-            const int controlRight = panel.size.cx - textGap - arrowSpace;
+            const int controlRight = panel.size.cx - rightInset - arrowSpace;
             const int controlLeft = controlRight - reserve;
             layout.controlRect = {controlLeft, offset, controlRight,
                                   offset + height};
@@ -6861,11 +7128,12 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
                     int stripLeft = textLeft + labelWidth + 12;
                     const int minBarWidth = 120;
                     stripLeft = std::min(
-                        stripLeft, static_cast<int>(panel.size.cx) - textGap -
+                        stripLeft, static_cast<int>(panel.size.cx) - rightInset -
                                        minBarWidth);
                     stripLeft = std::max(stripLeft, textLeft);
                     layout.areaRect = {stripLeft, offset,
-                                       panel.size.cx - textGap, offset + height};
+                                       panel.size.cx - rightInset,
+                                       offset + height};
                     layout.stripRect = layout.areaRect;
                     break;
                 }
@@ -6881,6 +7149,14 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
         }
         panel.items.push_back(std::move(layout));
         offset += height;
+    }
+    if (hasBar && barAtBottom) {
+        if (!listItems.empty()) {
+            appendSeparatorRow(offset);
+            offset += separatorRow;
+        }
+        appendTopBar(offset);
+        offset += barHeight;
     }
     return panel;
 }
@@ -7129,6 +7405,7 @@ struct LayoutKey {
     uint64_t themeRevision = 0;
     uint32_t dpi = 96;
     bool darkTheme = false;
+    bool topBarAtBottom = false;
     uint64_t modelFingerprint = 0;
 
     bool operator==(const LayoutKey&) const = default;
@@ -7140,6 +7417,7 @@ struct LayoutKey {
         hash = HashCombine(hash, themeRevision);
         hash = HashCombine(hash, dpi);
         hash = HashCombine(hash, darkTheme ? 1 : 0);
+        hash = HashCombine(hash, topBarAtBottom ? 1 : 0);
         hash = HashCombine(hash, modelFingerprint);
         return hash;
     }
@@ -7601,9 +7879,13 @@ public:
     IDCompositionTarget* CompTarget() const { return target_; }
     IDCompositionVisual* CompVisual() const { return visual_; }
 
-    void Present() {
+    // Interactive repaints (hover feedback) skip the vsync wait: this is a
+    // composition swap chain, so DWM composites whole frames and there is
+    // nothing to tear, while waiting for the previous buffer to be recycled
+    // blocks the menu thread for a full frame per repaint.
+    void Present(bool vsync) {
         if (swapChain_) {
-            swapChain_->Present(1, 0);
+            swapChain_->Present(vsync ? 1 : 0, 0);
         }
     }
 
@@ -7807,6 +8089,9 @@ CMO_NO_DESTROY inline std::optional<MenuWindowSet> g_menuWindowSet{std::in_place
 
 struct MenuInputState {
     int hoverIndex = -1;
+    // A hover repaint is owed but was coalesced away: more mouse moves were
+    // already queued, and the last one paints the final hover position.
+    bool hoverRepaintPending = false;
     int keyboardIndex = -1;
     int scrollOffset = 0;
     int openSubmenu = -1;
@@ -8733,7 +9018,7 @@ void DrawSubmenuArrow(ID2D1DeviceContext* dc, const LayoutItem& item,
     if (FAILED(dc->CreateSolidColorBrush(ColorFromArgb(color), &brush)) || !brush) {
         return;
     }
-    const float right = static_cast<float>(panelWidth - metrics.padding);
+    const float right = static_cast<float>(panelWidth - ContentSideInset(metrics));
     const float left = right - static_cast<float>(metrics.submenuArrowWidth) * 0.4f;
     const float midY = (static_cast<float>(item.rect.top) +
                         static_cast<float>(item.rect.bottom)) / 2.0f;
@@ -9986,6 +10271,7 @@ void MenuStateMouseMove(MenuInputState& state, const LayoutPanel& panel,
 
 void MenuStateMouseLeave(MenuInputState& state) {
     state.hoverIndex = -1;
+    state.hoverRepaintPending = false;
 }
 
 void MenuStateWheel(MenuInputState& state, const LayoutPanel& panel, int delta,
@@ -10129,6 +10415,12 @@ int MenuStateItemAt(const LayoutPanel& panel, const MenuInputState& state,
     for (size_t i = 0; i < panel.items.size(); ++i) {
         const LayoutItem& item = panel.items[i];
         if (clientPoint.y >= item.rect.top && clientPoint.y < item.rect.bottom) {
+            if (item.topBarCell &&
+                (clientPoint.x < item.rect.left ||
+                 clientPoint.x >= item.rect.right)) {
+                // Bar cells share one row; pick the one under the cursor.
+                continue;
+            }
             if (!MenuItemIsSelectable(item)) {
                 return -1;
             }
@@ -10419,7 +10711,7 @@ Appearance AppearanceFromAppearanceText(const std::wstring& text) {
 void RelayoutSession(MenuSession& session);
 void SettingsApplyReset(MenuSession& session, const std::wstring& key);
 void SettingsPerformWrite(SettingsSessionContext* settings);
-void RepaintMenuWindow(MenuSession* session, int index);
+void RepaintMenuWindow(MenuSession* session, int index, bool vsync = true);
 void SettingsSyncOverlayTimer(MenuSession& session);
 
 // Rebuilds the settings model from the working appearance and re-lays out the
@@ -11276,7 +11568,8 @@ void RenderMenuWindow(MenuWindow* window, const LayoutPanel& panel,
                       const BackdropBitmap* backdrop, int margin,
                       const RECT* shadowClipRect = nullptr,
                       const AnimationFrame& frame = AnimationFrame{},
-                      POINT anchor = POINT{0, 0}, float overlayTime = 0.0f) {
+                      POINT anchor = POINT{0, 0}, float overlayTime = 0.0f,
+                      bool vsync = true) {
     if (!window || !window->SwapChain() || !g_renderDevice.D2DDevice()) {
         return;
     }    IDXGISurface* surface = nullptr;
@@ -11314,7 +11607,7 @@ void RenderMenuWindow(MenuWindow* window, const LayoutPanel& panel,
     }
     dc->Release();
     surface->Release();
-    window->Present();
+    window->Present(vsync);
 }
 
 // Renders every window of the session at one animation frame.
@@ -11524,7 +11817,10 @@ void RunWindowAnimation(MenuSession& session, size_t index,
     }
 }
 
-void RepaintMenuWindow(MenuSession* session, int index) {
+// Diagnostics: the time of the previous hover change, for the debug log.
+inline thread_local ULONGLONG g_lastHoverChangeTick = 0;
+
+void RepaintMenuWindow(MenuSession* session, int index, bool vsync) {
     if (!session || index < 0 ||
         index >= static_cast<int>(session->windows.size())) {
         return;
@@ -11549,7 +11845,7 @@ void RepaintMenuWindow(MenuSession* session, int index) {
     RenderMenuWindow(window, *window->Panel(), session->states[index],
                      session->metrics, session->appearance, backdrop,
                      session->margin, shadowClipRect, session->animationFrame,
-                     session->animationAnchor, session->OverlaySeconds());
+                     session->animationAnchor, session->OverlaySeconds(), vsync);
 }
 
 void CloseSubmenusBelow(MenuSession* session, int index) {
@@ -12016,9 +12312,44 @@ LRESULT CustomMenuWindowProc(MenuWindow* window, HWND hwnd, UINT msg,
                 CloseSubmenusBelow(session, level);
             }
 
-            if (hit != levelState.hoverIndex) {
+            if (hit != levelState.hoverIndex ||
+                levelState.hoverRepaintPending) {
                 MenuStateMouseMove(levelState, levelPanel, hit);
-                RepaintMenuWindow(session, level);
+                // Repainting every intermediate item of a mouse sweep makes
+                // the highlight trail the cursor: each repaint is a full
+                // panel render that waits for the swap chain. When more
+                // moves are already queued, only the last one paints.
+                MSG queued = {};
+                const bool moreQueued =
+                    PeekMessageW(&queued, hwnd, WM_MOUSEMOVE, WM_MOUSEMOVE,
+                                 PM_NOREMOVE) != FALSE;
+                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG gap = now - g_lastHoverChangeTick;
+                g_lastHoverChangeTick = now;
+                const DWORD messageAge = static_cast<DWORD>(GetTickCount()) -
+                                         static_cast<DWORD>(GetMessageTime());
+                const bool bar =
+                    hit >= 0 && levelPanel.items[hit].topBarCell;
+                if (moreQueued) {
+                    levelState.hoverRepaintPending = true;
+                    if (g_settings->debugLogging) {
+                        Wh_Log(L"Hover: item=%d bar=%d age=%u ms gap=%llu ms; "
+                               L"repaint deferred",
+                               hit, bar ? 1 : 0, messageAge,
+                               static_cast<unsigned long long>(gap));
+                    }
+                } else {
+                    levelState.hoverRepaintPending = false;
+                    RepaintMenuWindow(session, level, false);
+                    if (g_settings->debugLogging) {
+                        Wh_Log(L"Hover: item=%d bar=%d age=%u ms gap=%llu ms; "
+                               L"painted in %llu ms",
+                               hit, bar ? 1 : 0, messageAge,
+                               static_cast<unsigned long long>(gap),
+                               static_cast<unsigned long long>(
+                                   GetTickCount64() - now));
+                    }
+                }
             }
 
             if (isSubmenu) {
@@ -12252,6 +12583,50 @@ CustomMenuResult ShowCustomMenu(const MenuModel& model, const LayoutKey& key,
         return result;
     }
 
+    const RECT workArea = WorkAreaForPoint(pt);
+    POINT panelPos = ClampPanelPosition(pt, panel->size, workArea);
+    // The top action bar sits on the side nearest the cursor: normally the
+    // top, but the bottom when the menu is pushed up by the screen edge.
+    // Both variants share the same size, so the position stays valid.
+    if (!settings &&
+        ((pt.y - panelPos.y) > panel->size.cy / 2) != key.topBarAtBottom) {
+        bool hasBarCells = false;
+        for (const LayoutItem& item : panel->items) {
+            if (item.topBarCell) {
+                hasBarCells = true;
+                break;
+            }
+        }
+        if (hasBarCells) {
+            LayoutKey altKey = key;
+            altKey.topBarAtBottom = !key.topBarAtBottom;
+            std::shared_ptr<const LayoutPanel> altPanel =
+                g_layoutCache->Find(altKey);
+            if (!altPanel) {
+                auto built = std::make_shared<LayoutPanel>(BuildLayoutPanel(
+                    model.items, metrics, &MeasureTextWidthDirectWrite,
+                    altKey.topBarAtBottom));
+                bool bound = false;
+                ID2D1DeviceContext* bindDc = nullptr;
+                if (SUCCEEDED(g_renderDevice.D2DDevice()->CreateDeviceContext(
+                        D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &bindDc)) &&
+                    bindDc) {
+                    g_contentCaches->Bind(*built, metrics, bindDc);
+                    bindDc->Release();
+                    bound = true;
+                }
+                if (bound) {
+                    g_layoutCache->Put(altKey, built);
+                }
+                altPanel = built;
+            }
+            if (altPanel) {
+                panel = altPanel;
+                panelPos = ClampPanelPosition(pt, panel->size, workArea);
+            }
+        }
+    }
+
     MenuWindow* root = g_menuWindowSet->Acquire();
     const int margin =
         appearance.shadow && (metrics.shadowSize > 0 || metrics.shadowBlur > 0)
@@ -12266,8 +12641,6 @@ CustomMenuResult ShowCustomMenu(const MenuModel& model, const LayoutKey& key,
         return result;
     }
 
-    const RECT workArea = WorkAreaForPoint(pt);
-    const POINT panelPos = ClampPanelPosition(pt, panel->size, workArea);
     if (settings) {
         settings->panelOrigin = panelPos;
     }
@@ -12403,8 +12776,17 @@ CustomMenuResult ShowCustomMenu(const MenuModel& model, const LayoutKey& key,
         session.submenuTimerActive = false;
     }
     KillTimer(root->Handle(), kMenuOverlayTimerId);
-    const AnimationSpec closing = ResolveAnimationSpec(appearance, false);
-    RunSessionAnimation(session, closing, false);
+    if (session.result.chosenItemId.has_value()) {
+        // A chosen action must start now: the menu disappears at once
+        // instead of fading, and nothing lingers on screen while a modal
+        // dialog (Properties, the delete confirmation) is up.
+        for (MenuWindow* window : session.windows) {
+            ::ShowWindow(window->Handle(), SW_HIDE);
+        }
+    } else {
+        const AnimationSpec closing = ResolveAnimationSpec(appearance, false);
+        RunSessionAnimation(session, closing, false);
+    }
     if (session.settings) {
         if (session.settings->write.pending) {
             SettingsPerformWrite(session.settings);
@@ -12707,6 +13089,7 @@ void OpenSettingsMenu(HWND owner, POINT pt, bool activate = false) {
         {L"Menu mode", g_settings->menuMode == 0 ? L"Custom" : L"Classic"},
         {L"Show classic menu item",
          g_settings->showMoreOptionsItem ? L"on" : L"off"},
+        {L"Top action bar", g_settings->topBar ? L"on" : L"off"},
         {L"Submenu delay",
          std::to_wstring(g_settings->submenuDelayMs) + L" ms"},
         {L"Bypass keys", g_settings->enableShiftBypass ? L"on" : L"off"},
@@ -13277,6 +13660,10 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
         addCommand(L"Open in new window", L"opennew");
         addCommand(L"Pin to Quick access", L"pintohome");
         addSeparator();
+        if (shape == Shape::Single) {
+            // A single folder pastes into itself, like the Windows 11 menu.
+            addCommand(L"Paste", L"paste", kModelNone, L"@glyph:E77F");
+        }
     } else {
         addCommand(openLabel, L"open", kModelDefault);
         addCommand(L"Open with", L"openwith", kModelNone, L"@glyph:E8E5");
@@ -13417,11 +13804,15 @@ MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
                 found = true;
             }
         }
-        if (!found) {
-            insertAt = std::min<size_t>(1, result.items.size());
+        if (found) {
+            result.items.insert(result.items.begin() + insertAt,
+                                addedOpen.begin(), addedOpen.end());
+        } else {
+            // No open group to attach to (for example a background menu):
+            // keep these with the other extras at the bottom of the list
+            // instead of putting them at the very top.
+            added.insert(added.end(), addedOpen.begin(), addedOpen.end());
         }
-        result.items.insert(result.items.begin() + insertAt, addedOpen.begin(),
-                            addedOpen.end());
     }
 
     if (!added.empty()) {
@@ -14548,13 +14939,16 @@ bool ShiftBypassHeld() {
 
 // Only main popup menus are deferred. CMF_DEFAULTONLY is the default-verb
 // resolution used by double-click/open; CMF_NOVERBS builds submenus such as
-// Send to; CMF_VERBSONLY builds verb-only menus. Those never show a popup we
+// Send to; CMF_VERBSONLY builds verb-only menus; CMF_OPTIMIZEFORINVOKE marks
+// a menu built only to resolve and invoke a command without displaying it
+// (for example middle-click's "Open in new tab"). Those never show a popup we
 // could replace and must reach the shell untouched. The bypass states are
 // passed in so this stays a pure predicate: non-popup calls cannot arm the
 // Ctrl bypass window (only the Windows 11 suppression hooks do).
 bool ShouldDeferContextMenu(UINT flags, bool shiftBypassActive,
                             bool ctrlBypassActive) {
-    if (flags & (CMF_DEFAULTONLY | CMF_NOVERBS | CMF_VERBSONLY)) {
+    if (flags & (CMF_DEFAULTONLY | CMF_NOVERBS | CMF_VERBSONLY |
+                 CMF_OPTIMIZEFORINVOKE)) {
         return false;
     }
     if ((flags & (CMF_EXPLORE | kCmfPopupMenu)) == 0) {
@@ -15760,6 +16154,14 @@ struct SelectionInfo {
     bool allItemsAreFolders = false;
 };
 
+// A .zip file and a folder shortcut both report SFGAO_FOLDER; only a real
+// directory has it without SFGAO_STREAM. Treating a zip as a folder would
+// give it the folder menu and a Paste that pastes into the archive.
+inline bool IsFolderAttributes(SFGAOF attributes) {
+    return (attributes & SFGAO_FOLDER) != 0 &&
+           (attributes & SFGAO_STREAM) == 0;
+}
+
 SelectionInfo GetSelectionFromShellBrowser(IShellBrowser* browser) {
     SelectionInfo info;
     if (!browser) {
@@ -15786,14 +16188,15 @@ SelectionInfo GetSelectionFromShellBrowser(IShellBrowser* browser) {
                     enumIds) {
                     LPITEMIDLIST pidl = nullptr;
                     while (enumIds->Next(1, &pidl, nullptr) == S_OK) {
-                        SFGAOF itemAttributes = SFGAO_FILESYSTEM | SFGAO_FOLDER;
+                        SFGAOF itemAttributes =
+                            SFGAO_FILESYSTEM | SFGAO_FOLDER | SFGAO_STREAM;
                         PCUITEMID_CHILD child = pidl;
                         if (SUCCEEDED(
                                 folder->GetAttributesOf(1, &child, &itemAttributes))) {
                             if (!(itemAttributes & SFGAO_FILESYSTEM)) {
                                 info.allItemsAreFilesystem = false;
                             }
-                            if (!(itemAttributes & SFGAO_FOLDER)) {
+                            if (!IsFolderAttributes(itemAttributes)) {
                                 allFolders = false;
                             }
                         } else {
@@ -16547,7 +16950,30 @@ bool CopyAsPath(const std::vector<std::wstring>& paths) {
 }
 
 bool ClipboardHasFileData() {
-    return IsClipboardFormatAvailable(CF_HDROP) != FALSE;
+    // The OLE clipboard wraps classic clipboard content as well, and it is
+    // the only reliable view of data objects (our own Cut/Copy put the
+    // shell's data object there).
+    IDataObject* data = nullptr;
+    bool has = false;
+    if (SUCCEEDED(OleGetClipboard(&data)) && data) {
+        // Shell formats cover virtual items (for example Outlook
+        // attachments), which have no file system paths.
+        const CLIPFORMAT formats[] = {
+            CF_HDROP,
+            static_cast<CLIPFORMAT>(RegisterClipboardFormatW(L"Shell IDList Array")),
+            static_cast<CLIPFORMAT>(RegisterClipboardFormatW(L"FileGroupDescriptorW")),
+        };
+        for (const CLIPFORMAT format : formats) {
+            FORMATETC formatEtc = {format, nullptr, DVASPECT_CONTENT, -1,
+                                   TYMED_HGLOBAL};
+            if (data->QueryGetData(&formatEtc) == S_OK) {
+                has = true;
+                break;
+            }
+        }
+        data->Release();
+    }
+    return has;
 }
 
 // Paste availability: cached state while the clipboard sequence is unchanged,
@@ -16557,36 +16983,65 @@ bool ComputePasteEnabled(DWORD sequenceAtOpen, DWORD currentSequence,
     return sequenceAtOpen == currentSequence ? cachedHadData : currentHasData;
 }
 
+// Reads a data object's preferred drop effect; false when the format is
+// absent (the caller picks the default for its purpose).
+bool ReadPreferredDropEffect(IDataObject* data, DWORD& effect) {
+    FORMATETC format = {
+        static_cast<CLIPFORMAT>(RegisterClipboardFormatW(L"Preferred DropEffect")),
+        nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    STGMEDIUM medium = {};
+    if (FAILED(data->GetData(&format, &medium))) {
+        return false;
+    }
+    bool found = false;
+    if (medium.tymed == TYMED_HGLOBAL && medium.hGlobal) {
+        if (const DWORD* value =
+                static_cast<const DWORD*>(GlobalLock(medium.hGlobal))) {
+            effect = *value;
+            GlobalUnlock(medium.hGlobal);
+            found = true;
+        }
+    }
+    ReleaseStgMedium(&medium);
+    return found;
+}
+
 // Reads the clipboard's CF_HDROP file list plus the preferred drop effect
-// (DROPEFFECT_MOVE means the files were cut).
+// (DROPEFFECT_MOVE means the files were cut). The OLE clipboard is used so
+// data objects put there by the shell (or by our own Cut/Copy) are read
+// correctly; classic clipboard content is wrapped by OLE as well.
 bool ReadClipboardFiles(std::vector<std::wstring>& paths, DWORD& dropEffect) {
     paths.clear();
     dropEffect = DROPEFFECT_COPY;
-    if (!OpenClipboard(nullptr)) {
+    IDataObject* data = nullptr;
+    if (FAILED(OleGetClipboard(&data)) || !data) {
         return false;
     }
     bool ok = false;
-    if (HANDLE handle = GetClipboardData(CF_HDROP)) {
-        HDROP drop = static_cast<HDROP>(handle);
-        const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
-        for (UINT i = 0; i < count; ++i) {
-            const UINT length = DragQueryFileW(drop, i, nullptr, 0);
-            std::vector<wchar_t> buffer(static_cast<size_t>(length) + 1);
-            if (DragQueryFileW(drop, i, buffer.data(), length + 1) == length) {
-                paths.emplace_back(buffer.data());
+    FORMATETC format = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1,
+                        TYMED_HGLOBAL};
+    STGMEDIUM medium = {};
+    if (SUCCEEDED(data->GetData(&format, &medium))) {
+        if (medium.tymed == TYMED_HGLOBAL && medium.hGlobal) {
+            HDROP drop = static_cast<HDROP>(medium.hGlobal);
+            const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+            for (UINT i = 0; i < count; ++i) {
+                const UINT length = DragQueryFileW(drop, i, nullptr, 0);
+                std::vector<wchar_t> buffer(static_cast<size_t>(length) + 1);
+                if (DragQueryFileW(drop, i, buffer.data(), length + 1) ==
+                    length) {
+                    paths.emplace_back(buffer.data());
+                }
             }
+            ok = !paths.empty();
         }
-        ok = !paths.empty();
+        ReleaseStgMedium(&medium);
     }
-    if (HANDLE handle = GetClipboardData(
-            RegisterClipboardFormatW(L"Preferred DropEffect"))) {
-        if (const DWORD* effect =
-                static_cast<const DWORD*>(GlobalLock(handle))) {
-            dropEffect = *effect;
-            GlobalUnlock(handle);
-        }
+    DWORD preferred = 0;
+    if (ReadPreferredDropEffect(data, preferred)) {
+        dropEffect = preferred;
     }
-    CloseClipboard();
+    data->Release();
     return ok;
 }
 
@@ -16614,6 +17069,21 @@ std::wstring MakeShortcutPath(const std::wstring& directory,
 // into the view's current folder. Explorer's view adds the standard Paste item
 // itself, so the captured shell menu never contains it and the mod performs
 // the operation directly.
+// Parent directory of a path, with the drive root kept as "C:\\"; empty when
+// the path has no directory part.
+std::wstring ParentDirectoryOf(const std::wstring& path) {
+    std::wstring directory = path;
+    const size_t slash = directory.find_last_of(L"\\/");
+    if (slash == std::wstring::npos || slash == 0) {
+        return std::wstring();
+    }
+    directory.resize(slash);
+    if (directory.size() == 2 && directory[1] == L':') {
+        directory += L'\\';
+    }
+    return directory;
+}
+
 bool InvokePaste(const InvocationContext& ctx) {
     if (ctx.directory.empty()) {
         return false;
@@ -16631,10 +17101,14 @@ bool InvokePaste(const InvocationContext& ctx) {
         !operation) {
         return false;
     }
-    operation->SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR);
+    // Collisions become "name - Copy" like Explorer's paste instead of a
+    // same-name warning.
+    operation->SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR |
+                                 FOF_RENAMEONCOLLISION);
 
     IShellItem* destination = nullptr;
     bool ok = false;
+    bool queued = false;
     if (SUCCEEDED(SHCreateItemFromParsingName(ctx.directory.c_str(), nullptr,
                                               IID_IShellItem,
                                               reinterpret_cast<void**>(&destination))) &&
@@ -16642,6 +17116,12 @@ bool InvokePaste(const InvocationContext& ctx) {
         const bool move = (dropEffect & DROPEFFECT_MOVE) != 0;
         ok = true;
         for (const std::wstring& source : sources) {
+            const std::wstring sourceParent = ParentDirectoryOf(source);
+            if (move && !sourceParent.empty() && !ctx.directory.empty() &&
+                _wcsicmp(sourceParent.c_str(), ctx.directory.c_str()) == 0) {
+                // Moving onto itself is a no-op, like Explorer's paste.
+                continue;
+            }
             IShellItem* item = nullptr;
             if (FAILED(SHCreateItemFromParsingName(
                     source.c_str(), nullptr, IID_IShellItem,
@@ -16655,18 +17135,21 @@ bool InvokePaste(const InvocationContext& ctx) {
                      : operation->CopyItem(item, destination, nullptr, nullptr);
             if (FAILED(hr)) {
                 ok = false;
+            } else {
+                queued = true;
             }
             item->Release();
         }
         destination->Release();
     }
-    if (ok) {
-        ok = SUCCEEDED(operation->PerformOperations());
+    if (ok && queued) {
+        const HRESULT hr = operation->PerformOperations();
         BOOL aborted = FALSE;
-        if (ok && SUCCEEDED(operation->GetAnyOperationsAborted(&aborted)) &&
-            aborted) {
-            ok = false;
-        }
+        operation->GetAnyOperationsAborted(&aborted);
+        // A canceled confirmation is the user's answer, so the click is done
+        // either way; only a real failure falls back. Nothing queued (for
+        // example moving onto the same folder) is a completed no-op.
+        ok = SUCCEEDED(hr) || aborted != FALSE;
     }
     operation->Release();
     if (g_settings->debugLogging) {
@@ -16840,11 +17323,17 @@ bool EnsureContextPopulated(PendingCapture& capture) {
 std::optional<uint32_t> FindNativeOffsetInMenu(HMENU menu, UINT idCmdFirst,
                                                IContextMenu* context,
                                                const MenuItem& target);
+bool TryInvokeVerbDirect(const MenuItem& item, const InvocationContext& ctx);
 
 InvokeResult InvokeExtensionItem(const MenuItem& item, const InvocationContext& ctx,
                                  PendingCapture& capture) {
     if (item.flags & kModelOwnerDraw) {
         return InvokeResult::FallbackNative;
+    }
+    // A registered verb needs no populated menu; dynamic handlers fall
+    // through to the shell path.
+    if (TryInvokeVerbDirect(item, ctx)) {
+        return InvokeResult::Handled;
     }
     if (!ctx.liveContext || !EnsureContextPopulated(capture)) {
         return InvokeResult::FallbackNative;
@@ -17009,6 +17498,687 @@ bool InvokeBuiltinAction(const MenuItem& item, const InvocationContext& ctx) {
     return false;
 }
 
+// Verbs with a direct implementation. Invoking one of these must not
+// populate the live shell menu first: the population is the slow part of a
+// native menu (hundreds of milliseconds with many handlers), and paying it on
+// click is what makes a chosen action feel late.
+enum class CoreVerb {
+    None,
+    Open,
+    Cut,
+    Copy,
+    Delete,
+    Properties,
+};
+
+CoreVerb ClassifyCoreVerb(const std::wstring& verb) {
+    if (EqualsIgnoreCase(verb, L"open")) {
+        return CoreVerb::Open;
+    }
+    if (EqualsIgnoreCase(verb, L"cut")) {
+        return CoreVerb::Cut;
+    }
+    if (EqualsIgnoreCase(verb, L"copy")) {
+        return CoreVerb::Copy;
+    }
+    if (EqualsIgnoreCase(verb, L"delete")) {
+        return CoreVerb::Delete;
+    }
+    if (EqualsIgnoreCase(verb, L"properties")) {
+        return CoreVerb::Properties;
+    }
+    return CoreVerb::None;
+}
+
+// Builds the CF_HDROP payload: a DROPFILES header followed by the paths,
+// each NUL-terminated, with one more NUL closing the list.
+std::vector<BYTE> BuildDropFilesBlob(const std::vector<std::wstring>& paths) {
+    std::vector<BYTE> blob;
+    if (paths.empty()) {
+        return blob;
+    }
+    size_t stringsBytes = sizeof(wchar_t);
+    for (const std::wstring& path : paths) {
+        stringsBytes += (path.size() + 1) * sizeof(wchar_t);
+    }
+    blob.assign(sizeof(DROPFILES) + stringsBytes, 0);
+    DROPFILES* header = reinterpret_cast<DROPFILES*>(blob.data());
+    header->pFiles = sizeof(DROPFILES);
+    header->fWide = TRUE;
+    wchar_t* cursor =
+        reinterpret_cast<wchar_t*>(blob.data() + sizeof(DROPFILES));
+    for (const std::wstring& path : paths) {
+        memcpy(cursor, path.c_str(), (path.size() + 1) * sizeof(wchar_t));
+        cursor += path.size() + 1;
+    }
+    return blob;
+}
+
+// Shared parent directory of all paths, or false when they differ (mixed
+// folders, search results) - the caller keeps the shell path then.
+bool ShareOneParentDirectory(const std::vector<std::wstring>& paths,
+                             std::wstring& parent) {
+    parent.clear();
+    if (paths.empty()) {
+        return false;
+    }
+    for (const std::wstring& path : paths) {
+        const std::wstring directory = ParentDirectoryOf(path);
+        if (directory.empty()) {
+            return false;
+        }
+        if (parent.empty()) {
+            parent = directory;
+        } else if (_wcsicmp(parent.c_str(), directory.c_str()) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// CFSTR_SHELLIDLIST payload: a CIDA header, the parent folder PIDL, then the
+// item PIDLs. The shell identifies clipboard items with this format (for
+// example to dim the cut ones in a view), which CF_HDROP alone cannot do. A
+// null parent becomes the documented empty PIDL (the desktop as root), used
+// for items from different folders; the items are absolute PIDLs then.
+std::vector<BYTE> BuildShellIdListBlob(
+    const ITEMIDLIST* parent, const std::vector<const ITEMIDLIST*>& items) {
+    std::vector<BYTE> blob;
+    if (items.empty()) {
+        return blob;
+    }
+    const size_t parentBytes = parent ? ILGetSize(parent) : sizeof(WORD);
+    std::vector<size_t> itemSizes;
+    size_t itemsBytes = 0;
+    for (const ITEMIDLIST* item : items) {
+        itemSizes.push_back(ILGetSize(item));
+        itemsBytes += itemSizes.back();
+    }
+    // cidl followed by one offset per PIDL, the parent first.
+    const size_t headerBytes = sizeof(UINT) * (items.size() + 2);
+    blob.assign(headerBytes + parentBytes + itemsBytes, 0);
+    UINT* header = reinterpret_cast<UINT*>(blob.data());
+    header[0] = static_cast<UINT>(items.size());
+    header[1] = static_cast<UINT>(headerBytes);
+    BYTE* cursor = blob.data() + headerBytes;
+    if (parent) {
+        memcpy(cursor, parent, parentBytes);
+    }
+    cursor += parentBytes;
+    for (size_t i = 0; i < items.size(); ++i) {
+        header[2 + i] = static_cast<UINT>(cursor - blob.data());
+        memcpy(cursor, items[i], itemSizes[i]);
+        cursor += itemSizes[i];
+    }
+    return blob;
+}
+
+// Builds the CFSTR_SHELLIDLIST payload for file system paths: a real parent
+// PIDL with relative children when they share a folder, the desktop root
+// with absolute children otherwise.
+std::vector<BYTE> BuildShellIdListForPaths(
+    const std::vector<std::wstring>& paths) {
+    std::vector<BYTE> blob;
+    if (paths.empty()) {
+        return blob;
+    }
+    std::wstring parentPath;
+    const bool sharedParent = ShareOneParentDirectory(paths, parentPath);
+    PIDLIST_ABSOLUTE parent = nullptr;
+    bool ok = sharedParent;
+    if (sharedParent &&
+        FAILED(SHParseDisplayName(parentPath.c_str(), nullptr, &parent, 0,
+                                  nullptr))) {
+        ok = false;
+    }
+    std::vector<PIDLIST_ABSOLUTE> absolute;
+    std::vector<const ITEMIDLIST*> items;
+    for (const std::wstring& path : paths) {
+        PIDLIST_ABSOLUTE item = nullptr;
+        if (!ok ||
+            FAILED(SHParseDisplayName(path.c_str(), nullptr, &item, 0,
+                                      nullptr)) ||
+            !item) {
+            ok = false;
+            break;
+        }
+        absolute.push_back(item);
+        items.push_back(sharedParent ? ILFindLastID(item) : item);
+    }
+    if (ok) {
+        blob = BuildShellIdListBlob(sharedParent ? parent : nullptr, items);
+    }
+    for (PIDLIST_ABSOLUTE item : absolute) {
+        CoTaskMemFree(item);
+    }
+    if (parent) {
+        CoTaskMemFree(parent);
+    }
+    return blob;
+}
+
+// Puts the selection on the clipboard the way Explorer's Cut/Copy do: a
+// CF_HDROP list, the shell item list, plus the preferred drop effect that
+// tells paste targets to copy or move, with clipboard viewers suppressed
+// like the shell does.
+bool WriteClipboardFiles(HWND owner, const std::vector<std::wstring>& paths,
+                         bool cut) {
+    const std::vector<BYTE> dropBlob = BuildDropFilesBlob(paths);
+    if (dropBlob.empty()) {
+        return false;
+    }
+    const std::vector<BYTE> idlistBlob = BuildShellIdListForPaths(paths);
+    HGLOBAL dropMemory = GlobalAlloc(GMEM_MOVEABLE, dropBlob.size());
+    HGLOBAL idlistMemory = idlistBlob.empty()
+                               ? nullptr
+                               : GlobalAlloc(GMEM_MOVEABLE, idlistBlob.size());
+    HGLOBAL effectMemory = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+    HGLOBAL ignoreMemory = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+    if (!dropMemory || (!idlistBlob.empty() && !idlistMemory) ||
+        !effectMemory || !ignoreMemory) {
+        if (dropMemory) GlobalFree(dropMemory);
+        if (idlistMemory) GlobalFree(idlistMemory);
+        if (effectMemory) GlobalFree(effectMemory);
+        if (ignoreMemory) GlobalFree(ignoreMemory);
+        return false;
+    }
+    auto fill = [](HGLOBAL memory, const void* data, size_t size) {
+        void* target = GlobalLock(memory);
+        if (!target) {
+            return false;
+        }
+        memcpy(target, data, size);
+        GlobalUnlock(memory);
+        return true;
+    };
+    const DWORD effect =
+        cut ? DROPEFFECT_MOVE : (DROPEFFECT_COPY | DROPEFFECT_LINK);
+    const DWORD ignore = 1;
+    if (!fill(dropMemory, dropBlob.data(), dropBlob.size()) ||
+        (idlistMemory &&
+         !fill(idlistMemory, idlistBlob.data(), idlistBlob.size())) ||
+        !fill(effectMemory, &effect, sizeof(effect)) ||
+        !fill(ignoreMemory, &ignore, sizeof(ignore))) {
+        if (dropMemory) GlobalFree(dropMemory);
+        if (idlistMemory) GlobalFree(idlistMemory);
+        if (effectMemory) GlobalFree(effectMemory);
+        if (ignoreMemory) GlobalFree(ignoreMemory);
+        return false;
+    }
+    // SetClipboardData takes ownership of the memory on success.
+    auto setFormat = [](UINT format, HGLOBAL& memory) {
+        if (memory && SetClipboardData(format, memory)) {
+            memory = nullptr;
+        }
+    };
+    bool ok = false;
+    if (OpenClipboard(owner)) {
+        if (EmptyClipboard()) {
+            setFormat(CF_HDROP, dropMemory);
+            ok = dropMemory == nullptr;
+            // CFSTR_SHELLIDLIST.
+            setFormat(RegisterClipboardFormatW(L"Shell IDList Array"),
+                      idlistMemory);
+            setFormat(RegisterClipboardFormatW(L"Preferred DropEffect"),
+                      effectMemory);
+            setFormat(RegisterClipboardFormatW(L"Clipboard Viewer Ignore"),
+                      ignoreMemory);
+        }
+        CloseClipboard();
+    }
+    if (dropMemory) GlobalFree(dropMemory);
+    if (idlistMemory) GlobalFree(idlistMemory);
+    if (effectMemory) GlobalFree(effectMemory);
+    if (ignoreMemory) GlobalFree(ignoreMemory);
+    return ok;
+}
+
+// True when the shell treats the item as a container the view can browse
+// into: real folders, drives and archives like .zip files. File attributes
+// would miss archives.
+bool IsShellContainerPath(const std::wstring& path) {
+    IShellItem* item = nullptr;
+    bool container = false;
+    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                              IID_IShellItem,
+                                              reinterpret_cast<void**>(&item))) &&
+        item) {
+        SFGAOF attributes = 0;
+        container = SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)) &&
+                    (attributes & SFGAO_FOLDER) != 0;
+        item->Release();
+    }
+    return container;
+}
+
+// Open: a single folder, drive or archive navigates the owner's folder window
+// in place, exactly like the view's own Open command (ShellExecuteEx would
+// leave the window behind and open a new one). A single file keeps the
+// default-verb dispatch; multi-selections stay with the shell, which invokes
+// the handler once for the whole selection.
+bool InvokeOpenPaths(const InvocationContext& ctx) {
+    if (ctx.paths.size() != 1) {
+        return false;
+    }
+    const std::wstring& path = ctx.paths.front();
+    if (ctx.kind == ShellViewKind::ShellDefView && IsShellContainerPath(path)) {
+        IShellBrowser* browser = GetShellBrowserForWindow(ctx.owner);
+        if (browser) {
+            browser->AddRef();  // borrowed pointer from CWM_GETISHELLBROWSER
+            PIDLIST_ABSOLUTE pidl = nullptr;
+            bool navigated = false;
+            if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0,
+                                             nullptr)) &&
+                pidl) {
+                navigated = SUCCEEDED(browser->BrowseObject(
+                    pidl, SBSP_DEFBROWSER | SBSP_ABSOLUTE));
+                CoTaskMemFree(pidl);
+            }
+            browser->Release();
+            if (navigated) {
+                return true;
+            }
+        }
+    }
+    SHELLEXECUTEINFOW info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_FLAG_NO_UI;
+    info.hwnd = ctx.owner;
+    info.lpVerb = L"open";
+    info.lpFile = path.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&info) != FALSE;
+}
+
+// Delete: the modern file operation with recycling, like Explorer's Delete.
+// The confirmation and error UI come from the operation itself.
+// Delete flags: Shift deletes permanently, like the shell's Delete; otherwise
+// items are recycled and the Recycle Bin's confirmation setting is honored.
+DWORD DeleteOperationFlags(bool permanent, bool noConfirmRecycle) {
+    if (permanent) {
+        return 0;  // the shell always warns before a permanent delete
+    }
+    return FOF_ALLOWUNDO | (noConfirmRecycle ? FOF_NOCONFIRMATION : 0);
+}
+
+bool InvokeDeletePaths(const InvocationContext& ctx) {
+    if (ctx.paths.empty()) {
+        return false;
+    }
+    IFileOperation* operation = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                IID_IFileOperation,
+                                reinterpret_cast<void**>(&operation))) ||
+        !operation) {
+        return false;
+    }
+    SHELLSTATE shellState = {};
+    SHGetSetSettings(&shellState, SSF_NOCONFIRMRECYCLE, FALSE);
+    operation->SetOperationFlags(DeleteOperationFlags(
+        (GetKeyState(VK_SHIFT) & 0x8000) != 0,
+        shellState.fNoConfirmRecycle != FALSE));
+    bool ok = true;
+    for (const std::wstring& path : ctx.paths) {
+        IShellItem* item = nullptr;
+        if (FAILED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                               IID_IShellItem,
+                                               reinterpret_cast<void**>(&item))) ||
+            !item) {
+            ok = false;
+            continue;
+        }
+        if (FAILED(operation->DeleteItem(item, nullptr))) {
+            ok = false;
+        }
+        item->Release();
+    }
+    if (ok) {
+        // Whatever PerformOperations decided (including a canceled
+        // confirmation) is the user's answer; retrying through the shell
+        // menu would only ask twice.
+        ok = SUCCEEDED(operation->PerformOperations());
+    }
+    operation->Release();
+    return ok;
+}
+
+// Properties: the same sheet the shell shows. A multi-selection uses the
+// aggregate dialog when the items share one parent folder; other shapes
+// keep the shell path.
+bool InvokeProperties(const InvocationContext& ctx) {
+    std::vector<std::wstring> targets = ctx.paths;
+    if (targets.empty() && !ctx.directory.empty()) {
+        // Background menus: the sheet belongs to the current folder.
+        targets.push_back(ctx.directory);
+    }
+    if (targets.empty()) {
+        return false;
+    }
+    if (targets.size() == 1) {
+        return SHObjectProperties(ctx.owner, SHOP_FILEPATH,
+                                  targets.front().c_str(), nullptr) != FALSE;
+    }
+    std::wstring parent;
+    if (!ShareOneParentDirectory(targets, parent)) {
+        return false;
+    }
+    PIDLIST_ABSOLUTE folder = nullptr;
+    if (FAILED(SHParseDisplayName(parent.c_str(), nullptr, &folder, 0,
+                                  nullptr)) ||
+        !folder) {
+        return false;
+    }
+    std::vector<PIDLIST_ABSOLUTE> absolute;
+    std::vector<PCUITEMID_CHILD> children;
+    bool ok = true;
+    for (const std::wstring& path : targets) {
+        PIDLIST_ABSOLUTE item = nullptr;
+        if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &item, 0,
+                                      nullptr)) ||
+            !item) {
+            ok = false;
+            break;
+        }
+        absolute.push_back(item);
+        children.push_back(ILFindLastID(item));
+    }
+    IDataObject* dataObject = nullptr;
+    if (ok) {
+        ok = SUCCEEDED(SHCreateDataObject(
+                 folder, static_cast<UINT>(children.size()), children.data(),
+                 nullptr, IID_IDataObject,
+                 reinterpret_cast<void**>(&dataObject))) &&
+             dataObject;
+    }
+    bool shown = false;
+    if (ok) {
+        shown = SUCCEEDED(SHMultiFileProperties(dataObject, 0));
+    }
+    if (dataObject) {
+        dataObject->Release();
+    }
+    for (PIDLIST_ABSOLUTE item : absolute) {
+        CoTaskMemFree(item);
+    }
+    CoTaskMemFree(folder);
+    return shown;
+}
+
+// Registered verbs dispatch through ShellExecuteEx without any context menu
+// population. Dynamic menu items (empty or unregistered verbs) fail quickly
+// here and keep the populated shell menu as the correctness net.
+// Verbs that need the window's browser site to pick their target window.
+// ShellExecuteEx has no site, so these keep the shell menu path.
+bool VerbNeedsBrowserSite(const std::wstring& verb) {
+    return EqualsIgnoreCase(verb, L"opennewtab");
+}
+
+bool TryInvokeVerbDirect(const MenuItem& item, const InvocationContext& ctx) {
+    if (ctx.paths.size() != 1 || item.canonicalVerb.empty() ||
+        VerbNeedsBrowserSite(item.canonicalVerb)) {
+        return false;
+    }
+    SHELLEXECUTEINFOW info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_FLAG_NO_UI;
+    info.hwnd = ctx.owner;
+    info.lpVerb = item.canonicalVerb.c_str();
+    info.lpFile = ctx.paths.front().c_str();
+    info.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&info) != FALSE;
+}
+
+// File views (folder windows, This PC, search results, the desktop) run
+// Explorer's own keyboard commands; the navigation tree does not share them.
+bool IsFileViewKind(ShellViewKind kind) {
+    return kind == ShellViewKind::Desktop || kind == ShellViewKind::ShellDefView;
+}
+
+// The view's own commands act on its current selection, so they are only
+// safe when it still matches the selection the menu was built for.
+bool ViewSelectionMatches(const InvocationContext& ctx) {
+    const SelectionInfo current = GetSelection(ctx.owner, ctx.kind);
+    return PathSetsEqual(current.paths, ctx.paths);
+}
+
+// Sets the preferred drop effect on a data object, like the shell's own
+// Cut/Copy do before putting the object on the clipboard.
+bool SetPreferredDropEffect(IDataObject* data, DWORD effect) {
+    FORMATETC format = {};
+    format.cfFormat = static_cast<CLIPFORMAT>(
+        RegisterClipboardFormatW(L"Preferred DropEffect"));
+    format.dwAspect = DVASPECT_CONTENT;
+    format.lindex = -1;
+    format.tymed = TYMED_HGLOBAL;
+    STGMEDIUM medium = {};
+    medium.tymed = TYMED_HGLOBAL;
+    medium.hGlobal = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+    if (!medium.hGlobal) {
+        return false;
+    }
+    void* target = GlobalLock(medium.hGlobal);
+    if (!target) {
+        GlobalFree(medium.hGlobal);
+        return false;
+    }
+    memcpy(target, &effect, sizeof(effect));
+    GlobalUnlock(medium.hGlobal);
+    const HRESULT hr = data->SetData(&format, &medium, TRUE);
+    if (FAILED(hr)) {
+        ReleaseStgMedium(&medium);
+        return false;
+    }
+    return true;
+}
+
+// Puts the view's own selection data object on the clipboard, with the
+// preferred drop effect, exactly like the view's Copy/Cut commands. The
+// shell's formats (including the Shell IDList Array the views use to dim cut
+// items), virtual items and the clipboard owner all match the native menu,
+// and no synthetic keystrokes are involved.
+bool CopySelectionViaView(const InvocationContext& ctx, bool cut) {
+    if (!IsFileViewKind(ctx.kind) || ctx.paths.empty() ||
+        !ViewSelectionMatches(ctx)) {
+        return false;
+    }
+    IShellView* view = GetActiveShellView(ctx.owner, ctx.kind);
+    if (!view) {
+        return false;
+    }
+    IDataObject* data = nullptr;
+    bool ok = false;
+    if (SUCCEEDED(view->GetItemObject(SVGIO_SELECTION, IID_IDataObject,
+                                      reinterpret_cast<void**>(&data))) &&
+        data) {
+        ok = SetPreferredDropEffect(
+            data, cut ? DROPEFFECT_MOVE : (DROPEFFECT_COPY | DROPEFFECT_LINK));
+        if (ok) {
+            ok = SUCCEEDED(OleSetClipboard(data));
+        }
+    }
+    if (data) {
+        data->Release();
+    }
+    view->Release();
+    return ok;
+}
+
+// Synthesizes the shortcut Explorer binds to a view command. The owner keeps
+// focus while the menu is open, so the keys reach the view.
+bool SendShortcut(WORD virtualKey, bool control) {
+    INPUT inputs[4] = {};
+    size_t count = 0;
+    if (control) {
+        inputs[count].type = INPUT_KEYBOARD;
+        inputs[count].ki.wVk = VK_CONTROL;
+        ++count;
+    }
+    inputs[count].type = INPUT_KEYBOARD;
+    inputs[count].ki.wVk = virtualKey;
+    ++count;
+    inputs[count].type = INPUT_KEYBOARD;
+    inputs[count].ki.wVk = virtualKey;
+    inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
+    ++count;
+    if (control) {
+        inputs[count].type = INPUT_KEYBOARD;
+        inputs[count].ki.wVk = VK_CONTROL;
+        inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
+        ++count;
+    }
+    return SendInput(static_cast<UINT>(count), inputs, sizeof(INPUT)) ==
+           static_cast<UINT>(count);
+}
+
+// A view shortcut is only safe when the view that owns the selection is the
+// foreground window's focused window and no modifier keys are held (the
+// synthetic keys would otherwise combine with the user's own keys).
+bool SendShortcutAllowed(bool foregroundIsOwnerRoot, bool focusInView,
+                         bool shiftDown, bool altDown, bool winDown,
+                         bool ctrlDown) {
+    return foregroundIsOwnerRoot && focusInView && !shiftDown && !altDown &&
+           !winDown && !ctrlDown;
+}
+
+bool ViewReadyForShortcut(HWND owner) {
+    const HWND focus = GetFocus();
+    return SendShortcutAllowed(
+        GetForegroundWindow() == GetAncestor(owner, GA_ROOT),
+        focus && (focus == owner || IsChild(owner, focus)),
+        (GetKeyState(VK_SHIFT) & 0x8000) != 0,
+        (GetKeyState(VK_MENU) & 0x8000) != 0,
+        ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) != 0,
+        (GetKeyState(VK_CONTROL) & 0x8000) != 0);
+}
+
+// Cut/Copy: the view's own command when it safely owns the keyboard, so the
+// cut visual appears exactly like the native menu (the view marks its own cut
+// items; clipboard formats alone do not reproduce that). The view's selection
+// data object is the fallback (correct clipboard, no cut visual), and the
+// direct clipboard write covers the tree and unmatched selections.
+bool InvokeCutCopy(const InvocationContext& ctx, bool cut) {
+    const bool viewOwnsSelection = IsFileViewKind(ctx.kind) &&
+                                   !ctx.paths.empty() &&
+                                   ViewSelectionMatches(ctx);
+    if (viewOwnsSelection && ViewReadyForShortcut(ctx.owner) &&
+        SendShortcut(cut ? L'X' : L'C', true)) {
+        if (g_settings->debugLogging) {
+            Wh_Log(L"Cut/Copy: view shortcut");
+        }
+        return true;
+    }
+    if (viewOwnsSelection && CopySelectionViaView(ctx, cut)) {
+        if (g_settings->debugLogging) {
+            Wh_Log(L"Cut/Copy: view data object");
+        }
+        return true;
+    }
+    if (g_settings->debugLogging) {
+        Wh_Log(L"Cut/Copy: direct clipboard write");
+    }
+    return WriteClipboardFiles(ctx.owner, ctx.paths, cut);
+}
+
+// The drop target of a folder other than the view's current one (a
+// right-clicked folder or a navigation-pane item).
+IDropTarget* FolderDropTargetForPath(HWND owner, const std::wstring& path) {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) ||
+        !pidl) {
+        return nullptr;
+    }
+    IShellFolder* parent = nullptr;
+    PCUITEMID_CHILD child = nullptr;
+    IDropTarget* target = nullptr;
+    if (SUCCEEDED(SHBindToParent(pidl, IID_IShellFolder,
+                                 reinterpret_cast<void**>(&parent), &child)) &&
+        parent && child) {
+        parent->GetUIObjectOf(owner, 1, &child, IID_IDropTarget, nullptr,
+                              reinterpret_cast<void**>(&target));
+    }
+    if (parent) {
+        parent->Release();
+    }
+    CoTaskMemFree(pidl);
+    return target;
+}
+
+// The drop target of the folder the view is showing, for background pastes.
+IDropTarget* ViewFolderDropTarget(HWND owner, ShellViewKind kind) {
+    IShellView* view = GetActiveShellView(owner, kind);
+    if (!view) {
+        return nullptr;
+    }
+    IFolderView* folderView = nullptr;
+    IShellFolder* folder = nullptr;
+    IDropTarget* target = nullptr;
+    if (SUCCEEDED(view->QueryInterface(IID_IFolderView,
+                                       reinterpret_cast<void**>(&folderView))) &&
+        folderView) {
+        if (SUCCEEDED(folderView->GetFolder(
+                IID_IShellFolder, reinterpret_cast<void**>(&folder))) &&
+            folder) {
+            folder->CreateViewObject(owner, IID_IDropTarget,
+                                     reinterpret_cast<void**>(&target));
+        }
+    }
+    if (folder) {
+        folder->Release();
+    }
+    if (folderView) {
+        folderView->Release();
+    }
+    view->Release();
+    return target;
+}
+
+// Pastes by dropping the clipboard object on the target folder's drop target,
+// which is how the shell's own Paste works: collision naming, undo and
+// virtual clipboard items (for example Outlook attachments) all match, and it
+// covers the view's folder, a right-clicked folder and tree items alike.
+bool InvokePasteViaDropTarget(const InvocationContext& ctx) {
+    IDropTarget* target = nullptr;
+    if (!ctx.paths.empty()) {
+        target = FolderDropTargetForPath(ctx.owner, ctx.paths.front());
+    } else {
+        target = ViewFolderDropTarget(ctx.owner, ctx.kind);
+    }
+    if (!target) {
+        return false;
+    }
+    IDataObject* data = nullptr;
+    bool ok = false;
+    if (SUCCEEDED(OleGetClipboard(&data)) && data) {
+        const POINTL point = {ctx.pt.x, ctx.pt.y};
+        // DragEnter and Drop take the effects the source allows on input and
+        // return the effect the target chose. The allowed set comes from the
+        // data object's preferred effect; without one, copy and link, so a
+        // drag default can never turn a copy into an implicit move.
+        DWORD allowed = DROPEFFECT_COPY | DROPEFFECT_LINK;
+        DWORD preferred = 0;
+        if (ReadPreferredDropEffect(data, preferred)) {
+            allowed = preferred;
+        }
+        DWORD effect = allowed;
+        if (SUCCEEDED(target->DragEnter(data, MK_LBUTTON, point, &effect)) &&
+            effect != DROPEFFECT_NONE) {
+            effect = allowed;
+            ok = SUCCEEDED(target->Drop(data, MK_LBUTTON, point, &effect));
+        } else {
+            target->DragLeave();
+        }
+        if (g_settings->debugLogging) {
+            Wh_Log(L"Paste: drop target (allowed=%08X, effect=%08X, ok=%d)",
+                   allowed, effect, ok ? 1 : 0);
+        }
+    }
+    if (data) {
+        data->Release();
+    }
+    target->Release();
+    return ok;
+}
+
 InvokeResult InvokeItem(const MenuItem& item, const InvocationContext& ctx,
                         PendingCapture& capture) {
     if (item.kind == ItemKind::Separator || (item.flags & kModelDisabled)) {
@@ -17075,6 +18245,9 @@ InvokeResult InvokeItem(const MenuItem& item, const InvocationContext& ctx,
                                          ctx.clipboardHadData, currentHasData)) {
                     return InvokeResult::Handled;
                 }
+                if (InvokePasteViaDropTarget(ctx)) {
+                    return InvokeResult::Handled;
+                }
                 // The captured shell menu never contains the view's standard
                 // Paste item, so perform it ourselves.
                 return InvokePaste(ctx) ? InvokeResult::Handled
@@ -17083,6 +18256,42 @@ InvokeResult InvokeItem(const MenuItem& item, const InvocationContext& ctx,
             if (item.canonicalVerb == L"pastelink") {
                 return InvokePasteShortcut(ctx) ? InvokeResult::Handled
                                                 : InvokeResult::FallbackNative;
+            }
+            // Core actions run directly, so a click never waits for the
+            // full shell menu population first.
+            switch (ClassifyCoreVerb(item.canonicalVerb)) {
+                case CoreVerb::Open:
+                    if (InvokeOpenPaths(ctx)) {
+                        return InvokeResult::Handled;
+                    }
+                    break;
+                case CoreVerb::Cut:
+                    if (InvokeCutCopy(ctx, true)) {
+                        return InvokeResult::Handled;
+                    }
+                    break;
+                case CoreVerb::Copy:
+                    if (InvokeCutCopy(ctx, false)) {
+                        return InvokeResult::Handled;
+                    }
+                    break;
+                case CoreVerb::Delete:
+                    if (InvokeDeletePaths(ctx)) {
+                        return InvokeResult::Handled;
+                    }
+                    break;
+                case CoreVerb::Properties:
+                    if (InvokeProperties(ctx)) {
+                        return InvokeResult::Handled;
+                    }
+                    break;
+                case CoreVerb::None:
+                    break;
+            }
+            // Registered verbs (for example "opennew" or "pintohome") also
+            // dispatch without the populated menu.
+            if (TryInvokeVerbDirect(item, ctx)) {
+                return InvokeResult::Handled;
             }
             // The shell only knows its own commands once the object has been
             // populated. Verb strings are rejected by the default context
@@ -17898,7 +19107,7 @@ private:
     std::unordered_map<std::wstring, HICON> icons_;
 };
 
-inline std::optional<IconCache> g_iconCache{std::in_place};
+CMO_NO_DESTROY inline std::optional<IconCache> g_iconCache{std::in_place};
 
 HBITMAP GetIconBitmapForMenu(const std::wstring& iconRef,
                              const std::vector<uint8_t>& iconPixels, int sizePx) {
@@ -19016,6 +20225,7 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
         if (scope == Scope::Background || scope == Scope::Desktop) {
             ApplyViewStateChecks(model.items, owner, kind);
         }
+        MarkTopBarActions(model.items, g_settings->topBar);
         if (g_settings->debugLogging) Wh_Log(L"Menu prep: %llu ms",
                static_cast<unsigned long long>(g_perf.OpenPathElapsedMs()));
 
