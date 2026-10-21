@@ -2,14 +2,13 @@
 // @id              brave-acrylic
 // @name            Brave Acrylic
 // @description     Alpha: Acrylic toolbar and vertical tabs for Brave; requires Translucent Windows
-// @version         2.8.1
+// @version         2.8.2
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @homepage        https://github.com/bardelyne/brave-acrylic
 // @license         MIT
 // @architecture    x86-64
 // @include         brave.exe
-// @compilerOptions -ldwmapi -lole32 -ldxgi -lcomctl32 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -40,11 +39,9 @@ Brave Acrylic makes selected toolbar and vertical-tab backgrounds transparent so
 
 > **Seeing two sets of minimize, maximize, and close buttons?** Enable Brave's **Use compact mode** option in Appearance. The same fix is explained in the mod's Settings tab.
 
-### Install before the Windhawk submission is merged
+### Install from source
 
 Open [brave-acrylic.wh.cpp](https://github.com/bardelyne/brave-acrylic/blob/main/brave-acrylic.wh.cpp), choose **Raw**, and copy the source. In Windhawk, open **Create a new mod**, replace the editor contents with that source, then compile and install it. No additional headers or DLLs are needed.
-
-Once the mod is accepted into Windhawk's catalog, it can be installed from the catalog normally.
 
 ## Advanced setup
 
@@ -65,7 +62,7 @@ To find another theme's colors:
 2. Take a screenshot and sample a flat area of the toolbar and sidebar. Avoid text, icons, borders, shadows, and hover effects.
 3. Add the sampled RGB values to the mod's settings, enable the mod, and restart Brave normally.
 
-Sample the **original paint color**, not an area already blended with acrylic. Enter colors as `RRGGBB`; a leading `#` is also accepted. Up to **16 colors** are supported. An empty list retains the built-in defaults.
+Sample the **original paint color**, not an area already blended with acrylic. Enter colors as `RRGGBB`; a leading `#` is also accepted. Up to **16 colors** are supported. An empty list restores the built-in defaults. Invalid rows are reported in the log and skipped; later valid rows are still used.
 
 Matching is exact. There is no tolerance setting that could also remove nearby colors.
 
@@ -79,7 +76,7 @@ The color list is shared across eligible palettes. An exact listed color can als
 
 ### Restart after changing colors
 
-Brave caches brushes and opacity information when windows are created. Saving new colors does not rebuild every cached surface. Close **all** Brave windows normally and reopen Brave. If Brave is configured to keep running in the background, exit that background instance normally as well.
+Restart Brave normally after enabling, disabling, or changing the mod. Brave caches brushes and opacity information when windows are created. Saving new colors does not rebuild every cached surface. Close **all** Brave windows normally and reopen Brave. If Brave is configured to keep running in the background, exit that background instance normally as well.
 
 ### Blur, tint, and backdrop
 
@@ -87,25 +84,25 @@ Use the required **Translucent Windows** mod to choose the background effect and
 
 These are different controls: the color list selects paint to remove, while the backdrop settings control what you see behind it.
 
-### Diagnostics and optional switches
+### Diagnostics
 
-Most users only need the color list. Optional switches are read at browser startup from `C:\ProgramData\Windhawk\brave-acrylic.cfg`.
+Turn on **Log colours (diagnostics)** in the mod's Settings tab to report original color IDs and RGB values. Capture them through Windhawk’s **Advanced → Debug logging → Detailed debug logs → Show log output**, then turn diagnostics off again.
 
-For example, `logColors=1` reports native color IDs and original RGB values through **Windhawk's debug logging**. Use it temporarily when identifying a theme, then turn it off.
+Settings and the signature cache use Windhawk’s own storage. No separate configuration file or administrator access is needed to edit the mod settings.
 
-The [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md) explains every switch, log collection, and the resolver's safeguards.
+The [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md) explains theme detection, log collection, startup behavior, and cache validation.
 
 ## How it works
 
-1. **Find Brave's native drawing functions.** The default resolver scans `chrome.dll` at actual x64 function entries. Each required function must have one unique signature match.
+1. **Find Brave's native drawing functions.** A loader hook initializes the mod when `chrome.dll` is loaded, before Brave's caller starts using it. The resolver scans actual x64 function entries, with one unique match required for each function. There is no startup polling thread.
 2. **Discover the toolbar color ID.** It finds `kColorToolbar` in Brave's own named-color tables. The enum number is discovered rather than fixed in the mod, and duplicate definitions must agree.
 3. **Check the original palette for each window.** The window's native color provider supplies its original toolbar color. An unmatched or unavailable palette keeps its original background painting.
 4. **Remove matching paint and clear old pixels.** Exact listed opaque colors become transparent. An allowlist of browser containers is cleared on repaint so previous tab labels and backgrounds do not leave trails. Interactive child views are not blanket-cleared.
-5. **Let Windows composite the backdrop.** Frame adjustments apply to real browser windows. Owned menus and popups are excluded from those frame adjustments. Translucent Windows provides the configured background effect.
+5. **Let Translucent Windows supply the backdrop.** Brave Acrylic leaves window styles, fullscreen transitions, and backdrop selection alone. Its GPU hook only adjusts compatible RGBA composition surfaces; HWND, YUV, and protected-video surfaces keep their original settings.
 
-Function addresses are cached for the exact `chrome.dll` build and rechecked before use. The named-color table is checked once per browser launch. There is no screenshot polling, webpage injection, or recurring full-module scan.
+Function addresses are cached in Windhawk’s per-mod storage for the exact `chrome.dll` build and rechecked before use. The named-color table is checked once per browser launch. There is no screenshot polling, webpage injection, or recurring full-module scan.
 
-Function discovery is local: **no Brave debug-symbol download is used**. The obsolete optional symbol-server path was removed in 2.8.1.
+Function discovery is local: **no Brave debug-symbol download is used**.
 
 ## Compatibility
 
@@ -144,21 +141,16 @@ Created by [bardelyne](https://github.com/bardelyne) with AI assistance. Built f
   - "1D2636"
   $name: Colours to make transparent
   $description: >-
-    ALPHA. Requires the Translucent Windows mod enabled for brave.exe.
-    Quick setup: select Dark appearance and the built-in Blue theme in Brave.
-    If you see two sets of window buttons (minimise/maximise/close), turn
-    on compact mode in brave://settings/appearance > Use compact mode.
-    A window is modified only when its main toolbar colour is in this list.
-    Other themes keep their original backgrounds. Within a matched window,
-    any UI painted in one of these colours becomes transparent, so the Acrylic
-    backdrop shows through it. Add a row for each colour you want to see
-    through, as RRGGBB. Defaults are Brave's dark+blue theme: 333C4D is the
-    vertical tab strip, 1D2636 is the top bar.
-    To find a colour, screenshot Brave and sample the pixel you want gone, or
-    set logColors=1 in the cfg and read them from the log.
-    Each RGB value is matched exactly. Any UI painted in that colour becomes
-    transparent, including text if its colour matches. Add colours one at a
-    time and check the result.
+    Exact RRGGBB colours. Include the original main toolbar colour to enable
+    its theme. Requires Translucent Windows; see the README for setup.
+    If minimize, maximize, and close buttons appear twice, enable Use compact
+    mode in Brave Settings > Appearance.
+- logColors: false
+  $name: Log colours (diagnostics)
+  $description: >-
+    Log original native colour IDs and RGB values in Windhawk to identify
+    theme colours. Enable Windhawk debug logging to collect them, then turn
+    this off. No page contents or URLs are logged.
 */
 // ==/WindhawkModSettings==
 
@@ -173,242 +165,153 @@ BOOL Wh_ModInit() {
 
 #else
 
-#include <windows.h>
-#include <commctrl.h>
-#include <dwmapi.h>
 #include <dxgi1_2.h>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <windhawk_utils.h>
 
-#ifndef DWMWA_SYSTEMBACKDROP_TYPE
-#define DWMWA_SYSTEMBACKDROP_TYPE 38
-#endif
-#ifndef DWMSBT_TRANSIENTWINDOW
-#define DWMSBT_TRANSIENTWINDOW 3
-#endif
+static constexpr int kMaxTargetColors = 16;
+static constexpr int kRequiredFunctions = 5;
+static constexpr unsigned int kDefaultColors[] = {0x333C4D, 0x1D2636};
 
-// ---------------------------------------------------------------------------
-// Runtime configuration (C:\ProgramData\Windhawk\brave-acrylic.cfg)
-// ---------------------------------------------------------------------------
+struct ColorSettings {
+    unsigned int colors[kMaxTargetColors]{};
+    int count = 0;
+};
 
-struct Config {
-    int clearViews          = 1;  // clear container view backgrounds
-    int colorProvider       = 1;  // return transparent from ColorProvider::GetColor
-    // Off by default: extending the frame makes DWM render the system frame
-    // behind the client area, so its caption buttons show through underneath
-    // Chromium's own and you see two sets. The backdrop does not need it.
-    int dwmExtend           = 0;
-    int gpuAlpha            = 1;  // force DComp swapchains to premultiplied alpha
-    int backdropType        = DWMSBT_TRANSIENTWINDOW;
-    int heartbeat           = 1;  // periodic re-assert of styles/backdrop
-    int keepThickFrame      = 1;  // re-add WS_THICKFRAME if Chromium drops it
-    // Hex RGB filter for diagnostic traceColor stacks. Actual replacement
-    // colours come from Windhawk's colours list, not this debug setting.
-    int bgColor             = 0x333C4D;
-    // Logs distinct opaque colours GetColor returns, to identify a new theme's
-    // toolbar colour. Noisy; for discovery only.
-    int logColors           = 0;
-    int traceColor          = 0;
-    int traceLimit          = 25;   // how many stacks traceColor captures
-} g_cfg;
-
-static void ApplyConfigLine(const char* key, const char* valueText) {
-    // bgColor is written as RRGGBB, so it is read as hex; everything else is
-    // a plain decimal number.
-    const bool hex = (lstrcmpiA(key, "bgColor") == 0);
-    const int value = (int)strtol(valueText, nullptr, hex ? 16 : 10);
-
-#define CFG_SET(name)                                  \
-    if (lstrcmpiA(key, #name) == 0) { g_cfg.name = value; return; }
-    CFG_SET(clearViews)
-    CFG_SET(colorProvider)
-    CFG_SET(dwmExtend)
-    CFG_SET(gpuAlpha)
-    CFG_SET(backdropType)
-    CFG_SET(heartbeat)
-    CFG_SET(keepThickFrame)
-    CFG_SET(bgColor)
-    CFG_SET(logColors)
-    CFG_SET(traceColor)
-    CFG_SET(traceLimit)
-#undef CFG_SET
-}
-
-static void LoadConfig() {
-    HANDLE f = CreateFileW(L"C:\\ProgramData\\Windhawk\\brave-acrylic.cfg",
-                           GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"no cfg file, using defaults");
-        return;
-    }
-    char buf[4096] = {};
-    DWORD read = 0;
-    ReadFile(f, buf, sizeof(buf) - 1, &read, nullptr);
-    CloseHandle(f);
-    buf[read] = 0;
-
-    char key[64], val[40];
-    size_t ki = 0, vi = 0;
-    bool inValue = false;
-    for (size_t i = 0; i <= read; ++i) {
-        char c = buf[i];
-        if (c == '\r') continue;
-        if (c == '\n' || c == 0) {
-            if (ki && vi) {
-                key[ki] = 0;
-                val[vi] = 0;
-                ApplyConfigLine(key, val);
-            }
-            ki = 0; vi = 0; inValue = false;
-            continue;
-        }
-        if (c == '#' && !inValue && ki == 0) {
-            while (i <= read && buf[i] != '\n') ++i;
-            --i;
-            continue;
-        }
-        if (!inValue) {
-            if (c == '=') { inValue = true; continue; }
-            if (c == ' ' || c == '\t') continue;
-            if (ki < sizeof(key) - 1) key[ki++] = c;
-        } else {
-            if (c == ' ' || c == '	') continue;
-            if (vi < sizeof(val) - 1) val[vi++] = c;
-        }
-    }
-    Wh_Log(L"cfg: clearViews=%d colorProvider=%d dwmExtend=%d gpuAlpha=%d "
-           L"backdropType=%d heartbeat=%d keepThickFrame=%d",
-           g_cfg.clearViews, g_cfg.colorProvider, g_cfg.dwmExtend, g_cfg.gpuAlpha,
-           g_cfg.backdropType, g_cfg.heartbeat, g_cfg.keepThickFrame);
-    Wh_Log(L"cfg: bgColor=%06X logColors=%d (exact colour matching)",
-           g_cfg.bgColor, g_cfg.logColors);
-}
-
-// ---------------------------------------------------------------------------
-// Original function pointers
-// ---------------------------------------------------------------------------
+static SRWLOCK s_colorsLock = SRWLOCK_INIT;
+static ColorSettings s_colors{{0x333C4D, 0x1D2636}, 2};
+static std::atomic<bool> s_logColors{false};
+static std::atomic<bool> s_transparencyReady{false};
+static std::atomic<bool> s_chromeAttempted{false};
+static SRWLOCK s_initLock = SRWLOCK_INIT;
+static bool s_stopping = false;  // Protected by s_initLock.
+static bool s_activateAfterInit = false;
+static bool s_isBrowserProcess = false;
+static HMODULE s_dxgiModule = nullptr;
+static int s_toolbarColorId = -1;
 
 struct StringView { const char* data; size_t length; };
-
-using GetColor_t = unsigned int (*)(const void* pThis, int id);
-static GetColor_t pOrigGetColor = nullptr;
-
-using DrawColor_t = void (*)(void* canvas, unsigned int color, int mode);
-static DrawColor_t pCanvasDrawColor = nullptr;
-
-using ViewGetClassNameW_t = StringView* (*)(const void* pView, StringView* ret);
-static ViewGetClassNameW_t pViewGetClassNameW = nullptr;
-
-using ViewGetColorProvider_t = const void* (*)(const void* view);
-static ViewGetColorProvider_t pViewGetColorProvider = nullptr;
-
-using ViewOnPaintBackground_t = void (*)(void* pThis, void* canvas);
-static ViewOnPaintBackground_t pOrigViewOnPaintBackground = nullptr;
-
-using DwmExtendFrameIntoClientArea_t = HRESULT (WINAPI*)(HWND, const MARGINS*);
-static DwmExtendFrameIntoClientArea_t pOrigDwmExtendFrameIntoClientArea = nullptr;
-
+using GetColor_t = unsigned int (*)(const void*, int);
+using DrawColor_t = void (*)(void*, unsigned int, int);
+using ViewGetClassNameW_t = StringView* (*)(const void*, StringView*);
+using ViewGetColorProvider_t = const void* (*)(const void*);
+using ViewOnPaintBackground_t = void (*)(void*, void*);
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 using CreateSwapChainForComposition_t = HRESULT (WINAPI*)(
     IDXGIFactory2*, IUnknown*, const DXGI_SWAP_CHAIN_DESC1*, IDXGIOutput*, IDXGISwapChain1**);
+
+static GetColor_t pOrigGetColor = nullptr;
+static DrawColor_t pCanvasDrawColor = nullptr;
+static ViewGetClassNameW_t pViewGetClassNameW = nullptr;
+static ViewGetColorProvider_t pViewGetColorProvider = nullptr;
+static ViewOnPaintBackground_t pOrigViewOnPaintBackground = nullptr;
+static LoadLibraryExW_t pOrigLoadLibraryExW = nullptr;
 static CreateSwapChainForComposition_t pOrigCreateSwapChainForComposition = nullptr;
 
-using CreateSwapChainForHwnd_t = HRESULT (WINAPI*)(
-    IDXGIFactory2*, IUnknown*, HWND, const DXGI_SWAP_CHAIN_DESC1*,
-    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC*, IDXGIOutput*, IDXGISwapChain1**);
-static CreateSwapChainForHwnd_t pOrigCreateSwapChainForHwnd = nullptr;
+static bool IsColorSpace(wchar_t ch) {
+    return ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n';
+}
 
-static std::atomic<int> s_logViewBg{0};
-static std::atomic<int> s_logSwap{0};
-static std::atomic<bool> s_stopThread{false};
-static HANDLE s_hThread = nullptr;
-static HANDLE s_hInitThread = nullptr;
-static std::atomic<bool> s_transparencyReady{false};
-static std::atomic<bool> s_modInitComplete{false};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// Colours to replace with transparency, taken from the mod's Windhawk settings.
-// An empty settings list retains these defaults.
-enum { kMaxTargetColors = 16 };
-static int g_targetColors[kMaxTargetColors] = {0x333C4D, 0x1D2636};
-static int g_targetColorCount = 2;
-
-static int ParseHexColor(PCWSTR s) {
-    if (!s) return -1;
-    while (*s == L'#' || *s == L' ' || *s == L'\t') ++s;
-    int v = 0, digits = 0;
-    for (; *s; ++s) {
-        int d;
-        if (*s >= L'0' && *s <= L'9') d = *s - L'0';
-        else if (*s >= L'a' && *s <= L'f') d = *s - L'a' + 10;
-        else if (*s >= L'A' && *s <= L'F') d = *s - L'A' + 10;
-        else break;
-        v = v * 16 + d;
-        ++digits;
+static int ParseHexColor(PCWSTR text) {
+    if (!text) return -1;
+    while (IsColorSpace(*text)) ++text;
+    if (*text == L'#') ++text;
+    unsigned int value = 0;
+    for (int i = 0; i < 6; ++i, ++text) {
+        unsigned int digit;
+        if (*text >= L'0' && *text <= L'9') digit = *text - L'0';
+        else if (*text >= L'a' && *text <= L'f') digit = *text - L'a' + 10;
+        else if (*text >= L'A' && *text <= L'F') digit = *text - L'A' + 10;
+        else return -1;
+        value = (value << 4) | digit;
     }
-    return digits >= 6 ? (v & 0xFFFFFF) : -1;
+    while (IsColorSpace(*text)) ++text;
+    return *text ? -1 : static_cast<int>(value);
 }
 
 static void LoadModSettings() {
-    // Read colors[0..n] until a blank. If the user has not set any (or
-    // Windhawk has never written the settings), the built-in defaults stand.
-    int found = 0;
+    ColorSettings next{};
     for (int i = 0; i < kMaxTargetColors; ++i) {
-        PCWSTR v = Wh_GetStringSetting(L"colors[%d]", i);
-        const int c = ParseHexColor(v);
-        Wh_FreeStringSetting(v);
-        if (c < 0) break;
-        g_targetColors[found++] = c;
-    }
-    if (found) g_targetColorCount = found;
-
-    {
-        char list[256];
-        int w = 0;
-        for (int i = 0; i < g_targetColorCount && w < (int)sizeof(list) - 10; ++i) {
-            w += sprintf(list + w, "%06X ", g_targetColors[i]);
+        const auto setting = WindhawkUtils::StringSetting::make(L"colors[%d]", i);
+        PCWSTR text = setting.get();
+        if (!text) continue;
+        while (IsColorSpace(*text)) ++text;
+        if (!*text) continue;
+        const int color = ParseHexColor(text);
+        if (color < 0) {
+            Wh_Log(L"Invalid colour row %d: enter exactly six RGB hex digits; row skipped", i + 1);
+            continue;
         }
-        list[w] = 0;
-        Wh_Log(L"settings: %d colour(s) [ %S] (exact matches)", g_targetColorCount, list);
+        next.colors[next.count++] = static_cast<unsigned int>(color);
     }
+    if (!next.count) {
+        memcpy(next.colors, kDefaultColors, sizeof(kDefaultColors));
+        next.count = ARRAYSIZE(kDefaultColors);
+    }
+
+    AcquireSRWLockExclusive(&s_colorsLock);
+    s_colors = next;
+    ReleaseSRWLockExclusive(&s_colorsLock);
+    s_logColors.store(Wh_GetIntSetting(L"logColors") != 0, std::memory_order_relaxed);
+
+    char list[kMaxTargetColors * 7 + 1]{};
+    size_t written = 0;
+    for (int i = 0; i < next.count; ++i) {
+        written += std::snprintf(list + written, sizeof(list) - written, "%06X ", next.colors[i]);
+    }
+    Wh_Log(L"settings: %d exact colour(s) [ %S]", next.count, list);
 }
 
-// The palette identifies the window theme; individual replacements still use
-// the explicitly configured RGB values.
-static inline bool IsThemeBackground(unsigned int color) {
-    for (int i = 0; i < g_targetColorCount; ++i) {
-        if (color == static_cast<unsigned int>(g_targetColors[i])) return true;
+// Caller must hold s_colorsLock. Never hold this lock across native calls.
+static bool ContainsColor(const ColorSettings& settings, unsigned int color) {
+    for (int i = 0; i < settings.count; ++i) {
+        if (settings.colors[i] == color) return true;
     }
     return false;
 }
 
-// Use this window's original palette, never a colour already replaced by our hook.
-// Query the native accessor each time: palettes change when switching themes, and
-// caching View/ColorProvider pointers would outlive their native objects.
-static int s_toolbarColorId = -1;
+static bool IsThemeBackground(unsigned int color) {
+    AcquireSRWLockShared(&s_colorsLock);
+    const bool found = ContainsColor(s_colors, color);
+    ReleaseSRWLockShared(&s_colorsLock);
+    return found;
+}
 
 static bool HasCompleteTransparencyPath() {
     return pOrigGetColor && pCanvasDrawColor && pViewGetClassNameW &&
            pViewGetColorProvider && pOrigViewOnPaintBackground && s_toolbarColorId >= 0;
 }
 
-static bool ThemeMatches(const void* provider) {
+static bool ReadToolbarColor(const void* provider, unsigned int* color) {
     if (!s_transparencyReady.load(std::memory_order_acquire) || !provider ||
         !pOrigGetColor || s_toolbarColorId < 0) return false;
-    const unsigned int toolbar = pOrigGetColor(provider, s_toolbarColorId);
-    // Chromium returns gfx::kPlaceholderColor (red) for a missing colour ID.
-    return toolbar != 0xFFFF0000 && (toolbar >> 24) == 0xFF &&
-           IsThemeBackground(toolbar & 0xFFFFFF);
+    *color = pOrigGetColor(provider, s_toolbarColorId);
+    // gfx::kPlaceholderColor denotes a missing native colour ID.
+    return *color != 0xFFFF0000 && (*color >> 24) == 0xFF;
+}
+
+static bool ThemeMatches(const void* provider) {
+    unsigned int toolbar;
+    return ReadToolbarColor(provider, &toolbar) && IsThemeBackground(toolbar & 0xFFFFFF);
+}
+
+static bool ShouldReplaceColor(const void* provider, unsigned int color) {
+    if ((color >> 24) != 0xFF || !IsThemeBackground(color & 0xFFFFFF)) return false;
+    unsigned int toolbar;
+    if (!ReadToolbarColor(provider, &toolbar)) return false;
+    // Recheck both colours in one published settings snapshot after the native call.
+    AcquireSRWLockShared(&s_colorsLock);
+    const bool replace = ContainsColor(s_colors, color & 0xFFFFFF) &&
+                         ContainsColor(s_colors, toolbar & 0xFFFFFF);
+    ReleaseSRWLockShared(&s_colorsLock);
+    return replace;
 }
 
 static bool CanClearForTheme(const void* view) {
-    return view && pViewGetColorProvider &&
-           s_transparencyReady.load(std::memory_order_acquire) &&
-           ThemeMatches(pViewGetColorProvider(view));
+    return view && s_transparencyReady.load(std::memory_order_acquire) &&
+           pViewGetColorProvider && ThemeMatches(pViewGetColorProvider(view));
 }
 
 static bool ShouldClearView(const void* view) {
@@ -416,9 +319,6 @@ static bool ShouldClearView(const void* view) {
     StringView name{};
     pViewGetClassNameW(view, &name);
     if (!name.data || !name.length || name.length >= 128) return false;
-
-    // An explicit container allowlist avoids walking Chromium's private View
-    // layout. In particular, never read a presumed parent_ member offset.
     static constexpr const char* containers[] = {
         "BrowserView", "BraveBrowserView",
         "VerticalTabStripRegionView", "BraveVerticalTabStripRegionView",
@@ -435,264 +335,112 @@ static bool ShouldClearView(const void* view) {
     return false;
 }
 
-static void ClearCanvas(void* canvas) {
-    if (pCanvasDrawColor && canvas) {
-        pCanvasDrawColor(canvas, 0x00000000, 0 /* SkBlendMode::kClear */);
+static void LogDiscoveredColor(int id, unsigned int color) {
+    if (!s_logColors.load(std::memory_order_relaxed) || (color >> 24) != 0xFF) return;
+    struct Entry { int id; unsigned int color; };
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static Entry seen[256]{};
+    static unsigned count = 0;
+    bool fresh = false;
+    AcquireSRWLockExclusive(&lock);
+    unsigned i = 0;
+    for (; i < count; ++i) {
+        if (seen[i].id == id && seen[i].color == color) break;
     }
+    if (i == count && count < ARRAYSIZE(seen)) {
+        seen[count++] = {id, color};
+        fresh = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (fresh) Wh_Log(L"colour id %d -> #%06X match=%d", id, color & 0xFFFFFF,
+                      static_cast<int>(IsThemeBackground(color & 0xFFFFFF)));
 }
 
-// ---------------------------------------------------------------------------
-// Hooks
-// ---------------------------------------------------------------------------
-
-// chrome.dll bounds, so only interesting frames are logged.
-static const unsigned char* g_chromeBase = nullptr;
-static size_t g_chromeSize = 0;
-
-using CaptureStackBackTrace_t = USHORT(WINAPI*)(ULONG, ULONG, PVOID*, PULONG);
-static CaptureStackBackTrace_t pCaptureStack = nullptr;
-
-static void TraceColorStack(int id, unsigned int rgb) {
-    if (!pCaptureStack) {
-        HMODULE nt = GetModuleHandleW(L"ntdll.dll");
-        if (nt) {
-            pCaptureStack =
-                (CaptureStackBackTrace_t)GetProcAddress(nt, "RtlCaptureStackBackTrace");
-        }
-        if (!pCaptureStack) return;
-    }
-    void* frames[24] = {};
-    USHORT n = pCaptureStack(1, 24, frames, nullptr);
-
-    char line[900];
-    int w = 0;
-    for (USHORT i = 0; i < n && w < (int)sizeof(line) - 24; ++i) {
-        const unsigned char* f = (const unsigned char*)frames[i];
-        if (g_chromeBase && f >= g_chromeBase && f < g_chromeBase + g_chromeSize) {
-            w += sprintf(line + w, "%llx ", (unsigned long long)(f - g_chromeBase));
-        }
-    }
-    line[w] = 0;
-    Wh_Log(L"TRACE id=%d #%06X <- chrome.dll+ %S", id, rgb, line);
+static unsigned int GetColor_Hook(const void* provider, int id) {
+    const unsigned int color = pOrigGetColor ? pOrigGetColor(provider, id) : 0;
+    LogDiscoveredColor(id, color);
+    return s_transparencyReady.load(std::memory_order_acquire) &&
+           ShouldReplaceColor(provider, color) ? 0 : color;
 }
 
-static std::atomic<int> s_traceCount{0};
-
-
-static unsigned int GetColor_Hook(const void* pThis, int id) {
-    unsigned int c = pOrigGetColor ? pOrigGetColor(pThis, id) : 0;
-    const unsigned int rgb = c & 0x00FFFFFF;
-    const bool opaque = (c >> 24) == 0xFF;
-
-    // Diagnostic mode logs distinct ID/colour pairs, not repeated calls to
-    // the same colour. Activation and repaint colours can then be compared.
-    if (g_cfg.logColors && opaque) {
-        struct Entry { int id; unsigned int color; };
-        static SRWLOCK lock = SRWLOCK_INIT;
-        static Entry seen[256]{};
-        static unsigned count = 0;
-        bool fresh = false;
-        AcquireSRWLockExclusive(&lock);
-        unsigned i = 0;
-        for (; i < count; ++i) {
-            if (seen[i].id == id && seen[i].color == c) break;
-        }
-        if (i == count && count < ARRAYSIZE(seen)) {
-            seen[count++] = {id, c};
-            fresh = true;
-        }
-        ReleaseSRWLockExclusive(&lock);
-        if (fresh) Wh_Log(L"colour id %d -> #%06X match=%d", id, rgb,
-                          static_cast<int>(IsThemeBackground(rgb)));
-    }
-
-
-    if (g_cfg.traceColor && opaque && rgb == static_cast<unsigned int>(g_cfg.bgColor) &&
-        s_traceCount.fetch_add(1) < g_cfg.traceLimit) {
-        TraceColorStack(id, rgb);
-    }
-
-    // Replace only the explicitly configured opaque theme colours.
-    if (s_transparencyReady.load(std::memory_order_relaxed) &&
-        g_cfg.colorProvider && opaque && IsThemeBackground(rgb) &&
-        ThemeMatches(pThis)) return 0x00000000;
-    return c;
-}
-
-
-static void ViewOnPaintBackground_Hook(void* pThis, void* canvas) {
-    if (g_cfg.clearViews && ShouldClearView(pThis)) {
-        if (s_logViewBg.fetch_add(1) < 24) {
-            StringView sv = {};
-            if (pViewGetClassNameW) pViewGetClassNameW(pThis, &sv);
-            Wh_Log(L"clearing view background: %.*S", (int)sv.length,
-                   sv.data ? sv.data : "unknown");
-        }
-        ClearCanvas(canvas);
+static void ViewOnPaintBackground_Hook(void* view, void* canvas) {
+    if (s_transparencyReady.load(std::memory_order_acquire) && canvas && ShouldClearView(view)) {
+        pCanvasDrawColor(canvas, 0, 0 /* SkBlendMode::kClear */);
         return;
     }
-    if (pOrigViewOnPaintBackground) pOrigViewOnPaintBackground(pThis, canvas);
+    if (pOrigViewOnPaintBackground) pOrigViewOnPaintBackground(view, canvas);
 }
 
-// Only real browser frames may be restyled. Menus, bubbles and other flyouts
-// are also Chrome_WidgetWin_1, but they are owned popups without min/max boxes;
-// giving those a WS_THICKFRAME draws a visible resize border around them.
-static bool IsBrowserFrameWindow(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd)) return false;
-    wchar_t cls[64] = {};
-    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    if (wcscmp(cls, L"Chrome_WidgetWin_1") != 0) return false;
-    if (GetWindow(hWnd, GW_OWNER) != nullptr) return false;
-    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-    if (style & (WS_CHILD | WS_POPUP)) return false;
-    if (!(style & WS_MAXIMIZEBOX)) return false;
-    return true;
-}
-
-// Remember which frames are configured. Re-issuing the DWM calls on every tick
-// resets the extended frame constantly and the backdrop stops showing, so they
-// must be applied once per window.
-static HWND s_configured[32] = {};
-static std::atomic<int> s_configuredCount{0};
-
-static bool AlreadyConfigured(HWND hWnd) {
-    int n = s_configuredCount.load();
-    for (int i = 0; i < n && i < 32; ++i) {
-        if (s_configured[i] == hWnd) return true;
-    }
-    return false;
-}
-
-static void MarkConfigured(HWND hWnd) {
-    int n = s_configuredCount.load();
-    if (n < 32) {
-        s_configured[n] = hWnd;
-        s_configuredCount.store(n + 1);
+static bool SupportsCompositionAlpha(DXGI_FORMAT format) {
+    switch (format) {
+        case DXGI_FORMAT_B8G8R8A8_UNORM:
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+        case DXGI_FORMAT_R16G16B16A16_FLOAT:
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+            return true;
+        default:
+            return false;
     }
 }
-
-static void ApplyWindowAttributes(HWND hWnd) {
-    if (!IsBrowserFrameWindow(hWnd)) return;
-
-    // Cheap safety net, re-checked on every heartbeat tick: if anything ever
-    // strips the resize border, put it back.
-    if (g_cfg.keepThickFrame) {
-        LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-        if (!(style & WS_THICKFRAME)) {
-            SetWindowLongPtrW(hWnd, GWL_STYLE, style | WS_THICKFRAME);
-            SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
-        }
-    }
-
-    if (AlreadyConfigured(hWnd)) return;
-    MarkConfigured(hWnd);
-
-    if (g_cfg.backdropType >= 0) {
-        int backdrop = g_cfg.backdropType;
-        DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-    }
-    if (g_cfg.dwmExtend) {
-        MARGINS margins = {-1, -1, -1, -1};
-        if (pOrigDwmExtendFrameIntoClientArea) {
-            pOrigDwmExtendFrameIntoClientArea(hWnd, &margins);
-        } else {
-            DwmExtendFrameIntoClientArea(hWnd, &margins);
-        }
-    }
-}
-
-static BOOL CALLBACK EnumBraveWindowsProc(HWND hWnd, LPARAM);
-
-static HRESULT WINAPI DwmExtendFrameIntoClientArea_Hook(HWND hWnd, const MARGINS* pMarInset) {
-    // Never override the margins Chromium picks for menus, bubbles and other
-    // flyouts.
-    if (g_cfg.dwmExtend && IsBrowserFrameWindow(hWnd)) {
-        MARGINS forced = {-1, -1, -1, -1};
-        return pOrigDwmExtendFrameIntoClientArea(hWnd, &forced);
-    }
-    return pOrigDwmExtendFrameIntoClientArea(hWnd, pMarInset);
-}
-
-static BOOL CALLBACK EnumBraveWindowsProc(HWND hWnd, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
-    if (IsWindowVisible(hWnd)) ApplyWindowAttributes(hWnd);
-    return TRUE;
-}
-
-static DWORD WINAPI HeartbeatThreadProc(LPVOID) {
-    while (!s_stopThread.load()) {
-        Sleep(1000);
-        if (g_cfg.heartbeat) EnumWindows(EnumBraveWindowsProc, 0);
-    }
-    return 0;
-}
-
-// ---------------------------------------------------------------------------
-// GPU process hooks
-// ---------------------------------------------------------------------------
 
 static HRESULT WINAPI CreateSwapChainForComposition_Hook(
-    IDXGIFactory2* pFactory, IUnknown* pDevice, const DXGI_SWAP_CHAIN_DESC1* pDesc,
-    IDXGIOutput* pRestrictToOutput, IDXGISwapChain1** ppSwapChain) {
-    if (pDesc && g_cfg.gpuAlpha) {
-        DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
-        if (s_logSwap.fetch_add(1) < 12) {
-            Wh_Log(L"CreateSwapChainForComposition %ux%u fmt=%d alpha=%d -> PREMULTIPLIED",
-                   desc.Width, desc.Height, (int)desc.Format, (int)desc.AlphaMode);
-        }
-        desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-        return pOrigCreateSwapChainForComposition(pFactory, pDevice, &desc, pRestrictToOutput, ppSwapChain);
+    IDXGIFactory2* factory, IUnknown* device, const DXGI_SWAP_CHAIN_DESC1* desc,
+    IDXGIOutput* output, IDXGISwapChain1** swapChain) {
+    if (!pOrigCreateSwapChainForComposition) return E_UNEXPECTED;
+    if (!desc || !swapChain ||
+        (desc->Flags & (DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO | DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED |
+                        DXGI_SWAP_CHAIN_FLAG_RESTRICTED_CONTENT)) ||
+        !SupportsCompositionAlpha(desc->Format) ||
+        (desc->AlphaMode != DXGI_ALPHA_MODE_IGNORE &&
+         desc->AlphaMode != DXGI_ALPHA_MODE_UNSPECIFIED)) {
+        return pOrigCreateSwapChainForComposition(factory, device, desc, output, swapChain);
     }
-    return pOrigCreateSwapChainForComposition(pFactory, pDevice, pDesc, pRestrictToOutput, ppSwapChain);
-}
-
-static HRESULT WINAPI CreateSwapChainForHwnd_Hook(
-    IDXGIFactory2* pFactory, IUnknown* pDevice, HWND hWnd, const DXGI_SWAP_CHAIN_DESC1* pDesc,
-    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc, IDXGIOutput* pRestrictToOutput,
-    IDXGISwapChain1** ppSwapChain) {
-    if (pDesc && g_cfg.gpuAlpha) {
-        DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
-        desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-        return pOrigCreateSwapChainForHwnd(pFactory, pDevice, hWnd, &desc, pFullscreenDesc,
-                                           pRestrictToOutput, ppSwapChain);
+    DXGI_SWAP_CHAIN_DESC1 adjusted = *desc;
+    adjusted.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    IDXGISwapChain1* created = nullptr;
+    const HRESULT result = pOrigCreateSwapChainForComposition(
+        factory, device, &adjusted, output, &created);
+    if (SUCCEEDED(result)) {
+        *swapChain = created;
+        return result;
     }
-    return pOrigCreateSwapChainForHwnd(pFactory, pDevice, hWnd, pDesc, pFullscreenDesc,
-                                       pRestrictToOutput, ppSwapChain);
+    if (created) created->Release();
+    if (result == DXGI_ERROR_INVALID_CALL || result == DXGI_ERROR_UNSUPPORTED) {
+        return pOrigCreateSwapChainForComposition(factory, device, desc, output, swapChain);
+    }
+    *swapChain = nullptr;
+    return result;
 }
 
 static bool InstallGpuHooks() {
-    HMODULE hDxgi = LoadLibraryW(L"dxgi.dll");
-    if (!hDxgi) return false;
-    using CreateDXGIFactory1_t = HRESULT (WINAPI*)(REFIID, void**);
-    auto pCreateDXGIFactory1 = (CreateDXGIFactory1_t)GetProcAddress(hDxgi, "CreateDXGIFactory1");
-    if (!pCreateDXGIFactory1) return false;
-
-    const IID iidFactory2 = {0x50c83a1c, 0xe072, 0x4c48, {0x87, 0xb0, 0x36, 0x30, 0xfa, 0x36, 0xa6, 0xd0}};
-    IDXGIFactory2* pFactory = nullptr;
-    if (FAILED(pCreateDXGIFactory1(iidFactory2, (void**)&pFactory)) || !pFactory) return false;
-
-    void** vtbl = *(void***)pFactory;
-    Wh_SetFunctionHook(vtbl[15], (void*)CreateSwapChainForHwnd_Hook, (void**)&pOrigCreateSwapChainForHwnd);
-    Wh_SetFunctionHook(vtbl[24], (void*)CreateSwapChainForComposition_Hook, (void**)&pOrigCreateSwapChainForComposition);
-    if (s_modInitComplete.load(std::memory_order_acquire)) Wh_ApplyHookOperations();
-    pFactory->Release();
-    Wh_Log(L"installed DXGI hooks in GPU process");
-    return true;
+    HMODULE module = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) return false;
+    using CreateFactory_t = HRESULT (WINAPI*)(REFIID, void**);
+    const auto createFactory = reinterpret_cast<CreateFactory_t>(
+        GetProcAddress(module, "CreateDXGIFactory1"));
+    IDXGIFactory2* factory = nullptr;
+    if (!createFactory || FAILED(createFactory(__uuidof(IDXGIFactory2),
+                                               reinterpret_cast<void**>(&factory))) || !factory) {
+        if (factory) factory->Release();
+        FreeLibrary(module);
+        return false;
+    }
+    // Only composition swap chains support this alpha override. Never hook HWND chains.
+    const auto target = reinterpret_cast<CreateSwapChainForComposition_t>(
+        (*reinterpret_cast<void***>(factory))[24]);
+    const bool installed = target && WindhawkUtils::SetFunctionHook(
+        target, CreateSwapChainForComposition_Hook, &pOrigCreateSwapChainForComposition);
+    factory->Release();
+    if (!installed) {
+        FreeLibrary(module);
+        return false;
+    }
+    // Keep the hook's module loaded until Windhawk has removed the hook.
+    s_dxgiModule = module;
+    return true;  // Windhawk applies the hook after Wh_ModInit returns.
 }
 
-// ---------------------------------------------------------------------------
-// Browser process hooks
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Signature scanning
-//
-// Resolve only complete function entries described by the x64 exception table.
-// Signatures inside a function cannot be mistaken for an entry point, and
-// function alignment does not affect discovery. Every signature must have one unique function match.
 struct Signature {
     const char* name;
     const unsigned char* bytes;
@@ -700,16 +448,35 @@ struct Signature {
     size_t length;
 };
 
-static const unsigned char kSigGetColor[] = {
+static constexpr unsigned char kSigGetColor[] = {
     0x41, 0x57, 0x41, 0x56, 0x41, 0x54, 0x56, 0x57, 0x55, 0x53, 0x48, 0x83,
-    0xEC, 0x20, 0x89, 0xD7, 0x48, 0x89, 0xCE, 0x4C, 0x8D, 0x71, 0x18, 0x48};
-static const char kMaskGetColor[] = "xxxxxxxxxxxxxxxxxxxxxxxx";
+    0xEC, 0x20, 0x89, 0xD7, 0x48, 0x89, 0xCE, 0x4C, 0x8D, 0x71, 0x18, 0x48,
+    0x8B, 0x41, 0x18, 0xEB, 0x09, 0x0F, 0x1F, 0x00, 0x7E, 0x18, 0x48, 0x8B,
+    0x40, 0x08, 0x48, 0x85, 0xC0, 0x74, 0x0D, 0x3B, 0x78, 0x20, 0x7D, 0xF0,
+    0x48, 0x8B, 0x00, 0x48, 0x85, 0xC0, 0x75, 0xF3, 0x31, 0xC0, 0x48, 0x85,
+    0xC0, 0x49, 0x0F, 0x44, 0xC6, 0x4C, 0x39, 0xF0, 0x74, 0x14, 0x8B, 0x68,
+    0x24, 0x89, 0xE8, 0x48, 0x83, 0xC4, 0x20, 0x5B, 0x5D, 0x5F, 0x5E, 0x41,
+    0x5C, 0x41, 0x5E, 0x41, 0x5F, 0xC3, 0x48, 0x8B, 0x0E, 0xBD, 0x00, 0x00,
+    0xFF, 0xFF, 0x48, 0x85, 0xC9, 0x74, 0xE2, 0x48, 0x83, 0xC1, 0x08, 0x89,
+    0xFA, 0xE8, 0xDE, 0x97, 0xE2, 0xFE, 0x3D, 0x00, 0x00, 0xFF, 0xFF, 0x74,
+    0xD0};
+static constexpr char kMaskGetColor[] =
+    "xxxxxxxxxxxxxxxxxxxxxx?xxx?x?xxxx?xxx?xxxx?xx?x?xxxxxxx?xxxxxxxxxxxxx?xx"
+    "?xxxxxxxxxxxxxxxxxxxxxxxxxxxxx?xxxxxxx????xxxxxx?";
 
-static const unsigned char kSigOnPaintBackground[] = {
+static constexpr unsigned char kSigOnPaintBackground[] = {
     0x56, 0x57, 0x48, 0x83, 0xEC, 0x38, 0x48, 0x89, 0xCE, 0x48, 0x8B, 0x05,
-    0x30, 0x60, 0x82, 0x12, 0x48, 0x31, 0xE0, 0x48, 0x89, 0x44, 0x24, 0x30,
-    0x48, 0x8B, 0x89, 0x28, 0x02, 0x00, 0x00, 0x48};
-static const char kMaskOnPaintBackground[] = "xxxxxxxxxxxx????xxxxxxxxxxxxxxxx";
+    0x70, 0x04, 0x7B, 0x12, 0x48, 0x31, 0xE0, 0x48, 0x89, 0x44, 0x24, 0x30,
+    0x48, 0x8B, 0x89, 0x28, 0x02, 0x00, 0x00, 0x48, 0x85, 0xC9, 0x75, 0x1B,
+    0x48, 0x8B, 0x44, 0x24, 0x30, 0x48, 0x31, 0xE0, 0x48, 0x8B, 0x0D, 0x4D,
+    0x04, 0x7B, 0x12, 0x48, 0x39, 0xC1, 0x75, 0x64, 0x48, 0x83, 0xC4, 0x38,
+    0x5F, 0x5E, 0xC3, 0x48, 0x89, 0xD7, 0x48, 0xC7, 0x44, 0x24, 0x20, 0xA2,
+    0x00, 0x00, 0x00, 0x8A, 0x05, 0xC1, 0x40, 0x94, 0x12, 0x84, 0xC0, 0x75,
+    0x54, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x20, 0x48, 0x89, 0xFA, 0x49,
+    0x89, 0xF0, 0xFF, 0x15, 0xD0, 0x57, 0x75, 0x12};
+static constexpr char kMaskOnPaintBackground[] =
+    "xxxxxxxxxxxx????xxxxxxx?xxx????xxxx?xxxx?xxxxxx????xxxx?xxxxxxxxxxxxxx??"
+    "???xx????xxx?xxxxxx?xxxxxxxx????";
 
 // The explicit blend-mode overload forwards r8d to the canvas call. The other
 // overload inserts 'mov r8d, kSrcOver' here. Match through that distinction,
@@ -727,10 +494,13 @@ static const char kMaskDrawColor[] =
     "xxxxxxx????xxxxxxxxxxx????xxxxxxxxxxxxxxxxxxxxxx????"
     "xxxxxxxxxxxxxxxxxxxxxxxxx????xx????";
 
-static const unsigned char kSigGetClassNameW[] = {
+static constexpr unsigned char kSigGetClassNameW[] = {
     0x56, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x89, 0xD6, 0x48, 0x8B, 0x81, 0x00,
-    0x01, 0x00, 0x00, 0x48, 0x81, 0xC1, 0x00, 0x01, 0x00, 0x00, 0x48, 0x8B};
-static const char kMaskGetClassNameW[] = "xxxxxxxxxxxxxxxxxxxxxxxx";
+    0x01, 0x00, 0x00, 0x48, 0x81, 0xC1, 0x00, 0x01, 0x00, 0x00, 0x48, 0x8B,
+    0x40, 0x08, 0xFF, 0x15, 0x88, 0x9B, 0x33, 0x0F, 0x0F, 0x10, 0x40, 0x08,
+    0x0F, 0x11, 0x06, 0x48, 0x89, 0xF0, 0x48, 0x83, 0xC4, 0x20, 0x5E, 0xC3};
+static constexpr char kMaskGetClassNameW[] =
+    "xxxxxxxxxxx????xxx????xxx?xx????xxx?xxxxxxxxxxxx";
 
 static constexpr unsigned char kSigViewColorProvider[] = {
     0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x58, 0x48,
@@ -886,7 +656,6 @@ static bool MatchesAt(const unsigned char* p, const Signature& sig) {
 
 struct ScanHit {
     const unsigned char* first;
-    const unsigned char* last;
     int count;
 };
 
@@ -947,381 +716,233 @@ static bool ScanAll(HMODULE mod, const unsigned char* text, size_t size,
                 sigs[s].length > f.EndAddress - f.BeginAddress ||
                 !MatchesAt(at, sigs[s])) continue;
             if (++out[s].count == 1) out[s].first = at;
-            out[s].last = at;
         }
     }
     return true;
 }
 
 
-// chrome.dll identity, so a cached result is never reused across Brave builds.
-static unsigned long long BuildKey(HMODULE mod) {
-    auto dos = (const IMAGE_DOS_HEADER*)mod;
-    auto nt = (const IMAGE_NT_HEADERS64*)((const unsigned char*)mod + dos->e_lfanew);
-    const unsigned long long kSignatureSetRevision = 11;
-    return (((unsigned long long)nt->FileHeader.TimeDateStamp << 32) ^
-            (unsigned long long)nt->OptionalHeader.SizeOfImage) +
-           kSignatureSetRevision;
+// A small value in Windhawk's per-mod storage; removed with the mod.
+struct SignatureCache {
+    unsigned long long key;
+    unsigned int count;
+    unsigned int reserved;
+    unsigned long long rva[kRequiredFunctions];
+    char version[64];
+};
+static_assert(sizeof(SignatureCache) == 120);
+
+static unsigned long long BuildKey(HMODULE module) {
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
+        reinterpret_cast<const unsigned char*>(module) + dos->e_lfanew);
+    constexpr unsigned long long signatureRevision = 13;
+    return ((static_cast<unsigned long long>(nt->FileHeader.TimeDateStamp) << 32) ^
+            nt->OptionalHeader.SizeOfImage) + signatureRevision;
 }
 
-// Kept in %LOCALAPPDATA%: the browser process runs at medium integrity and is
-// denied file creation under C:\ProgramData\Windhawk (ACCESS_DENIED), which is
-// why an earlier attempt to cache there silently rescanned on every launch.
-// Brave's version is the folder holding chrome.dll:
-// ...\Application\<version>\chrome.dll. Only used to make the log and the cache
-// readable -- correctness rests on the build key and the byte re-check.
-static void GetBraveVersion(HMODULE mod, char* out, size_t cch) {
-    out[0] = 0;
-    wchar_t path[MAX_PATH] = {};
-    if (!GetModuleFileNameW(mod, path, MAX_PATH)) return;
+static void GetBraveVersion(HMODULE module, char* output, size_t size) {
+    if (!size) return;
+    output[0] = 0;
+    wchar_t path[MAX_PATH]{};
+    if (!GetModuleFileNameW(module, path, ARRAYSIZE(path))) return;
     wchar_t* slash = wcsrchr(path, L'\\');
     if (!slash) return;
     *slash = 0;
-    wchar_t* ver = wcsrchr(path, L'\\');
-    if (!ver) return;
-    WideCharToMultiByte(CP_UTF8, 0, ver + 1, -1, out, (int)cch, nullptr, nullptr);
+    wchar_t* version = wcsrchr(path, L'\\');
+    if (!version) return;
+    WideCharToMultiByte(CP_UTF8, 0, version + 1, -1, output, static_cast<int>(size), nullptr, nullptr);
 }
 
-static const wchar_t* CachePath() {
-    static wchar_t path[MAX_PATH] = {};
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", path, MAX_PATH);
-        if (n == 0 || n >= MAX_PATH - 32) {
-            path[0] = 0;
-        } else {
-            lstrcatW(path, L"\\brave-acrylic.cache");
-        }
+static bool LoadCache(unsigned long long key, size_t* rva, int count,
+                      char* previousVersion, size_t previousSize) {
+    if (previousVersion && previousSize) previousVersion[0] = 0;
+    if (count != kRequiredFunctions) return false;
+    SignatureCache cache{};
+    if (Wh_GetBinaryValue(L"signatureCache", &cache, sizeof(cache)) != sizeof(cache) ||
+        cache.count != kRequiredFunctions || cache.reserved ||
+        !memchr(cache.version, 0, sizeof(cache.version))) return false;
+    if (previousVersion && previousSize) {
+        std::snprintf(previousVersion, previousSize, "%s", cache.version);
     }
-    return path[0] ? path : nullptr;
-}
-
-static bool LoadCache(unsigned long long wantKey, size_t* rva, int count,
-                      char* prevVersion, size_t cchPrev) {
-    const wchar_t* path = CachePath();
-    if (!path) return false;
-    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    char buf[512] = {};
-    DWORD read = 0;
-    ReadFile(f, buf, sizeof(buf) - 1, &read, nullptr);
-    CloseHandle(f);
-    buf[read] = 0;
-
-    // Layout: key, Brave version, then one RVA per line.
-    unsigned long long key = 0;
-    if (sscanf(buf, "%llx", &key) != 1) return false;
-
-    const char* p = strchr(buf, '\n');
-    if (!p) return false;
-    ++p;
-    if (prevVersion && cchPrev) {
-        size_t n = 0;
-        while (p[n] && p[n] != '\n' && n < cchPrev - 1) ++n;
-        memcpy(prevVersion, p, n);
-        prevVersion[n] = 0;
-    }
-    if (key != wantKey) return false;  // version reported, but cache unusable
-
-    for (int i = 0; i < count; ++i) {
-        p = strchr(p, '\n');
-        if (!p) return false;
-        ++p;
-        unsigned long long v = 0;
-        if (sscanf(p, "%llx", &v) != 1) return false;
-        rva[i] = (size_t)v;
-    }
+    if (cache.key != key) return false;
+    for (int i = 0; i < count; ++i) rva[i] = static_cast<size_t>(cache.rva[i]);
     return true;
 }
 
-static void SaveCache(unsigned long long key, const char* version,
-                      const size_t* rva, int count) {
-    char buf[512];
-    int n = sprintf(buf, "%llx\n%s\n", key, (version && version[0]) ? version : "?");
-    for (int i = 0; i < count; ++i) n += sprintf(buf + n, "%llx\n", (unsigned long long)rva[i]);
-    // FILE_WRITE_DATA only: GENERIC_WRITE additionally asks for WRITE_ATTRIBUTES,
-    // which this directory's ACL denies to the (medium integrity) browser process.
-    const wchar_t* path = CachePath();
-    if (!path) return;
-    HANDLE f = CreateFileW(path, FILE_WRITE_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"cache write failed: CreateFileW error %u", GetLastError());
-        return;
+static void SaveCache(unsigned long long key, const char* version, const size_t* rva, int count) {
+    if (count != kRequiredFunctions) return;
+    SignatureCache cache{};
+    cache.key = key;
+    cache.count = count;
+    std::snprintf(cache.version, sizeof(cache.version), "%s", version && *version ? version : "?");
+    for (int i = 0; i < count; ++i) cache.rva[i] = rva[i];
+    if (!Wh_SetBinaryValue(L"signatureCache", &cache, sizeof(cache))) {
+        Wh_Log(L"Could not save the signature cache; the next launch will rescan");
     }
-    DWORD written = 0;
-    BOOL ok = WriteFile(f, buf, (DWORD)n, &written, nullptr);
-    CloseHandle(f);
-    Wh_Log(L"cache written: %d bytes formatted, %u written, ok=%d", n, written, (int)ok);
 }
 
-static bool ResolveBySignature(HMODULE hChrome) {
+static bool ResolveBySignature(HMODULE module) {
     const unsigned char* text = nullptr;
     size_t textSize = 0;
-    if (!GetTextSection(hChrome, &text, &textSize)) {
-        Wh_Log(L"could not locate .text in chrome.dll");
-        return false;
-    }
-
-    enum { kNeeded = 5 };
-
-    const Signature sigs[kNeeded] = {
-        {"ui::ColorProvider::GetColor", kSigGetColor, kMaskGetColor,
-         sizeof(kSigGetColor)},
+    if (!GetTextSection(module, &text, &textSize)) return false;
+    const Signature signatures[kRequiredFunctions] = {
+        {"ui::ColorProvider::GetColor", kSigGetColor, kMaskGetColor, sizeof(kSigGetColor)},
         {"views::View::OnPaintBackground", kSigOnPaintBackground, kMaskOnPaintBackground,
          sizeof(kSigOnPaintBackground)},
-        {"gfx::Canvas::DrawColor", kSigDrawColor, kMaskDrawColor,
-         sizeof(kSigDrawColor)},
-        {"views::View::GetClassNameW", kSigGetClassNameW, kMaskGetClassNameW,
-         sizeof(kSigGetClassNameW)},
+        {"gfx::Canvas::DrawColor", kSigDrawColor, kMaskDrawColor, sizeof(kSigDrawColor)},
+        {"views::View::GetClassNameW", kSigGetClassNameW, kMaskGetClassNameW, sizeof(kSigGetClassNameW)},
         {"views::View::GetColorProvider", kSigViewColorProvider, kMaskViewColorProvider,
          sizeof(kSigViewColorProvider)},
     };
-
-    void** targets[kNeeded] = {
-        (void**)&pOrigGetColor,    (void**)&pOrigViewOnPaintBackground,
-        (void**)&pCanvasDrawColor, (void**)&pViewGetClassNameW,
-        (void**)&pViewGetColorProvider,
-    };
-    // Drawing/class/palette accessors are only called, never hooked.
-    void* hookFns[kNeeded] = {
-        (void*)GetColor_Hook, (void*)ViewOnPaintBackground_Hook,
-        nullptr,              nullptr,              nullptr,
-    };
-
+    auto* base = reinterpret_cast<unsigned char*>(module);
+    const size_t textRva = text - base;
     const DWORD started = GetTickCount();
-    const unsigned long long key = BuildKey(hChrome);
-    char version[64] = {};
-    char prevVersion[64] = {};
-    GetBraveVersion(hChrome, version, sizeof(version));
-    size_t rva[kNeeded] = {};
-    bool fromCache = false;
-
-    // A cached hit still has its bytes re-checked, so a stale or hand-edited
-    // cache can never point a hook at the wrong code.
-    if (LoadCache(key, rva, kNeeded, prevVersion, sizeof(prevVersion))) {
-        fromCache = true;
-        for (int i = 0; i < kNeeded; ++i) {
-            if (rva[i] == 0) { fromCache = false; break; }
-            const size_t textRva = text - reinterpret_cast<const unsigned char*>(hChrome);
-            if (rva[i] < textRva || rva[i] - textRva > textSize ||
-                sigs[i].length > textSize - (rva[i] - textRva) ||
-                !FunctionContains(hChrome, rva[i], sigs[i].length) ||
-                !MatchesAt(reinterpret_cast<const unsigned char*>(hChrome) + rva[i], sigs[i])) {
-                Wh_Log(L"cache entry for %S failed verification; rescanning", sigs[i].name);
-                fromCache = false;
+    const auto key = BuildKey(module);
+    char version[64]{}, previousVersion[64]{};
+    GetBraveVersion(module, version, sizeof(version));
+    size_t rva[kRequiredFunctions]{};
+    bool cached = LoadCache(key, rva, kRequiredFunctions, previousVersion, sizeof(previousVersion));
+    if (cached) {
+        for (int i = 0; i < kRequiredFunctions; ++i) {
+            if (!rva[i] || rva[i] < textRva || rva[i] - textRva > textSize ||
+                signatures[i].length > textSize - (rva[i] - textRva) ||
+                !FunctionContains(module, rva[i], signatures[i].length) ||
+                !MatchesAt(base + rva[i], signatures[i])) {
+                cached = false;
                 break;
             }
-
         }
     }
-
-    if (!fromCache) {
-        if (prevVersion[0]) {
-            Wh_Log(L"Brave changed (%S -> %S); rescanning", prevVersion,
-                   version[0] ? version : "?");
-        } else {
-            Wh_Log(L"no usable cache for Brave %S; scanning", version[0] ? version : "?");
-        }
-
-        ScanHit hits[kNeeded]{};
-        if (!ScanAll(hChrome, text, textSize, sigs, kNeeded, hits)) {
-            Wh_Log(L"missing or invalid x64 function table; refusing signature hooks");
-            return false;
-        }
-        for (int i = 0; i < kNeeded; ++i) {
-            rva[i] = hits[i].count == 1 ? hits[i].first -
-                reinterpret_cast<const unsigned char*>(hChrome) : 0;
-            if (!rva[i]) Wh_Log(L"%S: %d function matches (need exactly one)",
-                               sigs[i].name, hits[i].count);
-        }
-    }
-
-    // Never activate a partial clearing path. Matching a colour without being
-    // able to erase prior pixels can leave stale tab text on the screen.
-    for (int i = 0; i < kNeeded; ++i) {
-        if (!rva[i]) {
-            Wh_Log(L"required function missing: %S; transparency stays off", sigs[i].name);
-            return false;
-        }
-    }
-
-
-    int resolved = 0;
-    for (int i = 0; i < kNeeded; ++i) {
-        if (!rva[i]) {
-            Wh_Log(L"signature did NOT match: %S", sigs[i].name);
-            continue;
-        }
-        void* addr = (void*)((const unsigned char*)hChrome + rva[i]);
-        if (hookFns[i]) {
-            if (!Wh_SetFunctionHook(addr, hookFns[i], targets[i])) {
-                *targets[i] = nullptr;
-                Wh_Log(L"could not install required hook: %S", sigs[i].name);
-                continue;
+    if (!cached) {
+        if (previousVersion[0]) Wh_Log(L"Cached Brave %S needs revalidation for %S", previousVersion, version);
+        ScanHit hits[kRequiredFunctions]{};
+        if (!ScanAll(module, text, textSize, signatures, kRequiredFunctions, hits)) return false;
+        for (int i = 0; i < kRequiredFunctions; ++i) {
+            if (hits[i].count != 1) {
+                Wh_Log(L"%S: %d function matches; transparency stays off", signatures[i].name, hits[i].count);
+                return false;
             }
-        } else {
-            *targets[i] = addr;
-        }
-        ++resolved;
-    }
-    if (s_modInitComplete.load(std::memory_order_acquire)) Wh_ApplyHookOperations();
-    s_transparencyReady.store(g_cfg.clearViews && g_cfg.colorProvider &&
-                              HasCompleteTransparencyPath(), std::memory_order_release);
-
-    // Making backgrounds transparent without being able to erase the previous
-    // frame leaves the tab strip ghosting, so transparency is only switched on
-    // when the clearing path is fully available.
-    if (!pCanvasDrawColor || !pViewGetClassNameW || !pViewGetColorProvider ||
-        s_toolbarColorId < 0 || !pOrigViewOnPaintBackground) {
-        if (g_cfg.colorProvider) {
-            g_cfg.colorProvider = 0;
-            Wh_Log(L"clearing path incomplete - disabling the colour substitution "
-                   L"so the tab strip cannot ghost. Brave likely changed; "
-                   L"the resolver must be updated for this Brave build.");
+            rva[i] = hits[i].first - base;
         }
     }
 
-    const bool criticalOk = HasCompleteTransparencyPath();
-    if (criticalOk && !fromCache) SaveCache(key, version, rva, kNeeded);
-
-    Wh_Log(L"%s: %d/%d resolved in %u ms (Brave %S, key %llx)",
-           fromCache ? L"signature cache" : L"signature scan", resolved, (int)kNeeded,
-           GetTickCount() - started, version[0] ? version : "?", key);
-    return resolved == kNeeded;
-}
-
-static void StartWindowWork() {
-    if (s_stopThread.load()) return;
-    EnumWindows(EnumBraveWindowsProc, 0);
-    s_hThread = CreateThread(nullptr, 0, HeartbeatThreadProc, nullptr, 0, nullptr);
-}
-
-static bool InstallChromeHooks(HMODULE hChrome) {
-    if (!hChrome) return false;
-    Wh_Log(L"hooking chrome.dll at %p", hChrome);
-    {
-        auto dos = (const IMAGE_DOS_HEADER*)hChrome;
-        auto nt = (const IMAGE_NT_HEADERS64*)((const unsigned char*)hChrome + dos->e_lfanew);
-        g_chromeBase = (const unsigned char*)hChrome;
-        g_chromeSize = nt->OptionalHeader.SizeOfImage;
-    }
-
-    s_toolbarColorId = FindToolbarColorId(hChrome);
-    if (s_toolbarColorId < 0) {
-        Wh_Log(L"toolbar colour table missing or ambiguous; transparency stays off");
+    pCanvasDrawColor = reinterpret_cast<DrawColor_t>(base + rva[2]);
+    pViewGetClassNameW = reinterpret_cast<ViewGetClassNameW_t>(base + rva[3]);
+    pViewGetColorProvider = reinterpret_cast<ViewGetColorProvider_t>(base + rva[4]);
+    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<GetColor_t>(base + rva[0]),
+                                       GetColor_Hook, &pOrigGetColor) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<ViewOnPaintBackground_t>(
+                                           base + rva[1]),
+                                       ViewOnPaintBackground_Hook, &pOrigViewOnPaintBackground) ||
+        !HasCompleteTransparencyPath()) {
+        Wh_Log(L"Required paint hooks could not be registered; transparency stays off");
         return false;
     }
-    Wh_Log(L"per-window theme guard: kColorToolbar ID=%d", s_toolbarColorId);
-
-    HMODULE hDwmapi = LoadLibraryW(L"dwmapi.dll");
-    if (hDwmapi) {
-        void* p = (void*)GetProcAddress(hDwmapi, "DwmExtendFrameIntoClientArea");
-        if (p) {
-            Wh_SetFunctionHook(p, (void*)DwmExtendFrameIntoClientArea_Hook,
-                               (void**)&pOrigDwmExtendFrameIntoClientArea);
-            if (s_modInitComplete.load(std::memory_order_acquire)) Wh_ApplyHookOperations();
-        }
-    }
-
-    // Use only the validated local resolver; no symbol-server fallback.
-    if (!ResolveBySignature(hChrome)) return false;
-    StartWindowWork();
+    if (!cached) SaveCache(key, version, rva, kRequiredFunctions);
+    Wh_Log(L"%s: %d/%d resolved in %u ms (Brave %S)",
+           cached ? L"signature cache" : L"signature scan", kRequiredFunctions, kRequiredFunctions,
+           GetTickCount() - started, version);
     return true;
 }
 
-// Waits for chrome.dll to be mapped, then hooks it. Polls tightly because the
-// window that matters is created only a few hundred ms after the module loads.
-static DWORD WINAPI ChromeInitThreadProc(LPVOID) {
-    HMODULE hChrome = nullptr;
-    for (int i = 0; i < 2000 && !s_stopThread.load(); ++i) {
-        hChrome = GetModuleHandleW(L"chrome.dll");
-        if (hChrome) break;
-        Sleep(1);
+static bool InstallChromeHooks(HMODULE module) {
+    s_toolbarColorId = FindToolbarColorId(module);
+    if (s_toolbarColorId < 0) {
+        Wh_Log(L"Toolbar colour table missing or ambiguous; transparency stays off");
+        return false;
     }
-    if (s_stopThread.load()) return 0;
-    if (!hChrome) {
-        Wh_Log(L"chrome.dll never loaded");
-        return 0;
-    }
-    // ApplyHookOperations is only supported after ModInit has returned.
-    while (!s_modInitComplete.load(std::memory_order_acquire) && !s_stopThread.load()) Sleep(1);
-    if (!s_stopThread.load()) InstallChromeHooks(hChrome);
-    return 0;
+    Wh_Log(L"per-window theme guard: kColorToolbar ID=%d", s_toolbarColorId);
+    return ResolveBySignature(module);
 }
 
-// ---------------------------------------------------------------------------
-// Lifecycle
-// ---------------------------------------------------------------------------
+// Installation and shutdown share a barrier. No hook can be registered/applied
+// after Wh_ModBeforeUninit returns, including a loader call that finishes late.
+static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
+    if (!module || s_chromeAttempted.exchange(true, std::memory_order_acq_rel)) return false;
+    AcquireSRWLockExclusive(&s_initLock);
+    bool installed = false;
+    if (!s_stopping && InstallChromeHooks(module)) {
+        if (applyNow) {
+            installed = Wh_ApplyHookOperations() != FALSE;
+            s_transparencyReady.store(installed, std::memory_order_release);
+            if (!installed) Wh_Log(L"Could not activate paint hooks; transparency stays off");
+        } else {
+            // Windhawk applies these hooks after Wh_ModInit returns.
+            s_activateAfterInit = true;
+            installed = true;
+        }
+    }
+    ReleaseSRWLockExclusive(&s_initLock);
+    return installed;
+}
+
+static bool IsExecutableLibraryLoad(DWORD flags) {
+    return !(flags & (DONT_RESOLVE_DLL_REFERENCES | LOAD_LIBRARY_AS_DATAFILE |
+                      LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE));
+}
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    const HMODULE module = pOrigLoadLibraryExW(name, file, flags);
+    const DWORD error = GetLastError();
+    if (module && IsExecutableLibraryLoad(flags) && module == GetModuleHandleW(L"chrome.dll")) {
+        // Chrome's caller cannot use the new module until this hook returns.
+        TryInstallChromeHooks(module, true);
+    }
+    SetLastError(error);
+    return module;
+}
 
 BOOL Wh_ModInit() {
-    LoadConfig();
+    const auto command = GetCommandLineW();
+    if (wcsstr(command, L"--type=gpu-process")) return InstallGpuHooks();
+    if (wcsstr(command, L"--type=")) return FALSE;
+    s_isBrowserProcess = true;
     LoadModSettings();
-    LPCWSTR cmdLine = GetCommandLineW();
 
-    if (wcsstr(cmdLine, L"--type=gpu-process") != nullptr) {
-        Wh_Log(L"init in GPU process %u", GetCurrentProcessId());
-        InstallGpuHooks();
-        return TRUE;
-    }
-    if (wcsstr(cmdLine, L"--type=") != nullptr) {
-        return TRUE;
-    }
+    HMODULE chrome = GetModuleHandleW(L"chrome.dll");
+    if (chrome) return TryInstallChromeHooks(chrome, false);
 
-    Wh_Log(L"init in browser process %u", GetCurrentProcessId());
-    // chrome.dll is usually not mapped yet this early. Resolve inline when it
-    // is, otherwise pick it up as soon as it appears -- the hooks must be live
-    // before Brave builds its first browser window, because view layers get
-    // their opacity at creation time and are not revisited afterwards.
-    HMODULE hChrome = GetModuleHandleW(L"chrome.dll");
-    if (hChrome) {
-        InstallChromeHooks(hChrome);
-    } else {
-        s_hInitThread = CreateThread(nullptr, 0, ChromeInitThreadProc, nullptr, 0, nullptr);
+    const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    const auto loader = kernelBase ? reinterpret_cast<LoadLibraryExW_t>(
+        GetProcAddress(kernelBase, "LoadLibraryExW")) : nullptr;
+    if (!loader || !WindhawkUtils::SetFunctionHook(loader, LoadLibraryExW_Hook, &pOrigLoadLibraryExW)) {
+        return FALSE;
     }
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    s_modInitComplete.store(true, std::memory_order_release);
-}
-
-// Views resolve their background colour when they are built, so re-reading the
-// settings does not repaint anything. Posting WM_THEMECHANGED was tried and is
-// NOT sufficient -- a colour added this way only takes effect after Brave is
-// restarted. The post is kept because it is harmless and refreshes some
-// surfaces, but the log tells the truth about needing a restart.
-static BOOL CALLBACK RefreshThemeProc(HWND hWnd, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid == GetCurrentProcessId() && IsBrowserFrameWindow(hWnd)) {
-        PostMessageW(hWnd, WM_THEMECHANGED, 0, 0);
+    if (!s_isBrowserProcess) return;
+    AcquireSRWLockExclusive(&s_initLock);
+    if (!s_stopping && s_activateAfterInit) {
+        s_activateAfterInit = false;
+        s_transparencyReady.store(HasCompleteTransparencyPath(), std::memory_order_release);
     }
-    return TRUE;
+    ReleaseSRWLockExclusive(&s_initLock);
+    // Cover a load between ModInit's check and activation of the loader hook.
+    if (const auto chrome = GetModuleHandleW(L"chrome.dll")) TryInstallChromeHooks(chrome, true);
 }
 
 void Wh_ModSettingsChanged() {
+    if (!s_isBrowserProcess) return;
     LoadModSettings();
-    EnumWindows(RefreshThemeProc, 0);
-    Wh_Log(L"settings reloaded - RESTART BRAVE for colour changes to apply");
+    Wh_Log(L"Settings updated; restart Brave normally to rebuild its cached UI brushes");
+}
+
+void Wh_ModBeforeUninit() {
+    AcquireSRWLockExclusive(&s_initLock);
+    s_stopping = true;
+    s_activateAfterInit = false;
+    s_transparencyReady.store(false, std::memory_order_release);
+    ReleaseSRWLockExclusive(&s_initLock);
 }
 
 void Wh_ModUninit() {
-    s_stopThread.store(true);
-    s_transparencyReady.store(false);
-    if (s_hInitThread) {
-        WaitForSingleObject(s_hInitThread, INFINITE);
-        CloseHandle(s_hInitThread);
-        s_hInitThread = nullptr;
+    if (s_dxgiModule) {
+        FreeLibrary(s_dxgiModule);
+        s_dxgiModule = nullptr;
     }
-    if (s_hThread) {
-        WaitForSingleObject(s_hThread, INFINITE);
-        CloseHandle(s_hThread);
-        s_hThread = nullptr;
-    }
-    Wh_Log(L"uninit in %u", GetCurrentProcessId());
 }
 
 #endif  // x64 native resolver
