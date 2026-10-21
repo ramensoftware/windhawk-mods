@@ -3622,10 +3622,14 @@ HWND CreateBackdropWindow(HWND owner) {
         g_classRegistered = true;
     }
     // No WS_EX_LAYERED (it would kill the accent); WS_EX_TRANSPARENT passes the mouse.
-    // Owned by the island so lifetime/z-order stay coupled across reloads.
+    // Unowned (hWndParent = nullptr): In Win32, an owned popup window is strictly forced
+    // above its owner in the z-order upon owner activation. If owned by the island, calling
+    // SetForegroundWindow(island) for the right-click context menu (or Quick Lookup) would
+    // bring the backdrop window in front of the island, completely covering the island's
+    // content (text, icons, album art) with blur/acrylic. Unowned popups stay behind the island.
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
     if (g_settings.alwaysOnTop) exStyle |= WS_EX_TOPMOST;
-    HWND hwnd = CreateWindowExW(exStyle, kClassName, L"", WS_POPUP, 0, 0, 16, 16, owner, nullptr,
+    HWND hwnd = CreateWindowExW(exStyle, kClassName, L"", WS_POPUP, 0, 0, 16, 16, nullptr, nullptr,
                                 inst, nullptr);
     if (!hwnd) return nullptr;
     DisableTransitions(hwnd);
@@ -3682,10 +3686,30 @@ void EnsureTopMost(Slot& s, bool wantTopMost) {
     s.topMost = wantTopMost;
 }
 
+// Keeps all active backdrop windows placed immediately behind the island window in the z-order.
+// Called around context menu popups and foreground activation so the blur never covers the island.
+void EnsureBehind(HWND island) {
+    if (!island) return;
+    HWND prev = island;
+    for (Slot& s : g_slots) {
+        if (s.hwnd && s.visible) {
+            if (GetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT) != 0) {
+                SetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT, 0);
+            }
+            SetWindowPos(s.hwnd, prev, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+            prev = s.hwnd;
+        }
+    }
+}
+
 // Places one backdrop window below `prev`. Only moves it when something changed:
 // per-frame SetWindowPos lags on some Windows 10 builds.
 void PlaceSlot(Slot& s, HWND prev, int x, int y, int w, int h, int radius, int lift,
                bool wantTopMost) {
+    if (GetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT) != 0) {
+        SetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT, 0);
+    }
     EnsureTopMost(s, wantTopMost);
     UpdateRegion(s, w, h, radius, lift);
     const bool moved = x != s.x || y != s.y || w != s.w || h != s.h;
@@ -10371,6 +10395,7 @@ void ForceForeground(HWND hwnd) {
     SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
     BringWindowToTop(hwnd);
+    DwmBackdrop::EnsureBehind(hwnd);
     SetFocus(hwnd);
 }
 
@@ -11230,9 +11255,13 @@ void ShowMediaSourcePopup(HWND hwnd, POINT screenPoint) {
     HMENU menu = CreatePopupMenu();
     const std::vector<MediaSourceMenuItem> items = AppendMediaSourceItems(menu);
     SetForegroundWindow(hwnd);
+    DwmBackdrop::EnsureBehind(hwnd);
     const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
                                     screenPoint.x, screenPoint.y, 0, hwnd, nullptr);
     DestroyMenu(menu);
+    PostMessageW(hwnd, WM_NULL, 0, 0);
+    DwmBackdrop::EnsureBehind(hwnd);
+    g_layoutDirty = true;
     ApplyMediaSourceMenuCommand(cmd, items);
 }
 
@@ -11383,9 +11412,13 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 9, L"Open Windhawk settings");
 
     SetForegroundWindow(hwnd);
+    DwmBackdrop::EnsureBehind(hwnd);
     const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
                                    screenPoint.x, screenPoint.y, 0, hwnd, nullptr);
     DestroyMenu(menu);
+    PostMessageW(hwnd, WM_NULL, 0, 0);
+    DwmBackdrop::EnsureBehind(hwnd);
+    g_layoutDirty = true;
 
     // Theme ids are a contiguous range rather than individual cases, so adding a
     // palette to kThemePalettes needs no change here.
