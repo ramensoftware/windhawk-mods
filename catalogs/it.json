@@ -19801,7 +19801,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791644671000,
+        "updated": 1792578645000,
         "users": 20
       },
       "metadata": {
@@ -19818,7 +19818,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Windows 10 legacy flyouts on Win11 24H2 restorer",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "windows-10-winx-restorer": {

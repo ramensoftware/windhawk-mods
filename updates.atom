@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-21T10:04:52.000Z</updated>
+    <updated>2026-10-21T10:30:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 legacy flyouts on Win11 24H2 restorer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-legacy-flyouts-restorer#8811c162ad3ee0a49fbdbec9eea0cc72d620def7</id>
+        <link href="https://windhawk.net/mods/windows-10-legacy-flyouts-restorer"/>
+        <updated>2026-10-21T10:30:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the mod so that it stores downloaded files in the mod's private storage folder (adds Portable Windhawk support)</li>
+<li>Added a mechanism to detect legacy explorer.exe by file version instead of path</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multi PrintScreen 1.0.0]]></title>
         <id>https://windhawk.net/mods/multi-printscreen#842c9b8b730cab3a5c6fad2c222817b02ec95724</id>
@@ -846,22 +860,6 @@ the inclusion list, or their scrolling will be coarsened.</li>
         <author>
             <name>loliri</name>
             <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore legacy network tray 1.0]]></title>
-        <id>https://windhawk.net/mods/restore-legacy-network-tray#44b3fe7b010002fc8d12c9134affbb6f3fc4ec95</id>
-        <link href="https://windhawk.net/mods/restore-legacy-network-tray"/>
-        <updated>2026-10-20T05:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Redstores the classic network tray icon on Windows 10 taskbar running under Windows 11 24H2 or later.
-The mod downloads the network icon dll from the Microsoft's symbols server.</p>
-<p>This mod downloads the version of the network icon dll from one of the latest builds of Windows 11 23H2, so it may conflict 
-with the mod <code>Windows 10 legacy flyouts on Win11 24H2 restorer</code>. It is recommended to use only one of the mods.</p>
-<p>The original version of the mod is by user DerBaron of WinClassic forum, published under MIT license:
-https://winclassic.net/post/40623</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
