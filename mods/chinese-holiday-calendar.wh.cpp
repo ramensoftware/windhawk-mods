@@ -2620,7 +2620,7 @@ bool ParseIcs(std::wstring const& text,
             return false;
         };
         auto addDate = [&](int32_t key) {
-            if (!key || isExcluded(key)) {
+            if (!key) {
                 return;
             }
             out[key] = info;
@@ -2640,6 +2640,11 @@ bool ParseIcs(std::wstring const& text,
         // The limit is looked at inside the loop as well: a single event which spans
         // millions of days is what a limit at the start of the event does not catch.
         auto addRange = [&](int32_t from) {
+            // EXDATE cancels the occurrence which starts on that date, so its whole
+            // range is left out rather than only the one day it names.
+            if (isExcluded(from)) {
+                return;
+            }
             int32_t key = from;
             for (int day = 0; day < lengthDays && key; day++) {
                 if (added >= kMaxHolidayDates) {
