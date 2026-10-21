@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              bulk-copy-file-and-folder-names
 // @name            Bulk Copy File and Folder Names
-// @description     Copy the names of one or many selected files and folders in File Explorer, not the paths, with a hotkey or the right-click menu
+// @description     Copy the names of one or many selected files and folders in File Explorer, not the paths, from the right-click menu or with optional hotkeys
 // @version         0.3.0
 // @author          Shaerif
 // @github          https://github.com/Shaerif
 // @include         explorer.exe
-// @compilerOptions -luser32 -lole32 -loleaut32 -luuid
+// @compilerOptions -luser32 -lole32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -18,36 +18,47 @@ and often you only want the names. This mod copies the names of the files and
 folders you select in File Explorer as plain text, one per line. It works on one
 item or on many at once. A selection can mix files and folders.
 
-## Keys
-- Ctrl+Shift+N copies the names with their extensions.
-- Ctrl+Alt+Shift+N copies the names without extensions. Folders keep their full
-  name, so `sub.folder` stays `sub.folder`, and `a.tar.gz` becomes `a.tar`. A
-  name that starts with a dot, like `.gitignore`, stays whole.
-
-The keys only work while a File Explorer window is in front. You can change both
-keys in the settings.
-
 ## Right-click menu
 Right-click a file, a folder, or a selection of many files and folders in a File
 Explorer window. The classic menu gets two entries, Copy name and Copy name
-without extension. They follow the same rules and settings as the keys. On
-Windows 11 they're in the menu you get from Show more options or
-Shift+right-click. You can turn them off in the settings.
+without extension. On Windows 11 they're in the menu you get from Show more
+options or Shift+right-click. The entries are on by default, and you can turn
+them off in the settings.
+
+Copy name without extension keeps folder names whole, so `sub.folder` stays
+`sub.folder`, and `a.tar.gz` becomes `a.tar`. A name that starts with a dot, like
+`.gitignore`, stays whole.
+
+## Hotkeys
+The hotkeys are off until you turn them on, so a fresh install takes no key away
+from File Explorer. To turn them on, open the mod's Settings tab in Windhawk,
+tick Hotkeys, and save. The defaults are Ctrl+Shift+Y for names with extensions
+and Ctrl+Shift+U for names without. You can change both keys there too.
+
+A key is handled inside the File Explorer window that has the focus, so it never
+reaches other programs. It does nothing while you type in a rename box, the
+address bar or the search box, and it does nothing when no file or folder is
+selected. In both cases the key goes to File Explorer as usual.
+
+If you pick a key that File Explorer already uses, like Ctrl+Shift+N for New
+folder, the mod wins while the hotkeys are on and something is selected.
 
 ## Settings
+- Hotkeys: turn the two key combinations on. Off by default.
+- Modifiers and key for each copy action. Ctrl+Alt and Ctrl+Alt+Shift also
+  match AltGr, so skip them if your keyboard layout types letters with AltGr.
 - Separator: a new line, a comma, or a space between names.
 - Quote names: put each name in double quotes.
-- Right-click menu: show the two menu entries.
+- Right-click menu: show the two menu entries. On by default.
 
 ## Limits
-- Ctrl+Shift+N is also File Explorer's New folder key, so while the mod is on it
-  copies names instead. Pick another key in the settings if you need New folder.
 - The keys and menu entries don't work on the desktop or in file dialogs. Only
   File Explorer windows count.
 - The Windows 11 compact menu can't take new entries from a mod. Use Show more
   options.
-- The menu entries don't show on the column header menu or the menu you get
-  from empty space in a folder.
+- The menu entries don't show on the column header menu, the menu you get from
+  empty space in a folder, or the menu you get after a drag with the right
+  mouse button.
 - Items that aren't files or folders, like drives in This PC, give their
   internal name.
 - If nothing is selected, nothing happens.
@@ -56,51 +67,61 @@ Shift+right-click. You can turn them off in the settings.
 1. Select the files and folders in a File Explorer window. A mix of both is
    fine.
    ![A File Explorer window with two folders and five files selected in the demo-names folder](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-1-select.png)
-2. Keep that window in front, press Ctrl+Shift+N and paste. You get every name
-   with its extension, one per line.
-   ![The selected names pasted into a text window, one per line, with their extensions](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-2-names-with-extensions.png)
-3. Press Ctrl+Alt+Shift+N with the same selection and paste again. Files lose
-   their extension and folders keep their full name.
-   ![The same names pasted again without extensions, while the folder Backup.2025 keeps its full name](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-3-names-without-extensions.png)
-4. Or hold Shift and right-click the selection, and pick Copy name or Copy name
+2. Hold Shift and right-click the selection. Pick Copy name or Copy name
    without extension.
    ![The lower part of the classic right-click menu, with Copy name and Copy name without extension in their own group above Properties](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-4-right-click-menu.png)
+3. Paste. Copy name gives you every name with its extension, one per line.
+   ![The selected names pasted into a text window, one per line, with their extensions](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-2-names-with-extensions.png)
+4. Copy name without extension drops the extension from files and keeps the
+   full name of folders.
+   ![The same names pasted again without extensions, while the folder Backup.2025 keeps its full name](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-3-names-without-extensions.png)
+5. If you'd rather use the keyboard, tick Hotkeys in the settings. Ctrl+Shift+Y
+   then does what Copy name does, and Ctrl+Shift+U does what Copy name without
+   extension does.
 
 ### Gotchas
-- In step 2, Ctrl+Shift+N doesn't make new folders while the mod is on. Move
-  the copy key in the settings if you use New folder from the keyboard.
-- In step 3, only the last extension goes, so `archive.tar.gz` becomes
-  `archive.tar`.
-- In step 4, the compact Windows 11 menu can't show the entries. Use
+- In step 2, the compact Windows 11 menu can't show the entries. Use
   Shift+right-click or Show more options.
+- In step 4, only the last extension goes, so `archive.tar.gz` becomes
+  `archive.tar`.
+- In step 5, a key does nothing while you type in a rename box, the address bar
+  or the search box, and nothing while no item is selected. File Explorer gets
+  the key instead.
 
-Read the full guide in
-[docs/bulk-copy-file-and-folder-names.md](https://github.com/Shaerif/windhawk-mods/blob/main/docs/bulk-copy-file-and-folder-names.md).
+## Credits
+The way the hotkeys are caught, a hook on TranslateAcceleratorW that steps
+aside while a text box has the focus, follows the approach of the Explorer
+Custom Shortcuts mod.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- hotkeys: false
+  $name: Hotkeys
+  $description: Turn on the two key combinations below. They're off until you do, so the mod takes no key away from File Explorer. A key only acts in a File Explorer window, and never while you type in a rename box, the address bar or the search box.
 - withExtModifier: ctrl_shift
   $name: Modifiers for copy names with extension
+  $description: Ctrl+Alt and Ctrl+Alt+Shift also match AltGr. On a keyboard layout that types letters or symbols with AltGr, those two choices block that typing while File Explorer has the focus.
   $options:
   - ctrl_shift: Ctrl+Shift
   - ctrl_alt: Ctrl+Alt
   - ctrl_alt_shift: Ctrl+Alt+Shift
   - alt_shift: Alt+Shift
   - win_shift: Win+Shift
-- withExtKey: N
+- withExtKey: Y
   $name: Key for copy names with extension
   $description: A letter, a digit, or F1 to F24
-- noExtModifier: ctrl_alt_shift
+- noExtModifier: ctrl_shift
   $name: Modifiers for copy names without extension
+  $description: Ctrl+Alt and Ctrl+Alt+Shift also match AltGr. On a keyboard layout that types letters or symbols with AltGr, those two choices block that typing while File Explorer has the focus.
   $options:
   - ctrl_shift: Ctrl+Shift
   - ctrl_alt: Ctrl+Alt
   - ctrl_alt_shift: Ctrl+Alt+Shift
   - alt_shift: Alt+Shift
   - win_shift: Win+Shift
-- noExtKey: N
+- noExtKey: U
   $name: Key for copy names without extension
   $description: A letter, a digit, or F1 to F24
 - separator: newline
@@ -120,8 +141,6 @@ Read the full guide in
 
 #include <windhawk_utils.h>
 
-#include <exdisp.h>
-#include <servprov.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -131,22 +150,6 @@ Read the full guide in
 #include <cwctype>
 #include <string>
 #include <vector>
-
-#define WM_APP_RELOAD (WM_APP + 1)
-#define WM_APP_QUIT (WM_APP + 2)
-
-enum {
-    kHotkeyWithExt = 1,
-    kHotkeyNoExt = 2,
-};
-
-static const UINT_PTR kTimerId = 1;
-static const UINT kTimerMs = 100;
-
-// SID_STopLevelBrowser, defined here so the mod doesn't depend on which GUIDs
-// the import libraries carry.
-static const GUID kSidTopLevelBrowser = {
-    0x4C96BE40, 0x915C, 0x11CF, {0x99, 0xD3, 0x00, 0xAA, 0x00, 0x4A, 0xE8, 0x37}};
 
 // Shell tab windows answer this with their IShellBrowser, without a reference.
 static const UINT kMsgGetShellBrowser = WM_USER + 7;
@@ -162,6 +165,8 @@ static const int kMenuIdTries = 16;
 static const wchar_t kMenuLabelWithExt[] = L"Copy name";
 static const wchar_t kMenuLabelNoExt[] = L"Copy name without extension";
 
+// Modifier sets for the hotkeys, as MOD_CONTROL, MOD_SHIFT, MOD_ALT and
+// MOD_WIN bits. Keys are virtual key codes.
 struct {
     UINT withExtModifiers;
     UINT withExtKey;
@@ -171,31 +176,20 @@ struct {
     bool quoteNames;
 } g_settings;
 
-// The menu hook reads the settings on File Explorer's own threads, so writes
-// and those reads go through this lock.
+// The hooks read the settings on File Explorer's own threads, so writes and
+// those reads go through this lock.
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
+static std::atomic<bool> g_hotkeys{false};
 static std::atomic<bool> g_contextMenu{true};
-
-static HANDLE g_thread = nullptr;
-static DWORD g_threadId = 0;
-static HWND g_msgWnd = nullptr;
-static HANDLE g_readyEvent = nullptr;
-
-// Hotkeys are only registered while a File Explorer window is in front, so the
-// same keys keep working in other apps.
-static bool g_keysWanted = false;
-static bool g_withExtRegistered = false;
-static bool g_noExtRegistered = false;
-static bool g_loggedRegisterError = false;
-static std::atomic<bool> g_copying{false};
+static std::atomic<bool> g_unloading{false};
 
 // Open menus that carry our entries, so unloading can close them first.
 static std::atomic<int> g_openMenus{0};
 static std::atomic<HWND> g_menuOwner{nullptr};
 static thread_local bool t_inMenuHook = false;
+static thread_local bool t_copying = false;
 
 static UINT ParseModifiers(PCWSTR s, UINT fallback) {
-    if (!s) return fallback;
     if (wcscmp(s, L"ctrl_shift") == 0) return MOD_CONTROL | MOD_SHIFT;
     if (wcscmp(s, L"ctrl_alt") == 0) return MOD_CONTROL | MOD_ALT;
     if (wcscmp(s, L"ctrl_alt_shift") == 0) return MOD_CONTROL | MOD_ALT | MOD_SHIFT;
@@ -205,7 +199,7 @@ static UINT ParseModifiers(PCWSTR s, UINT fallback) {
 }
 
 static UINT ParseKey(PCWSTR s, UINT fallback) {
-    if (!s || !*s) return fallback;
+    if (!*s) return fallback;
     if (!s[1]) {
         wchar_t c = towupper(s[0]);
         if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) return (UINT)c;
@@ -218,32 +212,20 @@ static UINT ParseKey(PCWSTR s, UINT fallback) {
     return fallback;
 }
 
-static UINT ReadModifiers(PCWSTR name, UINT fallback) {
-    PCWSTR s = Wh_GetStringSetting(name);
-    UINT m = ParseModifiers(s, fallback);
-    Wh_FreeStringSetting(s);
-    return m | MOD_NOREPEAT;
-}
-
-static UINT ReadKey(PCWSTR name, UINT fallback) {
-    PCWSTR s = Wh_GetStringSetting(name);
-    UINT k = ParseKey(s, fallback);
-    Wh_FreeStringSetting(s);
-    return k;
-}
-
 static void LoadSettings() {
-    UINT withExtModifiers = ReadModifiers(L"withExtModifier", MOD_CONTROL | MOD_SHIFT);
-    UINT withExtKey = ReadKey(L"withExtKey", 'N');
-    UINT noExtModifiers = ReadModifiers(L"noExtModifier", MOD_CONTROL | MOD_ALT | MOD_SHIFT);
-    UINT noExtKey = ReadKey(L"noExtKey", 'N');
+    using WindhawkUtils::StringSetting;
 
-    PCWSTR sep = Wh_GetStringSetting(L"separator");
-    std::wstring separator;
-    if (sep && wcscmp(sep, L"comma") == 0) separator = L", ";
-    else if (sep && wcscmp(sep, L"space") == 0) separator = L" ";
-    else separator = L"\r\n";
-    Wh_FreeStringSetting(sep);
+    UINT withExtModifiers =
+        ParseModifiers(StringSetting::make(L"withExtModifier"), MOD_CONTROL | MOD_SHIFT);
+    UINT withExtKey = ParseKey(StringSetting::make(L"withExtKey"), 'Y');
+    UINT noExtModifiers =
+        ParseModifiers(StringSetting::make(L"noExtModifier"), MOD_CONTROL | MOD_SHIFT);
+    UINT noExtKey = ParseKey(StringSetting::make(L"noExtKey"), 'U');
+
+    StringSetting sep = StringSetting::make(L"separator");
+    std::wstring separator = L"\r\n";
+    if (wcscmp(sep, L"comma") == 0) separator = L", ";
+    else if (wcscmp(sep, L"space") == 0) separator = L" ";
 
     bool quoteNames = Wh_GetIntSetting(L"quoteNames") != 0;
 
@@ -256,108 +238,27 @@ static void LoadSettings() {
     g_settings.quoteNames = quoteNames;
     ReleaseSRWLockExclusive(&g_settingsLock);
 
+    g_hotkeys = Wh_GetIntSetting(L"hotkeys") != 0;
     g_contextMenu = Wh_GetIntSetting(L"contextMenu") != 0;
 }
 
-static bool IsExplorerWindow(HWND hWnd) {
-    if (!hWnd) return false;
+static bool HasClass(HWND hWnd, PCWSTR name) {
     wchar_t cls[64];
-    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    return wcscmp(cls, L"CabinetWClass") == 0;
+    return hWnd && GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, name) == 0;
 }
 
-static void UnregisterKeys(HWND hWnd) {
-    if (g_withExtRegistered) UnregisterHotKey(hWnd, kHotkeyWithExt);
-    if (g_noExtRegistered) UnregisterHotKey(hWnd, kHotkeyNoExt);
-    g_withExtRegistered = false;
-    g_noExtRegistered = false;
+static bool IsExplorerWindow(HWND hWnd) {
+    return HasClass(hWnd, L"CabinetWClass");
 }
 
-static void RegisterKeys(HWND hWnd) {
-    UnregisterKeys(hWnd);
-    g_withExtRegistered = RegisterHotKey(hWnd, kHotkeyWithExt, g_settings.withExtModifiers,
-                                         g_settings.withExtKey) != 0;
-    if (!g_withExtRegistered && !g_loggedRegisterError) {
-        Wh_Log(L"Couldn't register the hotkey for names with extensions (error %lu)", GetLastError());
-    }
-    g_noExtRegistered = RegisterHotKey(hWnd, kHotkeyNoExt, g_settings.noExtModifiers,
-                                       g_settings.noExtKey) != 0;
-    if (!g_noExtRegistered && !g_loggedRegisterError) {
-        Wh_Log(L"Couldn't register the hotkey for names without extensions (error %lu)", GetLastError());
-    }
-    if (!g_withExtRegistered || !g_noExtRegistered) g_loggedRegisterError = true;
-}
-
-static void UpdateKeys(HWND hWnd) {
-    bool wanted = IsExplorerWindow(GetForegroundWindow());
-    if (wanted == g_keysWanted) return;
-    g_keysWanted = wanted;
-    if (wanted) RegisterKeys(hWnd);
-    else UnregisterKeys(hWnd);
-}
-
-// Finds the shell browser of the active tab in the given File Explorer window.
-// The caller releases the result.
-static IShellBrowser* FindShellBrowser(HWND fg) {
-    IShellWindows* windows = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_IShellWindows,
-                                (void**)&windows)) ||
-        !windows) {
-        return nullptr;
-    }
-
-    long count = 0;
-    if (FAILED(windows->get_Count(&count))) count = 0;
-
-    // Each tab is its own entry, and all tabs share the frame window. The first
-    // tab child of the frame is the active one.
-    HWND activeTab = FindWindowExW(fg, nullptr, L"ShellTabWindowClass", nullptr);
-
-    IShellBrowser* best = nullptr;
-    int bestRank = 0;
-    for (long i = 0; i < count && bestRank < 3; i++) {
-        VARIANT index;
-        VariantInit(&index);
-        index.vt = VT_I4;
-        index.lVal = i;
-        IDispatch* disp = nullptr;
-        if (windows->Item(index, &disp) != S_OK || !disp) {
-            if (disp) disp->Release();
-            continue;
-        }
-
-        IWebBrowserApp* app = nullptr;
-        if (SUCCEEDED(disp->QueryInterface(IID_IWebBrowserApp, (void**)&app)) && app) {
-            SHANDLE_PTR frame = 0;
-            if (SUCCEEDED(app->get_HWND(&frame)) && (HWND)(LONG_PTR)frame == fg) {
-                IServiceProvider* sp = nullptr;
-                if (SUCCEEDED(app->QueryInterface(IID_IServiceProvider, (void**)&sp)) && sp) {
-                    IShellBrowser* browser = nullptr;
-                    if (SUCCEEDED(sp->QueryService(kSidTopLevelBrowser, IID_IShellBrowser,
-                                                   (void**)&browser)) &&
-                        browser) {
-                        HWND tab = nullptr;
-                        if (FAILED(browser->GetWindow(&tab))) tab = nullptr;
-                        int rank = 1;
-                        if (activeTab && tab == activeTab) rank = 3;
-                        else if (tab && IsWindowVisible(tab)) rank = 2;
-                        if (rank > bestRank) {
-                            if (best) best->Release();
-                            best = browser;
-                            bestRank = rank;
-                        } else {
-                            browser->Release();
-                        }
-                    }
-                    sp->Release();
-                }
-            }
-            app->Release();
-        }
-        disp->Release();
-    }
-    windows->Release();
-    return best;
+// Returns the shell browser of a tab window. The tab must live on the calling
+// thread, so the pointer it hands out stays in this apartment. The caller
+// releases the result.
+static IShellBrowser* BrowserForTab(HWND tab) {
+    if (!tab || GetWindowThreadProcessId(tab, nullptr) != GetCurrentThreadId()) return nullptr;
+    IShellBrowser* browser = (IShellBrowser*)SendMessageW(tab, kMsgGetShellBrowser, 0, 0);
+    if (browser) browser->AddRef();
+    return browser;
 }
 
 static void StripExtension(std::wstring& name) {
@@ -444,12 +345,14 @@ static bool SetClipboardText(HWND owner, const std::wstring& text) {
 }
 
 // Copies the selected names of one shell browser. Both the hotkeys and the
-// menu entries end up here.
-static void CopySelection(IShellBrowser* browser, HWND clipboardOwner, bool withExt) {
-    // COM calls can pump messages, so a second request could land here while
-    // the first one is still running.
-    if (g_copying.exchange(true)) return;
+// menu entries end up here. Returns true when names went to the clipboard.
+static bool CopySelection(IShellBrowser* browser, HWND clipboardOwner, bool withExt) {
+    // A shell call may pump messages, so a second request could land here
+    // while the first one is still running on this thread.
+    if (t_copying) return false;
+    t_copying = true;
 
+    bool copied = false;
     std::vector<std::wstring> names;
     if (!ReadSelectedNames(browser, withExt, names)) {
         Wh_Log(L"Couldn't read the selection from this window");
@@ -468,27 +371,117 @@ static void CopySelection(IShellBrowser* browser, HWND clipboardOwner, bool with
             text += names[i];
             if (quoteNames) text += L'"';
         }
-        if (SetClipboardText(clipboardOwner, text)) {
+        copied = SetClipboardText(clipboardOwner, text);
+        if (copied) {
             Wh_Log(L"Copied %zu names %s", names.size(),
                    withExt ? L"with extensions" : L"without extensions");
         }
     }
 
-    g_copying = false;
+    t_copying = false;
+    return copied;
 }
 
-static void CopyNames(HWND hWnd, bool withExt) {
-    HWND fg = GetForegroundWindow();
-    if (!IsExplorerWindow(fg)) return;
+// Hotkeys. A key press reaches us through TranslateAcceleratorW, which File
+// Explorer calls on the window's own thread for every key message. The match
+// happens there, and the copy runs in the same apartment as the view.
 
-    IShellBrowser* browser = FindShellBrowser(fg);
-    if (browser) {
-        CopySelection(browser, hWnd, withExt);
-        browser->Release();
-    } else {
-        Wh_Log(L"Couldn't find the shell view for this window");
+static bool ModifiersHeld(UINT wanted) {
+    UINT held = 0;
+    if (GetKeyState(VK_CONTROL) & 0x8000) held |= MOD_CONTROL;
+    if (GetKeyState(VK_SHIFT) & 0x8000) held |= MOD_SHIFT;
+    if (GetKeyState(VK_MENU) & 0x8000) held |= MOD_ALT;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) held |= MOD_WIN;
+    return held == wanted;
+}
+
+// 1 for the names-with-extension key, 2 for the names-without-extension key,
+// 0 for anything else.
+static int MatchHotkey(UINT vk) {
+    AcquireSRWLockShared(&g_settingsLock);
+    UINT withExtModifiers = g_settings.withExtModifiers;
+    UINT withExtKey = g_settings.withExtKey;
+    UINT noExtModifiers = g_settings.noExtModifiers;
+    UINT noExtKey = g_settings.noExtKey;
+    ReleaseSRWLockShared(&g_settingsLock);
+
+    if (vk == withExtKey && ModifiersHeld(withExtModifiers)) return 1;
+    if (vk == noExtKey && ModifiersHeld(noExtModifiers)) return 2;
+    return 0;
+}
+
+// True while the user is typing somewhere in this window: the rename box, the
+// address bar, the search box, or any other text field. The key belongs to
+// that field then.
+static bool IsTextFieldFocused(HWND root, HWND focus) {
+    if (!focus) return false;
+    // A dialog or another top-level window has the keyboard.
+    if (GetAncestor(focus, GA_ROOT) != root) return true;
+
+    // Text fields in File Explorer are an Edit control, a rich edit, or sit
+    // inside a wrapper with Edit in its class name, like the search box.
+    for (HWND h = focus; h && h != root; h = GetAncestor(h, GA_PARENT)) {
+        wchar_t cls[64];
+        if (!GetClassNameW(h, cls, ARRAYSIZE(cls))) break;
+        if (wcsstr(cls, L"Edit") || wcsstr(cls, L"Address Band")) return true;
     }
+
+    // Whatever its class, a window with a caret takes typed text.
+    GUITHREADINFO info{};
+    info.cbSize = sizeof(info);
+    if (GetGUIThreadInfo(GetCurrentThreadId(), &info) && info.hwndCaret) return true;
+    return false;
 }
+
+// The tab that holds the given window. Falls back to the first tab of the
+// frame when the window sits outside the tabs, like the toolbar area.
+static HWND TabForWindow(HWND hWnd, HWND root) {
+    for (HWND h = hWnd; h && h != root; h = GetAncestor(h, GA_PARENT)) {
+        if (HasClass(h, L"ShellTabWindowClass")) return h;
+    }
+    return FindWindowExW(root, nullptr, L"ShellTabWindowClass", nullptr);
+}
+
+// Returns true when the key was one of ours and names were copied. In every
+// other case the key is left to File Explorer.
+static bool HandleHotkey(const MSG* msg) {
+    int which = MatchHotkey((UINT)msg->wParam);
+    if (!which) return false;
+
+    HWND root = GetAncestor(msg->hwnd, GA_ROOT);
+    if (!IsExplorerWindow(root)) return false;
+    if (IsTextFieldFocused(root, msg->hwnd)) return false;
+
+    IShellBrowser* browser = BrowserForTab(TabForWindow(msg->hwnd, root));
+    if (!browser) return false;
+    bool copied = CopySelection(browser, root, which == 1);
+    browser->Release();
+    if (!copied) return false;
+
+    // With Alt held, File Explorer waits for the rest of a menu shortcut. A
+    // focus round trip drops it out of that state.
+    if (msg->message == WM_SYSKEYDOWN && (GetKeyState(VK_MENU) & 0x8000)) {
+        HWND focus = GetFocus();
+        SetFocus(root);
+        if (focus && IsWindow(focus)) SetFocus(focus);
+    }
+    return true;
+}
+
+using TranslateAcceleratorW_t = decltype(&TranslateAcceleratorW);
+static TranslateAcceleratorW_t TranslateAcceleratorW_Original;
+
+static int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) {
+    if (lpMsg && g_hotkeys && !g_unloading &&
+        (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN) &&
+        // Bit 30 marks an auto repeat. One press copies once.
+        !(lpMsg->lParam & (1 << 30)) && HandleHotkey(lpMsg)) {
+        return 1;
+    }
+    return TranslateAcceleratorW_Original(hWnd, hAccTable, lpMsg);
+}
+
+// Right-click menu.
 
 // Returns the shell browser behind a menu owner window when that window is the
 // file view of a File Explorer window. Anything else, like the navigation pane,
@@ -504,14 +497,7 @@ static IShellBrowser* BrowserForFileView(HWND hWnd) {
             if (wcscmp(cls, L"SHELLDLL_DefView") == 0) inFileView = true;
             continue;
         }
-        if (wcscmp(cls, L"ShellTabWindowClass") == 0) {
-            // The tab and the menu run on the same thread, so the pointer is
-            // safe to use here. Take a reference while we hold it.
-            IShellBrowser* browser =
-                (IShellBrowser*)SendMessageW(h, kMsgGetShellBrowser, 0, 0);
-            if (browser) browser->AddRef();
-            return browser;
-        }
+        if (wcscmp(cls, L"ShellTabWindowClass") == 0) return BrowserForTab(h);
         if (wcscmp(cls, L"CabinetWClass") == 0) break;
     }
     return nullptr;
@@ -555,13 +541,20 @@ static bool HasCheckedItem(HMENU menu, int count) {
     return false;
 }
 
+// The menu after a drag with the right mouse button (Copy here, Move here,
+// Create shortcuts here, Cancel) ends with a Cancel item whose ID is 0, so a
+// pick of it looks like a closed menu. The shell's own menu resources all end
+// that way. A file menu ends with Properties, which has a real ID.
+static bool EndsWithCancel(HMENU menu, int count) {
+    if (count < 1) return false;
+    UINT state = GetMenuState(menu, (UINT)count - 1, MF_BYPOSITION);
+    if (state == (UINT)-1 || (state & MF_SEPARATOR)) return false;
+    return GetMenuItemID(menu, count - 1) == 0;
+}
+
 static bool IsOnColumnHeader(int x, int y) {
     POINT pt{x, y};
-    HWND hWnd = WindowFromPoint(pt);
-    if (!hWnd) return false;
-    wchar_t cls[64];
-    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    return wcscmp(cls, L"SysHeader32") == 0;
+    return HasClass(WindowFromPoint(pt), L"SysHeader32");
 }
 
 static bool InsertItem(HMENU menu, UINT pos, UINT id, PCWSTR label) {
@@ -583,11 +576,15 @@ static UINT AddMenuEntries(HMENU menu, HWND owner, UINT flags, int x, int y,
     // Without TPM_RETURNCMD the pick goes to the owner as WM_COMMAND, and the
     // shell would get an ID it doesn't know.
     if (!(flags & TPM_RETURNCMD)) return 0;
+    // Most menus in explorer.exe belong to the taskbar, the tray or the
+    // desktop. Only a File Explorer window gets a closer look.
+    if (!owner || !IsExplorerWindow(GetAncestor(owner, GA_ROOT))) return 0;
 
     // Cheap checks first. The empty-space menu has Refresh.
     if (!IsMenuIdFree(menu, kRefreshCmd)) return 0;
     int count = GetMenuItemCount(menu);
     if (count < 0) return 0;
+    if (EndsWithCancel(menu, count)) return 0;
     // A menu for files and folders usually has a default action, like Open,
     // and the column header menu has none. File Explorer drops Open when more
     // than 15 files are selected, so a menu without one still counts unless
@@ -682,75 +679,14 @@ static BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, i
     });
 }
 
-static LRESULT CALLBACK MsgWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-        case WM_TIMER:
-            if (wParam == kTimerId) UpdateKeys(hWnd);
-            return 0;
-        case WM_HOTKEY:
-            if (wParam == kHotkeyWithExt) CopyNames(hWnd, true);
-            else if (wParam == kHotkeyNoExt) CopyNames(hWnd, false);
-            return 0;
-        case WM_APP_RELOAD:
-            // Drop the old keys. The next timer tick registers the new ones if
-            // File Explorer is in front.
-            UnregisterKeys(hWnd);
-            g_keysWanted = false;
-            g_loggedRegisterError = false;
-            LoadSettings();
-            UpdateKeys(hWnd);
-            return 0;
-        case WM_APP_QUIT:
-            DestroyWindow(hWnd);
-            return 0;
-        case WM_DESTROY:
-            KillTimer(hWnd, kTimerId);
-            UnregisterKeys(hWnd);
-            PostQuitMessage(0);
-            return 0;
-    }
-    return DefWindowProcW(hWnd, msg, wParam, lParam);
-}
-
-static DWORD WINAPI ThreadProc(LPVOID) {
-    HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    bool comReady = SUCCEEDED(hrCom);
-    if (!comReady) Wh_Log(L"CoInitializeEx failed (0x%08lX)", (unsigned long)hrCom);
-
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = MsgWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"WindhawkBulkCopyFileAndFolderNamesWnd";
-    RegisterClassW(&wc);
-
-    HWND wnd = nullptr;
-    if (comReady) {
-        wnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                              wc.hInstance, nullptr);
-        if (wnd) SetTimer(wnd, kTimerId, kTimerMs, nullptr);
-        else Wh_Log(L"Couldn't create the message window (error %lu)", GetLastError());
-    }
-    g_msgWnd = wnd;
-    SetEvent(g_readyEvent);
-
-    if (wnd) {
-        MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-    }
-
-    g_msgWnd = nullptr;
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    if (comReady) CoUninitialize();
-    return 0;
-}
-
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    // A failed hook only costs the menu entries. The hotkeys still work.
+    // Each hook only costs its own feature when it fails.
+    if (!WindhawkUtils::SetFunctionHook(TranslateAcceleratorW, TranslateAcceleratorW_Hook,
+                                        &TranslateAcceleratorW_Original)) {
+        Wh_Log(L"Couldn't hook TranslateAcceleratorW, so the hotkeys are off");
+    }
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
                                         &TrackPopupMenuEx_Original)) {
         Wh_Log(L"Couldn't hook TrackPopupMenuEx, so the menu entries are off");
@@ -759,48 +695,24 @@ BOOL Wh_ModInit() {
                                         &TrackPopupMenu_Original)) {
         Wh_Log(L"Couldn't hook TrackPopupMenu");
     }
-
-    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_readyEvent) return FALSE;
-    g_thread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, &g_threadId);
-    if (!g_thread) {
-        CloseHandle(g_readyEvent);
-        g_readyEvent = nullptr;
-        return FALSE;
-    }
-    WaitForSingleObject(g_readyEvent, 3000);
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
-    HWND wnd = g_msgWnd;
-    if (wnd) PostMessageW(wnd, WM_APP_RELOAD, 0, 0);
+    LoadSettings();
 }
 
 void Wh_ModBeforeUninit() {
+    // No new work from here on. The hooks pass everything through.
+    g_unloading = true;
+    g_hotkeys = false;
+    g_contextMenu = false;
+
     // A menu with our entries may still be open. Close it so the hook returns
     // before the mod's code goes away.
-    g_contextMenu = false;
     for (int i = 0; i < 100 && g_openMenus > 0; i++) {
         HWND owner = g_menuOwner;
         if (owner) PostMessageW(owner, WM_CANCELMODE, 0, 0);
         Sleep(20);
-    }
-}
-
-void Wh_ModUninit() {
-    if (g_thread) {
-        // Post to the window, not the thread. A thread message can be lost while
-        // a COM call runs its own message loop.
-        HWND wnd = g_msgWnd;
-        if (wnd) PostMessageW(wnd, WM_APP_QUIT, 0, 0);
-        else PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 5000);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
-    }
-    if (g_readyEvent) {
-        CloseHandle(g_readyEvent);
-        g_readyEvent = nullptr;
     }
 }
