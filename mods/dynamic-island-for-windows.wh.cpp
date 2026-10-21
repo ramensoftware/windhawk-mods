@@ -53,7 +53,7 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 - **Your Language:** The island's own labels follow your Windows display language across 12 languages, or you can pick one explicitly.
 - **File Tray:** Drag any file onto the island to park it on a shelf, then click to open it. You can now drag files back out into any folder or app, and remove them one by one. The island itself only references files, it never copies or moves them.
 - **Lyrics on the Collapsed Island:** Switch on "Show lyrics on collapsed island" from the right-click menu and the pill widens to show the current line as it's sung, sliding in with every new line. When there are no synced lyrics it shows the song title instead.
-- **Quick Lookup:** Press **Ctrl+Alt+Space** to open a search box right on the island. Type a word or phrase, press Enter, and get a definition or a short summary. Your clipboard text and recent searches are one click away.
+- **Quick Lookup:** Once enabled under Modules, press **Ctrl+Alt+Space** to open a search box right on the island. Type a word or phrase, press Enter, and get a definition or a short summary. Your clipboard text and recent searches are one click away.
 - **Lyrics Sync Offset:** Nudge lyric timing in milliseconds when lyrics feel early or late, with a separate value for Bluetooth audio output that is picked automatically from your default audio device. Set it in Mod Settings or from the right-click menu's "Lyrics sync" submenu.
 - **Typography & Clock Control:** Scale all island text independently of the island's size, choose 12- or 24-hour time, show seconds, and set a custom date pattern — including CJK forms like `yyyy年MM月dd日`.
 
@@ -65,7 +65,7 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 - **File Tray:** Enable the File Tray module, then drag files onto the island. It jumps to the shelf to confirm the drop. Click a row to open that file, drag a row out to drop the file into any folder or app, or press the small ✕ on a row to remove just that file. The bin button in the header clears the whole shelf.
 - **Lyrics on the Collapsed Island:** Right-click the island and tick "Show lyrics on collapsed island". This choice is remembered across restarts. Long lines pan across as they are sung.
 - **Cross-Source Media Switching:** If multiple apps are playing media at the same time, you can smoothly swap between their active playback controls directly from the island without opening the apps.
-- **Quick Lookup:** Press the hotkey (default **Ctrl+Alt+Space**, changeable in the **Shortcuts** tab) to open the search box. Type a word or phrase and press Enter. Up/Down picks a row and Esc closes it. With an empty box it suggests your clipboard text and your recent lookups. Results come from Wiktionary and Wikipedia, with dictionaryapi.dev as a backup. Nothing is sent anywhere until you press Enter, and recent lookups are kept in memory only. Turn it off under Modules > "Quick Lookup (hotkey)".
+- **Quick Lookup:** Enable "Quick Lookup (hotkey)" under Modules, then press the hotkey (default **Ctrl+Alt+Space**, changeable in the **Shortcuts** tab) to open the search box. Type a word or phrase and press Enter. Up/Down picks a row and Esc closes it. With an empty box it suggests your clipboard text and your recent lookups. Results come from Wiktionary and Wikipedia, with dictionaryapi.dev as a backup. Nothing is sent anywhere until you press Enter, and recent lookups are kept in memory only.
 - **Right-Click Menu:** Right-click the island to access Theme presets, Transparency settings, collapsed-island lyrics, and to pin the island open.
 - **⚠️ Right-click choices are per-session:** The right-click menu is a quick way to try things out, not a place to configure the mod. **Theme**, **shape style** (Pill / Notch / Windows 11) and **pin open** are all re-applied from your Windhawk settings whenever the mod restarts — so a reboot, a mod update, or toggling the mod off and on will discard them. Anything you want to keep, set in the **Mod Settings** tab instead. (Transparency and Expand-on-hover do persist, but the settings tab is still the reliable place for them.)
 - **Windhawk Settings:** Visit the Mod Settings tab to change the island's Position, Size Scale, Refresh Rate (Target FPS), Animation Style (Smooth/Default/Bouncy/Snappy), Animation Speed, and toggle specific modules. You can also perfectly align the island using the `Offset X` and `Offset Y` settings, and select exactly which monitor the island should appear on (including a "Follow Mouse" mode!).
@@ -80,12 +80,12 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 **Why it matters:** instant lyrics, less load on the free LRCLIB server, tiny disk footprint, and you can wipe it anytime.
 
 - **Source:** lyrics come from [LRCLIB](https://lrclib.net), a free open-source lyrics database.
-- **Where:** `%LOCALAPPDATA%\DynamicIslandForWindows\lyrics`, one small file per song.
-- **What's inside:** the song title, artist, album, duration and the lyric text. It stays on your own PC only. Nothing is uploaded anywhere.
+- **Where:** inside the mod's storage folder (`lyrics` subfolder), one small file per song.
+- **What's inside:** when fetching lyrics, the title, artist, album, and duration of the track being shown are sent to LRCLIB to look up matching lyrics. The retrieved lyrics and track metadata are then saved locally in the cache on your PC.
 - **Size & expiry:** capped at 25 MB by default (10 / 25 / 100 MB or Off in settings); the least recently used files are deleted first. Only songs that have lyrics are cached (refreshed after 90 days). Songs without lyrics, and failed requests, are never saved, so they are simply looked up again each time they play.
 - **Turn it off:** Mod Settings > Modules > "Lyrics cache (disk)", or set the size limit to Off. Lyrics are then not read from or written to disk at all.
 - **Clear it:** right-click the island > "Clear lyrics cache" (shows how many songs and how much space it uses).
-- **By hand:** you can delete the folder at any time. It is not removed when the mod is uninstalled.
+- **By hand:** you can clear or delete the cache at any time. It is stored in Windhawk's mod storage and is automatically cleaned up if the mod is uninstalled.
 
 ---
 
@@ -447,7 +447,7 @@ We love community contributions! To ensure high-quality updates, please follow t
     $description: By default the lines above and below the active line are only a faint ghost. Turn this on to make them clearly readable.
   - LyricsCache: true
     $name: Lyrics cache (disk)
-    $description: Instant lyrics, less load on LRCLIB, tiny disk use, clearable anytime. Stored in %LOCALAPPDATA%\DynamicIslandForWindows\lyrics. Turn off to stop all lyrics disk reads and writes.
+    $description: Instant lyrics, less load on LRCLIB, tiny disk use, clearable anytime. Stored in the mod's storage folder. Turn off to stop all lyrics disk reads and writes.
   - LyricsCacheMaxMB: '25'
     $name: Lyrics cache size limit
     $description: Least recently used files are deleted once the cache grows past this. Off disables the disk cache.
@@ -577,6 +577,7 @@ We love community contributions! To ensure high-quality updates, please follow t
 #include <shellapi.h>
 #include <ole2.h>
 #include <shlobj.h>
+#include <sddl.h>
 #include <setupapi.h>
 #include <devpropdef.h>
 #include <dbt.h>
@@ -1128,6 +1129,7 @@ struct Settings {
     bool separateExpandedOffsetY = false;  // #83
     int offsetYExpanded = 0;               // #83
     float sizeScale = 1.0f;
+    float baseSizeScale = 1.0f;
     std::wstring fontFamily;
     AccentMode accentMode = AccentMode::Auto;
     D2D1_COLOR_F customAccent = D2D1::ColorF(0x4cc9f0);
@@ -2681,18 +2683,62 @@ bool IsForegroundFullscreen(HWND targetHwnd) {
     return false;
 }
 
-// Returns the DPI scale factor for the primary monitor (1.0 = 96 DPI = 100%)
-float GetPrimaryMonitorDpiScale() {
-    POINT pt = {0, 0};
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+struct MonitorEnumData {
+    std::vector<HMONITOR> monitors;
+};
+
+inline BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
+    auto* data = reinterpret_cast<MonitorEnumData*>(dwData);
+    data->monitors.push_back(hMonitor);
+    return TRUE;
+}
+
+inline HMONITOR GetAnchorMonitorFor(int targetMonitor) {
+    HMONITOR selectedMonitor = nullptr;
+
+    if (targetMonitor == -1) {
+        POINT pt = {0, 0};
+        GetCursorPos(&pt);
+        selectedMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    } else if (targetMonitor > 0) {
+        MonitorEnumData data;
+        EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(&data));
+
+        int index = targetMonitor - 1;
+        if (index >= 0 && index < static_cast<int>(data.monitors.size())) {
+            selectedMonitor = data.monitors[index];
+        }
+    }
+
+    if (!selectedMonitor) {
+        POINT pt = {0, 0};
+        selectedMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
+    return selectedMonitor;
+}
+
+inline HMONITOR GetAnchorMonitor() {
+    return GetAnchorMonitorFor(g_settings.targetMonitor);
+}
+
+// Returns the DPI scale factor for a given monitor (1.0 = 96 DPI = 100%)
+inline float GetMonitorDpiScale(HMONITOR monitor) {
+    if (!monitor) {
+        POINT pt = {0, 0};
+        monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
     UINT dpiX = 96, dpiY = 96;
     using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
     static auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
         GetProcAddress(GetModuleHandleW(L"shcore.dll"), "GetDpiForMonitor"));
-    if (pGetDpiForMonitor) {
+    if (pGetDpiForMonitor && monitor) {
         pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY);
     }
     return static_cast<float>(dpiX) / 96.0f;
+}
+
+[[maybe_unused]] inline float GetPrimaryMonitorDpiScale() {
+    return GetMonitorDpiScale(nullptr);
 }
 
 int GetMonitorRefreshRate(HWND hwnd) {
@@ -2768,12 +2814,19 @@ void LoadSettings() {
             next.sizeScale = parsedScale;
         }
     }
+    next.baseSizeScale = next.sizeScale;
 
-    // Auto DPI scaling: multiply sizeScale by monitor DPI factor.
-    // On a 4K 200% display this doubles the island to the right physical size.
-    if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
-        next.sizeScale *= GetPrimaryMonitorDpiScale();
-    }
+    std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
+    if (mon == L"primary") next.targetMonitor = 0;
+    else if (mon == L"follow") next.targetMonitor = -1;
+    else next.targetMonitor = _wtoi(mon.c_str());
+
+    // Auto DPI scaling: multiply sizeScale by monitor DPI factor for the target display.
+    // On mixed-DPI setups or a 4K 200% display this scales the island to the right physical size.
+    next.autoDpiScale = (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0);
+    HMONITOR anchorMon = GetAnchorMonitorFor(next.targetMonitor);
+    const float dpi = next.autoDpiScale ? GetMonitorDpiScale(anchorMon) : 1.0f;
+    next.sizeScale = next.baseSizeScale * dpi;
 
     std::wstring fontSetting = GetStringSettingWithFallback(L"Themes.FontFamily", L"Appearance.FontFamily");
     size_t firstChar = fontSetting.find_first_not_of(L" \t\r\n\"'");
@@ -3093,7 +3146,7 @@ void LoadSettings() {
     next.separateExpandedOffsetY = Wh_GetIntSetting(L"Appearance.SeparateExpandedOffsetY") != 0;
     next.offsetYExpanded = Wh_GetIntSetting(L"Appearance.OffsetYExpanded");
 
-    std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
+    mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
     if (mon == L"primary") next.targetMonitor = 0;
     else if (mon == L"follow") next.targetMonitor = -1;
     else next.targetMonitor = _wtoi(mon.c_str());
@@ -3807,38 +3860,11 @@ void ApplyHideShowHotkey() {
 
 
 
-struct MonitorEnumData {
-    std::vector<HMONITOR> monitors;
-};
-
-BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
-    auto* data = reinterpret_cast<MonitorEnumData*>(dwData);
-    data->monitors.push_back(hMonitor);
-    return TRUE;
-}
-
-RECT GetAnchorWorkRect() {
-    HMONITOR selectedMonitor = nullptr;
-
-    if (g_settings.targetMonitor == -1) {
-        POINT pt = {0, 0};
-        GetCursorPos(&pt);
-        selectedMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    } else if (g_settings.targetMonitor > 0) {
-        MonitorEnumData data;
-        EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(&data));
-
-        int index = g_settings.targetMonitor - 1;
-        if (index >= 0 && index < static_cast<int>(data.monitors.size())) {
-            selectedMonitor = data.monitors[index];
-        }
+RECT GetAnchorWorkRect(HMONITOR* outMonitor = nullptr) {
+    HMONITOR selectedMonitor = GetAnchorMonitor();
+    if (outMonitor) {
+        *outMonitor = selectedMonitor;
     }
-
-    if (!selectedMonitor) {
-        POINT pt = {0, 0};
-        selectedMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
-    }
-
     MONITORINFO mi = {sizeof(mi)};
     GetMonitorInfoW(selectedMonitor, &mi);
     return mi.rcWork;
@@ -5778,6 +5804,14 @@ DWORD WINAPI NotificationThreadProc(void*) {
                             auto appInfo = userNotification.AppInfo();
                             auto displayInfo = appInfo.DisplayInfo();
                             snapshot.app = displayInfo.DisplayName().c_str();
+
+                            // Filter out noisy background console/script engines like PowerShell that fire system toasts unexpectedly
+                            const std::wstring lowerApp = ToLowerCopy(snapshot.app);
+                            if (lowerApp.find(L"powershell") != std::wstring::npos ||
+                                lowerApp.find(L"pwsh") != std::wstring::npos ||
+                                lowerApp.find(L"cmd.exe") != std::wstring::npos) {
+                                continue;
+                            }
                             try {
                                 auto logo = displayInfo.GetLogo({32.0f, 32.0f});
                                 std::vector<uint8_t> logoBytes = ReadWinRtStreamBytes(logo);
@@ -5823,7 +5857,7 @@ DWORD WINAPI NotificationThreadProc(void*) {
                             }
                             TriggerNudge();
                         } catch (const winrt::hresult_error& nex) {
-                            if (nex.to_abi() == 0x80004001 || nex.to_abi() == 0x80040154) { // E_NOTIMPL or REGDB_E_CLASSNOTREG
+                            if (nex.to_abi() == static_cast<int32_t>(0x80004001) || nex.to_abi() == static_cast<int32_t>(0x80040154)) { // E_NOTIMPL or REGDB_E_CLASSNOTREG
                                 // UWP subsystem not ready, skip without spamming logs
                             } else {
                                 Wh_Log(L"Failed to parse a notification (0x%08X); skipping.", nex.to_abi());
@@ -5836,7 +5870,7 @@ DWORD WINAPI NotificationThreadProc(void*) {
                     seenIds = std::move(currentIds);
                 } catch (const winrt::hresult_error& ex) {
                     const HRESULT hr = ex.to_abi();
-                    if (hr == 0x80004001 || hr == 0x80040154) { // E_NOTIMPL or REGDB_E_CLASSNOTREG
+                    if (hr == static_cast<HRESULT>(0x80004001) || hr == static_cast<HRESULT>(0x80040154)) { // E_NOTIMPL or REGDB_E_CLASSNOTREG
                         if (!accessLogged) {
                             Wh_Log(L"Notification listener UWP subsystem not fully ready (0x%08X). Retrying in background...", hr);
                             accessLogged = true;
@@ -7346,17 +7380,21 @@ void CountersAdjust(int dCount, int64_t dBytes) {
 }
 
 // ---- cache folder -------------------------------------------------------------
-// %LOCALAPPDATA%\DynamicIslandForWindows\lyrics. Empty if LOCALAPPDATA is unset,
-// in which case the disk layer simply behaves as a permanent miss.
+// Windhawk mod storage directory \lyrics. Fallback to %LOCALAPPDATA%\DynamicIslandForWindows\lyrics.
 const std::wstring& CacheDir(bool create) {
     static std::wstring dir;
     static bool resolved = false;
     if (!resolved) {
         resolved = true;
-        wchar_t base[MAX_PATH] = {};
-        const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-        if (n > 0 && n < ARRAYSIZE(base)) {
-            dir = std::wstring(base) + L"\\DynamicIslandForWindows\\lyrics";
+        wchar_t storagePath[MAX_PATH] = {};
+        if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+            dir = std::wstring(storagePath) + L"\\lyrics";
+        } else {
+            wchar_t base[MAX_PATH] = {};
+            const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
+            if (n > 0 && n < ARRAYSIZE(base)) {
+                dir = std::wstring(base) + L"\\DynamicIslandForWindows\\lyrics";
+            }
         }
     }
     if (create && !dir.empty()) {
@@ -9256,6 +9294,14 @@ bool IsLikelyToastWindow(HWND hwnd, const wchar_t* className, const wchar_t* tit
         return false;
     }
 
+    std::wstring image;
+    if (ProcessImageNameForWindow(hwnd, &image)) {
+        const std::wstring base = ToLowerCopy(BaseNameFromPath(image));
+        if (base == L"powershell.exe" || base == L"pwsh.exe" || base == L"conhost.exe" || base == L"cmd.exe") {
+            return false;
+        }
+    }
+
     const std::wstring cls = ToLowerCopy(className ? className : L"");
     const std::wstring text = ToLowerCopy(title ? title : L"");
 
@@ -9327,78 +9373,83 @@ void CaptureShellNotification(HWND hwnd) {
     // Spawn a background thread to extract the full rich text body of the toast using UI Automation.
     // Modern Windows Toasts often only provide the App Name via GetWindowTextW, leaving the body hidden in the XAML tree.
     std::thread([hwnd]() {
-        Sleep(400); // Give the heavy UWP XAML tree enough time to fully construct the text nodes
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        if (SUCCEEDED(hr)) {
-            IUIAutomation* uia = nullptr;
-            hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia);
-            if (SUCCEEDED(hr) && uia) {
-                IUIAutomation2* uia2 = nullptr;
-                if (SUCCEEDED(uia->QueryInterface(__uuidof(IUIAutomation2), (void**)&uia2)) && uia2) {
-                    uia2->put_TransactionTimeout(500);
-                    uia2->put_ConnectionTimeout(500);
-                    uia2->Release();
-                }
-                IUIAutomationElement* windowEl = nullptr;
-                if (SUCCEEDED(uia->ElementFromHandle(hwnd, &windowEl)) && windowEl) {
-                    IUIAutomationCondition* cond = nullptr;
-                    uia->CreateTrueCondition(&cond);
-                    IUIAutomationElementArray* elements = nullptr;
-                    if (SUCCEEDED(windowEl->FindAll(TreeScope_Descendants, cond, &elements)) && elements) {
-                        int count = 0;
-                        elements->get_Length(&count);
-                        std::wstring appName;
-                        std::wstring fullText;
-                        for (int i = 0; i < count; ++i) {
-                            IUIAutomationElement* el = nullptr;
-                            if (SUCCEEDED(elements->GetElement(i, &el)) && el) {
-                                BSTR name = nullptr;
-                                el->get_CurrentName(&name);
-                                if (name && wcslen(name) > 0) {
-                                    std::wstring chunk = name;
-                                    // Skip generic screen-reader labels often found in toasts
-                                    if (chunk != L"Notification" && chunk != L"New notification") {
-                                        if (appName.empty()) {
-                                            appName = chunk;
-                                        } else {
-                                            if (!fullText.empty()) fullText += L"  -  ";
-                                            fullText += chunk;
+        try {
+            Sleep(400); // Give the heavy UWP XAML tree enough time to fully construct the text nodes
+            if (!IsWindow(hwnd)) return;
+            HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            if (SUCCEEDED(hr)) {
+                IUIAutomation* uia = nullptr;
+                hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia);
+                if (SUCCEEDED(hr) && uia) {
+                    IUIAutomation2* uia2 = nullptr;
+                    if (SUCCEEDED(uia->QueryInterface(__uuidof(IUIAutomation2), (void**)&uia2)) && uia2) {
+                        uia2->put_TransactionTimeout(500);
+                        uia2->put_ConnectionTimeout(500);
+                        uia2->Release();
+                    }
+                    IUIAutomationElement* windowEl = nullptr;
+                    if (SUCCEEDED(uia->ElementFromHandle(hwnd, &windowEl)) && windowEl) {
+                        IUIAutomationCondition* cond = nullptr;
+                        uia->CreateTrueCondition(&cond);
+                        IUIAutomationElementArray* elements = nullptr;
+                        if (SUCCEEDED(windowEl->FindAll(TreeScope_Descendants, cond, &elements)) && elements) {
+                            int count = 0;
+                            elements->get_Length(&count);
+                            std::wstring appName;
+                            std::wstring fullText;
+                            for (int i = 0; i < count; ++i) {
+                                IUIAutomationElement* el = nullptr;
+                                if (SUCCEEDED(elements->GetElement(i, &el)) && el) {
+                                    BSTR name = nullptr;
+                                    el->get_CurrentName(&name);
+                                    if (name && wcslen(name) > 0) {
+                                        std::wstring chunk = name;
+                                        // Skip generic screen-reader labels often found in toasts
+                                        if (chunk != L"Notification" && chunk != L"New notification") {
+                                            if (appName.empty()) {
+                                                appName = chunk;
+                                            } else {
+                                                if (!fullText.empty()) fullText += L"  -  ";
+                                                fullText += chunk;
+                                            }
                                         }
                                     }
+                                    if (name) SysFreeString(name);
+                                    el->Release();
                                 }
-                                if (name) SysFreeString(name);
-                                el->Release();
                             }
-                        }
-                        elements->Release();
+                            elements->Release();
 
-                        if (fullText.empty() && !appName.empty()) {
-                            fullText = appName;
-                            appName = L"Notification";
-                        }
+                            if (fullText.empty() && !appName.empty()) {
+                                fullText = appName;
+                                appName = L"Notification";
+                            }
 
-                        if (!fullText.empty()) {
-                            std::lock_guard lock(g_stateMutex);
-                            if (g_state.notification.active) {
-                                if (!appName.empty()) {
-                                    g_state.notification.app = appName;
-                                    if (appName != L"Notification") {
-                                        PixelsRef resolvedIcon = FindAppIconByName(appName, 64);
+                            if (!fullText.empty()) {
+                                PixelsRef resolvedIcon;
+                                if (!appName.empty() && appName != L"Notification") {
+                                    resolvedIcon = FindAppIconByName(appName, 64);
+                                }
+                                std::lock_guard lock(g_stateMutex);
+                                if (g_state.notification.active) {
+                                    if (!appName.empty()) {
+                                        g_state.notification.app = appName;
                                         if (resolvedIcon) {
                                             g_state.notification.icon = std::move(resolvedIcon);
                                         }
                                     }
+                                    g_state.notification.title = fullText;
                                 }
-                                g_state.notification.title = fullText;
                             }
                         }
+                        if (cond) cond->Release();
+                        windowEl->Release();
                     }
-                    if (cond) cond->Release();
-                    windowEl->Release();
+                    uia->Release();
                 }
-                uia->Release();
+                CoUninitialize();
             }
-            CoUninitialize();
+        } catch (...) {
         }
     }).detach();
 }
@@ -21097,13 +21148,49 @@ namespace FileTrayStore {
 
 std::mutex g_ioMutex;  // serialises the load/save file access
 
-bool ResolvePaths(std::wstring* dir, std::wstring* file) {
-    wchar_t base[MAX_PATH] = {};
-    const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-    if (n == 0 || n >= ARRAYSIZE(base)) {
-        return false;
+inline std::wstring GetCurrentUserSid() {
+    HANDLE hToken = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        DWORD len = 0;
+        GetTokenInformation(hToken, TokenUser, nullptr, 0, &len);
+        if (len > 0) {
+            std::vector<BYTE> buffer(len);
+            if (GetTokenInformation(hToken, TokenUser, buffer.data(), len, &len)) {
+                auto* tokenUser = reinterpret_cast<TOKEN_USER*>(buffer.data());
+                LPWSTR sidString = nullptr;
+                if (ConvertSidToStringSidW(tokenUser->User.Sid, &sidString)) {
+                    std::wstring result = sidString;
+                    LocalFree(sidString);
+                    CloseHandle(hToken);
+                    return result;
+                }
+            }
+        }
+        CloseHandle(hToken);
     }
-    *dir = std::wstring(base) + L"\\DynamicIslandForWindows\\filetray";
+    wchar_t userBuf[256] = {};
+    DWORD un = ARRAYSIZE(userBuf);
+    if (GetUserNameW(userBuf, &un) && un > 0) {
+        return userBuf;
+    }
+    return L"default";
+}
+
+bool ResolvePaths(std::wstring* dir, std::wstring* file) {
+    wchar_t storagePath[MAX_PATH] = {};
+    std::wstring baseDir;
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        baseDir = storagePath;
+    } else {
+        wchar_t base[MAX_PATH] = {};
+        const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
+        if (n == 0 || n >= ARRAYSIZE(base)) {
+            return false;
+        }
+        baseDir = std::wstring(base) + L"\\DynamicIslandForWindows";
+    }
+    const std::wstring userKey = GetCurrentUserSid();
+    *dir = baseDir + L"\\filetray\\" + userKey;
     *file = *dir + L"\\items.dat";
     return true;
 }
@@ -21178,8 +21265,7 @@ void SaveFileTray() {
         return;
     }
 
-    CreateDirectoryW(dir.substr(0, dir.find_last_of(L'\\')).c_str(), nullptr);
-    CreateDirectoryW(dir.c_str(), nullptr);
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
 
     std::string data = "DIWFT 1\n";
     for (const Row& row : rows) {
@@ -22302,6 +22388,24 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     mediaActive = g_settings.media && g_state.media.available;
                     kinds = ChooseActivities(g_state, g_settings, NowSeconds());
                 }
+
+                // Clicking an active transient notification or clipboard card immediately dismisses it cleanly
+                if (!kinds.empty() && (kinds[0] == IslandKind::Notification || kinds[0] == IslandKind::Clipboard)) {
+                    {
+                        std::lock_guard lock(g_stateMutex);
+                        if (kinds[0] == IslandKind::Notification) {
+                            g_state.notification.active = false;
+                            g_state.notification.expiresAt = 0.0;
+                        } else if (kinds[0] == IslandKind::Clipboard) {
+                            g_state.clipboard.active = false;
+                            g_state.clipboard.expiresAt = 0.0;
+                        }
+                    }
+                    g_clickExpanded = false;
+                    g_layoutDirty = true;
+                    TriggerNudge();
+                    return 0;
+                }
                 const bool gameMetricsPresent =
                     !kinds.empty() && kinds[0] == IslandKind::Idle &&
                     (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0);
@@ -22495,6 +22599,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ClientToScreen(hwnd, &pt);
             ShowContextMenu(hwnd, pt);
+            return 0;
+        }
+
+        case WM_DPICHANGED:
+        case WM_DISPLAYCHANGE: {
+            g_layoutDirty = true;
+            PostMessageW(hwnd, WM_APP_NEW_EVENT, 0, 0);
             return 0;
         }
 
@@ -23262,14 +23373,22 @@ DWORD WINAPI RenderThreadProc(void*) {
             needsRender = true;
         }
 
-        // Active Monitor Tracking (Follow Mouse)
-        if (g_settings.targetMonitor == -1) {
-            static HMONITOR s_lastMonitor = nullptr;
-            POINT pt;
-            GetCursorPos(&pt);
-            HMONITOR currentMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            if (currentMonitor != s_lastMonitor) {
-                s_lastMonitor = currentMonitor;
+        // Active Monitor Tracking & dynamic DPI scaling
+        {
+            HMONITOR currentAnchor = nullptr;
+            GetAnchorWorkRect(&currentAnchor);
+            const float currentDpi = GetMonitorDpiScale(currentAnchor);
+            static HMONITOR s_lastAnchorMon = nullptr;
+            static float s_lastDpi = 0.0f;
+            if (currentAnchor != s_lastAnchorMon || currentDpi != s_lastDpi) {
+                s_lastAnchorMon = currentAnchor;
+                s_lastDpi = currentDpi;
+                std::lock_guard lock(g_settingsMutex);
+                if (g_settings.autoDpiScale) {
+                    g_settings.sizeScale = g_settings.baseSizeScale * currentDpi;
+                } else {
+                    g_settings.sizeScale = g_settings.baseSizeScale;
+                }
                 g_layoutDirty = true;
             }
         }
