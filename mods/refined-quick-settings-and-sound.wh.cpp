@@ -2,7 +2,7 @@
 // @id refined-quick-settings-and-sound
 // @name Refined Quick Settings and Sound
 // @description A "vanilla+" rework of the Windows 11 Quick Settings and Volume mixer panels for daily use
-// @version 0.1.153
+// @version 0.1.154
 // @author HeyOkay
 // @github https://github.com/HeyOkay
 // @include explorer.exe
@@ -63,7 +63,7 @@ customizations are restored when the mod is unloaded.
 - The first Sound opening in each ShellHost process starts with the mixer
   collapsed; subsequent openings remember its state.
 
-Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling this candidate, close and reopen it; restart ShellHost if it is not picked up.
+Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling the mod, close and reopen it; restart ShellHost if it is not picked up.
 
 ## Notes
 
@@ -102,7 +102,7 @@ in this source file.
 #include <windows.h>
 #include <shellapi.h>
 #include <windhawk_utils.h>
-#include <ocidl.h>
+#include <unknwn.h>
 #include <mutex>
 #include <set>
 #include <map>
@@ -738,9 +738,40 @@ using winrt::Windows::Foundation::IInspectable;
 inline std::atomic<bool> stopping = false;
 inline HMODULE module = nullptr;
 inline std::vector<std::wstring> hidden;
+inline UINT volumePulseMessage = RegisterWindowMessageW(L"Windhawk.NativeSound.VolumePulse.1");
+// Used only while unloading. Wait for the asynchronous operation itself,
+// not an event set inside its delegate: the DLL must outlive the delegate's return.
+inline bool DispatchCleanup(winrt::Windows::UI::Core::CoreDispatcher const &dispatcher,
+                            std::function<void()> action) {
+  if (!dispatcher)
+    return false;
+  try {
+    if (dispatcher.HasThreadAccess()) {
+      action();
+      return true;
+    }
+    auto cleaned = std::make_shared<std::atomic<bool>>(false);
+    auto operation = dispatcher.RunAsync(
+        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+        [action = std::move(action), cleaned] {
+          try {
+            action();
+            *cleaned = true;
+          } catch (...) {
+            Wh_Log(L"UI shutdown cleanup: %08X", winrt::to_hresult());
+          }
+        });
+    while (operation.Status() == winrt::Windows::Foundation::AsyncStatus::Started)
+      Sleep(1);
+    return operation.Status() == winrt::Windows::Foundation::AsyncStatus::Completed &&
+           cleaned->load();
+  } catch (...) {
+    Wh_Log(L"UI shutdown dispatcher: %08X", winrt::to_hresult());
+    return false;
+  }
+}
 // Post only an integer message, never a callback or object pointer. Removing
 // the subclass on unload makes any remaining queued notifications harmless.
-inline UINT volumePulseMessage = RegisterWindowMessageW(L"Windhawk.NativeSound.VolumePulse.1");
 struct VolumePulse {
   HWND window = nullptr;
   std::atomic<bool> active{true}, queued{false};
@@ -1052,10 +1083,6 @@ inline bool SetNumber(IInspectable const &model, PCWSTR name, double number) {
   }
   return false;
 }
-struct ModelAccess {
-  std::function<IInspectable(IInspectable const &, PCWSTR)> read;
-  std::function<bool(IInspectable const &, PCWSTR, double)> writeNumber;
-};
 // Let the shell's binding resolver access its model, including private XAML
 // property adapters. The displayed Slider and its Binding are never assigned.
 struct NumberRelay : winrt::implements<NumberRelay, D::IValueConverter> {
@@ -1888,7 +1915,6 @@ class SoundPage {
   HWND host_ = nullptr;
   std::shared_ptr<double> ownedHeight_ = std::make_shared<double>(NAN);
   double wantedHeight_ = 0;
-  ModelAccess access_;
   std::vector<std::shared_ptr<Menu>> menus_;
   std::vector<std::shared_ptr<AppRow>> rows_;
   std::vector<std::function<void()>> revoke_;
@@ -2272,9 +2298,7 @@ class SoundPage {
     return VolumeModel(slider);
   }
   IInspectable ReadModel(IInspectable const &object, PCWSTR name) {
-    if (auto value = ModelValue(object, name))
-      return value;
-    return access_.read ? access_.read(object, name) : nullptr;
+    return ModelValue(object, name);
   }
   bool WriteVolume(C::Slider const &slider, IInspectable const &object, double number) {
     try {
@@ -2289,7 +2313,7 @@ class SoundPage {
     } catch (...) {
       Wh_Log(L"Binding relay: %08X", winrt::to_hresult());
     }
-    return access_.writeNumber && access_.writeNumber(object, L"Volume", number);
+    return false;
   }
   void ResizeNative() {
     if (!frame_ || !footerBorder_)
@@ -3052,9 +3076,9 @@ class SoundPage {
   }
 
 public:
-  explicit SoundPage(X::FrameworkElement const &page, HWND host, ModelAccess access,
+  explicit SoundPage(X::FrameworkElement const &page, HWND host,
                      std::function<void()> volumeChanged)
-      : page_(page), host_(host), access_(std::move(access)),
+      : page_(page), host_(host),
         volumeChanged_(std::move(volumeChanged)) {}
   void MasterGlyph(float value, bool muted) {
     if (masterAnimation_)
@@ -6304,7 +6328,7 @@ struct Runtime {
     if (!Named(page, L"OutputGroupTitle"))
       return;
     auto pulse = volumePulse;
-    auto patch = std::make_unique<SoundPage>(page, window, ModelAccess{}, [pulse] {
+    auto patch = std::make_unique<SoundPage>(page, window, [pulse] {
       if (pulse)
         pulse->Post();
     });
@@ -6676,39 +6700,11 @@ inline void StopBridge() {
                                                                      : ThreadWindow(thread);
     if (handle && GetWindowThreadProcessId(handle, nullptr) == thread && Dispatch(handle, stop))
       continue;
-    auto cleaned = std::make_shared<std::atomic<bool>>(false);
-    bool stopped = false;
-    try {
-      // Keep a local dispatcher reference: stop() destroys the Runtime.
-      if (auto dispatcher = state->dispatcher) {
-        auto operation = dispatcher.RunAsync(
-            winrt::Windows::UI::Core::CoreDispatcherPriority::High, [stop, cleaned] {
-              try {
-                stop();
-                *cleaned = true;
-              } catch (...) {
-                Wh_Log(L"Control Center shutdown: %08X", winrt::to_hresult());
-              }
-            });
-        // AsyncStatus becomes Completed after the UI delegate returns. An
-        // event signaled inside the delegate could wake unload too early.
-        // This short wait exists only during unload, never in the background.
-        while (operation.Status() == winrt::Windows::Foundation::AsyncStatus::Started)
-          Sleep(1);
-        stopped = operation.Status() == winrt::Windows::Foundation::AsyncStatus::Completed &&
-                  cleaned->load();
-      }
-    } catch (...) {
-      Wh_Log(L"Control Center shutdown dispatch: %08X", winrt::to_hresult());
-    }
-    if (!stopped) {
-      // Wh_ModUninit cannot refuse unload. In this exceptional failure case,
-      // retain a module reference rather than leave live callbacks unmapped.
-      HMODULE retained = nullptr;
-      GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                         reinterpret_cast<LPCWSTR>(&StopBridge), &retained);
-      Wh_Log(L"Could not stop UI thread %u; keeping module loaded for its callbacks", thread);
-    }
+    // A dispatcher shutting down can complete without invoking the delegate.
+    // Keep unreachable thread-affine state, but never pin this mod's DLL.
+    auto dispatcher = state->dispatcher;
+    if (!DispatchCleanup(dispatcher, stop))
+      Wh_Log(L"Control Center UI thread %u is shutting down; retaining its XAML state", thread);
   }
 }
 } // namespace native
@@ -7010,6 +7006,7 @@ inline X::XamlRoot Root(HWND taskbar) {
 struct Record {
   DWORD thread = 0;
   HWND taskbar = nullptr;
+  winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
   winrt::weak_ref<X::FrameworkElement> icon, native;
   winrt::weak_ref<C::Panel> parent;
   X::FrameworkElement visual{nullptr};
@@ -7539,6 +7536,7 @@ inline void Observe(X::FrameworkElement const &element, HWND taskbar) {
   auto record = std::make_shared<Record>();
   record->thread = GetCurrentThreadId();
   record->taskbar = taskbar;
+  record->dispatcher = element.Dispatcher();
   record->icon = winrt::make_weak(element);
   std::weak_ptr<Record> weak = record;
   record->loaded = element.Loaded([weak](auto &&, auto &&) {
@@ -7767,6 +7765,39 @@ inline void AttachExisting() {
   }
   Wh_Log(L"Sound panel: attached %zu volume icons", attached);
 }
+// All XAML cleanup and the final Record destruction stay on the owner thread.
+// Leave a record in the no_destroy vector if cleanup fails partway through.
+inline void CleanupThreadRecords() {
+  std::vector<std::shared_ptr<Record>> local;
+  {
+    std::lock_guard lock(recordsMutex);
+    for (auto const &record : records)
+      if (record->thread == GetCurrentThreadId())
+        local.push_back(record);
+  }
+  for (auto const &record : local)
+    try {
+      if (record->timer) {
+        record->timer.Stop();
+        record->timer.Tick(record->tick);
+        record->timer = nullptr;
+      }
+      if (auto icon = record->icon.get(); icon && record->loaded.value) {
+        icon.Loaded(record->loaded);
+        record->loaded = {};
+      }
+      RestoreGlyphs(record);
+      RemoveVisual(record);
+      record->animated.reset();
+      std::lock_guard lock(recordsMutex);
+      auto it = std::find(records.begin(), records.end(), record);
+      if (it != records.end())
+        records.erase(it);
+    } catch (...) {
+      Wh_Log(L"Tray record cleanup on UI thread %u: %08X",
+             GetCurrentThreadId(), winrt::to_hresult());
+    }
+}
 inline void Shutdown() {
   stopping = true;
   powerWake.reset();
@@ -7774,67 +7805,65 @@ inline void Shutdown() {
     CancelMibChangeNotify2(ipNotification); // waits for a running callback
     ipNotification = nullptr;
   }
+  std::vector<HWND> windows = Taskbars();
+  auto rememberWindow = [&](HWND window) {
+    if (window && std::find(windows.begin(), windows.end(), window) == windows.end())
+      windows.push_back(window);
+  };
   {
     std::lock_guard lock(pulsesMutex);
-    for (auto const &[window, pulse] : pulses)
+    for (auto const &[window, pulse] : pulses) {
       pulse->active = false;
+      rememberWindow(window);
+    }
   }
   if (audio)
     audio->Stop();
-  std::vector<HWND> windows = Taskbars();
   {
     std::lock_guard lock(recordsMutex);
-    for (auto const &r : records)
-      if (r->taskbar && std::find(windows.begin(), windows.end(), r->taskbar) == windows.end())
-        windows.push_back(r->taskbar);
+    for (auto const &record : records)
+      rememberWindow(record->taskbar);
   }
-  for (auto window : windows)
-    if (IsWindow(window))
-      Dispatch(window, [window] {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, VolumeProc);
-        std::vector<std::shared_ptr<Record>> local;
-        {
-          std::lock_guard lock(recordsMutex);
-          for (auto it = records.begin(); it != records.end();)
-            if ((*it)->thread == GetCurrentThreadId()) {
-              local.push_back(*it);
-              it = records.erase(it);
-            } else
-              ++it;
-        }
-        for (auto const &r : local) {
-          if (r->timer) {
-            r->timer.Stop();
-            r->timer.Tick(r->tick);
-          }
-          if (auto icon = r->icon.get()) {
-            icon.Loaded(r->loaded);
-          }
-          RestoreGlyphs(r);
-          if (auto parent = r->parent.get())
-            if (r->visual) {
-              uint32_t index;
-              if (parent.Children().IndexOf(r->visual, index))
-                parent.Children().RemoveAt(index);
-            }
-        }
-      });
+  for (auto window : windows) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    if (process == GetCurrentProcessId()) {
+      // The subclass has its own synchronous removal message, independent
+      // of whether our window-dispatch hook can be installed.
+      WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, VolumeProc);
+      Dispatch(window, CleanupThreadRecords);
+    }
+  }
+  std::map<DWORD, winrt::Windows::UI::Core::CoreDispatcher> remaining;
+  {
+    std::lock_guard lock(recordsMutex);
+    for (auto const &record : records)
+      remaining.try_emplace(record->thread, record->dispatcher);
+  }
+  for (auto const &[thread, dispatcher] : remaining) {
+    auto threadHandle = OpenThread(SYNCHRONIZE, FALSE, thread);
+    bool exited = threadHandle && WaitForSingleObject(threadHandle, 0) == WAIT_OBJECT_0;
+    if (threadHandle)
+      CloseHandle(threadHandle);
+    if (exited) {
+      Wh_Log(L"Tray UI thread %u has exited; retaining its XAML records", thread);
+      continue;
+    }
+    if (DispatchCleanup(dispatcher, CleanupThreadRecords))
+      Wh_Log(L"Tray shutdown: dispatcher cleanup ran on UI thread %u", thread);
+    else
+      Wh_Log(L"Tray UI thread %u is shutting down; retaining its XAML records", thread);
+  }
   {
     std::lock_guard lock(pulsesMutex);
     pulses.clear();
   }
-  // The no_destroy globals give their contents back here, not at process exit.
   {
     std::lock_guard lock(recordsMutex);
     if (records.empty())
       records.shrink_to_fit();
-    else {
-      HMODULE retained = nullptr;
-      GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                          reinterpret_cast<LPCWSTR>(&Shutdown), &retained);
-      Wh_Log(L"Retaining %zu tray records and the module: their UI thread was not reached",
-               records.size());
-    }
+    else
+      Wh_Log(L"Retaining %zu tray records on unreachable UI threads", records.size());
   }
   audio.reset();
 }
