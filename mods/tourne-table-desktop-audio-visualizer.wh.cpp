@@ -3,7 +3,7 @@
 // @name                Tourne'Table [Audio Visualizer]
 // @description         A real-time audio visualizer for the Windows desktop: every bar its own frequency band, a Direct3D 11 renderer that idles to nothing, live right-click settings, My Styles, a Media Card and shareable setups.
 // @description:ru-RU   Аудиовизуализатор реального времени для рабочего стола Windows. Расширенные настройки без ущерба для экономии ресурсов. Практически безинтерфейсный (near-headless) поток рендеринга с оптимизацией процессора для захвата звука.
-// @version             2.1.0
+// @version             2.1.1
 // @author              USER-TOURNE
 // @github              https://github.com/USER-TOURNE
 // @donateUrl           https://ko-fi.com/tourne
@@ -49,7 +49,7 @@ Tourne'Table doesn't live inside `explorer.exe`. It runs as its own dedicated pr
 
 2.1 replaces 1.x. If you ran one of the 2.0 test builds from GitHub, turn it off: only one Tourne'Table should run. If you also use **Tourne Desktop** (my separate desktop app, not part of Windhawk), its taskbar counts as the taskbar for Place In = Taskbar, and it can show, hide or pin the panel through the window message `TourneTable.Panel`. The performance figures further down were measured on 1.x and haven't been re-measured on 2.x yet.
 
-**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the setups people have shared in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/tree/main/community) in your browser (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. A setup carries every setting except the ones that belong to your PC: the audio device, icon files, panel hotkey, monitor, docked app and graphics card. Browse them all on the [community page](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
+**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the [community styles page](https://user-tourne.github.io/Tourne-Style/) in your browser, with live previews of the setups people have shared (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. A setup carries every setting except the ones that belong to your PC (the audio device, icon files, panel hotkey, monitor, docked app and graphics card) and the ones that change how your mouse and keyboard are handled (Click to Seek, Keyboard Move, drag and the right-click mode). The styles and how to share one are also in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
 
 **Every bar is its own measurement now.** Up to 1.5 the analysis split the sound into 7 fixed bands and every bar interpolated between those 7 numbers, so Bar Count and FFT Size changed how many bars you saw, not how much they knew. The new **Precision** engine gives each bar its own frequency band with its own edges, measured straight from the spectrum:
 
@@ -2292,7 +2292,7 @@ void ReadBands(float (&dst)[VIZ_NUM_BANDS]) {
     }
 }
 
-std::thread* g_renderThread = nullptr;
+[[clang::no_destroy]] std::optional<std::thread> g_renderThread;
 std::atomic<bool> g_renderThreadRunning{false};
 std::atomic<bool> g_renderTickPending{false};
 
@@ -2508,6 +2508,7 @@ static std::atomic<DWORD> g_albumArtColor{0xFFFFFFFF};
 static std::atomic<DWORD> g_albumArtColorSecondary{0xFFAAAAAA};
 static std::atomic<bool>  g_albumArtColorReady{false};
 static std::atomic<bool>  g_albumArtFetchPending{false};
+static std::atomic<bool>  g_albumArtFetchQueued{false};
 static std::atomic<DWORD> g_accentColorCache{0xFF0078D4};
 
 static HANDLE g_gsmtcStopEvent = nullptr;
@@ -2516,7 +2517,7 @@ static HANDLE g_gsmtcStopEvent = nullptr;
 // std::terminate), so the optional is what gives teardown a join() + reset()
 // pair. This is the documented form for a global worker thread.
 [[clang::no_destroy]] static std::optional<std::thread> g_gsmtcThread;
-static std::thread* g_albumArtThread = nullptr;
+[[clang::no_destroy]] static std::optional<std::thread> g_albumArtThread;
 
 // Media Card (2.1): the cover, box-filtered down to at most 160 px, straight
 // alpha BGRA as WIC decodes it. Written by the album-art thread, read by the
@@ -3377,7 +3378,148 @@ DWORD GetWindowsAccentColor() {
     return g_accentColorCache.load(std::memory_order_relaxed);
 }
 
+// One fetch of the current track's text, art and colours. Every WinRT object it
+// makes is gone by the time it returns, so the caller can leave the apartment.
+static void VizFetchAlbumArtOnce() {
+    try {
+        auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        if (!mgr) { return; }
+        auto session = mgr.GetCurrentSession();
+        if (!session) { return; }
+
+        auto props = session.TryGetMediaPropertiesAsync().get();
+        if (!props) { return; }
+
+        {
+            std::wstring title(props.Title());
+            std::wstring artist(props.Artist());
+            std::wstring display = artist.empty() ? title
+                                  : title.empty()  ? artist
+                                                    : (artist + L" - " + title);
+            if (!display.empty()) {
+                std::lock_guard<std::mutex> lock(g_nowPlayingMutex);
+                g_nowPlayingTitle = title;
+                g_nowPlayingArtist = artist;
+                if (g_nowPlayingDisplay != display) {
+                    g_nowPlayingDisplay = display;
+                    g_nowPlayingChangedTick.store(GetTickCount64(), std::memory_order_relaxed);
+                }
+            }
+        }
+
+        auto thumbRef = props.Thumbnail();
+        if (!thumbRef) { VizStoreArtTile(nullptr, 0, 0); return; }
+
+        auto stream = thumbRef.OpenReadAsync().get();
+        if (!stream) { return; }
+
+        UINT64 sz = stream.Size();
+        if (sz == 0 || sz > 4 * 1024 * 1024) { return; }
+
+        DataReader reader(stream);
+        reader.LoadAsync((UINT32)sz).get();
+        std::vector<BYTE> thumbBytes((size_t)sz);
+        reader.ReadBytes(winrt::array_view<BYTE>(thumbBytes));
+        reader.DetachStream();
+
+        IWICImagingFactory* pFactory = nullptr;
+        if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(&pFactory))) || !pFactory) {
+            return;
+        }
+        IStream* pStream = SHCreateMemStream(thumbBytes.data(), (UINT)thumbBytes.size());
+        if (!pStream) { pFactory->Release(); return; }
+
+        IWICBitmapDecoder* pDecoder = nullptr;
+        IWICBitmapFrameDecode* pFrame = nullptr;
+        IWICFormatConverter* pConv = nullptr;
+        std::vector<BYTE> pixels;
+        int imgW = 0, imgH = 0;
+
+        if (SUCCEEDED(pFactory->CreateDecoderFromStream(pStream, nullptr,
+                WICDecodeMetadataCacheOnDemand, &pDecoder)) &&
+            SUCCEEDED(pDecoder->GetFrame(0, &pFrame)) &&
+            SUCCEEDED(pFactory->CreateFormatConverter(&pConv))) {
+            if (SUCCEEDED(pConv->Initialize(pFrame, GUID_WICPixelFormat32bppBGRA,
+                    WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeMedianCut))) {
+                UINT w = 0, h = 0;
+                pConv->GetSize(&w, &h);
+                if (w > 0 && h > 0) {
+                    pixels.resize((size_t)w * h * 4);
+                    if (SUCCEEDED(pConv->CopyPixels(nullptr, w * 4,
+                            (UINT)pixels.size(), pixels.data()))) {
+                        imgW = (int)w; imgH = (int)h;
+                    }
+                }
+            }
+        }
+        if (pConv)    pConv->Release();
+        if (pFrame)   pFrame->Release();
+        if (pDecoder) pDecoder->Release();
+        pStream->Release();
+        pFactory->Release();
+
+        if (!pixels.empty()) VizStoreArtTile(pixels.data(), imgW, imgH);
+        if (!pixels.empty()) {
+            struct Bucket { uint32_t r=0,g=0,b=0,n=0; };
+            Bucket buckets[16][16][16]{};
+            for (int y = 0; y < imgH; y += 4) {
+                for (int x = 0; x < imgW; x += 4) {
+                    size_t idx = ((size_t)y * imgW + x) * 4;
+                    if (idx + 4 > pixels.size()) continue;
+                    BYTE pb = pixels[idx], pg = pixels[idx+1], pr = pixels[idx+2];
+                    int luma = (pr * 299 + pg * 587 + pb * 114) / 1000;
+                    if (luma < 24 || luma > 235) continue;
+                    auto& bk = buckets[pr >> 4][pg >> 4][pb >> 4];
+                    bk.r += pr; bk.g += pg; bk.b += pb; bk.n++;
+                }
+            }
+
+            struct Cand { float w; BYTE r,g,b; };
+            std::vector<Cand> cands;
+            cands.reserve(64);
+            for (int R = 0; R < 16; R++) for (int G = 0; G < 16; G++) for (int B = 0; B < 16; B++) {
+                auto& bk = buckets[R][G][B];
+                if (bk.n < 8) continue;
+                float fr = bk.r/(float)bk.n/255.f, fg = bk.g/(float)bk.n/255.f, fb = bk.b/(float)bk.n/255.f;
+                float mx = std::max({fr,fg,fb}), mn = std::min({fr,fg,fb});
+                float sat = mx > 0 ? (mx - mn) / mx : 0;
+                cands.push_back({ bk.n * (0.3f + sat),
+                                 (BYTE)(fr*255), (BYTE)(fg*255), (BYTE)(fb*255) });
+            }
+
+            if (!cands.empty()) {
+                std::sort(cands.begin(), cands.end(),
+                          [](const Cand& a, const Cand& b){ return a.w > b.w; });
+
+                BYTE pR = cands[0].r, pG = cands[0].g, pB = cands[0].b;
+
+                BYTE sR = pR, sG = pG, sB = pB;
+                for (auto& c : cands) {
+                    int dr = (int)c.r - (int)pR;
+                    int dg = (int)c.g - (int)pG;
+                    int db = (int)c.b - (int)pB;
+                    if (dr*dr + dg*dg + db*db > 3264) {
+                        sR = c.r; sG = c.g; sB = c.b;
+                        break;
+                    }
+                }
+
+                DWORD col  = 0xFF000000 | ((DWORD)pR << 16) | ((DWORD)pG << 8) | pB;
+                DWORD col2 = 0xFF000000 | ((DWORD)sR << 16) | ((DWORD)sG << 8) | sB;
+                g_albumArtColor.store(col,  std::memory_order_relaxed);
+                g_albumArtColorSecondary.store(col2, std::memory_order_relaxed);
+                g_albumArtColorReady.store(true, std::memory_order_relaxed);
+                if (g_mediaWnd && g_settings.mediaCard) PostMessage(g_mediaWnd, WM_APP_MEDIA_REPAINT, 0, 0);
+            }
+        }
+    } catch (...) {}
+}
+
 void FetchAlbumArtColorAsync() {
+    // A request while a fetch runs is queued, not dropped: sessions often send
+    // two property changes per track, and the second one carries the new art.
+    g_albumArtFetchQueued.store(true);
     bool expected = false;
     if (!g_albumArtFetchPending.compare_exchange_strong(expected, true))
         return;
@@ -3386,147 +3528,21 @@ void FetchAlbumArtColorAsync() {
     if (g_albumArtThread) {
         if (g_albumArtThread->joinable())
             g_albumArtThread->join();
-        delete g_albumArtThread;
-        g_albumArtThread = nullptr;
+        g_albumArtThread.reset();
     }
 
-    g_albumArtThread = new std::thread([]() {
-        try {
-            winrt::init_apartment(winrt::apartment_type::multi_threaded);
-            auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-            if (!mgr) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-            auto session = mgr.GetCurrentSession();
-            if (!session) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-
-            auto props = session.TryGetMediaPropertiesAsync().get();
-            if (!props) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-
-            {
-                std::wstring title(props.Title());
-                std::wstring artist(props.Artist());
-                std::wstring display = artist.empty() ? title
-                                      : title.empty()  ? artist
-                                                        : (artist + L" - " + title);
-                if (!display.empty()) {
-                    std::lock_guard<std::mutex> lock(g_nowPlayingMutex);
-                    g_nowPlayingTitle = title;
-                    g_nowPlayingArtist = artist;
-                    if (g_nowPlayingDisplay != display) {
-                        g_nowPlayingDisplay = display;
-                        g_nowPlayingChangedTick.store(GetTickCount64(), std::memory_order_relaxed);
-                    }
-                }
+    g_albumArtThread.emplace([]() {
+        try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
+        for (;;) {
+            if (!g_albumArtFetchQueued.exchange(false)) {
+                g_albumArtFetchPending.store(false);
+                // A request that came in just now, after its caller saw us still busy.
+                if (g_albumArtFetchQueued.load() && !g_albumArtFetchPending.exchange(true)) continue;
+                break;
             }
-
-            auto thumbRef = props.Thumbnail();
-            if (!thumbRef) { VizStoreArtTile(nullptr, 0, 0); winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-
-            auto stream = thumbRef.OpenReadAsync().get();
-            if (!stream) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-
-            UINT64 sz = stream.Size();
-            if (sz == 0 || sz > 4 * 1024 * 1024) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-
-            DataReader reader(stream);
-            reader.LoadAsync((UINT32)sz).get();
-            std::vector<BYTE> thumbBytes((size_t)sz);
-            reader.ReadBytes(winrt::array_view<BYTE>(thumbBytes));
-            reader.DetachStream();
-
-            IWICImagingFactory* pFactory = nullptr;
-            if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                                        IID_PPV_ARGS(&pFactory))) || !pFactory) {
-                winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return;
-            }
-            IStream* pStream = SHCreateMemStream(thumbBytes.data(), (UINT)thumbBytes.size());
-            if (!pStream) { pFactory->Release(); winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
-
-            IWICBitmapDecoder* pDecoder = nullptr;
-            IWICBitmapFrameDecode* pFrame = nullptr;
-            IWICFormatConverter* pConv = nullptr;
-            std::vector<BYTE> pixels;
-            int imgW = 0, imgH = 0;
-
-            if (SUCCEEDED(pFactory->CreateDecoderFromStream(pStream, nullptr,
-                    WICDecodeMetadataCacheOnDemand, &pDecoder)) &&
-                SUCCEEDED(pDecoder->GetFrame(0, &pFrame)) &&
-                SUCCEEDED(pFactory->CreateFormatConverter(&pConv))) {
-                if (SUCCEEDED(pConv->Initialize(pFrame, GUID_WICPixelFormat32bppBGRA,
-                        WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeMedianCut))) {
-                    UINT w = 0, h = 0;
-                    pConv->GetSize(&w, &h);
-                    if (w > 0 && h > 0) {
-                        pixels.resize((size_t)w * h * 4);
-                        if (SUCCEEDED(pConv->CopyPixels(nullptr, w * 4,
-                                (UINT)pixels.size(), pixels.data()))) {
-                            imgW = (int)w; imgH = (int)h;
-                        }
-                    }
-                }
-            }
-            if (pConv)    pConv->Release();
-            if (pFrame)   pFrame->Release();
-            if (pDecoder) pDecoder->Release();
-            pStream->Release();
-            pFactory->Release();
-
-            if (!pixels.empty()) VizStoreArtTile(pixels.data(), imgW, imgH);
-            if (!pixels.empty()) {
-                struct Bucket { uint32_t r=0,g=0,b=0,n=0; };
-                Bucket buckets[16][16][16]{};
-                for (int y = 0; y < imgH; y += 4) {
-                    for (int x = 0; x < imgW; x += 4) {
-                        size_t idx = ((size_t)y * imgW + x) * 4;
-                        if (idx + 4 > pixels.size()) continue;
-                        BYTE pb = pixels[idx], pg = pixels[idx+1], pr = pixels[idx+2];
-                        int luma = (pr * 299 + pg * 587 + pb * 114) / 1000;
-                        if (luma < 24 || luma > 235) continue;
-                        auto& bk = buckets[pr >> 4][pg >> 4][pb >> 4];
-                        bk.r += pr; bk.g += pg; bk.b += pb; bk.n++;
-                    }
-                }
-
-                struct Cand { float w; BYTE r,g,b; };
-                std::vector<Cand> cands;
-                cands.reserve(64);
-                for (int R = 0; R < 16; R++) for (int G = 0; G < 16; G++) for (int B = 0; B < 16; B++) {
-                    auto& bk = buckets[R][G][B];
-                    if (bk.n < 8) continue;
-                    float fr = bk.r/(float)bk.n/255.f, fg = bk.g/(float)bk.n/255.f, fb = bk.b/(float)bk.n/255.f;
-                    float mx = std::max({fr,fg,fb}), mn = std::min({fr,fg,fb});
-                    float sat = mx > 0 ? (mx - mn) / mx : 0;
-                    cands.push_back({ bk.n * (0.3f + sat),
-                                     (BYTE)(fr*255), (BYTE)(fg*255), (BYTE)(fb*255) });
-                }
-
-                if (!cands.empty()) {
-                    std::sort(cands.begin(), cands.end(),
-                              [](const Cand& a, const Cand& b){ return a.w > b.w; });
-
-                    BYTE pR = cands[0].r, pG = cands[0].g, pB = cands[0].b;
-
-                    BYTE sR = pR, sG = pG, sB = pB;
-                    for (auto& c : cands) {
-                        int dr = (int)c.r - (int)pR;
-                        int dg = (int)c.g - (int)pG;
-                        int db = (int)c.b - (int)pB;
-                        if (dr*dr + dg*dg + db*db > 3264) {
-                            sR = c.r; sG = c.g; sB = c.b;
-                            break;
-                        }
-                    }
-
-                    DWORD col  = 0xFF000000 | ((DWORD)pR << 16) | ((DWORD)pG << 8) | pB;
-                    DWORD col2 = 0xFF000000 | ((DWORD)sR << 16) | ((DWORD)sG << 8) | sB;
-                    g_albumArtColor.store(col,  std::memory_order_relaxed);
-                    g_albumArtColorSecondary.store(col2, std::memory_order_relaxed);
-                    g_albumArtColorReady.store(true, std::memory_order_relaxed);
-                    if (g_mediaWnd && g_settings.mediaCard) PostMessage(g_mediaWnd, WM_APP_MEDIA_REPAINT, 0, 0);
-                }
-            }
-        } catch (...) {}
+            VizFetchAlbumArtOnce();
+        }
         try { winrt::uninit_apartment(); } catch (...) {}
-        g_albumArtFetchPending.store(false);
     });
 }
 
@@ -3675,7 +3691,7 @@ static bool g_gsmtcStarted = false;
 // behind the desktop icons and must never eat clicks), so a window that needs
 // to actually receive clicks has to be a separate, non-transparent surface.
 
-std::thread* g_mediaCmdThread = nullptr;
+[[clang::no_destroy]] std::optional<std::thread> g_mediaCmdThread;
 std::atomic<bool> g_mediaCmdPending{false};
 std::atomic<int> g_mediaCmdQueued{-1};
 
@@ -3689,14 +3705,13 @@ void SendMediaCommand(int cmd) {
     if (g_mediaCmdThread) {
         if (g_mediaCmdThread->joinable())
             g_mediaCmdThread->join();
-        delete g_mediaCmdThread;
-        g_mediaCmdThread = nullptr;
+        g_mediaCmdThread.reset();
     }
 
     // The thread runs every command queued while it works (the latest one, if
     // several came in), so a seek on release isn't dropped while the seek on
     // press is still in flight.
-    g_mediaCmdThread = new std::thread([]() {
+    g_mediaCmdThread.emplace([]() {
         try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
         for (;;) {
             int cmd = g_mediaCmdQueued.exchange(-1);
@@ -4236,6 +4251,12 @@ bool VizCardMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 s_cardTracking = TrackMouseEvent(&tme) != FALSE;
             }
             s_cardHover = true;
+            // A drag whose button-up never came (capture taken by a UAC prompt or
+            // Ctrl+Alt+Del) ends here instead of following the pointer.
+            if (s_cardDrag != kPartNone && !(wParam & MK_LBUTTON)) {
+                s_cardDrag = kPartNone;
+                s_cardSeekPreview = -1.f;
+            }
             int part = s_cardDrag != kPartNone ? s_cardDrag : CardHit(g, x, y);
             bool repaint = part != s_cardHoverPart;
             s_cardHoverPart = part;
@@ -4249,6 +4270,13 @@ bool VizCardMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (repaint) CardRepaint();
             return true;
         }
+        case WM_CAPTURECHANGED:
+            if (s_cardDrag != kPartNone && (HWND)lParam != hWnd) {
+                s_cardDrag = kPartNone;
+                s_cardSeekPreview = -1.f;
+                CardRepaint();
+            }
+            return false;
         case WM_MOUSELEAVE:
             s_cardTracking = false;
             s_cardHover = false;
@@ -8120,7 +8148,9 @@ void VizRebuildRenderDevice(PCWSTR reason) {
     g_dxgiFactory.Reset();
 
     if (!InitDirectX()) {
-        Wh_Log(L"[Hardware] InitDirectX failed during rebuild");
+        // Keep trying on the usual two-second spacing; until then nothing draws.
+        Wh_Log(L"[Hardware] InitDirectX failed during rebuild, retrying");
+        if (g_messageWnd) SetTimer(g_messageWnd, TIMER_ID_MSG_REBUILD_DEVICE, 2000, nullptr);
         return;
     }
     if (g_overlayWnd && CreateSwapChainResources() && !g_fullscreenPaused.load()) {
@@ -8478,10 +8508,14 @@ void VizTermGridSize(int* cols, int* rows) {
 
 // The grid's size in pixels: what the layout reserves for this shape instead
 // of a bar group. Bar Width, Gap and Max Size don't apply; the font does.
+extern DWORD g_uiThreadId;
+
 void VizTermBox(float* w, float* h) {
     int cols = 0, rows = 0;
     VizTermGridSize(&cols, &rows);
-    VizTermEnsureFormat();
+    // Only the UI thread, which draws with the format, may rebuild it. The input-hook thread
+    // (drag, Keyboard Move) asks for the box too and gets the last cell size measured.
+    if (GetCurrentThreadId() == g_uiThreadId) VizTermEnsureFormat();
     *w = (float)(cols * g_termCellW);
     *h = (float)(rows * g_termCellH);
 }
@@ -9719,6 +9753,9 @@ bool ComputeVizLayout(VizLayout* out) {
 bool CreateSwapChainResources() {
     HRESULT hr;
 
+    // After a failed rebuild these stay null; the retry timer recreates them and draws again.
+    if (!g_dxgiFactory || !g_dxgiDevice || !g_d2dDevice) return false;
+
     // Monitor and DPI must be resolved before the layout, since bar sizes are
     // DPI-scaled and the box is positioned against the monitor's work area.
     HMONITOR monitor = GetMonitorById(g_settings.monitor - 1);
@@ -10386,6 +10423,21 @@ void ResetMoveTarget(VizMoveTarget target) {
 // an app never sees a release without its press or a press without its release.
 bool g_keyMoveSwallowed[256] = {};  // input hook thread only
 
+// Swallows a key the move combo used. With Alt or Win in the combo, Windows would then see that
+// modifier pressed and released with nothing between (opening Start, the menu bar, or switching
+// the input language on Alt+Shift), so an unassigned key (VK 0xE8) is sent in between first.
+LRESULT KeyMoveSwallow(DWORD vk) {
+    g_keyMoveSwallowed[vk] = true;  // its release is swallowed too
+    if (g_settings.keyMoveModifier & (VIZ_MOD_ALT | VIZ_MOD_WIN)) {
+        INPUT in[2] = {};
+        in[0].type = in[1].type = INPUT_KEYBOARD;
+        in[0].ki.wVk = in[1].ki.wVk = 0xE8;
+        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(2, in, sizeof(INPUT));
+    }
+    return 1;
+}
+
 LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
@@ -10423,8 +10475,7 @@ LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                         NudgeTextOverlayPx(g_keyMoveTarget, dx * step, dy * step);
                     }
                 }
-                g_keyMoveSwallowed[kb->vkCode] = true;  // its release is swallowed too
-                return 1;
+                return KeyMoveSwallow(kb->vkCode);
             }
 
             // Same combo + 1/2/3/4 picks what the direction keys steer. One
@@ -10442,8 +10493,7 @@ LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                            : g_keyMoveTarget == VizMoveTarget::MediaControls ? L"media controls"
                                                                             : L"visualizer");
                 }
-                g_keyMoveSwallowed[kb->vkCode] = true;
-                return 1;
+                return KeyMoveSwallow(kb->vkCode);
             }
 
             // Same combo + Home resets whatever is selected: the visualizer
@@ -10455,8 +10505,7 @@ LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     ResetMoveTarget(g_keyMoveTarget);
                     Wh_Log(L"[KeyMove] reset target %d", (int)g_keyMoveTarget);
                 }
-                g_keyMoveSwallowed[kb->vkCode] = true;
-                return 1;
+                return KeyMoveSwallow(kb->vkCode);
             }
         }
     }
@@ -10691,7 +10740,6 @@ constexpr UINT WM_APP_KEYMOVE_SYNC = WM_APP + 90;  // thread message to the inpu
 // low-level hook whose thread doesn't service messages promptly, so this
 // thread does nothing but pump.
 DWORD WINAPI InputHookThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HINSTANCE hInst = (HINSTANCE)GetCurrentModuleHandle();
 
     g_dragMouseHook = SetWindowsHookEx(WH_MOUSE_LL, DragMouseHookProc, hInst, 0);
@@ -10891,6 +10939,7 @@ void ReleaseSwapChainResources() {
 
 bool RecreateVisualResources() {
     HRESULT hr;
+    if (!g_dc) return false;  // a failed device rebuild left nothing to draw on
 
     D2D1_COLOR_F barColor = D2D1::ColorF(g_settings.colorR / 255.0f, g_settings.colorG / 255.0f,
                                          g_settings.colorB / 255.0f, g_settings.colorA / 255.0f);
@@ -16414,7 +16463,7 @@ void StartRenderThread() {
     if (!g_engineWake) g_engineWake = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     if (!g_engineClosed) g_engineClosed = CreateEvent(nullptr, TRUE, TRUE, nullptr);
     g_renderThreadRunning.store(true, std::memory_order_relaxed);
-    g_renderThread = new std::thread(RenderThreadProc);
+    g_renderThread.emplace(RenderThreadProc);
     HANDLE hRenderThread = g_renderThread->native_handle();
     SetThreadDescription(hRenderThread, L"TourneTable-Engine");
 }
@@ -16424,8 +16473,7 @@ void StopRenderThread() {
     if (g_engineWake) SetEvent(g_engineWake);
     if (g_renderThread) {
         if (g_renderThread->joinable()) g_renderThread->join();
-        delete g_renderThread;
-        g_renderThread = nullptr;
+        g_renderThread.reset();
     }
     g_renderTickPending.store(false, std::memory_order_relaxed);
 }
@@ -16838,9 +16886,9 @@ std::vector<std::pair<std::wstring, std::wstring>> g_menuOverrides;
 
 void VizLoadMenuOverrides() {
     g_menuOverrides.clear();
-    WCHAR buf[4096] = {};
-    if (!Wh_GetStringValue(L"menuOverrides", buf, ARRAYSIZE(buf))) return;
-    std::wstring s = buf;
+    std::vector<WCHAR> buf(32768);
+    if (!Wh_GetStringValue(L"menuOverrides", buf.data(), buf.size())) return;
+    std::wstring s = buf.data();
     size_t pos = 0;
     while (pos < s.size()) {
         size_t nl = s.find(L'\n', pos);
@@ -17408,8 +17456,8 @@ bool VizApplyStylePreset(const std::wstring& name) {
 // A setup is plain text anyone can read: a first line, its name and the parts it carries, then the
 // settings in those parts that differ from the defaults, then quick settings as quick.<key>. It goes
 // around as a file (.ttstyle), as a one-line code (TT2: and the text packed, for chats), or through
-// the community list (a folder of setups on GitHub, read only when its button is pressed). The audio
-// device, hotkeys, file paths, hardware and how it is moved or dragged never go in one.
+// the community styles page (opened in the browser when its button is pressed). The audio device,
+// hotkeys, file paths, hardware and anything that hooks the mouse or keyboard never go in one.
 
 enum : unsigned { kPartLook = 1, kPartMotion = 2, kPartExtras = 4, kPartPlace = 8, kPartsAll = 15 };
 struct VizSetupKey {
@@ -17585,25 +17633,10 @@ static const VizSetupKey kSetupKeys[] = {
     {L"background.borderSize", L"0", true, 1},
     {L"background.borderColor", L"#40FFFFFF", true, 1},
     {L"performance.targetFps", L"60", false, 2},
-    // Behaviour goes in a setup too. Only what belongs to one PC stays out:
-    // the audio device, icon files, the panel hotkey, monitor, docked app and GPU.
-    {L"progress.clickToSeek", L"0", false, 4},
-    {L"progress.seekAppsMode", L"except", true, 4},
-    {L"progress.seekApps", L"", true, 4},
-    {L"interaction.keyMoveEnabled", L"0", false, 8},
-    {L"interaction.keyMoveModifier", L"ctrl_alt", true, 8},
-    {L"interaction.keyMoveKeys", L"both", true, 8},
-    {L"interaction.keyMoveStep", L"1", true, 8},
-    {L"interaction.keyMoveFastStep", L"10", true, 8},
-    {L"interaction.keyMoveFineStep", L"0.25", true, 8},
-    {L"interaction.keyMoveFineKey", L"none", true, 8},
-    {L"interaction.keyMoveFastKey", L"shift", true, 8},
-    {L"interaction.dragEnabled", L"0", false, 8},
-    {L"interaction.dragSnap", L"1", false, 8},
-    {L"interaction.dragSnapDistance", L"8", true, 8},
-    {L"interaction.dragModifier", L"ctrl", true, 8},
-    {L"interaction.dragButton", L"middle", true, 8},
-    {L"interaction.contextMenu", L"right_click", true, 8},
+    // Behaviour goes in a setup too. What belongs to one PC stays out (the audio device, icon
+    // files, the panel hotkey, monitor, docked app and GPU), and so does anything that hooks the
+    // mouse or keyboard (Click to Seek, Keyboard Move, drag, the right-click mode): a setup from
+    // someone else should never change how your input is handled.
     {L"performance.pauseOnFullscreen", L"1", false, 2},
     {L"performance.pauseWhenSilentSeconds", L"10", true, 2},
     {L"performance.deepIdle", L"1", false, 2},
@@ -17632,7 +17665,7 @@ static const VizQuickPart kQuickParts[] = {
     {L"progress", kPartExtras},   {L"mediaControls", kPartExtras}, {L"readout", kPartExtras}, {L"pixelSnap", kPartPlace},
 };
 
-static const wchar_t kCommunityFolder[] = L"https://github.com/USER-TOURNE/Tourne-Style/tree/main/community/setups";
+static const wchar_t kCommunityPage[] = L"https://user-tourne.github.io/Tourne-Style/";
 static const wchar_t kCommunityIssue[] = L"https://github.com/USER-TOURNE/Tourne-Style/issues/new";
 
 unsigned VizQuickPartOf(const std::wstring& key) {
@@ -17739,7 +17772,7 @@ VizSetup VizParseSetup(const std::wstring& text) {
         std::wstring line = text.substr(pos, nl - pos);
         pos = nl + 1;
         while (!line.empty() && iswspace(line.back())) line.pop_back();
-        while (!line.empty() && iswspace(line.front())) line.erase(line.begin());
+        line.erase(0, std::find_if_not(line.begin(), line.end(), iswspace) - line.begin());
         if (!started) {
             started = line.rfind(L"Tourne'Table setup", 0) == 0;
             s.ok = started;
@@ -17760,6 +17793,10 @@ VizSetup VizParseSetup(const std::wstring& text) {
 
 // Lays a setup's parts over the settings: each setting in them takes the setup's value or the default,
 // and quick settings in them give way to the setup's own.
+static const size_t kSetupValueMax = 128;
+// The Waterfall Ramp alone can be longer: up to 128 non-ASCII glyphs, an emoji with its FE0F taking 3 units.
+static const size_t kSetupRampMax = 512;
+
 void VizApplySetup(const VizSetup& s, unsigned parts) {
     if (!g_setupLayerLoaded) VizSetupLoad();
     for (const auto& k : kSetupKeys)
@@ -17768,9 +17805,16 @@ void VizApplySetup(const VizSetup& s, unsigned parts) {
                                          [&](const auto& kv) { return (VizQuickPartOf(kv.first) & parts) != 0; }),
                           g_menuOverrides.end());
     for (const auto& kv : s.values) {
+        // No other setting needs more than a few dozen characters. Longer ones only come from a
+        // hand-made setup and could push the stored values past what is read back on restart.
+        if (kv.second.size() > (kv.first == L"terminal.ramp" ? kSetupRampMax : kSetupValueMax)) continue;
         if (kv.first.rfind(L"quick.", 0) == 0) {
             std::wstring key = kv.first.substr(6);
-            if (VizQuickPartOf(key) & parts) g_menuOverrides.emplace_back(key, kv.second);
+            if (!(VizQuickPartOf(key) & parts)) continue;
+            auto it = std::find_if(g_menuOverrides.begin(), g_menuOverrides.end(),
+                                   [&](const auto& o) { return o.first == key; });
+            if (it != g_menuOverrides.end()) it->second = kv.second;
+            else g_menuOverrides.emplace_back(key, kv.second);
         } else if (const VizSetupKey* k = VizSetupKeyOf(kv.first)) {
             if (k->part & parts) g_setupLayer[k->name] = kv.second;
         }
@@ -17850,7 +17894,7 @@ std::wstring VizShareCode(const std::wstring& text) {
 
 // A code back to its text; anything else is taken as the text itself.
 std::wstring VizSetupText(std::wstring given) {
-    while (!given.empty() && iswspace(given.front())) given.erase(given.begin());
+    given.erase(0, std::find_if_not(given.begin(), given.end(), iswspace) - given.begin());
     while (!given.empty() && iswspace(given.back())) given.pop_back();
     std::string bytes, text;
     if (given.rfind(L"TT2:", 0) == 0 && VizUnbase64(given.substr(4), &bytes) && VizUnpack(bytes, &text)) return VizShareWide(text);
@@ -17955,8 +17999,8 @@ bool VizOpenSetupFile(HWND owner, std::wstring* text) {
     return ok;
 }
 
-// ---- The community list: setups in a folder of the Tourne-Style repository on GitHub ----
-// The mod never downloads anything itself: Community opens the folder in the browser, and a setup
+// ---- The community list: the Tourne-Style styles page, opened in the browser ----
+// The mod never downloads anything itself: Community opens the styles page in the browser, and a setup
 // found there comes in with Paste code or Open file.
 
 std::wstring VizUrlEncode(const std::wstring& w) {
@@ -18150,7 +18194,7 @@ void EditorBuild(HWND hWnd) {
     add(L"STATIC",
         L"Changes apply at once. Reset Quick Settings in the right-click menu returns to the settings page. "
         L"Reflection, Glow and Bloom need the Direct3D 11 renderer. Share carries the ticked parts; your audio "
-        L"device, hotkey, monitor, docked app, GPU and file paths stay out. Community opens GitHub in your browser.",
+        L"device, hotkey, monitor, docked app, GPU, file paths and input settings stay out. Community opens the styles page.",
         SS_LEFT, L, y, labelW + ctlW, px(80), -1);
     y += px(88);
     RECT rc = {0, 0, labelW + ctlW + L * 2, y};
@@ -18228,7 +18272,7 @@ LRESULT CALLBACK StyleEditorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 EditorSync(hWnd);
             } else if (id == kIdShareCommunity) {
                 HMENU m = CreatePopupMenu();
-                AppendMenuW(m, MF_STRING, 1001, L"Browse Community Setups (opens GitHub)");
+                AppendMenuW(m, MF_STRING, 1001, L"Browse Community Styles (opens in your browser)");
                 AppendMenuW(m, MF_STRING, 1000, L"Share Mine to the Community...");
                 RECT rc = {};
                 GetWindowRect(GetDlgItem(hWnd, kIdShareCommunity), &rc);
@@ -18239,7 +18283,7 @@ LRESULT CALLBACK StyleEditorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                     if (parts) VizShareToCommunity(hWnd, parts, EditorSetupName(hWnd));
                     else MessageBeep(MB_ICONWARNING);
                 } else if (cmd == 1001) {
-                    ShellExecuteW(nullptr, L"open", kCommunityFolder, nullptr, nullptr, SW_SHOWNORMAL);
+                    ShellExecuteW(nullptr, L"open", kCommunityPage, nullptr, nullptr, SW_SHOWNORMAL);
                 }
             } else if (id == kIdLoad || id == kIdSave || id == kIdDelete) {
                 WCHAR name[64] = {};
@@ -19490,7 +19534,6 @@ HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 
 DWORD WINAPI UiThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // This mod runs as its own dedicated process (see the tool-mod boilerplate
     // at the end of this file). WhTool_ModInit's own calling thread does not
     // survive -- the tool-mod launcher hooks the process's real entry point
@@ -19532,16 +19575,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
 
-    // Running injected into explorer.exe, this was inherited for free -- the
-    // shell process is always Per-Monitor-V2 DPI aware. Running as our own
-    // standalone process now, nothing declares that for us, so without this
-    // call every GetMonitorInfo/GetDpiForMonitor-based position and size
-    // calculation in the mod (the visualizer's own box, and the media
-    // controls window) risks running against a DPI-virtualized view of the
-    // desktop instead of true physical pixels on any scaled monitor.
-    if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
-        Wh_Log(L"SetProcessDpiAwarenessContext failed, error %u", GetLastError());
-    }
+    // No DPI call needed: windhawk.exe's manifest already makes this process Per-Monitor V2
+    // aware, so every position and size below is in true physical pixels.
 
     LoadSettings();
 
@@ -19601,8 +19636,7 @@ void WhTool_ModUninit() {
                 g_albumArtThread->detach();
             }
         }
-        delete g_albumArtThread;
-        g_albumArtThread = nullptr;
+        g_albumArtThread.reset();
     }
 
     if (g_mediaCmdThread) {
@@ -19614,8 +19648,7 @@ void WhTool_ModUninit() {
                 g_mediaCmdThread->detach();
             }
         }
-        delete g_mediaCmdThread;
-        g_mediaCmdThread = nullptr;
+        g_mediaCmdThread.reset();
     }
 
     g_gsmtcStarted = false;

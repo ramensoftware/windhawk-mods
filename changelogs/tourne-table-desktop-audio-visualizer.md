@@ -1,3 +1,23 @@
+## 2.1.1 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0c4b66869245e386f82cff23f9d3dab8b4ba240f/mods/tourne-table-desktop-audio-visualizer.wh.cpp))
+
+**Community styles page**
+- **Browse Community Styles** opens https://user-tourne.github.io/Tourne-Style/ in your default browser.
+- The menu item reads "Browse Community Styles (opens in your browser)", and the Readme's "Share your style" section links to the styles page.
+- The mod still never goes online. Styles come in only through **Paste code** or **Open file**.
+
+**Shared setups**
+- Shared setups no longer carry Click to Seek, Keyboard Move, drag or the right-click mode, so importing someone else's style can't change how your mouse and keyboard behave.
+- Imported values longer than 128 characters are skipped (512 for Waterfall Ramp), and quick settings are no longer duplicated, so an imported setup can't get lost on the next restart.
+- Very long setup codes are trimmed in one step, so a crafted code can't freeze the visualizer.
+
+**Fixes**
+- Keyboard Move with Alt or Win in the shortcut no longer opens Start, activates a menu bar or switches the input language when you let go.
+- A Media Card volume drag ends if the mouse is taken away mid-drag (a UAC prompt, Ctrl+Alt+Del), so hovering the card afterwards no longer changes the volume.
+- Album art, album colours and Now Playing text no longer lag a track behind when a player sends several updates per track.
+- If the GPU can't be rebuilt after a driver update or device change, the visualizer keeps retrying every two seconds and comes back on its own instead of staying blank or crashing.
+
+No settings or defaults were changed.
+
 ## 2.1.0 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/03313a1c1b7fd3526f5a6fb8f79f3a727d6ae74c/mods/tourne-table-desktop-audio-visualizer.wh.cpp))
 
 * **Precision analysis engine:** every bar is its own band (real-input FFT, three resolution tiers; log, mel, bark, ERB, fractional-octave or note layouts; A/C/Z weighting; time-based ballistics). The 1.x analysis stays as Analysis Engine = Classic.

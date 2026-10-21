@@ -9202,7 +9202,7 @@
         "ratingUsers": 241,
         "reviews": 4,
         "trendingSorting": 109.31823659538185,
-        "updated": 1792220568000,
+        "updated": 1792555438000,
         "users": 6540
       },
       "metadata": {
@@ -9218,7 +9218,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Ilha e Dock estilo Mac",
-        "version": "2.0.1"
+        "version": "2.0.6"
       },
       "metadataEnglish": {
         "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)",
@@ -17166,7 +17166,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792220572000,
+        "updated": 1792555433000,
         "users": 68
       },
       "metadata": {
@@ -17180,7 +17180,7 @@
         ],
         "license": "MIT",
         "name": "Tourne'Table [Audio Visualizer]",
-        "version": "2.1.0"
+        "version": "2.1.1"
       }
     },
     "translucent-flyouts-controller": {
@@ -19494,7 +19494,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792306992000,
+        "updated": 1792555443000,
         "users": 31
       },
       "metadata": {
@@ -19509,7 +19509,7 @@
           "explorer.exe"
         ],
         "name": "Mawaqit Prayer Clock",
-        "version": "0.7.0"
+        "version": "0.7.1"
       }
     },
     "windhawk-topbar": {

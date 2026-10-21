@@ -1,3 +1,51 @@
+## 2.0.6 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f0be7478ca936e97c740aa3ffa3407b421e4a7cf/mods/mac-island-dock.wh.cpp))
+
+**The dock**
+* Redone to look and move like macOS's: the icons spread on a rounded shelf that grows in width and height with them as they magnify in a wave, pushing their neighbors aside, and a click always goes to the icon under the mouse (on the transparent taskbar too). The taskbar's window makes room above itself for the magnified icons (the work area doesn't change), and the windows' previews open right above the dock.
+* Magnified icons are sharp (#6202): drawn from the apps' own bigger pictures (also for apps with several profiles, like a second Chrome profile, and for apps like Steam whose windows give the taskbar no icon: their program's), and icons shrunk at rest are smoothed.
+* New settings: icon size (24-64 px, replacing the dock's height: its height and margins follow the icons), space between icons, gap at the bottom, and the background behind the icons (off: only the icons). New defaults: icons 32 px, magnification 170%, reach 150 px, corners 22 px, gap 2 px.
+* The background is a plain tint in the theme's color (50% by default), as see-through as chosen (Windows' acrylic only drew its fallback color behind the taskbar, and turned black when the taskbar had the focus). The "Taskbar" choice now says "Dock: compact and floating, see-through, like on macOS".
+* Showing and hiding: the mouse within the icons' height of the bottom edge brings it up (with a monitor below, the mouse easily goes past the last row, and those first rows of the monitor below count too when coming from above); the strip beside the shelf keeps it up instead of showing and hiding it in a loop; hidden, only the part under the icons takes the mouse when the tray isn't shown; it no longer stays up after clicking an app in it, and stays up while an app's jump list is open.
+* Apps asking for attention no longer make the whole dock jump up for a moment (also with the mouse on another monitor), with "When an app needs attention" set to only the icon or nothing.
+* Badges and apps' overlay icons (like Discord's counter) fit in the dock on every monitor, and Discord's counter shows as a sharp red bubble with the right number, also when it was set before the mod started.
+* Dots under open apps also show for a pinned app opened from the dock.
+
+**The island's look**
+* Glass: the island (in every style, the notches too) and its panels see-through and blurred, with a bright edge, using Windows' blur (it needs Windows' transparency effects; a plain color without them or with the energy saver on).
+* "Icon size" is now "Icon and text size" (the pill's texts follow it too).
+* New options: the line's opacity (0% hides it, it still brings the island back), how long the area along the edge that brings it back is, the panels' size (100% to 150%), the media title's width on the pill, the minimize arrow at the end of the pill, the gray highlight behind the item under the mouse (#6324), and the tips under the icons and buttons. All of them per profile and monitor.
+* Language: the island's texts in English, Portuguese or Chinese, or "Automatic" (Windows' display language); the dates follow it.
+* Notches hiding together: each notch keeps its own line, and the mouse on any of them opens them all.
+* Icons drawn smaller than their picture are smoothed (no jagged edges).
+* On Windows 10, the island's icons use Segoe MDL2 Assets (they were empty boxes).
+* The pill's height, how round its corners are and the room at its ends (its width) are options (#6200).
+* The thin edge around the island, its panels, banners and bubbles (the glass's bright edge too) has a slider: 0% for none (the minimized line keeps its own).
+* Glass: a translucent option (a lighter tint and livelier colors, like the taskbar styler's LiquidGlass themes) and a slider to blur it more than Windows' own (#6368, #6309); it's still Windows' blur, so screenshots and recordings show it.
+* The bar style can put its items at the screen's corners, with the clock in the middle (#6275).
+* The battery icon turns green while charging (#6271), the volume's and battery's percentages sit closer to their icons (#6199), and a notification's title and text are centered by its icon (#6200).
+* The battery icon is drawn a bit bigger, as big as the other icons at every icon size.
+* The island's settings, Look tab: grouped in sections (Style, Colors, Glass, The pill's shape, Sizes, Details, Animations), each kept whole in one column; a dimmed slider says why on its name, like the options; the frosted glass's tip lists everything it needs.
+
+**Calendar and updates**
+* The calendar's gear (main island) hides your own past events after a day, a week or thirty days (their day keeps its dot and lists them behind "Show N hidden"), shows how many events are kept (out of 200, with a warning when almost full) and deletes the past ones (two clicks).
+* Updates are checked every 1, 3, 6, 12 or 24 hours, chosen under their list; an item shown only by another monitor's profile (updates, weather, usage) now gets its data too.
+
+**Other fixes**
+* The island starts even when Windows isn't ready for it at sign-in (it tries again for a minute) (#6309).
+* Updating or recompiling the mod no longer leaves the island off (the new version's island used to leave while the old one was still closing), and Windows' "Do not disturb" stays on through it with the island's own notifications.
+* Discord's notifications stay on the island while its taskbar counter does, and clicking one opens Discord.
+* An app's icon that came out as a white square (read while Explorer was restarting) is read again.
+* Bluetooth: a device no longer stays at "Disconnecting..." when Windows doesn't answer.
+* Changing the power mode or plan from the control center no longer can crash the island (Windows' power library is kept loaded).
+* The notification counts on the pill sit in the middle of their bubbles in the Fixed style too.
+* Windows' own notifications with buttons the island can't press (like Nearby sharing's "Save" and "Decline") keep Windows' banner, and a click on the island opens Windows' notification center, where the buttons work.
+* The keyboard language bubble shows again when switching 中/英 with the island minimized: an input method's own window coming to the front (like Microsoft Pinyin's) no longer counts as another app (#6313).
+* Clicking a notification of an app hidden in the tray, like QQ, brings up the running app through its tray icon instead of starting it again (the login screen) (#6076).
+* Wi-Fi: the network shows as Wi-Fi even when Windows doesn't give its signal (it showed as a cable); when Windows refuses the networks in reach (no location access on newer Windows 11 builds), the list says so and opens the page that allows it, instead of looking for networks forever; failures are logged.
+* Windows' "Do not disturb" stays on when the mod is updated while a folder window runs in its own Explorer process.
+* The dock (and the transparent taskbar) no longer shows behind the window in front when Windows left the taskbar under other windows with its "always on top" style still set: it's put on top every time it shows.
+* README redone: what the mod does at a glance, with new pictures and GIFs (the styles, glass, the dock), and the whole list of features below.
+
 ## 2.0.1 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a3e20ab7652e5c542efc0af02a6bb1a83b8234a/mods/mac-island-dock.wh.cpp))
 
 **Panels and look**
