@@ -9610,6 +9610,31 @@
         "version": "2.1.0"
       }
     },
+    "middle-click-new-tab": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792598572000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792598572000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "venasataa",
+        "compilerOptions": "-lole32 -loleaut32 -lshlwapi",
+        "description": "Middle-click the empty tab strip area of File Explorer, Notepad or Terminal to open a new tab",
+        "github": "https://github.com/venasataa",
+        "homepage": "https://venasataa.github.io",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Middle Click New Tab",
+        "version": "1.0.0"
+      }
+    },
     "minimize-to-tray": {
       "details": {
         "defaultSorting": 7360,
