@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-21T11:01:33.000Z</updated>
+    <updated>2026-10-21T11:41:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multi PrintScreen 1.0.2]]></title>
+        <id>https://windhawk.net/mods/multi-printscreen#f7976748878b7344e86d65b4388252c1227a7a31</id>
+        <link href="https://windhawk.net/mods/multi-printscreen"/>
+        <updated>2026-10-21T11:41:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Update author name to sharexza and update GitHub profile link in metadata.</li>
+</ul>]]></content>
+        <author>
+            <name>sharexza</name>
+            <uri>https://github.com/sharexza</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Maximized Window Margins 1.1]]></title>
         <id>https://windhawk.net/mods/maximized-window-margins#a9084d98e7b3af5bf30b70b44332bb77430bc405</id>
@@ -924,19 +937,6 @@ discrete wheel event is emitted. <code>120</code> is one standard wheel notch.</
 handled. Apps using Direct Manipulation bypass the queue entirely.</li>
 <li>Apps that already handle continuous deltas correctly should not be added to
 the inclusion list, or their scrolling will be coarsened.</li>
-</ul>]]></content>
-        <author>
-            <name>yezhiyi9670</name>
-            <uri>https://github.com/yezhiyi9670</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Disappearing Icon Fix for Windows 11 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11#21f2428e07c6783f78ea7b0a3b3038ab2ee3c6f6</id>
-        <link href="https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11"/>
-        <updated>2026-10-20T05:03:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>State that this mod is deprecated for Windows 11 24H2+ since I have not been able to reproduce the bug at all after a certain 24H2 version.</li>
 </ul>]]></content>
         <author>
             <name>yezhiyi9670</name>

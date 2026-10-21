@@ -21,6 +21,7 @@ const allowedAuthorNamePairs = [
 const allowedAuthorGithubPairs = [
     ['https://github.com/meteoni', 'https://github.com/meteony'],
     ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
+    ['https://github.com/sharexza', 'https://github.com/raviadityasetiawan-oss'],
 ];
 
 type ModAuthorData = {
