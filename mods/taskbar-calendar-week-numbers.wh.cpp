@@ -324,6 +324,9 @@ thread_local winrt::event_token t_visibilityChangedToken{};
 thread_local winrt::weak_ref<wux::FrameworkElement> t_layoutRoot;
 thread_local winrt::event_token t_layoutUpdatedToken{};
 thread_local ULONGLONG t_lastScanTick = 0;
+// Whether a calendar was ever attached on this thread, i.e. this is the
+// calendar flyout's thread.
+thread_local bool t_hadCalendar = false;
 
 template <typename T>
 T FindByName(wux::DependencyObject const& root, PCWSTR name, int depth = 0) {
@@ -556,6 +559,7 @@ bool AttachCalendar(wuxc::CalendarView const& calendar) {
         return true;  // Already attached.
     }
 
+    t_hadCalendar = true;
     Wh_Log(L"Attaching to calendar, first day of week %d",
            static_cast<int>(calendar.FirstDayOfWeek()));
 
@@ -749,7 +753,9 @@ void RefreshCalendars() {
 
 // How long after the flyout is shown the window is watched for a calendar
 // which isn't there yet. Other flyouts of the process never get one, so the
-// watch isn't kept armed for good.
+// watch isn't kept armed for good there. The calendar flyout's own thread
+// keeps watching, so that a calendar which is collapsed and expanded again
+// while the flyout is open gets its column back.
 constexpr ULONGLONG kLayoutWatchMs = 5000;
 thread_local ULONGLONG t_layoutWatchUntilTick = 0;
 
@@ -758,7 +764,7 @@ void OnLayoutUpdated() {
     // date. The window is only searched again when there's no calendar, e.g.
     // before it's created or after the flyout was rebuilt.
     const ULONGLONG now = GetTickCount64();
-    if (now > t_layoutWatchUntilTick || HasLiveCalendar() ||
+    if ((now > t_layoutWatchUntilTick && !t_hadCalendar) || HasLiveCalendar() ||
         now - t_lastScanTick < 500) {
         return;
     }
