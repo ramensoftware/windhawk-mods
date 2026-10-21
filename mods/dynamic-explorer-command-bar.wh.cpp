@@ -80,7 +80,7 @@ The mod supports rich parameter expansions that dynamically resolve the state of
 
 Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.exe "%sel%"`).
 
-> * **Virtual Shell Locations:** Locations such as *This PC*, *Recycle Bin*, and *Control Panel* do not possess a physical filesystem path. For safety, folder path argument tokens (`%path%`, `%dir%`, `%d%`, `%p%`) resolve to an empty string in these views to prevent destructive scripts from unintentionally targeting user directories. The working directory (`%USERPROFILE%`) is still used in the background so applications launch cleanly. Use `%d_name%` to retrieve the native shell title (e.g. `This PC` or `Recycle Bin`).
+> * **Virtual Shell Locations:** Locations such as *This PC*, *Recycle Bin*, and *Control Panel* do not possess a physical filesystem path. For safety, folder path argument tokens (`%path%`, `%dir%`, `%d%`, `%d_smart%`, `%p%`) resolve to an empty string in these views to prevent destructive scripts from unintentionally targeting user directories. The working directory (`%USERPROFILE%`) is still used in the background so applications launch cleanly. Use `%d_name%` to retrieve the native shell title (e.g. `This PC` or `Recycle Bin`).
 > * **UI Labels:** To prevent toolbar buttons from overflowing, multi-item tokens like `%base%`, `%name%`, and `%1%` automatically evaluate to the **first highlighted item's name** rather than full multi-line absolute paths.
 
 ---
@@ -110,7 +110,7 @@ The **File extension filter** (`matchExtensions`) field lets you display toolbar
 * **`multi_file`** *(or `multi_files`)* — Show exclusively when 2 or more regular files are selected.
 * **`single_folder`** *(or `single_folders`)* — Show exclusively when exactly 1 folder is selected.
 * **`multi_folder`** *(or `multi_folders`)* — Show exclusively when 2 or more folders are selected.
-* **`only <ext>`** *(e.g. `only txt`, `only:cpp`, `only txt, only cpp`)* — Strict whitelist. Shows exclusively when **every single highlighted item** matches one of the specified extensions (vetoes mixed selections and folders).
+* **`only <ext>`** *(e.g. `only txt`, `only:cpp`, `only txt, only cpp`, `only(txt, cpp)`)* — Strict whitelist. Shows exclusively when **every single highlighted item** matches one of the specified extensions (vetoes mixed selections and folders).
 * **`txt, js, cpp`** — Standard extension filter (shows if *any* selected file matches).
 
 ### Combining Rules (`OR`, `AND`, and Exclusions)
@@ -151,8 +151,6 @@ To place buttons inside a dropdown menu:
   The original mod provides static command buttons and hides built-in buttons. **Dynamic Explorer Command Bar** extends this with real-time selection-based extension filtering, per-item execution (`%sel_each%`), secondary toolbar placement, dual Light/Dark icons, and an expanded token engine (`%files`, `%folders`, `%n`, `%ext`, `%c`, `%d_name`, `%p`).
 * **vs. `explorer-custom-shortcuts` (ArvindSaini978)**:
   While *Explorer Custom Shortcuts* provides background keyboard hotkeys, this mod brings dynamic parameter evaluation directly to the visual WinUI command bar.
-* **vs. `explorer-folder-bookmarks-bar` (Maxim Fomin)**:
-  *Explorer Folder Bookmarks Bar* adds a dedicated horizontal folder strip. This mod focuses on customizable action buttons, command execution, and deep integration into the native command bar.
 
 ---
 
@@ -995,13 +993,20 @@ std::wstring BuildParameters(std::wstring parameters,
 
     std::vector<std::wstring> filesOnly;
     std::vector<std::wstring> foldersOnly;
-    for (const auto& item : context.allSelectedPaths) {
-        DWORD attr = GetFileAttributesW(item.c_str());
-        if (attr != INVALID_FILE_ATTRIBUTES &&
-            (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            foldersOnly.push_back(item);
-        } else {
-            filesOnly.push_back(item);
+    bool needsItemClassification =
+        (parameters.find(L"%files") != std::wstring::npos ||
+         parameters.find(L"%folders") != std::wstring::npos ||
+         parameters.find(L"%d_smart") != std::wstring::npos);
+
+    if (needsItemClassification) {
+        for (const auto& item : context.allSelectedPaths) {
+            DWORD attr = GetFileAttributesW(item.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES &&
+                (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                foldersOnly.push_back(item);
+            } else {
+                filesOnly.push_back(item);
+            }
         }
     }
 
@@ -1107,18 +1112,6 @@ std::wstring BuildParameters(std::wstring parameters,
     ReplacePlaceholder(parameters, L"%c%", countStr);
     ReplacePlaceholder(parameters, L"%c", countStr);
 
-    // --- %d_smart (Selected folder if one is chosen, otherwise active folder)
-    // ---
-    if (parameters.find(L"%d_smart") != std::wstring::npos) {
-        std::wstring smartDir =
-            !foldersOnly.empty() ? foldersOnly[0] : effectiveDir;
-        std::wstring quotedSmart = QuoteArg(smartDir);
-        ReplacePlaceholder(parameters, L"\"%d_smart%\"", quotedSmart);
-        ReplacePlaceholder(parameters, L"%d_smart%", smartDir);
-        ReplacePlaceholder(parameters, L"\"%d_smart\"", quotedSmart);
-        ReplacePlaceholder(parameters, L"%d_smart", smartDir);
-    }
-
     // --- %d_name (Folder display name: prefers native shell title, matches UI
     // labels) ---
     if (parameters.find(L"%d_name") != std::wstring::npos) {
@@ -1163,6 +1156,18 @@ std::wstring BuildParameters(std::wstring parameters,
                                    : L"";
     std::wstring quotedPhysicalPath =
         physicalDir.empty() ? L"" : QuoteArg(physicalDir);
+
+    // --- %d_smart (Selected folder if one is chosen, otherwise active physical
+    // folder) ---
+    if (parameters.find(L"%d_smart") != std::wstring::npos) {
+        std::wstring smartDir =
+            !foldersOnly.empty() ? foldersOnly[0] : physicalDir;
+        std::wstring quotedSmart = smartDir.empty() ? L"" : QuoteArg(smartDir);
+        ReplacePlaceholder(parameters, L"\"%d_smart%\"", quotedSmart);
+        ReplacePlaceholder(parameters, L"%d_smart%", smartDir);
+        ReplacePlaceholder(parameters, L"\"%d_smart\"", quotedSmart);
+        ReplacePlaceholder(parameters, L"%d_smart", smartDir);
+    }
 
     // --- %path% / %dir / %d ---
     ReplacePlaceholder(parameters, L"\"%path%\"", quotedPhysicalPath);
@@ -1273,15 +1278,11 @@ void LaunchItemForWindow(HWND hExplorerWnd,
                 safePath += L'\\';
             }
 
-            size_t qPos = param.find(L"\"%sel_each%\"");
-            if (qPos != std::wstring::npos) {
-                param.replace(qPos, 12, L"\"" + safePath + L"\"");
-            } else {
-                size_t uPos = param.find(L"%sel_each%");
-                if (uPos != std::wstring::npos) {
-                    param.replace(uPos, 10, L"\"" + safePath + L"\"");
-                }
-            }
+            std::wstring quotedPath = L"\"" + safePath + L"\"";
+            ReplacePlaceholder(param, L"\"%sel_each%\"", quotedPath);
+            ReplacePlaceholder(param, L"\"%sel_each\"", quotedPath);
+            ReplacePlaceholder(param, L"%sel_each%", quotedPath);
+            ReplacePlaceholder(param, L"%sel_each", quotedPath);
 
             PCWSTR namePtr = PathFindFileNameW(safePath.c_str());
             PCWSTR extPtr = PathFindExtensionW(safePath.c_str());
@@ -1368,6 +1369,32 @@ void RunShellWorkOnWorkerThread(std::function<void()> work) {
     }
 }
 
+void RunDetachedShellWork(std::function<void()> work) {
+    auto* pWork = new std::function<void()>(std::move(work));
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParam) -> DWORD {
+            std::unique_ptr<std::function<void()>> work(
+                reinterpret_cast<std::function<void()>*>(lpParam));
+            ComApartmentScope comScope(COINIT_APARTMENTTHREADED |
+                                       COINIT_DISABLE_OLE1DDE);
+            try {
+                (*work)();
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult().value);
+            }
+            return 0;
+        },
+        pWork, 0, nullptr);
+
+    if (thread) {
+        CloseHandle(
+            thread);  // Detach immediately so unload never waits on modal UI
+    } else {
+        delete pWork;
+    }
+}
+
 bool IsCommandMatch(std::wstring_view cmd, std::wstring_view actionName) {
     constexpr std::wstring_view kInternal = L"internal:";
     constexpr std::wstring_view kInt = L"int:";
@@ -1442,7 +1469,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         if (!context.selectedPath.empty() &&
             PathIsDirectoryW(context.selectedPath.c_str()) == FALSE) {
             std::wstring targetPath = context.selectedPath;
-            RunShellWorkOnWorkerThread([hWnd, targetPath]() {
+            RunDetachedShellWork([hWnd, targetPath]() {
                 OPENASINFO oai = {};
                 oai.pcszFile = targetPath.c_str();
                 oai.oaifInFlags = OAIF_EXEC | OAIF_ALLOW_REGISTRATION;
@@ -1983,91 +2010,56 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
 
     std::vector<std::wstring> orBranches;
     std::vector<std::wstring> negativeTokens;
-    std::vector<std::wstring> onlyExtensions;
 
-    // 1. Parse tokens separated by comma or semicolon
+    // 1. Parse top-level tokens separated by comma or semicolon,
+    //    ignoring commas inside parentheses like only(txt, cpp)
     size_t start = 0;
-    while (start < filter.size()) {
-        size_t end = filter.find_first_of(L",;", start);
-        if (end == std::wstring::npos)
-            end = filter.size();
-        std::wstring rawToken =
-            TrimWhitespaceAndQuotes(filter.substr(start, end - start));
-        start = end + 1;
-
-        if (rawToken.empty())
-            continue;
-
-        std::wstring lower = ToLower(rawToken);
-
-        // Absolute override: 'hide' or 'hidden'
-        if (lower == L"hide" || lower == L"hidden")
-            return false;
-
-        // Check for 'only' keyword: e.g. "only txt", "only .txt", "only:txt"
-        if (lower.starts_with(L"only ") || lower.starts_with(L"only:") ||
-            lower.starts_with(L"only=")) {
-            std::wstring extPart = TrimWhitespaceAndQuotes(rawToken.substr(4));
-            if (!extPart.empty() &&
-                (extPart.front() == L':' || extPart.front() == L'='))
-                extPart = TrimWhitespaceAndQuotes(extPart.substr(1));
-            if (!extPart.empty() && extPart.front() == L'.')
-                extPart.erase(extPart.begin());
-
-            if (!extPart.empty()) {
-                onlyExtensions.push_back(ToLower(extPart));
+    int parenDepth = 0;
+    for (size_t i = 0; i <= filter.size(); i++) {
+        if (i < filter.size()) {
+            if (filter[i] == L'(')
+                parenDepth++;
+            else if (filter[i] == L')') {
+                if (parenDepth > 0)
+                    parenDepth--;
             }
-            continue;
         }
 
-        // Negative tokens (-zip, -folder, etc.)
-        if (rawToken.front() == L'-' || rawToken.front() == L'~') {
-            rawToken.erase(rawToken.begin());
-            rawToken = TrimWhitespaceAndQuotes(rawToken);
-            if (!rawToken.empty() && rawToken.front() == L'.')
-                rawToken.erase(rawToken.begin());
-            rawToken = ToLower(rawToken);
-            if (rawToken == L"dir" || rawToken == L"directory" ||
-                rawToken == L"folders")
-                rawToken = L"folder";
-            if (rawToken == L"files")
-                rawToken = L"file";
-            negativeTokens.push_back(rawToken);
-        } else {
-            orBranches.push_back(rawToken);
-        }
-    }
+        if (i == filter.size() ||
+            (parenDepth == 0 && (filter[i] == L',' || filter[i] == L';'))) {
+            std::wstring rawToken =
+                TrimWhitespaceAndQuotes(filter.substr(start, i - start));
+            start = i + 1;
 
-    // 2. HIGHEST PRIORITY: Strict 'only' Whitelist Evaluation
-    if (!onlyExtensions.empty()) {
-        // Must have at least 1 item selected
-        if (summary.count == 0)
-            return false;
+            if (rawToken.empty())
+                continue;
 
-        // Folders are strictly disallowed when filtering for 'only <extension>'
-        if (summary.folderCount > 0)
-            return false;
+            std::wstring lower = ToLower(rawToken);
 
-        // EVERY selected file must match one of the specified allowed
-        // extensions
-        for (const auto& ext : summary.extensions) {
-            bool matchesAnyOnly = false;
-            for (const auto& targetExt : onlyExtensions) {
-                if (ext == targetExt) {
-                    matchesAnyOnly = true;
-                    break;
-                }
-            }
-            if (!matchesAnyOnly)
+            // Absolute override: 'hide' or 'hidden'
+            if (lower == L"hide" || lower == L"hidden")
                 return false;
-        }
 
-        // If no other branches exist, 'only' check passed
-        if (orBranches.empty())
-            return true;
+            // Negative tokens (-zip, -folder, etc.)
+            if (rawToken.front() == L'-' || rawToken.front() == L'~') {
+                rawToken.erase(rawToken.begin());
+                rawToken = TrimWhitespaceAndQuotes(rawToken);
+                if (!rawToken.empty() && rawToken.front() == L'.')
+                    rawToken.erase(rawToken.begin());
+                rawToken = ToLower(rawToken);
+                if (rawToken == L"dir" || rawToken == L"directory" ||
+                    rawToken == L"folders")
+                    rawToken = L"folder";
+                if (rawToken == L"files")
+                    rawToken = L"file";
+                negativeTokens.push_back(rawToken);
+            } else {
+                orBranches.push_back(rawToken);
+            }
+        }
     }
 
-    // 3. Strict Negative Exclusions (Veto)
+    // 2. Strict Negative Exclusions (Global Veto)
     if (summary.count > 0) {
         for (const auto& ext : summary.extensions) {
             bool isDir = (ext == L"folder");
@@ -2084,9 +2076,73 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return summary.count > 0;
     }
 
-    // 4. Standard atomic token evaluation for remaining branches
+    // 3. Atomic token evaluator (handles individual keywords, categories, and
+    // strict 'only')
     auto evalAtomicToken = [&](std::wstring token) -> bool {
         token = ToLower(TrimWhitespaceAndQuotes(token));
+
+        // Absolute veto if hide appears in an AND sub-token (e.g. "files +
+        // hide")
+        if (token == L"hide" || token == L"hidden")
+            return false;
+
+        // --- Strict Whitelist: only ... / only(...) / only:... / only=... ---
+        if (token.starts_with(L"only ") || token.starts_with(L"only:") ||
+            token.starts_with(L"only=") || token.starts_with(L"only(")) {
+            // Folders are strictly disallowed for 'only <extension>'
+            if (summary.count == 0 || summary.folderCount > 0)
+                return false;
+
+            std::wstring content;
+            if (token.starts_with(L"only(")) {
+                size_t closeParen = token.find(L')', 5);
+                if (closeParen == std::wstring::npos)
+                    closeParen = token.size();
+                content = token.substr(5, closeParen - 5);
+            } else {
+                content = token.substr(4);
+                if (!content.empty() &&
+                    (content.front() == L':' || content.front() == L'='))
+                    content = content.substr(1);
+            }
+
+            // Extract allowed extensions (splits on commas, spaces, pipes,
+            // slashes, semicolons)
+            std::vector<std::wstring> allowedExts;
+            size_t cStart = 0;
+            while (cStart < content.size()) {
+                size_t cEnd = content.find_first_of(L",;|/ \t", cStart);
+                if (cEnd == std::wstring::npos)
+                    cEnd = content.size();
+                std::wstring ext = TrimWhitespaceAndQuotes(
+                    content.substr(cStart, cEnd - cStart));
+                cStart = cEnd + 1;
+
+                if (!ext.empty() && ext.front() == L'.')
+                    ext.erase(ext.begin());
+                if (!ext.empty()) {
+                    allowedExts.push_back(ext);
+                }
+            }
+
+            if (allowedExts.empty())
+                return false;
+
+            // 100% of selected files must match one of the allowed extensions
+            for (const auto& ext : summary.extensions) {
+                bool matchedAny = false;
+                for (const auto& allowed : allowedExts) {
+                    if (ext == allowed) {
+                        matchedAny = true;
+                        break;
+                    }
+                }
+                if (!matchedAny)
+                    return false;
+            }
+            return true;
+        }
+
         if (!token.empty() && token.front() == L'.')
             token.erase(token.begin());
 
@@ -2131,6 +2187,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return false;
     };
 
+    // 4. Evaluate OR branches with '+' for AND conjunctions
     for (const auto& branch : orBranches) {
         bool branchPassed = true;
         size_t bStart = 0;
@@ -2145,6 +2202,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
             if (subToken.empty())
                 continue;
 
+            // If a sub-token fails or invokes hide, the branch fails
             if (!evalAtomicToken(subToken)) {
                 branchPassed = false;
                 break;
@@ -2242,12 +2300,10 @@ std::wstring ResolveLabelTokens(std::wstring label,
     ReplacePlaceholder(label, L"%ext%", ext);
     ReplacePlaceholder(label, L"%ext", ext);
 
-    std::wstring effectiveDir = GetEffectiveFolderPath(context.folderPath);
-
     // %d_name% (Native folder display name)
     std::wstring dName = context.folderDisplayName;
-    if (dName.empty()) {
-        std::wstring dir = effectiveDir;
+    if (dName.empty() && !context.folderPath.empty()) {
+        std::wstring dir = context.folderPath;
         while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
             dir.pop_back();
         PCWSTR dirName = PathFindFileNameW(dir.c_str());
@@ -2257,11 +2313,12 @@ std::wstring ResolveLabelTokens(std::wstring label,
     ReplacePlaceholder(label, L"%d_name%", dName);
     ReplacePlaceholder(label, L"%d_name", dName);
 
-    // %path% / %dir (Full folder path)
-    ReplacePlaceholder(label, L"%path%", effectiveDir);
-    ReplacePlaceholder(label, L"%path", effectiveDir);
-    ReplacePlaceholder(label, L"%dir%", effectiveDir);
-    ReplacePlaceholder(label, L"%dir", effectiveDir);
+    // %path% / %dir (Full folder path - uses context.folderPath directly
+    // without disk queries)
+    ReplacePlaceholder(label, L"%path%", context.folderPath);
+    ReplacePlaceholder(label, L"%path", context.folderPath);
+    ReplacePlaceholder(label, L"%dir%", context.folderPath);
+    ReplacePlaceholder(label, L"%dir", context.folderPath);
 
     // 2. Restore masked '%%' back to literal '%'
     if (hasEscapedPercent) {
@@ -2293,12 +2350,23 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
     auto commands = commandBar.PrimaryCommands();
     uint32_t count = commands.Size();
 
+    struct ItemSnapshot {
+        std::wstring rawLabel;
+        std::wstring matchExtensions;
+        bool isMenu;
+        bool showLabel;
+    };
+
     bool disabledInsteadOfHidden;
-    std::vector<ActionItem> currentItems;
+    std::vector<ItemSnapshot> itemSnapshots;
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
         disabledInsteadOfHidden = g_settings.disabledInsteadOfHidden;
-        currentItems = g_settings.items;
+        itemSnapshots.reserve(g_settings.items.size());
+        for (const auto& itm : g_settings.items) {
+            itemSnapshots.push_back({itm.GetDisplayLabel(), itm.matchExtensions,
+                                     itm.isMenu, itm.showLabel});
+        }
     }
 
     for (uint32_t i = 0; i < count; i++) {
@@ -2320,38 +2388,39 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
             continue;
 
         int itemIndex = _wtoi(name.c_str() + underscore + 1);
-        if (itemIndex < 0 || (size_t)itemIndex >= currentItems.size())
+        if (itemIndex < 0 || (size_t)itemIndex >= itemSnapshots.size())
             continue;
 
-        const auto& item = currentItems[(size_t)itemIndex];
+        const auto& item = itemSnapshots[(size_t)itemIndex];
 
         bool isVisible =
             ItemMatchesExtensionFilter(item.matchExtensions, summary);
 
-        // --- Label Resolution & Length Clamping ---
-        std::wstring rawLabel = item.GetDisplayLabel();
-        std::wstring fullResolved = (rawLabel.find(L'%') != std::wstring::npos)
-                                        ? ResolveLabelTokens(rawLabel, context)
-                                        : rawLabel;
-        std::wstring displayResolved =
-            TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+        // Touch WinUI Label and ToolTip ONLY if the label contains dynamic
+        // tokens
+        if (item.rawLabel.find(L'%') != std::wstring::npos) {
+            std::wstring fullResolved =
+                ResolveLabelTokens(item.rawLabel, context);
+            std::wstring displayResolved =
+                TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
 
-        if (item.isMenu) {
-            if (item.showLabel && !displayResolved.empty()) {
-                displayResolved += L" \u25BE";
+            if (item.isMenu) {
+                if (item.showLabel && !displayResolved.empty()) {
+                    displayResolved += L" \u25BE";
+                } else {
+                    displayResolved = L"\u25BE";
+                }
+                button.Label(displayResolved.c_str());
+                button.LabelPosition(muxc::CommandBarLabelPosition::Default);
             } else {
-                displayResolved = L"\u25BE";
+                button.Label(displayResolved.c_str());
+                button.LabelPosition(
+                    item.showLabel ? muxc::CommandBarLabelPosition::Default
+                                   : muxc::CommandBarLabelPosition::Collapsed);
             }
-            button.Label(displayResolved.c_str());
-            button.LabelPosition(muxc::CommandBarLabelPosition::Default);
-        } else {
-            button.Label(displayResolved.c_str());
-            button.LabelPosition(
-                item.showLabel ? muxc::CommandBarLabelPosition::Default
-                               : muxc::CommandBarLabelPosition::Collapsed);
+            muxc::ToolTipService::SetToolTip(
+                button, winrt::box_value(winrt::hstring{fullResolved}));
         }
-        muxc::ToolTipService::SetToolTip(
-            button, winrt::box_value(winrt::hstring{fullResolved}));
 
         if (disabledInsteadOfHidden) {
             button.Visibility(mux::Visibility::Visible);
@@ -2829,6 +2898,16 @@ void RemoveOurButtons(muxc::CommandBar const& commandBar) {
         }
         commands.RemoveAt(i - 1);
     }
+
+    // Restore secondary command bar's default label position to native
+    // Collapsed state
+    if (commandBar.Name() == L"FileExplorerSecondaryCommandBar") {
+        try {
+            commandBar.DefaultLabelPosition(
+                muxc::CommandBarDefaultLabelPosition::Collapsed);
+        } catch (...) {
+        }
+    }
 }
 
 void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
@@ -2849,13 +2928,6 @@ void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
             if (itm.labelText.find(L'%') != std::wstring::npos) {
                 hasFilters = true;
                 anyLabelHasTokens = true;
-            }
-            for (const auto& sub : itm.subItems) {
-                if (sub.labelText.find(L'%') != std::wstring::npos) {
-                    hasFilters = true;
-                    anyLabelHasTokens = true;
-                    break;
-                }
             }
         }
     }
@@ -3257,6 +3329,7 @@ CommandBarControl_GotFocusHandler_t
     CommandBarControl_Wave1_GotFocusHandler_Original;
 
 void HandleCommandBarControlGotFocus(void* sender) {
+    UiCallScope scope;
     if (g_unloading || !sender)
         return;
     if (g_threadScanned && GetKnownCommandBarForCurrentThread())
