@@ -1481,7 +1481,7 @@ bool IsSystemTrayModuleName(PCWSTR path) {
 // Подключает RefreshIcon в конкретном модуле. На разных сборках Windows 11
 // классы лежат в разных модулях, поэтому вызывающий код перебирает их.
 bool HookSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
             &RefreshIcon_Original,
@@ -1495,7 +1495,7 @@ bool HookSystemTraySymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks))) {
         Wh_Log(L"HookSymbols (system tray) failed");
         return false;
     }
