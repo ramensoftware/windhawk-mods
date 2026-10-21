@@ -3643,7 +3643,7 @@
         "ratingUsers": 189,
         "reviews": 0,
         "trendingSorting": 2.3148978631481647,
-        "updated": 1786487050000,
+        "updated": 1792602093000,
         "users": 21297
       },
       "metadata": {
@@ -3651,7 +3651,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-lgdi32 -lwevtapi",
+        "compilerOptions": "-lole32 -lwevtapi -ld2d1 -ld3d11",
         "description": "Customizes window corner radius in Windows 11, making corners more or less rounded",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -3660,7 +3660,7 @@
         ],
         "name": "Custom Window Corner Radius",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.3"
+        "version": "1.4"
       }
     },
     "custom-desktop-watermark": {

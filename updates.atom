@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-21T16:02:52.000Z</updated>
+    <updated>2026-10-21T17:01:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Window Corner Radius 1.4]]></title>
+        <id>https://windhawk.net/mods/custom-corner-radius#16f94de7c75e010ecc78abfd55eb4bb80fb9b5a3</id>
+        <link href="https://windhawk.net/mods/custom-corner-radius"/>
+        <updated>2026-10-21T17:01:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a per-corner radius option to override the radius of each corner independently.</li>
+<li>Added an option to exclude programs that will keep their original corner radius.</li>
+<li>Settings are now applied right away.</li>
+<li>Fixed a possible system hang when a custom tooltip corner radius is configured.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle Click New Tab 1.0.0]]></title>
         <id>https://windhawk.net/mods/middle-click-new-tab#99b8b3c87e40cc1592eb0f2735ebee83a15acea9</id>
@@ -771,31 +787,6 @@ ones are discarded once there are too many of them.</p>]]></content>
         <author>
             <name>Issuch</name>
             <uri>https://github.com/Issuch</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Island Media Controls 1.0.0]]></title>
-        <id>https://windhawk.net/mods/island-media-controls#1aece9a6cf5c3aea1d4fa1081d7b0bedbd1364e4</id>
-        <link href="https://windhawk.net/mods/island-media-controls"/>
-        <updated>2026-10-20T11:00:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Improve Windows 11 taskbar placement, including top and vertical taskbars, and add an optional disc-style main island.</p></li>
-<li><p>Redesign the Compact layout and refine Side expansion positioning, reveal direction, and control alignment.</p></li>
-<li><p>Add Transparent and Transparent borderless materials, and refine Mica-like, Acrylic, and Liquid Glass lighting, blur, tint, and light/dark presentation.</p></li>
-<li><p>Expand button styles, use Solid material by default, and offer an optional experimental glass button style.</p></li>
-<li><p>Refine opening, closing, interrupted transitions, hover/press feedback, seeking, progress lighting, and track-change transitions.</p></li>
-<li><p>Fix delayed media refresh, title/artist clipping, collapse artifacts, and clicks on other tray items while the expanded player is open.</p></li>
-<li><p>Simplify the settings interface with contextual layout/material options for Windhawk 2.0.</p></li>
-<li><p>Refresh the mod description with layout animations and consistent material previews.</p></li>
-<li><p>Harden unload cleanup for clips, layout handlers, async waits, cached XAML resources, and independent animations.</p></li>
-<li><p>Move steady glow/disc animation off the taskbar rendering callback; reduce idle layout/media work and remove the global low-level mouse hook.</p></li>
-<li><p>Fix grouped integer settings on older Windhawk versions and clarify experimental labels and the NetEase compatibility note.</p></li>
-<li><p>Detect taskbar XAML island replacement even when media stays unchanged; correct independent disc rotation and settled side-glow animation ownership/restart.</p></li>
-<li><p>Remove obsolete hook/glow code and unused hidden progress-glow textures.</p></li>
-</ul>]]></content>
-        <author>
-            <name>usho</name>
-            <uri>https://github.com/usho-lear</uri>
         </author>
     </entry>
 </feed>

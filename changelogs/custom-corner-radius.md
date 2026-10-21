@@ -1,3 +1,10 @@
+## 1.4 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/16f94de7c75e010ecc78abfd55eb4bb80fb9b5a3/mods/custom-corner-radius.wh.cpp))
+
+* Added a per-corner radius option to override the radius of each corner independently.
+* Added an option to exclude programs that will keep their original corner radius.
+* Settings are now applied right away.
+* Fixed a possible system hang when a custom tooltip corner radius is configured.
+
 ## 1.3 ([Aug 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/16834cd873954cf8b2e19612c4841dc905f6e148/mods/custom-corner-radius.wh.cpp))
 
 * Added an option for rounder corners for maximized and snapped windows. Based on the submission of [Alexey
