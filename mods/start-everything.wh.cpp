@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         GPL-3.0
-// @compilerOptions -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32 -ld3d11 -ldxgi -lwindowscodecs
+// @compilerOptions -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32 -ld3d11 -lwindowscodecs -lxmllite
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,6 +27,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 
 ## Version 2.0 Changes
 
+- Discovers searchable Settings names and keywords from Windows' local database and navigation metadata, cached in memory. Keeps additional Windows tools and falls back to the built-in list if native data is unavailable.
 - Search runs in its own Windows 11 window, opened directly with Win+S, the taskbar search icon, an optional custom shortcut, or by typing in Start. Start itself still opens normally.
 - Copies Start's measured size, alignment, background, rounded corners, and supported Start Menu Styler appearance. Root context menus and submenus receive their copied style before appearing.
 - Adds app and custom-command suggestions for an empty query, shared favorite learning, configurable menu width and height, and settings organized into sections.
@@ -40,7 +41,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 ## Key Features
 
 - **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
-- **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, Windows Settings categories, and deeper Settings pages (`ms-settings:`), with sharp shell icons, made at the exact pixel size of your display. Obsolete shortcuts are excluded, and optional Windows tools and Control Panel pages are shown only when their destinations are installed and resolvable.
+- **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Windows Settings, Control Panel applets, and Windows tools. Settings names and keywords come from Windows' own local search database and navigation metadata, cached in memory and refreshed with the app index when the Windows catalog changes. Additional Windows tools stay available, and an audited built-in list is used if native data is missing or incompatible. No Windows Search indexing service or extra database software is required. Shell icons are rendered at your display's exact pixel size.
 - **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
 - **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start switches immediately without an opening animation and carries the opening text into search. The search bar uses Windows' own search icon.
 - **Windows Search Out of the Way**: `SearchHost.exe` keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
@@ -573,11 +574,13 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <appmodel.h>
 #include <filter.h>
 #include <filterr.h>
+#include <xmllite.h>
+#include <cwctype>
+#include <sstream>
 #include <msctf.h>
 #include <wincodec.h>
 #include <d3d11.h>
 #include <d2d1_3.h>
-#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <string_view>
 #include <limits>
 #include <atomic>
@@ -2238,6 +2241,353 @@ inline const std::vector<SettingItem>& GetSettingsList() {
     return kSettings;
 }
 
+// The database supplies localized names/keywords; installed XML supplies navigation.
+// Both formats are private Windows data, so all reads are bounded and optional.
+struct NativeItem {
+    std::wstring name, command, arguments;
+    std::vector<std::wstring> aliases;
+};
+
+namespace native {
+
+inline std::wstring Lower(std::wstring value) {
+    for (auto& c : value) c = static_cast<wchar_t>(towlower(c));
+    return value;
+}
+
+inline std::wstring Trim(std::wstring value) {
+    const auto first = value.find_first_not_of(L" \r\n\t");
+    if (first == std::wstring::npos) return {};
+    return value.substr(first, value.find_last_not_of(L" \r\n\t") - first + 1);
+}
+
+inline bool Identifier(std::wstring_view value) {
+    return !value.empty() && value.size() <= 256 &&
+           std::all_of(value.begin(), value.end(), [](wchar_t c) {
+               return (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') ||
+                      (c >= L'0' && c <= L'9') || c == L'_' || c == L'-';
+           });
+}
+
+inline void AddAliases(std::vector<std::wstring>& out, std::wstring_view text) {
+    size_t at = 0;
+    while (at < text.size() && out.size() < 64) {
+        const size_t end = text.find_first_of(L"|;", at);
+        auto word = Lower(Trim(std::wstring(text.substr(at, end == text.npos ? text.size()-at : end-at))));
+        if (!word.empty() && word.size() <= 256 &&
+            std::find(out.begin(), out.end(), word) == out.end()) out.push_back(std::move(word));
+        if (end == text.npos) break;
+        at = end + 1;
+    }
+}
+
+struct Route {
+    std::wstring page, pageGroup, target, command, condition, host;
+};
+
+// Read installed metadata without loading Settings DLLs or scanning their code.
+inline bool ReadRoutes(const std::wstring& file, std::map<std::wstring, Route>& routes) {
+    WIN32_FILE_ATTRIBUTE_DATA attrs{};
+    if (!GetFileAttributesExW(file.c_str(), GetFileExInfoStandard, &attrs) ||
+        attrs.nFileSizeHigh || attrs.nFileSizeLow > 16 * 1024 * 1024) return false;
+    winrt::com_ptr<IStream> stream;
+    if (FAILED(SHCreateStreamOnFileEx(file.c_str(), STGM_READ | STGM_SHARE_DENY_NONE,
+                                     FILE_ATTRIBUTE_NORMAL, FALSE, nullptr, stream.put()))) return false;
+    winrt::com_ptr<IXmlReader> reader;
+    if (FAILED(CreateXmlReader(__uuidof(IXmlReader), reader.put_void(), nullptr)) ||
+        FAILED(reader->SetProperty(XmlReaderProperty_DtdProcessing, DtdProcessing_Prohibit)) ||
+        FAILED(reader->SetProperty(XmlReaderProperty_MaxElementDepth, 32)) ||
+        FAILED(reader->SetInput(stream.get()))) return false;
+    std::map<std::wstring, Route> parsed;
+    std::vector<std::wstring> stack;
+    std::wstring id, value, nodeType;
+    Route entry, path;
+    bool inEntry = false, inPath = false;
+    size_t count = 0;
+    auto field = [&](const std::wstring& tag, const std::wstring& text) {
+        if (!inEntry || text.empty()) return;
+        if (tag == L"Filename") id = text;
+        else if (tag == L"DeepLink") entry.command = text;
+        else if (tag == L"Condition") entry.condition = text;
+        else if (tag == L"HostID") entry.host = text;
+        else if (inPath) {
+            if (tag == L"PageID" || (tag == L"Node" && nodeType == L"Page")) path.page = text;
+            else if (tag == L"PageGroupID" || (tag == L"Node" && nodeType == L"PageGroup")) path.pageGroup = text;
+            else if (tag == L"SettingID" || (tag == L"Node" && nodeType == L"Setting")) path.target = text;
+        }
+    };
+    auto close = [&](const std::wstring& tag) {
+        field(tag, Trim(std::move(value)));
+        value.clear();
+        if (tag == L"Path") {
+            if (entry.page.empty() && entry.pageGroup.empty()) {
+                entry.page = std::move(path.page);
+                entry.pageGroup = std::move(path.pageGroup);
+                entry.target = std::move(path.target);
+            }
+            inPath = false;
+        } else if (tag == L"SearchableContent") {
+            if (!id.empty() && id.size() <= 512 && ++count <= 12000)
+                parsed.try_emplace(Lower(std::move(id)), std::move(entry));
+            inEntry = false;
+        }
+    };
+    XmlNodeType type{};
+    HRESULT hr;
+    while ((hr = reader->Read(&type)) == S_OK) {
+        if (type == XmlNodeType_Element) {
+            LPCWSTR raw = nullptr;
+            UINT length = 0;
+            if (FAILED(reader->GetLocalName(&raw, &length)) || length > 128) return false;
+            std::wstring tag(raw, length);
+            stack.push_back(tag);
+            value.clear();
+            if (tag == L"SearchableContent") { inEntry = true; entry = {}; id.clear(); }
+            else if (inEntry && tag == L"Path") { inPath = true; path = {}; }
+            else if (inEntry && tag == L"Node") {
+                nodeType.clear();
+                if (reader->MoveToAttributeByName(L"Type", nullptr) == S_OK) {
+                    if (SUCCEEDED(reader->GetValue(&raw, &length)) && length < 32) nodeType.assign(raw, length);
+                    reader->MoveToElement();
+                }
+            }
+            if (reader->IsEmptyElement()) { close(tag); stack.pop_back(); }
+        } else if (type == XmlNodeType_Text || type == XmlNodeType_CDATA ||
+                   type == XmlNodeType_Whitespace) {
+            LPCWSTR raw = nullptr;
+            UINT length = 0;
+            if (FAILED(reader->GetValue(&raw, &length)) || value.size() + length > 8192) return false;
+            value.append(raw, length);
+        } else if (type == XmlNodeType_EndElement) {
+            if (stack.empty()) return false;
+            close(stack.back());
+            stack.pop_back();
+        }
+        if (count > 12000) return false;
+    }
+    if (FAILED(hr) || !stack.empty()) return false;
+    for (auto& [key, route] : parsed) routes.try_emplace(std::move(key), std::move(route));
+    return !parsed.empty();
+}
+
+struct sqlite3;
+struct sqlite3_stmt;
+
+class Database {
+   public:
+    Database() = default;
+    Database(const Database&) = delete;
+    Database& operator=(const Database&) = delete;
+    ~Database() {
+        if (db_) close_(db_);
+        if (module_) FreeLibrary(module_);
+    }
+    bool Open(const std::wstring& path) {
+        module_ = LoadLibraryExW(L"winsqlite3.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!module_) return false;
+#define SETTINGS_SQLITE(function, member) \
+        member = reinterpret_cast<decltype(member)>(GetProcAddress(module_, function)); \
+        if (!member) return false
+        SETTINGS_SQLITE("sqlite3_open_v2", open_);
+        SETTINGS_SQLITE("sqlite3_close", close_);
+        SETTINGS_SQLITE("sqlite3_prepare_v2", prepare_);
+        SETTINGS_SQLITE("sqlite3_step", step_);
+        SETTINGS_SQLITE("sqlite3_finalize", finalize_);
+        SETTINGS_SQLITE("sqlite3_column_text16", text_);
+        SETTINGS_SQLITE("sqlite3_column_bytes16", bytes_);
+        SETTINGS_SQLITE("sqlite3_busy_timeout", busy_);
+        SETTINGS_SQLITE("sqlite3_progress_handler", progress_);
+#undef SETTINGS_SQLITE
+        const int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        if (size <= 0 || size > 32768) return false;
+        std::string utf8(size, '\0');
+        if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path.c_str(), -1, utf8.data(), size, nullptr, nullptr)) return false;
+        // READONLY | NOMUTEX | PRIVATECACHE. Never checkpoint or alter Windows' catalog.
+        if (open_(utf8.c_str(), &db_, 0x1 | 0x8000 | 0x40000, nullptr) != 0) return false;
+        busy_(db_, 25);
+        started_ = GetTickCount64();
+        progress_(db_, 1000, [](void* self) -> int {
+            return GetTickCount64() - static_cast<Database*>(self)->started_ > 1500;
+        }, this);
+        return Query("PRAGMA query_only=ON", 0, [](sqlite3_stmt*) {}) &&
+               Query("PRAGMA trusted_schema=OFF", 0, [](sqlite3_stmt*) {}) &&
+               Query("BEGIN", 0, [](sqlite3_stmt*) {});
+    }
+    template<class Callback>
+    bool Query(const char* sql, size_t limit, Callback callback) {
+        if (!db_) return false;
+        sqlite3_stmt* stmt = nullptr;
+        if (prepare_(db_, sql, -1, &stmt, nullptr) != 0) { if (stmt) finalize_(stmt); return false; }
+        struct Cleanup { sqlite3_stmt* value; int (*finish)(sqlite3_stmt*); ~Cleanup() { finish(value); } } cleanup{stmt, finalize_};
+        size_t rows = 0;
+        int result;
+        while ((result = step_(stmt)) == 100) {
+            if (++rows > limit) break;
+            callback(stmt);
+        }
+        return result == 101 && rows <= limit;
+    }
+    std::wstring Text(sqlite3_stmt* stmt, int column, size_t max = 4096) const {
+        const auto* data = static_cast<const wchar_t*>(text_(stmt, column));
+        const int bytes = bytes_(stmt, column);
+        if (!data || bytes < 0 || bytes % sizeof(wchar_t) || size_t(bytes) / sizeof(wchar_t) > max) return {};
+        std::wstring value(data, bytes / sizeof(wchar_t));
+        return value.find(L'\0') == value.npos ? value : std::wstring{};
+    }
+   private:
+    HMODULE module_ = nullptr;
+    sqlite3* db_ = nullptr;
+    ULONGLONG started_ = 0;
+    int (*open_)(const char*, sqlite3**, int, const char*) = nullptr;
+    int (*close_)(sqlite3*) = nullptr;
+    int (*prepare_)(sqlite3*, const char*, int, sqlite3_stmt**, const char**) = nullptr;
+    int (*step_)(sqlite3_stmt*) = nullptr;
+    int (*finalize_)(sqlite3_stmt*) = nullptr;
+    const void* (*text_)(sqlite3_stmt*, int) = nullptr;
+    int (*bytes_)(sqlite3_stmt*, int) = nullptr;
+    int (*busy_)(sqlite3*, int) = nullptr;
+    void (*progress_)(sqlite3*, int, int (*)(void*), void*) = nullptr;
+};
+
+inline std::wstring ClassicCommand(const Route& route, const DestinationCheck& destinations) {
+    // Conditions can refer to unavailable hardware or removed Windows features.
+    // Retain our audited tools instead of trying to interpret Shell's private predicates.
+    if (!route.condition.empty()) return {};
+    auto command = route.command;
+    if (command.starts_with(L"Microsoft.")) {
+        const auto slash = command.find(L'\\');
+        command = L"control /name " + command.substr(0, slash) +
+            (slash == command.npos ? L"" : L" /page " + command.substr(slash + 1));
+    } else if (command.starts_with(L"shell:::")) {
+        command = L"explorer.exe " + command;
+    } else if (Identifier(command) && _wcsicmp(route.host.c_str(), L"{6E6DDBCB-9C89-434B-A994-D5F22239523B}") == 0) {
+        // Security app entries use a target token rather than an executable.
+        if (!command.empty()) command = command == L"None" ? L"windowsdefender:" : L"windowsdefender://" + Lower(command) + L"/";
+    } else if (command.find(L"://") != command.npos) return {};
+    if (command.empty()) return {};
+    const auto lower = Lower(command);
+    if (lower.find(L"msdt.exe") != lower.npos) return {}; // retired legacy troubleshooters
+    // Check referenced applets/snap-ins/modules as well as the executable.
+    std::wistringstream tokens(command);
+    std::wstring token;
+    while (tokens >> token) {
+        token.resize(token.find(L',') == token.npos ? token.size() : token.find(L','));
+        const auto ext = Lower(token);
+        if ((ext.ends_with(L".dll") || ext.ends_with(L".cpl") || ext.ends_with(L".msc")) &&
+            !destinations.Available({L"", token.c_str(), L"", L""})) return {};
+    }
+    return destinations.Available({L"", command.c_str(), L"", L""}) ? command : L"";
+}
+
+inline bool Load(const std::wstring& path, const std::map<std::wstring, Route>& routes,
+                 const DestinationCheck& destinations, std::vector<NativeItem>& output) {
+    Database db;
+    if (!db.Open(path)) return false;
+    bool version = false, language = false;
+    if (!db.Query("SELECT name,value FROM metadata", 64, [&](sqlite3_stmt* s) {
+        const auto key = db.Text(s, 0, 64), value = db.Text(s, 1, 128);
+        if (key == L"version") version = value == L"2";
+        if (key == L"language") language = !value.empty();
+    }) || !version || !language) return false;
+    std::vector<NativeItem> fresh;
+    std::map<std::wstring, size_t> byId;
+    if (!db.Query("SELECT id,displayName FROM settings", 12000, [&](sqlite3_stmt* s) {
+        auto id = Lower(db.Text(s, 0, 512)), name = db.Text(s, 1, 512);
+        const auto found = routes.find(id);
+        if (name.empty() || found == routes.end()) return;
+        const auto& route = found->second;
+        NativeItem item;
+        item.name = std::move(name);
+        if (!route.command.empty()) {
+            item.command = ClassicCommand(route, destinations);
+            if (item.command.empty()) return;
+        } else {
+            if (Identifier(route.page)) item.arguments = L"page=" + route.page;
+            else if (Identifier(route.pageGroup)) item.arguments = L"pagegroup=" + route.pageGroup;
+            else return;
+            if (Identifier(route.target)) item.arguments += L"&target=" + route.target;
+            item.command = L"ms-settings:";
+        }
+        byId.try_emplace(std::move(id), fresh.size());
+        fresh.push_back(std::move(item));
+    }) || fresh.empty()) return false;
+    // Keywords are imported once; typing only searches the in-memory index.
+    // Optional tables may disappear independently without hiding valid settings.
+    auto add = [&](const char* sql) {
+        db.Query(sql, 60000, [&](sqlite3_stmt* s) {
+            auto found = byId.find(Lower(db.Text(s, 0, 512)));
+            if (found != byId.end()) AddAliases(fresh[found->second].aliases, db.Text(s, 1));
+        });
+    };
+    add("SELECT id,keyword FROM derivedsynonyms");
+    add("SELECT settingid,synonym FROM synonyms");
+    output = std::move(fresh);
+    return true;
+}
+
+inline void FileStamp(std::wstring& stamp, const std::wstring& file) {
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    stamp += file;
+    if (GetFileAttributesExW(file.c_str(), GetFileExInfoStandard, &data)) {
+        stamp += L":" + std::to_wstring(data.ftLastWriteTime.dwHighDateTime) + L":" +
+                 std::to_wstring(data.ftLastWriteTime.dwLowDateTime) + L":" +
+                 std::to_wstring(data.nFileSizeLow) + L":" + std::to_wstring(data.nFileSizeHigh);
+    }
+    stamp += L";";
+}
+
+} // namespace native
+
+// Owned by the background app index, never by the UI thread. Check stamps only
+// when that index is refreshed, and reuse parsed metadata/data while unchanged.
+class NativeCatalog {
+   public:
+    const std::vector<NativeItem>& Get(const DestinationCheck& destinations) {
+        PWSTR local = nullptr;
+        wchar_t windows[MAX_PATH]{};
+        if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local))) return items_;
+        std::wstring packages = std::wstring(local) + L"\\Packages\\";
+        CoTaskMemFree(local);
+        if (!GetWindowsDirectoryW(windows, std::size(windows))) return items_;
+        std::vector<std::wstring> databases;
+        for (const auto* package : {L"MicrosoftWindows.Client.CBS_cw5n1h2txyewy",
+                                    L"windows.immersivecontrolpanel_cw5n1h2txyewy",
+                                    L"Microsoft.Windows.Search_cw5n1h2txyewy"})
+            databases.push_back(packages + package + L"\\LocalState\\Search\\settings.db");
+        const auto directory = std::wstring(windows) + L"\\ImmersiveControlPanel\\Settings\\";
+        std::vector<std::wstring> xmlFiles;
+        WIN32_FIND_DATAW found{};
+        HANDLE find = FindFirstFileW((directory + L"AllSystemSettings_*.xml").c_str(), &found);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) xmlFiles.push_back(directory + found.cFileName);
+            } while (xmlFiles.size() < 16 && FindNextFileW(find, &found));
+            FindClose(find);
+        }
+        std::sort(xmlFiles.begin(), xmlFiles.end());
+        std::wstring stamp = std::to_wstring(GetUserDefaultUILanguage());
+        for (const auto& file : databases) { native::FileStamp(stamp, file); native::FileStamp(stamp, file + L"-wal"); }
+        for (const auto& file : xmlFiles) native::FileStamp(stamp, file);
+        const auto now = GetTickCount64();
+        if (stamp == stamp_ && (!items_.empty() || now - lastAttempt_ < 15000)) return items_;
+        lastAttempt_ = now;
+        std::map<std::wstring, native::Route> routes;
+        for (const auto& file : xmlFiles) native::ReadRoutes(file, routes);
+        std::vector<NativeItem> fresh;
+        for (const auto& database : databases) {
+            if (native::Load(database, routes, destinations, fresh)) break;
+        }
+        stamp_ = std::move(stamp);
+        items_ = std::move(fresh);
+        Wh_Log(L"settings: %zu native entries (%ls)", items_.size(), items_.empty() ? L"using fallback list" : L"cached Windows database");
+        return items_;
+    }
+   private:
+    std::wstring stamp_;
+    ULONGLONG lastAttempt_ = 0;
+    std::vector<NativeItem> items_;
+};
+
 } // namespace settings
 // ===========================================================================
 // Apps & Settings Indexer
@@ -2292,7 +2642,7 @@ struct App {
     bool isSetting = false;        // true if Windows Setting or Control Panel page
     std::wstring area;             // Settings category or Control Panel area
     std::wstring areaLower;
-    std::wstring settingPageGroup; // Native Settings category activation
+    std::wstring settingArguments; // Native Settings page/target activation
 };
 
 struct Match {
@@ -2617,14 +2967,16 @@ inline int ScoreApp(const App& app, const std::wstring& q) {
     else {
         for (const auto& al : app.aliases) {
             if (al == q) {
-                s = 4;
+                s = app.isSetting ? 25 : 4;
                 break;
             }
         }
     }
 
+    // Settings keywords can describe an entire category. Prefer a direct name
+    // prefix/word before those keywords, while retaining exact app aliases.
     // 4. Name starts with query
-    if (s < 0) {
+    if (s < 0 || (app.isSetting && s == 25)) {
         if (app.nameLower.starts_with(q)) {
             s = 10;
         }
@@ -2644,7 +2996,7 @@ inline int ScoreApp(const App& app, const std::wstring& q) {
             if (s < 0) {
                 for (const auto& al : app.aliases) {
                     if (al.starts_with(q)) {
-                        s = 25;
+                        s = app.isSetting ? 29 : 25;
                         break;
                     }
                 }
@@ -2872,43 +3224,78 @@ class Index {
         }
         e->Release();
 
-        // Append only installed, resolvable Windows Settings/tools.
+        // Refresh native data only on this background thread, never per keystroke.
         settings::DestinationCheck destinations;
+        const std::vector<settings::NativeItem>* nativeItems = nullptr;
+        try {
+            nativeItems = &nativeSettings_.Get(destinations);
+        } catch (const std::exception& error) {
+            Wh_Log(L"settings: native catalog failed, using fallback (%S)", error.what());
+        } catch (...) {
+            Wh_Log(L"settings: native catalog failed, using fallback");
+        }
+        const bool usingNative = nativeItems && !nativeItems->empty();
+        auto prepareSetting = [](App& a) {
+            a.isSetting = true;
+            a.nameLower = ToLower(a.name);
+            a.areaLower = ToLower(a.area);
+            a.targetPathLower = ToLower(a.targetPath);
+            a.exeNameLower = ToLower(ExtractExeName(a.targetPath));
+            std::wistringstream words(a.nameLower);
+            std::wstring word;
+            while (words >> word) {
+                while (!word.empty() && iswpunct(word.front())) word.erase(word.begin());
+                while (!word.empty() && iswpunct(word.back())) word.pop_back();
+                if (!word.empty()) { a.words.push_back(word); a.acronym.push_back(word[0]); }
+            }
+        };
+        wchar_t windows[MAX_PATH]{};
+        GetWindowsDirectoryW(windows, std::size(windows));
+        const std::wstring systemPrefix = ToLower(std::wstring(windows)) + L"\\system32\\";
+        auto commandKey = [&](std::wstring command) {
+            wchar_t expanded[4096]{};
+            const DWORD length = ExpandEnvironmentStringsW(command.c_str(), expanded, std::size(expanded));
+            if (length && length <= std::size(expanded)) command = expanded;
+            command = ToLower(std::move(command));
+            std::replace(command.begin(), command.end(), L'/', L'\\');
+            size_t at;
+            while ((at = command.find(systemPrefix)) != command.npos) command.erase(at, systemPrefix.size());
+            if (command.starts_with(L"mmc.exe ") && command.ends_with(L".msc")) command.erase(0, 8);
+            return command;
+        };
+        std::map<std::wstring, size_t> nativeCommands;
+        if (usingNative) {
+            for (const auto& item : *nativeItems) {
+                App a;
+                a.name = item.name;
+                a.targetPath = item.command;
+                a.settingArguments = item.arguments;
+                a.area = item.arguments.empty() && !item.command.starts_with(L"windowsdefender:") ? L"Control Panel" : L"Settings";
+                a.aliases = item.aliases;
+                prepareSetting(a);
+                if (a.settingArguments.empty()) nativeCommands.try_emplace(commandKey(a.targetPath), fresh.size());
+                fresh.push_back(std::move(a));
+            }
+        }
         for (const auto& s : settings::GetSettingsList()) {
+            // Windows owns the Settings/category catalog. Keep our extra tools;
+            // the complete audited list is used only if native data is unavailable.
+            if (usingNative && std::wstring_view(s.command).starts_with(L"ms-settings:")) continue;
+            const auto covered = nativeCommands.find(commandKey(s.command));
+            if (usingNative && covered != nativeCommands.end()) {
+                auto& aliases = fresh[covered->second].aliases;
+                settings::native::AddAliases(aliases, s.name);
+                if (s.altNames) settings::native::AddAliases(aliases, s.altNames);
+                continue;
+            }
             if (!destinations.Available(s)) continue;
             App a;
             a.name = s.name;
             a.targetPath = s.command;
             a.area = s.area;
-            a.areaLower = ToLower(a.area);
-            if (s.pageGroup) a.settingPageGroup = s.pageGroup;
-            a.isSetting = true;
-            a.nameLower = ToLower(a.name);
-            a.targetPathLower = ToLower(a.targetPath);
-            a.exeNameLower = ToLower(ExtractExeName(a.targetPath));
-
-            std::wistringstream ss(a.nameLower);
-            std::wstring word;
-            while (ss >> word) {
-                while (!word.empty() && iswpunct(word.front())) word.erase(word.begin());
-                while (!word.empty() && iswpunct(word.back())) word.pop_back();
-                if (!word.empty()) {
-                    a.words.push_back(word);
-                    a.acronym.push_back(word[0]);
-                }
-            }
-
-            if (s.altNames && s.altNames[0]) {
-                std::wistringstream alts(s.altNames);
-                std::wstring alt;
-                while (std::getline(alts, alt, L';')) {
-                    if (!alt.empty()) {
-                        a.aliases.push_back(ToLower(alt));
-                    }
-                }
-            }
-            // Area names describe a group, not an exact alias for every child.
-
+            if (s.pageGroup) a.settingArguments = L"pagegroup=" + std::wstring(s.pageGroup);
+            if (s.altNames) settings::native::AddAliases(a.aliases, s.altNames);
+            prepareSetting(a);
             fresh.push_back(std::move(a));
         }
 
@@ -3023,6 +3410,7 @@ class Index {
     }
 
    private:
+    settings::NativeCatalog nativeSettings_;
     mutable std::mutex mutex_;
     std::vector<App> apps_;
 };
@@ -10980,30 +11368,29 @@ void AddCustomCommandRows(std::vector<Row>* rows,std::vector<CustomCommand> cons
 
 
 void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool asAdmin = false,
-                    std::wstring settingPageGroup = L"") {
+                    std::wstring settingArguments = L"") {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    // Several category landing pages have no public ms-settings URI. Use the
-    // Settings app's native activation argument; ordinary page URIs remain the
-    // fallback if Windows ever stops accepting a category identifier.
-    if (!settingPageGroup.empty()) {
+    // Native catalog entries carry Windows' page and target identifiers.
+    // Fall back to the entry's shell destination if native activation fails.
+    if (!settingArguments.empty()) {
         winrt::com_ptr<IApplicationActivationManager> manager;
         HRESULT hr = CoCreateInstance(CLSID_ApplicationActivationManager, nullptr, CLSCTX_INPROC_SERVER,
                                       IID_PPV_ARGS(manager.put()));
         if (SUCCEEDED(hr)) {
-            const std::wstring arguments = L"pagegroup=" + settingPageGroup;
+            const std::wstring& arguments = settingArguments;
             DWORD pid = 0;
             hr = manager->ActivateApplication(
                 L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel",
                 arguments.c_str(), AO_NONE, &pid);
         }
         if (SUCCEEDED(hr)) {
-            Wh_Log(L"launched Settings category: %ls", settingPageGroup.c_str());
+            Wh_Log(L"launched Settings target: %ls", settingArguments.c_str());
             manager = nullptr;
             if (SUCCEEDED(comHr)) CoUninitialize();
             return;
         }
-        Wh_Log(L"Settings category activation failed (%08X): %ls", static_cast<unsigned>(hr), settingPageGroup.c_str());
+        Wh_Log(L"Settings target activation failed (%08X): %ls", static_cast<unsigned>(hr), settingArguments.c_str());
     }
 
     bool launched = false;
@@ -11934,7 +12321,7 @@ void SearchThreadMain() {
                     apps::RecordUsage(usage,app->nameLower);
                     std::wstring name = app->name;
                     std::wstring targetPath = app->targetPath;
-                    std::wstring settingPageGroup = app->settingPageGroup;
+                    std::wstring settingArguments = app->settingArguments;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
                     lock.unlock();
                     if (usage) {
@@ -11942,8 +12329,8 @@ void SearchThreadMain() {
                     }
 
                     SpawnTrackedLaunch([name = std::move(name), targetPath = std::move(targetPath),
-                                        settingPageGroup = std::move(settingPageGroup), pidlClone, asAdmin] {
-                        LaunchAppAsync(name, targetPath, pidlClone, asAdmin, settingPageGroup);
+                                        settingArguments = std::move(settingArguments), pidlClone, asAdmin] {
+                        LaunchAppAsync(name, targetPath, pidlClone, asAdmin, settingArguments);
                         if (pidlClone) {
                             ILFree(pidlClone);
                         }
@@ -12186,7 +12573,7 @@ void SearchThreadMain() {
                 bool canAdmin = true;
                 bool isFileTarget = false;
                 if (isSettingItem) {
-                    if (!m.app->area.empty()) {
+                    if (!m.app->area.empty() && _wcsicmp(m.app->area.c_str(), L"Settings") != 0) {
                         row.subtitle = L"Settings \u2022 " + m.app->area;
                     } else {
                         row.subtitle = L"Settings";
