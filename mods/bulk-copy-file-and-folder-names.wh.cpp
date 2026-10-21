@@ -13,16 +13,16 @@
 // ==WindhawkModReadme==
 /*
 # Bulk Copy File and Folder Names
-Windows has Copy as path (Ctrl+Shift+C). It gives you full paths in quotes. Often
-you only want the names. This mod copies the names of the files and folders you
-select in File Explorer as plain text, one per line. It works on one item or on
-many at once, and a selection can mix files and folders.
+Windows has Copy as path (Ctrl+Shift+C), but it gives you full paths in quotes,
+and often you only want the names. This mod copies the names of the files and
+folders you select in File Explorer as plain text, one per line. It works on one
+item or on many at once. A selection can mix files and folders.
 
 ## Keys
 - Ctrl+Shift+N copies the names with their extensions.
 - Ctrl+Alt+Shift+N copies the names without extensions. Folders keep their full
-  name, so `sub.folder` stays `sub.folder`. `a.tar.gz` becomes `a.tar`. A name
-  that starts with a dot, like `.gitignore`, stays whole.
+  name, so `sub.folder` stays `sub.folder`, and `a.tar.gz` becomes `a.tar`. A
+  name that starts with a dot, like `.gitignore`, stays whole.
 
 The keys only work while a File Explorer window is in front. You can change both
 keys in the settings.
@@ -40,7 +40,7 @@ Shift+right-click. You can turn them off in the settings.
 - Right-click menu: show the two menu entries.
 
 ## Limits
-- Ctrl+Shift+N is also File Explorer's New folder key. While the mod is on, it
+- Ctrl+Shift+N is also File Explorer's New folder key, so while the mod is on it
   copies names instead. Pick another key in the settings if you need New folder.
 - The keys and menu entries don't work on the desktop or in file dialogs. Only
   File Explorer windows count.
@@ -67,11 +67,11 @@ Shift+right-click. You can turn them off in the settings.
    ![The lower part of the classic right-click menu, with Copy name and Copy name without extension in their own group above Properties](https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-4-right-click-menu.png)
 
 ### Gotchas
-- Step 2: Ctrl+Shift+N doesn't make new folders while the mod is on. Move the
-  copy key in the settings if you use New folder from the keyboard.
-- Step 3: Only the last extension goes, so `archive.tar.gz` becomes
+- In step 2, Ctrl+Shift+N doesn't make new folders while the mod is on. Move
+  the copy key in the settings if you use New folder from the keyboard.
+- In step 3, only the last extension goes, so `archive.tar.gz` becomes
   `archive.tar`.
-- Step 4: The compact Windows 11 menu can't show the entries. Use
+- In step 4, the compact Windows 11 menu can't show the entries. Use
   Shift+right-click or Show more options.
 
 Read the full guide in
@@ -278,12 +278,12 @@ static void RegisterKeys(HWND hWnd) {
     g_withExtRegistered = RegisterHotKey(hWnd, kHotkeyWithExt, g_settings.withExtModifiers,
                                          g_settings.withExtKey) != 0;
     if (!g_withExtRegistered && !g_loggedRegisterError) {
-        Wh_Log(L"Could not register the copy-with-extension hotkey (error %lu)", GetLastError());
+        Wh_Log(L"Couldn't register the hotkey for names with extensions (error %lu)", GetLastError());
     }
     g_noExtRegistered = RegisterHotKey(hWnd, kHotkeyNoExt, g_settings.noExtModifiers,
                                        g_settings.noExtKey) != 0;
     if (!g_noExtRegistered && !g_loggedRegisterError) {
-        Wh_Log(L"Could not register the copy-without-extension hotkey (error %lu)", GetLastError());
+        Wh_Log(L"Couldn't register the hotkey for names without extensions (error %lu)", GetLastError());
     }
     if (!g_withExtRegistered || !g_noExtRegistered) g_loggedRegisterError = true;
 }
@@ -419,7 +419,7 @@ static bool SetClipboardText(HWND owner, const std::wstring& text) {
         if (!opened) Sleep(20);
     }
     if (!opened) {
-        Wh_Log(L"Could not open the clipboard (error %lu)", GetLastError());
+        Wh_Log(L"Couldn't open the clipboard (error %lu)", GetLastError());
         return false;
     }
 
@@ -452,7 +452,7 @@ static void CopySelection(IShellBrowser* browser, HWND clipboardOwner, bool with
 
     std::vector<std::wstring> names;
     if (!ReadSelectedNames(browser, withExt, names)) {
-        Wh_Log(L"Could not read the selection from this window");
+        Wh_Log(L"Couldn't read the selection from this window");
     }
 
     if (!names.empty()) {
@@ -486,7 +486,7 @@ static void CopyNames(HWND hWnd, bool withExt) {
         CopySelection(browser, hWnd, withExt);
         browser->Release();
     } else {
-        Wh_Log(L"Could not find the shell view for this window");
+        Wh_Log(L"Couldn't find the shell view for this window");
     }
 }
 
@@ -728,7 +728,7 @@ static DWORD WINAPI ThreadProc(LPVOID) {
         wnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                               wc.hInstance, nullptr);
         if (wnd) SetTimer(wnd, kTimerId, kTimerMs, nullptr);
-        else Wh_Log(L"Could not create the message window (error %lu)", GetLastError());
+        else Wh_Log(L"Couldn't create the message window (error %lu)", GetLastError());
     }
     g_msgWnd = wnd;
     SetEvent(g_readyEvent);
@@ -753,11 +753,11 @@ BOOL Wh_ModInit() {
     // A failed hook only costs the menu entries. The hotkeys still work.
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
                                         &TrackPopupMenuEx_Original)) {
-        Wh_Log(L"Could not hook TrackPopupMenuEx, menu entries are off");
+        Wh_Log(L"Couldn't hook TrackPopupMenuEx, so the menu entries are off");
     }
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenu_Hook,
                                         &TrackPopupMenu_Original)) {
-        Wh_Log(L"Could not hook TrackPopupMenu");
+        Wh_Log(L"Couldn't hook TrackPopupMenu");
     }
 
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
