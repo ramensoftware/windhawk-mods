@@ -3431,7 +3431,7 @@ BOOL Wh_ModInit() {
     };
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
-    if (ok) g_menuTimer = CreateThreadpoolTimer(MenuTimerCallback, nullptr, nullptr);    
+    if (ok) g_menuTimer = CreateThreadpoolTimer(MenuTimerCallback, nullptr, nullptr);
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
     DeriveHwndOffset();
 
