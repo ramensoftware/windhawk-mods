@@ -2,7 +2,7 @@
 // @id refined-quick-settings-and-sound
 // @name Refined Quick Settings and Sound
 // @description A "vanilla+" rework of the Windows 11 Quick Settings and Volume mixer panels for daily use
-// @version 0.1.149
+// @version 0.1.153
 // @author HeyOkay
 // @github https://github.com/HeyOkay
 // @include explorer.exe
@@ -4612,7 +4612,7 @@ namespace native {
 //   Volume mixer heading), gear in the right column;
 // - dark block rows one 38 DIP step apart (StepPx): All settings,
 //   [brightness], volume; 32 DIP buttons, 20 DIP side insets, thin sliders;
-// - the native footer row is hidden when it has nothing but the gear;
+// - the native battery footer moves into All settings; the old footer is hidden;
 // - the volume L2 button shows the mixer glyph without the chevron and still
 //   runs the native LaunchAdvancedPageCommand;
 // - the pager keeps its native place, without arrows, with plain dots.
@@ -5302,10 +5302,147 @@ class QuickPage {
     }
   }
 
+  // Move the shell's actual footer ItemsControl, not a copy of its battery icon.
+  // Keep its item templates, commands, bindings and future collection changes.
+  bool MoveBatteryFooter(X::FrameworkElement const &left, X::FrameworkElement const &footer) {
+    if (!left || !settingsRow_) {
+      if (settingsRow_ && First(view_, 72))
+        Wh_Log(L"Quick battery: LeftFooter was not found");
+      return false;
+    }
+    // A template root can be owned by a ContentPresenter rather than directly
+    // by a Panel. Move its enclosing slot; never remove generated ItemsPanel
+    // children, whose collection is controlled by the ItemsControl.
+    for (auto node = left; node; node = Parent(node))
+      if (node == settingsRow_)
+        return true;
+    auto moving = left;
+    C::Panel parent{nullptr};
+    uint32_t index = 0;
+    for (auto node = left; node && node != footer; node = Parent(node)) {
+      auto candidate = Parent(node).try_as<C::Panel>();
+      if (candidate && !candidate.IsItemsHost() && candidate.Children().IndexOf(node, index)) {
+        moving = node;
+        parent = candidate;
+        break;
+      }
+    }
+    if (!parent) {
+      if (First(left, 73))
+        Wh_Log(L"Quick battery: no detachable slot, left=%s parent=%s footer=%s",
+               Class(left).c_str(), Class(Parent(left)).c_str(), Class(footer).c_str());
+      return false;
+    }
+    auto element = moving;
+    // Preserve the former inheritance source, including subsequent DataContext
+    // replacements. Never overwrite an explicit native DataContext/binding.
+    if (element.ReadLocalValue(X::FrameworkElement::DataContextProperty()) ==
+        X::DependencyProperty::UnsetValue()) {
+      journal_.Save(element, X::FrameworkElement::DataContextProperty());
+      D::Binding binding;
+      binding.Source(parent);
+      binding.Path(X::PropertyPath(L"DataContext"));
+      binding.Mode(D::BindingMode::OneWay);
+      element.SetBinding(X::FrameworkElement::DataContextProperty(), binding);
+    }
+    Set(element, C::Grid::ColumnProperty(), winrt::box_value(1));
+    Set(element, C::Grid::RowProperty(), winrt::box_value(0));
+    Set(element, C::Grid::ColumnSpanProperty(), winrt::box_value(1));
+    Set(element, C::Grid::RowSpanProperty(), winrt::box_value(1));
+    Set(element, X::FrameworkElement::WidthProperty(), winrt::box_value(static_cast<double>(NAN)));
+    Set(element, X::FrameworkElement::MinWidthProperty(), winrt::box_value(0.));
+    Set(element, X::FrameworkElement::MinHeightProperty(), winrt::box_value(0.));
+    Set(element, X::FrameworkElement::MarginProperty(), winrt::box_value(X::Thickness{0, 0, 6, 0}));
+    Set(element, X::FrameworkElement::HorizontalAlignmentProperty(),
+        winrt::box_value(X::HorizontalAlignment::Right));
+    Set(element, X::FrameworkElement::VerticalAlignmentProperty(),
+        winrt::box_value(X::VerticalAlignment::Center));
+    auto oldParent = winrt::make_weak(parent);
+    auto newParent = winrt::make_weak(settingsRow_);
+    // Registered before the mutation, so a failed Append is reversible as well.
+    journal_.undo.push_back([oldParent, newParent, element, index] {
+      if (auto dest = newParent.get()) {
+        uint32_t current = 0;
+        if (dest.Children().IndexOf(element, current))
+          dest.Children().RemoveAt(current);
+      }
+      if (auto source = oldParent.get(); source && !Parent(element)) {
+        uint32_t current = 0;
+        if (!source.Children().IndexOf(element, current))
+          source.Children().InsertAt(std::min(index, source.Children().Size()), element);
+      }
+    });
+    parent.Children().RemoveAt(index);
+    settingsRow_.Children().Append(element);
+    Wh_Log(L"Quick battery: moved %s from %s into All settings",
+           Class(element).c_str(), Class(parent).c_str());
+    return true;
+  }
+  void CompactBattery(X::FrameworkElement const &left) {
+    // Match the gear: 36-DIP button, with a 2-DIP template inset on every
+    // side, giving both native hover plates the same 32-DIP height.
+    Find(left, [&](auto const &element) {
+      if (auto button = element.template try_as<C::Button>()) {
+        if (First(button, 70)) {
+          Set(button, X::FrameworkElement::HeightProperty(), winrt::box_value(36.));
+          Set(button, X::FrameworkElement::MinHeightProperty(), winrt::box_value(0.));
+          Set(button, X::FrameworkElement::MinWidthProperty(), winrt::box_value(0.));
+          Set(button, X::FrameworkElement::MarginProperty(), winrt::box_value(X::Thickness{}));
+          Set(button, C::Control::PaddingProperty(), winrt::box_value(X::Thickness{8, 0, 8, 0}));
+          Set(button, C::Control::HorizontalContentAlignmentProperty(),
+              winrt::box_value(X::HorizontalAlignment::Center));
+          Set(button, C::Control::VerticalContentAlignmentProperty(),
+              winrt::box_value(X::VerticalAlignment::Center));
+          Set(button, X::FrameworkElement::VerticalAlignmentProperty(),
+              winrt::box_value(X::VerticalAlignment::Center));
+        }
+        // Remove the asymmetric 4,3,2,3 footer ItemsControl margin and any
+        // enclosing slot insets. The plate, not the percentage, ends at the
+        // slider rail: 6 DIP outside the button + 2 DIP inside its template.
+        for (auto slot = Parent(button); slot && slot != settingsRow_; slot = Parent(slot))
+          if (First(slot, 75)) {
+            bool outer = Parent(slot) == settingsRow_;
+            Set(slot, X::FrameworkElement::MarginProperty(),
+                winrt::box_value(X::Thickness{0, 0, outer ? 6. : 0., 0}));
+            Set(slot, X::FrameworkElement::MinHeightProperty(), winrt::box_value(0.));
+            Set(slot, X::FrameworkElement::VerticalAlignmentProperty(),
+                winrt::box_value(X::VerticalAlignment::Center));
+          }
+        if (auto presenter = Named(button, L"ContentPresenter"); presenter && First(presenter, 71))
+          Set(presenter, X::FrameworkElement::MarginProperty(), winrt::box_value(X::Thickness{2, 2, 2, 2}));
+        // Keep the native icon/font/bindings, but centre both icon branches and
+        // the percentage on the gear axis (the new percentage has a -1 top inset).
+        if (auto content = button.Content().template try_as<X::FrameworkElement>()) {
+          if (First(content, 76))
+            Set(content, X::FrameworkElement::VerticalAlignmentProperty(),
+                winrt::box_value(X::VerticalAlignment::Center));
+          Find(content, [&](auto const &part) {
+            if (part.template try_as<C::TextBlock>() && First(part, 77)) {
+              auto margin = part.Margin();
+              margin.Top = margin.Bottom = 0;
+              Set(part, X::FrameworkElement::MarginProperty(), winrt::box_value(margin));
+              Set(part, X::FrameworkElement::VerticalAlignmentProperty(),
+                  winrt::box_value(X::VerticalAlignment::Center));
+            }
+            return false;
+          });
+        }
+      }
+      return false; // Visit all native buttons without stopping the traversal.
+    });
+    // Reserve the battery width and its 6-DIP outer inset; gear stays in column 2.
+    if (title_ && settingsRow_.ActualWidth() > 0) {
+      double available = std::max(0., settingsRow_.ActualWidth() - 40. - left.ActualWidth() - 6. - 12.);
+      if (title_.MaxWidth() != available)
+        title_.MaxWidth(available);
+    }
+  }
   void Footer() {
     auto footer = Named(view_, L"FooterGrid");
-    if (!footer)
+    if (!footer) {
+      if (First(view_, 74)) Wh_Log(L"Quick battery: FooterGrid was not found");
       return;
+    }
     if (!nativeSettings_.get())
       if (auto icon = Find(footer, [](auto const &e) {
             auto a = e.template try_as<U::AnimatedIcon>();
@@ -5316,13 +5453,20 @@ class QuickPage {
             nativeSettings_ = winrt::make_weak(button);
             break;
           }
-    // LeftFooter shows battery etc. on laptops: keep the row then.
-    auto left = Named(footer, L"LeftFooter");
-    bool used = left && Find(left, [&](auto const &e) {
+    // Search the view: after migration LeftFooter lives in our header.
+    auto left = Named(view_, L"LeftFooter");
+    bool moved = MoveBatteryFooter(left, footer);
+    if (moved)
+      CompactBattery(left);
+    bool used = left && ((left.try_as<C::ItemsControl>() &&
+                         left.as<C::ItemsControl>().Items().Size() > 0) || Find(left, [&](auto const &e) {
                   return e != left && e.template try_as<C::ItemsControl>() &&
                          e.Visibility() == X::Visibility::Visible;
-                });
-    auto want = used || !nativeSettings_.get() ? X::Visibility::Visible : X::Visibility::Collapsed;
+                }));
+    // Preserve the native fallback if an unfamiliar parent prevents migration,
+    // or if no working replacement for the native Settings button was found.
+    auto want = (!moved && used) || !nativeSettings_.get()
+                    ? X::Visibility::Visible : X::Visibility::Collapsed;
     if (footer.Visibility() != want)
       Set(footer, X::UIElement::VisibilityProperty(), winrt::box_value(want));
   }
@@ -5828,10 +5972,10 @@ class QuickPage {
             }
         });
       }
-      Footer();
       DarkBlock(l1);
       Pager();
       Sliders(l1);
+      Footer();
       FrameReveal();
       if (bright_ && bright_.IsLoaded() && !thinSliders_.count(winrt::get_abi(bright_))) {
         auto look = Look();
