@@ -191,6 +191,8 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 2. In Windhawk, open **Mods** and search for **Spotlight Launcher**, then click **Install**.
 3. Press **Alt + Space** to open it. Change the shortcut, position, effect and colour from the mod's **Settings** tab.
 
+If you used an earlier version, your previous settings keep working after the update. The Settings tab now groups them into sections and shows default values until you save it once; saving it applies what the tab shows.
+
 ### From source
 
 1. Download [`spotlight-launcher.wh.cpp`](https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/spotlight-launcher.wh.cpp).
@@ -1886,11 +1888,74 @@ static std::wstring FoldString(const std::wstring& s) {
     return r;
 }
 
-static std::wstring GetStringSetting(const wchar_t* name) {
+// ----- Settings migration (flat names -> grouped names) -----
+// Earlier releases stored every setting under a flat name (`Hotkey`, `Effect`, `Color`, ...).
+// The settings are now grouped (`Shortcuts.Hotkey`, `Appearance.Effect`, ...), so nothing is
+// stored under the new names for an existing install. While `g_legacySettings` is on, the old
+// flat names are read instead, so a user keeps their shortcut, colour, effect and the rest.
+// It switches off for good the first time the user saves the settings in the new layout
+// (see WhTool_ModSettingsChanged), because from then on the new names hold real values.
+// A fresh install has no old values, so there is nothing to carry over.
+static const wchar_t kSettingsGroupedKey[] = L"settings.grouped_v1";
+static bool g_legacySettings = false;  // UI thread only
+
+// "Shortcuts.Hotkey" -> "Hotkey" (the name the setting had before it was grouped).
+static const wchar_t* LegacyLeaf(const wchar_t* name) {
+    const wchar_t* dot = wcschr(name, L'.');
+    return dot ? dot + 1 : name;
+}
+
+// Integer settings that did NOT exist in the last release that used flat names. An integer has
+// no "not stored" state (a missing value reads as 0), so for these the old name must not be
+// read, or a feature that never existed back then would come out switched off. Text settings
+// do not need this: an empty text means "not stored".
+static bool IntSettingExistedBeforeGrouping(const wchar_t* leaf) {
+    static const wchar_t* const kNewer[] = {
+        L"FilesEnabled", L"CalculatorEnabled", L"SoundEnabled", L"SoundVolume", L"WebSearch",
+    };
+    for (const wchar_t* n : kNewer) {
+        if (wcscmp(leaf, n) == 0) return false;
+    }
+    return true;
+}
+
+static std::wstring ReadTextSetting(const wchar_t* name) {
     PCWSTR s = Wh_GetStringSetting(name);  // never returns NULL
     std::wstring r = s;
     Wh_FreeStringSetting(s);
     return r;
+}
+
+// Decides once, when the mod starts, whether there are old flat values to carry over.
+static void DetectLegacySettings() {
+    g_legacySettings = false;
+    if (Wh_GetIntValue(kSettingsGroupedKey, 0) != 0) return;  // already on the new names
+    static const wchar_t* const kProbes[] = {
+        L"Hotkey", L"Effect", L"Color", L"ListMode", L"ReindexMode", L"OpenOn", L"DetailsKey",
+    };
+    for (const wchar_t* p : kProbes) {
+        if (!ReadTextSetting(p).empty()) {
+            g_legacySettings = true;
+            return;
+        }
+    }
+    Wh_SetIntValue(kSettingsGroupedKey, 1);  // nothing to carry over: do not look again
+}
+
+static std::wstring GetStringSetting(const wchar_t* name) {
+    if (g_legacySettings) {
+        std::wstring old = ReadTextSetting(LegacyLeaf(name));
+        if (!old.empty()) return old;
+    }
+    return ReadTextSetting(name);
+}
+
+static int GetIntSetting(const wchar_t* name) {
+    if (g_legacySettings) {
+        const wchar_t* leaf = LegacyLeaf(name);
+        if (IntSettingExistedBeforeGrouping(leaf)) return Wh_GetIntSetting(leaf);
+    }
+    return Wh_GetIntSetting(name);
 }
 
 static void LoadSettings() {
@@ -1913,15 +1978,15 @@ static void LoadSettings() {
     c.hotkeyMods = mods;
     c.hotkeyVk = VK_SPACE;
 
-    c.verticalPct = std::clamp(Wh_GetIntSetting(L"Appearance.VerticalPosition"), 0, 100);
+    c.verticalPct = std::clamp(GetIntSetting(L"Appearance.VerticalPosition"), 0, 100);
     {
         std::wstring mo = GetStringSetting(L"Behavior.OpenOn");
         c.openMonitor = (mo == L"foreground") ? OpenMonitor::Foreground
                         : (mo == L"primary")  ? OpenMonitor::Primary
                                               : OpenMonitor::Cursor;
     }
-    c.maxRows = std::clamp(Wh_GetIntSetting(L"Behavior.MaxResults"), 3, 12);
-    c.opacityPct = std::clamp(Wh_GetIntSetting(L"Appearance.Opacity"), 70, 100);
+    c.maxRows = std::clamp(GetIntSetting(L"Behavior.MaxResults"), 3, 12);
+    c.opacityPct = std::clamp(GetIntSetting(L"Appearance.Opacity"), 70, 100);
     {
         std::wstring ef = GetStringSetting(L"Appearance.Effect");
         c.effect = (ef == L"mica")      ? BgEffect::Mica
@@ -1931,8 +1996,8 @@ static void LoadSettings() {
                    : (ef == L"solid")   ? BgEffect::Solid
                                         : BgEffect::Acrylic;
     }
-    c.blurPct = std::clamp(Wh_GetIntSetting(L"Appearance.BlurAmount"), 0, 100);
-    c.liveAcrylic = Wh_GetIntSetting(L"Appearance.LiveAcrylic") != 0;
+    c.blurPct = std::clamp(GetIntSetting(L"Appearance.BlurAmount"), 0, 100);
+    c.liveAcrylic = GetIntSetting(L"Appearance.LiveAcrylic") != 0;
 
     {
         std::wstring col = GetStringSetting(L"Appearance.Color");
@@ -1944,8 +2009,8 @@ static void LoadSettings() {
             }
         }
     }
-    c.hideUtility = Wh_GetIntSetting(L"Apps.HideUtilityEntries") != 0;
-    c.disableFullscreen = Wh_GetIntSetting(L"Behavior.DisableInFullscreen") != 0;
+    c.hideUtility = GetIntSetting(L"Apps.HideUtilityEntries") != 0;
+    c.disableFullscreen = GetIntSetting(L"Behavior.DisableInFullscreen") != 0;
 
     std::wstring rm = GetStringSetting(L"Apps.ReindexMode");
     if (rm == L"always") {
@@ -1970,7 +2035,7 @@ static void LoadSettings() {
         c.detailsKey = DetailsKey::CtrlI;
     }
 
-    c.calculatorEnabled = Wh_GetIntSetting(L"Features.CalculatorEnabled") != 0;
+    c.calculatorEnabled = GetIntSetting(L"Features.CalculatorEnabled") != 0;
     {
         std::wstring cs = GetStringSetting(L"Features.CalculatorStyle");
         c.calcStyle = (cs == L"hero")  ? CalcStyle::Hero
@@ -1978,10 +2043,10 @@ static void LoadSettings() {
                                          : CalcStyle::Both;
     }
 
-    c.sounds = Wh_GetIntSetting(L"Sounds.SoundEnabled") != 0;
-    c.soundVolume = std::clamp(Wh_GetIntSetting(L"Sounds.SoundVolume"), 0, 100);
+    c.sounds = GetIntSetting(L"Sounds.SoundEnabled") != 0;
+    c.soundVolume = std::clamp(GetIntSetting(L"Sounds.SoundVolume"), 0, 100);
 
-    c.webSearch = Wh_GetIntSetting(L"Features.WebSearch") != 0;
+    c.webSearch = GetIntSetting(L"Features.WebSearch") != 0;
     {
         std::wstring we = GetStringSetting(L"Features.WebEngine");
         c.webEngine = (we == L"bing")         ? WebEngine::Bing
@@ -1991,7 +2056,7 @@ static void LoadSettings() {
                                               : WebEngine::Google;
     }
 
-    c.filesEnabled = Wh_GetIntSetting(L"Features.FilesEnabled") != 0;
+    c.filesEnabled = GetIntSetting(L"Features.FilesEnabled") != 0;
 
     g_cfg = c;
 }
@@ -10925,6 +10990,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
+            g_legacySettings = false;  // the user saved the new layout: its values are the real ones
             LoadSettings();
             Sound::Configure();
             Sound::ApplyVolume();
@@ -10958,6 +11024,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     g_fileSearchIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    DetectLegacySettings();
     LoadSettings();
     LoadCalcHistory();
     LoadCalcAns();
@@ -11039,6 +11106,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    Wh_SetIntValue(kSettingsGroupedKey, 1);  // from now on only the grouped names are read
     if (g_hwnd) {
         PostMessageW(g_hwnd, WM_APP_SETTINGS, 0, 0);
     }
