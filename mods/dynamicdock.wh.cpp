@@ -19,19 +19,23 @@ the taskbar appears or slides the icons to your mouse **right where your mouse t
 
 This is still the real Windows taskbar, so everything works like normal: jump lists (right-click), hover thumbnails, badges, drag and drop, the tray and the clock.
 
+![DynamicDock in action](https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/main/DynamicDock-default-taskbar.gif)
+
 ![DynamicDock in action](https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/main/DynamicDock-with-mods.gif)
 
 ## Bottom taskbars (works with auto-hide or always visible)
-1. If you want to use with auto hide.
-    1a. Confirm or turn on **Automatically hide the taskbar** in Windows Settings > Personalization > Taskbar > Taskbar behaviors > Select "Automatically hide the taskbar" from the menu.
-    1b. Otherwise, this mod works with the default bottom taskbar that is always visible. Be sure to toggle the bottom taskbar setting that keeps the full width of the bar active in the "Bottom Taskbar" setting.
+1. Choose how the taskbar shows:
+    - **Auto-hide:** confirm or turn on **Automatically hide the taskbar** in Windows Settings > Personalization > Taskbar > Taskbar behaviors > Select "Automatically hide the taskbar" from the menu.
+    - **Always visible:** this mod also works with the default bottom taskbar that is always visible. Be sure to turn on **Keep the bottom Windows default taskbar full width** in the **Bottom taskbar** settings.
 2. Keep **Taskbar alignment** on **Center**.
 3. Move the mouse to the bottom edge of the screen anywhere: the bar opens under it or simply slides the icons to your mouse with the default taskbar.
 - **Keep in mind** that taskbars change widths based on the amount of icons in the bar. Some additional adjustments may be required as the total taskbar pixel count changes to maintain functionality and spacing as you desire.
 
 ## Top taskbar
-1. In Windows Settings > Personalization > Taskbar > Taskbar behaviors, set **Taskbar position** to **Top**.
-2. In DynamicDock's settings, toggle **Top taskbar ON** and turn on to turn on **Taskbar is at the top of the screen**.
+1. In Windows Settings > Personalization > Taskbar > Taskbar behaviors, set **Taskbar position** to **Top**. This option
+   only exists in recent Windows 11 builds (for example 26200.9711). If your build doesn't have it, use the
+   [Taskbar on top for Windows 11](https://windhawk.net/mods/taskbar-on-top) mod to move the taskbar to the top.
+2. In DynamicDock's settings, open **Top taskbar** and turn on **Taskbar on top of screen**.
 3. Touch the top edge of the screen anywhere: the app icons slide under the mouse.
 - The taskbar itself stays full width across the top (Windows can't auto-hide it there), and the tray and clock
   stay at the right edge. Only the row of app icons moves, so nothing collapses or leaves empty space.
@@ -80,7 +84,7 @@ left corner and the tray and clock at the right edge, and only the app icons sli
 - TopTaskbar:
   - Enabled: false
     $name: Taskbar on top of screen
-    $description: Turn on if you use the top taskbar (Windows Settings > Personalization > Taskbar > Taskbar behaviors > Taskbar position). DynamicDock then watches the top edge of the screen instead of the bottom. The taskbar stays full width at the top with the tray and clock at the right edge; only the app icons slide to the mouse whenever you touch the top edge (outside the center zone), even if "Follow the mouse" is off.
+    $description: Turn on if you use the top taskbar (Windows Settings > Personalization > Taskbar > Taskbar behaviors > Taskbar position, on recent Windows 11 builds; on older builds use the Taskbar on top for Windows 11 mod). DynamicDock then watches the top edge of the screen instead of the bottom. The taskbar stays full width at the top with the tray and clock at the right edge; only the app icons slide to the mouse whenever you touch the top edge (outside the center zone), even if "Follow the mouse" is off.
   $name: Top taskbar
 - Position:
   - FollowMouse: true
@@ -161,6 +165,7 @@ left corner and the tray and clock at the right edge, and only the app icons sli
 #include <cmath>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -170,7 +175,7 @@ using winrt::Windows::Foundation::Size;
 enum class TrayMode { withBar, edge, hidden };
 enum class Corners { none, top, all };
 
-struct {
+struct Settings {
     int minDisplayWidth;
     bool allMonitors;
     bool followMouse;
@@ -183,7 +188,24 @@ struct {
     int edgePadding;  // screen pixels
     int centerZone;   // percent of the display width around the center that keeps the stock taskbar
     int maxSlideLeft, maxSlideRight;  // screen pixels from the display center, 0 = unlimited
-} g_settings;
+};
+// Written by LoadSettings (engine thread), read from the poll and UI threads: always use a snapshot.
+std::mutex g_settingsMutex;
+Settings g_settingsData;
+Settings CurrentSettings() {
+    std::lock_guard lock(g_settingsMutex);
+    return g_settingsData;
+}
+
+// Every work item queued on the taskbar's UI thread holds one of these by value, so the unload can wait until all
+// of them have run or been discarded (the lambdas live in this DLL).
+std::atomic<int> g_uiTasks;
+std::atomic<bool> g_unloading;
+struct UiTask {
+    UiTask() { ++g_uiTasks; }
+    UiTask(UiTask const&) { ++g_uiTasks; }
+    ~UiTask() { --g_uiTasks; }
+};
 
 // Elements are moved through layout (Margin left +dx, right -dx: a shift by dx whatever their alignment, same
 // space), not a render transform, so Windows places jump lists, thumbnails and the Start menu at the moved
@@ -196,59 +218,69 @@ struct Moved {
         if (element.get() != e) {
             element = winrt::make_weak(e);
             original = e.Margin();
-            // An earlier copy of the mod was unloaded without putting it back: our shifts keep Left+Right constant,
-            // so splitting them evenly recovers the original margin (Windows uses even side margins here).
-            if (Wh_GetIntValue(L"IconsShifted", 0)) original.Left = original.Right = (original.Left + original.Right) / 2;
         }
         return e.Margin().Left - original.Left;
     }
     void SetShift(FrameworkElement e, double dx) {
         Shift(e);
         e.Margin({original.Left + dx, original.Top, original.Right - dx, original.Bottom});
-        static int stored = -1;  // remembered outside this DLL; only written when it changes
-        if (int shifted = dx != 0; shifted != stored) Wh_SetIntValue(L"IconsShifted", stored = shifted);
     }
 };
 
 // One per taskbar window (main + secondary monitors). Addresses are stable (std::list), entries are never removed.
 struct Bar {
-    HWND hwnd;                                 // Shell_TrayWnd or Shell_SecondaryTrayWnd
+    HWND hwnd;                                 // Shell_TrayWnd or Shell_SecondaryTrayWnd of this process
     winrt::weak_ref<FrameworkElement> frame;   // the TaskbarFrame (Start + task buttons), guarded by g_barsMutex
     std::atomic<int> appliedX = INT_MIN;       // cursor x the bar is centered on, INT_MIN = stock position
     std::atomic<int> spanLeft = INT_MAX, spanRight = INT_MIN;  // moved bar span, screen pixels
     std::atomic<double> trayTarget = 0;        // where the tray's left edge belongs, DIPs
-    DWORD lastProbe = 0;                       // poll thread only
-    DWORD hiddenAt = 0;                        // poll thread only: last time the taskbar was seen fully hidden
     std::atomic<bool> pending = false;         // a placement is queued on the UI thread
-    std::atomic<bool> resetPending = false;    // frame just found: put it back to normal before first use
+    std::atomic<bool> checkPending = false;    // a re-layout check is queued on the UI thread
     std::atomic<double> placedWidth = 0;       // icons width when last placed, DIPs
-    // UI thread only:
+    std::atomic<bool> measureRow = false;      // placedWidth measures the icon row's buttons (not the whole frame)
+    // Poll thread only:
+    DWORD lastProbe = 0;
+    DWORD hiddenAt = 0;                        // last time the taskbar was seen fully hidden
+    DWORD lastCheck = 0;
+    RECT monitor{};                            // cached, refreshed with the taskbar list
+    // UI thread only (strong XAML references are dropped there in the final reset):
     Moved icons;
     bool frameWasStretched = false;            // we switched the frame from Stretch to Center
+    winrt::weak_ref<FrameworkElement> tray;    // cached SystemTrayFrame
     winrt::weak_ref<FrameworkElement> background;
     Thickness backgroundMargin{};
     winrt::weak_ref<FrameworkElement> styledTray;  // tray we hid (hidden mode)
     winrt::weak_ref<FrameworkElement> trayBackgroundHost;  // element we gave the taskbar background (edge mode)
     Media::Brush trayOriginalBackground{nullptr};
     Media::Animation::Storyboard iconsGlide{nullptr}, trayGlide{nullptr};
-    std::vector<winrt::weak_ref<FrameworkElement>> heldInPlace;  // top taskbar: Widgets etc. kept in place
+    std::vector<winrt::weak_ref<FrameworkElement>> heldInPlace;  // full width: Widgets etc. kept in place
     std::vector<Media::Animation::Storyboard> heldGlides;
 
     explicit Bar(HWND h) : hwnd(h) {}
+
+    void ReleaseXamlObjects() {  // UI thread
+        iconsGlide = nullptr;
+        trayGlide = nullptr;
+        std::vector<Media::Animation::Storyboard>().swap(heldGlides);
+        trayOriginalBackground = nullptr;
+    }
 };
 
+// Bars hold strong XAML refs; they are released on the UI thread in the final reset, and the container is
+// destroyed with g_bars.reset() in Wh_ModUninit.
 std::mutex g_barsMutex;
-std::list<Bar> g_bars;
+[[clang::no_destroy]] std::optional<std::list<Bar>> g_bars{std::in_place};
 std::atomic<Bar*> g_probing;  // bar whose frame the UI Automation probe is currently asking for
 std::atomic<bool> g_reprobe;  // a taskbar frame we don't know yet was laid out (new monitor, Explorer rebuilt it)
+std::atomic<bool> g_xamlReleased;
 HANDLE g_thread;
-DWORD g_threadId;
+HANDLE g_stopEvent;
 
 Bar& GetBar(HWND hwnd) {
     std::lock_guard lock(g_barsMutex);
-    for (auto& b : g_bars)
+    for (auto& b : *g_bars)
         if (b.hwnd == hwnd) return b;
-    return g_bars.emplace_back(hwnd);
+    return g_bars->emplace_back(hwnd);
 }
 
 FrameworkElement GetFrame(Bar& b) {
@@ -258,7 +290,7 @@ FrameworkElement GetFrame(Bar& b) {
 
 Bar* BarForFrame(FrameworkElement const& frame) {
     std::lock_guard lock(g_barsMutex);
-    for (auto& b : g_bars)
+    for (auto& b : *g_bars)
         if (b.frame.get() == frame) return &b;
     return nullptr;
 }
@@ -266,7 +298,7 @@ Bar* BarForFrame(FrameworkElement const& frame) {
 std::vector<Bar*> AllBars() {
     std::lock_guard lock(g_barsMutex);
     std::vector<Bar*> bars;
-    for (auto& b : g_bars) bars.push_back(&b);
+    for (auto& b : *g_bars) bars.push_back(&b);
     return bars;
 }
 
@@ -290,18 +322,57 @@ FrameworkElement FindByName(DependencyObject node, std::wstring_view name, int d
     return nullptr;
 }
 
+FrameworkElement FindTray(Bar& b, FrameworkElement frame) {  // UI thread; cached
+    auto root = frame.XamlRoot();
+    if (auto t = b.tray.get(); t && t.XamlRoot() == root) return t;
+    auto t = FindByClass(root.Content(), L"SystemTrayFrame", 8);
+    b.tray = t ? winrt::make_weak(t) : winrt::weak_ref<FrameworkElement>{};
+    return t;
+}
+
+// Our TranslateTransforms. An element's existing RenderTransform (e.g. from a styler theme) is kept: ours is added
+// next to it in a TransformGroup, and the original is put back on unload. UI thread only.
+struct Wrapped {
+    winrt::weak_ref<UIElement> element;
+    Media::Transform original{nullptr};  // what the element had before
+    Media::Transform installed{nullptr};  // what we set (our transform, or a group holding original + ours)
+    Media::TranslateTransform ours{nullptr};
+};
+[[clang::no_destroy]] std::optional<std::vector<Wrapped>> g_wrapped{std::in_place};
+
+Wrapped* FindWrapped(UIElement const& e) {
+    for (auto& w : *g_wrapped)
+        if (w.element.get() == e && e.RenderTransform() == w.installed) return &w;
+    return nullptr;
+}
+
 Media::TranslateTransform Translate(FrameworkElement e) {
-    auto tt = e.RenderTransform().try_as<Media::TranslateTransform>();
-    if (!tt) {
-        tt = Media::TranslateTransform();
-        e.RenderTransform(tt);
+    if (auto w = FindWrapped(e)) return w->ours;
+    std::erase_if(*g_wrapped, [&](Wrapped const& w) { auto el = w.element.get(); return !el || el == e; });
+    UIElement ue = e;
+    Wrapped w{winrt::make_weak(ue), e.RenderTransform(), nullptr, Media::TranslateTransform()};
+    if (w.original) {
+        Media::TransformGroup group;
+        group.Children().Append(w.original);
+        group.Children().Append(w.ours);
+        w.installed = group;
+    } else {
+        w.installed = w.ours;
     }
-    return tt;
+    e.RenderTransform(w.installed);
+    g_wrapped->push_back(w);
+    return w.ours;
 }
 
 double TranslateX(FrameworkElement e) {
-    auto tt = e.RenderTransform().try_as<Media::TranslateTransform>();
-    return tt ? tt.X() : 0;
+    auto w = FindWrapped(e);
+    return w ? w->ours.X() : 0;
+}
+
+void RestoreTransforms() {  // UI thread, final reset: put every original RenderTransform back
+    for (auto& w : *g_wrapped)
+        if (auto e = w.element.get(); e && e.RenderTransform() == w.installed) e.RenderTransform(w.original);
+    std::vector<Wrapped>().swap(*g_wrapped);
 }
 
 // Set the translation to `to`, optionally gliding there from `from` (an ease-out animation on top of the final value).
@@ -336,8 +407,8 @@ double LeftEdge(FrameworkElement e) {  // where it is drawn right now, DIPs
     return e.TransformToVisual(nullptr).TransformPoint({0, 0}).X;
 }
 
-// Where the app buttons actually are inside an element that may be much wider than them (the top taskbar's icon
-// row spans the whole screen with the icons centered inside), relative to the element's left edge, DIPs.
+// Where the app buttons actually are inside an element that may be much wider than them (the full-width icon row
+// spans the whole screen with the icons centered inside), relative to the element's left edge, DIPs.
 // Buttons are grouped wherever there's a big gap; the widest group is the app icons, and the rest (e.g. the
 // Widgets button in the left corner) are returned in `others` so they can be kept where Windows put them.
 struct Extent {
@@ -393,9 +464,10 @@ bool IsInside(DependencyObject e, DependencyObject ancestor) {
         if (p == ancestor) return true;
     return false;
 }
-// Top taskbar: buttons outside the app group (Widgets) are shifted back by the row's shift so they stay where
-// Windows put them. While the row glides (from `rowFrom` to 0 on top of its new spot), they get the exact opposite
-// glide on the same curve, so on screen they don't move at all.
+
+// Full width: elements that should stay put (Widgets, background, tray) are shifted back by the frame's shift. While
+// the frame glides (from `rowFrom` to 0 on top of its new spot), they get the exact opposite glide on the same curve,
+// so on screen they don't move at all.
 void HoldInPlace(Bar& b, std::vector<FrameworkElement> const& elements, double shift, double rowFrom, bool animate) {
     for (auto& sb : b.heldGlides)
         if (sb) sb.Stop();
@@ -414,6 +486,7 @@ void HoldInPlace(Bar& b, std::vector<FrameworkElement> const& elements, double s
     b.heldInPlace = std::move(held);
     b.heldGlides = std::move(glides);
 }
+
 // Stock Windows paints the taskbar background on the frame. Once the frame hugs its icons, stretch that
 // background under the tray as well, so icons and tray stay one solid bar. right = 0 restores it.
 void ExtendBackground(Bar& b, FrameworkElement frame, double right) {
@@ -422,7 +495,6 @@ void ExtendBackground(Bar& b, FrameworkElement frame, double right) {
     if (b.background.get() != bg) {
         b.background = winrt::make_weak(bg);
         b.backgroundMargin = bg.Margin();
-        b.backgroundMargin.Right = b.backgroundMargin.Left;  // undo a leftover extension (Windows uses even side margins)
     }
     auto o = b.backgroundMargin;
     bg.Margin({o.Left, o.Top, o.Right - right, o.Bottom});
@@ -483,14 +555,8 @@ void StyleTray(Bar& b, FrameworkElement frame, FrameworkElement tray, TrayMode m
         SetBackground(host, b.trayOriginalBackground);
         RoundElement(host, Corners::none, 0);
         b.trayBackgroundHost = nullptr;
-    } else if (tray && Wh_GetIntValue(L"TrayStyled", 0)) {  // left over by an earlier copy of the mod
-        tray.Opacity(1);
-        tray.IsHitTestVisible(true);
-        SetBackground(TrayBackgroundHost(tray), nullptr);
-        RoundElement(TrayBackgroundHost(tray), Corners::none, 0);
+        b.trayOriginalBackground = nullptr;
     }
-    static int stored = -1;  // only write the stored flag when it changes
-    if (int styled = tray && mode != TrayMode::withBar; styled != stored) Wh_SetIntValue(L"TrayStyled", stored = styled);
     if (!tray || mode == TrayMode::withBar) return;
     if (mode == TrayMode::hidden) {
         b.styledTray = winrt::make_weak(tray);
@@ -508,34 +574,36 @@ void StyleTray(Bar& b, FrameworkElement frame, FrameworkElement tray, TrayMode m
     SetBackground(host, fill.Fill());
     RoundElement(host, corners, radius);  // same corners as the bar
 }
+
 // Center the bar on screen x `cursorX` (INT_MIN puts it back in its stock position), gliding if `animate`.
-// Bottom taskbar: the whole bar (icons, tray, background) gathers into one compact bar under the mouse.
-// Top taskbar: the taskbar stays full width; only the row of app icons slides to the mouse.
-// Runs on the taskbar's UI thread.
-winrt::Windows::Foundation::IAsyncAction Apply(Bar& b, int cursorX, bool animate) {
+// Compact bottom bar: the whole bar (icons, tray, background) gathers into one compact bar under the mouse.
+// Full width (top taskbar, or bottom by choice): the taskbar stays full width; only the app icons move.
+// Queued on the taskbar's UI thread.
+void Apply(Bar& b, int cursorX, bool animate) {
+    if (g_unloading && cursorX != INT_MIN) return;
     FrameworkElement frame = GetFrame(b);
     RECT wr;
-    if (!frame || !GetWindowRect(b.hwnd, &wr)) return nullptr;
+    if (!frame || !GetWindowRect(b.hwnd, &wr)) return;
     // One placement at a time: extra follow requests while one is queued are dropped (the next tick retries).
-    if (b.pending.exchange(true) && cursorX != INT_MIN) return nullptr;
-    auto settings = g_settings;
+    if (b.pending.exchange(true) && cursorX != INT_MIN) return;
+    auto settings = CurrentSettings();
     Bar* pb = &b;
-    return frame.Dispatcher().RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [pb, frame, cursorX, animate, settings, windowLeft = wr.left]() {
+    try {
+        frame.Dispatcher().RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+                                    [task = UiTask{}, pb, frame, cursorX, animate, settings, windowLeft = wr.left]() {
         Bar& b = *pb;
         try {
             auto root = frame.XamlRoot();
-            auto trayFrame = FindByClass(root.Content(), L"SystemTrayFrame", 8);
+            auto trayFrame = FindTray(b, frame);
             double trayWas = trayFrame ? TranslateX(trayFrame) : 0;
 
             if (cursorX == INT_MIN) {
                 b.appliedX = INT_MIN;  // first, so nothing re-places the bar while it goes back
-                auto moved = b.icons.element.get();  // the frame (bottom) or the icon row (top)
+                auto moved = b.icons.element.get();
                 double movedWas = moved ? LeftEdge(moved) : 0;
-                // Stored outside this DLL, so a later copy of the mod can still undo it after an unclean unload.
-                if (b.frameWasStretched || Wh_GetIntValue(L"FrameStretched", 0)) {
+                if (b.frameWasStretched) {
                     frame.HorizontalAlignment(HorizontalAlignment::Stretch);
                     b.frameWasStretched = false;
-                    Wh_SetIntValue(L"FrameStretched", 0);
                 }
                 ExtendBackground(b, frame, 0);
                 RoundCorners(frame, Corners::none, 0);
@@ -552,17 +620,20 @@ winrt::Windows::Foundation::IAsyncAction Apply(Bar& b, int cursorX, bool animate
                 if (trayFrame) Glide(b.trayGlide, trayFrame, trayWas, 0, animate);
                 b.spanLeft = INT_MAX;  // stock layout: any follow move outside the center zone places the bar
                 b.spanRight = INT_MIN;
-                b.pending = false;
                 Wh_Log(L"Reset to the normal position%s", animate ? L" (glide)" : L"");
+                b.pending = false;
                 return;
             }
 
-            // Full width (top taskbar, or the bottom one by choice): only the row of app icons moves.
             bool top = settings.topTaskbar || settings.bottomFullWidth;
             // The frame is always what moves (that's what Windows positions jump lists from); in full width, whatever
             // should stay put (background, Widgets, tray) is held in place, and the icon row is only measured.
+            // A styled taskbar (e.g. Taskbar Styler with a frame max width) has no full-width frame: there the frame
+            // already is the icon strip, so it moves as a whole and only the tray stays where it is.
+            bool rowMode = top && frame.ActualWidth() >= root.Size().Width * 0.8;
+            b.measureRow = rowMode;
             FrameworkElement mover = frame, row = nullptr;
-            if (top) {
+            if (rowMode) {
                 row = FindByName(frame, L"TaskbarFrameRepeater", 4);
                 if (!row) {
                     Wh_Log(L"Full width: icon row (TaskbarFrameRepeater) not found");
@@ -574,16 +645,15 @@ winrt::Windows::Foundation::IAsyncAction Apply(Bar& b, int cursorX, bool animate
                 // Taskbar Styler max-width hides this). Make it hug its icons so moving the frame moves just the icons.
                 frame.HorizontalAlignment(HorizontalAlignment::Center);
                 b.frameWasStretched = true;
-                Wh_SetIntValue(L"FrameStretched", 1);
             }
             frame.UpdateLayout();  // positions must reflect the last shift before we measure from them
             double moverWas = LeftEdge(mover);
 
             double scale = root.RasterizationScale();
             bool trayWithBar = !top && trayFrame && settings.trayMode == TrayMode::withBar;
-            // Top: the icon row is screen-wide, so place its app buttons, not the row (contentL = their offset in it).
-            Extent content = top ? ContentExtent(row) : Extent{};
-            if (top) {  // make the app buttons' extent relative to the frame instead of the row
+            // Full width: the icon row is screen-wide, so place its app buttons, not the row.
+            Extent content = rowMode ? ContentExtent(row) : Extent{};
+            if (rowMode) {  // make the app buttons' extent relative to the frame instead of the row
                 double rowOffset = row.TransformToVisual(frame).TransformPoint({0, 0}).X;
                 content.left += rowOffset;
                 content.right += rowOffset;
@@ -591,18 +661,20 @@ winrt::Windows::Foundation::IAsyncAction Apply(Bar& b, int cursorX, bool animate
                 content.othersAfter += rowOffset;
             }
             double contentL = content.left;
-            double iconsW = top ? content.Width() : mover.ActualWidth();
+            double iconsW = rowMode ? content.Width() : mover.ActualWidth();
             double trayW = trayWithBar ? trayFrame.ActualWidth() : 0;
             double total = iconsW + trayW;
             double width = root.Size().Width, mid = width / 2, pad = settings.edgePadding / scale;
             double home = LeftEdge(mover) - TranslateX(mover) - b.icons.Shift(mover);  // the mover's unshifted left edge
-            // A top taskbar keeps its tray at the right edge and Widgets in the left corner: the icons stay between them.
+            // Full width keeps its tray at the right edge and Widgets in the left corner: the icons stay between them.
             double leftLimit = 0, rightLimit = width;
             bool trayInFrame = trayFrame && IsInside(trayFrame, frame);  // then it moves with the frame and is held back
             if (top) {
                 if (trayFrame) rightLimit = std::min(rightLimit, TrayHome(trayFrame) - (trayInFrame ? b.icons.Shift(mover) : 0));
-                leftLimit = std::max(leftLimit, home + content.othersBefore);
-                rightLimit = std::min(rightLimit, home + content.othersAfter);
+                if (rowMode) {
+                    leftLimit = std::max(leftLimit, home + content.othersBefore);
+                    rightLimit = std::min(rightLimit, home + content.othersAfter);
+                }
             }
             double center = (cursorX - windowLeft) / scale;
             if (settings.maxSlideLeft) center = std::max(center, mid - settings.maxSlideLeft / scale);
@@ -619,7 +691,7 @@ winrt::Windows::Foundation::IAsyncAction Apply(Bar& b, int cursorX, bool animate
 
             if (top) {
                 auto held = content.others;  // Widgets stays in its corner, the background and tray stay full width
-                if (auto bg = FindByClass(frame, L"Taskbar.TaskbarBackground", 3)) held.push_back(bg);
+                if (auto bg = rowMode ? FindByClass(frame, L"Taskbar.TaskbarBackground", 3) : nullptr) held.push_back(bg);
                 if (trayInFrame) held.push_back(trayFrame);
                 HoldInPlace(b, held, b.icons.Shift(mover), rowFrom, animate);
                 StyleTray(b, frame, trayFrame, TrayMode::withBar);  // tray and clock stay as Windows placed them
@@ -644,42 +716,52 @@ winrt::Windows::Foundation::IAsyncAction Apply(Bar& b, int cursorX, bool animate
             Wh_Log(L"Apply failed: %08X %s", e.code().value, e.message().c_str());
         }
         b.pending = false;
-    });
+        });
+    } catch (winrt::hresult_error const&) {
+        b.pending = false;  // the taskbar's UI thread is going away
+    }
 }
-// Windows can still be settling the tray (e.g. right after the taskbar hid) when we place it, so keep it
-// attached to the icons while the bar is out.
-void RealignTray(Bar& b) {
+
+// Re-layout check, queued once per trigger (the frame was measured: an app opened or closed; or, while the bar is
+// visible, the tray may still be settling): re-place the bar if the icons' width changed, keep the tray attached.
+void QueueCheck(Bar& b) {
+    if (g_unloading || b.appliedX == INT_MIN) return;
     FrameworkElement frame = GetFrame(b);
-    if (!frame) return;
+    if (!frame || b.checkPending.exchange(true)) return;
     Bar* pb = &b;
-    frame.Dispatcher().RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [pb, frame]() {
-        Bar& b = *pb;
-        try {
-            if (b.appliedX == INT_MIN) return;
-            // An app opened or closed (the settled icons width changed): re-place so the bar stays centered on the
-            // same spot and the tray stays attached. Checked here, on settled layout, so it can't feed back on itself.
-            bool iconsOnly = g_settings.topTaskbar || g_settings.bottomFullWidth;
-            if (auto moved = b.icons.element.get(); moved && std::fabs(MovedWidth(moved, iconsOnly) - b.placedWidth) > 1) {
-                Apply(b, b.appliedX, g_settings.smoothFollow);
-                return;
+    try {
+        frame.Dispatcher().RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [task = UiTask{}, pb, frame]() {
+            Bar& b = *pb;
+            b.checkPending = false;
+            if (g_unloading || b.appliedX == INT_MIN) return;
+            try {
+                auto settings = CurrentSettings();
+                bool iconsOnly = settings.topTaskbar || settings.bottomFullWidth;
+                if (auto moved = b.icons.element.get(); moved && std::fabs(MovedWidth(moved, b.measureRow) - b.placedWidth) > 1) {
+                    Apply(b, b.appliedX, settings.smoothFollow);
+                    return;
+                }
+                if (iconsOnly || settings.trayMode != TrayMode::withBar) return;
+                auto trayFrame = FindTray(b, frame);
+                if (!trayFrame) return;
+                double shift = TranslateX(trayFrame);
+                double want = b.trayTarget - TrayHome(trayFrame);
+                if (std::fabs(want - shift) > 0.5) {
+                    Glide(b.trayGlide, trayFrame, LeftEdge(trayFrame) - TrayHome(trayFrame), want, true);
+                    Wh_Log(L"Realigned tray by %.0f", want - shift);
+                }
+            } catch (winrt::hresult_error const&) {
             }
-            if (iconsOnly || g_settings.trayMode != TrayMode::withBar) return;
-            auto trayFrame = FindByClass(frame.XamlRoot().Content(), L"SystemTrayFrame", 8);
-            if (!trayFrame) return;
-            double shift = TranslateX(trayFrame);
-            double want = b.trayTarget - TrayHome(trayFrame);
-            if (std::fabs(want - shift) > 0.5) {
-                Glide(b.trayGlide, trayFrame, LeftEdge(trayFrame) - TrayHome(trayFrame), want, true);
-                Wh_Log(L"Realigned tray by %.0f", want - shift);
-            }
-        } catch (winrt::hresult_error const&) {
-        }
-    });
+        });
+    } catch (winrt::hresult_error const&) {
+        b.checkPending = false;
+    }
 }
 
 // When the mod loads into a running Explorer nothing re-lays out the taskbar, so MeasureOverride can't tell us
 // which frame belongs to which taskbar. Asking UI Automation for a taskbar's frame bounds makes Explorer call
 // TaskbarFrameAutomationPeer::GetBoundingRectangleCore, whose hook records the frame for that taskbar.
+// Only used for taskbars owned by this process, so the query stays in-process.
 void ProbeFrame(Bar& b) {
     HWND bridge = FindWindowEx(b.hwnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
     if (!bridge) return;
@@ -701,15 +783,34 @@ void ProbeFrame(Bar& b) {
     VariantClear(&cls);
 }
 
-std::vector<HWND> Taskbars() {
-    std::vector<HWND> list;
-    if (HWND main = FindWindow(L"Shell_TrayWnd", nullptr)) list.push_back(main);
-    if (g_settings.allMonitors)
-        for (HWND h = nullptr; (h = FindWindowEx(nullptr, h, L"Shell_SecondaryTrayWnd", nullptr));) list.push_back(h);
-    return list;
+bool IsOwnWindow(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return pid == GetCurrentProcessId();  // other explorer.exe processes (folder windows, COM servers) have no taskbar
 }
 
-void TickBar(Bar& b, POINT pt, bool realign) {
+// This process's taskbar windows, refreshed about once a second (poll thread only).
+std::vector<HWND> Taskbars(Settings const& s) {
+    static std::vector<HWND> cached;
+    static DWORD refreshedAt;
+    static bool allMonitors;
+    if (GetTickCount() - refreshedAt < 1000 && allMonitors == s.allMonitors) return cached;
+    refreshedAt = GetTickCount();
+    allMonitors = s.allMonitors;
+    cached.clear();
+    if (HWND main = FindWindow(L"Shell_TrayWnd", nullptr); main && IsOwnWindow(main)) cached.push_back(main);
+    if (s.allMonitors)
+        for (HWND h = nullptr; (h = FindWindowEx(nullptr, h, L"Shell_SecondaryTrayWnd", nullptr));)
+            if (IsOwnWindow(h)) cached.push_back(h);
+    for (HWND h : cached) {  // monitor rects, refreshed with the list
+        MONITORINFO mi = {sizeof(mi)};
+        GetMonitorInfo(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi);
+        GetBar(h).monitor = mi.rcMonitor;
+    }
+    return cached;
+}
+
+void TickBar(Bar& b, POINT pt, Settings const& s) {
     if (!GetFrame(b)) {
         if (GetTickCount() - b.lastProbe > 2000) {  // retry, at most every 2 s
             b.lastProbe = GetTickCount();
@@ -717,43 +818,36 @@ void TickBar(Bar& b, POINT pt, bool realign) {
         }
         return;
     }
-    if (b.resetPending.exchange(false)) {
-        Apply(b, INT_MIN, false);
-        return;
-    }
-    if (realign && b.appliedX != INT_MIN) RealignTray(b);
-
-    MONITORINFO mi = {sizeof(mi)};
-    GetMonitorInfo(MonitorFromWindow(b.hwnd, MONITOR_DEFAULTTONEAREST), &mi);
-    RECT m = mi.rcMonitor;
-    if (m.right - m.left < g_settings.minDisplayWidth) {
+    RECT m = b.monitor;
+    if (m.right - m.left < s.minDisplayWidth) {
         if (b.appliedX != INT_MIN) Apply(b, INT_MIN, false);
         return;
     }
-    bool top = g_settings.topTaskbar;
+    bool top = s.topTaskbar;
     RECT tr;
     GetWindowRect(b.hwnd, &tr);
     // Fully hidden: only the thin auto-hide sliver is on screen. Once it starts sliding up, the spot is locked,
     // so small mouse moves during the slide can't make the bar jump.
     bool hidden = top ? tr.bottom <= m.top + 3 : tr.top >= m.bottom - 3;
     if (hidden) b.hiddenAt = GetTickCount();
+    // While the compact bar is visible, Windows may still be settling the tray: check it now and then.
+    if (!hidden && b.appliedX != INT_MIN && !s.topTaskbar && !s.bottomFullWidth && s.trayMode == TrayMode::withBar &&
+        GetTickCount() - b.lastCheck > 250) {
+        b.lastCheck = GetTickCount();
+        QueueCheck(b);
+    }
 
     bool atEdge = top ? pt.y <= m.top : pt.y >= m.bottom - 1 && pt.y < m.bottom;
     if (!atEdge || pt.x < m.left || pt.x >= m.right) return;  // only at this monitor's taskbar edge
     // A top taskbar can't auto-hide, so touching the edge always slides the visible bar (follow behavior).
-    bool follow = g_settings.followMouse || top;
-    bool inCenterZone = abs(pt.x - (m.left + m.right) / 2) * 200 <= (m.right - m.left) * g_settings.centerZone;
+    bool follow = s.followMouse || top;
+    bool inCenterZone = abs(pt.x - (m.left + m.right) / 2) * 200 <= (m.right - m.left) * s.centerZone;
     // Glide only when moving a bar that has been fully visible for a while (following the mouse). Right after it
     // pops up (e.g. an instant auto-hide reveal), the icons should simply appear in their new spot, not slide in.
-    bool glide = !hidden && g_settings.smoothFollow && GetTickCount() - b.hiddenAt > 500;
+    bool glide = !hidden && s.smoothFollow && GetTickCount() - b.hiddenAt > 500;
     int applied = b.appliedX;
     if (inCenterZone) {
-        static bool loggedZone;
-        if (!loggedZone) {
-            loggedZone = true;
-            Wh_Log(L"Mouse in the center zone");
-        }
-        if (g_settings.topTaskbar || g_settings.bottomFullWidth) {
+        if (s.topTaskbar || s.bottomFullWidth) {
             if (applied != INT_MIN && (hidden || follow)) Apply(b, INT_MIN, glide);  // full width: the stock taskbar
         } else {
             // Compact bar: the center zone shows the compact bar centered on the screen, not the full-width taskbar.
@@ -767,29 +861,36 @@ void TickBar(Bar& b, POINT pt, bool realign) {
 }
 
 void CALLBACK OnTick(HWND, UINT, UINT_PTR, DWORD) {
-    static int ticks;
-    bool realign = ++ticks % 5 == 0;  // every 100 ms
-    POINT pt;
-    if (!GetCursorPos(&pt)) return;
-    auto taskbars = Taskbars();
-    static DWORD lastReprobe;
-    if (g_reprobe && GetTickCount() - lastReprobe > 2000) {  // an unknown frame was laid out: re-map all taskbars
-        g_reprobe = false;
-        lastReprobe = GetTickCount();
-        for (HWND h : taskbars) ProbeFrame(GetBar(h));
+    try {
+        POINT pt;
+        if (!GetCursorPos(&pt)) return;
+        auto s = CurrentSettings();
+        auto taskbars = Taskbars(s);
+        if (taskbars.empty()) return;  // no taskbar in this explorer.exe process
+        static DWORD lastReprobe;
+        if (g_reprobe && GetTickCount() - lastReprobe > 2000) {  // an unknown frame was laid out: re-map all taskbars
+            g_reprobe = false;
+            lastReprobe = GetTickCount();
+            for (HWND h : taskbars) ProbeFrame(GetBar(h));
+        }
+        for (HWND h : taskbars) TickBar(GetBar(h), pt, s);
+        // A taskbar that is no longer handled (All monitors turned off) goes back to normal.
+        for (Bar* b : AllBars())
+            if (b->appliedX != INT_MIN && std::find(taskbars.begin(), taskbars.end(), b->hwnd) == taskbars.end()) Apply(*b, INT_MIN, false);
+    } catch (...) {
+        // e.g. a taskbar's XAML island being torn down when a monitor is removed: try again on the next tick
     }
-    for (HWND h : taskbars) TickBar(GetBar(h), pt, realign);
-    // A taskbar that is no longer handled (All monitors turned off) goes back to normal.
-    for (Bar* b : AllBars())
-        if (b->appliedX != INT_MIN && std::find(taskbars.begin(), taskbars.end(), b->hwnd) == taskbars.end()) Apply(*b, INT_MIN, false);
 }
 
 DWORD WINAPI PollThread(void*) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);  // for the UI Automation probe
     UINT_PTR timer = SetTimer(nullptr, 0, 20, OnTick);
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) DispatchMessage(&msg);
+    while (MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 + 1) {
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) DispatchMessage(&msg);
+    }
     KillTimer(nullptr, timer);
+    winrt::uninit_apartment();
     return 0;
 }
 
@@ -797,16 +898,18 @@ using TaskbarFrameAutomationPeer_GetBoundingRectangleCore_t = int(WINAPI*)(void*
 TaskbarFrameAutomationPeer_GetBoundingRectangleCore_t TaskbarFrameAutomationPeer_GetBoundingRectangleCore_Original;
 int WINAPI TaskbarFrameAutomationPeer_GetBoundingRectangleCore_Hook(void* pThis, winrt::Windows::Foundation::Rect* rect) {
     if (Bar* b = g_probing) {
-        Automation::Peers::FrameworkElementAutomationPeer peer = nullptr;
-        ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<Automation::Peers::FrameworkElementAutomationPeer>(), winrt::put_abi(peer));
-        if (auto frame = peer ? peer.Owner().try_as<FrameworkElement>() : nullptr) {
-            std::lock_guard lock(g_barsMutex);
-            if (b->frame.get() != frame) {
-                b->frame = winrt::make_weak(frame);
-                b->appliedX = INT_MIN;  // re-place on the next edge touch
-                b->resetPending = true;  // first undo anything an earlier copy of the mod left behind
-                Wh_Log(L"Got TaskbarFrame for %s", b->hwnd == FindWindow(L"Shell_TrayWnd", nullptr) ? L"the main taskbar" : L"a secondary taskbar");
+        try {
+            Automation::Peers::FrameworkElementAutomationPeer peer = nullptr;
+            ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<Automation::Peers::FrameworkElementAutomationPeer>(), winrt::put_abi(peer));
+            if (auto frame = peer ? peer.Owner().try_as<FrameworkElement>() : nullptr) {
+                std::lock_guard lock(g_barsMutex);
+                if (b->frame.get() != frame) {
+                    b->frame = winrt::make_weak(frame);
+                    b->appliedX = INT_MIN;  // re-place on the next edge touch
+                    Wh_Log(L"Got TaskbarFrame for %s", b->hwnd == FindWindow(L"Shell_TrayWnd", nullptr) ? L"the main taskbar" : L"a secondary taskbar");
+                }
             }
+        } catch (...) {
         }
     }
     return TaskbarFrameAutomationPeer_GetBoundingRectangleCore_Original(pThis, rect);
@@ -819,7 +922,8 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(void* pThis, Size size, Size* resul
     FrameworkElement frame = nullptr;
     ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(frame));
     if (!frame) return ret;
-    if (!BarForFrame(frame)) g_reprobe = true;  // a frame we don't know yet: find out which taskbar it belongs to
+    if (Bar* b = BarForFrame(frame)) QueueCheck(*b);  // contents may have changed (an app opened or closed)
+    else g_reprobe = true;  // a frame we don't know yet: find out which taskbar it belongs to
     return ret;
 }
 
@@ -829,6 +933,7 @@ HMODULE GetTaskbarViewModule() {
 }
 
 bool HookTaskbarView(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
@@ -859,22 +964,25 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
 }
 
 void LoadSettings() {
-    g_settings.minDisplayWidth = Wh_GetIntSetting(L"General.MinDisplayWidth");
-    g_settings.allMonitors = Wh_GetIntSetting(L"General.AllMonitors");
-    g_settings.followMouse = Wh_GetIntSetting(L"Position.FollowMouse");
-    g_settings.smoothFollow = Wh_GetIntSetting(L"Position.SmoothFollow");
-    g_settings.topTaskbar = Wh_GetIntSetting(L"TopTaskbar.Enabled");
-    g_settings.bottomFullWidth = Wh_GetIntSetting(L"BottomTaskbar.FullWidth");
+    Settings s;
+    s.minDisplayWidth = Wh_GetIntSetting(L"General.MinDisplayWidth");
+    s.allMonitors = Wh_GetIntSetting(L"General.AllMonitors");
+    s.followMouse = Wh_GetIntSetting(L"Position.FollowMouse");
+    s.smoothFollow = Wh_GetIntSetting(L"Position.SmoothFollow");
+    s.topTaskbar = Wh_GetIntSetting(L"TopTaskbar.Enabled");
+    s.bottomFullWidth = Wh_GetIntSetting(L"BottomTaskbar.FullWidth");
     std::wstring tray = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"Tray.TrayPlacement")).get();
-    g_settings.trayMode = tray == L"edge" ? TrayMode::edge : tray == L"hidden" ? TrayMode::hidden : TrayMode::withBar;
-    g_settings.edgePadding = std::max(0, Wh_GetIntSetting(L"Position.EdgePadding"));
+    s.trayMode = tray == L"edge" ? TrayMode::edge : tray == L"hidden" ? TrayMode::hidden : TrayMode::withBar;
+    s.edgePadding = std::max(0, Wh_GetIntSetting(L"Position.EdgePadding"));
     std::wstring corners = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"Appearance.Corners")).get();
-    g_settings.corners = corners == L"top" ? Corners::top : corners == L"all" ? Corners::all : Corners::none;
-    g_settings.cornerRadius = std::max(0, Wh_GetIntSetting(L"Appearance.CornerRadius"));
-    g_settings.centerZone = std::clamp(Wh_GetIntSetting(L"Position.CenterZone"), 0, 100);
+    s.corners = corners == L"top" ? Corners::top : corners == L"all" ? Corners::all : Corners::none;
+    s.cornerRadius = std::max(0, Wh_GetIntSetting(L"Appearance.CornerRadius"));
+    s.centerZone = std::clamp(Wh_GetIntSetting(L"Position.CenterZone"), 0, 100);
     bool separate = Wh_GetIntSetting(L"Position.SeparateSides");
-    g_settings.maxSlideLeft = std::max(0, Wh_GetIntSetting(separate ? L"Position.MaxSlideLeft" : L"Position.MaxSlide"));
-    g_settings.maxSlideRight = std::max(0, Wh_GetIntSetting(separate ? L"Position.MaxSlideRight" : L"Position.MaxSlide"));
+    s.maxSlideLeft = std::max(0, Wh_GetIntSetting(separate ? L"Position.MaxSlideLeft" : L"Position.MaxSlide"));
+    s.maxSlideRight = std::max(0, Wh_GetIntSetting(separate ? L"Position.MaxSlideRight" : L"Position.MaxSlide"));
+    std::lock_guard lock(g_settingsMutex);
+    g_settingsData = s;
 }
 
 BOOL Wh_ModInit() {
@@ -896,27 +1004,54 @@ void Wh_ModAfterInit() {
         if (HMODULE module = GetTaskbarViewModule(); module && !g_taskbarViewHooked.exchange(true) && HookTaskbarView(module))
             Wh_ApplyHookOperations();
     }
-    g_thread = CreateThread(nullptr, 0, PollThread, nullptr, 0, &g_threadId);
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_thread = CreateThread(nullptr, 0, PollThread, nullptr, 0, nullptr);
 }
 
 void Wh_ModBeforeUninit() {
     if (g_thread) {
-        PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 2000);
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    // Put every bar back and wait for it: the queued lambdas live in this DLL.
-    for (Bar* b : AllBars()) {
-        auto op = Apply(*b, INT_MIN, false);
-        int i = 0;
-        for (; op && i < 100 && op.Status() == winrt::Windows::Foundation::AsyncStatus::Started; i++) Sleep(10);
-        Wh_Log(L"Uninit: %s", !op ? L"no frame to reset" : i < 100 ? L"taskbar reset" : L"reset timed out");
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+    g_unloading = true;  // queued checks return immediately; only the resets below still run
+    auto bars = AllBars();
+    for (Bar* b : bars) Apply(*b, INT_MIN, false);
+    // Final cleanup on the UI thread (all taskbars share it): drop strong XAML refs of every bar, including bars
+    // whose taskbar is gone, and put back the original RenderTransforms.
+    for (Bar* b : bars) {
+        FrameworkElement frame = GetFrame(*b);
+        if (!frame) continue;
+        try {
+            frame.Dispatcher().RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [task = UiTask{}, bars]() {
+                for (Bar* b : bars) b->ReleaseXamlObjects();
+                RestoreTransforms();
+                g_xamlReleased = true;
+            });
+            break;
+        } catch (winrt::hresult_error const&) {
+        }
+    }
+    while (g_uiTasks > 0) Sleep(10);  // every queued lambda lives in this DLL
+    Wh_Log(L"Uninit: taskbar reset");
+}
+
+void Wh_ModUninit() {
+    // Hooks are removed by now. Only release the bars if their XAML objects were dropped on the UI thread;
+    // otherwise leak them rather than release XAML objects on the wrong thread.
+    if (g_xamlReleased) {
+        g_bars.reset();
+        g_wrapped.reset();
     }
 }
 
 void Wh_ModSettingsChanged() {
-    // Put every bar back first (top and bottom mode move different parts), then use the new settings.
+    // Put every bar back first (compact and full-width modes move different parts), then use the new settings.
     for (Bar* b : AllBars()) Apply(*b, INT_MIN, false);
     LoadSettings();
     for (Bar* b : AllBars()) b->appliedX = INT_MIN;  // re-place with the new settings on the next edge touch
