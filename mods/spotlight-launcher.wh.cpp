@@ -115,7 +115,7 @@ A folder button at the right of the search box switches between apps and files (
 * **Deep search**: whatever you type is searched in the current folder *and all its subfolders* (results show the folder they live in). Closer matches come first and appear while the search is still running. Dot-folders such as `.config` are included; other hidden/system items and offline/cloud folders are skipped. The scan stops when the bar closes.
 * **History**: go back and forward through the folders you visited; going back highlights the folder you came from.
 * **Edit the path**: click the path bar (or **Ctrl + L** / **Alt + D**) and type or paste a path. It understands `~`, `%USERPROFILE%`, quotes (Copy as path), `/` slashes, `..` and paths relative to the current folder. **Tab** completes folder names (Shift + Tab goes back). **Enter** goes there (a file path opens its folder with the file highlighted), **Esc** cancels.
-* **Actions menu**: **Ctrl + I** (your configured details key) opens a menu for the highlighted item: open, show in its folder, reveal in your file manager, run as administrator, terminal here, rename, copy path / name / file, new folder, properties and move to the Recycle Bin (asks for a second Enter). Copying keeps the bar open and the footer confirms it with *Copied*.
+* **Actions menu**: **Ctrl + I** (your configured details key) opens a menu for the highlighted item: open, show in its folder, reveal in your file manager, run as administrator, terminal here, rename, copy path / name / file, new folder, new file, properties and move to the Recycle Bin (asks for a second Enter). Copying keeps the bar open and the footer confirms it with *Copied*.
 
 #### Filters
 
@@ -150,7 +150,7 @@ For example `report *.pdf` or `dir: projects`. The active filters are shown in t
 | **Ctrl + P** | Properties |
 | **Ctrl + Shift + C** | Copy the path |
 
-Images show a thumbnail preview and other files a type icon; previews decode in the background (skipped on network drives and cloud placeholders, and very wide/tall images are center-cropped to fill the square without stretching). Switching modes clears the query and file mode is never remembered between opens. Deleting, renaming or creating a folder keeps the bar open in the same folder.
+Images show a thumbnail preview and other files a type icon; previews decode in the background (skipped on network drives and cloud placeholders, and very wide/tall images are center-cropped to fill the square without stretching). Switching modes clears the query and file mode is never remembered between opens. Deleting, renaming or creating a folder or file keeps the bar open in the same folder.
 
 ### Prefixes
 
@@ -1531,8 +1531,9 @@ struct AppEntry {
     ID2D1Bitmap* bmp = nullptr;
 };
 
-// Where a result comes from. Only App is produced today; the other kinds are added by
-// providers later (web, commands, files, settings) and carry their own text and payload.
+// Where a result comes from. Every kind is produced today: App for the app index, Web/Url for
+// web search, Command for built-in commands, File for the file browser and Setting for Windows
+// settings pages. Each kind carries its own text and payload.
 enum class ResultKind { App, Web, Url, Command, File, Setting };
 
 struct SearchResult {
@@ -2787,6 +2788,20 @@ static bool g_fileDeepDone = false;             // the deep search for g_fileDee
 static bool g_fileSearching = false;
 static std::vector<FileEntry>* g_fileSrc = &g_fileEntries;  // vector SearchResult::icon indexes into
 static volatile LONG g_fileSearchGen = 0;
+static volatile LONG g_fileSearchRunning = 0;  // deep-search threads still alive
+static HANDLE g_fileSearchIdle = nullptr;      // manual-reset, signaled when none is alive
+
+static void FileSearchStarted() {
+    if (InterlockedIncrement(&g_fileSearchRunning) == 1 && g_fileSearchIdle) {
+        ResetEvent(g_fileSearchIdle);
+    }
+}
+
+static void FileSearchFinished() {
+    if (InterlockedDecrement(&g_fileSearchRunning) == 0 && g_fileSearchIdle) {
+        SetEvent(g_fileSearchIdle);
+    }
+}
 
 // Decoded previews, keyed by full path and kept in a small LRU. File entries come and go with
 // every deep-search snapshot, so the images live outside them.
@@ -2801,6 +2816,7 @@ static uint64_t g_thumbClock = 0;
 static const size_t kThumbCacheMax = 96;
 static HANDLE g_thumbThread = nullptr;
 static HANDLE g_thumbEvent = nullptr;
+static HANDLE g_thumbStop = nullptr;  // manual-reset: asks the preview worker to exit
 static CRITICAL_SECTION g_thumbLock;  // guards g_thumbQueue (UI enqueues, worker dequeues)
 static std::deque<std::wstring> g_thumbQueue;
 
@@ -2948,7 +2964,7 @@ static int g_bandCompIdx = -1;
 
 enum FileActId {
     FA_OPEN = 1, FA_GOTO, FA_REVEAL, FA_ADMIN, FA_TERMINAL, FA_RENAME,
-    FA_COPYPATH, FA_COPYNAME, FA_COPYFILE, FA_NEWFOLDER, FA_PROPS, FA_DELETE
+    FA_COPYPATH, FA_COPYNAME, FA_COPYFILE, FA_NEWFOLDER, FA_NEWFILE, FA_PROPS, FA_DELETE
 };
 struct FileMenuItem {
     int id;
@@ -3258,6 +3274,9 @@ struct FileSearchResult {
 
 static DWORD WINAPI FileSearchThread(LPVOID param) {
     std::unique_ptr<FileSearchJob> job((FileSearchJob*)param);
+    struct DoneGuard {
+        ~DoneGuard() { FileSearchFinished(); }
+    } doneGuard;
     const size_t kMaxHits = 300, kMaxScanned = 400000;  // matches the 300 rows BuildFileResults keeps
     const int kMaxDepth = 14;
     const DWORD kBudgetMs = 6000;
@@ -6395,9 +6414,11 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
     IWICImagingFactory* wic = nullptr;
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
+    HANDLE waits[2] = {g_thumbEvent, g_thumbStop};
     for (;;) {
-        WaitForSingleObject(g_thumbEvent, INFINITE);
+        if (WaitForMultipleObjects(2, waits, FALSE, INFINITE) != WAIT_OBJECT_0) break;
         for (;;) {
+            if (WaitForSingleObject(g_thumbStop, 0) == WAIT_OBJECT_0) break;
             std::wstring path;
             EnterCriticalSection(&g_thumbLock);
             if (!g_thumbQueue.empty()) {
@@ -6418,7 +6439,10 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
             }
             if (!hwnd || !PostMessageW(hwnd, WM_APP_THUMB, 0, (LPARAM)tr)) delete tr;
         }
+        if (WaitForSingleObject(g_thumbStop, 0) == WAIT_OBJECT_0) break;
     }
+    SafeRelease(wic);
+    CoUninitialize();
     return 0;
 }
 
@@ -6426,16 +6450,36 @@ static bool EnsureThumbThread() {
     if (g_thumbThread) return true;
     InitializeCriticalSection(&g_thumbLock);
     g_thumbEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (g_thumbEvent) {
+    g_thumbStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_thumbEvent && g_thumbStop) {
         g_thumbThread = CreateThread(nullptr, 0, ThumbThreadProc, g_hwnd, 0, nullptr);
     }
     if (!g_thumbThread) {
         if (g_thumbEvent) CloseHandle(g_thumbEvent);
         g_thumbEvent = nullptr;
+        if (g_thumbStop) CloseHandle(g_thumbStop);
+        g_thumbStop = nullptr;
         DeleteCriticalSection(&g_thumbLock);
         return false;
     }
     return true;
+}
+
+// Asks the preview worker to exit and waits for it. Must run before the window is destroyed, so
+// the worker cannot post previews to a dead window. A blocked decode (slow or disconnected
+// drive) makes the wait time out; the process exits right after, so the handles stay open.
+static void StopThumbThread() {
+    if (!g_thumbThread) return;
+    if (g_thumbStop) SetEvent(g_thumbStop);
+    const DWORD waited = WaitForSingleObject(g_thumbThread, 3000);
+    if (waited != WAIT_OBJECT_0) return;
+    CloseHandle(g_thumbThread);
+    g_thumbThread = nullptr;
+    if (g_thumbEvent) CloseHandle(g_thumbEvent);
+    g_thumbEvent = nullptr;
+    if (g_thumbStop) CloseHandle(g_thumbStop);
+    g_thumbStop = nullptr;
+    DeleteCriticalSection(&g_thumbLock);
 }
 
 static void TrimThumbCache() {
@@ -7265,7 +7309,7 @@ static D2D1_RECT_F FileModeChipRect(float cx, float cy) {
     const float s = (float)g_scale;
     const float mid = cy + kBarH * s / 2;
     const float h = 26 * s;
-        const float labelW = TextWidth(kTxtFilesMode, g_fmtKeyBold);
+    const float labelW = TextWidth(kTxtFilesMode, g_fmtKeyBold);
     const float w = 64 * s + labelW;  // 10 + 16 + 8 + label + 10 + 12 + 8
     const float x = cx + 16 * s;
     return D2D1::RectF(x, mid - h / 2, x + w, mid + h / 2);
@@ -7907,14 +7951,35 @@ static D2D1_RECT_F HelpTabRect(float cx, float cy, int i) {
     return D2D1::RectF(x1, top, x1 + w1, top + 22 * s);
 }
 
-static const HelpRow kHelpNavRows[] = {
+// Labels for the F1 sheet, built from the configured shortcuts so the sheet never shows a
+// combination the user has changed.
+static std::wstring HotkeyHelpText() {
+    switch (g_cfg.hotkeyMods) {
+        case MOD_CONTROL: return L"Ctrl + Space";
+        case MOD_CONTROL | MOD_ALT: return L"Ctrl + Alt + Space";
+        case MOD_SHIFT | MOD_ALT: return L"Shift + Alt + Space";
+        case MOD_CONTROL | MOD_SHIFT: return L"Ctrl + Shift + Space";
+        default: return L"Alt + Space";
+    }
+}
+
+static std::wstring DetailsKeyHelpText() {
+    switch (g_cfg.detailsKey) {
+        case DetailsKey::CtrlK: return L"Ctrl + K";
+        case DetailsKey::CtrlSpace: return L"Ctrl + Space";
+        case DetailsKey::F4: return L"F4";
+        default: return L"Ctrl + I";
+    }
+}
+
+static HelpRow kHelpNavRows[] = {
     {L"Alt + Space", L"Open or close the bar"},
     {L"↑ / ↓", L"Move through the results"},
     {L"Enter", L"Open the selected item"},
     {L"Esc", L"Close the details panel, then the bar"},
 };
 
-static const HelpRow kHelpActionRows[] = {
+static HelpRow kHelpActionRows[] = {
     {L"Ctrl + I", L"Actions and details (configurable)"},
     {L"Ctrl + R", L"Rebuild the app index"},
 };
@@ -8035,6 +8100,11 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
 
     if (g_helpPage == 0) {
+        static std::wstring hotkeyText, detailsText;
+        hotkeyText = HotkeyHelpText();
+        detailsText = DetailsKeyHelpText();
+        kHelpNavRows[0].key = hotkeyText.c_str();
+        kHelpActionRows[0].key = detailsText.c_str();
         const HelpSection left[] = {
             {L"GETTING AROUND", kHelpNavRows, ARRAYSIZE(kHelpNavRows)},
             {L"ACTIONS", kHelpActionRows, ARRAYSIZE(kHelpActionRows)},
@@ -8157,7 +8227,7 @@ static void Render() {
         DrawFolderOutline(cr.left + 10 * s, (cr.top + cr.bottom) / 2 - 8 * s, 16 * s,
                           g_pal.accentInk);
         const float labelX = cr.left + 34 * s;  // 10 + 16 + 8
-    const float labelW = TextWidth(kTxtFilesMode, g_fmtKeyBold);
+        const float labelW = TextWidth(kTxtFilesMode, g_fmtKeyBold);
         DrawLabel(kTxtFilesMode, g_fmtKeyBold, labelX, cr.top, labelX + labelW, cr.bottom,
                   g_pal.accentStrong, 1.f);
         const D2D1_RECT_F xr = FileModeChipCloseRect(cx, cy);
@@ -8928,6 +8998,18 @@ static void RunShellOpen(const wchar_t* target) {
     ShellExecuteW(nullptr, L"open", target, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+// Full path of a System32 executable, so CreateProcess cannot pick up a same-named file from
+// the working directory or the search path.
+static std::wstring SystemExe(const wchar_t* name) {
+    wchar_t dir[MAX_PATH];
+    UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return name;
+    std::wstring path = dir;
+    path += L'\\';
+    path += name;
+    return path;
+}
+
 // Runs an executable with arguments, without flashing a console window.
 static void RunConsoleHidden(const wchar_t* exe, const wchar_t* args) {
     HideLauncher();
@@ -8952,19 +9034,20 @@ static void RunCommand(const std::wstring& id) {
         HideLauncher();
         // Loaded dynamically so the mod does not need to link against PowrProf.lib.
         typedef BOOLEAN(WINAPI * SuspendFn)(BOOLEAN, BOOLEAN, BOOLEAN);
-        HMODULE h = LoadLibraryW(L"powrprof.dll");
+        HMODULE h = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (h) {
             auto fn = (SuspendFn)GetProcAddress(h, "SetSuspendState");
             if (fn) fn(FALSE, FALSE, FALSE);
+            FreeLibrary(h);
         }
     } else if (id == L"hibernate") {
-        RunConsoleHidden(L"shutdown.exe", L"/h");
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/h");
     } else if (id == L"shutdown") {
-        RunConsoleHidden(L"shutdown.exe", L"/s /t 0");
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/s /t 0");
     } else if (id == L"restart") {
-        RunConsoleHidden(L"shutdown.exe", L"/r /t 0");
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/r /t 0");
     } else if (id == L"signout") {
-        RunConsoleHidden(L"shutdown.exe", L"/l");
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/l");
     } else if (id == L"emptyrecyclebin") {
         HideLauncher();
         SHEmptyRecycleBinW(nullptr, nullptr,
@@ -9043,8 +9126,10 @@ static void StartFileSearch() {
     job->key = FileSearchKey();
     job->tokens = g_tokens;
     job->filter = g_fileFilter;
+    FileSearchStarted();
     HANDLE th = CreateThread(nullptr, 0, FileSearchThread, job, 0, nullptr);
     if (!th) {
+        FileSearchFinished();
         delete job;
         g_fileSearching = false;
         return;
@@ -9429,6 +9514,33 @@ static void FileNewFolder() {
     }
 }
 
+// Creates "New file.txt" in the folder being browsed and starts renaming it. The name without
+// the extension is selected, so typing replaces it and the extension stays unless the user
+// edits it.
+static void FileNewFile() {
+    if (!g_fileMode || g_fileCur.empty()) return;
+    std::wstring path;
+    for (int i = 1; i < 1000; ++i) {
+        const std::wstring base =
+            i == 1 ? L"New file" : L"New file (" + std::to_wstring(i) + L")";
+        const std::wstring cand = JoinPath(g_fileCur, base + L".txt");
+        HANDLE h = CreateFileW(cand.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+            path = cand;
+            break;
+        }
+        const DWORD err = GetLastError();
+        if (err != ERROR_FILE_EXISTS && err != ERROR_ALREADY_EXISTS) return;
+    }
+    if (path.empty()) return;
+    FileGoTo(g_fileCur, false, path);  // relists with the new file highlighted
+    if (const FileEntry* e = SelectedFileEntry()) {
+        if (SamePath(e->path, path)) BeginRename(*e);
+    }
+}
+
 static void CopyFileToClipboard(const std::wstring& path) {
     const size_t bytes = sizeof(DROPFILES) + (path.size() + 2) * sizeof(wchar_t);
     HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
@@ -9456,9 +9568,13 @@ static void FileDelete(const FileEntry& t) {
     std::wstring from = t.path;
     from.push_back(L'\0');  // pFrom is double-null terminated
     SHFILEOPSTRUCTW op = {};
+    op.hwnd = g_hwnd;
     op.wFunc = FO_DELETE;
     op.pFrom = from.c_str();
-    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
+    // WANTNUKEWARNING re-enables the shell prompt when the item cannot go to the Recycle Bin
+    // (network share, item larger than the bin, no bin on the volume): without it the shell
+    // would silently turn "Move to Recycle Bin" into a permanent delete.
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
     // The shell briefly takes the foreground while deleting. That must not close the bar (the
     // user would lose the folder they are working in), so focus loss is ignored during the call
     // and for a moment after it; then the bar takes the focus back.
@@ -9495,7 +9611,7 @@ static void RunFileAction(int id) {
     const bool has = g_fileMenuHasTarget;
     g_fileMenuOpen = false;
     g_fileMenuArmed = false;
-    if (!has && id != FA_NEWFOLDER) {
+    if (!has && id != FA_NEWFOLDER && id != FA_NEWFILE) {
         MarkDirty();
         return;
     }
@@ -9550,6 +9666,9 @@ static void RunFileAction(int id) {
         case FA_NEWFOLDER:
             FileNewFolder();
             break;
+        case FA_NEWFILE:
+            FileNewFile();
+            break;
         case FA_PROPS: {
             SHELLEXECUTEINFOW sei = {};
             sei.cbSize = sizeof(sei);
@@ -9585,6 +9704,7 @@ static void BuildFileMenu() {
         g_fileMenu.push_back({FA_COPYFILE, L"Copy file", L""});
     }
     g_fileMenu.push_back({FA_NEWFOLDER, L"New folder", L"Ctrl+Shift+N"});
+    g_fileMenu.push_back({FA_NEWFILE, L"New file", L""});
     if (g_fileMenuHasTarget) {
         g_fileMenu.push_back({FA_PROPS, L"Properties", L"Ctrl+P"});
         g_fileMenu.push_back({FA_DELETE, L"Move to Recycle Bin", L""});
@@ -10842,6 +10962,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    g_fileSearchIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     LoadSettings();
     LoadCalcHistory();
     LoadCalcAns();
@@ -10888,6 +11009,14 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     StopWatcher();
+    CancelFileSearch();
+    if (g_fileSearchIdle) {
+        if (WaitForSingleObject(g_fileSearchIdle, 3000) == WAIT_OBJECT_0) {
+            CloseHandle(g_fileSearchIdle);
+            g_fileSearchIdle = nullptr;
+        }
+    }
+    StopThumbThread();
     UnregisterHotKey(g_hwnd, HOTKEY_ID);
     Sound::Shutdown();
     LiveDestroy();
