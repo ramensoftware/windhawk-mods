@@ -970,6 +970,9 @@ constexpr UINT WM_APP_MOVE_DEVICE = WM_APP + 8;    // Posted to itself.
 // Shows the windows of every monitor, or of the switcher's one again (see
 // OnToggleMonitors).
 constexpr UINT WM_APP_TOGGLE_MONITORS = WM_APP + 9;
+// A mouse button was pressed during a session that stays open. wParam,
+// lParam: where, in screen coordinates.
+constexpr UINT WM_APP_MOUSE_DOWN = WM_APP + 10;
 
 constexpr WPARAM kStartBackwards = 1;
 // Started from explorer's own Alt+Tab hotkey: the keyboard hook didn't see
@@ -1015,7 +1018,8 @@ constexpr double kSlideAnimationSeconds = 0.32;
 constexpr float kMinCloseButtonRadius = 4;
 
 // Overlay window timers.
-// Checks that a minimized window switched to was restored (see CheckRestored).
+// Checks that the window switched to is in front and restored (see
+// CheckRestored).
 constexpr UINT_PTR kRestoreTimerId = 1;
 constexpr UINT kRestoreCheckMs = 60;
 constexpr int kMaxRestoreTries = 3;
@@ -1473,6 +1477,42 @@ int PositiveMod(long long value, int modulus) {
     return (int)(result < 0 ? result + modulus : result);
 }
 
+// A process's integrity level, or 0 if it can't be read (e.g. it runs as
+// administrator and this process doesn't).
+DWORD GetIntegrityLevel(HANDLE process) {
+    HANDLE token;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        return 0;
+    }
+    DWORD level = 0;
+    DWORD buffer[32];
+    DWORD size = 0;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
+                            &size)) {
+        const PSID sid =
+            reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buffer)->Label.Sid;
+        level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return level;
+}
+
+// Whether the window belongs to a process whose input low-level hooks of this
+// process don't see (UIPI): one at a higher integrity level.
+bool IsAboveThisProcess(HWND hwnd) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return true;
+    }
+    const DWORD level = GetIntegrityLevel(process);
+    CloseHandle(process);
+    static const DWORD ownLevel = GetIntegrityLevel(GetCurrentProcess());
+    return !level || level > ownLevel;
+}
+
 bool IsKeyDown(int vk) {
     return (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
@@ -1579,12 +1619,12 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
 
     if (!g_switching) {
         Shortcut shortcut;
-        // With Ctrl held too, the key isn't flagged as pressed with Alt (it
-        // makes a WM_KEYDOWN, not a WM_SYSKEYDOWN): Alt's own state counts.
-        const bool alt =
-            (kb->flags & LLKHF_ALTDOWN) != 0 || IsKeyDown(VK_MENU);
+        // With Ctrl held too, Tab isn't flagged as pressed with Alt (it makes
+        // a WM_KEYDOWN, not a WM_SYSKEYDOWN): Alt's own state counts.
         if (keyDown && vk == VK_TAB && g_ready && g_takeOver &&
-            MatchShortcut(alt, CtrlHeld(), WinHeld(), &shortcut)) {
+            MatchShortcut(
+                (kb->flags & LLKHF_ALTDOWN) != 0 || IsKeyDown(VK_MENU),
+                CtrlHeld(), WinHeld(), &shortcut)) {
             g_sessionShortcut = shortcut;
             g_holdKey = HoldKeyFor(shortcut);
             g_switching = true;
@@ -1688,13 +1728,21 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
 }
 
 LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && wParam == WM_MOUSEWHEEL && g_switching) {
-        const auto* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        if (ms->dwExtraInfo != kInjectedInputTag) {
+    const auto* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+    if (code == HC_ACTION && g_switching &&
+        ms->dwExtraInfo != kInjectedInputTag) {
+        if (wParam == WM_MOUSEWHEEL) {
             const short delta = (short)HIWORD(ms->mouseData);
             PostMessageW(g_overlayWnd, WM_APP_WHEEL, (WPARAM)(INT_PTR)delta,
                          0);
             return 1;
+        }
+        // The click goes on to its window (see WM_APP_MOUSE_DOWN).
+        if (g_holdKey == HoldKey::None &&
+            (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+             wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN)) {
+            PostMessageW(g_overlayWnd, WM_APP_MOUSE_DOWN,
+                         (WPARAM)(INT_PTR)ms->pt.x, (LPARAM)ms->pt.y);
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -2616,8 +2664,7 @@ class Switcher {
     void StartCaptures();
     void StartCaptures(const std::vector<Item*>& items);
     bool FirstFramesReady();
-    bool StartCapture(Item& item, bool canRetry);
-    void CloseCapture(Item& item);
+    void StartCapture(Item& item);
     void StopCapture(Item& item);
     bool PollFrames(Item& item);
     void Teardown();
@@ -2858,6 +2905,19 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+// The helper windows (proxies, the backdrop and the focus window) draw
+// nothing themselves, and only the switcher destroys them: Alt+F4 while the
+// focus window is in front (see TakeFocus) mustn't.
+LRESULT CALLBACK HelperWndProc(HWND hwnd,
+                               UINT msg,
+                               WPARAM wParam,
+                               LPARAM lParam) {
+    if (msg == WM_CLOSE) {
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
 // Creates the overlay window only. It's quick, so the mod finishes loading
 // right away; the graphics devices are created afterwards, in Activate.
 bool Switcher::CreateOverlay() {
@@ -2875,9 +2935,9 @@ bool Switcher::CreateOverlay() {
         return false;
     }
 
-    // Proxy windows only host a DWM thumbnail, they draw nothing themselves.
+    // The helper windows' class (see HelperWndProc).
     WNDCLASSEXW proxyClass{sizeof(proxyClass)};
-    proxyClass.lpfnWndProc = DefWindowProcW;
+    proxyClass.lpfnWndProc = HelperWndProc;
     proxyClass.hInstance = g_module;
     proxyClass.lpszClassName = kProxyClassName;
     if (!RegisterClassExW(&proxyClass)) {
@@ -3526,6 +3586,19 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
             OnToggleMonitors();
             return 0;
 
+        case WM_APP_MOUSE_DOWN: {
+            // A session that stays open ends when another monitor is clicked,
+            // like the native switcher when it loses the focus. The clicked
+            // window keeps the focus: nothing is given back.
+            const POINT point{(LONG)(INT_PTR)wParam, (LONG)lParam};
+            if (g_holdKey == HoldKey::None && !PtInRect(&m_monitor, point) &&
+                EndSwitching()) {
+                m_hasFocus = false;
+                OnCancel();
+            }
+            return 0;
+        }
+
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
             // A session in progress keeps the style of its shortcut.
@@ -3614,11 +3687,19 @@ void Switcher::OnHotkey(WPARAM flags) {
         OnStep(backwards ? -1 : 1);
         return;
     }
-    Wh_Log(L"Shortcut %d came as a hotkey, taking it over",
-           (int)g_sessionShortcut.load());
-    // The hook may also have been dropped by Windows (see WM_HOOK_REINSTALL),
-    // which would leave every Alt+Tab to this path from now on.
-    PostThreadMessageW(g_hookThreadId, WM_HOOK_REINSTALL, 0, 0);
+    // Usually an elevated window is in front, whose keys the hook can't see.
+    // Otherwise the hook should have seen them: Windows may have dropped it
+    // (see WM_HOOK_REINSTALL), which would leave every Alt+Tab to this path
+    // from now on. It's not installed again needlessly, since a new hook
+    // goes ahead of the ones other programs installed after it.
+    HWND foreground = GetForegroundWindow();
+    const bool reinstall = foreground && !IsAboveThisProcess(foreground);
+    Wh_Log(L"Shortcut %d came as a hotkey, taking it over%s",
+           (int)g_sessionShortcut.load(),
+           reinstall ? L" (keyboard hook installed again)" : L"");
+    if (reinstall) {
+        PostThreadMessageW(g_hookThreadId, WM_HOOK_REINSTALL, 0, 0);
+    }
     PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 1, 0);
     OnStart(kStartFromHotkey | (backwards ? kStartBackwards : 0));
 }
@@ -4438,24 +4519,9 @@ void Switcher::StartCaptures() {
     StartCaptures(items);
 }
 
-// A proxy (see CreateProxy) that was just shown may not be ready in DWM yet,
-// and its capture can be refused then: those get one more try a frame later.
 void Switcher::StartCaptures(const std::vector<Item*>& items) {
-    std::vector<Item*> again;
     for (Item* item : items) {
-        if (!StartCapture(*item, true)) {
-            again.push_back(item);
-        }
-    }
-    if (again.empty()) {
-        return;
-    }
-    DwmFlush();
-    for (Item* item : again) {
-        StartCapture(*item, false);
-        if (item->session) {
-            Wh_Log(L"Capture of %p worked on the second try", item->hwnd);
-        }
+        StartCapture(*item);
     }
 }
 
@@ -4472,19 +4538,17 @@ bool Switcher::FirstFramesReady() {
     return ready;
 }
 
-// Returns false only if the capture of the window's proxy was refused and
-// canRetry is set: the proxy is kept for another try. Otherwise, a window
-// that can't be captured is left with its icon.
-bool Switcher::StartCapture(Item& item, bool canRetry) {
+// A window that can't be captured is left with its icon.
+void Switcher::StartCapture(Item& item) {
     HWND source = item.hwnd;
     if (item.minimized || item.hidden) {
         if (item.minimized && !m_settings.minimizedContent) {
-            return true;
+            return;
         }
-        if (!item.proxy && !CreateProxy(item)) {
+        if (!CreateProxy(item)) {
             Wh_Log(L"Proxy failed for %p", item.hwnd);
             StopCapture(item);
-            return true;
+            return;
         }
         source = item.proxy;
     }
@@ -4504,7 +4568,7 @@ bool Switcher::StartCapture(Item& item, bool canRetry) {
         const auto size = item.captureItem.Size();
         if (size.Width <= 0 || size.Height <= 0) {
             StopCapture(item);
-            return true;
+            return;
         }
 
         step = L"CreateFreeThreaded";
@@ -4529,20 +4593,14 @@ bool Switcher::StartCapture(Item& item, bool canRetry) {
         step = L"StartCapture";
         item.session.StartCapture();
     } catch (const winrt::hresult_error& e) {
-        if (canRetry && item.proxy) {
-            CloseCapture(item);
-            return false;
-        }
         Wh_Log(L"Capture failed for %p%s at %s: 0x%08X", item.hwnd,
                item.proxy ? L" (through its proxy)" : L"", step,
                (UINT)e.code());
         StopCapture(item);
     }
-    return true;
 }
 
-// Stops the capture, and keeps the proxy.
-void Switcher::CloseCapture(Item& item) {
+void Switcher::StopCapture(Item& item) {
     try {
         if (item.session) {
             item.session.Close();
@@ -4555,10 +4613,7 @@ void Switcher::CloseCapture(Item& item) {
     item.session = nullptr;
     item.framePool = nullptr;
     item.captureItem = nullptr;
-}
 
-void Switcher::StopCapture(Item& item) {
-    CloseCapture(item);
     if (item.thumbnail) {
         DwmUnregisterThumbnail(item.thumbnail);
         item.thumbnail = nullptr;
@@ -4779,51 +4834,35 @@ void Switcher::EndSession() {
     PostMessageW(m_hwnd, WM_APP_REFRESH_ICONS, 0, 0);
 }
 
-void Switcher::ActivateWindow(HWND hwnd) {
-    if (!IsWindow(hwnd)) {
-        return;
-    }
-
+// The window that gets the focus when switching to a window: its last active
+// popup (e.g. an open dialog), if it can take it.
+HWND ActivationTarget(HWND hwnd) {
     HWND popup = GetLastActivePopup(hwnd);
     if (!popup || !IsWindowVisible(popup) || !IsWindowEnabled(popup)) {
         popup = hwnd;
+    }
+    return popup;
+}
+
+void Switcher::ActivateWindow(HWND hwnd) {
+    if (!IsWindow(hwnd)) {
+        return;
     }
 
     // Input first, which allows this process to change the foreground. A
     // restore asked for before that can leave the window activated but still
     // minimized (console windows do).
     SendDummyKeyPress();
-    if (IsIconic(hwnd)) {
+    const bool minimized = IsIconic(hwnd);
+    if (minimized) {
         ShowWindowAsync(hwnd, SW_RESTORE);
-        // Some windows still ignore it: check, and try other ways.
+    }
+    // Some windows ignore the restore, and the foreground can be refused
+    // (e.g. while a fullscreen game holds on to it): check, and try again.
+    if (!SetForegroundWindow(ActivationTarget(hwnd)) || minimized) {
         m_restoreWnd = hwnd;
         m_restoreTries = 0;
         SetTimer(m_hwnd, kRestoreTimerId, kRestoreCheckMs, nullptr);
-    }
-
-    if (SetForegroundWindow(popup)) {
-        return;
-    }
-    // Refused, e.g. while a fullscreen game holds the foreground: sharing the
-    // input state of the window in front for a moment lets it pass on.
-    HWND foreground = GetForegroundWindow();
-    const DWORD foregroundThread =
-        foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    const DWORD thread = GetCurrentThreadId();
-    bool switched = false;
-    if (foregroundThread && foregroundThread != thread &&
-        !IsHungAppWindow(foreground) &&
-        AttachThreadInput(thread, foregroundThread, TRUE)) {
-        switched = SetForegroundWindow(popup) != FALSE;
-        AttachThreadInput(thread, foregroundThread, FALSE);
-    }
-    if (!switched) {
-        WCHAR className[64] = L"";
-        if (foreground) {
-            GetClassNameW(foreground, className, ARRAYSIZE(className));
-        }
-        Wh_Log(L"SetForegroundWindow failed for %p (%p, %s, in front)", popup,
-               foreground, className);
     }
 }
 
@@ -4834,32 +4873,42 @@ void Switcher::StopRestoreCheck() {
     }
 }
 
-// A minimized window switched to is still minimized: ask again, the way the
-// taskbar does it, then directly (without waiting for its app, which may be
-// busy).
+// The window switched to is still minimized or not in front: ask again. A
+// restore is asked the way the taskbar does it, then directly (without
+// waiting for its app, which may be busy).
 void Switcher::CheckRestored() {
     HWND hwnd = m_restoreWnd;
-    if (!hwnd || !IsWindow(hwnd) || !IsIconic(hwnd) ||
-        m_restoreTries >= kMaxRestoreTries) {
-        if (hwnd && IsWindow(hwnd) && IsIconic(hwnd)) {
-            Wh_Log(L"Couldn't restore %p", hwnd);
+    if (!hwnd || !IsWindow(hwnd)) {
+        StopRestoreCheck();
+        return;
+    }
+    HWND popup = ActivationTarget(hwnd);
+    const bool minimized = IsIconic(hwnd) != FALSE;
+    HWND foreground = GetForegroundWindow();
+    if (!minimized && foreground == popup) {
+        StopRestoreCheck();
+        return;
+    }
+    if (m_restoreTries >= kMaxRestoreTries) {
+        // Names the window that kept the foreground (e.g. a fullscreen game).
+        WCHAR className[64] = L"";
+        if (foreground) {
+            GetClassNameW(foreground, className, ARRAYSIZE(className));
         }
+        Wh_Log(L"Couldn't switch to %p%s (%p, %s, in front)", hwnd,
+               minimized ? L", still minimized" : L"", foreground, className);
         StopRestoreCheck();
         return;
     }
 
     m_restoreTries++;
-    Wh_Log(L"%p is still minimized, trying again (%d)", hwnd, m_restoreTries);
     SendDummyKeyPress();
-    if (m_restoreTries == 1) {
-        PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-    } else {
-        ShowWindowAsync(hwnd, SW_RESTORE);
-    }
-
-    HWND popup = GetLastActivePopup(hwnd);
-    if (!popup || !IsWindowVisible(popup) || !IsWindowEnabled(popup)) {
-        popup = hwnd;
+    if (minimized) {
+        if (m_restoreTries == 1) {
+            PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+        } else {
+            ShowWindowAsync(hwnd, SW_RESTORE);
+        }
     }
     SetForegroundWindow(popup);
 }
@@ -6723,9 +6772,11 @@ com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
 
     float drawWidth = (float)width;
     float drawHeight = (float)height;
+    // The part of the picture that is decoded.
+    WICRect part{0, 0, (INT)imageWidth, (INT)imageHeight};
     if (position == DWPOS_SPAN) {
         // One picture over all the monitors: it covers the box around them,
-        // and this monitor shows its own part of it.
+        // and this monitor shows its own part of it, which alone is decoded.
         const float left = (float)GetSystemMetrics(SM_XVIRTUALSCREEN);
         const float top = (float)GetSystemMetrics(SM_YVIRTUALSCREEN);
         const float spanWidth = (float)GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -6733,12 +6784,29 @@ com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
         if (spanWidth > 0 && spanHeight > 0) {
             const float scale = std::max(spanWidth / imageWidth,
                                          spanHeight / imageHeight);
-            drawWidth = imageWidth * scale;
-            drawHeight = imageHeight * scale;
-            const float x =
-                left + (spanWidth - drawWidth) / 2 - m_monitor.left;
-            const float y =
-                top + (spanHeight - drawHeight) / 2 - m_monitor.top;
+            const float originX = left + (spanWidth - imageWidth * scale) / 2;
+            const float originY = top + (spanHeight - imageHeight * scale) / 2;
+            // This monitor in picture pixels, rounded outwards.
+            const INT x0 = std::clamp(
+                (INT)std::floor((m_monitor.left - originX) / scale), 0,
+                (INT)imageWidth);
+            const INT y0 = std::clamp(
+                (INT)std::floor((m_monitor.top - originY) / scale), 0,
+                (INT)imageHeight);
+            const INT x1 = std::clamp(
+                (INT)std::ceil((m_monitor.right - originX) / scale), x0,
+                (INT)imageWidth);
+            const INT y1 = std::clamp(
+                (INT)std::ceil((m_monitor.bottom - originY) / scale), y0,
+                (INT)imageHeight);
+            if (x1 == x0 || y1 == y0) {
+                return nullptr;
+            }
+            part = {x0, y0, x1 - x0, y1 - y0};
+            drawWidth = part.Width * scale;
+            drawHeight = part.Height * scale;
+            const float x = originX + x0 * scale - m_monitor.left;
+            const float y = originY + y0 * scale - m_monitor.top;
             *rect = {x, y, x + drawWidth, y + drawHeight};
         } else {
             position = DWPOS_FILL;
@@ -6769,13 +6837,23 @@ com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
                  (width + drawWidth) / 2, (height + drawHeight) / 2};
     }
 
+    com_ptr<IWICBitmapClipper> clipper;
+    IWICBitmapSource* source = frame.get();
+    if (position == DWPOS_SPAN) {
+        if (FAILED(m_wicFactory->CreateBitmapClipper(clipper.put())) ||
+            FAILED(clipper->Initialize(frame.get(), &part))) {
+            return nullptr;
+        }
+        source = clipper.get();
+    }
+
     com_ptr<IWICBitmapScaler> scaler;
     com_ptr<IWICFormatConverter> converter;
     com_ptr<ID2D1Bitmap1> image;
     const UINT scaledWidth = (UINT)std::max(std::lround(drawWidth), 1L);
     const UINT scaledHeight = (UINT)std::max(std::lround(drawHeight), 1L);
     if (FAILED(m_wicFactory->CreateBitmapScaler(scaler.put())) ||
-        FAILED(scaler->Initialize(frame.get(), scaledWidth, scaledHeight,
+        FAILED(scaler->Initialize(source, scaledWidth, scaledHeight,
                                   WICBitmapInterpolationModeFant)) ||
         FAILED(m_wicFactory->CreateFormatConverter(converter.put())) ||
         FAILED(converter->Initialize(scaler.get(),
