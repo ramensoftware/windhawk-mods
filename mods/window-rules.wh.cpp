@@ -12,9 +12,6 @@
 
 // Source code is published under the MIT license.
 //
-// The @author and @github values must match the GitHub profile of the pull
-// request author. The @id must keep matching the file name.
-//
 // For bug reports and feature requests, please open an issue here:
 // https://github.com/ramensoftware/windhawk-mods/issues
 
@@ -138,9 +135,9 @@ a title match with `^` or `$`.
 * **Always on top and fullscreen is detected geometrically.** A window counts as
   fullscreen when it covers a monitor and is not maximized. A window that nearly
   covers a monitor is not detected, so a pinned window can stay above it.
-* **Stepping aside across monitors is unit-tested, not field-verified.** The
-  machine this was built on has one monitor, so "a game on the other monitor
-  leaves this window pinned" has no field run behind it.
+* **Stepping aside for a fullscreen app is tested, not observed, across
+  monitors.** It was built and tried on a single-monitor machine, so "a game on
+  the other monitor leaves this window pinned" has not been watched happening.
 
 ## Not the same as other mods
 
@@ -275,9 +272,9 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
       $description: >-
         Keep this app's windows above other windows. A pinned window is lowered
         while a fullscreen app covers the same monitor, and raised again after it
-        closes; another always-on-top window may still sit above it. Leaving this
-        as "No change" does not touch the window's z-order, and stops the mod
-        lowering a window it pinned earlier.
+        closes; another always-on-top window may still sit above it. "No change"
+        takes back a pin this mod set, so a window it pinned earlier comes back
+        down; it never touches the z-order of a window the mod did not pin.
       $options:
       - leave: No change
       - "on": Always on top
@@ -366,7 +363,7 @@ static constexpr UINT kMsgShutdown = WM_APP + 2;
 
 // Processes whose windows are never matched, checked before anything else.
 //
-// Same list as mod 1, for the same reason: the shell and the DWM own their own
+// Same list as an app-rules mod needs, for the same reason: the shell and the DWM own their own
 // windows, and placing or styling them fights the shell's own layout decisions.
 // windhawk.exe is excluded so the mod never matches Windhawk's own windows.
 static constexpr PCWSTR kExcludedProcesses[] = {
@@ -385,8 +382,8 @@ static constexpr int kMaxFilterSkipLinesPerReason = 10;
 // --- Pure rule core ---------------------------------------------------------
 //
 // Everything between the markers is pure: no Win32, no mod state, no I/O. The
-// offline tests extract exactly this region from the mod file and compile it,
-// so the tests exercise the code that ships rather than a copy of it.
+// unit tests extract exactly this region from this file and compile it, so the
+// tests exercise the code that ships rather than a copy of it.
 
 // >>> RULES_CORE >>>
 
@@ -431,7 +428,7 @@ static bool ContainsRegexMeta(const std::wstring& value) {
     // Deliberately not included: "." (it is in every "notepad.exe" ever typed)
     // and "\" (it is the path separator in this domain, and treating it as an
     // escape would turn every "C:\Apps\tool.exe" into a broken regex -- which
-    // is exactly the mistake the offline tests caught on the first run).
+    // is the mistake the unit tests exist to catch).
     static const wchar_t kMeta[] = L"^$+()[]{}|";
     return value.find_first_of(kMeta) != std::wstring::npos;
 }
@@ -481,11 +478,6 @@ static bool LooksLikePath(const std::wstring& value) {
            value.find(L':') != std::wstring::npos;
 }
 
-static std::wstring BaseNameOf(const std::wstring& path) {
-    size_t separator = path.find_last_of(L"\\/");
-    return separator == std::wstring::npos ? path : path.substr(separator + 1);
-}
-
 // Wildcard match over a whole value: * matches any run of characters (including
 // none), ? matches exactly one. Iterative with backtracking on the last *, so a
 // pathological pattern cannot blow up the way a recursive matcher can.
@@ -525,14 +517,12 @@ struct CompiledPattern {
     bool usable = true;        // false when a regular expression did not compile
     std::wstring problem;      // human-readable reason when !usable
     std::wstring literal;      // lowered literal, for Plain and Glob
-    std::wstring regexSource;  // the pattern as typed, for the journal
     std::wregex regex;         // used when kind is Regex
 };
 
 static CompiledPattern CompilePattern(const std::wstring& value) {
     CompiledPattern compiled;
     compiled.kind = ClassifyPattern(value);
-    compiled.regexSource = value;
 
     if (compiled.kind == PatternKind::Blank) {
         return compiled;
@@ -701,7 +691,7 @@ static bool RuleEntryIsPresent(const RuleSpec& rule, const RuleActions& actions)
     // present. The shipped template ends the list with exactly such an entry: if
     // Windhawk ever reports that default instead of an empty string for it, the
     // reader below would never find its terminator and would spin on the event
-    // thread -- the same failure that cost M0 a field run.
+    // thread, where nothing would ever load again.
     const bool topmostSet = !actions.topmost.empty() &&
                             actions.topmost != L"leave";
     return !rule.name.empty() || !rule.executable.empty() ||
@@ -782,10 +772,9 @@ static MatchOutcome FindFirstMatchingRule(
 
 // --- Action schema, validated but not applied -------------------------------
 //
-// M0 declares the action settings and checks that what the user typed can mean
-// something, so that a mistyped rule is a journal line at load time rather than
-// a window that mysteriously does not move in M1. Nothing here touches a
-// window; the parsed values are not even kept.
+// Checks that what the user typed can mean something, so that a mistyped rule is
+// a journal line at load time rather than a window that mysteriously does not
+// move. Nothing here touches a window; the parsed values are not even kept.
 
 static bool ParseLongPair(const std::wstring& text, wchar_t separator,
                           long& first, long& second) {
@@ -896,6 +885,10 @@ static bool ValidateMonitorValue(const std::wstring& text,
     }
 
     if (IsAllDigits(text)) {
+        if (text.size() > 2) {
+            problem = L"a display number must be between 1 and 32";
+            return false;
+        }
         long index = 0;
         for (wchar_t c : text) {
             index = index * 10 + (c - L'0');
@@ -996,7 +989,7 @@ static std::wstring DescribeRequestedActions(const RuleActions& actions) {
 // Still pure: rectangles are the mod's own type, monitors are plain structs, and
 // nothing below calls Win32 or reads mod state. The apply path in the impure half
 // is a thin translation of these decisions into calls, which is what makes the
-// interesting half of M1 testable off Windows.
+// interesting half of this mod testable without Windows.
 
 struct RuleRect {
     long left = 0;
@@ -1042,12 +1035,12 @@ struct TargetPlan {
 
 // The position is relative to the top-left of the target monitor, not to the
 // desktop. Absolute coordinates would break the moment the user docks, undocks,
-// or adds a monitor above the primary -- and mod 1 already taught this mod's
+// or adds a monitor above the primary -- the hard case this mod's
 // users to think in monitor-relative terms, so the sibling mod agreeing with it
 // matters more than being literally what the mouse is at.
 //
 // A negative value is allowed: the user may ask for a window to hang off the
-// edge, exactly as mod 1 lets a window the user placed off an edge survive.
+// edge: a window the user placed off an edge is allowed to stay there.
 static TargetPlan ComputeTargetPlan(const RuleRect& current,
                                     const RuleRect& monitor,
                                     const std::wstring& position,
@@ -1069,7 +1062,7 @@ static TargetPlan ComputeTargetPlan(const RuleRect& current,
         // Moving a window must not resize it. With no size in the rule, the far
         // edges travel with the near ones -- the first version left them where
         // they were, which silently resized every window a position-only rule
-        // touched. The offline tests caught it before it reached a desktop.
+        // touched. The unit tests caught it before it reached a desktop.
         if (!plan.setSize) {
             plan.target.right = plan.target.left + width;
             plan.target.bottom = plan.target.top + height;
@@ -1086,15 +1079,13 @@ static TargetPlan ComputeTargetPlan(const RuleRect& current,
     return plan;
 }
 
-// A monitor as the rules layer sees it. Deliberately not mod 1's MonitorView:
+// A monitor as the rules layer sees it. Deliberately not a remembered monitor:
 // this one has no relative-to-primary coordinates and no config table, because a
 // rule asks "which monitor is this?" and never "which monitor was this?".
 struct RuleMonitor {
-    std::wstring key;           // stable device interface path, survives a replug
-    std::wstring gdiName;       // \\.\DISPLAY1, slot-dependent, for readability
-    std::wstring friendlyName;
+    std::wstring key;       // stable device interface path, survives a replug
+    std::wstring gdiName;   // \\.\DISPLAY1, slot-dependent, for readability
     RuleRect pixelRect;
-    RuleRect workRect;
     bool primary = false;
 };
 
@@ -1123,7 +1114,11 @@ static MonitorSpec ParseMonitorSpec(const std::wstring& text) {
         return spec;
     }
 
-    if (IsAllDigits(text)) {
+    // Two digits is the most a display number can be, and the length is checked
+    // before the arithmetic: a settings block is editable by hand, and
+    // "99999999999" would otherwise overflow and become a confident nonsense
+    // monitor number.
+    if (IsAllDigits(text) && text.size() <= 2) {
         spec.kind = MonitorSpecKind::Index;
         int value = 0;
         for (wchar_t c : text) {
@@ -1267,7 +1262,7 @@ static ApplyDecision DecideApply(bool overridden, bool refused, bool minimized,
     return ApplyDecision::Proceed;
 }
 
-// --- Always on top (M2) -----------------------------------------------------
+// --- Always on top ----------------------------------------------------------
 //
 // The topmost bit is sticky: once set, activating an ordinary window does not
 // take it away. What it does answer to is another topmost window (the taskbar,
@@ -1428,7 +1423,7 @@ enum class SettleDecision {
     GiveUp  // out of time; leave it alone
 };
 
-// One retry, then stop: the same "never fight the user or the app" bias mod 1
+// One retry, then stop: the same "never fight the user or the app" rule that
 // settled on, and the reason an application that repositions itself on every show
 // is left alone rather than fought forever.
 static constexpr int kRetriesPerApply = 1;
@@ -1438,7 +1433,7 @@ static constexpr unsigned long long kSettleWindowMs = 800;
 // legitimately still where it was. Without a grace period, the first poll reads
 // that as "the app moved it back" and fires the single retry on every apply --
 // two moves where one was asked for, and a journal full of retries that describe
-// nothing real. This is the same trap mod 1's settle state machine exists for.
+// nothing real. This is the trap a settle state machine exists for.
 static constexpr unsigned long long kSettleGraceMs = 250;
 
 static SettleDecision DecideSettle(bool atTarget, int retriesLeft,
@@ -1460,6 +1455,13 @@ static SettleDecision DecideSettle(bool atTarget, int retriesLeft,
 
 // <<< RULES_CORE <<<
 
+// Outside the pure-core region above: nothing in the matching layer calls it, and
+// the standalone test build would warn about that.
+static std::wstring BaseNameOf(const std::wstring& path) {
+    size_t separator = path.find_last_of(L"\\/");
+    return separator == std::wstring::npos ? path : path.substr(separator + 1);
+}
+
 // --- Settings ---------------------------------------------------------------
 
 static std::vector<RuleSpec> g_rules;
@@ -1474,11 +1476,11 @@ static bool ReadStringSetting(PCWSTR key, std::wstring& out) {
     PCWSTR value = Wh_GetStringSetting(key);
     // Windhawk hands back an EMPTY STRING for a settings key that is not there,
     // not a null pointer. Treating "empty" as "present" made the loop below run
-    // forever on the very first field run: the thread spun inside LoadRules and
+    // forever when it was first run on a real desktop: the thread spun inside LoadRules and
     // never reached the code that installs the hook, so the mod started, wrote
     // its build line and then did nothing at all. Emptiness is the only signal
     // there is, and it is also what a blank field means, so the two agree.
-    if (!value || !*value) {
+    if (!*value) {
         Wh_FreeStringSetting(value);
         return false;
     }
@@ -1545,15 +1547,19 @@ static void LoadRules() {
 
 // --- Diagnostics journal ----------------------------------------------------
 //
-// Same contract as mod 1's journal, and for the same reason: one line appended
-// at the instant of each decision, nothing debounced, nothing overwritten, so a
-// validation script can assert against it without racing the mod.
+// One line appended at the instant of each decision, nothing debounced, nothing
+// overwritten, so a test script can assert against the journal without racing the
+// mod.
 static bool g_diagnosticsLog = false;
 
 // Journalled at startup so a stale build is visible immediately: a journal that
-// looks complete but was written by the previous copy of the mod has cost a
-// round of diagnosis before.
-static constexpr PCWSTR kJournalBuild = L"r5-2026-10-21";
+// looks complete but was written by the previous copy of the mod is the easiest
+// way to waste an hour.
+//
+// Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
+// numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
+// of 1.0 from the next. This tag is what the test scripts compare.
+static constexpr PCWSTR kJournalBuild = L"r6-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -1730,7 +1736,7 @@ static void JournalNoMatch(const std::wstring& exeName,
 // benefits from it.
 //
 // It is resolved at all because "(unknown)" in a journal is not an answer: the
-// first field run printed twenty rejection lines that named no process, which
+// first run on a real desktop printed twenty rejection lines that named no process, which
 // made it impossible to tell the app being tested from the shell's own windows.
 static std::wstring ExeNameForLog(HWND hwnd) {
     DWORD processId = 0;
@@ -1833,8 +1839,9 @@ static bool PassesWindowFilters(HWND hwnd, const wchar_t** reason) {
     return true;
 }
 
-// The facts a rule is matched against. Everything here is read-only: M0 exists
-// to prove this function's output, not to act on it.
+// The facts a rule is matched against. Everything here is read-only: matching
+// only ever reads a window, because deciding what to do with one is a separate
+// step.
 struct WindowFacts {
     std::wstring exePath;
     std::wstring exeName;
@@ -1887,7 +1894,7 @@ static bool ResolveWindowFacts(HWND hwnd, WindowFacts& facts,
     }
     facts.windowClass.assign(className, (size_t)classNameLength);
 
-    // A window with no title is not something a user opens: on mod 1, every
+    // A window with no title is not something a user opens: in practice every
     // scaffolding window observed had an empty title, while every real window
     // had one. It is still matched here (a rule with a blank title field would
     // match it), which is exactly the kind of thing the journal should show.
@@ -1928,8 +1935,6 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC /*hdc*/,
     view.gdiName = info.szDevice;
     view.pixelRect = {info.rcMonitor.left, info.rcMonitor.top,
                       info.rcMonitor.right, info.rcMonitor.bottom};
-    view.workRect = {info.rcWork.left, info.rcWork.top, info.rcWork.right,
-                     info.rcWork.bottom};
     view.primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
 
     // The stable identity: the device interface path, which does not change when
@@ -1940,7 +1945,6 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC /*hdc*/,
     if (EnumDisplayDevicesW(info.szDevice, 0, &device,
                             EDD_GET_DEVICE_INTERFACE_NAME)) {
         view.key = device.DeviceID;
-        view.friendlyName = device.DeviceString;
     }
 
     monitors->push_back(view);
@@ -2019,7 +2023,7 @@ static constexpr UINT_PTR kSettleTimerId = 1;
 static std::unordered_map<HWND, PendingApply> g_pendingApplies;
 
 // The user moved a window: their intent outranks the rule for the rest of the
-// session, exactly as in mod 1. Nothing re-applies to a window in this set, and
+// session. Nothing re-applies to a window in this set, and
 // no rule reasserts -- the whole project's first principle is that the computer
 // must not fight the person using it. A "always put it back" mode would be a
 // different feature and would need to be asked for explicitly.
@@ -2074,7 +2078,7 @@ static void EnsureSettleTimer() {
     }
     // Armed on the mod's own message window: a timer armed on a window owned by
     // another process fails and returns 0, which would silently disable the
-    // settle poll. Same trap as mod 1.
+    // settle poll. Same trap as in the settle state machine.
     g_settleTimer = SetTimer(target, kSettleTimerId, kSettleTickMs, nullptr);
 }
 
@@ -2094,7 +2098,7 @@ static void StopSettleTimerIfIdle() {
 // owned by another thread, and never activating, because a rule must not steal
 // focus.
 //
-// M2 gave it the z-order half rather than a second call site, so a rule that sets
+// The z-order half shares that call site rather than adding a second one, so a rule that sets
 // a position and "always on top" together moves and pins in one call. Two calls
 // would restack the window twice, which is visible as a flicker. A null rectangle
 // means "z-order only", which is how a pin, a yield and a withdrawal are issued.
@@ -2243,7 +2247,7 @@ static void ReleaseAllTopmost(PCWSTR source) {
 // A window the mod layered itself is a different case: the style is the mod's,
 // so the value is the mod's to change and to take back. Without the record, an
 // edited opacity would be read as "already layered, not mine" and silently
-// ignored -- which is exactly what version 1.0 did.
+// ignored -- which is exactly what an earlier build did.
 static void ApplyOpacity(HWND hwnd, int alpha, const WindowFacts& facts,
                          int ruleIndex, PCWSTR source) {
     const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
@@ -2392,7 +2396,7 @@ static int CoveredMonitorOfForeground(HWND exclude) {
 }
 
 // The two bookkeeping steps every successful geometry apply performs. Factored
-// out because M2 added a second success path (move and pin in one call) and the
+// out because a second success path was added (move and pin in one call) and the
 // settle machinery must be armed identically from both.
 static void AccountForApply(PCWSTR source) {
     if (source && wcscmp(source, L"reapply") == 0) {
@@ -2509,7 +2513,7 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
         if (plan.anything) {
             JournalApply(facts, ruleIndex, source, result, plan.target, current,
                          ERROR_SUCCESS);
-            // Unchanged from M1: a rule with geometry that was blocked stops
+            // By design: a rule with geometry that was blocked stops
             // here, so opacity is not applied either.
             return;
         }
@@ -2812,7 +2816,7 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     }
 }
 
-// --- Foreground changes (M2) ------------------------------------------------
+// --- Foreground changes -----------------------------------------------------
 
 // The only thing the foreground is used for: a fullscreen app taking a monitor is
 // a reason to lower the windows this mod pinned there, and giving it back is a
@@ -2932,7 +2936,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
     if (event == EVENT_SYSTEM_MOVESIZEEND) {
         // The user has just placed this window by hand. Their intent outranks
         // the rule for the rest of the session -- the project's first principle,
-        // and the same override mod 1 applies. Only windows a rule governs are
+        // and the same override the geometry-memory mod applies. Only windows a rule governs are
         // recorded, so dragging an unrelated window writes nothing.
         if (g_evaluatedWindows.count(hwnd) || g_pendingApplies.count(hwnd)) {
             g_pendingApplies.erase(hwnd);
@@ -2954,7 +2958,6 @@ static HWINEVENTHOOK g_hookWindows = nullptr;
 static HWINEVENTHOOK g_hookMoveSizeEnd = nullptr;
 static HWINEVENTHOOK g_hookForeground = nullptr;
 static std::atomic<DWORD> g_eventThreadId{0};
-static std::atomic<bool> g_settingsReloadRequested{false};
 static HANDLE g_eventThread = nullptr;
 
 static void InstallHooks() {
@@ -2995,9 +2998,9 @@ static void InstallHooks() {
     }
 
     if (!g_hookWindows || !g_hookMoveSizeEnd || !g_hookForeground) {
-        Wh_Log(L"[RULES] SetWinEventHook failed (last error %lu)", GetLastError());
+        Wh_Log(L"SetWinEventHook failed (last error %lu)", GetLastError());
     } else {
-        Wh_Log(L"[RULES] window event hooks installed");
+        Wh_Log(L"window event hooks installed");
     }
 }
 
@@ -3019,7 +3022,7 @@ static void UninstallHooks() {
 // Event-thread only. Re-reads everything the mod needs from the settings.
 static void ApplySettingsOnEventThread(bool initial) {
     if (!initial) {
-        Wh_Log(L"[RULES] settings changed; reloading rules");
+        Wh_Log(L"settings changed; reloading rules");
     }
 
     RefreshDiagnosticsSetting();
@@ -3043,7 +3046,7 @@ static void ApplySettingsOnEventThread(bool initial) {
         // rule would leave its windows pinned until they were closed.
         ReleaseAllTopmost(L"no-rules");
         ReleaseAllOpacity(L"no-rules");
-        Wh_Log(L"[RULES] no rules configured; nothing will be matched. A rule "
+        Wh_Log(L"no rules configured; nothing will be matched. A rule "
                L"entry with every field blank ends the list of rules, and the "
                L"settings template ships exactly that entry -- fill it in to "
                L"configure your first rule.");
@@ -3051,14 +3054,14 @@ static void ApplySettingsOnEventThread(bool initial) {
         return;
     }
 
-    Wh_Log(L"[RULES] %d rule(s) loaded; %d monitor(s) visible",
+    Wh_Log(L"%d rule(s) loaded; %d monitor(s) visible",
            (int)g_rules.size(), (int)g_monitors.size());
 
     // A settings change re-applies to what is already open -- "save the rule,
     // watch it happen" is the expectation a rules engine sets, and requiring a
     // restart to see an edit would be a surprise. NOT at startup, though: turning
     // the mod on must not move windows the user did not ask about, which is the
-    // same call mod 1 makes when it is enabled with windows already open.
+    // same call the geometry-memory mod makes when it is enabled with windows already open.
     if (initial) {
         AppendDiagnosticsJournal(L"REAPPLY-PASS windows=0 applied=0 skipped=initial");
         return;
@@ -3085,7 +3088,7 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             // A rearrangement changes what "monitor 1" and "primary" mean, so the
             // cache is refreshed. Nothing is moved here: a display change is not a
             // reason to re-apply a rule to windows the user did not touch, and
-            // mod 1 already owns the "a monitor went away" behaviour for its own
+            // the geometry-memory mod already owns the "a monitor went away" behaviour for its own
             // remembered geometry.
             RefreshMonitorViews();
             AppendDiagnosticsJournal(
@@ -3139,7 +3142,7 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
     windowClass.lpszClassName = kMessageWindowClassName;
 
     if (!RegisterClassExW(&windowClass)) {
-        Wh_Log(L"[RULES] RegisterClassExW failed (last error %lu)",
+        Wh_Log(L"RegisterClassExW failed (last error %lu)",
                GetLastError());
         return 1;
     }
@@ -3147,7 +3150,7 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
     HWND hwnd = CreateWindowExW(0, kMessageWindowClassName, L"", WS_POPUP, 0, 0,
                                 0, 0, nullptr, nullptr, instance, nullptr);
     if (!hwnd) {
-        Wh_Log(L"[RULES] failed to create the message window (last error %lu)",
+        Wh_Log(L"failed to create the message window (last error %lu)",
                GetLastError());
         UnregisterClassW(kMessageWindowClassName, instance);
         return 1;
@@ -3173,12 +3176,12 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 // --- Windhawk entry points --------------------------------------------------
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"[RULES] init");
+    Wh_Log(L"init");
 
     g_eventThread = CreateThread(nullptr, 0, EventThreadProc, nullptr, 0,
                                  nullptr);
     if (!g_eventThread) {
-        Wh_Log(L"[RULES] failed to create the event thread (last error %lu)",
+        Wh_Log(L"failed to create the event thread (last error %lu)",
                GetLastError());
         return FALSE;
     }
@@ -3187,8 +3190,6 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    g_settingsReloadRequested.store(true);
-
     // Settings are re-read on the event thread so that all mod state stays
     // owned by one thread. If the window does not exist yet, the thread reads
     // the current settings when it starts.
@@ -3199,7 +3200,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"[RULES] uninit");
+    Wh_Log(L"uninit");
 
     HWND messageWindow = g_messageWindow.load();
     DWORD eventThreadId = g_eventThreadId.load();
@@ -3213,14 +3214,14 @@ void WhTool_ModUninit() {
 
     if (g_eventThread) {
         if (WaitForSingleObject(g_eventThread, 5000) != WAIT_OBJECT_0) {
-            Wh_Log(L"[RULES] the event thread did not exit in time");
+            Wh_Log(L"the event thread did not exit in time");
         }
         CloseHandle(g_eventThread);
         g_eventThread = nullptr;
     }
 }
 
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
