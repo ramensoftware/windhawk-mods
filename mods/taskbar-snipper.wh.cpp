@@ -1111,7 +1111,8 @@ class WidgetWindow {
 public:
     // Messages to the UI thread's window given to Start: the widget's window is in a taskbar
     // (wParam is the window, or null if it couldn't be made), or is gone (wParam), along with its
-    // taskbar or for good. Its mouse messages, and the other widgets' notices, come as they are.
+    // taskbar or for good. Its other messages (WM_MOUSELEAVE, WM_CAPTURECHANGED and
+    // WM_DPICHANGED_AFTERPARENT) and the other widgets' notices come as they are.
     static constexpr UINT kAttachedMessage = WM_APP + 0x200;
     static constexpr UINT kDetachedMessage = WM_APP + 0x201;
     // Its mouse messages (WM_MOUSEFIRST to WM_MOUSELAST) come as this plus their place in that range,
