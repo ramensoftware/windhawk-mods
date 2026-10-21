@@ -20,6 +20,9 @@ The panel provides access to Wi-Fi networks, wired connections, VPN connections
 and Airplane mode, where supported by Windows and the installed hardware.
 This modification has been tested on Windows 11 24H2 and Windows 11 25H2.
 
+![winserverpicture](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/winserverpicture.png)
+
+Note: This is a best-effort modification. The Windows 8 network flyout and its dependencies had been removed in Windows 11 24H2+ and the restoration is done within modern Windows' limitations.
 ## Requirements
 
 - 64-bit Windows 10 (build 17763 or later) or Windows 11.
@@ -65,7 +68,6 @@ If the panel does not open, check the internet connection and Windhawk's mod log
 An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
 restores the normal Windows behavior. If shutdown gets stuck, some resources may
 be kept until Explorer exits to avoid unloading code that is still running.
-
 ## Credits 
 - AdministratoX - Testing on Windows 11 25H2
 */
@@ -2048,6 +2050,31 @@ struct ScopedHookGuard {
     }
 };
 
+// COM activation must not borrow the registry/loader recursion guard: a
+// provider's factory/constructor can legitimately read its redirected registry
+// and activate other managed classes while it initializes.
+constexpr unsigned kMaxManagedComActivationDepth = 16;
+thread_local const GUID* g_comActivationStack[kMaxManagedComActivationDepth]{};
+thread_local unsigned g_comActivationDepth = 0;
+
+bool CanEnterManagedComActivation(REFCLSID clsid) noexcept {
+    if (g_comActivationDepth >= kMaxManagedComActivationDepth) return false;
+    for (unsigned i = 0; i < g_comActivationDepth; ++i)
+        if (IsEqualGUID(*g_comActivationStack[i], clsid)) return false;
+    return true;
+}
+
+struct ScopedComActivationGuard {
+    explicit ScopedComActivationGuard(REFCLSID clsid) noexcept {
+        g_comActivationStack[g_comActivationDepth++] = &clsid;
+    }
+    ~ScopedComActivationGuard() noexcept {
+        g_comActivationStack[--g_comActivationDepth] = nullptr;
+    }
+    ScopedComActivationGuard(const ScopedComActivationGuard&) = delete;
+    ScopedComActivationGuard& operator=(const ScopedComActivationGuard&) = delete;
+};
+
 class ScopedOverlayMutex {
   public:
     ScopedOverlayMutex(HANDLE mutex, DWORD timeoutMs) noexcept : m_mutex(mutex) {
@@ -2321,6 +2348,71 @@ bool IsManagedVanCallContext(void* caller) noexcept {
     return (sta != 0 && GetCurrentThreadId() == sta) || IsCallerManagedVanModule(caller);
 }
 
+// Own exactly one LoadLibrary/GetModuleHandleEx reference, never a borrowed handle.
+struct ScopedRuntimeModuleReference {
+    HMODULE value;
+    explicit ScopedRuntimeModuleReference(HMODULE module) noexcept : value(module) {}
+    ScopedRuntimeModuleReference(const ScopedRuntimeModuleReference&) = delete;
+    ScopedRuntimeModuleReference& operator=(const ScopedRuntimeModuleReference&) = delete;
+    ~ScopedRuntimeModuleReference() noexcept { if (value) FreeLibrary(value); }
+    HMODULE release() noexcept { HMODULE result = value; value = nullptr; return result; }
+};
+
+bool AdoptManagedRuntimeReference(HMODULE owned, const wchar_t* canonicalName) {
+    ScopedRuntimeModuleReference reference(owned);
+    bool added = false;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        if (std::find(g_loadedVanModules.begin(), g_loadedVanModules.end(), owned) ==
+                g_loadedVanModules.end()) {
+            // If allocation throws, the local reference is released and no
+            // caller range is published for a potentially unloaded image.
+            g_loadedVanModules.push_back(owned);
+            reference.release();
+            added = true;
+        }
+    }
+    PublishManagedImage(owned, canonicalName);
+    return added;
+}
+
+void RefreshManagedDependencyImages() {
+    // Run only after LoadLibrary returns, never from the LdrLoadDll hook.
+    // Imported DLLs do not necessarily pass through our LoadLibrary hooks.
+    // GetModuleHandleEx takes a temporary reference; transfer it to our normal
+    // runtime ownership list or release it before returning. No mod-image pin.
+    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+        const wchar_t* expected = g_managedFullPaths[i];
+        if (!expected[0]) continue;
+        HMODULE module = nullptr;
+        if (!GetModuleHandleExW(0, expected, &module)) continue;
+        struct ModuleReference {
+            HMODULE value;
+            ~ModuleReference() noexcept { if (value) FreeLibrary(value); }
+        } reference{module};
+        wchar_t actual[1024]{};
+        const DWORD length = GetModuleFileNameW(module, actual, ARRAYSIZE(actual));
+        if (!length || length >= ARRAYSIZE(actual) ||
+            CompareStringOrdinal(actual, -1, expected, -1, TRUE) != CSTR_EQUAL) {
+            Wh_Log(L"Managed dependency rejected: expected=%s, actual=%s", expected,
+                   length && length < ARRAYSIZE(actual) ? actual : L"<unavailable>");
+            continue;
+        }
+        bool added = false;
+        {
+            std::lock_guard<std::mutex> lock(g_stateMutex);
+            if (std::find(g_loadedVanModules.begin(), g_loadedVanModules.end(), module) ==
+                    g_loadedVanModules.end()) {
+                g_loadedVanModules.push_back(module);
+                reference.value = nullptr; // balanced by normal runtime DLL cleanup
+                added = true;
+            }
+        }
+        PublishManagedImage(module, kRuntimeDllNames[i]);
+        if (added) Wh_Log(L"Managed imported dependency recognized: %s", actual);
+    }
+}
+
 HMODULE LoadManagedDll(const wchar_t* canonicalName) {
     const std::filesystem::path fullPath = GetManagedDllPath(canonicalName);
     ScopedHookGuard guard;
@@ -2328,12 +2420,10 @@ HMODULE LoadManagedDll(const wchar_t* canonicalName) {
         fullPath.c_str(), nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hMod) {
-        PublishManagedImage(hMod, canonicalName);
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        if (std::find(g_loadedVanModules.begin(), g_loadedVanModules.end(), hMod) ==
-            g_loadedVanModules.end()) {
-            g_loadedVanModules.push_back(hMod);
-        }
+        // Internal users borrow the reference kept in our runtime list.
+        // Repeated loads release their redundant reference instead of leaking it.
+        AdoptManagedRuntimeReference(hMod, canonicalName);
+        RefreshManagedDependencyImages();
     }
     return hMod;
 }
@@ -3756,27 +3846,57 @@ class ScopedComReference {
     Interface* value_;
 };
 
-void RegWriteSz(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName,
-                const std::wstring& value, DWORD type = REG_SZ) {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
-                        KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-        ScopedRegistryKey owner(hKey);
-        RegSetValueExW(
-            hKey, valueName, 0, type, reinterpret_cast<const BYTE*>(value.c_str()),
-            static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+// Overlay write failures are counted so PopulateVirtualRegistryOverlay can
+// refuse to report success for a partially written tree. Only the first few
+// failures are logged (compact, non-verbose).
+std::atomic<unsigned> g_overlayWriteFailures{0};
+std::atomic<unsigned> g_overlayWriteFailureLogs{0};
+
+void NoteOverlayWriteFailure(const std::wstring& subKey, LSTATUS status) noexcept {
+    g_overlayWriteFailures.fetch_add(1, std::memory_order_relaxed);
+    if (g_overlayWriteFailureLogs.fetch_add(1, std::memory_order_relaxed) < 6) {
+        Wh_Log(L"[registry] overlay write failed: key=%.80s status=%ld",
+               subKey.c_str(), static_cast<long>(status));
     }
 }
 
-void RegWriteDword(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName,
+bool RegWriteSz(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName,
+                const std::wstring& value, DWORD type = REG_SZ) {
+    HKEY hKey = nullptr;
+    LSTATUS status = RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
+                                     KEY_SET_VALUE, nullptr, &hKey, nullptr);
+    if (status != ERROR_SUCCESS) {
+        NoteOverlayWriteFailure(subKey, status);
+        return false;
+    }
+    ScopedRegistryKey owner(hKey);
+    status = RegSetValueExW(
+        hKey, valueName, 0, type, reinterpret_cast<const BYTE*>(value.c_str()),
+        static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+    if (status != ERROR_SUCCESS) {
+        NoteOverlayWriteFailure(subKey, status);
+        return false;
+    }
+    return true;
+}
+
+bool RegWriteDword(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName,
                    DWORD value) {
     HKEY hKey = nullptr;
-    if (RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
-                        KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-        ScopedRegistryKey owner(hKey);
-        RegSetValueExW(hKey, valueName, 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value),
-                       sizeof(value));
+    LSTATUS status = RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
+                                     KEY_SET_VALUE, nullptr, &hKey, nullptr);
+    if (status != ERROR_SUCCESS) {
+        NoteOverlayWriteFailure(subKey, status);
+        return false;
     }
+    ScopedRegistryKey owner(hKey);
+    status = RegSetValueExW(hKey, valueName, 0, REG_DWORD,
+                            reinterpret_cast<const BYTE*>(&value), sizeof(value));
+    if (status != ERROR_SUCCESS) {
+        NoteOverlayWriteFailure(subKey, status);
+        return false;
+    }
+    return true;
 }
 
 void WriteXwComponentNode(
@@ -3842,8 +3962,11 @@ void RemoveLegacyTaggedHkcuComRegistrations() {
     }
 }
 
-bool PopulateVirtualRegistryOverlay() {
+bool PruneAndAddInstancePid();  // defined below, used by the rebuild path
+
+bool PopulateVirtualRegistryOverlayOnce() {
     ScopedHookGuard guard;
+    g_overlayWriteFailures.store(0, std::memory_order_relaxed);
 
     HKEY hOverlayRoot = nullptr;
     if (RegCreateKeyExW(
@@ -3960,10 +4083,55 @@ bool PopulateVirtualRegistryOverlay() {
         RegWriteSz(hOverlayRoot, inproc, L"ThreadingModel", entry.threadingModel);
     }
 
+    // 4. Read-back verification: every media manager must be visible with
+    //    Active=1, and no write may have failed. A silently incomplete
+    //    Control_VAN tree makes van.dll find zero providers ("No connections
+    //    are available") without any other symptom.
+    const unsigned failures = g_overlayWriteFailures.load(std::memory_order_relaxed);
+    unsigned verifiedManagers = 0;
+    for (const auto& mm : managers) {
+        const std::wstring sub = L"Control_VAN\\" + GuidToUpperBraceString(mm.clsid);
+        DWORD active = 0;
+        DWORD size = sizeof(active);
+        if (RegGetValueW(hOverlayRoot, sub.c_str(), L"Active", RRF_RT_REG_DWORD, nullptr,
+                         &active, &size) == ERROR_SUCCESS && active == 1) {
+            ++verifiedManagers;
+        }
+    }
+    // Only the Control_VAN media managers are mandatory. Write failures
+    // elsewhere (typically access denied on pre-existing XWizards keys left by
+    // an earlier overlay) were always silent and the flyout works with them,
+    // so they are reported as a warning, never as a reason to stay passive.
+    if (verifiedManagers != ARRAYSIZE(managers)) {
+        Wh_Log(L"[registry] overlay incomplete: verified=%u/%u failures=%u",
+               verifiedManagers, static_cast<unsigned>(ARRAYSIZE(managers)), failures);
+        return false;
+    }
 
-    Wh_Log(L"Virtual registry overlay populated; COM classes are served by in-process hooks");
-
+    Wh_Log(L"[registry] overlay verified: media managers=%u/%u, non-critical write failures=%u",
+           verifiedManagers, static_cast<unsigned>(ARRAYSIZE(managers)), failures);
     return true;
+}
+
+// Populates the overlay and, if the result is incomplete, rebuilds it from
+// scratch exactly once. Callers hold g_overlayMutex.
+bool PopulateVirtualRegistryOverlay() {
+    if (PopulateVirtualRegistryOverlayOnce()) {
+        return true;
+    }
+    {
+        ScopedHookGuard guard;
+        const LSTATUS deleteStatus = RegDeleteTreeW(HKEY_CURRENT_USER, kVirtualRegRootSubkey);
+        Wh_Log(L"[registry] rebuilding overlay: delete status=%ld", static_cast<long>(deleteStatus));
+        // The PID marker lives in the same key; restore it after the wipe.
+    }
+    if (!PruneAndAddInstancePid()) {
+        Wh_Log(L"[registry] rebuild: PID marker could not be restored");
+        return false;
+    }
+    const bool ok = PopulateVirtualRegistryOverlayOnce();
+    Wh_Log(L"[registry] rebuild result: %s", ok ? L"ok" : L"failed");
+    return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -4320,6 +4488,7 @@ bool BuildOverlayPath(HKEY hKey, const wchar_t* subKey, wchar_t* out, size_t cch
 
 using RegOpenKeyExW_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, DWORD, REGSAM, PHKEY);
 RegOpenKeyExW_t g_origRegOpenKeyExW = nullptr;
+std::atomic<unsigned> g_controlVanOpenLogs{0};
 
 constexpr ACCESS_MASK kRegistryWriteAccessMask =
     KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK | DELETE | WRITE_DAC | WRITE_OWNER |
@@ -4339,6 +4508,13 @@ LSTATUS WINAPI Hook_RegOpenKeyExW(
             ScopedHookGuard guard;
             LSTATUS st = g_origRegOpenKeyExW(
                 HKEY_CURRENT_USER, mapped, ulOptions, samDesired, phkResult);
+            // Compact diagnostic: does VAN actually reach the private
+            // Control_VAN tree? Only the first few opens are logged.
+            if (wcsstr(mapped, L"\\Control_VAN") &&
+                g_controlVanOpenLogs.fetch_add(1, std::memory_order_relaxed) < 8) {
+                Wh_Log(L"[registry] Control_VAN open: status=%ld access=0x%lX",
+                       static_cast<long>(st), static_cast<unsigned long>(samDesired));
+            }
             if (st == ERROR_SUCCESS) {
                 return st;  // genuine kernel HKEY - RegNotifyChangeKeyValue works
             }
@@ -4864,22 +5040,32 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
                                   LOAD_LIBRARY_SEARCH_SYSTEM32;
             }
             HMODULE hMod = g_origLoadLibraryExW(target.c_str(), hFile, effectiveFlags);
+            ScopedRuntimeModuleReference callerReference(hMod);
             if (hMod && (effectiveFlags & (LOAD_LIBRARY_AS_DATAFILE |
                                            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
                                            LOAD_LIBRARY_AS_IMAGE_RESOURCE)) == 0) {
-                PublishManagedImage(hMod, managed);
-                std::lock_guard<std::mutex> lock(g_stateMutex);
-                if (std::find(g_loadedVanModules.begin(), g_loadedVanModules.end(), hMod) ==
-                    g_loadedVanModules.end()) {
-                    g_loadedVanModules.push_back(hMod);
+                // The LoadLibrary reference belongs to the caller, which may
+                // FreeLibrary it. Keep an independent, balanced runtime reference
+                // so our published address range cannot outlive the loaded image.
+                HMODULE retained = nullptr;
+                if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                        reinterpret_cast<LPCWSTR>(hMod), &retained)) {
+                    const DWORD error = GetLastError();
+                    callerReference.release();
+                    FreeLibrary(hMod);
+                    SetLastError(error);
+                    return nullptr;
                 }
+                AdoptManagedRuntimeReference(retained, managed);
+                RefreshManagedDependencyImages();
             }
-            return hMod;
+            return callerReference.release();
         }
     }
     return g_origLoadLibraryExW(lpLibFileName, hFile, dwFlags);
 } catch (...) {
-    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    // An operational C++ failure requests normal STA cleanup. It does not,
+    // by itself, prove that callback/class teardown has failed.
     DisableModAfterCppException(L"Hook_LoadLibraryExW");
     SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr;
 }
@@ -4892,12 +5078,20 @@ HMODULE WINAPI Hook_LoadLibraryW(LPCWSTR lpLibFileName) try {
         !g_nativeSystemVan.load(std::memory_order_acquire) && !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         if (const wchar_t* managed = MatchManagedDllCanonicalName(lpLibFileName)) {
-            return LoadManagedDll(managed);
+            HMODULE module = LoadManagedDll(managed);
+            if (!module) return nullptr;
+            HMODULE callerOwned = nullptr;
+            // LoadManagedDll returns a runtime-owned borrowed handle. Preserve
+            // LoadLibraryW's contract by returning a separate caller reference.
+            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                    reinterpret_cast<LPCWSTR>(module), &callerOwned)) return nullptr;
+            return callerOwned;
         }
     }
     return g_origLoadLibraryW(lpLibFileName);
 } catch (...) {
-    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    // An operational C++ failure requests normal STA cleanup. It does not,
+    // by itself, prove that callback/class teardown has failed.
     DisableModAfterCppException(L"Hook_LoadLibraryW");
     SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr;
 }
@@ -4920,7 +5114,12 @@ HRESULT TryGetInProcManagedClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv
             if (!pfn) {
                 return CLASS_E_CLASSNOTAVAILABLE;
             }
-            return pfn(rclsid, riid, ppv);
+            const HRESULT result = pfn(rclsid, riid, ppv);
+            if (IsEqualGUID(rclsid, CLSID_WlanMediaManager)) {
+                Wh_Log(L"WLAN legacy provider factory: hr=0x%08lX, object=%p",
+                       static_cast<unsigned long>(result), *ppv);
+            }
+            return result;
         }
     }
     return CLASS_E_CLASSNOTAVAILABLE;
@@ -4956,13 +5155,41 @@ HRESULT TryGetPopupWindowFactoryClassObject(REFIID riid, LPVOID* ppv) {
     return pfn ? pfn(CLSID_PopupWindowFactory, riid, ppv) : CLASS_E_CLASSNOTAVAILABLE;
 }
 
+std::atomic<unsigned> g_providerComTraceCount{0};
+// Counts activations of the three media managers requested by managed VAN code.
+// The first-show watchdog uses it to detect "ShowVAN returned S_OK but VAN
+// never asked for a single provider" (empty Control_VAN enumeration).
+std::atomic<unsigned> g_providerActivations{0};
+std::atomic<unsigned> g_popupFactoryLogCount{0};
+
+void TraceProviderComGate(const wchar_t* api, REFCLSID clsid, void* caller) noexcept {
+    if (!IsEqualGUID(clsid, CLSID_WlanMediaManager) &&
+        !IsEqualGUID(clsid, CLSID_Dot3MediaManager) &&
+        !IsEqualGUID(clsid, CLSID_RasMediaManager)) return;
+    if (IsManagedVanCallContext(caller) &&
+        g_vanStoreReady.load(std::memory_order_acquire)) {
+        g_providerActivations.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (g_providerComTraceCount.fetch_add(1, std::memory_order_relaxed) >= 24) return;
+    const wchar_t* provider = IsEqualGUID(clsid, CLSID_WlanMediaManager) ? L"WLAN" :
+        IsEqualGUID(clsid, CLSID_Dot3MediaManager) ? L"Ethernet" : L"RAS";
+    Wh_Log(L"Provider COM gate: api=%s, provider=%s, thread=%lu, caller=%p, "
+           L"context=%u, ready=%u, guard=%u, depth=%u",
+           api, provider, GetCurrentThreadId(), caller,
+           IsManagedVanCallContext(caller) ? 1u : 0u,
+           g_vanStoreReady.load(std::memory_order_acquire) ? 1u : 0u,
+           g_inHookGuard ? 1u : 0u, g_comActivationDepth);
+}
+
 HRESULT WINAPI Hook_CoGetClassObject(
     REFCLSID rclsid, DWORD dwClsContext, LPVOID pvReserved, REFIID riid, LPVOID* ppv) try {
+    TraceProviderComGate(L"CoGetClassObject", rclsid, __builtin_return_address(0));
     if (ppv && (dwClsContext & CLSCTX_INPROC_SERVER) != 0 && g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) &&
         !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
-        IsManagedVanCallContext(__builtin_return_address(0))) {
-        ScopedHookGuard guard;
+        IsManagedVanCallContext(__builtin_return_address(0)) &&
+        CanEnterManagedComActivation(rclsid)) {
+        ScopedComActivationGuard activationGuard(rclsid);
         HRESULT hr = TryGetInProcManagedClassObject(rclsid, riid, ppv);
         if (SUCCEEDED(hr)) {
             return hr;
@@ -4975,16 +5202,22 @@ HRESULT WINAPI Hook_CoGetClassObject(
         g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) &&
         !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
-        IsManagedVanCallContext(__builtin_return_address(0))) {
-        ScopedHookGuard guard;
+        IsManagedVanCallContext(__builtin_return_address(0)) &&
+        CanEnterManagedComActivation(rclsid)) {
+        ScopedComActivationGuard activationGuard(rclsid);
         HRESULT fallback = TryGetPopupWindowFactoryClassObject(riid, ppv);
+        if (g_popupFactoryLogCount.fetch_add(1, std::memory_order_relaxed) < 4) {
+            Wh_Log(L"[com] PopupWindowFactory: original hr=0x%08lX fallback hr=0x%08lX",
+                   static_cast<unsigned long>(hr), static_cast<unsigned long>(fallback));
+        }
         if (SUCCEEDED(fallback)) {
             return fallback;
         }
     }
     return hr;
 } catch (...) {
-    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    // An operational C++ failure requests normal STA cleanup. It does not,
+    // by itself, prove that callback/class teardown has failed.
     DisableModAfterCppException(L"Hook_CoGetClassObject");
     if (ppv) *ppv = nullptr; return E_UNEXPECTED;
 }
@@ -4994,17 +5227,23 @@ CoCreateInstance_t g_origCoCreateInstance = nullptr;
 
 HRESULT WINAPI Hook_CoCreateInstance(
     REFCLSID rclsid, LPUNKNOWN pUnkOuter, DWORD dwClsContext, REFIID riid, LPVOID* ppv) try {
+    TraceProviderComGate(L"CoCreateInstance", rclsid, __builtin_return_address(0));
     if (ppv && (dwClsContext & CLSCTX_INPROC_SERVER) != 0 && g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) &&
         !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
-        IsManagedVanCallContext(__builtin_return_address(0))) {
-        ScopedHookGuard guard;
+        IsManagedVanCallContext(__builtin_return_address(0)) &&
+        CanEnterManagedComActivation(rclsid)) {
+        ScopedComActivationGuard activationGuard(rclsid);
         IClassFactory* pFactory = nullptr;
         if (SUCCEEDED(TryGetInProcManagedClassObject(
                 rclsid, IID_IClassFactory, reinterpret_cast<void**>(&pFactory))) &&
             pFactory) {
+            ScopedComReference<IClassFactory> factoryOwner(pFactory);
             HRESULT hr = pFactory->CreateInstance(pUnkOuter, riid, ppv);
-            pFactory->Release();
+            if (IsEqualGUID(rclsid, CLSID_WlanMediaManager)) {
+                Wh_Log(L"WLAN legacy provider CreateInstance: hr=0x%08lX, object=%p",
+                       static_cast<unsigned long>(hr), *ppv);
+            }
             return hr;
         }
     }
@@ -5015,19 +5254,21 @@ HRESULT WINAPI Hook_CoCreateInstance(
         g_vanStoreReady.load(std::memory_order_acquire) &&
         !g_nativeSystemVan.load(std::memory_order_acquire) &&
         !g_shuttingDown.load(std::memory_order_acquire) && !g_inHookGuard &&
-        IsManagedVanCallContext(__builtin_return_address(0))) {
-        ScopedHookGuard guard;
+        IsManagedVanCallContext(__builtin_return_address(0)) &&
+        CanEnterManagedComActivation(rclsid)) {
+        ScopedComActivationGuard activationGuard(rclsid);
         IClassFactory* pFactory = nullptr;
         HRESULT factoryHr = TryGetPopupWindowFactoryClassObject(
             IID_IClassFactory, reinterpret_cast<void**>(&pFactory));
         if (SUCCEEDED(factoryHr) && pFactory) {
+            ScopedComReference<IClassFactory> factoryOwner(pFactory);
             hr = pFactory->CreateInstance(pUnkOuter, riid, ppv);
-            pFactory->Release();
         }
     }
     return hr;
 } catch (...) {
-    g_unloadSafetyFailure.store(true, std::memory_order_release);
+    // An operational C++ failure requests normal STA cleanup. It does not,
+    // by itself, prove that callback/class teardown has failed.
     DisableModAfterCppException(L"Hook_CoCreateInstance");
     if (ppv) *ppv = nullptr; return E_UNEXPECTED;
 }
@@ -5090,8 +5331,21 @@ bool IsVanFlyoutWindowVisible() noexcept {
     return false;
 }
 
+// First-show watchdog state (STA thread only, except the atomics).
+std::atomic<bool> g_firstShowChecked{false};
+std::atomic<bool> g_showWatchdogRetryDone{false};
+// Set when ShutdownVAN has run on an image that could not be unloaded: any new
+// ShowVAN on it would touch freed internal state, so flyout requests are refused.
+std::atomic<bool> g_vanRuntimeStale{false};
+UINT_PTR g_showWatchdogTimerId = 0;
+constexpr UINT kShowWatchdogDelayMs = 2500;
+
 void InvokeShowVanOnStaThread(bool allowToggleClose) {
     if (g_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (g_vanRuntimeStale.load(std::memory_order_acquire)) {
+        Wh_Log(L"[supervisor] flyout request ignored: VAN runtime is stopped (restart Explorer)");
         return;
     }
 
@@ -5108,6 +5362,15 @@ void InvokeShowVanOnStaThread(bool allowToggleClose) {
             ResolveVanExport<HideVAN_t>(g_vanModule, "HideVAN", 1, "?HideVAN@@YAXXZ");
         g_pfnShutdownVAN = ResolveVanExport<ShutdownVAN_t>(
             g_vanModule, "ShutdownVAN", 3, "?ShutdownVAN@@YAXXZ");
+        wchar_t loadedVanPath[1024]{};
+        const DWORD loadedPathLength = GetModuleFileNameW(
+            g_vanModule, loadedVanPath, ARRAYSIZE(loadedVanPath));
+        unsigned recognized = 0;
+        for (size_t i = 0; i < kRuntimeDllCount; ++i)
+            if (g_managedImageBegin[i].load(std::memory_order_acquire)) ++recognized;
+        Wh_Log(L"VAN load provenance: path=%s, recognized private/native images=%u",
+               loadedPathLength && loadedPathLength < ARRAYSIZE(loadedVanPath)
+                   ? loadedVanPath : L"<unavailable>", recognized);
         Wh_Log(L"Hydrated van.dll loaded; ShowVAN=%p HideVAN=%p ShutdownVAN=%p",
                reinterpret_cast<void*>(g_pfnShowVAN), reinterpret_cast<void*>(g_pfnHideVAN),
                reinterpret_cast<void*>(g_pfnShutdownVAN));
@@ -5125,10 +5388,143 @@ void InvokeShowVanOnStaThread(bool allowToggleClose) {
 
     // ShowVAN spawns and manages its internal RunVANUI thread by itself;
     // never create a parallel VAN UI thread here.
+    const bool armWatchdog = !g_nativeSystemVan.load(std::memory_order_acquire) &&
+                             !g_firstShowChecked.exchange(true, std::memory_order_acq_rel);
+    if (armWatchdog) {
+        g_providerActivations.store(0, std::memory_order_relaxed);
+    }
     HRESULT hr = ObserveShowVanCall(g_pfnShowVAN);
     if (FAILED(hr)) {
         Wh_Log(L"ShowVAN returned HRESULT 0x%08lX", static_cast<unsigned long>(hr));
     }
+    if (armWatchdog && SUCCEEDED(hr)) {
+        // Thread timer (no window): delivered to the STA message pump below.
+        g_showWatchdogTimerId = SetTimer(nullptr, 0, kShowWatchdogDelayMs, nullptr);
+        if (!g_showWatchdogTimerId) {
+            Wh_Log(L"[supervisor] first-show watchdog could not be armed (%lu)", GetLastError());
+        }
+    }
+}
+
+// Unloads van.dll and its provider DLLs (everything except pnidui.dll, which
+// backs the live tray icon) so the next ShowVAN starts from a pristine image.
+// This mirrors what disabling/enabling the mod does and, unlike a bare
+// ShutdownVAN + ShowVAN, also discards any stale global state inside van.dll.
+// Runs on the STA thread only.
+bool ReloadManagedVanRuntimeOnSta() {
+    ObserveVanVoidCall(g_pfnHideVAN, L"HideVAN");
+    ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
+
+    g_pfnShowVAN = nullptr;
+    g_pfnHideVAN = nullptr;
+    g_pfnShutdownVAN = nullptr;
+    g_vanModule = nullptr;
+
+    // Stop treating these images as managed callers before they can unload.
+    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+        if (_wcsicmp(kRuntimeDllNames[i], L"pnidui.dll") == 0) continue;
+        g_managedImageBegin[i].store(0, std::memory_order_release);
+        g_managedImageEnd[i].store(0, std::memory_order_relaxed);
+    }
+
+    std::vector<HMODULE> toFree;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        std::vector<HMODULE> keep;
+        for (HMODULE module : g_loadedVanModules) {
+            wchar_t path[1024]{};
+            const DWORD length = GetModuleFileNameW(module, path, ARRAYSIZE(path));
+            const wchar_t* base = length && length < ARRAYSIZE(path) ? wcsrchr(path, L'\\') : nullptr;
+            base = base ? base + 1 : path;
+            if (_wcsicmp(base, L"pnidui.dll") == 0) {
+                keep.push_back(module);
+            } else {
+                toFree.push_back(module);
+            }
+        }
+        g_loadedVanModules.swap(keep);
+    }
+    {
+        ScopedHookGuard guard;
+        for (auto it = toFree.rbegin(); it != toFree.rend(); ++it) {
+            FreeLibrary(*it);
+        }
+    }
+
+    // Diagnostic: if van.dll is still mapped, something else holds a reference
+    // and the reload cannot reset its internal state.
+    HMODULE stillMapped = nullptr;
+    const size_t vanIndex = 1;  // kRuntimeDllNames[1] == van.dll
+    const bool mapped = g_managedFullPaths[vanIndex][0] &&
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           g_managedFullPaths[vanIndex], &stillMapped) && stillMapped;
+    Wh_Log(L"[supervisor] managed runtime reloaded: released=%u van.dll still mapped=%u",
+           static_cast<unsigned>(toFree.size()), mapped ? 1u : 0u);
+    if (mapped) {
+        // The image survived (someone holds a reference), so its globals are
+        // still in the post-ShutdownVAN state. Calling ShowVAN on it again is
+        // a use-after-shutdown risk: forbid any further ShowVAN this session.
+        g_vanRuntimeStale.store(true, std::memory_order_release);
+    }
+    return !mapped;
+}
+
+unsigned g_watchdogAttempt = 0;          // STA thread only
+bool g_watchdogDelayServed = false;      // STA thread only
+constexpr UINT kWatchdogLateRetryDelayMs = 10000;
+
+void ArmShowWatchdog(UINT delayMs) {
+    g_showWatchdogTimerId = SetTimer(nullptr, 0, delayMs, nullptr);
+    if (!g_showWatchdogTimerId) {
+        Wh_Log(L"[supervisor] watchdog timer could not be armed (%lu)", GetLastError());
+    }
+}
+
+// Runs on the STA thread ~2.5 s after the first ShowVAN of the session. At
+// boot, ShowVAN can return S_OK while van.dll never even opens Control_VAN or
+// activates a provider (log evidence: overlay verified 3/3, zero opens, zero
+// COM activations, and a ShutdownVAN+ShowVAN retry changes nothing; only a
+// full reload of the DLLs recovers). So: reload the managed runtime and show
+// again, at most twice (the second time after a pause in case this is timing).
+// Later shows are not checked: VAN keeps its providers and legitimately does
+// not re-activate them.
+void EvaluateShowWatchdogOnSta() {
+    if (g_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
+    const unsigned activations = g_providerActivations.load(std::memory_order_relaxed);
+    if (activations != 0) {
+        Wh_Log(L"[supervisor] watchdog ok: providers=%u attempt=%u", activations, g_watchdogAttempt);
+        return;
+    }
+    if (g_watchdogAttempt >= 2) {
+        Wh_Log(L"[supervisor] watchdog gave up after %u reloads; VAN stays as is for this session",
+               g_watchdogAttempt);
+        return;
+    }
+    if (g_watchdogAttempt == 1 && !g_watchdogDelayServed) {
+        g_watchdogDelayServed = true;
+        Wh_Log(L"[supervisor] watchdog: reload did not help; waiting %u ms before the last attempt",
+               kWatchdogLateRetryDelayMs);
+        ArmShowWatchdog(kWatchdogLateRetryDelayMs);
+        return;
+    }
+    ++g_watchdogAttempt;
+    Wh_Log(L"[supervisor] watchdog: no provider activated; reloading managed runtime (attempt %u/2)",
+           g_watchdogAttempt);
+
+    const bool cleanReload = ReloadManagedVanRuntimeOnSta();
+    if (!cleanReload) {
+        Wh_Log(L"[supervisor] van.dll could not be unloaded; refusing to call ShowVAN on a stopped image");
+        g_watchdogAttempt = 2;
+        return;
+    }
+    if (g_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
+    g_providerActivations.store(0, std::memory_order_relaxed);
+    InvokeShowVanOnStaThread(/*allowToggleClose=*/false);
+    ArmShowWatchdog(kShowWatchdogDelayMs);
 }
 
 // May be called from ANY thread (hooks run on the taskbar thread etc.).
@@ -5368,15 +5764,44 @@ HRESULT WINAPI Hook_CreateUri(LPCWSTR pwzURI, DWORD dwFlags, DWORD_PTR dwReserve
 using WlanEnumInterfaces_t = DWORD(WINAPI*)(HANDLE, PVOID, PWLAN_INTERFACE_INFO_LIST*);
 WlanEnumInterfaces_t g_origWlanEnumInterfaces = nullptr;
 
+std::atomic<unsigned> g_wlanEnumLogCount{0};
+
 DWORD WINAPI Hook_WlanEnumInterfaces(
     HANDLE hClientHandle, PVOID pReserved, PWLAN_INTERFACE_INFO_LIST* ppInterfaceList) {
-    DWORD err = g_origWlanEnumInterfaces(hClientHandle, pReserved, ppInterfaceList);
-    if (err == ERROR_SUCCESS && ppInterfaceList && *ppInterfaceList &&
+    const DWORD err = g_origWlanEnumInterfaces(hClientHandle, pReserved, ppInterfaceList);
+    const bool managedCaller = IsCallerManagedVanModule(__builtin_return_address(0));
+    if (managedCaller && g_wlanEnumLogCount.fetch_add(1, std::memory_order_relaxed) < 8) {
+        const DWORD count = err == ERROR_SUCCESS && ppInterfaceList && *ppInterfaceList
+            ? (*ppInterfaceList)->dwNumberOfItems : 0;
+        Wh_Log(L"Legacy WLAN enumeration: error=%lu, interfaces=%lu", err, count);
+    }
+    if (managedCaller && err == ERROR_SUCCESS && ppInterfaceList && *ppInterfaceList &&
         g_hideDuplicateWlanAdapters.load(std::memory_order_relaxed) &&
         (*ppInterfaceList)->dwNumberOfItems > 1) {
         (*ppInterfaceList)->dwNumberOfItems = 1;
+        (*ppInterfaceList)->dwIndex = 0;
     }
     return err;
+}
+
+// Diagnostic-only: preserve the exact WLAN result and caller-owned buffer.
+using WlanGetAvailableNetworkList_t = DWORD(WINAPI*)(
+    HANDLE, const GUID*, DWORD, PVOID, PWLAN_AVAILABLE_NETWORK_LIST*);
+WlanGetAvailableNetworkList_t g_origWlanGetAvailableNetworkList = nullptr;
+std::atomic<unsigned> g_wlanNetworkLogCount{0};
+
+DWORD WINAPI Hook_WlanGetAvailableNetworkList(
+    HANDLE client, const GUID* interfaceGuid, DWORD flags, PVOID reserved,
+    PWLAN_AVAILABLE_NETWORK_LIST* networks) {
+    const DWORD error = g_origWlanGetAvailableNetworkList(
+        client, interfaceGuid, flags, reserved, networks);
+    if (IsCallerManagedVanModule(__builtin_return_address(0)) &&
+        g_wlanNetworkLogCount.fetch_add(1, std::memory_order_relaxed) < 8) {
+        const DWORD count = error == ERROR_SUCCESS && networks && *networks
+            ? (*networks)->dwNumberOfItems : 0;
+        Wh_Log(L"Legacy WLAN available networks: error=%lu, networks=%lu", error, count);
+    }
+    return error;
 }
 
 // ===========================================================================
@@ -5978,6 +6403,76 @@ void ReevaluateHostingOnSta() {
     }
 }
 
+struct WlanStartupObservation {
+    DWORD error = ERROR_SUCCESS;
+    DWORD interfaces = 0;
+    DWORD readyInterfaces = 0;
+};
+
+bool IsWlanStartupUsable(const WlanStartupObservation& observation) noexcept {
+    // A disconnected/radio-off interface is sufficient. Never require an
+    // existing association, an IP address, or a nonempty list of nearby SSIDs.
+    return observation.error == ERROR_SUCCESS && observation.readyInterfaces != 0;
+}
+
+WlanStartupObservation ProbeWlanStartup() {
+    struct ProbeResources {
+        HANDLE client = nullptr;
+        PWLAN_INTERFACE_INFO_LIST list = nullptr;
+        ~ProbeResources() noexcept {
+            if (list) WlanFreeMemory(list);
+            if (client) WlanCloseHandle(client, nullptr);
+        }
+    } resources;
+    WlanStartupObservation observation;
+    DWORD negotiated = 0;
+    observation.error = WlanOpenHandle(2, nullptr, &negotiated, &resources.client);
+    if (observation.error != ERROR_SUCCESS) return observation;
+    observation.error = g_origWlanEnumInterfaces
+        ? g_origWlanEnumInterfaces(resources.client, nullptr, &resources.list)
+        : WlanEnumInterfaces(resources.client, nullptr, &resources.list);
+    if (observation.error != ERROR_SUCCESS || !resources.list) return observation;
+    observation.interfaces = resources.list->dwNumberOfItems;
+    for (DWORD i = 0; i < observation.interfaces; ++i)
+        if (resources.list->InterfaceInfo[i].isState != wlan_interface_state_not_ready)
+            ++observation.readyInterfaces;
+    return observation;
+}
+
+bool WaitForWlanStartupOnSta() {
+    // Retry the public readiness query, not VAN activation. No extra thread,
+    // service restart, fake connection, or repeated ShutdownVAN cycle.
+    unsigned consecutiveReady = 0;
+    DWORD lastError = static_cast<DWORD>(-1);
+    DWORD lastCount = static_cast<DWORD>(-1);
+    DWORD lastReady = static_cast<DWORD>(-1);
+    for (unsigned attempt = 0; attempt < 30; ++attempt) {
+        if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+        const WlanStartupObservation sample = ProbeWlanStartup();
+        if (sample.error != lastError || sample.interfaces != lastCount ||
+            sample.readyInterfaces != lastReady) {
+            Wh_Log(L"WLAN startup probe: error=%lu, interfaces=%lu, ready=%lu",
+                   sample.error, sample.interfaces, sample.readyInterfaces);
+            lastError = sample.error; lastCount = sample.interfaces; lastReady = sample.readyInterfaces;
+        }
+        consecutiveReady = IsWlanStartupUsable(sample) ? consecutiveReady + 1 : 0;
+        if (consecutiveReady >= 2) {
+            Wh_Log(L"WLAN startup ready; allowing first legacy runtime activation");
+            return true;
+        }
+        const DWORD wait = WaitForSingleObject(g_stopEvent, 500);
+        if (wait == WAIT_OBJECT_0 || g_shuttingDown.load(std::memory_order_acquire)) return false;
+        if (wait == WAIT_FAILED) {
+            Wh_Log(L"WLAN startup wait failed (%lu); stopping startup", GetLastError());
+            return false;
+        }
+    }
+    // Non-WLAN systems and disabled adapters must still be able to show wired
+    // connections. A budget expiry is diagnostic, never invented Wi-Fi state.
+    Wh_Log(L"WLAN readiness retry budget exhausted; proceeding without assuming Wi-Fi exists");
+    return !g_shuttingDown.load(std::memory_order_acquire);
+}
+
 void RunVanStaWorkerBody() {
     MSG dummyMsg{};
     PeekMessageW(&dummyMsg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -6035,6 +6530,10 @@ void RunVanStaWorkerBody() {
             return;
         }
         g_registryOverlayReady.store(true, std::memory_order_release);
+    }
+    if (!WaitForWlanStartupOnSta() || g_shuttingDown.load(std::memory_order_acquire)) {
+        Wh_Log(L"WLAN startup cancelled; legacy runtime was not activated");
+        return;
     }
     g_vanStoreReady.store(true, std::memory_order_release);
     Wh_Log(L"Managed runtime enabled; classic tray requested=%d (disable it for crash isolation)",
@@ -6104,6 +6603,13 @@ void RunVanStaWorkerBody() {
                     ApplyHotkeyRegistration();
                     continue;
                 }
+                if (msg.message == WM_TIMER && msg.hwnd == nullptr &&
+                    g_showWatchdogTimerId != 0 && msg.wParam == g_showWatchdogTimerId) {
+                    KillTimer(nullptr, g_showWatchdogTimerId);
+                    g_showWatchdogTimerId = 0;
+                    EvaluateShowWatchdogOnSta();
+                    continue;
+                }
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -6115,6 +6621,10 @@ void RunVanStaWorkerBody() {
 void CleanupVanStaOnOwningThread() {
     // 7. Deterministic shutdown (all on the owning STA thread):
     //    tray first, then the VAN UI thread via van.dll's own ShutdownVAN.
+    if (g_showWatchdogTimerId != 0) {
+        KillTimer(nullptr, g_showWatchdogTimerId);
+        g_showWatchdogTimerId = 0;
+    }
     RemoveTrayMouseHook();
     if (g_hotkeyRegistered && g_staCtrlWnd) {
         UnregisterHotKey(g_staCtrlWnd, kHotkeyId);
@@ -6189,6 +6699,7 @@ DWORD WINAPI VanStaWorkerThreadProc(LPVOID) noexcept {
 // ===========================================================================
 BOOL Wh_ModInit() try {
     Wh_Log(L"Initializing Windows 8 Network Flyout Restorer v1.0.0...");
+    Wh_Log(L"Flyout code revision: wifi-dependency-ownership-r3; COM gate tracing enabled");
 
     // Install the required write guard before allocating mod-owned resources.
     HMODULE registryNtdll = GetModuleHandleW(L"ntdll.dll");
@@ -6224,6 +6735,16 @@ BOOL Wh_ModInit() try {
     g_unloadSafetyFailure.store(false, std::memory_order_release);
     g_pnidTrayHwnd.store(nullptr, std::memory_order_release);
     g_pnidTrayCallbackMsg.store(0, std::memory_order_release);
+    g_wlanEnumLogCount.store(0, std::memory_order_relaxed);
+    g_wlanNetworkLogCount.store(0, std::memory_order_relaxed);
+    g_providerComTraceCount.store(0, std::memory_order_relaxed);
+    g_providerActivations.store(0, std::memory_order_relaxed);
+    g_firstShowChecked.store(false, std::memory_order_relaxed);
+    g_showWatchdogRetryDone.store(false, std::memory_order_relaxed);
+    g_showWatchdogTimerId = 0;
+    g_overlayWriteFailures.store(0, std::memory_order_relaxed);
+    g_overlayWriteFailureLogs.store(0, std::memory_order_relaxed);
+    g_controlVanOpenLogs.store(0, std::memory_order_relaxed);
 
     std::filesystem::path nativeSystemDir;
     DWORD nativeBuild = 0;
@@ -6528,6 +7049,12 @@ BOOL Wh_ModInit() try {
         WindhawkUtils::SetFunctionHook(
             ResolveExportAddress<WlanEnumInterfaces_t>(hWlanApi, "WlanEnumInterfaces"),
             Hook_WlanEnumInterfaces, &g_origWlanEnumInterfaces);
+        const auto availableNetworks = ResolveExportAddress<WlanGetAvailableNetworkList_t>(
+            hWlanApi, "WlanGetAvailableNetworkList");
+        if (availableNetworks) {
+            WindhawkUtils::SetFunctionHook(availableNetworks,
+                Hook_WlanGetAvailableNetworkList, &g_origWlanGetAvailableNetworkList);
+        }
     }
 
     Wh_Log(L"All hooks installed; starting the STA worker");
@@ -6585,24 +7112,12 @@ void Wh_ModSettingsChanged() try {
 } catch (...) {
     DisableModAfterCppException(L"settings update");
 }
-
-void Wh_ModUninit() try {
+void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Windows 8 Network Flyout Restorer...");
 
-    auto keepModImageMapped = []() -> bool {
-        HMODULE hMod = nullptr;
-        const LPCWSTR modAddress = reinterpret_cast<LPCWSTR>(&Wh_ModUninit);
-        if (GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                modAddress, &hMod)) {
-            return true;  // Pinned until Explorer exits.
-        }
-        // Conservative fallback: take an additional reference and intentionally
-        // retain it. Windhawk's later FreeLibrary cannot unmap the image.
-        return GetModuleHandleExW(
-                   GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, modAddress, &hMod) != FALSE;
-    };
-
+    // 1. Signal shutdown to every layer. Hooks check g_shuttingDown before
+    //    dispatching, the STA pump exits on g_stopEvent/WM_QUIT, and any
+    //    in-flight MSDL transfer is aborted immediately.
     g_shuttingDown.store(true, std::memory_order_release);
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
@@ -6613,66 +7128,51 @@ void Wh_ModUninit() try {
     }
     AbortWinHttpSession();
 
+    // 2. Wait for the STA worker unconditionally. The worker is designed to
+    //    always terminate: ShutdownVAN runs on a disposable helper thread with
+    //    a bounded wait, and the STA thread never parks. There is therefore no
+    //    timeout bail-out, no image pin, and no leaked reference here.
     if (g_workerThread) {
-        const DWORD workerWait = WaitForSingleObject(g_workerThread, 15000);
+        const DWORD workerWait = WaitForSingleObject(g_workerThread, INFINITE);
         if (workerWait != WAIT_OBJECT_0) {
-            g_workerStillRunning.store(true, std::memory_order_release);
-            const bool keptMapped = keepModImageMapped();
-            if (!keptMapped) {
-                Wh_Log(L"CRITICAL: could not pin/add a reference to the mod image; "
-                       L"waiting without returning to prevent an unsafe unload");
-                // An unload with a running worker is never a safe fallback.
-                for (;;) {
-                    const DWORD waitResult = WaitForSingleObject(g_workerThread, INFINITE);
-                    if (waitResult == WAIT_OBJECT_0) {
-                        break;
-                    }
-                    Sleep(1000);
-                }
-                g_workerStillRunning.store(false, std::memory_order_release);
-            } else {
-                Wh_Log(L"STA worker did not exit within 15s (often blocked in "
-                       L"ShutdownVAN). The mod image is pinned and every resource it "
-                       L"could still touch is intentionally retained; no thread is "
-                       L"terminated and no live DLL/class is unloaded.");
-                CloseHandle(g_workerThread);
-                g_workerThread = nullptr;
-                return;
-            }
+            Wh_Log(L"CRITICAL: WaitForSingleObject on the STA worker failed (%lu)",
+                   GetLastError());
         }
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
 
-    // A callback/class teardown failure is another reason not to let Windhawk
-    // unmap this image. Keep the process-local resources alive as a last resort.
+    // 3. Teardown note: g_unloadSafetyFailure is only a diagnostic here. It
+    //    must never translate into a pin, an extra reference, or an infinite
+    //    sleep: those would make the mod permanently un-unloadable, which is
+    //    exactly what the unloadability contract forbids. Any resource that
+    //    could not be released cleanly is left to process teardown.
     if (g_unloadSafetyFailure.load(std::memory_order_acquire)) {
-        if (keepModImageMapped()) {
-            Wh_Log(L"Window callback/class teardown was incomplete; the mod image and "
-                   L"runtime resources are retained until Explorer exits");
-            return;
-        }
-        Wh_Log(L"CRITICAL: could not retain the mod image after failed callback teardown; "
-               L"blocking unload for safety");
-        Sleep(INFINITE);
+        Wh_Log(L"Window callback/COM teardown reported incomplete; continuing normal "
+               L"unload (unreleased resources are left to process teardown)");
     }
 
+    // 4. Remove the DLL directory cookie, if any. No-op when never set.
     if (g_dllDirectoryCookie) {
         RemoveDllDirectory(g_dllDirectoryCookie);
         g_dllDirectoryCookie = nullptr;
     }
 
-    // Only the last tracked fallback-overlay instance may remove this tree.
+    // 5. Only the last tracked fallback-overlay instance may remove the
+    //    private registry tree. The overlay mutex is best-effort: if it cannot
+    //    be acquired, the PID marker and subtree are preserved for a later
+    //    recovery pass instead of being deleted under a live instance.
     if (g_overlayInstanceRegistered.exchange(false, std::memory_order_acq_rel)) {
         ScopedOverlayMutex overlayLock(g_overlayMutex, 5000);
         if (!overlayLock.locked()) {
-            Wh_Log(L"Could not acquire the overlay mutex during unload; keeping the PID marker "
-                   L"and registry subtree for later recovery");
+            Wh_Log(L"Could not acquire the overlay mutex during unload; keeping the PID "
+                   L"marker and registry subtree for later recovery");
         } else if (RemoveInstancePidAndCheckLast()) {
             CleanupRegistryArtifacts();
         }
     }
 
+    // 6. Close the cross-process coordination handles.
     if (g_provisionMutex) {
         CloseHandle(g_provisionMutex);
         g_provisionMutex = nullptr;
@@ -6686,48 +7186,44 @@ void Wh_ModUninit() try {
         g_overlayMutex = nullptr;
     }
 
+    // 7. Drop the resolved van.dll exports. The module itself is released
+    //    below through the balanced runtime reference list.
     g_pfnShowVAN = nullptr;
     g_pfnHideVAN = nullptr;
     g_pfnShutdownVAN = nullptr;
     g_vanModule = nullptr;
 
-    ScopedHookGuard guard;
-    std::vector<HMODULE> modulesToFree;
-    std::vector<HANDLE> verifiedFilesToClose;
+    // 8. Release every managed runtime module and every verified-file handle
+    //    under the hook guard, so the redirection hooks do not observe
+    //    half-torn state while FreeLibrary/CloseHandle run.
     {
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        modulesToFree.swap(g_loadedVanModules);
-        verifiedFilesToClose.swap(g_verifiedRuntimeFileHandles);
-    }
-    for (size_t i = 0; i < kRuntimeDllCount; ++i) {
-        g_managedImageBegin[i].store(0, std::memory_order_release);
-        g_managedImageEnd[i].store(0, std::memory_order_relaxed);
-    }
-    for (auto it = modulesToFree.rbegin(); it != modulesToFree.rend(); ++it) {
-        if (*it) {
-            FreeLibrary(*it);
+        ScopedHookGuard guard;
+        std::vector<HMODULE> modulesToFree;
+        std::vector<HANDLE> verifiedFilesToClose;
+        {
+            std::lock_guard<std::mutex> lock(g_stateMutex);
+            modulesToFree.swap(g_loadedVanModules);
+            verifiedFilesToClose.swap(g_verifiedRuntimeFileHandles);
         }
-    }
-    for (HANDLE handle : verifiedFilesToClose) {
-        if (handle && handle != INVALID_HANDLE_VALUE) {
-            CloseHandle(handle);
+        for (size_t i = 0; i < kRuntimeDllCount; ++i) {
+            g_managedImageBegin[i].store(0, std::memory_order_release);
+            g_managedImageEnd[i].store(0, std::memory_order_relaxed);
+        }
+        for (auto it = modulesToFree.rbegin(); it != modulesToFree.rend(); ++it) {
+            if (*it) {
+                FreeLibrary(*it);
+            }
+        }
+        for (HANDLE handle : verifiedFilesToClose) {
+            if (handle && handle != INVALID_HANDLE_VALUE) {
+                CloseHandle(handle);
+            }
         }
     }
 
+    // 9. Publish the final "not ready" state so any late hook entry fails
+    //    closed instead of touching released state.
     g_vanStoreReady.store(false, std::memory_order_release);
     g_registryOverlayReady.store(false, std::memory_order_release);
     Wh_Log(L"Windows 8 Network Flyout Restorer unloaded cleanly");
-} catch (...) {
-    DisableModAfterCppException(L"mod unload");
-    g_unloadSafetyFailure.store(true, std::memory_order_release);
-    HMODULE retained = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                              GET_MODULE_HANDLE_EX_FLAG_PIN,
-                          reinterpret_cast<LPCWSTR>(&Wh_ModUninit), &retained)) {
-        Wh_Log(L"Unload C++ failure: mod image retained and remaining resources left intact; "
-               L"restart Explorer before using this mod again");
-        return;
-    }
-    Wh_Log(L"CRITICAL: cannot retain image after unload exception; blocking unsafe unload");
-    for (;;) Sleep(INFINITE);
 }
