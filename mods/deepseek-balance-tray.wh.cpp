@@ -4,7 +4,7 @@
 // @description     Shows the current DeepSeek API account balance next to the taskbar clock
 // @version         1.0.0
 // @author          MrAlexFreeman
-// @github          https://github.com/MrAlexFreeman/deepseek-balance-tray
+// @github          https://github.com/MrAlexFreeman
 // @license         MIT
 // @architecture    x86-64
 // @include         explorer.exe
@@ -1461,7 +1461,7 @@ unsigned int WINAPI UpdateTextStringsIfNecessary_Hook(void* pThis, bool* param) 
 
 // Символы ищутся через WindhawkUtils::HookSymbols: утилита кэширует
 // найденные адреса и не перечитывает PDB модуля при каждом поиске, в отличие
-// от ручного перебора Wh_FindFirstSymbol/Wh_FindNextSymbol.
+// от ручного перебора символов модуля.
 
 std::atomic<bool> g_systemTrayHooked{false};
 
@@ -1481,7 +1481,7 @@ bool IsSystemTrayModuleName(PCWSTR path) {
 // Подключает RefreshIcon в конкретном модуле. На разных сборках Windows 11
 // классы лежат в разных модулях, поэтому вызывающий код перебирает их.
 bool HookSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
             &RefreshIcon_Original,
@@ -1495,7 +1495,7 @@ bool HookSystemTraySymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
         Wh_Log(L"HookSymbols (system tray) failed");
         return false;
     }
