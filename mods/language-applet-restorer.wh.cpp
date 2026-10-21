@@ -12,6 +12,8 @@
 
 // ==WindhawkModReadme==
 /*
+
+BETA:a redirect option for 1709 intl.cpl will be added
 # Language Applet Restorer
 
 Restores the Language applet (`Microsoft.Language`) and intl.cpl of Windows 10 1709 in the later versions of windows
