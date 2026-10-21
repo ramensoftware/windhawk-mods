@@ -747,15 +747,41 @@ void RefreshCalendars() {
     }
 }
 
+// How long after the flyout is shown the window is watched for a calendar
+// which isn't there yet. Other flyouts of the process never get one, so the
+// watch isn't kept armed for good.
+constexpr ULONGLONG kLayoutWatchMs = 5000;
+thread_local ULONGLONG t_layoutWatchUntilTick = 0;
+
 void OnLayoutUpdated() {
     // Once the calendar is attached, its own events keep the column up to
     // date. The window is only searched again when there's no calendar, e.g.
     // before it's created or after the flyout was rebuilt.
-    if (HasLiveCalendar() || GetTickCount64() - t_lastScanTick < 500) {
+    const ULONGLONG now = GetTickCount64();
+    if (now > t_layoutWatchUntilTick || HasLiveCalendar() ||
+        now - t_lastScanTick < 500) {
         return;
     }
     try {
         ScanForCalendars();
+    } catch (...) {
+    }
+}
+
+// Runs on the UI thread whenever the flyout window is shown.
+void OnFlyoutShown() {
+    t_layoutWatchUntilTick = GetTickCount64() + kLayoutWatchMs;
+    try {
+        // The regional setting can have changed since.
+        {
+            const int rule = RegionalFirstWeekRule();
+            std::lock_guard lock(g_settingsMutex);
+            g_settings.firstWeekRule = rule;
+        }
+        if (!HasLiveCalendar()) {
+            ScanForCalendars();
+        }
+        RefreshCalendars();
     } catch (...) {
     }
 }
@@ -777,21 +803,8 @@ void InitializeForCurrentThread() {
                 t_coreWindow = coreWindow;
                 t_visibilityChangedToken = coreWindow.VisibilityChanged(
                     [](auto const&, wuc::VisibilityChangedEventArgs const& args) {
-                        if (!args.Visible()) {
-                            return;
-                        }
-                        try {
-                            // The regional setting can have changed since.
-                            {
-                                const int rule = RegionalFirstWeekRule();
-                                std::lock_guard lock(g_settingsMutex);
-                                g_settings.firstWeekRule = rule;
-                            }
-                            if (!HasLiveCalendar()) {
-                                ScanForCalendars();
-                            }
-                            RefreshCalendars();
-                        } catch (...) {
+                        if (args.Visible()) {
+                            OnFlyoutShown();
                         }
                     });
             }
@@ -807,7 +820,7 @@ void InitializeForCurrentThread() {
                 [](auto const&, auto const&) { OnLayoutUpdated(); });
         }
 
-        ScanForCalendars();
+        OnFlyoutShown();
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Initialization failed: %08X", static_cast<DWORD>(e.code().value));
     }
@@ -939,12 +952,13 @@ using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original;
 
 // Catches flyout windows which are created after the mod was loaded. Once a
-// thread is set up, later shows are handled by its VisibilityChanged and
-// LayoutUpdated handlers.
+// thread is set up, later shows are handled by its CoreWindow's
+// VisibilityChanged handler. ShellHost's ControlCenterWindow has no
+// CoreWindow, so there the shows keep coming through here.
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     BOOL result = ShowWindow_Original(hWnd, nCmdShow);
 
-    if (nCmdShow != SW_HIDE && !g_unloading && !t_layoutRoot.get() &&
+    if (nCmdShow != SW_HIDE && !g_unloading && (!t_layoutRoot.get() || !t_coreWindow) &&
         GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId() &&
         IsFlyoutWindow(hWnd)) {
         if (!t_pendingInitTimer) {
@@ -952,8 +966,13 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 SetTimer(nullptr, 0, 50, [](HWND, UINT, UINT_PTR idEvent, DWORD) {
                     KillTimer(nullptr, idEvent);
                     t_pendingInitTimer = 0;
-                    if (!g_unloading) {
+                    if (g_unloading) {
+                        return;
+                    }
+                    if (!t_layoutRoot.get()) {
                         InitializeForCurrentThread();
+                    } else {
+                        OnFlyoutShown();
                     }
                 });
         }
