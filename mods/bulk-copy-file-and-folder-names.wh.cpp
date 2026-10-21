@@ -183,7 +183,8 @@ static std::atomic<bool> g_hotkeys{false};
 static std::atomic<bool> g_contextMenu{true};
 static std::atomic<bool> g_unloading{false};
 
-// Open menus that carry our entries, so unloading can close them first.
+// Open menus that carry our entries, plus hotkey copies still running, so
+// unloading can close the menus and wait for all of them first.
 static std::atomic<int> g_openMenus{0};
 static std::atomic<HWND> g_menuOwner{nullptr};
 static thread_local bool t_inMenuHook = false;
@@ -415,8 +416,6 @@ static int MatchHotkey(UINT vk) {
 // that field then.
 static bool IsTextFieldFocused(HWND root, HWND focus) {
     if (!focus) return false;
-    // A dialog or another top-level window has the keyboard.
-    if (GetAncestor(focus, GA_ROOT) != root) return true;
 
     // Text fields in File Explorer are an Edit control, a rich edit, or sit
     // inside a wrapper with Edit in its class name, like the search box.
@@ -471,12 +470,22 @@ static bool HandleHotkey(const MSG* msg) {
 using TranslateAcceleratorW_t = decltype(&TranslateAcceleratorW);
 static TranslateAcceleratorW_t TranslateAcceleratorW_Original;
 
+// Keeps g_openMenus raised for one scope, so unloading waits for a hotkey copy
+// the same way it waits for a menu.
+struct BusyGuard {
+    BusyGuard() { g_openMenus++; }
+    ~BusyGuard() { g_openMenus--; }
+};
+
 static int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) {
     if (lpMsg && g_hotkeys && !g_unloading &&
         (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN) &&
         // Bit 30 marks an auto repeat. One press copies once.
-        !(lpMsg->lParam & (1 << 30)) && HandleHotkey(lpMsg)) {
-        return 1;
+        !(lpMsg->lParam & (1 << 30))) {
+        BusyGuard busy;
+        // Checked again with the count raised, so an unload that starts in
+        // between either sees the count or is seen here.
+        if (!g_unloading && HandleHotkey(lpMsg)) return 1;
     }
     return TranslateAcceleratorW_Original(hWnd, hAccTable, lpMsg);
 }
@@ -708,8 +717,9 @@ void Wh_ModBeforeUninit() {
     g_hotkeys = false;
     g_contextMenu = false;
 
-    // A menu with our entries may still be open. Close it so the hook returns
-    // before the mod's code goes away.
+    // A menu with our entries may still be open, or a hotkey copy may still be
+    // running. Close the menu and wait, so every hook returns before the mod's
+    // code goes away.
     for (int i = 0; i < 100 && g_openMenus > 0; i++) {
         HWND owner = g_menuOwner;
         if (owner) PostMessageW(owner, WM_CANCELMODE, 0, 0);
