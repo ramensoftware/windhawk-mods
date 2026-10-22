@@ -1,3 +1,30 @@
+## 1.4.0 ([Oct 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fbb8e30010d661ed001161637cd38e8365b7f7c3/mods/windhawk-topbar.wh.cpp))
+
+**Addition:**
+* Added a New Auto Hide mode that hides the Top bar when moving cursor out of the grid. It can be shown by either Activation pill, OR by hovering on edge of the screen.
+* Added a Tray Button & Flyout to show tray icons.
+* Added New Flyouts Animations Setting to customize Flyouts opening and closing animation.
+* Added a Notification Button & Flyout to show Notifications.
+* Added a Calendar flyout date and time button.
+* Added a Thumbnail Preview for TaskList buttons, featuring a set of app control buttons (Pin, Minimize, Maximize, Close).
+* Added more controls in Control Centre flyout.
+* Added new Win UI Icon Pack to Top bar.
+
+**Updates:**
+* Updated Weather Flyout to show weekly weather.
+* Made the background in Settings app, have hand-built Mica effect.
+* Progress bar in Media player flyout can now rewind the playing music.
+* Made graph animations in Resource flyout smoother.
+* Updated the thumbnail icon in Media player button to show squared rounded album art instead of small thumbnail maintaining ascpect ratio of the image.
+* Improved Styling support for Top Bar.
+* Other Minor UI updates.
+* Updated All the themes.
+
+**Fixes:**
+* Fix the UWP apps such as Calculator, and some other apps like Windows Settings were not showing icons in tasklist.
+* Fixed Top Bar Flickering in secondary monitor.
+* Fixed Top Bar wrong display scalings when switching between monitors.
+
 ## 1.3.0 ([Oct 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3a25447184fb292f91b386490c355dd55658d2fb/mods/windhawk-topbar.wh.cpp))
 
 ### Added
