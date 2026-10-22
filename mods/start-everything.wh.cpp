@@ -61,7 +61,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
-- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse bounded caches of effect definitions without keeping Start's composition objects alive. Material definitions stay only in memory and are cleared when the mod unloads. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
+- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse bounded caches of effect definitions without keeping Start's composition objects alive. When the mod attaches after Start has already created its custom brushes, it refreshes their own composition resources once to capture the current effect. This also handles updates and disable/enable cycles without saved theme snapshots. Material definitions stay only in memory and are cleared when the mod unloads. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
 - **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Focus uses standard foreground APIs without attaching thread input.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
@@ -221,7 +221,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - **Everything is reported as not running:** start the Everything application and leave it running in the tray. Its service alone does not provide the search IPC window. Everything 1.4 and 1.5 alpha/beta, including named instances, are supported.
 - **A preview shows only an icon:** enable File Preview. Common image formats have a built-in decoding fallback; specialist formats may require a thumbnail provider, and videos may require a compatible Windows codec. Unavailable or unreadable content falls back to its icon and available properties.
 - **Folder sizes are missing:** enable Everything's **Index folder size** option; see [Folder Sizes in Preview](#folder-sizes-in-preview). The mod does not recursively scan folders to calculate sizes.
-- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Supported static glass effects are captured when Start creates them. If a custom style was already applied before the mod loaded, reapply the current Start Menu Styler theme once so its material can be captured. If the appearance differs after installing or updating the mod, reapply Start Menu Styler or restart Start once. Live image/visual sources, animated custom effects, and unsupported effects use an approximation; their appearance may differ.
+- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Supported static glass effects are captured when Start creates them. Existing custom brushes refresh their composition resources once when first needed after installation, an update, or re-enabling the mod; Start does not need to restart. If an unsupported custom effect still differs, reapply the current Start Menu Styler theme. Live image/visual sources, animated custom effects, and unsupported effects use an approximation; their appearance may differ.
 - **A custom command does not start:** choose the shell that understands the command. PowerShell 7 and custom shells must already be installed. Hide Terminal hides the shell console; it does not shorten the command's lifetime or hide windows opened by the command.
 
 Tested on **Windows 11 25H2 and 26H2, x86-64**. Other Windows versions and builds, including Insider builds, have not been verified. For a reproducible problem, include the full Windows build, mod version, Everything version and instance name, other Start/search mods, and steps to reproduce it.
@@ -10895,6 +10895,19 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
+// WindowsXamlManager::Close schedules asynchronous cleanup on its UI thread.
+// Drain that private thread before it exits; abandoning the work leaves dead
+// XAML dispatchers in Explorer and stalls later Taskbar Styler subscriptions.
+static void DrainSearchXamlThreadMessages() {
+    MSG message;
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+        if (message.message == WM_QUIT)
+            continue;
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+}
+
 static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
@@ -10965,6 +10978,7 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
     }
     g_hExplorerHelperWnd = nullptr;
     UnregisterClassW(kExplorerHelperClassName, wc.hInstance);
+    DrainSearchXamlThreadMessages();
 
     if (SUCCEEDED(hr)) {
         CoUninitialize();
@@ -19866,8 +19880,118 @@ struct SearchCapturedXamlBrush {
     void* compositionIdentity = nullptr; // equality only; never dereferenced
     bool captured = false;
     SearchBrushData data;
+    void* compositionObject = nullptr; // canonical IUnknown; valid while owner holds its observed assignment
+    bool compositionObserved = false, refreshAttempted = false;
 };
 static std::unordered_map<void*, SearchCapturedXamlBrush> g_searchMaterialXaml;
+using SearchPutXamlComposition = HRESULT(WINAPI*)(void*, void*);
+static SearchPutXamlComposition g_searchPutXamlComposition = nullptr;
+static std::atomic<bool> g_searchXamlCompositionCapture{false};
+static thread_local unsigned g_searchXamlSetterDepth = 0;
+
+// Observe the public protected setter without keeping its interface pointer:
+// aggregated XAML brushes can expose that pointer only to their implementation.
+// Its IInspectable identity still resolves to the outer brush. That live XAML
+// owner retains the assigned native brush until its next observed setter call.
+HRESULT WINAPI SearchPutXamlCompositionHook(void* self, void* value) {
+    struct SetterScope {
+        SetterScope() { ++g_searchXamlSetterDepth; }
+        ~SetterScope() { --g_searchXamlSetterDepth; }
+    } scope;
+    if (g_searchMaterialCapture && !g_quit) try {
+        wuxm::IXamlCompositionBrushBaseProtected access{nullptr};
+        winrt::copy_from_abi(access, self);
+        auto identity = access.as<IUnknown>();
+        std::lock_guard lock(g_searchMaterialMutex);
+        if (auto entry = g_searchMaterialXaml.find(identity.get()); entry != g_searchMaterialXaml.end()) {
+            // Invalidate before XAML releases the old assignment: a reentrant
+            // appearance read must not dereference a brush being replaced.
+            entry->second.compositionObject = nullptr;
+            entry->second.compositionObserved = false;
+        }
+    } catch (...) {}
+    auto hr = g_searchPutXamlComposition(self, value);
+    if (FAILED(hr) || !g_searchMaterialCapture || g_quit) return hr;
+    try {
+        wuxm::IXamlCompositionBrushBaseProtected access{nullptr};
+        winrt::copy_from_abi(access, self);
+        auto owner = access.as<wf::IInspectable>();
+        if (!owner.try_as<winrt::impl::IWeakReferenceSource>()) return hr;
+        auto identity = owner.as<IUnknown>();
+        // Read back the effective assignment, including changes made by a
+        // reentrant setter, rather than assuming the input remained current.
+        auto composition = access.CompositionBrush();
+        SearchBrushData data;
+        const bool captured = composition && TryCaptureSearchCompositionBrush(composition, data);
+        auto compositionIdentity = composition ? composition.as<IUnknown>() : nullptr;
+        std::lock_guard lock(g_searchMaterialMutex);
+        auto entry = g_searchMaterialXaml.find(identity.get());
+        if (entry == g_searchMaterialXaml.end()) {
+            std::erase_if(g_searchMaterialXaml, [](auto const& item) { return !item.second.owner.get(); });
+            if (g_searchMaterialXaml.size() >= kSearchMaterialCacheLimit) return hr;
+            entry = g_searchMaterialXaml.emplace(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(owner)}).first;
+        }
+        auto& cached = entry->second;
+        if (!cached.owner.get()) cached = SearchCapturedXamlBrush{winrt::make_weak(owner)};
+        cached.compositionObject = compositionIdentity.get();
+        cached.compositionObserved = true;
+        cached.refreshAttempted = true; // this assignment was already observed live
+        if (composition) {
+            cached.compositionIdentity = compositionIdentity.get();
+            cached.captured = captured;
+            cached.data = data;
+        }
+    } catch (...) {}
+    return hr;
+}
+
+bool ReadSearchXamlComposition(void* identity, searchcomp::CompositionBrush& composition) {
+    std::lock_guard lock(g_searchMaterialMutex);
+    auto entry = g_searchMaterialXaml.find(identity);
+    if (entry == g_searchMaterialXaml.end() || !entry->second.compositionObserved) return false;
+    auto owner = entry->second.owner.get();
+    if (!owner || !owner.as<wux::DependencyObject>().Dispatcher().HasThreadAccess()) return false;
+    // The owner is held alive on its XAML thread. Its native property retains
+    // this canonical COM identity, and every replacement clears/updates it in
+    // the setter hook. No cached protected tear-off or native strong reference.
+    composition = nullptr;
+    if (entry->second.compositionObject) {
+        wf::IUnknown current{nullptr};
+        winrt::copy_from_abi(current, entry->second.compositionObject);
+        composition = current.as<searchcomp::CompositionBrush>();
+    }
+    return true;
+}
+
+bool RefreshSearchXamlComposition(wuxm::XamlCompositionBrushBase const& brush) {
+    if (!g_searchMaterialCapture || !g_searchXamlCompositionCapture || g_quit || g_searchXamlSetterDepth) return false;
+    if (!brush.Dispatcher().HasThreadAccess()) return false;
+    auto identity = brush.as<IUnknown>();
+    auto lifecycle = brush.try_as<wuxm::IXamlCompositionBrushBaseOverrides>();
+    if (!lifecycle) return false;
+    {
+        std::lock_guard lock(g_searchMaterialMutex);
+        auto entry = g_searchMaterialXaml.find(identity.get());
+        if (entry == g_searchMaterialXaml.end()) {
+            std::erase_if(g_searchMaterialXaml, [](auto const& item) { return !item.second.owner.get(); });
+            if (g_searchMaterialXaml.size() >= kSearchMaterialCacheLimit) return false;
+            entry = g_searchMaterialXaml.emplace(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(brush.as<wf::IInspectable>())}).first;
+        }
+        if (!entry->second.owner.get())
+            entry->second = SearchCapturedXamlBrush{winrt::make_weak(brush.as<wf::IInspectable>())};
+        if (entry->second.refreshAttempted) return false;
+        entry->second.refreshAttempted = true; // also guards reentrant appearance reads
+    }
+    // The brush predates this mod load. Recreate its own resources once, on its
+    // XAML thread, using the same balanced lifecycle pair it normally receives.
+    // Always attempt reconnection, even if a custom disconnect implementation fails.
+    HRESULT result = S_OK;
+    try { lifecycle.OnDisconnected(); } catch (...) { result = winrt::to_hresult(); }
+    try { lifecycle.OnConnected(); } catch (...) { result = winrt::to_hresult(); }
+    Wh_Log(L"existing XAML material refresh: %08X", static_cast<unsigned>(result));
+    return SUCCEEDED(result);
+}
+
 void ForgetSearchXamlComposition(wf::IUnknown const& composition) {
     auto identity = composition.as<IUnknown>();
     std::lock_guard lock(g_searchMaterialMutex);
@@ -19893,8 +20017,11 @@ void NoteSearchXamlBrush(void* outer, void* inner, void* result) noexcept {
         auto identity = owner.as<IUnknown>();
         std::lock_guard lock(g_searchMaterialMutex);
         std::erase_if(g_searchMaterialXaml, [](auto const& item) { return !item.second.owner.get(); });
-        if (g_searchMaterialXaml.size() < 256)
-            g_searchMaterialXaml.insert_or_assign(identity.get(), SearchCapturedXamlBrush{winrt::make_weak(owner), inner});
+        if (g_searchMaterialXaml.size() < kSearchMaterialCacheLimit) {
+            SearchCapturedXamlBrush entry{winrt::make_weak(owner), inner};
+            entry.refreshAttempted = true; // created under the current capture hooks
+            g_searchMaterialXaml.insert_or_assign(identity.get(), std::move(entry));
+        }
     } catch (...) {}
 }
 
@@ -19911,21 +20038,37 @@ bool CaptureSearchXamlMaterial(wuxm::XamlCompositionBrushBase const& brush, Sear
     if (!access) {
         std::lock_guard lock(g_searchMaterialMutex);
         auto entry = g_searchMaterialXaml.find(identity.get());
-        if (entry == g_searchMaterialXaml.end()) return false;
-        owner = entry->second.owner.get();
-        if (!owner || owner.as<IUnknown>().get() != identity.get()) return false;
+        if (entry != g_searchMaterialXaml.end()) owner = entry->second.owner.get();
         // The public composable factory supplies its base object separately.
         // Query the live base each time: a protected interface may be a
         // temporary tear-off, so never cache that interface's raw pointer.
-        wf::IInspectable base{nullptr};
-        winrt::copy_from_abi(base, entry->second.innerBrush);
-        access = base.try_as<wuxm::IXamlCompositionBrushBaseProtected>();
-        if (!access) return false;
+        if (owner && owner.as<IUnknown>().get() == identity.get() && entry->second.innerBrush) {
+            wf::IInspectable base{nullptr};
+            winrt::copy_from_abi(base, entry->second.innerBrush);
+            access = base.try_as<wuxm::IXamlCompositionBrushBaseProtected>();
+        }
     }
-    auto composition = access.CompositionBrush();
+    searchcomp::CompositionBrush composition{nullptr};
+    if (access) composition = access.CompositionBrush();
+    else if (!ReadSearchXamlComposition(identity.get(), composition)) {
+        if (!RefreshSearchXamlComposition(brush) || !ReadSearchXamlComposition(identity.get(), composition)) return false;
+    }
+    // A hidden Start can already have disconnected the brush before this load.
+    // An empty composition then needs the same one-time live refresh.
+    if (!composition && RefreshSearchXamlComposition(brush)) {
+        if (access) composition = access.CompositionBrush();
+        else if (!ReadSearchXamlComposition(identity.get(), composition)) return false;
+    }
     if (composition) {
+        bool captured = TryCaptureSearchCompositionBrush(composition, data);
+        if (!captured && RefreshSearchXamlComposition(brush)) {
+            if (access) composition = access.CompositionBrush();
+            else if (!ReadSearchXamlComposition(identity.get(), composition)) return false;
+            if (!composition) return false;
+            captured = TryCaptureSearchCompositionBrush(composition, data);
+        }
         auto compositionIdentity = composition.as<IUnknown>();
-        if (!TryCaptureSearchCompositionBrush(composition, data)) {
+        if (!captured) {
             SearchEffectGraph graph;
             {
                 // A live XAML owner can outlast the bounded general brush cache.
@@ -19977,7 +20120,7 @@ bool CaptureSearchXamlMaterial(wuxm::XamlCompositionBrushBase const& brush, Sear
 // Hook targets must remain loaded until Windhawk removes the hooks. A fresh
 // Start process may not have loaded XAML/Composition yet; the temporary API
 // discovery thread otherwise releases their last reference before hooks apply.
-static std::array<HMODULE, 4> g_searchMaterialModules{};
+static std::array<HMODULE, 5> g_searchMaterialModules{};
 template <typename Prototype>
 bool SetSearchMaterialHook(size_t index, void* target, Prototype* hook, Prototype** original) {
     HMODULE module = nullptr;
@@ -19989,6 +20132,56 @@ bool SetSearchMaterialHook(size_t index, void* target, Prototype* hook, Prototyp
     }
     g_searchMaterialModules[index] = module;
     return true;
+}
+
+
+void RegisterSearchXamlCompositionHook() noexcept {
+    if (g_searchXamlCompositionCapture || g_quit) return;
+    try {
+        struct Probe : wuxm::XamlCompositionBrushBaseT<Probe> {
+            wf::IInspectable Inner() const { return this->m_inner; }
+        };
+        auto probe = winrt::make_self<Probe>();
+        auto access = probe->Inner().as<wuxm::IXamlCompositionBrushBaseProtected>();
+        struct ProtectedFunctions { void* inspectable[6]; void* getBrush; void* putBrush; };
+        auto functions = *reinterpret_cast<ProtectedFunctions**>(winrt::get_abi(access));
+        g_searchXamlCompositionCapture = SetSearchMaterialHook(4, functions->putBrush,
+            SearchPutXamlCompositionHook, &g_searchPutXamlComposition);
+    } catch (...) { Wh_Log(L"existing material hook discovery failed: %08X", static_cast<unsigned>(winrt::to_hresult())); }
+}
+
+void RegisterSearchXamlCompositionHookOnStartThread() noexcept {
+    if (g_searchXamlCompositionCapture || g_quit) return;
+    HWND core = nullptr;
+    EnumWindows([](HWND window, LPARAM result) -> BOOL {
+        DWORD process = 0;
+        GetWindowThreadProcessId(window, &process);
+        wchar_t name[64]{};
+        if (process != GetCurrentProcessId() || !GetClassNameW(window, name, ARRAYSIZE(name)) ||
+            wcscmp(name, L"Windows.UI.Core.CoreWindow")) return TRUE;
+        *reinterpret_cast<HWND*>(result) = window;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&core));
+    if (!core) return; // cold Start creates its brushes under the ordinary factory hooks
+    DWORD thread = GetWindowThreadProcessId(core, nullptr);
+    if (thread == GetCurrentThreadId()) {
+        RegisterSearchXamlCompositionHook();
+        return;
+    }
+    static const UINT message = RegisterWindowMessageW(L"StartEverything_MaterialHookDiscovery");
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+        if (code == HC_ACTION) {
+            auto call = reinterpret_cast<CWPSTRUCT const*>(lParam);
+            if (call->message == message) RegisterSearchXamlCompositionHook();
+        }
+        return CallNextHookEx(nullptr, code, wParam, lParam);
+    }, nullptr, thread);
+    if (!hook) return;
+    // Synchronous and parameter-free: the discovery callback has finished before
+    // its transient hook is removed. All five hooks then apply together when
+    // Wh_ModInit returns; no slow runtime hook application or retained callback.
+    SendMessageW(core, message, 0, 0);
+    UnhookWindowsHookEx(hook);
 }
 
 void InitSearchMaterialCapture() noexcept {
@@ -20032,6 +20225,14 @@ void InitSearchMaterialCapture() noexcept {
                     bool fourth = SetSearchMaterialHook(3, x->createInstance, SearchCreateXamlBrushHook,
                                                      &g_searchCreateXamlBrush);
                     g_searchMaterialCapture = first && second && third && fourth;
+                    // Desktop test hosts can initialize XAML here. Packaged Start
+                    // uses its existing XAML thread after this discovery thread exits.
+                    try {
+                        auto manager = wux::Hosting::WindowsXamlManager::InitializeForCurrentThread();
+                        RegisterSearchXamlCompositionHook();
+                        manager.Close();
+                    } catch (...) {}
+
                     } catch (...) { Wh_Log(L"material API initialization unavailable: %08X", static_cast<unsigned>(winrt::to_hresult())); }
                     complete.set_value();
                 })) throw winrt::hresult_error(E_FAIL);
@@ -20041,10 +20242,12 @@ void InitSearchMaterialCapture() noexcept {
             } catch (...) { Wh_Log(L"material capture unavailable: %08X", static_cast<unsigned>(winrt::to_hresult())); }
         }).join();
     } catch (...) { Wh_Log(L"material capture initialization failed"); }
+    RegisterSearchXamlCompositionHookOnStartThread();
 }
 
 void StopSearchMaterialCapture() {
     g_searchMaterialCapture = false;
+    g_searchXamlCompositionCapture = false;
     decltype(g_searchMaterialFactories) factories, brushes;
     decltype(g_searchMaterialXaml) xaml;
     {
