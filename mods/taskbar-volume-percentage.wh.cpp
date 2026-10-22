@@ -173,6 +173,7 @@ If you find this mod useful, you can support its development and maintenance:
 #include <cwctype>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -1548,11 +1549,21 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
     Wh_Log(L"> tid=%u volume=%.2f muted=%d", GetCurrentThreadId(), volumeLevel,
            isMuted);
 
+    float curVolume = 0.0f;
+    bool curMuted = false;
+    bool stateChanged = false;
+
     {
         std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        if (!g_hasVolumeState || g_volumeLevel != volumeLevel ||
+            g_isMuted != isMuted) {
+            stateChanged = true;
+        }
         g_volumeLevel = volumeLevel;
         g_isMuted = isMuted;
         g_hasVolumeState = true;
+        curVolume = volumeLevel;
+        curMuted = isMuted;
 
         if (spatialSoundName) {
             g_spatialSoundName = *spatialSoundName;
@@ -1563,6 +1574,15 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
 
     VolumeSystemTrayIconDataModel_UpdateVolume_Original(
         pThis, volumeLevel, isMuted, spatialSoundName);
+
+    if (stateChanged && !g_unloading) {
+        SafeXamlCall([curVolume, curMuted] {
+            g_volumeText = FormatVolumeText(curVolume, curMuted);
+            g_volumeTextChanged = true;
+            UpdateAllVolumeLayouts();
+            ApplyVolumeIconViewsWidth();
+        });
+    }
 }
 
 HRESULT WINAPI
