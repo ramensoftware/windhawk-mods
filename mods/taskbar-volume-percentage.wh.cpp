@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.9.0
+// @version         1.9.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @architecture    x86-64
@@ -38,6 +38,7 @@ level, updated in real time.
   - On the left
 - **Custom prefix**: Text prefix used with the "Prefix and percentage" style (default: `Vol `).
 - **Mute display style**: Style of the mute indicator when audio is muted:
+  - Same as Display style (Keep volume level) (default)
   - MUT
   - Mute
   - 0%
@@ -101,9 +102,10 @@ If you find this mod useful, you can support its development and maintenance:
 - customPrefix: "Vol "
   $name: Custom prefix
   $description: Used with the "Prefix and percentage" display style.
-- muteStyle: mut
+- muteStyle: currentVolume
   $name: Mute display style
   $options:
+  - currentVolume: Same as Display style (Keep volume level)
   - mut: MUT
   - mute: Mute
   - zero: 0%
@@ -203,6 +205,7 @@ enum class ElementPosition {
 };
 
 enum class MuteStyle {
+    currentVolume,
     mut,
     mute,
     zero,
@@ -427,7 +430,7 @@ bool IsDualBoxStyle() {
 }
 
 std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
-    if (isMuted) {
+    if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
         std::wstring customText = g_settings.customMuteText.get();
         return (g_settings.muteStyle == MuteStyle::mute)        ? L"Mute"
                : (g_settings.muteStyle == MuteStyle::zero)      ? L"0%"
@@ -465,10 +468,14 @@ std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
         return rawPrefix + number + L"%";
     }
     if (g_settings.displayStyle == DisplayStyle::emoji) {
+        PCWSTR emojiIcon =
+            (isMuted && g_settings.muteStyle == MuteStyle::currentVolume)
+                ? L"\U0001F507"
+                : L"\U0001F50A";
         if (g_settings.elementPosition == ElementPosition::left) {
-            return L"\U0001F50A " + number + L"%";
+            return std::wstring(emojiIcon) + L" " + number + L"%";
         }
-        return number + L"% \U0001F50A";
+        return number + L"% " + emojiIcon;
     }
 
     return number + L"%";
@@ -1001,7 +1008,7 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
         return;
     }
 
-    if (isMuted) {
+    if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
         if (g_settings.muteStyle == MuteStyle::emoji) {
             double effectiveIconSize = (g_settings.iconSize > 0)
                                            ? g_settings.iconSize
@@ -1069,7 +1076,10 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
                                        ? g_settings.iconSize
                                        : kDefaultIconFontSize;
         std::wstring numPart = number + L"%";
-        std::wstring emojiPart = L"\U0001F50A";
+        std::wstring emojiPart =
+            (isMuted && g_settings.muteStyle == MuteStyle::currentVolume)
+                ? L"\U0001F507"
+                : L"\U0001F50A";
 
         subBlock.Text(L"");
         subBlock.Inlines().Clear();
@@ -1269,7 +1279,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
     bool isDualBoxRequested = IsDualBoxStyle();
     bool isMuteDualBox = isDualBoxRequested && g_isMuted &&
-                         (g_settings.muteStyle == MuteStyle::glyphText ||
+                         (g_settings.muteStyle == MuteStyle::currentVolume ||
+                          g_settings.muteStyle == MuteStyle::glyphText ||
                           g_settings.muteStyle == MuteStyle::glyphZero);
     bool showDualBox = isDualBoxRequested && (!g_isMuted || isMuteDualBox);
 
@@ -1819,7 +1830,8 @@ void LoadSettings() {
 
     auto muteStyle = WindhawkUtils::StringSetting::make(L"muteStyle");
     std::wstring_view ms = muteStyle.get();
-    g_settings.muteStyle = (ms == L"mute")        ? MuteStyle::mute
+    g_settings.muteStyle = (ms == L"mut")         ? MuteStyle::mut
+                           : (ms == L"mute")      ? MuteStyle::mute
                            : (ms == L"zero")      ? MuteStyle::zero
                            : (ms == L"cross")     ? MuteStyle::cross
                            : (ms == L"emoji")     ? MuteStyle::emoji
@@ -1827,7 +1839,7 @@ void LoadSettings() {
                            : (ms == L"glyphText") ? MuteStyle::glyphText
                            : (ms == L"glyphZero") ? MuteStyle::glyphZero
                            : (ms == L"custom")    ? MuteStyle::custom
-                                                  : MuteStyle::mut;
+                                                  : MuteStyle::currentVolume;
 
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
