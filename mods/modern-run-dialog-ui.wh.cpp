@@ -1,20 +1,20 @@
 // ==WindhawkMod==
 // @id              modern-run-dialog-ui
-// @name            Modern Run Dialog UI For Windows 11
-// @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 11
-// @description     Transforms the classic Run dialog into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution.
-// @description:vi-VN Biến đổi hộp thoại Run cổ điển thành giao diện Fluent UI hiện đại với hiệu ứng Liquid Glass, phông chữ DirectWrite sắc nét và chạy lệnh nhanh từ lịch sử.
+// @name            Modern Run Dialog UI For Windows 10 & 11
+// @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
+// @description     Transforms the classic Run dialog into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution on Windows 10 & 11.
+// @description:vi-VN Biến đổi hộp thoại Run cổ điển thành giao diện Fluent UI hiện đại với hiệu ứng Liquid Glass, phông chữ DirectWrite sắc nét và chạy lệnh nhanh từ lịch sử trên Windows 10 & 11.
 // @version         3.0.4
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -lgdiplus -limm32 -lcomdlg32 -ld2d1 -ldwrite
+// @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Modern Run Dialog UI For Windows 11
+# Modern Run Dialog UI For Windows 10 & 11
 
 ![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/liquidglass.png)
 
@@ -28,45 +28,55 @@ Modern Run Dialog UI Preview (Windows Blur)
 
 ## 🌐 English
 
-**Modern Run Dialog UI For Windows 11** replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid Glass / Fluent Design** command palette powered by **Direct2D & DirectWrite**.
+**Modern Run Dialog UI For Windows 10 & 11** replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid Glass / Fluent Design** command palette powered by **Direct2D & DirectWrite**, fully compatible with both **Windows 10** and **Windows 11**.
 
 ### ✨ Key Features
 
+- **Windows 10 & Windows 11 Compatibility:**
+  * Works seamlessly on both **Windows 10** and **Windows 11** (`x86-64`) with hardware-accelerated Direct2D rendering and native composition blur.
+
 - **Liquid Glass, Windows Blur & Opaque Themes:**
-  * **Liquid Glass:** Translucent low-tint glass backdrop that lets vibrant background colors shine through, paired with dual refractive rim strokes (`#DEFFFFFF` / `#45BEDFFF` / `#60FFDAEE`), pointer-following specular highlights, and glass-styled pill buttons.
+  * **Liquid Glass:** Translucent low-tint glass backdrop paired with dual refractive rim strokes, pointer-following specular highlights, and glass-styled pill buttons.
   * **16×16 Luminance Contrast Adaptation:** Automatically switches glass text contrast between light and dark based on a temporary 16×16 luminance sample of the backdrop.
   * **Windows Blur & Opaque Fallbacks:** Respects High Contrast mode and automatically falls back to Windows Blur on older unsupported CPUs.
 
-- **Native Windows 11 DirectWrite Typography:**
-  * Rendered with **DirectWrite (`IDWriteTextLayout`)** and **Direct2D** for genuine Windows 11 XAML text quality, crisp Semibold command titles, Regular metadata, and flawless Vietnamese diacritics.
+- **Native DirectWrite Typography:**
+  * Rendered with **DirectWrite (`IDWriteTextLayout`)** and **Direct2D** for crisp Semibold command titles, Regular metadata, Per-Monitor DPI scaling, and accurate multilingual diacritics.
 
-- **One-Click Smart History:**
+- **One-Click Smart History (Per-User Storage):**
   * Displays up to **10 recently executed commands** with native icons, friendly app names, and execution timestamps.
   * **Click any history item to execute it immediately** without cluttering the input box.
+  * Maintains a per-user command and timestamp history in Windhawk mod storage (`HistoryTimestamps_<SID>`), allowing history to work even when Windows' own `RunMRU` tracking is disabled.
+  * **Clearing History:** Enable **History · Clear Stored History** in the mod settings and click Save (or press `Delete` on a hovered/selected history row) to remove stored history items, or set **History · Max Items** to `0` to disable history completely.
 
 - **Quality-of-Life Enhancements:**
   * **Taskbar Icon & `Win + R` Toggle:** Click the Run icon on the Taskbar to minimize/restore, or press `Win + R` while open to close immediately.
-  * **Seamless IME & Multilingual Support:** Works smoothly with Vietnamese IME (Unikey, EVKey, Telex/VNI) and supports 10 display languages.
+  * **Seamless IME & Multilingual Support:** Works smoothly with Windows IME (Vietnamese Telex/VNI, CJK), Unikey, and EVKey, and supports 10 display languages.
 
 ---
 
 ## 🇻🇳 Tiếng Việt
 
-**Modern Run Dialog UI For Windows 11** thay thế hộp thoại **Run (`Win + R`)** cổ điển bằng giao diện **Liquid Glass / Fluent Design** không viền hiện đại, được kết xuất trực tiếp bằng **Direct2D & DirectWrite**.
+**Modern Run Dialog UI For Windows 10 & 11** thay thế hộp thoại **Run (`Win + R`)** cổ điển bằng giao diện **Liquid Glass / Fluent Design** không viền hiện đại, được kết xuất trực tiếp bằng **Direct2D & DirectWrite** và tương thích hoàn hảo với cả **Windows 10** lẫn **Windows 11**.
 
 ### ✨ Tính năng nổi bật
 
+- **Tương thích tốt với cả Windows 10 & Windows 11:**
+  * Hoạt động ổn định và mượt mà trên cả **Windows 10** và **Windows 11** (`x86-64`) với đồ họa Direct2D tăng tốc phần cứng và hiệu ứng làm mờ nền hệ thống.
+
 - **3 Chế độ bề mặt (Liquid Glass, Làm mờ Windows & Nền đặc):**
-  * **Liquid Glass:** Lớp nền kính trong suốt xuyên màu giúp ánh sáng và màu sắc phía sau hiển thị sống động, kết hợp viền khúc xạ ánh sáng 2 lớp (`#DEFFFFFF` / `#45BEDFFF` / `#60FFDAEE`), hiệu ứng phản sáng chạy theo trỏ chuột và các nút bấm dạng viên thuốc bằng kính.
+  * **Liquid Glass:** Lớp nền kính trong suốt kết hợp viền khúc xạ ánh sáng 2 lớp, hiệu ứng phản sáng chạy theo trỏ chuột và các nút bấm dạng viên thuốc bằng kính.
   * **Tự động thích ứng độ tương phản (Mẫu 16×16):** Tự động chuyển đổi màu chữ và sắc độ kính giữa Sáng và Tối dựa trên mẫu đo độ sáng 16×16 tạm thời của vùng nền phía sau.
   * **Làm mờ Windows & Nền đặc tương thích:** Tôn trọng chế độ Tương phản cao (High Contrast) của hệ thống và tự động chuyển về Làm mờ Windows trên các dòng CPU đời cũ.
 
-- **Phông chữ DirectWrite chuẩn Windows 11 gốc:**
-  * Kết xuất bằng **DirectWrite (`IDWriteTextLayout`)** và **Direct2D** mang lại chất lượng chữ sắc nét chuẩn XAML Windows 11: tên lệnh Semibold nổi bật, tên ứng dụng Regular cân đối, hiển thị tiếng Việt có dấu đều đặn tuyệt đối và tự co giãn chuẩn theo DPI màn hình.
+- **Phông chữ DirectWrite sắc nét:**
+  * Kết xuất bằng **DirectWrite (`IDWriteTextLayout`)** và **Direct2D** mang lại chất lượng chữ sắc nét: tên lệnh Semibold nổi bật, tên ứng dụng Regular cân đối, hiển thị tiếng Việt có dấu đều đặn và tự co giãn chuẩn theo DPI màn hình.
 
-- **Lịch sử thông minh — Bấm là chạy ngay:**
+- **Lịch sử thông minh — Bấm là chạy ngay (Lưu trữ riêng theo từng User):**
   * Hiển thị tối đa **10 lệnh chạy gần nhất** kèm biểu tượng gốc, tên ứng dụng thân thiện (`lệnh · Tên ứng dụng`) và thời gian thực thi.
-  * **Bấm trực tiếp vào bất kỳ mục lịch sử nào để chạy lệnh ngay lập tức** mà không cần đẩy xuống ô nhập liệu (hoạt động ổn định kể cả khi Windows tắt `RunMRU`).
+  * **Bấm trực tiếp vào bất kỳ mục lịch sử nào để chạy lệnh ngay lập tức** mà không cần đẩy xuống ô nhập liệu.
+  * Lưu lịch sử và thời gian chạy riêng biệt cho từng tài khoản người dùng Windows (`HistoryTimestamps_<SID>`), giúp lịch sử hoạt động ổn định kể cả khi bạn tắt tính năng lưu lịch sử `RunMRU` của Windows.
+  * **Xóa lịch sử:** Bật tùy chọn **Xóa lịch sử đã lưu** trong phần Cài đặt mod rồi bấm Lưu (hoặc nhấn phím `Delete` khi đang trỏ chuột/chọn một dòng lịch sử) để xóa các mục đã lưu, hoặc đặt **Số mục lịch sử tối đa** về `0` để tắt hẳn.
 
 - **Tiện ích nâng cao trải nghiệm (Quality-of-Life):**
   * **Đóng/mở nhanh từ Taskbar & `Win + R`:** Bấm vào biểu tượng Run dưới Taskbar để thu nhỏ/khôi phục cửa sổ, hoặc nhấn lại `Win + R` khi hộp thoại đang mở để đóng nhanh.
@@ -77,14 +87,25 @@ Modern Run Dialog UI Preview (Windows Blur)
 // ==WindhawkModSettings==
 /*
 - language: auto
-  #
-  $name: Display Language (Ngôn ngữ hiển thị)
-  #
-  $description: Auto-detect or choose a fixed language (Tự động hoặc chọn ngôn ngữ cố định).
-  #
-  $options:
-  - auto: Auto (System Default / Tự động)
+  $name: Display · Language
+  $name:vi-VN: Ngôn ngữ hiển thị
+  $description: Auto-detect the system’s UI language or choose a fixed language.
+  $description:vi-VN: Tự động theo hệ điều hành hoặc chọn ngôn ngữ cố định.
+  $options:vi-VN:
+  - auto: Tự động theo Windows
   - en: English (Tiếng Anh)
+  - vi: Tiếng Việt
+  - ja: 日本語 (Tiếng Nhật)
+  - zh_cn: 简体中文 (Tiếng Trung Giản thể)
+  - zh_tw: 繁體中文 (Tiếng Trung Phồn thể)
+  - ko: 한국어 (Tiếng Hàn)
+  - fr: Français (Tiếng Pháp)
+  - de: Deutsch (Tiếng Đức)
+  - es: Español (Tiếng Tây Ban Nha)
+  - ru: Русский (Tiếng Nga)
+  $options:
+  - auto: Auto – System Default
+  - en: English
   - vi: Tiếng Việt (Vietnamese)
   - ja: 日本語 (Japanese)
   - zh_cn: 简体中文 (Simplified Chinese)
@@ -95,70 +116,83 @@ Modern Run Dialog UI Preview (Windows Blur)
   - es: Español (Spanish)
   - ru: Русский (Russian)
 - surfaceTheme: glass
-  #
-  $name: Surface Theme (Giao diện bề mặt)
-  #
-  $description: Choose Liquid Glass, Windows Blur, or Opaque (Chọn hiệu ứng bề mặt cửa sổ).
-  #
+  $name: Appearance · Surface Theme
+  $name:vi-VN: Giao diện bề mặt
+  $description: Choose between Liquid Glass, Windows Blur, or Off – Opaque surface.
+  $description:vi-VN: Chọn giữa hiệu ứng Liquid Glass, Làm mờ Windows hoặc Tắt làm mờ (nền đặc).
+  $options:vi-VN:
+  - glass: Liquid Glass
+  - blur: Làm mờ Windows
+  - solid: Tắt làm mờ (Nền đặc)
   $options:
-  - glass: Liquid Glass (Hiệu ứng kính)
-  - blur: Windows Blur (Làm mờ Windows)
-  - solid: Off / Opaque (Tắt làm mờ)
+  - glass: Liquid Glass
+  - blur: Windows Blur
+  - solid: Off – Opaque
 - colorMode: auto
-  #
-  $name: Color Mode (Chế độ Sáng / Tối)
-  #
-  $description: Dynamic contrast on Liquid Glass or system theme (Tự động đổi độ tương phản).
-  #
+  $name: Appearance · Color Mode
+  $name:vi-VN: Chế độ Sáng / Tối
+  $description: Follow Windows’ Light/Dark mode and backdrop contrast automatically, or choose a fixed mode.
+  $description:vi-VN: Tự động theo giao diện Sáng/Tối của Windows và độ sáng nền, hoặc chọn cố định.
+  $options:vi-VN:
+  - auto: Tự động theo Windows
+  - dark: Giao diện Tối (Dark)
+  - light: Giao diện Sáng (Light)
   $options:
-  - auto: Auto (Dynamic Contrast / Tự động)
-  - dark: Dark Mode (Giao diện Tối)
-  - light: Light Mode (Giao diện Sáng)
+  - auto: Auto – Follow Windows
+  - dark: Dark Mode
+  - light: Light Mode
 - blurOpacity: 170
-  #
-  $name: Blur Opacity (Độ đậm nền Blur 0 - 255)
-  #
-  $description: Background tint opacity for Windows Blur (Độ đậm lớp phủ khi dùng Làm mờ Windows).
+  $name: Appearance · Blur Opacity (0–255)
+  $name:vi-VN: Độ đậm nền Blur (0–255)
+  $description: Background tint opacity when using Windows Blur (0–255, default is 170).
+  $description:vi-VN: Độ đậm lớp phủ nền khi dùng Làm mờ Windows (0–255, mặc định là 170).
 - maxHistoryItems: 5
-  #
-  $name: Max History Items (Số mục lịch sử tối đa 0 - 10)
-  #
-  $description: Maximum number of recent commands shown (Số lượng lệnh gần đây hiển thị ở trên).
+  $name: History · Max Items (0–10)
+  $name:vi-VN: Số mục lịch sử tối đa (0–10)
+  $description: Maximum number of recent commands shown in the top list (0–10, set 0 to disable).
+  $description:vi-VN: Số lượng lệnh gần đây hiển thị ở phần phía trên (0–10, nhập 0 để tắt).
 - showTimestamp: true
-  #
-  $name: Show Last Executed Time (Hiển thị thời gian chạy lệnh)
-  #
-  $description: Display the execution timestamp on each row (Hiển thị thời gian chạy ở mỗi dòng).
+  $name: History · Show Last Executed Time
+  $name:vi-VN: Hiển thị thời gian chạy lệnh gần nhất
+  $description: Display the execution timestamp and clock icon on each history row — or hide both when disabled.
+  $description:vi-VN: Hiển thị thời gian thực thi và biểu tượng đồng hồ ở mỗi dòng lịch sử.
+- clearStoredHistory: false
+  $name: History · Clear Stored History
+  $name:vi-VN: Xóa lịch sử đã lưu
+  $description: Enable and save settings to clear all stored history and timestamps for the current user — set back to Off afterwards.
+  $description:vi-VN: Bật tùy chọn này và lưu cài đặt để xóa lịch sử cùng thời gian chạy lệnh đã lưu của người dùng hiện tại.
 - clearInitialInput: true
-  #
-  $name: Clear Input on Open (Để trống ô nhập khi mở)
-  #
-  $description: Show placeholder text on open (Hiển thị dòng gợi ý thay vì điền sẵn lệnh cũ).
+  $name: Input · Clear Input on Open
+  $name:vi-VN: Để trống ô nhập khi mở
+  $description: Show placeholder text on open — instead of pre-filling the last command.
+  $description:vi-VN: Hiển thị dòng gợi ý khi mới mở thay vì điền sẵn lệnh cũ.
 - taskbarClickAction: minimize
-  #
-  $name: Taskbar Icon Click Action (Hành vi bấm icon Taskbar)
-  #
-  $description: Action when clicking the Run icon on Taskbar (Hành động khi bấm icon Run dưới Taskbar).
-  #
+  $name: Behavior · Taskbar Icon Click Action
+  $name:vi-VN: Hành vi khi bấm icon Run trên Taskbar
+  $description: Action when clicking the Run icon on the Taskbar while open — minimize/restore or close.
+  $description:vi-VN: Hành động khi bấm vào biểu tượng Run dưới Taskbar lúc cửa sổ đang mở.
+  $options:vi-VN:
+  - minimize: Ẩn & Mở lại cửa sổ Run
+  - close: Đóng hẳn cửa sổ Run
   $options:
-  - minimize: Minimize & Restore (Ẩn & Mở lại)
-  - close: Close Window (Đóng hẳn)
+  - minimize: Minimize – Restore
+  - close: Close Window
 - closeOnClickOutside: false
-  #
-  $name: Close on Click Outside (Tự động đóng khi bấm ra ngoài)
-  #
-  $description: Automatically close when clicking outside (Tự động đóng hộp thoại khi bấm ra ngoài).
+  $name: Behavior · Close on Click Outside
+  $name:vi-VN: Tự động đóng khi bấm ra ngoài
+  $description: Automatically close the Run dialog when clicking outside the window — similar to Command Palette.
+  $description:vi-VN: Tự động đóng hộp thoại Run khi click chuột ra ngoài cửa sổ.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <sddl.h>
 #include <commdlg.h>
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <commctrl.h>
-#include <gdiplus.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <imm.h>
@@ -169,6 +203,7 @@ Modern Run Dialog UI Preview (Windows Blur)
 #include <string>
 #include <string_view>
 #include <vector>
+#include <optional>
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -220,9 +255,8 @@ RunDlgProc_t RunDlgProc_Orig = nullptr;
 
 ID2D1Factory* g_pD2DFactory = nullptr;
 IDWriteFactory* g_pDWriteFactory = nullptr;
-ULONG_PTR g_gdiplusToken = 0;
 
-// --- Liquid Glass CPU Eligibility (from live-update-for-windows-widget) ---
+// --- CPU Policy for Liquid Glass Surface ---
 
 bool GlassCpuAllowed(std::string_view vendor, unsigned family, unsigned model, std::string brand) {
     for (auto& ch : brand) {
@@ -340,7 +374,7 @@ enum ToggleAction : WPARAM {
     kActionReloadSettings = 4
 };
 
-// Base dimensions at 96 DPI (1:1 Windows 11 widget proportions)
+// Base dimensions at 96 DPI
 constexpr int kBaseDlgWidth         = 600;
 constexpr int kBaseRowHeight        = 38;
 constexpr int kBaseListPadTop       = 8;
@@ -391,7 +425,7 @@ D2D1_COLOR_F GetSystemAccentColorF() {
     return D2D1::ColorF(0.44f, 0.38f, 0.88f, 1.0f);
 }
 
-// Temporary 16x16 background luminance sampler (from live-update-for-windows-widget)
+// Temporary 16x16 background luminance sampler to adapt Liquid Glass text contrast
 bool SampleBackdropLuminanceIsLight(int x, int y, int w, int h, bool dialogAlreadyVisible, bool prevLight) {
     if (w <= 0 || h <= 0) return prevLight;
 
@@ -455,7 +489,6 @@ bool SampleBackdropLuminanceIsLight(int x, int y, int w, int h, bool dialogAlrea
     ReleaseDC(nullptr, hScreenDC);
 
     if (!valid) return prevLight;
-    // Keep the dark smoky glass aesthetic unless the backdrop is genuinely bright white
     return prevLight ? (lum > 0.52) : (lum > 0.62);
 }
 
@@ -601,7 +634,59 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
     };
 }
 
-void LoadSettings() {
+// --- Per-User Command & Timestamp Storage in Windhawk Mod Storage ---
+
+std::wstring GetCurrentUserSidString() {
+    HANDLE hToken = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        return L"Default";
+    }
+    DWORD dwSize = 0;
+    GetTokenInformation(hToken, TokenUser, nullptr, 0, &dwSize);
+    if (dwSize == 0) {
+        CloseHandle(hToken);
+        return L"Default";
+    }
+    std::vector<BYTE> buffer(dwSize);
+    std::wstring sidResult = L"Default";
+    if (GetTokenInformation(hToken, TokenUser, buffer.data(), dwSize, &dwSize)) {
+        auto* pTokenUser = reinterpret_cast<TOKEN_USER*>(buffer.data());
+        LPWSTR strSid = nullptr;
+        if (ConvertSidToStringSidW(pTokenUser->User.Sid, &strSid) && strSid) {
+            sidResult = strSid;
+            LocalFree(strSid);
+        }
+    }
+    CloseHandle(hToken);
+    return sidResult;
+}
+
+const std::wstring& GetHistoryStorageKey() {
+    [[clang::no_destroy]] static const std::wstring kKey = L"HistoryTimestamps_" + GetCurrentUserSidString();
+    return kKey;
+}
+
+const std::wstring& GetClearAckStorageKey() {
+    [[clang::no_destroy]] static const std::wstring kAckKey = L"ClearHistoryAck_" + GetCurrentUserSidString();
+    return kAckKey;
+}
+
+void ClearCurrentUserStoredHistory() {
+    Wh_SetStringValue(GetHistoryStorageKey().c_str(), L"");
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU",
+                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        RegDeleteValueW(hKey, L"MRUList");
+        for (wchar_t ch = L'a'; ch <= L'z'; ++ch) {
+            wchar_t valName[2] = { ch, L'\0' };
+            RegDeleteValueW(hKey, valName);
+        }
+        RegCloseKey(hKey);
+    }
+}
+
+void LoadSettings(bool fromSettingsChanged = false) {
     auto langSetting = WindhawkUtils::StringSetting::make(L"language");
     auto surfaceSetting = WindhawkUtils::StringSetting::make(L"surfaceTheme");
     auto colorSetting = WindhawkUtils::StringSetting::make(L"colorMode");
@@ -633,6 +718,17 @@ void LoadSettings() {
     newSettings.clearInitialInput = Wh_GetIntSetting(L"clearInitialInput") != 0;
     newSettings.closeOnClickOutside = Wh_GetIntSetting(L"closeOnClickOutside") != 0;
 
+    bool clearRequested = Wh_GetIntSetting(L"clearStoredHistory") != 0;
+    if (clearRequested) {
+        int ack = Wh_GetIntValue(GetClearAckStorageKey().c_str(), 0);
+        if (fromSettingsChanged || ack == 0) {
+            ClearCurrentUserStoredHistory();
+            Wh_SetIntValue(GetClearAckStorageKey().c_str(), 1);
+        }
+    } else {
+        Wh_SetIntValue(GetClearAckStorageKey().c_str(), 0);
+    }
+
     LocalizedStrings newI18n = GetLocalizedStringsForLanguage(newSettings.language);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -653,7 +749,6 @@ struct RunDialogState {
     HWND hOrigEdit = nullptr;
     HWND hModernEdit = nullptr;
     HWND hOkBtn = nullptr;
-    HWND hCancelBtn = nullptr;
 
     HFONT hFontEditCtl = nullptr;
     HICON hRunIcon = nullptr;
@@ -684,18 +779,25 @@ struct RunDialogState {
     bool caretVisible = true;
     bool isTriggeringRun = false;
     bool isBrowsingFile = false;
+    bool pendingUninit = false;
 };
 
+// Atomic state shared safely across threads
 std::atomic<HWND> g_hActiveRunDlg{nullptr};
 std::atomic<ULONGLONG> g_openTick{0};
 std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
 std::atomic<bool> g_isBrowsingFile{false};
+std::atomic<bool> g_unloading{false};
+HANDLE g_hUninitEvent = nullptr;
 thread_local bool g_internalActivation = false;
 
+// Wrapped in std::optional with [[clang::no_destroy]] so the CRT does not invoke
+// std::thread::~thread() (which calls std::terminate() if joinable) when Explorer
+// exits while the Run dialog is still open and Wh_ModUninit is skipped.
 std::mutex g_keyHookMutex;
 std::condition_variable g_keyHookCv;
-std::thread g_keyHookThread;
+[[clang::no_destroy]] std::optional<std::thread> g_keyHookThread;
 DWORD g_keyHookThreadId = 0;
 bool g_keyHookThreadReady = false;
 
@@ -725,14 +827,14 @@ LRESULT CALLBACK LowLevelKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 void StartKeyHookThread() {
     std::unique_lock<std::mutex> lock(g_keyHookMutex);
-    if (g_keyHookThread.joinable()) {
+    if (g_keyHookThread.has_value()) {
         return;
     }
 
     g_keyHookThreadReady = false;
     g_keyHookThreadId = 0;
 
-    g_keyHookThread = std::thread([]() {
+    g_keyHookThread.emplace([]() {
         MSG msg = {};
         PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -762,13 +864,14 @@ void StopKeyHookThread() {
     std::thread threadToJoin;
     {
         std::lock_guard<std::mutex> lock(g_keyHookMutex);
-        if (!g_keyHookThread.joinable()) {
+        if (!g_keyHookThread.has_value()) {
             return;
         }
         if (g_keyHookThreadId != 0) {
             PostThreadMessageW(g_keyHookThreadId, WM_QUIT, 0, 0);
         }
-        threadToJoin = std::move(g_keyHookThread);
+        threadToJoin = std::move(*g_keyHookThread);
+        g_keyHookThread.reset();
         g_keyHookThreadId = 0;
         g_keyHookThreadReady = false;
     }
@@ -780,6 +883,7 @@ void StopKeyHookThread() {
 void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
+void PerformDialogUninit(HWND hWnd, RunDialogState* state);
 
 int GetDlgWidth(const RunDialogState* state) {
     return DpiScale(kBaseDlgWidth, state->dpi);
@@ -903,6 +1007,7 @@ void RestoreRunDialog(RunDialogState* state) {
 
 void OpenBrowseExecutableDialog(RunDialogState* state) {
     if (!state || !state->hDlg || state->isBrowsingFile) return;
+    HWND hDlg = state->hDlg;
     state->isBrowsingFile = true;
     g_isBrowsingFile.store(true);
 
@@ -910,7 +1015,7 @@ void OpenBrowseExecutableDialog(RunDialogState* state) {
 
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = state->hDlg;
+    ofn.hwndOwner = hDlg;
     ofn.lpstrFilter = state->i18n.browseFilter;
     ofn.lpstrFile = filePath;
     ofn.nMaxFile = MAX_PATH;
@@ -918,7 +1023,22 @@ void OpenBrowseExecutableDialog(RunDialogState* state) {
     ofn.lpstrDefExt = L"exe";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
 
-    if (GetOpenFileNameW(&ofn) && filePath[0] != L'\0') {
+    BOOL picked = GetOpenFileNameW(&ofn);
+
+    if (g_hActiveRunDlg.load() != hDlg || !IsWindow(hDlg)) {
+        g_isBrowsingFile.store(false);
+        return;
+    }
+
+    state->isBrowsingFile = false;
+    g_isBrowsingFile.store(false);
+
+    if (state->pendingUninit) {
+        PerformDialogUninit(hDlg, state);
+        return;
+    }
+
+    if (picked && filePath[0] != L'\0') {
         std::wstring formattedPath = filePath;
         if (formattedPath.find(L' ') != std::wstring::npos && formattedPath.front() != L'"') {
             formattedPath = L"\"" + formattedPath + L"\"";
@@ -932,19 +1052,14 @@ void OpenBrowseExecutableDialog(RunDialogState* state) {
         state->selectedRow = -1;
     }
 
-    state->isBrowsingFile = false;
-    g_isBrowsingFile.store(false);
-
-    if (IsWindow(state->hDlg)) {
+    if (IsWindow(hDlg)) {
         if (state->hModernEdit && IsWindow(state->hModernEdit)) {
             SetFocus(state->hModernEdit);
         }
         state->caretVisible = true;
-        InvalidateRect(state->hDlg, nullptr, TRUE);
+        InvalidateRect(hDlg, nullptr, TRUE);
     }
 }
-
-// --- Command & Timestamp Persistence in Windhawk Mod Storage ---
 
 std::wstring TrimCommandString(const std::wstring& cmd) {
     wchar_t buf[MAX_PATH] = {};
@@ -976,7 +1091,7 @@ struct StoredTimestampEntry {
 std::vector<StoredTimestampEntry> LoadStoredTimestamps() {
     std::vector<StoredTimestampEntry> entries;
     std::vector<wchar_t> buffer(16384, L'\0');
-    size_t charsRead = Wh_GetStringValue(L"HistoryTimestamps", buffer.data(), buffer.size());
+    size_t charsRead = Wh_GetStringValue(GetHistoryStorageKey().c_str(), buffer.data(), buffer.size());
     if (charsRead == 0 || buffer[0] == L'\0') {
         return entries;
     }
@@ -1029,7 +1144,7 @@ void SaveStoredTimestamps(const std::vector<StoredTimestampEntry>& entries) {
         serialized += entries[i].displayCmd.empty() ? entries[i].cmdKey : entries[i].displayCmd;
         serialized += L'\n';
     }
-    Wh_SetStringValue(L"HistoryTimestamps", serialized.c_str());
+    Wh_SetStringValue(GetHistoryStorageKey().c_str(), serialized.c_str());
 }
 
 void SaveCommandTimestamp(const std::wstring& cmd) {
@@ -1053,6 +1168,19 @@ void SaveCommandTimestamp(const std::wstring& cmd) {
         entries.resize(kMaxMruEntries);
     }
     SaveStoredTimestamps(entries);
+}
+
+void RemoveCommandFromHistoryStorage(const std::wstring& cmd) {
+    std::wstring keyName = NormalizeCmdKey(cmd);
+    if (keyName.empty()) return;
+
+    auto entries = LoadStoredTimestamps();
+    auto newEnd = std::remove_if(entries.begin(), entries.end(),
+                                 [&](const StoredTimestampEntry& e) { return e.cmdKey == keyName; });
+    if (newEnd != entries.end()) {
+        entries.erase(newEnd, entries.end());
+        SaveStoredTimestamps(entries);
+    }
 }
 
 std::wstring FormatHistoryTimestamp(const FILETIME& ftUtc, const wchar_t* todayPrefix) {
@@ -1189,6 +1317,10 @@ void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawComma
 
     if (g_hActiveRunDlg.load() == hDlg && IsWindow(hDlg)) {
         state->isTriggeringRun = false;
+        if (state->pendingUninit) {
+            PerformDialogUninit(hDlg, state);
+            return;
+        }
     }
 }
 
@@ -1233,9 +1365,8 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hDlg, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 
-    // Suppress native DWM border when Liquid Glass draws its own dual refractive rim
     COLORREF borderCol = (state->effectiveSurface == SurfaceTheme::Glass)
-        ? 0xFFFFFFFE // DWMWA_COLOR_NONE
+        ? 0xFFFFFFFE // DWMWA_COLOR_NONE (Liquid Glass draws its own dual refractive rim)
         : (state->isLightMode ? RGB(204, 208, 216) : RGB(64, 68, 76));
     DwmSetWindowAttribute(hDlg, DWMWA_BORDER_COLOR, &borderCol, sizeof(borderCol));
 
@@ -1248,7 +1379,6 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
 
     ACCENT_POLICY policy = {};
     if (state->effectiveSurface == SurfaceTheme::Glass) {
-        // Low-tint Acrylic blur (~9% tint alpha) so vibrant background colors (like purple/blue in the reference screenshot) shine through
         policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
         policy.AccentFlags = 2;
         DWORD alpha = state->isLightMode ? 32 : 24;
@@ -1551,7 +1681,7 @@ void LoadHistoryItems(RunDialogState* state) {
     }
 }
 
-// Pill Button Rectangles (matching the proportions of "Phương tiện" / "Pin" / "Ẩn" in the screenshot)
+// Action Button & Input Bar Layout Rectangles
 RECT GetBrowseButtonRect(const RunDialogState* state) {
     int dlgW = GetDlgWidth(state);
     int barH = GetInputBarHeight(state);
@@ -1606,10 +1736,9 @@ int HitTestHistoryRow(const RunDialogState* state, POINT pt) {
     return -1;
 }
 
-// --- Direct2D Liquid Glass & DirectWrite Rendering Helpers (Exact port from live-update-for-windows-widget) ---
+// --- Direct2D Liquid Glass & DirectWrite Rendering Helpers ---
 
 void DrawD2DGlassRim(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT dpi, bool isLight, float outerThicknessDip = 1.2f) {
-    // 1. Outer 5-stop refractive border (#DEFFFFFF -> #45BEDFFF -> #12FFFFFF -> #60FFDAEE -> #B0FFFFFF)
     D2D1_GRADIENT_STOP stops[5] = {
         { 0.00f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.90f : 0.87f) },
         { 0.30f, D2D1::ColorF(0.75f, 0.87f, 1.00f, isLight ? 0.42f : 0.27f) },
@@ -1631,7 +1760,6 @@ void DrawD2DGlassRim(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT 
         pStops->Release();
     }
 
-    // 2. Inner rim stroke (Margin = 2 DIP, BorderThickness = 0.5 DIP, BorderBrush = #20FFFFFF)
     float inset = DpiScaleF(2.0f, dpi);
     if ((rc.right - rc.left) > inset * 2.0f && (rc.bottom - rc.top) > inset * 2.0f) {
         D2D1_RECT_F innerRc = D2D1::RectF(rc.left + inset, rc.top + inset, rc.right - inset, rc.bottom - inset);
@@ -1646,12 +1774,10 @@ void DrawD2DGlassRim(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT 
     }
 }
 
-// Exact port of g_glassButtonTemplate in live-update-for-windows-widget.wh.cpp
 void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT dpi,
                         D2D1_COLOR_F bgTint, bool hovered, bool pressed, bool isLight) {
     D2D1_ROUNDED_RECT rrect = D2D1::RoundedRect(rc, radius, radius);
 
-    // 1. Base smoky glass layer (TintColor="#B0B0B0" TintOpacity="0.06")
     ID2D1SolidColorBrush* pBaseBr = nullptr;
     if (SUCCEEDED(pRT->CreateSolidColorBrush(
             isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.22f) : D2D1::ColorF(0.69f, 0.69f, 0.69f, 0.08f), &pBaseBr))) {
@@ -1659,7 +1785,6 @@ void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UI
         pBaseBr->Release();
     }
 
-    // 2. TemplateBinding Background layer
     if (bgTint.a > 0.001f) {
         ID2D1SolidColorBrush* pTintBr = nullptr;
         if (SUCCEEDED(pRT->CreateSolidColorBrush(bgTint, &pTintBr))) {
@@ -1668,7 +1793,6 @@ void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UI
         }
     }
 
-    // 3. Diagonal Highlight layer (Normal = 0.16, PointerOver = 0.30, Pressed = 0.50)
     float hlOpacity = pressed ? 0.50f : (hovered ? 0.30f : 0.16f);
     D2D1_GRADIENT_STOP hlStops[3] = {
         { 0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.00f * hlOpacity) },
@@ -1688,7 +1812,6 @@ void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UI
         pHlStops->Release();
     }
 
-    // 4. Dual refractive glass borders
     DrawD2DGlassRim(pRT, rc, radius, dpi, isLight, 1.2f);
 }
 
@@ -1765,6 +1888,24 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             TriggerRunCommand(state);
             return 0;
         }
+        if (wParam == VK_DELETE && !state->history.empty()) {
+            int targetIdx = (state->hoveredRow >= 0 && state->hoveredRow < (int)state->history.size())
+                            ? state->hoveredRow
+                            : state->selectedRow;
+            if (targetIdx >= 0 && targetIdx < (int)state->history.size()) {
+                RemoveCommandFromHistoryStorage(state->history[targetIdx].cmd);
+                state->hoveredRow = -1;
+                state->selectedRow = -1;
+                LoadHistoryItems(state);
+                RecomputeDialogMetrics(state);
+                int dlgW = GetDlgWidth(state);
+                ClampDialogToMonitorWorkArea(state->hDlg, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
+                SetWindowPos(state->hDlg, nullptr, state->normalX, state->normalY, dlgW, state->totalHeight,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                InvalidateRect(state->hDlg, nullptr, TRUE);
+                return 0;
+            }
+        }
         if ((wParam == VK_UP || wParam == VK_DOWN) && !state->history.empty()) {
             int n = (int)state->history.size();
             if (wParam == VK_UP) {
@@ -1833,6 +1974,21 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
         }
         delete state;
     }
+
+    if (g_hUninitEvent) {
+        SetEvent(g_hUninitEvent);
+    }
+}
+
+LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
+void PerformDialogUninit(HWND hWnd, RunDialogState* state) {
+    RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
+    CleanupDialogState(hWnd, state);
+    HWND hCancel = GetDlgItem(hWnd, IDCANCEL);
+    if (hCancel) EnableWindow(hCancel, TRUE);
+    PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), (LPARAM)hCancel);
 }
 
 LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -1840,11 +1996,21 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
     auto* state = reinterpret_cast<RunDialogState*>(dwRefData);
 
     if (uMsg == g_msgUninit && g_msgUninit != 0) {
-        RemoveWindowSubclass(hWnd, RunDlgSubclassProc, uIdSubclass);
-        CleanupDialogState(hWnd, state);
-        HWND hCancel = GetDlgItem(hWnd, IDCANCEL);
-        if (hCancel) EnableWindow(hCancel, TRUE);
-        PostMessageW(hWnd, WM_COMMAND, IDCANCEL, 0);
+        if (!state) {
+            if (g_hUninitEvent) SetEvent(g_hUninitEvent);
+            return 0;
+        }
+        // Defer cleanup if the dialog thread is currently inside a nested modal loop
+        // (such as GetOpenFileNameW or an error message box from IDOK).
+        if (state->isBrowsingFile || state->isTriggeringRun) {
+            state->pendingUninit = true;
+            HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
+            if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
+                PostMessageW(hPopup, WM_CLOSE, 0, 0);
+            }
+            return 0;
+        }
+        PerformDialogUninit(hWnd, state);
         return 0;
     }
 
@@ -2221,7 +2387,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         pRT->BindDC(hMemDC, &rcClient);
                         pRT->BeginDraw();
                         pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-                        // Grayscale AA is required by DirectWrite on translucent ARGB surfaces (matches Windows 11 XAML popups)
                         pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
 
                         // 1. Paint Surface Backdrop (Liquid Glass / Windows Blur / Solid / High Contrast)
@@ -2229,7 +2394,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             COLORREF winBg = GetSysColor(COLOR_WINDOW);
                             pRT->Clear(D2D1::ColorF(GetRValue(winBg) / 255.0f, GetGValue(winBg) / 255.0f, GetBValue(winBg) / 255.0f, 1.0f));
                         } else if (surface == SurfaceTheme::Glass) {
-                            // Low-tint smoky glass so vibrant background colors bleed through like the reference screenshot
                             pRT->Clear(isLight ? D2D1::ColorF(0.95f, 0.96f, 0.98f, 0.34f)
                                                : D2D1::ColorF(0.07f, 0.07f, 0.09f, 0.32f));
 
@@ -2268,7 +2432,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             colPrimary = colSecondary = colTime = colHint =
                                 D2D1::ColorF(GetRValue(fg) / 255.0f, GetGValue(fg) / 255.0f, GetBValue(fg) / 255.0f, 1.0f);
                         } else {
-                            // Exact text colors from live-update-for-windows-widget (#F5F5F8 dark / #141418 light)
                             colPrimary   = isLight ? D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.00f) : D2D1::ColorF(0.96f, 0.96f, 0.97f, 1.00f);
                             colSecondary = isLight ? D2D1::ColorF(0.15f, 0.16f, 0.20f, 0.72f) : D2D1::ColorF(0.94f, 0.94f, 0.96f, 0.68f);
                             colTime      = isLight ? D2D1::ColorF(0.18f, 0.20f, 0.24f, 0.66f) : D2D1::ColorF(0.92f, 0.93f, 0.96f, 0.64f);
@@ -2289,7 +2452,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
                         g_pD2DFactory->CreateStrokeStyle(strokeProps, nullptr, 0, &pRoundStroke);
 
-                        // 3. Create DirectWrite Text Formats (Genuine Windows 11 Segoe UI Typography)
+                        // 3. Create DirectWrite Text Formats
                         IDWriteTextFormat* pFmtRow = nullptr;
                         IDWriteTextFormat* pFmtTime = nullptr;
                         IDWriteTextFormat* pFmtInput = nullptr;
@@ -2420,7 +2583,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         }
 
-                        // Subtle divider line matching the header separator in the reference screenshot
+                        // Subtle divider line between history list and input bar
                         if (state->topAreaHeight > 0) {
                             ID2D1SolidColorBrush* pDivBr = nullptr;
                             D2D1_COLOR_F divCol = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f)
@@ -2434,7 +2597,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         }
 
-                        // 5. Draw Input Box with DirectWrite HitTestTextPosition for exact caret & selection placement
+                        // 5. Draw Input Box with DirectWrite HitTestTextPosition for caret & selection placement
                         RECT rcEditWin = GetModernEditRect(state);
                         D2D1_RECT_F rcEdit = D2D1::RectF((float)rcEditWin.left, (float)rcEditWin.top,
                                                          (float)rcEditWin.right, (float)rcEditWin.bottom);
@@ -2518,7 +2681,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                         pRT->PopAxisAlignedClip();
 
-                        // 6. Draw Action Pill Buttons (matching "Phương tiện", "Pin", "Quyền riêng tư", "Ẩn" in the reference screenshot)
+                        // 6. Draw Action Pill Buttons
                         auto drawPillButton = [&](RECT rWin, const wchar_t* label, bool isPrimaryAccent,
                                                   bool hovered, bool pressed) {
                             D2D1_RECT_F rcBtn = D2D1::RectF((float)rWin.left, (float)rWin.top,
@@ -2526,12 +2689,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             if (surface == SurfaceTheme::Glass) {
                                 D2D1_COLOR_F overlay = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.0f);
                                 if (isPrimaryAccent) {
-                                    // Accent-tinted glass like "Phương tiện" in the reference screenshot
                                     D2D1_COLOR_F acc = GetSystemAccentColorF();
                                     float alpha = pressed ? 0.44f : (hovered ? 0.36f : 0.28f);
                                     overlay = D2D1::ColorF(acc.r, acc.g, acc.b, alpha);
                                 } else {
-                                    // Neutral smoky glass like "Pin" / "Quyền riêng tư" / "Ẩn" in the reference screenshot
                                     overlay = isLight
                                         ? D2D1::ColorF(1.0f, 1.0f, 1.0f, pressed ? 0.22f : (hovered ? 0.14f : 0.06f))
                                         : D2D1::ColorF(1.0f, 1.0f, 1.0f, pressed ? 0.14f : (hovered ? 0.08f : 0.03f));
@@ -2577,7 +2738,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         drawPillButton(GetCloseButtonRect(state), state->i18n.exitBtn, false,
                                        state->closeHovered, state->closePressed);
 
-                        // 7. Draw Outer Window Liquid Glass Dual Rim (matches the popup rim in the reference screenshot)
+                        // 7. Draw Outer Window Liquid Glass Dual Rim
                         if (surface == SurfaceTheme::Glass && !highContrast) {
                             float rimInset = DpiScaleF(0.6f, dpi);
                             D2D1_RECT_F rcWindowRim = D2D1::RectF(rimInset, rimInset,
@@ -2640,6 +2801,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 }
 
 void TransformRunDialog(HWND hDlg) {
+    if (g_unloading.load()) return;
     if (!hDlg || !IsWindow(hDlg)) return;
     if (GetPropW(hDlg, L"WindhawkModernRunApplied")) return;
     SetPropW(hDlg, L"WindhawkModernRunApplied", (HANDLE)1);
@@ -2679,7 +2841,6 @@ void TransformRunDialog(HWND hDlg) {
                 state->hOkBtn = hChild;
                 SetWindowPos(hChild, nullptr, -32000, -32000, 1, 1, SWP_NOZORDER);
             } else if (id == IDCANCEL) {
-                state->hCancelBtn = hChild;
                 SetWindowPos(hChild, nullptr, -32000, -32000, 1, 1, SWP_NOZORDER);
             } else {
                 ShowWindow(hChild, SW_HIDE);
@@ -2843,31 +3004,53 @@ BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
     return SetForegroundWindow_Orig(hWnd);
 }
 
+void ReleaseGlobalResources() {
+    if (g_pDWriteFactory) {
+        g_pDWriteFactory->Release();
+        g_pDWriteFactory = nullptr;
+    }
+    if (g_pD2DFactory) {
+        g_pD2DFactory->Release();
+        g_pD2DFactory = nullptr;
+    }
+    if (g_hUninitEvent) {
+        CloseHandle(g_hUninitEvent);
+        g_hUninitEvent = nullptr;
+    }
+}
+
 BOOL Wh_ModInit() {
+    g_unloading.store(false);
     g_glassCpuSupported = DetectGlassCpuSupport();
 
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+    g_hUninitEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!g_hUninitEvent) {
+        Wh_Log(L"Failed to create uninit synchronization event");
+        return FALSE;
+    }
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory),
                                  nullptr, reinterpret_cast<void**>(&g_pD2DFactory)))) {
         Wh_Log(L"Failed to create Direct2D factory");
+        ReleaseGlobalResources();
         return FALSE;
     }
 
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
                                    reinterpret_cast<IUnknown**>(&g_pDWriteFactory)))) {
         Wh_Log(L"Failed to create DirectWrite factory");
+        ReleaseGlobalResources();
         return FALSE;
     }
 
-    LoadSettings();
+    LoadSettings(false);
     g_msgUninit = RegisterWindowMessageW(L"Windhawk_Uninit_" WH_MOD_ID);
     g_msgToggle = RegisterWindowMessageW(L"Windhawk_Toggle_" WH_MOD_ID);
 
     HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32) {
         Wh_Log(L"Failed to load shell32.dll");
+        ReleaseGlobalResources();
         return FALSE;
     }
 
@@ -2884,6 +3067,7 @@ BOOL Wh_ModInit() {
 
     if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to hook RunDlgProc in shell32.dll");
+        ReleaseGlobalResources();
         return FALSE;
     }
 
@@ -2895,31 +3079,33 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
+    LoadSettings(true);
     if (HWND hDlg = g_hActiveRunDlg.load()) {
         PostMessageW(hDlg, g_msgToggle, kActionReloadSettings, 0);
     }
 }
 
 void Wh_ModBeforeUninit() {
+    g_unloading.store(true);
     if (HWND hDlg = g_hActiveRunDlg.load()) {
-        SendMessageW(hDlg, g_msgUninit, 0, 0);
+        if (IsWindow(hDlg)) {
+            if (g_hUninitEvent) {
+                ResetEvent(g_hUninitEvent);
+            }
+            SendMessageW(hDlg, g_msgUninit, 0, 0);
+            if (g_hUninitEvent) {
+                while (g_hActiveRunDlg.load() != nullptr && IsWindow(hDlg)) {
+                    if (WaitForSingleObject(g_hUninitEvent, 50) == WAIT_OBJECT_0) {
+                        break;
+                    }
+                }
+            }
+        }
     }
     StopKeyHookThread();
 }
 
 void Wh_ModUninit() {
     StopKeyHookThread();
-    if (g_pDWriteFactory) {
-        g_pDWriteFactory->Release();
-        g_pDWriteFactory = nullptr;
-    }
-    if (g_pD2DFactory) {
-        g_pD2DFactory->Release();
-        g_pD2DFactory = nullptr;
-    }
-    if (g_gdiplusToken) {
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-    }
+    ReleaseGlobalResources();
 }
