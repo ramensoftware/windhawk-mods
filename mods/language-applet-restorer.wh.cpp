@@ -26,6 +26,8 @@ Restores the classic Control Panel **Language** applet from windows 10 1709 and 
 
 ![addlang](https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151500.png)
 
+![intl.cpl](https://raw.githubusercontent.com/AdmXP8/assets/main/intl1709.png)
+
 ## What is downloaded, from where, and when
 
 The mod does not contain any Microsoft binaries. The first time it runs inside `explorer.exe`, it downloads five files of Windows 10 1709 (build 16299), about 3.7 MB in total, from Microsoft's public symbol server (`https://msdl.microsoft.com/download/symbols/`):
