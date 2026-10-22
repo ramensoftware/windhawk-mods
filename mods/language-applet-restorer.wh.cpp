@@ -2,7 +2,7 @@
 // @id              language-applet-restorer
 // @name            Language Applet Restorer
 // @description     Brings back the classic Control Panel "Language" applet (Windows 10 1709 build) on later versions of Windows downloading the original files from Microsoft's symbol server
-// @version         0.5.1
+// @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -2328,7 +2328,7 @@ static void InstallTranslationHook() {
 // that load (and not in Wh_ModInit). The system dui70.dll is deliberately not hooked.
 static void HookDui76(HMODULE hDui76) {
     static std::atomic<bool> hooked{false};
-    if (!hDui76 || hooked.exchange(true)) return;
+    if (!hDui76 || g_shuttingDown.load() || hooked.exchange(true)) return;
     if (auto* p = reinterpret_cast<XResourceProviderCreate_t>(GetProcAddress(
             hDui76, "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))) {
         WindhawkUtils::SetFunctionHook(p, XResourceProviderCreateHookDui76,
@@ -2913,14 +2913,20 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     }
 }
 
-void Wh_ModUninit() {
-    if (!g_isExplorer.load()) return;   // helper processes must not touch files or the registry
-    RestoreHideStrings();
+// Runs before Windhawk removes the hooks. The setup thread calls Wh_SetFunctionHook / Wh_ApplyHookOperations
+// (HookDui76), which must not happen after this function returns, so it is stopped and joined here.
+void Wh_ModBeforeUninit() {
+    if (!g_isExplorer.load()) return;
     g_shuttingDown.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
     CancelInFlightDownload();
     if (g_setupThread && g_setupThread->joinable()) g_setupThread->join();
     g_setupThread.reset();
+}
+
+void Wh_ModUninit() {
+    if (!g_isExplorer.load()) return;   // helper processes must not touch files or the registry
+    RestoreHideStrings();
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
 
     ReleaseLocalizedResourceModule();
