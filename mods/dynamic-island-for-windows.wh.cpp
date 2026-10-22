@@ -70,7 +70,7 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 - **⚠️ Right-click choices are per-session:** The right-click menu is a quick way to try things out, not a place to configure the mod. **Theme**, **shape style** (Pill / Notch / Windows 11) and **pin open** are all re-applied from your Windhawk settings whenever the mod restarts — so a reboot, a mod update, or toggling the mod off and on will discard them. Anything you want to keep, set in the **Mod Settings** tab instead. (Transparency and Expand-on-hover do persist, but the settings tab is still the reliable place for them.)
 - **Windhawk Settings:** Visit the Mod Settings tab to change the island's Position, Size Scale, Refresh Rate (Target FPS), Animation Style (Smooth/Default/Bouncy/Snappy), Animation Speed, and toggle specific modules. You can also perfectly align the island using the `Offset X` and `Offset Y` settings, and select exactly which monitor the island should appear on (including a "Follow Mouse" mode!).
 - **Blur & Acrylic need Transparency effects:** Windows does not enable this by default on every PC, and the Blur and Acrylic backdrop will not show without it (you will only see a flat tint instead). Turn it on in **Settings > Personalization > Colors > Transparency effects** (on Windows 11 you can also find it under **Settings > Accessibility > Visual effects > Transparency effects**). Also make sure **Battery saver** is off, because it disables these effects too. Then pick a material under **Mod Settings > Themes > Backdrop material**; the change applies live, no restart needed.
-- **Notifications:** Windows must allow apps to read notifications: turn on **Settings > Privacy & security > Notifications > "Let apps access your notifications"**. Without that permission Windows denies the listener and the module stays silent. Nothing needs to be added to the process inclusion list; the island runs in its own process and reads notifications from there.
+- **Notifications:** Windows must allow apps to read notifications: turn on **Settings > Privacy & security > Notifications > "Let apps access your notifications"**. Without that permission Windows denies the listener and the module stays silent. Nothing needs to be added to the process inclusion list; the island runs in its own process and reads notifications from there. Note: notifications from command-line consoles and terminal hosts (PowerShell, cmd.exe, conhost) are filtered out by default to avoid toast spam from terminal scripts and build jobs.
 - **Quick Hide/Show:** Right-click the island and choose "Hide Island" to collapse it completely — CPU usage drops to ~0% while hidden since the mod fully parks its render thread. Bring it back instantly with the configurable hotkey (default **Ctrl+Alt+D**, changeable in the **Shortcuts** settings tab). Because a hidden island can't be right-clicked, the hotkey is the *only* way back once hidden — if you turn the hotkey off while hidden, re-enable it (or disable the mod) from Windhawk's settings.
 
 ---
@@ -423,7 +423,7 @@ We love community contributions! To ensure high-quality updates, please follow t
     $description: Display weather temperature and wind speed in imperial units.
   - MediaTabLyrics: false
     $name: Lyrics in the media tab
-    $description: Shows synced lyrics in a side panel next to the album art and playback controls when the island is expanded on the Media tab. The island is only wider while this is on. Can also be toggled from the right-click menu.
+    $description: Adds a lyrics button to the media player controls to toggle an immersive lyrics view over the media tab. Can also be toggled from the right-click menu.
   - Lyrics: false
     $name: Lyrics module
     $description: Shows synced lyrics for the current track (fetched from LRCLIB, a free open-source lyrics database) while the island is expanded. Scroll to the Lyrics tab to view them.
@@ -2737,9 +2737,6 @@ inline float GetMonitorDpiScale(HMONITOR monitor) {
     return static_cast<float>(dpiX) / 96.0f;
 }
 
-[[maybe_unused]] inline float GetPrimaryMonitorDpiScale() {
-    return GetMonitorDpiScale(nullptr);
-}
 
 int GetMonitorRefreshRate(HWND hwnd) {
     HMONITOR monitor = nullptr;
@@ -3146,10 +3143,6 @@ void LoadSettings() {
     next.separateExpandedOffsetY = Wh_GetIntSetting(L"Appearance.SeparateExpandedOffsetY") != 0;
     next.offsetYExpanded = Wh_GetIntSetting(L"Appearance.OffsetYExpanded");
 
-    mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
-    if (mon == L"primary") next.targetMonitor = 0;
-    else if (mon == L"follow") next.targetMonitor = -1;
-    else next.targetMonitor = _wtoi(mon.c_str());
 
     std::wstring shapeStr = GetStringSettingCopy(L"Appearance.ShapeStyle");
     static std::wstring s_lastConfiguredShape = L"";
@@ -3693,9 +3686,6 @@ void EnsureBehind(HWND island) {
     HWND prev = island;
     for (Slot& s : g_slots) {
         if (s.hwnd && s.visible) {
-            if (GetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT) != 0) {
-                SetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT, 0);
-            }
             SetWindowPos(s.hwnd, prev, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
             prev = s.hwnd;
@@ -3707,9 +3697,6 @@ void EnsureBehind(HWND island) {
 // per-frame SetWindowPos lags on some Windows 10 builds.
 void PlaceSlot(Slot& s, HWND prev, int x, int y, int w, int h, int radius, int lift,
                bool wantTopMost) {
-    if (GetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT) != 0) {
-        SetWindowLongPtrW(s.hwnd, GWLP_HWNDPARENT, 0);
-    }
     EnsureTopMost(s, wantTopMost);
     UpdateRegion(s, w, h, radius, lift);
     const bool moved = x != s.x || y != s.y || w != s.w || h != s.h;
@@ -3775,6 +3762,12 @@ void Sync(HWND island, POINT origin, const D2D1_RECT_F* rects, const float* radi
                      g_lastSync.material == static_cast<int>(material) &&
                      g_lastSync.color == color && g_lastSync.state == state &&
                      g_lastSync.notch == notch;
+    if (unchanged && count > 0 && g_slots[0].hwnd && g_slots[0].visible) {
+        // If another always-on-top window slipped between the island and its backdrop, restack.
+        if (GetWindow(island, GW_HWNDNEXT) != g_slots[0].hwnd) {
+            unchanged = false;
+        }
+    }
     if (unchanged) {
         for (int i = 0; i < count; ++i) {
             if (!geom[i].valid) {
@@ -3925,50 +3918,6 @@ int ResolveOffsetY(float windowHeight) {
     return static_cast<int>(std::lround(collapsed + (expanded - collapsed) * t));
 }
 
-void PositionOverlayWindow(HWND hwnd, int width, int height) {
-    RECT work = GetAnchorWorkRect();
-    const bool flushTop = g_settings.notchStyle || g_settings.borderMergedMode;
-    int x = work.left + (work.right - work.left - width) / 2;
-    int y = flushTop ? work.top : (work.top + 8);
-
-    switch (g_settings.position) {
-        case Position::TopLeft:
-            x = work.left + 16;
-            y = flushTop ? work.top : (work.top + 8);
-            break;
-        case Position::TopRight:
-            x = work.right - width - 16;
-            y = flushTop ? work.top : (work.top + 8);
-            break;
-        case Position::BottomCenter:
-            x = work.left + (work.right - work.left - width) / 2;
-            y = work.bottom - height - 40;
-            break;
-        case Position::BottomLeft:
-            x = work.left + 16;
-            y = work.bottom - height - 40;
-            break;
-        case Position::BottomRight:
-            x = work.right - width - 16;
-            y = work.bottom - height - 40;
-            break;
-        case Position::TopCenter:
-        default:
-            break;
-    }
-
-    HWND zOrder = g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST;
-
-    x += g_settings.offsetX;
-    y += ResolveOffsetY(static_cast<float>(height));
-    // Yield to the screen-clip overlay.
-    const bool yieldToClipUi = Backdrop::ClipUiActiveCached();
-    SetWindowPos(hwnd, yieldToClipUi ? nullptr : zOrder, x, y, width, height,
-                 SWP_NOACTIVATE | SWP_NOOWNERZORDER |
-                     (yieldToClipUi ? SWP_NOZORDER : SWP_SHOWWINDOW));
-
-}
-
 // Where the layered window's top-left goes for a pill `pillWidth` px wide.
 // *subX receives the pill's fractional left edge (0..1) so the renderer can draw
 // at the exact float position. Snapping to whole pixels made the pill's centre
@@ -4111,6 +4060,9 @@ void ApplyOverlayZOrder(HWND hwnd, int width, int height) {
     SetWindowPos(hwnd, yieldToClipUi ? nullptr : zOrder, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
                      (yieldToClipUi ? SWP_NOZORDER : SWP_SHOWWINDOW));
+    if (!yieldToClipUi) {
+        DwmBackdrop::EnsureBehind(hwnd);
+    }
 }
 
 // Windows' own shell surfaces are all WS_EX_TOPMOST, and they are *supposed* to
@@ -4211,6 +4163,7 @@ void EnsureTopmost(HWND hwnd, const RECT* pillScreenRect = nullptr) {
     if (covered) {
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        DwmBackdrop::EnsureBehind(hwnd);
     }
 }
 
@@ -7038,9 +6991,13 @@ DWORD WINAPI WeatherThreadProc(void*) {
 }
 
 // ── Lyrics (LRCLIB, https://lrclib.net) ──────────────────────────────────────
-// OPTIONAL: User-Agent sent to LRCLIB. 
+#ifndef WH_MOD_VERSION
+#define WH_MOD_VERSION L"1.4.0"
+#endif
+
+// User-Agent sent to LRCLIB.
 constexpr wchar_t kLyricsUserAgent[] =
-    L"DynamicIslandForWindows/1.4.0 (https://github.com/devcode90/Dynamic-Island-for-Windows)";
+    L"DynamicIslandForWindows/" WH_MOD_VERSION L" (https://github.com/devcode90/Dynamic-Island-for-Windows)";
 
 bool IsUrlSafeChar(unsigned char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
@@ -7404,7 +7361,7 @@ void CountersAdjust(int dCount, int64_t dBytes) {
 }
 
 // ---- cache folder -------------------------------------------------------------
-// Windhawk mod storage directory \lyrics. Fallback to %LOCALAPPDATA%\DynamicIslandForWindows\lyrics.
+// Windhawk mod storage directory \lyrics. Strictly kept inside mod storage.
 const std::wstring& CacheDir(bool create) {
     static std::wstring dir;
     static bool resolved = false;
@@ -7413,12 +7370,6 @@ const std::wstring& CacheDir(bool create) {
         wchar_t storagePath[MAX_PATH] = {};
         if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
             dir = std::wstring(storagePath) + L"\\lyrics";
-        } else {
-            wchar_t base[MAX_PATH] = {};
-            const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-            if (n > 0 && n < ARRAYSIZE(base)) {
-                dir = std::wstring(base) + L"\\DynamicIslandForWindows\\lyrics";
-            }
         }
     }
     if (create && !dir.empty()) {
@@ -9109,19 +9060,20 @@ bool IsDeviceActiveViaRegistry(const wchar_t* capability, std::wstring* outAppNa
     basePath += capability;
 
     auto CheckSubkeys = [&](HKEY hKeyParent) -> bool {
+        constexpr REGSAM kSam = KEY_READ | KEY_WOW64_64KEY;
         DWORD index = 0;
         wchar_t subKeyName[256];
         DWORD nameLen = ARRAYSIZE(subKeyName);
         while (RegEnumKeyExW(hKeyParent, index, subKeyName, &nameLen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
             HKEY hSub;
-            if (RegOpenKeyExW(hKeyParent, subKeyName, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+            if (RegOpenKeyExW(hKeyParent, subKeyName, 0, kSam, &hSub) == ERROR_SUCCESS) {
                 if (_wcsicmp(subKeyName, L"NonPackaged") == 0) {
                     DWORD npIndex = 0;
                     wchar_t npSubKeyName[256];
                     DWORD npNameLen = ARRAYSIZE(npSubKeyName);
                     while (RegEnumKeyExW(hSub, npIndex, npSubKeyName, &npNameLen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
                         HKEY hNpSub;
-                        if (RegOpenKeyExW(hSub, npSubKeyName, 0, KEY_READ, &hNpSub) == ERROR_SUCCESS) {
+                        if (RegOpenKeyExW(hSub, npSubKeyName, 0, kSam, &hNpSub) == ERROR_SUCCESS) {
                             if (ConsentStoreEntryInUse(hNpSub)) {
                                 if (outAppName && outAppName->empty()) {
                                     *outAppName = CleanActiveAppName(npSubKeyName);
@@ -9153,13 +9105,13 @@ bool IsDeviceActiveViaRegistry(const wchar_t* capability, std::wstring* outAppNa
     };
 
     HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, basePath.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, basePath.c_str(), 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
         isActive = CheckSubkeys(hKey);
         RegCloseKey(hKey);
     }
 
     if (!isActive) {
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, basePath.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, basePath.c_str(), 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
             isActive = CheckSubkeys(hKey);
             RegCloseKey(hKey);
         }
@@ -9657,9 +9609,8 @@ int LookupRowAtContentPoint(const MediaContentPoint& pt, int rowCount, bool head
 // and add one line to LookupText().
 
 // Wikimedia asks API clients to send a descriptive User-Agent with contact info.
-// Replace the placeholder with your fork's page, like kLyricsUserAgent.
 constexpr wchar_t kLookupUserAgent[] =
-    L"DynamicIslandForWindows/1.4.0 (https://github.com/devcode90/Dynamic-Island-for-Windows) QuickLookup";
+    L"DynamicIslandForWindows/" WH_MOD_VERSION L" (https://github.com/devcode90/Dynamic-Island-for-Windows) QuickLookup";
 
 // Bumped for every new request AND when the card is dismissed. A worker only
 // publishes if its id is still current, so a slow reply can never resurrect a card
@@ -13185,24 +13136,6 @@ class Renderer {
         }
     }
 
-    void DrawAccentGlow(D2D1_RECT_F rect, const Activity& activity, double now) {
-        float opacity = activity.kind == IslandKind::Media ? 0.23f : 0.12f;
-        if (activity.kind == IslandKind::BatteryLow) {
-            redBrush_->SetOpacity(0.18f);
-            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(rect.right - 38, rect.top + 20), 56, 36),
-                                 redBrush_.Get());
-            redBrush_->SetOpacity(1.0f);
-            return;
-        }
-
-        opacity += 0.05f * (0.5f + 0.5f * std::sin(static_cast<float>(now * 1.7)));
-        accentBrush_->SetOpacity(opacity);
-        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(rect.left + 48, rect.top + 10), 70, 42),
-                             accentBrush_.Get());
-        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(rect.right - 58, rect.bottom - 8), 76, 42),
-                             accentBrush_.Get());
-        accentBrush_->SetOpacity(1.0f);
-    }
 
     static void GetWeatherIconAndText(int code, std::wstring& icon, std::wstring& text) {
         switch (code) {
@@ -21211,19 +21144,11 @@ inline std::wstring GetCurrentUserSid() {
 
 bool ResolvePaths(std::wstring* dir, std::wstring* file) {
     wchar_t storagePath[MAX_PATH] = {};
-    std::wstring baseDir;
-    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
-        baseDir = storagePath;
-    } else {
-        wchar_t base[MAX_PATH] = {};
-        const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-        if (n == 0 || n >= ARRAYSIZE(base)) {
-            return false;
-        }
-        baseDir = std::wstring(base) + L"\\DynamicIslandForWindows";
+    if (!Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        return false;
     }
     const std::wstring userKey = GetCurrentUserSid();
-    *dir = baseDir + L"\\filetray\\" + userKey;
+    *dir = std::wstring(storagePath) + L"\\filetray\\" + userKey;
     *file = *dir + L"\\items.dat";
     return true;
 }
@@ -21816,7 +21741,7 @@ void StartFileTrayDrag(const std::wstring& path) {
     ComPtr<IDropSource> source;
     source.Attach(new TrayDropSource());
 
-    constexpr DWORD kOkEffects = DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK;
+    constexpr DWORD kOkEffects = DROPEFFECT_COPY | DROPEFFECT_LINK;
     DWORD effect = DROPEFFECT_NONE;
 
     // SHDoDragDrop adds the normal Explorer drag image (thumbnail + name).
@@ -22422,8 +22347,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     kinds = ChooseActivities(g_state, g_settings, NowSeconds());
                 }
 
-                // Clicking an active transient notification or clipboard card immediately dismisses it cleanly
-                if (!kinds.empty() && (kinds[0] == IslandKind::Notification || kinds[0] == IslandKind::Clipboard)) {
+                // Clicking an active transient notification or clipboard card immediately dismisses it cleanly.
+                // In a split layout (kinds.size() > 1), don't dismiss if clicking on the secondary pill on the right.
+                const bool onSecondarySplit = (kinds.size() > 1 && g_pillClientRect.valid &&
+                                               xPos > (g_pillClientRect.left + (g_pillClientRect.right - g_pillClientRect.left) * 0.5f));
+                if (!kinds.empty() && !onSecondarySplit &&
+                    (kinds[0] == IslandKind::Notification || kinds[0] == IslandKind::Clipboard)) {
                     {
                         std::lock_guard lock(g_stateMutex);
                         if (kinds[0] == IslandKind::Notification) {
@@ -22739,8 +22668,6 @@ DWORD WINAPI RenderThreadProc(void*) {
     if (pChangeWindowMessageFilterEx) {
         if (g_shellHookMessage) pChangeWindowMessageFilterEx(hwnd, g_shellHookMessage, 1 /*MSGFLT_ALLOW*/, nullptr);
         if (g_taskbarCreatedMessage) pChangeWindowMessageFilterEx(hwnd, g_taskbarCreatedMessage, 1 /*MSGFLT_ALLOW*/, nullptr);
-        pChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, 1 /*MSGFLT_ALLOW*/, nullptr);
-        pChangeWindowMessageFilterEx(hwnd, 0x0049 /*WM_COPYGLOBALDATA*/, 1 /*MSGFLT_ALLOW*/, nullptr);
     } else {
         using ChangeWindowMessageFilter_t = BOOL(WINAPI*)(UINT, DWORD);
         static auto pChangeWindowMessageFilter = reinterpret_cast<ChangeWindowMessageFilter_t>(
@@ -22748,8 +22675,6 @@ DWORD WINAPI RenderThreadProc(void*) {
         if (pChangeWindowMessageFilter) {
             if (g_shellHookMessage) pChangeWindowMessageFilter(g_shellHookMessage, 1 /*MSGFLT_ADD*/);
             if (g_taskbarCreatedMessage) pChangeWindowMessageFilter(g_taskbarCreatedMessage, 1 /*MSGFLT_ADD*/);
-            pChangeWindowMessageFilter(WM_COPYDATA, 1 /*MSGFLT_ADD*/);
-            pChangeWindowMessageFilter(0x0049 /*WM_COPYGLOBALDATA*/, 1 /*MSGFLT_ADD*/);
         }
     }
     EnableBlurBehind(hwnd);
@@ -22782,13 +22707,6 @@ DWORD WINAPI RenderThreadProc(void*) {
     // COM apartment this thread already initialised.
     LoadFileTray();
 
-    using TimeBeginPeriod_t = MMRESULT(WINAPI*)(UINT);
-    using TimeEndPeriod_t = MMRESULT(WINAPI*)(UINT);
-    static auto pTimeBeginPeriod = reinterpret_cast<TimeBeginPeriod_t>(
-        GetProcAddress(LoadLibraryW(L"winmm.dll"), "timeBeginPeriod"));
-    static auto pTimeEndPeriod = reinterpret_cast<TimeEndPeriod_t>(
-        GetProcAddress(GetModuleHandleW(L"winmm.dll"), "timeEndPeriod"));
-
     // A 1ms timer resolution costs power, so it is requested only while the island
     // is actually animating. It used to be requested once here and released at
     // shutdown, so a parked or idle island held it for the mod's whole lifetime.
@@ -22816,13 +22734,11 @@ DWORD WINAPI RenderThreadProc(void*) {
             return;
         }
         if (want) {
-            if (pTimeBeginPeriod && pTimeBeginPeriod(1) == TIMERR_NOERROR) {
+            if (timeBeginPeriod(1) == TIMERR_NOERROR) {
                 highResTimer = true;
             }
         } else {
-            if (pTimeEndPeriod) {
-                pTimeEndPeriod(1);
-            }
+            timeEndPeriod(1);
             highResTimer = false;
         }
     };
