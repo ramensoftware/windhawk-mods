@@ -21,7 +21,7 @@ This is still the real Windows taskbar, so everything works like normal: jump li
 
 ![DynamicDock in action](https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/assets/DynamicDock-default-taskbar.gif)
 
-![DynamicDock in action](https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/assets/DynamicDock-with-mod.gif)
+![DynamicDock in action](https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/assets/DynamicDock-with-mods.gif)
 
 ## Bottom taskbars (works with auto-hide or always visible)
 1. Choose how the taskbar shows:
