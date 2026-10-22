@@ -25,6 +25,8 @@
 
 This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png)
+
 ## About the mod
 The mod replaces the Start experience with a full-screen Start screen modeled after
 Windows 8.1: tiles arranged in groups, an All Apps view, type-to-search, and the
@@ -72,6 +74,10 @@ The mod does **not** replace system files.
 - The mod is available in English, Italian, Spanish, French and Portuguese. The language
   follows the Windows display language.
 - All options are documented on the mod's settings page in Windhawk.
+- If the Start hook cannot be installed (for example on an unsupported Windows build), the
+  mod falls back to keyboard interception. A lone Windows key press is then detected by a
+  keyboard hook, and the mod sends a synthetic key press of an unassigned key (VK 0xE8) so
+  that Explorer does not open its own Start menu as well.
 
 ## Credits
 
@@ -265,17 +271,6 @@ The mod does **not** replace system files.
   $description:es: "Esta configuración da a cada icono con imagen un relleno plano muestreado del tono dominante del icono, como la opción del menú Inicio de Windows 10, en lugar de los colores fijos de la paleta de Windows 8.1. Los iconos sin imagen mantienen su color de paleta. Portada de la mod Windows 10 1507 Start Menu Recreation. Las aplicaciones empaquetadas siempre usan el color de su propio icono, como en Windows 8.1; esta configuración extiende el muestreo a todos los iconos."
   $description:fr: "Ce paramètre donne à chaque vignette avec icône un fond uni échantillonné depuis la teinte dominante de l'icône, comme l'option du menu Démarrer de Windows 10, au lieu des couleurs fixes de la palette Windows 8.1. Les vignettes sans icône gardent leur couleur de palette. Porté du mod Windows 10 1507 Start Menu Recreation. Les applications packagées utilisent toujours la couleur de leur propre vignette, comme Windows 8.1 ; ce paramètre étend l'échantillonnage à toutes les vignettes."
   $description:pt: "Esta configuração dá a cada bloco com ícone um preenchimento sólido amostrado do tom dominante do ícone, como a opção do menu Iniciar do Windows 10, em vez das cores fixas da paleta do Windows 8.1. Blocos sem ícone mantêm a cor da paleta. Portado da mod Windows 10 1507 Start Menu Recreation. Os aplicativos empacotados sempre usam a cor do seu próprio bloco, como no Windows 8.1; esta configuração estende a amostragem a todos os blocos."
-- exactCornerStartTip: true
-  $name: "Companion Charms Bar mod: Start tip only in the exact bottom-left corner"
-  $name:it: "Mod compagna Charms Bar: Start tip solo nell'angolo in basso a sinistra esatto"
-  $name:es: "Mod complementaria Charms Bar: Start tip solo en la esquina inferior izquierda exacta"
-  $name:fr: "Mod compagnon Charms Bar : Start tip uniquement dans le coin inférieur gauche exact"
-  $name:pt: "Mod companheira Charms Bar: Start tip somente no canto inferior esquerdo exato"
-  $description: "This setting only matters together with the companion Windows 8/8.1 Charms Bar Recreation mod. That mod deliberately arms its Start tip from the whole left screen edge over the Start screen; real Windows 8.1 raises the tip from the bottom-left corner only. With this on, this mod quietly holds the companion's tip back until the pointer is right in the corner, like the original, without the companion mod needing an update. Without that mod this setting does nothing."
-  $description:it: "Questa impostazione conta solo insieme alla mod compagna Windows 8/8.1 Charms Bar Recreation. Quella mod arma apposta la sua Start tip da tutto il bordo sinistro sopra la schermata Start; il vero Windows 8.1 fa salire la tip solo dall'angolo in basso a sinistra. Se attiva, questa mod trattiene in silenzio la tip della compagna finché il puntatore non è proprio nell'angolo, come l'originale, senza che la mod compagna debba essere aggiornata. Senza quella mod non fa nulla."
-  $description:es: "Esta configuración solo importa junto a la mod complementaria Windows 8/8.1 Charms Bar Recreation. Esa mod arma a propósito su Start tip desde todo el borde izquierdo sobre la pantalla de inicio; el verdadero Windows 8.1 levanta la tip solo desde la esquina inferior izquierda. Activada, esta mod retiene en silencio la tip de la complementaria hasta que el puntero está justo en la esquina, como el original, sin que la otra mod necesite una actualización. Sin esa mod no hace nada."
-  $description:fr: "Ce paramètre ne compte qu'avec le mod compagnon Windows 8/8.1 Charms Bar Recreation. Ce mod arme délibérément son Start tip depuis tout le bord gauche au-dessus de l'écran d'accueil ; le vrai Windows 8.1 ne lève la tip que depuis le coin inférieur gauche. Activé, ce mod retient silencieusement la tip du compagnon jusqu'à ce que le pointeur soit juste dans le coin, comme l'original, sans que le mod compagnon ait besoin d'une mise à jour. Sans ce mod, il ne fait rien."
-  $description:pt: "Esta configuração só importa junto à mod companheira Windows 8/8.1 Charms Bar Recreation. Essa mod arma de propósito sua Start tip de toda a borda esquerda sobre a Tela Inicial; o verdadeiro Windows 8.1 levanta a tip apenas do canto inferior esquerdo. Ativada, esta mod retém silenciosamente a tip da companheira até que o ponteiro esteja bem no canto, como o original, sem que a outra mod precise de atualização. Sem essa mod, não faz nada."
 - seedStartLayout: false
   $name: "Populate Start with a Windows 8.1 style layout from installed apps"
   $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
@@ -781,13 +776,18 @@ static const UINT WM_APP_LOGON_OPEN = WM_APP + 12;
 static const UINT WM_APP_REBUILD_BG = WM_APP + 13;
 static const UINT WM_APP_CHARM_POINTER = WM_APP + 14;
 static const UINT WM_APP_SEED_LAYOUT = WM_APP + 15;
+static const UINT WM_APP_FILES_READY = WM_APP + 16;
 static const UINT WM_HOOKCTL_MOUSE_ON  = WM_APP + 30;
 static const UINT WM_HOOKCTL_MOUSE_OFF = WM_APP + 31;
 static const ULONG_PTR kMagic = 0x38303435;
 static const wchar_t* kClassName = L"Win8StartScreenMod8045";
 static const wchar_t* kDesktopTarget = L"win8start:desktop";
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
 static HINSTANCE g_inst = NULL;
+static bool g_classRegistered = false;
+static bool g_uiCoInit = false;
+static HANDLE g_uiReady = NULL, g_uiStop = NULL;
 static HANDLE g_thread = NULL;
 static DWORD  g_tid = 0;
 static HWND   g_wnd = NULL;
@@ -914,6 +914,7 @@ static bool g_tracking = false;
 static bool g_winDown = false, g_winCombo = false;
 static volatile LONG g_privacyMode = 0;
 static volatile LONG g_appTileColors = 0;
+static volatile LONG g_tileColorsDirty = 0;
 static volatile LONG g_appSort = 0;
 static int g_charmScope = 0;
 static int g_ctxRow = -1;
@@ -993,6 +994,8 @@ static int g_selected = 0;
 static LONG g_appsReady = 0;
 static HANDLE g_appsThread = NULL, g_appsStop = NULL;
 static SRWLOCK g_appsLock = SRWLOCK_INIT;
+static HANDLE g_filesNeed = NULL;
+static std::vector<AppEntry>* g_pendingFiles = NULL;
 static float g_sbFrom = 0.0f, g_sbTo = 0.0f, g_sbDur = SB_IN;
 static DWORD g_sbTick = 0, g_searchTick = 0, g_returnTick = 0;
 static bool g_sbWanted = false;
@@ -1372,16 +1375,53 @@ static void MaybeSwapDraggedGroup() {
     }
     SaveLayout();
 }
-static bool GroupsPathW(wchar_t* out) {
-    wchar_t base[MAX_PATH] = L"";
-    if (FAILED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, base)) || !base[0]) return false;
-    wsprintfW(out, L"%s\\Win8StartScreen", base);
-    CreateDirectoryW(out, NULL);
-    wsprintfW(out, L"%s\\Win8StartScreen\\groups.txt", base);
+static std::wstring CurrentUserSid() {
+    static const std::wstring sid = [] {
+        std::wstring result;
+        HANDLE token = NULL;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            BYTE buf[512];
+            DWORD need = 0;
+            if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &need)) {
+                LPWSTR str = NULL;
+                if (ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &str) && str) {
+                    result = str;
+                    LocalFree(str);
+                }
+            }
+            CloseHandle(token);
+        }
+        if (result.empty()) result = L"unknown";
+        return result;
+    }();
+    return sid;
+}
+static bool StorageFilePath(const wchar_t* stem, std::wstring& out) {
+    wchar_t base[4096] = L"";
+    size_t n = Wh_GetModStoragePath(base, ARRAYSIZE(base));
+    if (!n) return false;
+    std::wstring dir(base, n);
+    CreateDirectoryW(dir.c_str(), NULL);
+    out = dir + L"\\" + stem + L"-" + CurrentUserSid() + L".txt";
     return true;
 }
+static std::wstring LegacyDataPath(const wchar_t* file) {
+    wchar_t base[MAX_PATH] = L"";
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, base)) || !base[0]) return L"";
+    return std::wstring(base) + L"\\Win8StartScreen\\" + file;
+}
+static void RemoveLegacyData(const wchar_t* file) {
+    std::wstring path = LegacyDataPath(file);
+    if (path.empty()) return;
+    DeleteFileW(path.c_str());
+    size_t slash = path.find_last_of(L'\\');
+    if (slash != std::wstring::npos) RemoveDirectoryW(path.substr(0, slash).c_str());
+}
+static bool GroupsPathW(std::wstring& out) {
+    return StorageFilePath(L"groups", out);
+}
 static void SaveGroupNames() {
-    wchar_t path[MAX_PATH];
+    std::wstring path;
     if (!GroupsPathW(path)) return;
     std::wstring text = L"#Win8StartScreen groups v1\n";
     for (int g = 0; g < (int)g_groupNames.size(); ++g) {
@@ -1394,17 +1434,27 @@ static void SaveGroupNames() {
     if (n <= 0) return;
     std::string utf8((size_t)n, '\0');
     WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), &utf8[0], n, NULL, NULL);
-    HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) return;
     DWORD written = 0;
     WriteFile(f, utf8.data(), (DWORD)utf8.size(), &written, NULL);
     CloseHandle(f);
+    static bool legacyRemoved = false;
+    if (!legacyRemoved) {
+        legacyRemoved = true;
+        RemoveLegacyData(L"groups.txt");
+    }
 }
 static void LoadGroupNames() {
     g_groupNames.assign(std::max(0, g_groupCount), std::wstring());
-    wchar_t path[MAX_PATH];
+    std::wstring path;
     if (!GroupsPathW(path)) return;
-    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        std::wstring legacy = LegacyDataPath(L"groups.txt");
+        if (!legacy.empty())
+            f = CreateFileW(legacy.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    }
     if (f == INVALID_HANDLE_VALUE) return;
     DWORD size = GetFileSize(f, NULL);
     if (size == INVALID_FILE_SIZE || size == 0 || size > (1u << 20)) { CloseHandle(f); return; }
@@ -2978,7 +3028,7 @@ static void RecreateFonts() {
     if (g_writeFactory) {
         IDWriteTextFormat* all[] = { g_titleFormat, g_userFormat, g_subFormat, g_itemFormat,
                                      g_sbTitleFormat, g_boldFormat, g_rowFormat, g_countFormat,
-                                     g_queryFormat, g_glyphFormat, g_glyphSmall, g_barLabel, g_flyFormat, g_hdrGlyphFmt };
+                                     g_queryFormat, g_glyphFormat, g_glyphSmall, g_barLabel, g_flyFormat, g_hdrGlyphFmt, g_zoomFormat };
         for (size_t i = 0; i < ARRAYSIZE(all); ++i) if (all[i]) { all[i]->Release(); all[i] = NULL; }
         if (g_rt) {
             g_writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_LIGHT,
@@ -3421,6 +3471,7 @@ static void ScanCharmDir(std::vector<AppEntry>& out, const std::wstring& dir, in
     if (hf == INVALID_HANDLE_VALUE) return;
     do {
         if (out.size() >= cap) break;
+        if (g_appsStop && WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0) break;
         if (fd.cFileName[0] == L'.') continue;
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM |
                                    FILE_ATTRIBUTE_REPARSE_POINT)) continue;
@@ -4066,8 +4117,7 @@ static DWORD WINAPI AppsThread(LPVOID) {
     }
 
     AddCharmSystemEntries(list);
-    ScanCharmFiles(list);
-    Wh_Log(L"Search: %u catalog entries including charm files/settings", (unsigned)list.size());
+    Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
     AcquireSRWLockExclusive(&g_appsLock);
     g_apps.swap(list);
@@ -4079,11 +4129,27 @@ static DWORD WINAPI AppsThread(LPVOID) {
 
     for (size_t i = 0; i < g_apps.size(); ++i) {
         if (WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0) break;
-        if (g_apps[i].charmCat == CC_FILE) continue;
+        if (g_apps[i].charmCat == CC_FILE || g_apps[i].exe) continue;
         LoadIconFor(i);
         if ((i & 7) == 7 && g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
     }
     if (g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
+
+    HANDLE filesWait[2] = { g_appsStop, g_filesNeed };
+    if (g_filesNeed && WaitForMultipleObjects(2, filesWait, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
+        std::vector<AppEntry>* files = new std::vector<AppEntry>();
+        ScanCharmFiles(*files);
+        const bool stopped = WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0;
+        if (stopped || files->empty()) {
+            delete files;
+        } else {
+            AcquireSRWLockExclusive(&g_appsLock);
+            delete g_pendingFiles;
+            g_pendingFiles = files;
+            ReleaseSRWLockExclusive(&g_appsLock);
+            if (g_wnd) PostMessageW(g_wnd, WM_APP_FILES_READY, 0, 0);
+        }
+    }
     CoUninitialize();
   });
     return 0;
@@ -4239,6 +4305,7 @@ static void RunSearch() {
             }
         }
         if (words.empty()) return;
+        if ((g_charmScope == 0 || g_charmScope == 3) && g_filesNeed) SetEvent(g_filesNeed);
         for (size_t i = 0; i < g_apps.size(); ++i) {
             const AppEntry& a = g_apps[i];
             if (a.exe) {
@@ -4513,6 +4580,7 @@ static ID2D1Bitmap* IconGpu(int appIdx) {
     }
     IconSlot& s = g_icons[appIdx];
     if (s.gpu) return s.gpu;
+    if (!InterlockedCompareExchange(&s.ready, 0, 0) && g_apps[appIdx].exe) LoadIconFor((size_t)appIdx);
     if (!InterlockedCompareExchange(&s.ready, 0, 0) || !s.px) return NULL;
     D2D1_BITMAP_PROPERTIES p = {};
     p.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -4745,18 +4813,13 @@ static bool IsPackagedAppTarget(const wchar_t* target) {
     return bang && bang != id && bang[1] != 0;
 }
 
-static bool LayoutPath(wchar_t* out) {
-    wchar_t base[MAX_PATH] = L"";
-    if (FAILED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, base)) || !base[0]) return false;
-    wsprintfW(out, L"%s\\Win8StartScreen", base);
-    CreateDirectoryW(out, NULL);
-    wsprintfW(out, L"%s\\Win8StartScreen\\tiles.txt", base);
-    return true;
+static bool LayoutPath(std::wstring& out) {
+    return StorageFilePath(L"tiles", out);
 }
 
 static void SaveLayout() {
     for (int i = 0; i < g_tileCount; ++i) g_committedGroup[i] = g_tileGroup[i];
-    wchar_t path[MAX_PATH];
+    std::wstring path;
     if (!LayoutPath(path)) return;
     std::wstring text = L"#Win8StartScreen tiles v2 (group column)\n";
     for (int k = 0; k < g_orderCount; ++k) {
@@ -4770,11 +4833,16 @@ static void SaveLayout() {
     if (n <= 0) return;
     std::string utf8((size_t)n, '\0');
     WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), &utf8[0], n, NULL, NULL);
-    HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) return;
     DWORD written = 0;
     WriteFile(f, utf8.data(), (DWORD)utf8.size(), &written, NULL);
     CloseHandle(f);
+    static bool legacyRemoved = false;
+    if (!legacyRemoved) {
+        legacyRemoved = true;
+        RemoveLegacyData(L"tiles.txt");
+    }
 }
 
 static std::vector<std::wstring> SplitTabs(const std::wstring& line) {
@@ -4800,9 +4868,14 @@ static bool BuiltinTargetMatch(const wchar_t* target, const wchar_t* builtin) {
     return wcsstr(target, builtin) != NULL;
 }
 static bool LoadLayout() {
-    wchar_t path[MAX_PATH];
+    std::wstring path;
     if (!LayoutPath(path)) return false;
-    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        std::wstring legacy = LegacyDataPath(L"tiles.txt");
+        if (!legacy.empty())
+            f = CreateFileW(legacy.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    }
     if (f == INVALID_HANDLE_VALUE) return false;
     DWORD size = GetFileSize(f, NULL);
     if (size == INVALID_FILE_SIZE || size == 0 || size > (4u << 20)) { CloseHandle(f); return false; }
@@ -5507,7 +5580,8 @@ static std::wstring ItemFile(const SelectedItem& item) {
 }
 
 static void ShellActionError(const wchar_t* message) {
-    MessageBoxW(g_wnd, message, T(STR_START), MB_OK | MB_ICONINFORMATION);
+    Wh_Log(L"Shell action failed: %s", message);
+    MessageBeep(MB_ICONINFORMATION);
 }
 
 static bool ShortcutCommand(const std::wstring& file, std::wstring* executable, std::wstring* args) {
@@ -7215,7 +7289,7 @@ static void CharmRender(int contOff) {
             }
             if ((size_t)idx < g_icons.size()) {
             IconSlot& sl = g_icons[(size_t)idx];
-            if (!InterlockedCompareExchange(&sl.ready, 1, 1) && g_apps[idx].charmCat == CC_FILE)
+            if (!InterlockedCompareExchange(&sl.ready, 1, 1) && (g_apps[idx].charmCat == CC_FILE || g_apps[idx].exe))
                 LoadIconFor((size_t)idx);
             if (InterlockedCompareExchange(&sl.ready, 1, 1) && sl.px && sl.w > 0) {
                 bool drewIcon = false;
@@ -8159,21 +8233,12 @@ static DWORD WINAPI LogonOpenThread(LPVOID) {
         Wh_Log(L"Sign-in Start: interactive desktop was not ready; skipped this session");
         return;
     }
-    HKEY key = NULL;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Win8StartScreen", 0, NULL, 0,
-                        KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS) return;
+    const std::wstring valueName = L"LastStartLogonTime-" + CurrentUserSid();
     ULONGLONG previous = 0;
-    DWORD type = 0, length = sizeof(previous);
-    LONG read = RegQueryValueExW(key, L"LastStartLogonTime", NULL, &type,
-                                  (BYTE*)&previous, &length);
-    if (read == ERROR_SUCCESS && type == REG_QWORD && length == sizeof(previous) && previous == loggedOn) {
-        RegCloseKey(key);
-        return;
-    }
-    LONG written = RegSetValueExW(key, L"LastStartLogonTime", 0, REG_QWORD,
-                                   (const BYTE*)&loggedOn, sizeof(loggedOn));
-    RegCloseKey(key);
-    if (written != ERROR_SUCCESS) return;
+    const size_t got = Wh_GetBinaryValue(valueName.c_str(), &previous, sizeof(previous));
+    if (got == sizeof(previous) && previous == loggedOn) return;
+    if (!Wh_SetBinaryValue(valueName.c_str(), &loggedOn, sizeof(loggedOn))) return;
+    RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\Win8StartScreen");
 
     Wh_Log(L"Sign-in Start: interactive desktop ready; requesting opening reveal");
     if (g_wnd) PostMessageW(g_wnd, WM_APP_LOGON_OPEN, 0, 0);
@@ -8313,42 +8378,7 @@ static DWORD ArtRefreshAfterMs() {
     return (DWORD)(end * 1000.0f);
 }
 
-static volatile LONG g_exactCornerTip = 1;
-static void PoliceCompanionStartTip() {
-    static HWND tip = NULL;
-    static bool hiddenByUs = false;
-    static DWORD findLast = 0;
-    if (!g_open || g_closing) { hiddenByUs = false; return; }
-    if (!InterlockedCompareExchange(&g_exactCornerTip, 0, 0)) {
-        if (hiddenByUs && tip && IsWindow(tip)) ShowWindow(tip, SW_SHOWNA);
-        hiddenByUs = false;
-        return;
-    }
-    if (!tip || !IsWindow(tip)) {
-        tip = NULL; hiddenByUs = false;
-        const DWORD now = NowMs();
-        if (now - findLast < 2000) return;
-        findLast = now;
-        tip = FindWindowW(L"WhCharmsBarPortStartTip", NULL);
-        if (!tip) return;
-    }
-    POINT p;
-    RECT wr;
-    if (!GetCursorPos(&p) || !GetWindowRect(g_wnd, &wr)) return;
-    const int keep = ScI(48 + 12);
-    const bool inCorner = p.x >= wr.left && p.x < wr.left + keep &&
-                          p.y >= wr.bottom - keep && p.y < wr.bottom;
-    const bool inZone = inCorner ||
-        (p.x >= wr.left && p.x < wr.left + ScI(12) && p.y >= wr.top && p.y < wr.bottom) ||
-        (p.x >= wr.left && p.x < wr.left + ScI(140) && p.y >= wr.bottom - ScI(140) && p.y < wr.bottom);
-    const bool visible = IsWindowVisible(tip) != FALSE;
-    if (visible && !inCorner) { ShowWindow(tip, SW_HIDE); hiddenByUs = true; }
-    else if (!visible && hiddenByUs && inCorner) { ShowWindow(tip, SW_SHOWNA); hiddenByUs = false; }
-    else if (!inZone) hiddenByUs = false;
-}
-
 static void Tick() {
-    PoliceCompanionStartTip();
     DWORD now = NowMs();
     float dt = (float)(now - g_lastTick) / 1000.0f;
     if (dt > 0.1f) dt = 0.1f;
@@ -8475,6 +8505,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         RepaintNow();
         return 0;
     case WM_APP_REBUILD_BG:
+        if (InterlockedExchange(&g_tileColorsDirty, 0)) UpdateTileAppColors();
         BuildBuffers();
         InitGpu();
         RepaintNow();
@@ -8591,6 +8622,25 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (g_charmOpen) CharmRender(g_charmCont);
         if (g_open) RepaintNow();
         return 0;
+    case WM_APP_FILES_READY: {
+        std::vector<AppEntry>* files = NULL;
+        AcquireSRWLockExclusive(&g_appsLock);
+        files = g_pendingFiles;
+        g_pendingFiles = NULL;
+        if (files) {
+            for (AppEntry& a : *files) g_apps.push_back(std::move(a));
+            g_icons.resize(g_apps.size());
+        }
+        ReleaseSRWLockExclusive(&g_appsLock);
+        if (files) {
+            delete files;
+            Wh_Log(L"Search: %u catalog entries including files", (unsigned)g_apps.size());
+            RunSearch();
+            if (g_charmOpen) CharmRender(g_charmCont);
+            if (g_open) RepaintNow();
+        }
+        return 0;
+    }
     case WM_APP_ICON_READY:
         if (g_iconBitmapCache) g_iconBitmapCache->clear();
         UpdateTileAppColors();
@@ -9051,6 +9101,7 @@ static bool InstallStartHook() {
     return true;
 }
 
+// An unassigned key pressed between the Windows key down and up stops Explorer from treating it as a lone press.
 static void MaskWinKey() {
     INPUT in[2] = {};
     in[0].type = INPUT_KEYBOARD; in[0].ki.wVk = 0xE8; in[0].ki.dwExtraInfo = kMagic;
@@ -9058,16 +9109,26 @@ static void MaskWinKey() {
     SendInput(2, in, sizeof(INPUT));
 }
 
-static wchar_t KeyToChar(const KBDLLHOOKSTRUCT* k) {
+static wchar_t TranslateKey(const KBDLLHOOKSTRUCT* k, bool altGr, HKL hkl) {
     BYTE ks[256] = {};
     if (GetAsyncKeyState(VK_SHIFT) & 0x8000) ks[VK_SHIFT] = 0x80;
     if (GetKeyState(VK_CAPITAL) & 1) ks[VK_CAPITAL] = 1;
-    HWND fg = GetForegroundWindow();
-    DWORD tid = fg ? GetWindowThreadProcessId(fg, NULL) : 0;
-    HKL hkl = GetKeyboardLayout(tid);
+    if (altGr) {
+        ks[VK_CONTROL] = ks[VK_LCONTROL] = 0x80;
+        ks[VK_MENU] = ks[VK_RMENU] = 0x80;
+    }
     WCHAR buf[8] = {};
     int n = ToUnicodeEx(k->vkCode, k->scanCode, ks, buf, 8, 0x4  , hkl);
     return (n == 1 && buf[0] >= 0x20 && buf[0] != 0x7f) ? buf[0] : 0;
+}
+
+static wchar_t KeyToChar(const KBDLLHOOKSTRUCT* k, bool altGr) {
+    HWND fg = GetForegroundWindow();
+    DWORD tid = fg ? GetWindowThreadProcessId(fg, NULL) : 0;
+    HKL hkl = GetKeyboardLayout(tid);
+    wchar_t c = TranslateKey(k, altGr, hkl);
+    if (altGr && c && c == TranslateKey(k, false, hkl)) return 0;
+    return c;
 }
 
 static bool HandleSearchKey(const KBDLLHOOKSTRUCT* k, bool down, bool up) {
@@ -9083,7 +9144,9 @@ static bool HandleSearchKey(const KBDLLHOOKSTRUCT* k, bool down, bool up) {
         PostMessageW(g_wnd, WM_APP_ALL_APPS, 0, 0);
         return true;
     }
-    if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000)) return false;
+    const bool altGr = (GetAsyncKeyState(VK_RMENU) & 0x8000) && (GetAsyncKeyState(VK_LCONTROL) & 0x8000) &&
+                       !(GetAsyncKeyState(VK_RCONTROL) & 0x8000) && !(GetAsyncKeyState(VK_LMENU) & 0x8000);
+    if (!altGr && ((GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000))) return false;
     bool searching = (g_view == VIEW_SEARCH) || g_charmOpen || g_namingGroup >= 0;
     if (searching && (vk == VK_BACK || vk == VK_RETURN || vk == VK_UP || vk == VK_DOWN ||
                       vk == VK_LEFT || vk == VK_RIGHT)) {
@@ -9099,7 +9162,7 @@ static bool HandleSearchKey(const KBDLLHOOKSTRUCT* k, bool down, bool up) {
         PostMessageW(g_wnd, WM_APP_KEY, vk, 0);
         return true;
     }
-    wchar_t c = KeyToChar(k);
+    wchar_t c = KeyToChar(k, altGr);
     if (!c) return false;
     g_swallowed[vk] = true;
     if (!searching && c == L' ') return true;
@@ -9171,10 +9234,10 @@ static DWORD WINAPI HookThread(LPVOID) {
   RunGuarded(L"HookThread", [] {
     MSG m;
     PeekMessageW(&m, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_hookReady) SetEvent(g_hookReady);
     g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, GetModuleHandleW(NULL), 0);
     if (g_hook) Wh_Log(L"Keyboard hook installed");
     else Wh_Log(L"SetWindowsHookEx failed, error %u", (unsigned)GetLastError());
-    if (g_hookReady) SetEvent(g_hookReady);
     while (GetMessageW(&m, NULL, 0, 0) > 0) {
         if (m.message == WM_HOOKCTL_MOUSE_ON) {
             if (!g_mouseHook) g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CharmMouseProc, GetModuleHandleW(NULL), 0);
@@ -9191,6 +9254,7 @@ static DWORD WINAPI HookThread(LPVOID) {
     if (g_hook) UnhookWindowsHookEx(g_hook);
     g_hook = NULL;
   });
+    if (g_hookReady) SetEvent(g_hookReady);
     return 0;
 }
 
@@ -9269,29 +9333,22 @@ static void InitTiles() {
     for (int i = 0; i < g_tileCount; ++i) g_committedGroup[i] = g_tileGroup[i];
 }
 
-static DWORD WINAPI UiThread(LPVOID) {
-    HANDLE mtx = CreateMutexW(NULL, TRUE, L"Local\\Win8StartScreenMod8045");
-    if (mtx && GetLastError() == ERROR_ALREADY_EXISTS) {
-        DWORD w = WaitForSingleObject(mtx, 8000);
-        if (w != WAIT_OBJECT_0 && w != WAIT_ABANDONED) {
-            Wh_Log(L"Another live Start screen instance holds the mutex; standing down");
-            CloseHandle(mtx);
-            return 0;
-        }
-        Wh_Log(L"Took over the Start screen instance from a previous shell");
-    }
-  RunGuarded(L"UiThread", [] {
-    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+static void UiRun() {
+    g_uiCoInit = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
     DetectUiLanguage();
     Gdiplus::GdiplusStartupInput gdipInput;
     if (Gdiplus::GdiplusStartup(&g_gdipToken, &gdipInput, NULL) != Gdiplus::Ok) g_gdipToken = 0;
-    g_inst = GetModuleHandleW(NULL);
+    g_inst = (HINSTANCE)&__ImageBase;
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = g_inst;
     wc.hCursor = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
     wc.lpszClassName = kClassName;
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClassW failed for the Start window, err=%u", (unsigned)GetLastError());
+        return;
+    }
+    g_classRegistered = true;
 
     CreateUiFonts();
     DWORD n = 127;
@@ -9321,6 +9378,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (g_wnd && g_artStop && g_artWake)
         g_artThread = CreateThread(NULL, 0, PackageArtThread, NULL, 0, NULL);
     g_appsStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+    g_filesNeed = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (g_wnd && g_appsStop) g_appsThread = CreateThread(NULL, 0, AppsThread, NULL, 0, NULL);
     g_wallStop = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_wallWake = CreateEventW(NULL, TRUE, TRUE, NULL);
@@ -9334,10 +9392,18 @@ static DWORD WINAPI UiThread(LPVOID) {
     g_hookThread = CreateThread(NULL, 0, HookThread, NULL, 0, &g_hookTid);
 
     MSG m;
-    while (GetMessageW(&m, NULL, 0, 0)) {
-        TranslateMessage(&m);
-        DispatchMessageW(&m);
+    bool quit = false;
+    while (!quit) {
+        if (MsgWaitForMultipleObjectsEx(1, &g_uiStop, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE) == WAIT_OBJECT_0) break;
+        while (PeekMessageW(&m, NULL, 0, 0, PM_REMOVE)) {
+            if (m.message == WM_QUIT) { quit = true; break; }
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
     }
+}
+
+static void UiTeardown() {
 
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
@@ -9348,8 +9414,11 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (g_artWake) { CloseHandle(g_artWake); g_artWake = NULL; }
     if (g_artStop) { CloseHandle(g_artStop); g_artStop = NULL; }
     if (g_appsStop) SetEvent(g_appsStop);
-    if (g_appsThread) { WaitForSingleObject(g_appsThread, 8000); CloseHandle(g_appsThread); g_appsThread = NULL; }
+    if (g_appsThread) { WaitForSingleObject(g_appsThread, INFINITE); CloseHandle(g_appsThread); g_appsThread = NULL; }
     if (g_appsStop) { CloseHandle(g_appsStop); g_appsStop = NULL; }
+    if (g_filesNeed) { CloseHandle(g_filesNeed); g_filesNeed = NULL; }
+    delete g_pendingFiles;
+    g_pendingFiles = NULL;
     if (g_wallStop) SetEvent(g_wallStop);
     if (g_wallWake) SetEvent(g_wallWake);
     if (g_wallThread) {
@@ -9361,38 +9430,73 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (g_frameStop) SetEvent(g_frameStop);
     if (g_frameWake) SetEvent(g_frameWake);
     if (g_frameThread) {
-        WaitForSingleObject(g_frameThread, 3000);
+        WaitForSingleObject(g_frameThread, INFINITE);
         CloseHandle(g_frameThread); g_frameThread = NULL;
     }
     if (g_frameWake) { CloseHandle(g_frameWake); g_frameWake = NULL; }
     if (g_frameStop) { CloseHandle(g_frameStop); g_frameStop = NULL; }
     if (g_hookThread) {
+        HANDLE hookWait[2] = { g_hookReady, g_hookThread };
+        if (g_hookReady) WaitForMultipleObjects(2, hookWait, FALSE, INFINITE);
         PostThreadMessageW(g_hookTid, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 3000);
+        WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread); g_hookThread = NULL;
     }
     if (g_hookReady) { CloseHandle(g_hookReady); g_hookReady = NULL; }
     if (g_wnd) DestroyWindow(g_wnd);
     g_wnd = NULL;
+    ReleaseUiIcons();
+    ReleaseAvatarPicture();
+    CharmRelease();
     FreeBuffers();
     for (size_t i = 0; i < g_icons.size(); ++i) { delete[] g_icons[i].px; g_icons[i].px = NULL; }
     g_packageArts.clear(); g_artQueue.clear();
     if (g_titleFormat) { g_titleFormat->Release(); g_titleFormat = NULL; }
     if (g_userFormat) { g_userFormat->Release(); g_userFormat = NULL; }
     IDWriteTextFormat** searchFormats[] = { &g_subFormat, &g_itemFormat, &g_sbTitleFormat, &g_boldFormat, &g_rowFormat,
-                                            &g_countFormat, &g_queryFormat, &g_glyphFormat, &g_glyphSmall, &g_barLabel, &g_flyFormat, &g_zoomFormat };
+                                            &g_countFormat, &g_queryFormat, &g_glyphFormat, &g_glyphSmall, &g_barLabel, &g_flyFormat, &g_zoomFormat, &g_hdrGlyphFmt };
     for (IDWriteTextFormat** f : searchFormats) if (*f) { (*f)->Release(); *f = NULL; }
     if (g_writeFactory) { g_writeFactory->Release(); g_writeFactory = NULL; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = NULL; }
     for (int i = 0; i < g_tileCount; i++) FreeTile(g_tiles[i]);
-    DeleteObject(g_fTitle); DeleteObject(g_fUser); DeleteObject(g_fLabel); DeleteObject(g_fTopLabel);
+    HFONT* fonts[] = { &g_fTitle, &g_fUser, &g_fLabel, &g_fTopLabel, &g_fHdrGlyph, &g_fBarMeas };
+    for (HFONT* f : fonts) if (*f) { DeleteObject(*f); *f = NULL; }
+    if (g_stockAppIcon) { DestroyIcon(g_stockAppIcon); g_stockAppIcon = NULL; }
     UnregisterUserMenuClass();
-    UnregisterClassW(kClassName, g_inst);
+    if (g_classRegistered) {
+        UnregisterClassW(kClassName, g_inst);
+        g_classRegistered = false;
+    }
     if (g_iconBitmapCache) g_iconBitmapCache->clear();
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
-    CoUninitialize();
-  });
-    CloseHandle(mtx);
+    if (g_uiCoInit) {
+        CoUninitialize();
+        g_uiCoInit = false;
+    }
+}
+
+static DWORD WINAPI UiThread(LPVOID) {
+    MSG queueMsg;
+    PeekMessageW(&queueMsg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_uiReady) SetEvent(g_uiReady);
+    HANDLE mtx = CreateMutexW(NULL, TRUE, L"Local\\Win8StartScreenMod8045");
+    if (mtx && GetLastError() == ERROR_ALREADY_EXISTS) {
+        HANDLE waits[2] = { mtx, g_uiStop };
+        DWORD w = WaitForMultipleObjects(g_uiStop ? 2 : 1, waits, FALSE, 8000);
+        if (w != WAIT_OBJECT_0 && w != WAIT_ABANDONED_0) {
+            Wh_Log(L"Another live Start screen instance holds the mutex, or the mod is unloading; standing down");
+            CloseHandle(mtx);
+            return 0;
+        }
+        Wh_Log(L"Took over the Start screen instance from a previous shell");
+    }
+    if (g_uiStop && WaitForSingleObject(g_uiStop, 0) == WAIT_OBJECT_0) {
+        if (mtx) CloseHandle(mtx);
+        return 0;
+    }
+    RunGuarded(L"UiThread", [] { UiRun(); });
+    RunGuarded(L"UiTeardown", [] { UiTeardown(); });
+    if (mtx) CloseHandle(mtx);
     return 0;
 }
 
@@ -9453,7 +9557,6 @@ static void LoadSettings() {
     LONG oldRows = InterlockedExchange(&g_requestedGroupRows, rows);
     if ((oldCols != cols || oldRows != rows) && g_wnd)
         PostMessageW(g_wnd, WM_APP_GROUP_SETTINGS, 0, 0);
-    InterlockedExchange(&g_exactCornerTip, Wh_GetIntSetting(L"exactCornerStartTip") != 0 ? 1 : 0);
     {
         const LONG seed = Wh_GetIntSetting(L"seedStartLayout") != 0 ? 1 : 0;
         if (seed && InterlockedExchange(&g_seedLayout, seed) == 0) {
@@ -9465,7 +9568,7 @@ static void LoadSettings() {
     LONG appc = Wh_GetIntSetting(L"appTileColors") != 0 ? 1 : 0;
     bool chromeChanged = false;
     if (InterlockedExchange(&g_privacyMode, priv) != priv) { g_userTextW = -1; chromeChanged = true; }
-    if (InterlockedExchange(&g_appTileColors, appc) != appc) { UpdateTileAppColors(); chromeChanged = true; }
+    if (InterlockedExchange(&g_appTileColors, appc) != appc) { InterlockedExchange(&g_tileColorsDirty, 1); chromeChanged = true; }
     if ((bgChanged || chromeChanged) && g_wnd)
         PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
 }
@@ -9476,8 +9579,14 @@ void Wh_ModSettingsChanged() { RunGuarded(L"ModSettingsChanged", [] { LoadSettin
 BOOL Wh_ModInit() {
     return RunGuardedValue<BOOL>(L"ModInit", FALSE, []() -> BOOL {
         LoadSettings();
-        g_thread = CreateThread(NULL, 0, UiThread, NULL, 0, &g_tid);
-        if (!g_thread) return FALSE;
+        g_uiReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+        g_uiStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (g_uiReady && g_uiStop) g_thread = CreateThread(NULL, 0, UiThread, NULL, 0, &g_tid);
+        if (!g_thread) {
+            if (g_uiReady) { CloseHandle(g_uiReady); g_uiReady = NULL; }
+            if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
+            return FALSE;
+        }
         if (!g_keyboardOnly) g_startHooked = InstallStartHook();
         return TRUE;
     });
@@ -9486,10 +9595,15 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     RunGuarded(L"ModUninit", [] {
         if (g_thread) {
+            if (g_uiStop) SetEvent(g_uiStop);
+            HANDLE readyWait[2] = { g_uiReady, g_thread };
+            if (g_uiReady) WaitForMultipleObjects(2, readyWait, FALSE, INFINITE);
             PostThreadMessageW(g_tid, WM_QUIT, 0, 0);
-            WaitForSingleObject(g_thread, 3000);
+            WaitForSingleObject(g_thread, INFINITE);
             CloseHandle(g_thread);
             g_thread = NULL;
         }
+        if (g_uiReady) { CloseHandle(g_uiReady); g_uiReady = NULL; }
+        if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
     });
 }
