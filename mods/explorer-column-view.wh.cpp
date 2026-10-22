@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.42
+// @version         0.43
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -58,9 +58,22 @@ it on the right and show folder details too.
 
 ## Turn columns on or off
 
-With Explorer focused, press **Ctrl+Alt+Shift+V** to switch column browsing across
-open and new Explorer windows and tabs. The shortcut remains available to other
-apps. **Enable columns by default** controls the initial mode.
+With Explorer focused, press **Ctrl+Alt+Shift+V** (the default) to switch column
+browsing across open and new Explorer windows and tabs. Change **Toggle shortcut**
+in the mod settings, for example to `Ctrl+Shift+C` or `F8`. Use `Ctrl`, `Alt`,
+`Shift` and/or `Win` separated by `+`, followed by a letter, digit, `F1`–`F24`,
+or a named key: `Space`, `Tab`, `Enter`, `Esc`, `Backspace`, `Delete`, `Insert`,
+`Home`, `End`, `PageUp`, `PageDown`, `Left`, `Right`, `Up`, or `Down`.
+Other keyboard virtual-key codes can be written in hexadecimal, e.g. `Ctrl+0xBA`.
+Names are case-insensitive; leave the setting empty to disable the shortcut.
+Invalid shortcuts fall back to **Ctrl+Alt+Shift+V** and are logged.
+
+The shortcut only runs in Explorer, not while typing in an address/search/rename
+field or using Right Alt (AltGr). Extra modifiers prevent a match. Choose a
+combination that does not conflict with another Explorer command: the configured
+shortcut takes precedence there, but cannot override Windows-reserved shortcuts.
+It remains available to other apps. **Enable columns by default** controls the
+initial mode.
 Use Explorer's main sidebar or address bar to change the first column's location.
 Click **Save settings** in Windhawk to apply configuration changes.
 
@@ -99,7 +112,10 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
 /*
 - EnableByDefault: true
   $name: Enable columns by default
-  $description: On starts a fresh Explorer/mod session with columns enabled. Off starts with regular Explorer until Ctrl+Alt+Shift+V is pressed. The shortcut switches all open and new windows on or off. Changing this setting applies immediately.
+  $description: On starts a fresh Explorer/mod session with columns enabled. Off starts with regular Explorer until the toggle shortcut is pressed. The shortcut switches all open and new windows on or off. Changing this setting applies immediately.
+- ToggleShortcut: Ctrl+Alt+Shift+V
+  $name: Toggle shortcut
+  $description: Explorer-only shortcut. Combine Ctrl, Alt, Shift or Win with a letter, digit, F1-F24 or named key (see Details), e.g. Ctrl+Shift+C or F8. Empty disables it. Invalid values use Ctrl+Alt+Shift+V. Does not run in text fields or with Right Alt (AltGr). Save settings to apply.
 - FixedInspector: false
   $name: Use fixed-width Inspector
   $description: Off places file previews after the folder columns and fills the remaining window space. On keeps the Inspector fixed on the far right and also shows folder details.
@@ -410,6 +426,91 @@ std::shared_ptr<PreviewJob> StartPreviewJob(const std::wstring& path,
     ReleaseSRWLockExclusive(&g_previewJobsLock);
     if (!job->thread) { delete argument; return {}; }
     return job;
+}
+
+// Pack the key and modifiers together so UI threads never observe a partially
+// updated shortcut when settings are saved on another thread.
+constexpr UINT kShortcutCtrl = 0x100;
+constexpr UINT kShortcutAlt = 0x200;
+constexpr UINT kShortcutShift = 0x400;
+constexpr UINT kShortcutWin = 0x800;
+constexpr UINT kDefaultToggleShortcut = kShortcutCtrl | kShortcutAlt | kShortcutShift | 'V';
+std::atomic<UINT> g_toggleShortcut{kDefaultToggleShortcut};
+
+bool ParseToggleShortcut(const wchar_t* value, UINT* shortcut) {
+    *shortcut = 0;
+    std::wstring text = value ? value : L"";
+    UINT modifiers = 0, key = 0;
+    size_t start = 0;
+    if (text.find_first_not_of(L" \t\r\n") == std::wstring::npos) return true;
+    while (start <= text.size()) {
+        size_t end = text.find(L'+', start);
+        std::wstring token = text.substr(start, end == std::wstring::npos ? end : end - start);
+        size_t first = token.find_first_not_of(L" \t\r\n");
+        if (first == std::wstring::npos) return false;
+        token = token.substr(first, token.find_last_not_of(L" \t\r\n") - first + 1);
+        for (auto& ch : token) ch = std::towupper(ch);
+        UINT modifier = token == L"CTRL" ? kShortcutCtrl :
+                        token == L"ALT" ? kShortcutAlt :
+                        token == L"SHIFT" ? kShortcutShift :
+                        token == L"WIN" ? kShortcutWin : 0;
+        if (modifier) {
+            if (key || (modifiers & modifier)) return false;
+            modifiers |= modifier;
+        } else {
+            if (key) return false;
+            if (token.size() == 1 && ((token[0] >= L'A' && token[0] <= L'Z') ||
+                                      (token[0] >= L'0' && token[0] <= L'9'))) {
+                key = token[0];
+            } else if (token[0] == L'F' && token.size() >= 2 && token.size() <= 3) {
+                UINT number = 0;
+                for (size_t i = 1; i < token.size(); ++i) {
+                    if (token[i] < L'0' || token[i] > L'9') return false;
+                    number = number * 10 + token[i] - L'0';
+                }
+                if (number < 1 || number > 24) return false;
+                key = VK_F1 + number - 1;
+            } else if (token.size() >= 3 && token.size() <= 4 && token.substr(0, 2) == L"0X") {
+                for (size_t i = 2; i < token.size(); ++i) {
+                    wchar_t ch = token[i];
+                    if (ch >= L'0' && ch <= L'9') key = key * 16 + ch - L'0';
+                    else if (ch >= L'A' && ch <= L'F') key = key * 16 + ch - L'A' + 10;
+                    else return false;
+                }
+                // Exclude mouse buttons, modifiers and undefined sentinel values.
+                if (key <= VK_XBUTTON2 || key >= 0xFF ||
+                    (key >= VK_SHIFT && key <= VK_MENU) ||
+                    key == VK_LWIN || key == VK_RWIN ||
+                    (key >= VK_LSHIFT && key <= VK_RMENU)) return false;
+            } else {
+                static const struct { PCWSTR name; UINT key; } names[] = {
+                    {L"SPACE", VK_SPACE}, {L"TAB", VK_TAB}, {L"ENTER", VK_RETURN},
+                    {L"ESC", VK_ESCAPE}, {L"BACKSPACE", VK_BACK}, {L"DELETE", VK_DELETE},
+                    {L"INSERT", VK_INSERT}, {L"HOME", VK_HOME}, {L"END", VK_END},
+                    {L"PAGEUP", VK_PRIOR}, {L"PAGEDOWN", VK_NEXT}, {L"LEFT", VK_LEFT},
+                    {L"RIGHT", VK_RIGHT}, {L"UP", VK_UP}, {L"DOWN", VK_DOWN},
+                };
+                for (const auto& entry : names) if (token == entry.name) key = entry.key;
+                if (!key) return false;
+            }
+        }
+        if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    if (!key) return false;
+    *shortcut = modifiers | key;
+    return true;
+}
+
+void LoadToggleShortcut() {
+    PCWSTR value = Wh_GetStringSetting(L"ToggleShortcut");
+    UINT shortcut;
+    if (!ParseToggleShortcut(value, &shortcut)) {
+        Wh_Log(L"[Columns settings] Invalid ToggleShortcut; using Ctrl+Alt+Shift+V");
+        shortcut = kDefaultToggleShortcut;
+    }
+    Wh_FreeStringSetting(value);
+    g_toggleShortcut.store(shortcut);
 }
 
 std::atomic<bool> g_fixedInspectorSetting{false};
@@ -6475,6 +6576,41 @@ bool TranslateColumnAccelerator(MSG* message) {
     return false;
 }
 
+bool HandleToggleShortcut(MSG* msg) {
+    const bool down = msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN;
+    const bool up = msg->message == WM_KEYUP || msg->message == WM_SYSKEYUP;
+    if (!down && !up) return false;
+    static thread_local UINT consumedKey = 0;
+    const bool repeat = down && (msg->lParam & (1LL << 30));
+    if (msg->wParam == consumedKey) {
+        // Finish a consumed press even if settings/modifiers/focus changed.
+        // A fresh down also recovers from a keyup that never reached this thread.
+        if (up || repeat) {
+            if (up) consumedKey = 0;
+            msg->message = WM_NULL;
+            return true;
+        }
+        consumedKey = 0;
+    }
+    if (!down || repeat) return false;
+    UINT shortcut = g_toggleShortcut.load();
+    if (!shortcut || msg->wParam != (shortcut & 0xFF)) return false;
+    UINT modifiers = 0;
+    if (GetKeyState(VK_CONTROL) & 0x8000) modifiers |= kShortcutCtrl;
+    if (GetKeyState(VK_MENU) & 0x8000) modifiers |= kShortcutAlt;
+    if (GetKeyState(VK_SHIFT) & 0x8000) modifiers |= kShortcutShift;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) modifiers |= kShortcutWin;
+    HWND foreground = GetForegroundWindow();
+    if (modifiers != (shortcut & ~0xFFu) || (GetKeyState(VK_RMENU) & 0x8000) ||
+        !IsExplorerWindow(foreground) || IsColumnTextInput(msg->hwnd) ||
+        GetWindowThreadProcessId(msg->hwnd, nullptr) != GetCurrentThreadId() ||
+        GetAncestor(msg->hwnd, GA_ROOT) != foreground) return false;
+    if (!PostThreadMessageW(g_threadId, kToggleColumnsMessage, 0, 0)) return false;
+    consumedKey = static_cast<UINT>(msg->wParam);
+    msg->message = WM_NULL;
+    return true;
+}
+
 LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
     CallbackScope callbackScope;
     if (g_unloading.load())
@@ -6482,6 +6618,7 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
     if (code >= 0 && wp == PM_REMOVE && lp) {
         MSG* msg = reinterpret_cast<MSG*>(lp);
         ObserveNativeRestorationInput(msg->message, msg->wParam);
+        if (HandleToggleShortcut(msg)) return CallNextHookEx(nullptr, code, wp, lp);
         if (msg->message == g_toggleMessage) {
             HWND explorer = reinterpret_cast<HWND>(msg->wParam);
             LPARAM command = msg->lParam;
@@ -6493,22 +6630,6 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
             PostThreadMessageW(g_threadId, kCommandDoneMessage,
                 reinterpret_cast<WPARAM>(msg->hwnd), command);
         } else if (msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN) {
-            HWND foreground = GetForegroundWindow();
-            if (msg->wParam == 'V' && IsExplorerWindow(foreground) &&
-                !IsColumnTextInput(msg->hwnd) &&
-                !(GetKeyState(VK_RMENU) & 0x8000) &&
-                GetWindowThreadProcessId(msg->hwnd, nullptr) == GetCurrentThreadId() &&
-                GetAncestor(msg->hwnd, GA_ROOT) == foreground &&
-                (GetKeyState(VK_CONTROL) & 0x8000) &&
-                (GetKeyState(VK_MENU) & 0x8000) &&
-                (GetKeyState(VK_SHIFT) & 0x8000)) {
-                // Only this foreground Explorer's input is consumed. Repeated
-                // keydown messages stay consumed without toggling repeatedly.
-                if (!(msg->lParam & (1LL << 30)))
-                    PostThreadMessageW(g_threadId, kToggleColumnsMessage, 0, 0);
-                msg->message = WM_NULL;
-                return CallNextHookEx(nullptr, code, wp, lp);
-            }
             if (auto menuOwner = NativeMenuSessionOnThread()) {
                 wchar_t name[100] = {};
                 GetClassNameW(msg->hwnd, name, ARRAYSIZE(name));
@@ -6858,7 +6979,7 @@ DWORD WINAPI UiThread(void*) {
     InitializeModeStore();
     SynchronizeColumnsMode();
     g_helperQueueReady.store(true);
-    Wh_Log(L"[Columns] Ready v%s: mode=%s; Ctrl+Alt+Shift+V in Explorer toggles columns",
+    Wh_Log(L"[Columns] Ready v%s: mode=%s; configured shortcut in Explorer toggles columns",
            WH_MOD_VERSION, g_columnsEnabled.load() ? L"on" : L"off");
     // The only full enumeration. Later tabs/native views arrive through the
     // CreateWindowExW hook, registered during Wh_ModInit before hooks activate.
@@ -6974,6 +7095,7 @@ BOOL Wh_ModInit() {
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
+    LoadToggleShortcut();
     Wh_Log(L"[Columns settings] Loaded v%s default=%d fixedInspector=%d classicMenus=%d",
         WH_MOD_VERSION, g_enableByDefault.load(), g_fixedInspectorSetting.load(), g_classicContextMenus.load());
     const auto& platform = GetMenuPlatform();
@@ -7012,6 +7134,7 @@ void Wh_ModSettingsChanged() {
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
+    LoadToggleShortcut();
     // Publish the layout/menu preferences before the helper can open new tabs.
     if (g_enableByDefault.exchange(preference) != preference) {
         g_preferenceChangePending.store(true);
