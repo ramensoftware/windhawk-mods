@@ -62,7 +62,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
-- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse bounded live caches. Last captured definitions are saved in this mod's Windhawk storage on unload and used as a compatible fallback after a reload, including while Start is hidden. The saved cache applies only to the current Start process and is discarded when Start restarts. Disabling the mod releases its hooks and live caches; its recovery data stays in its own Windhawk storage. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
+- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse bounded caches of effect definitions without keeping Start's composition objects alive. Last captured definitions are saved in this mod's Windhawk storage on unload and used as a compatible fallback after a reload, including while Start is hidden. Recovery storage is separated by Windows session and applies only to the current Start process; it is discarded when Start restarts. Disabling the mod releases its hooks and live caches; its recovery data stays in its own Windhawk storage. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
 - **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Focus uses standard foreground APIs without attaching thread input.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
@@ -657,6 +657,7 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <filterr.h>
 #include <xmllite.h>
 #include <cwctype>
+#include <cwchar>
 #include <sstream>
 #include <msctf.h>
 #include <wincodec.h>
@@ -19692,9 +19693,8 @@ bool ValidSearchEffectGraph(SearchEffectGraph const& graph) {
 }
 
 struct SearchCapturedMaterial {
-    // Composition objects have no weak-reference API. A bounded native COM
-    // reference prevents identity reuse; every reference is released on unload.
-    winrt::com_ptr<IUnknown> owner;
+    // Plain data only: creation hooks invalidate reused object identities.
+    // Never keep Start's composition objects alive or release them at shutdown.
     SearchEffectGraph graph;
     uint64_t used = 0;
 };
@@ -19704,7 +19704,8 @@ static std::unordered_map<void*, SearchCapturedMaterial> g_searchMaterialBrushes
 static uint64_t g_searchMaterialUse = 0;
 static std::atomic<bool> g_searchMaterialCapture{false};
 static constexpr size_t kSearchMaterialCacheLimit = 256;
-static constexpr wchar_t kSearchMaterialStorage[] = L"appearanceMaterialCache.v1";
+static constexpr wchar_t kSearchMaterialLegacyStorage[] = L"appearanceMaterialCache.v1";
+static wchar_t g_searchMaterialStorage[64]{};
 
 // Only the last observed definitions are persisted, in this mod's own storage.
 // Object identities are opaque hashes, used solely for equality within the
@@ -19744,8 +19745,23 @@ uint64_t SearchMaterialClass(wuxm::XamlCompositionBrushBase const& brush) {
 
 void LoadSearchMaterialStorage() noexcept {
     try {
+        DWORD session = 0;
+        if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
+            g_searchMaterialStorage[0] = 0;
+            Wh_Log(L"material recovery session unavailable");
+            return;
+        }
+        std::swprintf(g_searchMaterialStorage, std::size(g_searchMaterialStorage),
+                      L"appearanceMaterialCache.v1.session.%lu", session);
         auto saved = std::make_unique<SearchSavedMaterials>();
-        const size_t bytes = Wh_GetBinaryValue(kSearchMaterialStorage, saved.get(), sizeof(*saved));
+        size_t bytes = Wh_GetBinaryValue(g_searchMaterialStorage, saved.get(), sizeof(*saved));
+        bool legacy = false;
+        if (!bytes) {
+            // Migrate only a compatible record from this exact Start lifetime.
+            // Never delete the shared legacy value: another session may own it.
+            bytes = Wh_GetBinaryValue(kSearchMaterialLegacyStorage, saved.get(), sizeof(*saved));
+            legacy = bytes != 0;
+        }
         const uint64_t created = SearchMaterialProcessCreated();
         bool valid = bytes >= offsetof(SearchSavedMaterials, entries) && saved->version == 1 &&
             saved->graphSize == sizeof(SearchEffectGraph) && saved->process == GetCurrentProcessId() &&
@@ -19769,9 +19785,9 @@ void LoadSearchMaterialStorage() noexcept {
             g_searchSavedMaterials = {};
             g_searchSavedMaterials.process = GetCurrentProcessId();
             g_searchSavedMaterials.created = created;
-            if (bytes) Wh_DeleteValue(kSearchMaterialStorage);
+            if (bytes && !legacy) Wh_DeleteValue(g_searchMaterialStorage);
         }
-        g_searchSavedMaterialsDirty = false;
+        g_searchSavedMaterialsDirty = valid && legacy;
     } catch (...) { Wh_Log(L"material recovery cache unavailable"); }
 }
 
@@ -19779,10 +19795,10 @@ void SaveSearchMaterialStorage() noexcept {
     try {
         // Only unload writes storage; appearance polling never performs I/O.
         std::lock_guard lock(g_searchMaterialMutex);
-        if (!g_searchSavedMaterialsDirty || !g_searchSavedMaterials.created) return;
+        if (!g_searchSavedMaterialsDirty || !g_searchSavedMaterials.created || !g_searchMaterialStorage[0]) return;
         const size_t bytes = offsetof(SearchSavedMaterials, entries) +
             g_searchSavedMaterials.count * sizeof(SearchSavedMaterial);
-        if (Wh_SetBinaryValue(kSearchMaterialStorage, &g_searchSavedMaterials, bytes))
+        if (Wh_SetBinaryValue(g_searchMaterialStorage, &g_searchSavedMaterials, bytes))
             g_searchSavedMaterialsDirty = false;
         else Wh_Log(L"material recovery cache could not be saved");
     } catch (...) { Wh_Log(L"material recovery cache save failed"); }
@@ -19831,6 +19847,31 @@ bool RecallSearchMaterial(wuxm::XamlCompositionBrushBase const& brush,
     return false;
 }
 
+void ForgetSearchSavedMaterial(wf::IUnknown const& object, bool xamlBrush) {
+    const auto identity = SearchMaterialIdentity(object);
+    std::lock_guard lock(g_searchMaterialMutex);
+    auto& saved = g_searchSavedMaterials;
+    for (uint32_t i = 0; i < saved.count;) {
+        auto const& entry = saved.entries[i];
+        if ((xamlBrush ? entry.brush : entry.composition) != identity) { ++i; continue; }
+        saved.entries[i] = saved.entries[--saved.count];
+        saved.entries[saved.count] = {};
+        g_searchSavedMaterialsDirty = true;
+    }
+}
+
+void ForgetSearchMaterial(std::unordered_map<void*, SearchCapturedMaterial>& cache,
+                          void* object) noexcept {
+    if (!object) return;
+    try {
+        wf::IUnknown created{nullptr};
+        winrt::copy_from_abi(created, object);
+        auto identity = created.as<IUnknown>();
+        std::lock_guard lock(g_searchMaterialMutex);
+        cache.erase(identity.get());
+    } catch (...) {}
+}
+
 void CacheSearchMaterial(std::unordered_map<void*, SearchCapturedMaterial>& cache,
                          wf::IUnknown const& object, SearchEffectGraph const& graph) {
     if (!g_searchMaterialCapture || g_quit) return;
@@ -19843,7 +19884,7 @@ void CacheSearchMaterial(std::unordered_map<void*, SearchCapturedMaterial>& cach
             [](auto const& a, auto const& b) { return a.second.used < b.second.used; });
         cache.erase(oldest);
     }
-    cache.insert_or_assign(identity.get(), SearchCapturedMaterial{identity, graph, ++g_searchMaterialUse});
+    cache.insert_or_assign(identity.get(), SearchCapturedMaterial{graph, ++g_searchMaterialUse});
 }
 
 bool FindSearchMaterial(std::unordered_map<void*, SearchCapturedMaterial>& cache,
@@ -19880,12 +19921,17 @@ void NoteSearchEffectFactory(void* source, void* result) noexcept {
 }
 HRESULT WINAPI SearchCreateFactoryHook(void* self, void* effect, void** result) {
     auto hr = g_searchCreateFactory(self, effect, result);
-    if (SUCCEEDED(hr) && result) NoteSearchEffectFactory(effect, *result);
+    if (SUCCEEDED(hr) && result && *result) {
+        ForgetSearchMaterial(g_searchMaterialFactories, *result);
+        NoteSearchEffectFactory(effect, *result);
+    }
     return hr;
 }
 HRESULT WINAPI SearchCreateFactoryWithPropertiesHook(void* self, void* effect, void* properties, void** result) {
     auto hr = g_searchCreateFactoryWithProperties(self, effect, properties, result);
-    if (SUCCEEDED(hr) && result) {
+    if (SUCCEEDED(hr) && result && *result) {
+        // Invalidate even when animation enumeration or graph capture fails.
+        ForgetSearchMaterial(g_searchMaterialFactories, *result);
         try {
             bool animated = false;
             if (properties) {
@@ -19901,14 +19947,17 @@ HRESULT WINAPI SearchCreateFactoryWithPropertiesHook(void* self, void* effect, v
 }
 HRESULT WINAPI SearchCreateEffectBrushHook(void* self, void** result) {
     auto hr = g_searchCreateEffectBrush(self, result);
-    if (FAILED(hr) || !result || !*result || !g_searchMaterialCapture || g_quit) return hr;
+    if (FAILED(hr) || !result || !*result) return hr;
+    ForgetSearchMaterial(g_searchMaterialBrushes, *result);
     try {
+        searchcomp::CompositionEffectBrush brush{nullptr};
+        winrt::copy_from_abi(brush, *result);
+        ForgetSearchSavedMaterial(brush, false);
+        if (!g_searchMaterialCapture || g_quit) return hr;
         searchcomp::CompositionEffectFactory factory{nullptr};
         winrt::copy_from_abi(factory, self);
         SearchEffectGraph graph;
         if (!FindSearchMaterial(g_searchMaterialFactories, factory, graph)) return hr;
-        searchcomp::CompositionEffectBrush brush{nullptr};
-        winrt::copy_from_abi(brush, *result);
         CacheSearchMaterial(g_searchMaterialBrushes, brush, graph);
     } catch (...) {}
     return hr;
@@ -19983,6 +20032,7 @@ void NoteSearchXamlBrush(void* outer, void* inner, void* result) noexcept {
     try {
         wf::IInspectable owner{nullptr}, base{nullptr};
         winrt::copy_from_abi(owner, outer ? outer : result);
+        ForgetSearchSavedMaterial(owner, true);
         winrt::copy_from_abi(base, inner);
         auto access = base.try_as<wuxm::IXamlCompositionBrushBaseProtected>();
         if (!access || !owner.try_as<winrt::impl::IWeakReferenceSource>()) return;
@@ -20152,7 +20202,7 @@ void StopSearchMaterialCapture() {
         brushes.swap(g_searchMaterialBrushes);
         xaml.swap(g_searchMaterialXaml);
     }
-    // Release native COM objects outside the cache lock, before the libraries.
+    // These caches contain only plain definitions and weak XAML references.
     factories.clear();
     brushes.clear();
     xaml.clear();
