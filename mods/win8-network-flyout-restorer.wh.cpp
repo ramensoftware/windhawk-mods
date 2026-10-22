@@ -6492,13 +6492,15 @@ void EnterHostModeOnSta() {
     // Hard reset completo: quando Explorer si riavvia e questo processo diventa
     // il nuovo host del flyout, ricarica la mod da zero così riparte pulita
     // come se fosse appena installata.
-    if (g_pfnShutdownVAN) {
-        BoundedShutdownVan();
+    // Use the same full unload as the watchdog reload: ShutdownVAN, FreeLibrary
+    // of van.dll and its providers, and the "still mapped" stale guard. A partial
+    // reset here would leave a post-ShutdownVAN van.dll mapped and reachable.
+    if (ReloadManagedVanRuntimeOnSta()) {
+        // Image is gone: the next InvokeShowVanOnStaThread loads a fresh copy.
+        g_vanRuntimeStale.store(false, std::memory_order_release);
     }
-    g_pfnShowVAN = nullptr;
-    g_pfnHideVAN = nullptr;
-    g_pfnShutdownVAN = nullptr;
-    g_vanModule = nullptr;
+    // If van.dll is still mapped, ReloadManagedVanRuntimeOnSta has set
+    // g_vanRuntimeStale and flyout requests stay refused until Explorer restarts.
     g_watchdogAttempt = 0;
     g_watchdogDelayServed = false;
     g_providerActivations.store(0, std::memory_order_relaxed);
