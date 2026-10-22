@@ -12266,6 +12266,35 @@
         "version": "1.3"
       }
     },
+    "refined-quick-settings-and-sound": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792710249000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792710249000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "HeyOkay",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lcomctl32 -lole32 -loleaut32 -lruntimeobject -liphlpapi -lshlwapi -lshell32 -lpowrprof -luuid",
+        "description": "A \"vanilla+\" rework of the Windows 11 Quick Settings and Volume mixer panels for daily use",
+        "github": "https://github.com/HeyOkay",
+        "include": [
+          "explorer.exe",
+          "ShellHost.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Refined Quick Settings and Sound",
+        "version": "0.1.154"
+      }
+    },
     "regedit-auto-trim-whitespace-on-navigation-bar": {
       "details": {
         "defaultSorting": 1460,
@@ -16435,7 +16464,7 @@
         "ratingUsers": 59,
         "reviews": 0,
         "trendingSorting": 5.781719123719134,
-        "updated": 1792404023000,
+        "updated": 1792710254000,
         "users": 1782
       },
       "metadata": {
@@ -16452,7 +16481,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar System Info",
-        "version": "1.8.1"
+        "version": "1.9.0"
       }
     },
     "taskbar-thumbnail-hover-fix": {

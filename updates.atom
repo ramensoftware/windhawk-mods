@@ -2,12 +2,98 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-22T17:02:11.000Z</updated>
+    <updated>2026-10-22T23:04:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Info 1.9.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-info#7bceda88d81084e19f4eaced0cac413d2b41df30</id>
+        <link href="https://windhawk.net/mods/taskbar-system-info"/>
+        <updated>2026-10-22T23:04:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a preferred layout setting: Full, Without graphs, Compact two rows, or Compact one row. Automatically fit smaller layouts and restore the selected view when space returns.</li>
+<li>Add independent CPU and GPU graph switches while keeping usage percentages visible.</li>
+<li>Hide temperature fields and reclaim their space when Temperature source is Disabled.</li>
+<li>Keep placement, reserved space, secondary copies and move previews consistent with the selected layout and visible fields.</li>
+</ul>]]></content>
+        <author>
+            <name>Yevhenii Starychenko</name>
+            <uri>https://github.com/starychenko</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Refined Quick Settings and Sound 0.1.154]]></title>
+        <id>https://windhawk.net/mods/refined-quick-settings-and-sound#9c7175f4a37662b14e99df140efbb33936871863</id>
+        <link href="https://windhawk.net/mods/refined-quick-settings-and-sound"/>
+        <updated>2026-10-22T23:04:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="refinedquicksettingsandsound">Refined Quick Settings and Sound</h1>
+<p><img src="https://raw.githubusercontent.com/HeyOkay/Refined-Quick-Settings-and-Sound/main/docs/assets/preview-lossless.webp" alt="Quick Settings and Sound preview" /></p>
+<p>This "vanilla+" Windhawk mod reworks the Windows 11 "Quick Settings" and
+"Volume mixer" panels and makes them fit for daily use. It follows the
+Windows 11 design language, refining existing features and adding new ones:
+thin sliders, even row spacing at every display scale and a smooth frame
+transition to the Sound page.</p>
+<p>Everything runs inside the shell's own panels (ShellHost): no extra windows,
+the system Acrylic, fonts, themes, lists, bindings and animations are kept, and
+customizations are restored when the mod is unloaded.</p>
+<h2 id="features">Features</h2>
+<p><strong>Quick Settings</strong></p>
+<ul>
+<li>Brightness control for DDC/CI-compatible displays, with animated glyphs.</li>
+<li>Press the brightness glyph to toggle night light on and off.</li>
+<li>Open display settings directly from the glyph on the right side of the slider.</li>
+</ul>
+<p><strong>Sound</strong></p>
+<ul>
+<li>The "Sound output" page is now simply "Sound".</li>
+<li>Change the output and input devices and the spatial sound provider from
+dropdown lists.</li>
+<li>Below them, a reworked Volume mixer for the apps. It is collapsible and
+remembers its last state.</li>
+<li>Mouse wheel on every slider; press an app's icon to mute and restore it, or
+its volume number to set it to 100.</li>
+<li>Hide apps from the mixer by name (setting below).</li>
+</ul>
+<p><strong>Taskbar</strong></p>
+<ul>
+<li>Click the volume icon to open Sound directly.</li>
+<li>The system's animated volume glyph and an Ethernet glyph for wired networks.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 24H2 or later (Quick Settings hosted by ShellHost), x86-64
+(ARM64 is untested).
+Development testing: build 26300, primarily at 125% scale.</li>
+<li>Other Windows builds and display scales need validation. The mod depends on
+internal shell XAML elements and symbols which can change with Windows updates.</li>
+<li>DDC/CI brightness requires a compatible monitor with DDC/CI enabled.</li>
+<li>Added labels such as "Sound" and "Input device" are in English.</li>
+<li>The first Sound opening in each ShellHost process starts with the mixer
+collapsed; subsequent openings remember its state.</li>
+</ul>
+<p>Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling the mod, close and reopen it; restart ShellHost if it is not picked up.</p>
+<h2 id="notes">Notes</h2>
+<p>Disable other mods that change the Quick Settings, the Sound page or the
+taskbar volume icon before enabling this one. Errors are written to the
+Windhawk log.</p>
+<h2 id="creditsandlicense">Credits and license</h2>
+<p>GPL-3.0-only. The UI-thread dispatch technique follows
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-notification-center-styler.wh.cpp">m417z's Notification Center Styler</a>
+(GPL-3.0). ControlCenter.dll discovery uses the COM produce-interface pattern
+documented by <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/per-monitor-brightness.wh.cpp">Per-monitor brightness</a>.
+The hidden-applications parser is adapted from the local
+Sound Output Direct and Taller mod (GPL-3.0-only).
+The sliders-horizontal and ethernet-port icons are from
+<a href="https://lucide.dev/">Lucide</a> (ISC); the license notice is included below
+in this source file.</p>]]></content>
+        <author>
+            <name>HeyOkay</name>
+            <uri>https://github.com/HeyOkay</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Snipper 1.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-snipper#063bc430d57a0fe909326b5f36f5b7f562b2314f</id>
@@ -594,59 +680,6 @@ Advanced options (e.g. EcoQoS, P/E-core affinity, power schemes) can be enabled 
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 legacy flyouts on Win11 24H2 restorer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-legacy-flyouts-restorer#8811c162ad3ee0a49fbdbec9eea0cc72d620def7</id>
-        <link href="https://windhawk.net/mods/windows-10-legacy-flyouts-restorer"/>
-        <updated>2026-10-21T10:30:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved the mod so that it stores downloaded files in the mod's private storage folder (adds Portable Windhawk support)</li>
-<li>Added a mechanism to detect legacy explorer.exe by file version instead of path</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multi PrintScreen 1.0.0]]></title>
-        <id>https://windhawk.net/mods/multi-printscreen#842c9b8b730cab3a5c6fad2c222817b02ec95724</id>
-        <link href="https://windhawk.net/mods/multi-printscreen"/>
-        <updated>2026-10-21T10:04:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="multiprintscreen">Multi PrintScreen</h1>
-<p>Take several screenshots in a row (Win+Shift+S, PrintScreen, …), then press
-<strong>Ctrl+V</strong> repeatedly in a target app: the <strong>first</strong> screenshot is pasted first,
-the <strong>second</strong> on the next Ctrl+V, and so on (First In, First Out).</p>
-<p>How it works (short version):</p>
-<ul>
-<li>A hidden window in a dedicated tool process listens for clipboard changes
-(<code>AddClipboardFormatListener</code>) and copies pure screenshot payloads
-(CF_DIB and PNG) into a private FIFO queue.</li>
-<li>Only pure screenshots are queued. Copying anything else (text, Excel cells,
-files, HTML) automatically clears the queue so Ctrl+V never interferes with
-normal copy/paste.</li>
-<li>A low-level keyboard hook swallows Ctrl+V (in any application) when the
-queue is not empty, puts the oldest screenshot onto the clipboard, then
-re-sends a marked V keystroke so the app pastes it.</li>
-<li>Windows Clipboard History (Win+V) duplicates are suppressed for re-injected
-pastes.</li>
-<li>When the queue is empty, Ctrl+V behaves completely normally.</li>
-</ul>
-<p>Runs as a dedicated tool process in Windhawk. Nothing is injected into explorer.exe
-or into the apps you paste into, so there is nothing to marshal across processes.</p>
-<p>Memory limits:</p>
-<ul>
-<li>Total queue memory is capped at 128 MB (the oldest screenshots are dropped if
-this budget is exceeded). Individual image payloads above 32 MB are skipped.</li>
-</ul>
-<p>Note: When pasting, the physical 'V' keystroke is swallowed while the image is
-restored to the clipboard, then re-injected. Very fast typing immediately after
-Ctrl+V may occasionally land before the pasted image.</p>]]></content>
-        <author>
-            <name>@sharexza</name>
-            <uri>https://github.com/raviadityasetiawan-oss</uri>
         </author>
     </entry>
 </feed>

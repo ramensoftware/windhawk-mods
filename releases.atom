@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-22T15:04:40.000Z</updated>
+    <updated>2026-10-22T23:04:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Refined Quick Settings and Sound 0.1.154]]></title>
+        <id>https://windhawk.net/mods/refined-quick-settings-and-sound#9c7175f4a37662b14e99df140efbb33936871863</id>
+        <link href="https://windhawk.net/mods/refined-quick-settings-and-sound"/>
+        <updated>2026-10-22T23:04:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="refinedquicksettingsandsound">Refined Quick Settings and Sound</h1>
+<p><img src="https://raw.githubusercontent.com/HeyOkay/Refined-Quick-Settings-and-Sound/main/docs/assets/preview-lossless.webp" alt="Quick Settings and Sound preview" /></p>
+<p>This "vanilla+" Windhawk mod reworks the Windows 11 "Quick Settings" and
+"Volume mixer" panels and makes them fit for daily use. It follows the
+Windows 11 design language, refining existing features and adding new ones:
+thin sliders, even row spacing at every display scale and a smooth frame
+transition to the Sound page.</p>
+<p>Everything runs inside the shell's own panels (ShellHost): no extra windows,
+the system Acrylic, fonts, themes, lists, bindings and animations are kept, and
+customizations are restored when the mod is unloaded.</p>
+<h2 id="features">Features</h2>
+<p><strong>Quick Settings</strong></p>
+<ul>
+<li>Brightness control for DDC/CI-compatible displays, with animated glyphs.</li>
+<li>Press the brightness glyph to toggle night light on and off.</li>
+<li>Open display settings directly from the glyph on the right side of the slider.</li>
+</ul>
+<p><strong>Sound</strong></p>
+<ul>
+<li>The "Sound output" page is now simply "Sound".</li>
+<li>Change the output and input devices and the spatial sound provider from
+dropdown lists.</li>
+<li>Below them, a reworked Volume mixer for the apps. It is collapsible and
+remembers its last state.</li>
+<li>Mouse wheel on every slider; press an app's icon to mute and restore it, or
+its volume number to set it to 100.</li>
+<li>Hide apps from the mixer by name (setting below).</li>
+</ul>
+<p><strong>Taskbar</strong></p>
+<ul>
+<li>Click the volume icon to open Sound directly.</li>
+<li>The system's animated volume glyph and an Ethernet glyph for wired networks.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 24H2 or later (Quick Settings hosted by ShellHost), x86-64
+(ARM64 is untested).
+Development testing: build 26300, primarily at 125% scale.</li>
+<li>Other Windows builds and display scales need validation. The mod depends on
+internal shell XAML elements and symbols which can change with Windows updates.</li>
+<li>DDC/CI brightness requires a compatible monitor with DDC/CI enabled.</li>
+<li>Added labels such as "Sound" and "Input device" are in English.</li>
+<li>The first Sound opening in each ShellHost process starts with the mixer
+collapsed; subsequent openings remember its state.</li>
+</ul>
+<p>Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling the mod, close and reopen it; restart ShellHost if it is not picked up.</p>
+<h2 id="notes">Notes</h2>
+<p>Disable other mods that change the Quick Settings, the Sound page or the
+taskbar volume icon before enabling this one. Errors are written to the
+Windhawk log.</p>
+<h2 id="creditsandlicense">Credits and license</h2>
+<p>GPL-3.0-only. The UI-thread dispatch technique follows
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-notification-center-styler.wh.cpp">m417z's Notification Center Styler</a>
+(GPL-3.0). ControlCenter.dll discovery uses the COM produce-interface pattern
+documented by <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/per-monitor-brightness.wh.cpp">Per-monitor brightness</a>.
+The hidden-applications parser is adapted from the local
+Sound Output Direct and Taller mod (GPL-3.0-only).
+The sliders-horizontal and ethernet-port icons are from
+<a href="https://lucide.dev/">Lucide</a> (ISC); the license notice is included below
+in this source file.</p>]]></content>
+        <author>
+            <name>HeyOkay</name>
+            <uri>https://github.com/HeyOkay</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mute Focused Window 1.0]]></title>
         <id>https://windhawk.net/mods/mute-focused-window#b947ebaf2f1b237297b90ed9fe480958f701f311</id>
@@ -1158,65 +1228,6 @@ than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 reco
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Keep Windows Clear of Taskbar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/keep-windows-clear-of-taskbar#ebdfb4280309ef0023530a596f94da19a44e6447</id>
-        <link href="https://windhawk.net/mods/keep-windows-clear-of-taskbar"/>
-        <updated>2026-10-19T20:02:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="keepwindowsclearoftaskbar">Keep Windows Clear of Taskbar</h1>
-<p>Keep Windows Clear of Taskbar v1.0.0 by Goobis</p>
-<p>AI was used to help develop this application</p>
-<p><a href="https://ko-fi.com/goobis2dmx">Support on Ko-fi</a></p>
-<p>Windows lets app windows open, restore or be dragged so they end up under the
-taskbar. This mod keeps every normal window (one with a title bar and a sizing
-border) clear of the taskbar, whichever screen edge the taskbar is on: bottom,
-top, left or right. A window is corrected when:</p>
-<ul>
-<li>it opens,</li>
-<li>you restore it from maximized,</li>
-<li>an app moves or resizes it,</li>
-<li>you finish dragging or resizing it (can be turned off in Settings).</li>
-</ul>
-<p>Windows that are already open are checked too: when the mod starts, and again
-whenever the taskbar or the display layout changes (for example when you move
-or resize the taskbar, or change resolution or monitors). An auto-hide taskbar
-sliding in and out doesn't count, so it never shuffles your windows around.</p>
-<p>If a window fits, it is moved just far enough to clear the taskbar. If it is too
-big to fit between the taskbar and the opposite screen edge, it is shrunk to
-fit; if the app refuses to get that small, it is lined up with the edge next to
-the taskbar instead.</p>
-<p>Left alone: maximized and fullscreen windows, minimized windows, tool windows,
-always-on-top windows, menus, tooltips, windows you have placed across two
-monitors, and screen edges without a taskbar or other reserved screen space
-(you can still park a window partly off-screen there). Space reserved by docks,
-app bars or mods such as Maximized Window Margins counts as reserved too, so
-windows are kept clear of it as well.</p>
-<h2 id="relationtotaskbartopwindowguard">Relation to Taskbar Top Window Guard</h2>
-<p>Taskbar Top Window Guard solves the same problem for a taskbar at the top of the
-screen, and adds optional centering of new windows. This mod covers any taskbar
-edge, including the bottom, and does not center windows. With a top taskbar,
-both mods correct the same windows, so Taskbar Top Window Guard is only worth
-adding alongside this one for its centering.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod runs as a Windhawk tool mod in its own windhawk.exe process. It listens
-to the window events Windows already broadcasts to accessibility tools and moves
-offending windows asynchronously, so a hung app can never block it. It doesn't
-load into, hook or subclass any other process, so it can't crash other apps or
-Explorer. If an app keeps fighting the correction, the mod backs off from that
-window.</p>
-<p>The mod measures where the taskbar actually is, so it also works when another
-mod (such as Taskbar auto-hide when maximized) puts the taskbar in auto-hide mode
-but keeps it visible.</p>
-<p>You may see a window appear at its old size for a split second before it jumps
-into place. That is expected: the correction happens right after Windows moves
-the window.</p>
-<p>Apps running as administrator can't be moved by a normal process, so their
-windows are not corrected.</p>]]></content>
-        <author>
-            <name>Goobis</name>
-            <uri>https://github.com/b2dmx</uri>
         </author>
     </entry>
 </feed>

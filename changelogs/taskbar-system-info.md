@@ -1,3 +1,10 @@
+## 1.9.0 ([Oct 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7bceda88d81084e19f4eaced0cac413d2b41df30/mods/taskbar-system-info.wh.cpp))
+
+* Add a preferred layout setting: Full, Without graphs, Compact two rows, or Compact one row. Automatically fit smaller layouts and restore the selected view when space returns.
+* Add independent CPU and GPU graph switches while keeping usage percentages visible.
+* Hide temperature fields and reclaim their space when Temperature source is Disabled.
+* Keep placement, reserved space, secondary copies and move previews consistent with the selected layout and visible fields.
+
 ## 1.8.1 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/25d3c591d7a442a0319733fe7d8bba3e63251f1b/mods/taskbar-system-info.wh.cpp))
 
 * Fix dock clipping with Taskbar Styler Grid placement, including constrained columns, dynamic docks and theme reapplication.
