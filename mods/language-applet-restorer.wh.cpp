@@ -2,10 +2,12 @@
 // @id              language-applet-restorer
 // @name            Language Applet Restorer
 // @description     Brings back the classic Control Panel "Language" applet (Windows 10 1709 build) on later versions of Windows downloading the original files from Microsoft's symbol server
-// @version         0.4.0
+// @version         0.5.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
+// @include         rundll32.exe
+// @include         control.exe
 // @architecture    x86-64
 // @compilerOptions -lwininet -ladvapi32
 // ==/WindhawkMod==
@@ -13,7 +15,9 @@
 // ==WindhawkModReadme==
 /*
 
-BETA:a redirect option for 1709 intl.cpl will be added
+THIS SECTION WILL BE REMOVED IN FINAL RELEASE
+BETA:an redirect option for 1709 intl.cpl will be added(done)
+BETA:an redirect option for ms-settings to intl.cpl will be added
 # Language Applet Restorer
 
 Restores the Language applet (`Microsoft.Language`) and intl.cpl of Windows 10 1709 in the later versions of windows
@@ -49,9 +53,13 @@ babamohammed2022 for adding various languages.
   $name: Force translations
   $description: If this setting is enabled, the mod forces the use of the embedded translations within the page and generated .mui files for the 6 available languages.
 
-- keepFilesOnDisable: true
+- oOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $description: If on, the downloaded and generated files stay in the mod's storage folder so re-enabling works offline. If off, they are deleted on the next unload (files still in use are left and retried later).
+
+- redirectIntlCpl: false
+  $name: Redirect Control Panel's intl.cpl to the restored one
+  $description: When enabled, opening Region / intl.cpl (from Control Panel, Run dialog or control.exe) loads the Windows 10 1709 intl.cpl from the mod's storage folder instead of the system one. Takes effect immediately for newly opened windows.
 */
 // ==/WindhawkModSettings==
 
@@ -2539,6 +2547,53 @@ static void RunSetup() {
     if (!LoadPrivateModules(binDir)) return;
     RegisterApplet(binDir);
 }
+// ---- intl.cpl redirect ----------------------------------------------------------------------
+static std::atomic<bool> g_redirectIntl{false};
+static std::atomic<bool> g_isExplorer{true};
+static std::wstring g_systemIntlPath;   // <System32>\intl.cpl
+static std::wstring g_modIntlPath;      // <storage>\bin\intl.cpl
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+
+static bool IsSystemIntlCpl(LPCWSTR p) {
+    if (!p) return false;
+    return _wcsicmp(p, L"intl.cpl") == 0 || _wcsicmp(p, g_systemIntlPath.c_str()) == 0;
+}
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    if (g_redirectIntl.load() && IsSystemIntlCpl(name) &&
+        GetFileAttributesW(g_modIntlPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        DWORD f = flags;
+        const DWORD kNoAltered = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE |
+                                 LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                                 LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32 |
+                                 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
+        // so nlsk32.dll (the kernel32 shim) is found next to our intl.cpl
+        if (!(f & kNoAltered)) f |= LOAD_WITH_ALTERED_SEARCH_PATH;
+        if (HMODULE m = LoadLibraryExW_Original(g_modIntlPath.c_str(), file, f)) {
+            Wh_Log(L"intl.cpl redirected (%s)", name);
+            return m;
+        }
+        Wh_Log(L"intl.cpl redirect failed (err %lu), using the system one", GetLastError());
+    }
+    return LoadLibraryExW_Original(name, file, flags);
+}
+
+static void InitRedirect() {
+    wchar_t sys[MAX_PATH] = {};
+    GetSystemDirectoryW(sys, MAX_PATH);
+    g_systemIntlPath = std::wstring(sys) + L"\\intl.cpl";
+    const std::wstring dir = StorageDir();
+    if (!dir.empty()) g_modIntlPath = dir + L"\\bin\\intl.cpl";
+
+    if (HMODULE kb = GetModuleHandleW(L"kernelbase.dll")) {
+        if (auto p = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kb, "LoadLibraryExW"))) {
+            WindhawkUtils::SetFunctionHook(p, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
+        }
+    }
+}
 
 // ---- unhide hook ----------------------------------------------------------------------------
 // shell32 / windows.storage decide to hide the applet by comparing its name/GUID with a built-in
@@ -2667,6 +2722,23 @@ BOOL Wh_ModInit() {
     }
     g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
     LoadLanguageSetting();
+    g_redirectIntl.store(Wh_GetIntSetting(L"redirectIntlCpl") != 0);
+
+    wchar_t exe[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    const wchar_t* exeName = wcsrchr(exe, L'\\');
+    exeName = exeName ? exeName + 1 : exe;
+    g_isExplorer.store(_wcsicmp(exeName, L"explorer.exe") == 0);
+
+    InitRedirect();
+
+    if (!g_isExplorer.load()) {
+        // rundll32.exe / control.exe: only the redirect and the string hooks.
+        // No download, no registration, no file cleanup (that is explorer.exe's job).
+        InstallTranslationHook();
+        return TRUE;
+    }
+
     g_shuttingDown.store(false);
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     BlankHideString(GetModuleHandleW(L"shell32.dll"), L"shell32.dll");
@@ -2688,6 +2760,11 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     try {
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
+                g_redirectIntl.store(Wh_GetIntSetting(L"redirectIntlCpl") != 0);
+        if (!g_isExplorer.load()) {
+            if (reload) *reload = FALSE;
+            return TRUE;
+        }
         const std::wstring dir = StorageDir();
         if (!dir.empty()) {
             const std::wstring dlDir = dir + L"\\dl", binDir = dir + L"\\bin";
@@ -2715,6 +2792,8 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 }
 
 void Wh_ModUninit() {
+    if (!g_isExplorer.load()) return;   // helper processes must not touch files or the registry
+    RestoreHideStrings();
     RestoreHideStrings();
     g_shuttingDown.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
