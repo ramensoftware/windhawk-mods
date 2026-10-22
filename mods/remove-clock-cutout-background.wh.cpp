@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id             remove-clock-cutout-background
-// @name           Remove Legacy Clock Square Cutout & Animated Custom Image
+// @id         remove-clock-cutout-background
+// @name       Remove Legacy Clock Square Cutout & Animated Custom Image
 // @description    Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs, with full animated GIF and PNG replacement support.
-// @version        3.2.0
+// @version        3.2.1
 // @author         awnaise
 // @github         https://github.com/awnaise
 // @include        explorer.exe
@@ -24,6 +24,16 @@ Removes the light square background behind the analog clock in StartAllBack
 and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
 double buffering (WS_EX_COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
 masking with smart dark-mode dialog sampling, plus full animated GIF and PNG replacement support.
+
+### Transparent PNG Support
+
+Now with transparent PNG support!
+
+**Before:**
+![Before Transparent PNG](https://i.imgur.com/aC8dRN0.png)
+
+**After:**
+![After Transparent PNG](https://i.imgur.com/KoSYtFz.png)
 
 ### Custom Image / GIF Demonstration
 
@@ -73,9 +83,14 @@ static ShowWindow_t pfnShowWindowOriginal = NULL;
 
 thread_local bool g_bInMask = false;
 
-// Global state tracking for subclassed windows
+// State tracking for subclassed windows and border management
+struct ClockWindowState {
+    bool addedComposited;
+    bool removedBorder;
+};
+
 std::mutex g_clockWindowsMutex;
-std::unordered_map<HWND, bool> g_clockWindows;
+std::unordered_map<HWND, ClockWindowState> g_clockWindows;
 
 // Cached image structure for animated GIF support
 struct CachedImage {
@@ -97,6 +112,16 @@ struct WindowAnimState {
 std::unordered_map<HWND, WindowAnimState> g_windowAnims;
 std::mutex g_windowAnimsMutex;
 
+// Helper to toggle and refresh window borders cleanly
+void SetBorder(HWND hwnd, bool enable) {
+    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
+    SetWindowLongW(hwnd, GWL_STYLE,
+                   enable ? (style | WS_BORDER) : (style & ~WS_BORDER));
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                     SWP_NOACTIVATE);
+}
+
 // Retrieve or load cached image from memory stream to prevent file locking
 CachedImage* GetCachedImage(const wchar_t* path) {
     std::lock_guard<std::mutex> lock(g_imageMutex);
@@ -106,8 +131,8 @@ CachedImage* GetCachedImage(const wchar_t* path) {
     }
 
     HANDLE file = CreateFileW(path, GENERIC_READ,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                              nullptr, OPEN_EXISTING, 0, nullptr);
+                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                            nullptr, OPEN_EXISTING, 0, nullptr);
     if (file == INVALID_HANDLE_VALUE) return nullptr;
 
     std::vector<BYTE> data;
@@ -290,9 +315,14 @@ void ApplySmoothMaskToDC(HDC hdc, HWND hwnd, int w, int h) {
     if (customImagePath && customImagePath[0] != L'\0') {
         CachedImage* cached = GetCachedImage(customImagePath);
         if (cached && cached->img) {
+            COLORREF bgClr = GetParentBgColor(hwnd);
+
             Graphics graphics(hdc);
             graphics.SetInterpolationMode(InterpolationModeHighQualityBicubic);
             graphics.SetSmoothingMode(SmoothingModeAntiAlias);
+
+            SolidBrush bgBrush(Color(255, GetRValue(bgClr), GetGValue(bgClr), GetBValue(bgClr)));
+            graphics.FillRectangle(&bgBrush, 0, 0, w, h);
 
             if (cached->frameCount > 1) {
                 UINT frameIndex = 0;
@@ -400,31 +430,57 @@ LRESULT CALLBACK ClockSubclassProc(
         }
 
         case WM_PAINT: {
-            LRESULT lRes = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+            PCWSTR customImagePath = Wh_GetStringSetting(L"customImagePath");
+            bool hasCustomImage = (customImagePath && customImagePath[0] != L'\0');
+            Wh_FreeStringSetting((PWSTR)customImagePath);
 
-            RECT rc;
-            if (GetClientRect(hwnd, &rc)) {
-                int w = rc.right - rc.left;
-                int h = rc.bottom - rc.top;
-                HDC hdc = GetDC(hwnd);
+            if (hasCustomImage) {
+                PAINTSTRUCT ps;
+                HDC hdc = BeginPaint(hwnd, &ps);
                 if (hdc) {
-                    ApplySmoothMaskToDC(hdc, hwnd, w, h);
-                    ReleaseDC(hwnd, hdc);
+                    RECT rc;
+                    GetClientRect(hwnd, &rc);
+                    ApplySmoothMaskToDC(hdc, hwnd, rc.right - rc.left, rc.bottom - rc.top);
+                    EndPaint(hwnd, &ps);
                 }
+                return 0;
+            } else {
+                LRESULT lRes = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+                RECT rc;
+                if (GetClientRect(hwnd, &rc)) {
+                    HDC hdc = GetDC(hwnd);
+                    if (hdc) {
+                        ApplySmoothMaskToDC(hdc, hwnd, rc.right - rc.left, rc.bottom - rc.top);
+                        ReleaseDC(hwnd, hdc);
+                    }
+                }
+                return lRes;
             }
-            return lRes;
         }
 
         case WM_PRINTCLIENT: {
-            LRESULT res = DefSubclassProc(hwnd, uMsg, wParam, lParam);
-            HDC hdc = (HDC)wParam;
-            if (hdc) {
-                RECT rc;
-                if (GetClientRect(hwnd, &rc)) {
+            PCWSTR customImagePath = Wh_GetStringSetting(L"customImagePath");
+            bool hasCustomImage = (customImagePath && customImagePath[0] != L'\0');
+            Wh_FreeStringSetting((PWSTR)customImagePath);
+
+            if (hasCustomImage) {
+                HDC hdc = (HDC)wParam;
+                if (hdc) {
+                    RECT rc;
+                    GetClientRect(hwnd, &rc);
                     ApplySmoothMaskToDC(hdc, hwnd, rc.right - rc.left, rc.bottom - rc.top);
                 }
+                return 0;
+            } else {
+                LRESULT res = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+                HDC hdc = (HDC)wParam;
+                if (hdc) {
+                    RECT rc;
+                    GetClientRect(hwnd, &rc);
+                    ApplySmoothMaskToDC(hdc, hwnd, rc.right - rc.left, rc.bottom - rc.top);
+                }
+                return res;
             }
-            return res;
         }
 
         case WM_TIMER: {
@@ -465,12 +521,16 @@ LRESULT CALLBACK ClockSubclassProc(
 void AttachIfClock(HWND hwnd) {
     if (!IsAnalogClockControl(hwnd)) return;
 
+    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
     DWORD exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
-    bool addedComposited = !(exStyle & WS_EX_COMPOSITED);
+    ClockWindowState state{
+        .addedComposited = !(exStyle & WS_EX_COMPOSITED),
+        .removedBorder = (style & WS_BORDER) != 0,
+    };
 
     {
         std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
-        if (!g_clockWindows.try_emplace(hwnd, addedComposited).second) return;
+        if (!g_clockWindows.try_emplace(hwnd, state).second) return;
     }
 
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ClockSubclassProc, 0)) {
@@ -479,8 +539,12 @@ void AttachIfClock(HWND hwnd) {
         return;
     }
 
-    if (addedComposited) {
+    if (state.addedComposited) {
         SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle | WS_EX_COMPOSITED);
+    }
+
+    if (state.removedBorder) {
+        SetBorder(hwnd, false);
     }
 
     InvalidateRect(hwnd, NULL, TRUE);
@@ -505,6 +569,18 @@ HWND WINAPI HookedCreateWindowExW(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
     );
+
+    (void)dwExStyle;
+    (void)lpWindowName;
+    (void)dwStyle;
+    (void)X;
+    (void)Y;
+    (void)nWidth;
+    (void)nHeight;
+    (void)hWndParent;
+    (void)hMenu;
+    (void)hInstance;
+    (void)lpParam;
 
     if (hwnd) {
         AttachToClockWindow(hwnd);
@@ -549,25 +625,34 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    std::vector<std::pair<HWND, bool>> windows;
+    std::vector<std::pair<HWND, ClockWindowState>> windows;
     {
         std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
         windows.assign(g_clockWindows.begin(), g_clockWindows.end());
         g_clockWindows.clear();
     }
 
-    for (auto [hwnd, addedComposited] : windows) {
+    auto cleanup = [](const auto& pair) {
+        HWND hwnd = pair.first;
+        ClockWindowState state = pair.second;
         KillTimer(hwnd, 9999);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClockSubclassProc);
-        if (addedComposited) {
+        if (state.addedComposited) {
             SetWindowLongW(hwnd, GWL_EXSTYLE,
-                         GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+                           GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+        }
+        if (state.removedBorder) {
+            SetBorder(hwnd, true);
         }
         InvalidateRect(hwnd, NULL, TRUE);
+    };
+
+    for (const auto& item : windows) {
+        cleanup(item);
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_imageMutex);
+        std::lock_guard<std::mutex> lockImg(g_imageMutex);
         g_imageCache.reset();
     }
 

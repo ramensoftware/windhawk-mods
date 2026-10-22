@@ -4,7 +4,7 @@
 // @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
 // @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
 // @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.7.1
+// @version         1.7.2
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -75,7 +75,11 @@ Simpler 2D styles, for those who want something closer to the default:
 * **Native Windows Alt+Tab**: the mod leaves Alt+Tab alone.
 
 The switcher opens on the monitor where the mouse cursor is (or, optionally,
-where the active window is).
+where the active window is). It can show only the windows on that monitor
+(*Only the windows on the switcher's monitor*); a key then shows the windows
+of every monitor while it's open, and pressing it again goes back. It's the
+key left of 1 by default, and can be changed (*Key that shows every
+monitor*).
 
 ## Controls
 
@@ -89,6 +93,7 @@ where the active window is).
 | Click a window            | Switch to that window                         |
 | Middle-click a window     | Close that window (optional)                  |
 | Click the X on a window   | Close that window (optional)                  |
+| Key left of 1 (or chosen) | Windows of every monitor (optional)           |
 | Esc                       | Cancel and go back to where you were          |
 
 Win+Tab can open the switcher too, instead of Alt+Tab or together with it
@@ -102,6 +107,8 @@ it), and **Ctrl+Alt+Tab**, to give it a style of its own.
 
 A quick Alt+Tab tap (shorter than the *show delay*) switches instantly to the
 previous window without showing the stack, just like the native switcher.
+With *Show at once on the second Tab*, pressing Tab again shows the stack
+without waiting for the delay.
 
 ## How it compares with similar mods
 
@@ -131,9 +138,7 @@ above. Only one of them can take over Alt+Tab.
 * With an animated wallpaper (Wallpaper Engine, Lively Wallpaper and
   similar apps), the *Live desktop* background shows the real desktop behind
   the stack, still playing. If the wallpaper app pauses while another app is
-  maximized or in front, it stays paused there too, also while the switcher
-  has the focus (when a program running as administrator is in front). See
-  that app's settings.
+  maximized or in front, it stays paused there too. See that app's settings.
 * Windows on other virtual desktops follow the Windows setting for Alt+Tab,
   or the *Virtual desktops* setting. Picking one switches to its desktop.
 * Tiling window managers such as komorebi hide the windows of their other
@@ -234,7 +239,11 @@ Estilos 2D mais simples, para quem quer algo mais perto do padrão:
 * **Alt+Tab nativo do Windows**: o mod deixa o Alt+Tab em paz.
 
 O alternador abre no monitor onde está o cursor do mouse (ou, se preferir,
-onde está a janela ativa).
+onde está a janela ativa). Ele pode mostrar só as janelas desse monitor (*Só
+as janelas do monitor do alternador*); com ele aberto, uma tecla mostra então
+as janelas de todos os monitores, e apertar de novo volta. Por padrão é a
+tecla à esquerda do 1, e dá para trocar (*Tecla que mostra todos os
+monitores*).
 
 ### Controles
 
@@ -248,6 +257,7 @@ onde está a janela ativa).
 | Clicar numa janela           | Muda para essa janela                      |
 | Clique do meio numa janela   | Fecha essa janela (opcional)               |
 | Clicar no X de uma janela    | Fecha essa janela (opcional)               |
+| Tecla à esquerda do 1 (ou outra) | Janelas de todos os monitores (opcional) |
 | Esc                          | Cancela e volta para onde você estava      |
 
 O Win+Tab também pode abrir o alternador, no lugar do Alt+Tab ou junto com
@@ -261,6 +271,8 @@ ele até você adicioná-lo), e o **Ctrl+Alt+Tab**, para ter um estilo próprio.
 
 Um toque rápido no Alt+Tab (menor que o *atraso para exibir*) troca na hora
 para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
+Com *Mostrar na hora no segundo Tab*, apertar o Tab de novo mostra a pilha
+sem esperar o atraso.
 
 ### Comparação com mods parecidos
 
@@ -292,9 +304,8 @@ acima. Só um deles consegue assumir o Alt+Tab.
 * Com um papel de parede animado (Wallpaper Engine, Lively Wallpaper e apps
   parecidos), o fundo *Área de trabalho ao vivo* mostra a área de trabalho de
   verdade atrás da pilha, ainda animada. Se o app do papel de parede pausar
-  quando outro app está maximizado ou na frente, ele fica pausado ali também,
-  inclusive enquanto o alternador está com o foco (quando um programa rodando
-  como administrador está na frente). Veja as configurações desse app.
+  quando outro app está maximizado ou na frente, ele fica pausado ali também.
+  Veja as configurações desse app.
 * Janelas de outras áreas de trabalho virtuais seguem a configuração do
   Windows para o Alt+Tab, ou a configuração *Áreas de trabalho virtuais*.
   Escolher uma delas troca para a área dela.
@@ -411,6 +422,132 @@ escrever em português.
   $options:pt-BR:
   - cursor: Onde está o cursor do mouse
   - activeWindow: Onde está a janela ativa
+- currentMonitorOnly: false
+  $name: Only the windows on the switcher's monitor
+  $name:pt-BR: Só as janelas do monitor do alternador
+  $description: Shows only the windows on the monitor the switcher opens on (see Monitor). While it's open, a key (the one left of 1 by default, see below) shows the windows of every monitor, and pressing it again goes back. If that monitor has no windows, all of them are shown
+  $description:pt-BR: Mostra só as janelas do monitor onde o alternador abre (veja Monitor). Com ele aberto, uma tecla (a da esquerda do 1, por padrão, veja abaixo) mostra as janelas de todos os monitores, e apertar de novo volta. Se esse monitor não tiver janelas, todas aparecem
+- allMonitorsKey: leftOf1
+  $name: Key that shows every monitor
+  $name:pt-BR: Tecla que mostra todos os monitores
+  $description: With "Only the windows on the switcher's monitor", pressing this key while the switcher is open shows the windows of every monitor, and pressing it again goes back. Type in the list to find a key. Tab, the arrows, Enter, Space, Esc and the modifier keys already belong to the switcher
+  $description:pt-BR: Com "Só as janelas do monitor do alternador", apertar esta tecla com o alternador aberto mostra as janelas de todos os monitores, e apertar de novo volta. Digite na lista para achar uma tecla. Tab, setas, Enter, Espaço, Esc e as teclas modificadoras já são do alternador
+  $options:
+  - leftOf1: Key left of 1 (under Esc)
+  - keyA: A
+  - keyB: B
+  - keyC: C
+  - keyD: D
+  - keyE: E
+  - keyF: F
+  - keyG: G
+  - keyH: H
+  - keyI: I
+  - keyJ: J
+  - keyK: K
+  - keyL: L
+  - keyM: M
+  - keyN: N
+  - keyO: O
+  - keyP: P
+  - keyQ: Q
+  - keyR: R
+  - keyS: S
+  - keyT: T
+  - keyU: U
+  - keyV: V
+  - keyW: W
+  - keyX: X
+  - keyY: Y
+  - keyZ: Z
+  - digit0: "0"
+  - digit1: "1"
+  - digit2: "2"
+  - digit3: "3"
+  - digit4: "4"
+  - digit5: "5"
+  - digit6: "6"
+  - digit7: "7"
+  - digit8: "8"
+  - digit9: "9"
+  - f1: F1
+  - f2: F2
+  - f3: F3
+  - f4: F4
+  - f5: F5
+  - f6: F6
+  - f7: F7
+  - f8: F8
+  - f9: F9
+  - f10: F10
+  - f11: F11
+  - f12: F12
+  - backspace: Backspace
+  - insert: Insert
+  - delete: Delete
+  - home: Home
+  - end: End
+  - pageUp: Page Up
+  - pageDown: Page Down
+  - none: None (no key)
+  $options:pt-BR:
+  - leftOf1: Tecla à esquerda do 1 (embaixo do Esc)
+  - keyA: A
+  - keyB: B
+  - keyC: C
+  - keyD: D
+  - keyE: E
+  - keyF: F
+  - keyG: G
+  - keyH: H
+  - keyI: I
+  - keyJ: J
+  - keyK: K
+  - keyL: L
+  - keyM: M
+  - keyN: N
+  - keyO: O
+  - keyP: P
+  - keyQ: Q
+  - keyR: R
+  - keyS: S
+  - keyT: T
+  - keyU: U
+  - keyV: V
+  - keyW: W
+  - keyX: X
+  - keyY: Y
+  - keyZ: Z
+  - digit0: "0"
+  - digit1: "1"
+  - digit2: "2"
+  - digit3: "3"
+  - digit4: "4"
+  - digit5: "5"
+  - digit6: "6"
+  - digit7: "7"
+  - digit8: "8"
+  - digit9: "9"
+  - f1: F1
+  - f2: F2
+  - f3: F3
+  - f4: F4
+  - f5: F5
+  - f6: F6
+  - f7: F7
+  - f8: F8
+  - f9: F9
+  - f10: F10
+  - f11: F11
+  - f12: F12
+  - backspace: Backspace
+  - insert: Insert
+  - delete: Delete
+  - home: Home
+  - end: End
+  - pageUp: Page Up
+  - pageDown: Page Down
+  - none: Nenhuma (sem tecla)
 - shortcut: altTab
   $name: Shortcut
   $name:pt-BR: Atalho
@@ -568,6 +705,11 @@ escrever em português.
   $name:pt-BR: Atraso para exibir (ms)
   $description: A quick Alt+Tab shorter than this switches instantly without showing the stack (0-1000, default 90)
   $description:pt-BR: Um Alt+Tab mais rápido que isso troca na hora, sem mostrar a pilha (0-1000, padrão 90)
+- showOnSecondTab: false
+  $name: Show at once on the second Tab
+  $name:pt-BR: Mostrar na hora no segundo Tab
+  $description: With a show delay, pressing Tab again (or an arrow key, or turning the mouse wheel) before it passes shows the stack right away. A quick Alt+Tab still switches without showing it
+  $description:pt-BR: Com um atraso para exibir, apertar o Tab de novo (ou uma seta, ou girar a roda do mouse) antes dele passar mostra a pilha na hora. Um Alt+Tab rápido continua trocando sem mostrar
 - tiltAngle: 30
   $name: Tilt angle (degrees)
   $name:pt-BR: Ângulo de inclinação (graus)
@@ -825,6 +967,12 @@ constexpr UINT WM_APP_CANCEL = WM_APP + 5;  // go back without switching
 constexpr UINT WM_APP_SETTINGS = WM_APP + 6;
 constexpr UINT WM_APP_REFRESH_ICONS = WM_APP + 7;  // Posted to itself.
 constexpr UINT WM_APP_MOVE_DEVICE = WM_APP + 8;    // Posted to itself.
+// Shows the windows of every monitor, or of the switcher's one again (see
+// OnToggleMonitors).
+constexpr UINT WM_APP_TOGGLE_MONITORS = WM_APP + 9;
+// A mouse button was pressed during a session that stays open. wParam,
+// lParam: where, in screen coordinates.
+constexpr UINT WM_APP_MOUSE_DOWN = WM_APP + 10;
 
 constexpr WPARAM kStartBackwards = 1;
 // Started from explorer's own Alt+Tab hotkey: the keyboard hook didn't see
@@ -849,11 +997,18 @@ constexpr UINT WM_HOOK_ENGAGE = WM_APP + 20;
 constexpr UINT WM_HOOK_DISENGAGE = WM_APP + 21;
 // Installs or removes the keyboard hook, following g_takeOver.
 constexpr UINT WM_HOOK_UPDATE = WM_APP + 22;
+// Installs the keyboard hook anew (see OnHotkey).
+constexpr UINT WM_HOOK_REINSTALL = WM_APP + 23;
+// Sends the dummy key (see KeyboardProc).
+constexpr UINT WM_HOOK_MASK_MODIFIERS = WM_APP + 24;
 
 // Marks input injected by this mod, so the hooks can ignore it.
 constexpr ULONG_PTR kInjectedInputTag = 0x46334453;
 // Unassigned virtual key, used to stop Alt from activating menu bars.
 constexpr WORD kDummyVk = 0xE8;
+// The key left of 1 (under Esc), whatever the keyboard layout: the default
+// key that shows the windows of every monitor (see allMonitorsKey).
+constexpr DWORD kLeftOf1ScanCode = 0x29;
 
 // Closing a window from the switcher: it shrinks and fades out, and the
 // others slide to their new places.
@@ -863,7 +1018,8 @@ constexpr double kSlideAnimationSeconds = 0.32;
 constexpr float kMinCloseButtonRadius = 4;
 
 // Overlay window timers.
-// Checks that a minimized window switched to was restored (see CheckRestored).
+// Checks that the window switched to is in front and restored (see
+// CheckRestored).
 constexpr UINT_PTR kRestoreTimerId = 1;
 constexpr UINT kRestoreCheckMs = 60;
 constexpr int kMaxRestoreTries = 3;
@@ -938,9 +1094,15 @@ struct Settings {
     bool shortcutOn[kShortcutCount];
     AnimationStyle shortcutStyle[kShortcutCount];
     MonitorMode monitor;
+    bool currentMonitorOnly;
+    // The key that shows every monitor: a virtual key, or a scan code (the
+    // key left of 1 has no fixed virtual key), or neither.
+    UINT allMonitorsVk;
+    DWORD allMonitorsScanCode;
     int animationDurationMs;
     float flipSpeed;
     int showDelayMs;
+    bool showOnSecondTab;
     float tiltRadians;
     float stackSpacing;
     float windowSize;
@@ -1030,6 +1192,38 @@ Settings LoadSettings() {
     s.monitor = wcscmp(monitor, L"activeWindow") == 0
                     ? MonitorMode::ActiveWindow
                     : MonitorMode::Cursor;
+    s.currentMonitorOnly = Wh_GetIntSetting(L"currentMonitorOnly") != 0;
+    s.allMonitorsVk = 0;
+    s.allMonitorsScanCode = 0;
+    const auto allMonitorsKey =
+        WindhawkUtils::StringSetting::make(L"allMonitorsKey");
+    const PCWSTR keyName = allMonitorsKey.get();
+    constexpr struct {
+        PCWSTR name;
+        UINT vk;
+    } kNamedKeys[] = {
+        {L"backspace", VK_BACK}, {L"insert", VK_INSERT}, {L"delete", VK_DELETE},
+        {L"home", VK_HOME},      {L"end", VK_END},       {L"pageUp", VK_PRIOR},
+        {L"pageDown", VK_NEXT},
+    };
+    if (wcsncmp(keyName, L"key", 3) == 0 && keyName[3] >= L'A' &&
+        keyName[3] <= L'Z' && !keyName[4]) {
+        s.allMonitorsVk = keyName[3];
+    } else if (wcsncmp(keyName, L"digit", 5) == 0 && keyName[5] >= L'0' &&
+               keyName[5] <= L'9' && !keyName[6]) {
+        s.allMonitorsVk = keyName[5];
+    } else if (keyName[0] == L'f' && _wtoi(keyName + 1) >= 1 &&
+               _wtoi(keyName + 1) <= 12) {
+        s.allMonitorsVk = VK_F1 + _wtoi(keyName + 1) - 1;
+    } else if (wcscmp(keyName, L"none") != 0) {
+        s.allMonitorsScanCode = kLeftOf1ScanCode;
+        for (const auto& entry : kNamedKeys) {
+            if (wcscmp(keyName, entry.name) == 0) {
+                s.allMonitorsVk = entry.vk;
+                s.allMonitorsScanCode = 0;
+            }
+        }
+    }
 
     const auto shortcut = WindhawkUtils::StringSetting::make(L"shortcut");
     const bool altTab = wcscmp(shortcut, L"winTab") != 0;
@@ -1082,6 +1276,7 @@ Settings LoadSettings() {
         std::clamp(Wh_GetIntSetting(L"animationDuration"), 50, 3000);
     s.flipSpeed = std::clamp(Wh_GetIntSetting(L"flipSpeed"), 25, 400) / 100.0f;
     s.showDelayMs = std::clamp(Wh_GetIntSetting(L"showDelay"), 0, 1000);
+    s.showOnSecondTab = Wh_GetIntSetting(L"showOnSecondTab") != 0;
     s.tiltRadians = std::clamp(Wh_GetIntSetting(L"tiltAngle"), 0, 70) *
                     3.14159265f / 180.0f;
     s.stackSpacing =
@@ -1177,9 +1372,13 @@ std::atomic<HoldKey> g_holdKey{HoldKey::Alt};
 // The shortcuts that open the switcher, one bit per Shortcut, read by the
 // keyboard hook (and by explorer's hotkey hook).
 std::atomic<unsigned> g_shortcuts{1u << (int)Shortcut::AltTab};
+// The key that shows every monitor (see Settings), read by the keyboard hook.
+std::atomic<UINT> g_allMonitorsVk;
+std::atomic<DWORD> g_allMonitorsScanCode{kLeftOf1ScanCode};
 // The shortcut that opened the session in progress.
 std::atomic<Shortcut> g_sessionShortcut{Shortcut::AltTab};
 
+// The settings the keyboard hook reads.
 void ApplyShortcutSettings(const Settings& settings) {
     unsigned shortcuts = 0;
     for (int i = 0; i < kShortcutCount; i++) {
@@ -1188,6 +1387,8 @@ void ApplyShortcutSettings(const Settings& settings) {
         }
     }
     g_shortcuts = shortcuts;
+    g_allMonitorsVk = settings.allMonitorsVk;
+    g_allMonitorsScanCode = settings.allMonitorsScanCode;
 }
 
 // The shortcut made by Tab pressed with these modifiers, if it's turned on.
@@ -1274,6 +1475,43 @@ float PositiveMod(float value, float modulus) {
 int PositiveMod(long long value, int modulus) {
     long long result = value % modulus;
     return (int)(result < 0 ? result + modulus : result);
+}
+
+// A process's integrity level, or 0 if it can't be read (e.g. it runs as
+// administrator and this process doesn't).
+DWORD GetIntegrityLevel(HANDLE process) {
+    HANDLE token;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        return 0;
+    }
+    DWORD level = 0;
+    alignas(TOKEN_MANDATORY_LABEL) BYTE
+        buffer[sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
+                            &size)) {
+        const PSID sid =
+            reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buffer)->Label.Sid;
+        level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return level;
+}
+
+// Whether the window belongs to a process whose input low-level hooks of this
+// process don't see (UIPI): one at a higher integrity level.
+bool IsAboveThisProcess(HWND hwnd) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return true;
+    }
+    const DWORD level = GetIntegrityLevel(process);
+    CloseHandle(process);
+    static const DWORD ownLevel = GetIntegrityLevel(GetCurrentProcess());
+    return !level || level > ownLevel;
 }
 
 bool IsKeyDown(int vk) {
@@ -1382,9 +1620,12 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
 
     if (!g_switching) {
         Shortcut shortcut;
+        // With Ctrl held too, Tab isn't flagged as pressed with Alt (it makes
+        // a WM_KEYDOWN, not a WM_SYSKEYDOWN): Alt's own state counts.
         if (keyDown && vk == VK_TAB && g_ready && g_takeOver &&
-            MatchShortcut((kb->flags & LLKHF_ALTDOWN) != 0, CtrlHeld(),
-                          WinHeld(), &shortcut)) {
+            MatchShortcut(
+                (kb->flags & LLKHF_ALTDOWN) != 0 || IsKeyDown(VK_MENU),
+                CtrlHeld(), WinHeld(), &shortcut)) {
             g_sessionShortcut = shortcut;
             g_holdKey = HoldKeyFor(shortcut);
             g_switching = true;
@@ -1440,7 +1681,22 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
 
     // While switching, every other key belongs to the switcher. Otherwise the
     // foreground app would receive them as Alt+key accelerators.
+    const bool repeat = g_swallowedPress[vk];
     g_swallowedPress[vk] = true;
+    // Alt+Shift released with no other key between them switches the keyboard
+    // layout, and a swallowed key doesn't count as one (e.g. Shift+Tab to go
+    // back). The dummy key does.
+    if (IsKeyDown(VK_SHIFT)) {
+        PostThreadMessageW(g_hookThreadId, WM_HOOK_MASK_MODIFIERS, 0, 0);
+    }
+    const UINT allMonitorsVk = g_allMonitorsVk;
+    const DWORD allMonitorsScanCode = g_allMonitorsScanCode;
+    if (!repeat &&
+        ((allMonitorsVk && vk == allMonitorsVk) ||
+         (allMonitorsScanCode && kb->scanCode == allMonitorsScanCode &&
+          !(kb->flags & LLKHF_EXTENDED)))) {
+        PostMessageW(g_overlayWnd, WM_APP_TOGGLE_MONITORS, 0, 0);
+    }
     int step = 0;
     switch (vk) {
         case VK_TAB:
@@ -1473,13 +1729,21 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
 }
 
 LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && wParam == WM_MOUSEWHEEL && g_switching) {
-        const auto* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        if (ms->dwExtraInfo != kInjectedInputTag) {
+    const auto* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+    if (code == HC_ACTION && g_switching &&
+        ms->dwExtraInfo != kInjectedInputTag) {
+        if (wParam == WM_MOUSEWHEEL) {
             const short delta = (short)HIWORD(ms->mouseData);
             PostMessageW(g_overlayWnd, WM_APP_WHEEL, (WPARAM)(INT_PTR)delta,
                          0);
             return 1;
+        }
+        // The click goes on to its window (see WM_APP_MOUSE_DOWN).
+        if (g_holdKey == HoldKey::None &&
+            (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+             wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN)) {
+            PostMessageW(g_overlayWnd, WM_APP_MOUSE_DOWN,
+                         (WPARAM)(INT_PTR)ms->pt.x, (LPARAM)ms->pt.y);
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -1519,6 +1783,32 @@ DWORD WINAPI HookThreadProc(LPVOID parameter) {
         switch (msg.message) {
             case WM_HOOK_UPDATE:
                 UpdateKeyboardHook();
+                break;
+
+            case WM_HOOK_REINSTALL: {
+                // Windows silently stops calling a hook that took too long
+                // to answer (e.g. while the PC was frozen), and the handle
+                // looks valid all along.
+                if (g_keyboardHook) {
+                    UnhookWindowsHookEx(g_keyboardHook);
+                    g_keyboardHook = nullptr;
+                }
+                // The keys known to be pressed on the real keyboard stay
+                // known, unless released meanwhile: the system state read
+                // when the hook is installed includes injected keys.
+                const int modifiers = g_physicalModifiers;
+                UpdateKeyboardHook();
+                g_physicalModifiers = modifiers;
+                for (DWORD vk : {VK_LCONTROL, VK_RCONTROL, VK_LWIN, VK_RWIN}) {
+                    if (!IsKeyDown(vk)) {
+                        g_physicalModifiers &= ~ModifierBit(vk);
+                    }
+                }
+                break;
+            }
+
+            case WM_HOOK_MASK_MODIFIERS:
+                SendDummyKeyPress();
                 break;
 
             case WM_HOOK_ENGAGE:
@@ -2367,9 +2657,13 @@ class Switcher {
     void UpdateHover();
     void DrawCloseButton(float t);
 
+    std::vector<std::pair<HWND, bool>> FindWindows(bool allMonitors) const;
+    std::unique_ptr<Item> MakeItem(HWND hwnd, bool hidden);
     void CollectWindows();
+    void OnToggleMonitors();
     bool CreateProxy(Item& item);
     void StartCaptures();
+    void StartCaptures(const std::vector<Item*>& items);
     bool FirstFramesReady();
     void StartCapture(Item& item);
     void StopCapture(Item& item);
@@ -2510,6 +2804,10 @@ class Switcher {
     double m_slideStart = 0;
     std::vector<DrawEntry> m_drawList;
     RECT m_monitor{};
+    HMONITOR m_monitorHandle = nullptr;
+    // The session shows the windows of every monitor, although the setting
+    // asks for the switcher's one only (see OnToggleMonitors).
+    bool m_allMonitors = false;
     // Monitor DPI / 96, for text sizes.
     float m_dpiScale = 1;
     double m_showAt = 0;
@@ -2530,7 +2828,9 @@ class Switcher {
     WindowFilter m_filter;
     com_ptr<IVirtualDesktopManager> m_desktops;
     bool m_selectedOnTopWhenFlat = false;
-    // The overlay took the keyboard focus (sessions started from the hotkey).
+    // The switcher took the keyboard focus (sessions started from the hotkey,
+    // see TakeFocus).
+    HWND m_focusWnd = nullptr;
     bool m_hasFocus = false;
     HWND m_previousForeground = nullptr;
     long long m_target = 0;  // Index of the front item, not wrapped.
@@ -2606,6 +2906,19 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+// The helper windows (proxies, the backdrop and the focus window) draw
+// nothing themselves, and only the switcher destroys them: Alt+F4 while the
+// focus window is in front (see TakeFocus) mustn't.
+LRESULT CALLBACK HelperWndProc(HWND hwnd,
+                               UINT msg,
+                               WPARAM wParam,
+                               LPARAM lParam) {
+    if (msg == WM_CLOSE) {
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
 // Creates the overlay window only. It's quick, so the mod finishes loading
 // right away; the graphics devices are created afterwards, in Activate.
 bool Switcher::CreateOverlay() {
@@ -2623,9 +2936,9 @@ bool Switcher::CreateOverlay() {
         return false;
     }
 
-    // Proxy windows only host a DWM thumbnail, they draw nothing themselves.
+    // The helper windows' class (see HelperWndProc).
     WNDCLASSEXW proxyClass{sizeof(proxyClass)};
-    proxyClass.lpfnWndProc = DefWindowProcW;
+    proxyClass.lpfnWndProc = HelperWndProc;
     proxyClass.hInstance = g_module;
     proxyClass.lpszClassName = kProxyClassName;
     if (!RegisterClassExW(&proxyClass)) {
@@ -2668,6 +2981,15 @@ bool Switcher::CreateOverlay() {
                               &corners, sizeof(corners));
     } else {
         Wh_Log(L"CreateWindowEx failed for the backdrop: %u", GetLastError());
+    }
+
+    // Takes the keyboard focus when needed (see TakeFocus). It draws nothing.
+    m_focusWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,
+                                 kProxyClassName, L"", WS_POPUP, 0, 0, 1, 1,
+                                 nullptr, nullptr, g_module, nullptr);
+    if (!m_focusWnd) {
+        Wh_Log(L"CreateWindowEx failed for the focus window: %u",
+               GetLastError());
     }
     return true;
 }
@@ -3119,6 +3441,10 @@ void Switcher::Shutdown() {
         DestroyWindow(m_backdrop);
         m_backdrop = nullptr;
     }
+    if (m_focusWnd) {
+        DestroyWindow(m_focusWnd);
+        m_focusWnd = nullptr;
+    }
     UnregisterClassW(kOverlayClassName, g_module);
     UnregisterClassW(kProxyClassName, g_module);
     if (m_frameTimer) {
@@ -3257,6 +3583,23 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
             MoveDeviceToMonitor();
             return 0;
 
+        case WM_APP_TOGGLE_MONITORS:
+            OnToggleMonitors();
+            return 0;
+
+        case WM_APP_MOUSE_DOWN: {
+            // A session that stays open ends when another monitor is clicked,
+            // like the native switcher when it loses the focus. The clicked
+            // window keeps the focus: nothing is given back.
+            const POINT point{(LONG)(INT_PTR)wParam, (LONG)lParam};
+            if (g_holdKey == HoldKey::None && !PtInRect(&m_monitor, point) &&
+                EndSwitching()) {
+                m_hasFocus = false;
+                OnCancel();
+            }
+            return 0;
+        }
+
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
             // A session in progress keeps the style of its shortcut.
@@ -3345,8 +3688,19 @@ void Switcher::OnHotkey(WPARAM flags) {
         OnStep(backwards ? -1 : 1);
         return;
     }
-    Wh_Log(L"Shortcut %d came as a hotkey, taking it over",
-           (int)g_sessionShortcut.load());
+    // Usually an elevated window is in front, whose keys the hook can't see.
+    // Otherwise the hook should have seen them: Windows may have dropped it
+    // (see WM_HOOK_REINSTALL), which would leave every Alt+Tab to this path
+    // from now on. It's not installed again needlessly, since a new hook
+    // goes ahead of the ones other programs installed after it.
+    HWND foreground = GetForegroundWindow();
+    const bool reinstall = foreground && !IsAboveThisProcess(foreground);
+    Wh_Log(L"Shortcut %d came as a hotkey, taking it over%s",
+           (int)g_sessionShortcut.load(),
+           reinstall ? L" (keyboard hook installed again)" : L"");
+    if (reinstall) {
+        PostThreadMessageW(g_hookThreadId, WM_HOOK_REINSTALL, 0, 0);
+    }
     PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 1, 0);
     OnStart(kStartFromHotkey | (backwards ? kStartBackwards : 0));
 }
@@ -3384,6 +3738,7 @@ void Switcher::OnStart(WPARAM flags) {
         return;
     }
     m_monitor = info.rcMonitor;
+    m_monitorHandle = monitor;
 
     // A previous window may still be on its way back from minimized.
     StopRestoreCheck();
@@ -3423,7 +3778,14 @@ void Switcher::OnStart(WPARAM flags) {
     }
 
     const int count = (int)m_items.size();
-    m_target = count > 1 ? (backwards ? count - 1 : 1) : 0;
+    // The window in front comes first, and Alt+Tab goes to the next one. When
+    // it was left out for being on another monitor, the first one is next.
+    const bool frontLeftOut =
+        m_settings.currentMonitorOnly && !m_allMonitors &&
+        m_previousForeground && m_items[0]->hwnd != m_previousForeground &&
+        MonitorFromWindow(m_previousForeground, MONITOR_DEFAULTTONEAREST) !=
+            m_monitorHandle;
+    m_target = count > 1 ? (backwards ? count - 1 : (frontLeftOut ? 0 : 1)) : 0;
     m_scroll = (double)m_target;
     m_velocity = 0;
     m_wheelRemainder = 0;
@@ -3445,35 +3807,19 @@ void Switcher::OnStart(WPARAM flags) {
 }
 
 // Used when the keyboard hook can't see the keys (e.g. an elevated window has
-// the focus). Like the native switcher, the overlay then takes the keyboard
-// focus, so the rest of the session goes through the hook again. It stays
-// fully transparent until the stack is shown.
+// the focus). Like the native switcher, the switcher then takes the keyboard
+// focus, so the rest of the session goes through the hook again. A tiny
+// window off the screen takes it, not the overlay: animated wallpaper apps
+// pause while a full-screen window has the focus.
 void Switcher::TakeFocus() {
-    const UINT width = (UINT)(m_monitor.right - m_monitor.left);
-    const UINT height = (UINT)(m_monitor.bottom - m_monitor.top);
-    if (!EnsureSwapChain(width, height)) {
+    if (!m_focusWnd) {
         return;
     }
-
-    m_ctx->SetTarget(m_targetBitmap.get());
-    m_ctx->BeginDraw();
-    m_ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
-    HRESULT hr = m_ctx->EndDraw();
-    m_ctx->SetTarget(nullptr);
-    if (SUCCEEDED(hr)) {
-        hr = m_swapChain->Present(0, 0);
-    }
-    if (FAILED(hr)) {
-        return;
-    }
-
-    SetWindowLongPtrW(m_hwnd, GWL_EXSTYLE,
-                      GetWindowLongPtrW(m_hwnd, GWL_EXSTYLE) &
-                          ~WS_EX_NOACTIVATE);
-    SetWindowPos(m_hwnd, HWND_TOPMOST, m_monitor.left, m_monitor.top, width,
-                 height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(m_focusWnd, HWND_TOP, GetSystemMetrics(SM_XVIRTUALSCREEN) - 100,
+                 GetSystemMetrics(SM_YVIRTUALSCREEN), 1, 1,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
     // Receiving the hotkey allows this process to change the foreground.
-    m_hasFocus = SetForegroundWindow(m_hwnd) != FALSE;
+    m_hasFocus = SetForegroundWindow(m_focusWnd) != FALSE;
     if (!m_hasFocus) {
         Wh_Log(L"Couldn't take the focus");
     }
@@ -3481,9 +3827,9 @@ void Switcher::TakeFocus() {
 
 void Switcher::HideOverlay() {
     ShowWindow(m_hwnd, SW_HIDE);
-    SetWindowLongPtrW(m_hwnd, GWL_EXSTYLE,
-                      GetWindowLongPtrW(m_hwnd, GWL_EXSTYLE) |
-                          WS_EX_NOACTIVATE);
+    if (m_focusWnd) {
+        ShowWindow(m_focusWnd, SW_HIDE);
+    }
     m_hasFocus = false;
     HideBackdrop();
 }
@@ -3563,8 +3909,8 @@ void Switcher::ShowBackdrop() {
     }
     m_backdropOpacity = 0;
 
-    // Right under the overlay (which may already be shown, see TakeFocus).
-    SetWindowPos(m_backdrop, IsWindowVisible(m_hwnd) ? m_hwnd : HWND_TOPMOST,
+    // The overlay is shown right after it, above it.
+    SetWindowPos(m_backdrop, HWND_TOPMOST,
                  m_monitor.left, m_monitor.top,
                  m_monitor.right - m_monitor.left,
                  m_monitor.bottom - m_monitor.top,
@@ -3630,6 +3976,10 @@ void Switcher::OnStep(int step) {
     m_target += step;
     if (m_state == State::Pending) {
         m_scroll = (double)m_target;
+        // Looking for a window further away: no need to wait (see Run).
+        if (m_settings.showOnSecondTab) {
+            m_showAt = std::min(m_showAt, NowSeconds());
+        }
     }
 }
 
@@ -3666,7 +4016,7 @@ void Switcher::OnCommit(int index) {
 
 void Switcher::OnCancel() {
     if (m_state == State::Pending) {
-        // If the overlay took the focus, give it back.
+        // If the switcher took the focus, give it back.
         if (m_hasFocus && m_previousForeground) {
             ActivateWindow(m_previousForeground);
         }
@@ -3918,19 +4268,63 @@ struct EnumWindowsContext {
     std::vector<std::pair<HWND, bool>> windows;
     const Settings* settings;
     const WindowFilter* filter;
+    // Only the windows on this monitor, or on every one if null.
+    HMONITOR monitor;
 };
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     auto* context = reinterpret_cast<EnumWindowsContext*>(lParam);
     const Settings& settings = *context->settings;
     bool hidden;
+    // A minimized window counts as being on the monitor it was on.
     if (IsSwitchableWindow(hwnd, *context->filter, &hidden) &&
         (settings.includeMinimized || !IsIconic(hwnd)) &&
+        (!context->monitor ||
+         MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) ==
+             context->monitor) &&
         !(settings.hideBars && IsBarWindow(hwnd)) &&
         !IsExcludedApp(hwnd, settings.excludedApps)) {
         context->windows.push_back({hwnd, hidden});
     }
     return context->windows.size() < (size_t)settings.maxWindows;
+}
+
+// The windows to show, in order, and whether each is hidden (see
+// WindowFilter): those of every monitor, or of the switcher's one.
+std::vector<std::pair<HWND, bool>> Switcher::FindWindows(
+    bool allMonitors) const {
+    EnumWindowsContext context{{}, &m_settings, &m_filter,
+                               allMonitors ? nullptr : m_monitorHandle};
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
+
+    // EnumWindows returns the Z order, which puts topmost windows first. The
+    // window that was in front must come first, like in the native switcher.
+    auto it = std::find_if(context.windows.begin(), context.windows.end(),
+                           [this](const auto& window) {
+                               return window.first == m_previousForeground;
+                           });
+    if (it != context.windows.end()) {
+        std::rotate(context.windows.begin(), it, it + 1);
+    }
+    return std::move(context.windows);
+}
+
+// Null if the window has no size.
+std::unique_ptr<Item> Switcher::MakeItem(HWND hwnd, bool hidden) {
+    auto item = std::make_unique<Item>();
+    item->hwnd = hwnd;
+    item->minimized = IsIconic(hwnd);
+    item->hidden = hidden;
+    if (!GetWindowBounds(hwnd, item->minimized, &item->rect)) {
+        return nullptr;
+    }
+
+    WCHAR title[256];
+    const int length = GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    item->title.assign(title, std::max(length, 0));
+
+    item->icon = GetIconBitmap(hwnd);
+    return item;
 }
 
 void Switcher::CollectWindows() {
@@ -3953,36 +4347,129 @@ void Switcher::CollectWindows() {
         m_filter.desktops = m_desktops.get();
     }
 
-    EnumWindowsContext context{{}, &m_settings, &m_filter};
-    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
-
-    // EnumWindows returns the Z order, which puts topmost windows first. The
-    // foreground window must come first, like in the native switcher.
-    HWND foreground = GetForegroundWindow();
-    auto it = std::find_if(context.windows.begin(), context.windows.end(),
-                           [foreground](const auto& window) {
-                               return window.first == foreground;
-                           });
-    if (it != context.windows.end()) {
-        std::rotate(context.windows.begin(), it, it + 1);
+    // Only the switcher's monitor, if asked; if it has no windows, all.
+    m_allMonitors = !m_settings.currentMonitorOnly;
+    auto windows = FindWindows(m_allMonitors);
+    if (windows.empty() && !m_allMonitors) {
+        m_allMonitors = true;
+        windows = FindWindows(true);
     }
 
     m_items.clear();
-    for (const auto& [hwnd, hidden] : context.windows) {
-        auto item = std::make_unique<Item>();
-        item->hwnd = hwnd;
-        item->minimized = IsIconic(hwnd);
-        item->hidden = hidden;
-        if (!GetWindowBounds(hwnd, item->minimized, &item->rect)) {
+    for (const auto& [hwnd, hidden] : windows) {
+        if (auto item = MakeItem(hwnd, hidden)) {
+            m_items.push_back(std::move(item));
+        }
+    }
+}
+
+// The allMonitorsKey key, with the currentMonitorOnly setting: shows the
+// windows of every monitor, and pressed again, only the switcher's monitor's
+// ones.
+// The windows that stay slide to their new places, the ones coming in fly
+// from where they are, and the ones left out fade away.
+void Switcher::OnToggleMonitors() {
+    if (!m_settings.currentMonitorOnly || m_items.empty() ||
+        (m_state != State::Pending && m_state != State::Open)) {
+        return;
+    }
+    const auto windows = FindWindows(!m_allMonitors);
+    if (windows.empty()) {
+        // The switcher's monitor has no windows: all of them stay.
+        return;
+    }
+    m_allMonitors = !m_allMonitors;
+
+    auto listed = [&windows](HWND hwnd) {
+        return std::any_of(windows.begin(), windows.end(),
+                           [hwnd](const auto& window) {
+                               return window.first == hwnd;
+                           });
+    };
+    // The selected window stays selected. If it's left out, the next one
+    // that stays is.
+    const int count = (int)m_items.size();
+    const int selected = SelectedIndex();
+    HWND selectedWindow = nullptr;
+    for (int i = 0; i < count && !selectedWindow; i++) {
+        HWND hwnd = m_items[(selected + i) % count]->hwnd;
+        if (listed(hwnd)) {
+            selectedWindow = hwnd;
+        }
+    }
+
+    const double now = NowSeconds();
+    std::vector<std::unique_ptr<Item>> items;
+    std::vector<Item*> added;
+    for (const auto& window : windows) {
+        HWND hwnd = window.first;
+        auto old = std::find_if(m_items.begin(), m_items.end(),
+                                [hwnd](const auto& item) {
+                                    return item && item->hwnd == hwnd;
+                                });
+        if (old != m_items.end()) {
+            items.push_back(std::move(*old));
+        } else if (auto item = MakeItem(hwnd, window.second)) {
+            added.push_back(item.get());
+            items.push_back(std::move(item));
+        }
+    }
+    for (auto& item : m_items) {
+        if (!item) {
             continue;
         }
+        // Its last frame stays, for the animation.
+        StopCapture(*item);
+        if (item->hasLastPose) {
+            m_closingItems.push_back({std::move(item), now});
+        }
+    }
+    m_items = std::move(items);
+    if (m_items.empty()) {
+        // None of them could be shown.
+        if (EndSwitching()) {
+            OnCancel();
+        }
+        return;
+    }
 
-        WCHAR title[256];
-        const int length = GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-        item->title.assign(title, std::max(length, 0));
+    int index = 0;
+    for (size_t i = 0; i < m_items.size(); i++) {
+        if (m_items[i]->hwnd == selectedWindow) {
+            index = (int)i;
+        }
+    }
+    // A flip still on its way keeps going.
+    m_scroll = index + (m_scroll - (double)m_target);
+    m_target = index;
 
-        item->icon = GetIconBitmap(hwnd);
-        m_items.push_back(std::move(item));
+    for (auto& item : m_items) {
+        item->slideFrom = item->hasLastPose ? item->lastPose : FlatPose(*item);
+        item->slides = m_state == State::Open;
+    }
+    m_slideStart = now;
+
+    // The draw list points to the items.
+    m_drawList.clear();
+    m_hoverIndex = -1;
+    m_titleIndex = -1;
+    m_titleLayout = nullptr;
+    ComputeLayout();
+
+    if (m_capturing) {
+        StartCaptures(added);
+    }
+    if (m_state == State::Open) {
+        std::vector<HWND> addedWindows;
+        for (Item* item : added) {
+            if (!item->content && !item->placeholder) {
+                item->placeholder = CreatePlaceholder(*item);
+            }
+            addedWindows.push_back(item->hwnd);
+        }
+        if (ShowsAppName(m_settings.style)) {
+            LookUpAppNames(addedWindows);
+        }
     }
 }
 
@@ -4026,7 +4513,15 @@ bool Switcher::CreateProxy(Item& item) {
 
 void Switcher::StartCaptures() {
     m_capturing = true;
+    std::vector<Item*> items;
     for (auto& item : m_items) {
+        items.push_back(item.get());
+    }
+    StartCaptures(items);
+}
+
+void Switcher::StartCaptures(const std::vector<Item*>& items) {
+    for (Item* item : items) {
         StartCapture(*item);
     }
 }
@@ -4044,6 +4539,7 @@ bool Switcher::FirstFramesReady() {
     return ready;
 }
 
+// A window that can't be captured is left with its icon.
 void Switcher::StartCapture(Item& item) {
     HWND source = item.hwnd;
     if (item.minimized || item.hidden) {
@@ -4058,6 +4554,8 @@ void Switcher::StartCapture(Item& item) {
         source = item.proxy;
     }
 
+    // Logged with the error, so a report tells which step failed.
+    PCWSTR step = L"CreateForWindow";
     try {
         auto factory =
             winrt::get_activation_factory<wgc::GraphicsCaptureItem>();
@@ -4074,10 +4572,12 @@ void Switcher::StartCapture(Item& item) {
             return;
         }
 
+        step = L"CreateFreeThreaded";
         item.framePool = wgc::Direct3D11CaptureFramePool::CreateFreeThreaded(
             m_captureDevice, wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
             2, size);
         item.poolSize = size;
+        step = L"CreateCaptureSession";
         item.session = item.framePool.CreateCaptureSession(item.captureItem);
 
         // Both are optional: older builds lack them, and the border can be
@@ -4091,9 +4591,12 @@ void Switcher::StartCapture(Item& item) {
         } catch (...) {
         }
 
+        step = L"StartCapture";
         item.session.StartCapture();
     } catch (const winrt::hresult_error& e) {
-        Wh_Log(L"Capture failed for %p: 0x%08X", item.hwnd, (UINT)e.code());
+        Wh_Log(L"Capture failed for %p%s at %s: 0x%08X", item.hwnd,
+               item.proxy ? L" (through its proxy)" : L"", step,
+               (UINT)e.code());
         StopCapture(item);
     }
 }
@@ -4307,7 +4810,7 @@ HWND Switcher::CommitTarget() const {
         const int selected = SelectedIndex();
         return selected >= 0 ? m_items[selected]->hwnd : nullptr;
     }
-    // Canceled after the overlay took the focus: give it back.
+    // Canceled after the switcher took the focus: give it back.
     return m_hasFocus ? m_previousForeground : nullptr;
 }
 
@@ -4332,30 +4835,35 @@ void Switcher::EndSession() {
     PostMessageW(m_hwnd, WM_APP_REFRESH_ICONS, 0, 0);
 }
 
-void Switcher::ActivateWindow(HWND hwnd) {
-    if (!IsWindow(hwnd)) {
-        return;
-    }
-
+// The window that gets the focus when switching to a window: its last active
+// popup (e.g. an open dialog), if it can take it.
+HWND ActivationTarget(HWND hwnd) {
     HWND popup = GetLastActivePopup(hwnd);
     if (!popup || !IsWindowVisible(popup) || !IsWindowEnabled(popup)) {
         popup = hwnd;
+    }
+    return popup;
+}
+
+void Switcher::ActivateWindow(HWND hwnd) {
+    if (!IsWindow(hwnd)) {
+        return;
     }
 
     // Input first, which allows this process to change the foreground. A
     // restore asked for before that can leave the window activated but still
     // minimized (console windows do).
     SendDummyKeyPress();
-    if (IsIconic(hwnd)) {
+    const bool minimized = IsIconic(hwnd);
+    if (minimized) {
         ShowWindowAsync(hwnd, SW_RESTORE);
-        // Some windows still ignore it: check, and try other ways.
+    }
+    // Some windows ignore the restore, and the foreground can be refused
+    // (e.g. while a fullscreen game holds on to it): check, and try again.
+    if (!SetForegroundWindow(ActivationTarget(hwnd)) || minimized) {
         m_restoreWnd = hwnd;
         m_restoreTries = 0;
         SetTimer(m_hwnd, kRestoreTimerId, kRestoreCheckMs, nullptr);
-    }
-
-    if (!SetForegroundWindow(popup)) {
-        Wh_Log(L"SetForegroundWindow failed for %p", popup);
     }
 }
 
@@ -4366,32 +4874,42 @@ void Switcher::StopRestoreCheck() {
     }
 }
 
-// A minimized window switched to is still minimized: ask again, the way the
-// taskbar does it, then directly (without waiting for its app, which may be
-// busy).
+// The window switched to is still minimized or not in front: ask again. A
+// restore is asked the way the taskbar does it, then directly (without
+// waiting for its app, which may be busy).
 void Switcher::CheckRestored() {
     HWND hwnd = m_restoreWnd;
-    if (!hwnd || !IsWindow(hwnd) || !IsIconic(hwnd) ||
-        m_restoreTries >= kMaxRestoreTries) {
-        if (hwnd && IsWindow(hwnd) && IsIconic(hwnd)) {
-            Wh_Log(L"Couldn't restore %p", hwnd);
+    if (!hwnd || !IsWindow(hwnd)) {
+        StopRestoreCheck();
+        return;
+    }
+    HWND popup = ActivationTarget(hwnd);
+    const bool minimized = IsIconic(hwnd) != FALSE;
+    HWND foreground = GetForegroundWindow();
+    if (!minimized && foreground == popup) {
+        StopRestoreCheck();
+        return;
+    }
+    if (m_restoreTries >= kMaxRestoreTries) {
+        // Names the window that kept the foreground (e.g. a fullscreen game).
+        WCHAR className[64] = L"";
+        if (foreground) {
+            GetClassNameW(foreground, className, ARRAYSIZE(className));
         }
+        Wh_Log(L"Couldn't switch to %p%s (%p, %s, in front)", hwnd,
+               minimized ? L", still minimized" : L"", foreground, className);
         StopRestoreCheck();
         return;
     }
 
     m_restoreTries++;
-    Wh_Log(L"%p is still minimized, trying again (%d)", hwnd, m_restoreTries);
     SendDummyKeyPress();
-    if (m_restoreTries == 1) {
-        PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-    } else {
-        ShowWindowAsync(hwnd, SW_RESTORE);
-    }
-
-    HWND popup = GetLastActivePopup(hwnd);
-    if (!popup || !IsWindowVisible(popup) || !IsWindowEnabled(popup)) {
-        popup = hwnd;
+    if (minimized) {
+        if (m_restoreTries == 1) {
+            PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+        } else {
+            ShowWindowAsync(hwnd, SW_RESTORE);
+        }
     }
     SetForegroundWindow(popup);
 }
@@ -6255,9 +6773,51 @@ com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
 
     float drawWidth = (float)width;
     float drawHeight = (float)height;
+    // The part of the picture that is decoded.
+    WICRect part{0, 0, (INT)imageWidth, (INT)imageHeight};
+    if (position == DWPOS_SPAN) {
+        // One picture over all the monitors: it covers the box around them,
+        // and this monitor shows its own part of it, which alone is decoded.
+        const float left = (float)GetSystemMetrics(SM_XVIRTUALSCREEN);
+        const float top = (float)GetSystemMetrics(SM_YVIRTUALSCREEN);
+        const float spanWidth = (float)GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        const float spanHeight = (float)GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (spanWidth > 0 && spanHeight > 0) {
+            const float scale = std::max(spanWidth / imageWidth,
+                                         spanHeight / imageHeight);
+            const float originX = left + (spanWidth - imageWidth * scale) / 2;
+            const float originY = top + (spanHeight - imageHeight * scale) / 2;
+            // This monitor in picture pixels, rounded outwards.
+            const INT x0 = std::clamp(
+                (INT)std::floor((m_monitor.left - originX) / scale), 0,
+                (INT)imageWidth);
+            const INT y0 = std::clamp(
+                (INT)std::floor((m_monitor.top - originY) / scale), 0,
+                (INT)imageHeight);
+            const INT x1 = std::clamp(
+                (INT)std::ceil((m_monitor.right - originX) / scale), x0,
+                (INT)imageWidth);
+            const INT y1 = std::clamp(
+                (INT)std::ceil((m_monitor.bottom - originY) / scale), y0,
+                (INT)imageHeight);
+            if (x1 == x0 || y1 == y0) {
+                return nullptr;
+            }
+            part = {x0, y0, x1 - x0, y1 - y0};
+            drawWidth = part.Width * scale;
+            drawHeight = part.Height * scale;
+            const float x = originX + x0 * scale - m_monitor.left;
+            const float y = originY + y0 * scale - m_monitor.top;
+            *rect = {x, y, x + drawWidth, y + drawHeight};
+        } else {
+            position = DWPOS_FILL;
+        }
+    }
     const float scaleX = width / (float)imageWidth;
     const float scaleY = height / (float)imageHeight;
     switch (position) {
+        case DWPOS_SPAN:
+            break;
         case DWPOS_FIT:
             drawWidth = imageWidth * std::min(scaleX, scaleY);
             drawHeight = imageHeight * std::min(scaleX, scaleY);
@@ -6268,13 +6828,25 @@ com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
             drawWidth = (float)imageWidth;
             drawHeight = (float)imageHeight;
             break;
-        default:  // Fill, span and tile.
+        default:  // Fill and tile.
             drawWidth = imageWidth * std::max(scaleX, scaleY);
             drawHeight = imageHeight * std::max(scaleX, scaleY);
             break;
     }
-    *rect = {(width - drawWidth) / 2, (height - drawHeight) / 2,
-             (width + drawWidth) / 2, (height + drawHeight) / 2};
+    if (position != DWPOS_SPAN) {
+        *rect = {(width - drawWidth) / 2, (height - drawHeight) / 2,
+                 (width + drawWidth) / 2, (height + drawHeight) / 2};
+    }
+
+    com_ptr<IWICBitmapClipper> clipper;
+    IWICBitmapSource* source = frame.get();
+    if (position == DWPOS_SPAN) {
+        if (FAILED(m_wicFactory->CreateBitmapClipper(clipper.put())) ||
+            FAILED(clipper->Initialize(frame.get(), &part))) {
+            return nullptr;
+        }
+        source = clipper.get();
+    }
 
     com_ptr<IWICBitmapScaler> scaler;
     com_ptr<IWICFormatConverter> converter;
@@ -6282,7 +6854,7 @@ com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
     const UINT scaledWidth = (UINT)std::max(std::lround(drawWidth), 1L);
     const UINT scaledHeight = (UINT)std::max(std::lround(drawHeight), 1L);
     if (FAILED(m_wicFactory->CreateBitmapScaler(scaler.put())) ||
-        FAILED(scaler->Initialize(frame.get(), scaledWidth, scaledHeight,
+        FAILED(scaler->Initialize(source, scaledWidth, scaledHeight,
                                   WICBitmapInterpolationModeFant)) ||
         FAILED(m_wicFactory->CreateFormatConverter(converter.put())) ||
         FAILED(converter->Initialize(scaler.get(),
@@ -6404,7 +6976,9 @@ void Switcher::UpdateBackground() {
     const std::wstring key =
         path + L"|" + std::to_wstring(GetFileWriteTime(path)) + L"|" +
         transcoded + L"|" + std::to_wstring(GetFileWriteTime(transcoded)) +
-        L"|" + std::to_wstring(width) + L"x" + std::to_wstring(height) + L"|" +
+        L"|" + std::to_wstring(width) + L"x" + std::to_wstring(height) + L"@" +
+        std::to_wstring(m_monitor.left) + L"," +
+        std::to_wstring(m_monitor.top) + L"|" +
         std::to_wstring(color) + L"|" + std::to_wstring((int)position) + L"|" +
         std::to_wstring((int)m_settings.background) + L"|" +
         std::to_wstring(m_settings.blurAmount);

@@ -4,14 +4,14 @@
 // @name:zh-CN      Excel 滚轮切换工作表
 // @description     Scroll the sheet tab strip with the vertical wheel and switch sheets with the horizontal wheel
 // @description:zh-CN 使用原生箭头滚动标签栏，左右拨动一次切换一张工作表
-// @version         0.5.4
+// @version         0.5.5
 // @author          youareanimal
 // @github          https://github.com/youareanimal
 // @homepage        https://github.com/youareanimal/excel-wheel-scroll-sheets
 // @license         GPL-3.0-or-later
 // @include         EXCEL.EXE
 // @architecture    x86-64
-// @compilerOptions -loleacc -lole32 -loleaut32 -luuid
+// @compilerOptions -loleacc -loleaut32 -luuid
 // ==/WindhawkMod==
 
 // Source code is licensed under GPL-3.0-or-later.
@@ -20,46 +20,36 @@
 /*
 # Excel Wheel Sheet Navigation
 
+This mod brings WPS-style mouse wheel navigation to Excel, making it easier and faster to browse sheet tabs and switch between worksheets in workbooks with many sheets.
+
+## Features
+
+1. **Tilt the wheel to switch worksheets**
+
+   With a mouse that supports left/right wheel tilt, such as the Logitech G502, tilt the wheel over the worksheet area to switch to the previous or next worksheet.
+
+   Horizontal scrolling from a thumb wheel or a touchpad's two-finger swipe also switches worksheets. To restore Excel's horizontal grid scrolling, turn off **Switch sheets with the horizontal wheel**.
+
+2. **Scroll the wheel to browse sheet tabs**
+
+   Hover over the sheet tab bar at the bottom of Excel and scroll the wheel up or down to reveal tabs that are out of view. This scrolls the tab bar without changing the active worksheet—especially useful for workbooks with many sheets.
+
+## Compatibility and behavior
+
 For 64-bit desktop Excel on Windows:
 
-- Vertical wheel over the bottom sheet tabs scrolls the tab strip without changing the active sheet.
-- Horizontal wheel over the worksheet or sheet tabs activates the adjacent visible sheet.
 - The tab strip uses Excel's native navigation arrows and animation. If the arrows cannot be used, it falls back to `ScrollWorkbookTabs`.
-- Repeated same-direction horizontal wheel messages are grouped with a 200 ms quiet period by default; the first switch is immediate.
+- Repeated same-direction horizontal wheel messages are grouped with a 50 ms quiet period by default; the first switch is immediate.
 - Hidden sheets are skipped. Modified wheel input and ordinary vertical worksheet scrolling keep Excel's behavior.
+
+Horizontal input over non-tab points in the bottom strip of the sheet area (about 64 pixels at 100% scaling) retains Excel's behavior, including a narrow strip of cells above the tab row.
+The horizontal quiet period accepts 50–2000 ms. Reversal switches immediately.
+The **Vertical sheet switching interval** setting defaults to 150 ms; reverse direction and wraparound are off by default.
 
 Settings allow direct sheet activation instead of tab scrolling, reversing direction, disabling horizontal switching, and optional wraparound.
 No macros are required. Activating a sheet can trigger existing workbook activation events, just like clicking a tab.
 Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions and 32-bit Excel have not been tested.
 
----
-
-# Excel 滚轮切换工作表
-
-默认操作：标签栏上下滚轮平滑滚动标签；点击标签切换工作表。
-单元格区域左右滚轮切换到相邻的可见工作表。
-
-标签栏滚动使用左下角左右箭头的原生操作路径和动画，
-不再使用图像覆盖或淡入淡出。滚动不改变当前工作表。
-左右拨动产生的连续同方向信号会合并，一次拨动只切换一张。
-
-将鼠标放到 Excel 底部的工作表标签上，根据“滚轮行为”选择：
-
-- 直接切换工作表：向下切换到下一张可见工作表，向上切换到上一张。
-  隐藏的工作表会跳过。
-- 只滚动标签栏：向下显示右侧标签，向上显示左侧标签；当前工作表保持不变，
-  找到目标标签后点击进入。
-
-单元格区域的上下滚轮仍然滚动表格内容。左右滚轮切换可以单独关闭，
-关闭后恢复 Excel 原来的横向滚动。水平滚动条、状态栏或功能区保留原有行为。
-单元格编辑、查找对话框或其他窗口占用焦点时不进行切换。
-
-只适用于 Windows 桌面版 64 位 Excel。通过 Excel 自身的工作表对象切换，
-不需要启用宏，也不会更改工作簿中的数据。切换工作表会触发工作簿自身已有
-的工作表激活事件，与手动点击标签一样。
-
-左右拨动防重复默认 200 毫秒：同方向连续信号合并为一次拨动，
-停顿后再次切换，反方向立即切换。标签栏直接切换模式的间隔仍为 150 毫秒。
 */
 // ==/WindhawkModReadme==
 
@@ -79,11 +69,11 @@ Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions 
   $name:zh-CN: 使用 Excel 原生标签滚动
   $description: Use Excel's native navigation arrows and animation. When disabled, scroll the tab strip directly.
   $description:zh-CN: 使用左下角左右箭头相同的滚动方式，动画速度由 Excel 决定。关闭后直接按标签滚动。
-- horizontalGestureMs: 200
+- horizontalGestureMs: 50
   $name: Horizontal gesture quiet period (milliseconds)
   $name:zh-CN: 左右拨动防重复（毫秒）
-  $description: "Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 150–2000 ms (values outside are clamped); default 200."
-  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。有效范围 150–2000 毫秒（超出会被限制）；默认 200。
+  $description: "Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 50–2000 ms (values outside are clamped); default 50."
+  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。有效范围 50–2000 毫秒（超出会被限制）；默认 50。
 - horizontalSwitching: true
   $name: Switch sheets with the horizontal wheel
   $name:zh-CN: 左右滚轮切换工作表
@@ -119,14 +109,9 @@ std::atomic<bool> g_scrollTabs{false};
 std::atomic<bool> g_horizontal{true};
 std::atomic<unsigned> g_throttle{150};
 std::atomic<bool> g_smooth{true};
-std::atomic<unsigned> g_horizontalGestureMs{200};
-// Debug output is handled by Windhawk logging; no synchronous mod-storage writes.
-void LogDiagnostic(PCWSTR name, int value) {
-    Wh_Log(L"%ls=%d",name,value);
-}
+std::atomic<unsigned> g_horizontalGestureMs{50};
 thread_local bool g_insideHook = false;
 thread_local HWND g_lastRoot = nullptr;
-thread_local UINT g_lastAxis = 0;
 thread_local int g_deltaRemainder = 0;
 thread_local ULONGLONG g_lastWheel = 0, g_lastSwitch = 0;
 
@@ -318,15 +303,13 @@ struct NativeArrowTarget {
     ComPtr<IAccessible> object;
     Variant child;
     RECT box{};
-    HWND target=nullptr;
     unsigned long long name=0;
 };
 bool ReadNativeArrow(HWND worksheet,const RECT& row,const RECT& expected,NativeArrowTarget& arrow) {
     if(!ContainsRect(row,expected)) return false;
     POINT center{(expected.left+expected.right)/2,
                  (expected.top+expected.bottom)/2};
-    arrow.target=WindowFromPoint(center);
-    if(arrow.target!=worksheet) return false;
+    if(WindowFromPoint(center)!=worksheet) return false;
     if(FAILED(AccessibleObjectFromPoint(center,&arrow.object.p,
                                        &arrow.child.value)) ||
        !arrow.object.p) return false;
@@ -356,10 +339,10 @@ bool InvokeNativeArrow(NativeArrowTarget& arrow,int steps) {
         if(state.value.lVal&STATE_SYSTEM_UNAVAILABLE)
             return true;
         HRESULT hr=arrow.object.p->accDoDefaultAction(arrow.child.value);
-        LogDiagnostic(L"nativeArrowResult",hr);
+        Wh_Log(L"Native arrow result: 0x%08X",hr);
         if(FAILED(hr)) return false;
     }
-    LogDiagnostic(L"nativeArrowOutcome",1);
+    Wh_Log(L"Native arrow invoked");
     return true;
 }
 
@@ -429,14 +412,18 @@ struct HorizontalGesture {
     HWND root=nullptr;
     DWORD lastInput=0;
     int direction=0, accumulated=0;
-    bool active=false, fired=false;
+    bool active=false, fired=false, failed=false, started=false;
+    MSG pending[WHEEL_DELTA]{};
+    unsigned pendingCount=0;
     bool Accept(HWND currentRoot,DWORD inputTime,int delta,unsigned idleMs) {
+        started=false;
         if (!delta) return false;
         int currentDirection=delta>0?1:-1;
         if (!active || root!=currentRoot || currentDirection!=direction ||
             DWORD(inputTime-lastInput)>=idleMs) {
             root=currentRoot; direction=currentDirection;
-            accumulated=0; fired=false; active=true;
+            accumulated=0; fired=false; failed=false; active=true;
+            pendingCount=0; started=true;
         }
         lastInput=inputTime;
         if(fired) return false;
@@ -445,7 +432,10 @@ struct HorizontalGesture {
         fired=true;
         return true;
     }
-    void Reset() { active=false; fired=false; accumulated=0; }
+    void Reset() {
+        active=false; fired=false; failed=false; started=false;
+        accumulated=0; pendingCount=0;
+    }
 };
 thread_local HorizontalGesture g_horizontalGesture;
 
@@ -460,17 +450,25 @@ bool IsLeftToRightTabLayout(IDispatch* excelWindow,HWND worksheet) {
            rtl.value.vt==VT_BOOL && rtl.value.boolVal==VARIANT_FALSE;
 }
 
-bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT point,
-                      int steps,const RECT& tabRow) {
-    ComPtr<IDispatch> excelWindow, application, activeSheet, workbook, sheets;
+bool GetReadyExcelWindow(HWND worksheet,ComPtr<IDispatch>& excelWindow) {
+    ComPtr<IDispatch> application;
     AccessibleObjectFromWindow(worksheet,OBJID_NATIVEOM,IID_IDispatch,
                                reinterpret_cast<void**>(&excelWindow.p));
     if (!excelWindow.p || !GetDispatchProperty(excelWindow.p, L"Application", application))
         return false;
     Variant ready;
-    if (FAILED(InvokeMember(application.p, L"Ready", DISPATCH_PROPERTYGET,
-                            &ready.value)) || ready.value.vt != VT_BOOL ||
-        ready.value.boolVal == VARIANT_FALSE) return false;
+    return SUCCEEDED(InvokeMember(application.p, L"Ready", DISPATCH_PROPERTYGET,
+                                  &ready.value)) && ready.value.vt == VT_BOOL &&
+           ready.value.boolVal != VARIANT_FALSE;
+}
+bool IsWorksheetReady(HWND worksheet) {
+    ComPtr<IDispatch> excelWindow;
+    return GetReadyExcelWindow(worksheet,excelWindow);
+}
+bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT point,
+                      int steps,const RECT& tabRow) {
+    ComPtr<IDispatch> excelWindow, activeSheet, workbook, sheets;
+    if(!GetReadyExcelWindow(worksheet,excelWindow)) return false;
     if (!horizontal && g_scrollTabs.load()) {
         if (g_smooth.load() && IsLeftToRightTabLayout(excelWindow.p,worksheet) &&
             ScrollUsingNativeArrow(worksheet,point,tabRow,direction,steps))
@@ -534,7 +532,7 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
         return g_originalDispatchMessageW(message);
     g_insideHook = true;
     bool consumed = false;
-    try {
+    {
         RECT tabRow{};
         bool eligible = horizontal ? IsHorizontalSwitchTarget(worksheet,point,tabRow)
                                    : IsSheetTab(point,worksheet,tabRow);
@@ -542,24 +540,40 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
             ULONGLONG now = GetTickCount64();
             if (horizontal) {
                 int delta=GET_WHEEL_DELTA_WPARAM(message->wParam);
-                consumed=true;
-                if(g_horizontalGesture.Accept(root,message->time,delta,
-                    g_horizontalGestureMs.load())) {
+                bool fire=g_horizontalGesture.Accept(root,message->time,delta,
+                                                     g_horizontalGestureMs.load());
+                consumed=delta!=0 && !g_horizontalGesture.failed;
+                // Do not buffer even the first small delta while Excel is busy
+                // or editing. Readiness is checked once per new partial burst.
+                if(consumed && g_horizontalGesture.started && !fire &&
+                   !IsWorksheetReady(worksheet)) {
+                    g_horizontalGesture.failed=true;
+                    consumed=false;
+                }
+                if(consumed && fire) {
                     int direction=delta>0?1:-1;
                     if(g_reverse.load()) direction=-direction;
                     Wh_Log(L"Horizontal gesture accepted");
                     consumed=ApplyWheelAction(worksheet,direction,true,point,1,tabRow);
-                    if (!consumed) g_horizontalGesture.Reset();
-                } else {
-                    Wh_Log(L"Horizontal gesture repeat suppressed");
+                    if(!consumed) {
+                        g_horizontalGesture.failed=true;
+                        // If activation fails after accumulating small deltas,
+                        // replay every held message through the original dispatch
+                        // before the current message. No synthesized wheel events.
+                        for(unsigned i=0;i<g_horizontalGesture.pendingCount;++i)
+                            g_originalDispatchMessageW(&g_horizontalGesture.pending[i]);
+                    }
+                    g_horizontalGesture.pendingCount=0;
+                } else if(consumed && !g_horizontalGesture.fired) {
+                    // Each nonzero delta contributes at least one toward 120,
+                    // so fewer than WHEEL_DELTA messages can be pending.
+                    g_horizontalGesture.pending[g_horizontalGesture.pendingCount++]=*message;
                 }
             } else {
             g_horizontalGesture.Reset();
-            if (root != g_lastRoot || message->message != g_lastAxis ||
-                now - g_lastWheel > 1000)
+            if (root != g_lastRoot || now - g_lastWheel > 1000)
                 g_deltaRemainder = 0;
             g_lastRoot = root;
-            g_lastAxis = message->message;
             g_lastWheel = now;
             g_deltaRemainder += GET_WHEEL_DELTA_WPARAM(message->wParam);
             int steps = g_deltaRemainder / WHEEL_DELTA;
@@ -578,8 +592,6 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
         } else if (horizontal) {
             g_horizontalGesture.Reset();
         }
-    } catch (...) {
-        Wh_Log(L"Wheel handler failed; preserving Excel's normal behavior");
     }
     g_insideHook = false;
     return consumed ? 0 : g_originalDispatchMessageW(message);
@@ -589,21 +601,19 @@ void LoadSettings() {
     g_scrollTabs = wcscmp(WindhawkUtils::StringSetting::make(L"wheelAction"),L"scroll")==0;
     g_horizontal = Wh_GetIntSetting(L"horizontalSwitching") != 0;
     g_smooth = Wh_GetIntSetting(L"smoothAnimation") != 0;
-    g_horizontalGestureMs = std::clamp(Wh_GetIntSetting(L"horizontalGestureMs"),150,2000);
+    g_horizontalGestureMs = std::clamp(Wh_GetIntSetting(L"horizontalGestureMs"),50,2000);
     g_reverse = Wh_GetIntSetting(L"reverseDirection") != 0;
     g_wrap = Wh_GetIntSetting(L"wrapAround") != 0;
     g_throttle = std::clamp(Wh_GetIntSetting(L"throttleMs"), 0, 5000);
-    LogDiagnostic(L"settingsSmooth",g_smooth.load());
-    LogDiagnostic(L"horizontalGestureMs",g_horizontalGestureMs.load());
+    Wh_Log(L"Settings: smooth=%d horizontalGestureMs=%u",g_smooth.load(),
+           g_horizontalGestureMs.load());
 }
 BOOL Wh_ModInit() {
     LoadSettings();
     Wh_Log(L"Excel sheet wheel mod initializing: horizontal=%d", g_horizontal.load());
     BOOL hooked=WindhawkUtils::SetFunctionHook(DispatchMessageW,DispatchMessageWHook,
                                              &g_originalDispatchMessageW);
-    if (hooked) LogDiagnostic(L"initializedPid", GetCurrentProcessId());
+    if (hooked) Wh_Log(L"Initialized in process %lu", GetCurrentProcessId());
     return hooked;
 }
-void Wh_ModAfterInit() {}
-void Wh_ModUninit() {}
 void Wh_ModSettingsChanged() { LoadSettings(); }

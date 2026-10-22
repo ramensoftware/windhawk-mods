@@ -2,10 +2,10 @@
 // @id              taskbar-rdp-launcher
 // @name            Taskbar RDP Launcher
 // @description     A taskbar widget that starts Remote Desktop full screen on the number of displays you pick
-// @version         1.0.0
+// @version         1.2.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
-// @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lcomdlg32
 // @license         MIT
 // ==/WindhawkMod==
@@ -14,7 +14,7 @@
 /*
 # Taskbar RDP Launcher
 
-![The widget on the taskbar, with a computer and buttons for 1, 2 and 3 displays](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-rdp-launcher/screenshot.png)
+![The widget on the taskbar, with a computer and buttons for 1, 2 and 3 displays](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-rdp-launcher/screenshot-1.2.png)
 
 A taskbar widget, in the style of the Windows weather widget, that starts Remote Desktop
 full screen on as many of your displays as you want. Instead of editing `use multimon` and
@@ -46,9 +46,9 @@ sometimes docked keeps separate buttons for the desk and for the road.
   `Default.rdp` in Documents. So just before the session starts, the mod sets `screen mode id`,
   `use multimon`, `span monitors` and `selectedmonitors` there (creating the file, hidden, if there
   isn't one), and as soon as the session ends, it puts back what they were. It notes what they were
-  in its own storage first, so if Windhawk is closed during a session, they're put back the next
-  time the mod starts; if the mod is turned off during a session, they're put back right away. A
-  setting you change in Remote Desktop Connection in the meantime is left as you set it.
+  in its own storage first: if the mod is turned off during a session, they're put back right away,
+  and if Explorer restarts during one, they're put back when the session ends. A setting you change
+  in Remote Desktop Connection in the meantime is left as you set it.
 - Saved .rdp files are never changed: the mod opens a copy with the display options set (and gets
   the warning, as any .rdp file does), and deletes the copy when the session ends. If the file is
   signed and its signature covers the display options, the copy goes without the signature, so
@@ -58,12 +58,23 @@ sometimes docked keeps separate buttons for the desk and for the road.
   flash) and remembers it until your displays change. **Read display numbers again** in the menu
   asks again.
 
-## Linking with Taskbar Audio Flipper
+## Linking with the other widgets
 
-With the Taskbar Audio Flipper mod running too, the two widgets can be joined into one: right-click
-either, choose **Link with AudioFlipper** (or **Link with RDPLauncher**) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.
+![Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png)
+
+From the left: [Taskbar Snipper](https://windhawk.net/mods/taskbar-snipper),
+[Taskbar Audio Flipper](https://windhawk.net/mods/taskbar-audio-flipper) and
+[Taskbar RDP Launcher](https://windhawk.net/mods/taskbar-rdp-launcher).
+
+With the Taskbar Audio Flipper or Taskbar Snipper mod running too, their widgets can be joined with
+this one into one: right-click any of them, open **Link widgets**, and choose **Link with** the other. Linked,
+they sit side by side with a divider between them, and dragging any of them moves them all; **Move
+this widget left** and **right** change their order. A widget that hides leaves no gap.
+
+Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.2 or
+later, Taskbar Snipper 1.1 or later): their widgets are inside the taskbar now, where older versions
+don't look for them, so an older one overlaps the others and doesn't follow them when they're
+dragged, reordered or unlinked.
 
 ## Settings
 
@@ -76,7 +87,6 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 
 #include <windows.h>
 #include <windowsx.h>
-#include <shellapi.h>
 #include <shlobj.h>
 #include <shellscalingapi.h>
 #include <dwmapi.h>
@@ -87,6 +97,7 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 #include <gdiplus.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cwctype>
 #include <functional>
@@ -100,19 +111,20 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 
 namespace {
 
-const wchar_t kSelfApp[] = L"RDPLauncher";
-const wchar_t kPartnerApp[] = L"AudioFlipper";
 const wchar_t kWidgetClassName[] = L"RDPLauncher.Mod.Widget";
-const wchar_t kPartnerWidgetClassName[] = L"AudioFlipper.Mod.Widget";
 const wchar_t kWidgetTitle[] = L"Taskbar RDP Launcher";
+// This widget's place among the widgets that can link (WidgetLink::kMembers), and the one it was
+// linked with as a pair before there were three.
+constexpr int kSelfMember = 1;
+constexpr int kLegacyPartner = 0;
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both, each
-// keeping the parts it uses): the taskbar widget window, popups, menus, the text
-// prompt, the link between the two widgets, the mod's storage and launching
-// programs.
+// Shared by the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper mods
+// (the same code is in all three, each keeping the parts it uses): the taskbar
+// widget window, popups, menus, the text prompt, the link between the widgets, the
+// mod's storage and launching programs.
 
 namespace gp = Gdiplus;
 
@@ -207,9 +219,9 @@ std::wstring WindowsFolder() {
     return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows";
 }
 
-// System32, for starting the programs in it. Windhawk 1.7 runs tool mods in its 32-bit
-// windhawk.exe, where Windows redirects System32 to the 32-bit SysWOW64; "Sysnative" reaches the
-// real System32 from there. Windhawk 2.0 runs them 64-bit, where System32 is the real one.
+// System32, for starting the programs in it. Explorer and the app are 64-bit on 64-bit Windows,
+// where System32 is the real one; a 32-bit process there gets the 32-bit SysWOW64 instead, and
+// "Sysnative" reaches the real System32 from it.
 std::wstring NativeSystemFolder() {
     return WindowsFolder() + (IsWow64() ? L"\\Sysnative" : L"\\System32");
 }
@@ -515,56 +527,73 @@ bool Launch(const std::wstring& exe, const std::wstring& arguments, HANDLE* proc
 // ---------------------------------------------------------------------------
 // Taskbar
 
-HWND TaskbarWindow() {
-    return FindWindowW(L"Shell_TrayWnd", nullptr);
-}
-
-// The main taskbar and its monitor, when the taskbar is horizontal and on screen (not slid away
-// by auto-hide).
-bool TryGetVisibleTaskbar(RECT& bar, RECT& monitor) {
-    HWND window = TaskbarWindow();
-    if (!window || !IsWindowVisible(window) || !GetWindowRect(window, &bar)) {
-        return false;
-    }
-    MONITORINFO info{sizeof(info)};
-    if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info)) {
-        return false;
-    }
-    monitor = info.rcMonitor;
-    int width = bar.right - bar.left;
-    int height = bar.bottom - bar.top;
-    RECT visible{};
-    IntersectRect(&visible, &bar, &monitor);
-    return width > height && height > 0 && visible.bottom - visible.top >= height - 2;
-}
-
-// Whether a full-screen app (game, video, presentation) is in front on the monitor.
-// shellReportsFullScreen is Windows' own verdict, the notification that makes the taskbar step
-// aside; screen overlays such as screenshot tools cover the screen too, but Windows doesn't
-// count them, so neither does this.
-bool IsFullScreenAppActive(const RECT& monitor, HWND ignore, bool shellReportsFullScreen) {
-    QUERY_USER_NOTIFICATION_STATE state;
-    if (SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_RUNNING_D3D_FULL_SCREEN) {
-        return true;
-    }
-    if (!shellReportsFullScreen) {
-        return false;
-    }
-    // The notification doesn't say which monitor, so also check the app in front covers this one.
-    HWND window = GetForegroundWindow();
-    RECT rect;
-    if (!window || window == ignore || !GetWindowRect(window, &rect)) {
-        return false;
-    }
-    WCHAR className[256] = {};
-    GetClassNameW(window, className, ARRAYSIZE(className));
-    for (const wchar_t* shellClass : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"}) {
-        if (wcscmp(className, shellClass) == 0) {
+// Whether this is an Explorer process.
+bool InExplorer() {
+    static const bool inExplorer = []() {
+        WCHAR path[MAX_PATH];
+        DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+        if (length == 0 || length >= MAX_PATH) {
             return false;
         }
+        const wchar_t* name = wcsrchr(path, L'\\');
+        return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    }();
+    return inExplorer;
+}
+
+// Whether the process is an Explorer.
+bool IsExplorerProcess(DWORD processId) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
     }
-    return rect.left <= monitor.left && rect.top <= monitor.top && rect.right >= monitor.right &&
-           rect.bottom >= monitor.bottom;
+    WCHAR path[MAX_PATH];
+    DWORD length = MAX_PATH;
+    bool explorer = false;
+    if (QueryFullProcessImageNameW(process, 0, path, &length)) {
+        const wchar_t* name = wcsrchr(path, L'\\');
+        explorer = _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    }
+    CloseHandle(process);
+    return explorer;
+}
+
+// Explorer's taskbar (in Explorer, this process's own if it has one). Other apps' Shell_TrayWnd
+// windows don't count: taskbar replacements such as RetroBar make one, so tray icons reach them.
+HWND TaskbarWindow() {
+    HWND explorers = nullptr;
+    for (HWND window = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr); window;
+         window = FindWindowExW(nullptr, window, L"Shell_TrayWnd", nullptr)) {
+        DWORD process = 0;
+        GetWindowThreadProcessId(window, &process);
+        if (process == GetCurrentProcessId() && InExplorer()) {
+            return window;
+        }
+        if (!explorers && IsExplorerProcess(process)) {
+            explorers = window;
+        }
+    }
+    return explorers;
+}
+
+// Whether this is an Explorer process for folder windows ("Launch folder windows in a separate
+// process"), started with "/factory,". Those never have the taskbar.
+bool InFolderWindowProcess() {
+    std::wstring commandLine = GetCommandLineW();
+    std::transform(commandLine.begin(), commandLine.end(), commandLine.begin(), towlower);
+    return InExplorer() && commandLine.find(L"/factory,") != std::wstring::npos;
+}
+
+// The taskbar to put the widget in, if there is one. In Explorer, only the process that has it:
+// Windhawk loads the mod into Explorer's folder-window processes too. (The app puts the widget in
+// Explorer's taskbar from its own process.)
+HWND WidgetTaskbar() {
+    HWND taskbar = TaskbarWindow();
+    DWORD process = 0;
+    if (taskbar && InExplorer() && GetWindowThreadProcessId(taskbar, &process) && process != GetCurrentProcessId()) {
+        return nullptr;
+    }
+    return taskbar;
 }
 
 UINT DpiForPoint(POINT point) {
@@ -1277,40 +1306,87 @@ std::optional<std::wstring> PromptForText(const std::wstring& title, const std::
 }
 
 // ---------------------------------------------------------------------------
-// The link between the Taskbar Audio Flipper and Taskbar RDP Launcher widgets (the same in both
-// mods). Linked, they sit side by side as one widget, in the order chosen, with a divider between
-// them, and dragging either moves both.
+// Linking the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper widgets (the same
+// code is in all three mods). Linked widgets sit side by side as one, in the order chosen, with a
+// divider between them, and dragging any of them moves them all.
 //
-// Each mod keeps its own copy of the link (on or off, which widget is on the left, and where the
-// pair is) in its storage, and shows it to the other as properties of its widget window, stamped
-// with when it last changed: the newer copy wins. Each widget finds the other by its window class
-// and posts it a message whenever its link, size or place changes.
+// Each mod keeps its own copy of the group (which widgets are in it, left to right, and where it
+// is) in its storage, and shows it to the others as properties of its widget window, stamped with
+// when it last changed: the newest copy wins. Each widget shows its id on its window too, finds the
+// others by theirs (the ones it knows, by their window class), and posts them a message whenever
+// its group, size or place changes.
 
 namespace WidgetLink {
 
-struct State {
-    bool linked = false;
-    bool selfOnLeft = true;
-    int offset = -1;  // The pair's left edge from the taskbar's left edge; negative for the default.
-    int stamp = 0;    // When it last changed, in seconds since 2020: the newer copy wins.
-
-    // As one number, the way it's stored and shown to the other widget (as seen from this side).
-    int Pack() const { return (linked ? 1 : 0) | (selfOnLeft ? 2 : 0) | (std::max(-1, offset) + 1) << 2; }
-
-    static State Unpack(int packed, int stamp) {
-        return State{(packed & 1) != 0, (packed & 2) != 0, (packed >> 2) - 1, stamp};
-    }
-
-    // The same link as the other widget sees it.
-    State Mirrored() const { return State{linked, !selfOnLeft, offset, stamp}; }
+struct Member {
+    const wchar_t* name;         // As the menus show it.
+    const wchar_t* windowClass;  // Of its widget window.
 };
 
-const wchar_t kStateProperty[] = L"TaskbarWidgetLink.Mod.State";
-const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.Stamp";
+// Every widget that can link, by id (its place here). Ids stay as they are: a new widget goes at
+// the end, up to 15 of them.
+constexpr Member kMembers[] = {
+    {L"Audio Flipper", L"AudioFlipper.Mod.Widget"},
+    {L"RDP Launcher", L"RDPLauncher.Mod.Widget"},
+    {L"Snipper", L"TaskbarSnipper.Mod.Widget"},
+};
+constexpr int kMemberCount = ARRAYSIZE(kMembers);
 
-// Posted to the other widget when the link, or this widget's size or place, changes.
+// The format of the group shown to the other widgets and kept in storage, in the top four bits of
+// its order. A widget skips copies in a format it doesn't know. Widgets added later don't need a new
+// one: an id a widget doesn't know stays in the group as it is.
+constexpr unsigned kFormat = 1;
+constexpr int kOrderSlots = 7;  // Widgets in a group: four bits each, below the format.
+
+struct Group {
+    std::vector<int> order;  // The widgets in it, by id, left to right.
+    int offset = -1;         // Its left edge from the taskbar's left edge; negative for the default.
+    int stamp = 0;           // When it last changed, in seconds since 2020: the newest copy wins.
+
+    bool Has(int member) const { return std::find(order.begin(), order.end(), member) != order.end(); }
+
+    // Whether this widget is linked with another.
+    bool Linked() const { return order.size() >= 2 && Has(kSelfMember); }
+
+    // The order as one number: the format, then four bits for each widget, left to right (its id
+    // plus one; none after the last).
+    int PackOrder() const {
+        unsigned packed = kFormat << 28;
+        for (size_t i = 0; i < order.size() && i < (size_t)kOrderSlots; i++) {
+            packed |= (unsigned)((order[i] + 1) & 15) << (4 * i);
+        }
+        return (int)packed;
+    }
+
+    // Reads the order. False for a format this widget doesn't know.
+    bool UnpackOrder(int packed) {
+        if ((unsigned)packed >> 28 != kFormat) {
+            return false;
+        }
+        order.clear();
+        for (int i = 0; i < kOrderSlots; i++) {
+            int member = (int)(((unsigned)packed >> (4 * i)) & 15) - 1;
+            if (member < 0) {
+                break;
+            }
+            if (!Has(member)) {
+                order.push_back(member);
+            }
+        }
+        return true;
+    }
+};
+
+// What each widget shows on its window: its id (so any widget can find it, even one added after
+// this one), and its copy of the group.
+const wchar_t kMemberProperty[] = L"TaskbarWidgetLink.Mod.Member";
+const wchar_t kOrderProperty[] = L"TaskbarWidgetLink.Mod.Order";
+const wchar_t kOffsetProperty[] = L"TaskbarWidgetLink.Mod.Offset";
+const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.GroupStamp";
+
+// Posted to the other widgets when the group, or this widget's size or place, changes.
 UINT ChangedMessage() {
-    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.Changed");
+    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.GroupChanged");
     return message;
 }
 
@@ -1327,64 +1403,122 @@ int NewStamp(int newerThan) {
     return std::max(seconds, newerThan + 1);
 }
 
-State Load() {
-    return State::Unpack(Storage::GetInt(L"Link", 0), Storage::GetInt(L"LinkStamp", 0));
+Group Load() {
+    Group group;
+    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
+    if (stamp != 0 && group.UnpackOrder(Storage::GetInt(L"LinkGroupOrder", 0))) {
+        group.offset = Storage::GetInt(L"LinkGroupOffset", -1);
+        group.stamp = stamp;
+        return group;
+    }
+    // Before there were three, two widgets linked as a pair, kept as Link (on or off, whether this
+    // widget was on the left, and the offset) and LinkStamp. The stamp counts even when they were
+    // unlinked: unlinking while the other widget's mod wasn't running still wins.
+    group = {};
+    if (kLegacyPartner >= 0) {
+        int pair = Storage::GetInt(L"Link", 0);
+        if (pair & 1) {
+            group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
+            group.offset = (pair >> 2) - 1;
+        }
+        group.stamp = Storage::GetInt(L"LinkStamp", 0);
+    }
+    return group;
 }
 
-void Save(const State& state) {
-    Storage::SetInt(L"Link", state.Pack());
-    Storage::SetInt(L"LinkStamp", state.stamp);
+void Save(const Group& group) {
+    Storage::SetInt(L"LinkGroupOrder", group.PackOrder());
+    Storage::SetInt(L"LinkGroupOffset", group.offset);
+    Storage::SetInt(L"LinkGroupStamp", group.stamp);
+    // The pair link from before is in the group now.
+    Storage::Delete(L"Link");
+    Storage::Delete(L"LinkStamp");
 }
 
-// Shows this widget's copy of the link on its window, for the other widget to read.
-void Publish(HWND window, const State& state) {
-    SetPropW(window, kStateProperty, (HANDLE)(INT_PTR)state.Pack());
-    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)state.stamp);
+// Shows this widget's id and copy of the group on its window, for the other widgets to read.
+void Publish(HWND window, const Group& group) {
+    SetPropW(window, kMemberProperty, (HANDLE)(INT_PTR)(kSelfMember + 1));
+    SetPropW(window, kOrderProperty, (HANDLE)(INT_PTR)group.PackOrder());
+    SetPropW(window, kOffsetProperty, (HANDLE)(INT_PTR)(std::max(-1, group.offset) + 1));
+    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)group.stamp);
 }
 
 void Unpublish(HWND window) {
-    RemovePropW(window, kStateProperty);
+    RemovePropW(window, kMemberProperty);
+    RemovePropW(window, kOrderProperty);
+    RemovePropW(window, kOffsetProperty);
     RemovePropW(window, kStampProperty);
 }
 
-HWND FindPartner() {
-    return FindWindowW(kPartnerWidgetClassName, nullptr);
-}
-
-// The other widget's copy of the link, as this widget sees it, if it's running.
-std::optional<State> ReadPartner() {
-    HWND window = FindPartner();
-    if (!window || !GetPropW(window, kStampProperty)) {
-        return std::nullopt;
+BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
+    int member = (int)(INT_PTR)GetPropW(window, kMemberProperty) - 1;
+    if (member >= 0 && member != kSelfMember) {
+        ((std::vector<std::pair<int, HWND>>*)widgets)->emplace_back(member, window);
     }
-    return State::Unpack((int)(INT_PTR)GetPropW(window, kStateProperty), (int)(INT_PTR)GetPropW(window, kStampProperty))
-        .Mirrored();
+    return TRUE;
 }
 
-// Whether the other mod is running, to link with.
-bool PartnerRunning() {
-    return FindPartner() != nullptr;
+// The widget windows of the other widgets that are running, with their ids: top-level windows, and
+// windows inside the taskbar (a widget's mod that Windhawk loads into Explorer puts it there).
+std::vector<std::pair<int, HWND>> OtherWidgets() {
+    std::vector<std::pair<int, HWND>> widgets;
+    EnumWindows(AddOtherWidget, (LPARAM)&widgets);
+    if (HWND taskbar = TaskbarWindow()) {
+        EnumChildWindows(taskbar, AddOtherWidget, (LPARAM)&widgets);
+    }
+    return widgets;
 }
 
-// The other app's widget, when it's on the taskbar right now.
-bool TryGetPartnerBounds(RECT& bounds) {
-    HWND window = FindPartner();
+HWND FindMember(int member) {
+    if (member == kSelfMember || member < 0) {
+        return nullptr;
+    }
+    if (member < kMemberCount) {
+        if (HWND window = FindWindowW(kMembers[member].windowClass, nullptr)) {
+            return window;
+        }
+        HWND taskbar = TaskbarWindow();
+        return taskbar ? FindWindowExW(taskbar, nullptr, kMembers[member].windowClass, nullptr) : nullptr;
+    }
+    // One added after this widget: by the id it shows.
+    for (const auto& [id, window] : OtherWidgets()) {
+        if (id == member) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+// Whether the widget's mod is running (this one always is).
+bool Running(int member) {
+    return member == kSelfMember || FindMember(member) != nullptr;
+}
+
+// The newest copy of the group among the other widgets that are running.
+std::optional<Group> ReadNewest() {
+    std::optional<Group> newest;
+    for (const auto& [member, window] : OtherWidgets()) {
+        int stamp = (int)(INT_PTR)GetPropW(window, kStampProperty);
+        Group group;
+        if (stamp != 0 && (!newest || stamp > newest->stamp) && group.UnpackOrder((int)(INT_PTR)GetPropW(window, kOrderProperty))) {
+            group.offset = (int)(INT_PTR)GetPropW(window, kOffsetProperty) - 1;
+            group.stamp = stamp;
+            newest = group;
+        }
+    }
+    return newest;
+}
+
+// The widget, when it's on the taskbar right now.
+bool TryGetBounds(int member, RECT& bounds) {
+    HWND window = FindMember(member);
     return window && IsWindowVisible(window) && GetWindowRect(window, &bounds) && bounds.right > bounds.left;
 }
 
-void NotifyPartner() {
-    if (HWND window = FindPartner()) {
+void NotifyOthers() {
+    for (const auto& [member, window] : OtherWidgets()) {
         PostMessageW(window, ChangedMessage(), 0, 0);
     }
-}
-
-// Where a linked widget goes: the pair starts at groupOffset (kept on the taskbar), with the left
-// app first. Both apps work it out the same way from the same numbers, so they meet without a
-// gap. Without the other widget showing, this one takes the pair's place.
-int PlaceInGroup(int barLeft, int barWidth, int ownWidth, int partnerWidth, bool selfOnLeft, int groupOffset, int& groupLeft) {
-    int total = std::min(ownWidth + partnerWidth, barWidth);
-    groupLeft = barLeft + std::max(0, std::min(groupOffset, barWidth - total));
-    return selfOnLeft || partnerWidth == 0 ? groupLeft : std::min(groupLeft + partnerWidth, barLeft + barWidth - ownWidth);
 }
 
 }  // namespace WidgetLink
@@ -1392,25 +1526,280 @@ int PlaceInGroup(int barLeft, int barWidth, int ownWidth, int partnerWidth, bool
 // ---------------------------------------------------------------------------
 // The taskbar widget
 
+// The widget's window inside the taskbar, owned by a thread that does nothing else. Windows joins
+// the input of a child window's thread with its parent's, so while the thread that owns the
+// widget's window is busy, the taskbar gets no mouse or keyboard input either. This thread only
+// shows the pictures the UI thread draws, and passes the mouse on to it, so it's never busy.
+class WidgetWindow {
+public:
+    // Messages to the UI thread's window given to Start: the widget's window is in a taskbar
+    // (wParam is the window, or null if it couldn't be made), or is gone (wParam), along with its
+    // taskbar or for good. Its other messages (WM_MOUSELEAVE, WM_CAPTURECHANGED and
+    // WM_DPICHANGED_AFTERPARENT) and the other widgets' notices come as they are.
+    static constexpr UINT kAttachedMessage = WM_APP + 0x200;
+    static constexpr UINT kDetachedMessage = WM_APP + 0x201;
+    // Its mouse messages (WM_MOUSEFIRST to WM_MOUSELAST) come as this plus their place in that range,
+    // as a menu's modal loop takes every message in that range from its thread's queue for itself,
+    // even those posted to its other windows.
+    static constexpr UINT kMouseMessage = WM_APP + 0x210;
+
+    ~WidgetWindow() { Stop(); }
+
+    bool Start(HWND input) {
+        input_ = input;
+        windowClass_ = RegisterWidgetClass();
+        if (!windowClass_) {
+            return false;
+        }
+        ready_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        thread_ = CreateThread(nullptr, 0, ThreadProc, this, 0, &threadId_);
+        if (!thread_) {
+            Stop();
+            return false;
+        }
+        WaitForSingleObject(ready_, INFINITE);  // Its message queue is there from then on.
+        return true;
+    }
+
+    // Destroys the window and ends the thread.
+    void Stop() {
+        if (thread_) {
+            PostThreadMessageW(threadId_, WM_QUIT, 0, 0);
+            WaitForSingleObject(thread_, INFINITE);
+            CloseHandle(thread_);
+            thread_ = nullptr;
+        }
+        if (ready_) {
+            CloseHandle(ready_);
+            ready_ = nullptr;
+        }
+        if (picture_) {
+            DeleteObject(picture_);
+            picture_ = nullptr;
+        }
+    }
+
+    // Puts the window in the taskbar, unless it's in one already.
+    void Attach(HWND taskbar) { PostThreadMessageW(threadId_, kAttachMessage, 0, (LPARAM)taskbar); }
+
+    // Shows the picture (which this then owns) at the position in the taskbar's client area. With
+    // notify, the linked widgets are told once it shows (so they see where it is now).
+    void Present(HBITMAP picture, POINT position, SIZE size, bool notify) {
+        AcquireSRWLockExclusive(&lock_);
+        HBITMAP old = picture_;
+        picture_ = picture;
+        position_ = position;
+        size_ = size;
+        ReleaseSRWLockExclusive(&lock_);
+        if (old) {
+            DeleteObject(old);
+        }
+        if (HWND window = window_) {
+            PostMessageW(window, kPresentMessage, notify, 0);
+        }
+    }
+
+    // The latest point the mouse moved to, when the UI thread gets the move posted to it.
+    LPARAM TakeMouseMove() {
+        movePending_ = false;
+        return movePoint_;
+    }
+
+    // Shows or hides the window; with notify, the linked widgets are told after.
+    void SetVisible(bool visible, bool notify) {
+        if (HWND window = window_) {
+            PostMessageW(window, kVisibleMessage, visible, notify);
+        }
+    }
+
+private:
+    static constexpr UINT kAttachMessage = WM_APP + 0x202;   // To the thread.
+    static constexpr UINT kPresentMessage = WM_APP + 0x203;  // To the window.
+    static constexpr UINT kVisibleMessage = WM_APP + 0x204;  // To the window.
+
+    static const wchar_t* RegisterWidgetClass() {
+        std::vector<std::wstring>& classes = RegisteredClasses();
+        if (std::find(classes.begin(), classes.end(), kWidgetClassName) != classes.end()) {
+            return kWidgetClassName;
+        }
+        WNDCLASSEXW windowClass{sizeof(windowClass)};
+        windowClass.hInstance = ModuleInstance();
+        windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        windowClass.lpszClassName = kWidgetClassName;
+        windowClass.lpfnWndProc = WindowProc;
+        if (!RegisterClassExW(&windowClass)) {
+            Wh_Log(L"Couldn't register window class %s: error %u", kWidgetClassName, GetLastError());
+            return nullptr;
+        }
+        classes.push_back(kWidgetClassName);
+        return kWidgetClassName;
+    }
+
+    static DWORD WINAPI ThreadProc(void* parameter) {
+        auto self = (WidgetWindow*)parameter;
+        MSG message;
+        PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // Creates the message queue.
+        SetEvent(self->ready_);
+        while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+            if (!message.hwnd && message.message == kAttachMessage) {
+                self->Create((HWND)message.lParam);
+            } else {
+                DispatchMessageW(&message);
+            }
+        }
+        if (HWND window = self->window_) {
+            DestroyWindow(window);
+        }
+        return 0;
+    }
+
+    void Create(HWND taskbar) {
+        if (HWND window = window_) {
+            PostMessageW(input_, kAttachedMessage, (WPARAM)window, 0);  // There already.
+            return;
+        }
+        // Layered, as only a layered window draws over the content of the Windows 11 taskbar; and
+        // not mirrored when the taskbar is (for right-to-left languages), as it's drawn as it is.
+        HWND window = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOPARENTNOTIFY | WS_EX_NOINHERITLAYOUT, windowClass_, kWidgetTitle,
+                                      WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 1, 1, taskbar, nullptr, ModuleInstance(), this);
+        if (window) {
+            // Only needed when the app runs as administrator: lets the other widgets' messages
+            // through.
+            ChangeWindowMessageFilterEx(window, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
+            window_ = window;
+        }
+        PostMessageW(input_, kAttachedMessage, (WPARAM)window, 0);
+    }
+
+    void PostMouse(UINT message, WPARAM wParam, LPARAM lParam) {
+        PostMessageW(input_, kMouseMessage + (message - WM_MOUSEFIRST), wParam, lParam);
+    }
+
+    // Draws the picture last given (on this thread, which owns the window).
+    void Show(HWND window, bool notify) {
+        HDC screen = GetDC(nullptr);
+        HDC memory = CreateCompatibleDC(screen);
+        AcquireSRWLockExclusive(&lock_);
+        if (picture_) {
+            HGDIOBJ previous = SelectObject(memory, picture_);
+            POINT source{0, 0};
+            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+            UpdateLayeredWindow(window, screen, &position_, &size_, memory, &source, 0, &blend, ULW_ALPHA);
+            SelectObject(memory, previous);
+        }
+        ReleaseSRWLockExclusive(&lock_);
+        DeleteDC(memory);
+        ReleaseDC(nullptr, screen);
+        if (notify) {
+            WidgetLink::NotifyOthers();
+        }
+    }
+
+    static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == WM_NCCREATE) {
+            SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)((CREATESTRUCTW*)lParam)->lpCreateParams);
+        }
+        auto self = (WidgetWindow*)GetWindowLongPtrW(window, GWLP_USERDATA);
+        if (!self) {
+            return DefWindowProcW(window, message, wParam, lParam);
+        }
+        if (message == WidgetLink::ChangedMessage()) {
+            PostMessageW(self->input_, message, wParam, lParam);
+            return 0;
+        }
+        switch (message) {
+            case kPresentMessage:
+                self->Show(window, wParam != 0);
+                return 0;
+            case kVisibleMessage:
+                ShowWindow(window, wParam ? SW_SHOWNA : SW_HIDE);
+                if (lParam) {
+                    WidgetLink::NotifyOthers();
+                }
+                return 0;
+            case WM_MOUSEACTIVATE:
+                return MA_NOACTIVATE;
+            case WM_MOUSEMOVE:
+                if (!self->trackingMouse_) {
+                    TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, window, 0};
+                    self->trackingMouse_ = TrackMouseEvent(&track);
+                }
+                // Only the latest move matters, as Windows has it for a busy thread: one is posted at
+                // a time, and the UI thread takes the latest point when it gets to it (TakeMouseMove).
+                self->movePoint_ = lParam;
+                if (!self->movePending_.exchange(true)) {
+                    self->PostMouse(message, wParam, lParam);
+                }
+                return 0;
+            case WM_MOUSELEAVE:
+                self->trackingMouse_ = false;
+                PostMessageW(self->input_, message, wParam, lParam);
+                return 0;
+            case WM_LBUTTONDOWN:
+                SetCapture(window);  // For dragging.
+                self->PostMouse(message, wParam, lParam);
+                return 0;
+            case WM_LBUTTONUP:
+                self->PostMouse(message, wParam, lParam);
+                if (GetCapture() == window) {
+                    ReleaseCapture();
+                }
+                return 0;
+            case WM_MBUTTONUP:
+            case WM_RBUTTONUP:
+            case WM_MOUSEWHEEL:
+                self->PostMouse(message, wParam, lParam);
+                return 0;
+            case WM_CAPTURECHANGED:
+            case WM_DPICHANGED_AFTERPARENT:
+                PostMessageW(self->input_, message, wParam, lParam);
+                break;
+            case WM_DESTROY:
+                // Destroyed here, or along with the taskbar (which Explorer can recreate).
+                WidgetLink::Unpublish(window);
+                self->window_ = nullptr;
+                self->trackingMouse_ = false;
+                PostMessageW(self->input_, kDetachedMessage, (WPARAM)window, 0);
+                break;
+        }
+        return DefWindowProcW(window, message, wParam, lParam);
+    }
+
+    HWND input_ = nullptr;
+    const wchar_t* windowClass_ = nullptr;
+    HANDLE thread_ = nullptr;
+    DWORD threadId_ = 0;
+    HANDLE ready_ = nullptr;
+    std::atomic<HWND> window_{nullptr};
+    bool trackingMouse_ = false;  // On its thread.
+    std::atomic<LPARAM> movePoint_{0};
+    std::atomic<bool> movePending_{false};
+    SRWLOCK lock_ = SRWLOCK_INIT;  // For the picture.
+    HBITMAP picture_ = nullptr;
+    POINT position_{};
+    SIZE size_{};
+};
+
 // A taskbar button in the style of the Windows weather widget. Windows 11 has no API for adding
-// things to the taskbar, so this is a transparent, always-on-top window kept just above the
-// taskbar. It moves back above the taskbar when the taskbar is clicked, and hides when the
-// taskbar auto-hides or a full-screen app is in front. To know about full-screen apps it registers
-// as an app bar (without reserving any screen space), the same way the taskbar learns to step
-// aside for them. Drag it to move it along the taskbar.
+// things to the taskbar, so it's a transparent window inside the taskbar's own window, over the
+// buttons Explorer draws there: it moves and auto-hides with the taskbar, and full-screen apps and
+// the Start menu cover it as they do the rest of the taskbar. Drag it to move it along the taskbar.
+//
+// Windhawk loads the mod into Explorer, which has the taskbar; the app puts the widget into
+// Explorer's taskbar from its own process. Either way the window is a WidgetWindow, on a thread of
+// its own, and everything else happens on the UI thread, with a hidden top-level window: it gets
+// the widget's mouse messages from the WidgetWindow, the notices Windows sends only to top-level
+// windows (settings, display and taskbar changes), and the timers, and owns the menus and
+// dialogs. When Explorer recreates the taskbar, the widget's window goes with the old one, and a
+// new one goes into the new taskbar.
 //
 // Subclasses lay out and draw the content and handle clicks.
 class TaskbarWidget {
 public:
     virtual ~TaskbarWidget() {
-        if (hwnd_) {
-            DestroyWindow(hwnd_);
-        }
-        if (foregroundHook_) {
-            UnhookWinEvent(foregroundHook_);
-        }
-        if (widgetForHook_ == this) {
-            widgetForHook_ = nullptr;
+        window_.Stop();
+        if (events_.hwnd_) {
+            DestroyWindow(events_.hwnd_);
         }
     }
 
@@ -1422,99 +1811,136 @@ public:
     bool Create(int offset) {
         offset_ = offset;
         link_ = WidgetLink::Load();
-        if (const wchar_t* registered = RegisterForwardingClass<TaskbarWidget>(kWidgetClassName)) {
-            CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, registered, kWidgetTitle, WS_POPUP,
-                            0, 0, 1, 1, nullptr, nullptr, ModuleInstance(), this);
+        events_.widget = this;
+        static const std::wstring eventsClass = std::wstring(kWidgetClassName) + L".Events";
+        if (const wchar_t* registered = RegisterForwardingClass<Events>(eventsClass.c_str())) {
+            CreateWindowExW(WS_EX_TOOLWINDOW, registered, kWidgetTitle, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), &events_);
         }
-        if (!hwnd_) {
+        if (!events_.hwnd_ || !window_.Start(events_.hwnd_)) {
             return false;
         }
-        // Only needed when Windhawk itself runs as administrator (a portable Windhawk started that
-        // way): lets the other widget's and the shell's messages through to the widget.
-        ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
-        appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
-        ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
+        // Only needed when the app runs as administrator: lets Explorer's notice through.
         taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
-        ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
-        RegisterAppBar();
-        // Take the other widget's copy of the link if it changed more recently, and let it know
-        // this one is here.
-        WidgetLink::Publish(hwnd_, link_);
-        SyncLink();
-        WidgetLink::NotifyPartner();
+        ChangeWindowMessageFilterEx(events_.hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
+        SetTimer(events_.hwnd_, kPlacementTimer, 250, nullptr);
+        AttachToTaskbar();
         return true;
     }
 
     void Destroy() {
-        if (!hwnd_) {
-            return;
-        }
         SetShown(false);
+        window_.Stop();  // Its window goes, taking this widget's copy of the group with it.
         if (linkSavePending_) {
+            linkSavePending_ = false;
             WidgetLink::Save(link_);
         }
-        APPBARDATA data{sizeof(data)};
-        data.hWnd = hwnd_;
-        SHAppBarMessage(ABM_REMOVE, &data);
-        WidgetLink::Unpublish(hwnd_);
-        DestroyWindow(hwnd_);
-        WidgetLink::NotifyPartner();  // So it takes the pair's place.
+        if (hwnd_) {
+            hwnd_ = nullptr;
+            WidgetLink::NotifyOthers();  // So they close the gap.
+        }
+        if (events_.hwnd_) {
+            DestroyWindow(events_.hwnd_);  // Its timers go with it.
+        }
     }
 
-    HWND Handle() const { return hwnd_; }
+    // A hidden window of the UI thread, for timers (which come to OnTimer), and to own menus and
+    // dialogs.
+    HWND OwnerWindow() const { return events_.hwnd_; }
 
-    bool Visible() const { return hwnd_ && IsWindowVisible(hwnd_); }
+    bool Visible() const { return hwnd_ && visible_; }
 
     RECT Bounds() const {
         RECT rect{};
-        GetWindowRect(hwnd_, &rect);
+        if (hwnd_) {
+            GetWindowRect(hwnd_, &rect);
+        }
         return rect;
     }
 
-    // Shows or hides the widget; it only watches the taskbar while it's meant to be shown.
     void SetShown(bool shown) {
         if (shown == shown_) {
             return;
         }
         shown_ = shown;
-        if (shown) {
-            SetTimer(hwnd_, kPlacementTimer, 250, nullptr);
-            if (!foregroundHook_) {
-                widgetForHook_ = this;
-                foregroundHook_ = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
-                                                  OnForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
-            }
-        } else {
-            KillTimer(hwnd_, kPlacementTimer);
-            if (foregroundHook_) {
-                UnhookWinEvent(foregroundHook_);
-                foregroundHook_ = nullptr;
-            }
-        }
         UpdatePlacement(true);
     }
 
     // Re-renders after the content changed (and resizes if its width did).
     void ContentChanged() { UpdatePlacement(true); }
 
-    const WidgetLink::State& Link() const { return link_; }
+    const WidgetLink::Group& Link() const { return link_; }
 
-    // Links this widget with the other mod's, with this one on the given side, or unlinks them.
-    void SetLink(bool linked, bool selfOnLeft) {
-        int groupOffset = link_.offset;
-        if (linked && !link_.linked) {
-            // Start the pair where the leftmost of the two widgets is now.
-            RECT bounds = Bounds();
-            int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
-            RECT partner;
-            if (WidgetLink::TryGetPartnerBounds(partner)) {
-                left = Visible() ? std::min(left, (int)partner.left) : (int)partner.left;
+    // Links another mod's widget with this one (joining its group if it's in one), or takes it out
+    // of the group.
+    void SetMemberLinked(int member, bool linked) {
+        WidgetLink::Group group = link_;
+        if (linked) {
+            if (group.order.size() < 2) {
+                // A new group starts where the leftmost of the two widgets is now, in the order
+                // they're in.
+                int left = taskbar_.left + (Visible() ? placedOffset_ : std::max(0, offset_));
+                RECT other;
+                bool otherFirst = false;
+                if (WidgetLink::TryGetBounds(member, other)) {
+                    otherFirst = other.left < left;
+                    left = std::min(left, (int)other.left);
+                }
+                group.order = otherFirst ? std::vector<int>{member, kSelfMember} : std::vector<int>{kSelfMember, member};
+                group.offset = std::max(0, left - (int)taskbar_.left);
+            } else {
+                // Joining the group, at its right end.
+                if (!group.Has(kSelfMember)) {
+                    group.order.push_back(kSelfMember);
+                }
+                if (!group.Has(member)) {
+                    group.order.push_back(member);
+                }
             }
-            groupOffset = std::max(0, left - (int)taskbar_.left);
+        } else {
+            group.order.erase(std::remove(group.order.begin(), group.order.end(), member), group.order.end());
+            if (group.order.size() < 2) {
+                group.order.clear();
+            }
         }
-        ChangeLink(WidgetLink::State{linked, selfOnLeft, groupOffset});
+        ChangeLink(group);
         UpdatePlacement(true);
-        WidgetLink::NotifyPartner();
+        WidgetLink::NotifyOthers();
+    }
+
+    // Whether a widget in the group is showing left (-1) or right (1) of this one, to move past.
+    bool CanMoveInGroup(int direction) const { return NeighborShowing(direction) >= 0; }
+
+    // Moves this widget past the nearest widget in its group that's showing on its left (-1) or
+    // right (1). (Past one that's hidden, nothing would change to see.)
+    void MoveInGroup(int direction) {
+        int neighbor = NeighborShowing(direction);
+        if (neighbor < 0) {
+            return;
+        }
+        WidgetLink::Group group = link_;
+        int passed = group.order[neighbor];
+        group.order.erase(std::remove(group.order.begin(), group.order.end(), kSelfMember), group.order.end());
+        auto place = std::find(group.order.begin(), group.order.end(), passed);
+        group.order.insert(direction < 0 ? place : place + 1, kSelfMember);
+        ChangeLink(group);
+        UpdatePlacement(true);
+        WidgetLink::NotifyOthers();
+    }
+
+    // The place in the group of the nearest widget showing on this one's left (-1) or right (1),
+    // or -1.
+    int NeighborShowing(int direction) const {
+        auto self = std::find(link_.order.begin(), link_.order.end(), kSelfMember);
+        if (self == link_.order.end()) {
+            return -1;
+        }
+        RECT bounds;
+        for (int i = (int)(self - link_.order.begin()) + direction; i >= 0 && i < (int)link_.order.size(); i += direction) {
+            if (WidgetLink::TryGetBounds(link_.order[i], bounds)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     float Scale() const { return scale_; }
@@ -1526,154 +1952,6 @@ public:
         RECT bounds = Bounds();
         return {bounds.left + x, bounds.top, bounds.left + x + width, bounds.bottom};
     }
-
-    bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
-        if (message == WidgetLink::ChangedMessage()) {
-            // The other widget moved, changed size, or changed the link.
-            SyncLink();
-            UpdatePlacement(false);
-            return true;
-        }
-        if (taskbarCreatedMessage_ && message == taskbarCreatedMessage_) {
-            // Explorer started (again, or after the mod at sign-in) and knows no app bars yet.
-            shellReportsFullScreen_ = false;
-            RegisterAppBar();
-            UpdatePlacement(true);
-            return true;
-        }
-        if (appBarMessage_ && message == appBarMessage_) {
-            // Windows says a full-screen app opened or closed (lParam is nonzero while one is open).
-            if (wParam == ABN_FULLSCREENAPP) {
-                shellReportsFullScreen_ = lParam != 0;
-                UpdatePlacement(false);
-            }
-            return true;
-        }
-        switch (message) {
-            case WM_MOUSEACTIVATE:
-                result = MA_NOACTIVATE;
-                return true;
-            case WM_TIMER:
-                if (wParam == kPlacementTimer) {
-                    UpdatePlacement(false);
-                } else if (wParam == kLinkSaveTimer) {
-                    KillTimer(hwnd_, kLinkSaveTimer);
-                    linkSavePending_ = false;
-                    WidgetLink::Save(link_);
-                } else {
-                    OnTimer(wParam);
-                }
-                return true;
-            case WM_MOUSEMOVE: {
-                POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                if (!trackingMouse_) {
-                    TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd_, 0};
-                    trackingMouse_ = TrackMouseEvent(&track);
-                }
-                if (!pressed_) {
-                    OnHover(point);
-                    return true;
-                }
-                POINT cursor;
-                GetCursorPos(&cursor);
-                int distance = cursor.x - dragStartCursorX_;
-                if (!dragging_ && std::abs(distance) < GetSystemMetrics(SM_CXDRAG)) {
-                    return true;
-                }
-                if (!dragging_) {
-                    dragging_ = true;
-                    OnDragStart();
-                }
-                int dragged = std::max(0, dragStartOffset_ + distance);
-                if (wasLinked_) {
-                    WidgetLink::State moved = link_;
-                    moved.offset = dragged;
-                    ChangeLink(moved);  // Moves the pair; the other widget follows when told.
-                } else {
-                    offset_ = dragged;
-                }
-                UpdatePlacement(true);
-                return true;
-            }
-            case WM_MOUSELEAVE:
-                trackingMouse_ = false;
-                OnHoverLeave();
-                return true;
-            case WM_LBUTTONDOWN: {
-                SetCapture(hwnd_);
-                POINT cursor;
-                GetCursorPos(&cursor);
-                pressed_ = true;
-                dragging_ = false;
-                dragStartCursorX_ = cursor.x;
-                dragStartOffset_ = groupLeft_ - taskbar_.left;
-                return true;
-            }
-            case WM_LBUTTONUP: {
-                bool wasPressed = pressed_;
-                bool wasDragging = dragging_;
-                pressed_ = false;
-                dragging_ = false;
-                if (GetCapture() == hwnd_) {
-                    ReleaseCapture();
-                }
-                if (wasDragging) {
-                    EndDrag();
-                } else if (wasPressed) {
-                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                    RECT client;
-                    GetClientRect(hwnd_, &client);
-                    // Pressing and sliding off the widget before letting go doesn't click it.
-                    if (PtInRect(&client, point)) {
-                        OnClick(point, MouseButton::Left);
-                    }
-                }
-                return true;
-            }
-            case WM_CAPTURECHANGED:
-                // Something else took the mouse mid-press (a menu opened by a right-click): the press
-                // ends there, and a drag stays where it got to.
-                if ((HWND)lParam != hwnd_ && pressed_) {
-                    bool wasDragging = dragging_;
-                    pressed_ = false;
-                    dragging_ = false;
-                    if (wasDragging) {
-                        EndDrag();
-                    }
-                }
-                return false;
-            case WM_MBUTTONUP:
-            case WM_RBUTTONUP:
-                OnClick({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
-                        message == WM_MBUTTONUP ? MouseButton::Middle : MouseButton::Right);
-                return true;
-            case WM_MOUSEWHEEL: {
-                // Precision touchpads send fractions of a notch; add them up.
-                wheelRemainder_ += GET_WHEEL_DELTA_WPARAM(wParam);
-                int notches = wheelRemainder_ / WHEEL_DELTA;
-                wheelRemainder_ -= notches * WHEEL_DELTA;
-                if (notches != 0) {
-                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                    ScreenToClient(hwnd_, &point);
-                    OnWheel(point, notches);
-                }
-                return true;
-            }
-            case WM_DISPLAYCHANGE:
-                if (onDisplaysChanged) {
-                    onDisplaysChanged();
-                }
-                UpdatePlacement(true);
-                return false;
-            case WM_SETTINGCHANGE:
-                RefreshShellSettings();
-                UpdatePlacement(true);
-                return false;
-        }
-        return false;
-    }
-
-    HWND hwnd_ = nullptr;
 
 protected:
     enum class MouseButton { Left, Middle, Right };
@@ -1699,31 +1977,24 @@ protected:
 
     bool Pressed() const { return pressed_; }
 
-    // Moves the widget onto the taskbar and above it, or hides it when it shouldn't show.
+    // Places the widget on the taskbar, or hides it when it shouldn't show.
     void UpdatePlacement(bool contentChanged) {
-        if (!hwnd_) {
-            return;
-        }
+        HWND taskbar = hwnd_ ? GetParent(hwnd_) : nullptr;
         RECT bar;
-        RECT monitor;
-        if (!shown_ || !TryGetVisibleTaskbar(bar, monitor) || IsFullScreenAppActive(monitor, hwnd_, shellReportsFullScreen_)) {
-            if (IsWindowVisible(hwnd_)) {
-                ShowWindow(hwnd_, SW_HIDE);
-                if (link_.linked) {
-                    WidgetLink::NotifyPartner();  // So it takes the pair's place.
-                }
+        // A vertical taskbar (Windows 10 can have one) has no room for it.
+        if (!shown_ || !taskbar || !GetWindowRect(taskbar, &bar) || bar.right - bar.left <= bar.bottom - bar.top) {
+            if (hwnd_ && visible_) {
+                window_.SetVisible(false, link_.Linked());  // Telling the others, so they close the gap.
+                visible_ = false;
             }
             OnHidden();
             return;
         }
 
         // Scale with the taskbar's display.
-        UINT dpi = GetDpiForWindow(TaskbarWindow());
-        if (dpi == 0) {
-            dpi = DpiForPoint({(bar.left + bar.right) / 2, (bar.top + bar.bottom) / 2});
-        }
-        float scale = dpi / 96.0f;
-        if (scale > 0 && scale != scale_) {
+        UINT dpi = GetDpiForWindow(taskbar);
+        float scale = (dpi ? dpi : 96) / 96.0f;
+        if (scale != scale_) {
             scale_ = scale;
             OnScaleChanged();
             contentChanged = true;
@@ -1738,103 +2009,325 @@ protected:
         int width = std::min(LayOut(), barWidth);
         taskbar_ = bar;
 
-        RECT bounds = Bounds();
-        if (wasLinked_ && !link_.linked && IsWindowVisible(hwnd_)) {
-            // Just unlinked: stay where the pair left this widget.
-            offset_ = std::max(0, (int)(bounds.left - bar.left));
+        bool linked = link_.Linked();
+        if (wasLinked_ && !linked && visible_) {
+            // Just unlinked: stay where the group left this widget.
+            offset_ = std::max(0, placedOffset_);
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
             }
         }
-        wasLinked_ = link_.linked;
+        wasLinked_ = linked;
 
         int x;
-        int partnerWidth = 0;
-        if (link_.linked) {
-            // Side by side with the other widget, wherever the pair was put.
-            RECT partner;
-            if (WidgetLink::TryGetPartnerBounds(partner)) {
-                partnerWidth = partner.right - partner.left;
+        bool divider = false;
+        if (linked) {
+            // Side by side with the other widgets in the group that are showing, in its order,
+            // wherever the group was put. Every widget works it out the same way from the same
+            // numbers, so they meet without gaps.
+            int before = 0;
+            int total = 0;
+            bool reachedSelf = false;
+            for (int member : link_.order) {
+                int memberWidth = 0;
+                RECT other;
+                if (member == kSelfMember) {
+                    memberWidth = width;
+                    reachedSelf = true;
+                } else if (WidgetLink::TryGetBounds(member, other)) {
+                    memberWidth = other.right - other.left;
+                }
+                if (!reachedSelf) {
+                    before += memberWidth;
+                }
+                total += memberWidth;
             }
-            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, width + partnerWidth);
-            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link_.selfOnLeft, groupOffset, groupLeft_);
+            total = std::min(total, barWidth);
+            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, total);
+            groupLeft_ = bar.left + std::max(0, std::min(groupOffset, barWidth - total));
+            x = std::min(groupLeft_ + before, (int)bar.left + barWidth - width);
+            divider = before > 0;
         } else {
             int preferredOffset = offset_ >= 0 ? offset_ : DefaultOffset(barWidth, width);
             x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
             groupLeft_ = x;
         }
-        bool divider = partnerWidth > 0 && !link_.selfOnLeft;
+        placedOffset_ = x - bar.left;
+        // In the taskbar's client area (mirrored, for right-to-left languages).
         RECT target{x, bar.top, x + width, bar.bottom};
+        MapWindowPoints(nullptr, taskbar, (POINT*)&target, 2);
 
-        bool moved = !EqualRect(&target, &bounds) || !IsWindowVisible(hwnd_);
+        // The other widgets in the group are told once the widget's window has moved, so they move
+        // up against it where it is.
+        bool moved = !EqualRect(&target, &placed_) || !visible_;
+        bool notify = moved && linked;
         if (contentChanged || moved || divider != dividerAtLeft_) {
             dividerAtLeft_ = divider;
-            Render(target);
+            Render(target, notify && visible_);
         }
-        if (!IsWindowVisible(hwnd_)) {
-            ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+        if (!visible_) {
+            window_.SetVisible(true, notify);
+            visible_ = true;
         }
-        if (moved && link_.linked) {
-            WidgetLink::NotifyPartner();  // So it moves up against this widget.
-        }
+        StayOverTaskbarContent();
         OnPlaced();
-        StayAboveTaskbar();
     }
 
-    void Render() { Render(Bounds()); }
+    void Render() { Render(placed_); }
 
 private:
     static constexpr UINT_PTR kPlacementTimer = 1;
     static constexpr UINT_PTR kLinkSaveTimer = 3;
 
-    // Registers the widget as an app bar (without reserving any space), for Windows' notice that a
-    // full-screen app opened or closed. Fails harmlessly when it's registered already, and when the
-    // taskbar isn't there yet; it's done again when the taskbar is created.
-    void RegisterAppBar() {
-        APPBARDATA data{sizeof(data)};
-        data.hWnd = hwnd_;
-        data.uCallbackMessage = appBarMessage_;
-        SHAppBarMessage(ABM_NEW, &data);
+    // The hidden top-level window of the UI thread.
+    struct Events {
+        TaskbarWidget* widget = nullptr;
+        HWND hwnd_ = nullptr;
+
+        bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+            return widget->HandleEvent(message, wParam, lParam, result);
+        }
+    };
+
+    bool HandleEvent(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+        if (taskbarCreatedMessage_ && message == taskbarCreatedMessage_) {
+            // Explorer started again, or recreated the taskbar: the widget goes into the new one.
+            AttachToTaskbar();
+            return true;
+        }
+        if (message == WidgetLink::ChangedMessage()) {
+            // Another widget moved, changed size, or changed the group.
+            SyncLink();
+            UpdatePlacement(false);
+            return true;
+        }
+        if (message >= WidgetWindow::kMouseMessage && message <= WidgetWindow::kMouseMessage + (WM_MOUSELAST - WM_MOUSEFIRST)) {
+            message = WM_MOUSEFIRST + (message - WidgetWindow::kMouseMessage);  // The widget's, handled below.
+        }
+        switch (message) {
+            case WidgetWindow::kAttachedMessage:
+                attaching_ = false;
+                if (wParam && (HWND)wParam != hwnd_) {
+                    hwnd_ = (HWND)wParam;
+                    visible_ = false;
+                    placed_ = {};
+                    // Take the other widgets' copy of the group if it changed more recently, and
+                    // let them know this one is here.
+                    WidgetLink::Publish(hwnd_, link_);
+                    SyncLink();
+                    WidgetLink::NotifyOthers();
+                    if (shown_) {
+                        UpdatePlacement(true);
+                    }
+                }
+                return true;
+            case WidgetWindow::kDetachedMessage:
+                if ((HWND)wParam == hwnd_) {
+                    hwnd_ = nullptr;
+                    visible_ = false;
+                    OnHidden();
+                    WidgetLink::NotifyOthers();
+                }
+                return true;
+            case WM_TIMER:
+                if (wParam == kPlacementTimer) {
+                    // In an Explorer process (for folder windows) that started while there was no
+                    // taskbar, and another Explorer has it now, the mod has nothing to do: it ends.
+                    if (TaskbarWindow() && !WidgetTaskbar()) {
+                        PostQuitMessage(0);
+                        return true;
+                    }
+                    // Also notices the taskbar moving or changing size.
+                    AttachToTaskbar();
+                    if (shown_) {
+                        UpdatePlacement(false);
+                    }
+                } else if (wParam == kLinkSaveTimer) {
+                    KillTimer(events_.hwnd_, kLinkSaveTimer);
+                    linkSavePending_ = false;
+                    WidgetLink::Save(link_);
+                } else {
+                    OnTimer(wParam);
+                }
+                return true;
+            case WM_DISPLAYCHANGE:
+                if (onDisplaysChanged) {
+                    onDisplaysChanged();
+                }
+                UpdatePlacement(true);
+                return false;
+            case WM_SETTINGCHANGE:
+                RefreshShellSettings();
+                UpdatePlacement(true);
+                return false;
+            case WM_MOUSEMOVE:
+            case WM_MOUSELEAVE:
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONUP:
+            case WM_MBUTTONUP:
+            case WM_RBUTTONUP:
+            case WM_MOUSEWHEEL:
+            case WM_CAPTURECHANGED:
+            case WM_DPICHANGED_AFTERPARENT:
+                // The widget's, from its window. Not while a dialog of this thread is open (which
+                // disables this window), as a disabled window gets no mouse input.
+                if (message == WM_MOUSEMOVE) {
+                    lParam = window_.TakeMouseMove();
+                }
+                if (hwnd_ && IsWindowEnabled(events_.hwnd_)) {
+                    HandleInput(message, wParam, lParam);
+                }
+                return true;
+        }
+        return false;
     }
 
-    // A change to the link made here: it's stamped as the newest copy, shown to the other widget,
-    // and saved once it settles (a drag changes it on every mouse move).
-    void ChangeLink(WidgetLink::State state) {
-        int newerThan = link_.stamp;
-        if (std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner()) {
-            newerThan = std::max(newerThan, partner->stamp);
+    void HandleInput(UINT message, WPARAM wParam, LPARAM lParam) {
+        switch (message) {
+            case WM_MOUSEMOVE: {
+                POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                if (!pressed_) {
+                    OnHover(point);
+                    return;
+                }
+                POINT cursor;
+                GetCursorPos(&cursor);
+                int distance = cursor.x - dragStartCursorX_;
+                if (!dragging_ && std::abs(distance) < GetSystemMetrics(SM_CXDRAG)) {
+                    return;
+                }
+                if (!dragging_) {
+                    dragging_ = true;
+                    OnDragStart();
+                }
+                int dragged = std::max(0, dragStartOffset_ + distance);
+                if (wasLinked_) {
+                    WidgetLink::Group moved = link_;
+                    moved.offset = dragged;
+                    ChangeLink(moved);  // Moves the group; the other widgets follow when told.
+                } else {
+                    offset_ = dragged;
+                }
+                UpdatePlacement(true);
+                return;
+            }
+            case WM_MOUSELEAVE:
+                OnHoverLeave();
+                return;
+            case WM_LBUTTONDOWN: {
+                POINT cursor;
+                GetCursorPos(&cursor);
+                pressed_ = true;
+                dragging_ = false;
+                dragStartCursorX_ = cursor.x;
+                dragStartOffset_ = groupLeft_ - taskbar_.left;
+                return;
+            }
+            case WM_LBUTTONUP: {
+                bool wasPressed = pressed_;
+                bool wasDragging = dragging_;
+                pressed_ = false;
+                dragging_ = false;
+                if (wasDragging) {
+                    EndDrag();
+                } else if (wasPressed) {
+                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                    // Pressing and sliding off the widget before letting go doesn't click it (nor
+                    // does letting go after its window has gone with the taskbar).
+                    RECT client{};
+                    if (GetClientRect(hwnd_, &client) && PtInRect(&client, point)) {
+                        OnClick(point, MouseButton::Left);
+                    }
+                }
+                return;
+            }
+            case WM_CAPTURECHANGED:
+                // Something else took the mouse mid-press: the press ends there, and a drag stays
+                // where it got to.
+                if ((HWND)lParam != hwnd_ && pressed_) {
+                    bool wasDragging = dragging_;
+                    pressed_ = false;
+                    dragging_ = false;
+                    if (wasDragging) {
+                        EndDrag();
+                    }
+                }
+                return;
+            case WM_MBUTTONUP:
+            case WM_RBUTTONUP:
+                OnClick({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, message == WM_MBUTTONUP ? MouseButton::Middle : MouseButton::Right);
+                return;
+            case WM_MOUSEWHEEL: {
+                // Precision touchpads send fractions of a notch; add them up.
+                wheelRemainder_ += GET_WHEEL_DELTA_WPARAM(wParam);
+                int notches = wheelRemainder_ / WHEEL_DELTA;
+                wheelRemainder_ -= notches * WHEEL_DELTA;
+                if (notches != 0) {
+                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                    ScreenToClient(hwnd_, &point);
+                    OnWheel(point, notches);
+                }
+                return;
+            }
+            case WM_DPICHANGED_AFTERPARENT:
+                UpdatePlacement(true);
+                return;
         }
-        state.stamp = WidgetLink::NewStamp(newerThan);
-        link_ = state;
-        WidgetLink::Publish(hwnd_, link_);
+    }
+
+    // Puts the widget in the taskbar, once there is one (again).
+    void AttachToTaskbar() {
+        if (hwnd_ || attaching_) {
+            return;
+        }
+        if (HWND taskbar = WidgetTaskbar()) {
+            attaching_ = true;
+            window_.Attach(taskbar);
+        }
+    }
+
+    // A change to the group made here: it's stamped as the newest copy, shown to the other widgets,
+    // and saved once it settles (a drag changes it on every mouse move).
+    void ChangeLink(WidgetLink::Group group) {
+        int newerThan = link_.stamp;
+        if (std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest()) {
+            newerThan = std::max(newerThan, newest->stamp);
+        }
+        group.stamp = WidgetLink::NewStamp(newerThan);
+        link_ = group;
+        if (hwnd_) {
+            WidgetLink::Publish(hwnd_, link_);
+        }
         SaveLinkSoon();
     }
 
-    // Takes the other widget's copy of the link when it changed more recently than this one's.
+    // Takes the other widgets' copy of the group when it changed more recently than this one's.
     void SyncLink() {
-        std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner();
-        if (partner && partner->stamp > link_.stamp) {
-            link_ = *partner;
-            WidgetLink::Publish(hwnd_, link_);
+        std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest();
+        if (newest && newest->stamp > link_.stamp) {
+            link_ = *newest;
+            if (hwnd_) {
+                WidgetLink::Publish(hwnd_, link_);
+            }
             SaveLinkSoon();
         }
     }
 
     void SaveLinkSoon() {
         linkSavePending_ = true;
-        SetTimer(hwnd_, kLinkSaveTimer, 1000, nullptr);
+        SetTimer(events_.hwnd_, kLinkSaveTimer, 1000, nullptr);
     }
 
-    // Keeps where a drag left the widget (or the pair).
+    // Keeps where a drag left the widget (or the group).
     void EndDrag() {
         if (wasLinked_) {
-            WidgetLink::State moved = link_;
-            moved.offset = groupLeft_ - taskbar_.left;  // Where the pair ended up after clamping.
+            WidgetLink::Group moved = link_;
+            moved.offset = groupLeft_ - taskbar_.left;  // Where the group ended up after clamping.
             ChangeLink(moved);
             Render();
-            WidgetLink::NotifyPartner();
+            WidgetLink::NotifyOthers();
         } else {
-            offset_ = Bounds().left - taskbar_.left;  // Where it ended up after clamping.
+            offset_ = placedOffset_;  // Where it ended up after clamping.
             Render();
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
@@ -1842,12 +2335,15 @@ private:
         }
     }
 
-    void Render(const RECT& bounds) {
+    // Draws the widget at the bounds (in the taskbar's client area), for its window to show; with
+    // notify, the linked widgets are told once it does.
+    void Render(const RECT& bounds, bool notify = false) {
         int width = bounds.right - bounds.left;
         int height = bounds.bottom - bounds.top;
-        if (width <= 0 || height <= 0) {
+        if (!hwnd_ || width <= 0 || height <= 0) {
             return;
         }
+        placed_ = bounds;
         BITMAPINFO info{};
         info.bmiHeader.biSize = sizeof(info.bmiHeader);
         info.bmiHeader.biWidth = width;
@@ -1856,92 +2352,106 @@ private:
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB;
         void* bits = nullptr;
-        HDC screen = GetDC(nullptr);
-        HDC memory = CreateCompatibleDC(screen);
-        HBITMAP bitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (bitmap && bits) {
-            HGDIOBJ previous = SelectObject(memory, bitmap);
-            {
-                gp::Bitmap canvas(width, height, width * 4, PixelFormat32bppPARGB, (BYTE*)bits);
-                gp::Graphics graphics(&canvas);
-                // Nearly invisible, but fully transparent pixels would let clicks fall through to the taskbar.
-                graphics.Clear(Argb(1, 0, 0, 0));
-                graphics.SetSmoothingMode(gp::SmoothingModeAntiAlias);
-                graphics.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
-                gp::Color foreground = lightTaskbar_ ? Argb(255, 28, 28, 28) : Argb(255, 255, 255, 255);
-                if (dragging_) {
-                    FillRoundedRect(graphics, WithAlpha(lightTaskbar_ ? 18 : 24, foreground),
-                                    gp::RectF((float)Px(2), (float)Px(4), (float)(width - Px(4)), (float)(height - Px(8))), (float)Px(4));
-                }
-                if (dividerAtLeft_) {
-                    // Linked with the other app's widget on the left: the divider between the two.
-                    gp::Pen pen(WithAlpha(lightTaskbar_ ? 50 : 60, foreground), 1);
-                    graphics.DrawLine(&pen, 1.0f, (float)Px(14), 1.0f, (float)(height - Px(14)));
-                }
-                Draw(graphics, width, height, lightTaskbar_);
+        HBITMAP bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!bitmap || !bits) {
+            if (bitmap) {
+                DeleteObject(bitmap);
             }
-            POINT position{bounds.left, bounds.top};
-            SIZE size{width, height};
-            POINT source{0, 0};
-            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-            UpdateLayeredWindow(hwnd_, screen, &position, &size, memory, &source, 0, &blend, ULW_ALPHA);
-            SelectObject(memory, previous);
-        }
-        if (bitmap) {
-            DeleteObject(bitmap);
-        }
-        DeleteDC(memory);
-        ReleaseDC(nullptr, screen);
-    }
-
-    // The taskbar comes to the front whenever it's clicked, so move back above it. Only just above
-    // it, though: windows that belong over the taskbar, like a screenshot tool's overlay or an
-    // always-on-top window, stay over the widget too.
-    void StayAboveTaskbar() {
-        HWND taskbar = TaskbarWindow();
-        if (!taskbar) {
             return;
         }
-        for (HWND window = GetWindow(taskbar, GW_HWNDPREV); window; window = GetWindow(window, GW_HWNDPREV)) {
-            if (window == hwnd_) {
-                return;  // Already above the taskbar.
+        {
+            gp::Bitmap canvas(width, height, width * 4, PixelFormat32bppPARGB, (BYTE*)bits);
+            gp::Graphics graphics(&canvas);
+            // Nearly invisible, but fully transparent pixels would let clicks fall through to the taskbar.
+            graphics.Clear(Argb(1, 0, 0, 0));
+            graphics.SetSmoothingMode(gp::SmoothingModeAntiAlias);
+            graphics.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
+            gp::Color foreground = lightTaskbar_ ? Argb(255, 28, 28, 28) : Argb(255, 255, 255, 255);
+            if (dragging_) {
+                FillRoundedRect(graphics, WithAlpha(lightTaskbar_ ? 18 : 24, foreground),
+                                gp::RectF((float)Px(2), (float)Px(4), (float)(width - Px(4)), (float)(height - Px(8))), (float)Px(4));
+            }
+            if (dividerAtLeft_) {
+                // Linked, with another widget on the left: the divider between them.
+                gp::Pen pen(WithAlpha(lightTaskbar_ ? 50 : 60, foreground), 1);
+                graphics.DrawLine(&pen, 1.0f, (float)Px(14), 1.0f, (float)(height - Px(14)));
+            }
+            Draw(graphics, width, height, lightTaskbar_);
+        }
+        GdiFlush();
+        window_.Present(bitmap, {bounds.left, bounds.top}, {width, height}, notify);
+    }
+
+    // Keeps the widget over the taskbar's own content: the windows Explorer draws the taskbar's
+    // buttons in (Windows 11's XAML; Windows 10's task band, tray and buttons). Other windows in the
+    // taskbar, such as other mods', stay where they are.
+    void StayOverTaskbarContent() {
+        static const wchar_t* const kContent[] = {L"Windows.UI.Composition.DesktopWindowContentBridge", L"ReBarWindow32", L"TrayNotifyWnd",
+                                                  L"Start", L"TrayButton", L"TrayDummySearchControl", L"TrayShowDesktopButtonWClass"};
+        for (HWND above = GetWindow(hwnd_, GW_HWNDPREV); above; above = GetWindow(above, GW_HWNDPREV)) {
+            WCHAR className[64] = {};
+            GetClassNameW(above, className, ARRAYSIZE(className));
+            for (const wchar_t* content : kContent) {
+                if (wcscmp(className, content) == 0) {
+                    // Asynchronous, as the window is another thread's.
+                    SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                    return;
+                }
             }
         }
-        // Placing the widget after (below) the window just above the taskbar puts it directly over the taskbar.
-        HWND justAbove = GetWindow(taskbar, GW_HWNDPREV);
-        SetWindowPos(hwnd_, justAbove ? justAbove : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
-    // Another app came to the front, which may have put the taskbar over the widget.
-    static void CALLBACK OnForegroundChanged(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
-        if (widgetForHook_) {
-            widgetForHook_->UpdatePlacement(false);
-        }
-    }
-
-    static inline TaskbarWidget* widgetForHook_ = nullptr;
-
+    HWND hwnd_ = nullptr;  // The widget's window, while it's in a taskbar.
+    WidgetWindow window_;
+    Events events_;
+    bool attaching_ = false;
+    bool visible_ = false;
+    RECT placed_{};  // Where the widget was last drawn, in the taskbar's client area.
+    int placedOffset_ = 0;  // And its distance from the taskbar's left edge.
     bool shown_ = false;
     int offset_ = -1;  // Pixels from the taskbar's left edge; negative means the default position.
     RECT taskbar_{};
     float scale_ = 0;
     bool lightTaskbar_ = false;
-    bool shellReportsFullScreen_ = false;
-    UINT appBarMessage_ = 0;
     UINT taskbarCreatedMessage_ = 0;
-    HWINEVENTHOOK foregroundHook_ = nullptr;
-    bool trackingMouse_ = false;
     bool pressed_ = false;
     bool dragging_ = false;
     int dragStartCursorX_ = 0;
     int dragStartOffset_ = 0;
     int wheelRemainder_ = 0;
-    int groupLeft_ = 0;  // Left edge of the linked pair on screen (or of this widget alone).
-    WidgetLink::State link_;
+    int groupLeft_ = 0;  // Left edge of the linked group on screen (or of this widget alone).
+    WidgetLink::Group link_;
     bool linkSavePending_ = false;
     bool wasLinked_ = false;
-    bool dividerAtLeft_ = false;  // Linked, with the other widget on the left.
+    bool dividerAtLeft_ = false;  // Linked, with another widget on the left.
 };
+
+// The Link widgets submenu: links this widget with the other mods' widgets that are running (or
+// linked already), and moves it left or right among them.
+void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
+    const WidgetLink::Group& group = widget.Link();
+    std::vector<int> others;
+    for (int member = 0; member < WidgetLink::kMemberCount; member++) {
+        if (member != kSelfMember && (WidgetLink::Running(member) || (group.Linked() && group.Has(member)))) {
+            others.push_back(member);
+        }
+    }
+    if (others.empty()) {
+        return;
+    }
+    menu.AddSeparator();
+    Menu& submenu = menu.AddSubmenu(L"Link widgets");
+    for (int member : others) {
+        bool linked = group.Linked() && group.Has(member);
+        submenu.Add(std::wstring(L"Link with ") + WidgetLink::kMembers[member].name,
+                    [&widget, member, linked]() { widget.SetMemberLinked(member, !linked); }, linked);
+    }
+    if (group.Linked()) {
+        submenu.AddSeparator();
+        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, widget.CanMoveInGroup(-1));
+        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, widget.CanMoveInGroup(1));
+    }
+}
 
 // The flyout shown above a part of the widget while hovering it. It stays open while the mouse is
 // on its way up from the widget, and closes as soon as the mouse leaves the flyout.
@@ -2052,67 +2562,72 @@ public:
         return true;
     }
 
-    // Gives any still running a little time to finish, well within the time the mod has to unload.
-    void WaitAll(DWORD milliseconds) {
-        DWORD start = GetTickCount();
+    // Waits for any still running, however long that takes: the mod's code mustn't be running when
+    // Windhawk unloads it from Explorer. Tell them to stop first.
+    void WaitAll() {
         for (HANDLE thread : threads_) {
-            DWORD elapsed = GetTickCount() - start;
-            WaitForSingleObject(thread, elapsed < milliseconds ? milliseconds - elapsed : 0);
+            WaitForSingleObject(thread, INFINITE);
             CloseHandle(thread);
         }
         threads_.clear();
     }
 
-    ~WorkerThreads() { WaitAll(0); }
+    ~WorkerThreads() { WaitAll(); }
 
 private:
     std::vector<HANDLE> threads_;
 };
 
-// Runs the UI on its own thread with a message loop, for WhTool_ModInit/WhTool_ModUninit.
+// Runs the UI on its own thread with a message loop, for Wh_ModInit/Wh_ModUninit.
 class UiThread {
 public:
     // run is called on the new thread (with COM and GDI+ set up) and returns an object that lives
-    // until the mod is unloaded, or null if it couldn't start. Returns whether it started.
+    // until the mod is unloaded, or null if it couldn't start (the thread then ends). Returns once
+    // the thread is running, without waiting for that: Wh_ModInit can run on Explorer's main
+    // thread while Explorer starts.
     bool Start(std::function<std::shared_ptr<void>()> run) {
         run_ = std::move(run);
         ready_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         thread_ = CreateThread(nullptr, 0, ThreadProc, this, 0, &threadId_);
         if (!thread_) {
+            CloseHandle(ready_);
+            ready_ = nullptr;
             return false;
         }
-        return WaitForSingleObject(ready_, 10000) == WAIT_OBJECT_0 && started_;
+        WaitForSingleObject(ready_, INFINITE);  // Its message queue is there from then on, for Stop.
+        return true;
     }
 
+    // Ends the thread, waiting for it however long that takes: Windhawk unloads the mod from
+    // Explorer as soon as Wh_ModUninit returns, and the mod's code still running then would crash
+    // Explorer.
     void Stop() {
         if (!thread_) {
             return;
         }
         PostThreadMessageW(threadId_, WM_QUIT, 0, 0);
-        WaitForSingleObject(thread_, 10000);
+        WaitForSingleObject(thread_, INFINITE);
         CloseHandle(thread_);
         thread_ = nullptr;
         CloseHandle(ready_);
+        ready_ = nullptr;
     }
 
 private:
     static DWORD WINAPI ThreadProc(void* parameter) {
         auto self = (UiThread*)parameter;
+        MSG message;
+        PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // Creates the message queue.
+        SetEvent(self->ready_);
         HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         ULONG_PTR gdiplusToken = 0;
         gp::GdiplusStartupInput startup;
         gp::GdiplusStartup(&gdiplusToken, &startup, nullptr);
-        MSG message;
-        PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // Creates the message queue.
         {
             std::shared_ptr<void> app = self->run_();
-            self->started_ = app != nullptr;
-            SetEvent(self->ready_);
-            if (app) {
-                while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-                    TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
+            while (app && GetMessageW(&message, nullptr, 0, 0) > 0) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
             }
         }
         UnregisterWindowClasses();
@@ -2127,7 +2642,6 @@ private:
     HANDLE thread_ = nullptr;
     HANDLE ready_ = nullptr;
     DWORD threadId_ = 0;
-    bool started_ = false;
 };
 
 }  // namespace
@@ -2189,7 +2703,7 @@ Displays GetDisplays() {
         device.cb = sizeof(device);
     }
 
-    // Windhawk's process is per-monitor DPI aware, so these are physical pixels.
+    // Explorer (and the app) are per-monitor DPI aware, so these are physical pixels.
     Displays displays;
     EnumDisplayMonitors(nullptr, nullptr, AddDisplay, (LPARAM)&displays);
     for (size_t i = 0; i < displays.size(); i++) {
@@ -2445,9 +2959,18 @@ std::wstring ReadWindowTexts(HWND window) {
 std::wstring ReadAutomationNames(HWND window) {
     std::wstring text;
     IUIAutomation* automation = nullptr;
-    if (FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
+    if (FAILED(CoCreateInstance(__uuidof(CUIAutomation8), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&automation)) &&
+        FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
                                 (void**)&automation))) {
         return text;
+    }
+    // Short timeouts, so a dialog that stops responding can't hold up the mod turning off, which
+    // waits for this thread.
+    IUIAutomation2* timeouts = nullptr;
+    if (SUCCEEDED(automation->QueryInterface(__uuidof(IUIAutomation2), (void**)&timeouts)) && timeouts) {
+        timeouts->put_ConnectionTimeout(2000);
+        timeouts->put_TransactionTimeout(2000);
+        timeouts->Release();
     }
     IUIAutomationElement* root = nullptr;
     IUIAutomationCondition* condition = nullptr;
@@ -3160,7 +3683,7 @@ private:
 
 // Sets the display settings in Default.rdp for a session started with /v. What it had before is
 // noted first (unless that's noted already, from a session that hasn't ended), so it can be put
-// back even if Windhawk is closed before the session ends.
+// back even if the mod stops (or Explorer restarts) before the session ends.
 std::optional<std::wstring> SetDefaultRdpDisplays(const std::vector<RdpSetting>& settings) {
     std::wstring path = DefaultRdpPath();
     bool existed = FileExists(path);
@@ -3196,6 +3719,60 @@ std::optional<std::wstring> SetDefaultRdpDisplays(const std::vector<RdpSetting>&
         SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_HIDDEN);  // As Remote Desktop Connection keeps it.
     }
     return std::nullopt;
+}
+
+// The sessions started with /v (so using Default.rdp's display settings), by process ID and start
+// time (IDs get reused), kept in the mod's storage so they're still known if Explorer restarts
+// during one.
+struct SessionMark {
+    DWORD processId = 0;
+    ULONGLONG started = 0;
+
+    bool operator==(const SessionMark& other) const = default;
+};
+
+ULONGLONG ProcessStartTime(HANDLE process) {
+    FILETIME created, exited, kernel, user;
+    if (!GetProcessTimes(process, &created, &exited, &kernel, &user)) {
+        return 0;
+    }
+    return ((ULONGLONG)created.dwHighDateTime << 32) | created.dwLowDateTime;
+}
+
+std::vector<SessionMark> LoadSessionMarks() {
+    std::vector<SessionMark> marks;
+    for (const std::wstring& line : Split(Storage::GetString(L"DefaultRdpSessions"), L'\n')) {
+        std::vector<std::wstring> fields = Split(line, L'\t');
+        if (fields.size() == 2) {
+            marks.push_back({(DWORD)wcstoul(fields[0].c_str(), nullptr, 10), wcstoull(fields[1].c_str(), nullptr, 10)});
+        }
+    }
+    return marks;
+}
+
+void SaveSessionMarks(const std::vector<SessionMark>& marks) {
+    if (marks.empty()) {
+        Storage::Delete(L"DefaultRdpSessions");
+        return;
+    }
+    std::vector<std::wstring> lines;
+    for (const SessionMark& mark : marks) {
+        lines.push_back(std::to_wstring(mark.processId) + L"\t" + std::to_wstring(mark.started));
+    }
+    Storage::SetString(L"DefaultRdpSessions", Join(lines, L"\n"));
+}
+
+// The session's process, if it's still running (the same process: ID and start time), or null.
+HANDLE OpenRunningSession(const SessionMark& mark) {
+    HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, mark.processId);
+    if (!process) {
+        return nullptr;
+    }
+    if (WaitForSingleObject(process, 0) != WAIT_TIMEOUT || ProcessStartTime(process) != mark.started) {
+        CloseHandle(process);
+        return nullptr;
+    }
+    return process;
 }
 
 // Puts Default.rdp's display settings back to what they were before the mod changed them, those
@@ -3291,8 +3868,8 @@ std::optional<std::wstring> StartFullScreen(const Connection& connection, const 
     return std::nullopt;
 }
 
-// Deletes the .rdp copies sessions were started from that are still there (when Windhawk was
-// closed before they ended).
+// Deletes the .rdp copies sessions were started from that are still there (when the mod stopped
+// before they ended).
 void DeleteSessionCopies() {
     std::wstring folder = SessionsFolder();
     if (folder.empty()) {
@@ -3325,47 +3902,44 @@ bool EditConnection(const Connection& connection) {
 namespace {
 
 // ---------------------------------------------------------------------------
-// Icons, drawn to match the Windows 11 taskbar at any size.
+// Icons: glyphs from the Windows icon font, like the taskbar's own.
 
-// Outlines a monitor on its stand, filling the box; returns the inside of its screen.
-gp::RectF DrawMonitor(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float stroke) {
-    float half = stroke / 2;
-    gp::RectF screen(box.X + half, box.Y + box.Height * 0.1f + half, box.Width - stroke, box.Height * 0.62f - stroke);
-    DrawRoundedRect(graphics, color, screen, box.Width * 0.09f, stroke);
-    gp::Pen pen(color, stroke);
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    float middle = box.X + box.Width / 2;
-    float baseY = box.Y + box.Height * 0.9f - half;
-    graphics.DrawLine(&pen, middle, screen.GetBottom() + half, middle, baseY);
-    graphics.DrawLine(&pen, box.X + box.Width * 0.3f, baseY, box.X + box.Width * 0.7f, baseY);
-    screen.Inflate(-half, -half);
-    return screen;
+const wchar_t* const kGlyphThisPC = L"\uEC4E";
+const wchar_t* const kGlyphMonitor = L"\uE7F4";  // TVMonitor
+const wchar_t* const kGlyphCheckMark = L"\uE73E";
+
+// Draws an icon-font glyph at one font size, centered in the box by its ink, the way the taskbar
+// draws its own glyphs: unlike DrawGlyph, it doesn't stretch each glyph to fill the box, so they all
+// keep the same size and weight. Returns where the ink went.
+gp::RectF DrawGlyphAtSize(gp::Graphics& graphics, const wchar_t* glyph, float emSize, const gp::RectF& box, const gp::Color& color) {
+    const wchar_t* fontName = IconFontName();
+    if (!fontName) {
+        DrawGlyph(graphics, glyph, box, color);  // Draws a placeholder.
+        return box;
+    }
+    gp::FontFamily family(fontName);
+    gp::GraphicsPath path;
+    path.AddString(glyph, -1, &family, gp::FontStyleRegular, emSize, gp::PointF(0, 0), gp::StringFormat::GenericTypographic());
+    gp::RectF ink;
+    path.GetBounds(&ink);
+    if (ink.Width <= 0 || ink.Height <= 0) {
+        return box;
+    }
+    gp::RectF placed(box.X + (box.Width - ink.Width) / 2, box.Y + (box.Height - ink.Height) / 2, ink.Width, ink.Height);
+    gp::Matrix transform;
+    transform.Translate(placed.X - ink.X, placed.Y - ink.Y);
+    path.Transform(&transform);
+    gp::SolidBrush brush(color);
+    graphics.FillPath(&brush, &path);
+    return placed;
 }
 
-// A monitor with an arrow on its screen: Remote Desktop.
-void DrawRemoteDesktop(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color) {
-    float stroke = std::max(1.25f, std::min(box.Width, box.Height) * 0.08f);
-    gp::RectF screen = DrawMonitor(graphics, box, color, stroke);
-    gp::Pen pen(color, stroke);
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    pen.SetLineJoin(gp::LineJoinRound);
-    float left = screen.X + screen.Width * 0.32f;
-    float right = screen.X + screen.Width * 0.68f;
-    float top = screen.Y + screen.Height * 0.26f;
-    float bottom = screen.Y + screen.Height * 0.74f;
-    float head = screen.Width * 0.2f;
-    graphics.DrawLine(&pen, left, bottom, right, top);
-    gp::PointF arrowHead[] = {{right - head, top}, {right, top}, {right, top + head}};
-    graphics.DrawLines(&pen, arrowHead, 3);
-}
-
-// A monitor outline with a number on its screen, for the display buttons.
-void DrawNumberedMonitor(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, const std::wstring& number,
+// The monitor glyph with a number on its screen, for the display buttons.
+void DrawNumberedMonitor(gp::Graphics& graphics, const gp::RectF& box, float emSize, const gp::Color& color, const std::wstring& number,
                          float fontPixels) {
-    float stroke = std::max(1.25f, std::min(box.Width, box.Height) * 0.07f);
-    gp::RectF screen = DrawMonitor(graphics, box, color, stroke);
+    gp::RectF monitor = DrawGlyphAtSize(graphics, kGlyphMonitor, emSize, box, color);
+    // Inside its outline, above the stand (in both Segoe Fluent Icons and Segoe MDL2 Assets).
+    gp::RectF screen(monitor.X + monitor.Width * 0.07f, monitor.Y + monitor.Height * 0.08f, monitor.Width * 0.86f, monitor.Height * 0.66f);
     // The screen is shorter than a line of text, so draw the digits as a shape and center what's inked.
     gp::FontFamily family(L"Segoe UI Semibold");
     gp::GraphicsPath path;
@@ -3381,17 +3955,6 @@ void DrawNumberedMonitor(gp::Graphics& graphics, const gp::RectF& box, const gp:
     path.Transform(&transform);
     gp::SolidBrush brush(color);
     graphics.FillPath(&brush, &path);
-}
-
-// A tick, as on a chosen display in the display picker.
-void DrawCheck(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color) {
-    float s = std::min(box.Width, box.Height);
-    gp::Pen pen(color, std::max(1.5f, s * 0.12f));
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    pen.SetLineJoin(gp::LineJoinRound);
-    gp::PointF points[] = {{box.X + s * 0.2f, box.Y + s * 0.53f}, {box.X + s * 0.41f, box.Y + s * 0.73f}, {box.X + s * 0.8f, box.Y + s * 0.3f}};
-    graphics.DrawLines(&pen, points, 3);
 }
 
 // ---------------------------------------------------------------------------
@@ -3542,7 +4105,7 @@ private:
         }
         float check = std::min((float)Px(20), std::min(rect.Width, rect.Height) * 0.5f);
         if (chosen && check >= Px(8)) {
-            DrawCheck(graphics, gp::RectF(rect.X + (rect.Width - check) / 2, rect.Y + (rect.Height - check) / 2, check, check), mark);
+            DrawGlyphAtSize(graphics, kGlyphCheckMark, check, rect, mark);
         }
     }
 
@@ -3657,8 +4220,8 @@ protected:
                 graphics.DrawLine(&divider, (float)section.x, (float)Px(14), (float)section.x, (float)(height - Px(14)));
             }
             gp::Color iconColor = content_.busyButton == button ? WithAlpha(110, foreground) : foreground;
-            gp::RectF icon(section.x + (section.width - Px(26)) / 2.0f, height / 2.0f - Px(12), (float)Px(26), (float)Px(24));
-            DrawNumberedMonitor(graphics, icon, iconColor, std::to_wstring(content_.buttons[button].size()), 11.0f * Scale());
+            gp::RectF icon((float)section.x, height / 2.0f - Px(12), (float)section.width, (float)Px(24));
+            DrawNumberedMonitor(graphics, icon, 20.0f * Scale(), iconColor, std::to_wstring(content_.buttons[button].size()), 11.0f * Scale());
         }
     }
 
@@ -3671,10 +4234,10 @@ protected:
         Render();
         // Display buttons open their flyout after a moment; an open flyout closes itself once the
         // mouse is away from it and its button.
-        KillTimer(Handle(), kHoverTimer);
+        KillTimer(OwnerWindow(), kHoverTimer);
         if (section > kConnection) {
             hoverTarget_ = section;
-            SetTimer(Handle(), kHoverTimer, 400, nullptr);
+            SetTimer(OwnerWindow(), kHoverTimer, 400, nullptr);
         }
     }
 
@@ -3683,14 +4246,14 @@ protected:
             hovered_ = kNone;
             Render();
         }
-        KillTimer(Handle(), kHoverTimer);
+        KillTimer(OwnerWindow(), kHoverTimer);
     }
 
     void OnTimer(UINT_PTR timer) override {
         if (timer != kHoverTimer) {
             return;
         }
-        KillTimer(Handle(), kHoverTimer);
+        KillTimer(OwnerWindow(), kHoverTimer);
         RECT bounds = SectionScreenBounds(hoverTarget_);
         POINT cursor;
         GetCursorPos(&cursor);
@@ -3703,7 +4266,7 @@ protected:
     }
 
     void OnClick(POINT point, MouseButton mouseButton) override {
-        KillTimer(Handle(), kHoverTimer);
+        KillTimer(OwnerWindow(), kHoverTimer);
         flyout_.Hide();
         int section = SectionAt(point);
         if (mouseButton == MouseButton::Right) {
@@ -3728,7 +4291,7 @@ protected:
     }
 
     void OnDragStart() override {
-        KillTimer(Handle(), kHoverTimer);
+        KillTimer(OwnerWindow(), kHoverTimer);
         flyout_.Hide();
     }
 
@@ -3776,13 +4339,15 @@ private:
         return width;
     }
 
-    // The Remote Desktop icon, then the name over the address, like the weather widget's two lines;
+    // The This PC icon, then the name over the address, like the weather widget's two lines;
     // just the name, centered, without an address.
     void DrawConnection(gp::Graphics& graphics, const Section& section, int height, const gp::Color& foreground,
                         const gp::Color& secondary) {
         float middle = height / 2.0f;
         float iconSize = (float)Px(24);
-        DrawRemoteDesktop(graphics, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
+        // At three quarters of the box's height, about the size of the taskbar's own icons.
+        DrawGlyphAtSize(graphics, kGlyphThisPC, iconSize * 0.75f, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize),
+                        foreground);
         float textLeft = section.x + (float)Px(44);
         float textWidth = section.x + section.width - textLeft - Px(10);
         // The section is sized to fit the text, so it's only cut short when it's as wide as it gets.
@@ -3821,8 +4386,12 @@ public:
         }
         messages_.onTimer = [this](UINT_PTR timer) { OnTimer(timer); };
         messages_.onMessage = [this](UINT message, WPARAM wParam, LPARAM lParam) { OnMessage(message, wParam, lParam); };
-        // Tidy up after sessions that were still running when Windhawk was last closed.
-        RestoreDefaultRdp(false);
+        // Tidy up after sessions that were still running when the mod last stopped. Ones started
+        // with /v that are still running (Explorer restarted during them) keep their display
+        // settings in Default.rdp until they end, as they may save it then.
+        if (!WatchRunningSessions()) {
+            RestoreDefaultRdp(false);
+        }
         DeleteSessionCopies();
         return StartWidget();
     }
@@ -3830,7 +4399,7 @@ public:
     ~RdpApp() {
         widget_.Destroy();
         SetEvent(cancel_);  // A display-number read in progress closes mstsc and stops.
-        workers_.WaitAll(5000);
+        workers_.WaitAll();
         CloseHandle(cancel_);
         bool sessionUsesDefaultRdp = false;
         for (const std::unique_ptr<Session>& session : sessions_) {
@@ -4070,7 +4639,11 @@ private:
         StartedSession started;
         std::optional<std::wstring> error = StartFullScreen(connection, displayIds, started);
         if (started.process) {
-            WatchSession(started);
+            if (WatchSession(started) && started.setDefaultRdp) {
+                std::vector<SessionMark> marks = LoadSessionMarks();
+                marks.push_back({GetProcessId(started.process), ProcessStartTime(started.process)});
+                SaveSessionMarks(marks);
+            }
         } else if (started.setDefaultRdp) {
             RestoreDefaultRdpWhenNoSessions();
         }
@@ -4082,16 +4655,33 @@ private:
         SetTimer(messages_.Handle(), kCooldownTimer, kStartCooldownMilliseconds, nullptr);
     }
 
-    // Watches for the session to end, to tidy up after it.
-    void WatchSession(const StartedSession& started) {
+    // Watches for the session to end, to tidy up after it. Returns whether it's watched.
+    bool WatchSession(const StartedSession& started) {
         auto session = std::make_unique<Session>(Session{messages_.Handle(), started.process, nullptr, started.copy, started.setDefaultRdp});
         if (!RegisterWaitForSingleObject(&session->wait, session->process, OnSessionExited, session.get(), INFINITE,
                                          WT_EXECUTEONLYONCE)) {
-            // It can't be watched; the next start of the mod tidies up.
+            // It can't be watched; the mod tidies up when it next starts.
             CloseHandle(session->process);
-            return;
+            return false;
         }
         sessions_.push_back(std::move(session));
+        return true;
+    }
+
+    // Watches the sessions started with /v before the mod last stopped that are still running.
+    // Returns whether there are any.
+    bool WatchRunningSessions() {
+        std::vector<SessionMark> running;
+        for (const SessionMark& mark : LoadSessionMarks()) {
+            StartedSession started;
+            started.process = OpenRunningSession(mark);
+            started.setDefaultRdp = true;
+            if (started.process && WatchSession(started)) {
+                running.push_back(mark);
+            }
+        }
+        SaveSessionMarks(running);
+        return !running.empty();
     }
 
     // A session ended: deletes its .rdp copy (unless another session uses one by the same name),
@@ -4104,6 +4694,12 @@ private:
         std::unique_ptr<Session> session = std::move(*found);
         sessions_.erase(found);
         UnregisterWaitEx(session->wait, INVALID_HANDLE_VALUE);
+        if (session->setDefaultRdp) {
+            std::vector<SessionMark> marks = LoadSessionMarks();
+            SessionMark ended{GetProcessId(session->process), ProcessStartTime(session->process)};
+            marks.erase(std::remove(marks.begin(), marks.end(), ended), marks.end());
+            SaveSessionMarks(marks);
+        }
         CloseHandle(session->process);
         if (!session->copy.empty() && std::none_of(sessions_.begin(), sessions_.end(), [&](const std::unique_ptr<Session>& s) {
                 return EqualsIgnoreCase(s->copy, session->copy);
@@ -4294,24 +4890,14 @@ private:
         menu.Add(L"Reset display buttons", [this]() { ResetDisplayButtons(); }, false, settings_.displayButtons.count(setupKey_) > 0);
         menu.Add(L"Read display numbers again", [this]() { ReadDisplayIdsAgain(); }, false, displays_.size() > 1);
 
-        // Linking the widget with Taskbar Audio Flipper's into one, on either side; offered while that
-        // mod is running (or they're linked).
-        const WidgetLink::State& link = widget_.Link();
-        if (link.linked || WidgetLink::PartnerRunning()) {
-            menu.AddSeparator();
-            Menu& linkMenu = menu.AddSubmenu(std::wstring(L"Link with ") + kPartnerApp);
-            bool selfOnLeft = link.selfOnLeft;
-            linkMenu.Add(L"Not linked", [this, selfOnLeft]() { widget_.SetLink(false, selfOnLeft); }, !link.linked);
-            linkMenu.Add(std::wstring(kPartnerApp) + L" on the left", [this]() { widget_.SetLink(true, false); }, link.linked && !selfOnLeft);
-            linkMenu.Add(std::wstring(kPartnerApp) + L" on the right", [this]() { widget_.SetLink(true, true); }, link.linked && selfOnLeft);
-        }
+        AddLinkMenu(menu, widget_);
 
         RECT bounds = widget_.Bounds();
         POINT cursor;
         GetCursorPos(&cursor);
         widget_.HideFlyout();
-        // Above the widget, which keeps itself on top and would otherwise cover the menu.
-        menu.Show(widget_.Handle(), {cursor.x, bounds.top});
+        // Above the widget, so the menu doesn't cover it.
+        menu.Show(widget_.OwnerWindow(), {cursor.x, bounds.top});
     }
 
     Settings settings_;
@@ -4338,8 +4924,13 @@ UiThread g_uiThread;
 
 }  // namespace
 
-BOOL WhTool_ModInit() {
+BOOL Wh_ModInit() {
     Wh_Log(L">");
+    // Windhawk loads the mod into every Explorer process, folder windows' too: it runs in the one
+    // with the taskbar (or, while Explorer is starting, the one that's about to have it).
+    if (InFolderWindowProcess() || (TaskbarWindow() && !WidgetTaskbar())) {
+        return FALSE;
+    }
     return g_uiThread.Start([]() -> std::shared_ptr<void> {
         auto app = std::make_shared<RdpApp>();
         if (!app->Start()) {
@@ -4350,190 +4941,11 @@ BOOL WhTool_ModInit() {
     });
 }
 
-void WhTool_ModSettingsChanged() {
-    Wh_Log(L">");
-}
-
-void WhTool_ModUninit() {
-    Wh_Log(L">");
-    g_uiThread.Stop();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
-
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
-}
-
-BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
+    Wh_Log(L">");
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
+    Wh_Log(L">");
+    g_uiThread.Stop();
 }
