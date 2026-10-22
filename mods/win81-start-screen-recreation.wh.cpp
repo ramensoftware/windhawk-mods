@@ -9031,7 +9031,7 @@ static HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int method, i
 
 static bool InstallStartHook() {
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
             &XamlLauncher_ShowStartView_Original,
@@ -9043,7 +9043,7 @@ static bool InstallStartHook() {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return false;
     }
-    if (!WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"HookSymbols failed for ShowStartView; using the keyboard hook only");
         return false;
     }
