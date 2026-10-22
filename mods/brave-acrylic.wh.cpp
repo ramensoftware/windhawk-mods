@@ -2,14 +2,14 @@
 // @id              brave-acrylic
 // @name            Brave Acrylic
 // @description     Alpha: Acrylic toolbar and vertical tabs for Brave; requires Translucent Windows
-// @version         2.8.3
+// @version         2.8.4
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @homepage        https://github.com/bardelyne/brave-acrylic
 // @license         MIT
 // @architecture    x86-64
 // @include         brave.exe
-// @compilerOptions -lshell32
+// @compilerOptions -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,52 +24,61 @@ Brave Acrylic makes selected toolbar and vertical-tab backgrounds transparent so
 
 ## Requirements
 
-- Windows 11 and the **x64 version of Brave**.
+- **x64 version of Brave**.
 - [Windhawk](https://windhawk.net/) with **Brave Acrylic** enabled.
 - The **[Translucent Windows](https://windhawk.net/mods/translucent-windows)** mod, configured to apply a translucent background effect to `brave.exe`.
 - Windows **Transparency effects** enabled.
 
-## Fast setup
+## Compatibility
 
-**Go to Brave Settings → Appearance, select Dark appearance, then choose the built-in Blue color theme.** The default color list is already configured for it.
+- Tested on **Windows 11 26H2**, **Brave 1.97.59** / **Chromium 155.0.8059.85**, x64.
+- **Windows 10 compatibility is unverified.** Brave Acrylic has no Windows 11 version gate, but the required backdrop must also work on the target system. Translucent Windows documents its SystemBackdrop modes as requiring Windows 11 22H2 or later; do not assume the full setup works on Windows 10.
+- The per-window check has been tested with regular, private, and Tor window themes.
+- Native ARM64 and 32-bit Brave are not supported. Unsupported native processes are refused before any hooks are installed.
+
+**This is an alpha release, not a guarantee of future Brave compatibility.** The resolver tolerates changing relocation addresses and validates cached function boundaries, but it still works with private Brave functions. If a required function or the named-color table cannot be identified, the transparency path stays disabled.
+
+## Fast setup
 
 1. Enable **Brave Acrylic** and the required **Translucent Windows** mod. In Translucent Windows, apply the background effect you want to `brave.exe`.
 2. Open `brave://settings/appearance`, select **Dark** appearance, and choose the built-in **Blue** theme.
 3. Enable **vertical tabs** for the layout in the screenshot.
 4. Close all Brave windows normally and reopen Brave.
 
-> **Seeing two sets of minimize, maximize, and close buttons?** Enable Brave's **Use compact mode** option in Appearance. The same fix is explained in the mod's Settings tab.
+The default **Hide duplicate Windows buttons** option removes Windows' underlying caption buttons while keeping Brave's own controls. Turn it off in the mod settings to restore the native layer.
 
 ## Advanced setup
 
 ### Choose your own colors
 
-Open Brave Acrylic's **Settings** tab and edit **Colours to make transparent**. Add one six-digit RGB value per row, without an alpha channel.
+To make an area of Brave's interface transparent, pick that area color and add that HEX value to **Colours to make transparent** in the mod's Settings tab.
 
-| Default color | Surface in the built-in Dark + Blue theme |
+The list matches **colors across Brave's native interface**. When a listed color appears elsewhere in an enabled window theme, that matching color also becomes transparent. For example, adding a sidebar's color can also affect a toolbar, button, or icon that uses exactly the same color. Add colors carefully: a common color such as pure white can also remove text.
+
+1. Temporarily disable **Brave Acrylic** and close all Brave windows normally. Reopen Brave so you can sample its original, opaque colors.
+2. On Windows 11, press **Win+Shift+S** (or **Print Screen / PrtSc** if configured to open Snipping Tool). Select the **Color picker** eyedropper and choose **HEX**.
+3. For a new theme, sample the **main toolbar** first, then sample each additional area you want to make transparent. Pick a flat background area, away from text, icons, borders, shadows, and hover effects.
+4. Open **Windhawk → Brave Acrylic → Settings → Colours to make transparent**. Add each sampled color on its own row, such as `333C4D` or `#333C4D`.
+5. Save the settings, enable the mod, and close all Brave windows normally before reopening Brave to apply the colors.
+
+See [Microsoft's Snipping Tool color picker instructions](https://blogs.windows.com/windowsexperience/2025/07/22/windows-11-is-the-home-for-ai-on-the-pc-with-even-more-experiences-available-today/#:~:text=To%20try%20color%20picker). If Color picker is unavailable in your Snipping Tool version, sample a screenshot with another color picker.
+
+Use the **original color with the mod disabled**. A color sampled while acrylic is active is already blended with the backdrop and may not match Brave's paint color.
+
+Each value must contain six hexadecimal digits (`RRGGBB`), with an optional leading `#` and no alpha channel. Matching is exact. Up to **16 colors** are supported. An empty list restores the built-in defaults. Invalid rows are reported in the log and skipped; later valid rows are still used.
+
+Fresh installations include these colors for the built-in Dark + Blue theme:
+
+| Default color | Area |
 | --- | --- |
 | `333C4D` | Vertical tab strip |
 | `1D2636` | Main toolbar |
-
-**The window's original main toolbar color must be in the list.** That enables the effect for its palette. Other configured colors can then become transparent in that palette.
-
-To find another theme's colors:
-
-1. Temporarily disable Brave Acrylic and restart Brave to restore its original, opaque UI colors.
-2. Take a screenshot and sample a flat area of the toolbar and sidebar. Avoid text, icons, borders, shadows, and hover effects.
-3. Add the sampled RGB values to the mod's settings, enable the mod, and restart Brave normally.
-
-Sample the **original paint color**, not an area already blended with acrylic. Enter colors as `RRGGBB`; a leading `#` is also accepted. Up to **16 colors** are supported. An empty list restores the built-in defaults. Invalid rows are reported in the log and skipped; later valid rows are still used.
-
-Matching is exact. There is no tolerance setting that could also remove nearby colors.
 
 ### Blue, purple, and pink together
 
 Keep the blue theme's entries and add the original toolbar and sidebar colors for a purple private window or a pink Tor window. Each window uses its own native color provider, so enabling one theme does not blindly clear another window's background.
 
 An unlisted toolbar color keeps that palette's normal background painting. There are no hardcoded purple or pink presets: private and Tor windows use the same check as ordinary windows.
-
-The color list is shared across eligible palettes. An exact listed color can also appear in text, buttons, or popup backgrounds. Add colors carefully: adding a common foreground color such as pure white can remove text too.
 
 ### Restart after changing colors
 
@@ -95,27 +104,18 @@ The [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/do
 2. **Discover the toolbar color ID.** It finds `kColorToolbar` in Brave's own named-color tables. The enum number is discovered rather than fixed in the mod, and duplicate definitions must agree.
 3. **Check the original palette for each window.** The window's native color provider supplies its original toolbar color. An unmatched or unavailable palette keeps its original background painting.
 4. **Remove matching paint and clear old pixels.** Exact listed opaque colors become transparent. An allowlist of browser containers is cleared on repaint so previous tab labels and backgrounds do not leave trails. Interactive child views are not blanket-cleared.
-5. **Let Translucent Windows supply the backdrop.** Brave Acrylic leaves window styles, fullscreen transitions, and backdrop selection alone. Its GPU hook only adjusts compatible RGBA composition surfaces; HWND, YUV, and protected-video surfaces keep their original settings.
+5. **Keep one set of window buttons.** For unowned, resizable Chromium browser frames, the optional caption fix hides Windows' underlying buttons. Brave retains its logical window style so its controls and fullscreen restoration continue to work. Turning the option or mod off restores the native buttons. Popups, owned dialogs, and tool windows are excluded.
+6. **Let Translucent Windows supply the backdrop.** The caption fix leaves sizing and fullscreen frame bits alone. Translucent Windows controls the backdrop. The GPU hook only adjusts compatible RGBA composition surfaces; HWND, YUV, and protected-video surfaces keep their original settings.
 
 Function addresses and the toolbar table entry are cached in Windhawk’s per-mod storage for the exact `chrome.dll` build and rechecked before use. A valid cache avoids scanning the full named-color table again. There is no screenshot polling, webpage injection, or recurring full-module scan.
-
-Function discovery is local: **no Brave debug-symbol download is used**.
-
-## Compatibility
-
-- Tested on **Windows 11 26H2**, **Brave 1.97.59** / **Chromium 155.0.8059.85**, x64.
-- The per-window check has been tested with regular, private, and Tor window themes.
-- Native ARM64 and 32-bit Brave are not supported. Unsupported native processes are refused before any hooks are installed.
-- Website backgrounds remain under the website's control. Ordinary webpages are not made transparent by this mod.
-
-**This is an alpha release, not a guarantee of future Brave compatibility.** The resolver tolerates changing relocation addresses and validates cached function boundaries, but it still works with private Brave functions. If a required function or the named-color table cannot be identified, the transparency path stays disabled.
 
 ## Troubleshooting
 
 | Symptom | What to check |
 | --- | --- |
 | No transparency | Enable **both mods**, apply Translucent Windows to `brave.exe`, choose Dark + built-in Blue, then restart Brave. |
-| Two sets of minimize/maximize/close buttons | Enable Brave's **Use compact mode** in Appearance, as explained in the mod settings. |
+| Two sets of minimize/maximize/close buttons | Enable **Hide duplicate Windows buttons** in this mod. |
+| A window needs Windows' original controls | Disable **Hide duplicate Windows buttons** to restore the native layer immediately. |
 | Private or Tor window stays opaque | Add that theme's **original main toolbar color** and any sidebar colors you want removed. An unmatched palette stays opaque deliberately. |
 | Text or icons disappear | Remove the color that also matches those elements, then restart Brave. Avoid adding common foreground colors. |
 | Effect stops after a Brave update | Collect [Windhawk debug output](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md#collect-logs) and include your exact Brave version in a bug report. |
@@ -140,8 +140,12 @@ Created by [bardelyne](https://github.com/bardelyne) with AI assistance. Built f
   $description: >-
     Exact RRGGBB colours. Include the original main toolbar colour to enable
     its theme. Requires Translucent Windows; see the README for setup.
-    If minimize, maximize, and close buttons appear twice, enable Use compact
-    mode in Brave Settings > Appearance.
+- hideNativeCaptionButtons: true
+  $name: Hide duplicate Windows buttons
+  $description: >-
+    Hide Windows caption buttons underneath Brave's own minimize, maximize,
+    and close buttons. Applies immediately to browser frames; disabling this
+    restores the native buttons.
 - logColors: false
   $name: Log colours (diagnostics)
   $description: >-
@@ -208,6 +212,162 @@ static ViewOnPaintBackground_t pOrigViewOnPaintBackground = nullptr;
 static LoadLibraryExW_t pOrigLoadLibraryExW = nullptr;
 static CreateSwapChainForComposition_t pOrigCreateSwapChainForComposition = nullptr;
 
+// Windows still draws its caption buttons underneath Chromium's transparent
+// custom frame. Hide only WS_SYSMENU, retaining the resize/caption/min/max bits.
+// Chromium reads its original logical style, including when saving fullscreen
+// state; DWM sees the real style without the native buttons.
+static constexpr wchar_t kNativeCaptionProperty[] =
+    L"Windhawk.BraveAcrylic.NativeCaption";
+static std::atomic<bool> s_hideNativeCaptionButtons{true};
+static std::atomic<bool> s_captionFixActive{false};
+static std::atomic<bool> s_captionStopping{false};
+static bool s_captionHooksInstalled = false;
+static decltype(&CreateWindowExW) pOrigCreateWindowExW = nullptr;
+static decltype(&GetWindowLongPtrW) pOrigGetWindowLongPtrW = nullptr;
+static decltype(&SetWindowLongPtrW) pOrigSetWindowLongPtrW = nullptr;
+static decltype(&GetWindowLongW) pOrigGetWindowLongW = nullptr;
+static decltype(&SetWindowLongW) pOrigSetWindowLongW = nullptr;
+static thread_local HWND s_captionStyleWrite = nullptr;
+
+static bool IsBrowserCaptionFrame(HWND window, LONG_PTR style) {
+    constexpr LONG_PTR required = WS_CAPTION | WS_THICKFRAME |
+                                 WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    if (!window || (style & required) != required || (style & WS_CHILD)) return false;
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    if (process != GetCurrentProcessId() || GetAncestor(window, GA_ROOT) != window ||
+        GetWindow(window, GW_OWNER)) return false;
+    const auto exStyle = pOrigGetWindowLongPtrW(window, GWL_EXSTYLE);
+    if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_DLGMODALFRAME)) return false;
+    wchar_t name[32]{};
+    return GetClassNameW(window, name, ARRAYSIZE(name)) &&
+           !wcscmp(name, L"Chrome_WidgetWin_1");
+}
+
+static void RefreshNativeCaption(HWND window) {
+    SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                 SWP_FRAMECHANGED);
+}
+
+static void RestoreNativeCaption(HWND window) {
+    if (!GetPropW(window, kNativeCaptionProperty)) return;
+    RemovePropW(window, kNativeCaptionProperty);
+    // Use the public APIs here: Windhawk has removed the hooks by ModUninit.
+    const auto style = GetWindowLongPtrW(window, GWL_STYLE);
+    SetWindowLongPtrW(window, GWL_STYLE, style | WS_SYSMENU);
+    RefreshNativeCaption(window);
+}
+
+template<typename Value>
+static Value ReadCaptionStyle(HWND window, int index, Value (WINAPI* original)(HWND, int)) {
+    auto value = original(window, index);
+    const DWORD error = GetLastError();
+    if (index == GWL_STYLE && GetPropW(window, kNativeCaptionProperty)) value |= WS_SYSMENU;
+    SetLastError(error);
+    return value;
+}
+
+static LONG_PTR WINAPI GetWindowLongPtrW_Hook(HWND window, int index) {
+    return ReadCaptionStyle(window, index, pOrigGetWindowLongPtrW);
+}
+
+static LONG WINAPI GetWindowLongW_Hook(HWND window, int index) {
+    return ReadCaptionStyle(window, index, pOrigGetWindowLongW);
+}
+
+template<typename Value>
+static Value WriteCaptionStyle(HWND window, int index, Value value,
+                               Value (WINAPI* original)(HWND, int, Value)) {
+    // Windows may forward one API to the other. Translate the style only once.
+    if (index != GWL_STYLE || s_captionStyleWrite == window) return original(window, index, value);
+    const bool owned = GetPropW(window, kNativeCaptionProperty) != nullptr;
+    const bool hide = s_captionFixActive.load(std::memory_order_acquire) &&
+        (value & WS_SYSMENU) && (owned || IsBrowserCaptionFrame(window, value));
+    bool marked = owned;
+    if (hide && !owned) {
+        marked = SetPropW(window, kNativeCaptionProperty, reinterpret_cast<HANDLE>(1)) != FALSE;
+    } else if (!hide && owned) {
+        RemovePropW(window, kNativeCaptionProperty);
+        marked = false;
+    }
+    const HWND previousWrite = s_captionStyleWrite;
+    s_captionStyleWrite = window;
+    // Zero is also a valid previous style. Clear stale errors before testing
+    // whether the native setter failed, as required by SetWindowLong.
+    SetLastError(ERROR_SUCCESS);
+    const auto previous = original(window, index,
+                                   hide && marked ? value & ~static_cast<Value>(WS_SYSMENU) : value);
+    const DWORD error = GetLastError();
+    s_captionStyleWrite = previousWrite;
+    if (!previous && error) {
+        if (owned) SetPropW(window, kNativeCaptionProperty, reinterpret_cast<HANDLE>(1));
+        else RemovePropW(window, kNativeCaptionProperty);
+    } else if (hide && marked && !s_captionFixActive.load(std::memory_order_acquire)) {
+        // A setting can change while SetWindowLong dispatches style messages.
+        RestoreNativeCaption(window);
+    }
+    SetLastError(error);
+    return previous && owned ? previous | WS_SYSMENU : previous;
+}
+
+static LONG_PTR WINAPI SetWindowLongPtrW_Hook(HWND window, int index, LONG_PTR value) {
+    return WriteCaptionStyle(window, index, value, pOrigSetWindowLongPtrW);
+}
+
+static LONG WINAPI SetWindowLongW_Hook(HWND window, int index, LONG value) {
+    return WriteCaptionStyle(window, index, value, pOrigSetWindowLongW);
+}
+
+static void ApplyNativeCaption(HWND window) {
+    if (!s_captionFixActive.load(std::memory_order_acquire) ||
+        GetPropW(window, kNativeCaptionProperty)) return;
+    const auto style = pOrigGetWindowLongPtrW(window, GWL_STYLE);
+    if (!(style & WS_SYSMENU) || !IsBrowserCaptionFrame(window, style)) return;
+    SetWindowLongPtrW_Hook(window, GWL_STYLE, style);
+    if (GetPropW(window, kNativeCaptionProperty)) RefreshNativeCaption(window);
+}
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className, LPCWSTR name,
+                                       DWORD style, int x, int y, int width, int height,
+                                       HWND parent, HMENU menu, HINSTANCE instance, LPVOID param) {
+    const auto window = pOrigCreateWindowExW(exStyle, className, name, style,
+                                            x, y, width, height, parent, menu, instance, param);
+    const DWORD error = GetLastError();
+    if (window) ApplyNativeCaption(window);
+    SetLastError(error);
+    return window;
+}
+
+static BOOL CALLBACK SyncNativeCaptionWindow(HWND window, LPARAM) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    if (process == GetCurrentProcessId()) {
+        if (s_captionFixActive.load(std::memory_order_acquire)) ApplyNativeCaption(window);
+        else RestoreNativeCaption(window);
+    }
+    return TRUE;
+}
+
+static void SyncNativeCaptions() {
+    const bool active = s_captionHooksInstalled &&
+        !s_captionStopping.load(std::memory_order_acquire) &&
+        s_transparencyReady.load(std::memory_order_acquire) &&
+        s_hideNativeCaptionButtons.load(std::memory_order_relaxed);
+    s_captionFixActive.store(active, std::memory_order_release);
+    if (s_captionHooksInstalled) EnumWindows(SyncNativeCaptionWindow, 0);
+}
+
+static void InstallNativeCaptionHooks() {
+    s_captionHooksInstalled =
+        WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &pOrigCreateWindowExW) &&
+        WindhawkUtils::SetFunctionHook(GetWindowLongPtrW, GetWindowLongPtrW_Hook, &pOrigGetWindowLongPtrW) &&
+        WindhawkUtils::SetFunctionHook(SetWindowLongPtrW, SetWindowLongPtrW_Hook, &pOrigSetWindowLongPtrW) &&
+        WindhawkUtils::SetFunctionHook(GetWindowLongW, GetWindowLongW_Hook, &pOrigGetWindowLongW) &&
+        WindhawkUtils::SetFunctionHook(SetWindowLongW, SetWindowLongW_Hook, &pOrigSetWindowLongW);
+    if (!s_captionHooksInstalled) Wh_Log(L"Native caption fix unavailable; acrylic is unchanged");
+}
+
 static bool IsColorSpace(wchar_t ch) {
     return ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n';
 }
@@ -253,6 +413,8 @@ static void LoadModSettings() {
     s_colors = next;
     ReleaseSRWLockExclusive(&s_colorsLock);
     s_logColors.store(Wh_GetIntSetting(L"logColors") != 0, std::memory_order_relaxed);
+    s_hideNativeCaptionButtons.store(Wh_GetIntSetting(L"hideNativeCaptionButtons") != 0,
+                                    std::memory_order_relaxed);
 
     char list[kMaxTargetColors * 7 + 1]{};
     size_t written = 0;
@@ -891,6 +1053,7 @@ static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
         }
     }
     ReleaseSRWLockExclusive(&s_initLock);
+    if (applyNow && installed) SyncNativeCaptions();
     return installed;
 }
 
@@ -919,7 +1082,8 @@ static ProcessRole GetProcessRole() {
     if (!arguments) return ProcessRole::Other;
     ProcessRole role = ProcessRole::Browser;
     for (int i = 1; i < count; ++i) {
-        if (!wcscmp(arguments[i], L"--")) break;
+        if (!wcscmp(arguments[i], L"--") ||
+            !wcscmp(arguments[i], L"--single-argument")) break;
         if (!wcsncmp(arguments[i], L"--type=", 7)) {
             role = !wcscmp(arguments[i] + 7, L"gpu-process") ? ProcessRole::Gpu : ProcessRole::Other;
         }
@@ -934,6 +1098,7 @@ BOOL Wh_ModInit() {
     if (role != ProcessRole::Browser) return FALSE;
     s_isBrowserProcess = true;
     LoadModSettings();
+    InstallNativeCaptionHooks();
 
     HMODULE chrome = GetModuleHandleW(L"chrome.dll");
     if (chrome) return TryInstallChromeHooks(chrome, false);
@@ -957,15 +1122,19 @@ void Wh_ModAfterInit() {
     ReleaseSRWLockExclusive(&s_initLock);
     // Cover a load between ModInit's check and activation of the loader hook.
     if (const auto chrome = GetModuleHandleW(L"chrome.dll")) TryInstallChromeHooks(chrome, true);
+    SyncNativeCaptions();
 }
 
 void Wh_ModSettingsChanged() {
     if (!s_isBrowserProcess) return;
     LoadModSettings();
+    SyncNativeCaptions();
     Wh_Log(L"Settings updated; restart Brave normally to rebuild its cached UI brushes");
 }
 
 void Wh_ModBeforeUninit() {
+    s_captionStopping.store(true, std::memory_order_release);
+    s_captionFixActive.store(false, std::memory_order_release);
     AcquireSRWLockExclusive(&s_initLock);
     s_stopping = true;
     s_activateAfterInit = false;
@@ -974,6 +1143,7 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    if (s_isBrowserProcess) EnumWindows(SyncNativeCaptionWindow, 0);
     if (s_dxgiModule) {
         FreeLibrary(s_dxgiModule);
         s_dxgiModule = nullptr;
