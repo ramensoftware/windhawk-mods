@@ -48,13 +48,9 @@ so there are no external dependencies.
 * **DeepSeek API key** — `sk-...` key stored in Windhawk's mod settings on this
   PC. Leave it empty to use the `DEEPSEEK_API_KEY` environment variable.
 * **Refresh interval** — how often to poll the API, in minutes.
-* **Currency prefix** — text before the amount in native mode; empty means the
-  currency symbol (`¥` for CNY, `$` for USD).
-* **Currency** — which `balance_infos` entry to use: `auto` (first non-zero),
-  `CNY` or `USD`.
 * **Clock line** — append to the bottom (date) line or the top (time) line.
-* **Display currency** — `native` (CNY/USD) or `RUB` (converted at the CBR
-  rate).
+* **Display currency** — `CNY`, `RUB` or `USD`: the balance is converted to the
+  selected currency with the official Bank of Russia rates.
 
 ## Notes
 
@@ -85,23 +81,6 @@ so there are no external dependencies.
   $description: >-
     How often to poll the API. Values below 1 are treated as 1, values above
     1440 as 1440 (one day).
-- formatPrefix: ""
-  $name: Currency prefix
-  $description: >-
-    Text printed before the amount in native mode. Leave empty to use the
-    currency symbol ("¥" for CNY, "$" for USD); set it explicitly for anything
-    else, for example "CNY " or "$".
-- currency: auto
-  $name: Currency
-  $description: >-
-    Which balance_infos entry to show. auto — the first entry with a non-zero
-    balance (or the first entry if all are zero). The API often returns USD
-    with a zero balance first, so auto usually picks the currency that has
-    money in it.
-  $options:
-  - auto: Auto
-  - CNY: CNY
-  - USD: USD
 - clockLine: date
   $name: Clock line
   $description: >-
@@ -110,16 +89,17 @@ so there are no external dependencies.
   $options:
   - date: Date line (bottom)
   - time: Time line (top)
-- displayCurrency: native
+- displayCurrency: CNY
   $name: Display currency
   $description: >-
-    native — show the balance in the API currency (CNY/USD); RUB — convert it
-    to Russian rubles using the official Bank of Russia rate (updated daily,
-    cached for 6 hours). If the rate cannot be fetched, the native currency is
-    shown.
+    Currency to show the balance in: CNY (Chinese yuan), RUB (Russian rubles) or
+    USD (US dollars). The amount is converted using the official Bank of Russia
+    rates (updated daily, cached for 6 hours); if a rate is not available, the
+    balance is shown in its original currency.
   $options:
-  - native: Native (CNY/USD)
-  - RUB: Russian rubles (CBR rate)
+  - CNY: Chinese yuan (¥)
+  - RUB: Russian rubles (₽)
+  - USD: US dollars ($)
 */
 // ==/WindhawkModSettings==
 
@@ -151,10 +131,8 @@ std::mutex g_stateMutex;
 
 struct Settings {
     std::wstring apiKey;            // ключ DeepSeek без префикса "Bearer "
-    std::wstring prefix = L"$";     // префикс валюты
-    std::wstring currency = L"auto"; // "auto", "CNY" или "USD"
     std::wstring clockLine = L"date"; // "date" (нижняя строка) или "time"
-    std::wstring displayCurrency = L"native"; // "native" или "RUB"
+    std::wstring displayCurrency = L"CNY"; // "CNY", "RUB" или "USD"
     int refreshMinutes = 5;         // период опроса API
 };
 
@@ -255,11 +233,8 @@ bool ParseDecimal(const std::wstring& rawValue, double& out) {
     return true;
 }
 
-// "≈1 061 ₽": округление до целых рублей, разряды через пробел.
-// Знак "≈" показывает, что сумма пересчитана по курсу и может отличаться
-// от точного списания в валюте.
-std::wstring FormatRubles(double rubles) {
-    long long value = static_cast<long long>(rubles + 0.5);
+// Разбивает целое число на разряды пробелами: 1234567 -> "1 234 567".
+std::wstring GroupDigits(long long value) {
     bool negative = value < 0;
 
     if (negative) {
@@ -268,7 +243,7 @@ std::wstring FormatRubles(double rubles) {
 
     std::wstring digits = std::to_wstring(value);
     std::wstring grouped;
-    grouped.reserve(digits.size() + digits.size() / 3);
+    grouped.reserve(digits.size() + digits.size() / 3 + 1);
 
     int count = 0;
 
@@ -280,22 +255,44 @@ std::wstring FormatRubles(double rubles) {
         }
     }
 
-    return (negative ? L"-≈" : L"≈") + grouped + L" ₽";
+    if (negative) {
+        grouped.insert(grouped.begin(), L'-');
+    }
+
+    return grouped;
 }
 
-// Символ валюты по её коду. Используется, когда префикс валюты не задан:
-// тогда для CNY выводится "¥", для USD — "$", иначе код валюты.
-std::wstring CurrencySymbol(const std::wstring& code) {
+// Форматирует сумму в выбранной валюте: рубли — целыми, юани и доллары — с
+// двумя знаками после точки.
+// Знак "≈" показывает, что сумма пересчитана по курсу и может отличаться от
+// точного списания в исходной валюте.
+std::wstring FormatAmount(double value, const std::wstring& code,
+                          bool approximate) {
+    if (value < 0.0) {
+        value = 0.0;
+    }
+
+    const std::wstring prefix = approximate ? L"≈" : L"";
+
+    if (_wcsicmp(code.c_str(), L"RUB") == 0) {
+        return prefix + GroupDigits(static_cast<long long>(value + 0.5)) + L" ₽";
+    }
+
+    const long long cents = static_cast<long long>(value * 100.0 + 0.5);
+    std::wstring number = GroupDigits(cents / 100);
+    number += L'.';
+    number += static_cast<wchar_t>(L'0' + (cents % 100) / 10);
+    number += static_cast<wchar_t>(L'0' + cents % 10);
+
     if (_wcsicmp(code.c_str(), L"CNY") == 0) {
-        return L"¥";
+        return prefix + L"¥" + number;
     }
     if (_wcsicmp(code.c_str(), L"USD") == 0) {
-        return L"$";
+        return prefix + L"$" + number;
     }
-    if (_wcsicmp(code.c_str(), L"RUB") == 0) {
-        return L"₽";
-    }
-    return code.empty() ? std::wstring() : code + L" ";
+
+    // Неизвестная валюта — показываем её код после суммы.
+    return prefix + number + L" " + code;
 }
 
 // Обрезает длинный текст для Wh_Log: в лог не должны попадать переводы строк
@@ -365,14 +362,6 @@ void LoadSettingsLocked() {
         TrimInPlace(settings.apiKey);
     }
 
-    settings.prefix = GetStringSetting(L"formatPrefix");
-
-    settings.currency = GetStringSetting(L"currency");
-    TrimInPlace(settings.currency);
-    if (settings.currency.empty()) {
-        settings.currency = L"auto";
-    }
-
     settings.clockLine = GetStringSetting(L"clockLine");
     TrimInPlace(settings.clockLine);
     if (settings.clockLine.empty()) {
@@ -382,7 +371,7 @@ void LoadSettingsLocked() {
     settings.displayCurrency = GetStringSetting(L"displayCurrency");
     TrimInPlace(settings.displayCurrency);
     if (settings.displayCurrency.empty()) {
-        settings.displayCurrency = L"native";
+        settings.displayCurrency = L"CNY";
     }
 
     int minutes = Wh_GetIntSetting(L"refreshInterval");
@@ -397,6 +386,10 @@ void LoadSettingsLocked() {
     g_settings = std::move(settings);
 }
 
+// Определён в разделе курсов ЦБ ниже; объявлен заранее, потому что строка
+// часов пересобирается раньше.
+double LookupRateLocked(PCWSTR code);
+
 // Вызывается с захваченным g_stateMutex.
 void RebuildSuffixLocked() {
     if (!g_hasAmount || g_amount.empty()) {
@@ -404,27 +397,32 @@ void RebuildSuffixLocked() {
         return;
     }
 
-    const bool showRubles =
-        _wcsicmp(g_settings.displayCurrency.c_str(), L"RUB") == 0;
+    std::wstring target = g_settings.displayCurrency;
+    double value = g_amountValue;
+    bool converted = false;
 
-    // Формат: " | $12.34". Разделитель с пробелами отделяет баланс от времени,
-    // чтобы строка не слипалась.
-    g_clockSuffix.assign(L" | ");
+    // Пересчёт идёт через рубли: amount * rate(source) / rate(target).
+    if (!g_currency.empty() &&
+        _wcsicmp(g_currency.c_str(), target.c_str()) != 0) {
+        const double sourceRate = g_rubPerUnit;
+        // Рубль — базовая валюта курсов ЦБ, его курс всегда 1.
+        const double targetRate =
+            _wcsicmp(target.c_str(), L"RUB") == 0
+                ? 1.0
+                : LookupRateLocked(target.c_str());
 
-    if (showRubles && g_rubPerUnit > 0.0) {
-        // Пересчёт по курсу ЦБ: " | ≈1 061 ₽".
-        g_clockSuffix += FormatRubles(g_amountValue * g_rubPerUnit);
-    } else {
-        // Нативная валюта (или курс ещё не получен): " | ¥86.37".
-        // Пустой префикс означает «взять символ по коду валюты».
-        std::wstring prefix = g_settings.prefix;
-        if (prefix.empty()) {
-            prefix = CurrencySymbol(g_currency);
+        if (sourceRate > 0.0 && targetRate > 0.0) {
+            value = value * sourceRate / targetRate;
+            converted = true;
+        } else {
+            // Курса нет — показываем исходную валюту, а не пустую строку.
+            target = g_currency;
         }
-
-        g_clockSuffix += prefix;
-        g_clockSuffix += g_amount;
     }
+
+    // Формат: " | ¥86.37". Разделитель с пробелами отделяет баланс от времени.
+    g_clockSuffix.assign(L" | ");
+    g_clockSuffix += FormatAmount(value, target, converted);
 }
 
 // ---------------------------------------------------------------------------
@@ -1069,10 +1067,10 @@ bool FetchCbrRates(std::vector<RubRate>& rates) {
     return ParseCbrRates(xml, rates);
 }
 
-// Курс текущей валюты из кэша; 0 — если курса нет. Вызывается с g_stateMutex.
-double LookupRateLocked() {
+// Курс валюты из кэша; 0 — если курса нет. Вызывается с g_stateMutex.
+double LookupRateLocked(PCWSTR code) {
     for (const auto& rate : g_rubRates) {
-        if (_wcsicmp(rate.charCode.c_str(), g_currency.c_str()) == 0) {
+        if (_wcsicmp(rate.charCode.c_str(), code) == 0) {
             return rate.rubPerUnit;
         }
     }
@@ -1147,8 +1145,7 @@ void FetchAndUpdate() {
     std::wstring amount;
     std::wstring currency;
     bool isAvailable = true;
-    if (!ParseBalanceResponse(body, settings.currency, amount, currency,
-                              isAvailable)) {
+    if (!ParseBalanceResponse(body, L"auto", amount, currency, isAvailable)) {
         Wh_Log(L"Unexpected API response: %s", SnippetForLog(body).c_str());
         return;
     }
@@ -1162,17 +1159,18 @@ void FetchAndUpdate() {
     Wh_Log(L"Balance: %s %s (is_available=%d)", amount.c_str(), currency.c_str(),
            isAvailable ? 1 : 0);
 
-    bool wantRubles = false;
+    bool needRates = false;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         g_currency = currency;
-        wantRubles = _wcsicmp(g_settings.displayCurrency.c_str(), L"RUB") == 0;
+        needRates =
+            _wcsicmp(g_settings.displayCurrency.c_str(), currency.c_str()) != 0;
     }
 
     // Курс нужен до пересборки строки, но сеть — строго без блокировки.
     // Проверяем флаг остановки между двумя запросами: иначе выгрузка мода
     // ждала бы ещё и запрос к ЦБ.
-    if (wantRubles && !g_stopRequested.load(std::memory_order_acquire)) {
+    if (needRates && !g_stopRequested.load(std::memory_order_acquire)) {
         EnsureRubRates();
     }
 
@@ -1180,14 +1178,10 @@ void FetchAndUpdate() {
     g_amount = amount;
     g_amountValue = amountValue;
     g_hasAmount = true;
-    g_rubPerUnit = LookupRateLocked();
+    g_rubPerUnit = LookupRateLocked(g_currency.c_str());
     RebuildSuffixLocked();
 
-    if (wantRubles && g_rubPerUnit > 0.0) {
-        Wh_Log(L"In rubles: %s (1 %s = %.4f RUB)",
-               FormatRubles(amountValue * g_rubPerUnit).c_str(),
-               g_currency.c_str(), g_rubPerUnit);
-    }
+    Wh_Log(L"Display: %s", g_clockSuffix.c_str());
 }
 
 void WorkerProc() {
@@ -1410,7 +1404,7 @@ int WINAPI GetDateFormatEx_Hook(LPCWSTR lpLocaleName,
     }
 
     // Дописываем только к первой дате за обновление (см. g_dateFormatCalls).
-    if (g_dateFormatCalls++ != 0) {
+    if (cchDate != 0 && g_dateFormatCalls++ != 0) {
         return result;
     }
 
@@ -1503,22 +1497,54 @@ bool HookSystemTraySymbols(HMODULE module) {
     return true;
 }
 
-// Пробует известные модули, в которых живут часы Windows 11. SystemTray.dll
-// появился в новых сборках, до этого типы жили в Taskbar.View.dll.
-bool TryHookSystemTray() {
-    HMODULE modules[] = {
-        GetModuleHandleW(L"SystemTray.dll"),
-        GetModuleHandleW(L"Taskbar.View.dll"),
-        GetModuleHandleW(L"ExplorerExtensions.dll"),
-    };
+// Номер сборки Windows нужен для выбора модуля часов; определяется ниже.
+DWORD GetWindowsBuildNumber();
 
-    for (HMODULE module : modules) {
-        if (module && HookSystemTraySymbols(module)) {
-            return true;
-        }
+// Сборка, в которой типы SystemTray переехали из Taskbar.View.dll в
+// SystemTray.dll (Taskbar.View.dll 2604+).
+constexpr DWORD kSystemTrayDllBuild = 26100;
+
+bool IsLegacyTaskbarBuild() {
+    return GetWindowsBuildNumber() < kSystemTrayDllBuild;
+}
+
+// Возвращает единственный модуль, в котором могут жить типы SystemTray.
+// На новых сборках это только SystemTray.dll: Taskbar.View.dll там ещё
+// загружается, но нужных типов уже не содержит, и поиск символов в ней лишь
+// впустую читал бы её PDB.
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandleW(L"SystemTray.dll");
+    if (module) {
+        return module;
     }
 
-    return false;
+    if (!IsLegacyTaskbarBuild()) {
+        return nullptr;
+    }
+
+    module = GetModuleHandleW(L"Taskbar.View.dll");
+    if (module) {
+        return module;
+    }
+
+    return GetModuleHandleW(L"ExplorerExtensions.dll");
+}
+
+// Подключает часы Windows 11. Флаг захватывается только вместе с конкретным
+// модулем, поэтому HookSymbols не вызывается для заведомо неподходящих
+// модулей и не повторяется (повторный вызов сбрасывает его кэш).
+// Возвращает true, только если хуки установлены именно в этом вызове.
+bool TryHookSystemTray() {
+    HMODULE module = GetSystemTrayModuleHandle();
+    if (!module) {
+        return false;
+    }
+
+    if (g_systemTrayHooked.exchange(true, std::memory_order_acq_rel)) {
+        return false;  // Уже подключено другим потоком или в Wh_ModInit.
+    }
+
+    return HookSystemTraySymbols(module);
 }
 
 // Windows 10: часы — обычная кнопка в MSTaskSwWClass, её строки
@@ -1596,19 +1622,13 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     // SystemTray.dll (новые сборки) или Taskbar.View.dll (22H2) загружаются
     // при старте оболочки. Если мод инициализировался раньше, хук ловит
     // момент загрузки и вешает RefreshIcon уже на живой модуль.
-    if (module && IsSystemTrayModuleName(lpLibFileName)) {
-        // compare_exchange защищает от гонки с Wh_ModAfterInit: только один
-        // поток выполняет поиск символов и установку хуков.
-        bool expected = false;
-
-        if (g_systemTrayHooked.compare_exchange_strong(expected, true)) {
-            if (!HookSystemTraySymbols(module)) {
-                g_systemTrayHooked.store(false, std::memory_order_release);
-            } else {
-                // Хуки, зарегистрированные после Wh_ModInit, применяются
-                // только явным вызовом Wh_ApplyHookOperations.
-                Wh_ApplyHookOperations();
-            }
+    if (module && IsSystemTrayModuleName(lpLibFileName) &&
+        module == GetSystemTrayModuleHandle() &&
+        !g_systemTrayHooked.exchange(true, std::memory_order_acq_rel)) {
+        if (HookSystemTraySymbols(module)) {
+            // Хуки, зарегистрированные после Wh_ModInit, применяются
+            // только явным вызовом Wh_ApplyHookOperations.
+            Wh_ApplyHookOperations();
         }
     }
 
@@ -1672,7 +1692,7 @@ BOOL Wh_ModInit() {
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         LoadSettingsLocked();
-        g_rubPerUnit = LookupRateLocked();
+        g_rubPerUnit = LookupRateLocked(g_currency.c_str());
         RebuildSuffixLocked();
     }
 
@@ -1684,9 +1704,12 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Windows build: %u", build);
 
     if (build >= 22000) {
-        // Windows 11: XAML-часы.
-        if (TryHookSystemTray()) {
-            g_systemTrayHooked.store(true, std::memory_order_release);
+        // Windows 11: XAML-часы. Если модуль с типами SystemTray ещё не
+        // загружен, ждём его через LoadLibraryExW.
+        if (GetSystemTrayModuleHandle()) {
+            if (!TryHookSystemTray()) {
+                Wh_Log(L"Cannot hook the system tray clock");
+            }
         } else {
             Wh_Log(L"System tray module is not loaded yet, waiting for it");
 
@@ -1720,15 +1743,14 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    // Только один поток выполняет поиск символов: compare_exchange защищает
-    // от одновременной работы с LoadLibraryExW_Hook.
-    bool expected = false;
-    if (!g_systemTrayHooked.compare_exchange_strong(expected, true)) {
+    if (!GetSystemTrayModuleHandle()) {
         return;
     }
 
+    // TryHookSystemTray возвращает true, только если хуки установлены именно
+    // сейчас: если их уже поставил Wh_ModInit или LoadLibraryExW_Hook,
+    // применять операции повторно не нужно.
     if (!TryHookSystemTray()) {
-        g_systemTrayHooked.store(false, std::memory_order_release);
         return;
     }
 
@@ -1753,7 +1775,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         LoadSettingsLocked();
-        g_rubPerUnit = LookupRateLocked();
+        g_rubPerUnit = LookupRateLocked(g_currency.c_str());
         RebuildSuffixLocked();
 
         // Разбудить фоновый поток, чтобы новый ключ/префикс применились
