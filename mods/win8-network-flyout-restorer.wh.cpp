@@ -18,7 +18,14 @@
 This mod restores the Windows 8-style network panel from the taskbar network icon.
 The panel provides access to Wi-Fi networks, wired connections, VPN connections
 and Airplane mode, where supported by Windows and the installed hardware.
-This modification has been tested on Windows 11 24H2 and Windows 11 25H2.
+
+This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+
+On builds that still contain the legacy network components, the mod uses them
+directly and downloads nothing; the result is usually closer to the original
+Windows 8 panel, since the system's own providers are used. On newer builds,
+the required Microsoft components are downloaded from Microsoft's Symbol Server
+and verified with SHA-256 before use.
 
 ![winserverpicture](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/winserverpicture.png)
 
@@ -223,6 +230,13 @@ constexpr const wchar_t* kVirtualRegRootSubkey =
     L"Software\\Windhawk\\Mods\\win8-network-flyout-restorer\\VirtualRegistry";
 constexpr const wchar_t* kLegacyVirtualRegRootSubkey =
     L"Software\\Windhawk\\Mods\\windows-8-network-flyout-restorer\\VirtualRegistry";
+// Overlay subkey that mirrors HKLM\...\XWizards. The name is versioned on
+// purpose: earlier releases seeded "XWizards" with RegCopyTreeW, which also
+// copies the source key's security descriptor, so that tree can carry the
+// machine ACL and reject every write from a standard user (access denied).
+// Such a stale tree cannot be repaired or deleted by this process, so the
+// current layout simply lives next to it under a new name.
+constexpr const wchar_t* kXWizardsOverlaySub = L"XWizardsV2";
 constexpr const wchar_t* kInstancePidValueName = L"InstancePids";
 constexpr const wchar_t* kComMarkerValueName = L"WindhawkWin8Van";
 constexpr const wchar_t* kProvisionMutexName = L"Local\\Windhawk_Win8NetworkFlyout_ProvisionMutex";
@@ -3899,10 +3913,79 @@ bool RegWriteDword(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueN
     return true;
 }
 
+// Recursively copies values and subkeys from hSrc (opened with KEY_READ) into
+// hDst without copying security descriptors. New subkeys are created with NULL
+// security attributes, so they inherit the ACL of their direct parent
+// (RegCreateKeyEx documentation). Returns the first error encountered but keeps
+// copying the remaining entries.
+LSTATUS CopyRegistryTreeWithoutSecurity(HKEY hSrc, HKEY hDst, int depth) {
+    if (depth > 16) {
+        return ERROR_BAD_PATHNAME;
+    }
+    LSTATUS result = ERROR_SUCCESS;
+
+    DWORD subKeyCount = 0, maxSubKeyLen = 0, valueCount = 0, maxValueNameLen = 0,
+          maxValueDataLen = 0;
+    LSTATUS status = RegQueryInfoKeyW(
+        hSrc, nullptr, nullptr, nullptr, &subKeyCount, &maxSubKeyLen, nullptr, &valueCount,
+        &maxValueNameLen, &maxValueDataLen, nullptr, nullptr);
+    if (status != ERROR_SUCCESS) {
+        return status;
+    }
+
+    std::vector<wchar_t> nameBuf(std::max(maxValueNameLen, maxSubKeyLen) + 2);
+    std::vector<BYTE> dataBuf(maxValueDataLen + 2);
+
+    for (DWORD i = 0; i < valueCount; ++i) {
+        DWORD nameLen = static_cast<DWORD>(nameBuf.size());
+        DWORD dataLen = static_cast<DWORD>(dataBuf.size());
+        DWORD type = 0;
+        status = RegEnumValueW(hSrc, i, nameBuf.data(), &nameLen, nullptr, &type,
+                               dataBuf.data(), &dataLen);
+        if (status != ERROR_SUCCESS) {
+            if (result == ERROR_SUCCESS) result = status;
+            continue;
+        }
+        status = RegSetValueExW(hDst, nameBuf.data(), 0, type, dataBuf.data(), dataLen);
+        if (status != ERROR_SUCCESS && result == ERROR_SUCCESS) {
+            result = status;
+        }
+    }
+
+    for (DWORD i = 0; i < subKeyCount; ++i) {
+        DWORD nameLen = static_cast<DWORD>(nameBuf.size());
+        status = RegEnumKeyExW(hSrc, i, nameBuf.data(), &nameLen, nullptr, nullptr, nullptr,
+                               nullptr);
+        if (status != ERROR_SUCCESS) {
+            if (result == ERROR_SUCCESS) result = status;
+            continue;
+        }
+        HKEY hSrcChild = nullptr;
+        status = RegOpenKeyExW(hSrc, nameBuf.data(), 0, KEY_READ, &hSrcChild);
+        if (status != ERROR_SUCCESS) {
+            if (result == ERROR_SUCCESS) result = status;
+            continue;
+        }
+        HKEY hDstChild = nullptr;
+        status = RegCreateKeyExW(hDst, nameBuf.data(), 0, nullptr, REG_OPTION_NON_VOLATILE,
+                                 KEY_ALL_ACCESS, nullptr, &hDstChild, nullptr);
+        if (status == ERROR_SUCCESS) {
+            status = CopyRegistryTreeWithoutSecurity(hSrcChild, hDstChild, depth + 1);
+            RegCloseKey(hDstChild);
+        }
+        RegCloseKey(hSrcChild);
+        if (status != ERROR_SUCCESS && result == ERROR_SUCCESS) {
+            result = status;
+        }
+    }
+    return result;
+}
+
 void WriteXwComponentNode(
     HKEY hOverlayRoot, const GUID& compGuid, DWORD classType, const wchar_t* name,
     const std::filesystem::path& dllPath) {
-    const std::wstring base = L"XWizards\\Components\\" + GuidToUpperBraceString(compGuid);
+    const std::wstring base = std::wstring(kXWizardsOverlaySub) + L"\\Components\\" +
+                              GuidToUpperBraceString(compGuid);
     RegWriteSz(hOverlayRoot, base, nullptr, name);
     RegWriteSz(hOverlayRoot, base, L"Class Description", name);
     RegWriteDword(hOverlayRoot, base, L"Class Type", classType);
@@ -3916,14 +3999,16 @@ void WriteXwLink(
     const std::wstring pStr = GuidToUpperBraceString(parentGuid);
     const std::wstring cStr = GuidToUpperBraceString(childGuid);
 
-    const std::wstring childKey = L"XWizards\\Components\\" + pStr + L"\\Children\\" + cStr;
+    const std::wstring childKey = std::wstring(kXWizardsOverlaySub) + L"\\Components\\" +
+                                  pStr + L"\\Children\\" + cStr;
     RegWriteSz(hOverlayRoot, childKey, nullptr, childName);
     RegWriteSz(hOverlayRoot, childKey, L"Class Description", childName);
     RegWriteDword(hOverlayRoot, childKey, L"Class Type", childType);
     RegWriteDword(hOverlayRoot, childKey, L"Ordinal", ordinal);
     RegWriteDword(hOverlayRoot, childKey, L"User Flags", 0);
 
-    const std::wstring parentKey = L"XWizards\\Components\\" + cStr + L"\\Parents\\" + pStr;
+    const std::wstring parentKey = std::wstring(kXWizardsOverlaySub) + L"\\Components\\" +
+                                   cStr + L"\\Parents\\" + pStr;
     RegWriteSz(hOverlayRoot, parentKey, nullptr, parentName);
     RegWriteSz(hOverlayRoot, parentKey, L"Class Description", parentName);
     RegWriteDword(hOverlayRoot, parentKey, L"Class Type", parentType);
@@ -4022,15 +4107,24 @@ bool PopulateVirtualRegistryOverlayOnce() {
                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", 0, KEY_READ,
                 &hRealXw) == ERROR_SUCCESS) {
             if (RegCreateKeyExW(
-                    hOverlayRoot, L"XWizards", 0, nullptr, REG_OPTION_NON_VOLATILE,
+                    hOverlayRoot, kXWizardsOverlaySub, 0, nullptr, REG_OPTION_NON_VOLATILE,
                     KEY_ALL_ACCESS, nullptr, &hVirtXw, nullptr) == ERROR_SUCCESS) {
-                RegCopyTreeW(hRealXw, nullptr, hVirtXw);
+                // RegCopyTreeW also copies the source security descriptor
+                // (Microsoft docs, RegCopyTree remarks), which would make the
+                // overlay read-only for this user. Copy values and subkeys by
+                // hand instead: RegCreateKeyExW with NULL security attributes
+                // gives every new key the ACL inherited from its parent.
+                const LSTATUS copyStatus = CopyRegistryTreeWithoutSecurity(hRealXw, hVirtXw, 0);
+                if (copyStatus != ERROR_SUCCESS) {
+                    Wh_Log(L"[registry] XWizards seed copy incomplete: status=%ld",
+                           static_cast<long>(copyStatus));
+                }
                 RegCloseKey(hVirtXw);
             }
             RegCloseKey(hRealXw);
         } else {
             RegCreateKeyExW(
-                hOverlayRoot, L"XWizards", 0, nullptr, REG_OPTION_NON_VOLATILE,
+                hOverlayRoot, kXWizardsOverlaySub, 0, nullptr, REG_OPTION_NON_VOLATILE,
                 KEY_ALL_ACCESS, nullptr, &hVirtXw, nullptr);
             if (hVirtXw) {
                 RegCloseKey(hVirtXw);
@@ -4429,7 +4523,7 @@ struct OverlayPrefixMap {
 // private overlay. Native COM activation is handled separately by the hooks.
 constexpr OverlayPrefixMap kHklmOverlayMaps[] = {
     {L"SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN"},
-    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", L"XWizards"},
+    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", kXWizardsOverlaySub},
     {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN", L"Software_VAN"},
     {L"SOFTWARE\\Classes\\CLSID", L"CLSID"},
 };
@@ -4692,7 +4786,7 @@ bool BuildRedirectedNtKeyPath(
     static constexpr NtPrefixMap kMaps[] = {
         {L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN"},
         {L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards",
-         L"XWizards"},
+         kXWizardsOverlaySub},
         {L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN",
          L"Software_VAN"},
         {L"\\Registry\\Machine\\SOFTWARE\\Classes\\CLSID", L"CLSID"},
@@ -5382,7 +5476,7 @@ void InvokeShowVanOnStaThread(bool allowToggleClose) {
     }
 
     if (allowToggleClose && g_pfnHideVAN && IsVanFlyoutWindowVisible()) {
-        ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
+        ObserveVanVoidCall(g_pfnHideVAN, L"HideVAN");
         return;
     }
 
@@ -5412,7 +5506,6 @@ void InvokeShowVanOnStaThread(bool allowToggleClose) {
 // ShutdownVAN + ShowVAN, also discards any stale global state inside van.dll.
 // Runs on the STA thread only.
 bool ReloadManagedVanRuntimeOnSta() {
-    ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
     ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
 
     g_pfnShowVAN = nullptr;
@@ -5804,6 +5897,26 @@ DWORD WINAPI Hook_WlanGetAvailableNetworkList(
     return error;
 }
 
+// --- NEW: WlanConnect hook (connection attempt tracing) ---
+using WlanConnect_t = DWORD(WINAPI*)(HANDLE, const GUID*, const PWLAN_CONNECTION_PARAMETERS, PVOID);
+WlanConnect_t g_origWlanConnect = nullptr;
+
+DWORD WINAPI Hook_WlanConnect(
+    HANDLE hClientHandle, const GUID* pInterfaceGuid,
+    const PWLAN_CONNECTION_PARAMETERS pConnectionParameters, PVOID pReserved) {
+    if (IsCallerManagedVanModule(__builtin_return_address(0))) {
+        Wh_Log(L"[connect] WlanConnect ENTER: mode=%d, profile=%s",
+               pConnectionParameters ? static_cast<int>(pConnectionParameters->wlanConnectionMode) : -1,
+               (pConnectionParameters && pConnectionParameters->strProfile)
+                   ? pConnectionParameters->strProfile : L"<null>");
+    }
+    const DWORD err = g_origWlanConnect(hClientHandle, pInterfaceGuid, pConnectionParameters, pReserved);
+    if (IsCallerManagedVanModule(__builtin_return_address(0))) {
+        Wh_Log(L"[connect] WlanConnect LEAVE: err=%lu (0=success)", err);
+    }
+    return err;
+}
+// --- END NEW ---
 // ===========================================================================
 // Smart fallback tray icon (live NLM status, hosted by the mod itself)
 // ===========================================================================
@@ -6639,9 +6752,6 @@ void CleanupVanStaOnOwningThread() {
         DestroyWindow(g_staCtrlWnd);
         g_staCtrlWnd = nullptr;
     }
-    if (g_pfnHideVAN) {
-        ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
-    }
     if (g_pfnShutdownVAN) {
         // ShutdownVAN joins van.dll's internal UI thread and can block on
         // some Windows builds. Run it on a throwaway helper thread and wait
@@ -7078,6 +7188,10 @@ BOOL Wh_ModInit() try {
         if (availableNetworks) {
             WindhawkUtils::SetFunctionHook(availableNetworks,
                 Hook_WlanGetAvailableNetworkList, &g_origWlanGetAvailableNetworkList);
+        }
+        const auto wlanConnect = ResolveExportAddress<WlanConnect_t>(hWlanApi, "WlanConnect");
+        if (wlanConnect) {
+            WindhawkUtils::SetFunctionHook(wlanConnect, Hook_WlanConnect, &g_origWlanConnect);
         }
     }
 
