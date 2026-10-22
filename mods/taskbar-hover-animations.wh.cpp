@@ -17,6 +17,9 @@
 When the mouse hovers over a taskbar icon, an animation plays on a transparent
 overlay above the icon (the overlay does not block clicks).
 
+![Preview 1](https://i.imgur.com/nHvCbY5.gif)
+![Preview 2](https://i.imgur.com/YyZFtgA.gif)
+
 ## Effects
 - **Heartbeat**: Grows and shrinks twice in a "lub-dub" rhythm, with a red/pink halo flashing behind it.
 - **Flash**: White glow plus a lens flare, double flash.
