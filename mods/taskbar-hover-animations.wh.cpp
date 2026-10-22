@@ -4,6 +4,7 @@
 // @description     Heartbeat, flash, ripple, neon glow, sparkle, bounce, wobble, confetti and more animations when hovering taskbar icons
 // @version         1.0
 // @author          DahaSakinOlamazdim
+// @github          https://github.com/DahaSakinOlamazdim
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -luser32
