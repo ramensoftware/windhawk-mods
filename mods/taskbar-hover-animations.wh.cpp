@@ -1,24 +1,24 @@
 // ==WindhawkMod==
 // @id              taskbar-hover-animations
 // @name            Taskbar Icon Animation
+// @name:tr-TR      Görev Çubuğu İkon Animasyonu
 // @description     Heartbeat, flash, ripple, neon glow, sparkle, bounce, wobble, confetti and more animations when hovering taskbar icons
+// @description:tr-TR Görev çubuğu ikonlarının üzerine gelince kalp atışı, flaş, dalga, neon parıltı, yıldız parıltısı, zıplama, sallanma, konfeti ve daha fazla animasyon oynatır
 // @version         1.0
 // @author          DahaSakinOlamazdim
 // @github          https://github.com/DahaSakinOlamazdim
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -luser32
+// @include         windhawk.exe
+// @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Taskbar Icon Animation
+![Preview](https://i.imgur.com/nHvCbY5.gif)
+![Preview](https://i.imgur.com/YyZFtgA.gif)
 
 When the mouse hovers over a taskbar icon, an animation plays on a transparent
 overlay above the icon (the overlay does not block clicks).
-
-![Preview 1](https://i.imgur.com/nHvCbY5.gif)
-![Preview 2](https://i.imgur.com/YyZFtgA.gif)
 
 ## Effects
 - **Heartbeat**: Grows and shrinks twice in a "lub-dub" rhythm, with a red/pink halo flashing behind it.
@@ -39,6 +39,8 @@ overlay above the icon (the overlay does not block clicks).
 
 ## Notes
 - Works on both the Windows 10 and Windows 11 taskbar (button positions are found with UI Automation).
+- The mod runs in its own dedicated process, not inside Explorer, so a problem in the mod cannot crash the shell.
+- Animations are not played over fullscreen apps.
 - The animation is played on the overlay using a screenshot of the icon, so if the
   icon is very dark or the same color as the background, its edges may look soft.
 - When "App buttons only" is enabled, Start, Search, tray icons, etc. are not animated.
@@ -69,6 +71,8 @@ engellemeyen) şeffaf bir katman üzerinde animasyon oynatır.
 
 ## Notlar
 - Windows 10 ve Windows 11 görev çubuğunda çalışır (UI Automation ile düğme konumu bulunur).
+- Mod, Explorer'ın içinde değil kendi ayrı sürecinde çalışır. Bu yüzden modda bir sorun olsa bile kabuk çökmez.
+- Tam ekran uygulamaların üstünde animasyon oynatılmaz.
 - Animasyon, ikonun ekran görüntüsü alınarak katmanda oynatılır; bu yüzden
   ikon çok koyu/arka planla aynı renkteyse kenarlar yumuşak görünebilir.
 - "Sadece uygulama düğmeleri" açıksa Başlat, Arama, tepsi ikonları vb. animasyon almaz.
@@ -130,15 +134,18 @@ engellemeyen) şeffaf bir katman üzerinde animasyon oynatır.
   $description: When enabled, Start, Search, tray buttons, etc. are not animated.
   $description:tr-TR: Açıksa Başlat, Arama, tepsi vb. düğmeler animasyon almaz.
 - accent: "#4cc2ff"
-  $name: Accent color (Ripple effect)
-  $name:tr-TR: Vurgu rengi (Dalga efekti)
+  $name: Accent color (Ripple and Spin effects)
+  $name:tr-TR: Vurgu rengi (Dalga ve Dönüş efektleri)
   $description: "Use the #RRGGBB format."
   $description:tr-TR: "#RRGGBB biçiminde."
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellapi.h>
 #include <uiautomation.h>
+#include <stdio.h>
+#include <wchar.h>
 
 #include <algorithm>
 #include <atomic>
@@ -188,7 +195,8 @@ struct Settings {
 static Settings g_s;
 static std::atomic<bool> g_stop{false};
 static HANDLE g_thread = nullptr;
-static HANDLE g_stopEvent = nullptr;
+static HANDLE g_readyEvent = nullptr;
+static bool g_initOk = false;
 
 static void LoadSettings() {
     Settings s;
@@ -818,42 +826,14 @@ static void StartAnim(const RECT& r, int forcedEffect) {
 // Görev çubuğu / UI Automation
 // ---------------------------------------------------------------------------
 
-// Bu işlem görev çubuğunun sahibi mi? Birden fazla explorer.exe işlemi varsa
-// (ör. klasör pencereleri ayrı işlemde) yalnızca sahibi animasyon oynatır.
-static bool OwnsTaskbar() {
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!tray) return false;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(tray, &pid);
-    return pid == GetCurrentProcessId();
-}
-
-// Fare görev çubuğu pencerelerinin dikdörtgeninin içinde mi?
-static bool PtInTaskbarRect(POINT pt) {
-    HWND h = FindWindowW(L"Shell_TrayWnd", nullptr);
-    RECT r;
-    if (h && IsWindowVisible(h) && GetWindowRect(h, &r) && PtInRect(&r, pt))
-        return true;
-    HWND prev = nullptr;
-    while ((prev = FindWindowExW(nullptr, prev, L"Shell_SecondaryTrayWnd",
-                                 nullptr)) != nullptr) {
-        if (IsWindowVisible(prev) && GetWindowRect(prev, &r) &&
-            PtInRect(&r, pt))
-            return true;
-    }
-    return false;
-}
-
-// Fareyi gerçekten görev çubuğu mu karşılıyor? Tam ekran uygulama/video
-// görev çubuğunun üstündeyse (çubuk gizli ama pencere görünür) false döner.
+// Imlecin altındaki gerçek pencere bir görev çubuğu mu? Tam ekran bir uygulama
+// görev çubuğunu kapatıyorsa imlecin altındaki pencere o uygulama olur.
+// Animasyon katmanı WS_EX_TRANSPARENT olduğu için WindowFromPoint onu atlar.
 static bool InTaskbar(POINT pt) {
     HWND hit = WindowFromPoint(pt);
     HWND root = hit ? GetAncestor(hit, GA_ROOT) : nullptr;
-    if (!root) return false;
-    // Kendi şeffaf katmanımız fare altındaysa dikdörtgen kontrolüne dön.
-    if (root == g_hwnd) return PtInTaskbarRect(pt);
     WCHAR cls[32];
-    return GetClassNameW(root, cls, ARRAYSIZE(cls)) &&
+    return root && GetClassNameW(root, cls, ARRAYSIZE(cls)) &&
            (!wcscmp(cls, L"Shell_TrayWnd") ||
             !wcscmp(cls, L"Shell_SecondaryTrayWnd"));
 }
@@ -869,7 +849,7 @@ static bool ClassContains(IUIAutomationElement* el, const wchar_t* what,
     return res;
 }
 
-// Önbellekten (CacheRequest) sınıf adı okuyan sürüm.
+// ClassContains'in önbellekteki değeri okuyan hali (FindAllBuildCache sonrası).
 static bool CachedClassContains(IUIAutomationElement* el, const wchar_t* what,
                                 bool exact) {
     BSTR cn = nullptr;
@@ -956,21 +936,23 @@ static void RefreshButtons(IUIAutomation* uia,
         !cond)
         return;
 
-    // Konum ve sınıf adını tek çağrıda (önbellekle) oku.
-    IUIAutomationCacheRequest* cr = nullptr;
-    if (FAILED(uia->CreateCacheRequest(&cr)) || !cr) {
+    // Konum ve sınıf adı tek seferde (ve üst öğeyle birlikte) önbelleğe alınır;
+    // böylece her düğme için ayrı bir süreçler arası çağrı yapılmaz.
+    IUIAutomationCacheRequest* cache = nullptr;
+    if (FAILED(uia->CreateCacheRequest(&cache)) || !cache) {
         cond->Release();
         return;
     }
-    cr->AddProperty(UIA_BoundingRectanglePropertyId);
-    cr->AddProperty(UIA_ClassNamePropertyId);
+    cache->AddProperty(UIA_BoundingRectanglePropertyId);
+    cache->AddProperty(UIA_ClassNamePropertyId);
+    cache->put_TreeScope((TreeScope)(TreeScope_Element | TreeScope_Parent));
 
     for (HWND bar : bars) {
         IUIAutomationElement* root = nullptr;
         if (FAILED(uia->ElementFromHandle(bar, &root)) || !root) continue;
         IUIAutomationElementArray* arr = nullptr;
-        if (SUCCEEDED(root->FindAllBuildCache(TreeScope_Descendants, cond, cr,
-                                              &arr)) &&
+        if (SUCCEEDED(root->FindAllBuildCache(TreeScope_Descendants, cond,
+                                              cache, &arr)) &&
             arr) {
             int n = 0;
             arr->get_Length(&n);
@@ -987,11 +969,16 @@ static void RefreshButtons(IUIAutomation* uia,
                                                        false);
                         if (!pass) {
                             IUIAutomationElement* p = nullptr;
-                            if (SUCCEEDED(walker->GetParentElementBuildCache(
-                                    el, cr, &p)) &&
-                                p) {
+                            if (SUCCEEDED(el->GetCachedParent(&p)) && p) {
                                 pass = CachedClassContains(
                                     p, L"MSTaskListWClass", true);
+                                p->Release();
+                            } else if (SUCCEEDED(
+                                           walker->GetParentElement(el, &p)) &&
+                                       p) {
+                                // Önbellekte üst öğe yoksa canlı sorguya dön.
+                                pass = ClassContains(p, L"MSTaskListWClass",
+                                                     true);
                                 p->Release();
                             }
                         }
@@ -1004,7 +991,7 @@ static void RefreshButtons(IUIAutomation* uia,
         }
         root->Release();
     }
-    cr->Release();
+    cache->Release();
     cond->Release();
 }
 
@@ -1046,19 +1033,15 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
+// Başlatma sonucunu WhTool_ModInit'e bildirir.
+static void SignalReady(bool ok) {
+    g_initOk = ok;
+    if (g_readyEvent) SetEvent(g_readyEvent);
+}
+
 static DWORD WINAPI Worker(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     srand((unsigned)GetTickCount64());
-
-    // Görev çubuğu bu işleme ait değilse hiçbir şey yapma (başka bir
-    // explorer.exe işlemi animasyonu oynatır). Çubuk henüz yoksa bekle.
-    while (!g_stop && !OwnsTaskbar()) {
-        WaitForSingleObject(g_stopEvent, 500);
-    }
-    if (g_stop) {
-        CoUninitialize();
-        return 0;
-    }
 
     IUIAutomation* uia = nullptr;
     IUIAutomationTreeWalker* walker = nullptr;
@@ -1070,6 +1053,7 @@ static DWORD WINAPI Worker(LPVOID) {
         if (walker) walker->Release();
         if (uia) uia->Release();
         CoUninitialize();
+        SignalReady(false);
         return 1;
     }
 
@@ -1079,12 +1063,13 @@ static DWORD WINAPI Worker(LPVOID) {
     wc.lpszClassName = L"WindhawkTaskbarHoverAnimOverlay";
     ATOM atom = RegisterClassW(&wc);
     if (!atom) {
-        // Eski bir örneğin sınıfı kalmış olabilir; onunla pencere açmak
-        // boşaltılmış koda işaret eder. Temiz çık.
-        Wh_Log(L"RegisterClass basarisiz: %lu", GetLastError());
+        // Sınıf kaydedilemediyse (ör. önceki bir örnekten kalmış), o sınıfın
+        // pencere işlevi artık geçersiz olabilir. Pencere oluşturmadan çık.
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
         walker->Release();
         uia->Release();
         CoUninitialize();
+        SignalReady(false);
         return 1;
     }
 
@@ -1112,17 +1097,20 @@ static DWORD WINAPI Worker(LPVOID) {
         Wh_Log(L"Normal pencere kullaniliyor: %p", g_hwnd);
     }
     if (!g_hwnd) {
-        Wh_Log(L"Katman penceresi olusturulamadi: %lu", GetLastError());
+        Wh_Log(L"Overlay window creation failed: %lu", GetLastError());
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
         walker->Release();
         uia->Release();
         CoUninitialize();
+        SignalReady(false);
         return 1;
     }
 
     HDC scr = GetDC(nullptr);
     g_memdc = CreateCompatibleDC(scr);
     ReleaseDC(nullptr, scr);
+
+    SignalReady(true);
 
     RECT hoverRect = {};
     bool hoverValid = false;
@@ -1157,8 +1145,8 @@ static DWORD WINAPI Worker(LPVOID) {
                     RefreshButtons(uia, walker);
                 }
                 on = FindButton(pt, &r);
-                if (!on && now - g_btnsTime >= 1000) {
-                    // Yeni açılan/kapanan ikonlar için (seyrek) tekrar dene.
+                // Yeni açılan/kapanan ikonlar için, ama en çok saniyede bir.
+                if (!on && GetTickCount64() - g_btnsTime >= 1000) {
                     RefreshButtons(uia, walker);
                     on = FindButton(pt, &r);
                 }
@@ -1203,10 +1191,10 @@ static DWORD WINAPI Worker(LPVOID) {
             }
         }
 
-        // Animasyon sırasında ~60 FPS; fare görev çubuğundayken sık, dışındayken
-        // seyrek kontrol. Durdurma olayı gelirse hemen uyanır.
-        DWORD wait = g_a.active ? 16 : (wasInBar ? 30 : 100);
-        MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, wait, QS_ALLINPUT);
+        // Animasyon sırasında ~kare hızında, görev çubuğundayken orta,
+        // görev çubuğu dışındayken seyrek uyan.
+        DWORD waitMs = g_a.active ? 16 : (wasInBar ? 30 : 100);
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, waitMs, QS_ALLINPUT);
     }
 
     EndAnim();
@@ -1223,40 +1211,233 @@ static DWORD WINAPI Worker(LPVOID) {
 }
 
 // ---------------------------------------------------------------------------
-// Windhawk giriş noktaları
+// Tool mod giriş noktaları
 // ---------------------------------------------------------------------------
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Taskbar Hover Animations basliyor");
     LoadSettings();
     g_stop = false;
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) return FALSE;
+    g_initOk = false;
+
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_readyEvent) return FALSE;
+
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     if (!g_thread) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+        return FALSE;
+    }
+
+    // İş parçacığı başlatmayı bitirene kadar bekle (başarısızlıkta da sinyal verir).
+    WaitForSingleObject(g_readyEvent, INFINITE);
+    if (!g_initOk) {
+        WaitForSingleObject(g_thread, INFINITE);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
         return FALSE;
     }
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Taskbar Hover Animations kapaniyor");
     g_stop = true;
-    if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
-        // Mod boşaltılmadan önce iş parçacığının tamamen bitmesini bekle.
+        // Iş parçacığı bitmeden mod kaldırılırsa kodu bellekten silinir ve
+        // Explorer çökebilir; bu yüzden süresiz bekle.
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
