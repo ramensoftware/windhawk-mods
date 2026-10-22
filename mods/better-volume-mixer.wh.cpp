@@ -8,7 +8,7 @@
 // @homepage     https://github.com/0Allu/better-volume-mixer
 // @donateUrl    https://ko-fi.com/0allu
 // @include      windhawk.exe
-// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -lgdiplus -ld2d1 -ldwrite
+// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -lgdiplus -ld2d1 -ldwrite -lshlwapi
 // @license      MIT
 // ==/WindhawkMod==
 
@@ -160,6 +160,7 @@ and enable **Hide volume icon** in its settings.
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <endpointvolume.h>
@@ -3866,18 +3867,68 @@ struct MovedNotification {
 };
 std::vector<MovedNotification> g_movedNotifications;
 HWINEVENTHOOK g_notificationHook;
+DWORD g_notificationProcessId;  // ShellExperienceHost of this session.
+
+// The title Windows gives a notification's window, in the display language.
+// Other windows of the process, such as Quick Settings and the clock, open
+// in the same corner and must stay where they are.
+const std::wstring& NotificationTitle() {
+    static const std::wstring title = [] {
+        WCHAR windows[MAX_PATH] = {};
+        GetWindowsDirectoryW(windows, ARRAYSIZE(windows));
+        std::wstring source = L"@{" + std::wstring(windows) +
+            L"\\SystemResources\\Windows.UI.ShellCommon\\Windows.UI.ShellCommon.pri"
+            L"? ms-resource:///ActionCenter/AC_ToastCenter_Title}";
+        WCHAR text[256] = {};
+        if (SUCCEEDED(SHLoadIndirectString(source.c_str(), text, ARRAYSIZE(text), nullptr)) &&
+            text[0]) {
+            return std::wstring(text);
+        }
+        return std::wstring(L"New notification");
+    }();
+    return title;
+}
 
 bool IsNotificationWindow(HWND window) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (!processId || processId != g_notificationProcessId) return false;
     WCHAR className[32] = {};
     if (!GetClassNameW(window, className, ARRAYSIZE(className)) ||
         wcscmp(className, L"Windows.UI.Core.CoreWindow") != 0) {
         return false;
     }
-    DWORD processId = 0;
-    GetWindowThreadProcessId(window, &processId);
-    return _wcsicmp(BaseNameWithoutExtension(GetProcessPath(processId)).c_str(),
-                    L"ShellExperienceHost") == 0;
+    // Reads the title without sending a message, which could wait on a busy
+    // process.
+    WCHAR title[128] = {};
+    InternalGetWindowText(window, title, ARRAYSIZE(title));
+    return NotificationTitle() == title;
 }
+
+DWORD FindNotificationProcess() {
+    DWORD session = 0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) return 0;
+    DWORD found = 0;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return 0;
+    PROCESSENTRY32W entry = {sizeof(entry)};
+    for (BOOL more = Process32FirstW(snapshot, &entry); more && !found;
+         more = Process32NextW(snapshot, &entry)) {
+        DWORD processSession = 0;
+        if (_wcsicmp(entry.szExeFile, L"ShellExperienceHost.exe") == 0 &&
+            ProcessIdToSessionId(entry.th32ProcessID, &processSession) &&
+            processSession == session) {
+            found = entry.th32ProcessID;
+        }
+    }
+    CloseHandle(snapshot);
+    return found;
+}
+
+// Moves another process's window without waiting for it, so a busy shell
+// cannot hold up the mixer.
+constexpr UINT NOTIFICATION_MOVE_FLAGS = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                                         SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
 
 void KeepNotificationAway(HWND window) {
     RECT rect;
@@ -3890,12 +3941,8 @@ void KeepNotificationAway(HWND window) {
     }
     RECT overlap;
     if (!IntersectRect(&overlap, &rect, &g_restRect) || !IsNotificationWindow(window)) return;
-    // Notification Center is in the same process, and stays where it is.
-    MONITORINFO info = {sizeof(info)};
-    GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST), &info);
-    if ((rect.bottom - rect.top) * 4 > (info.rcWork.bottom - info.rcWork.top) * 3) return;
     if (SetWindowPos(window, nullptr, NOTIFICATION_AWAY, NOTIFICATION_AWAY, 0, 0,
-                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER)) {
+                     NOTIFICATION_MOVE_FLAGS)) {
         g_movedNotifications.push_back({window, {rect.left, rect.top}});
     }
 }
@@ -3914,20 +3961,11 @@ void KeepNotificationsAway() {
     // Only the notifications' own process is watched: watching every
     // process would also report each move of the pointer.
     if (!g_notificationHook) {
-        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (snapshot != INVALID_HANDLE_VALUE) {
-            PROCESSENTRY32W entry = {sizeof(entry)};
-            for (BOOL more = Process32FirstW(snapshot, &entry); more;
-                 more = Process32NextW(snapshot, &entry)) {
-                if (_wcsicmp(entry.szExeFile, L"ShellExperienceHost.exe") == 0) {
-                    g_notificationHook = SetWinEventHook(
-                        EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-                        NotificationEvent, entry.th32ProcessID, 0, WINEVENT_OUTOFCONTEXT);
-                    break;
-                }
-            }
-            CloseHandle(snapshot);
-        }
+        g_notificationProcessId = FindNotificationProcess();
+        if (!g_notificationProcessId) return;
+        g_notificationHook = SetWinEventHook(
+            EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, nullptr, NotificationEvent,
+            g_notificationProcessId, 0, WINEVENT_OUTOFCONTEXT);
     }
     // Notifications showing already. They are not listed with other windows,
     // but can be found under the mixer.
@@ -3950,7 +3988,7 @@ void ReturnNotifications() {
         if (IsWindow(moved.window) && GetWindowRect(moved.window, &rect) &&
             rect.left == NOTIFICATION_AWAY && rect.top == NOTIFICATION_AWAY) {
             SetWindowPos(moved.window, nullptr, moved.home.x, moved.home.y, 0, 0,
-                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                         NOTIFICATION_MOVE_FLAGS);
         }
     }
     g_movedNotifications.clear();
@@ -5037,16 +5075,16 @@ struct OutputDevice {
 
 // The icon for the kind of device: headphones, a display, or speakers.
 PCWSTR ReadEndpointGlyph(IMMDevice* device) {
-    PCWSTR glyph = L"";
+    PCWSTR glyph = L"\uE7F5";
     IPropertyStore* store = nullptr;
     if (FAILED(device->OpenPropertyStore(STGM_READ, &store)) || !store) return glyph;
     PROPVARIANT value;
     PropVariantInit(&value);
     if (SUCCEEDED(store->GetValue(kEndpointFormFactor, &value)) && value.vt == VT_UI4) {
-        if (value.ulVal == 3 || value.ulVal == 5) {
-            glyph = L"";  // Headphones or a headset.
-        } else if (value.ulVal == 9) {
-            glyph = L"";  // A display, over HDMI or DisplayPort.
+        if (value.ulVal == Headphones || value.ulVal == Headset) {
+            glyph = L"\uE7F6";
+        } else if (value.ulVal == DigitalAudioDisplayDevice) {
+            glyph = L"\uE7F4";  // Over HDMI or DisplayPort.
         }
     }
     PropVariantClear(&value);
@@ -5269,9 +5307,23 @@ int RunOutputList(HWND owner, const std::vector<OutputDevice>& outputs, int curr
 
     int chosen = -1;
     bool done = false;
+    RECT ownerAt{};
+    GetWindowRect(owner, &ownerAt);
     MSG msg;
     while (!done && IsWindowVisible(owner) && !g_closeTime &&
            GetForegroundWindow() == owner) {
+        // The mixer moves when it grows or shrinks, as apps start or stop
+        // playing. The list goes with the picker.
+        RECT ownerNow{};
+        if (GetWindowRect(owner, &ownerNow) &&
+            (ownerNow.left != ownerAt.left || ownerNow.top != ownerAt.top)) {
+            RECT listRect{};
+            GetWindowRect(list, &listRect);
+            SetWindowPos(list, nullptr, listRect.left + ownerNow.left - ownerAt.left,
+                         listRect.top + ownerNow.top - ownerAt.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            ownerAt = ownerNow;
+        }
         BOOL result = GetMessageW(&msg, nullptr, 0, 0);
         if (result <= 0) {
             if (result == 0) PostQuitMessage(static_cast<int>(msg.wParam));
