@@ -19,8 +19,9 @@ The standard **F2** shortcut is unchanged.
 
 ## Scope
 
-- Works only in `explorer.exe` and only when the keyboard focus appears to be
-  inside Explorer's shell file list.
+- Works only in File Explorer windows, not on the desktop or in file dialogs,
+    and only when the keyboard focus appears to be inside Explorer's shell file
+    list.
 - Does not intercept Enter while editing text, in the address/search controls,
   or with Ctrl, Alt, or Shift pressed.
 - This mod intentionally does *not* remap Ctrl+Enter to open a file.
@@ -60,6 +61,7 @@ static bool ClassIs(HWND hwnd, const wchar_t* expected) {
 static bool InFileList() {
     HWND focus = GetFocus();
     if (!focus) return false;
+    if (!ClassIs(GetAncestor(focus, GA_ROOT), L"CabinetWClass")) return false;
     bool shellView = false;
     bool fileList = false;
     for (HWND w = focus; w; w = GetParent(w)) {
