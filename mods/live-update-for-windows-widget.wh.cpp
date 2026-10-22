@@ -8308,7 +8308,12 @@ DWORD WINAPI SettingsHostThread(void*) {
         job=CreateJobObjectW(nullptr,nullptr);
         if(job) { JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{}; limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
             if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,&limits,sizeof(limits)) || !AssignProcessToJobObject(job,child)) {CloseHandle(job);job=nullptr;} }
-        ResumeThread(process.hThread); CloseHandle(process.hThread); CloseHandle(inputRead); inputRead=nullptr; CloseHandle(nullOutput); nullOutput=INVALID_HANDLE_VALUE;
+        ResumeThread(process.hThread);
+        CloseHandle(process.hThread);
+        CloseHandle(inputRead);
+        inputRead = nullptr;
+        CloseHandle(nullOutput);
+        nullOutput = INVALID_HANDLE_VALUE;
         std::string script=kSettingsScript; auto marker=script.find("__PIPE__"); script.replace(marker,8,winrt::to_string(pipeName));
         DWORD sent=0; winrt::check_bool(WriteFile(inputWrite,script.data(),static_cast<DWORD>(script.size()),&sent,nullptr) && sent==script.size());
         CloseHandle(inputWrite); inputWrite=nullptr;
@@ -8347,7 +8352,13 @@ void ShowQuickSettings() {
     if(g_settingsHostThread && WaitForSingleObject(g_settingsHostThread,0)==WAIT_TIMEOUT) {
         DWORD pid=g_settingsHostPid.load();
         EnumWindows([](HWND window,LPARAM value)->BOOL { DWORD pid=0;GetWindowThreadProcessId(window,&pid);
-            if(pid==static_cast<DWORD>(value) && IsWindowVisible(window)) {ShowWindowAsync(window,SW_RESTORE);SetForegroundWindow(window);return FALSE;} return TRUE;},pid);
+            if (pid == static_cast<DWORD>(value) && IsWindowVisible(window)) {
+              ShowWindowAsync(window, SW_RESTORE);
+              SetForegroundWindow(window);
+              return FALSE;
+            }
+            return TRUE;
+        }, pid);
         return;
     }
     if(g_settingsHostThread) CloseHandle(g_settingsHostThread);
@@ -8371,7 +8382,12 @@ void ShowTaskbarContextMenu(wf::Point point) {
         std::wstring value=choice.value;item.Click([value](auto const&,auto const&){try{SetQuickOption(L"popupTheme",value);}catch(...){}});themes.Items().Append(item);
     }
     g_quickMenu.Items().Append(themes);g_quickMenu.Items().Append(wuxc::MenuFlyoutSeparator());
-    wuxc::MenuFlyoutItem options;options.Text(PickText(vi,L"Cài đặt",L"Settings"));options.Click([](auto const&,auto const&){try{ShowQuickSettings();}catch(...){}});g_quickMenu.Items().Append(options);
+    wuxc::MenuFlyoutItem options;
+    options.Text(PickText(vi, L"Cài đặt", L"Settings"));
+    options.Click([](auto const&, auto const&) {
+        try { ShowQuickSettings(); } catch (...) {}
+    });
+    g_quickMenu.Items().Append(options);
     g_quickMenu.Opened([](auto const&,auto const&){g_quickMenuOpen=true;});
     g_quickMenu.Closed([](auto const&,auto const&){g_quickMenuOpen=false;});
     g_quickMenu.ShowAt(g_playerGrid,point);
@@ -8379,7 +8395,12 @@ void ShowTaskbarContextMenu(wf::Point point) {
 
 void StopSettingsHost() {
     std::lock_guard<std::mutex> lock(g_settingsHostMutex);
-    if(g_settingsHostThread) {CancelSynchronousIo(g_settingsHostThread);WaitForSingleObject(g_settingsHostThread,INFINITE);CloseHandle(g_settingsHostThread);g_settingsHostThread=nullptr;}
+    if (g_settingsHostThread) {
+        CancelSynchronousIo(g_settingsHostThread);
+        WaitForSingleObject(g_settingsHostThread, INFINITE);
+        CloseHandle(g_settingsHostThread);
+        g_settingsHostThread = nullptr;
+    }
 }
 void RefreshSettingsWindow() { ++g_settingsRevision; }
 
@@ -8744,7 +8765,13 @@ bool SamplePopupContrast(bool force=false) {
     auto now=GetTickCount64();if(!force && now-g_popupContrastSampled<2000)return false;g_popupContrastSampled=now;
     RECT rect{};if(!GetWindowRect(g_expandedPopup,&rect)||rect.right<=rect.left||rect.bottom<=rect.top)return false;
     HDC screen=GetDC(nullptr);if(!screen)return false;HDC memory=CreateCompatibleDC(screen);
-    BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=16;info.bmiHeader.biHeight=-16;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = 16;
+    info.bmiHeader.biHeight = -16;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
     void* pixels=nullptr;HBITMAP bitmap=CreateDIBSection(screen,&info,DIB_RGB_COLORS,&pixels,nullptr,0);
     bool changed=false;
     if(memory && bitmap && pixels) {
@@ -9304,7 +9331,9 @@ void UpdateWidgetMaterial(bool light,bool open) {
             auto backdrop=compositor.CreateSpriteVisual();backdrop.RelativeSizeAdjustment({1,1});backdrop.Brush(brush);
             container.Children().InsertAtBottom(backdrop);
             auto overlay=compositor.CreateSpriteVisual();overlay.RelativeSizeAdjustment({1,1});
-            tint.A=static_cast<uint8_t>(glass?(light?55:65):(light?150:135));overlay.Brush(compositor.CreateColorBrush(tint));container.Children().InsertAtTop(overlay);
+            tint.A = static_cast<uint8_t>(glass ? (light ? 55 : 65) : (light ? 150 : 135));
+            overlay.Brush(compositor.CreateColorBrush(tint));
+            container.Children().InsertAtTop(overlay);
             if(glass) {
                 auto sheen=compositor.CreateSpriteVisual();sheen.RelativeSizeAdjustment({1,1});
                 auto gradient=compositor.CreateLinearGradientBrush();gradient.StartPoint({0,0});gradient.EndPoint({1,1});
