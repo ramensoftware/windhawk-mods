@@ -1998,6 +1998,7 @@ constexpr UINT WM_APP_SYNC_TRAY = WM_APP + 0x382;
 constexpr UINT WM_APP_FALLBACK_TRAY_CB = WM_APP + 0x384;
 constexpr UINT_PTR kStaTimerHostReeval = 1;           // 5s hosting re-evaluation
 constexpr UINT_PTR kStaTimerFallbackRefresh = 2;      // 2s fallback icon refresh
+constexpr UINT_PTR kStaTimerFlyoutDataRefresh = 3;    // 30s flyout data refresh (when closed)
 constexpr int kHotkeyId = 0x56414E31;                 // 'VAN1'
 
 // van.dll x64 exports - verified by dumping the PE export directory of the
@@ -5505,8 +5506,42 @@ void InvokeShowVanOnStaThread(bool allowToggleClose) {
 // This mirrors what disabling/enabling the mod does and, unlike a bare
 // ShutdownVAN + ShowVAN, also discards any stale global state inside van.dll.
 // Runs on the STA thread only.
+// BoundedShutdownVan runs van.dll's ShutdownVAN on a throwaway helper thread
+// with a 2 s timeout so the STA message pump is never blocked. It is used by
+// both the watchdog reload path and the teardown path.
+void BoundedShutdownVan() {
+    if (!g_pfnShutdownVAN) {
+        return;
+    }
+    struct ShutdownVanHelper {
+        ShutdownVAN_t fn;
+        static DWORD WINAPI ThreadProc(LPVOID param) {
+            auto* self = reinterpret_cast<ShutdownVanHelper*>(param);
+            Wh_Log(L"Legacy call enter: ShutdownVAN (helper thread %lu)",
+                   GetCurrentThreadId());
+            self->fn();
+            Wh_Log(L"Legacy call leave: ShutdownVAN");
+            return 0;
+        }
+    } helper{g_pfnShutdownVAN};
+    HANDLE hHelper = CreateThread(nullptr, 0, ShutdownVanHelper::ThreadProc,
+                                  &helper, 0, nullptr);
+    if (hHelper) {
+        const DWORD waitResult = WaitForSingleObject(hHelper, 2000);
+        if (waitResult != WAIT_OBJECT_0) {
+            Wh_Log(L"ShutdownVAN did not return within 2s; abandoning helper "
+                   L"thread and continuing teardown");
+        }
+        CloseHandle(hHelper);
+    } else {
+        Wh_Log(L"Could not create the ShutdownVAN helper thread (%lu); "
+               L"skipping ShutdownVAN", GetLastError());
+    }
+    g_pfnShutdownVAN = nullptr;  // never touch it again
+}
+
 bool ReloadManagedVanRuntimeOnSta() {
-    ObserveVanVoidCall(g_pfnShutdownVAN, L"ShutdownVAN");
+    BoundedShutdownVan();
 
     g_pfnShowVAN = nullptr;
     g_pfnHideVAN = nullptr;
@@ -5588,6 +5623,8 @@ void EvaluateShowWatchdogOnSta() {
     const unsigned activations = g_providerActivations.load(std::memory_order_relaxed);
     if (activations != 0) {
         Wh_Log(L"[supervisor] watchdog ok: providers=%u attempt=%u", activations, g_watchdogAttempt);
+        g_watchdogAttempt = 0;
+        g_watchdogDelayServed = false;
         return;
     }
     if (g_watchdogAttempt >= 2) {
@@ -5603,7 +5640,7 @@ void EvaluateShowWatchdogOnSta() {
         return;
     }
     ++g_watchdogAttempt;
-    Wh_Log(L"[supervisor] watchdog: no provider activated; reloading managed runtime (attempt %u/2)",
+    Wh_Log(L"[supervisor] watchdog: no provider activated; reloading managed runtime (attempt %u)",
            g_watchdogAttempt);
 
     const bool cleanReload = ReloadManagedVanRuntimeOnSta();
@@ -6284,6 +6321,7 @@ bool g_hotkeyRegistered = false;
 int g_hostMissCount = 0;
 
 void ReevaluateHostingOnSta();
+void RefreshFlyoutDataIfClosed();
 
 LRESULT CALLBACK VanStaWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) try {
     if (uMsg == WM_NCDESTROY) {
@@ -6314,6 +6352,10 @@ LRESULT CALLBACK VanStaWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         if (wParam == kStaTimerFallbackRefresh) {
             g_fallbackTrayIcon.RefreshStatus();
+            return 0;
+        }
+        if (wParam == kStaTimerFlyoutDataRefresh) {
+            RefreshFlyoutDataIfClosed();
             return 0;
         }
     }
@@ -6443,8 +6485,25 @@ void SyncTrayHostingOnSta() {
     }
 }
 
+// Lightweight polling: refresh WLAN data when the flyout is closed so the
+// available-network list stays populated (e.g. after Explorer restarts).
 void EnterHostModeOnSta() {
     Wh_Log(L"This explorer.exe takes over as flyout/tray host (owns Shell_TrayWnd)");
+    // Hard reset completo: quando Explorer si riavvia e questo processo diventa
+    // il nuovo host del flyout, ricarica la mod da zero così riparte pulita
+    // come se fosse appena installata.
+    if (g_pfnShutdownVAN) {
+        BoundedShutdownVan();
+    }
+    g_pfnShowVAN = nullptr;
+    g_pfnHideVAN = nullptr;
+    g_pfnShutdownVAN = nullptr;
+    g_vanModule = nullptr;
+    g_watchdogAttempt = 0;
+    g_watchdogDelayServed = false;
+    g_providerActivations.store(0, std::memory_order_relaxed);
+    g_firstShowChecked.store(false, std::memory_order_release);
+
     g_hostRole.store(static_cast<int>(HostRole::Host), std::memory_order_release);
 
     if (g_staCtrlWnd) {
@@ -6458,6 +6517,7 @@ void EnterHostModeOnSta() {
 
     SetTimer(g_staCtrlWnd, kStaTimerHostReeval, 5000, nullptr);
     SetTimer(g_staCtrlWnd, kStaTimerFallbackRefresh, 2000, nullptr);
+    SetTimer(g_staCtrlWnd, kStaTimerFlyoutDataRefresh, 30000, nullptr);
 
     InstallTrayMouseHook();
     ApplyHotkeyRegistration();
@@ -6469,18 +6529,19 @@ void EnterSecondaryModeOnSta() {
     g_hostRole.store(static_cast<int>(HostRole::Secondary), std::memory_order_release);
 
     RemoveTrayMouseHook();
-    if (g_hotkeyRegistered && g_staCtrlWnd) {
-        UnregisterHotKey(g_staCtrlWnd, kHotkeyId);
-        g_hotkeyRegistered = false;
-    }
-    g_trayHostController.Stop();
-    g_fallbackTrayIcon.Stop();
+        if (g_hotkeyRegistered && g_staCtrlWnd) {
+            UnregisterHotKey(g_staCtrlWnd, kHotkeyId);
+            g_hotkeyRegistered = false;
+        }
+        g_trayHostController.Stop();
+        g_fallbackTrayIcon.Stop();
 
-    if (g_staCtrlWnd) {
-        DestroyWindow(g_staCtrlWnd);
-        g_staCtrlWnd = nullptr;
-    }
-    g_staCtrlWnd = CreateStaWindow(kVanCtrlWndClassName);
+        if (g_staCtrlWnd) {
+            KillTimer(g_staCtrlWnd, kStaTimerFlyoutDataRefresh);
+            DestroyWindow(g_staCtrlWnd);
+            g_staCtrlWnd = nullptr;
+        }
+        g_staCtrlWnd = CreateStaWindow(kVanCtrlWndClassName);
     SetTimer(g_staCtrlWnd, kStaTimerHostReeval, 5000, nullptr);
 }
 
@@ -6550,6 +6611,21 @@ WlanStartupObservation ProbeWlanStartup() {
         if (resources.list->InterfaceInfo[i].isState != wlan_interface_state_not_ready)
             ++observation.readyInterfaces;
     return observation;
+}
+
+void RefreshFlyoutDataIfClosed() {
+    // Only touch WLAN state when the flyout is closed: this keeps the
+    // available-network list fresh without interfering with saved-network
+    // connections or an open credential prompt.
+    if (IsVanFlyoutWindowVisible()) {
+        return;
+    }
+    const auto obs = ProbeWlanStartup();
+    if (obs.error != ERROR_SUCCESS) {
+        Wh_Log(L"[flyout data refresh] WLAN probe failed: error=%lu, "
+               L"interfaces=%u, ready=%u",
+               obs.error, obs.interfaces, obs.readyInterfaces);
+    }
 }
 
 bool WaitForWlanStartupOnSta() {
@@ -6749,42 +6825,11 @@ void CleanupVanStaOnOwningThread() {
     if (g_staCtrlWnd) {
         KillTimer(g_staCtrlWnd, kStaTimerHostReeval);
         KillTimer(g_staCtrlWnd, kStaTimerFallbackRefresh);
+        KillTimer(g_staCtrlWnd, kStaTimerFlyoutDataRefresh);
         DestroyWindow(g_staCtrlWnd);
         g_staCtrlWnd = nullptr;
     }
-    if (g_pfnShutdownVAN) {
-        // ShutdownVAN joins van.dll's internal UI thread and can block on
-        // some Windows builds. Run it on a throwaway helper thread and wait
-        // with a bounded timeout so the STA worker is never held hostage. If
-        // it times out, the helper is abandoned (it dies with Explorer) and
-        // the STA worker continues to return 0. This is what makes the
-        // unconditional join in Wh_ModUninit safe.
-        struct ShutdownVanHelper {
-            ShutdownVAN_t fn;
-            static DWORD WINAPI ThreadProc(LPVOID param) {
-                auto* self = reinterpret_cast<ShutdownVanHelper*>(param);
-                Wh_Log(L"Legacy call enter: ShutdownVAN (helper thread %lu)",
-                       GetCurrentThreadId());
-                self->fn();
-                Wh_Log(L"Legacy call leave: ShutdownVAN");
-                return 0;
-            }
-        } helper{g_pfnShutdownVAN};
-        HANDLE hHelper = CreateThread(nullptr, 0, ShutdownVanHelper::ThreadProc,
-                                      &helper, 0, nullptr);
-        if (hHelper) {
-            const DWORD waitResult = WaitForSingleObject(hHelper, 2000);
-            if (waitResult != WAIT_OBJECT_0) {
-                Wh_Log(L"ShutdownVAN did not return within 2s; abandoning helper "
-                       L"thread and continuing teardown");
-            }
-            CloseHandle(hHelper);
-        } else {
-            Wh_Log(L"Could not create the ShutdownVAN helper thread (%lu); "
-                   L"skipping ShutdownVAN", GetLastError());
-        }
-        g_pfnShutdownVAN = nullptr;  // never touch it again
-    }
+    BoundedShutdownVan();
     UnregisterStaWindowClasses();
     g_hostRole.store(static_cast<int>(HostRole::Undetermined), std::memory_order_release);
     g_vanStoreReady.store(false, std::memory_order_release);
