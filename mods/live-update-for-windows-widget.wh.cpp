@@ -1589,7 +1589,13 @@ LiveSnapshot ReadLiveSnapshot() {
     std::lock_guard<std::mutex> lock(g_liveMutex);
     auto result = g_liveSnapshot; result.obs = g_obsSnapshot; result.clock=g_clockSnapshot;
     result.obs.elapsedSeconds = ObsElapsedMilliseconds(result.obs, GetTickCount64()) / 1000;
-    result.display = g_displaySnapshot; result.hotspot = g_hotspotSnapshot; result.bluetooth = g_bluetoothSnapshot; result.taskNotice = g_taskNotice; result.memory = g_memorySnapshot; result.remote = g_remoteSnapshot; result.temperature = g_temperatureSnapshot;
+    result.display = g_displaySnapshot;
+    result.hotspot = g_hotspotSnapshot;
+    result.bluetooth = g_bluetoothSnapshot;
+    result.taskNotice = g_taskNotice;
+    result.memory = g_memorySnapshot;
+    result.remote = g_remoteSnapshot;
+    result.temperature = g_temperatureSnapshot;
     std::vector<TaskProgress> detailed;
     for (auto task : result.tasks) {
         auto found = g_taskControls.find(task.id);
@@ -3210,7 +3216,12 @@ ObsSnapshot ObserveObsReceipt(ObsSnapshot const& old, ObsSnapshot next, uint64_t
 void PublishObs(ObsSnapshot const& incoming) {
     ObsSnapshot value;
     bool changed;
-    { std::lock_guard<std::mutex> lock(g_liveMutex); value = ObserveObsReceipt(g_obsSnapshot, incoming, GetTickCount64()); changed = !(g_obsSnapshot == value); g_obsSnapshot = value; }
+    {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        value = ObserveObsReceipt(g_obsSnapshot, incoming, GetTickCount64());
+        changed = !(g_obsSnapshot == value);
+        g_obsSnapshot = value;
+    }
     if (changed) NotifyLiveUi();
 }
 bool ApplyObsStatus(ObsSnapshot& state, bool active, bool paused, double duration, uint64_t& epoch, uint64_t sampledAt) {
