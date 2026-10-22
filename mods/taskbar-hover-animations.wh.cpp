@@ -14,6 +14,8 @@
 // ==WindhawkModReadme==
 /*
 # Taskbar Icon Animation
+https://s5.ezgif.com/tmp/ezgif-5150f93d8c3d211d.gif
+https://s5.ezgif.com/tmp/ezgif-528d0e79e4665369.gif
 
 When the mouse hovers over a taskbar icon, an animation plays on a transparent
 overlay above the icon (the overlay does not block clicks).
