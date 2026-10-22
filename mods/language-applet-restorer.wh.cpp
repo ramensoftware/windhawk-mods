@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              language-applet-restorer
 // @name            Language Applet Restorer
-// @description     Brings back the classic Control Panel "Language" applet (Windows 10 1709 build) on later versions of Windows downloading the original files from Microsoft's symbol server
+// @description     Brings back the Control Panel "Language" applet on later versions of Windows downloading the original files from Microsoft's symbol server
 // @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
@@ -16,7 +16,7 @@
 /*
 # Language Applet Restorer
 
-Restores the classic Control Panel **Language** applet (`Microsoft.Language`) and, optionally, the classic **Region** applet (`intl.cpl`) of Windows 10 1709 on later versions of Windows.
+Restores the classic Control Panel **Language** applet from windows 10 1709 and optionally the classic **Region** applet (`intl.cpl`) of Windows 10 1709 on later versions of Windows.
 
 ## Preview:
 
