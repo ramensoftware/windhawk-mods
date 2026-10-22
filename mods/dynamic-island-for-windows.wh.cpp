@@ -6,7 +6,7 @@
 // @author          Himanshu
 // @github          https://github.com/devcode90
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi -lwinhttp -lpdh -lwinmm
+// @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lsetupapi -lwinhttp -lpdh -lwinmm
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -1743,6 +1743,10 @@ std::atomic<uint64_t> g_bluetoothConnectGeneration = 0;
 std::atomic<bool> g_isDnDActive = false;
 void* g_wnfDndSubscription = nullptr;
 
+std::atomic<bool> g_gameOverlayPinned{false};
+std::atomic<bool> g_pinnedExpanded{false};
+std::atomic<int> g_pillOpacityOverride{-1};
+
 constexpr GUID kSubTypeIeeeFloat = {
     0x00000003,
     0x0000,
@@ -3087,6 +3091,9 @@ void LoadSettings() {
     next.tintOpacity = Clamp(Wh_GetIntSetting(L"Themes.TintIntensity") / 100.0f, 0.0f, 1.0f);
     const int settingOpacity = Wh_GetIntSetting(L"Themes.PillOpacity");
     const int localOpacity = Wh_GetIntValue(L"PillOpacityOverride", -1);
+    g_pillOpacityOverride.store(localOpacity);
+    g_gameOverlayPinned.store(Wh_GetIntValue(L"GameOverlayPinned", 0) != 0);
+    g_pinnedExpanded.store(Wh_GetIntValue(L"PinnedExpanded", 0) != 0);
     next.pillOpacity = Clamp((localOpacity >= 0 ? localOpacity : settingOpacity) / 100.0f,
                              0.35f, 1.0f);
     next.gameOverlay = Wh_GetIntSetting(L"Modules.GameOverlay") != 0;
@@ -3345,6 +3352,7 @@ void LoadSettings() {
     next.micDotColor = next.privacyDotsMicHex;
     next.camDotColor = next.privacyDotsCamHex;
 
+    g_pinnedExpanded.store(false);
     Wh_SetIntValue(L"PinnedExpanded", 0);
 
     // Compare-then-publish under one lock so the change flags describe exactly
@@ -6991,11 +6999,9 @@ DWORD WINAPI WeatherThreadProc(void*) {
 }
 
 // ── Lyrics (LRCLIB, https://lrclib.net) ──────────────────────────────────────
-#define DIW_MOD_VERSION L"1.4.0"
-
 // User-Agent sent to LRCLIB.
 constexpr wchar_t kLyricsUserAgent[] =
-    L"DynamicIslandForWindows/" DIW_MOD_VERSION L" (https://github.com/devcode90/Dynamic-Island-for-Windows)";
+    L"DynamicIslandForWindows/" WH_MOD_VERSION L" (https://github.com/devcode90/Dynamic-Island-for-Windows)";
 
 bool IsUrlSafeChar(unsigned char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
@@ -9608,7 +9614,7 @@ int LookupRowAtContentPoint(const MediaContentPoint& pt, int rowCount, bool head
 
 // Wikimedia asks API clients to send a descriptive User-Agent with contact info.
 constexpr wchar_t kLookupUserAgent[] =
-    L"DynamicIslandForWindows/" DIW_MOD_VERSION L" (https://github.com/devcode90/Dynamic-Island-for-Windows) QuickLookup";
+    L"DynamicIslandForWindows/" WH_MOD_VERSION L" (https://github.com/devcode90/Dynamic-Island-for-Windows) QuickLookup";
 
 // Bumped for every new request AND when the card is dismissed. A worker only
 // publishes if its id is still current, so a slow reply can never resurrect a card
@@ -11259,7 +11265,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
         AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(trayMenu), Loc(L"File Tray"));
     }
     AppendMenuW(menu, MF_STRING, 2, L"Pin expanded");
-    AppendMenuW(menu, MF_STRING, 3, Wh_GetIntValue(L"GameOverlayPinned", 0) ? L"Hide game overlay" : L"Show game overlay");
+    AppendMenuW(menu, MF_STRING, 3, g_gameOverlayPinned.load() ? L"Hide game overlay" : L"Show game overlay");
     {
         // g_settings already reflects any right-click override, so it is the
         // source of truth for which style is active.
@@ -11336,7 +11342,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
         }
     }
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    const int activeOpacity = Wh_GetIntValue(L"PillOpacityOverride", -1);
+    const int activeOpacity = g_pillOpacityOverride.load();
     HMENU opacityMenu = CreatePopupMenu();
     AppendMenuW(opacityMenu, MF_STRING | (activeOpacity == 100 ? MF_CHECKED : 0), 4, L"100% (Opaque)");
     AppendMenuW(opacityMenu, MF_STRING | (activeOpacity == 85 ? MF_CHECKED : 0), 5, L"85%");
@@ -11390,29 +11396,40 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             g_layoutDirty = true;
             TriggerNudge();
             break;
-        case 2:
-            Wh_SetIntValue(L"PinnedExpanded", Wh_GetIntValue(L"PinnedExpanded", 0) ? 0 : 1);
+        case 2: {
+            const bool nextVal = !g_pinnedExpanded.load();
+            g_pinnedExpanded.store(nextVal);
+            Wh_SetIntValue(L"PinnedExpanded", nextVal ? 1 : 0);
             break;
-        case 3:
-            Wh_SetIntValue(L"GameOverlayPinned", Wh_GetIntValue(L"GameOverlayPinned", 0) ? 0 : 1);
+        }
+        case 3: {
+            const bool nextVal = !g_gameOverlayPinned.load();
+            g_gameOverlayPinned.store(nextVal);
+            Wh_SetIntValue(L"GameOverlayPinned", nextVal ? 1 : 0);
             break;
+        }
         case 4:
+            g_pillOpacityOverride.store(100);
             Wh_SetIntValue(L"PillOpacityOverride", 100);
             LoadSettings();
             break;
         case 5:
+            g_pillOpacityOverride.store(85);
             Wh_SetIntValue(L"PillOpacityOverride", 85);
             LoadSettings();
             break;
         case 6:
+            g_pillOpacityOverride.store(70);
             Wh_SetIntValue(L"PillOpacityOverride", 70);
             LoadSettings();
             break;
         case 7:
+            g_pillOpacityOverride.store(55);
             Wh_SetIntValue(L"PillOpacityOverride", 55);
             LoadSettings();
             break;
         case 8:
+            g_pillOpacityOverride.store(-1);
             Wh_SetIntValue(L"PillOpacityOverride", -1);
             LoadSettings();
             break;
@@ -11857,7 +11874,7 @@ class Renderer {
         settingsOpacity_ = settings.pillOpacity;
 
         const bool gameMetricsPresent = primary.kind == IslandKind::Idle &&
-            (settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0);
+            (settings.gameOverlay || g_gameOverlayPinned.load());
         // True while the island is collapsing to nothing (auto-hide / fullscreen).
         islandHiding_ = primary.width < 1.0f && primary.height < 1.0f && !secondary;
 
@@ -15063,7 +15080,7 @@ class Renderer {
 
     void DrawIdleDashboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings,
                            double now) {
-        if (settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0) {
+        if (settings.gameOverlay || g_gameOverlayPinned.load()) {
             DrawGameOverlay(state, rect, 1.0f);
             return;
         }
@@ -22368,9 +22385,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 const bool gameMetricsPresent =
                     !kinds.empty() && kinds[0] == IslandKind::Idle &&
-                    (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0);
+                    (g_settings.gameOverlay || g_gameOverlayPinned.load());
 
-                bool expanded = Wh_GetIntValue(L"PinnedExpanded", 0) != 0 || g_clickExpanded.load();
+                bool expanded = g_pinnedExpanded.load() || g_clickExpanded.load();
                 if (!gameMetricsPresent && !g_settings.expandOnHover && !expanded) {
                     g_clickExpanded = true;
                     g_layoutDirty = true;
@@ -22514,9 +22531,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             ToggleEndpointMute();
             return 0;
 
-        case WM_LBUTTONDBLCLK:
-            Wh_SetIntValue(L"PinnedExpanded", Wh_GetIntValue(L"PinnedExpanded", 0) ? 0 : 1);
+        case WM_LBUTTONDBLCLK: {
+            const bool nextVal = !g_pinnedExpanded.load();
+            g_pinnedExpanded.store(nextVal);
+            Wh_SetIntValue(L"PinnedExpanded", nextVal ? 1 : 0);
             return 0;
+        }
 
         case WM_MOUSEWHEEL: {
             // Delta is accumulated rather than dropped inside a debounce window, so
@@ -22967,7 +22987,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             secondary = ActivityForKind(kinds[1], g_settings, snapshot);
         }
 
-        const bool pinned = Wh_GetIntValue(L"PinnedExpanded", 0) != 0;
+        const bool pinned = g_pinnedExpanded.load();
 
         if (primary.kind != previousPrimary) {
             if (primary.kind != IslandKind::Idle) {
@@ -23059,7 +23079,7 @@ DWORD WINAPI RenderThreadProc(void*) {
 
         bool isHoverExpanded = g_settings.expandOnHover ? hover : (hover && g_clickExpanded.load());
         const bool gameMetricsPresent = primary.kind == IslandKind::Idle &&
-            (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0);
+            (g_settings.gameOverlay || g_gameOverlayPinned.load());
         if (gameMetricsPresent) {
             isHoverExpanded = false;
         }
@@ -23159,7 +23179,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             }
         }
         if (!isFullscreen && primary.kind == IslandKind::Idle &&
-            (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0)) {
+            (g_settings.gameOverlay || g_gameOverlayPinned.load())) {
             // Width follows the metrics actually enabled (#25) so switching some
             // off shrinks the strip instead of leaving empty space, and compact
             // mode narrows it enough to sit neatly in the taskbar area. Both the
@@ -23563,7 +23583,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             Settings renderSettings = GetSettingsCopy();
             if (ctrlHoverCT) {
                 renderSettings.pillOpacity = Clamp(renderSettings.pillOpacity * 0.35f, 0.15f, 0.45f);
-            } else if (renderSettings.themePreset == ThemePreset::Graphite && Wh_GetIntValue(L"PillOpacityOverride", -1) < 0) {
+            } else if (renderSettings.themePreset == ThemePreset::Graphite && g_pillOpacityOverride.load() < 0) {
                 const bool isExpanded = isHoverExpanded || pinned || isTransientAlert || (widthSpring.value > 260.0f);
                 renderSettings.pillOpacity = isExpanded ? 0.98f : 0.88f;
             }
