@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-21T17:01:33.000Z</updated>
+    <updated>2026-10-22T05:01:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.7.2]]></title>
+        <id>https://windhawk.net/mods/alt-tab-flip-3d#925f0a2bdfa754cab000f38401a3e51707248281</id>
+        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
+        <updated>2026-10-22T05:01:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New "Only the windows on the switcher's monitor" setting (off by default): the switcher lists only the windows on the monitor it opens on. While it's open, a key shows the windows of every monitor, and pressing it again goes back: the key left of 1 (under Esc) by default, or another one chosen in the new "Key that shows every monitor" setting (letters, digits, F1-F12, navigation keys, or none). A monitor without windows shows them all.</li>
+<li>New "Show at once on the second Tab" setting (off by default): with a show delay, pressing Tab again shows the stack right away, while a quick Alt+Tab still switches without showing it (#6249).</li>
+<li>Alt+Shift+Tab inside the switcher no longer switches the keyboard layout (Windows' Alt+Shift shortcut) when more than one layout is installed.</li>
+<li>If Windows drops the mod's keyboard hook (it does so silently after the PC hangs for a moment), the hook is installed again at the next Alt+Tab.</li>
+<li>When Windows refuses to switch to the chosen window (for example while a fullscreen game holds on to the foreground), the switch is tried again for a moment, as minimized windows already were.</li>
+<li>Animated wallpapers (Wallpaper Engine and similar) keep playing behind the "Live desktop" background when a program running as administrator is in front, and with Ctrl+Alt+Tab. Ctrl+Alt+Tab is now caught directly, like Alt+Tab, instead of through explorer's hotkey.</li>
+<li>A wallpaper set to "Span" (one picture over several monitors) now shows each monitor's own part in the "Wallpaper" and "Blurred wallpaper" backgrounds, instead of the whole picture squeezed into one monitor.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave) 1.0]]></title>
+        <id>https://windhawk.net/mods/chrome-middle-click-new-tab#6c631d36933267b1d2219ceefb8c568e09dce28e</id>
+        <link href="https://windhawk.net/mods/chrome-middle-click-new-tab"/>
+        <updated>2026-10-22T05:01:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="middleclickemptytabbartoopenanewtabchromeedgebrave">Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave)</h1>
+<p>Middle-click the empty area of the tab bar (between the "+" button and the
+minimize/maximize/close buttons) to open a new tab, just like clicking "+".</p>
+<p><img src="https://i.imgur.com/KBVoOg9.gif" alt="demonstration" /></p>
+<p>Currently supported browsers: Google Chrome, Microsoft Edge, Brave. Other
+Chromium-based browsers may work too: add their executable in the mod's
+Advanced settings (custom process inclusion list).</p>
+<p>The empty tab bar area is detected using the window's hit-testing: Chrome
+reports it as a caption (draggable) area, while tabs and buttons are reported
+as client area. By default, only caption areas that have a tab or a button
+between them and the side away from the window buttons are used, so the thin
+drag strip above the tabs and the area before the first tab are ignored. This
+also works with right-to-left UI languages, where the tab bar is mirrored.</p>
+<p>Installed web apps (PWAs) are ignored, since they have a title bar instead of a
+tab bar.</p>
+<p>The new tab is opened with the browser's "new" app command (the same command as
+Ctrl+T), so no keyboard input is simulated.</p>]]></content>
+        <author>
+            <name>erenalpars</name>
+            <uri>https://github.com/erenalpars</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fix Windows Tools Folder View 2.0]]></title>
+        <id>https://windhawk.net/mods/fix-windows-tools-view#04b768394c787b2fa41a89ebbbfc832acee689bb</id>
+        <link href="https://windhawk.net/mods/fix-windows-tools-view"/>
+        <updated>2026-10-22T05:01:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use another method based on registry findings by WinClassic user 04mc</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Window Corner Radius 1.4]]></title>
         <id>https://windhawk.net/mods/custom-corner-radius#16f94de7c75e010ecc78abfd55eb4bb80fb9b5a3</id>
@@ -560,233 +619,6 @@ Windows shortcut.</li>
         <author>
             <name>appEW</name>
             <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Where I Left It 1.2]]></title>
-        <id>https://windhawk.net/mods/window-geometry-memory#9a8f03ad75e595cf6725ae5fe616dc28cefcaaac</id>
-        <link href="https://windhawk.net/mods/window-geometry-memory"/>
-        <updated>2026-10-20T17:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="whereileftit">Where I Left It</h1>
-<p>Remembers where you left each app's window -- its position, its size, and which
-monitor it was on -- and puts it back when the app opens again. It also keeps
-windows that are already open reachable when your display setup changes: a
-monitor going away, a different resolution, docking or undocking, or a
-rotation.</p>
-<h2 id="gettingstarted">Getting started</h2>
-<p>The mod does nothing until you tell it which apps to manage. Open the mod's
-settings, add an executable name (for example <code>notepad.exe</code>) or a full path to
-<strong>Apps to manage</strong>, and save. Only windows belonging to the executables in that
-list are remembered or moved.</p>
-<h2 id="howitbehaves">How it behaves</h2>
-<ul>
-<li>Geometry is captured when you move or resize a window, and when a window
-closes. Move a window where you want it, close it, and it opens there next
-time -- in the same session or after a reboot.</li>
-<li>Maximized and minimized windows are handled as you would expect: a window that
-was maximized comes back maximized, and one that was minimized comes back where
-it was, at its normal size, or maximized if it was maximized before it was
-minimized.</li>
-<li>Saving is per monitor arrangement. A window is restored to the same monitor it
-was on, and after docking or undocking it is mapped to the closest equivalent
-monitor instead of being left off-screen.</li>
-<li><strong>Windows that are already open are moved too.</strong> When the display arrangement
-changes -- a different resolution, docking, a monitor waking up or going away
--- open tracked windows are mapped from the monitor they were on to the closest
-equivalent monitor that still exists, keeping the same fraction of that
-monitor. Nothing is left stranded on a monitor that is no longer there.</li>
-<li>Moving or resizing a window always wins over anything the mod was doing. If an
-application insists on its own placement, the mod tries once more and then
-stops fighting it.</li>
-<li>Each app's saved geometry can remember its position and its size separately,
-per app, in the settings. With <strong>Restore size</strong> off, a window is placed but not
-resized, so an app that sizes itself to its content keeps that size; with
-<strong>Restore position</strong> off, it is sized where it opened. Both are still recorded
-while off, so switching a box back on brings back the last position or size
-that window had rather than a value frozen at the moment it was switched off.</li>
-</ul>
-<h2 id="outofscopeinv1">Out of scope in v1</h2>
-<ul>
-<li>Moving windows between virtual desktops</li>
-<li>Z-order (stacking order) restore</li>
-<li>Re-scaling what is <em>inside</em> a window when the scale percentage changes. The
-frame is moved and sized; how an app redraws its contents is up to the app.</li>
-<li>A periodic check for monitor changes. The mod reacts to Windows' display-change
-notification and is silent the rest of the time.</li>
-<li>UWP / Store apps that restore their own window placement</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>Elevated windows are not moved.</strong> Windows cannot be repositioned across
-integrity levels: the move is refused with access denied, the mod detects the
-refusal, leaves that window alone for the rest of the session, and records why.
-The window is still tracked, so it is not ignored -- the mod tries. While a
-refusal stands, that window's position is not saved either: your chosen
-position for it is not overwritten by wherever it happened to be sitting.</li>
-<li><strong>Titles are part of how a window is matched.</strong> A window whose title changed
-between sessions falls back to matching by executable, class and ordinal, and
-is only restored when that match is unambiguous. Windows with identical titles
-may be restored to each other's positions.</li>
-<li><strong>A save at close can lose its turn.</strong> The rectangle is read from the window as
-the window is closing, and Windows sometimes has the window out of the way first.
-When that happens nothing is recorded for that close, the diagnostics journal says
-so with a reason, and the window keeps whatever position it was last remembered
-at. Moving the window once by hand records it there and then, and that save is not
-a last-moment read, so this is about windows that are moved by something other than
-you and closed immediately after.</li>
-<li><strong>A window that was minimized when it closed comes back where it was</strong>, at its
-normal size, or maximized if it was maximized before it was minimized. It does
-not come back minimized.</li>
-<li><strong>Stored resolution is not rescaled when DPI changes.</strong> Nothing multiplies a
-stored rectangle by a DPI ratio. After a display change a window is mapped by
-the rules above, which already express it as a fraction of its monitor -- so a
-change of scale percentage on its own leaves windows where they are, because no
-monitor has moved.</li>
-<li><strong>A window is measured against the screen, not against the taskbar.</strong> The
-taskbar is taller in pixels at a larger scale, so a window restored after a
-change of scale percentage can sit partly behind it. Move the window once and
-the new position is what is remembered.</li>
-<li><strong>A maximized window is left where Windows puts it.</strong> While its monitor still
-exists, its maximized state and placement stay Windows' own business -- the mod
-does not move it, and it is not resized by a resolution change. If the monitor
-it was maximized on disappears, it is rescued onto a remaining monitor like any
-other window.</li>
-<li><strong>UWP and Store apps</strong> often restore their own placement and may ignore the
-mod.</li>
-<li>If an application moves its window right after showing, the mod re-applies the
-stored geometry once. Applications that keep overriding it are left alone.</li>
-</ul>
-<h2 id="diagnostics">Diagnostics</h2>
-<p>Turn on <strong>Write a diagnostics journal</strong> in the settings and the mod appends a
-line to <code>window-geometry-journal.txt</code> for every save, restore and decision, with
-the exact rectangle and monitor involved. It is the fastest way to see why a
-particular window was or was not restored, and it is worth attaching to a bug
-report. It is off by default.</p>
-<p>Both files live in a folder named after the signed-in user's SID, inside the mod's
-storage folder. That storage folder is shared by the whole machine and a tool mod
-runs one process per signed-in session, so the folder is created with a protected
-access control list that gives full access to that user, SYSTEM and
-administrators, and to nobody else: two users signed in at once neither overwrite
-each other's saved geometry nor can read each other's window titles. If the mod
-cannot read the user's SID it saves nothing at all -- sharing the data would be
-worse than forgetting it. The journal is a diagnostics aid rather than a history,
-so it is capped: once it passes a megabyte it starts over from empty.</p>]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Cat 1.0.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-cat#df5e6b06673d317de585922fcd839f3211a30581</id>
-        <link href="https://windhawk.net/mods/taskbar-cat"/>
-        <updated>2026-10-20T14:02:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarcat">Taskbar Cat</h1>
-<p><img src="https://raw.githubusercontent.com/viraj-rgb/windhawk-taskbar-cat/8e9fd963225749cad2ba94e514f65df638d40910/art/preview.gif" alt="Taskbar Cat" /></p>
-<p>An orange pixel-art cat that lives on the Windows 11 taskbar.</p>
-<p>The cat has moods. Energy, boredom and a need for attention
-drift over time and decide what it does next: strolls, the odd burst of
-zoomies, sitting, loafing, and naps when it gets tired (more of them at
-night). If you leave the PC for 5 minutes it curls up and sleeps until you
-come back.</p>
-<p>Playing with it:</p>
-<ul>
-<li><strong>Hover</strong> over the cat: it purrs, with hearts.</li>
-<li><strong>Click</strong>: it meows (or wakes up).</li>
-<li><strong>Double-click</strong>: it rolls over for a belly rub.</li>
-<li><strong>Drag</strong> it: you pick it up by the scruff; let go and it drops back down.</li>
-<li><strong>Whizz the cursor</strong> along the taskbar near it: it may crouch, wiggle and pounce.</li>
-<li><strong>Right-click</strong> for a menu: pet, treat, nap, wake up, move over, "Stay here"
-(it keeps doing everything else but won't wander off; drag it to move it),
-let a butterfly in, or hide it for an hour.</li>
-</ul>
-<p>It also notices Windows: it looks up (and sometimes jumps) when a new window
-opens, trots over to the taskbar buttons when one flashes, says hello when you unlock
-the PC, and hides during fullscreen apps and with an auto-hidden taskbar.</p>
-<p>Between all that it grooms, scratches behind its ears, kneads before a nap,
-chases its own tail when bored, and stretches and yawns when it wakes up.</p>
-<p>Toys: now and then a butterfly flutters along the taskbar and the cat
-stalks it (it catches one about a third of the time). Pick "Play with yarn"
-from the right-click menu to toss it a ball of yarn; click the ball to send
-it rolling, right-click it (or the cat) to put it away. Once in a while the cat leaves you a gift (a toy mouse): click
-it to collect it.</p>
-<p>When music is playing it sits and bobs along to the beat (it listens to
-everything your PC plays, so videos and games count too). Around 8:00 and
-19:00 it gets hungry and asks for a treat (right-click, "Give a treat").
-It wears a witch hat in late October, a Santa hat in December, and a party
-hat on New Year's and on its own birthday. The tooltip shows how old it is ("day 2"); set its birthday in the settings.</p>
-<p>It can meow, trill hello and purr out loud: turn on "Sounds" in the settings.
-The sounds are generated by the mod itself, and it stays quiet while Do Not
-Disturb is on or a fullscreen app is running.</p>
-<p>Its mood, spot on the taskbar, age and your gift count are remembered across
-restarts.</p>
-<p>The cat lives on the main taskbar only (not the taskbars of other monitors),
-and only on a horizontal taskbar. Everything
-above can be tuned or switched off in the settings.</p>
-<p>Empty taskbar space stays click-through, and the cat hides with an
-auto-hidden taskbar or a fullscreen app.</p>]]></content>
-        <author>
-            <name>viraj-rgb</name>
-            <uri>https://github.com/viraj-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Folder thumbnails on taskbar buttons 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-taskbar-folder-thumbnails#1e85462fd71bea76edc7a3157799d6d27f338319</id>
-        <link href="https://windhawk.net/mods/explorer-taskbar-folder-thumbnails"/>
-        <updated>2026-10-20T14:02:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="folderthumbnailsontaskbarbuttons">Folder thumbnails on taskbar buttons</h1>
-<p>Every File Explorer window gets a taskbar icon showing the folder it has open,
-drawn the way Explorer draws that folder in its own large-icon view. A folder
-full of photos shows those photos on its taskbar button.</p>
-<p>Without the mod, every File Explorer window has the same icon:</p>
-<p><img src="https://raw.githubusercontent.com/Issuch/explorer-taskbar-folder-thumbnails/screenshots/taskbar-before.png" alt="Taskbar without the mod" /></p>
-<p>With the mod, each one shows the folder it has open:</p>
-<p><img src="https://raw.githubusercontent.com/Issuch/explorer-taskbar-folder-thumbnails/screenshots/taskbar-after.png" alt="Taskbar with the mod" /></p>
-<h2 id="recommendedfolderthumbnailfix">Recommended: FolderThumbnailFix</h2>
-<p>The mod works best together with
-<a href="https://github.com/LesFerch/FolderThumbnailFix">FolderThumbnailFix</a> by
-LesFerch. Windows 11 draws the front of a folder over the folder's preview,
-which hides most of the pictures inside. FolderThumbnailFix removes that cover,
-so a taskbar button shows the pictures in full, as in the screenshot above.</p>
-<h2 id="nodelay">No delay</h2>
-<p>The mod takes over the window procedure of each Explorer window. When Explorer
-changes a window's icon after a navigation or a tab switch, the mod substitutes
-the folder preview within that very message. The taskbar therefore gets a
-single icon update, at the same moment it would have received Explorer's own
-icon, and the generic folder icon never appears in between. A newly opened
-window gets its preview before it is shown for the first time.</p>
-<p>Previews come from an in-memory cache, from the mod's own disk cache or from
-the Windows thumbnail cache. The disk cache is kept in the mod's Windhawk
-storage, in a folder which only your account can open, and is removed together
-with the mod.
-When a preview is in none of them, the button keeps Explorer's own folder icon
-and the preview is rendered in the background, usually within a fraction of a
-second, and then saved for next time.</p>
-<h2 id="nopolling">No polling</h2>
-<p>The mod sleeps while nothing happens. It reacts to events: a window being
-shown, a navigation, a tab switch, a change among the files of an open folder,
-and a window being closed. A folder is re-rendered when its files change, and
-once in the background when it is opened again later, so that changes made
-while it was closed show up too. That refresh is usually served from the
-Windows thumbnail cache.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li><strong><a href="https://windhawk.net/mods/taskbar-grouping">Disable grouping on the taskbar</a>
-with its "Use window icons" option.</strong> The mod puts the preview on each
-Explorer window, and that mod gives each window its own taskbar button and
-makes the button show the window's icon instead of the Explorer icon. To use
-window icons for File Explorer only, leave "Use window icons" off and add
-<code>explorer.exe</code> to "Use window icons exceptions".</li>
-<li><strong>Thumbnails enabled.</strong> In File Explorer, under Options -&gt; View, the checkbox
-"Always show icons, never thumbnails" must be unchecked.</li>
-</ul>
-<p>The mod has no settings. The preview resolution follows the screen's DPI,
-previews are kept on disk so that they are instant after a reboot, and the old
-ones are discarded once there are too many of them.</p>]]></content>
-        <author>
-            <name>Issuch</name>
-            <uri>https://github.com/Issuch</uri>
         </author>
     </entry>
 </feed>

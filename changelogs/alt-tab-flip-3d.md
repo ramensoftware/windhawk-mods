@@ -1,3 +1,13 @@
+## 1.7.2 ([Oct 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/925f0a2bdfa754cab000f38401a3e51707248281/mods/alt-tab-flip-3d.wh.cpp))
+
+* New "Only the windows on the switcher's monitor" setting (off by default): the switcher lists only the windows on the monitor it opens on. While it's open, a key shows the windows of every monitor, and pressing it again goes back: the key left of 1 (under Esc) by default, or another one chosen in the new "Key that shows every monitor" setting (letters, digits, F1-F12, navigation keys, or none). A monitor without windows shows them all.
+* New "Show at once on the second Tab" setting (off by default): with a show delay, pressing Tab again shows the stack right away, while a quick Alt+Tab still switches without showing it (#6249).
+* Alt+Shift+Tab inside the switcher no longer switches the keyboard layout (Windows' Alt+Shift shortcut) when more than one layout is installed.
+* If Windows drops the mod's keyboard hook (it does so silently after the PC hangs for a moment), the hook is installed again at the next Alt+Tab.
+* When Windows refuses to switch to the chosen window (for example while a fullscreen game holds on to the foreground), the switch is tried again for a moment, as minimized windows already were.
+* Animated wallpapers (Wallpaper Engine and similar) keep playing behind the "Live desktop" background when a program running as administrator is in front, and with Ctrl+Alt+Tab. Ctrl+Alt+Tab is now caught directly, like Alt+Tab, instead of through explorer's hotkey.
+* A wallpaper set to "Span" (one picture over several monitors) now shows each monitor's own part in the "Wallpaper" and "Blurred wallpaper" backgrounds, instead of the whole picture squeezed into one monitor.
+
 ## 1.7.1 ([Oct 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b2813a1c76395983542ac7cbbb8561f99e7c6912/mods/alt-tab-flip-3d.wh.cpp))
 
 * New "Extra shortcuts" list, each item with a style of its own: Win+Ctrl+Tab, which keeps the switcher open like Ctrl+Alt+Tab (the original Flip 3D shortcut; off by default), and Ctrl+Alt+Tab, to give it a style of its own (#5946, #5947). Win+Ctrl+Tab also works when a program running as administrator is in front.

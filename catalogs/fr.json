@@ -416,7 +416,7 @@
         "ratingUsers": 145,
         "reviews": 1,
         "trendingSorting": 41.287896049011906,
-        "updated": 1792044252000,
+        "updated": 1792645283000,
         "users": 5072
       },
       "metadata": {
@@ -432,7 +432,7 @@
         ],
         "license": "MIT",
         "name": "Alt+Tab Flip 3D (Vista Style)",
-        "version": "1.7.1"
+        "version": "1.7.2"
       }
     },
     "alt-tab-hide-ghost-windows": {
@@ -1578,6 +1578,33 @@
         ],
         "name": "Chrome Context Menu Items",
         "version": "1.0.0"
+      }
+    },
+    "chrome-middle-click-new-tab": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792645278000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792645278000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "erenalpars",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lole32 -lshell32",
+        "description": "Middle-click the empty area of the tab bar to open a new tab",
+        "github": "https://github.com/erenalpars",
+        "include": [
+          "chrome.exe",
+          "msedge.exe",
+          "brave.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave)",
+        "version": "1.0"
       }
     },
     "chrome-native-ui-tweaks": {
@@ -7433,19 +7460,18 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0.21607163889959857,
-        "updated": 1772053332000,
+        "updated": 1792645273000,
         "users": 107
       },
       "metadata": {
         "author": "Anixx",
-        "compilerOptions": "-lole32 -luuid -lcomctl32",
         "description": "Saves/restores view mode for Windows Tools folder",
         "github": "https://github.com/Anixx",
         "include": [
-          "explorer.exe"
+          "*"
         ],
         "name": "Fix Windows Tools Folder View",
-        "version": "1.0"
+        "version": "2.0"
       }
     },
     "flexible-explorer-toolbars-deluxe": {
