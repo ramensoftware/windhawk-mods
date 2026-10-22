@@ -14308,7 +14308,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792472559000,
+        "updated": 1792688516000,
         "users": 43
       },
       "metadata": {
@@ -14317,11 +14317,11 @@
         "description": "A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off",
         "github": "https://github.com/Lucidic15",
         "include": [
-          "windhawk.exe"
+          "explorer.exe"
         ],
         "license": "MIT",
         "name": "Taskbar Audio Flipper",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "taskbar-auto-hide-custom-activation-area": {
@@ -16018,7 +16018,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792468904000,
+        "updated": 1792688523000,
         "users": 13
       },
       "metadata": {
@@ -16027,11 +16027,11 @@
         "description": "A taskbar widget that starts Remote Desktop full screen on the number of displays you pick",
         "github": "https://github.com/Lucidic15",
         "include": [
-          "windhawk.exe"
+          "explorer.exe"
         ],
         "license": "MIT",
         "name": "Taskbar RDP Launcher",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "taskbar-recent-focus-highlight": {
@@ -16260,7 +16260,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792472564000,
+        "updated": 1792688531000,
         "users": 47
       },
       "metadata": {
@@ -16269,11 +16269,11 @@
         "description": "Print Screen, or a button on the taskbar, selects part of the screen to mark up and copy or save; Win+Shift+R records it as a video to trim and copy or save",
         "github": "https://github.com/Lucidic15",
         "include": [
-          "windhawk.exe"
+          "explorer.exe"
         ],
         "license": "MIT",
         "name": "Taskbar Snipper",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "taskbar-spatial-order": {
