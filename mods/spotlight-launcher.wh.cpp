@@ -1911,7 +1911,7 @@ static const wchar_t* LegacyLeaf(const wchar_t* name) {
 // do not need this: an empty text means "not stored".
 static bool IntSettingExistedBeforeGrouping(const wchar_t* leaf) {
     static const wchar_t* const kNewer[] = {
-        L"FilesEnabled", L"CalculatorEnabled", L"SoundEnabled", L"SoundVolume", L"WebSearch",
+        L"FilesEnabled", L"WebSearch",
     };
     for (const wchar_t* n : kNewer) {
         if (wcscmp(leaf, n) == 0) return false;
