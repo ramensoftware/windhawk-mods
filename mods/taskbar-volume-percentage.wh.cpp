@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.9.1
+// @version         1.10.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @architecture    x86-64
@@ -49,6 +49,12 @@ level, updated in real time.
   - Native mute icon and 0%
   - Custom text
 - **Custom mute text**: Text used when the "Custom text" or "Native mute icon and text" mute style is selected (default: `Mute`).
+- **Mute visual cue for volume text**: Visual cue applied to the volume text when audio is muted and "Same as Display style" is selected:
+  - Strikethrough text (default)
+  - Dimmed (reduced opacity)
+  - Strikethrough and dimmed
+  - None (keep text unchanged)
+- **Mute dimmed opacity percentage**: Opacity percentage (10 to 90) used when the dimmed cue is active (default: `50`).
 - **Icon spacing**: Space between the icon and the text (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Container width**: Width of the volume area (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Volume font size**: Size in pixels for the volume text indicator. Set to `0` to use the default size.
@@ -120,6 +126,21 @@ If you find this mod useful, you can support its development and maintenance:
   $description: >-
     Used with the "Custom text" and "Native mute icon and text" mute display
     styles.
+- muteTextCue: strikethrough
+  $name: Mute visual cue for volume text
+  $description: >-
+    Visual indication applied to the volume text when audio is muted and "Same
+    as Display style" is selected.
+  $options:
+  - strikethrough: Strikethrough text
+  - dimmed: Dimmed (reduced opacity)
+  - strikethroughAndDimmed: Strikethrough and dimmed
+  - none: None (keep text unchanged)
+- muteOpacity: 50
+  $name: Mute dimmed opacity percentage
+  $description: >-
+    Opacity percentage (10 to 90) used when the dimmed cue is active. Defaults
+    to 50%.
 - iconSpacing: -1
   $name: Icon spacing
   $description: >-
@@ -218,12 +239,21 @@ enum class MuteStyle {
     custom,
 };
 
+enum class MuteTextCue {
+    strikethrough,
+    dimmed,
+    strikethroughAndDimmed,
+    none,
+};
+
 struct {
     DisplayStyle displayStyle;
     ElementPosition elementPosition;
     WindhawkUtils::StringSetting customPrefix;
     MuteStyle muteStyle;
     WindhawkUtils::StringSetting customMuteText;
+    MuteTextCue muteTextCue;
+    int muteOpacity;
     int containerWidth;
     int iconSpacing;
     double fontSize;
@@ -1007,6 +1037,30 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
                            float volumeLevel) {
     if (!subBlock) {
         return;
+    }
+
+    bool applyMuteCue =
+        isMuted && g_settings.muteStyle == MuteStyle::currentVolume;
+
+    if (applyMuteCue) {
+        bool doStrikethrough =
+            g_settings.muteTextCue == MuteTextCue::strikethrough ||
+            g_settings.muteTextCue == MuteTextCue::strikethroughAndDimmed;
+        bool doDim =
+            g_settings.muteTextCue == MuteTextCue::dimmed ||
+            g_settings.muteTextCue == MuteTextCue::strikethroughAndDimmed;
+
+        subBlock.TextDecorations(
+            doStrikethrough
+                ? winrt::Windows::UI::Text::TextDecorations::Strikethrough
+                : winrt::Windows::UI::Text::TextDecorations::None);
+        subBlock.Opacity(
+            doDim ? (static_cast<double>(g_settings.muteOpacity) / 100.0)
+                  : 1.0);
+    } else {
+        subBlock.TextDecorations(
+            winrt::Windows::UI::Text::TextDecorations::None);
+        subBlock.Opacity(1.0);
     }
 
     if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
@@ -1863,6 +1917,27 @@ void LoadSettings() {
 
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
+
+    auto muteTextCue = WindhawkUtils::StringSetting::make(L"muteTextCue");
+    std::wstring_view mtc = muteTextCue.get();
+    g_settings.muteTextCue =
+        (mtc == L"dimmed")
+            ? MuteTextCue::dimmed
+        : (mtc == L"strikethroughAndDimmed")
+            ? MuteTextCue::strikethroughAndDimmed
+        : (mtc == L"none")
+            ? MuteTextCue::none
+            : MuteTextCue::strikethrough;
+
+    int opacity = Wh_GetIntSetting(L"muteOpacity");
+    if (opacity <= 0) {
+        opacity = 50;
+    } else if (opacity < 10) {
+        opacity = 10;
+    } else if (opacity > 90) {
+        opacity = 90;
+    }
+    g_settings.muteOpacity = opacity;
 
     g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
 
