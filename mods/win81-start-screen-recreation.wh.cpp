@@ -354,30 +354,6 @@ public:
     void reset(T h = NULL) { if (h_) DeleteObject(h_); h_ = h; }
 };
 
-class WinHandle {
-    HANDLE h_;
-public:
-    explicit WinHandle(HANDLE h = NULL) : h_(h) {}
-    ~WinHandle() { if (h_) CloseHandle(h_); }
-    WinHandle(const WinHandle&) = delete; WinHandle& operator=(const WinHandle&) = delete;
-    WinHandle(WinHandle&& o) noexcept : h_(o.h_) { o.h_ = NULL; }
-    WinHandle& operator=(WinHandle&& o) noexcept { if (this != &o) { if (h_) CloseHandle(h_); h_ = o.h_; o.h_ = NULL; } return *this; }
-    HANDLE get() const { return h_; } HANDLE release() { HANDLE t = h_; h_ = NULL; return t; }
-    void reset(HANDLE h = NULL) { if (h_) CloseHandle(h_); h_ = h; }
-};
-
-class DcObj {
-    HDC h_;
-public:
-    explicit DcObj(HDC h = NULL) : h_(h) {}
-    ~DcObj() { if (h_) DeleteDC(h_); }
-    DcObj(const DcObj&) = delete; DcObj& operator=(const DcObj&) = delete;
-    DcObj(DcObj&& o) noexcept : h_(o.h_) { o.h_ = NULL; }
-    DcObj& operator=(DcObj&& o) noexcept { if (this != &o) { if (h_) DeleteDC(h_); h_ = o.h_; o.h_ = NULL; } return *this; }
-    HDC get() const { return h_; } operator HDC() const { return h_; }
-    HDC release() { HDC t = h_; h_ = NULL; return t; }
-};
-
 class ScopedWindowDc {
     HWND wnd_;
     HDC dc_;
@@ -401,61 +377,6 @@ public:
     ScopedPaint& operator=(const ScopedPaint&) = delete;
     HDC get() const { return dc_; }
     operator HDC() const { return dc_; }
-};
-
-template <typename T>
-class ScopedComPtr {
-    T* p_ = nullptr;
-public:
-    ScopedComPtr() = default;
-    explicit ScopedComPtr(T* p) : p_(p) {}
-    ~ScopedComPtr() { if (p_) p_->Release(); }
-    ScopedComPtr(const ScopedComPtr&) = delete;
-    ScopedComPtr& operator=(const ScopedComPtr&) = delete;
-    ScopedComPtr(ScopedComPtr&& o) noexcept : p_(o.p_) { o.p_ = nullptr; }
-    ScopedComPtr& operator=(ScopedComPtr&& o) noexcept {
-        if (this != &o) { if (p_) p_->Release(); p_ = o.p_; o.p_ = nullptr; }
-        return *this;
-    }
-    T* get() const { return p_; }
-    T* operator->() const { return p_; }
-    explicit operator bool() const { return p_ != nullptr; }
-    T** put() { if (p_) { p_->Release(); p_ = nullptr; } return &p_; }
-};
-
-class ScopedWhString {
-    PCWSTR str_ = nullptr;
-public:
-    explicit ScopedWhString(PCWSTR settingName) : str_(Wh_GetStringSetting(settingName)) {}
-    ~ScopedWhString() { if (str_) Wh_FreeStringSetting(str_); }
-    ScopedWhString(const ScopedWhString&) = delete;
-    ScopedWhString& operator=(const ScopedWhString&) = delete;
-    PCWSTR get() const { return str_; }
-    operator PCWSTR() const { return str_; }
-};
-
-class ScopedGlobalAlloc {
-    HGLOBAL h_ = NULL;
-public:
-    explicit ScopedGlobalAlloc(SIZE_T bytes, UINT flags = GMEM_MOVEABLE)
-        : h_(GlobalAlloc(flags, bytes)) {}
-    ~ScopedGlobalAlloc() { if (h_) GlobalFree(h_); }
-    ScopedGlobalAlloc(const ScopedGlobalAlloc&) = delete;
-    ScopedGlobalAlloc& operator=(const ScopedGlobalAlloc&) = delete;
-    HGLOBAL get() const { return h_; }
-    HGLOBAL release() { HGLOBAL t = h_; h_ = NULL; return t; }
-};
-
-// Helpers
-class ScopedGlobalLock {
-    HGLOBAL h_ = NULL;
-    void* ptr_ = nullptr;
-public:
-    explicit ScopedGlobalLock(HGLOBAL h) : h_(h), ptr_(h ? GlobalLock(h) : nullptr) {}
-    ~ScopedGlobalLock() { if (ptr_) GlobalUnlock(h_); }
-    ScopedGlobalLock(const ScopedGlobalLock&) = delete;
-    ScopedGlobalLock& operator=(const ScopedGlobalLock&) = delete;
-    void* get() const { return ptr_; }
 };
 
 struct ScopedSelectedObject {
@@ -491,14 +412,6 @@ struct ScopedBkMode {
     ~ScopedBkMode() { if (dc) SetBkMode(dc, previous); }
     ScopedBkMode(const ScopedBkMode&) = delete;
     ScopedBkMode& operator=(const ScopedBkMode&) = delete;
-};
-
-struct ScopedComApartment {
-    bool initialized = false;
-    explicit ScopedComApartment(bool ok) : initialized(ok) {}
-    ~ScopedComApartment() { if (initialized) CoUninitialize(); }
-    ScopedComApartment(const ScopedComApartment&) = delete;
-    ScopedComApartment& operator=(const ScopedComApartment&) = delete;
 };
 
 static std::atomic<unsigned> g_exceptionCount{0};
@@ -717,11 +630,16 @@ static const float HEADER_FADE   = 0.19f;
 static const float CLOSE_SLIDE   = 0.60f;
 
 static int SB_W = 346, SB_PAD = 40;
-static const float SB_IN = 0.11f, SB_OUT = 0.13f;
+static const float SB_IN = 0.11f;
 static const float RESULT_FADE = 0.12f;
 static const float BG_BACK = 0.15f;
-static const int   kItemX = 112, kItemY = 178, kItemW = 216, kItemH = 59;
-static const int   kItemPitchX = 235, kItemPitchY = 60;
+// All Apps / search grid metrics, authored at 96 DPI and scaled with the current DPI.
+#define kItemX      ScI(112)
+#define kItemY      ScI(178)
+#define kItemW      ScI(216)
+#define kItemH      ScI(59)
+#define kItemPitchX ScI(235)
+#define kItemPitchY ScI(60)
 
 enum TileStyle { TOP_APP, BOTTOM_CAPTION, DESKTOP_REFERENCE, STORE_CAPTION, PINNED_APP };
 
@@ -777,6 +695,7 @@ static const UINT WM_APP_REBUILD_BG = WM_APP + 13;
 static const UINT WM_APP_CHARM_POINTER = WM_APP + 14;
 static const UINT WM_APP_SEED_LAYOUT = WM_APP + 15;
 static const UINT WM_APP_FILES_READY = WM_APP + 16;
+static const UINT WM_APP_APPS_REFRESH = WM_APP + 17;
 static const UINT WM_HOOKCTL_MOUSE_ON  = WM_APP + 30;
 static const UINT WM_HOOKCTL_MOUSE_OFF = WM_APP + 31;
 static const ULONG_PTR kMagic = 0x38303435;
@@ -809,6 +728,7 @@ static HANDLE g_logonThread = NULL, g_logonStop = NULL;
 static float g_openSlideSeconds = OPEN_SLIDE, g_closeSlideSeconds = CLOSE_SLIDE;
 
 static int  g_sw = 1920, g_sh = 1080;
+static int  g_monX = 0, g_monY = 0;   // top-left of the monitor Start is shown on
 static int GroupColumns() { return (int)InterlockedCompareExchange(&g_requestedGroupCols, 0, 0); }
 static int GroupRows() {
     int requested = (int)InterlockedCompareExchange(&g_requestedGroupRows, 0, 0);
@@ -975,6 +895,11 @@ struct AppEntry { std::wstring name, lower, parse; bool exe, desktop;
                   bool dir = false;
                   bool searchOnly = false;
                   bool direct = false; };
+// Copy of the entry the context menu was opened on: g_results can be re-sorted
+// (e.g. when the file list finishes) while the menu is open.
+static AppEntry g_ctxApp;
+static bool g_ctxAppValid = false;
+
 struct IconSlot { BYTE* px; int w, h; LONG ready; ID2D1Bitmap* gpu; LONG tried; };
 static std::wstring AppTarget(const AppEntry& a) {
     return (a.exe || a.direct || a.desktop) ? a.parse
@@ -996,9 +921,14 @@ static HANDLE g_appsThread = NULL, g_appsStop = NULL;
 static SRWLOCK g_appsLock = SRWLOCK_INIT;
 static HANDLE g_filesNeed = NULL;
 static std::vector<AppEntry>* g_pendingFiles = NULL;
-static float g_sbFrom = 0.0f, g_sbTo = 0.0f, g_sbDur = SB_IN;
+// Catalog refresh: the worker rebuilds the list, the UI thread applies it (so g_apps is
+// never replaced under a reader), then signals g_iconsGo to let the worker load icons.
+static HANDLE g_appsRefresh = NULL, g_iconsGo = NULL;
+static std::vector<AppEntry>* g_pendingApps = NULL;
+static ULONGLONG g_catalogBuiltTick = 0;
+static const ULONGLONG kCatalogMaxAgeMs = 10ULL * 60ULL * 1000ULL;
+static float g_sbDur = SB_IN;
 static DWORD g_sbTick = 0, g_searchTick = 0, g_returnTick = 0;
-static bool g_sbWanted = false;
 static bool g_skipSnapshot = false;
 static bool g_swallowed[256] = {};
 
@@ -1405,18 +1335,6 @@ static bool StorageFilePath(const wchar_t* stem, std::wstring& out) {
     out = dir + L"\\" + stem + L"-" + CurrentUserSid() + L".txt";
     return true;
 }
-static std::wstring LegacyDataPath(const wchar_t* file) {
-    wchar_t base[MAX_PATH] = L"";
-    if (FAILED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, base)) || !base[0]) return L"";
-    return std::wstring(base) + L"\\Win8StartScreen\\" + file;
-}
-static void RemoveLegacyData(const wchar_t* file) {
-    std::wstring path = LegacyDataPath(file);
-    if (path.empty()) return;
-    DeleteFileW(path.c_str());
-    size_t slash = path.find_last_of(L'\\');
-    if (slash != std::wstring::npos) RemoveDirectoryW(path.substr(0, slash).c_str());
-}
 static bool GroupsPathW(std::wstring& out) {
     return StorageFilePath(L"groups", out);
 }
@@ -1439,22 +1357,12 @@ static void SaveGroupNames() {
     DWORD written = 0;
     WriteFile(f, utf8.data(), (DWORD)utf8.size(), &written, NULL);
     CloseHandle(f);
-    static bool legacyRemoved = false;
-    if (!legacyRemoved) {
-        legacyRemoved = true;
-        RemoveLegacyData(L"groups.txt");
-    }
 }
 static void LoadGroupNames() {
     g_groupNames.assign(std::max(0, g_groupCount), std::wstring());
     std::wstring path;
     if (!GroupsPathW(path)) return;
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (f == INVALID_HANDLE_VALUE) {
-        std::wstring legacy = LegacyDataPath(L"groups.txt");
-        if (!legacy.empty())
-            f = CreateFileW(legacy.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    }
     if (f == INVALID_HANDLE_VALUE) return;
     DWORD size = GetFileSize(f, NULL);
     if (size == INVALID_FILE_SIZE || size == 0 || size > (1u << 20)) { CloseHandle(f); return; }
@@ -1516,19 +1424,6 @@ static void NamingKey(UINT vk) {
     if (vk == VK_BACK) { if (!g_groupNameEdit.empty()) g_groupNameEdit.pop_back(); g_dirty = true; RepaintNow(); }
     else if (vk == VK_RETURN) CommitNaming();
     else if (vk == VK_ESCAPE) CancelNaming();
-}
-static bool OverviewEnabled() { return false; }
-static void EnterZoom() {
-    if (!OverviewEnabled()) return;
-    if (g_view != VIEW_START || g_charmOpen || g_dragging || g_closing || !g_open) return;
-    if (g_barVisible) HideBar();
-    g_zoomOut = true;
-    g_zoomTick = NowMs();
-    g_scrollTarget = 0.0f;
-    g_hoverGroup = -1;
-    g_focus = -1;
-    Wh_Log(L"[zoom] overview open");
-    g_dirty = true; RepaintNow();
 }
 static void ExitZoom(int jumpGroup) {
     if (g_namingGroup >= 0) CancelNaming();
@@ -1613,14 +1508,6 @@ static void DrawGroupNamesGpu(DWORD now) {
             TextAt(nm->c_str(), g_subFormat, nx, ny, nx + (r - l), ny + ScF(26), RGB(255, 255, 255), 0.92f * ta);
         }
     }
-}
-static void DrawZoomButtonGpu() {
-    if (g_view != VIEW_START || ZoomPresence(NowMs()) > 0.0f) return;
-    if (!g_iconZoom.gpu) return;
-    RECT zr; ZoomButtonRect(&zr);
-    g_rt->DrawBitmap(g_iconZoom.gpu,
-                     D2D1::RectF((float)zr.left, (float)zr.top, (float)zr.right, (float)zr.bottom),
-                     g_hoverZoomBtn ? 1.0f : 0.16f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 struct AutoCompatDC {
     HDC dc = NULL; HGDIOBJ old = NULL;
@@ -1893,11 +1780,13 @@ static std::wstring HeadingLabel(const AppHeading& h) {
     if (h.last != h.first) { s += L'\x2013'; s += h.last; }
     return s;
 }
-static const int kZoomTop = 196, kZoomTileH = 56, kZoomGapY = 10;
+#define kZoomTop   ScI(196)
+#define kZoomTileH ScI(56)
+#define kZoomGapY  ScI(10)
 static int ZoomTileRows() {
-    int rowsAvail = (g_sh - kZoomTop - 64) / (kZoomTileH + kZoomGapY);
+    int rowsAvail = (g_sh - kZoomTop - ScI(64)) / (kZoomTileH + kZoomGapY);
     if (rowsAvail < 1) rowsAvail = 1;
-    int colsAvail = (g_sw - kItemX - 48) / kItemPitchX;
+    int colsAvail = (g_sw - kItemX - ScI(48)) / kItemPitchX;
     if (colsAvail < 1) colsAvail = 1;
     int n = (int)g_appHeadings.size();
     int rowsNeeded = std::max(1, (n + colsAvail - 1) / colsAvail);
@@ -1914,7 +1803,7 @@ static int HitHeading(int mx, int my) {
     if (g_view != VIEW_SEARCH || g_queryLen != 0) return -1;
     for (int i = 0; i < (int)g_appHeadings.size(); ++i) {
         float x = (float)(kItemX + g_appHeadings[i].col * kItemPitchX) - g_scrollCur;
-        if (mx >= (int)x && mx <= (int)x + kItemW && my >= 130 && my <= 172) return i;
+        if (mx >= (int)x && mx <= (int)x + kItemW && my >= ScI(130) && my <= ScI(172)) return i;
     }
     return -1;
 }
@@ -3026,15 +2915,18 @@ static void RecreateFonts() {
     CreateUiFonts();
     g_userTextW = -1;
     if (g_writeFactory) {
-        IDWriteTextFormat* all[] = { g_titleFormat, g_userFormat, g_subFormat, g_itemFormat,
-                                     g_sbTitleFormat, g_boldFormat, g_rowFormat, g_countFormat,
-                                     g_queryFormat, g_glyphFormat, g_glyphSmall, g_barLabel, g_flyFormat, g_hdrGlyphFmt, g_zoomFormat };
-        for (size_t i = 0; i < ARRAYSIZE(all); ++i) if (all[i]) { all[i]->Release(); all[i] = NULL; }
+        // Release through pointers so the globals are nulled, never left dangling.
+        IDWriteTextFormat** all[] = { &g_titleFormat, &g_userFormat, &g_subFormat, &g_itemFormat,
+                                      &g_sbTitleFormat, &g_boldFormat, &g_rowFormat, &g_countFormat,
+                                      &g_queryFormat, &g_glyphFormat, &g_glyphSmall, &g_barLabel,
+                                      &g_flyFormat, &g_hdrGlyphFmt, &g_zoomFormat };
+        for (IDWriteTextFormat** f : all) if (*f) { (*f)->Release(); *f = NULL; }
         if (g_rt) {
             g_writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_LIGHT,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(56.0f), L"en-US", &g_titleFormat);
             g_writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_LIGHT,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(28.0f), L"en-US", &g_userFormat);
+            if (g_userFormat) g_userFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
             MakeSearchFormats();
         }
     }
@@ -3054,9 +2946,6 @@ static void UploadTileTexturesGpu() {
     }
 }
 static bool InitGpu() {
-#ifdef WHTEST_FORCE_GDI
-    return false;
-#endif
     if (g_rt) {
         if (!g_bgGpu && g_bgBits) {
             D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties();
@@ -4051,6 +3940,7 @@ static void WalkStartLnks(const std::wstring& dir, int depth, size_t rootLen,
 static DWORD WINAPI AppsThread(LPVOID) {
   RunGuarded(L"AppsThread", [] {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    for (bool first = true;; first = false) {
     std::vector<AppEntry> list;
 
     PIDLIST_ABSOLUTE pidl = NULL;
@@ -4119,13 +4009,26 @@ static DWORD WINAPI AppsThread(LPVOID) {
     AddCharmSystemEntries(list);
     Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
-    AcquireSRWLockExclusive(&g_appsLock);
-    g_apps.swap(list);
-    g_icons.clear();
-    g_icons.resize(g_apps.size());
-    ReleaseSRWLockExclusive(&g_appsLock);
-    InterlockedExchange(&g_appsReady, 1);
-    if (g_wnd) PostMessageW(g_wnd, WM_APP_APPS_READY, 0, 0);
+    g_catalogBuiltTick = GetTickCount64();
+    if (first) {
+        AcquireSRWLockExclusive(&g_appsLock);
+        g_apps.swap(list);
+        g_icons.clear();
+        g_icons.resize(g_apps.size());
+        ReleaseSRWLockExclusive(&g_appsLock);
+        InterlockedExchange(&g_appsReady, 1);
+        if (g_wnd) PostMessageW(g_wnd, WM_APP_APPS_READY, 0, 0);
+    } else {
+        std::vector<AppEntry>* np = new std::vector<AppEntry>(std::move(list));
+        AcquireSRWLockExclusive(&g_appsLock);
+        delete g_pendingApps;
+        g_pendingApps = np;
+        ReleaseSRWLockExclusive(&g_appsLock);
+        if (g_wnd) PostMessageW(g_wnd, WM_APP_APPS_REFRESH, 0, 0);
+        HANDLE go[2] = { g_appsStop, g_iconsGo };
+        if (!g_iconsGo || WaitForMultipleObjects(2, go, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) break;
+        ResetEvent(g_iconsGo);
+    }
 
     for (size_t i = 0; i < g_apps.size(); ++i) {
         if (WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0) break;
@@ -4135,8 +4038,10 @@ static DWORD WINAPI AppsThread(LPVOID) {
     }
     if (g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
 
-    HANDLE filesWait[2] = { g_appsStop, g_filesNeed };
-    if (g_filesNeed && WaitForMultipleObjects(2, filesWait, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
+    // Wait for either a file-scan request or a catalog refresh request.
+    HANDLE wait3[3] = { g_appsStop, g_filesNeed, g_appsRefresh };
+    DWORD w = WaitForMultipleObjects(g_filesNeed ? 3 : 1, wait3, FALSE, INFINITE);
+    if (w == WAIT_OBJECT_0 + 1) {
         std::vector<AppEntry>* files = new std::vector<AppEntry>();
         ScanCharmFiles(*files);
         const bool stopped = WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0;
@@ -4149,6 +4054,13 @@ static DWORD WINAPI AppsThread(LPVOID) {
             ReleaseSRWLockExclusive(&g_appsLock);
             if (g_wnd) PostMessageW(g_wnd, WM_APP_FILES_READY, 0, 0);
         }
+        if (stopped) break;
+        HANDLE wait2[2] = { g_appsStop, g_appsRefresh };
+        if (WaitForMultipleObjects(g_appsRefresh ? 2 : 1, wait2, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) break;
+    } else if (w != WAIT_OBJECT_0 + 2) {
+        break;
+    }
+    ResetEvent(g_appsRefresh);
     }
     CoUninitialize();
   });
@@ -4156,7 +4068,7 @@ static DWORD WINAPI AppsThread(LPVOID) {
 }
 
 static int RowsPerCol() {
-    int rows = (g_sh - kItemY - 24) / kItemPitchY;
+    int rows = (g_sh - kItemY - ScI(24)) / kItemPitchY;
     return rows < 1 ? 1 : rows;
 }
 
@@ -4164,7 +4076,7 @@ static float MaxScrollSearch() {
     int rows = RowsPerCol();
     int cols = g_queryLen == 0 ? (int)g_appHeadings.size() :
                ((int)g_results.size() + rows - 1) / rows;
-    float right = (float)(kItemX + cols * kItemPitchX + 40);
+    float right = (float)(kItemX + cols * kItemPitchX + ScI(40));
     float m = right - (float)g_sw;
     return m > 0.0f ? m : 0.0f;
 }
@@ -4191,8 +4103,6 @@ static void RepaintNow() {
     if (g_wnd) InvalidateRect(g_wnd, NULL, FALSE);
 }
 
-static void SetSidebar(bool, float) { }
-static void SetSidebarNow(bool) { }
 
 static wchar_t AppInitial(const std::wstring& name) {
     for (wchar_t c : name) {
@@ -4377,7 +4287,6 @@ static void CommitAllApps() {
     g_returnTick = 0;
     RunSearch();
     g_searchTick = NowMs();
-    SetSidebarNow(false);
     RepaintNow();
 }
 static void EnterAllApps() {
@@ -4395,24 +4304,12 @@ static void EnterAllApps() {
 
 static void EnterSearchEmpty() {
     CharmToggle();
-    if (true) return;
-    if (!g_rt || !g_bgPlainGpu) return;
-    g_view = VIEW_SEARCH;
-    g_queryLen = 0; g_query[0] = 0;
-    g_scrollCur = g_scrollTarget = 0.0f;
-    g_hover = g_pressed = -1;
-    g_returnTick = 0;
-    RunSearch();
-    g_searchTick = NowMs();
-    g_sbFrom = 0.0f; g_sbTo = 1.0f; g_sbTick = g_searchTick; g_sbDur = SB_IN; g_sbWanted = true;
-    RepaintNow();
 }
 
 static void LeaveSearch() {
     DWORD now = NowMs();
     g_logonOpening = false;
     g_view = VIEW_START;
-    SetSidebarNow(false);
     g_hover = g_pressed = -1;
     g_appsSearchFocus = false;
     g_scrollCur = g_scrollTarget = 0.0f;
@@ -4424,13 +4321,15 @@ static void LeaveSearch() {
     RepaintNow();
 }
 
-static void LaunchResult(int i) {
-    if (i < 0 || i >= (int)g_results.size()) return;
-    const AppEntry& a = g_apps[g_results[i]];
+static void LaunchEntry(const AppEntry& a) {
     if (a.desktop) { CloseStart(g_firstDesktopAfterLogon); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
     ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
+}
+static void LaunchResult(int i) {
+    if (i < 0 || i >= (int)g_results.size()) return;
+    LaunchEntry(g_apps[g_results[i]]);
 }
 
 static void OnSearchChar(wchar_t c) {
@@ -4466,7 +4365,7 @@ static void MoveSelection(int delta) {
     if (g_selected >= n) g_selected = n - 1;
     float x = (float)(kItemX + ResultCol(g_selected) * kItemPitchX);
     if (x - g_scrollTarget < 0.0f) g_scrollTarget = x - (float)kItemX;
-    else if (x + kItemW - g_scrollTarget > (float)g_sw - 40.0f) g_scrollTarget = x + kItemW - (float)g_sw + 40.0f;
+    else if (x + kItemW - g_scrollTarget > (float)g_sw - ScF(40.0f)) g_scrollTarget = x + kItemW - (float)g_sw + ScF(40.0f);
     float m = MaxScrollSearch();
     if (g_scrollTarget < 0.0f) g_scrollTarget = 0.0f;
     if (g_scrollTarget > m) g_scrollTarget = m;
@@ -4548,7 +4447,6 @@ static void OnSearchClick(int x, int y) {
     }
     int r = HitResult(x, y);
     if (r >= 0) { LaunchResult(r); return; }
-    if (g_sbWanted) SetSidebar(false, SB_OUT);
 }
 
 static void SetBr(COLORREF c, float a) {
@@ -4616,22 +4514,22 @@ static void DrawSearchGpu(DWORD now, bool closing) {
     float fade = Clamp01(((float)(now - g_searchTick) / 1000.0f - 0.04f) / RESULT_FADE);
     if (g_results.empty()) {
         if (g_queryLen > 0) TextAt(T(STR_NO_RESULTS), g_itemFormat,
-                                   (float)LEFT, 186.0f, 900.0f, 230.0f, RGB(225, 225, 235), fade);
+                                   (float)LEFT, ScF(186.0f), ScF(900.0f), ScF(230.0f), RGB(225, 225, 235), fade);
     } else {
         if (g_queryLen == 0) {
             for (const AppHeading& h : g_appHeadings) {
                 float x = (float)(kItemX + h.col * kItemPitchX) - g_scrollCur;
                 if (x + kItemW < 0.0f || x > (float)g_sw) continue;
                 if (!h.text.empty()) {
-                    TextAt(h.text.c_str(), g_subFormat, x + 8.0f, 135.0f, x + kItemW, 167.0f,
+                    TextAt(h.text.c_str(), g_subFormat, x + ScF(8.0f), ScF(135.0f), x + kItemW, ScF(167.0f),
                            RGB(235, 235, 245), fade);
                 } else if (h.bucket >= 0) {
-                    TextAt(T((StrId)(STR_DATE_TODAY + h.bucket)), g_subFormat, x + 8.0f, 135.0f, x + kItemW, 167.0f,
+                    TextAt(T((StrId)(STR_DATE_TODAY + h.bucket)), g_subFormat, x + ScF(8.0f), ScF(135.0f), x + kItemW, ScF(167.0f),
                            RGB(235, 235, 245), fade);
                 } else {
                     wchar_t label[4] = { h.first, 0, 0, 0 };
                     if (h.last != h.first) { label[1] = L'\x2013'; label[2] = h.last; }
-                    TextAt(label, g_subFormat, x + 8.0f, 135.0f, x + kItemW, 167.0f,
+                    TextAt(label, g_subFormat, x + ScF(8.0f), ScF(135.0f), x + kItemW, ScF(167.0f),
                            RGB(235, 235, 245), fade);
                 }
             }
@@ -4642,11 +4540,11 @@ static void DrawSearchGpu(DWORD now, bool closing) {
             if (x + kItemW < 0.0f || x > (float)g_sw) continue;
             int ai = g_results[i];
             COLORREF plate = g_apps[ai].lower == L"store" ? RGB(172, 137, 0) : RGB(92, 40, 138);
-            FillRc(x + 8.0f, y + 7.0f, x + 53.0f, y + 52.0f, plate, fade);
+            FillRc(x + ScF(8.0f), y + ScF(7.0f), x + ScF(53.0f), y + ScF(52.0f), plate, fade);
             if (ID2D1Bitmap* ic = IconGpu(ai))
-                g_rt->DrawBitmap(ic, D2D1::RectF(x + 10.5f, y + 9.5f, x + 50.5f, y + 49.5f), fade,
+                g_rt->DrawBitmap(ic, D2D1::RectF(x + ScF(10.5f), y + ScF(9.5f), x + ScF(50.5f), y + ScF(49.5f)), fade,
                                  D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-            TextAt(g_apps[ai].name.c_str(), g_itemFormat, x + 60.0f, y + 8.0f, x + (float)kItemW - 4.0f, y + 54.0f,
+            TextAt(g_apps[ai].name.c_str(), g_itemFormat, x + ScF(60.0f), y + ScF(8.0f), x + (float)kItemW - ScF(4.0f), y + ScF(54.0f),
                    RGB(235, 235, 245), fade);
             if (i == g_selected) {
                 SetBr(RGB(255, 255, 255), fade);
@@ -4838,11 +4736,6 @@ static void SaveLayout() {
     DWORD written = 0;
     WriteFile(f, utf8.data(), (DWORD)utf8.size(), &written, NULL);
     CloseHandle(f);
-    static bool legacyRemoved = false;
-    if (!legacyRemoved) {
-        legacyRemoved = true;
-        RemoveLegacyData(L"tiles.txt");
-    }
 }
 
 static std::vector<std::wstring> SplitTabs(const std::wstring& line) {
@@ -4871,11 +4764,6 @@ static bool LoadLayout() {
     std::wstring path;
     if (!LayoutPath(path)) return false;
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (f == INVALID_HANDLE_VALUE) {
-        std::wstring legacy = LegacyDataPath(L"tiles.txt");
-        if (!legacy.empty())
-            f = CreateFileW(legacy.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    }
     if (f == INVALID_HANDLE_VALUE) return false;
     DWORD size = GetFileSize(f, NULL);
     if (size == INVALID_FILE_SIZE || size == 0 || size > (4u << 20)) { CloseHandle(f); return false; }
@@ -5205,6 +5093,7 @@ static void PinApp(const wchar_t* name, const std::wstring& target) {
 
 static void SeedStartLayout() {
     InterlockedExchange(&g_seedPending, 0);
+    Wh_SetIntValue(L"layoutSeeded", 1);
     struct Seed { const wchar_t* match[3]; int cw; bool newGroup; };
     static const Seed kSeeds[] = {
         { { L"microsoft.windowslive.mail",     L"microsoft.outlookforwindows", NULL }, TS_WIDE,   true  },
@@ -5582,6 +5471,16 @@ static std::wstring ItemFile(const SelectedItem& item) {
 static void ShellActionError(const wchar_t* message) {
     Wh_Log(L"Shell action failed: %s", message);
     MessageBeep(MB_ICONINFORMATION);
+    // Show it off the UI thread so the Start screen keeps pumping messages.
+    wchar_t* copy = _wcsdup(message);
+    if (!copy) return;
+    HANDLE th = CreateThread(NULL, 0, [](LPVOID p) -> DWORD {
+        wchar_t* m = (wchar_t*)p;
+        MessageBoxW(NULL, m, L"Start", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
+        free(m);
+        return 0;
+    }, copy, 0, NULL);
+    if (th) CloseHandle(th); else free(copy);
 }
 
 static bool ShortcutCommand(const std::wstring& file, std::wstring* executable, std::wstring* args) {
@@ -5900,10 +5799,6 @@ static void DrawAppsChromeGdi(HDC) {
     const BYTE aa = (BYTE)((g_hoverArrow ? 255 : 42) * ChromeIdleFade(NowMs()));
     if (g_view == VIEW_START && ZoomPresence(NowMs()) <= 0.0f) {
         BlitIconGdi(g_bbDC, g_iconArrowDown, ar, g_hoverArrow, aa);
-        if (OverviewEnabled()) {
-            RECT zr; ZoomButtonRect(&zr);
-            BlitIconGdi(g_bbDC, g_iconZoom, zr, g_hoverZoomBtn, (BYTE)((g_hoverZoomBtn ? 255 : 42) * ChromeIdleFade(NowMs())));
-        }
     } else if (g_queryLen == 0) {
         BlitIconGdi(g_bbDC, g_iconArrowUp, ar, g_hoverArrow, aa);
         RECT sr; SortButtonRect(&sr);
@@ -5933,7 +5828,7 @@ static void DrawAppsChromeGpu() {
         }
     };
     if (!EnsureUiIcons()) return;
-    if (g_view == VIEW_START) { if (ZoomPresence(NowMs()) <= 0.0f) arrow(true); if (OverviewEnabled()) DrawZoomButtonGpu(); }
+    if (g_view == VIEW_START) { if (ZoomPresence(NowMs()) <= 0.0f) arrow(true); }
     else if (g_queryLen == 0) {
         arrow(false);
         RECT sr; SortButtonRect(&sr);
@@ -6103,13 +5998,8 @@ static COLORREF SystemAccentColor() {
     return RGB(0, 116, 203);
 }
 
-#if defined(__clang__) && __has_attribute(no_destroy)
-#define WHSM_NO_DESTROY [[clang::no_destroy]]
-#else
-#define WHSM_NO_DESTROY
-#endif
 static HICON g_stockAppIcon = NULL;
-WHSM_NO_DESTROY static std::optional<
+[[clang::no_destroy]] static std::optional<
     std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>>>
     g_iconBitmapCache{std::in_place};
 
@@ -7454,7 +7344,10 @@ static bool DismissCompanionSearchCharm(POINT screenPt, bool havePt) {
         screenPt.x = GetSystemMetrics(SM_XVIRTUALSCREEN);
         screenPt.y = GetSystemMetrics(SM_YVIRTUALSCREEN);
     }
-    PostMessageW(other, WM_APP + 3, (WPARAM)(LONG_PTR)screenPt.x, (LPARAM)(LONG_PTR)screenPt.y);
+    // Shared, named message so both mods agree on the id regardless of WM_APP allocation.
+    static const UINT kDismissMsg = RegisterWindowMessageW(L"Win81SearchCharmMod.Dismiss");
+    if (!kDismissMsg) return false;
+    PostMessageW(other, kDismissMsg, (WPARAM)(LONG_PTR)screenPt.x, (LPARAM)(LONG_PTR)screenPt.y);
     return true;
 }
 static void SuppressOtherSearchCharm() { POINT z = { 0, 0 }; DismissCompanionSearchCharm(z, false); }
@@ -7618,16 +7511,8 @@ static void DismissUserMenu() {
 
 static bool HibernateAvailable() {
     bool yes = false;
-    HMODULE hp = LoadLibraryW(L"powrprof.dll");
-    if (hp) {
-        typedef BOOL(WINAPI* GetPwrCapabilitiesFn)(void*);
-        GetPwrCapabilitiesFn fn = (GetPwrCapabilitiesFn)GetProcAddress(hp, "GetPwrCapabilities");
-        if (fn) {
-            BYTE caps[256] = {};
-            if (fn(caps)) yes = ((caps[1] >> 5) & 1) != 0;
-        }
-        FreeLibrary(hp);
-    }
+    SYSTEM_POWER_CAPABILITIES caps = {};
+    if (GetPwrCapabilities(&caps)) yes = caps.SystemS4 != FALSE && caps.HiberFilePresent != FALSE;
     return yes;
 }
 static void ShowMenuFor(HWND owner, RECT anchor, int kind);
@@ -7673,7 +7558,8 @@ static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
         out.push_back({ T(STR_PWR_SHUTDOWN), UM_SHUTDOWN });
         out.push_back({ T(STR_PWR_RESTART), UM_RESTART });
     } else if (kind == 4) {
-        const AppEntry& a = g_apps[g_results[g_ctxRow]];
+        if (!g_ctxAppValid) return;
+        const AppEntry& a = g_ctxApp;
         bool fileish = !a.parse.empty() && wcsstr(a.parse.c_str(), L"shell:") == NULL &&
                        wcsstr(a.parse.c_str(), L"ms-") == NULL;
         out.push_back({ T(STR_CTX_OPEN), CM_OPEN });
@@ -7812,10 +7698,10 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
                       SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
         break;
     case MC_SEP_ID: break;
-    case CM_OPEN: if (g_ctxRow >= 0 && g_ctxRow < (int)g_results.size()) LaunchResult(g_ctxRow); break;
+    case CM_OPEN: if (g_ctxAppValid) LaunchEntry(g_ctxApp); break;
     case CM_PINSTART:
-        if (g_ctxRow >= 0 && g_ctxRow < (int)g_results.size()) {
-            const AppEntry& a = g_apps[g_results[g_ctxRow]];
+        if (g_ctxAppValid) {
+            const AppEntry& a = g_ctxApp;
             const std::wstring target = AppTarget(a);
             if (!target.empty()) {
                 const int existing = FindPinned(target.c_str());
@@ -7827,8 +7713,8 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
     case CM_LOCATION:
     case CM_RUNAS:
     case CM_COPY:
-        if (g_ctxRow >= 0 && g_ctxRow < (int)g_results.size()) {
-            const AppEntry& a = g_apps[g_results[g_ctxRow]];
+        if (g_ctxAppValid) {
+            const AppEntry& a = g_ctxApp;
             if (cmd == CM_COPY) {
                 if (OpenClipboard(g_wnd)) {
                     EmptyClipboard();
@@ -8166,7 +8052,10 @@ static DWORD WINAPI FrameThread(LPVOID) {
     return 0;
 }
 
+static bool g_framesIdle = false;
+static int g_idleTicks = 0;
 static void StartFrames() {
+    g_framesIdle = false; g_idleTicks = 0;
     if (g_frameThread && WaitForSingleObject(g_frameThread, 0) == WAIT_TIMEOUT) {
         SetEvent(g_frameWake);
     } else {
@@ -8175,8 +8064,23 @@ static void StartFrames() {
 }
 
 static void StopFrames() {
+    g_framesIdle = false;
     if (g_frameWake) ResetEvent(g_frameWake);
     KillTimer(g_wnd, 1);
+}
+
+// When nothing has animated for a while, drop the per-vblank pump and poll at 10 Hz;
+// any input (or Tick noticing a change) restores the full-rate pump.
+static void EnterIdleFrames(HWND h) {
+    if (g_framesIdle || !g_frameWake) return;
+    g_framesIdle = true;
+    ResetEvent(g_frameWake);
+    SetTimer(h, 1, 100, NULL);
+}
+static void ResumeFrames() {
+    if (!g_framesIdle) return;
+    KillTimer(g_wnd, 1);
+    StartFrames();
 }
 
 static bool InteractiveDesktopReady() {
@@ -8238,7 +8142,6 @@ static DWORD WINAPI LogonOpenThread(LPVOID) {
     const size_t got = Wh_GetBinaryValue(valueName.c_str(), &previous, sizeof(previous));
     if (got == sizeof(previous) && previous == loggedOn) return;
     if (!Wh_SetBinaryValue(valueName.c_str(), &loggedOn, sizeof(loggedOn))) return;
-    RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\Win8StartScreen");
 
     Wh_Log(L"Sign-in Start: interactive desktop ready; requesting opening reveal");
     if (g_wnd) PostMessageW(g_wnd, WM_APP_LOGON_OPEN, 0, 0);
@@ -8249,7 +8152,7 @@ static DWORD WINAPI LogonOpenThread(LPVOID) {
 static void CaptureDesktop() {
     if (!g_snapDC) return;
     HDC sdc = GetDC(NULL);
-    g_snapReady = BitBlt(g_snapDC, 0, 0, g_sw, g_sh, sdc, 0, 0, SRCCOPY | CAPTUREBLT) != 0;
+    g_snapReady = BitBlt(g_snapDC, 0, 0, g_sw, g_sh, sdc, g_monX, g_monY, SRCCOPY | CAPTUREBLT) != 0;
     ReleaseDC(NULL, sdc);
     GdiFlush();
 }
@@ -8257,17 +8160,34 @@ static void CaptureDesktop() {
 static void OpenStart(bool atLogon = false) {
     if (!g_wnd) return;
     UpdateDpi();
+    if (g_appsRefresh && InterlockedCompareExchange(&g_appsReady, 0, 0) &&
+        GetTickCount64() - g_catalogBuiltTick > kCatalogMaxAgeMs)
+        SetEvent(g_appsRefresh);   // catalog is stale: rebuild apps (and files, if they were requested)
+    // Open on the monitor that holds the cursor (the primary one at logon).
+    int monX = 0, monY = 0;
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    {
+        POINT cp = { 0, 0 };
+        if (!atLogon && GetCursorPos(&cp)) {
+            MONITORINFO mi = { sizeof(mi) };
+            HMONITOR mon = MonitorFromPoint(cp, MONITOR_DEFAULTTOPRIMARY);
+            if (mon && GetMonitorInfoW(mon, &mi)) {
+                monX = mi.rcMonitor.left; monY = mi.rcMonitor.top;
+                sw = mi.rcMonitor.right - mi.rcMonitor.left;
+                sh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+            }
+        }
+    }
     bool wasVisible = IsWindowVisible(g_wnd) != 0;
-    if (sw != g_sw || sh != g_sh || !g_bgBmp) {
+    if (sw != g_sw || sh != g_sh || monX != g_monX || monY != g_monY || !g_bgBmp) {
         if (wasVisible) ShowWindow(g_wnd, SW_HIDE);
-        g_sw = sw; g_sh = sh;
+        g_sw = sw; g_sh = sh; g_monX = monX; g_monY = monY;
         for (int i = 0; i < g_tileCount; ++i) g_tileGroup[i] = g_committedGroup[i];
         Relayout(false);
         ClampScroll();
         BuildBuffers();
         RebuildDesktopPreview();
-        SetWindowPos(g_wnd, NULL, 0, 0, g_sw, g_sh,
+        SetWindowPos(g_wnd, NULL, g_monX, g_monY, g_sw, g_sh,
                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
         wasVisible = false;
     }
@@ -8287,7 +8207,6 @@ static void OpenStart(bool atLogon = false) {
     SetCharmMouseHook(false);
     g_queryLen = 0; g_query[0] = 0;
     g_results.clear(); g_selected = 0;
-    SetSidebarNow(false);
     g_logonOpening = atLogon;
     if (atLogon) g_firstDesktopAfterLogon = true;
     g_logonVisualMs = 0;
@@ -8312,7 +8231,7 @@ static void OpenStart(bool atLogon = false) {
     g_closing = false;
     g_dirty = true;
     if (!gpuReady) Render();
-    SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, g_sw, g_sh,
+    SetWindowPos(g_wnd, HWND_TOPMOST, g_monX, g_monY, g_sw, g_sh,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     InvalidateRect(g_wnd, NULL, FALSE);
     UpdateWindow(g_wnd);
@@ -8473,11 +8392,17 @@ static void Tick() {
         if (g_barVisible && (float)(now - g_barTick) / 1000.0f < 0.2f) changed = true;
     }
 
-    if (changed) { g_dirty = true; InvalidateRect(g_wnd, NULL, FALSE); }
+    if (changed) { g_idleTicks = 0; g_dirty = true; InvalidateRect(g_wnd, NULL, FALSE); }
+    else ++g_idleTicks;
 }
 
 static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return RunGuardedValue<LRESULT>(L"WndProc", 0, [&]() -> LRESULT {
+    if (msg != WM_TIMER && msg != WM_PAINT && msg != WM_APP_FRAME &&
+        msg != WM_NCHITTEST && msg != WM_SETCURSOR && msg != WM_ERASEBKGND) {
+        g_idleTicks = 0;
+        ResumeFrames();
+    }
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
@@ -8523,6 +8448,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         AdvanceLogonClock();
         SyncDragToCursor(h);
         if (g_open || g_closing) Tick();
+        if (g_open && !g_closing && !g_dragging && !g_logonOpening && g_idleTicks > 45) EnterIdleFrames(h);
         if (g_artRebuildPending && !g_closing &&
             (!g_open || OpeningElapsedMs(NowMs()) > ArtRefreshAfterMs())) {
             ApplyPackageArtChanges();
@@ -8533,6 +8459,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         AdvanceLogonClock();
         SyncDragToCursor(h);
         Tick();
+        if (g_framesIdle && g_idleTicks == 0) ResumeFrames();
         if (g_artRebuildPending && !g_closing &&
             (!g_open || OpeningElapsedMs(NowMs()) > ArtRefreshAfterMs())) {
             ApplyPackageArtChanges();
@@ -8622,6 +8549,29 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (g_charmOpen) CharmRender(g_charmCont);
         if (g_open) RepaintNow();
         return 0;
+    case WM_APP_APPS_REFRESH: {
+        std::vector<AppEntry>* fresh = NULL;
+        AcquireSRWLockExclusive(&g_appsLock);
+        fresh = g_pendingApps;
+        g_pendingApps = NULL;
+        if (fresh) {
+            g_apps.swap(*fresh);
+            g_icons.clear();
+            g_icons.resize(g_apps.size());
+        }
+        ReleaseSRWLockExclusive(&g_appsLock);
+        const bool haveFresh = fresh != NULL;
+        delete fresh;
+        if (g_iconBitmapCache) g_iconBitmapCache->clear();
+        if (g_iconsGo) SetEvent(g_iconsGo);
+        if (haveFresh) {
+            RunSearch();
+            if (g_selected >= (int)g_results.size()) g_selected = g_results.empty() ? -1 : 0;
+            if (g_charmOpen) CharmRender(g_charmCont);
+            if (g_open) RepaintNow();
+        }
+        return 0;
+    }
     case WM_APP_FILES_READY: {
         std::vector<AppEntry>* files = NULL;
         AcquireSRWLockExclusive(&g_appsLock);
@@ -8643,9 +8593,13 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_APP_ICON_READY:
         if (g_iconBitmapCache) g_iconBitmapCache->clear();
-        UpdateTileAppColors();
-        if (g_open && !g_closing)
-            PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
+        // Tile accent colours are the only thing that depends on icons; skip the
+        // rebuild entirely when appTileColors is off.
+        if (g_appTileColors) {
+            UpdateTileAppColors();
+            if (g_open && !g_closing)
+                PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
+        }
         if (g_view == VIEW_SEARCH && g_open) RepaintNow();
         return 0;
     case WM_APP_PACKAGE_ART:
@@ -8804,6 +8758,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                         int lx = rpt.x - pr.left - g_charmCont, ly = rpt.y - pr.top, row = -1;
                         if (CharmHit(lx, ly, &row) == CH_ROW && row >= 0) {
                             g_charmSel = row; g_ctxRow = row;
+                            g_ctxAppValid = row < (int)g_results.size();
+                            if (g_ctxAppValid) g_ctxApp = g_apps[g_results[row]];
                             RECT an = { rpt.x, rpt.y, rpt.x, rpt.y };
                             ShowMenuFor(h, an, 4);
                             CharmRender(g_charmCont); RepaintNow();
@@ -8933,7 +8889,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (g_open && !g_closing && !g_barVisible && g_view == VIEW_START && !g_charmOpen) {
                 float zk = ZoomPresence(NowMs());
                 RECT zr; ZoomButtonRect(&zr);
-                if (zk <= 0.0f && PtInRect(&zr, zpt)) { EnterZoom(); return 0; }
                 if (zk > 0.5f) {
                     if (g_dragGroup >= 0) {
                         int zg = g_dragGroup; bool moved = g_dragGroupMoved;
@@ -9088,7 +9043,8 @@ static bool InstallStartHook() {
             XamlLauncher_ShowStartView_Hook,
         },
     };
-    HMODULE twinui = LoadLibraryW(L"twinui.pcshell.dll");
+    HMODULE twinui = GetModuleHandleW(L"twinui.pcshell.dll");
+    if (!twinui) twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!twinui) {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return false;
@@ -9300,17 +9256,28 @@ static void UpdateTileAppColors() {
     }
 }
 
+// True only if the Microsoft Store package is actually registered for this user.
+static bool StoreAppInstalled() {
+    PIDLIST_ABSOLUTE pidl = NULL;
+    const bool ok = SUCCEEDED(SHParseDisplayName(L"shell:AppsFolder\\Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+                                                 NULL, &pidl, 0, NULL)) && pidl;
+    if (pidl) CoTaskMemFree(pidl);
+    return ok;
+}
+
 static void InitTiles() {
     g_tileCount = g_orderCount = 0;
     if (!LoadLayout()) {
-        for (int i = 0; i < kDefaultTileCount; ++i) {
+        // The Store tile is the last default (index kDefaultTileCount - 1); skip it when absent.
+        const int defaultCount = StoreAppInstalled() ? kDefaultTileCount : kDefaultTileCount - 1;
+        for (int i = 0; i < defaultCount; ++i) {
             g_tiles[i] = kDefaultTiles[i];
             g_tiles[i].alive = true;
             g_tiles[i].owned = false;
             g_tiles[i].kind = 0;
             g_order[i] = i;
         }
-        g_tileCount = g_orderCount = kDefaultTileCount;
+        g_tileCount = g_orderCount = defaultCount;
         {
             const wchar_t* localized[kDefaultTileCount];
             localized[0] = T(STR_TILE_EXPLORER);
@@ -9318,9 +9285,9 @@ static void InitTiles() {
             localized[2] = T(STR_TILE_CONTROLPANEL);
             localized[3] = T(STR_DESKTOP);
             localized[4] = T(STR_TILE_STORE);
-            for (int i = 0; i < kDefaultTileCount; ++i) g_tiles[i].label = localized[i];
+            for (int i = 0; i < defaultCount; ++i) g_tiles[i].label = localized[i];
         }
-        for (int i = 0; i < kDefaultTileCount; ++i) g_tileGroup[i] = 0;
+        for (int i = 0; i < defaultCount; ++i) g_tileGroup[i] = 0;
     }
     for (int i = 0; i < MAX_TILES; ++i) g_tileScale[i] = 1.0f;
     LoadTileIcons();
@@ -9379,6 +9346,8 @@ static void UiRun() {
         g_artThread = CreateThread(NULL, 0, PackageArtThread, NULL, 0, NULL);
     g_appsStop = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_filesNeed = CreateEventW(NULL, TRUE, FALSE, NULL);
+    g_appsRefresh = CreateEventW(NULL, TRUE, FALSE, NULL);
+    g_iconsGo = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (g_wnd && g_appsStop) g_appsThread = CreateThread(NULL, 0, AppsThread, NULL, 0, NULL);
     g_wallStop = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_wallWake = CreateEventW(NULL, TRUE, TRUE, NULL);
@@ -9417,6 +9386,10 @@ static void UiTeardown() {
     if (g_appsThread) { WaitForSingleObject(g_appsThread, INFINITE); CloseHandle(g_appsThread); g_appsThread = NULL; }
     if (g_appsStop) { CloseHandle(g_appsStop); g_appsStop = NULL; }
     if (g_filesNeed) { CloseHandle(g_filesNeed); g_filesNeed = NULL; }
+    if (g_appsRefresh) { CloseHandle(g_appsRefresh); g_appsRefresh = NULL; }
+    if (g_iconsGo) { CloseHandle(g_iconsGo); g_iconsGo = NULL; }
+    delete g_pendingApps;
+    g_pendingApps = NULL;
     delete g_pendingFiles;
     g_pendingFiles = NULL;
     if (g_wallStop) SetEvent(g_wallStop);
@@ -9467,7 +9440,7 @@ static void UiTeardown() {
         UnregisterClassW(kClassName, g_inst);
         g_classRegistered = false;
     }
-    if (g_iconBitmapCache) g_iconBitmapCache->clear();
+    g_iconBitmapCache.reset();
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
     if (g_uiCoInit) {
         CoUninitialize();
@@ -9504,9 +9477,10 @@ static void LoadSettings() {
     g_useWinKey = Wh_GetIntSetting(L"winKey") != 0;
     g_searchEnabled = Wh_GetIntSetting(L"searchOnType") != 0;
     InterlockedExchange(&g_openAtLogon, Wh_GetIntSetting(L"openAtLogon") != 0);
-    PCWSTR mode = Wh_GetStringSetting(L"interceptMode");
-    g_keyboardOnly = mode && wcscmp(mode, L"keyboard") == 0;
-    Wh_FreeStringSetting(mode);
+    {
+        WindhawkUtils::StringSetting mode(WindhawkUtils::StringSetting::make(L"interceptMode"));
+        g_keyboardOnly = wcscmp(mode.get(), L"keyboard") == 0;
+    }
     LONG openMs = Wh_GetIntSetting(L"openSlideMs");
     LONG closeMs = Wh_GetIntSetting(L"closeSlideMs");
     if (openMs < 80) openMs = 80;
@@ -9515,18 +9489,16 @@ static void LoadSettings() {
     if (closeMs > 3000) closeMs = 3000;
     InterlockedExchange(&g_openSlideMs, openMs);
     InterlockedExchange(&g_closeSlideMs, closeMs);
-    ScopedWhString bgModeStr(L"backgroundMode");
+    WindhawkUtils::StringSetting bgModeStr(WindhawkUtils::StringSetting::make(L"backgroundMode"));
     LONG bgMode = 0;
-    if (bgModeStr.get()) {
-        if (wcscmp(bgModeStr.get(), L"solid") == 0) bgMode = 1;
-        else if (wcscmp(bgModeStr.get(), L"accent") == 0) bgMode = 2;
-        else if (wcscmp(bgModeStr.get(), L"wallpaper") == 0) bgMode = 3;
-        else if (wcscmp(bgModeStr.get(), L"image") == 0) bgMode = 4;
-    }
+    if (wcscmp(bgModeStr.get(), L"solid") == 0) bgMode = 1;
+    else if (wcscmp(bgModeStr.get(), L"accent") == 0) bgMode = 2;
+    else if (wcscmp(bgModeStr.get(), L"wallpaper") == 0) bgMode = 3;
+    else if (wcscmp(bgModeStr.get(), L"image") == 0) bgMode = 4;
     bool bgPathChanged = false;
     {
-        ScopedWhString pathStr(L"backgroundImagePath");
-        const std::wstring want = pathStr.get() ? pathStr.get() : L"";
+        WindhawkUtils::StringSetting pathStr(WindhawkUtils::StringSetting::make(L"backgroundImagePath"));
+        const std::wstring want = pathStr.get();
         AcquireSRWLockExclusive(&g_bgPathLock);
         bgPathChanged = (g_bgImagePath != want);
         if (bgPathChanged) g_bgImagePath = want;
@@ -9534,15 +9506,13 @@ static void LoadSettings() {
     }
     COLORREF bgColor = RGB(0x46, 0x17, 0xB4);
     {
-        ScopedWhString colorStr(L"backgroundColor");
-        if (colorStr.get()) {
-            const wchar_t* v = colorStr.get();
-            if (v[0] == L'#') ++v;
-            wchar_t* end = NULL;
-            unsigned long parsed = wcstoul(v, &end, 16);
-            if (end != v && wcslen(v) == 6)
-                bgColor = RGB((parsed >> 16) & 255, (parsed >> 8) & 255, parsed & 255);
-        }
+        WindhawkUtils::StringSetting colorStr(WindhawkUtils::StringSetting::make(L"backgroundColor"));
+        const wchar_t* v = colorStr.get();
+        if (v[0] == L'#') ++v;
+        wchar_t* end = NULL;
+        unsigned long parsed = wcstoul(v, &end, 16);
+        if (end != v && end == v + 6 && *end == L'\0')
+            bgColor = RGB((parsed >> 16) & 255, (parsed >> 8) & 255, parsed & 255);
     }
     LONG oldBgMode = InterlockedExchange(&g_bgMode, bgMode);
     bool bgChanged = (oldBgMode != bgMode) || (bgColor != g_bgColor) || bgPathChanged;
@@ -9559,7 +9529,12 @@ static void LoadSettings() {
         PostMessageW(g_wnd, WM_APP_GROUP_SETTINGS, 0, 0);
     {
         const LONG seed = Wh_GetIntSetting(L"seedStartLayout") != 0 ? 1 : 0;
-        if (seed && InterlockedExchange(&g_seedLayout, seed) == 0) {
+        // Seed at most once per user: re-seeding would re-pin apps the user removed.
+        // Turning the option off clears the flag, so off -> on seeds again on request.
+        if (!seed) Wh_SetIntValue(L"layoutSeeded", 0);
+        const bool alreadySeeded = Wh_GetIntValue(L"layoutSeeded", 0) != 0;
+        if (!seed) InterlockedExchange(&g_seedLayout, 0);
+        if (seed && !alreadySeeded && InterlockedExchange(&g_seedLayout, seed) == 0) {
             InterlockedExchange(&g_seedPending, 1);
             if (g_wnd) PostMessageW(g_wnd, WM_APP_SEED_LAYOUT, 0, 0);
         }
@@ -9574,10 +9549,40 @@ static void LoadSettings() {
 }
 
 // Mod entry points
-void Wh_ModSettingsChanged() { RunGuarded(L"ModSettingsChanged", [] { LoadSettings(); }); }
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    const bool oldKeyboardOnly = g_keyboardOnly;
+    RunGuarded(L"ModSettingsChanged", [] { LoadSettings(); });
+    // The hook set depends on interceptMode, so a change needs a reload.
+    if (bReload && g_keyboardOnly != oldKeyboardOnly) *bReload = TRUE;
+    return TRUE;
+}
+
+// explorer.exe also runs as COM/file-window helper processes (/factory, -Embedding); only the
+// shell instance should host the Start screen, otherwise it could claim the mutex first.
+static bool IsShellExplorerProcess() {
+    const wchar_t* cmd = GetCommandLineW();
+    if (!cmd) return true;
+    std::wstring lower = cmd;
+    for (wchar_t& c : lower) c = (wchar_t)towlower(c);
+    if (lower.find(L"/factory") != std::wstring::npos || lower.find(L"-embedding") != std::wstring::npos ||
+        lower.find(L"/embedding") != std::wstring::npos || lower.find(L"/select") != std::wstring::npos)
+        return false;
+    // If a shell window already exists, it must belong to this process.
+    HWND shell = GetShellWindow();
+    if (shell) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(shell, &pid);
+        if (pid && pid != GetCurrentProcessId()) return false;
+    }
+    return true;
+}
 
 BOOL Wh_ModInit() {
     return RunGuardedValue<BOOL>(L"ModInit", FALSE, []() -> BOOL {
+        if (!IsShellExplorerProcess()) {
+            Wh_Log(L"Not the shell explorer.exe; not hosting the Start screen here");
+            return FALSE;
+        }
         LoadSettings();
         g_uiReady = CreateEventW(NULL, TRUE, FALSE, NULL);
         g_uiStop = CreateEventW(NULL, TRUE, FALSE, NULL);
