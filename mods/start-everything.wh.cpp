@@ -18527,7 +18527,7 @@ void SearchWindowTrace(const wchar_t* message, HRESULT hr = S_OK) {
 // The hook runs on its own message thread: no XAML, I/O, or cross-process
 // SendMessage runs inside it. Only Start/Search and the brief handoff qualify.
 struct SearchWindowInput {
-    enum Kind { Text, Backspace, Enter, Escape, Show, NativeKey } kind = Text;
+    enum Kind { Text, Backspace, Enter, Escape, Show, NativeKey, Paste } kind = Text;
     std::wstring text;
     UINT key = 0, keyMessage = 0;
     LPARAM keyParam = 0;
@@ -18736,8 +18736,12 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
     const bool ctrl = (g_searchWindowKeyState[VK_CONTROL] & 0x80) != 0;
     const bool alt = (g_searchWindowKeyState[VK_MENU] & 0x80) != 0;
     const bool altGr = (g_searchWindowKeyState[VK_RMENU] & 0x80) != 0;
-    if (((ctrl || alt) && !altGr) ||
-        ((g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80))
+    const bool win = (g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
+    // Capture the opening paste before native Start closes and loses the chord.
+    // The UI thread calls TextBox.PasteFromClipboard; the hook never reads the
+    // clipboard, and a focused search box keeps its normal editing shortcuts.
+    const bool paste = ctrl && !alt && !win && vk == 'V' && !menuActive && !menuTyping;
+    if (!paste && (((ctrl || alt) && !altGr) || win))
         return CallNextHookEx(nullptr, code, message, param);
 
     // An IME must see opening keys before character translation. Once focus
@@ -18751,7 +18755,7 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
         (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping);
     const UINT mappedCharacter = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, inputLayout) & 0xffff;
     const bool textKey = vk == VK_PROCESSKEY || (mappedCharacter >= 0x20 && mappedCharacter != 0x7f);
-    if (SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
+    if (!paste && SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
         auto input = NativeSearchKey(key, true, wasDown, inputLayout);
         const bool wasMenuTyping = g_searchWindowMenuTyping.load();
         if (menuActive) g_searchWindowMenuTyping = true;
@@ -18765,7 +18769,10 @@ LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param
         return CallNextHookEx(nullptr, code, message, param);
     }
     SearchWindowInput input;
-    if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+    if (paste) {
+        ClearSearchWindowDeadKey();
+        input.kind = SearchWindowInput::Paste;
+    } else if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
         (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
         ClearSearchWindowDeadKey();
         input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
@@ -18964,6 +18971,8 @@ void ApplySearchWindowInput() try {
                 g_ourBox.SelectedText(winrt::hstring{input.text});
                 g_ourBox.SelectionStart(caret + static_cast<int32_t>(input.text.size()));
                 g_ourBox.SelectionLength(0);
+            } else if (input.kind == SearchWindowInput::Paste) {
+                g_ourBox.PasteFromClipboard();
             } else if (input.kind == SearchWindowInput::Backspace) {
                 std::wstring text{g_ourBox.Text()};
                 size_t caret = std::min(static_cast<size_t>(g_ourBox.SelectionStart()), text.size());
