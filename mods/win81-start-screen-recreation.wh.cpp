@@ -13,6 +13,7 @@
 // @version         1.0.0
 // @license         GPL-3.0-or-later
 // @author          babamohammed
+// @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof
@@ -7759,7 +7760,16 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
                     EmptyClipboard();
                     size_t n = (a.parse.size() + 1) * sizeof(wchar_t);
                     HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, n);
-                    if (hg) { void* m = GlobalLock(hg); if (m) { memcpy(m, a.parse.c_str(), n); GlobalUnlock(hg); SetClipboardData(CF_UNICODETEXT, hg); } else GlobalFree(hg); }
+                    if (hg) {
+                        void* m = GlobalLock(hg);
+                        if (m) {
+                            memcpy(m, a.parse.c_str(), n);
+                            GlobalUnlock(hg);
+                            SetClipboardData(CF_UNICODETEXT, hg);
+                        } else {
+                            GlobalFree(hg);
+                        }
+                    }
                     CloseClipboard();
                 }
             } else if (cmd == CM_LOCATION) {
@@ -8552,8 +8562,26 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             else if (wp == VK_SPACE) OnSearchChar(L' ');
         }
         return 0;
-    case WM_APP_CHAR: if (g_open && !g_closing) { if (g_namingGroup >= 0) NamingChar((wchar_t)wp); else if (!g_customize) OnSearchChar((wchar_t)wp); } return 0;
-    case WM_APP_KEY:  if (g_open && !g_closing) { if (g_namingGroup >= 0 && (wp == VK_BACK || wp == VK_RETURN || wp == VK_ESCAPE)) NamingKey((UINT)wp); else if (g_customize) { if (wp == VK_ESCAPE) ExitCustomize(); } else OnSearchKey((UINT)wp); } return 0;
+    case WM_APP_CHAR:
+        if (g_open && !g_closing) {
+            if (g_namingGroup >= 0) {
+                NamingChar((wchar_t)wp);
+            } else if (!g_customize) {
+                OnSearchChar((wchar_t)wp);
+            }
+        }
+        return 0;
+    case WM_APP_KEY:
+        if (g_open && !g_closing) {
+            if (g_namingGroup >= 0 && (wp == VK_BACK || wp == VK_RETURN || wp == VK_ESCAPE)) {
+                NamingKey((UINT)wp);
+            } else if (g_customize) {
+                if (wp == VK_ESCAPE) ExitCustomize();
+            } else {
+                OnSearchKey((UINT)wp);
+            }
+        }
+        return 0;
     case WM_APP_SEED_LAYOUT:
         if (InterlockedCompareExchange(&g_appsReady, 0, 0)) SeedStartLayout();
         return 0;
@@ -9002,7 +9030,7 @@ static HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int method, i
 }
 
 static bool InstallStartHook() {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
             &XamlLauncher_ShowStartView_Original,
@@ -9014,7 +9042,7 @@ static bool InstallStartHook() {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return false;
     }
-    if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) {
         Wh_Log(L"HookSymbols failed for ShowStartView; using the keyboard hook only");
         return false;
     }
