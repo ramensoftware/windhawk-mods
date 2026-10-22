@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-22T05:01:18.000Z</updated>
+    <updated>2026-10-22T10:02:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fullscreen Start (Launchpad style) 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fullscreen-start#6cea3b683d857f0cc4cf22360c2c07cdeff7b8f1</id>
+        <link href="https://windhawk.net/mods/fullscreen-start"/>
+        <updated>2026-10-22T10:02:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fullscreenstartlaunchpadstyle">Fullscreen Start (Launchpad style)</h1>
+<p><img src="https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/fullscreen-start.png" alt="Fullscreen Start" /></p>
+<p>Replaces the Windows Start menu with a screen in the style of the macOS
+Launchpad: all installed apps in a grid, with search at the top and a blurred
+background.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Fullscreen</strong>: takes the whole work area of the monitor where the mouse
+is, without covering the taskbar, other side bars or the Dock of the
+<strong>Standalone Dock (macOS-like)</strong> mod.</li>
+<li><strong>All apps</strong>: the same ones as the "All apps" list of Start (programs and
+Store apps), in alphabetical order, with icon and name.</li>
+<li><strong>Search</strong>: just type. The list is filtered instantly, ignoring case and
+accents; names that start with the text come first.</li>
+<li><strong>Adjustable blurred background</strong>: configurable strength, opacity and
+color.</li>
+</ul>
+<h2 id="howtoopen">How to open</h2>
+<p>Everything that would open the Windows Start menu opens this one instead:</p>
+<ul>
+<li>the <strong>Windows</strong> key and <strong>Ctrl+Esc</strong>;</li>
+<li>the <strong>Start button</strong> of the taskbar, or of the Dock of the Standalone Dock
+mod.</li>
+</ul>
+<p>The mod hooks the function Explorer uses to show Start
+(<code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code>), so the original
+Start doesn't open at all. Windhawk downloads the symbols of that file the
+first time the mod loads.</p>
+<h2 id="keyboardandmouse">Keyboard and mouse</h2>
+<ul>
+<li>Type to search; <strong>Backspace</strong> deletes, <strong>Ctrl+Backspace</strong> deletes the last
+word, <strong>Ctrl+V</strong> pastes.</li>
+<li><strong>Arrows</strong> select an app, <strong>Enter</strong> opens the selected one (while
+searching, the first result is already selected).</li>
+<li><strong>Esc</strong> clears the search; with an empty search, it closes.</li>
+<li>The mouse wheel or <strong>Page Up/Page Down</strong> scroll the list.</li>
+<li>Clicking outside the icons or switching windows closes it.</li>
+</ul>
+<h2 id="blur">Blur</h2>
+<ul>
+<li><strong>Adjustable</strong> (default): the mod takes a screenshot the moment it opens
+and blurs it with the chosen strength. The background stays still while
+Start is open.</li>
+<li><strong>Acrylic</strong> and <strong>Windows blur</strong>: the effect is applied by DWM composition
+and follows what changes behind it. Windows doesn't allow changing the
+strength of that blur, so the strength setting doesn't apply to them.</li>
+<li><strong>No blur</strong>: only the color on top.</li>
+</ul>
+<p>Changes to the settings apply the next time Start opens.</p>]]></content>
+        <author>
+            <name>Rafael Mendes</name>
+            <uri>https://github.com/RafaelMendes1407</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave) 1.0]]></title>
         <id>https://windhawk.net/mods/chrome-middle-click-new-tab#6c631d36933267b1d2219ceefb8c568e09dce28e</id>
@@ -1116,130 +1175,6 @@ removes everything it created.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Date and Time Format 1.0]]></title>
-        <id>https://windhawk.net/mods/lockscreen-datetime-format#16df35e500e1bc07d675ab1dba52ded2d1cc499f</id>
-        <link href="https://windhawk.net/mods/lockscreen-datetime-format"/>
-        <updated>2026-10-19T10:00:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lockscreendateandtimeformat">Lock Screen Date and Time Format</h1>
-<p>Changes how the Windows lock screen shows the time and the date. The mod only
-changes the <strong>text</strong> of the clock and the date. Fonts, sizes, colors and
-positions are not touched (see <a href="#styling">Styling</a> below).</p>
-<p>Example (Windows default on the left, this mod on the right):</p>
-<p>| Before | After |
-|--------|-------|
-| <img src="https://i.imgur.com/vwH10YW.png" alt="Before" /> | <img src="https://i.imgur.com/2kZgtnm.png" alt="After" /> |</p>
-<p>The clock keeps updating on its own, and choosing the "Windows default"
-options restores the original text.</p>
-<h2 id="settings">Settings</h2>
-<h3 id="clock">Clock</h3>
-<ul>
-<li><p><strong>Clock layout</strong></p></li>
-<li><p><em>Windows default</em>: the clock is left alone.</p></li>
-<li><p><em>Vertical</em>: hours, minutes (and seconds) each on their own line, no
-separator.</p></li>
-<li><p><em>Horizontal with custom separator</em>: everything on one line, joined by the
-separator below.</p></li>
-<li><p><strong>Line spacing (% of font size)</strong>: distance between the lines of a vertical
-clock, as a percentage of the clock font size. Lower is tighter, higher is
-looser, <code>0</code> keeps the font's default. It only has an effect when the clock
-has more than one line. About <code>80</code> to <code>85</code> is a good starting point.</p></li>
-<li><p><strong>Separator (horizontal layout)</strong>: the text placed between hours, minutes
-and seconds. It is plain text, so a colon, a dot, a dash, a space, or even an
-emoji all work.</p>
-<p>Example with an emoji as the separator:</p>
-<p><img src="https://i.imgur.com/HDPAl63.png" alt="Clock with an emoji as the separator" /></p></li>
-<li><p><strong>Hour format</strong>: follow the Windows short time format (the one the lock
-screen shows), or force 24-hour or 12-hour.</p></li>
-<li><p><strong>Leading zero on hours</strong>: show <code>09</code> or <code>9</code>.</p></li>
-<li><p><strong>Show seconds</strong>: also show the seconds (<code>15:19:42</code>). The clock then updates
-every second instead of once a minute. With the vertical layout this gives
-three lines, so you will probably want a smaller font.</p></li>
-<li><p><strong>AM/PM position (12-hour only)</strong>: beside the last unit shown, on its own
-line below, or hidden.</p></li>
-</ul>
-<p>Digits are always shown as <code>0-9</code>, whatever the Windows language is.</p>
-<p><strong>Note:</strong> the line spacing, separator, hour format, leading zero, show seconds
-and AM/PM options only take effect when <strong>Clock layout</strong> is <em>Vertical</em> or
-<em>Horizontal</em>. With <em>Windows default</em> the clock is left completely alone.</p>
-<h3 id="date">Date</h3>
-<ul>
-<li><strong>Date format</strong>: choose one of the presets (for example <code>Fri, 16 Oct</code>,
-<code>Fri 16 Oct 26</code>, <code>16-10-2026</code>, <code>16/10/2026</code>), keep the Windows default, or
-choose <em>Custom</em>.</li>
-<li><strong>Custom date pattern</strong>: only used when the format is <em>Custom</em>. Supported
-letters: <code>d</code> / <code>dd</code> (day), <code>ddd</code> / <code>dddd</code> (weekday name), <code>M</code> / <code>MM</code> (month
-number), <code>MMM</code> / <code>MMMM</code> (month name), <code>yy</code> / <code>yyyy</code> (year). Literal text goes
-in single quotes, for example <code>dddd 'the' d</code>.</li>
-</ul>
-<p>Weekday and month names come from your Windows regional format, so they follow
-that language.</p>
-<h2 id="notesonthe12hourformat">Notes on the 12-hour format</h2>
-<p>AM/PM is placed after the last unit shown: the minutes, or the seconds when
-<strong>Show seconds</strong> is on. The examples below assume seconds are off:</p>
-<ul>
-<li><strong>Vertical layout, AM/PM beside the minutes:</strong> hours on the first line,
-minutes and AM/PM on the second line (<code>03</code> / <code>24 PM</code>).</li>
-<li><strong>Vertical layout, AM/PM below:</strong> three lines (<code>03</code> / <code>24</code> / <code>PM</code>).</li>
-<li><strong>Horizontal layout, AM/PM beside the minutes:</strong> everything on one line
-(<code>03:24 PM</code>). With a very large clock font the line can be wider than the
-space it has, and <code>PM</code> may wrap onto a second line. Use a smaller font, or
-set AM/PM to hidden, if that bothers you.</li>
-<li><strong>AM/PM hidden:</strong> only the hours and minutes are shown.</li>
-</ul>
-<h2 id="styling">Styling</h2>
-<p>This mod does not change fonts, sizes, colors or positions. For that, use the
-<strong>Windows 11 Start Menu Styler</strong> mod with <code>LockApp.exe</code> added to its process
-inclusion list. For example:</p>
-<pre><code>- target: StackPanel#TimePanel &gt; TextBlock#Time
-  styles:
-    - FontSize=350
-    - FontWeight=Bold
-- target: TextBlock#Date
-  styles:
-    - FontSize=28
-</code></pre>
-<p>Example with this mod and the Styler together:</p>
-<p><img src="https://i.imgur.com/FobjRr6.png" alt="Lock screen using this mod together with Windows 11 Start Menu Styler" /></p>
-<p>Making the clock font bigger usually moves the clock; adjust a
-<code>TranslateTransform</code> in the Styler if it ends up off-center.</p>
-<p>Lock the screen with <strong>Win+L</strong> to see the result. Changes in the settings
-apply right away while the lock screen is showing.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The lock screen (<code>LockApp.exe</code>) draws the time and the date in XAML
-<code>TextBlock</code> elements named <code>Time</code> and <code>Date</code>. This mod finds them, builds the
-text itself from the system clock according to your settings, and writes it
-back whenever Windows updates them. Unloading the mod puts Windows' own text
-back.</p>
-<p>The width of the clock is also kept constant, so the date underneath does not
-move sideways when the clock text gets wider or narrower (for example when the
-seconds change, or when AM switches to PM). This is skipped when the clock
-takes up almost the whole width of the screen, because there is no room left
-for it to move and forcing a width could get it cut off.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The mod relies on the internal element names <code>Time</code> and <code>Date</code> in
-<code>LockApp.exe</code>. If a future Windows update renames them, the mod will stop
-finding them.</li>
-<li>Digits are always Latin (<code>0-9</code>). Showing the digits of your own language is
-not supported yet.</li>
-<li>The AM/PM text cannot be made smaller than the clock yet.</li>
-<li>Most fonts have digits of different widths, so with <strong>Show seconds</strong> on, the
-digits inside the clock can shift slightly every second. The date and the
-position of the clock stay where they are, except when the clock takes up
-almost the whole width of the screen. Pick a font with equal-width digits
-in the Styler if that bothers you.</li>
-<li>Tested on Windows 11 25H2 (build 26200.9457). Other versions are untested.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If nothing happens, open the Windhawk log for this mod and lock the screen
-with Win+L. You should see <code>Hook installed on UI thread</code>, <code>Clock format
-attached</code> and <code>Date format attached</code>.</p>]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
         </author>
     </entry>
 </feed>

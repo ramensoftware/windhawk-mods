@@ -2,12 +2,92 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-22T06:02:38.000Z</updated>
+    <updated>2026-10-22T10:02:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lunar & Holiday Calendar 1.0]]></title>
+        <id>https://windhawk.net/mods/chinese-holiday-calendar#52517936a7ca67146a155b080dbca63004efed0b</id>
+        <link href="https://windhawk.net/mods/chinese-holiday-calendar"/>
+        <updated>2026-10-22T10:02:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>⚠️ BREAKING CHANGE: Holiday markers are now user-defined rules instead of built-in matching. Existing holiday text and colour settings are not migrated; existing feed URLs still work, but after upgrading please review “Highlight rules” and add any unwanted feed markers to “Text to remove”.</li>
+<li>⚠️ BREAKING CHANGE: The global “Replace the lunar text” switch is gone. To change colour only, leave the rule’s “Text” empty.</li>
+<li>Added date rules: mark a lunar or solar date directly, without a feed.</li>
+<li>Added an optional Vietnamese lunar calendar, contributed by <a href="https://github.com/vantruong-dev">@vantruong-dev</a> and <a href="https://github.com/phatMT97">@phatMT97</a>:</li>
+<li>Day cells show Vietnamese lunar dates, and the header shows the Can Chi year; everything is calculated offline.</li>
+<li>Added a hover tooltip (on by default) for full holiday names that do not fit in a cell.</li>
+<li>Added support for more ICS feeds: recurring events, extra dates, excluded dates, durations, and compressed responses.</li>
+<li>Improved text matching and restoration: feeds that use different Unicode forms now match correctly, and holiday text no longer stays behind after the mod or the system lunar calendar is turned off.</li>
+<li>Renamed the mod to Lunar &amp; Holiday Calendar (ID unchanged); the README and settings are available in Chinese, English, and Vietnamese.</li>
+</ul>]]></content>
+        <author>
+            <name>dcsmf</name>
+            <uri>https://github.com/dcsmf</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fullscreen Start (Launchpad style) 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fullscreen-start#6cea3b683d857f0cc4cf22360c2c07cdeff7b8f1</id>
+        <link href="https://windhawk.net/mods/fullscreen-start"/>
+        <updated>2026-10-22T10:02:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fullscreenstartlaunchpadstyle">Fullscreen Start (Launchpad style)</h1>
+<p><img src="https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/fullscreen-start.png" alt="Fullscreen Start" /></p>
+<p>Replaces the Windows Start menu with a screen in the style of the macOS
+Launchpad: all installed apps in a grid, with search at the top and a blurred
+background.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Fullscreen</strong>: takes the whole work area of the monitor where the mouse
+is, without covering the taskbar, other side bars or the Dock of the
+<strong>Standalone Dock (macOS-like)</strong> mod.</li>
+<li><strong>All apps</strong>: the same ones as the "All apps" list of Start (programs and
+Store apps), in alphabetical order, with icon and name.</li>
+<li><strong>Search</strong>: just type. The list is filtered instantly, ignoring case and
+accents; names that start with the text come first.</li>
+<li><strong>Adjustable blurred background</strong>: configurable strength, opacity and
+color.</li>
+</ul>
+<h2 id="howtoopen">How to open</h2>
+<p>Everything that would open the Windows Start menu opens this one instead:</p>
+<ul>
+<li>the <strong>Windows</strong> key and <strong>Ctrl+Esc</strong>;</li>
+<li>the <strong>Start button</strong> of the taskbar, or of the Dock of the Standalone Dock
+mod.</li>
+</ul>
+<p>The mod hooks the function Explorer uses to show Start
+(<code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code>), so the original
+Start doesn't open at all. Windhawk downloads the symbols of that file the
+first time the mod loads.</p>
+<h2 id="keyboardandmouse">Keyboard and mouse</h2>
+<ul>
+<li>Type to search; <strong>Backspace</strong> deletes, <strong>Ctrl+Backspace</strong> deletes the last
+word, <strong>Ctrl+V</strong> pastes.</li>
+<li><strong>Arrows</strong> select an app, <strong>Enter</strong> opens the selected one (while
+searching, the first result is already selected).</li>
+<li><strong>Esc</strong> clears the search; with an empty search, it closes.</li>
+<li>The mouse wheel or <strong>Page Up/Page Down</strong> scroll the list.</li>
+<li>Clicking outside the icons or switching windows closes it.</li>
+</ul>
+<h2 id="blur">Blur</h2>
+<ul>
+<li><strong>Adjustable</strong> (default): the mod takes a screenshot the moment it opens
+and blurs it with the chosen strength. The background stays still while
+Start is open.</li>
+<li><strong>Acrylic</strong> and <strong>Windows blur</strong>: the effect is applied by DWM composition
+and follows what changes behind it. Windows doesn't allow changing the
+strength of that blur, so the strength setting doesn't apply to them.</li>
+<li><strong>No blur</strong>: only the color on top.</li>
+</ul>
+<p>Changes to the settings apply the next time Start opens.</p>]]></content>
+        <author>
+            <name>Rafael Mendes</name>
+            <uri>https://github.com/RafaelMendes1407</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TopBar for Windows 1.4.0]]></title>
         <id>https://windhawk.net/mods/windhawk-topbar#fbb8e30010d661ed001161637cd38e8365b7f7c3</id>
@@ -597,50 +677,6 @@ Windows shortcut.</li>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 2.1.1]]></title>
-        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#0c4b66869245e386f82cff23f9d3dab8b4ba240f</id>
-        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
-        <updated>2026-10-21T04:03:53.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Community styles page</strong></p>
-<ul>
-<li><strong>Browse Community Styles</strong> opens https://user-tourne.github.io/Tourne-Style/ in your default browser.</li>
-<li>The menu item reads "Browse Community Styles (opens in your browser)", and the Readme's "Share your style" section links to the styles page.</li>
-<li>The mod still never goes online. Styles come in only through <strong>Paste code</strong> or <strong>Open file</strong>.</li>
-</ul>
-<p><strong>Shared setups</strong></p>
-<ul>
-<li>Shared setups no longer carry Click to Seek, Keyboard Move, drag or the right-click mode, so importing someone else's style can't change how your mouse and keyboard behave.</li>
-<li>Imported values longer than 128 characters are skipped (512 for Waterfall Ramp), and quick settings are no longer duplicated, so an imported setup can't get lost on the next restart.</li>
-<li>Very long setup codes are trimmed in one step, so a crafted code can't freeze the visualizer.</li>
-</ul>
-<p><strong>Fixes</strong></p>
-<ul>
-<li>Keyboard Move with Alt or Win in the shortcut no longer opens Start, activates a menu bar or switches the input language when you let go.</li>
-<li>A Media Card volume drag ends if the mouse is taken away mid-drag (a UAC prompt, Ctrl+Alt+Del), so hovering the card afterwards no longer changes the volume.</li>
-<li>Album art, album colours and Now Playing text no longer lag a track behind when a player sends several updates per track.</li>
-<li>If the GPU can't be rebuilt after a driver update or device change, the visualizer keeps retrying every two seconds and comes back on its own instead of staying blank or crashing.</li>
-</ul>
-<p>No settings or defaults were changed.</p>]]></content>
-        <author>
-            <name>USER-TOURNE</name>
-            <uri>https://github.com/USER-TOURNE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MultiWM 1.13.59]]></title>
-        <id>https://windhawk.net/mods/multiwm#b039ab01c4b034c0adea8c12b213192e8085bec9</id>
-        <link href="https://windhawk.net/mods/multiwm"/>
-        <updated>2026-10-20T17:01:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>added contributing section </li>
-<li>added WHAM delimiters for multi-file workflows</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
         </author>
     </entry>
 </feed>

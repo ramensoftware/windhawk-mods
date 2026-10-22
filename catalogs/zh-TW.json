@@ -1512,7 +1512,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791723793000,
+        "updated": 1792663345000,
         "users": 34
       },
       "metadata": {
@@ -1521,19 +1521,19 @@
         ],
         "author": "dcsmf",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-        "description": "在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排",
+        "description": "在 Windows 11 日历里写自己的文字和颜色：按规则标记 ICS 订阅中的节假日，或直接标记农历/阳历日期；也可以换成越南农历",
         "github": "https://github.com/dcsmf",
         "include": [
           "ShellExperienceHost.exe",
           "ShellHost.exe"
         ],
         "license": "GPL-3.0-only",
-        "name": "中国节假日日历",
-        "version": "0.21"
+        "name": "农历与节假日日历",
+        "version": "1.0"
       },
       "metadataEnglish": {
-        "description": "Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout",
-        "name": "Chinese Holiday Calendar"
+        "description": "Write your own text and colour into the Windows 11 calendar: holidays from an iCalendar (.ics) feed, dates matched by your rules, and optionally the Vietnamese lunar calendar",
+        "name": "Lunar & Holiday Calendar"
       }
     },
     "chinese-ime-fixed-mode": {
@@ -7698,6 +7698,34 @@
         ],
         "name": "Force thick frames",
         "version": "2"
+      }
+    },
+    "fullscreen-start": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792663340000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792663340000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Rafael Mendes",
+        "compilerOptions": "-lgdi32 -lshell32 -lshcore -ldwmapi -ld2d1 -ldwrite -lole32 -luuid",
+        "description": "Replaces the Start menu with a fullscreen grid of all apps, with search and an adjustable blurred background",
+        "github": "https://github.com/RafaelMendes1407",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Fullscreen Start (Launchpad style)",
+        "version": "1.0.0"
       }
     },
     "fully-customizable-winver": {
