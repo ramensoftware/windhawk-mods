@@ -2,12 +2,171 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-22T10:02:25.000Z</updated>
+    <updated>2026-10-22T15:04:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mute Focused Window 1.0]]></title>
+        <id>https://windhawk.net/mods/mute-focused-window#b947ebaf2f1b237297b90ed9fe480958f701f311</id>
+        <link href="https://windhawk.net/mods/mute-focused-window"/>
+        <updated>2026-10-22T15:04:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mutefocusedwindow">Mute Focused Window</h1>
+<p>Press <strong>Ctrl+Alt+M</strong> to mute the app whose window has focus. Press it again to
+unmute it. Other apps keep playing.</p>
+<p>This changes the same per-app mute as the Windows Volume Mixer, so the mixer
+shows the result and can undo it.</p>
+<h2 id="whatgetsmuted">What gets muted</h2>
+<p>The mod mutes every audio session that belongs to the focused window's app, on
+every active output device. If some of those sessions are muted and others are
+not, the first press mutes them all.</p>
+<p>Browsers and Electron apps such as Discord play sound from a helper process
+instead of the process that owns the window. The mod therefore includes the
+app's background child processes too. A child process with its own visible
+window is treated as a separate app and left alone. For example, a media player
+launched from a terminal keeps playing when you mute the terminal.</p>
+<h2 id="hotkey">Hotkey</h2>
+<p>Change the hotkey in the mod's settings. Write any modifiers and exactly one
+key, joined by <code>+</code>, for example <code>Ctrl+Alt+M</code>, <code>Win+Shift+F9</code> or <code>Pause</code>.</p>
+<ul>
+<li>Modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.</li>
+<li>Keys: <code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F24</code>, <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>,
+<code>Backspace</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>,
+<code>Down</code>, <code>Left</code>, <code>Right</code>, <code>Pause</code>, <code>ScrollLock</code>, <code>PrintScreen</code>, <code>Numpad0</code>–
+<code>Numpad9</code>, <code>VolumeMute</code>, <code>VolumeDown</code>, <code>VolumeUp</code>, <code>MediaPlayPause</code>,
+<code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code>.</li>
+<li>Any other key: its virtual-key code in hexadecimal, such as <code>0x4D</code>.</li>
+</ul>
+<p>Windows gives a hotkey to only one program at a time, and other apps stop
+receiving that key combination. If the hotkey does nothing, another program may
+already own it. Turn on logging in the mod's Advanced tab to see why.</p>
+<p>The default, Ctrl+Alt+M, also takes Word's Insert Comment shortcut. On keyboard
+layouts with an AltGr key, Windows treats AltGr as Ctrl+Alt, so AltGr+M (<code>µ</code> on
+German layouts) stops typing its character. Choose another hotkey if you need
+either.</p>
+<h2 id="usingthekeyboardsmutekey">Using the keyboard's Mute key</h2>
+<p>Most keyboards with a dedicated Mute key, and laptops with a mute function key,
+send <code>VolumeMute</code>.</p>
+<ul>
+<li>Set the hotkey to <code>VolumeMute</code> to make the Mute key mute the focused app
+instead of everything. Also turn on <strong>Mute the system when there's no app to
+mute</strong>, so the key still mutes everything when you press it on the desktop,
+the taskbar, a File Explorer window or an app without audio.</li>
+<li>Set the hotkey to <code>Ctrl+VolumeMute</code> to keep the Mute key as it is and use
+Ctrl+Mute for the focused app.</li>
+</ul>
+<p>Keyboard software that reassigns the Mute key can stop it from sending
+<code>VolumeMute</code>.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>A browser is muted as a whole, not tab by tab. The Volume Mixer shows it the
+same way.</li>
+<li>An app started from the focused app and hidden in the tray, with no visible
+window, counts as part of the focused app. For example, a music player
+started from a launcher and minimized to the tray is muted along with the
+launcher. Windows gives no reliable way to tell such an app from the hidden
+helper processes that browsers and Electron apps play their sound through.</li>
+<li>Windows remembers an app's mute setting. An app you muted is still muted the
+next time it starts; press the hotkey or use the Volume Mixer to unmute it.</li>
+<li>Pressing the hotkey on the desktop, the taskbar or a File Explorer window does
+nothing, unless <strong>Mute the system when there's no app to mute</strong> is on.</li>
+<li>That system mute doesn't show Windows' volume indicator.</li>
+</ul>]]></content>
+        <author>
+            <name>Benevolent Anarchy</name>
+            <uri>https://github.com/cicely-f</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Bulk Copy File and Folder Names 0.3.0]]></title>
+        <id>https://windhawk.net/mods/bulk-copy-file-and-folder-names#5faa114e2d64c77e02d79f4a54a79f92c89137dd</id>
+        <link href="https://windhawk.net/mods/bulk-copy-file-and-folder-names"/>
+        <updated>2026-10-22T15:04:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="bulkcopyfileandfoldernames">Bulk Copy File and Folder Names</h1>
+<p>Windows has Copy as path (Ctrl+Shift+C), but it gives you full paths in quotes,
+and often you only want the names. This mod copies the names of the files and
+folders you select in File Explorer as plain text, one per line. It works on one
+item or on many at once. A selection can mix files and folders.</p>
+<h2 id="rightclickmenu">Right-click menu</h2>
+<p>Right-click a file, a folder, or a selection of many files and folders in a File
+Explorer window. The classic menu gets two entries, Copy name and Copy name
+without extension. On Windows 11 they're in the menu you get from Show more
+options or Shift+right-click. The entries are on by default, and you can turn
+them off in the settings.</p>
+<p>Copy name without extension keeps folder names whole, so <code>sub.folder</code> stays
+<code>sub.folder</code>, and <code>a.tar.gz</code> becomes <code>a.tar</code>. A name that starts with a dot, like
+<code>.gitignore</code>, stays whole.</p>
+<h2 id="hotkeys">Hotkeys</h2>
+<p>The hotkeys are off until you turn them on, so a fresh install takes no key away
+from File Explorer. To turn them on, open the mod's Settings tab in Windhawk,
+tick Hotkeys, and save. The defaults are Ctrl+Shift+Y for names with extensions
+and Ctrl+Shift+U for names without. You can change both keys there too.</p>
+<p>A key is handled inside the File Explorer window that has the focus, so it never
+reaches other programs. It does nothing while you type in a rename box, the
+address bar or the search box, and it does nothing when no file or folder is
+selected. In both cases the key goes to File Explorer as usual.</p>
+<p>If you pick a key that File Explorer already uses, like Ctrl+Shift+N for New
+folder, the mod wins while the hotkeys are on and something is selected.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Hotkeys: turn the two key combinations on. Off by default.</li>
+<li>Modifiers and key for each copy action. Ctrl+Alt and Ctrl+Alt+Shift also
+match AltGr, so skip them if your keyboard layout types letters with AltGr.</li>
+<li>Separator: a new line, a comma, or a space between names.</li>
+<li>Quote names: put each name in double quotes.</li>
+<li>Right-click menu: show the two menu entries. On by default.</li>
+</ul>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>The keys and menu entries don't work on the desktop or in file dialogs. Only
+File Explorer windows count.</li>
+<li>The Windows 11 compact menu can't take new entries from a mod. Use Show more
+options.</li>
+<li>The menu entries don't show on the column header menu, the menu you get from
+empty space in a folder, or the menu you get after a drag with the right
+mouse button.</li>
+<li>Items that aren't files or folders, like drives in This PC, give their
+internal name.</li>
+<li>If nothing is selected, nothing happens.</li>
+</ul>
+<h2 id="tutorial">Tutorial</h2>
+<ol>
+<li>Select the files and folders in a File Explorer window. A mix of both is
+fine.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-1-select.png" alt="A File Explorer window with two folders and five files selected in the demo-names folder" /></li>
+<li>Hold Shift and right-click the selection. Pick Copy name or Copy name
+without extension.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-4-right-click-menu.png" alt="The lower part of the classic right-click menu, with Copy name and Copy name without extension in their own group above Properties" /></li>
+<li>Paste. Copy name gives you every name with its extension, one per line.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-2-names-with-extensions.png" alt="The selected names pasted into a text window, one per line, with their extensions" /></li>
+<li>Copy name without extension drops the extension from files and keeps the
+full name of folders.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-3-names-without-extensions.png" alt="The same names pasted again without extensions, while the folder Backup.2025 keeps its full name" /></li>
+<li>If you'd rather use the keyboard, tick Hotkeys in the settings. Ctrl+Shift+Y
+then does what Copy name does, and Ctrl+Shift+U does what Copy name without
+extension does.</li>
+</ol>
+<h3 id="gotchas">Gotchas</h3>
+<ul>
+<li>In step 2, the compact Windows 11 menu can't show the entries. Use
+Shift+right-click or Show more options.</li>
+<li>In step 4, only the last extension goes, so <code>archive.tar.gz</code> becomes
+<code>archive.tar</code>.</li>
+<li>In step 5, a key does nothing while you type in a rename box, the address bar
+or the search box, and nothing while no item is selected. File Explorer gets
+the key instead.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The way the hotkeys are caught, a hook on TranslateAcceleratorW that steps
+aside while a text box has the focus, follows the approach of the Explorer
+Custom Shortcuts mod.</p>]]></content>
+        <author>
+            <name>Shaerif</name>
+            <uri>https://github.com/Shaerif</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lunar & Holiday Calendar 1.0]]></title>
         <id>https://windhawk.net/mods/chinese-holiday-calendar#52517936a7ca67146a155b080dbca63004efed0b</id>
@@ -597,86 +756,6 @@ Windows shortcut.</li>
         <author>
             <name>jayll1303</name>
             <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.7.1]]></title>
-        <id>https://windhawk.net/mods/windhawk-mawaqit#b1d6e84f9facc94d8e6be50ff78a9b13396f6b9e</id>
-        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
-        <updated>2026-10-21T04:04:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added optional Imsak and Shuruq schedule entries, including support for six- and seven-entry Mawaqit calendars.</li>
-<li>Improved prayer and Iqamah countdown behavior and presentation.</li>
-<li>Added Emberveil Midnight and Emberveil Daybreak appearance presets.</li>
-<li>Improved popup layout, mosque-name wrapping, spacing, and visual alignment.</li>
-<li>Refined theme colors, borders, automatic pill sizing, and customization options.</li>
-<li>Improved prayer schedule caching and compatibility handling.</li>
-<li>Updated the embedded mod documentation.</li>
-<li>Settings compatibility: v0.7.1 reorganizes several settings paths. Existing preferences may need to be reapplied after updating, including custom theme colors. See the migration guidance in TROUBLESHOOTING.md in the project repository.</li>
-</ul>]]></content>
-        <author>
-            <name>HHeitlager</name>
-            <uri>https://github.com/hheitlager</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac Island & Dock 2.0.6]]></title>
-        <id>https://windhawk.net/mods/mac-island-dock#f0be7478ca936e97c740aa3ffa3407b421e4a7cf</id>
-        <link href="https://windhawk.net/mods/mac-island-dock"/>
-        <updated>2026-10-21T04:03:58.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>The dock</strong></p>
-<ul>
-<li>Redone to look and move like macOS's: the icons spread on a rounded shelf that grows in width and height with them as they magnify in a wave, pushing their neighbors aside, and a click always goes to the icon under the mouse (on the transparent taskbar too). The taskbar's window makes room above itself for the magnified icons (the work area doesn't change), and the windows' previews open right above the dock.</li>
-<li>Magnified icons are sharp (#6202): drawn from the apps' own bigger pictures (also for apps with several profiles, like a second Chrome profile, and for apps like Steam whose windows give the taskbar no icon: their program's), and icons shrunk at rest are smoothed.</li>
-<li>New settings: icon size (24-64 px, replacing the dock's height: its height and margins follow the icons), space between icons, gap at the bottom, and the background behind the icons (off: only the icons). New defaults: icons 32 px, magnification 170%, reach 150 px, corners 22 px, gap 2 px.</li>
-<li>The background is a plain tint in the theme's color (50% by default), as see-through as chosen (Windows' acrylic only drew its fallback color behind the taskbar, and turned black when the taskbar had the focus). The "Taskbar" choice now says "Dock: compact and floating, see-through, like on macOS".</li>
-<li>Showing and hiding: the mouse within the icons' height of the bottom edge brings it up (with a monitor below, the mouse easily goes past the last row, and those first rows of the monitor below count too when coming from above); the strip beside the shelf keeps it up instead of showing and hiding it in a loop; hidden, only the part under the icons takes the mouse when the tray isn't shown; it no longer stays up after clicking an app in it, and stays up while an app's jump list is open.</li>
-<li>Apps asking for attention no longer make the whole dock jump up for a moment (also with the mouse on another monitor), with "When an app needs attention" set to only the icon or nothing.</li>
-<li>Badges and apps' overlay icons (like Discord's counter) fit in the dock on every monitor, and Discord's counter shows as a sharp red bubble with the right number, also when it was set before the mod started.</li>
-<li>Dots under open apps also show for a pinned app opened from the dock.</li>
-</ul>
-<p><strong>The island's look</strong></p>
-<ul>
-<li>Glass: the island (in every style, the notches too) and its panels see-through and blurred, with a bright edge, using Windows' blur (it needs Windows' transparency effects; a plain color without them or with the energy saver on).</li>
-<li>"Icon size" is now "Icon and text size" (the pill's texts follow it too).</li>
-<li>New options: the line's opacity (0% hides it, it still brings the island back), how long the area along the edge that brings it back is, the panels' size (100% to 150%), the media title's width on the pill, the minimize arrow at the end of the pill, the gray highlight behind the item under the mouse (#6324), and the tips under the icons and buttons. All of them per profile and monitor.</li>
-<li>Language: the island's texts in English, Portuguese or Chinese, or "Automatic" (Windows' display language); the dates follow it.</li>
-<li>Notches hiding together: each notch keeps its own line, and the mouse on any of them opens them all.</li>
-<li>Icons drawn smaller than their picture are smoothed (no jagged edges).</li>
-<li>On Windows 10, the island's icons use Segoe MDL2 Assets (they were empty boxes).</li>
-<li>The pill's height, how round its corners are and the room at its ends (its width) are options (#6200).</li>
-<li>The thin edge around the island, its panels, banners and bubbles (the glass's bright edge too) has a slider: 0% for none (the minimized line keeps its own).</li>
-<li>Glass: a translucent option (a lighter tint and livelier colors, like the taskbar styler's LiquidGlass themes) and a slider to blur it more than Windows' own (#6368, #6309); it's still Windows' blur, so screenshots and recordings show it.</li>
-<li>The bar style can put its items at the screen's corners, with the clock in the middle (#6275).</li>
-<li>The battery icon turns green while charging (#6271), the volume's and battery's percentages sit closer to their icons (#6199), and a notification's title and text are centered by its icon (#6200).</li>
-<li>The battery icon is drawn a bit bigger, as big as the other icons at every icon size.</li>
-<li>The island's settings, Look tab: grouped in sections (Style, Colors, Glass, The pill's shape, Sizes, Details, Animations), each kept whole in one column; a dimmed slider says why on its name, like the options; the frosted glass's tip lists everything it needs.</li>
-</ul>
-<p><strong>Calendar and updates</strong></p>
-<ul>
-<li>The calendar's gear (main island) hides your own past events after a day, a week or thirty days (their day keeps its dot and lists them behind "Show N hidden"), shows how many events are kept (out of 200, with a warning when almost full) and deletes the past ones (two clicks).</li>
-<li>Updates are checked every 1, 3, 6, 12 or 24 hours, chosen under their list; an item shown only by another monitor's profile (updates, weather, usage) now gets its data too.</li>
-</ul>
-<p><strong>Other fixes</strong></p>
-<ul>
-<li>The island starts even when Windows isn't ready for it at sign-in (it tries again for a minute) (#6309).</li>
-<li>Updating or recompiling the mod no longer leaves the island off (the new version's island used to leave while the old one was still closing), and Windows' "Do not disturb" stays on through it with the island's own notifications.</li>
-<li>Discord's notifications stay on the island while its taskbar counter does, and clicking one opens Discord.</li>
-<li>An app's icon that came out as a white square (read while Explorer was restarting) is read again.</li>
-<li>Bluetooth: a device no longer stays at "Disconnecting…" when Windows doesn't answer.</li>
-<li>Changing the power mode or plan from the control center no longer can crash the island (Windows' power library is kept loaded).</li>
-<li>The notification counts on the pill sit in the middle of their bubbles in the Fixed style too.</li>
-<li>Windows' own notifications with buttons the island can't press (like Nearby sharing's "Save" and "Decline") keep Windows' banner, and a click on the island opens Windows' notification center, where the buttons work.</li>
-<li>The keyboard language bubble shows again when switching 中/英 with the island minimized: an input method's own window coming to the front (like Microsoft Pinyin's) no longer counts as another app (#6313).</li>
-<li>Clicking a notification of an app hidden in the tray, like QQ, brings up the running app through its tray icon instead of starting it again (the login screen) (#6076).</li>
-<li>Wi-Fi: the network shows as Wi-Fi even when Windows doesn't give its signal (it showed as a cable); when Windows refuses the networks in reach (no location access on newer Windows 11 builds), the list says so and opens the page that allows it, instead of looking for networks forever; failures are logged.</li>
-<li>Windows' "Do not disturb" stays on when the mod is updated while a folder window runs in its own Explorer process.</li>
-<li>The dock (and the transparent taskbar) no longer shows behind the window in front when Windows left the taskbar under other windows with its "always on top" style still set: it's put on top every time it shows.</li>
-<li>README redone: what the mod does at a glance, with new pictures and GIFs (the styles, glass, the dock), and the whole list of features below.</li>
-</ul>]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
         </author>
     </entry>
 </feed>

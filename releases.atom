@@ -2,12 +2,171 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-22T10:02:20.000Z</updated>
+    <updated>2026-10-22T15:04:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mute Focused Window 1.0]]></title>
+        <id>https://windhawk.net/mods/mute-focused-window#b947ebaf2f1b237297b90ed9fe480958f701f311</id>
+        <link href="https://windhawk.net/mods/mute-focused-window"/>
+        <updated>2026-10-22T15:04:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mutefocusedwindow">Mute Focused Window</h1>
+<p>Press <strong>Ctrl+Alt+M</strong> to mute the app whose window has focus. Press it again to
+unmute it. Other apps keep playing.</p>
+<p>This changes the same per-app mute as the Windows Volume Mixer, so the mixer
+shows the result and can undo it.</p>
+<h2 id="whatgetsmuted">What gets muted</h2>
+<p>The mod mutes every audio session that belongs to the focused window's app, on
+every active output device. If some of those sessions are muted and others are
+not, the first press mutes them all.</p>
+<p>Browsers and Electron apps such as Discord play sound from a helper process
+instead of the process that owns the window. The mod therefore includes the
+app's background child processes too. A child process with its own visible
+window is treated as a separate app and left alone. For example, a media player
+launched from a terminal keeps playing when you mute the terminal.</p>
+<h2 id="hotkey">Hotkey</h2>
+<p>Change the hotkey in the mod's settings. Write any modifiers and exactly one
+key, joined by <code>+</code>, for example <code>Ctrl+Alt+M</code>, <code>Win+Shift+F9</code> or <code>Pause</code>.</p>
+<ul>
+<li>Modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.</li>
+<li>Keys: <code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F24</code>, <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>,
+<code>Backspace</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>,
+<code>Down</code>, <code>Left</code>, <code>Right</code>, <code>Pause</code>, <code>ScrollLock</code>, <code>PrintScreen</code>, <code>Numpad0</code>–
+<code>Numpad9</code>, <code>VolumeMute</code>, <code>VolumeDown</code>, <code>VolumeUp</code>, <code>MediaPlayPause</code>,
+<code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code>.</li>
+<li>Any other key: its virtual-key code in hexadecimal, such as <code>0x4D</code>.</li>
+</ul>
+<p>Windows gives a hotkey to only one program at a time, and other apps stop
+receiving that key combination. If the hotkey does nothing, another program may
+already own it. Turn on logging in the mod's Advanced tab to see why.</p>
+<p>The default, Ctrl+Alt+M, also takes Word's Insert Comment shortcut. On keyboard
+layouts with an AltGr key, Windows treats AltGr as Ctrl+Alt, so AltGr+M (<code>µ</code> on
+German layouts) stops typing its character. Choose another hotkey if you need
+either.</p>
+<h2 id="usingthekeyboardsmutekey">Using the keyboard's Mute key</h2>
+<p>Most keyboards with a dedicated Mute key, and laptops with a mute function key,
+send <code>VolumeMute</code>.</p>
+<ul>
+<li>Set the hotkey to <code>VolumeMute</code> to make the Mute key mute the focused app
+instead of everything. Also turn on <strong>Mute the system when there's no app to
+mute</strong>, so the key still mutes everything when you press it on the desktop,
+the taskbar, a File Explorer window or an app without audio.</li>
+<li>Set the hotkey to <code>Ctrl+VolumeMute</code> to keep the Mute key as it is and use
+Ctrl+Mute for the focused app.</li>
+</ul>
+<p>Keyboard software that reassigns the Mute key can stop it from sending
+<code>VolumeMute</code>.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>A browser is muted as a whole, not tab by tab. The Volume Mixer shows it the
+same way.</li>
+<li>An app started from the focused app and hidden in the tray, with no visible
+window, counts as part of the focused app. For example, a music player
+started from a launcher and minimized to the tray is muted along with the
+launcher. Windows gives no reliable way to tell such an app from the hidden
+helper processes that browsers and Electron apps play their sound through.</li>
+<li>Windows remembers an app's mute setting. An app you muted is still muted the
+next time it starts; press the hotkey or use the Volume Mixer to unmute it.</li>
+<li>Pressing the hotkey on the desktop, the taskbar or a File Explorer window does
+nothing, unless <strong>Mute the system when there's no app to mute</strong> is on.</li>
+<li>That system mute doesn't show Windows' volume indicator.</li>
+</ul>]]></content>
+        <author>
+            <name>Benevolent Anarchy</name>
+            <uri>https://github.com/cicely-f</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Bulk Copy File and Folder Names 0.3.0]]></title>
+        <id>https://windhawk.net/mods/bulk-copy-file-and-folder-names#5faa114e2d64c77e02d79f4a54a79f92c89137dd</id>
+        <link href="https://windhawk.net/mods/bulk-copy-file-and-folder-names"/>
+        <updated>2026-10-22T15:04:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="bulkcopyfileandfoldernames">Bulk Copy File and Folder Names</h1>
+<p>Windows has Copy as path (Ctrl+Shift+C), but it gives you full paths in quotes,
+and often you only want the names. This mod copies the names of the files and
+folders you select in File Explorer as plain text, one per line. It works on one
+item or on many at once. A selection can mix files and folders.</p>
+<h2 id="rightclickmenu">Right-click menu</h2>
+<p>Right-click a file, a folder, or a selection of many files and folders in a File
+Explorer window. The classic menu gets two entries, Copy name and Copy name
+without extension. On Windows 11 they're in the menu you get from Show more
+options or Shift+right-click. The entries are on by default, and you can turn
+them off in the settings.</p>
+<p>Copy name without extension keeps folder names whole, so <code>sub.folder</code> stays
+<code>sub.folder</code>, and <code>a.tar.gz</code> becomes <code>a.tar</code>. A name that starts with a dot, like
+<code>.gitignore</code>, stays whole.</p>
+<h2 id="hotkeys">Hotkeys</h2>
+<p>The hotkeys are off until you turn them on, so a fresh install takes no key away
+from File Explorer. To turn them on, open the mod's Settings tab in Windhawk,
+tick Hotkeys, and save. The defaults are Ctrl+Shift+Y for names with extensions
+and Ctrl+Shift+U for names without. You can change both keys there too.</p>
+<p>A key is handled inside the File Explorer window that has the focus, so it never
+reaches other programs. It does nothing while you type in a rename box, the
+address bar or the search box, and it does nothing when no file or folder is
+selected. In both cases the key goes to File Explorer as usual.</p>
+<p>If you pick a key that File Explorer already uses, like Ctrl+Shift+N for New
+folder, the mod wins while the hotkeys are on and something is selected.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Hotkeys: turn the two key combinations on. Off by default.</li>
+<li>Modifiers and key for each copy action. Ctrl+Alt and Ctrl+Alt+Shift also
+match AltGr, so skip them if your keyboard layout types letters with AltGr.</li>
+<li>Separator: a new line, a comma, or a space between names.</li>
+<li>Quote names: put each name in double quotes.</li>
+<li>Right-click menu: show the two menu entries. On by default.</li>
+</ul>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>The keys and menu entries don't work on the desktop or in file dialogs. Only
+File Explorer windows count.</li>
+<li>The Windows 11 compact menu can't take new entries from a mod. Use Show more
+options.</li>
+<li>The menu entries don't show on the column header menu, the menu you get from
+empty space in a folder, or the menu you get after a drag with the right
+mouse button.</li>
+<li>Items that aren't files or folders, like drives in This PC, give their
+internal name.</li>
+<li>If nothing is selected, nothing happens.</li>
+</ul>
+<h2 id="tutorial">Tutorial</h2>
+<ol>
+<li>Select the files and folders in a File Explorer window. A mix of both is
+fine.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-1-select.png" alt="A File Explorer window with two folders and five files selected in the demo-names folder" /></li>
+<li>Hold Shift and right-click the selection. Pick Copy name or Copy name
+without extension.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-4-right-click-menu.png" alt="The lower part of the classic right-click menu, with Copy name and Copy name without extension in their own group above Properties" /></li>
+<li>Paste. Copy name gives you every name with its extension, one per line.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-2-names-with-extensions.png" alt="The selected names pasted into a text window, one per line, with their extensions" /></li>
+<li>Copy name without extension drops the extension from files and keeps the
+full name of folders.
+<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-3-names-without-extensions.png" alt="The same names pasted again without extensions, while the folder Backup.2025 keeps its full name" /></li>
+<li>If you'd rather use the keyboard, tick Hotkeys in the settings. Ctrl+Shift+Y
+then does what Copy name does, and Ctrl+Shift+U does what Copy name without
+extension does.</li>
+</ol>
+<h3 id="gotchas">Gotchas</h3>
+<ul>
+<li>In step 2, the compact Windows 11 menu can't show the entries. Use
+Shift+right-click or Show more options.</li>
+<li>In step 4, only the last extension goes, so <code>archive.tar.gz</code> becomes
+<code>archive.tar</code>.</li>
+<li>In step 5, a key does nothing while you type in a rename box, the address bar
+or the search box, and nothing while no item is selected. File Explorer gets
+the key instead.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The way the hotkeys are caught, a hook on TranslateAcceleratorW that steps
+aside while a text box has the focus, follows the approach of the Explorer
+Custom Shortcuts mod.</p>]]></content>
+        <author>
+            <name>Shaerif</name>
+            <uri>https://github.com/Shaerif</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fullscreen Start (Launchpad style) 1.0.0]]></title>
         <id>https://windhawk.net/mods/fullscreen-start#6cea3b683d857f0cc4cf22360c2c07cdeff7b8f1</id>
@@ -1058,123 +1217,6 @@ windows are not corrected.</p>]]></content>
         <author>
             <name>Goobis</name>
             <uri>https://github.com/b2dmx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Hover Info 1.1.1]]></title>
-        <id>https://windhawk.net/mods/file-hover-info#5a1aef942cf4db6248a43b5f102d7b7296fcedd4</id>
-        <link href="https://windhawk.net/mods/file-hover-info"/>
-        <updated>2026-10-19T18:05:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="filehoverinfo">File Hover Info</h1>
-<p>Rest the cursor on a file, folder, drive or shortcut — on the desktop or in a
-File Explorer window — and a card appears with the details you choose: size,
-folder size, free space on drives, creation / modification / access dates,
-attributes, image dimensions, media duration, file version, shortcut target,
-folder contents and location.</p>
-<p><img src="https://i.imgur.com/Gk2ZcFl.png" alt="File Hover Info card" /></p>
-<p>The card follows the Windows display language (English, Italian, Spanish,
-French, German and Portuguese are included; other languages fall back to
-English), or you can pick one.</p>
-<p>Everything is configurable: which fields to show, date style (absolute,
-relative or both), theme (follow Windows, dark, light or fully custom colors),
-solid / acrylic / blur background, accent color and bar, corner radius,
-shadow, fade-in, font, size, icon or thumbnail.</p>
-<h2 id="windowsownpopup">Windows' own popup</h2>
-<p>By default the mod hides Windows' built-in hover popup, so only the card is
-shown. This only affects Explorer while the mod is running: the Windows
-setting itself is not changed, and the popup comes back as soon as the option
-or the mod is turned off. The option also hides the small tooltip Windows
-shows for desktop icon names that are cut off, since the card shows the full
-name anyway.</p>
-<h2 id="foldersize">Folder size</h2>
-<p>Folder sizes are summed on a background thread, so Explorer is never blocked.
-The card shows "Calculating…" and updates when the total is ready. The
-calculation stops as soon as the cursor moves away, and after the time limit
-set in the options (the card then shows a partial total). Drives show their
-free space instead of being scanned.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Acrylic and blur use an undocumented Windows API; on some builds the blur
-may not follow the rounded corners.</li>
-<li>Items are matched by their displayed name. If two items in the same folder
-show the same name (e.g. <code>photo.jpg</code> and <code>photo.png</code> with extensions
-hidden), the first one is shown.</li>
-<li>Pages that aren't classic folder views (Home, Gallery) are not supported.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Real-time Cast Shadow Wallpaper 1.0.3]]></title>
-        <id>https://windhawk.net/mods/realtime-cast-shadow-wallpaper#b2cec81257f082e05d00a6aa292494dde3ad40e2</id>
-        <link href="https://windhawk.net/mods/realtime-cast-shadow-wallpaper"/>
-        <updated>2026-10-19T17:04:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="realtimecastshadowwallpaper">Real-time Cast Shadow Wallpaper</h1>
-<p>Turns the desktop into a lit surface: a light source moves over your wallpaper
-and every visible window casts a projected shadow on it, updated in real time
-as you move, resize and drag windows.</p>
-<p><img src="https://i.imgur.com/hfuF3Na.gif" alt="Preview" /></p>
-<p><a href="https://i.imgur.com/5f4m5cO.mp4">Watch the full-quality video</a></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Light motion</strong>: follow the mouse, wander randomly, orbit the screen, sweep
-across it like the sun, follow the real time of day, or stay fixed.</li>
-<li><strong>Light presets</strong>: warm lamp, daylight, flickering candle, moonlight, neon,
-or fully custom color, intensity, radius and height.</li>
-<li><strong>Shadow presets</strong>: crisp, soft, diffuse, long (dramatic), subtle, or custom
-opacity, softness and length.</li>
-<li><strong>Anchored shadows</strong>: the shadow stays attached to the window base and
-stretches away from the light, with a sharp contact edge and a soft tail.</li>
-<li><strong>Contact shadow</strong>: a soft darkening right around each window that grounds
-it on the desktop, independent of the light.</li>
-<li><strong>Shadow color</strong>: neutral, cool, warm or violet shadows.</li>
-<li><strong>Shadows on other windows</strong> (optional): windows also shade the
-applications below them, following the real window stacking order.</li>
-<li><strong>Background</strong>: your current Windows wallpaper (per monitor, slideshows
-included), a custom image, or a plain dark surface; optional vignette.</li>
-<li>Multi-monitor support, pause on fullscreen apps, smooth tracking while
-dragging windows.</li>
-</ul>
-<h2 id="lightmotion">Light motion</h2>
-<p>| Motion | Behavior |
-|---|---|
-| Follow the mouse | The light follows the cursor across all monitors. |
-| Wander | Smooth random paths, independent on each monitor. |
-| Orbit | A slow elliptical orbit around the center of each monitor. |
-| Sun arc | Rises on the left, crosses the top, sets on the right, then repeats. Shadows are long and the light warm near the horizon. |
-| Time of day | Like the sun arc, but driven by your clock: sunrise at 6:00, noon at the top, sunset at 20:00, then a dim moonlight arc at night. |
-| Fixed point | Pinned to a position in % of the monitor; values below 0 or above 100 place it off-screen for long, raking shadows. |</p>
-<p>"Speed" applies to wander, orbit and sun arc.</p>
-<h2 id="presets">Presets</h2>
-<p>Choosing a light or shadow preset overrides the matching custom values; pick
-"Custom" to use your own. Shadow presets express length relative to the light
-height, so they look consistent with every light preset.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windows are approximated as rounded rectangles with a common virtual height:
-shadows don't follow transparency or irregular window shapes.</li>
-<li>Shadows are drawn on the wallpaper behind the desktop icons. Shadows on
-other windows use a click-through overlay that never covers the window
-casting them; the taskbar, menus and tooltips are left untouched. This
-option adds some CPU/GPU load.</li>
-<li>Rendering uses OpenGL (GLSL 1.20). On current Windows 11 desktops, frames
-are only redrawn when the light, the windows or the background change, so a
-still desktop costs almost nothing (the flickering candle redraws
-continuously). On older desktop layouts every frame is drawn, up to the FPS
-limit.</li>
-<li>Rendering pauses while the session is locked, the display is off, or every
-monitor shows a fullscreen app. If the desktop isn't ready yet (at sign-in,
-or while Explorer restarts), the mod waits and attaches when it appears.</li>
-<li>The Windows wallpaper setting is never modified, Explorer's own windows are
-never reordered, and nothing is written to the registry. Disabling the mod
-removes everything it created.</li>
-<li>Disable other animated-wallpaper mods while using this one.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

@@ -1191,6 +1191,31 @@
         "version": "1.7.6"
       }
     },
+    "bulk-copy-file-and-folder-names": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792681474000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792681474000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Shaerif",
+        "compilerOptions": "-luser32 -lole32 -luuid",
+        "description": "Copy the names of one or many selected files and folders in File Explorer, not the paths, from the right-click menu or with optional hotkeys",
+        "github": "https://github.com/Shaerif",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Bulk Copy File and Folder Names",
+        "version": "0.3.0"
+      }
+    },
     "caffeine": {
       "details": {
         "defaultSorting": 13464,
@@ -10200,6 +10225,32 @@
         "license": "MIT",
         "name": "MultiWM",
         "version": "1.13.59"
+      }
+    },
+    "mute-focused-window": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792681480000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792681480000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Benevolent Anarchy",
+        "compilerOptions": "-lole32",
+        "description": "Press a hotkey to mute or unmute the audio of the window that currently has focus",
+        "github": "https://github.com/cicely-f",
+        "homepage": "https://github.com/Benevolent-Anarchy/Mute-Focused-Window",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Mute Focused Window",
+        "version": "1.0"
       }
     },
     "mute-in-background": {
