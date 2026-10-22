@@ -9030,6 +9030,7 @@ static HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int method, i
 }
 
 static bool InstallStartHook() {
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
