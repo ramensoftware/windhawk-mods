@@ -447,6 +447,9 @@ struct CommandBarEntry {
     winrt::com_ptr<IShellView> cachedShellView{nullptr};
     int lastSelectionCount = -1;
     int lastFocusedItem = -1;
+    bool hasModifiedDefaultLabelPosition = false;
+    muxc::CommandBarDefaultLabelPosition originalDefaultLabelPosition{
+        muxc::CommandBarDefaultLabelPosition::Bottom};
 };
 
 thread_local std::vector<CommandBarEntry> g_entries;
@@ -1369,32 +1372,6 @@ void RunShellWorkOnWorkerThread(std::function<void()> work) {
     }
 }
 
-void RunDetachedShellWork(std::function<void()> work) {
-    auto* pWork = new std::function<void()>(std::move(work));
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParam) -> DWORD {
-            std::unique_ptr<std::function<void()>> work(
-                reinterpret_cast<std::function<void()>*>(lpParam));
-            ComApartmentScope comScope(COINIT_APARTMENTTHREADED |
-                                       COINIT_DISABLE_OLE1DDE);
-            try {
-                (*work)();
-            } catch (...) {
-                Wh_Log(L"Error %08X", winrt::to_hresult().value);
-            }
-            return 0;
-        },
-        pWork, 0, nullptr);
-
-    if (thread) {
-        CloseHandle(
-            thread);  // Detach immediately so unload never waits on modal UI
-    } else {
-        delete pWork;
-    }
-}
-
 bool IsCommandMatch(std::wstring_view cmd, std::wstring_view actionName) {
     constexpr std::wstring_view kInternal = L"internal:";
     constexpr std::wstring_view kInt = L"int:";
@@ -1469,7 +1446,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         if (!context.selectedPath.empty() &&
             PathIsDirectoryW(context.selectedPath.c_str()) == FALSE) {
             std::wstring targetPath = context.selectedPath;
-            RunDetachedShellWork([hWnd, targetPath]() {
+            RunShellWorkOnWorkerThread([hWnd, targetPath]() {
                 OPENASINFO oai = {};
                 oai.pcszFile = targetPath.c_str();
                 oai.oaifInFlags = OAIF_EXEC | OAIF_ALLOW_REGISTRATION;
@@ -2008,6 +1985,35 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return true;
     }
 
+    // Global Absolute Override: 'hide' or 'hidden' anywhere in the filter
+    // permanently hides the button
+    std::wstring lowerFilter = ToLower(filter);
+    size_t hPos = 0;
+    while ((hPos = lowerFilter.find_first_of(L"hH", hPos)) !=
+           std::wstring::npos) {
+        std::wstring_view sv(lowerFilter.c_str() + hPos);
+        size_t matchLen = 0;
+        if (sv.starts_with(L"hidden")) {
+            matchLen = 6;
+        } else if (sv.starts_with(L"hide")) {
+            matchLen = 4;
+        }
+
+        if (matchLen > 0) {
+            bool leftBoundary =
+                (hPos == 0) ||
+                (wcschr(L",;+|/ \t()", lowerFilter[hPos - 1]) != nullptr);
+            bool rightBoundary =
+                (hPos + matchLen == lowerFilter.size()) ||
+                (wcschr(L",;+|/ \t()", lowerFilter[hPos + matchLen]) !=
+                 nullptr);
+            if (leftBoundary && rightBoundary) {
+                return false;  // Absolute veto under all conditions
+            }
+        }
+        hPos++;
+    }
+
     std::vector<std::wstring> orBranches;
     std::vector<std::wstring> negativeTokens;
 
@@ -2201,6 +2207,10 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
             subToken = TrimWhitespaceAndQuotes(subToken);
             if (subToken.empty())
                 continue;
+
+            std::wstring lowerSub = ToLower(subToken);
+            if (lowerSub == L"hide" || lowerSub == L"hidden")
+                return false;
 
             // If a sub-token fails or invokes hide, the branch fails
             if (!evalAtomicToken(subToken)) {
@@ -2865,6 +2875,19 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
         }
     } else if (commandBar.Name() == L"FileExplorerSecondaryCommandBar") {
         if (placeOnSecondary) {
+            for (auto& ent : g_entries) {
+                if (ent.commandBar.get() == commandBar) {
+                    if (!ent.hasModifiedDefaultLabelPosition) {
+                        try {
+                            ent.originalDefaultLabelPosition =
+                                commandBar.DefaultLabelPosition();
+                            ent.hasModifiedDefaultLabelPosition = true;
+                        } catch (...) {
+                        }
+                    }
+                    break;
+                }
+            }
             commandBar.DefaultLabelPosition(
                 muxc::CommandBarDefaultLabelPosition::Right);
             EnsureActionButtons(commandBar);
@@ -2880,7 +2903,8 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
     }
 }
 
-void RemoveOurButtons(muxc::CommandBar const& commandBar) {
+void RemoveOurButtons(muxc::CommandBar const& commandBar,
+                      CommandBarEntry* pEntry = nullptr) {
     auto commands = commandBar.PrimaryCommands();
     for (uint32_t i = commands.Size(); i > 0; i--) {
         auto command = commands.GetAt(i - 1);
@@ -2899,14 +2923,22 @@ void RemoveOurButtons(muxc::CommandBar const& commandBar) {
         commands.RemoveAt(i - 1);
     }
 
-    // Restore secondary command bar's default label position to native
-    // Collapsed state
-    if (commandBar.Name() == L"FileExplorerSecondaryCommandBar") {
+    if (!pEntry) {
+        for (auto& ent : g_entries) {
+            if (ent.commandBar.get() == commandBar) {
+                pEntry = &ent;
+                break;
+            }
+        }
+    }
+
+    if (pEntry && pEntry->hasModifiedDefaultLabelPosition) {
         try {
             commandBar.DefaultLabelPosition(
-                muxc::CommandBarDefaultLabelPosition::Collapsed);
+                pEntry->originalDefaultLabelPosition);
         } catch (...) {
         }
+        pEntry->hasModifiedDefaultLabelPosition = false;
     }
 }
 
@@ -3117,7 +3149,7 @@ void RemoveButtonsForCurrentThread() {
         if (!commandBar)
             continue;
         try {
-            RemoveOurButtons(commandBar);
+            RemoveOurButtons(commandBar, &entry);
         } catch (...) {
             Wh_Log(L"Error %08X", winrt::to_hresult().value);
         }
@@ -3130,19 +3162,16 @@ void RefreshButtonsForCurrentThread() {
     StopHoverTimersForCurrentThread();
     RevokeHandlersForCurrentThread();
 
-    std::vector<winrt::weak_ref<muxc::CommandBar>> commandBars;
-    for (auto& entry : g_entries) {
-        StopSelectionTimer(entry);
-        commandBars.push_back(entry.commandBar);
-    }
-    g_entries.clear();
+    std::vector<CommandBarEntry> taken;
+    taken.swap(g_entries);
 
-    for (auto const& weakCommandBar : commandBars) {
-        auto commandBar = weakCommandBar.get();
+    for (auto& entry : taken) {
+        StopSelectionTimer(entry);
+        auto commandBar = entry.commandBar.get();
         if (!commandBar)
             continue;
         try {
-            RemoveOurButtons(commandBar);
+            RemoveOurButtons(commandBar, &entry);
             OnCommandBarAdded(commandBar);
         } catch (...) {
             Wh_Log(L"Error %08X", winrt::to_hresult().value);
