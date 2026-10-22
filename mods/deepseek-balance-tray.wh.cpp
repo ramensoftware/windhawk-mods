@@ -8,7 +8,7 @@
 // @license         MIT
 // @architecture    x86-64
 // @include         explorer.exe
-// @compilerOptions -lwinhttp
+// @compilerOptions -lwinhttp -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -39,9 +39,10 @@ so there are no external dependencies.
   flag), so dates in other Explorer windows are left alone.
 * A background thread polls `https://api.deepseek.com/user/balance` through
   WinHTTP, parses the JSON and updates the clock suffix.
-* In `RUB` mode the mod also fetches the official Bank of Russia rate
-  (`https://www.cbr.ru/scripts/XML_daily.asp`, windows-1251), caches it for six
-  hours and shows the balance in rubles.
+* When a display currency is selected, the mod fetches the official Bank of
+  Russia rates (`https://www.cbr.ru/scripts/XML_daily.asp`, windows-1251),
+  caches them for six hours and converts the balance. With the default
+  `native` mode no such request is made.
 
 ## Settings
 
@@ -49,8 +50,9 @@ so there are no external dependencies.
   PC. Leave it empty to use the `DEEPSEEK_API_KEY` environment variable.
 * **Refresh interval** — how often to poll the API, in minutes.
 * **Clock line** — append to the bottom (date) line or the top (time) line.
-* **Display currency** — `CNY`, `RUB` or `USD`: the balance is converted to the
-  selected currency with the official Bank of Russia rates.
+* **Display currency** — `native` keeps the currency returned by the API;
+  `CNY`, `RUB` and `USD` convert the balance with the official Bank of Russia
+  rates.
 
 ## Notes
 
@@ -59,7 +61,8 @@ so there are no external dependencies.
 * The old Windows 10 taskbar on Windows 11 (ExplorerPatcher) is not supported.
 * The API key is stored in plain text in the mod settings: Windhawk has no
   secret setting type. The key is only sent to `api.deepseek.com` and is never
-  logged; no other endpoints are contacted except `www.cbr.ru` in `RUB` mode.
+  logged; no other endpoints are contacted except `www.cbr.ru`, and only when a
+  display currency other than `native` is selected.
   In a regular (non-portable) Windhawk install the settings are machine-wide,
   so every Windows account on this PC shares the same key.
 * Do not enable this mod together with Taskbar Clock Customization: both hook
@@ -89,14 +92,16 @@ so there are no external dependencies.
   $options:
   - date: Date line (bottom)
   - time: Time line (top)
-- displayCurrency: CNY
+- displayCurrency: native
   $name: Display currency
   $description: >-
-    Currency to show the balance in: CNY (Chinese yuan), RUB (Russian rubles) or
-    USD (US dollars). The amount is converted using the official Bank of Russia
-    rates (updated daily, cached for 6 hours); if a rate is not available, the
-    balance is shown in its original currency.
+    Currency to show the balance in. native keeps the currency returned by the
+    API and makes no additional network requests; CNY, RUB and USD convert the
+    balance using the official Bank of Russia rates (updated daily, cached for
+    6 hours). If a rate is not available, the balance is shown in its original
+    currency.
   $options:
+  - native: Native (as returned by the API)
   - CNY: Chinese yuan (¥)
   - RUB: Russian rubles (₽)
   - USD: US dollars ($)
@@ -132,7 +137,7 @@ std::mutex g_stateMutex;
 struct Settings {
     std::wstring apiKey;            // ключ DeepSeek без префикса "Bearer "
     std::wstring clockLine = L"date"; // "date" (нижняя строка) или "time"
-    std::wstring displayCurrency = L"CNY"; // "CNY", "RUB" или "USD"
+    std::wstring displayCurrency = L"native"; // "native", "CNY", "RUB" или "USD"
     int refreshMinutes = 5;         // период опроса API
 };
 
@@ -165,6 +170,13 @@ double g_rubPerUnit = 0.0;          // курс текущей валюты (0 �
 [[clang::no_destroy]] std::optional<std::thread> g_workerThread;
 HANDLE g_wakeEvent = nullptr;       // guarded by g_stateMutex
 std::atomic<bool> g_stopRequested{false};
+
+// Состояние подключения часов Windows 11 (SystemTray.dll и т. п.).
+std::atomic<bool> g_systemTrayHooked{false};
+
+// Хук LoadLibraryExW только отмечает факт загрузки подходящего модуля.
+// Разбор модуля (версия, символы) делает поток обновления, вне loader lock.
+std::atomic<bool> g_pendingClockModule{false};
 
 // ---------------------------------------------------------------------------
 // 2. Вспомогательные функции работы со строками
@@ -371,7 +383,7 @@ void LoadSettingsLocked() {
     settings.displayCurrency = GetStringSetting(L"displayCurrency");
     TrimInPlace(settings.displayCurrency);
     if (settings.displayCurrency.empty()) {
-        settings.displayCurrency = L"CNY";
+        settings.displayCurrency = L"native";
     }
 
     int minutes = Wh_GetIntSetting(L"refreshInterval");
@@ -398,6 +410,12 @@ void RebuildSuffixLocked() {
     }
 
     std::wstring target = g_settings.displayCurrency;
+    if (_wcsicmp(target.c_str(), L"native") == 0) {
+        // native — показываем в валюте ответа API, без пересчёта и без запроса
+        // курсов ЦБ.
+        target = g_currency;
+    }
+
     double value = g_amountValue;
     bool converted = false;
 
@@ -1163,8 +1181,12 @@ void FetchAndUpdate() {
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         g_currency = currency;
-        needRates =
-            _wcsicmp(g_settings.displayCurrency.c_str(), currency.c_str()) != 0;
+
+        // Курсы ЦБ нужны, только если пользователь явно выбрал валюту,
+        // отличную от валюты ответа. В режиме native второй запрос не нужен.
+        const wchar_t* display = g_settings.displayCurrency.c_str();
+        needRates = _wcsicmp(display, L"native") != 0 &&
+                    _wcsicmp(display, currency.c_str()) != 0;
     }
 
     // Курс нужен до пересборки строки, но сеть — строго без блокировки.
@@ -1184,10 +1206,24 @@ void FetchAndUpdate() {
     Wh_Log(L"Display: %s", g_clockSuffix.c_str());
 }
 
+// Определена в разделе 9; объявлена заранее, потому что поток обновления
+// доустанавливает хуки часов, когда их модуль загрузится.
+bool TryHookSystemTray();
+
 void WorkerProc() {
     for (;;) {
         if (g_stopRequested.load(std::memory_order_acquire)) {
             break;
+        }
+
+        // Модуль часов мог загрузиться позже мода. Разбор модуля (версия,
+        // поиск символов, установка хуков) делаем здесь, а не в хуке
+        // LoadLibraryExW: тот работает под loader lock.
+        if (g_pendingClockModule.exchange(false, std::memory_order_acq_rel) &&
+            !g_systemTrayHooked.load(std::memory_order_acquire)) {
+            if (TryHookSystemTray()) {
+                Wh_ApplyHookOperations();
+            }
         }
 
         FetchAndUpdate();
@@ -1202,6 +1238,13 @@ void WorkerProc() {
         // Wh_ModSettingsChanged сигналит событием, и поток сразу идёт
         // за новым балансом (например, после смены ключа).
         DWORD timeoutMs = static_cast<DWORD>(minutes) * 60u * 1000u;
+
+        // Пока часы не подключены, просыпаемся раз в секунду: модуль с
+        // типами SystemTray мог загрузиться только что.
+        if (!g_systemTrayHooked.load(std::memory_order_acquire)) {
+            timeoutMs = 1000;
+        }
+
         DWORD waitResult = WaitForSingleObject(g_wakeEvent, timeoutMs);
 
         if (g_stopRequested.load(std::memory_order_acquire)) {
@@ -1457,8 +1500,6 @@ unsigned int WINAPI UpdateTextStringsIfNecessary_Hook(void* pThis, bool* param) 
 // найденные адреса и не перечитывает PDB модуля при каждом поиске, в отличие
 // от ручного перебора символов модуля.
 
-std::atomic<bool> g_systemTrayHooked{false};
-
 bool IsSystemTrayModuleName(PCWSTR path) {
     if (!path) {
         return false;
@@ -1497,37 +1538,64 @@ bool HookSystemTraySymbols(HMODULE module) {
     return true;
 }
 
-// Номер сборки Windows нужен для выбора модуля часов; определяется ниже.
-DWORD GetWindowsBuildNumber();
+// Версия модуля из его ресурса версии. Вызывается только вне loader lock
+// (Wh_ModInit, Wh_ModAfterInit, поток обновления), никогда из хука загрузчика.
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
+    HRSRC resource =
+        FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (!resource) {
+        return nullptr;
+    }
 
-// Сборка, в которой типы SystemTray переехали из Taskbar.View.dll в
-// SystemTray.dll (Taskbar.View.dll 2604+).
-constexpr DWORD kSystemTrayDllBuild = 26100;
+    HGLOBAL global = LoadResource(module, resource);
+    if (!global) {
+        return nullptr;
+    }
 
-bool IsLegacyTaskbarBuild() {
-    return GetWindowsBuildNumber() < kSystemTrayDllBuild;
+    void* data = LockResource(global);
+    if (!data) {
+        return nullptr;
+    }
+
+    VS_FIXEDFILEINFO* info = nullptr;
+    UINT size = 0;
+    if (!VerQueryValueW(data, L"\\", reinterpret_cast<void**>(&info), &size) ||
+        !info || size == 0) {
+        return nullptr;
+    }
+
+    return info;
+}
+
+WORD GetModuleMajorVersion(HMODULE module) {
+    VS_FIXEDFILEINFO* info = GetModuleVersionInfo(module);
+    return info ? HIWORD(info->dwFileVersionMS) : 0;
 }
 
 // Возвращает единственный модуль, в котором могут жить типы SystemTray.
-// На новых сборках это только SystemTray.dll: Taskbar.View.dll там ещё
-// загружается, но нужных типов уже не содержит, и поиск символов в ней лишь
-// впустую читал бы её PDB.
+// Решает версия Taskbar.View.dll, а не сборка ОС: типы переехали в
+// SystemTray.dll с версии 2604, и на 24H2/25H2 без этого обновления (включая
+// LTSC 2024) SystemTray.dll ещё нет, а типы лежат в Taskbar.View.dll.
 HMODULE GetSystemTrayModuleHandle() {
     HMODULE module = GetModuleHandleW(L"SystemTray.dll");
     if (module) {
         return module;
     }
 
-    if (!IsLegacyTaskbarBuild()) {
-        return nullptr;
-    }
-
     module = GetModuleHandleW(L"Taskbar.View.dll");
     if (module) {
-        return module;
+        const WORD major = GetModuleMajorVersion(module);
+        if (!major || major >= 2604) {
+            // Типы уже переехали в SystemTray.dll — этот модуль не подходит.
+            module = nullptr;
+        }
     }
 
-    return GetModuleHandleW(L"ExplorerExtensions.dll");
+    if (!module) {
+        module = GetModuleHandleW(L"ExplorerExtensions.dll");
+    }
+
+    return module;
 }
 
 // Подключает часы Windows 11. Флаг захватывается только вместе с конкретным
@@ -1620,16 +1688,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
 
     // SystemTray.dll (новые сборки) или Taskbar.View.dll (22H2) загружаются
-    // при старте оболочки. Если мод инициализировался раньше, хук ловит
-    // момент загрузки и вешает RefreshIcon уже на живой модуль.
-    if (module && IsSystemTrayModuleName(lpLibFileName) &&
-        module == GetSystemTrayModuleHandle() &&
-        !g_systemTrayHooked.exchange(true, std::memory_order_acq_rel)) {
-        if (HookSystemTraySymbols(module)) {
-            // Хуки, зарегистрированные после Wh_ModInit, применяются
-            // только явным вызовом Wh_ApplyHookOperations.
-            Wh_ApplyHookOperations();
-        }
+    // при старте оболочки. Здесь нельзя читать версию модуля и искать символы:
+    // хук вызывается под loader lock. Поэтому только запоминаем факт загрузки,
+    // а решение принимает поток обновления (см. WorkerProc).
+    if (module && IsSystemTrayModuleName(lpLibFileName)) {
+        g_pendingClockModule.store(true, std::memory_order_release);
     }
 
     return module;
