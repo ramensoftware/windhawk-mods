@@ -2,7 +2,7 @@
 // @id              language-applet-restorer
 // @name            Language Applet Restorer
 // @description     Brings back the classic Control Panel "Language" applet (Windows 10 1709 build) on later versions of Windows downloading the original files from Microsoft's symbol server
-// @version         0.5.0
+// @version         0.5.1
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -14,13 +14,9 @@
 
 // ==WindhawkModReadme==
 /*
-
-THIS SECTION WILL BE REMOVED IN FINAL RELEASE
-BETA:an redirect option for 1709 intl.cpl will be added(done)
-BETA:an redirect option for ms-settings to intl.cpl will be added
 # Language Applet Restorer
 
-Restores the Language applet (`Microsoft.Language`) and intl.cpl of Windows 10 1709 in the later versions of windows
+Restores the classic Control Panel **Language** applet (`Microsoft.Language`) and, optionally, the classic **Region** applet (`intl.cpl`) of Windows 10 1709 on later versions of Windows.
 
 ## Preview:
 
@@ -29,6 +25,31 @@ Restores the Language applet (`Microsoft.Language`) and intl.cpl of Windows 10 1
 ![advancepage](https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151455.png)
 
 ![addlang](https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151500.png)
+
+## What is downloaded, from where, and when
+
+The mod does not contain any Microsoft binaries. The first time it runs inside `explorer.exe`, it downloads five files of Windows 10 1709 (build 16299), about 3.7 MB in total, from Microsoft's public symbol server (`https://msdl.microsoft.com/download/symbols/`):
+
+`intl.cpl`, `UserLanguagesCpl.dll`, `WinLangdb.dll`, `Bcp47Langs.dll` and `dui70.dll`.
+
+The size and SHA-256 of every file are checked against values pinned in the mod, and a file that doesn't match is discarded. The originals are kept in the mod's storage folder (`dl`); patched copies and small compatibility shims are generated from them into `bin`. Nothing is downloaded again as long as `dl` is present.
+
+**Offline:** if the files are not on disk and there is no internet connection, the applet is simply not added and the reason is written to the mod's log. Connect to the internet and restart `explorer.exe` once. After a successful first run the mod works offline, provided *Keep downloaded files* is on.
+
+## Settings
+
+- **Page language**: language of the restored Language page and its Control Panel tooltip. *Automatic* follows the Windows UI language. Available: English, Italian, Persian, Spanish, French, Portuguese.
+- **Force translations**: use the embedded translations for the six languages above, instead of relying only on the generated `.mui` files.
+- **Keep downloaded files when the mod is disabled**: keep `dl` and `bin` in the storage folder so the mod works offline and doesn't download again. If off, the files are deleted when the mod is unloaded.
+- **Redirect Control Panel's intl.cpl to the restored one**: when enabled, opening Region (`intl.cpl`) from Control Panel, the Run dialog or `control.exe` loads the restored 1709 `intl.cpl` instead of the system one. This is done in `explorer.exe`, `rundll32.exe` and `control.exe`; the mod does nothing in other processes. It only affects windows opened after the setting is changed. The restored file is checked against the expected contents right before it is loaded; if that fails, or the files are not downloaded yet, the system `intl.cpl` is used.
+
+## Notes
+
+- Only **x64** is supported (no ARM64).
+- The 2017 components run inside `explorer.exe`. A crash in them restarts Explorer.
+- The registration of the applet is per user and volatile; it is removed when the mod is disabled and at sign-out.
+- **Compatibility:** `intl.cpl` redirection overlaps with the `win7-intl-control-panel-restorer` mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which `intl.cpl` is opened.
+- Links in the applet that open the Settings app are not changed by this mod. The `settings-to-control-panel` mod can redirect them.
 
 ## Special Thanks to:
 babamohammed2022 for adding various languages.
@@ -53,7 +74,7 @@ babamohammed2022 for adding various languages.
   $name: Force translations
   $description: If this setting is enabled, the mod forces the use of the embedded translations within the page and generated .mui files for the 6 available languages.
 
-- oOnDisable: true
+- keepFilesOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $description: If on, the downloaded and generated files stay in the mod's storage folder so re-enabling works offline. If off, they are deleted on the next unload (files still in use are left and retried later).
 
@@ -1452,6 +1473,18 @@ static Bytes MakeShim(const Bytes& image, const char* module, const std::string&
     return pepatch::BuildShimDll(shimName, ex);
 }
 
+// intl.cpl: Windows 11's kernel32 no longer exports two Nls ETW helpers it imports, so its kernel32 import is
+// renamed to nlsk32.dll, a shim that forwards to the real kernel32 and stubs those two functions.
+// Deterministic: the same inputs always give the same bytes (the redirect re-derives and compares them).
+static bool BuildIntlFiles(const Bytes& intl, const std::vector<std::string>& kernel32Exports,
+                           Bytes& intlOut, Bytes& nlskOut, std::vector<std::string>& notes, std::string& err) {
+    Bytes p = intl;
+    if (pepatch::PatchImportName(p, "kernel32.dll", "nlsk32.dll") <= 0) { err = "intl.cpl: no kernel32 import to rename"; return false; }
+    intlOut = std::move(p);
+    nlskOut = MakeShim(intl, "kernel32.dll", "nlsk32.dll", kernel32Exports, "kernel32", nullptr, notes);
+    return true;
+}
+
 // `in` maps original file name -> verified bytes. Produces everything that goes into <storage>\bin.
 static bool BuildOutputs(const std::map<std::wstring, Bytes>& in, const Win11Exports& w11,
                          std::vector<OutFile>& out, std::vector<std::string>& notes, std::string& err) {
@@ -1464,12 +1497,12 @@ static bool BuildOutputs(const std::map<std::wstring, Bytes>& in, const Win11Exp
     if (!intl || !ul || !wl || !bc || !dui) { err = "an input file is missing"; return false; }
     out.clear();
 
-    // intl.cpl: Windows 11's kernel32 no longer exports two Nls ETW helpers it imports.
+    // intl.cpl + its kernel32 shim.
     {
-        Bytes p = *intl;
-        if (pepatch::PatchImportName(p, "kernel32.dll", "nlsk32.dll") <= 0) { err = "intl.cpl: no kernel32 import to rename"; return false; }
-        out.push_back({L"intl.cpl", p});
-        out.push_back({L"nlsk32.dll", MakeShim(*intl, "kernel32.dll", "nlsk32.dll", w11.kernel32, "kernel32", nullptr, notes)});
+        Bytes patchedIntl, nlsk;
+        if (!BuildIntlFiles(*intl, w11.kernel32, patchedIntl, nlsk, notes, err)) return false;
+        out.push_back({L"intl.cpl", std::move(patchedIntl)});
+        out.push_back({L"nlsk32.dll", std::move(nlsk)});
     }
     // UserLanguagesCpl.dll: private DirectUI copy + language-database DLLs.
     {
@@ -2085,8 +2118,9 @@ static HMODULE EnsureLocalizedResourceModuleLoaded() {
 
 using LoadStringW_t = int(WINAPI*)(HINSTANCE, UINT, LPWSTR, int);
 using LoadStringA_t = int(WINAPI*)(HINSTANCE, UINT, LPSTR, int);
+// DirectUI::XResourceProvider::Create(HINSTANCE, const wchar_t*, const wchar_t*, const wchar_t*, XResourceProvider**)
 using XResourceProviderCreate_t = HRESULT(__fastcall*)(HINSTANCE, const wchar_t*,
-                                                       const wchar_t*, HINSTANCE, void**);
+                                                       const wchar_t*, const wchar_t*, void**);
 using FindResourceExW_t = HRSRC(WINAPI*)(HMODULE, LPCWSTR, LPCWSTR, WORD);
 using LoadResource_t = HGLOBAL(WINAPI*)(HMODULE, HRSRC);
 
@@ -2094,48 +2128,56 @@ static LoadStringW_t LoadStringWOriginalUser32 = nullptr;
 static LoadStringW_t LoadStringWOriginalKernelBase = nullptr;
 static LoadStringA_t LoadStringAOriginalUser32 = nullptr;
 static LoadStringA_t LoadStringAOriginalKernelBase = nullptr;
-static XResourceProviderCreate_t XResourceProviderCreateOriginalDui70 = nullptr;
 static XResourceProviderCreate_t XResourceProviderCreateOriginalDui76 = nullptr;
 static FindResourceExW_t FindResourceExWOriginal = nullptr;
 static LoadResource_t LoadResourceOriginal = nullptr;
+
+// Folder of the mod's generated files (lower case, trailing backslash); set in Wh_ModInit.
+static std::wstring g_binDirLower;
+static std::mutex g_resModuleCacheMutex;
+static std::map<uintptr_t, bool> g_resModuleCache;   // module base -> "is the mod's own UserLanguagesCpl"
+
+// Other handles to the mod's own UserLanguagesCpl.dll (for example a data-file load by the shell) can't be
+// recognised by handle, so they are recognised by path, and only inside the mod's own bin folder. The stock
+// Windows intl.cpl is never matched. The answer is cached per module base.
+static bool IsModUserLanguagesModule(uintptr_t base) {
+    if (g_binDirLower.empty()) return false;
+    {
+        std::lock_guard<std::mutex> l(g_resModuleCacheMutex);
+        auto it = g_resModuleCache.find(base);
+        if (it != g_resModuleCache.end()) return it->second;
+    }
+    bool match = false;
+    wchar_t path[MAX_PATH] = {};
+    if (GetModuleFileNameW(reinterpret_cast<HMODULE>(base), path, ARRAYSIZE(path))) {
+        std::wstring p(path);
+        for (auto& c : p) c = towlower(c);
+        if (p.compare(0, g_binDirLower.size(), g_binDirLower) == 0) {
+            const wchar_t* name = p.c_str() + g_binDirLower.size();
+            match = wcscmp(name, L"userlanguagescpl.dll") == 0 ||
+                    wcsncmp(name, L"userlanguagescpl.resources", 25) == 0;
+        }
+    }
+    std::lock_guard<std::mutex> l(g_resModuleCacheMutex);
+    g_resModuleCache[base] = match;
+    return match;
+}
 
 static bool IsTargetResourceModule(HINSTANCE instance, bool* isIntlOut = nullptr) {
     if (isIntlOut) *isIntlOut = false;
     if (!instance) return false;
 
-    const auto SameModuleBase = [](HINSTANCE a, HMODULE b) -> bool {
-        if (!a || !b) return false;
-        const uintptr_t addrA = reinterpret_cast<uintptr_t>(a) & ~static_cast<uintptr_t>(3);
-        const uintptr_t addrB = reinterpret_cast<uintptr_t>(b) & ~static_cast<uintptr_t>(3);
-        return addrA == addrB;
+    const uintptr_t base = reinterpret_cast<uintptr_t>(instance) & ~static_cast<uintptr_t>(3);
+    const auto same = [base](HMODULE m) -> bool {
+        return m && (reinterpret_cast<uintptr_t>(m) & ~static_cast<uintptr_t>(3)) == base;
     };
 
-    if (SameModuleBase(instance, g_hUserLanguagesCpl.load()) ||
-        SameModuleBase(instance, g_hLocalizedResources.load())) {
-        return true;
-    }
-    if (SameModuleBase(instance, g_hIntlCpl.load())) {
+    if (same(g_hUserLanguagesCpl.load()) || same(g_hLocalizedResources.load())) return true;
+    if (same(g_hIntlCpl.load())) {   // only ever the mod's own copy (set by the intl.cpl redirect)
         if (isIntlOut) *isIntlOut = true;
         return true;
     }
-
-    wchar_t modulePath[MAX_PATH] = {};
-    if (!GetModuleFileNameW(
-            reinterpret_cast<HMODULE>(reinterpret_cast<uintptr_t>(instance) & ~static_cast<uintptr_t>(3)),
-            modulePath, ARRAYSIZE(modulePath))) {
-        return false;
-    }
-    const wchar_t* base = wcsrchr(modulePath, L'\\');
-    base = base ? (base + 1) : modulePath;
-    if (_wcsicmp(base, L"UserLanguagesCpl.dll") == 0 ||
-        _wcsnicmp(base, L"UserLanguagesCpl.resources", 26) == 0) {
-        return true;
-    }
-    if (_wcsicmp(base, L"intl.cpl") == 0) {
-        if (isIntlOut) *isIntlOut = true;
-        return true;
-    }
-    return false;
+    return IsModUserLanguagesModule(base);
 }
 
 static int HandleLoadStringW(LoadStringW_t orig, HINSTANCE instance, UINT id,
@@ -2192,29 +2234,15 @@ static int WINAPI LoadStringAHookKernelBase(HINSTANCE i, UINT id, LPSTR b, int c
     return HandleLoadStringA(LoadStringAOriginalKernelBase, i, id, b, c);
 }
 
-static HRESULT HandleXResourceProviderCreate(XResourceProviderCreate_t orig,
-                                             HINSTANCE instance, const wchar_t* uResID,
-                                             const wchar_t* uResid2,
-                                             HINSTANCE resourceModule, void** ppOut) {
-    if (g_forceTranslations.load()) {
-        if (IsTargetResourceModule(instance) || IsTargetResourceModule(resourceModule)) {
-            if (HMODULE localizedModule = EnsureLocalizedResourceModuleLoaded()) {
-                if (IsTargetResourceModule(instance)) instance = localizedModule;
-                if (IsTargetResourceModule(resourceModule)) resourceModule = localizedModule;
-            }
+static HRESULT __fastcall XResourceProviderCreateHookDui76(
+    HINSTANCE instance, const wchar_t* r1, const wchar_t* r2, const wchar_t* r3, void** out) {
+    bool isIntl = false;
+    if (g_forceTranslations.load() && IsTargetResourceModule(instance, &isIntl) && !isIntl) {
+        if (HMODULE localizedModule = EnsureLocalizedResourceModuleLoaded()) {
+            instance = localizedModule;
         }
     }
-    return orig(instance, uResID, uResid2, resourceModule, ppOut);
-}
-
-static HRESULT __fastcall XResourceProviderCreateHookDui70(
-    HINSTANCE i, const wchar_t* r1, const wchar_t* r2, HINSTANCE rm, void** out) {
-    return HandleXResourceProviderCreate(XResourceProviderCreateOriginalDui70, i, r1, r2, rm, out);
-}
-
-static HRESULT __fastcall XResourceProviderCreateHookDui76(
-    HINSTANCE i, const wchar_t* r1, const wchar_t* r2, HINSTANCE rm, void** out) {
-    return HandleXResourceProviderCreate(XResourceProviderCreateOriginalDui76, i, r1, r2, rm, out);
+    return XResourceProviderCreateOriginalDui76(instance, r1, r2, r3, out);
 }
 
 static HRSRC WINAPI FindResourceExWHook(HMODULE hModule, LPCWSTR lpType,
@@ -2294,26 +2322,20 @@ static void InstallTranslationHook() {
             WindhawkUtils::SetFunctionHook(pLoadRes, LoadResourceHook, &LoadResourceOriginal);
         }
     }
+}
 
-    HMODULE hDui70 = GetModuleHandleW(L"dui70.dll");
-    if (!hDui70) hDui70 = LoadLibraryW(L"dui70.dll");
-    if (hDui70) {
-        if (auto* pCreate = reinterpret_cast<XResourceProviderCreate_t>(GetProcAddress(
-                hDui70,
-                "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))) {
-            WindhawkUtils::SetFunctionHook(pCreate, XResourceProviderCreateHookDui70,
-                                           &XResourceProviderCreateOriginalDui70);
-        }
-    }
-
-    HMODULE hDui76 = GetModuleHandleW(L"DUI76.dll");
-    if (hDui76 && hDui76 != hDui70) {
-        if (auto* pCreate76 = reinterpret_cast<XResourceProviderCreate_t>(GetProcAddress(
-                hDui76,
-                "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))) {
-            WindhawkUtils::SetFunctionHook(pCreate76, XResourceProviderCreateHookDui76,
-                                           &XResourceProviderCreateOriginalDui76);
-        }
+// The applet's DirectUI copy (DUI76.dll) is only loaded by the setup thread, so it is hooked right after
+// that load (and not in Wh_ModInit). The system dui70.dll is deliberately not hooked.
+static void HookDui76(HMODULE hDui76) {
+    static std::atomic<bool> hooked{false};
+    if (!hDui76 || hooked.exchange(true)) return;
+    if (auto* p = reinterpret_cast<XResourceProviderCreate_t>(GetProcAddress(
+            hDui76, "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))) {
+        WindhawkUtils::SetFunctionHook(p, XResourceProviderCreateHookDui76,
+                                       &XResourceProviderCreateOriginalDui76);
+        Wh_ApplyHookOperations();
+    } else {
+        Wh_Log(L"XResourceProvider::Create not found in DUI76.dll");
     }
 }
 
@@ -2340,16 +2362,62 @@ static void RefreshGeneratedMuiFiles(const std::wstring& dlDir, const std::wstri
     WriteOutputs(binDir, muiFiles);
 }
 
-static bool LoadPrivateModules(const std::wstring& binDir) {
+// Loads `path` only if it is byte-identical to `expected`. The file is held open with FILE_SHARE_READ only
+// (so nobody can write to, rename or delete it) from before the comparison until the image is mapped; an image
+// that is mapped can't be modified either. Reparse points are rejected.
+static HMODULE LoadVerified(const std::wstring& path, const Bytes& expected, DWORD flags,
+                            HMODULE(WINAPI* loader)(LPCWSTR, HANDLE, DWORD)) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Cannot open %s for verification (error %u)", path.c_str(), GetLastError());
+        return nullptr;
+    }
+    BY_HANDLE_FILE_INFORMATION info{};
+    bool ok = GetFileInformationByHandle(h, &info) &&
+              !(info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) &&
+              info.nFileSizeHigh == 0 && info.nFileSizeLow == expected.size() && !expected.empty();
+    if (ok) {
+        Bytes data(expected.size());
+        size_t done = 0;
+        while (ok && done < data.size()) {
+            DWORD rd = 0;
+            ok = ReadFile(h, &data[done], (DWORD)std::min<size_t>(data.size() - done, 1u << 20), &rd, nullptr) && rd > 0;
+            done += rd;
+        }
+        ok = ok && memcmp(data.data(), expected.data(), data.size()) == 0;
+    }
+    HMODULE m = nullptr;
+    if (ok) {
+        m = loader(path.c_str(), nullptr, flags);   // handle still open
+    } else {
+        Wh_Log(L"%s does not match the expected contents; not loading it (restart explorer.exe to regenerate it)", path.c_str());
+    }
+    CloseHandle(h);
+    return m;
+}
+
+static bool LoadPrivateModules(const std::wstring& binDir, const std::vector<OutFile>& outs) {
     // Dependencies first, by full path, so the loader finds them by name when the next one needs them.
     static const wchar_t* order[] = {L"Bcp17Lng.dll", L"WinLng17.dll", L"wlshim.dll",
                                      L"bcshim.dll",   L"DUI76.dll",    L"UserLanguagesCpl.dll"};
     for (const wchar_t* n : order) {
-        const std::wstring p = binDir + L"\\" + n;
-        HMODULE h = LoadLibraryExW(p.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-        if (!h) {
-            Wh_Log(L"LoadLibrary failed for %s (error %u)", p.c_str(), GetLastError());
+        const Bytes* expected = nullptr;
+        for (const OutFile& f : outs) {
+            if (_wcsicmp(f.rel.c_str(), n) == 0) { expected = &f.data; break; }
+        }
+        if (!expected) {
+            Wh_Log(L"No expected contents known for %s", n);
             return false;
+        }
+        const std::wstring p = binDir + L"\\" + n;
+        HMODULE h = LoadVerified(p, *expected, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW);
+        if (!h) {
+            Wh_Log(L"Could not load %s", p.c_str());
+            return false;
+        }
+        if (_wcsicmp(n, L"DUI76.dll") == 0) {
+            HookDui76(h);
         }
         if (_wcsicmp(n, L"UserLanguagesCpl.dll") == 0) {
             g_hUserLanguagesCpl.store(h);
@@ -2544,7 +2612,7 @@ static void RunSetup() {
     }
     if (g_shuttingDown.load()) return;
 
-    if (!LoadPrivateModules(binDir)) return;
+    if (!LoadPrivateModules(binDir, outs)) return;
     RegisterApplet(binDir);
 }
 // ---- intl.cpl redirect ----------------------------------------------------------------------
@@ -2552,31 +2620,77 @@ static std::atomic<bool> g_redirectIntl{false};
 static std::atomic<bool> g_isExplorer{true};
 static std::wstring g_systemIntlPath;   // <System32>\intl.cpl
 static std::wstring g_modIntlPath;      // <storage>\bin\intl.cpl
+static std::wstring g_modBinDir;        // <storage>\bin
+static std::wstring g_modDlDir;         // <storage>\dl
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+
+// What bin\intl.cpl and bin\nlsk32.dll must contain, derived from the pinned (size + SHA-256) original
+// in the dl folder and the export list of this machine's kernel32. Works in every process, with no help
+// from the setup thread.
+static std::mutex g_intlPairMutex;
+static bool g_intlPairReady = false;
+static Bytes g_expectedIntl, g_expectedNlsk;
+
+static bool GetExpectedIntlPair(const Bytes** intl, const Bytes** nlsk) {
+    std::lock_guard<std::mutex> l(g_intlPairMutex);
+    if (!g_intlPairReady) {
+        const FileSpec* spec = nullptr;
+        for (const FileSpec& f : kFiles) {
+            if (wcscmp(f.name, L"intl.cpl") == 0) spec = &f;
+        }
+        if (!spec || g_modDlDir.empty()) return false;
+        Bytes original;
+        if (!ReadWholeFile(g_modDlDir + L"\\intl.cpl", original) || original.size() != spec->size ||
+            Sha256Hex(original) != spec->sha256) {
+            Wh_Log(L"dl\\intl.cpl is missing or doesn't match the pinned hash; intl.cpl is not redirected");
+            return false;
+        }
+        const std::vector<std::string> k32 = SystemExports(L"kernel32.dll");
+        std::vector<std::string> notes;
+        std::string err;
+        if (k32.empty() || !BuildIntlFiles(original, k32, g_expectedIntl, g_expectedNlsk, notes, err)) {
+            Wh_Log(L"Could not derive the expected intl.cpl files");
+            return false;
+        }
+        g_intlPairReady = true;
+    }
+    *intl = &g_expectedIntl;
+    *nlsk = &g_expectedNlsk;
+    return true;
+}
 
 static bool IsSystemIntlCpl(LPCWSTR p) {
     if (!p) return false;
     return _wcsicmp(p, L"intl.cpl") == 0 || _wcsicmp(p, g_systemIntlPath.c_str()) == 0;
 }
 
+// Loads the verified copy of the mod's intl.cpl (nlsk32.dll first, so that intl.cpl's renamed import
+// resolves to the verified shim). Returns nullptr when anything is missing or doesn't match.
+static HMODULE LoadModIntlCpl(DWORD flags) {
+    const Bytes *intl = nullptr, *nlsk = nullptr;
+    if (g_modIntlPath.empty() || !GetExpectedIntlPair(&intl, &nlsk)) return nullptr;
+    if (!LoadVerified(g_modBinDir + L"\\nlsk32.dll", *nlsk, 0, LoadLibraryExW_Original)) return nullptr;
+    const DWORD kSearchFlags = LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                               LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32 |
+                               LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
+    DWORD f = flags;
+    if (!(f & kSearchFlags)) f |= LOAD_WITH_ALTERED_SEARCH_PATH;
+    return LoadVerified(g_modIntlPath, *intl, f, LoadLibraryExW_Original);
+}
+
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
-    if (g_redirectIntl.load() && IsSystemIntlCpl(name) &&
-        GetFileAttributesW(g_modIntlPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        DWORD f = flags;
-        const DWORD kNoAltered = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE |
-                                 LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
-                                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
-                                 LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32 |
-                                 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
-        // so nlsk32.dll (the kernel32 shim) is found next to our intl.cpl
-        if (!(f & kNoAltered)) f |= LOAD_WITH_ALTERED_SEARCH_PATH;
-        if (HMODULE m = LoadLibraryExW_Original(g_modIntlPath.c_str(), file, f)) {
+    const DWORD kDataFile = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE |
+                            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE;
+    // Only real (code) loads are redirected; resource-only loads keep using the system file.
+    if (g_redirectIntl.load() && !(flags & kDataFile) && IsSystemIntlCpl(name)) {
+        if (HMODULE m = LoadModIntlCpl(flags)) {
+            g_hIntlCpl.store(m);
             Wh_Log(L"intl.cpl redirected (%s)", name);
             return m;
         }
-        Wh_Log(L"intl.cpl redirect failed (err %lu), using the system one", GetLastError());
+        Wh_Log(L"intl.cpl redirect not possible, using the system one");
     }
     return LoadLibraryExW_Original(name, file, flags);
 }
@@ -2586,7 +2700,13 @@ static void InitRedirect() {
     GetSystemDirectoryW(sys, MAX_PATH);
     g_systemIntlPath = std::wstring(sys) + L"\\intl.cpl";
     const std::wstring dir = StorageDir();
-    if (!dir.empty()) g_modIntlPath = dir + L"\\bin\\intl.cpl";
+    if (!dir.empty()) {
+        g_modBinDir = dir + L"\\bin";
+        g_modDlDir = dir + L"\\dl";
+        g_modIntlPath = g_modBinDir + L"\\intl.cpl";
+        g_binDirLower = g_modBinDir + L"\\";
+        for (auto& c : g_binDirLower) c = towlower(c);
+    }
 
     if (HMODULE kb = GetModuleHandleW(L"kernelbase.dll")) {
         if (auto p = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kb, "LoadLibraryExW"))) {
@@ -2730,12 +2850,13 @@ BOOL Wh_ModInit() {
     exeName = exeName ? exeName + 1 : exe;
     g_isExplorer.store(_wcsicmp(exeName, L"explorer.exe") == 0);
 
+    // rundll32.exe / control.exe only need the intl.cpl redirect: nothing to do there when it is off.
+    if (!g_isExplorer.load() && !g_redirectIntl.load()) return FALSE;
+
     InitRedirect();
 
     if (!g_isExplorer.load()) {
-        // rundll32.exe / control.exe: only the redirect and the string hooks.
-        // No download, no registration, no file cleanup (that is explorer.exe's job).
-        InstallTranslationHook();
+        // Redirect only: no download, no registration, no resource hooks, no file cleanup.
         return TRUE;
     }
 
@@ -2760,9 +2881,10 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     try {
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
-                g_redirectIntl.store(Wh_GetIntSetting(L"redirectIntlCpl") != 0);
+        g_redirectIntl.store(Wh_GetIntSetting(L"redirectIntlCpl") != 0);
         if (!g_isExplorer.load()) {
-            if (reload) *reload = FALSE;
+            // Helper processes: reload, so Wh_ModInit decides again whether the mod is needed here.
+            if (reload) *reload = TRUE;
             return TRUE;
         }
         const std::wstring dir = StorageDir();
@@ -2794,7 +2916,6 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 void Wh_ModUninit() {
     if (!g_isExplorer.load()) return;   // helper processes must not touch files or the registry
     RestoreHideStrings();
-    RestoreHideStrings();
     g_shuttingDown.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
     CancelInFlightDownload();
@@ -2803,6 +2924,10 @@ void Wh_ModUninit() {
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
 
     ReleaseLocalizedResourceModule();
+    {
+        std::lock_guard<std::mutex> l(g_resModuleCacheMutex);
+        g_resModuleCache.clear();
+    }
     UnregisterApplet();   // the loaded DLLs stay mapped until explorer.exe exits: shell objects may still use them
 
     const std::wstring dir = StorageDir();
