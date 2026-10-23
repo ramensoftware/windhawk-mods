@@ -22,12 +22,6 @@ and Win+S continue to work normally. Mouse activity and keys held before a
 Windows-key tap no longer cancel Search. The generated Win+S is held briefly
 (50 ms) before release, matching a normal shortcut press.
 
-## Installation
-
-In Windhawk, choose **Create a new mod**, replace the template with this entire
-file, and click **Compile Mod**. Keep the mod enabled. Disable it to restore
-the usual Windows-key behavior. No Explorer restart is required.
-
 The mod runs in a separate helper process with a dedicated keyboard thread.
 On Windhawk 1.7.3, enabling the mod explicitly launches its helper with the
 Windows "Run as administrator" verb. Accept the Windows UAC prompt if shown.
