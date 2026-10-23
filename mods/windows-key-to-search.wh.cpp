@@ -6,6 +6,7 @@
 // @author          Tyler
 // @github          https://github.com/snowtyler
 // @include         windhawk.exe
+// @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
 // @include         windhawk-mod-elevated.exe
 // @compilerOptions -luser32 -lshell32 -ladvapi32 -lole32
@@ -136,12 +137,10 @@ bool CompleteSearch(const KBDLLHOOKSTRUCT* replay = nullptr, bool up = false) {
 
 void OpenSearch(WORD win) {
     CompleteSearch();
-#ifdef WH_MOD
     DWORD foregroundPid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
     Wh_Log(L"Search request: foreground PID=%lu; hold=%u ms", foregroundPid,
            kSearchHoldMs);
-#endif
     // Query held keys only after the physical Win-up callback has returned.
     const WORD keys[] = {VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
                          VK_LMENU, VK_RMENU, 'S'};
@@ -159,9 +158,7 @@ void OpenSearch(WORD win) {
     g_searchWin = win;
     g_searchActive = true;
     const bool accepted = Inject(inputs, count);
-#ifdef WH_MOD
     Wh_Log(L"Search key-down batch: events=%u accepted=%d", count, accepted);
-#endif
     if (!accepted) {
         CompleteSearch();
         return;
@@ -180,7 +177,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         return CallNextHookEx(nullptr, code, message, param);
     }
     const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
-#ifdef WH_MOD
     // Log only Windows-key events and our generated shortcut. Queue the trace
     // so debugger output cannot block the low-level hook callback itself.
     if (IsWindowsKey(key.vkCode) ||
@@ -191,7 +187,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
             (g_pending[0] ? 0x400 : 0) | (g_pending[1] ? 0x800 : 0);
         PostThreadMessageW(g_threadId, kTraceKeyMessage, key.vkCode, trace);
     }
-#endif
     if (key.dwExtraInfo == kInputTag || key.vkCode >= 256) {
         return CallNextHookEx(nullptr, code, message, param);
     }
@@ -271,9 +266,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
                 // returns, rather than during the physical Win-up callback.
                 if (!PostThreadMessageW(g_threadId, kOpenSearchMessage,
                                         key.vkCode, 0)) {
-#ifdef WH_MOD
                     Wh_Log(L"Could not queue Search (error %lu)", GetLastError());
-#endif
                 }
             }
             if (swallow) {
@@ -322,15 +315,10 @@ DWORD WINAPI HookThread(void*) {
                 // Timer IDs can be reused while an old WM_TIMER is queued.
                 if (GetTickCount64() >= g_searchReleaseAt) {
                     const bool released = CompleteSearch();
-#ifdef WH_MOD
                     Wh_Log(L"Search key-up batch: accepted=%d", released);
-#else
-                    (void)released;
-#endif
                 }
                 continue;
             }
-#ifdef WH_MOD
             if (message.message == kTraceKeyMessage) {
                 Wh_Log(L"Key trace: vk=%u down=%d own=%d flags=0x%02X pending=%d/%d",
                        static_cast<UINT>(message.wParam),
@@ -339,7 +327,6 @@ DWORD WINAPI HookThread(void*) {
                        !!(message.lParam & 0x400), !!(message.lParam & 0x800));
                 continue;
             }
-#endif
             if (message.message == kOpenSearchMessage) {
                 OpenSearch(static_cast<WORD>(message.wParam));
                 continue;
@@ -396,19 +383,15 @@ bool HasElevatedInputAccess() {
     const BOOL readUiAccess = GetTokenInformation(
         token, TokenUIAccess, &uiAccess, sizeof(uiAccess), &length);
     CloseHandle(token);
-#ifdef WH_MOD
     Wh_Log(L"Keyboard helper PID=%lu: elevated=%lu, UIAccess=%lu",
            GetCurrentProcessId(), elevation.TokenIsElevated, uiAccess);
-#endif
     return (readElevation && elevation.TokenIsElevated) ||
            (readUiAccess && uiAccess);
 }
 
 BOOL WhTool_ModInit() {
     if (!HasElevatedInputAccess()) {
-#ifdef WH_MOD
         Wh_Log(L"Keyboard helper needs administrator access or UIAccess; not installing hook");
-#endif
         return FALSE;
     }
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -436,7 +419,6 @@ void WhTool_ModUninit() {
 void WhTool_ModSettingsChanged() {
 }
 
-#ifdef WH_MOD
 ////////////////////////////////////////////////////////////////////////////////
 // Adapted Windhawk tool mod implementation with explicit helper elevation.
 // For mods which don't need to inject to other
@@ -593,4 +575,3 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
-#endif  // WH_MOD
