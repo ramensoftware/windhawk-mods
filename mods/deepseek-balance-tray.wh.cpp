@@ -1513,8 +1513,9 @@ bool HookSystemTraySymbols(HMODULE module) {
     return true;
 }
 
-// Версия модуля из его ресурса версии. Вызывается только вне loader lock
-// (Wh_ModInit, Wh_ModAfterInit, поток обновления), никогда из хука загрузчика.
+// Версия модуля из его ресурса версии. Вызывается из Wh_ModInit,
+// Wh_ModAfterInit и из хука LoadLibraryExW — там оригинальная функция уже
+// вернулась, поэтому loader lock отпущен.
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
     HRSRC resource =
         FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
