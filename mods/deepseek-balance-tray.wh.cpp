@@ -174,10 +174,6 @@ std::atomic<bool> g_stopRequested{false};
 // Состояние подключения часов Windows 11 (SystemTray.dll и т. п.).
 std::atomic<bool> g_systemTrayHooked{false};
 
-// Хук LoadLibraryExW только отмечает факт загрузки подходящего модуля.
-// Разбор модуля (версия, символы) делает поток обновления, вне loader lock.
-std::atomic<bool> g_pendingClockModule{false};
-
 // ---------------------------------------------------------------------------
 // 2. Вспомогательные функции работы со строками
 // ---------------------------------------------------------------------------
@@ -1206,24 +1202,10 @@ void FetchAndUpdate() {
     Wh_Log(L"Display: %s", g_clockSuffix.c_str());
 }
 
-// Определена в разделе 9; объявлена заранее, потому что поток обновления
-// доустанавливает хуки часов, когда их модуль загрузится.
-bool TryHookSystemTray();
-
 void WorkerProc() {
     for (;;) {
         if (g_stopRequested.load(std::memory_order_acquire)) {
             break;
-        }
-
-        // Модуль часов мог загрузиться позже мода. Разбор модуля (версия,
-        // поиск символов, установка хуков) делаем здесь, а не в хуке
-        // LoadLibraryExW: тот работает под loader lock.
-        if (g_pendingClockModule.exchange(false, std::memory_order_acq_rel) &&
-            !g_systemTrayHooked.load(std::memory_order_acquire)) {
-            if (TryHookSystemTray()) {
-                Wh_ApplyHookOperations();
-            }
         }
 
         FetchAndUpdate();
@@ -1238,13 +1220,6 @@ void WorkerProc() {
         // Wh_ModSettingsChanged сигналит событием, и поток сразу идёт
         // за новым балансом (например, после смены ключа).
         DWORD timeoutMs = static_cast<DWORD>(minutes) * 60u * 1000u;
-
-        // Пока часы не подключены, просыпаемся раз в секунду: модуль с
-        // типами SystemTray мог загрузиться только что.
-        if (!g_systemTrayHooked.load(std::memory_order_acquire)) {
-            timeoutMs = 1000;
-        }
-
         DWORD waitResult = WaitForSingleObject(g_wakeEvent, timeoutMs);
 
         if (g_stopRequested.load(std::memory_order_acquire)) {
@@ -1688,11 +1663,14 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
 
     // SystemTray.dll (новые сборки) или Taskbar.View.dll (22H2) загружаются
-    // при старте оболочки. Здесь нельзя читать версию модуля и искать символы:
-    // хук вызывается под loader lock. Поэтому только запоминаем факт загрузки,
-    // а решение принимает поток обновления (см. WorkerProc).
-    if (module && IsSystemTrayModuleName(lpLibFileName)) {
-        g_pendingClockModule.store(true, std::memory_order_release);
+    // при старте оболочки. LoadLibraryExW уже вернулся, loader lock отпущен,
+    // поэтому здесь можно и прочитать версию модуля, и поставить хуки —
+    // так же делает taskbar-clock-customization.
+    if (module && IsSystemTrayModuleName(lpLibFileName) &&
+        module == GetSystemTrayModuleHandle() && TryHookSystemTray()) {
+        // Хуки, зарегистрированные после Wh_ModInit, применяются только
+        // явным вызовом Wh_ApplyHookOperations.
+        Wh_ApplyHookOperations();
     }
 
     return module;
