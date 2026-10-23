@@ -2,7 +2,7 @@
 // @id mond-desktop-clock
 // @name Mond Desktop Clock
 // @description A universal desktop clock widget with configurable typography, layout, and placement.
-// @version 5.0
+// @version 5.1
 // @author Elmidin Mahmud
 // @github https://github.com/elmidin
 // @include windhawk.exe
@@ -624,18 +624,18 @@ static COLORREF ParseColor(const wchar_t* s) {
 }
 
 static COLORREF LoadColorSetting(const wchar_t* name, COLORREF fallback) {
-  WindhawkUtils::StringSetting value(name);
+  auto value = WindhawkUtils::StringSetting::make(name);
   return *value.get() ? ParseColor(value.get()) : fallback;
 }
 
 static int LoadShadowOffset(const wchar_t* name, int fallback) {
-  WindhawkUtils::StringSetting value(name);
+  auto value = WindhawkUtils::StringSetting::make(name);
   return *value.get() ? std::clamp(_wtoi(value.get()), 0, 20) : fallback;
 }
 
 static std::wstring LoadStringSetting(const wchar_t* name,
                                       const wchar_t* fallback) {
-  WindhawkUtils::StringSetting value(name);
+  auto value = WindhawkUtils::StringSetting::make(name);
   return *value.get() ? value.get() : fallback;
 }
 
@@ -1258,7 +1258,8 @@ static std::wstring MonitorKey(const MonitorEntry& entry) {
   return name.empty() ? L"DISPLAY" : name;
 }
 
-// "\\.\DISPLAY2" -> 2, matching the number Windows shows in Display settings.
+// "\\.\DISPLAY2" -> 2. This is Windows' internal display number; it usually
+// matches Settings > Display > Identify, but not always.
 static int MonitorNumber(const MonitorEntry& entry) {
   const std::wstring device = entry.info.szDevice;
   size_t end = device.size();
