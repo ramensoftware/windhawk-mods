@@ -62,9 +62,11 @@ More themes, stylings, etc can be found and contributed from:
 
 ## Settings
 
-Settings live in a dedicated settings window. Open it by the shortcut key `Ctrl + Alt + S`, from the ⚙ button on
+Settings live in a dedicated settings window. Open it from the ⚙ button on
 the topbar, from any right-click context menu, or via the **TopBar settings…**
-entry. 
+entry. Global shortcuts are configured on the **Shortcuts** page; the built-in
+`Ctrl + Alt + S` (open settings) and `Ctrl + Alt + R` (reload TopBar) are
+available there and disabled by default.
 Pages:
 
 - **Appearance** — bar height, corner radius, global tint color & opacity,
@@ -76,6 +78,8 @@ Pages:
   TopBar Start/Search button actions.
 - **UI Alignment** — move any button between the Left, Center and Right panels.
 - **Buttons** — per-button visibility toggles.
+- **Shortcuts** — record global hotkeys for flyouts, Start, Search and other
+  actions.
 - **Import / Export** — save or restore the entire configuration as JSON, or
   copy / paste it via the clipboard.
 - **About** — version info and links.
@@ -2411,44 +2415,118 @@ void AdjustTaskButtonWidths() {
     double rootWidth = g_rootElement.ActualWidth();
     if (rootWidth <= 0) return;
 
-    double leftWidth = 0.0, rightWidth = 0.0, clockWidth = 0.0;
-    auto leftIt = g_namedElements.find(L"LeftPanel");
-    if (leftIt != g_namedElements.end()) leftWidth = leftIt->second.ActualWidth();
-    auto rightIt = g_namedElements.find(L"TrayPanel");
-    if (rightIt != g_namedElements.end()) rightWidth = rightIt->second.ActualWidth();
-    auto clockIt = g_namedElements.find(L"ClockPanel");
-    if (clockIt != g_namedElements.end()) clockWidth = clockIt->second.ActualWidth();
+    auto getFeWidth = [](FrameworkElement fe) -> double {
+        if (!fe) return 0.0;
+        double w = fe.ActualWidth();
+        if (w <= 0) w = fe.DesiredSize().Width;
+        if (w <= 0) w = fe.Width();
+        if (std::isnan(w) || w < 0) w = 0;
+        return w;
+    };
 
-    double middleWidth = rootWidth - leftWidth - rightWidth - clockWidth;
-    if (middleWidth <= 0) return;
-
-    // Sum the width of center-panel children that are NOT the task list.
-    // Those are the centre-cluster buttons (resource, weather, …).
-    double centerItemsWidth = 0.0;
-    if (g_centerPanel) {
-        for (auto&& child : g_centerPanel.Children()) {
+    // Measure other items in each panel. This is exact even mid-layout,
+    // whereas "panel.ActualWidth() - taskPanel.ActualWidth()" is stale
+    // during the SizeChanged pass and caused the random task-list overflow.
+    double otherLeftWidth = 0.0;
+    if (g_leftPanel) {
+        for (auto&& child : g_leftPanel.Children()) {
             if (child == g_taskListPanel) continue;
             if (auto fe = child.try_as<FrameworkElement>()) {
-                centerItemsWidth += fe.ActualWidth() +
-                                    fe.Margin().Left + fe.Margin().Right;
+                if (fe.Visibility() == Visibility::Visible) {
+                    otherLeftWidth += getFeWidth(fe) + fe.Margin().Left + fe.Margin().Right;
+                }
             }
         }
     }
 
-    double availableWidth = middleWidth - centerItemsWidth;
-    if (availableWidth <= 0) return;
+    double otherRightWidth = 0.0;
+    if (g_trayPanel) {
+        for (auto&& child : g_trayPanel.Children()) {
+            if (child == g_taskListPanel) continue;
+            if (auto fe = child.try_as<FrameworkElement>()) {
+                if (fe.Visibility() == Visibility::Visible) {
+                    otherRightWidth += getFeWidth(fe) + fe.Margin().Left + fe.Margin().Right;
+                }
+            }
+        }
+    }
+
+    double otherCenterWidth = 0.0;
+    if (g_centerPanel) {
+        for (auto&& child : g_centerPanel.Children()) {
+            if (child == g_taskListPanel) continue;
+            if (auto fe = child.try_as<FrameworkElement>()) {
+                if (fe.Visibility() == Visibility::Visible) {
+                    otherCenterWidth += getFeWidth(fe) + fe.Margin().Left + fe.Margin().Right;
+                }
+            }
+        }
+    }
+
+    double clockWidth = 0.0;
+    if (g_clockPanel) {
+        for (auto&& child : g_clockPanel.Children()) {
+            if (child == g_taskListPanel) continue;
+            if (auto fe = child.try_as<FrameworkElement>()) {
+                if (fe.Visibility() == Visibility::Visible) {
+                    clockWidth += getFeWidth(fe) + fe.Margin().Left + fe.Margin().Right;
+                }
+            }
+        }
+    }
+
+    double availableWidth = 0.0;
+    bool handled = false;
+
+    // Centre panel is shifted by offset = (rightW + clockW - leftW) / 2.
+    // We solve leftW <= centerPanelRenderedLeftEdge for availableWidth,
+    // which yields (rootW - centerW + rightW + clockW - 3*otherLeftW) / 3.
+    // Same for the right panel; center panel uses the direct transform bounds.
+    if (g_taskListPanel) {
+        try {
+            auto par = wuxm::VisualTreeHelper::GetParent(g_taskListPanel);
+            if (g_leftPanel && par == g_leftPanel) {
+                handled = true;
+                availableWidth = (rootWidth - otherCenterWidth + otherRightWidth + clockWidth
+                                  - 3.0 * otherLeftWidth) / 3.0;
+            } else if (g_trayPanel && par == g_trayPanel) {
+                handled = true;
+                availableWidth = (rootWidth - 3.0 * otherRightWidth - otherCenterWidth
+                                  - clockWidth + otherLeftWidth) / 3.0;
+            } else if (g_centerPanel && par == g_centerPanel) {
+                handled = true;
+                double maxCenterWidth = std::min(
+                    rootWidth + otherRightWidth + clockWidth - 3.0 * otherLeftWidth,
+                    rootWidth - 3.0 * otherRightWidth - 3.0 * clockWidth + otherLeftWidth);
+                if (maxCenterWidth < 0) maxCenterWidth = 0;
+                availableWidth = maxCenterWidth - otherCenterWidth;
+            }
+        } catch (...) {}
+    }
+
+    if (!handled) {
+        availableWidth = rootWidth - (otherLeftWidth + otherRightWidth + otherCenterWidth + clockWidth);
+    }
+
+    // 4px safety margin so a rounding slip cannot produce a 1px visual overlap.
+    availableWidth -= 4.0;
+    if (availableWidth < 20.0) availableWidth = 20.0;
 
     double sumNaturalWidths = 0.0;
     double sumMargins = 0.0;
     std::vector<double> naturalWidths;
     for (auto&& child : g_taskListPanel.Children()) {
         if (auto button = child.try_as<wuxc::Button>()) {
-            button.ClearValue(FrameworkElement::WidthProperty());
-            button.Measure(winrt::Windows::Foundation::Size{
-                std::numeric_limits<float>::max(),
-                std::numeric_limits<float>::max()
-            });
-            double natural = button.DesiredSize().Width;
+            double natural = 100.0;
+            try {
+                button.ClearValue(FrameworkElement::WidthProperty());
+                button.Measure(winrt::Windows::Foundation::Size{
+                    std::numeric_limits<float>::max(),
+                    std::numeric_limits<float>::max()
+                });
+                double measured = button.DesiredSize().Width;
+                if (measured > 0) natural = measured;
+            } catch (...) {}
             naturalWidths.push_back(natural);
             sumNaturalWidths += natural;
             sumMargins += (button.Margin().Left + button.Margin().Right);
@@ -2457,12 +2535,28 @@ void AdjustTaskButtonWidths() {
     if (sumNaturalWidths <= 0) return;
 
     double spaceForWidths = availableWidth - sumMargins;
-    if (spaceForWidths <= 0) return;
+    if (spaceForWidths <= 0) {
+        // Not even margins fit. Force every button to 1px so the list at
+        // least cannot grow past its panel. The previous "return" left the
+        // buttons at their last width, which overflowed into the centre
+        // panel whenever the task list happened to be too wide.
+        for (auto&& child : g_taskListPanel.Children()) {
+            if (auto button = child.try_as<wuxc::Button>()) {
+                try { button.Width(1.0); } catch (...) {}
+            }
+        }
+        return;
+    }
 
     if (sumNaturalWidths <= spaceForWidths) {
         for (auto&& child : g_taskListPanel.Children()) {
             if (auto button = child.try_as<wuxc::Button>()) {
-                button.ClearValue(FrameworkElement::WidthProperty());
+                try {
+                    auto v = button.ReadLocalValue(FrameworkElement::WidthProperty());
+                    if (v != DependencyProperty::UnsetValue() && v != nullptr) {
+                        button.ClearValue(FrameworkElement::WidthProperty());
+                    }
+                } catch (...) {}
             }
         }
         return;
@@ -2473,8 +2567,14 @@ void AdjustTaskButtonWidths() {
     for (auto&& child : g_taskListPanel.Children()) {
         if (auto button = child.try_as<wuxc::Button>()) {
             double newWidth = naturalWidths[idx] * scale;
-            newWidth = std::max(20.0, newWidth);
-            button.Width(newWidth);
+            // Lower the floor from 20 to 4. With 20, ten apps would need
+            // 200px minimum and overflow past a small availableWidth; 4px
+            // still leaves a visible sliver and keeps the whole task list
+            // inside its panel no matter how many apps are open.
+            newWidth = std::max(4.0, newWidth);
+            try {
+                button.Width(newWidth);
+            } catch (...) {}
             idx++;
         }
     }
@@ -4403,6 +4503,53 @@ void ApplyShadowTree(FrameworkElement const& root) {
     walk(root);
 }
 
+void UpdateCenterPanelAlignment() {
+    try {
+        if (!g_centerPanel) return;
+        bool isAuto = false;
+        FrameworkElement topBarRootFE = nullptr;
+        auto tbIt = g_namedElements.find(L"TopBarRoot");
+        if (tbIt != g_namedElements.end()) topBarRootFE = tbIt->second;
+        if (!topBarRootFE && g_rootElement) topBarRootFE = g_rootElement;
+        if (topBarRootFE) {
+            auto lw = topBarRootFE.ReadLocalValue(FrameworkElement::WidthProperty());
+            if (lw != DependencyProperty::UnsetValue() && lw != nullptr) {
+                if (auto pv = lw.try_as<wf::IPropertyValue>()) {
+                    if (pv.Type() == wf::PropertyType::Double) {
+                        double d = pv.GetDouble();
+                        isAuto = std::isnan(d) || d <= 0.0;
+                    } else if (pv.Type() == wf::PropertyType::String) {
+                        if (pv.GetString() == L"Auto") isAuto = true;
+                    }
+                }
+            }
+        }
+        double offset = 0.0;
+        if (!isAuto) {
+            auto leftIt = g_namedElements.find(L"LeftPanel");
+            auto rightIt = g_namedElements.find(L"TrayPanel");
+            auto clockIt = g_namedElements.find(L"ClockPanel");
+            double leftW = (leftIt != g_namedElements.end()) ? leftIt->second.ActualWidth() : 0.0;
+            double rightW = (rightIt != g_namedElements.end()) ? rightIt->second.ActualWidth() : 0.0;
+            double clockW = (clockIt != g_namedElements.end()) ? clockIt->second.ActualWidth() : 0.0;
+            if (leftW <= 0.0 && rightW <= 0.0 && clockW <= 0.0) {
+                return;
+            }
+            offset = (rightW + clockW - leftW) / 2.0;
+        }
+        double currentX = 0.0;
+        if (auto tt = g_centerPanel.RenderTransform().try_as<wuxm::TranslateTransform>()) {
+            currentX = tt.X();
+        }
+        if (std::abs(currentX - offset) > 0.5) {
+            wuxm::TranslateTransform tt;
+            tt.X(offset);
+            tt.Y(0);
+            g_centerPanel.RenderTransform(tt);
+        }
+    } catch (...) {}
+}
+
 void ApplyAllControlStyles() {
     if (g_applyingStyles) {
         return;
@@ -4571,37 +4718,7 @@ void ApplyAllControlStyles() {
             }
         } catch (...) {}
 
-        // Center panel truly centered on the display in normal mode.
-        // The CenterPanel lives in a Star column between left and right
-        // panels, so its natural position is centred inside that middle
-        // region — not the screen. A TranslateTransform shifts it by
-        // (rightW + clockW - leftW) / 2, which moves its midpoint to
-        // exactly half of root.ActualWidth. In Auto mode the transform
-        // is reset to 0 so the natural, content-sized layout applies.
-        try {
-            if (g_centerPanel) {
-                double offset = 0.0;
-                if (!isAuto) {
-                    auto leftIt = g_namedElements.find(L"LeftPanel");
-                    auto rightIt = g_namedElements.find(L"TrayPanel");
-                    auto clockIt = g_namedElements.find(L"ClockPanel");
-                    double leftW = (leftIt != g_namedElements.end()) ? leftIt->second.ActualWidth() : 0.0;
-                    double rightW = (rightIt != g_namedElements.end()) ? rightIt->second.ActualWidth() : 0.0;
-                    double clockW = (clockIt != g_namedElements.end()) ? clockIt->second.ActualWidth() : 0.0;
-                    offset = (rightW + clockW - leftW) / 2.0;
-                }
-                double currentX = 0.0;
-                if (auto tt = g_centerPanel.RenderTransform().try_as<wuxm::TranslateTransform>()) {
-                    currentX = tt.X();
-                }
-                if (std::abs(currentX - offset) > 0.5) {
-                    wuxm::TranslateTransform tt;
-                    tt.X(offset);
-                    tt.Y(0);
-                    g_centerPanel.RenderTransform(tt);
-                }
-            }
-        } catch (...) {}
+        UpdateCenterPanelAlignment();
     } catch (...) {}
 
     try {
@@ -4703,14 +4820,15 @@ void ApplyVisibilitySettings() {
     setVis(L"ClockButton", g_settings.showClock || g_settings.showDate);
     setVis(L"MediaButton", g_settings.showMediaButton && g_mediaSessionExists);
     setVis(L"NotificationsButton", g_settings.showNotificationsButton);
-    bool appTitleVisible = g_settings.showAppTitleButton &&
+    bool appTitleAllowed = g_settings.showAppTitleButton &&
                            g_settings.centerContent == L"applicationButtons";
-    setVis(L"AppTitleButton", appTitleVisible);
-    if (g_appTitleButton) {
-        try {
-            g_appTitleButton.Visibility(appTitleVisible
-                ? Visibility::Visible : Visibility::Collapsed);
-        } catch (...) {}
+    if (!appTitleAllowed) {
+        setVis(L"AppTitleButton", false);
+        if (g_appTitleButton) {
+            try {
+                g_appTitleButton.Visibility(Visibility::Collapsed);
+            } catch (...) {}
+        }
     }
 }
 
@@ -6874,6 +6992,12 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid == GetCurrentProcessId()) {
+        if (g_settingsWindowHwnd && IsWindow(g_settingsWindowHwnd) &&
+            hwnd == g_settingsWindowHwnd) {
+            RunOnUiThread([] {
+                try { RefreshApplicationButtons(); } catch (...) {}
+            });
+        }
         return;
     }
 
@@ -7420,6 +7544,16 @@ std::wstring FindStartMenuShortcutName(const std::wstring& exePath) {
 }
 
 std::wstring GetApplicationDisplayName(HWND hwnd) {
+    if (hwnd && IsWindow(hwnd)) {
+        wchar_t cls[64]{};
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
+            if (_wcsicmp(cls, L"Progman") == 0 ||
+                _wcsicmp(cls, L"WorkerW") == 0) {
+                return L"Desktop";
+            }
+        }
+    }
+
     wchar_t titleBuf[512]{};
     GetWindowText(hwnd, titleBuf, ARRAYSIZE(titleBuf));
     std::wstring title = TrimWs(titleBuf);
@@ -7537,25 +7671,35 @@ void RefreshApplicationButtons() {
         return;
     }
 
-    HWND target = g_lastForegroundHwnd;
-    if (!target || !IsWindow(target)) {
-        HWND fg = GetForegroundWindow();
-        if (fg) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(fg, &pid);
-            target = (pid && pid != GetCurrentProcessId()) ? fg : nullptr;
-        } else {
-            target = nullptr;
+    // While the button is hidden (TaskList or None mode), skip the whole
+    // function on every foreground change. Clearing the cached state
+    // ensures the next visible call refreshes from scratch.
+    if (g_appTitleButton.Visibility() != Visibility::Visible) {
+        g_lastAppTitleTarget = nullptr;
+        g_lastAppTitleText.clear();
+        return;
+    }
+
+    HWND target = nullptr;
+    HWND fgNow = GetForegroundWindow();
+    if (g_settingsWindowHwnd && IsWindow(g_settingsWindowHwnd) &&
+        fgNow == g_settingsWindowHwnd) {
+        target = g_settingsWindowHwnd;
+    } else {
+        target = g_lastForegroundHwnd;
+        if (!target || !IsWindow(target)) {
+            if (fgNow) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(fgNow, &pid);
+                target = (pid && pid != GetCurrentProcessId()) ? fgNow : nullptr;
+            }
         }
     }
 
     if (!target) {
-        if (g_lastAppTitleTarget != nullptr) {
-            g_appTitleButton.Content(MakeText(L"AppTitleText", L"", 12.5, true));
-            g_appTitleButton.Tag(winrt::box_value(static_cast<int64_t>(0)));
-            g_lastAppTitleTarget = nullptr;
-            g_lastAppTitleText.clear();
-        }
+        g_appTitleButton.Visibility(Visibility::Collapsed);
+        g_lastAppTitleTarget = nullptr;
+        g_lastAppTitleText.clear();
         return;
     }
 
@@ -7571,7 +7715,43 @@ void RefreshApplicationButtons() {
     titleText.MaxWidth(340.0);
     g_appTitleButton.Content(titleText);
     g_appTitleButton.Tag(winrt::box_value(reinterpret_cast<int64_t>(target)));
-    ApplyAllControlStyles();
+
+    if (g_settings.showAppTitleButton &&
+        g_settings.centerContent == L"applicationButtons") {
+        try { g_appTitleButton.Visibility(Visibility::Visible); } catch (...) {}
+    }
+
+    // Re-apply only the user control styles that target AppTitle elements,
+    // walking just the AppTitleButton and its new titleText. A full
+    // ApplyAllControlStyles pass walks every button in the tree and
+    // reinstalls templates, which is what made every foreground change
+    // expensive.
+    for (const auto& rule : g_controlStyleRules) {
+        std::wstring t = TrimWs(rule.target);
+        if (t.empty() || t.starts_with(L"//")) continue;
+        if (t.find(L"AppTitle") == std::wstring::npos) continue;
+        auto chain = ParseTargetChain(t);
+        if (chain.empty()) continue;
+        auto tryApply = [&](FrameworkElement fe) {
+            if (fe && TestTreeMatcher(fe, chain.back()) &&
+                MatchesAncestorChain(fe, chain)) {
+                for (const auto& s : rule.styles) {
+                    ApplySingleStyleToElement(fe, s);
+                }
+            }
+        };
+        tryApply(g_appTitleButton);
+        tryApply(titleText);
+        try {
+            int n = wuxm::VisualTreeHelper::GetChildrenCount(titleText);
+            for (int i = 0; i < n; i++) {
+                if (auto childFe = wuxm::VisualTreeHelper::GetChild(titleText, i)
+                        .try_as<FrameworkElement>()) {
+                    tryApply(childFe);
+                }
+            }
+        } catch (...) {}
+    }
 }
 
 void RefreshTaskList(bool forceIconRegeneration) {
@@ -24486,17 +24666,17 @@ void BuildUiAlignmentPage(wuxc::StackPanel& p) {
         std::vector<std::wstring> members;
     };
     const std::vector<Tile> tiles = {
-        { L"Start",     { L"StartButton" } },
-        { L"Search",    { L"SearchButton" } },
-        { L"Title Button", { L"AppTitleButton" } },
-        { L"Resources", { L"ResourceButton" } },
-        { L"Weather",   { L"WeatherButton" } },
-        { L"Clock",     { L"ClockButton" } },
-        { L"Settings",  { L"SettingsButton" } },
-        { L"Media Player", { L"MediaButton" } },
-        { L"Control Center", { L"ControlCenterButton" } },
-        { L"System tray", { L"TrayIconButton" } },
-        { L"Notifications", { L"NotificationsButton" } },
+        { L"Start Button",     { L"StartButton" } },
+        { L"Search Button",    { L"SearchButton" } },
+        { L"App Title Button", { L"AppTitleButton" } },
+        { L"Resources Button", { L"ResourceButton" } },
+        { L"Weather Button",   { L"WeatherButton" } },
+        { L"Clock Button",     { L"ClockButton" } },
+        { L"Settings Button",  { L"SettingsButton" } },
+        { L"Media Player Button", { L"MediaButton" } },
+        { L"Control Center Button", { L"ControlCenterButton" } },
+        { L"System tray Button", { L"TrayIconButton" } },
+        { L"Notifications Button", { L"NotificationsButton" } },
         { L"Control Panel buttons",
           { L"DisplayButton", L"SoundButton", L"WifiButton",
             L"BluetoothButton", L"BatteryButton", L"RecycleBinButton" } },
@@ -28247,6 +28427,7 @@ FrameworkElement BuildTopBarContent() {
     g_detachedStyleRoots.clear();  // Clear old flyout roots before rebuilding
     g_lastAppTitleTarget = nullptr;
     g_lastAppTitleText.clear();
+    g_appTitleButton = nullptr;
 
     // Outer root grid that holds the interactive bar. Kept so existing
     // styles that target Grid#BarRoot > Grid#TopBarRoot still resolve.
@@ -28524,9 +28705,20 @@ FrameworkElement BuildTopBarContent() {
     taskPanel.VerticalAlignment(VerticalAlignment::Stretch);
     taskPanel.HorizontalAlignment(HorizontalAlignment::Left);
     g_taskListPanel = taskPanel;
-    g_taskListPanel.SizeChanged([](auto&&, auto&&) {
-        AdjustTaskButtonWidths();
-    });
+g_taskListPanel.SizeChanged([](auto&&, auto&&) {
+    // Only re-adjust when the button count changes. Compression and
+    // expansion both change the task-list width, which fires SizeChanged
+    // again; triggering on every SizeChanged caused a feedback loop that
+    // shook the task list once its count was large enough to need
+    // compression. Title changes and other content updates already call
+    // AdjustTaskButtonWidths from inside RefreshTaskList, so those are
+    // covered without this handler.
+    static size_t s_lastCount = 0;
+    size_t curCount = g_taskListPanel.Children().Size();
+    if (curCount == s_lastCount) return;
+    s_lastCount = curCount;
+    AdjustTaskButtonWidths();
+});
     RegisterNamed(L"TaskListPanel", taskPanel);
 
     wuxc::StackPanel centerPanel;
@@ -29201,6 +29393,19 @@ g_centerPanel.Children().Append(resourceButton);
     attachMenusToPanel(g_centerPanel);
     attachMenusToPanel(g_clockPanel);
     attachMenusToPanel(g_trayPanel);
+
+    auto hookPanelForRealign = [](wuxc::StackPanel const& panel) {
+        if (!panel) return;
+        try {
+            panel.SizeChanged([](auto&&, auto&&) {
+                UpdateCenterPanelAlignment();
+            });
+        } catch (...) {}
+    };
+    hookPanelForRealign(g_leftPanel);
+    hookPanelForRealign(g_centerPanel);
+    hookPanelForRealign(g_clockPanel);
+    hookPanelForRealign(g_trayPanel);
 
     wuxc::Grid::SetColumn(rightPanel, 2);
     root.Children().Append(rightPanel);
@@ -30595,6 +30800,14 @@ LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && g_shortcutCaptureActive.load()) {
         auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         if (kb && !(kb->flags & LLKHF_INJECTED)) {
+            HWND fgHwnd = GetForegroundWindow();
+            bool settingsActive =
+                fgHwnd && g_settingsWindowHwnd && IsWindow(g_settingsWindowHwnd) &&
+                GetWindowThreadProcessId(fgHwnd, nullptr) ==
+                    GetWindowThreadProcessId(g_settingsWindowHwnd, nullptr);
+            if (!settingsActive) {
+                return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+            }
             bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
             DWORD vk = kb->vkCode;
@@ -34772,7 +34985,7 @@ void CALLBACK WindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObje
                 g_taskRefreshTimer.Interval(std::chrono::milliseconds(200));
                 g_taskRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
                     g_taskRefreshTimer.Stop();
-                    RefreshTaskList(false);
+                    try { RefreshTaskList(false); } catch (...) {}
                 });
             }
             g_taskRefreshTimer.Stop();
@@ -36689,6 +36902,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             g_startMenuFlyout = nullptr;
         }
         if (g_displayButton) g_displayButton = nullptr;
+        if (g_appTitleButton) g_appTitleButton = nullptr;
         
         if (g_resourceButton) g_resourceButton = nullptr;
         if (g_displayPanel) g_displayPanel = nullptr;
@@ -37155,8 +37369,8 @@ void LoadSettings() {
     if (g_settings.thumbPreviewMaxHeight < 120) g_settings.thumbPreviewMaxHeight = 120;
     if (g_settings.thumbPreviewMaxHeight > 560) g_settings.thumbPreviewMaxHeight = 560;
 
-    g_shortcutSettingsEnabled = ReadIntSetting(L"shortcutSettingsEnabled", 1) != 0;
-    g_shortcutReloadEnabled = ReadIntSetting(L"shortcutReloadEnabled", 1) != 0;
+    g_shortcutSettingsEnabled = ReadIntSetting(L"shortcutSettingsEnabled", 0) != 0;
+    g_shortcutReloadEnabled = ReadIntSetting(L"shortcutReloadEnabled", 0) != 0;
     {
         std::wstring scJson = GetStringSettingCopy(L"customShortcuts");
         DeserializeCustomShortcuts(scJson);
@@ -37934,6 +38148,8 @@ static LONG WINAPI TopBarUnhandledExceptionFilter(EXCEPTION_POINTERS* info) {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"TopBar: WhTool_ModInit called.");
+
+    SetUnhandledExceptionFilter(TopBarUnhandledExceptionFilter);
 
     InstallProcessTransparencyBlock();
     LoadSettings();
