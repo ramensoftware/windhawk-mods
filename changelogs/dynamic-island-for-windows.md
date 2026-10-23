@@ -1,3 +1,12 @@
+## 1.4.0 ([Oct 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/54af632874bbd94e0a49897b9c0905e9ebe97635/mods/dynamic-island-for-windows.wh.cpp))
+
+* Added real Windows DWM blur and acrylic backdrop material support.
+* Added Live Lyrics with inline collapsed view, dedicated lyrics tab, and Quick Lookup.
+* Added cross-source media switching between multiple playing apps.
+* Added persistent disk storage for File Tray items across restarts.
+* Rebuilt volume flyout to be event-driven with smooth spring animation and automatic device switching.
+* Improved calendar regional locale support and weekday headers.
+
 ## 1.3.1 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/682a7f72694eb768724bea8ef72b079aedd9c57b/mods/dynamic-island-for-windows.wh.cpp))
 
 * Fixed the preview images on this page showing an older version.

@@ -5059,12 +5059,12 @@
         "ratingUsers": 1499,
         "reviews": 2,
         "trendingSorting": 19.3971415824844,
-        "updated": 1790443976000,
+        "updated": 1792771331000,
         "users": 52727
       },
       "metadata": {
         "author": "Himanshu",
-        "compilerOptions": "-lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi -lwinhttp -lpdh -lwinmm",
+        "compilerOptions": "-lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lsetupapi -lwinhttp -lpdh -lwinmm",
         "description": "A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.",
         "github": "https://github.com/devcode90",
         "include": [
@@ -5072,7 +5072,7 @@
         ],
         "license": "MIT",
         "name": "Dynamic Island for Windows",
-        "version": "1.3.1"
+        "version": "1.4.0"
       }
     },
     "dynamic-taskbar-transparency": {
@@ -9297,6 +9297,30 @@
         ],
         "name": "macOS magnifying cursor",
         "version": "1.4.7"
+      }
+    },
+    "macos-enter-rename": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792771336000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792771336000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "emagiaco",
+        "compilerOptions": "-luser32",
+        "description": "Rename selected files and folders with Enter, like in macOS Finder.",
+        "github": "https://github.com/emagiaco",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Enter to Rename in File Explorer",
+        "version": "0.4.0"
       }
     },
     "macos-minimize-animation": {

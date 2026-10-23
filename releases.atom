@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-22T23:04:09.000Z</updated>
+    <updated>2026-10-23T16:02:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enter to Rename in File Explorer 0.4.0]]></title>
+        <id>https://windhawk.net/mods/macos-enter-rename#9f270d11043b5f657484cc66bcf077aa80b2036d</id>
+        <link href="https://windhawk.net/mods/macos-enter-rename"/>
+        <updated>2026-10-23T16:02:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="entertorenameinfileexplorer">Enter to Rename in File Explorer</h1>
+<p>Use <strong>Enter</strong> to rename a selected file or folder in Windows File Explorer,
+like in macOS Finder. Press <strong>Enter</strong> again to confirm the new name.
+The standard <strong>F2</strong> shortcut is unchanged.</p>
+<h2 id="scope">Scope</h2>
+<ul>
+<li>Works only in File Explorer windows, not on the desktop or in file dialogs,
+and only when the keyboard focus appears to be inside Explorer's shell file
+list.</li>
+<li>Does not intercept Enter while editing text, in the address/search controls,
+or with Ctrl, Alt, or Shift pressed.</li>
+<li>This mod intentionally does <em>not</em> remap Ctrl+Enter to open a file.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested by the original user on Windows 11 for files, folders, rename confirmation,
+search, and multi-selection. Other Windows versions, Explorer extensions and
+alternative list controls have not yet been validated.</p>
+<h2 id="notes">Notes</h2>
+<p>The mod intercepts Enter and synthesizes an F2 key press. The context check
+is based on Explorer window classes, which might differ across builds.
+If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
+        <author>
+            <name>emagiaco</name>
+            <uri>https://github.com/emagiaco</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Refined Quick Settings and Sound 0.1.154]]></title>
         <id>https://windhawk.net/mods/refined-quick-settings-and-sound#9c7175f4a37662b14e99df140efbb33936871863</id>
@@ -1123,111 +1154,6 @@ https://winclassic.net/post/40623</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Snipper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-snipper#737ac0bd8a791ba491e35dadcda50eda00c1d3e2</id>
-        <link href="https://windhawk.net/mods/taskbar-snipper"/>
-        <updated>2026-10-20T05:02:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarsnipper">Taskbar Snipper</h1>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-snipper/screenshot.png" alt="The screenshot and record buttons on the taskbar" /></p>
-<p>Press <strong>Print Screen</strong>, or click the screenshot button on the taskbar, to select part of the
-screen. A toolbox opens right above the selection to mark it up with a pencil, lines, arrows, boxes
-and text, in any color and thickness. When you're done, click anywhere outside the selection (or
-press <strong>Enter</strong>), and the screenshot is copied to the clipboard, saved to a folder, or both, as you
-choose in the mod's settings.</p>
-<p>Press <strong>Win+Shift+R</strong>, or click the record button, to record part of the screen as a video. When
-you stop, trim its start and end, then copy or save it.</p>
-<h2 id="selecting">Selecting</h2>
-<ul>
-<li><strong>Drag</strong> to select an area. The screen stays as it was when you pressed Print Screen.</li>
-<li><strong>Click</strong> a window to select all of it, or the desktop to select the whole display.</li>
-<li><strong>Esc</strong> or <strong>right-click</strong> cancels.</li>
-</ul>
-<h2 id="thetoolbox">The toolbox</h2>
-<ul>
-<li><strong>Select</strong> (V), <strong>Pencil</strong> (P), <strong>Line</strong> (L), <strong>Arrow</strong> (A), <strong>Box</strong> (B) and <strong>Text</strong> (T). Drag
-inside the selection to draw; hold <strong>Shift</strong> to keep a line or arrow to 45° steps, or a box
-square. A click with the pencil makes a dot. With Text, click where the text goes and type;
-<strong>Enter</strong> starts a new line, and <strong>Esc</strong> or a click elsewhere finishes it.</li>
-<li><strong>Colors</strong>: eight at hand, and the last swatch picks any color.</li>
-<li><strong>Thickness</strong>: <strong>−</strong> and <strong>+</strong>, or the mouse wheel. Text gets bigger with it too.</li>
-<li><strong>Undo</strong> (Ctrl+Z), <strong>Copy</strong> (Ctrl+C), <strong>Save</strong> (Ctrl+S) and <strong>Close</strong> (Esc).</li>
-</ul>
-<p><strong>Copy</strong> and <strong>Save</strong> do just that. Clicking outside the selection or pressing Enter does what the
-<strong>When you're done</strong> setting says: copy, save, or both. Screenshots are saved as PNG files named by
-the date and time, in Windows' Screenshots folder (in Pictures) unless you choose another. A note
-in the corner of the screen says what happened; click it to show a saved screenshot in File
-Explorer.</p>
-<h2 id="movingandchangingmarks">Moving and changing marks</h2>
-<ul>
-<li>Whatever tool is in hand, <strong>drag</strong> anything already drawn to move it; the pointer turns into a
-four-way arrow over it. The <strong>Select</strong> tool only selects and moves, for when you'd rather not
-draw by accident.</li>
-<li><strong>Click</strong> a mark to select it. Its color and thickness show in the toolbox, and changing them
-changes the mark. The <strong>arrow keys</strong> nudge it (with <strong>Shift</strong>, 10 pixels at a time), <strong>Delete</strong>
-removes it, and <strong>Esc</strong> lets go of it.</li>
-<li>To change text, click it with the Text tool, or click it again once it's selected.</li>
-<li>Undo takes back moves and changes too.</li>
-</ul>
-<h2 id="recordingthescreen">Recording the screen</h2>
-<ul>
-<li>Press <strong>Win+Shift+R</strong>, click the record button, or choose <strong>Record the screen</strong> from the buttons'
-menu. Select an area as for a screenshot, then click <strong>Start recording</strong> (or press <strong>Enter</strong>).
-Recording starts after a 3-second countdown.</li>
-<li>While recording, a red line marks the area and a bar beside it shows the time; neither is in the
-video. To stop, click the <strong>stop</strong> square on the bar or the record button, or press
-<strong>Win+Shift+R</strong> again. The bar's <strong>X</strong> throws the recording away.</li>
-<li>The recording then opens to trim it. Drag the handles at either end of the strip of frames to cut
-off its start and end, and click the strip to see any moment. <strong>Space</strong> plays the part kept, the
-<strong>arrow keys</strong> step a frame at a time (a second with <strong>Shift</strong>), and <strong>I</strong> and <strong>O</strong> set the start
-and end at the frame shown.</li>
-<li><strong>Copy</strong> (Ctrl+C) puts the video on the clipboard, to paste into a chat, an email or a folder.
-<strong>Save</strong> (Ctrl+S) saves it in Windows' Screen Recordings folder (in Videos) unless you choose
-another.</li>
-<li>Recordings are MP4 videos (H.264, without sound) of up to 30 frames a second, with the mouse
-pointer.</li>
-</ul>
-<h2 id="thebuttons">The buttons</h2>
-<p>The screenshot and record buttons sit on the taskbar like the Windows weather widget: click one to
-take a screenshot or record, right-click them for their menu, and drag them to move them along the
-taskbar. <strong>Which buttons</strong> in the mod's settings shows both, or just one of them, and <strong>Buttons on
-the taskbar</strong> turns them off; the shortcuts work either way.</p>
-<p>The menu opens the screenshots and recordings folders, and <strong>Choose the screenshots folder…</strong> and
-<strong>Choose the recordings folder…</strong> pick others. The folders can be set in the mod's settings too;
-whichever you changed last is used.</p>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png" alt="Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar" /></p>
-<p>From the left: <a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a>,
-<a href="https://windhawk.net/mods/taskbar-audio-flipper">Taskbar Audio Flipper</a> and
-<a href="https://windhawk.net/mods/taskbar-rdp-launcher">Taskbar RDP Launcher</a>.</p>
-<p>With the Taskbar Audio Flipper or Taskbar RDP Launcher mod running too, their widgets can be joined
-with the buttons into one: right-click any of them, open <strong>Link widgets</strong>, and choose <strong>Link with</strong>
-the other. Linked, they sit side by side with a divider between them, and dragging any of them
-moves them all; <strong>Move this widget left</strong> and <strong>right</strong> change their order.</p>
-<p>Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
-later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
-unlinked.</p>
-<h2 id="goodtoknow">Good to know</h2>
-<ul>
-<li>Only Print Screen on its own is taken over. Alt+Print Screen, Win+Print Screen and Win+Shift+S
-work as usual, and turning the mod off gives Print Screen back to Windows. Win+Shift+R is taken
-over while <strong>Win+Shift+R records the screen</strong> is on in the settings.</li>
-<li>While a program running as administrator is in front, Windows doesn't let the mod see Print
-Screen or Win+Shift+R, so Windows handles them as usual.</li>
-<li>The tool, color and thickness you used last are remembered.</li>
-<li>A recording closed without copying or saving it is deleted; the window asks first. If the mod
-turns off (or Windows signs out) while recording, or with a recording still open, the recording
-goes to the recordings folder: right away when that's on the same drive as Windhawk's mod storage,
-otherwise the next time the mod starts.</li>
-<li>Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
-mod's storage (in a folder only you can open), and go with the mod.</li>
-<li>Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
-than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 records up to 4K.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-23T10:00:06.000Z</updated>
+    <updated>2026-10-23T16:02:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enter to Rename in File Explorer 0.4.0]]></title>
+        <id>https://windhawk.net/mods/macos-enter-rename#9f270d11043b5f657484cc66bcf077aa80b2036d</id>
+        <link href="https://windhawk.net/mods/macos-enter-rename"/>
+        <updated>2026-10-23T16:02:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="entertorenameinfileexplorer">Enter to Rename in File Explorer</h1>
+<p>Use <strong>Enter</strong> to rename a selected file or folder in Windows File Explorer,
+like in macOS Finder. Press <strong>Enter</strong> again to confirm the new name.
+The standard <strong>F2</strong> shortcut is unchanged.</p>
+<h2 id="scope">Scope</h2>
+<ul>
+<li>Works only in File Explorer windows, not on the desktop or in file dialogs,
+and only when the keyboard focus appears to be inside Explorer's shell file
+list.</li>
+<li>Does not intercept Enter while editing text, in the address/search controls,
+or with Ctrl, Alt, or Shift pressed.</li>
+<li>This mod intentionally does <em>not</em> remap Ctrl+Enter to open a file.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested by the original user on Windows 11 for files, folders, rename confirmation,
+search, and multi-selection. Other Windows versions, Explorer extensions and
+alternative list controls have not yet been validated.</p>
+<h2 id="notes">Notes</h2>
+<p>The mod intercepts Enter and synthesizes an F2 key press. The context check
+is based on Explorer window classes, which might differ across builds.
+If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
+        <author>
+            <name>emagiaco</name>
+            <uri>https://github.com/emagiaco</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island for Windows 1.4.0]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-for-windows#54af632874bbd94e0a49897b9c0905e9ebe97635</id>
+        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
+        <updated>2026-10-23T16:02:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added real Windows DWM blur and acrylic backdrop material support.</li>
+<li>Added Live Lyrics with inline collapsed view, dedicated lyrics tab, and Quick Lookup.</li>
+<li>Added cross-source media switching between multiple playing apps.</li>
+<li>Added persistent disk storage for File Tray items across restarts.</li>
+<li>Rebuilt volume flyout to be event-driven with smooth spring animation and automatic device switching.</li>
+<li>Improved calendar regional locale support and weekday headers.</li>
+</ul>]]></content>
+        <author>
+            <name>Himanshu</name>
+            <uri>https://github.com/devcode90</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Volume Mixer 1.5.7]]></title>
         <id>https://windhawk.net/mods/better-volume-mixer#b7f63d65fc05d4235f2404ba2d507504073a69c3</id>
@@ -576,43 +625,6 @@ behaviors keep working perfectly.</li>
         <author>
             <name>venasataa</name>
             <uri>https://github.com/venasataa</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or later 0.3.0]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#60fe84cec4c9dfd974d3dcbdd22cc2cadbb73106</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
-        <updated>2026-10-21T15:01:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a link to readme for restoring the network icon</li>
-<li>Save the downloaded file in a local mod's data folder to avoid interference with other mods</li>
-<li>Verify the checksum of the old taskbar file</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notification Bell Highlighter 0.5.2]]></title>
-        <id>https://windhawk.net/mods/notification-bell-highlighter#568908705fea166e6bbadb1516c6c9d7757783ad</id>
-        <link href="https://windhawk.net/mods/notification-bell-highlighter"/>
-        <updated>2026-10-21T15:01:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="notificationbellhighlighter">Notification Bell Highlighter</h1>
-<p>Makes the Windows notification bell more obvious when notifications are waiting.
-Draws a pulsing, bright overlay with an optional counter over the taskbar notification bell when notifications are pending.</p>
-<p>Settings for shape (circle or square), size, position, colour, pulse rate and counter visibility</p>
-<p><img src="https://raw.githubusercontent.com/mwalker212/windhawk-assets/refs/heads/main/bell-notification.gif" alt="Screenshot" /></p>
-<p>Windows 11 only. Tested on 26H2 build 26300.9711.</p>
-<p>Limitations:</p>
-<ul>
-<li>Overlay rather than restyled icon, this mod highlights the bell, while 'Taskbar tray system icon tweaks' can hide it.</li>
-<li>Primary taskbar only.</li>
-<li>Relies on the English accessible name, e.g. "Notifications 1 new notification".</li>
-</ul>]]></content>
-        <author>
-            <name>mwalker212</name>
-            <uri>https://github.com/mwalker212</uri>
         </author>
     </entry>
 </feed>
