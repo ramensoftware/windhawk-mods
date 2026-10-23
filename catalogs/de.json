@@ -16898,7 +16898,7 @@
         "ratingUsers": 31,
         "reviews": 0,
         "trendingSorting": 2.562293988792907,
-        "updated": 1792270922000,
+        "updated": 1792778693000,
         "users": 530
       },
       "metadata": {
@@ -16915,7 +16915,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Volume Percentage Indicator",
-        "version": "1.9.0"
+        "version": "1.10.0"
       }
     },
     "taskbar-wheel-cycle": {

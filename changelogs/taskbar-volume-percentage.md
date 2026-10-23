@@ -1,3 +1,10 @@
+## 1.10.0 ([Oct 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/296517f68b3f6840c58f222c5e810db41e96ff15/mods/taskbar-volume-percentage.wh.cpp))
+
+- Added visual mute cues for volume text (strikethrough and customizable dimming opacity) across all display styles when using "Same as Display style".
+- Added a mute style that keeps the volume level, avoiding the layout shift in the native icon styles (fixes #6421).
+- Fixed mute state layout update when muting audio while volume level is already at 0%.
+- Added explicit `<optional>` include.
+
 ## 1.9.0 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b00b5e3043a606e9864405a111acaf29d69dc170/mods/taskbar-volume-percentage.wh.cpp))
 
 * Added separate vertical offset settings (`verticalOffset` and `iconVerticalOffset`) for the percentage text and native volume/mute icons to allow fine-tuned alignment.

@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-23T17:03:24.000Z</updated>
+    <updated>2026-10-23T18:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.10.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-percentage#296517f68b3f6840c58f222c5e810db41e96ff15</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
+        <updated>2026-10-23T18:04:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added visual mute cues for volume text (strikethrough and customizable dimming opacity) across all display styles when using "Same as Display style".</li>
+<li>Added a mute style that keeps the volume level, avoiding the layout shift in the native icon styles (fixes #6421).</li>
+<li>Fixed mute state layout update when muting audio while volume level is already at 0%.</li>
+<li>Added explicit <code>&lt;optional&gt;</code> include.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Screen Clock Styler 0.4.0]]></title>
         <id>https://windhawk.net/mods/lock-screen-clock-styler#f09550cbeffb51073c224969a2ba706a481d69b6</id>
@@ -615,22 +631,6 @@ Ctrl+T), so no keyboard input is simulated.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Window Corner Radius 1.4]]></title>
-        <id>https://windhawk.net/mods/custom-corner-radius#16f94de7c75e010ecc78abfd55eb4bb80fb9b5a3</id>
-        <link href="https://windhawk.net/mods/custom-corner-radius"/>
-        <updated>2026-10-21T17:01:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a per-corner radius option to override the radius of each corner independently.</li>
-<li>Added an option to exclude programs that will keep their original corner radius.</li>
-<li>Settings are now applied right away.</li>
-<li>Fixed a possible system hang when a custom tooltip corner radius is configured.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
