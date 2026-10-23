@@ -6,6 +6,7 @@
 // @author          Frankh93
 // @github          https://github.com/frankh93
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
