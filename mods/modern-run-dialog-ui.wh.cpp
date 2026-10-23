@@ -2,8 +2,8 @@
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 10 & 11
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
-// @description     Transforms the classic Run dialog into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution on Windows 10 & 11.
-// @description:vi-VN Biến đổi hộp thoại Run cổ điển thành giao diện Fluent UI hiện đại với hiệu ứng Liquid Glass, phông chữ DirectWrite sắc nét và chạy lệnh nhanh từ lịch sử trên Windows 10 & 11.
+// @description     Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution.
+// @description:vi-VN Biến đổi hộp thoại Run cổ điển trên Windows 10 & 11 thành giao diện Fluent UI hiện đại với hiệu ứng Liquid Glass, phông chữ DirectWrite sắc nét và chạy lệnh nhanh từ lịch sử.
 // @version         3.0.4
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
@@ -32,8 +32,8 @@ Modern Run Dialog UI Preview (Windows Blur)
 
 ### ✨ Key Features
 
-- **Windows 10 & Windows 11 Compatibility:**
-  * Works seamlessly on both **Windows 10** and **Windows 11** (`x86-64`) with hardware-accelerated Direct2D rendering and native composition blur.
+- **Full Windows 10 & Windows 11 Compatibility:**
+  * Works seamlessly on both **Windows 10** and **Windows 11** (`x86-64`), automatically anchoring right above the Taskbar and supporting Per-Monitor DPI scaling across both operating systems.
 
 - **Liquid Glass, Windows Blur & Opaque Themes:**
   * **Liquid Glass:** Translucent low-tint glass backdrop paired with dual refractive rim strokes, pointer-following specular highlights, and glass-styled pill buttons.
@@ -46,12 +46,12 @@ Modern Run Dialog UI Preview (Windows Blur)
 - **One-Click Smart History (Per-User Storage):**
   * Displays up to **10 recently executed commands** with native icons, friendly app names, and execution timestamps.
   * **Click any history item to execute it immediately** without cluttering the input box.
-  * Maintains a per-user command and timestamp history in Windhawk mod storage (`HistoryTimestamps_<SID>`), allowing history to work even when Windows' own `RunMRU` tracking is disabled.
-  * **Clearing History:** Enable **History · Clear Stored History** in the mod settings and click Save (or press `Delete` on a hovered/selected history row) to remove stored history items, or set **History · Max Items** to `0` to disable history completely.
+  * Maintains a per-user command and timestamp history in Windhawk mod storage (`HistoryTimestamps_<SID>`), allowing the mod's history list to work even when Windows' own `RunMRU` tracking is disabled.
+  * **Clearing History (Non-Destructive):** Enable **History · Clear Stored History** in the mod settings and click Save (or press `Delete` on a hovered/selected history row) to clear the mod's displayed history for the current user without deleting Windows' native `RunMRU` registry entries, or set **History · Max Items** to `0` to disable history completely.
 
 - **Quality-of-Life Enhancements:**
   * **Taskbar Icon & `Win + R` Toggle:** Click the Run icon on the Taskbar to minimize/restore, or press `Win + R` while open to close immediately.
-  * **Seamless IME & Multilingual Support:** Works smoothly with Windows IME (Vietnamese Telex/VNI, CJK), Unikey, and EVKey, and supports 10 display languages.
+  * **Seamless IME & Multilingual Support:** Works smoothly with Windows IME (Vietnamese Telex/VNI, CJK), Unikey, and EVKey, and supports 11 display languages (including Italian).
 
 ---
 
@@ -62,7 +62,7 @@ Modern Run Dialog UI Preview (Windows Blur)
 ### ✨ Tính năng nổi bật
 
 - **Tương thích tốt với cả Windows 10 & Windows 11:**
-  * Hoạt động ổn định và mượt mà trên cả **Windows 10** và **Windows 11** (`x86-64`) với đồ họa Direct2D tăng tốc phần cứng và hiệu ứng làm mờ nền hệ thống.
+  * Hoạt động mượt mà, ổn định trên cả **Windows 10** và **Windows 11** (`x86-64`), tự động căn chỉnh vị trí sát thanh Taskbar và co giãn chuẩn theo DPI từng màn hình.
 
 - **3 Chế độ bề mặt (Liquid Glass, Làm mờ Windows & Nền đặc):**
   * **Liquid Glass:** Lớp nền kính trong suốt kết hợp viền khúc xạ ánh sáng 2 lớp, hiệu ứng phản sáng chạy theo trỏ chuột và các nút bấm dạng viên thuốc bằng kính.
@@ -76,11 +76,11 @@ Modern Run Dialog UI Preview (Windows Blur)
   * Hiển thị tối đa **10 lệnh chạy gần nhất** kèm biểu tượng gốc, tên ứng dụng thân thiện (`lệnh · Tên ứng dụng`) và thời gian thực thi.
   * **Bấm trực tiếp vào bất kỳ mục lịch sử nào để chạy lệnh ngay lập tức** mà không cần đẩy xuống ô nhập liệu.
   * Lưu lịch sử và thời gian chạy riêng biệt cho từng tài khoản người dùng Windows (`HistoryTimestamps_<SID>`), giúp lịch sử hoạt động ổn định kể cả khi bạn tắt tính năng lưu lịch sử `RunMRU` của Windows.
-  * **Xóa lịch sử:** Bật tùy chọn **Xóa lịch sử đã lưu** trong phần Cài đặt mod rồi bấm Lưu (hoặc nhấn phím `Delete` khi đang trỏ chuột/chọn một dòng lịch sử) để xóa các mục đã lưu, hoặc đặt **Số mục lịch sử tối đa** về `0` để tắt hẳn.
+  * **Xóa lịch sử an toàn:** Bật tùy chọn **Xóa lịch sử đã lưu** trong phần Cài đặt mod rồi bấm Lưu (hoặc nhấn phím `Delete` khi đang trỏ chuột/chọn một dòng lịch sử) để làm sạch danh sách lịch sử hiển thị trong mod mà không xóa dữ liệu `RunMRU` gốc của Windows, hoặc đặt **Số mục lịch sử tối đa** về `0` để tắt hẳn.
 
 - **Tiện ích nâng cao trải nghiệm (Quality-of-Life):**
   * **Đóng/mở nhanh từ Taskbar & `Win + R`:** Bấm vào biểu tượng Run dưới Taskbar để thu nhỏ/khôi phục cửa sổ, hoặc nhấn lại `Win + R` khi hộp thoại đang mở để đóng nhanh.
-  * **Tương thích bộ gõ Tiếng Việt & Đa ngôn ngữ:** Hoạt động mượt mà với Unikey, EVKey, bộ gõ Windows IME và hỗ trợ 10 ngôn ngữ hiển thị.
+  * **Tương thích bộ gõ Tiếng Việt & Đa ngôn ngữ:** Hoạt động mượt mà với Unikey, EVKey, bộ gõ Windows IME và hỗ trợ 11 ngôn ngữ hiển thị.
 */
 // ==/WindhawkModReadme==
 
@@ -102,6 +102,7 @@ Modern Run Dialog UI Preview (Windows Blur)
   - fr: Français (Tiếng Pháp)
   - de: Deutsch (Tiếng Đức)
   - es: Español (Tiếng Tây Ban Nha)
+  - it: Italiano (Tiếng Ý)
   - ru: Русский (Tiếng Nga)
   $options:
   - auto: Auto – System Default
@@ -114,6 +115,7 @@ Modern Run Dialog UI Preview (Windows Blur)
   - fr: Français (French)
   - de: Deutsch (German)
   - es: Español (Spanish)
+  - it: Italiano (Italian)
   - ru: Русский (Russian)
 - surfaceTheme: glass
   $name: Appearance · Surface Theme
@@ -158,9 +160,9 @@ Modern Run Dialog UI Preview (Windows Blur)
   $description:vi-VN: Hiển thị thời gian thực thi và biểu tượng đồng hồ ở mỗi dòng lịch sử.
 - clearStoredHistory: false
   $name: History · Clear Stored History
-  $name:vi-VN: Xóa lịch sử đã lưu
-  $description: Enable and save settings to clear all stored history and timestamps for the current user — set back to Off afterwards.
-  $description:vi-VN: Bật tùy chọn này và lưu cài đặt để xóa lịch sử cùng thời gian chạy lệnh đã lưu của người dùng hiện tại.
+  $name:vi-VN: Xóa lịch sử đã lưu trong Mod
+  $description: Turn on and save to clear the mod’s displayed history for the current user (without deleting Windows’ native RunMRU) — or press Delete on any row in the dialog.
+  $description:vi-VN: Bật và lưu để xóa lịch sử hiển thị trong mod của người dùng hiện tại (không xóa RunMRU gốc của Windows) — hoặc nhấn phím Delete trên dòng bất kỳ.
 - clearInitialInput: true
   $name: Input · Clear Input on Open
   $name:vi-VN: Để trống ô nhập khi mở
@@ -518,6 +520,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             case LANG_FRENCH:     lang = L"fr"; break;
             case LANG_GERMAN:     lang = L"de"; break;
             case LANG_SPANISH:    lang = L"es"; break;
+            case LANG_ITALIAN:    lang = L"it"; break;
             case LANG_RUSSIAN:    lang = L"ru"; break;
             default:              lang = L"en"; break;
         }
@@ -611,6 +614,17 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Programas (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Todos los archivos (*.*)\0*.*\0\0"
         };
     }
+    if (lang == L"it") {
+        return {
+            L"Digitare il nome del programma da eseguire",
+            L"Sfoglia...",
+            L"OK",
+            L"Annulla",
+            L"Oggi",
+            L"Seleziona un programma da eseguire",
+            L"Programmi (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tutti i file (*.*)\0*.*\0\0"
+        };
+    }
     if (lang == L"ru") {
         return {
             L"Введите имя команды для выполнения",
@@ -634,7 +648,28 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
     };
 }
 
-// --- Per-User Command & Timestamp Storage in Windhawk Mod Storage ---
+// --- Per-User Command, Timestamp & Hidden-MRU Storage in Windhawk Mod Storage ---
+
+std::wstring TrimCommandString(const std::wstring& cmd) {
+    wchar_t buf[MAX_PATH] = {};
+    wcsncpy_s(buf, cmd.c_str(), _TRUNCATE);
+    PathRemoveBlanksW(buf);
+    std::wstring res = buf;
+    for (wchar_t& ch : res) {
+        if (ch == L'\t' || ch == L'\r' || ch == L'\n') {
+            ch = L' ';
+        }
+    }
+    return res;
+}
+
+std::wstring NormalizeCmdKey(const std::wstring& cmd) {
+    std::wstring res = TrimCommandString(cmd);
+    for (wchar_t& ch : res) {
+        ch = towlower(ch);
+    }
+    return res;
+}
 
 std::wstring GetCurrentUserSidString() {
     HANDLE hToken = nullptr;
@@ -662,28 +697,120 @@ std::wstring GetCurrentUserSidString() {
 }
 
 const std::wstring& GetHistoryStorageKey() {
-    [[clang::no_destroy]] static const std::wstring kKey = L"HistoryTimestamps_" + GetCurrentUserSidString();
+    static const std::wstring kKey = L"HistoryTimestamps_" + GetCurrentUserSidString();
     return kKey;
 }
 
+const std::wstring& GetHiddenMruStorageKey() {
+    static const std::wstring kHiddenKey = L"HiddenRunMru_" + GetCurrentUserSidString();
+    return kHiddenKey;
+}
+
 const std::wstring& GetClearAckStorageKey() {
-    [[clang::no_destroy]] static const std::wstring kAckKey = L"ClearHistoryAck_" + GetCurrentUserSidString();
+    static const std::wstring kAckKey = L"ClearHistoryAck_" + GetCurrentUserSidString();
     return kAckKey;
 }
 
+std::vector<std::wstring> LoadHiddenMruCommands() {
+    std::vector<std::wstring> hiddenKeys;
+    std::vector<wchar_t> buffer(8192, L'\0');
+    size_t charsRead = Wh_GetStringValue(GetHiddenMruStorageKey().c_str(), buffer.data(), buffer.size());
+    if (charsRead == 0 || buffer[0] == L'\0') {
+        return hiddenKeys;
+    }
+
+    std::wstring data(buffer.data());
+    size_t pos = 0;
+    while (pos < data.size()) {
+        size_t endLine = data.find(L'\n', pos);
+        if (endLine == std::wstring::npos) {
+            endLine = data.size();
+        }
+        std::wstring line = data.substr(pos, endLine - pos);
+        if (!line.empty() && line.back() == L'\r') {
+            line.pop_back();
+        }
+        std::wstring norm = NormalizeCmdKey(line);
+        if (!norm.empty() && std::find(hiddenKeys.begin(), hiddenKeys.end(), norm) == hiddenKeys.end()) {
+            hiddenKeys.push_back(std::move(norm));
+        }
+        pos = endLine + 1;
+    }
+    return hiddenKeys;
+}
+
+void SaveHiddenMruCommands(const std::vector<std::wstring>& hiddenKeys) {
+    if (hiddenKeys.empty()) {
+        Wh_DeleteValue(GetHiddenMruStorageKey().c_str());
+        return;
+    }
+    std::wstring serialized;
+    size_t count = (std::min)(hiddenKeys.size(), (size_t)64);
+    for (size_t i = 0; i < count; ++i) {
+        serialized += hiddenKeys[i];
+        serialized += L'\n';
+    }
+    Wh_SetStringValue(GetHiddenMruStorageKey().c_str(), serialized.c_str());
+}
+
+void AddCommandToHiddenMru(const std::wstring& cmd) {
+    std::wstring norm = NormalizeCmdKey(cmd);
+    if (norm.empty()) return;
+    auto hiddenKeys = LoadHiddenMruCommands();
+    if (std::find(hiddenKeys.begin(), hiddenKeys.end(), norm) == hiddenKeys.end()) {
+        hiddenKeys.insert(hiddenKeys.begin(), norm);
+        SaveHiddenMruCommands(hiddenKeys);
+    }
+}
+
+void RemoveCommandFromHiddenMru(const std::wstring& cmd) {
+    std::wstring norm = NormalizeCmdKey(cmd);
+    if (norm.empty()) return;
+    auto hiddenKeys = LoadHiddenMruCommands();
+    auto newEnd = std::remove(hiddenKeys.begin(), hiddenKeys.end(), norm);
+    if (newEnd != hiddenKeys.end()) {
+        hiddenKeys.erase(newEnd, hiddenKeys.end());
+        SaveHiddenMruCommands(hiddenKeys);
+    }
+}
+
+// Clears the mod's per-user history and hides any commands currently in Windows' RunMRU
+// without modifying or deleting Windows' native RunMRU registry values.
 void ClearCurrentUserStoredHistory() {
-    Wh_SetStringValue(GetHistoryStorageKey().c_str(), L"");
+    Wh_DeleteValue(GetHistoryStorageKey().c_str());
+
+    auto hiddenKeys = LoadHiddenMruCommands();
+    auto addHidden = [&](const std::wstring& rawCmd) {
+        std::wstring norm = NormalizeCmdKey(rawCmd);
+        if (!norm.empty() && std::find(hiddenKeys.begin(), hiddenKeys.end(), norm) == hiddenKeys.end()) {
+            hiddenKeys.insert(hiddenKeys.begin(), norm);
+        }
+    };
+
     HKEY hKey = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
                       L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU",
-                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-        RegDeleteValueW(hKey, L"MRUList");
-        for (wchar_t ch = L'a'; ch <= L'z'; ++ch) {
-            wchar_t valName[2] = { ch, L'\0' };
-            RegDeleteValueW(hKey, valName);
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        wchar_t mruList[64] = {};
+        DWORD cbList = sizeof(mruList);
+        if (RegGetValueW(hKey, nullptr, L"MRUList", RRF_RT_REG_SZ, nullptr, mruList, &cbList) == ERROR_SUCCESS) {
+            for (int i = 0; mruList[i] != L'\0'; ++i) {
+                wchar_t valName[2] = { mruList[i], L'\0' };
+                wchar_t cmdBuf[MAX_PATH] = {};
+                DWORD cbCmd = sizeof(cmdBuf);
+                if (RegGetValueW(hKey, nullptr, valName, RRF_RT_REG_SZ, nullptr, cmdBuf, &cbCmd) == ERROR_SUCCESS) {
+                    size_t len = wcslen(cmdBuf);
+                    if (len >= 2 && cmdBuf[len - 2] == L'\\' && cmdBuf[len - 1] == L'1') {
+                        cmdBuf[len - 2] = L'\0';
+                    }
+                    addHidden(cmdBuf);
+                }
+            }
         }
         RegCloseKey(hKey);
     }
+
+    SaveHiddenMruCommands(hiddenKeys);
 }
 
 void LoadSettings(bool fromSettingsChanged = false) {
@@ -719,14 +846,19 @@ void LoadSettings(bool fromSettingsChanged = false) {
     newSettings.closeOnClickOutside = Wh_GetIntSetting(L"closeOnClickOutside") != 0;
 
     bool clearRequested = Wh_GetIntSetting(L"clearStoredHistory") != 0;
+    const std::wstring& ackKey = GetClearAckStorageKey();
+    int ack = Wh_GetIntValue(ackKey.c_str(), 0);
     if (clearRequested) {
-        int ack = Wh_GetIntValue(GetClearAckStorageKey().c_str(), 0);
-        if (fromSettingsChanged || ack == 0) {
-            ClearCurrentUserStoredHistory();
-            Wh_SetIntValue(GetClearAckStorageKey().c_str(), 1);
+        if (ack == 0) {
+            if (fromSettingsChanged) {
+                ClearCurrentUserStoredHistory();
+            }
+            Wh_SetIntValue(ackKey.c_str(), 1);
         }
     } else {
-        Wh_SetIntValue(GetClearAckStorageKey().c_str(), 0);
+        if (ack != 0) {
+            Wh_SetIntValue(ackKey.c_str(), 0);
+        }
     }
 
     LocalizedStrings newI18n = GetLocalizedStringsForLanguage(newSettings.language);
@@ -789,7 +921,6 @@ std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
 std::atomic<bool> g_isBrowsingFile{false};
 std::atomic<bool> g_unloading{false};
-HANDLE g_hUninitEvent = nullptr;
 thread_local bool g_internalActivation = false;
 
 // Wrapped in std::optional with [[clang::no_destroy]] so the CRT does not invoke
@@ -905,6 +1036,39 @@ int GetInputBarHeight(const RunDialogState* state) {
     return DpiScale(kBaseInputBarHeight, state->dpi);
 }
 
+// Computes the initial dialog position anchored right next to the Taskbar
+void GetDefaultTaskbarAnchoredPosition(HWND hDlg, int width, int height, UINT dpi, int* outX, int* outY) {
+    HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    RECT rcWork = {};
+    RECT rcMon = {};
+    if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        rcWork = mi.rcWork;
+        rcMon  = mi.rcMonitor;
+    } else {
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+        rcMon = rcWork;
+    }
+
+    int margin = DpiScale(12, dpi);
+    bool taskbarAtTop   = (rcWork.top > rcMon.top);
+    bool taskbarAtRight = (rcWork.right < rcMon.right) &&
+                          (rcWork.top == rcMon.top) &&
+                          (rcWork.bottom == rcMon.bottom);
+
+    if (taskbarAtRight) {
+        *outX = rcWork.right - width - margin;
+    } else {
+        *outX = rcWork.left + margin;
+    }
+
+    if (taskbarAtTop) {
+        *outY = rcWork.top + margin;
+    } else {
+        *outY = rcWork.bottom - height - margin;
+    }
+}
+
 void ClampDialogToMonitorWorkArea(HWND hDlg, int* inOutX, int* inOutY, int width, int height, UINT dpi) {
     HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
@@ -915,20 +1079,19 @@ void ClampDialogToMonitorWorkArea(HWND hDlg, int* inOutX, int* inOutY, int width
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
     }
 
-    int marginTrigger = DpiScale(12, dpi);
-    int marginTarget  = DpiScale(16, dpi);
+    int margin = DpiScale(12, dpi);
 
-    if (*inOutY + height > rcWork.bottom - marginTrigger) {
-        *inOutY = rcWork.bottom - height - marginTarget;
+    if (*inOutY + height > rcWork.bottom - margin) {
+        *inOutY = rcWork.bottom - height - margin;
     }
-    if (*inOutY < rcWork.top + marginTrigger) {
-        *inOutY = rcWork.top + marginTarget;
+    if (*inOutY < rcWork.top + margin) {
+        *inOutY = rcWork.top + margin;
     }
-    if (*inOutX + width > rcWork.right - marginTrigger) {
-        *inOutX = rcWork.right - width - marginTarget;
+    if (*inOutX + width > rcWork.right - margin) {
+        *inOutX = rcWork.right - width - margin;
     }
-    if (*inOutX < rcWork.left + marginTrigger) {
-        *inOutX = rcWork.left + marginTarget;
+    if (*inOutX < rcWork.left + margin) {
+        *inOutX = rcWork.left + margin;
     }
 }
 
@@ -1030,13 +1193,14 @@ void OpenBrowseExecutableDialog(RunDialogState* state) {
         return;
     }
 
-    state->isBrowsingFile = false;
-    g_isBrowsingFile.store(false);
-
     if (state->pendingUninit) {
-        PerformDialogUninit(hDlg, state);
+        g_isBrowsingFile.store(false);
+        state->isBrowsingFile = false;
         return;
     }
+
+    g_isBrowsingFile.store(false);
+    state->isBrowsingFile = false;
 
     if (picked && filePath[0] != L'\0') {
         std::wstring formattedPath = filePath;
@@ -1059,27 +1223,6 @@ void OpenBrowseExecutableDialog(RunDialogState* state) {
         state->caretVisible = true;
         InvalidateRect(hDlg, nullptr, TRUE);
     }
-}
-
-std::wstring TrimCommandString(const std::wstring& cmd) {
-    wchar_t buf[MAX_PATH] = {};
-    wcsncpy_s(buf, cmd.c_str(), _TRUNCATE);
-    PathRemoveBlanksW(buf);
-    std::wstring res = buf;
-    for (wchar_t& ch : res) {
-        if (ch == L'\t' || ch == L'\r' || ch == L'\n') {
-            ch = L' ';
-        }
-    }
-    return res;
-}
-
-std::wstring NormalizeCmdKey(const std::wstring& cmd) {
-    std::wstring res = TrimCommandString(cmd);
-    for (wchar_t& ch : res) {
-        ch = towlower(ch);
-    }
-    return res;
 }
 
 struct StoredTimestampEntry {
@@ -1132,6 +1275,10 @@ std::vector<StoredTimestampEntry> LoadStoredTimestamps() {
 }
 
 void SaveStoredTimestamps(const std::vector<StoredTimestampEntry>& entries) {
+    if (entries.empty()) {
+        Wh_DeleteValue(GetHistoryStorageKey().c_str());
+        return;
+    }
     std::wstring serialized;
     size_t count = (std::min)(entries.size(), kMaxMruEntries);
     for (size_t i = 0; i < count; ++i) {
@@ -1151,6 +1298,9 @@ void SaveCommandTimestamp(const std::wstring& cmd) {
     std::wstring cleanCmd = TrimCommandString(cmd);
     std::wstring keyName = NormalizeCmdKey(cleanCmd);
     if (keyName.empty()) return;
+
+    // Unhide the command if it was previously hidden
+    RemoveCommandFromHiddenMru(cleanCmd);
 
     FILETIME ft = {};
     GetSystemTimeAsFileTime(&ft);
@@ -1181,6 +1331,9 @@ void RemoveCommandFromHistoryStorage(const std::wstring& cmd) {
         entries.erase(newEnd, entries.end());
         SaveStoredTimestamps(entries);
     }
+
+    // Also mark as hidden in HiddenRunMru_<SID> so it isn't re-imported from Windows' RunMRU
+    AddCommandToHiddenMru(cmd);
 }
 
 std::wstring FormatHistoryTimestamp(const FILETIME& ftUtc, const wchar_t* todayPrefix) {
@@ -1317,10 +1470,6 @@ void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawComma
 
     if (g_hActiveRunDlg.load() == hDlg && IsWindow(hDlg)) {
         state->isTriggeringRun = false;
-        if (state->pendingUninit) {
-            PerformDialogUninit(hDlg, state);
-            return;
-        }
     }
 }
 
@@ -1611,13 +1760,22 @@ void LoadHistoryItems(RunDialogState* state) {
     }
 
     auto storedTimestamps = LoadStoredTimestamps();
+    auto hiddenMruKeys = LoadHiddenMruCommands();
     bool timestampsModified = false;
 
-    auto addUniqueCommand = [&](const std::wstring& rawText) {
+    auto isHiddenInMru = [&](const std::wstring& normKey) {
+        return std::find(hiddenMruKeys.begin(), hiddenMruKeys.end(), normKey) != hiddenMruKeys.end();
+    };
+
+    auto addUniqueCommand = [&](const std::wstring& rawText, bool checkHiddenList) {
         if ((int)state->history.size() >= maxItems) return;
         std::wstring cleanText = TrimCommandString(rawText);
         std::wstring normKey = NormalizeCmdKey(cleanText);
         if (normKey.empty()) return;
+
+        if (checkHiddenList && isHiddenInMru(normKey)) {
+            return;
+        }
 
         for (const auto& existing : state->history) {
             if (NormalizeCmdKey(existing.cmd) == normKey) {
@@ -1635,7 +1793,7 @@ void LoadHistoryItems(RunDialogState* state) {
 
     for (const auto& entry : storedTimestamps) {
         if ((int)state->history.size() >= maxItems) break;
-        addUniqueCommand(entry.displayCmd.empty() ? entry.cmdKey : entry.displayCmd);
+        addUniqueCommand(entry.displayCmd.empty() ? entry.cmdKey : entry.displayCmd, false);
     }
 
     if (state->hCombo) {
@@ -1646,7 +1804,7 @@ void LoadHistoryItems(RunDialogState* state) {
                 std::wstring text(len + 1, L'\0');
                 SendMessageW(state->hCombo, CB_GETLBTEXT, i, (LPARAM)text.data());
                 text.resize(wcslen(text.c_str()));
-                addUniqueCommand(text);
+                addUniqueCommand(text, true);
             }
         }
     }
@@ -1668,7 +1826,7 @@ void LoadHistoryItems(RunDialogState* state) {
                         if (len >= 2 && cmdBuf[len - 2] == L'\\' && cmdBuf[len - 1] == L'1') {
                             cmdBuf[len - 2] = L'\0';
                         }
-                        addUniqueCommand(cmdBuf);
+                        addUniqueCommand(cmdBuf, true);
                     }
                 }
             }
@@ -1893,11 +2051,13 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                             ? state->hoveredRow
                             : state->selectedRow;
             if (targetIdx >= 0 && targetIdx < (int)state->history.size()) {
+                int oldHeight = state->totalHeight;
                 RemoveCommandFromHistoryStorage(state->history[targetIdx].cmd);
                 state->hoveredRow = -1;
                 state->selectedRow = -1;
                 LoadHistoryItems(state);
                 RecomputeDialogMetrics(state);
+                state->normalY += (oldHeight - state->totalHeight);
                 int dlgW = GetDlgWidth(state);
                 ClampDialogToMonitorWorkArea(state->hDlg, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
                 SetWindowPos(state->hDlg, nullptr, state->normalX, state->normalY, dlgW, state->totalHeight,
@@ -1974,10 +2134,6 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
         }
         delete state;
     }
-
-    if (g_hUninitEvent) {
-        SetEvent(g_hUninitEvent);
-    }
 }
 
 LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -1997,21 +2153,22 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
     if (uMsg == g_msgUninit && g_msgUninit != 0) {
         if (!state) {
-            if (g_hUninitEvent) SetEvent(g_hUninitEvent);
-            return 0;
+            return 1;
         }
-        // Defer cleanup if the dialog thread is currently inside a nested modal loop
-        // (such as GetOpenFileNameW or an error message box from IDOK).
+        // If the dialog thread is inside a nested modal call (Browse file picker or IDOK error box),
+        // close the modal popup and return 0 so Wh_ModBeforeUninit retries after the modal loop exits.
         if (state->isBrowsingFile || state->isTriggeringRun) {
-            state->pendingUninit = true;
-            HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
-            if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
-                PostMessageW(hPopup, WM_CLOSE, 0, 0);
+            if (!state->pendingUninit) {
+                state->pendingUninit = true;
+                HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
+                if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
+                    PostMessageW(hPopup, WM_CLOSE, 0, 0);
+                }
             }
             return 0;
         }
         PerformDialogUninit(hWnd, state);
-        return 0;
+        return 1;
     }
 
     if (uMsg == g_msgToggle && g_msgToggle != 0) {
@@ -2031,6 +2188,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 break;
             case kActionReloadSettings: {
+                int oldHeight = state->totalHeight;
                 {
                     std::lock_guard<std::mutex> lock(g_settingsMutex);
                     state->settings = g_settings;
@@ -2038,6 +2196,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 LoadHistoryItems(state);
                 RecomputeDialogMetrics(state);
+                state->normalY += (oldHeight - state->totalHeight);
                 int dlgW = GetDlgWidth(state);
                 ClampDialogToMonitorWorkArea(hWnd, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
                 if (!IsIconic(hWnd)) {
@@ -2862,11 +3021,10 @@ void TransformRunDialog(HWND hDlg) {
     LoadHistoryItems(state);
     RecomputeDialogMetrics(state);
 
-    RECT rcWin = {};
-    GetWindowRect(hDlg, &rcWin);
     int dlgW = GetDlgWidth(state);
-    int newX = rcWin.left;
-    int newY = rcWin.top;
+    int newX = 100;
+    int newY = 100;
+    GetDefaultTaskbarAnchoredPosition(hDlg, dlgW, state->totalHeight, state->dpi, &newX, &newY);
     ClampDialogToMonitorWorkArea(hDlg, &newX, &newY, dlgW, state->totalHeight, state->dpi);
 
     state->normalX = newX;
@@ -3013,21 +3171,14 @@ void ReleaseGlobalResources() {
         g_pD2DFactory->Release();
         g_pD2DFactory = nullptr;
     }
-    if (g_hUninitEvent) {
-        CloseHandle(g_hUninitEvent);
-        g_hUninitEvent = nullptr;
-    }
 }
 
 BOOL Wh_ModInit() {
     g_unloading.store(false);
     g_glassCpuSupported = DetectGlassCpuSupport();
 
-    g_hUninitEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
-    if (!g_hUninitEvent) {
-        Wh_Log(L"Failed to create uninit synchronization event");
-        return FALSE;
-    }
+    // Clean up legacy v2.0.15 shared (non-SID) timestamp key if present
+    Wh_DeleteValue(L"HistoryTimestamps");
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory),
                                  nullptr, reinterpret_cast<void**>(&g_pD2DFactory)))) {
@@ -3087,20 +3238,10 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true);
-    if (HWND hDlg = g_hActiveRunDlg.load()) {
-        if (IsWindow(hDlg)) {
-            if (g_hUninitEvent) {
-                ResetEvent(g_hUninitEvent);
-            }
-            SendMessageW(hDlg, g_msgUninit, 0, 0);
-            if (g_hUninitEvent) {
-                while (g_hActiveRunDlg.load() != nullptr && IsWindow(hDlg)) {
-                    if (WaitForSingleObject(g_hUninitEvent, 50) == WAIT_OBJECT_0) {
-                        break;
-                    }
-                }
-            }
-        }
+    HWND hDlg = g_hActiveRunDlg.load();
+    while (hDlg && IsWindow(hDlg) && g_hActiveRunDlg.load() == hDlg &&
+           SendMessageW(hDlg, g_msgUninit, 0, 0) != 1) {
+        Sleep(50);
     }
     StopKeyHookThread();
 }
