@@ -7,7 +7,6 @@
 // @github          https://github.com/Maveric2005
 // @homepage        https://github.com/Maveric2005/windhawk-calendar-week-numbers
 // @include         ShellExperienceHost.exe
-// @include         ShellHost.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // @license         MIT
@@ -37,9 +36,8 @@ clock in the Windows 11 taskbar, like the week numbers in Outlook.
 - Only the calendar flyout is changed. The mod writes nothing to disk and makes
   no network requests.
 - The calendar's day cells get slightly narrower to make room for the column.
-- Tested on Windows 11 (build 26220), where the calendar is hosted in
-  `ShellExperienceHost.exe`. `ShellHost.exe` is included for builds that host
-  it there.
+- The calendar flyout is hosted in `ShellExperienceHost.exe`. Tested on
+  Windows 11 build 26220.
 */
 // ==/WindhawkModReadme==
 
@@ -910,14 +908,13 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procPa
 }
 
 // The windows which can host the calendar: the CoreWindows of
-// ShellExperienceHost and the ControlCenterWindow of ShellHost.
+// ShellExperienceHost.
 bool IsFlyoutWindow(HWND hWnd) {
     WCHAR className[32];
     if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
         return false;
     }
-    return _wcsicmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-           _wcsicmp(className, L"ControlCenterWindow") == 0;
+    return _wcsicmp(className, L"Windows.UI.Core.CoreWindow") == 0;
 }
 
 // The current flyout windows of this process, one per thread: the state of
@@ -959,12 +956,11 @@ ShowWindow_t ShowWindow_Original;
 
 // Catches flyout windows which are created after the mod was loaded. Once a
 // thread is set up, later shows are handled by its CoreWindow's
-// VisibilityChanged handler. ShellHost's ControlCenterWindow has no
-// CoreWindow, so there the shows keep coming through here.
+// VisibilityChanged handler.
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     BOOL result = ShowWindow_Original(hWnd, nCmdShow);
 
-    if (nCmdShow != SW_HIDE && !g_unloading && (!t_layoutRoot.get() || !t_coreWindow) &&
+    if (nCmdShow != SW_HIDE && !g_unloading && !t_layoutRoot.get() &&
         GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId() &&
         IsFlyoutWindow(hWnd)) {
         if (!t_pendingInitTimer) {
@@ -972,13 +968,8 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 SetTimer(nullptr, 0, 50, [](HWND, UINT, UINT_PTR idEvent, DWORD) {
                     KillTimer(nullptr, idEvent);
                     t_pendingInitTimer = 0;
-                    if (g_unloading) {
-                        return;
-                    }
-                    if (!t_layoutRoot.get()) {
+                    if (!g_unloading) {
                         InitializeForCurrentThread();
-                    } else {
-                        OnFlyoutShown();
                     }
                 });
         }
