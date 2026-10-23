@@ -115,10 +115,7 @@ static GetAsyncKeyState_t pfnGetAsyncKeyState_Original = nullptr;
 
 // Queries physical key state directly, bypassing our own hook that masks Ctrl
 static inline bool IsCtrlPhysicallyDown() {
-    if (pfnGetAsyncKeyState_Original) {
-        return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
-    }
-    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
 }
 
 void LoadSettings() {
@@ -149,6 +146,14 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
     if (!outTarget)
         return false;
 
+    // Do not post messages to windows belonging to another process
+    DWORD targetPid = 0;
+    GetWindowThreadProcessId(outTarget, &targetPid);
+    if (targetPid != GetCurrentProcessId()) {
+        outTarget = nullptr;
+        return false;
+    }
+
     WCHAR cls[64] = {};
     GetClassNameW(outTarget, cls, ARRAYSIZE(cls));
     if (_wcsicmp(cls, L"SysHeader32") == 0) {
@@ -172,9 +177,20 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
 
 void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
     if (isDiscrete && hTarget) {
-        int steps = std::max(1, std::abs(deltaY) / WHEEL_DELTA);
+        UINT scrollLines = 3;
+        SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+
+        if (scrollLines == WHEEL_PAGESCROLL) {
+            PostMessageW(hTarget, WM_VSCROLL,
+                         (deltaY > 0) ? SB_PAGEUP : SB_PAGEDOWN, 0);
+            PostMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
+            return;
+        }
+
+        int notches = std::max(1, std::abs(deltaY) / WHEEL_DELTA);
+        int totalSteps = notches * static_cast<int>(scrollLines);
         WPARAM scrollCmd = (deltaY > 0) ? SB_LINEUP : SB_LINEDOWN;
-        for (int i = 0; i < steps; ++i) {
+        for (int i = 0; i < totalSteps; ++i) {
             PostMessageW(hTarget, WM_VSCROLL, scrollCmd, 0);
             PostMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
         }
@@ -396,15 +412,18 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
             g_lastPt = g_anchorPt;
             g_accumY = 0.0;
 
-            HWND hRoot = GetAncestor(pMsg->hwnd, GA_ROOT);
-            if (hRoot) {
-                GetWindowRect(hRoot, &g_windowBounds);
-                if (GetForegroundWindow() != hRoot)
-                    SetForegroundWindow(hRoot);
-            } else {
-                GetWindowRect(pMsg->hwnd, &g_windowBounds);
-                if (GetForegroundWindow() != pMsg->hwnd)
-                    SetForegroundWindow(pMsg->hwnd);
+            HWND hTargetWnd = GetAncestor(pMsg->hwnd, GA_ROOT);
+            if (!hTargetWnd)
+                hTargetWnd = pMsg->hwnd;
+
+            GetWindowRect(hTargetWnd, &g_windowBounds);
+
+            // Do not steal focus from deliberately non-activating windows (e.g.
+            // On-Screen Keyboard)
+            LONG_PTR exStyle = GetWindowLongPtrW(hTargetWnd, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_NOACTIVATE) &&
+                GetForegroundWindow() != hTargetWnd) {
+                SetForegroundWindow(hTargetWnd);
             }
             return true;
         }
