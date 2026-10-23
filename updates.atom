@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-23T16:02:16.000Z</updated>
+    <updated>2026-10-23T17:03:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Clock Styler 0.4.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-clock-styler#f09550cbeffb51073c224969a2ba706a481d69b6</id>
+        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
+        <updated>2026-10-23T17:03:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="lockscreenclockstyler">Lock Screen Clock Styler</h1>
+<p>Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.</p>
+<h2 id="features">Features:</h2>
+<ul>
+<li><strong>Minimalist Sonoma (Clean Typography):</strong> Apple-inspired lock screen typography with date positioned above the time, slender display numerals, dual-layer atmospheric shadow, and bottom-left or center placement.</li>
+<li><strong>Modern Flip Clock:</strong> Split glass cards for hour and minute with an elegant horizontal flip seam.</li>
+<li><strong>Classic Flip Clock:</strong> Classic mechanical Solari-inspired flip clock with matte charcoal flap cards, aged ivory cream typography, mechanical split seam, and hinge axle clips.</li>
+<li><strong>Cyberpunk Sci-Fi HUD Terminal:</strong> Bespoke tactical Netrunner HUD terminal with dark obsidian glass chassis, tactical corner brackets in acid yellow and hot magenta, top telemetry diagnostic bar, electric cyan digits with rhythmic tactical pulse, and bottom telemetry date logger.</li>
+<li><strong>Retro Pixel / LED Dot Matrix Clock:</strong> Authentic dot matrix display inspired by classic digital boards with active and ambient inactive LED dots.</li>
+<li><strong>Minimalist Aura / Floating Clock:</strong> Frameless floating typography with ambient soft drop-shadow depth and an elegant frosted date pill.</li>
+<li><strong>Battery & Charging Capsule:</strong> Live battery percentage and power indicator (⚡ %85) for laptop users, automatically hidden on desktop PCs.</li>
+<li><strong>12-Hour / 24-Hour Format:</strong> Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.</li>
+<li><strong>Show Seconds Toggle:</strong> Optional live seconds display. Supported by every style except the two flip clocks.</li>
+<li><strong>Frosted Glass / Acrylic Styling:</strong> Translucent glass panels with subtle border highlights and rounded corners.</li>
+<li><strong>Dynamic Date Display:</strong> Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.</li>
+<li><strong>Hide Default Widgets:</strong> Clean up the lock screen by hiding MSN weather, sports, and news widgets.</li>
+<li><strong>Hide / Replace Default Clock:</strong> Seamlessly replace the stock Windows 11 clock with custom styles or adjust vertical offsets.</li>
+<li><strong>Extensive Customization:</strong> Card opacity, font size, vertical offsets, and alignments are fully customizable via settings.</li>
+<li><strong>No XAML Diagnostics:</strong> The mod walks the lock screen visual tree from its own UI thread instead of registering a XAML Diagnostics TAP. It can therefore run alongside other XAML-based Windhawk mods such as Windows 11 Start Menu Styler.</li>
+</ul>
+<h2 id="screenshots">Screenshots:</h2>
+<p>| Style | Preview |
+| :---: | :---: |
+| Minimalist Sonoma | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png" alt="Minimalist Sonoma" /> |
+| Retro Pixel / LED Matrix | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/Retro%20Pixel.png" alt="Retro Pixel" /> |
+| Modern Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/modern%20flip%20clock.png" alt="Modern Flip Clock" /> |
+| Classic Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/classical%20flip%20clock.png" alt="Classic Flip Clock" /> |
+| Cyberpunk Sci-Fi HUD | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20style.png" alt="Cyberpunk Sci-Fi HUD" /> |</p>
+<h2 id="securitynote">Security Note:</h2>
+<p>This mod exclusively targets <code>LockApp.exe</code>. It does not inject into or interfere with <code>LogonUI.exe</code> or <code>winlogon.exe</code> in the Secure Desktop, preventing any system lockup or logon security risks.</p>]]></content>
+        <author>
+            <name>ali0zdas</name>
+            <uri>https://github.com/ali0zdas</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enter to Rename in File Explorer 0.4.0]]></title>
         <id>https://windhawk.net/mods/macos-enter-rename#9f270d11043b5f657484cc66bcf077aa80b2036d</id>
@@ -591,40 +631,6 @@ Ctrl+T), so no keyboard input is simulated.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Middle Click New Tab 1.0.0]]></title>
-        <id>https://windhawk.net/mods/middle-click-new-tab#99b8b3c87e40cc1592eb0f2735ebee83a15acea9</id>
-        <link href="https://windhawk.net/mods/middle-click-new-tab"/>
-        <updated>2026-10-21T16:02:52.000Z</updated>
-        <content type="html"><![CDATA[<p>The mod opens a new tab when you release the middle mouse button over the empty space of a tab strip.</p>
-<p>Three apps are supported:</p>
-<ul>
-<li>File Explorer: the new tab is opened by invoking the native AddButton (fallback: Ctrl+T).</li>
-<li>Notepad: the new tab is opened by invoking the native AddButton (fallback: Ctrl+N).</li>
-<li>Terminal: the new tab is opened by invoking the native AddButton (fallback: Ctrl+Shift+T). Note: This does not work if Terminal is running as administrator due to privilege isolation.</li>
-</ul>
-<p>You can enable or disable each app individually in the mod's settings tab.</p>
-<p>How it works:</p>
-<ul>
-<li>The mod runs as a standalone Windhawk Tool, ensuring it executes in a single 
-instance and doesn't inject multiple hooks into different Explorer processes.</li>
-<li>A dedicated low-level mouse hook thread records middle-button press/release events.
-It never performs slow UI Automation work and never blocks global input.</li>
-<li>If the press looks like it happened in a tab strip area, an isolated UI Automation
-worker thread verifies whether the point is on an actual tab, a button, or empty
-tab strip space.</li>
-<li>If the mouse button is released before the check finishes, the mod temporarily
-holds the release event and re-sends it synthetically after the check. This avoids
-the race condition where the native app closes the tab before the mod can inspect it.</li>
-<li>Middle clicking an actual tab or the add button is left untouched, so the native 
-behaviors keep working perfectly.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/venasataa/middle-click-new-tab/refs/heads/main/preview.gif" alt="Middle Click New Tab Demo" /></p>]]></content>
-        <author>
-            <name>venasataa</name>
-            <uri>https://github.com/venasataa</uri>
         </author>
     </entry>
 </feed>

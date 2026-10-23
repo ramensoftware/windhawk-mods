@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-23T16:02:16.000Z</updated>
+    <updated>2026-10-23T17:03:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Clock Styler 0.4.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-clock-styler#f09550cbeffb51073c224969a2ba706a481d69b6</id>
+        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
+        <updated>2026-10-23T17:03:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="lockscreenclockstyler">Lock Screen Clock Styler</h1>
+<p>Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.</p>
+<h2 id="features">Features:</h2>
+<ul>
+<li><strong>Minimalist Sonoma (Clean Typography):</strong> Apple-inspired lock screen typography with date positioned above the time, slender display numerals, dual-layer atmospheric shadow, and bottom-left or center placement.</li>
+<li><strong>Modern Flip Clock:</strong> Split glass cards for hour and minute with an elegant horizontal flip seam.</li>
+<li><strong>Classic Flip Clock:</strong> Classic mechanical Solari-inspired flip clock with matte charcoal flap cards, aged ivory cream typography, mechanical split seam, and hinge axle clips.</li>
+<li><strong>Cyberpunk Sci-Fi HUD Terminal:</strong> Bespoke tactical Netrunner HUD terminal with dark obsidian glass chassis, tactical corner brackets in acid yellow and hot magenta, top telemetry diagnostic bar, electric cyan digits with rhythmic tactical pulse, and bottom telemetry date logger.</li>
+<li><strong>Retro Pixel / LED Dot Matrix Clock:</strong> Authentic dot matrix display inspired by classic digital boards with active and ambient inactive LED dots.</li>
+<li><strong>Minimalist Aura / Floating Clock:</strong> Frameless floating typography with ambient soft drop-shadow depth and an elegant frosted date pill.</li>
+<li><strong>Battery & Charging Capsule:</strong> Live battery percentage and power indicator (⚡ %85) for laptop users, automatically hidden on desktop PCs.</li>
+<li><strong>12-Hour / 24-Hour Format:</strong> Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.</li>
+<li><strong>Show Seconds Toggle:</strong> Optional live seconds display. Supported by every style except the two flip clocks.</li>
+<li><strong>Frosted Glass / Acrylic Styling:</strong> Translucent glass panels with subtle border highlights and rounded corners.</li>
+<li><strong>Dynamic Date Display:</strong> Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.</li>
+<li><strong>Hide Default Widgets:</strong> Clean up the lock screen by hiding MSN weather, sports, and news widgets.</li>
+<li><strong>Hide / Replace Default Clock:</strong> Seamlessly replace the stock Windows 11 clock with custom styles or adjust vertical offsets.</li>
+<li><strong>Extensive Customization:</strong> Card opacity, font size, vertical offsets, and alignments are fully customizable via settings.</li>
+<li><strong>No XAML Diagnostics:</strong> The mod walks the lock screen visual tree from its own UI thread instead of registering a XAML Diagnostics TAP. It can therefore run alongside other XAML-based Windhawk mods such as Windows 11 Start Menu Styler.</li>
+</ul>
+<h2 id="screenshots">Screenshots:</h2>
+<p>| Style | Preview |
+| :---: | :---: |
+| Minimalist Sonoma | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png" alt="Minimalist Sonoma" /> |
+| Retro Pixel / LED Matrix | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/Retro%20Pixel.png" alt="Retro Pixel" /> |
+| Modern Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/modern%20flip%20clock.png" alt="Modern Flip Clock" /> |
+| Classic Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/classical%20flip%20clock.png" alt="Classic Flip Clock" /> |
+| Cyberpunk Sci-Fi HUD | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20style.png" alt="Cyberpunk Sci-Fi HUD" /> |</p>
+<h2 id="securitynote">Security Note:</h2>
+<p>This mod exclusively targets <code>LockApp.exe</code>. It does not inject into or interfere with <code>LogonUI.exe</code> or <code>winlogon.exe</code> in the Secure Desktop, preventing any system lockup or logon security risks.</p>]]></content>
+        <author>
+            <name>ali0zdas</name>
+            <uri>https://github.com/ali0zdas</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enter to Rename in File Explorer 0.4.0]]></title>
         <id>https://windhawk.net/mods/macos-enter-rename#9f270d11043b5f657484cc66bcf077aa80b2036d</id>
@@ -1138,22 +1178,6 @@ the inclusion list, or their scrolling will be coarsened.</li>
         <author>
             <name>loliri</name>
             <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore legacy network tray 1.0]]></title>
-        <id>https://windhawk.net/mods/restore-legacy-network-tray#44b3fe7b010002fc8d12c9134affbb6f3fc4ec95</id>
-        <link href="https://windhawk.net/mods/restore-legacy-network-tray"/>
-        <updated>2026-10-20T05:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Redstores the classic network tray icon on Windows 10 taskbar running under Windows 11 24H2 or later.
-The mod downloads the network icon dll from the Microsoft's symbols server.</p>
-<p>This mod downloads the version of the network icon dll from one of the latest builds of Windows 11 23H2, so it may conflict 
-with the mod <code>Windows 10 legacy flyouts on Win11 24H2 restorer</code>. It is recommended to use only one of the mods.</p>
-<p>The original version of the mod is by user DerBaron of WinClassic forum, published under MIT license:
-https://winclassic.net/post/40623</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

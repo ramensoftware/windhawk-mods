@@ -9191,6 +9191,34 @@
         "version": "1.2.0"
       }
     },
+    "lock-screen-clock-styler": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792775004000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792775004000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ali0zdas",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
+        "description": "Customize the Windows 11 lock screen clock with modern styles, date display, and widget controls.",
+        "github": "https://github.com/ali0zdas",
+        "include": [
+          "LockApp.exe"
+        ],
+        "license": "MIT",
+        "name": "Lock Screen Clock Styler",
+        "version": "0.4.0"
+      }
+    },
     "lockscreen-datetime-format": {
       "details": {
         "defaultSorting": 3360,
