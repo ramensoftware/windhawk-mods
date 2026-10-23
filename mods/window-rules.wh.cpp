@@ -105,10 +105,11 @@ field you leave blank matches anything. The fields are:
   `Chrome_WidgetWin_1`.
 * **Window title** -- searched *inside* the title, so a fragment is enough.
 
-All matching is case-insensitive. In the executable and class fields `*` and `?`
-are wildcards, so `chrome*` matches `chrome.exe`. Writing any of `. ^ $ + ( ) [ ]
-{ } |` switches that field to a full regular expression, which is how you anchor
-a title match with `^` or `$`.
+All matching is case-insensitive. `*` and `?` are wildcards, so `chrome*` matches
+`chrome.exe` and `Untitled*` matches any title starting that way. To use a full
+regular expression, wrap it in slashes: `/^Document - \\w+\\.txt$/`. Nothing else
+is treated as a pattern, so a path like `C:\\Program Files (x86)\\Steam\\steam.exe`
+or a title like `Inbox | Outlook` matches literally.
 
 ## What it does not do, and where the limits are
 
@@ -124,14 +125,29 @@ a title match with `^` or `$`.
   no meaningful rectangle to move, so nothing is applied while it is minimized;
   the rule is applied the moment you restore it, including for an app that starts
   in the tray.
-* **A rule applied to a maximized window changes where it will restore to**, not
-  what you see while it is maximized. Windows keeps the window maximized.
+* **A maximized window stays maximized.** The mod does not restore it to normal
+  first, and what Windows does with a maximized window's restore rectangle is
+  Windows' business rather than the mod's, so a rule that sets a position may not
+  show until you restore the window yourself.
 * **Opacity on a window that is already translucent by itself.** Those windows
   draw their own transparency; a flat opacity level would replace it with
   something that renders wrong, so the mod reports `already-layered` in the journal
   and leaves them alone.
 * **Change a window's size when the app is in charge of it.** Some apps re-create
   their window when resized; they are left as they are after the single retry.
+* **The invisible border.** Since Windows 10 a window's rectangle includes about
+  seven pixels of invisible resize border per edge, so `position: 0,0` leaves a
+  small visible gap at the left and top, and a `800x600` rule looks about 14 pixels
+  smaller than 800 by 600. The mod does exactly what the numbers say in the
+  coordinates Windows reports, and the journal prints those numbers.
+* **File Explorer windows are not matched.** `explorer.exe` is on the built-in
+  exclude list, because the same process owns the taskbar, the desktop and the
+  shell's own windows. Explorer windows cannot be targeted by a rule in this
+  version.
+* **A window on another virtual desktop is skipped until you switch to it.** Those
+  windows are cloaked, and the mod ignores cloaked windows on purpose, so a rule
+  you delete reaches such a window the next time you are on its desktop or when
+  the mod is turned off. Nothing is left behind permanently.
 * **Always on top and fullscreen is detected geometrically.** A window counts as
   fullscreen when it covers a monitor and is not maximized. A window that nearly
   covers a monitor is not detected, so a pinned window can stay above it.
@@ -197,8 +213,9 @@ Rules are read from the top down, and **an entry with every field blank ends the
 list** -- the settings template ships one blank entry, so a fresh install has no
 rules at all until you fill it in. Leave the blank entry last.
 
-A rule with a name but no match fields matches every window; the journal says so
-at load time as `RULE-BROAD`, because that is almost never what someone means.
+A rule with no match fields is not loaded, because it would apply to every window
+on the desktop; the journal says `RULE-PROBLEM` and names the rule. To mean every
+window on purpose, put a `*` in one of the match fields.
 */
 // ==/WindhawkModReadme==
 
@@ -231,21 +248,23 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
         Case-insensitive. Blank matches any executable. * and ? are wildcards,
         so chrome* matches chrome.exe. A value containing a backslash, a slash
         or a colon is matched against the full path instead, and wildcards work
-        there too. Use any of ^ $ + ( ) [ ] { } | to switch this field to a full
-        regular expression.
+        there too. Wrap the value in slashes to use a regular expression:
+        /^(chrome|msedge)/ . Anything not in slashes is matched literally, so a
+        path with brackets in it is fine.
     - windowClass: ""
       $name: Window class
       $description: >-
         The window's class name, for example Notepad or Chrome_WidgetWin_1.
         Case-insensitive, matched against the whole name, with the same wildcard
-        and regular expression rules as Executable. Blank matches any class.
+        and slash-delimited regular expression rules as Executable. Blank matches
+        any class.
     - title: ""
       $name: Window title
       $description: >-
         Searched inside the window title, so a fragment is enough.
-        Case-insensitive, with the same wildcard and regular expression rules as
-        Executable; in a regular expression, ^ and $ anchor the match. Blank
-        matches any title.
+        Case-insensitive, with the same wildcard and slash-delimited regular
+        expression rules as Executable; inside slashes, ^ and $ anchor the match.
+        Blank matches any title.
     - position: ""
       $name: Position
       $description: >-
@@ -325,6 +344,8 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
 //   SetWinEventHook ranges on it:
 //     - EVENT_OBJECT_CREATE..EVENT_OBJECT_SHOW, for a window appearing;
 //     - EVENT_SYSTEM_MOVESIZEEND, for the user placing a window by hand;
+//     - EVENT_SYSTEM_MINIMIZEEND, for a window whose rule was deferred while it
+//       was minimized and which is now back;
 //     - EVENT_SYSTEM_FOREGROUND, alone, for a fullscreen app taking a monitor.
 //   EVENT_OBJECT_LOCATIONCHANGE is deliberately not registered: it is the
 //   highest-volume event in the shell and a rules engine learns nothing from a
@@ -415,11 +436,8 @@ struct RuleActions {
 
 // How a match field is interpreted. The order of the checks matters and is
 // documented in the settings text, so that nobody has to read this to know what
-// to type: a value is a wildcard pattern when it contains * or ?, a regular
-// expression when it contains any other metacharacter, and otherwise a plain
-// literal. "." is deliberately not a metacharacter for this purpose -- it is in
-// every "notepad.exe" ever typed, and treating it as "any character" would make
-// the most common entry behave surprisingly.
+// to type: a value wrapped in slashes is a regular expression, one containing *
+// or ? is a wildcard pattern, and everything else is a plain literal.
 enum class PatternKind {
     Blank,  // matches anything
     Plain,  // literal text
@@ -432,20 +450,30 @@ static bool ContainsGlobMeta(const std::wstring& value) {
            value.find(L'?') != std::wstring::npos;
 }
 
-static bool ContainsRegexMeta(const std::wstring& value) {
-    // Deliberately not included: "." (it is in every "notepad.exe" ever typed)
-    // and "\" (it is the path separator in this domain, and treating it as an
-    // escape would turn every "C:\Apps\tool.exe" into a broken regex -- which
-    // is the mistake the unit tests exist to catch).
-    static const wchar_t kMeta[] = L"^$+()[]{}|";
-    return value.find_first_of(kMeta) != std::wstring::npos;
+// A regular expression is opt-in and written between slashes: /^Untitled.*/
+//
+// Auto-detection was tried first, and it failed silently. Any of a handful of
+// characters turned a field into a regex, so "C:\\Program Files (x86)\\Steam\\steam.exe"
+// became a regex in which \\s is a whitespace class and the rule never matched
+// anything, "Inbox | Outlook" matched the wrong windows, and "Untitled (1)"
+// became a group. Requiring the slashes costs a little typing and makes every
+// other value mean exactly what it looks like.
+static bool IsSlashDelimitedRegex(const std::wstring& value) {
+    return value.size() >= 2 && value.front() == L'/' && value.back() == L'/';
+}
+
+static std::wstring InnerRegexText(const std::wstring& value) {
+    if (!IsSlashDelimitedRegex(value)) {
+        return value;
+    }
+    return value.substr(1, value.size() - 2);
 }
 
 static PatternKind ClassifyPattern(const std::wstring& value) {
     if (value.empty()) {
         return PatternKind::Blank;
     }
-    if (ContainsRegexMeta(value)) {
+    if (IsSlashDelimitedRegex(value)) {
         return PatternKind::Regex;
     }
     if (ContainsGlobMeta(value)) {
@@ -540,7 +568,8 @@ static CompiledPattern CompilePattern(const std::wstring& value) {
 
     if (compiled.kind == PatternKind::Regex) {
         try {
-            compiled.regex = std::wregex(value, std::regex_constants::icase);
+            compiled.regex =
+                std::wregex(InnerRegexText(value), std::regex_constants::icase);
         } catch (const std::regex_error&) {
             // A pattern that does not compile is reported once at load time and
             // then never matches. Silently ignoring it would leave the user
@@ -649,8 +678,9 @@ static bool PatternMatchesExecutable(const CompiledPattern& pattern,
 
     // A value that looks like a path is about the path and nothing else, so a
     // path entry cannot silently start matching same-named executables in other
-    // folders.
-    if (LooksLikePath(pattern.literal)) {
+    // folders. Not for a regex: its delimiters are slashes, so every regex would
+    // look like a path and be compared against the full path instead of the name.
+    if (pattern.kind != PatternKind::Regex && LooksLikePath(pattern.literal)) {
         return matchesText(loweredPath, exePath);
     }
 
@@ -659,6 +689,15 @@ static bool PatternMatchesExecutable(const CompiledPattern& pattern,
     // the user wrote, which is the one without the suffix they left out.
     return matchesText(loweredName, exeName) ||
            (stem != loweredName && matchesText(stem, stemOriginal));
+}
+
+// A rule with nothing to match on would match every window on the desktop, and a
+// reapply pass would then move or fade everything open. It is not a useful thing
+// to configure by accident, so it does not load at all. "Every window" is still
+// sayable on purpose: an asterisk in any one field.
+static bool RuleMatchesAnything(const RuleSpec& rule) {
+    return rule.executable.empty() && rule.windowClass.empty() &&
+           rule.title.empty();
 }
 
 struct CompiledRule {
@@ -674,6 +713,16 @@ static CompiledRule CompileRule(const RuleSpec& rule) {
     compiled.executable = CompilePattern(rule.executable);
     compiled.windowClass = CompilePattern(rule.windowClass);
     compiled.title = CompilePattern(rule.title);
+
+    if (RuleMatchesAnything(rule)) {
+        // Rejected rather than applied to everything. The journal line names the
+        // rule, and the settings text says how to mean it on purpose.
+        compiled.usable = false;
+        compiled.problem =
+            L"no match fields: fill in Executable, Window class or Window title, "
+            L"or type * to mean every window";
+        return compiled;
+    }
 
     if (!compiled.executable.usable) {
         compiled.usable = false;
@@ -706,14 +755,6 @@ static bool RuleEntryIsPresent(const RuleSpec& rule, const RuleActions& actions)
            !rule.windowClass.empty() || !rule.title.empty() ||
            !actions.position.empty() || !actions.size.empty() ||
            !actions.monitor.empty() || !actions.opacity.empty() || topmostSet;
-}
-
-// A rule with nothing to match on matches every window on the desktop. That is
-// a legitimate thing to ask for in a rules engine, and almost never what a user
-// meant to ask for, so the load-time journal says so out loud.
-static bool RuleMatchesAnything(const RuleSpec& rule) {
-    return rule.executable.empty() && rule.windowClass.empty() &&
-           rule.title.empty();
 }
 
 struct MatchOutcome {
@@ -1325,13 +1366,15 @@ enum class OpacityDecision {
     SkipAppLayered, // the application layered this window itself: not ours
 };
 
-// `ours` is the window being in the mod's own record, `currentAlpha` is the value
-// that record holds, and `styleSet` says whether the window still carries the
-// layered style right now -- an application is free to clear it, and a window
-// whose style was cleared has to be layered again whatever the value says.
+// `ours` is the window being in the mod's own record and `currentAlpha` is the
+// value that record holds. `styleSet` is whether the window carries the layered
+// style right now. A recorded window whose style was cleared never reaches this
+// question: the caller forgets it instead, the way the topmost claim is dropped
+// when an app removes that bit.
 static OpacityDecision DecideOpacity(bool styleSet, bool ours, int currentAlpha,
                                      int wantedAlpha) {
     if (!styleSet) {
+        // Not layered and not ours: nothing to preserve, so layer it.
         return OpacityDecision::Apply;
     }
     if (!ours) {
@@ -1591,7 +1634,7 @@ static bool g_diagnosticsLog = false;
 // Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
 // numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
 // of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r10-2026-10-21";
+static constexpr PCWSTR kJournalBuild = L"r11-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -1997,13 +2040,6 @@ static void JournalRulesLoaded() {
                                      L"\" problem=\"" + compiled.problem + L"\"");
         }
 
-        if (RuleMatchesAnything(rule)) {
-            AppendDiagnosticsJournal(
-                L"RULE-BROAD i=" + std::to_wstring(i) + L" name=\"" +
-                RuleNameText((int)i) +
-                L"\" (no match fields set: this rule matches every window)");
-        }
-
         for (const std::wstring& problem : DescribeActionProblems(g_ruleActions[i])) {
             AppendDiagnosticsJournal(L"RULE-PROBLEM i=" + std::to_wstring(i) +
                                      L" name=\"" + RuleNameText((int)i) +
@@ -2369,6 +2405,12 @@ struct OpacityRecord {
 
 static std::unordered_map<HWND, OpacityRecord> g_opacityWindows;
 
+// Windows a rule has matched at some point this session. The override exists to
+// stop the mod fighting a window it governs; dragging a window no rule touches
+// must not record anything, or a rule added for that app later would be silently
+// blocked for the rest of the session.
+static std::unordered_set<HWND> g_governedWindows;
+
 static UINT_PTR g_settleTimer = 0;
 
 static void EnsureSettleTimer() {
@@ -2558,6 +2600,16 @@ static void ApplyOpacity(HWND hwnd, int alpha, const WindowFacts& facts,
     const bool ours = mine != g_opacityWindows.end();
     const bool styleSet = (exStyle & WS_EX_LAYERED) != 0;
 
+    // The app cleared the style itself. The record goes with it, exactly as the
+    // topmost claim goes when an app clears that bit: the mod does not spend the
+    // session putting back a style that something else keeps removing. A settings
+    // save is a fresh instruction and applies it again.
+    if (ours && !styleSet) {
+        g_opacityWindows.erase(mine);
+        JournalOpacity(facts.exeName, ruleIndex, source, L"app-cleared", alpha);
+        return;
+    }
+
     const OpacityDecision decision =
         DecideOpacity(styleSet, ours, ours ? mine->second.alpha : 0, alpha);
 
@@ -2582,8 +2634,9 @@ static void ApplyOpacity(HWND hwnd, int alpha, const WindowFacts& facts,
     g_opacityWindows[hwnd] = OpacityRecord{alpha, facts.exeName};
 
     // No re-assert, deliberately: if the application clears the style later,
-    // that is the application's decision about its own window. The journal
-    // records what was set, so "the opacity went back" has an answer.
+    // that is the application's decision about its own window, and the branch
+    // above forgets the record rather than restoring it. The journal records what
+    // was set and what was taken away, so "the opacity went back" has an answer.
     JournalOpacity(facts.exeName, ruleIndex, source,
                    decision == OpacityDecision::AlreadyThere ? L"already-there"
                                                              : L"applied",
@@ -2816,10 +2869,14 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
         if (plan.anything) {
             JournalApply(facts, ruleIndex, source, result, plan.target, current,
                          ERROR_SUCCESS);
-            // By design: a rule with geometry that was blocked stops
-            // here, so opacity is not applied either.
-            return;
         }
+        // Blocked means blocked. Overridden is the user's own placement, refused
+        // is a window that cannot be changed and minimized is a window with no
+        // rectangle worth touching; fading any of them would be the mod doing
+        // something to a window it just said it would leave alone. This used to
+        // return only when the rule had geometry, so a rule with opacity but no
+        // position still faded a window the user had dragged.
+        return;
     }
 
     const bool move =
@@ -2900,6 +2957,12 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
         int alpha = 0;
         if (ParseOpacityValue(actions.opacity, alpha)) {
             ApplyOpacity(hwnd, alpha, facts, ruleIndex, source);
+        } else {
+            // The rules load validates this, so reaching here means the value is
+            // unusable in a way the load did not catch. Giving the level back is
+            // the honest answer: leaving the window at the previous level would
+            // be the mod applying a rule it cannot read.
+            WithdrawOpacity(hwnd, facts.exeName, ruleIndex, source);
         }
     }
 }
@@ -3092,6 +3155,7 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
 
     if (outcome.matched) {
         JournalRuleHit(outcome.ruleIndex, outcome, facts.exeName);
+        g_governedWindows.insert(hwnd);
         if (IsIconic(hwnd)) {
             g_deferredWindows.insert(hwnd);
         } else {
@@ -3109,6 +3173,7 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     // goes back here too.
     WithdrawTopmost(hwnd, facts.exeName, -1, source);
     WithdrawOpacity(hwnd, facts.exeName, -1, source);
+    g_governedWindows.erase(hwnd);
 
     // A window with no title yet is not decided either: the title is the last of
     // its facts to settle, so a rule that matches on the title would have missed
@@ -3231,17 +3296,33 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
         g_topmostWindows.erase(hwnd);
         g_yieldedWindows.erase(hwnd);
         g_opacityWindows.erase(hwnd);
+        g_governedWindows.erase(hwnd);
         g_deferredWindows.erase(hwnd);
         return;
     }
 
+    if (event == EVENT_SYSTEM_MINIMIZEEND) {
+        // The window is back on the screen. A rule that matched it while it was
+        // minimized was deferred rather than dropped, and this is the event that
+        // gives it its chance: restoring a minimized window raises MINIMIZEEND,
+        // not OBJECT_SHOW, so relying on SHOW alone left an app that starts in the
+        // tray with no rule at all.
+        if (g_deferredWindows.count(hwnd)) {
+            EvaluateWindow(hwnd, /*forced=*/true, L"restored");
+        }
+        return;
+    }
+
     if (event == EVENT_SYSTEM_MOVESIZEEND) {
-        // The user has just placed this window by hand. Their intent outranks
-        // the rule for the rest of the session -- the project's first principle,
-        // and the same override the geometry-memory mod applies. Only windows a
-        // rule governs are recorded, so dragging an unrelated window writes
-        // nothing.
-        if (g_evaluatedWindows.count(hwnd) || g_pendingApplies.count(hwnd)) {
+        // The user has just placed this window by hand. Their intent outranks the
+        // rule for the rest of the session -- the project's first principle, and
+        // the same override the geometry-memory mod applies.
+        //
+        // Only a window a rule actually governs is recorded. g_evaluatedWindows
+        // also holds windows that matched nothing, so using it here meant
+        // dragging any window at all marked it, and a rule added for that app
+        // later in the session was silently blocked.
+        if (g_governedWindows.count(hwnd) || g_pendingApplies.count(hwnd)) {
             g_pendingApplies.erase(hwnd);
             if (g_overriddenWindows.insert(hwnd).second) {
                 AppendDiagnosticsJournal(
@@ -3259,12 +3340,14 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
 
 static HWINEVENTHOOK g_hookWindows = nullptr;
 static HWINEVENTHOOK g_hookMoveSizeEnd = nullptr;
+static HWINEVENTHOOK g_hookMinimizeEnd = nullptr;
 static HWINEVENTHOOK g_hookForeground = nullptr;
 static std::atomic<DWORD> g_eventThreadId{0};
 static HANDLE g_eventThread = nullptr;
 
 static void InstallHooks() {
-    if (g_hookWindows && g_hookMoveSizeEnd && g_hookForeground) {
+    if (g_hookWindows && g_hookMoveSizeEnd && g_hookMinimizeEnd &&
+        g_hookForeground) {
         return;
     }
 
@@ -3289,6 +3372,16 @@ static void InstallHooks() {
                             nullptr, WinEventProc, 0, 0,
                             WINEVENT_OUTOFCONTEXT);
     }
+    if (!g_hookMinimizeEnd) {
+        // Restoring a minimized window raises MINIMIZEEND, not OBJECT_SHOW, so a
+        // window whose rule was deferred while it was minimized needs this to get
+        // its chance. Without it, an app that starts in the tray never gets its
+        // rule at all, which is the case the deferral exists for.
+        g_hookMinimizeEnd =
+            SetWinEventHook(EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND,
+                            nullptr, WinEventProc, 0, 0,
+                            WINEVENT_OUTOFCONTEXT);
+    }
     if (!g_hookForeground) {
         // One event, not a range, and only for the yield path: a fullscreen app
         // taking a monitor, and giving it back. The callback returns immediately
@@ -3300,7 +3393,8 @@ static void InstallHooks() {
                             WINEVENT_OUTOFCONTEXT);
     }
 
-    if (!g_hookWindows || !g_hookMoveSizeEnd || !g_hookForeground) {
+    if (!g_hookWindows || !g_hookMoveSizeEnd || !g_hookMinimizeEnd ||
+        !g_hookForeground) {
         Wh_Log(L"SetWinEventHook failed (last error %lu)", GetLastError());
     } else {
         Wh_Log(L"window event hooks installed");
@@ -3315,6 +3409,10 @@ static void UninstallHooks() {
     if (g_hookMoveSizeEnd) {
         UnhookWinEvent(g_hookMoveSizeEnd);
         g_hookMoveSizeEnd = nullptr;
+    }
+    if (g_hookMinimizeEnd) {
+        UnhookWinEvent(g_hookMinimizeEnd);
+        g_hookMinimizeEnd = nullptr;
     }
     if (g_hookForeground) {
         UnhookWinEvent(g_hookForeground);
@@ -3417,6 +3515,7 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             g_topmostWindows.clear();
             g_yieldedWindows.clear();
             g_opacityWindows.clear();
+            g_governedWindows.clear();
             g_deferredWindows.clear();
             g_monitors.clear();
             g_noMatchCounts.clear();
