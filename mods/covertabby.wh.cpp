@@ -21,7 +21,7 @@
 # CoverTabby
 Replaces the alt+tab with a modded kind of the stardock alt tabby's layout.
 
-By **LTHC (LoreTheHolyChip)**. Version **1.0**.
+By **LTHC (LoreTheHolyChip)**. Version **1.1**.
 
 Win+Tab integration is experimental and disabled by default. Alt+Tab remains enabled.
 Explorer forwards Alt+Tab to the switcher running in Windhawk’s own tool process. No separate application needs to be installed.
