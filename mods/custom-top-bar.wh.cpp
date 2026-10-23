@@ -2,13 +2,13 @@
 // @id              custom-top-bar
 // @name            Custom Top Bar
 // @name:ru-RU      Custom Top Bar
-// @description     A customizable extra bar: apps, clock, calendar, weather, Wi-Fi, volume, keyboard layout, battery, media player, timers and more
-// @description:ru-RU Настраиваемая дополнительная панель: приложения, часы, календарь, погода, Wi-Fi, громкость, раскладка, батарея, плеер, таймеры и многое другое
-// @version         0.14
+// @description     A customizable extra bar: apps, clock, calendar, Wi-Fi, volume, keyboard layout, battery, media player, timers and more
+// @description:ru-RU Настраиваемая дополнительная панель: приложения, часы, календарь, Wi-Fi, громкость, раскладка, батарея, плеер, таймеры и многое другое
+// @version         0.15
 // @author          MrAllayi
 // @github          https://github.com/mrallayi
-// @include         explorer.exe
-// @compilerOptions -lgdi32 -luser32 -lshell32 -liphlpapi -lkernel32 -lwinhttp -lwlanapi -lbthprops -lshcore -ldwmapi -lole32 -lpowrprof -ladvapi32 -lws2_32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -luser32 -lshell32 -liphlpapi -lkernel32 -lwlanapi -lbthprops -lshcore -ldwmapi -lole32 -lpowrprof -ladvapi32 -lws2_32 -DWIN32_LEAN_AND_MEAN
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -20,7 +20,7 @@ An additional bar (top or bottom of the screen). The Windows taskbar stays
 where it is.
 
 The settings are split into sections: layout, size, colors, fonts, apps,
-clock, right-side features, Wi-Fi and Bluetooth, weather, timers, custom
+clock, right-side features, Wi-Fi and Bluetooth, timers, custom
 items.
 
 **Layout** is chosen in the settings ("Item arrangement"):
@@ -43,7 +43,7 @@ Task Manager, lock, sleep, restart, etc.).
 **Clock:** a click opens a calendar with events and time zones, a right
 click shows the list of time zones.
 
-**Features:** CPU / RAM / network, weather, "Hidden icons" button, menu
+**Features:** CPU / RAM / network, "Hidden icons" button, menu
 button (three bars), keyboard layout (language), Wi-Fi, Bluetooth, volume,
 battery, timers (timer, stopwatch, Pomodoro, alarm), notifications,
 right-side app icons, custom text / image.
@@ -53,6 +53,9 @@ right-side app icons, custom text / image.
   remembered.
 
 ## Notes
+* The mod runs in its own process (a Windhawk tool mod) and not inside
+  Explorer, so it cannot affect Explorer's stability. If Explorer restarts,
+  the bar is recreated automatically. The mod does not use the network.
 * The menu button (three bars) sits right after the "Hidden icons" arrow and
   is enabled by default. A click opens the Windows 11 quick settings
   (network, sound, brightness) - the same window as the network and sound
@@ -77,8 +80,6 @@ right-side app icons, custom text / image.
   ico, bmp.
 * Win: when the Win key is pressed, a hidden bar smoothly appears for about
   4 seconds.
-* Weather is taken from the free Open-Meteo service (no key needed). Enter a
-  city or coordinates.
 * The mini player detects the track from the player window title (for
   example Spotify: "Artist - Title") and controls players with media keys.
 * The notifications button opens the notification center (and resets the
@@ -440,32 +441,6 @@ right-side app icons, custom text / image.
     $name:ru-RU: "Bluetooth: показывать название устройства"
   $name: "8. Wi-Fi and Bluetooth"
   $name:ru-RU: "8. Wi-Fi и Bluetooth"
-- weather:
-  - showWeather: false
-    $name: Show weather
-    $name:ru-RU: Показывать погоду
-  - weatherCity: ""
-    $name: City
-    $name:ru-RU: Город
-    $description: For example Amsterdam. Used if coordinates are not set.
-    $description:ru-RU: Например Amsterdam. Используется, если координаты не заданы.
-  - weatherLat: ""
-    $name: Latitude (optional)
-    $name:ru-RU: Широта (необязательно)
-  - weatherLon: ""
-    $name: Longitude (optional)
-    $name:ru-RU: Долгота (необязательно)
-  - weatherUnits: c
-    $name: Units
-    $name:ru-RU: Единицы
-    $options:
-    - c: Celsius
-    - f: Fahrenheit
-    $options:ru-RU:
-    - c: Цельсий
-    - f: Фаренгейт
-  $name: "9. Weather"
-  $name:ru-RU: "9. Погода"
 - timers:
   - showTimer: true
     $name: Timer / stopwatch / Pomodoro / alarm
@@ -482,8 +457,8 @@ right-side app icons, custom text / image.
   - alarmEnabled: false
     $name: Alarm enabled
     $name:ru-RU: Будильник включён
-  $name: "10. Timers and alarm"
-  $name:ru-RU: "10. Таймеры и будильник"
+  $name: "9. Timers and alarm"
+  $name:ru-RU: "9. Таймеры и будильник"
 - custom:
   - rightApp: ""
     $name: Right-side app (icon)
@@ -505,14 +480,15 @@ right-side app icons, custom text / image.
   - rightImageSize: 22
     $name: Custom image height (px)
     $name:ru-RU: Высота своей картинки (px)
-  $name: "11. Custom text, image, right-side apps"
-  $name:ru-RU: "11. Свой текст, картинка, приложения справа"
+  $name: "10. Custom text, image, right-side apps"
+  $name:ru-RU: "10. Свой текст, картинка, приложения справа"
 */
 // ==/WindhawkModSettings==
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <ole2.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <shellapi.h>
@@ -522,7 +498,6 @@ right-side app icons, custom text / image.
 #include <dwmapi.h>
 #include <wlanapi.h>
 #include <bluetoothapis.h>
-#include <winhttp.h>
 #include <powrprof.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
@@ -532,6 +507,7 @@ right-side app icons, custom text / image.
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -576,8 +552,7 @@ struct Settings {
                  layout = L"appsLeft", winButton = L"none", pinDisplay = L"both",
                  menuPlace = L"bar";
     std::wstring bg, text, borderColor, effect, font, clockFormat, hourFormat,
-        customTime, dateFormat, language, weatherCity, weatherLat, weatherLon,
-        weatherUnits, mediaProcesses, alarmTime, rightApp, rightText, rightImage;
+        customTime, dateFormat, language, mediaProcesses, alarmTime, rightApp, rightText, rightImage;
     int barHeight = 49, sideWidth = 180, padding = 12, itemSpacing = 12,
         mLeft = 0, mRight = 0, mTop = 0, mBottom = 0, radius = 0, yOffset = 0, opacity = 255, borderWidth = 0,
         shadowSize = 0, shadowOpacity = 120, fontSize = 11, clockFontSize = 12,
@@ -587,7 +562,7 @@ struct Settings {
          showSeconds = false, weekMonday = true, showCpu = true, showMem = true,
          showNet = true, showBattery = true, showWifi = true, wifiName = true,
          wifiSignal = true, wifiIp = false, showBt = true, btNames = true,
-         showWeather = false, showMedia = false, showTimer = true,
+         showMedia = false, showTimer = true,
          alarmEnabled = false, showBell = true,
          showTray = true, showMenu = true, showLang = true, showVolume = true;
     std::vector<std::wstring> pinned, rightApps;
@@ -617,7 +592,6 @@ struct Data {
     int wifiSignal = 0;
     int btCount = 0;
     std::wstring btNames;
-    std::wstring weather, weatherSym;
     std::wstring track;
     int volPct = -1;
     bool volMuted = false;
@@ -632,10 +606,9 @@ struct Lock {
 
 static std::atomic<bool> g_stop{false};
 static std::atomic<int> g_workers{0};
-static std::atomic<bool> g_btBusy{false}, g_weatherBusy{false};
+static std::atomic<bool> g_btBusy{false};
 static HANDLE g_thread = nullptr;
-static HWND g_ctl = nullptr;
-static std::atomic<ULONGLONG> g_weatherNext{0};
+static std::atomic<HWND> g_ctl{nullptr};
 static ULONGLONG g_btNext = 0;
 static int g_notifCount = 0;
 static bool g_toastPrev = false;
@@ -644,7 +617,7 @@ static bool g_toastPrev = false;
 
 enum Act {
     A_NONE, A_PIN, A_CLOCK, A_MPREV, A_MPLAY, A_MNEXT, A_MTRACK, A_STATS,
-    A_WEATHER, A_WIFI, A_BT, A_BATTERY, A_TIMER, A_BELL, A_START, A_RIGHTAPP,
+    A_WIFI, A_BT, A_BATTERY, A_TIMER, A_BELL, A_START, A_RIGHTAPP,
     A_LANG, A_VOLUME, A_TRAY, A_CUSTOM, A_MENU
 };
 
@@ -716,6 +689,15 @@ struct Hit {
 
 static int Sc(const Bar* b, int v) { return MulDiv(v, b->dpi, 96); }
 
+// Handle of this mod's own module (used for window classes and windows).
+static HINSTANCE ModInst() {
+    static HINSTANCE h = nullptr;
+    if (!h)
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCWSTR)&ModInst, (HMODULE*)&h);
+    return h;
+}
+
 // ----------------------------------------------------------------- helpers --
 
 static std::wstring TakeString(PCWSTR s) {
@@ -777,14 +759,6 @@ static std::wstring ExpandPath(const std::wstring& p) {
     DWORD n = ExpandEnvironmentStringsW(p.c_str(), buf, ARRAYSIZE(buf));
     if (n == 0 || n > ARRAYSIZE(buf)) return p;
     return buf;
-}
-
-static std::string ToUtf8(const std::wstring& w) {
-    if (w.empty()) return "";
-    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
-    std::string s(n, 0);
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &s[0], n, nullptr, nullptr);
-    return s;
 }
 
 static std::wstring FromUtf8(const char* s, int len) {
@@ -928,21 +902,14 @@ static void LoadSettings() {
     s.showBt = I(L"network.showBluetooth") != 0;
     s.btNames = I(L"network.btShowNames") != 0;
 
-    // 9. Weather
-    s.showWeather = I(L"weather.showWeather") != 0;
-    s.weatherCity = Trim(S(L"weather.weatherCity"));
-    s.weatherLat = Trim(S(L"weather.weatherLat"));
-    s.weatherLon = Trim(S(L"weather.weatherLon"));
-    s.weatherUnits = S(L"weather.weatherUnits");
-
-    // 10. Timers
+    // 9. Timers
     s.showTimer = I(L"timers.showTimer") != 0;
     s.pomoWork = I(L"timers.pomodoroWork");
     s.pomoBreak = I(L"timers.pomodoroBreak");
     s.alarmTime = Trim(S(L"timers.alarmTime"));
     s.alarmEnabled = I(L"timers.alarmEnabled") != 0;
 
-    // 11. Custom items
+    // 10. Custom items
     s.rightApp = Trim(S(L"custom.rightApp"));
     s.rightText = S(L"custom.rightText");
     s.rightTextSize = I(L"custom.rightTextSize");
@@ -1240,14 +1207,13 @@ static void SavePinOrder() {
 
 // ------------------------------------------------- order of right-side features --
 
-static const wchar_t* kDefTokens[] = {L"stats", L"weather", L"tray", L"menu", L"lang", L"wifi", L"bt",
+static const wchar_t* kDefTokens[] = {L"stats", L"tray", L"menu", L"lang", L"wifi", L"bt",
                                       L"volume", L"battery", L"timer", L"bell", L"apps", L"custom"};
 static std::vector<std::wstring> g_rightOrder;
 
 static const wchar_t* TokenOf(Act a) {
     switch (a) {
         case A_STATS: return L"stats";
-        case A_WEATHER: return L"weather";
         case A_TRAY: return L"tray";
         case A_MENU: return L"menu";
         case A_LANG: return L"lang";
@@ -1690,13 +1656,27 @@ static void UpdateWifi() {
 
 // ------------------------------------------------------------ worker threads --
 
+static std::mutex g_workersMutex;
+static std::vector<HANDLE> g_workerThreads;
+
+// Every worker handle is kept so that unloading can wait for all of them.
 static void StartWorker(LPTHREAD_START_ROUTINE fn, LPVOID arg) {
     g_workers++;
     HANDLE h = CreateThread(nullptr, 0, fn, arg, 0, nullptr);
-    if (h)
-        CloseHandle(h);
-    else
+    if (!h) {
         g_workers--;
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_workersMutex);
+    for (size_t i = 0; i < g_workerThreads.size();) {  // drop finished threads
+        if (WaitForSingleObject(g_workerThreads[i], 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_workerThreads[i]);
+            g_workerThreads.erase(g_workerThreads.begin() + i);
+        } else {
+            i++;
+        }
+    }
+    g_workerThreads.push_back(h);
 }
 
 static DWORD WINAPI BtWorker(LPVOID) {
@@ -1741,146 +1721,6 @@ static DWORD WINAPI WifiWorker(LPVOID) {
     g_wifiBusy = false;
     g_workers--;
     return 0;
-}
-
-static std::string HttpGet(const wchar_t* host, const std::wstring& path) {
-    std::string out;
-    HINTERNET s = WinHttpOpen(L"WHTopBar/0.3", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                              WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!s) return out;
-    WinHttpSetTimeouts(s, 5000, 5000, 8000, 8000);
-    HINTERNET c = WinHttpConnect(s, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    if (c) {
-        HINTERNET r = WinHttpOpenRequest(c, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
-                                         WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
-        if (r) {
-            if (WinHttpSendRequest(r, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-                WinHttpReceiveResponse(r, nullptr)) {
-                for (;;) {
-                    DWORD avail = 0;
-                    if (!WinHttpQueryDataAvailable(r, &avail) || avail == 0) break;
-                    std::string chunk(avail, 0);
-                    DWORD rd = 0;
-                    if (!WinHttpReadData(r, &chunk[0], avail, &rd) || rd == 0) break;
-                    out.append(chunk.data(), rd);
-                    if (out.size() > 200000) break;
-                }
-            }
-            WinHttpCloseHandle(r);
-        }
-        WinHttpCloseHandle(c);
-    }
-    WinHttpCloseHandle(s);
-    return out;
-}
-
-static bool JsonNum(const std::string& js, size_t from, const char* key, double* out) {
-    size_t p = js.find(key, from);
-    if (p == std::string::npos) return false;
-    p = js.find(':', p);
-    if (p == std::string::npos) return false;
-    *out = strtod(js.c_str() + p + 1, nullptr);
-    return true;
-}
-
-static std::wstring UrlEncode(const std::wstring& w) {
-    std::string u = ToUtf8(w);
-    std::wstring r;
-    wchar_t buf[8];
-    for (unsigned char c : u) {
-        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            r += (wchar_t)c;
-        } else {
-            swprintf(buf, 8, L"%%%02X", c);
-            r += buf;
-        }
-    }
-    return r;
-}
-
-static const wchar_t* WeatherSymbol(int code) {
-    if (code == 0) return L"\u2600";
-    if (code <= 2) return L"\u26C5";
-    if (code == 3 || code == 45 || code == 48) return L"\u2601";
-    if (code >= 71 && code <= 77) return L"\u2744";
-    if (code == 85 || code == 86) return L"\u2744";
-    if (code >= 95) return L"\u26A1";
-    return L"\u2614";
-}
-
-struct WeatherReq {
-    std::wstring city, lat, lon, units;
-    int gen;
-};
-static std::atomic<int> g_weatherGen{0};
-
-static DWORD WINAPI WeatherWorker(LPVOID arg) {
-    WeatherReq* rq = (WeatherReq*)arg;
-    static std::wstring cachedCity, cachedLat, cachedLon;
-    std::wstring lat = rq->lat, lon = rq->lon;
-    bool ok = false;
-    if ((lat.empty() || lon.empty()) && !rq->city.empty()) {
-        if (cachedCity == rq->city && !cachedLat.empty()) {
-            lat = cachedLat;
-            lon = cachedLon;
-        } else {
-            std::string js = HttpGet(L"geocoding-api.open-meteo.com",
-                                     L"/v1/search?count=1&language=en&format=json&name=" + UrlEncode(rq->city));
-            double la = 0, lo = 0;
-            if (JsonNum(js, 0, "\"latitude\"", &la) && JsonNum(js, 0, "\"longitude\"", &lo)) {
-                wchar_t b1[32], b2[32];
-                swprintf(b1, 32, L"%.4f", la);
-                swprintf(b2, 32, L"%.4f", lo);
-                lat = b1;
-                lon = b2;
-                cachedCity = rq->city;
-                cachedLat = lat;
-                cachedLon = lon;
-            }
-        }
-    }
-    if (!lat.empty() && !lon.empty()) {
-        std::wstring path = L"/v1/forecast?current=temperature_2m,weather_code&latitude=" + lat +
-                            L"&longitude=" + lon +
-                            (rq->units == L"f" ? L"&temperature_unit=fahrenheit" : L"&temperature_unit=celsius");
-        std::string js = HttpGet(L"api.open-meteo.com", path);
-        size_t c = js.find("\"current\":{");
-        double t = 0, code = 0;
-        if (c != std::string::npos && JsonNum(js, c, "\"temperature_2m\"", &t) &&
-            JsonNum(js, c, "\"weather_code\"", &code)) {
-            if (rq->gen == g_weatherGen) {  // settings did not change while the request was in progress
-                wchar_t buf[48];
-                swprintf(buf, 48, L"%.0f\u00B0", t);
-                Lock l;
-                g_d.weather = buf;
-                g_d.weatherSym = WeatherSymbol((int)code);
-            }
-            ok = true;
-        }
-    }
-    if (rq->gen != g_weatherGen)
-        g_weatherNext = 0;  // settings changed: request again immediately
-    else
-        g_weatherNext = GetTickCount64() + (ok ? 15ULL * 60 * 1000 : 60ULL * 1000);  // on error retry in a minute
-    delete rq;
-    g_weatherBusy = false;
-    g_workers--;
-    return 0;
-}
-
-static void StartWeather() {
-    if (g_weatherBusy.exchange(true)) return;
-    WeatherReq* rq = new WeatherReq{g_s.weatherCity, g_s.weatherLat, g_s.weatherLon, g_s.weatherUnits,
-                                    g_weatherGen.load()};
-    g_workers++;
-    HANDLE h = CreateThread(nullptr, 0, WeatherWorker, rq, 0, nullptr);
-    if (h) {
-        CloseHandle(h);
-    } else {
-        g_workers--;
-        delete rq;
-        g_weatherBusy = false;
-    }
 }
 
 // -------------------------------------------------------------------- media --
@@ -2100,15 +1940,13 @@ static std::wstring BuildClockText() {
 static bool BuildContent() {
     std::vector<Elem> L, R;
     const wchar_t* sep = g_vertical ? L"\n" : L"    ";
-    std::wstring weather, weatherSym, btNames, track, ssid, ip;
+    std::wstring btNames, track, ssid, ip;
     int btCount, wifiSignal, volPct;
     bool wifiUp, volMuted;
     {
         Lock l;
         volPct = g_d.volPct;
         volMuted = g_d.volMuted;
-        weather = g_d.weather;
-        weatherSym = g_d.weatherSym;
         btNames = g_d.btNames;
         btCount = g_d.btCount;
         track = g_d.track;
@@ -2174,14 +2012,6 @@ static bool BuildContent() {
         Elem e;
         e.act = A_STATS;
         e.text = t;
-        R.push_back(e);
-    }
-    if (g_s.showWeather && !weather.empty()) {
-        Elem e;
-        e.act = A_WEATHER;
-        e.glyph = weatherSym;
-        e.font = 1;
-        e.text = weather;
         R.push_back(e);
     }
     // --- replacement for the right part of the taskbar: hidden icons, menu, language, network, sound, battery
@@ -3395,7 +3225,7 @@ static void ToggleCalendar(Bar* b, const RECT& clockRc) {
     x = std::max((int)b->monRc.left, std::min(x, (int)b->monRc.right - w));
     y = std::max((int)b->monRc.top, std::min(y, (int)b->monRc.bottom - h));
     g_cal = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kCalClass, L"WH Calendar", WS_POPUP, x, y, w, h,
-                            nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+                            nullptr, nullptr, ModInst(), nullptr);
     if (g_cal) {
         ShowWindow(g_cal, SW_SHOW);
         SetForegroundWindow(g_cal);
@@ -3404,6 +3234,23 @@ static void ToggleCalendar(Bar* b, const RECT& clockRc) {
 }
 
 // ----------------------------------------------------------------- actions ----
+
+// While a menu is open the bar windows must not be destroyed: rebuilds, setting
+// reloads and unloading are postponed until the menu closes.
+static int g_modalDepth = 0;
+static bool g_reloadPending = false, g_closePending = false;
+
+static void OnModalEnd() {
+    if (g_modalDepth > 0) return;
+    HWND c = g_ctl;
+    if (!c) return;
+    if (g_closePending) {
+        PostMessageW(c, WM_CLOSE, 0, 0);
+    } else if (g_reloadPending) {
+        g_reloadPending = false;
+        PostMessageW(c, WM_RELOAD, 0, 0);
+    }
+}
 
 static void PopupMenuAt(Bar* b, HMENU m, const RECT& rc, int* cmd) {
     UINT flags = TPM_RETURNCMD | TPM_NONOTIFY;
@@ -3417,9 +3264,13 @@ static void PopupMenuAt(Bar* b, HMENU m, const RECT& rc, int* cmd) {
         x = b->pos.left + rc.left;
         y = b->pos.bottom;
     }
-    SetForegroundWindow(b->hwnd);
-    *cmd = TrackPopupMenu(m, flags, x, y, 0, b->hwnd, nullptr);
-    PostMessageW(b->hwnd, WM_NULL, 0, 0);
+    HWND hw = b->hwnd;  // "b" may be freed while the menu is open, so it is not used after this point
+    SetForegroundWindow(hw);
+    g_modalDepth++;
+    *cmd = TrackPopupMenu(m, flags, x, y, 0, hw, nullptr);
+    g_modalDepth--;
+    PostMessageW(hw, WM_NULL, 0, 0);
+    OnModalEnd();
 }
 
 static void TimerMenu(Bar* b, const RECT& rc) {
@@ -3551,6 +3402,22 @@ static void SendKeyPress(WORD key) {
     SendInput(2, in, sizeof(INPUT));
 }
 
+static std::atomic<bool> g_powerAsk{false};
+
+static DWORD WINAPI PowerConfirmWorker(LPVOID arg) {
+    bool restart = (int)(INT_PTR)arg == 304;
+    bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+    if (!g_stop &&
+        MessageBoxW(nullptr, restart ? L"Restart the computer?" : L"Shut down the computer?", L"Top Bar",
+                    MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND) == IDYES &&
+        !g_stop)
+        ShellExecuteW(nullptr, L"open", L"shutdown.exe", restart ? L"/r /t 0" : L"/s /t 0", nullptr, SW_HIDE);
+    if (com) CoUninitialize();
+    g_powerAsk = false;
+    g_workers--;
+    return 0;
+}
+
 static void Screenshot() {
     HINSTANCE r = ShellExecuteW(nullptr, L"open", L"ms-screenclip:", nullptr, nullptr, SW_SHOWNORMAL);
     if ((INT_PTR)r <= 32) SendWinCombo('S', true);  // fallback: Win+Shift+S
@@ -3581,14 +3448,8 @@ static void QuickMenu(Bar* b, const RECT& rc) {
         case 303: SleepNow(); break;
         case 309: SetSuspendState(TRUE, FALSE, FALSE); break;
         case 304:
-            if (MessageBoxW(nullptr, L"Restart the computer?", L"Top Bar",
-                            MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND) == IDYES)
-                ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/r /t 0", nullptr, SW_HIDE);
-            break;
         case 305:
-            if (MessageBoxW(nullptr, L"Shut down the computer?", L"Top Bar",
-                            MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND) == IDYES)
-                ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/s /t 0", nullptr, SW_HIDE);
+            if (!g_powerAsk.exchange(true)) StartWorker(PowerConfirmWorker, (LPVOID)(INT_PTR)cmd);
             break;
         case 306: ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/l", nullptr, SW_HIDE); break;
         case 307: ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
@@ -3812,7 +3673,6 @@ static void Activate(Bar* b, const Hit& h) {
         case A_MPLAY: MediaKey(VK_MEDIA_PLAY_PAUSE); break;
         case A_MNEXT: MediaKey(VK_MEDIA_NEXT_TRACK); break;
         case A_STATS: ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
-        case A_WEATHER: g_weatherNext = 0; break;
         case A_WIFI: ShellExecuteW(nullptr, L"open", L"ms-settings:network-wifi", nullptr, nullptr, SW_SHOWNORMAL); break;
         case A_BT: ShellExecuteW(nullptr, L"open", L"ms-settings:bluetooth", nullptr, nullptr, SW_SHOWNORMAL); break;
         case A_BATTERY: ShellExecuteW(nullptr, L"open", L"ms-settings:batterysaver", nullptr, nullptr, SW_SHOWNORMAL); break;
@@ -4258,7 +4118,11 @@ static LRESULT CALLBACK BarProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             Hit h = HitTest(b, pt);
             // compare the item itself, not its index: the item list may be updated between press and release
             const Elem* eu = ElemOf(h);
-            if (eu && b->downKey >= 0 && KeyOf(*eu) == b->downKey) Activate(b, h);
+            if (eu && b->downKey >= 0 && KeyOf(*eu) == b->downKey) {
+                Activate(b, h);
+                b = BarOf(hwnd);  // the bar may have been rebuilt while a menu was open
+                if (!b) return 0;
+            }
             b->downKey = -1;
             return 0;
         }
@@ -4352,7 +4216,7 @@ static void CreateBars() {
     std::vector<HMONITOR> mons;
     EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&mons);
     HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
-    HINSTANCE hi = GetModuleHandleW(nullptr);
+    HINSTANCE hi = ModInst();
     for (HMONITOR hm : mons) {
         if (g_s.monitors != L"all" && hm != primary) continue;
         Bar* b = new Bar();
@@ -4530,18 +4394,11 @@ static void PollLang() {
 
 static void ApplyAll() {
     LoadSettings();
-    g_weatherGen++;
-    {
-        Lock l;
-        g_d.weather.clear();
-        g_d.weatherSym.clear();
-    }
     ResolveColors();
     g_t.alarmOn = g_s.alarmEnabled;
     g_t.lastAlarmDay = -1;
     BuildIcons();
     LoadRightOrder();
-    g_weatherNext = 0;
     g_btNext = 0;
     UpdateStats();
     UpdateWifi();
@@ -4556,10 +4413,6 @@ static void OnTick() {
     UpdateTimers();
     UpdateMedia();
     ULONGLONG now = GetTickCount64();
-    if (g_s.showWeather && now >= g_weatherNext) {
-        g_weatherNext = now + 15 * 60 * 1000;
-        StartWeather();
-    }
     if (g_s.showBt && now >= g_btNext) {
         g_btNext = now + 15000;
         if (!g_btBusy.exchange(true)) StartWorker(BtWorker, nullptr);
@@ -4596,7 +4449,13 @@ static void OnSlow() {
     FlushBars();
 }
 
+static UINT g_msgTaskbarCreated = 0;
+
 static LRESULT CALLBACK CtlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (g_msgTaskbarCreated && msg == g_msgTaskbarCreated) {  // Explorer restarted: the appbar must be re-registered
+        SetTimer(hwnd, TM_REBUILD, 1000, nullptr);
+        return 0;
+    }
     switch (msg) {
         case WM_TIMER:
             if (wp == TM_TICK) OnTick();
@@ -4609,12 +4468,25 @@ static LRESULT CALLBACK CtlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             else if (wp == TM_ANIM) AnimTick();
             else if (wp == TM_KEY) PollWinKey();
             else if (wp == TM_REBUILD) {
+                if (g_modalDepth > 0) return 0;  // a menu is open: try again on the next tick
                 KillTimer(hwnd, TM_REBUILD);
                 CreateBars();
             }
             return 0;
         case WM_RELOAD:
+            if (g_modalDepth > 0) {  // a menu is open: apply the new settings after it closes
+                g_reloadPending = true;
+                return 0;
+            }
             ApplyAll();
+            return 0;
+        case WM_CLOSE:
+            if (g_modalDepth > 0) {  // close the menu first, then shut down
+                g_closePending = true;
+                EndMenu();
+                return 0;
+            }
+            DestroyWindow(hwnd);
             return 0;
         case WM_DISPLAYCHANGE:
             SetTimer(hwnd, TM_REBUILD, 500, nullptr);
@@ -4639,54 +4511,49 @@ static LRESULT CALLBACK CtlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static DWORD WINAPI MainThread(LPVOID) {
-    DWORD pid = 0;
-    for (int i = 0; i < 120 && !g_stop; i++) {
-        HWND sh = GetShellWindow();
-        if (sh) {
-            GetWindowThreadProcessId(sh, &pid);
-            break;
-        }
-        Sleep(500);
-    }
-    if (g_stop || pid != GetCurrentProcessId()) return 0;
+    if (g_stop) return 0;
 
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     bool ole = SUCCEEDED(OleInitialize(nullptr));
+    g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    HINSTANCE hi = GetModuleHandleW(nullptr);
+    HINSTANCE hi = ModInst();
     WNDCLASSW wc{};
     wc.hInstance = hi;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.lpfnWndProc = BarProc;
-    wc.lpszClassName = kBarClass;
-    RegisterClassW(&wc);
-    wc.lpfnWndProc = FxProc;
-    wc.lpszClassName = kFxClass;
-    RegisterClassW(&wc);
-    wc.lpfnWndProc = CalProc;
-    wc.lpszClassName = kCalClass;
-    wc.style = CS_DROPSHADOW;
-    RegisterClassW(&wc);
-    wc.style = 0;
-    wc.lpfnWndProc = CtlProc;
-    wc.lpszClassName = kCtlClass;
-    RegisterClassW(&wc);
+    auto reg = [&](WNDPROC proc, const wchar_t* name, UINT style) {
+        wc.lpfnWndProc = proc;
+        wc.lpszClassName = name;
+        wc.style = style;
+        return RegisterClassW(&wc) != 0;
+    };
+    bool classesOk = reg(BarProc, kBarClass, 0) && reg(FxProc, kFxClass, 0) &&
+                     reg(CalProc, kCalClass, CS_DROPSHADOW) && reg(CtlProc, kCtlClass, 0);
 
-    g_ctl = CreateWindowExW(WS_EX_TOOLWINDOW, kCtlClass, L"WH Top Bar Controller", WS_POPUP, 0, 0, 0, 0,
-                            nullptr, nullptr, hi, nullptr);
-    if (g_ctl) {
-        ApplyAll();
-        SetTimer(g_ctl, TM_TICK, 1000, nullptr);
-        SetTimer(g_ctl, TM_SLOW, 5000, nullptr);
-        SetTimer(g_ctl, TM_FS, 500, nullptr);
-        SetTimer(g_ctl, TM_KEY, 60, nullptr);
-        StartWorker(VolumeWorker, nullptr);
-        MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    if (classesOk) {
+        g_ctl = CreateWindowExW(WS_EX_TOOLWINDOW, kCtlClass, L"WH Top Bar Controller", WS_POPUP, 0, 0, 0, 0,
+                                nullptr, nullptr, hi, nullptr);
+        HWND ctl = g_ctl;
+        if (ctl) {
+            if (g_stop) {
+                DestroyWindow(ctl);  // unloading was requested while the thread was starting
+            } else {
+                ApplyAll();
+                SetTimer(ctl, TM_TICK, 1000, nullptr);
+                SetTimer(ctl, TM_SLOW, 5000, nullptr);
+                SetTimer(ctl, TM_FS, 500, nullptr);
+                SetTimer(ctl, TM_KEY, 60, nullptr);
+                StartWorker(VolumeWorker, nullptr);
+            }
+            MSG msg;
+            while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            g_ctl = nullptr;
         }
-        g_ctl = nullptr;
+    } else {
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
     }
     ClearIcons();
     UnregisterClassW(kBarClass, hi);
@@ -4699,30 +4566,226 @@ static DWORD WINAPI MainThread(LPVOID) {
 
 // ------------------------------------------------------------ Windhawk API ----
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
     InitializeCriticalSection(&g_cs);
     g_stop = false;
     g_thread = CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
+    if (!g_thread) {
+        DeleteCriticalSection(&g_cs);
+        return FALSE;
+    }
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
     g_stop = true;
     HWND h = g_ctl;
     if (h) PostMessageW(h, WM_CLOSE, 0, 0);
+
+    // Wait for the UI thread and for every worker thread. The wait is bounded because
+    // a stuck file system call must not hang Windhawk; the tool process exits right
+    // after this function returns, so nothing keeps running inside the mod.
+    bool clean = true;
     if (g_thread) {
-        WaitForSingleObject(g_thread, 8000);
+        if (WaitForSingleObject(g_thread, 10000) != WAIT_OBJECT_0) clean = false;
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    for (int i = 0; i < 100 && g_workers > 0; i++) Sleep(100);
-    DeleteCriticalSection(&g_cs);
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_workersMutex);
+        threads.swap(g_workerThreads);
+    }
+    for (HANDLE t : threads) {
+        if (WaitForSingleObject(t, 5000) != WAIT_OBJECT_0) clean = false;
+        CloseHandle(t);
+    }
+    if (clean) DeleteCriticalSection(&g_cs);
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     HWND h = g_ctl;
     if (h) PostMessageW(h, WM_RELOAD, 0, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
