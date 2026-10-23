@@ -192,8 +192,8 @@ void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
         WPARAM scrollCmd = (deltaY > 0) ? SB_LINEUP : SB_LINEDOWN;
         for (int i = 0; i < totalSteps; ++i) {
             PostMessageW(hTarget, WM_VSCROLL, scrollCmd, 0);
-            PostMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
         }
+        PostMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
         return;
     }
     SendMaskedWheelAsync(deltaY);
