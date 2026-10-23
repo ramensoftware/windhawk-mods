@@ -103,9 +103,9 @@ make it open a second window. Thanks!
   **Animation style** between the classic and modern (Potassiumuncher) genie.
 
 ## Features
-- **Real genie warp.** The window is rendered as a Direct2D mesh whose vertices
-  follow the macOS lamp curve, so the whole frame necks down and funnels into the
-  taskbar icon instead of just shrinking.
+- **Real genie warp.** The window necks down and funnels into the taskbar icon
+  instead of just shrinking - row by row in the classic style, or as a Direct2D
+  mesh following the macOS lamp curve in the modern style.
 - **Actually smooth.** Progress is driven by real elapsed time, and frames are
   paced at twice the display's refresh rate (via a high-resolution timer), so the
   compositor always has a fresh frame ready at each vsync. No system animation
@@ -127,7 +127,8 @@ make it open a second window. Thanks!
 The mod hooks `ShowWindow`, `ShowWindowAsync`, `SetWindowPlacement`, `CloseWindow`,
 `SetWindowPos` and `DefWindowProcW` to catch minimize / restore / first-show
 requests - including apps with custom title bars (e.g. Zed) and Store/UWP apps,
-whose minimize buttons bypass the classic paths. It snapshots the window, then on
+whose minimize buttons bypass the classic paths - and `DestroyWindow` (plus
+`WM_CLOSE` and hides) for the close animation. It snapshots the window, then on
 a dedicated high-priority thread it draws a transparent layered "ghost" window that
 warps the snapshot frame by frame into the taskbar, leaving the real window to
 minimize behind it without the system's own animation getting in the way.
@@ -403,11 +404,11 @@ std::atomic<bool> g_multiMonitor{false};
 std::atomic<int>  g_unhideDurationMs{450};
 std::atomic<bool> g_unhideEnabled{true};
 // false = modern Direct2D genie (Potassiumuncher's engine), true = the original
-// v2.2.0 strip-based GDI genie, offered as an opt-in "classic" style.
+// v2.2.0 strip-based GDI genie ("classic", the default style).
 std::atomic<bool> g_classicEngine{true};
 // Mesh resolution of the modern engine (Potassiumuncher's tile-count setting).
 std::atomic<int> g_tileCount{TILE_COUNT_DEFAULT};
-// Close animation (MrCrustyToast): off by default.
+// Close animation (MrCrustyToast): on by default; hide-as-close off by default.
 std::atomic<bool> g_closeAnimation{true};
 std::atomic<bool> g_hideAsClose{false};
 std::atomic<int>  g_closeDirection{2};   // 0 = left, 1 = right, 2 = up, 3 = down
@@ -907,6 +908,23 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
     *outY = w.y + y + offsetY;
 }
 
+// The lamp curve assumes the target is BELOW the window. For a target above it (a
+// close toward the top edge, a top taskbar, a side edge with the window in the
+// lower half) evaluate it in vertically mirrored space and mirror the result back;
+// otherwise the window sweeps past itself and the snapshot plays upside down.
+static void CalculateLampVertex(float tx, float ty, float p, const Geometry& w,
+                                const Geometry& i, float* outX, float* outY) {
+    if (i.y + i.height * 0.5f >= w.y + w.height * 0.5f) {
+        CalculateLampVertexMacOS(tx, ty, p, w, i, outX, outY);
+        return;
+    }
+    Geometry wm = { w.x, -(w.y + w.height), w.width, w.height };
+    Geometry im = { i.x, -(i.y + i.height), i.width, i.height };
+    float yM;
+    CalculateLampVertexMacOS(tx, 1.0f - ty, p, wm, im, outX, &yM);
+    *outY = -yM;
+}
+
 // Shared by both engines: union of the monitors involved (the window's own
 // monitor and the monitor the genie funnels to). With Multi-monitor support off
 // (the default) data->hMon is the primary monitor, so a window sitting on a
@@ -1202,7 +1220,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     // subtraction below - vLeft/vTop are negative on monitors left of
                     // / above the primary. Every mesh coordinate passes through here
                     // exactly once; nothing downstream re-offsets.
-                    CalculateLampVertexMacOS(tx, ty, t, wGeom, iGeom, &px, &py);
+                    CalculateLampVertex(tx, ty, t, wGeom, iGeom, &px, &py);
                     grid[y][x] = D2D1::Point2F(px - vLeft, py - vTop);
                 }
             }
@@ -2412,19 +2430,58 @@ static bool MacGenieMarkCloseAndCloak(HWND hWnd) {
 }
 
 // Wait (bounded) for the close genie of hWnd to finish. Runs on the app's UI
-// thread, which is holding the app's DestroyWindow / hide call back meanwhile; the
-// render thread never sends this thread a message, so this can't deadlock.
-static void MacGenieWaitCloseAnim(HWND hWnd, int maxSteps) {
-    for (int i = 0; i < maxSteps && IsWindow(hWnd) &&
-                    !g_unloading.load(std::memory_order_relaxed); ++i) {
-        bool active;
+// thread, which is holding the app's DestroyWindow / hide call back meanwhile. The
+// render thread never sends this thread a message, so this can't deadlock; and
+// while waiting, nonqueued SENT messages are still handled (other threads that
+// SendMessage to this thread's windows - the app's workers, the taskbar,
+// accessibility tools, broadcasts - aren't stuck behind the genie), while posted
+// input stays queued. Same wait as ReDrag's Windows Animations. A sent message
+// may destroy the window meanwhile; the callers check IsWindow afterwards.
+static void MacGenieWaitCloseAnim(HWND hWnd, DWORD timeoutMs) {
+    const DWORD start = GetTickCount();
+    while (IsWindow(hWnd) && !g_unloading.load(std::memory_order_relaxed)) {
         {
             std::lock_guard<std::mutex> lock(g_CacheMutex);
-            active = g_AnimActive.count(hWnd) != 0;
+            if (!g_AnimActive.count(hWnd)) break;
         }
-        if (!active) break;
-        Sleep(10);
+        const DWORD elapsed = GetTickCount() - start;
+        if (elapsed >= timeoutMs) break;
+        DWORD slice = timeoutMs - elapsed;
+        if (slice > 10) slice = 10;
+        if (MsgWaitForMultipleObjectsEx(0, nullptr, slice, QS_SENDMESSAGE,
+                                        MWMO_INPUTAVAILABLE) == WAIT_OBJECT_0) {
+            MSG msg;
+            PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        }
     }
+}
+
+// Does the process have another visible app window besides hWnd? Then closing
+// hWnd doesn't end the process, so DestroyWindow needn't be held for the whole
+// genie (the ghost is a snapshot on its own thread) - and holding it would freeze
+// the app's other windows on the same UI thread (Chromium, Edge...).
+struct MacGenieOtherWindowSearch { HWND self; DWORD pid; bool found; };
+
+static BOOL CALLBACK MacGenieFindOtherAppWindow(HWND w, LPARAM lp) {
+    MacGenieOtherWindowSearch* s = (MacGenieOtherWindowSearch*)lp;
+    if (w == s->self || !IsWindowVisible(w) || GetAncestor(w, GA_ROOT) != w ||
+        GetWindow(w, GW_OWNER) ||
+        (GetWindowLongPtrW(w, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) {
+        return TRUE;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    if (pid == s->pid && !MacGenieIsCloaked(w)) {
+        s->found = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static bool MacGenieHasOtherAppWindow(HWND hWnd) {
+    MacGenieOtherWindowSearch search = { hWnd, GetCurrentProcessId(), false };
+    EnumWindows(MacGenieFindOtherAppWindow, (LPARAM)&search);
+    return search.found;
 }
 
 // Start a close genie for hWnd. On failure everything is undone and false returned.
@@ -2443,8 +2500,43 @@ static bool MacGenieStartClose(HWND hWnd, UINT closeMsg) {
     return false;
 }
 
-// A window being destroyed by DestroyWindow on its own thread: visible, on this
-// desktop, a root window with no owner, not a tool window, at least 40x40.
+// Popup / overlay / shell-surface classes that are never an app's main window.
+static bool MacGenieIsPopupClass(const WCHAR* cls) {
+    static const WCHAR* const kClasses[] = {
+        L"Xaml_WindowedPopupClass", L"Popup", L"Overlay", L"ToolTip",
+        L"CoreWindow", L"ApplicationFrameWindow", L"XamlExplorerHostIslandWindow",
+        L"Windows.Internal.Shell.TabProxyWindow",
+    };
+    for (const WCHAR* c : kClasses) {
+        if (_wcsicmp(cls, c) == 0) return true;
+    }
+    return false;
+}
+
+// Inside explorer.exe only File Explorer windows count as app windows: the shell's
+// own full-monitor surfaces (around lock / power transitions, the desktop, flyouts)
+// look like large unowned windows and would otherwise play a whole-screen genie and
+// hold a shell thread for it. Same rule as ReDrag's Windows Animations.
+static bool MacGenieIsExplorerProcess() {
+    static const bool isExplorer = [] {
+        WCHAR path[MAX_PATH];
+        DWORD len = GetModuleFileNameW(NULL, path, MAX_PATH);
+        if (!len || len >= MAX_PATH) return false;
+        const WCHAR* name = wcsrchr(path, L'\\');
+        return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    }();
+    return isExplorer;
+}
+
+static bool MacGenieIsBlockedShellWindow(const WCHAR* cls) {
+    return MacGenieIsExplorerProcess() &&
+           _wcsicmp(cls, L"CabinetWClass") != 0 && _wcsicmp(cls, L"ExploreWClass") != 0;
+}
+
+// A window being destroyed by DestroyWindow on its own thread that is an app's main
+// window: visible, on this desktop, a root window with no owner, not a tool window
+// or popup / shell surface, at least 300x300 (the Windows Animations rule - smaller
+// unowned windows are mostly splash screens, toasts and overlays).
 static bool MacGenieIsCloseTarget(HWND hWnd) {
     if (!g_closeAnimation.load(std::memory_order_relaxed)) return false;
     if (!hWnd || !IsWindowVisible(hWnd) || IsIconic(hWnd) ||
@@ -2457,17 +2549,17 @@ static bool MacGenieIsCloseTarget(HWND hWnd) {
     if ((style & WS_CHILD) || (exStyle & WS_EX_TOOLWINDOW) || GetWindow(hWnd, GW_OWNER)) {
         return false;
     }
-    // Explorer's small taskbar tab proxy for browser windows would otherwise play
-    // a second, thin genie next to the real window's.
+    // (The popup list includes Explorer's small taskbar tab proxy for browser
+    // windows, which would otherwise play a second, thin genie.)
     WCHAR cls[128];
-    if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
-        _wcsicmp(cls, L"Windows.Internal.Shell.TabProxyWindow") == 0) {
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) || MacGenieIsPopupClass(cls) ||
+        MacGenieIsBlockedShellWindow(cls)) {
         return false;
     }
     // Cloaked = not on screen here (another virtual desktop, or already hidden).
     if (MacGenieIsCloaked(hWnd)) return false;
     RECT r;
-    return GetWindowRect(hWnd, &r) && r.right - r.left >= 40 && r.bottom - r.top >= 40;
+    return GetWindowRect(hWnd, &r) && r.right - r.left >= 300 && r.bottom - r.top >= 300;
 }
 
 // Classes whose close is caught at WM_CLOSE / SC_CLOSE in DefWindowProcW (they
@@ -2502,14 +2594,8 @@ static bool MacGenieShouldTreatHideAsClose(HWND hWnd) {
         return false;
     }
     WCHAR cls[128];
-    if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
-        (_wcsicmp(cls, L"Xaml_WindowedPopupClass") == 0 ||
-         _wcsicmp(cls, L"Popup") == 0 ||
-         _wcsicmp(cls, L"Overlay") == 0 ||
-         _wcsicmp(cls, L"ToolTip") == 0 ||
-         _wcsicmp(cls, L"CoreWindow") == 0 ||
-         _wcsicmp(cls, L"ApplicationFrameWindow") == 0 ||
-         _wcsicmp(cls, L"XamlExplorerHostIslandWindow") == 0)) {
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) || MacGenieIsPopupClass(cls) ||
+        MacGenieIsBlockedShellWindow(cls)) {
         return false;
     }
     if (MacGenieIsCloaked(hWnd)) return false;
@@ -2529,7 +2615,7 @@ static bool MacGenieCloseBlocked(HWND hWnd) {
 static bool MacGenieAnimateBeforeNativeHide(HWND hWnd) {
     if (!MacGenieShouldTreatHideAsClose(hWnd) || MacGenieCloseBlocked(hWnd)) return false;
     if (!MacGenieStartClose(hWnd, WM_DESTROY)) return false;
-    MacGenieWaitCloseAnim(hWnd, 350);
+    MacGenieWaitCloseAnim(hWnd, 3500);
     return true;
 }
 
@@ -2545,11 +2631,13 @@ static void MacGenieFinishNativeHide(HWND hWnd, bool animated) {
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     // Chromium, Firefox and Electron windows destroy themselves directly after
     // their own close handling, without WM_CLOSE reaching DefWindowProcW. Animate
-    // at this confirmed-destruction point, then let the destroy through.
+    // at this confirmed-destruction point, then let the destroy through. The
+    // destroy is held for the whole genie only for the process's last window (so
+    // the process doesn't exit under the ghost); otherwise only for its first frame.
     bool animated = false;
     if (MacGenieIsCloseTarget(hWnd) && !MacGenieCloseBlocked(hWnd)) {
         animated = MacGenieStartClose(hWnd, WM_DESTROY);
-        if (animated) MacGenieWaitCloseAnim(hWnd, 400);
+        if (animated && !MacGenieHasOtherAppWindow(hWnd)) MacGenieWaitCloseAnim(hWnd, 4000);
     }
     BOOL result = DestroyWindow_Original(hWnd);
     if (!result && animated && IsWindow(hWnd)) {
