@@ -2,11 +2,10 @@
 // @id              fix-windows-tools-view
 // @name            Fix Windows Tools Folder View
 // @description     Saves/restores view mode for Windows Tools folder
-// @version         1.0
+// @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
-// @include         explorer.exe
-// @compilerOptions -lole32 -luuid -lcomctl32
+// @include         *
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -15,265 +14,224 @@ This mod makes the `Windows Tools` (formerly `Administrative Tools`) folder to s
 instead of using the hardcoded tile view.
 Particularly, this works around the issue that in the default, tile mode the elements of this folders have other content
 instead of names displayed when using SysListView32.
+
+The version 2.0 is based on the registry findings by the WinClassic user 04mc.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
-#include <commctrl.h>
-#include <shlobj.h>
-#include <shobjidl.h>
-#include <exdisp.h>
-#include <unordered_map>
-#include <set>
+#include <winternl.h>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <cwctype>
 
-static const CLSID CLSID_WindowsTools =
-    {0x4234D49B, 0x0245, 0x4DF3,
-     {0xB7, 0x80, 0x38, 0x93, 0x94, 0x34, 0x56, 0xE1}};
+// --- Определение структур и функций NTAPI для получения пути ключа реестра ---
+typedef enum _KEY_INFORMATION_CLASS_EXT {
+    KeyNameInformationClass = 3
+} KEY_INFORMATION_CLASS_EXT;
 
-struct FolderInfo {
-    int bagNumber = -1;
-    IFolderView2* pFolderView = nullptr;
-};
+typedef struct _KEY_NAME_INFORMATION {
+    ULONG NameLength;
+    WCHAR Name[1];
+} KEY_NAME_INFORMATION, *PKEY_NAME_INFORMATION;
 
-std::unordered_map<HWND, FolderInfo> g_windows;
-std::set<HWND> g_subclassedDefViews;
-HWND g_lastCreatedCabinet = NULL;
+typedef NTSTATUS(WINAPI* PNtQueryKey)(
+    HANDLE                KeyHandle,
+    ULONG                 KeyInformationClass,
+    PVOID                 KeyInformation,
+    ULONG                 Length,
+    PULONG                ResultLength
+);
 
-static UINT WM_REMOVE_SUBCLASS = 0;
+PNtQueryKey pNtQueryKey = nullptr;
 
-typedef HWND (WINAPI *CREATEWINDOWEXW)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
+std::wstring GetKeyPath(HKEY hKey) {
+    if (!pNtQueryKey) return L"";
 
-CREATEWINDOWEXW pOriginalCreateWindowExW;
-REGQUERYVALUEEXW pOriginalRegQueryValueExW;
+    ULONG resultLength = 0;
+    pNtQueryKey(hKey, KeyNameInformationClass, nullptr, 0, &resultLength);
+    if (resultLength == 0) return L"";
 
-LRESULT CALLBACK DefViewSubclassProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
-
-int ExtractBagNumber(HKEY hKey) {
-    typedef LONG (WINAPI *NTQUERYKEY)(HANDLE, int, PVOID, ULONG, PULONG);
-    static NTQUERYKEY pNtQueryKey = (NTQUERYKEY)GetProcAddress(
-        GetModuleHandleW(L"ntdll.dll"), "NtQueryKey");
-    if (!pNtQueryKey) return -1;
-
-    BYTE buffer[1024];
-    ULONG resultLength;
-    if (pNtQueryKey(hKey, 3, buffer, sizeof(buffer), &resultLength) != 0)
-        return -1;
-
-    WCHAR* keyPath = (WCHAR*)(buffer + sizeof(ULONG));
-    const WCHAR* bags = wcsstr(keyPath, L"\\Bags\\");
-    if (!bags) return -1;
-    bags += 6;
-    if (wcsstr(bags, L"AllFolders") == bags) return -1;
-
-    return _wtoi(bags);
+    std::vector<BYTE> buffer(resultLength);
+    if (pNtQueryKey(hKey, KeyNameInformationClass, buffer.data(), resultLength, &resultLength) == 0 /* STATUS_SUCCESS */) {
+        auto info = (PKEY_NAME_INFORMATION)buffer.data();
+        return std::wstring(info->Name, info->NameLength / sizeof(WCHAR));
+    }
+    return L"";
 }
 
-IFolderView2* GetFolderViewFromCabinet(HWND hwndCabinet) {
-    IFolderView2* result = nullptr;
-    IShellWindows* psw = nullptr;
+// --- Логика подмены ---
 
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER,
-                                 IID_IShellWindows, (void**)&psw)) || !psw) return nullptr;
+#define TARGET_GUID L"{D20EA4E1-3957-11D2-A40B-0C5020524153}"
+#define TARGET_PATH_INSTANCE L"CLASSES\\CLSID\\" TARGET_GUID L"\\INSTANCE"
+#define TARGET_PATH_INITPROP L"CLASSES\\CLSID\\" TARGET_GUID L"\\INSTANCE\\INITPROPERTYBAG"
 
-    long count = 0;
-    psw->get_Count(&count);
+// Быстрый фильтр (fast-path), чтобы не нагружать нецелевые запросы к реестру
+bool IsCandidateValueName(LPCWSTR valueName) {
+    return valueName && (_wcsicmp(valueName, L"CLSID") == 0 ||
+                         _wcsicmp(valueName, L"TargetKnownFolder") == 0);
+}
 
-    for (long i = 0; i < count && !result; i++) {
-        VARIANT vi = {VT_I4};
-        vi.lVal = i;
+// Медленный путь, вызывается только для целевых параметров
+bool TrySpoofRegistryValue(
+    HKEY hKey, 
+    LPCWSTR lpValueName, 
+    LPDWORD lpType, 
+    LPBYTE lpData, 
+    LPDWORD lpcbData, 
+    LSTATUS& statusOut
+) {
+    LPCWSTR fakeStr = nullptr;
 
-        IDispatch* pdisp = nullptr;
-        if (FAILED(psw->Item(vi, &pdisp)) || !pdisp) continue;
-
-        IWebBrowser2* pwb = nullptr;
-        if (SUCCEEDED(pdisp->QueryInterface(IID_IWebBrowser2, (void**)&pwb)) && pwb) {
-            HWND hwnd = NULL;
-            pwb->get_HWND((SHANDLE_PTR*)&hwnd);
-
-            if (hwnd == hwndCabinet) {
-                IServiceProvider* psp = nullptr;
-                if (SUCCEEDED(pwb->QueryInterface(IID_IServiceProvider, (void**)&psp)) && psp) {
-                    IShellBrowser* psb = nullptr;
-                    if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser, IID_IShellBrowser, (void**)&psb)) && psb) {
-                        IShellView* psv = nullptr;
-                        if (SUCCEEDED(psb->QueryActiveShellView(&psv)) && psv) {
-                            psv->QueryInterface(IID_IFolderView2, (void**)&result);
-                            psv->Release();
-                        }
-                        psb->Release();
-                    }
-                    psp->Release();
-                }
-            }
-            pwb->Release();
+    if (_wcsicmp(lpValueName, L"CLSID") == 0) {
+        std::wstring path = GetKeyPath(hKey);
+        std::transform(path.begin(), path.end(), path.begin(), ::towupper);
+        
+        // Проверяем \Instance, но исключаем подпапки (например, \InitPropertyBag)
+        if (path.find(TARGET_PATH_INSTANCE) != std::wstring::npos && 
+            path.find(L"INITPROPERTYBAG") == std::wstring::npos) 
+        {
+            fakeStr = L"{0E5AAE11-A475-4c5b-AB00-C66DE400274E}";
         }
-        pdisp->Release();
     }
-    psw->Release();
-    return result;
+    else if (_wcsicmp(lpValueName, L"TargetKnownFolder") == 0) {
+        std::wstring path = GetKeyPath(hKey);
+        std::transform(path.begin(), path.end(), path.begin(), ::towupper);
+        
+        if (path.find(TARGET_PATH_INITPROP) != std::wstring::npos) {
+            fakeStr = L"{D0384E7D-BAC3-4797-8F14-CBA229B392B5}";
+        }
+    }
+
+    if (fakeStr) {
+        DWORD requiredSize = (DWORD)(wcslen(fakeStr) + 1) * sizeof(WCHAR);
+        
+        if (lpType) {
+            *lpType = REG_SZ;
+        }
+
+        if (lpData) {
+            if (!lpcbData || *lpcbData < requiredSize) {
+                if (lpcbData) *lpcbData = requiredSize;
+                statusOut = ERROR_MORE_DATA;
+                return true;
+            }
+            wcscpy_s((LPWSTR)lpData, *lpcbData / sizeof(WCHAR), fakeStr);
+        }
+        
+        if (lpcbData) {
+            *lpcbData = requiredSize;
+        }
+
+        statusOut = ERROR_SUCCESS;
+        return true;
+    }
+
+    return false;
 }
 
-bool IsWindowsToolsFolder(IFolderView2* pfv) {
-    bool result = false;
-    IPersistFolder2* ppf = nullptr;
-    if (SUCCEEDED(pfv->GetFolder(IID_IPersistFolder2, (void**)&ppf)) && ppf) {
-        CLSID clsid;
-        if (SUCCEEDED(ppf->GetClassID(&clsid)))
-            result = IsEqualCLSID(clsid, CLSID_WindowsTools);
-        ppf->Release();
+// --- Хуки ---
+
+using RegQueryValueExW_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
+RegQueryValueExW_t RegQueryValueExW_orig;
+
+LSTATUS WINAPI RegQueryValueExW_hook(
+    HKEY hKey, 
+    LPCWSTR lpValueName, 
+    LPDWORD lpReserved, 
+    LPDWORD lpType, 
+    LPBYTE lpData, 
+    LPDWORD lpcbData
+) {
+    if (IsCandidateValueName(lpValueName)) {
+        LSTATUS spoofStatus;
+        if (TrySpoofRegistryValue(hKey, lpValueName, lpType, lpData, lpcbData, spoofStatus)) {
+            Wh_Log(L"Spoofed RegQueryValueExW for value: %s", lpValueName);
+            return spoofStatus;
+        }
     }
-    return result;
+    return RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
 }
 
-void SaveViewMode(IFolderView2* pfv, int bagNum) {
-    UINT viewMode = 0;
-    int iconSize = 0;
-    if (FAILED(pfv->GetViewModeAndIconSize((FOLDERVIEWMODE*)&viewMode, &iconSize))) return;
+using RegGetValueW_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
+RegGetValueW_t RegGetValueW_orig;
 
-    WCHAR regPath[256];
-    wsprintfW(regPath, L"Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\%d\\Shell", bagNum);
-
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, regPath, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, L"WTViewMode", 0, REG_DWORD, (BYTE*)&viewMode, sizeof(viewMode));
-        RegSetValueExW(hKey, L"WTIconSize", 0, REG_DWORD, (BYTE*)&iconSize, sizeof(iconSize));
-        RegCloseKey(hKey);
+LSTATUS WINAPI RegGetValueW_hook(
+    HKEY hKey, 
+    LPCWSTR lpSubKey, 
+    LPCWSTR lpValue, 
+    DWORD dwFlags, 
+    LPDWORD pdwType, 
+    PVOID pvData, 
+    LPDWORD pcbData
+) {
+    if (!IsCandidateValueName(lpValue)) {
+        return RegGetValueW_orig(hKey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     }
+
+    // Проверяем, позволяет ли вызывающий код вернуть строковый тип. 
+    // Если флаг ограничивает типы (например, строго REG_DWORD), сразу отдаём оригиналу.
+    if (!(dwFlags & RRF_RT_REG_SZ)) {
+        return RegGetValueW_orig(hKey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    }
+
+    HKEY hTargetKey = hKey;
+    bool closedKey = false;
+    LSTATUS spoofStatus;
+
+    // Резолв ключа делаем только на медленном пути, когда точно знаем, что ключ целевой
+    if (lpSubKey && lpSubKey[0] != L'\0') {
+        if (RegOpenKeyExW(hKey, lpSubKey, 0, KEY_QUERY_VALUE, &hTargetKey) == ERROR_SUCCESS) {
+            closedKey = true;
+        } else {
+            return RegGetValueW_orig(hKey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+        }
+    }
+
+    bool spoofed = TrySpoofRegistryValue(hTargetKey, lpValue, pdwType, (LPBYTE)pvData, pcbData, spoofStatus);
+
+    if (closedKey) {
+        RegCloseKey(hTargetKey);
+    }
+
+    if (spoofed) {
+        Wh_Log(L"Spoofed RegGetValueW for value: %s", lpValue);
+        return spoofStatus;
+    }
+
+    return RegGetValueW_orig(hKey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
 }
 
-BOOL ApplyViewMode(IFolderView2* pfv, int bagNum) {
-    WCHAR regPath[256];
-    wsprintfW(regPath, L"Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\%d\\Shell", bagNum);
+// --- Инициализация мода ---
+BOOL Wh_ModInit() {
+    Wh_Log(L"Init Explorer Registry Spoofer");
 
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, regPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+    HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
+    if (hNtDll) {
+        pNtQueryKey = (PNtQueryKey)GetProcAddress(hNtDll, "NtQueryKey");
+    }
+
+    if (!pNtQueryKey) {
+        Wh_Log(L"Failed to locate NtQueryKey in ntdll.dll");
         return FALSE;
-
-    DWORD viewMode, iconSize, dataSize = sizeof(DWORD);
-    BOOL result = FALSE;
-
-    if (RegQueryValueExW(hKey, L"WTViewMode", NULL, NULL, (BYTE*)&viewMode, &dataSize) == ERROR_SUCCESS) {
-        dataSize = sizeof(DWORD);
-        if (RegQueryValueExW(hKey, L"WTIconSize", NULL, NULL, (BYTE*)&iconSize, &dataSize) == ERROR_SUCCESS)
-            result = SUCCEEDED(pfv->SetViewModeAndIconSize((FOLDERVIEWMODE)viewMode, iconSize));
-    }
-    RegCloseKey(hKey);
-    return result;
-}
-
-void CleanupCabinetEntry(HWND hwndCabinet) {
-    auto it = g_windows.find(hwndCabinet);
-    if (it == g_windows.end()) return;
-
-    if (it->second.pFolderView) {
-        if (it->second.bagNumber > 0)
-            SaveViewMode(it->second.pFolderView, it->second.bagNumber);
-        it->second.pFolderView->Release();
-    }
-    g_windows.erase(it);
-}
-
-LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
-                                      LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    HWND hwndCabinet = GetAncestor(hWnd, GA_ROOT);
-
-    if (uMsg == WM_REMOVE_SUBCLASS && WM_REMOVE_SUBCLASS != 0) {
-        CleanupCabinetEntry(hwndCabinet);
-        g_subclassedDefViews.erase(hWnd);
-        RemoveWindowSubclass(hWnd, DefViewSubclassProc, uIdSubclass);
-        return 0;
     }
 
-    if (uMsg == WM_SHOWWINDOW && wParam == TRUE) {
-        IFolderView2* pfv = GetFolderViewFromCabinet(hwndCabinet);
-        if (pfv) {
-            if (IsWindowsToolsFolder(pfv)) {
-                auto it = g_windows.find(hwndCabinet);
-                if (it != g_windows.end()) {
-                    it->second.pFolderView = pfv;
-                    pfv->AddRef();
-
-                    if (it->second.bagNumber > 0 && !ApplyViewMode(pfv, it->second.bagNumber)) {
-                        UINT viewMode = 0;
-                        if (SUCCEEDED(pfv->GetCurrentViewMode(&viewMode)) && viewMode == FVM_TILE)
-                            pfv->SetCurrentViewMode(FVM_LIST);
-                    }
-                }
-            } else {
-                pfv->Release();
-                g_subclassedDefViews.erase(hWnd);
-                RemoveWindowSubclass(hWnd, DefViewSubclassProc, uIdSubclass);
-                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            }
-            pfv->Release();
+    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (hKernelBase) {
+        void* pRegQueryValueExW = (void*)GetProcAddress(hKernelBase, "RegQueryValueExW");
+        if (pRegQueryValueExW) {
+            Wh_SetFunctionHook(pRegQueryValueExW, (void*)RegQueryValueExW_hook, (void**)&RegQueryValueExW_orig);
         }
-    }
-    else if (uMsg == WM_DESTROY) {
-        CleanupCabinetEntry(hwndCabinet);
-        g_subclassedDefViews.erase(hWnd);
-        RemoveWindowSubclass(hWnd, DefViewSubclassProc, uIdSubclass);
-    }
 
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-                                 DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hWnd = pOriginalCreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
-                                          X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd || !lpClassName || ((ULONG_PTR)lpClassName <= 0xFFFF)) return hWnd;
-
-    if (wcscmp(lpClassName, L"CabinetWClass") == 0) {
-        g_lastCreatedCabinet = hWnd;
-        g_windows[hWnd] = {};
-    }
-    else if (wcscmp(lpClassName, L"SHELLDLL_DefView") == 0) {
-        SetWindowSubclass(hWnd, DefViewSubclassProc, 0, 0);
-        g_subclassedDefViews.insert(hWnd);
-    }
-
-    return hWnd;
-}
-
-LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
-                                  LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    LONG result = pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-
-    if (g_lastCreatedCabinet && IsWindow(g_lastCreatedCabinet)) {
-        int bagNum = ExtractBagNumber(hKey);
-        if (bagNum > 0) {
-            auto it = g_windows.find(g_lastCreatedCabinet);
-            if (it != g_windows.end() && it->second.bagNumber == -1)
-                it->second.bagNumber = bagNum;
+        void* pRegGetValueW = (void*)GetProcAddress(hKernelBase, "RegGetValueW");
+        if (pRegGetValueW) {
+            Wh_SetFunctionHook(pRegGetValueW, (void*)RegGetValueW_hook, (void**)&RegGetValueW_orig);
         }
+    } else {
+        Wh_Log(L"Failed to get handle for kernelbase.dll");
+        return FALSE;
     }
-    return result;
-}
 
-BOOL Wh_ModInit(void) {
-    WM_REMOVE_SUBCLASS = RegisterWindowMessageW(L"WH_FixWindowsToolsView_RemoveSubclass");
-    if (!WM_REMOVE_SUBCLASS) return FALSE;
-
-    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibraryW(L"kernelbase.dll"), "RegQueryValueExW"),
-                       (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
-    Wh_SetFunctionHook((void*)CreateWindowExW,
-                       (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
     return TRUE;
-}
-
-void Wh_ModUninit(void) {
-
-    for (HWND hwnd : std::set<HWND>(g_subclassedDefViews)) {
-        if (IsWindow(hwnd))
-            SendMessage(hwnd, WM_REMOVE_SUBCLASS, 0, 0);
-    }
-    g_subclassedDefViews.clear();
-
-    for (auto& pair : g_windows) {
-        if (pair.second.pFolderView)
-            pair.second.pFolderView->Release();
-    }
-    g_windows.clear();
 }

@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.2
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -64,15 +64,15 @@ Moves the Windows 11 taskbar to the top of the screen.
   $name: Adjust Start menu animation
   $description: >-
     Adjust the Start menu opening animation to match the taskbar on top
-    position. This option doesn't work with the redesigned Start menu, and might
-    not work with the Phone Link sidebar and with some Start Menu Styler themes.
+    position. The redesigned Start menu animation is always adjusted, so this
+    option only affects the classic Start menu. This option might not work with
+    the Phone Link sidebar and with some Start Menu Styler themes.
 - useNativeTaskbar: true
   $name: Use the native taskbar when possible
   $description: >-
     Newer Windows 11 builds include a native option to show the taskbar on top.
-    If disabled, or if taskbar auto-hide is enabled, the mod's own
-    implementation is used instead, and the taskbar position in Windows settings
-    should be kept at Bottom.
+    If disabled, the mod's own implementation is used instead, and the taskbar
+    position in Windows settings should be kept at Bottom.
 */
 // ==/WindhawkModSettings==
 
@@ -92,6 +92,7 @@ Moves the Windows 11 taskbar to the top of the screen.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <list>
@@ -291,22 +292,13 @@ bool IsTaskbarAutoHideEnabled() {
     return (state & ABS_AUTOHIDE) != 0;
 }
 
-// Reads the state saved by the taskbar, available before the taskbar is
-// created. The state is a DWORD at offset 8.
-bool IsStoredTaskbarAutoHideEnabled() {
-    BYTE settings[256];
-    DWORD size = sizeof(settings);
-    if (RegGetValueW(
-            HKEY_CURRENT_USER,
-            LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3)",
-            L"Settings", RRF_RT_REG_BINARY, nullptr, settings,
-            &size) != ERROR_SUCCESS ||
-        size < 12) {
-        return false;
-    }
-
-    DWORD state = *(DWORD*)(settings + 8);
-    return (state & ABS_AUTOHIDE) != 0;
+// Returns the top of an auto-hidden taskbar on top, of which only the trigger
+// strip stays on the monitor.
+int GetAutoHiddenTaskbarTop(const RECT& monitorRect,
+                            UINT monitorDpiY,
+                            int taskbarHeight) {
+    int triggerHeight = MulDiv(kAutoHideTriggerHeight, monitorDpiY, 96);
+    return monitorRect.top + triggerHeight - taskbarHeight;
 }
 
 HWND FindCurrentProcessWindow(PCWSTR className) {
@@ -492,20 +484,12 @@ void WINAPI TrayUI__HandleSettingChange_Hook(void* pThis,
     }
 }
 
-using TrayUI_GetDockedRect_t = DWORD(WINAPI*)(void* pThis,
-                                              RECT* rect,
-                                              BOOL param2);
-TrayUI_GetDockedRect_t TrayUI_GetDockedRect_Original;
-DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL param2) {
-    Wh_Log(L">");
-
-    DWORD ret = TrayUI_GetDockedRect_Original(pThis, rect, param2);
-
-    if (g_hasNativeTaskbarOnTop) {
-        return ret;
-    }
-
-    HMONITOR monitor = MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
+// Moves a taskbar rect that Windows computes for the bottom of the monitor to
+// the top of the monitor.
+void MoveTaskbarRectToTop(RECT* rect) {
+    // The top edge stays on the monitor when the taskbar is auto-hidden.
+    HMONITOR monitor = MonitorFromPoint(
+        {(rect->left + rect->right) / 2, rect->top}, MONITOR_DEFAULTTONEAREST);
 
     RECT monitorRect;
     GetMonitorRect(monitor, &monitorRect);
@@ -518,8 +502,14 @@ DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL param2) {
 
     switch (GetTaskbarLocationForMonitor(monitor)) {
         case TaskbarLocation::top:
-            rect->top = monitorRect.top;
-            rect->bottom = monitorRect.top + height;
+            // The rect of an auto-hidden taskbar is mostly below the monitor.
+            // Move it to the hidden position on top, which Windows slides the
+            // taskbar to and derives the window's clip region from.
+            rect->top =
+                rect->bottom > monitorRect.bottom
+                    ? GetAutoHiddenTaskbarTop(monitorRect, monitorDpiY, height)
+                    : monitorRect.top;
+            rect->bottom = rect->top + height;
             break;
 
         case TaskbarLocation::bottom:
@@ -531,8 +521,47 @@ DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL param2) {
         case TaskbarLocation::right:
             break;
     }
+}
+
+using TrayUI_GetDockedRect_t = DWORD(WINAPI*)(void* pThis,
+                                              RECT* rect,
+                                              BOOL param2);
+TrayUI_GetDockedRect_t TrayUI_GetDockedRect_Original;
+DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL param2) {
+    Wh_Log(L">");
+
+    DWORD ret = TrayUI_GetDockedRect_Original(pThis, rect, param2);
+
+    if (!g_hasNativeTaskbarOnTop) {
+        MoveTaskbarRectToTop(rect);
+    }
 
     return ret;
+}
+
+using CSecondaryTray__ComputeHiddenRect_t = void(WINAPI*)(void* pThis,
+                                                          RECT* rect);
+CSecondaryTray__ComputeHiddenRect_t CSecondaryTray__ComputeHiddenRect_Original;
+void WINAPI CSecondaryTray__ComputeHiddenRect_Hook(void* pThis, RECT* rect) {
+    Wh_Log(L">");
+
+    CSecondaryTray__ComputeHiddenRect_Original(pThis, rect);
+
+    if (!g_hasNativeTaskbarOnTop) {
+        MoveTaskbarRectToTop(rect);
+    }
+}
+
+// While this feature is enabled, the native primary taskbar doesn't auto-hide
+// when it's not on the bottom. The rest of its auto-hide handles all edges.
+using WilFeatureImpl_61970341_IsEnabled_t = bool(WINAPI*)(void* pThis);
+WilFeatureImpl_61970341_IsEnabled_t WilFeatureImpl_61970341_IsEnabled_Original;
+bool WINAPI WilFeatureImpl_61970341_IsEnabled_Hook(void* pThis) {
+    if (g_hasNativeTaskbarOnTop && !g_unloading) {
+        return false;
+    }
+
+    return WilFeatureImpl_61970341_IsEnabled_Original(pThis);
 }
 
 using TrayUI_MakeStuckRect_t = void(WINAPI*)(void* pThis,
@@ -930,59 +959,42 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
                 Wh_Log(L"WM_WINDOWPOSCHANGING (size or move): %08X",
                        (DWORD)(ULONG_PTR)hWnd);
 
-                if (!g_unloading) {
-                    RECT rect{
-                        .left = windowpos->x,
-                        .top = windowpos->y,
-                        .right = windowpos->x + windowpos->cx,
-                        .bottom = windowpos->y + windowpos->cy,
-                    };
+                if (!g_unloading && !(windowpos->flags & SWP_NOMOVE)) {
                     HMONITOR monitor =
-                        MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
-
-                    if (!(windowpos->flags & SWP_NOMOVE) &&
+                        (HMONITOR)GetProp(hWnd, L"TaskbarMonitor");
+                    RECT monitorRect;
+                    if (monitor && GetMonitorRect(monitor, &monitorRect) &&
                         GetTaskbarLocationForMonitor(monitor) ==
                             TaskbarLocation::top) {
-                        RECT monitorRect;
-                        GetMonitorRect(monitor, &monitorRect);
-
                         // Normal positioning without auto-hide adjustment.
                         int yPosition = monitorRect.top;
 
-                        // Auto-hide positioning: move taskbar mostly off-screen
-                        // when hiding.
-                        if (!secondaryTaskbar && IsTaskbarAutoHideEnabled()) {
-                            // Check if cursor is within the taskbar's current
-                            // bounds.
-                            DWORD messagePos = GetMessagePos();
-                            POINT pt{
-                                GET_X_LPARAM(messagePos),
-                                GET_Y_LPARAM(messagePos),
-                            };
-
+                        // Auto-hide positioning: Windows slides the taskbar
+                        // between the shown position and the hidden one from
+                        // TrayUI_GetDockedRect_Hook, or from
+                        // CSecondaryTray__ComputeHiddenRect_Hook for secondary
+                        // taskbars, which hide below the monitor without it.
+                        if ((!secondaryTaskbar ||
+                             CSecondaryTray__ComputeHiddenRect_Original) &&
+                            IsTaskbarAutoHideEnabled()) {
                             RECT currentRect;
                             GetWindowRect(hWnd, &currentRect);
 
-                            // Check if cursor is in the taskbar area (on screen
-                            // and over taskbar).
-                            int currentHeight =
-                                currentRect.bottom - currentRect.top;
-                            bool cursorInShownTaskbarArea =
-                                pt.x >= monitorRect.left &&
-                                pt.x < monitorRect.right &&
-                                pt.y >= monitorRect.top &&
-                                pt.y < monitorRect.top + currentHeight;
-                            if (!cursorInShownTaskbarArea) {
-                                // Cursor is not in taskbar - hide it by moving
-                                // mostly off-screen.
-                                UINT monitorDpiX = 96;
-                                UINT monitorDpiY = 96;
-                                GetDpiForMonitor(monitor, MDT_DEFAULT,
-                                                 &monitorDpiX, &monitorDpiY);
-                                int triggerHeight = MulDiv(
-                                    kAutoHideTriggerHeight, monitorDpiY, 96);
-                                yPosition -= currentHeight - triggerHeight;
-                            }
+                            // cy isn't set with SWP_NOSIZE.
+                            int height =
+                                (windowpos->flags & SWP_NOSIZE)
+                                    ? currentRect.bottom - currentRect.top
+                                    : windowpos->cy;
+
+                            UINT monitorDpiX = 96;
+                            UINT monitorDpiY = 96;
+                            GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX,
+                                             &monitorDpiY);
+                            int hiddenTop = GetAutoHiddenTaskbarTop(
+                                monitorRect, monitorDpiY, height);
+
+                            yPosition = std::clamp((int)windowpos->y, hiddenTop,
+                                                   yPosition);
                         }
 
                         windowpos->y = yPosition;
@@ -2401,33 +2413,36 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     int cy = targetRect.bottom - targetRect.top;
 
     if (target == DwmTarget::StartMenu) {
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        GetMonitorInfo(monitor, &monitorInfo);
-
         int xNew = x;
         int yNew = y;
         if (g_hasNativeTaskbarOnTop) {
+            RECT workAreaRect;
+            GetMonitorWorkAreaWithoutTaskbar(monitor, &workAreaRect);
+
             // Only move towards the taskbar.
             switch (taskbarLocation) {
                 case TaskbarLocation::top:
-                    yNew = monitorInfo.rcWork.top;
+                    yNew = workAreaRect.top;
                     break;
 
                 case TaskbarLocation::bottom:
-                    yNew = monitorInfo.rcWork.bottom - cy;
+                    yNew = workAreaRect.bottom - cy;
                     break;
 
                 case TaskbarLocation::left:
-                    xNew = monitorInfo.rcWork.left;
+                    xNew = workAreaRect.left;
                     break;
 
                 case TaskbarLocation::right:
-                    xNew = monitorInfo.rcWork.right - cx;
+                    xNew = workAreaRect.right - cx;
                     break;
             }
         } else {
+            MONITORINFO monitorInfo{
+                .cbSize = sizeof(MONITORINFO),
+            };
+            GetMonitorInfo(monitor, &monitorInfo);
+
             // Only change x. This is a workaround for ExplorerPatcher, see:
             // https://github.com/ramensoftware/windhawk-mods/issues/2401
             xNew = monitorInfo.rcWork.left;
@@ -3026,6 +3041,120 @@ void SettingsChanged() {
     ApplyStyle();
 }
 
+// The redesigned Start menu (StartMenu.dll) has entrance and dismiss
+// animations for each taskbar edge. All of them get the edge from
+// GetCurrentTaskbarEdge, which is replaced with the taskbar location of the
+// Start menu monitor.
+enum class StartMenuTaskbarEdge {
+    left = 0,
+    top = 1,
+    right = 2,
+    bottom = 3,
+};
+
+std::atomic<bool> g_startMenuDllHooked;
+
+StartMenuTaskbarEdge GetStartMenuTaskbarEdge(StartMenuTaskbarEdge edge) {
+    if (g_unloading) {
+        return edge;
+    }
+
+    // The Start menu is left to Windows, see GetStartMenuAdjustment.
+    if (GetNativeTaskbarOnTop() == NativeTaskbarOnTop::unknown) {
+        return edge;
+    }
+
+    HMONITOR monitor =
+        MonitorFromWindow(GetCoreWnd(), MONITOR_DEFAULTTONEAREST);
+    switch (GetTaskbarLocationForMonitor(monitor)) {
+        case TaskbarLocation::top:
+            return StartMenuTaskbarEdge::top;
+        case TaskbarLocation::bottom:
+            return StartMenuTaskbarEdge::bottom;
+        case TaskbarLocation::left:
+            return StartMenuTaskbarEdge::left;
+        case TaskbarLocation::right:
+            return StartMenuTaskbarEdge::right;
+    }
+
+    return edge;
+}
+
+using StartBlendedFlexFrame_GetCurrentTaskbarEdge_t =
+    StartMenuTaskbarEdge(WINAPI*)(void* pThis, StartMenuTaskbarEdge edge);
+StartBlendedFlexFrame_GetCurrentTaskbarEdge_t
+    StartBlendedFlexFrame_GetCurrentTaskbarEdge_Original;
+StartMenuTaskbarEdge WINAPI
+StartBlendedFlexFrame_GetCurrentTaskbarEdge_Hook(void* pThis,
+                                                 StartMenuTaskbarEdge edge) {
+    StartMenuTaskbarEdge ret =
+        StartBlendedFlexFrame_GetCurrentTaskbarEdge_Original(pThis, edge);
+    StartMenuTaskbarEdge newEdge = GetStartMenuTaskbarEdge(ret);
+    Wh_Log(L"> %d->%d", static_cast<int>(ret), static_cast<int>(newEdge));
+    return newEdge;
+}
+
+bool HookStartMenuDllSymbols(HMODULE module) {
+    // StartMenu.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: enum winrt::StartMenu::implementation::DockedAnimationTypes::TaskbarEdge __cdecl winrt::StartMenu::implementation::StartBlendedFlexFrame::GetCurrentTaskbarEdge(enum winrt::StartMenu::implementation::DockedAnimationTypes::TaskbarEdge))"},
+            &StartBlendedFlexFrame_GetCurrentTaskbarEdge_Original,
+            StartBlendedFlexFrame_GetCurrentTaskbarEdge_Hook,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+HMODULE GetStartMenuModuleHandle() {
+    return GetModuleHandle(L"StartMenu.dll");
+}
+
+void HandleLoadedModuleIfStartMenu(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_startMenuDllHooked && GetStartMenuModuleHandle() == module &&
+        !g_startMenuDllHooked.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookStartMenuDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfStartMenu(module, lpLibFileName);
+    }
+
+    return module;
+}
+
+void HookStartMenuAnimation() {
+    if (HMODULE startMenuModule = GetStartMenuModuleHandle()) {
+        g_startMenuDllHooked = true;
+        HookStartMenuDllSymbols(startMenuModule);
+        return;
+    }
+
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
+}
+
 using RoGetActivationFactory_t = decltype(&RoGetActivationFactory);
 RoGetActivationFactory_t RoGetActivationFactory_Original;
 HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
@@ -3489,6 +3618,12 @@ bool HookTaskbarDllSymbols() {
             CSecondaryTray_v_WndProc_Hook,
         },
         {
+            {LR"(private: void __cdecl CSecondaryTray::_ComputeHiddenRect(struct tagRECT *))"},
+            &CSecondaryTray__ComputeHiddenRect_Original,
+            CSecondaryTray__ComputeHiddenRect_Hook,
+            true,  // Only needed for auto-hide on secondary monitors.
+        },
+        {
             {LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
             &CTaskListWnd_ComputeJumpViewPosition_Original,
             CTaskListWnd_ComputeJumpViewPosition_Hook,
@@ -3570,6 +3705,12 @@ bool HookTaskbarDllSymbols() {
             TaskbarSettings_TaskbarSettings_Hook,
             true,  // Only needed for the native taskbar on top.
         },
+        {
+            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_61970341>::__private_IsEnabled(void))"},
+            &WilFeatureImpl_61970341_IsEnabled_Original,
+            WilFeatureImpl_61970341_IsEnabled_Hook,
+            true,  // Only needed for auto-hide with the native taskbar on top.
+        },
     };
 
     if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
@@ -3582,14 +3723,6 @@ bool HookTaskbarDllSymbols() {
 
     if (g_hasNativeTaskbarOnTop && !g_settings.useNativeTaskbar) {
         Wh_Log(L"Not using native taskbar on top due to settings");
-        g_hasNativeTaskbarOnTop = false;
-    }
-
-    // The native taskbar doesn't implement auto-hide for non-bottom taskbars.
-    // If auto-hide is enabled, the native taskbar isn't used to avoid breaking
-    // the auto-hide behavior.
-    if (g_hasNativeTaskbarOnTop && IsStoredTaskbarAutoHideEnabled()) {
-        Wh_Log(L"Not using native taskbar on top with auto-hide");
         g_hasNativeTaskbarOnTop = false;
     }
 
@@ -3661,6 +3794,8 @@ BOOL Wh_ModInit() {
         WindhawkUtils::SetFunctionHook(
             pRoGetActivationFactory, StartMenuUI::RoGetActivationFactory_Hook,
             &StartMenuUI::RoGetActivationFactory_Original);
+
+        StartMenuUI::HookStartMenuAnimation();
 
         return TRUE;
     }
@@ -3806,6 +3941,11 @@ void Wh_ModAfterInit() {
 
         ApplySettings();
     } else if (g_target == Target::StartMenuExperienceHost) {
+        if (HMODULE startMenuModule = StartMenuUI::GetStartMenuModuleHandle()) {
+            StartMenuUI::HandleLoadedModuleIfStartMenu(startMenuModule,
+                                                       L"StartMenu.dll");
+        }
+
         HWND hCoreWnd = StartMenuUI::GetCoreWnd();
         if (hCoreWnd) {
             Wh_Log(L"Initializing - Found core window");

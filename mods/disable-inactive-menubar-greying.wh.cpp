@@ -2,7 +2,7 @@
 // @id              disable-inactive-menubar-greying
 // @name            Disable Inactive Menubar Greying
 // @description     Prevents menubar text from being greyed out in inactive folder windows in Classic theme
-// @version         1.3
+// @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -30,19 +30,14 @@ SetTextColor_t SetTextColor_Original;
 thread_local bool checked=false;
 thread_local bool found=false;
 
-bool IsGreyColor(COLORREF color, COLORREF menuTextColor)
+// Проверяем, что цвет точно равен системному "затенённому" цвету
+// (COLOR_BTNSHADOW), а не просто "выглядит серым".
+bool IsGreyedColor(COLORREF color, COLORREF menuTextColor, COLORREF grayTextColor)
 {
-    // Отсекаем PALETTERGB/PALETTEINDEX - ненулевой старший байт.
-    // Настоящий менюбар всегда получает цвет через GetSysColor,
-    // где старший байт всегда нулевой.
-    if ((color & 0xFF000000) != 0)
-        return false;
-
-    BYTE r = GetRValue(color);
-    BYTE g = GetGValue(color);
-    BYTE b = GetBValue(color);
-
-    return (r == g && g == b && r > 0 && r < 255 && color != menuTextColor);
+    // Сравниваем с реальным системным цветом "затенённого" текста,
+    // а не с жёстко заданной серой палитрой - он может быть любым
+    // в зависимости от цветовой схемы.
+    return (color == grayTextColor && grayTextColor != menuTextColor);
 }
 
 // Возвращает true, если поток, вызвавший нас, владеет окном,
@@ -85,9 +80,10 @@ bool IsCurrentThreadTaskbar()
 COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 {
     COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
+    COLORREF grayTextColor = GetSysColor(COLOR_BTNSHADOW);
 
     // Cheapest checks first: no syscalls unless the color actually matches.
-    if (!IsGreyColor(color, menuTextColor) || WindowFromDC(hdc) ||
+    if (!IsGreyedColor(color, menuTextColor, grayTextColor) || WindowFromDC(hdc) ||
         IsCurrentThreadWindowFocused() || IsCurrentThreadTaskbar()) {
         return SetTextColor_Original(hdc, color);
     }

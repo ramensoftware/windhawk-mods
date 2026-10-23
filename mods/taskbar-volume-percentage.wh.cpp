@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.8.1
+// @version         1.10.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @architecture    x86-64
@@ -38,6 +38,7 @@ level, updated in real time.
   - On the left
 - **Custom prefix**: Text prefix used with the "Prefix and percentage" style (default: `Vol `).
 - **Mute display style**: Style of the mute indicator when audio is muted:
+  - Same as Display style (Keep volume level) (default)
   - MUT
   - Mute
   - 0%
@@ -48,12 +49,20 @@ level, updated in real time.
   - Native mute icon and 0%
   - Custom text
 - **Custom mute text**: Text used when the "Custom text" or "Native mute icon and text" mute style is selected (default: `Mute`).
+- **Mute visual cue for volume text**: Visual cue applied to the volume text when audio is muted and "Same as Display style" is selected:
+  - Strikethrough text (default)
+  - Dimmed (reduced opacity)
+  - Strikethrough and dimmed
+  - None (keep text unchanged)
+- **Mute dimmed opacity percentage**: Opacity percentage (10 to 90) used when the dimmed cue is active (default: `50`).
 - **Icon spacing**: Space between the icon and the text (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Container width**: Width of the volume area (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Volume font size**: Size in pixels for the volume text indicator. Set to `0` to use the default size.
 - **Prefix font size**: Size in pixels for the prefix text. Set to `0` to use the default size.
 - **Icon and logo size**: Size in pixels for native volume/mute icons and emoji icons. Set to `0` to use the Windows default size.
 - **Custom font family**: Name of any font installed in Windows (e.g. `JetBrains Mono`, `Fira Code`, `Bahnschrift`, `Consolas`, `Digital-7`). Leave empty to use the default taskbar font.
+- **Text vertical offset**: Vertical offset in pixels for the volume text. Positive values shift downward, negative values shift upward (default: `0`).
+- **Icon vertical offset**: Vertical offset in pixels for the native volume and mute icons. Positive values shift downward, negative values shift upward (default: `0`).
 
 ## Compatibility
 
@@ -73,7 +82,7 @@ If you find this mod useful, you can support its development and maintenance:
 
 ## Credits
 
-- Inspired by the taskbar visual customization concepts from [m417z](https://github.com/m417z) and [taskbar-tray-system-icon-tweaks](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-system-icon-tweaks.wh.cpp).
+- Inspired by the taskbar visual customization concepts from [m417z](https://github.com/m417z) and [taskbar-tray-system-icon-tweaks](https://windhawk.net/mods/taskbar-tray-system-icon-tweaks).
 */
 // ==/WindhawkModReadme==
 
@@ -99,9 +108,10 @@ If you find this mod useful, you can support its development and maintenance:
 - customPrefix: "Vol "
   $name: Custom prefix
   $description: Used with the "Prefix and percentage" display style.
-- muteStyle: mut
+- muteStyle: currentVolume
   $name: Mute display style
   $options:
+  - currentVolume: Same as Display style (Keep volume level)
   - mut: MUT
   - mute: Mute
   - zero: 0%
@@ -116,6 +126,21 @@ If you find this mod useful, you can support its development and maintenance:
   $description: >-
     Used with the "Custom text" and "Native mute icon and text" mute display
     styles.
+- muteTextCue: strikethrough
+  $name: Mute visual cue for volume text
+  $description: >-
+    Visual indication applied to the volume text when audio is muted and "Same
+    as Display style" is selected.
+  $options:
+  - strikethrough: Strikethrough text
+  - dimmed: Dimmed (reduced opacity)
+  - strikethroughAndDimmed: Strikethrough and dimmed
+  - none: None (keep text unchanged)
+- muteOpacity: 50
+  $name: Mute dimmed opacity percentage
+  $description: >-
+    Opacity percentage (10 to 90) used when the dimmed cue is active. Defaults
+    to 50%.
 - iconSpacing: -1
   $name: Icon spacing
   $description: >-
@@ -146,6 +171,17 @@ If you find this mod useful, you can support its development and maintenance:
     Name of any font installed in Windows (e.g. "JetBrains Mono", "Fira Code",
     "Bahnschrift", "Consolas", "Digital-7"). Leave empty to use the default
     taskbar font.
+- verticalOffset: 0
+  $name: Text vertical offset
+  $description: >-
+    Vertical offset in pixels for the volume text. Positive values shift
+    downward, negative values shift upward. Set to 0 for default alignment.
+- iconVerticalOffset: 0
+  $name: Icon vertical offset
+  $description: >-
+    Vertical offset in pixels for the native volume and mute icons. Positive
+    values shift downward, negative values shift upward. Set to 0 for default
+    alignment.
 */
 // ==/WindhawkModSettings==
 
@@ -158,6 +194,7 @@ If you find this mod useful, you can support its development and maintenance:
 #include <cwctype>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -190,6 +227,7 @@ enum class ElementPosition {
 };
 
 enum class MuteStyle {
+    currentVolume,
     mut,
     mute,
     zero,
@@ -201,18 +239,29 @@ enum class MuteStyle {
     custom,
 };
 
+enum class MuteTextCue {
+    strikethrough,
+    dimmed,
+    strikethroughAndDimmed,
+    none,
+};
+
 struct {
     DisplayStyle displayStyle;
     ElementPosition elementPosition;
     WindhawkUtils::StringSetting customPrefix;
     MuteStyle muteStyle;
     WindhawkUtils::StringSetting customMuteText;
+    MuteTextCue muteTextCue;
+    int muteOpacity;
     int containerWidth;
     int iconSpacing;
     double fontSize;
     double prefixSize;
     double iconSize;
     WindhawkUtils::StringSetting customFontFamily;
+    int verticalOffset;
+    int iconVerticalOffset;
 } g_settings;
 
 std::atomic<bool> g_unloading;
@@ -261,12 +310,16 @@ struct TrackedVolumeContent {
     winrt::weak_ref<Controls::TextBlock> subBlock;
     bool isCustomLayoutConfigured = false;
     bool lastDualBoxMode = false;
+    bool hasIconOffset = false;
+    bool hasTextOffset = false;
     winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayColumn{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseColumn{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseMargin{nullptr};
+    winrt::Windows::Foundation::IInspectable origUnderlayMargin{nullptr};
     winrt::Windows::Foundation::IInspectable origContainerGridAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origContainerGridColumnSpacing{
         nullptr};
@@ -336,7 +389,7 @@ static LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam)
 
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
-                         void* procParam) {
+                         void* procParam = nullptr) {
     static const UINT runFromWindowThreadRegisteredMsg =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -361,6 +414,7 @@ bool RunFromWindowThread(HWND hWnd,
     RUN_FROM_WINDOW_THREAD_PARAM param;
     param.proc = proc;
     param.procParam = procParam;
+
     SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
                 reinterpret_cast<LPARAM>(&param));
 
@@ -371,7 +425,7 @@ bool RunFromWindowThread(HWND hWnd,
 
 bool RunFromTaskbarThread(RunFromWindowThreadProc_t proc) {
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    return hTaskbarWnd && RunFromWindowThread(hTaskbarWnd, proc, nullptr);
+    return hTaskbarWnd && RunFromWindowThread(hTaskbarWnd, proc);
 }
 
 FrameworkElement GetParentElementByClassName(FrameworkElement const& element,
@@ -407,7 +461,7 @@ bool IsDualBoxStyle() {
 }
 
 std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
-    if (isMuted) {
+    if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
         std::wstring customText = g_settings.customMuteText.get();
         return (g_settings.muteStyle == MuteStyle::mute)        ? L"Mute"
                : (g_settings.muteStyle == MuteStyle::zero)      ? L"0%"
@@ -445,10 +499,14 @@ std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
         return rawPrefix + number + L"%";
     }
     if (g_settings.displayStyle == DisplayStyle::emoji) {
+        PCWSTR emojiIcon =
+            (isMuted && g_settings.muteStyle == MuteStyle::currentVolume)
+                ? L"\U0001F507"
+                : L"\U0001F50A";
         if (g_settings.elementPosition == ElementPosition::left) {
-            return L"\U0001F50A " + number + L"%";
+            return std::wstring(emojiIcon) + L" " + number + L"%";
         }
-        return number + L"% \U0001F50A";
+        return number + L"% " + emojiIcon;
     }
 
     return number + L"%";
@@ -528,6 +586,19 @@ double GetContainerWidth() {
     return CalculateAutoWidth();
 }
 
+void RestoreLocalProperty(
+    FrameworkElement const& target,
+    DependencyProperty const& dp,
+    winrt::Windows::Foundation::IInspectable const& orig) {
+    if (target) {
+        if (!orig || orig == DependencyProperty::UnsetValue()) {
+            target.ClearValue(dp);
+        } else {
+            target.SetValue(dp, orig);
+        }
+    }
+}
+
 void ApplyIconViewWidth(TrackedIconView& tracked,
                         FrameworkElement const& iconView) {
     double width = GetContainerWidth();
@@ -545,21 +616,13 @@ void ApplyIconViewWidth(TrackedIconView& tracked,
         iconView.Width(width);
         iconView.HorizontalAlignment(HorizontalAlignment::Center);
     } else if (tracked.hasCustomWidth) {
-        auto restoreProp =
-            [](FrameworkElement const& el, DependencyProperty const& dp,
-               winrt::Windows::Foundation::IInspectable const& orig) {
-                if (!orig || orig == DependencyProperty::UnsetValue()) {
-                    el.ClearValue(dp);
-                } else {
-                    el.SetValue(dp, orig);
-                }
-            };
-        restoreProp(iconView, FrameworkElement::MinWidthProperty(),
-                    tracked.origMinWidth);
-        restoreProp(iconView, FrameworkElement::WidthProperty(),
-                    tracked.origWidth);
-        restoreProp(iconView, FrameworkElement::HorizontalAlignmentProperty(),
-                    tracked.origAlignment);
+        RestoreLocalProperty(iconView, FrameworkElement::MinWidthProperty(),
+                             tracked.origMinWidth);
+        RestoreLocalProperty(iconView, FrameworkElement::WidthProperty(),
+                             tracked.origWidth);
+        RestoreLocalProperty(iconView,
+                             FrameworkElement::HorizontalAlignmentProperty(),
+                             tracked.origAlignment);
         tracked.hasCustomWidth = false;
     }
 }
@@ -675,17 +738,6 @@ void ApplyIconFontSize(
     if (!el) {
         return;
     }
-    auto restoreProp =
-        [](FrameworkElement const& target, DependencyProperty const& dp,
-           winrt::Windows::Foundation::IInspectable const& orig) {
-            if (target) {
-                if (!orig || orig == DependencyProperty::UnsetValue()) {
-                    target.ClearValue(dp);
-                } else {
-                    target.SetValue(dp, orig);
-                }
-            }
-        };
 
     if (FrameworkElement tbEl = FindChildByName(el, L"InnerTextBlock")) {
         if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
@@ -693,10 +745,10 @@ void ApplyIconFontSize(
                 tb.FontSize(size);
                 el.MinWidth(size);
             } else {
-                restoreProp(tb, Controls::TextBlock::FontSizeProperty(),
-                            origFontSize);
-                restoreProp(el, FrameworkElement::MinWidthProperty(),
-                            origMinWidth);
+                RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
+                                     origFontSize);
+                RestoreLocalProperty(el, FrameworkElement::MinWidthProperty(),
+                                     origMinWidth);
             }
         }
     }
@@ -745,65 +797,70 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
 
     containerGrid.ColumnDefinitions().Clear();
 
-    auto restoreProp =
-        [](FrameworkElement const& el, DependencyProperty const& dp,
-           winrt::Windows::Foundation::IInspectable const& orig) {
-            if (el) {
-                if (!orig || orig == DependencyProperty::UnsetValue()) {
-                    el.ClearValue(dp);
-                } else {
-                    el.SetValue(dp, orig);
-                }
-            }
-        };
+    if (tracked.hasIconOffset) {
+        if (auto base = tracked.baseElement.get()) {
+            RestoreLocalProperty(base, FrameworkElement::MarginProperty(),
+                                 tracked.origBaseMargin);
+        }
+        if (auto underlay = tracked.underlayElement.get()) {
+            RestoreLocalProperty(underlay, FrameworkElement::MarginProperty(),
+                                 tracked.origUnderlayMargin);
+        }
+        tracked.hasIconOffset = false;
+    }
 
     if (auto base = tracked.baseElement.get()) {
-        restoreProp(base, FrameworkElement::MinWidthProperty(),
-                    tracked.origBaseMinWidth);
-        restoreProp(base, UIElement::VisibilityProperty(),
-                    tracked.origBaseVisibility);
-        restoreProp(base, FrameworkElement::HorizontalAlignmentProperty(),
-                    tracked.origBaseAlignment);
-        restoreProp(base, Controls::Grid::ColumnProperty(),
-                    tracked.origBaseColumn);
+        RestoreLocalProperty(base, FrameworkElement::MinWidthProperty(),
+                             tracked.origBaseMinWidth);
+        RestoreLocalProperty(base, UIElement::VisibilityProperty(),
+                             tracked.origBaseVisibility);
+        RestoreLocalProperty(base,
+                             FrameworkElement::HorizontalAlignmentProperty(),
+                             tracked.origBaseAlignment);
+        RestoreLocalProperty(base, Controls::Grid::ColumnProperty(),
+                             tracked.origBaseColumn);
         if (FrameworkElement tbEl = FindChildByName(base, L"InnerTextBlock")) {
             if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
                 tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
                 tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
-                restoreProp(tb, Controls::TextBlock::FontSizeProperty(),
-                            tracked.origBaseFontSize);
+                RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
+                                     tracked.origBaseFontSize);
             }
         }
     }
     if (auto underlay = tracked.underlayElement.get()) {
-        restoreProp(underlay, FrameworkElement::MinWidthProperty(),
-                    tracked.origUnderlayMinWidth);
-        restoreProp(underlay, UIElement::VisibilityProperty(),
-                    tracked.origUnderlayVisibility);
-        restoreProp(underlay, FrameworkElement::HorizontalAlignmentProperty(),
-                    tracked.origUnderlayAlignment);
-        restoreProp(underlay, Controls::Grid::ColumnProperty(),
-                    tracked.origUnderlayColumn);
+        RestoreLocalProperty(underlay, FrameworkElement::MinWidthProperty(),
+                             tracked.origUnderlayMinWidth);
+        RestoreLocalProperty(underlay, UIElement::VisibilityProperty(),
+                             tracked.origUnderlayVisibility);
+        RestoreLocalProperty(underlay,
+                             FrameworkElement::HorizontalAlignmentProperty(),
+                             tracked.origUnderlayAlignment);
+        RestoreLocalProperty(underlay, Controls::Grid::ColumnProperty(),
+                             tracked.origUnderlayColumn);
         if (FrameworkElement tbEl =
                 FindChildByName(underlay, L"InnerTextBlock")) {
             if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
                 tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
                 tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
-                restoreProp(tb, Controls::TextBlock::FontSizeProperty(),
-                            tracked.origUnderlayFontSize);
+                RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
+                                     tracked.origUnderlayFontSize);
             }
         }
     }
 
-    restoreProp(containerGrid, FrameworkElement::HorizontalAlignmentProperty(),
-                tracked.origContainerGridAlignment);
-    restoreProp(containerGrid, Controls::Grid::ColumnSpacingProperty(),
-                tracked.origContainerGridColumnSpacing);
+    RestoreLocalProperty(containerGrid,
+                         FrameworkElement::HorizontalAlignmentProperty(),
+                         tracked.origContainerGridAlignment);
+    RestoreLocalProperty(containerGrid, Controls::Grid::ColumnSpacingProperty(),
+                         tracked.origContainerGridColumnSpacing);
     if (auto tic = tracked.textIconContent.get()) {
-        restoreProp(tic, FrameworkElement::HorizontalAlignmentProperty(),
-                    tracked.origTextIconContentAlignment);
+        RestoreLocalProperty(tic,
+                             FrameworkElement::HorizontalAlignmentProperty(),
+                             tracked.origTextIconContentAlignment);
     }
 
+    tracked.hasTextOffset = false;
     tracked.lastDualBoxMode = false;
     tracked.lastNativeGlyph = false;
     tracked.isCustomLayoutConfigured = false;
@@ -982,7 +1039,31 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
         return;
     }
 
-    if (isMuted) {
+    bool applyMuteCue =
+        isMuted && g_settings.muteStyle == MuteStyle::currentVolume;
+
+    if (applyMuteCue) {
+        bool doStrikethrough =
+            g_settings.muteTextCue == MuteTextCue::strikethrough ||
+            g_settings.muteTextCue == MuteTextCue::strikethroughAndDimmed;
+        bool doDim =
+            g_settings.muteTextCue == MuteTextCue::dimmed ||
+            g_settings.muteTextCue == MuteTextCue::strikethroughAndDimmed;
+
+        subBlock.TextDecorations(
+            doStrikethrough
+                ? winrt::Windows::UI::Text::TextDecorations::Strikethrough
+                : winrt::Windows::UI::Text::TextDecorations::None);
+        subBlock.Opacity(
+            doDim ? (static_cast<double>(g_settings.muteOpacity) / 100.0)
+                  : 1.0);
+    } else {
+        subBlock.TextDecorations(
+            winrt::Windows::UI::Text::TextDecorations::None);
+        subBlock.Opacity(1.0);
+    }
+
+    if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
         if (g_settings.muteStyle == MuteStyle::emoji) {
             double effectiveIconSize = (g_settings.iconSize > 0)
                                            ? g_settings.iconSize
@@ -1050,7 +1131,10 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
                                        ? g_settings.iconSize
                                        : kDefaultIconFontSize;
         std::wstring numPart = number + L"%";
-        std::wstring emojiPart = L"\U0001F50A";
+        std::wstring emojiPart =
+            (isMuted && g_settings.muteStyle == MuteStyle::currentVolume)
+                ? L"\U0001F507"
+                : L"\U0001F50A";
 
         subBlock.Text(L"");
         subBlock.Inlines().Clear();
@@ -1206,6 +1290,42 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         textIconContent.HorizontalAlignment(HorizontalAlignment::Center);
     }
 
+    if (g_settings.iconVerticalOffset != 0) {
+        if (!tracked->hasIconOffset) {
+            tracked->origBaseMargin =
+                baseElement.ReadLocalValue(FrameworkElement::MarginProperty());
+            if (underlayElement) {
+                tracked->origUnderlayMargin = underlayElement.ReadLocalValue(
+                    FrameworkElement::MarginProperty());
+            }
+            tracked->hasIconOffset = true;
+        }
+        double off = static_cast<double>(g_settings.iconVerticalOffset);
+        baseElement.Margin(Thickness{0, off, 0, -off});
+        if (underlayElement) {
+            underlayElement.Margin(Thickness{0, off, 0, -off});
+        }
+    } else if (tracked->hasIconOffset) {
+        RestoreLocalProperty(baseElement, FrameworkElement::MarginProperty(),
+                             tracked->origBaseMargin);
+        RestoreLocalProperty(underlayElement,
+                             FrameworkElement::MarginProperty(),
+                             tracked->origUnderlayMargin);
+        tracked->hasIconOffset = false;
+    }
+
+    Controls::TextBlock subBlock =
+        GetOrCreateSubBlock(*tracked, containerGrid, baseElement);
+
+    if (g_settings.verticalOffset != 0) {
+        double off = static_cast<double>(g_settings.verticalOffset);
+        subBlock.Margin(Thickness{0, off, 0, -off});
+        tracked->hasTextOffset = true;
+    } else if (tracked->hasTextOffset) {
+        subBlock.ClearValue(FrameworkElement::MarginProperty());
+        tracked->hasTextOffset = false;
+    }
+
     ApplyIconFontSize(baseElement, g_settings.iconSize,
                       tracked->origBaseFontSize, tracked->origBaseMinWidth);
     ApplyIconFontSize(underlayElement, g_settings.iconSize,
@@ -1214,7 +1334,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
     bool isDualBoxRequested = IsDualBoxStyle();
     bool isMuteDualBox = isDualBoxRequested && g_isMuted &&
-                         (g_settings.muteStyle == MuteStyle::glyphText ||
+                         (g_settings.muteStyle == MuteStyle::currentVolume ||
+                          g_settings.muteStyle == MuteStyle::glyphText ||
                           g_settings.muteStyle == MuteStyle::glyphZero);
     bool showDualBox = isDualBoxRequested && (!g_isMuted || isMuteDualBox);
 
@@ -1236,9 +1357,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     if (!showDualBox) {
         containerGrid.ColumnDefinitions().Clear();
         containerGrid.ColumnSpacing(0.0);
-
-        Controls::TextBlock subBlock =
-            GetOrCreateSubBlock(*tracked, containerGrid, baseElement);
 
         if (useNativeGlyph) {
             subBlock.Text(L"");
@@ -1281,9 +1399,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         tracked->isCustomLayoutConfigured = true;
         return;
     }
-
-    Controls::TextBlock subBlock =
-        GetOrCreateSubBlock(*tracked, containerGrid, baseElement);
 
     if (containerGrid.ColumnDefinitions().Size() < 2) {
         containerGrid.ColumnDefinitions().Clear();
@@ -1488,11 +1603,21 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
     Wh_Log(L"> tid=%u volume=%.2f muted=%d", GetCurrentThreadId(), volumeLevel,
            isMuted);
 
+    float curVolume = 0.0f;
+    bool curMuted = false;
+    bool stateChanged = false;
+
     {
         std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        if (!g_hasVolumeState || g_volumeLevel != volumeLevel ||
+            g_isMuted != isMuted) {
+            stateChanged = true;
+        }
         g_volumeLevel = volumeLevel;
         g_isMuted = isMuted;
         g_hasVolumeState = true;
+        curVolume = volumeLevel;
+        curMuted = isMuted;
 
         if (spatialSoundName) {
             g_spatialSoundName = *spatialSoundName;
@@ -1503,6 +1628,15 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
 
     VolumeSystemTrayIconDataModel_UpdateVolume_Original(
         pThis, volumeLevel, isMuted, spatialSoundName);
+
+    if (stateChanged && !g_unloading) {
+        SafeXamlCall([curVolume, curMuted] {
+            g_volumeText = FormatVolumeText(curVolume, curMuted);
+            g_volumeTextChanged = true;
+            UpdateAllVolumeLayouts();
+            ApplyVolumeIconViewsWidth();
+        });
+    }
 }
 
 HRESULT WINAPI
@@ -1770,7 +1904,8 @@ void LoadSettings() {
 
     auto muteStyle = WindhawkUtils::StringSetting::make(L"muteStyle");
     std::wstring_view ms = muteStyle.get();
-    g_settings.muteStyle = (ms == L"mute")        ? MuteStyle::mute
+    g_settings.muteStyle = (ms == L"mut")         ? MuteStyle::mut
+                           : (ms == L"mute")      ? MuteStyle::mute
                            : (ms == L"zero")      ? MuteStyle::zero
                            : (ms == L"cross")     ? MuteStyle::cross
                            : (ms == L"emoji")     ? MuteStyle::emoji
@@ -1778,10 +1913,31 @@ void LoadSettings() {
                            : (ms == L"glyphText") ? MuteStyle::glyphText
                            : (ms == L"glyphZero") ? MuteStyle::glyphZero
                            : (ms == L"custom")    ? MuteStyle::custom
-                                                  : MuteStyle::mut;
+                                                  : MuteStyle::currentVolume;
 
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
+
+    auto muteTextCue = WindhawkUtils::StringSetting::make(L"muteTextCue");
+    std::wstring_view mtc = muteTextCue.get();
+    g_settings.muteTextCue =
+        (mtc == L"dimmed")
+            ? MuteTextCue::dimmed
+        : (mtc == L"strikethroughAndDimmed")
+            ? MuteTextCue::strikethroughAndDimmed
+        : (mtc == L"none")
+            ? MuteTextCue::none
+            : MuteTextCue::strikethrough;
+
+    int opacity = Wh_GetIntSetting(L"muteOpacity");
+    if (opacity <= 0) {
+        opacity = 50;
+    } else if (opacity < 10) {
+        opacity = 10;
+    } else if (opacity > 90) {
+        opacity = 90;
+    }
+    g_settings.muteOpacity = opacity;
 
     g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
 
@@ -1804,6 +1960,9 @@ void LoadSettings() {
 
     g_settings.customFontFamily =
         WindhawkUtils::StringSetting::make(L"customFontFamily");
+
+    g_settings.verticalOffset = Wh_GetIntSetting(L"verticalOffset");
+    g_settings.iconVerticalOffset = Wh_GetIntSetting(L"iconVerticalOffset");
 
     g_maxObservedWidth = 0.0;
 

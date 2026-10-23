@@ -4,7 +4,7 @@
 // @name:pt-BR      Ilha e Dock estilo Mac
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
-// @version         2.0.0
+// @version         2.0.6
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -30,279 +30,226 @@ GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BMac%2
 [caliberda.com.br](https://caliberda.com.br)
 
 The top of macOS and the iPhone's Dynamic Island on Windows 11: an island at
-the top of the screen with the clock, a control center, notifications and
-what's playing; and, if you want it, a dock like the one on macOS instead of
-the taskbar.
+the top of the screen with the clock, a control center, your notifications
+and what's playing, and, if you want it, a dock like the one on macOS
+instead of the taskbar.
 
-![The island minimized to a line and opened again](https://i.imgur.com/pGYje4Z.gif)
+![The island opening from its line, a notification, the control center](https://i.imgur.com/hiLqamP.gif)
 
-| The control center | A new notification in the pill |
-| :---: | :---: |
-| ![The control center](https://i.imgur.com/KxO0ssn.gif) | ![A new notification in the pill](https://i.imgur.com/8VlkvfE.gif) |
+## What's new in 2.0.6
 
-## The island
+| Glass | A new dock | Your size and language |
+| :---: | :---: | :---: |
+| ![Glass](https://i.imgur.com/dEv7mfK.gif) | ![The new dock](https://i.imgur.com/dSN342D.gif) | ![The new options](https://i.imgur.com/89DjPMq.png) |
+| The island and its panels see-through and blurred, in every style | Icons that grow in a wave and push their neighbors, sharp when magnified | Icon and text size, panels up to 150%, the island in English, Portuguese or Chinese |
 
-* **Always at the top**: the clock, the control center, volume, battery and
-  notifications, always visible (except in full screen, and a moment after
-  a screenshot's selection starts, out of its buttons' way): a black pill at
-  the top center, which can be minimized to a thin line, or a full-width bar
-  like the macOS menu bar, which keeps maximized windows below it. In the
-  Fixed style, it can also be notches hanging from the top edge, like a
-  MacBook's: one in the middle, one at each of the screen's top corners, or
-  three (left, middle and right), with curves made rounder or flatter in
-  the settings; each item goes in the notch it's dragged to in the
-  settings, a notch with nothing in it stays small, the notifications come
-  out of the notch with the bell, and the notches hide all together (as
-  one line, on the bell's notch) or each on its own (each as its line). The mouse
-  wheel on the volume changes it (its percentage shows under it a moment),
-  and Shift and the wheel go to another
-  output device (its name shows under it, used once Shift is let go); the
-  bell turns into a moon while "Do not disturb" is on. The middle button
-  mutes the volume or the microphone, and turns "Do not disturb" on or off
-  on the bell; the bell's right click opens the notifications with their
-  switches.
-* **Apps with unread notifications** (a count on their taskbar button, or a
-  notification not looked at yet) show up on the island with a red bubble
-  with how many they have (in Windows' notification center, where
-  WhatsApp's count the messages they say they hold, or on the taskbar
-  button; a dot without a number), even while the taskbar is
-  hidden, and the bell gets a red dot until the list is
-  opened. Notifications that came while the island wasn't running (the
-  computer off, the island turned off) and are still in Windows' list show
-  the same way when it starts. Clicking an app (or its notification in the pill) opens it at its
-  latest notification (an app hidden in the tray, like many chat apps, by
-  its tray icon); a
-  notification with nothing to open (like a script's) shows the list
-  instead, scrolled to it. Opening the app in any way (from the island, the
-  list or the taskbar) clears its notifications from the island and the
-  list, and so does the app taking them away from the Windows notification
-  center (like a message read on the phone). Under the mouse, an app's icon
-  shows its name and how many notifications it has. Apps that send their
-  notifications under several names (like Phone Link, one for each phone
-  app) show as one icon with their counts together (an option in the
-  notifications' settings, on by default).
-* **Panels like the Dynamic Island**: the pill itself stretches into a panel,
-  sideways and then down, with a little bounce:
-  * **Calendar** (the clock).
-  * **Control center** (its own icon), like the one on
-    macOS: Wi-Fi (on/off, the network cable's state and speed, the
-    networks in reach with buttons to connect, disconnect or forget one
-    (two clicks), joining with a password and, when it fails, Windows'
-    reason),
-    Bluetooth (on/off, the paired devices), "Do not disturb", night light,
-    project (the four display modes), cast, live captions, accessibility
-    (magnifier, narrator, color filters, sticky keys), the display's
-    brightness (monitors with DDC/CI), the volume, the output device and the
-    volume of each app, the battery, the mobile hotspot and airplane mode.
-  * **Sound** (the volume): only the volume, the output device and the
-    volume of each app, like the sound menu on macOS.
-  * **Notifications** (the bell): the latest notifications Windows showed,
-    in a list that takes up to half of the screen and scrolls smoothly;
-    clicking one opens its app.
-  * **What's playing** (the music note): the cover, the song, a timeline to
-    jump in it, previous / play / next, the volume (the mouse wheel too),
-    and the playing app's own volume, muted with a click on its note. The
-    buttons, and the cover with the title, can also sit on the pill.
-    Clicking the cover brings its app to the front, and a title or an
-    artist too long scrolls in it under the mouse; on the pill, the mouse
-    over it shows the whole title and the artist in a bubble, and a long
-    title can keep scrolling while it plays (an island setting, off by
-    default).
-    With several apps with media (a paused Spotify and a browser playing,
-    for example), a row at its top chooses which one the island controls
-    ("Automatic" follows Windows); on the pill, a dot under the cover for
-    each, and Shift+wheel (or a sideways touchpad swipe) on it goes to the
-    next one. Only apps that give Windows their media controls show (the
-    ones in Windows' own media flyout): players without them, like VLC 3,
-    don't.
-  * The control center's controls can be chosen and ordered right in it
-    ("Edit", like on the iPhone: drag one to move it, "-" removes
-    it, and the others are listed below to add), with shortcuts like dark
-    mode, screenshot, lock, emoji, clipboard history, Task Manager,
-    Calculator and File Explorer.
-  * **komorebi** (the tiling window manager, if installed; a control center
-    section and an optional button on the pill, whose click opens a small
-    panel): start, stop and reload buttons, with its version under them,
-    like yasb's control. Each runs komorebi's own `komorebic start`, `stop`
-    or both, only when clicked, without a window like yasb does; when it
-    fails, a terminal on the screen shows what it printed (it isn't run
-    again).
-    Options choose whether whkd and masir start and stop with it. Nothing
-    is installed or accepted for you, and the mod never ends komorebi by
-    itself.
-  * The calendar keeps events, with reminders that show in the pill, and,
-    if chosen, the public holidays of the country set in Windows. Its gear
-    opens its agendas: .ics calendars (a link, like Google Calendar's
-    "Secret address in iCal format", or a file), added there or in the
-    mod's settings, whose events show read only, repeating ones too, on
-    their days in each agenda's color, with the next ones under the month
-    (with their year when it's another one, like a birthday already past
-    this year); and today's color (red, Windows' accent color, or one
-    chosen).
-  * **Power** (an optional button on the pill): sleep, restart, shut down,
-    lock and sign out, like the macOS Apple menu. Restarting, shutting down
-    and signing out ask first, and Windows closes the apps as usual.
-  * **Battery** (the battery): only the battery and the power plan (and,
-    with the balanced plan, Windows' power modes).
-  * **Brightness** (the brightness's item): only the screen's brightness,
-    like the sound.
-  * **More on the pill** (each one optional, off by default, in the island's
-    settings):
-    how much the processor, the memory and the video memory are used
-    (clicking one shows its graphs and details), a button muting the
-    microphones (while the island runs their level goes to 0 too, for apps
-    that record a muted microphone; it comes back when they're unmuted or
-    the island stops, and they stay muted until you unmute them), the
-    screen's brightness
-    (the mouse wheel changes it, a click opens it alone), the keyboard's language and input mode
-    (中 or 英, あ or A, 가 or A, or the language, like PT, when there's more
-    than one keyboard; a click lists the keyboards, to switch the app in
-    front to another one, and a change shows in a bubble while the pill is
-    minimized), the apps using the microphone, the camera or the location
-    (an orange, green or blue icon while one is used, with rings spreading
-    out of the camera's as it starts; the mouse on it names the apps, a
-    click opens Windows' privacy page), USB drives (on by default, two
-    options: an icon listing them while there are some, to open or eject
-    each, and a notice when one is plugged in), the virtual desktops (a dot
-    each; the mouse wheel goes to the next or previous one, a click lists
-    them with a new one and the task view, and an "x" closes one), the
-    control center's buttons (night light, the hotspot and airplane mode
-    switch right there, lit while on; Wi-Fi shows the network's bars and,
-    like Bluetooth, projecting and accessibility, opens its own list under
-    it, closed by a second click; the others are their shortcuts),
-    **folders and places** (your shortcuts: folders you pin and Windows'
-    places like This PC, the Recycle Bin, Settings pages, Device Manager or
-    Programs and Features; a click on a folder shows what's in it in a
-    column beside it, and so on deeper, like the Finder's columns, with a
-    button back; "Open in Explorer" opens the column's folder, a click on a
-    file opens it with its app, and a folder's pin pins it; only names are
-    shown, read when shown), **wallpapers** from a folder you pick (its
-    pictures' thumbnails; one chosen comes in with a transition, fade,
-    circle, slide or zoom, chosen there too, placed as Windows places its
-    wallpaper, and becomes that monitor's wallpaper; the mouse wheel on the
-    item goes to the next one), names under the mouse on every icon, a
-    button switching light and dark mode, **notes** (with topics, copied
-    with a click), **tasks** (in progress, and the last ten
-    done below them),
-    **keyboard shortcuts** to remember (recorded by pressing them, or
-    imported from a file like komorebi's whkdrc), the **weather** (now, the
-    next hours and the week, for a city typed in its panel) and **updates**
-    (the apps with a newer version in winget, updated in a terminal: one,
-    the ones ticked, or all; an app can be ignored, so one winget can't
-    update doesn't keep the count on the pill, and shown again; and the
-    Windows updates waiting). Notes, tasks
-    and shortcuts also have buttons in the control center.
-* **Colors**: black, graphite, light, the Windows accent color, glass,
-  black or light following Windows' dark or light mode (or the other way
-  around), or your own colors (the background, the texts and the pill's
-  icons, picked in Windows' color dialog; buttons and switches that are on
-  follow the icons' color, and a warning shows when the texts or icons are
-  hard to read on the background), or the colors of the app in front (its
-  title bar's or its icon's, blending in as you switch apps); how opaque
-  the island and its panels are; and frosted glass on the bar and on the Fixed style's strip
-  (not with the notches, the screen shows between them; Windows' blur: it
-  shows while Windows' transparency effects are on, in Settings >
-  Personalization > Colors, which the mod never changes; Windows blurs only
-  rectangles, so the loose pill stays as it is).
-* **The other apps' tray icons** on the island: the pinned ones always, the
-  others opening sideways from the "⋯" button, or, if chosen, in a list
-  under the pill, as a grid like Windows' or with their names (it stays
-  open while an app's menu shows, until a click outside it). Clicking, double-clicking and
-  right-clicking them works like on the taskbar (a double click opens the app,
-  the right button shows its menu; a click in the room between two icons
-  goes to the nearer one); their names show under them in a bubble drawn
-  like the island, in its colors. To keep one on the pill (pinned), click it
-  with the middle button (the mouse wheel), or leave the mouse on it for two
-  seconds and click the pin that shows; the same unpins it (the grid and the
-  list say so under their icons). Dragged, an icon changes its place: in the
-  list of the ones not pinned (their order), anywhere on the pill (beside an
-  item, it goes with that item, in every style and notch), from the list to
-  the pill (pinned there) or back (unpinned). Each island keeps its own: the
-  ones following the main settings share them, and one with a profile of its
-  own keeps them in that profile (like the other monitors using it). With many
-  icons, the list shows twelve at a time (an island setting; fewer on small
-  screens): the icons at an edge with more past it
-  fade out, and the mouse wheel (or a sideways swipe) over the icons scrolls
-  the list.
-* **New notifications in the pill**: the pill opens with the app, the title
-  and the text for a few seconds, like the iPhone's Dynamic Island (not with
-  "Do not disturb"), with the sender's picture when the notification has one
-  on this computer (like a contact's photo). Messaging apps that offer a reply box in their
-  Windows notifications (like WhatsApp) can be answered right there; the
-  reply wraps onto more lines (the wheel scrolls it), Shift+Enter starts a
-  new line, the arrows move in it and Ctrl+Backspace deletes a word. Under the mouse, a long notification shows
-  on up to three lines (in the list too).
-  Its "x" deletes it (from the pill and the list); its arrow minimizes it,
-  ignoring its app for a minute, like on Android (its notifications still go
-  to the list, and only its icon on the island moves). With the bar style,
-  the banner drops out of the bar's middle.
-* **Notifications** can be cleared from the island's list (all, or one by
-  one); the gear at its top unfolds its switches ("Do not disturb", the
-  banners in the pill, and showing what they say).
-* **Anywhere on the screen**: choose its place in the island's settings (or
-  turn on
-  dragging the pill, which then snaps to the middle and the corners of each
-  edge); some apps can have a place of their own (for example, lower, so it
-  doesn't cover a browser's tabs), and icons and a clock of their own
-  (shown or hidden while they're in front, even ones turned off for all
-  apps; a shorter clock for a smaller island), and it slides
-  there while they're in
-  front. On the lower half of the screen, its panels and banners open
-  upwards; on the left and right edges it stands upright, and they open
-  towards the middle. Against the bottom edge or upright on a side, it can
-  be minimized to a line there too.
-* **Several monitors**: the island stays on the main monitor, on another
-  one chosen, follows the monitor with the mouse, or shows on every monitor
-  (each with the main island's settings or a profile of its own); each
-  monitor keeps its own place for it. Going to another monitor, it closes
-  into its dot, which glides there and opens again.
-* **Smooth everywhere**: what it shows opens, closes, grows, shrinks and
-  changes with springs (icons crossfade, new tray icons and notifications
-  grow in, old ones shrink away). For slower computers, the "Animations"
-  settings (the island's in its settings, the dock's in Windhawk's) turn them off,
-  keep only the essential ones ("partial": the island, panels and banners
-  opening and closing, without bounces, glows, color blends, counting
-  numbers or scrolling text), change their speed, or limit the frames a
-  second (about 90, 60 or 30; the animations keep their length).
-* **The island's options are in the island**: right-click the island (the
-  pill or the minimized line) and click the gear that comes out under it
-  (see below), or click the gear at the bottom of the control center; a
-  dimmed option says why under the mouse. Windhawk's settings turn the
-  island on and set up the taskbar, the dock and the dock's animations.
+Also: the pill's height, corners and width, the edge around it (or none), a
+translucent glass and its blur, the bar's items at the screen's corners, a
+green battery while charging, the calendar hiding your past events, updates
+checked as often as you choose, and fixes for the island at startup, Wi-Fi,
+the keyboard language bubble, QQ's and Nearby sharing's notifications and
+more.
+
+## What it does
+
+| | |
+| :--- | :---: |
+| **The island**: always at the top, as a pill, notches like a MacBook's, or a full bar like macOS'. It minimizes to a thin line and comes back when the mouse reaches it. | ![The styles](https://i.imgur.com/Bh0AxUU.gif) |
+| **Notifications**: new ones drop out of the pill (answer messages right there), apps with unread ones show on it with their count, and the bell keeps the list. | ![A notification in the pill](https://i.imgur.com/CsViw16.gif) |
+| **Control center**: Wi-Fi, Bluetooth, the sound of each app, brightness, "Do not disturb", night light and more, like on macOS; edit it like on the iPhone. | ![The control center](https://i.imgur.com/mIUH1ea.gif) |
+| **Everything else on the pill**, each one optional: what's playing, a calendar with your agendas, the weather, notes, tasks, folders, wallpapers, the computer's usage, updates, virtual desktops, the keyboard's language, privacy indicators, komorebi... | ![Some of the panels](https://i.imgur.com/Q7a2g94.png) |
+| **The dock** (optional): a dock like macOS' instead of the taskbar, or the Windows taskbar made transparent with only its apps. | ![The dock](https://i.imgur.com/dSN342D.gif) |
+| **Make it yours**: colors (your own, or the app in front's), glass, sizes, a place and icons per app, profiles, one island on each monitor. | ![Colors](https://i.imgur.com/GJdJDI8.png) |
+
+## Getting started
+
+1. Install it: the island shows at the top of the screen.
+2. Right-click the island and click the gear under it: all its options are
+   there.
+3. This page's "Settings" tab chooses the taskbar: the dock, the
+   transparent one, or Windows' own.
+
+Everything the mod does, in detail, is below.
+
+## The island in detail
+
+### On the pill
+
+* **Styles**: a black pill at the top center; the Fixed style, which keeps
+  its room so maximized windows stop beside it; a full-width bar like the
+  macOS menu bar; or notches like a MacBook's (in the middle, at the corners,
+  or three), with rounder or flatter curves. Each item goes in the notch
+  it's dragged to, and an empty notch stays small.
+* **Minimized** to a thin line (also at the bottom, or upright on a side), it
+  comes back when the mouse reaches it; notches hide together or each on its
+  own. It steps aside in full screen and as a screenshot's selection starts.
+* **Volume**: the wheel changes it, Shift+wheel picks another output device.
+  The middle button mutes the volume or the microphone, or switches "Do not
+  disturb" on the bell (a moon while it's on); the bell's right click opens
+  the notifications with their switches.
+* **More items**, each optional (off by default):
+  * the processor, memory and video memory use (a click shows graphs);
+  * a microphone mute button (it also turns the level to 0 for apps that
+    record a muted microphone, back when unmuted);
+  * the screen's brightness (the wheel changes it);
+  * the keyboard's language and input mode (中 or 英, あ or A, 가 or A, or
+    PT...; a click switches keyboards, a bubble shows a change while the
+    pill is minimized);
+  * the microphone, camera and location in use (colored icons; the apps'
+    names under the mouse);
+  * USB drives (on by default: open or eject them, and a notice when one is
+    plugged in);
+  * the virtual desktops (a dot each; the wheel switches, a click lists them
+    with a new one and an "x" to close);
+  * the app in focus on that monitor, light and dark mode, the profiles and
+    a power button;
+  * notes (with topics), tasks (the last ten done kept), and keyboard
+    shortcuts to remember (recorded, or imported from komorebi's whkdrc);
+  * the weather, updates, folders and places, wallpapers and komorebi (see
+    the panels below);
+  * the control center's buttons (night light, the hotspot and airplane mode
+    switch right there; Wi-Fi, Bluetooth, projecting and accessibility open
+    their list under them; the others are shortcuts).
+* Every icon shows its name under the mouse (the tips can be turned off), and
+  the item under the mouse gets a gray highlight (can be turned off too).
+
+### Notifications
+
+* **Apps with unread notifications** show on the pill with their count (from
+  Windows' notification center or the taskbar button, also with the taskbar
+  hidden), and the bell gets a red dot until the list is opened; the Widgets
+  button's news too. Ones that came while the island wasn't running show as
+  it starts.
+* A click opens the app at its latest notification (an app hidden in the
+  tray, through its tray icon); one with nothing to open shows the list.
+  Opening the app in any way, or the app clearing them in Windows, clears
+  them on the island. Apps that send under several names (Phone Link's phone
+  apps) show as one icon (an option, on by default).
+* **New ones drop out of the pill** for a few seconds (not with "Do not
+  disturb"), with the sender's picture when there's one. Messages can be
+  answered right there in apps that offer it (Shift+Enter for a new line);
+  a long one shows on up to three lines under the mouse; its "x" deletes
+  it, its arrow ignores the app for a minute. With the bar style, it drops
+  from the bar's middle.
+* **The list** (the bell): up to half of the screen, scrolling smoothly;
+  clear one or all (Windows' center too); its gear has "Do not disturb",
+  the banners in the pill and showing what they say.
+* Optional: what's copied in a bubble under the pill (not password
+  managers', nothing kept); Win+N and Win+A opening the island's
+  notifications and control center; the Snipping Tool's notification
+  showing the screenshot in Explorer.
+
+### Panels
+
+Each one grows out from behind the pill, under the item clicked, with a
+little bounce.
+
+* **Control center** (its own icon), like on macOS: Wi-Fi (the networks,
+  connecting with a password, Windows' reason when it fails, forgetting
+  one; the cable's state and speed), Bluetooth (the paired devices; a click
+  connects headphones and speakers), "Do not disturb", night light, project,
+  cast, live captions, accessibility (magnifier, narrator, color filters,
+  sticky keys), brightness (monitors with DDC/CI, a slider each), the
+  volume, the output device and each app's volume, the battery, the mobile
+  hotspot and airplane mode. "Edit" chooses and orders its controls like on
+  the iPhone, with shortcuts (dark mode, screenshot, lock, emoji, the
+  clipboard, Task Manager, Calculator, File Explorer).
+* **Sound**, **battery** (with the power plan and modes) and **brightness**:
+  only that, like on macOS.
+* **Calendar** (the clock): your events, with reminders in the pill; the
+  holidays of Windows' country (optional); .ics agendas (a link, like Google
+  Calendar's secret iCal address, or a file), read only, each in its color,
+  with the next events under the month; today's color; your past events
+  hidden after a day, a week or 30 days, their count (up to 200) and
+  deleting them.
+* **What's playing** (the note): the cover, the song, a timeline,
+  previous/play/next, the volume and the app's own volume. The buttons and
+  the cover with the title can sit on the pill (its width chosen, scrolling
+  while it plays if chosen); with several apps playing, a row picks one
+  ("Automatic" follows Windows), Shift+wheel on the pill too. A click on the
+  cover brings the app to the front, and the whole title and the artist show
+  under the mouse. Only apps that give Windows their media controls show
+  (not VLC 3, for example).
+* **Folders and places**: folders you pin and Windows' places (This PC, the
+  Recycle Bin, Settings pages...), browsed in columns like the Finder; a
+  search (a name or *.pdf), by name or newest first, "Open in Explorer";
+  files dragged out (copied or moved, asked once) or onto a folder.
+* **Wallpapers** from a folder you pick: thumbnails, a transition (fade,
+  circle, slide or zoom), on that monitor; the wheel on the item goes to the
+  next one.
+* **komorebi** (if installed): start, stop and reload (with whkd and masir if
+  chosen; a terminal shows what failed; nothing is installed for you, and the
+  mod never ends komorebi by itself), and its layout on the pill after a
+  dot per workspace, whose menu has the layouts (columns, rows, grid, BSP,
+  the stacks, scrolling), tiling, monocle and pause, like yasb's.
+* **Weather** (now, the next hours and the week, for a city you type) and
+  **updates** (apps with a newer version in winget, updated in a terminal:
+  one, the ones ticked or all, an app can be ignored; and Windows updates
+  waiting; checked every 1 to 24 hours).
+* **Power**: sleep, restart, shut down (these two ask first), lock and sign
+  out, like the macOS Apple menu.
+
+### Tray icons
+
+* The other apps' tray icons: the pinned ones on the pill, the others opening
+  sideways from "⋯", or in a list under the pill (a grid like Windows', or
+  with their names). Clicks work like on the taskbar, and their names show
+  under them.
+* Pin one with a middle click, or the pin that shows after two seconds;
+  drag them to reorder, anywhere on the pill (every style and notch), or
+  between the list and the pill. Each island (or its profile) keeps its own.
+* A long list shows twelve at a time (an option) and scrolls with the wheel.
+
+### Look, place and monitors
+
+* **Colors**: black, graphite, light, Windows' accent color, glass, black or
+  light following Windows' mode (or the other way around), your own (fill,
+  texts, icons; a warning when they're hard to read), or the colors of the
+  app in front; the opacity; **glass** (Windows' blur on the island in every
+  style and on the panels; with Windows' transparency effects on, a plain
+  color otherwise or with the energy saver), translucent (a lighter tint
+  and livelier colors) or not, and blurred more than Windows' own if you
+  like; and frosted glass on the bar and the Fixed style's strip.
+* **Sizes**: the island, its icons and texts, the pill's height, corners and
+  the room at its ends, and the panels (100% to 150%).
+* **Place**: anywhere on the screen (or drag the pill, which snaps to the
+  edges and corners); a place, icons and a clock of their own for some apps
+  (the pill style); on the lower half its panels open upwards, and upright
+  on the left and right edges.
+* **Monitors**: the main one, another one, the one with the mouse, or all of
+  them (each with the main island's settings or a profile of its own);
+  moving to another monitor, it glides there.
+* **Profiles** (up to 10; a pill button switches them), **backup** (export
+  and import), and the **language** (English, Portuguese, Chinese, or
+  Windows').
+* **Animations**: springs everywhere; for slower computers, only the
+  essential ones or none, their speed, and about 90, 60 or 30 frames a
+  second.
 
 ### The island's settings
 
-A right click on the island (not on another app's icon or a notification)
-brings out a small bubble with a gear under it; clicking it opens the
-control center on the settings (with the bar style, the right click opens
-them right away, in the middle of the screen). They're in five tabs
-(General: the profiles, the backup and the place; Look: the style with its
-notches, the colors, the size and transparency, the animations; Pill: the
-order of its items, the system's, the desktop's, apps and tools, and the
-control center buttons; Tray, media and clock; Notifications), with a sixth
-Monitors tab when two or more screens are connected, shown in two or three
-columns (one on small screens, scrolling), each option right under the one
-it depends on. Typing anywhere in
-them searches them all
-(accents don't matter); the box works like any text box (arrows, Home, End,
-Shift to select, dragging the mouse, a double click on a word, Ctrl+A,
-Ctrl+Backspace deletes a word), Esc clears the
-search, and Esc (or a click outside) closes them.
+Right-click the island and click the gear under it (with the bar, the right
+click opens them), or the gear in the control center. They're in tabs
+(General, Look, Pill, Tray media and clock, Notifications, and Monitors with
+two screens or more); typing searches them all, and a dimmed option says why
+under the mouse. Windhawk's settings turn the island on and set up the
+taskbar, the dock and its animations.
 
 | Section | What it sets |
 | :--- | :--- |
-| Profiles | Up to 10 profiles with the island's settings below (for work, for games, one with everything on): "+" beside the title saves the current ones, a click applies one, the one in use keeps every change made to the settings by itself, and a pencil renames one, saves the current settings in it or deletes it. A button on the pill switches them (off by default): a click lists them, and Shift and the mouse wheel on it go to the next one (shown under it, applied once Shift is let go). Notifications, notes and tasks aren't part of them (the pinned tray icons and their places are). |
-| Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, the agendas' links (a Google Calendar "secret address" too: keep the file private), pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it; Windhawk keeps them for the whole computer, so every Windows account on it sees the same ones. |
-| Place | Where it sits (kept for each monitor); "Place and icons per app" (only for the Island style, the pill: the Fixed style and the bar keep one place and the same items for every app; for some apps, added from the open apps: a place, icons and their order, what's playing's parts, a clock (and whether it's kept in the middle), a distance from the edges and a size of their own); moving the pill by dragging it; standing upright on the left and right edges; hiding as its line until the mouse reaches it (at an edge), after the time chosen; its distance from the screen's edges. |
-| Look | The style (the pill; the pill keeping its room at its edge, so maximized windows stop beside it; or the bar), the colors (and your own: a click on "Fill", "Text" or "Icons" opens Windows' color dialog), the opacity, the frosted glass (the bar and the Fixed style's strip, without notches), colors following the app in front (its title bar's color when it has one, or its icon's main color, blending in as you switch apps; never read from the screen), the size, and panels as wide as the island. |
-| Notches (Fixed style) | None, one in the middle, one at each top corner, or three; how big their curves are (75% by default, up to 200% for wide, sweeping curves); and hiding each one on its own (otherwise one line, on the bell's notch, opens them all). |
-| Animations | On or off, how many (all, partial, none), their speed, and the frames a second, for the island (the dock's are in Windhawk's settings; the island's start as those were). |
-| On the pill | The order of its items (drag them in the little pill; with notches, from one notch to another), the clock kept in the middle (the other items spread on both sides, keeping their order), and which items it shows: the control center, volume and battery (each with its percentage beside it, off by default), the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, the profiles, the screen's brightness, the keyboard's language, the microphone, camera and location in use, USB drives (their icon and the notice when one is plugged in, both on by default), the virtual desktops, folders and places, wallpapers (and their transition), and the processor, memory and video memory use. A pill longer than its screen stops short of the edges, and the mouse wheel slides along it (Shift+wheel over what's playing). |
-| Control center buttons on the pill | Night light, Wi-Fi, Bluetooth, the mobile hotspot, airplane mode, project, cast, captions, accessibility, screenshot, lock, emoji, the clipboard, Task Manager, Calculator, File Explorer and komorebi, each on its own, with its own place in the pill's order (the control center keeps its own order). |
-| Tray icons and media | The other apps' tray icons: the ones not pinned open sideways in the pill (keeping their list open, and how many it shows before it scrolls), or in a list under it, as a grid of icons (like Windows') or with their names; what's playing (its note), and its buttons and its cover with the title on the pill, each on its own, and the wheel on it changing the song instead of the volume and a long title kept scrolling while it plays (both off by default). |
-| Clock | The time's format (Windows', 24 hours, or 12 hours with a small AM/PM after it, also in the calendar and the notifications), seconds, the day of the week, the day and month, the year, the date's order, the month as a number ("9/10"), and the holidays in the calendar (off by default). The date follows the Windows regional format ("Fri Oct 9", "sex 9 out"; in Chinese, Japanese and Korean from the year to the day, 2026年10月9日), or the order chosen (day, month, year; month, day, year; or year, month, day). |
-| Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, downloading pictures from the web (off by default), one icon per app (Phone Link's phone apps together), and showing what's copied in a bubble under the pill (off by default: the start of a text, a file's name or a picture, but not the Snipping Tool's, which has its own banner; nothing is kept, password managers' copies aren't shown, and it only says "Copied" while the notifications' contents are hidden), Win+N and Win+A opening the island's notifications and control center instead of Windows' own (both off by default), and a click on the Snipping Tool's notification of a screenshot it just saved (in the Screenshots folder) showing it in Explorer instead of opening the Snipping Tool (off by default). |
-| Monitors (2+ screens) | Choose one monitor, all monitors, or follow the mouse. The map follows the real screen layout and uses the display device numbers; click a screen to choose the main island (alerts and tray). Notches on the main island disable following the mouse. In all-monitor mode, each other screen uses "Same as the main one" (live mirror) or a profile; each island's own settings open from its gear. Edits update every monitor using that profile, including the main island; "+" on another island copies its current look into a new profile used there. Items' order and distribution between notches belong to the profile. Notification options are the main island's (dimmed on the others); animation options stay shared. Unplugging a monitor hides this tab when only one remains; existing profile assignments are preserved. |
+| Profiles | Up to 10 sets of the island's settings: "+" saves the current ones, a click applies one, the one in use keeps every change; a pill button switches them (Shift+wheel). Notifications, notes and tasks aren't in them. |
+| Backup | Export or import a file with notes, tasks, shortcuts, events, the agendas' links (keep it private), pinned folders, the wallpapers' folder, profiles and settings. They're kept by Windhawk on this computer, for every account on it. |
+| Language | English, Portuguese, Chinese (Simplified), or Windows' display language; the dates follow it. |
+| Place | Where it sits (per monitor); a place and icons per app (pill style); dragging the pill; upright on the sides; hiding as a line after a time (its opacity and how long the area that brings it back is); the minimize arrow; the distance from the edges. |
+| Look | The style, the colors (your own with Windows' color dialog), the opacity, glass (translucent, its blur) and frosted glass, colors following the app in front, the size, the icons and texts' size, the pill's height, corners and the room at its ends, the edge around the island, its panels and bubbles (0% for none), the panels' size, panels as wide as the island, the hover highlight and the tips. |
+| Notches (Fixed style) | None, middle, corners or three; their curves (75% by default, up to 200%); hiding each on its own. |
+| Animations | On or off, all, partial or none, the speed and the frames a second (the dock's are in Windhawk's settings). |
+| On the pill | The items' order (dragged, also between notches), the clock kept in the middle (with the bar, the other items can go to the screen's corners), and which items show (see above); a pill longer than the screen scrolls with the wheel. |
+| Control center buttons on the pill | Night light, Wi-Fi, Bluetooth, hotspot, airplane mode, project, cast, captions, accessibility, screenshot, lock, emoji, clipboard, Task Manager, Calculator, File Explorer and komorebi, each in its own place; komorebi's layout. |
+| Tray icons and media | Where the icons not pinned open (sideways, a grid or a list with names) and how many show; what's playing's note, buttons, cover and title on the pill, the wheel changing the song, the title's width and scrolling. |
+| Clock | 24 or 12 hours (a small AM/PM), seconds, the day of the week, the date and its order, the year, the month as a number, the holidays. The date follows Windows' regional format, in the island's language when one is chosen. |
+| Notifications | "The island handles notifications and their sounds" (see the notes), banners in the pill (also minimized), hiding Windows' banners, pictures from the web, the apps' icons on the pill and one icon per app, what's copied, Win+N and Win+A, and the Snipping Tool's screenshots in Explorer. |
+| Monitors (2+ screens) | One monitor, all of them or the one with the mouse, on a map of the real layout; the main island (alerts and tray); each other screen "Same as the main one" or a profile; notification options are the main island's. |
 
 ### Screenshots
 
@@ -316,7 +263,7 @@ search, and Esc (or a click outside) closes them.
 
 | The island's settings | Keyboard shortcuts |
 | :---: | :---: |
-| ![The island's settings](https://i.imgur.com/nvuBMH9.png) | ![Keyboard shortcuts](https://i.imgur.com/q75V4Sm.png) |
+| ![The island's settings](https://i.imgur.com/89DjPMq.png) | ![Keyboard shortcuts](https://i.imgur.com/q75V4Sm.png) |
 
 The other apps' tray icons: their list open, and opening:
 
@@ -331,23 +278,23 @@ Or as a grid under the pill:
 The styles: the pill, the Fixed style (the pill keeping its room, so
 maximized windows stop beside it) and the bar, at the top of the screen:
 
-![The pill](https://i.imgur.com/vujKa2O.png)
+![The pill](https://i.imgur.com/9eLqY38.png)
 
-![The Fixed style](https://i.imgur.com/Be1vKd9.png)
+![The Fixed style](https://i.imgur.com/hndh6lx.png)
 
-![The bar style](https://i.imgur.com/fcJntKM.png)
+![The bar style](https://i.imgur.com/EkIJ4Zl.png)
 
 The Fixed style's notches: three, three with the curves at 200%, at the
 corners, and one in the middle; a notification coming out of the notch with
 the bell; and the notches hiding together as one line:
 
-![Three notches](https://i.imgur.com/PBWL4HD.png)
+![Three notches](https://i.imgur.com/iJUrPeu.png)
 
 ![Three notches, curves at 200%](https://i.imgur.com/YBNVGef.png)
 
-![Notches at the corners](https://i.imgur.com/BDQoBvg.png)
+![Notches at the corners](https://i.imgur.com/oglSDoR.png)
 
-![One notch in the middle](https://i.imgur.com/IF2Jfy9.png)
+![One notch in the middle](https://i.imgur.com/NxwTVFC.png)
 
 ![A notification out of the notch with the bell](https://i.imgur.com/GiSUBxZ.gif)
 
@@ -360,221 +307,113 @@ the bell; and the notches hiding together as one line:
 | Light | ![Light](https://i.imgur.com/B6lsL49.png) |
 | The Windows accent color | ![Accent color](https://i.imgur.com/Ilr8YHB.png) |
 | Glass | ![Glass](https://i.imgur.com/kAsBeR8.png) |
+| The glass option (Windows' blur, any color) | ![The glass option](https://i.imgur.com/fbAnalU.png) |
 | Following Windows' mode (black in dark mode) | ![Auto](https://i.imgur.com/wNJKUiA.png) |
 | The other way around (light in dark mode) | ![Auto inverted](https://i.imgur.com/tMr0Hqo.png) |
 | Your own colors | ![Your own colors](https://i.imgur.com/27jYaq7.png) |
 
-## The dock (optional)
+## The dock in detail
 
 The "Taskbar" setting (the Windows taskbar stays as it is by default) turns
 the Windows taskbar into a dock like the one on macOS; or keeps the Windows
-taskbar, transparent with only its apps (with a soft shadow rising from the bottom edge, the magnification and the bounces,
-sliding in and out with the mod's animation; it only comes up and takes
-clicks around its apps, so the rest of the bottom of the screen stays
-usable), or as it is (all of it, or only its apps).
+taskbar, transparent with only its apps (a soft shadow, the magnification and
+the bounces; it only takes clicks around its apps), or as it is (all of it,
+or only its apps).
 
 ![The transparent taskbar, with only its apps](https://i.imgur.com/z0FMhlK.gif)
 
-* **Compact and floating**: only the app icons, centered, in a rounded pill
-  that floats a little above the bottom edge.
-* **Blurred background**: the windows and the wallpaper behind it show
-  through, blurred.
-* **Magnification**: the icons grow in a wave that follows the mouse.
-* **Bouncing icons**: an app's icon bounces while it opens, and when the app
-  needs attention (a new message, for example). After clicking an app, the
-  dock waits for it to open and bounce before hiding.
-* **Notifications without the whole dock**: when an app needs attention while
-  the dock is hidden (a new count on its icon, or a flashing button), only its
-  icon peeks out from the bottom edge, bounces, and goes away again. Clicking
-  it opens the app. The whole dock, or nothing at all, can be chosen instead.
-  On the transparent taskbar, an app asking for attention neither bounces
-  nor brings the taskbar up: its button shows it once the taskbar is up.
-* **Apps coming and going**: an app opening grows into the dock, and the
-  icons next to it slide over to make room (and back when one closes).
-* **Dots under open apps**, instead of the Windows line.
-* **Hidden until you need it** (optional, off by default): the taskbar
-  auto-hides, and springs in when the mouse reaches the bottom edge of the
-  screen.
-* **Out of the way in full screen**: games and apps in full screen (exclusive
-  or borderless) don't bring it up when the mouse hits the bottom edge.
+* **Compact and floating**: the app icons on a rounded shelf a little above
+  the bottom edge; the icons' size, the space between them, the gap at the
+  bottom, the corners and the background (a see-through tint with a thin
+  edge, or none) are settings.
+* **Magnification**: the icons grow in a wave that follows the mouse and
+  pushes their neighbors aside (a click always goes to the icon under the
+  mouse), sharp from the apps' own bigger pictures; the dock makes room above
+  itself, and the windows' previews open right above it.
+* **Bounces**: an app's icon bounces while it opens and when it needs
+  attention; after a click, the dock waits for the app before hiding.
+* **Attention while hidden**: only the app's icon peeks out from the bottom
+  edge and bounces (or the whole dock, or nothing).
+* Apps grow in and the others slide over; dots under the open apps.
+* **Hidden until you need it** (optional): it shows when the mouse reaches
+  the bottom edge, not over full-screen games and videos.
+* Without the island, the clock and the tray stay at the dock's right end, in
+  their own pill (unless hidden in the settings).
 
 ## Notes
 
-* Windows 11 only.
-* The island's texts follow the Windows display language: English,
-  Portuguese or Chinese (Simplified).
-* The dock is for a taskbar at the bottom. With the taskbar on the left, the
-  right or the top (newer Windows 11 versions), it stays as Windows has it
-  (the transparent taskbar stays transparent, without hiding itself or
-  growing its icons, and Windows' own auto-hide works only at the bottom),
-  and the island keeps working: the pill and the bar stay clear of the
-  taskbar on any edge, and follow it when it moves. The dock comes back
-  when the taskbar is at the bottom again.
-* **The island without the dock**: the "Taskbar" setting keeps the Windows
-  taskbar as it is (optionally without its clock and tray while the island
-  is on and shows them), or with only its apps (the island shows the clock, tray and
-  notifications), to combine the island with other taskbar mods.
-* With "Hide the taskbar until the mouse reaches the bottom edge" on (off
-  by default), the mod turns on the taskbar's auto-hide (the Windows
-  setting) while it's enabled, and turns it back off when the mod is
-  disabled (if it was off before), also after a crash, at the next start. If Explorer isn't running when
-  the mod is disabled, turn it off in Windows' taskbar settings.
-* **Windows' own settings**: the control center's switches and buttons
-  change Windows' settings themselves, as Windows' quick settings do: dark
-  mode, night light, the power plan and the power mode, the microphone's
-  mute, the default output device, Wi-Fi networks (a network joined is
-  saved by Windows, with its password; "Forget" deletes it), Sticky Keys and the other
-  accessibility switches, the display mode (Project), the monitor's
-  brightness, and the radios. They stay as set after the mod is disabled.
-* Without the island, the system tray (clock, network, volume) stays at the
-  right end of the taskbar, in its own pill, unless it's hidden in the
-  settings.
-* **Bigger magnification**: the magnified icons can only grow up to the top
-  of the taskbar. For room above the dock, make the taskbar taller with the
-  [Taskbar height and icon size](https://windhawk.net/mods/taskbar-icon-size)
-  mod (for example, a height of 72 and the default icon size). The dock keeps
-  its own height, and the space above it is left for the icons.
-* Don't combine this mod with other mods that restyle the taskbar or change
-  its auto-hide animation, such as Windows 11 Taskbar Styler themes or
-  Taskbar Auto-Hide Instant Show, or with other dock mods. With the Windows
-  taskbar "only the apps", Windows 11 Taskbar Styler can bring the tray back
-  and make Explorer stop responding; for a transparent taskbar, use this
-  mod's own "transparent" option instead.
-* **Two processes**: the dock (and what only the taskbar knows: the apps'
-  badges and the tray icons the apps send it) runs in `explorer.exe`, since
-  it changes the taskbar itself; the island runs in a `windhawk.exe` process
-  of its own, so a problem in it can't take the taskbar and the desktop down.
-  They tell each other what changed with window messages.
-* **How some features work**: Windows has no public API for a few of them, so
-  the mod uses what Windows itself uses, and leaves a feature out when it
-  doesn't find it as expected:
-  * New notifications (also when an app's count doesn't change, like a new
-    message in a chat that's already unread) and the notification list are
-    read, read-only, from the Windows notification database.
-  * Night light is switched through its state in the registry (CloudStore),
-    checked before it's changed.
-  * The output device and airplane mode use interfaces of Windows (the same
-    ones the volume tools and the quick settings use).
-  * Cast, live captions, the narrator and color filters are switched with
-    their Windows shortcuts.
-  * The frosted glass is Windows' own blur behind a window (the one its
-    shell uses), looked for when the mod starts.
-  * The apps using the microphone are the ones recording (Windows' audio
-    sessions, which tell when one starts or stops); the camera's, from
-    Media Foundation's sensor activity monitor (made for privacy
-    indicators); the location's, read-only from the record Windows keeps
-    for its privacy settings (CapabilityAccessManager in the registry),
-    which newer Windows builds may no longer keep up to date.
-  * A USB drive is ejected the way Windows' "Safely Remove Hardware" does
-    (asking the device to be ejected; a program with a file open on it
-    keeps it). A card in a built-in reader: only the card is ejected, like
-    Explorer's "Eject".
-  * The virtual desktops are read from the registry, where Windows keeps
-    them (watched for changes, not polled); switching presses Windows'
-    shortcut (Ctrl+Win+Left or Right) as many times as it takes.
-  * Win+N and Win+A are Windows' own shortcuts: when chosen for the island,
-    a low-level keyboard hook takes them first, on a thread of its own and
-    only while one of them is on.
-  * A wallpaper's transition is drawn by a window of the mod just above the
-    desktop for a moment; the wallpaper is then set with Windows'
-    documented interface (IDesktopWallpaper). With an app that draws its
-    own wallpaper over the desktop (Wallpaper Engine), Windows' wallpaper
-    stays under it.
-  * The input mode (中 or 英) is asked to the input method window of the
-    app in front, as input method tools do.
-  * "Do not disturb" is switched with the interface the Windows notification
-    center uses.
-  * The tray icons are read as the apps send them to the taskbar. When the
-    mod starts, it asks the apps to send them again, with the message Windows
-    sends when the taskbar restarts; an app that changes an icon the mod
-    hasn't seen yet (one started before it) is sent that message on its own,
-    and an icon whose app hasn't said which mouse messages it takes gets
-    each click in both forms (older apps don't use the newer one).
-    Some apps never send them again (Spotify): so that their icons aren't
-    lost when the mod reloads (its settings saved, turned off and on), the
-    list is kept in the mod's storage while it reloads, and taken back for
-    the apps still running.
-    Clearing notifications on the island only hides them there (the Windows
-    notification database is only read).
-  * When the island takes a new notification (in the pill, or, with the bar
-    style or a panel open, as its app's icon with the red dot and in the
-    list), the Windows banner is moved off the screen (it can be kept in the
-    island's settings); Windows places it again for the next notification.
-    Windows 11
-    shows its banners stacked in one window, so it's off the screen only
-    while every banner in it is one the island shows: calls, alarms and
-    reminders keep Windows' banner, with its buttons, and the others in the
-    stack show with them. In full screen nothing shows on the island (the
-    notification waits in the list), and, like with Windows' "Do not
-    disturb", Windows' banners are left alone. With the pill's banners off,
-    or minimized without them, the Windows banner stays.
-    Windows shows its banners one after the other, late when many come, and
-    plays their sounds then: the option "The island handles notifications
-    and their sounds" (off by default) keeps Windows' "Do not disturb" on
-    while the island runs, so Windows stays quiet and the island shows each
-    notification and plays its sound (the one it asks for) as it comes.
-    Calls, alarms and reminders then show in the pill too, ahead of the
-    others (one on the pill gives way and shows again after them, with what
-    was being typed): they stay until closed, with the buttons the island
-    can press (an app's own, and "Dismiss"), and ring until closed, up to a
-    minute. "Do not disturb" lets them through by default, so Windows may
-    show its banner for one too (and plays its sound instead of the
-    island's): the island then reads that banner through UI Automation (the
-    accessibility tree, only that window) and, when it's the one on the
-    pill, takes it over: Windows' banner is hidden while the pill shows it,
-    and the pill's buttons are Windows' own ("Snooze" too), pressed on it
-    when the pill's are. It comes back as soon as the pill stops showing
-    it, or if anything doesn't match. The island's "Do not
-    disturb" is then its own (the bell's moon), and Windows' is turned back
-    off when the island stops (from explorer if the island's process ends
-    unexpectedly, or at the next start after a crash); it's left alone if it
-    was already on. If it's turned off from Windows, it's left off and the
-    island works as usual until the option is turned on again.
-  * Replies go to the app the way Windows sends them from its own banners:
-    through the notification handler the app registered.
-  * The mod only goes online for what's turned on in the island's settings
-    (all of it off by default; an app's own icons can hide these items, but
-    not turn them on): "Download pictures from the web" (a notification's
-    picture that's on the web, like WhatsApp's contact photos, downloaded
-    over https from the address the app put in it, like Windows does, and
-    only for apps allowed to go online; otherwise the app's icon is shown),
-    the weather ([Open-Meteo](https://open-meteo.com): the city typed, then
-    its forecast every 30 minutes while it's on the pill), the holidays
-    ([Nager.Date](https://date.nager.at): the country set in Windows, once a
-    year), the agendas' links added to the calendar (as it opens, at most
-    every 15 minutes) and updates (winget asks its community source, 20 seconds after
-    the island starts unless it did in the last 6 hours, then every 6
-    hours; the Windows updates are read, read-only and offline, from
-    Windows' own last scan through the Windows Update Agent).
-  * Updates are only listed by the mod (it accepts no terms for you): an
-    app is updated in a terminal, where "winget upgrade" shows what it does
-    and asks for anything it needs, only when asked in the panel.
-  * The power modes are read and set with the functions of powrprof.dll
-    that Windows' Settings uses; the power plans with the documented ones.
-  * The GPU's use comes from Windows' performance counters, and its
-    temperature, fan and power from the display driver's own figures (left
-    out when the driver doesn't give them).
-  * Sleep, restart, shut down and sign out use the Windows functions for
-    them (with "Fast startup", shutting down works like the Start menu's).
-    On PCs with Modern Standby, "Sleep" turns the screen off, which is what
-    puts them to sleep.
-* **Graphics driver updates**: the island and its panels are drawn with
-  Direct2D on layered windows. If the graphics driver is updated or reset,
-  the island starts again by itself (every two seconds at most, while the
-  driver is still installing), with everything drawn anew. The picture is
-  copied to the window, so on laptops with two GPUs it doesn't matter which
-  one draws it.
+* Made for Windows 11. On Windows 10, only the island works.
+* The dock needs the taskbar at the bottom: on another edge, the taskbar
+  stays as Windows has it, and the island stays clear of it.
+* **With other taskbar mods**, choose "Windows taskbar, unchanged"
+  (optionally without its clock and tray) or "only the apps". Don't combine
+  the dock with mods that restyle the taskbar or its auto-hide (Windows 11
+  Taskbar Styler themes, Taskbar Auto-Hide Instant Show) or other dock mods;
+  for a transparent taskbar, use this mod's own option.
+* **Auto-hide**: hiding the taskbar turns on Windows' auto-hide while the mod
+  is on, and back off afterwards (also after a crash). If Explorer isn't
+  running when the mod is turned off, turn it off in Windows' settings.
+* **Windows' settings**: the control center changes them itself, like
+  Windows' quick settings (dark mode, night light, the power plan and mode,
+  the microphone's mute, the output device, Wi-Fi networks, accessibility,
+  the display mode, brightness, the radios); they stay as set.
+* **"The island handles notifications and their sounds"** (off by default):
+  Windows' "Do not disturb" stays on while the island runs ("alarms only"
+  while the island's own is on), so Windows stays quiet and the island shows
+  each notification and plays its sound as it comes; calls, alarms and
+  reminders show in the pill with their buttons and ring until closed. It's
+  turned back off when the island stops or the mod is turned off (also after
+  a crash or a shutdown), and left off if turned off from Windows.
+* **Windows' banners**: while the island shows a notification, Windows'
+  banner is moved off the screen (an option); calls, alarms and reminders
+  keep it, and nothing changes in full screen.
+* **Online only when turned on** (all off by default): pictures from the web
+  in notifications (over https, only for apps allowed online), the weather
+  ([Open-Meteo](https://open-meteo.com), every 30 minutes while shown), the
+  holidays ([Nager.Date](https://date.nager.at), once a year), the agendas'
+  links (at most every 15 minutes) and updates (winget, every few hours;
+  Windows updates are read offline). Updates run only when asked, in a
+  terminal, accepting nothing for you.
+* **Storage**: Windhawk keeps the settings, notes and the rest for the whole
+  computer (every Windows account sees the same ones); export a backup
+  before formatting.
+* **Two processes**: the island runs in a `windhawk.exe` process of its own,
+  so a problem in it can't take the taskbar down; the dock runs in
+  `explorer.exe`. If the graphics driver resets, the island starts again by
+  itself.
+* **How some features work** (Windows has no public API for them; a feature
+  is left out if Windows doesn't match):
+  * notifications: read only from Windows' notification database, cleared
+    with Windows' notification history interface, replies through the app's
+    own handler; a call's or alarm's banner read with UI Automation;
+  * night light: its state in the registry (CloudStore); the output device
+    and airplane mode: Windows' own interfaces; cast, captions, the narrator
+    and color filters: Windows' shortcuts; "Do not disturb": the notification
+    center's interface;
+  * the glass: Windows' own blur behind a window;
+  * apps using the microphone, camera and location: Windows' audio sessions,
+    Media Foundation's sensor monitor, and the record in
+    CapabilityAccessManager (newer builds may not keep it up to date);
+  * USB drives: ejected like "Safely Remove Hardware";
+  * virtual desktops: read from the registry (watched), switched with
+    Ctrl+Win+Left or Right;
+  * komorebi's layout: `komorebic subscribe-pipe`;
+  * Win+N and Win+A: a low-level keyboard hook, only while one is on;
+  * wallpapers: a transition window, then Windows' IDesktopWallpaper;
+  * the input mode: asked to the app's input method window;
+  * tray icons: as the apps send them to the taskbar (asked again when the
+    mod starts, and kept while it reloads);
+  * power modes: the powrprof.dll functions Windows' Settings uses; the
+    GPU: performance counters and the driver's own figures.
 * **Similar mods**: [Dynamic Island for
-  Windows](https://windhawk.net/mods/dynamic-island-for-windows) is a pill
-  overlay that reacts to media, downloads and the clipboard; [Island Media
-  Controls](https://windhawk.net/mods/island-media-controls) puts media
-  controls on the taskbar; [TopBar for
-  Windows](https://windhawk.net/mods/windhawk-topbar) adds a top bar with
-  flyouts; [Taskbar Dock
-  Animation](https://windhawk.net/mods/taskbar-dock-animation) magnifies the
-  taskbar icons. This mod brings the island (with the control center,
-  notifications and tray icons) and the dock together, as one macOS-like top
-  and bottom, without other mods.
+  Windows](https://windhawk.net/mods/dynamic-island-for-windows) (a pill for
+  media, downloads and the clipboard), [Island Media
+  Controls](https://windhawk.net/mods/island-media-controls) (media controls
+  on the taskbar), [TopBar for Windows](https://windhawk.net/mods/windhawk-topbar)
+  (a top bar with flyouts) and [Taskbar Dock
+  Animation](https://windhawk.net/mods/taskbar-dock-animation) (magnified
+  taskbar icons). This mod brings the island and the dock together, as one
+  macOS-like top and bottom.
 
 ## Contact
 
@@ -609,282 +448,233 @@ GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BMac%2
 [@cesar.kali](https://www.instagram.com/cesar.kali) · [caliberda.com.br](https://caliberda.com.br)
 
 O topo do macOS e a Dynamic Island do iPhone no Windows 11: uma ilha no topo
-da tela com o relógio, uma central de controle, as notificações e o que está
-tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
+da tela com o relógio, uma central de controle, as suas notificações e o
+que está tocando; e, se quiser, uma dock como a do macOS no lugar da barra
+de tarefas.
 
-![A ilha minimizada numa linha e aberta de novo](https://i.imgur.com/pGYje4Z.gif)
+![A ilha abrindo da linha, uma notificação, a central de controle](https://i.imgur.com/hiLqamP.gif)
 
-| A central de controle | Uma notificação nova na pílula |
-| :---: | :---: |
-| ![A central de controle](https://i.imgur.com/KxO0ssn.gif) | ![Uma notificação nova na pílula](https://i.imgur.com/8VlkvfE.gif) |
+### Novidades da 2.0.6
 
-### A ilha
+| Vidro | Uma dock nova | Seu tamanho e idioma |
+| :---: | :---: | :---: |
+| ![Vidro](https://i.imgur.com/dEv7mfK.gif) | ![A dock nova](https://i.imgur.com/dSN342D.gif) | ![As opções novas](https://i.imgur.com/89DjPMq.png) |
+| A ilha e os painéis transparentes e desfocados, em todos os estilos | Ícones que crescem numa onda e afastam os vizinhos, nítidos ampliados | Tamanho dos ícones e textos, painéis até 150%, a ilha em inglês, português ou chinês |
 
-* **Sempre no topo**: o relógio, a central de controle, o volume, a bateria
-  e as notificações, sempre visíveis (menos em tela cheia, e um instante depois
-  de começar a seleção de uma captura de tela, para não cobrir os botões
-  dela): uma pílula preta no centro do topo, que pode ser minimizada para
-  uma linha fina, ou uma barra na largura toda, como a barra de menus do macOS, que deixa as janelas
-  maximizadas abaixo dela. No estilo Fixa, ela também pode virar entalhes
-  pendurados na borda de cima, como o do MacBook: um no meio, um em cada
-  canto de cima da tela, ou três (esquerda, meio e direita), com curvas mais
-  redondas ou mais retas nas configurações; cada item vai para o entalhe
-  para onde é arrastado nas configurações, um entalhe sem nada fica
-  pequeno, as notificações saem do entalhe com o sino, e os entalhes se
-  escondem todos juntos (numa linha só, no entalhe do sino) ou cada um
-  sozinho (cada um na sua linha). A roda do mouse no volume muda o volume (a
-  porcentagem aparece embaixo por um momento), e Shift e a roda vão para
-  outro dispositivo de saída (o nome aparece embaixo, usado
-  quando o Shift é solto); o sino vira uma lua quando o "Não incomodar" está
-  ligado. O botão do meio muta o volume ou o microfone, e liga ou desliga o
-  "Não incomodar" no sino; o botão direito no sino abre as notificações já
-  com as chaves delas.
-* **Apps com notificações não lidas** (um número no botão da barra, ou uma
-  notificação ainda não vista) aparecem na ilha com uma bolinha vermelha com
-  quantas notificações têm (na central de notificações do Windows, onde as
-  do WhatsApp contam as mensagens que dizem ter, ou no botão da barra; um
-  pontinho quando não há número), mesmo com a barra escondida,
-  e o sino ganha um pontinho vermelho até a
-  lista ser aberta. As notificações que chegaram com a ilha parada (o
-  computador desligado, a ilha desligada) e ainda estão na lista do Windows
-  aparecem do mesmo jeito quando ela inicia. Clicar num app (ou na notificação dele na pílula) abre a
-  última notificação dele (um app escondido na bandeja, como muitos apps de
-  conversa, pelo ícone dele na bandeja); uma
-  notificação sem nada para abrir (como a de um script) mostra a lista, já
-  nela. Abrir o app de qualquer jeito (pela ilha, pela lista ou pela barra)
-  limpa as notificações dele da ilha e da lista, e o mesmo acontece quando o
-  app as tira da central de notificações do Windows (como uma mensagem lida
-  no celular). Com o mouse em cima, o ícone de um app mostra o nome dele e
-  quantas notificações ele tem. Apps que mandam as notificações com vários
-  nomes (como o Vincular ao Celular, um para cada app do celular) aparecem
-  como um ícone só, com os números somados (uma opção nas configurações
-  das notificações, ligada por padrão).
-* **Painéis como a Dynamic Island**: a própria pílula se estica até virar um
-  painel, para os lados e depois para baixo, com um leve balanço:
-  * **Calendário** (o relógio).
-  * **Central de controle** (o ícone dela), como a do macOS:
-    Wi-Fi (ligar/desligar, o estado e a velocidade do cabo de rede, as
-    redes ao alcance com botões para conectar, desconectar ou esquecer uma
-    (dois cliques), conectar com senha e, quando falha, o motivo dado pelo
-    Windows),
-    Bluetooth (ligar/desligar, os dispositivos pareados), "Não incomodar",
-    luz noturna, projetar (os quatro modos de tela), transmitir, legendas ao
-    vivo, acessibilidade (lupa, narrador, filtros de cor, teclas de
-    aderência), o brilho da tela (monitores com DDC/CI), o volume, o
-    dispositivo de saída e o volume de cada app, a bateria, o hotspot móvel e
-    o modo avião.
-  * **Som** (o volume): só o volume, o dispositivo de saída e o volume de
-    cada app, como o menu de som do macOS.
-  * **Notificações** (o sino): as últimas notificações que o Windows mostrou,
-    numa lista que ocupa até metade da tela e rola suavemente; clicar numa
-    abre o app dela.
-  * **O que está tocando** (a nota musical): a capa, a música, uma linha do
-    tempo para pular partes, voltar / tocar / avançar, o volume (a roda do
-    mouse também), e o volume só do app que está tocando, mutado com um
-    clique na nota dele. Os botões, e a capa com o título, também podem
-    ficar na pílula. Clicar na capa traz o app para a frente, e um título
-    ou um artista longo demais rola nele com o mouse em cima; na pílula, o
-    mouse em cima mostra o título inteiro e o artista num balão, e um título
-    longo pode ficar rolando enquanto toca (uma configuração da ilha,
-    desligada por padrão). Com
-    vários apps com mídia (um Spotify pausado e um
-    navegador tocando, por exemplo), uma fileira no topo escolhe qual a ilha controla
-    ("Automático" segue o Windows); na pílula, um pontinho embaixo da capa
-    para cada um, e Shift+roda (ou deslizar para o lado no touchpad) em cima
-    dela passa para o próximo. Só aparecem os apps que dão ao Windows os
-    controles de mídia deles (os que aparecem no painel de mídia do próprio
-    Windows): players sem eles, como o VLC 3, não aparecem.
-  * Os controles da central de controle podem ser escolhidos e ordenados nela
-    mesma ("Editar", como no iPhone: arraste um para mudar de
-    lugar, o "-" tira, e os outros ficam listados embaixo para adicionar), com
-    atalhos como modo escuro, captura de tela, bloquear, emojis, histórico da
-    área de transferência, Gerenciador de Tarefas, Calculadora e Explorador de
-    Arquivos.
-  * **komorebi** (o gerenciador de janelas lado a lado, se instalado; uma
-    seção da central e um botão opcional na pílula, cujo clique abre um
-    painelzinho): botões de iniciar, parar e recarregar, com a versão
-    embaixo, como o controle do yasb. Cada um roda o próprio `komorebic
-    start`, `stop` ou os dois, só no clique, sem janela como o yasb faz;
-    quando falha, um terminal na tela mostra o que ele escreveu (ele não
-    roda de novo).
-    Opções escolhem se o whkd e o masir iniciam e param junto. Nada é
-    instalado nem aceito por você, e o mod nunca encerra o komorebi
-    sozinho.
-  * O calendário guarda eventos, com lembretes que aparecem na pílula, e,
-    se escolhido, os feriados do país configurado no Windows. A engrenagem
-    dele abre as agendas: agendas .ics (um link, como o "Endereço secreto
-    no formato iCal" do Google Agenda, ou um arquivo), adicionadas ali ou
-    nas configurações do mod, com os eventos só para leitura, inclusive os
-    que se repetem, nos dias deles na cor de cada agenda, e os próximos
-    embaixo do mês (com o ano quando é outro, como um aniversário que já
-    passou neste ano); e a cor de hoje (vermelho, a cor de destaque do
-    Windows ou uma escolhida).
-  * **Energia** (um botão opcional na pílula): suspender, reiniciar,
-    desligar, bloquear e sair, como o menu Apple do macOS. Reiniciar,
-    desligar e sair perguntam antes, e o Windows fecha os apps como sempre.
-  * **Bateria** (a bateria): só a bateria e o plano de energia (e, com o
-    plano equilibrado, os modos de energia do Windows).
-  * **Brilho** (o item do brilho): só o brilho da tela, como o som.
-  * **Mais na pílula** (cada um opcional, desligado por padrão, nas
-    configurações da ilha): o uso do processador, da memória e da memória de vídeo
-    (clicar num mostra os gráficos e os detalhes), um botão que silencia os
-    microfones (enquanto a ilha roda, o nível deles vai a 0 também, para
-    apps que gravam um microfone mudo; ele volta ao tirar o mudo ou quando a
-    ilha para, e eles continuam mudos até você tirar o mudo), o brilho da
-    tela (a
-    roda do mouse muda, um clique o abre sozinho), o idioma e o modo de digitação do teclado (中 ou
-    英, あ ou A, 가 ou A, ou o idioma, como PT, quando há mais de um teclado;
-    um clique lista os teclados, para trocar o do app em primeiro plano, e
-    uma troca aparece num balão com a pílula minimizada), os apps usando o
-    microfone, a câmera ou a localização (um ícone laranja, verde ou azul
-    enquanto um deles é usado, com anéis saindo do da câmera quando ela
-    começa; o mouse em cima diz quais apps, um clique abre a página de
-    privacidade do Windows), pendrives (ligado por padrão, duas opções: um
-    ícone que lista todos enquanto houver algum, para abrir ou ejetar cada
-    um, e um aviso ao conectar), as áreas de trabalho virtuais (um ponto
-    para cada; a roda do mouse vai para a próxima ou a anterior, um clique
-    lista todas, com uma nova e a visão de tarefas, e um "x" fecha uma), os
-    botões da central de controle (luz noturna, hotspot e modo avião trocam
-    ali mesmo, acesos enquanto ligados; o Wi-Fi mostra as barrinhas da rede
-    e, como Bluetooth, projetar e acessibilidade, abre a lista dele embaixo,
-    fechada com um segundo clique; os outros são os atalhos deles),
-    **pastas e locais** (seus atalhos: pastas que você fixa e os locais do
-    Windows como Este Computador, a Lixeira, páginas das Configurações, o
-    Gerenciador de Dispositivos ou Programas e Recursos; um clique numa
-    pasta mostra o que tem dentro numa coluna ao lado, e assim por diante,
-    como as colunas do Finder, com um botão de voltar; "Abrir no Explorador"
-    abre a pasta da coluna, um clique num arquivo abre no app dele, e o
-    alfinete de uma pasta a fixa; só os nomes aparecem, lidos na hora),
-    **papéis de parede** de uma pasta que você escolhe (as miniaturas das
-    imagens; a escolhida entra com uma transição, esmaecer, círculo,
-    deslizar ou zoom, escolhida ali também, posicionada como o Windows
-    posiciona o papel de parede, e vira o papel de parede daquele monitor;
-    a roda do mouse no item passa para o próximo), o nome de cada ícone com
-    o mouse em cima, um botão que troca o modo claro e escuro,
-    **anotações** (com
-    tópicos, copiadas com um clique), **tarefas** (em andamento, e as dez
-    últimas concluídas embaixo), **atalhos do teclado** para lembrar (gravados apertando as
-    teclas, ou importados de um arquivo como o whkdrc do komorebi), o
-    **clima** (agora, as próximas horas e a semana, da cidade digitada no
-    painel) e **atualizações** (os apps com versão nova no winget,
-    atualizados num terminal: um, os marcados, ou todos; um app pode ser
-    ignorado, para um que o winget não consegue atualizar não deixar o
-    contador da pílula preso, e voltar a ser mostrado; e as atualizações
-    do Windows pendentes).
-    Anotações, tarefas e atalhos também têm botões na central de controle.
-* **Cores**: preto, grafite, claro, a cor de destaque do Windows, vidro,
-  preto ou claro seguindo o modo escuro ou claro do Windows (ou o contrário
-  dele), ou cores próprias (o fundo, os textos e os ícones da pílula,
-  escolhidos na janela de cores do Windows; os botões e interruptores
-  ligados seguem a cor dos ícones, e um aviso aparece quando os textos ou
-  os ícones ficam difíceis de ler no fundo), ou as cores do app da frente
-  (a da barra de título ou a do ícone dele, mudando suave ao trocar de app);
-  o quanto a ilha e os painéis são opacos; e vidro fosco na barra e na faixa do estilo Fixa
-  (não com os entalhes, a tela aparece entre eles; o desfoque do
-  Windows: aparece enquanto os efeitos de transparência do Windows estão
-  ligados, em Configurações > Personalização > Cores, que o mod nunca
-  muda; o Windows só desfoca retângulos, então a pílula solta fica como
-  está).
-* **Os ícones dos outros apps na bandeja**, na ilha: os fixados sempre, os
-  outros abrindo para o lado pelo botão "⋯", ou, se escolhido, numa lista
-  embaixo da pílula, em grade como a do Windows ou com os nomes (ela fica
-  aberta enquanto o menu de um app aparece, até um clique fora dela). Clicar, clicar duas vezes e
-  clicar com o botão direito funcionam como na barra (o duplo clique abre o
-  app, o botão direito mostra o menu dele; um clique no espaço entre dois
-  ícones vale para o mais perto); os nomes deles aparecem embaixo num balão
-  desenhado como a ilha, nas cores dela. Para deixar um na pílula (fixado),
-  clique nele com o botão do meio (a roda do mouse), ou deixe o mouse em
-  cima dele por dois segundos e clique no alfinete que aparece; o mesmo
-  desafixa (a grade e a lista dizem isso embaixo dos ícones). Arrastando, um
-  ícone muda de lugar: na lista dos não fixados (a ordem deles), em qualquer
-  ponto da pílula (ao lado de um item, ele acompanha esse item, em todo estilo
-  e entalhe), da lista para a pílula (fixado ali) ou de volta (desafixado).
-  Cada ilha guarda os seus: as que seguem as configurações principais
-  compartilham, e uma com um perfil próprio guarda os dela nesse perfil (como
-  os outros monitores que usam ele). Com
-  muitos ícones, a lista mostra doze por vez (uma configuração da ilha;
-  menos em telas pequenas): os ícones numa ponta com mais depois
-  dela vão sumindo, e a roda do mouse (ou deslizar para o lado) em cima dos
-  ícones rola a lista.
-* **Notificações novas na pílula**: a pílula se abre com o app, o título e o
-  texto por alguns segundos, como a Dynamic Island do iPhone (não com o "Não
-  incomodar" ligado), com a foto de quem mandou quando a notificação tem uma
-  neste computador (como a foto de um contato). Apps de mensagem que oferecem resposta nas
-  notificações do Windows (como o WhatsApp) podem ser respondidos ali mesmo;
-  a resposta quebra em mais linhas (a roda do mouse rola), Shift+Enter
-  começa uma linha nova, as setas andam nela e Ctrl+Backspace apaga uma
-  palavra. Com o mouse em cima, uma notificação
-  longa aparece em até três linhas (na lista também).
-  O "x" apaga a notificação (da pílula e da lista); a setinha a minimiza,
-  ignorando o app dela por um minuto, como no Android (as notificações dele
-  continuam indo para a lista, e só o ícone dele na ilha se mexe). No estilo
-  barra, o aviso desce do meio da barra.
-* **Notificações** podem ser limpas na lista da ilha (todas, ou uma por uma);
-  a engrenagem no topo dela abre as chaves dela ("Não incomodar", os avisos
-  na pílula e mostrar o conteúdo).
-* **Em qualquer lugar da tela**: escolha a posição nas configurações da ilha
-  (ou ligue
-  mover a pílula arrastando; ela gruda no meio e nos cantos de cada borda);
-  alguns apps podem ter uma posição só deles (por exemplo, mais abaixo, para
-  não cobrir as abas do navegador) e ícones e relógio só deles (mostrados
-  ou escondidos enquanto eles estão na frente, até os desligados para todos;
-  um relógio mais curto deixa a ilha menor), e ela desliza para lá enquanto eles
-  estão na frente. Na metade de baixo da tela, os painéis e os avisos abrem para
-  cima; nas laterais ela fica em pé, e eles abrem para o meio. Encostada na
-  borda de baixo ou em pé numa lateral, ela também pode ser minimizada para
-  uma linha ali.
-* **Vários monitores**: a ilha fica no monitor principal, num outro
-  escolhido, segue o monitor onde está o mouse, ou aparece em todos os
-  monitores (cada um com as configurações da ilha principal ou um perfil
-  próprio); cada monitor guarda a posição dela. Indo para outro monitor,
-  ela se fecha no pontinho, que desliza até lá e se abre de novo.
-* **Suave em tudo**: o que ela mostra abre, fecha, cresce, diminui e muda
-  com efeito de mola (os ícones trocam com transição, ícones da bandeja e
-  notificações novas crescem, os que saem encolhem). Para computadores mais
-  lentos, as configurações de "Animações" (as da ilha nas configurações dela, as da dock no Windhawk)
-  desligam tudo, deixam só o essencial ("parciais": a ilha, os painéis e os
-  avisos abrindo e fechando, sem quiques, brilhos, mistura de cores, números
-  contando nem texto rolando), mudam a velocidade ou limitam os quadros por
-  segundo (cerca de 90, 60 ou 30; as animações mantêm a duração).
-* **As opções da ilha ficam na ilha**: clique com o botão direito na ilha (na
-  pílula ou na linha minimizada) e clique na engrenagem que sai embaixo dela
-  (veja abaixo), ou clique na engrenagem no rodapé da central de controle;
-  uma opção apagada diz o motivo com o mouse em cima. As configurações do
-  Windhawk ligam a ilha e ajustam a barra de tarefas, a dock e as animações
-  da dock.
+E também: a altura, os cantos e a largura da pílula, a borda em volta (ou
+nenhuma), o vidro translúcido e o desfoque dele, os itens da barra nos cantos
+da tela, a bateria verde carregando, o calendário ocultando seus eventos
+passados, as atualizações verificadas no intervalo que você escolher, e
+correções na ilha ao ligar o PC, no Wi-Fi, na bolha do idioma do teclado, nas
+notificações do QQ e do compartilhamento por proximidade e mais.
+
+### O que ele faz
+
+| | |
+| :--- | :---: |
+| **A ilha**: sempre no topo, como pílula, entalhes como os do MacBook ou uma barra inteira como a do macOS. Minimiza para uma linha fina e volta quando o mouse chega nela. | ![Os estilos](https://i.imgur.com/Bh0AxUU.gif) |
+| **Notificações**: as novas saem da pílula (dá para responder mensagens ali mesmo), os apps com notificações não lidas aparecem nela com o número, e o sino guarda a lista. | ![Uma notificação na pílula](https://i.imgur.com/CsViw16.gif) |
+| **Central de controle**: Wi-Fi, Bluetooth, o som de cada app, brilho, "Não incomodar", luz noturna e mais, como no macOS; edite como no iPhone. | ![A central de controle](https://i.imgur.com/mIUH1ea.gif) |
+| **Tudo o mais na pílula**, cada um opcional: o que está tocando, um calendário com suas agendas, o clima, anotações, tarefas, pastas, papéis de parede, o uso do computador, atualizações, áreas de trabalho virtuais, o idioma do teclado, indicadores de privacidade, komorebi... | ![Alguns painéis](https://i.imgur.com/Q7a2g94.png) |
+| **A dock** (opcional): uma dock como a do macOS no lugar da barra, ou a barra do Windows transparente só com os apps. | ![A dock](https://i.imgur.com/dSN342D.gif) |
+| **Do seu jeito**: cores (as suas, ou as do app da frente), vidro, tamanhos, posição e ícones por app, perfis, uma ilha em cada monitor. | ![Cores](https://i.imgur.com/GJdJDI8.png) |
+
+### Começando
+
+1. Instale: a ilha aparece no topo da tela.
+2. Clique com o botão direito na ilha e na engrenagem embaixo dela: todas as
+   opções dela estão lá.
+3. A aba "Settings" desta página escolhe a barra de tarefas: a dock, a
+   transparente ou a do próprio Windows.
+
+Tudo o que o mod faz, em detalhes, está abaixo.
+
+### A ilha em detalhes
+
+#### Na pílula
+
+* **Estilos**: uma pílula preta no centro do topo; o estilo Fixa, que guarda
+  o espaço dela para as janelas maximizadas pararem ao lado; uma barra
+  inteira como a do macOS; ou entalhes como os do MacBook (no meio, nos
+  cantos ou três), com curvas mais redondas ou mais retas. Cada item vai
+  para o entalhe para onde é arrastado, e um entalhe vazio fica pequeno.
+* **Minimizada** numa linha fina (também embaixo, ou em pé numa lateral), ela
+  volta quando o mouse chega nela; os entalhes se escondem juntos ou cada um
+  sozinho. Ela sai do caminho em tela cheia e quando começa a seleção de uma
+  captura de tela.
+* **Volume**: a roda muda, Shift+roda escolhe outro dispositivo de saída. O
+  botão do meio silencia o volume ou o microfone, ou liga o "Não incomodar"
+  no sino (uma lua enquanto ligado); o clique direito no sino abre as
+  notificações com os interruptores.
+* **Mais itens**, cada um opcional (desligados por padrão):
+  * o uso do processador, da memória e da memória de vídeo (um clique mostra
+    os gráficos);
+  * um botão que silencia os microfones (o nível também vai a 0 para apps
+    que gravam um microfone mudo, e volta ao tirar o mudo);
+  * o brilho da tela (a roda muda);
+  * o idioma e o modo de digitação do teclado (中 ou 英, あ ou A, 가 ou A, ou
+    PT...; um clique troca o teclado, e um balão mostra a troca com a pílula
+    minimizada);
+  * o microfone, a câmera e a localização em uso (ícones coloridos; o nome
+    dos apps com o mouse em cima);
+  * pendrives (ligado por padrão: abrir ou ejetar, e um aviso ao conectar);
+  * as áreas de trabalho virtuais (um ponto para cada; a roda troca, um
+    clique lista todas, com uma nova e um "x" para fechar);
+  * o app em foco naquele monitor, o modo claro e escuro, os perfis e um
+    botão de energia;
+  * anotações (com tópicos), tarefas (as dez últimas concluídas guardadas) e
+    atalhos do teclado para lembrar (gravados ou importados do whkdrc do
+    komorebi);
+  * o clima, as atualizações, pastas e locais, papéis de parede e o komorebi
+    (veja os painéis abaixo);
+  * os botões da central de controle (luz noturna, hotspot e modo avião
+    trocam ali mesmo; Wi-Fi, Bluetooth, projetar e acessibilidade abrem a
+    lista deles embaixo; os outros são atalhos).
+* Cada ícone mostra o nome com o mouse em cima (as dicas podem ser
+  desligadas), e o item sob o mouse ganha um destaque cinza (também pode ser
+  desligado).
+
+#### Notificações
+
+* **Os apps com notificações não lidas** aparecem na pílula com o número (da
+  central de notificações do Windows ou do botão na barra, também com a
+  barra escondida), e o sino ganha um ponto vermelho até a lista ser aberta;
+  as notícias do botão Widgets também. As que chegaram com a ilha parada
+  aparecem quando ela começa.
+* Um clique abre o app na notificação mais recente (um app escondido na
+  bandeja, pelo ícone dele na bandeja); uma sem nada para abrir mostra a
+  lista. Abrir o app de qualquer jeito, ou o app limpar as notificações no
+  Windows, limpa na ilha também. Apps que mandam com vários nomes (os apps
+  do celular do Vincular ao Celular) aparecem como um ícone só (uma opção,
+  ligada por padrão).
+* **As novas saem da pílula** por alguns segundos (não com "Não incomodar"),
+  com a foto de quem mandou quando tem. Dá para responder mensagens ali
+  mesmo nos apps que oferecem (Shift+Enter para nova linha); uma longa
+  aparece em até três linhas com o mouse em cima; o "x" apaga, a seta ignora
+  o app por um minuto. No estilo barra, ela desce do meio da barra.
+* **A lista** (o sino): até metade da tela, rolando suave; limpe uma ou
+  todas (a central do Windows também); a engrenagem dela tem o "Não
+  incomodar", os avisos na pílula e mostrar o conteúdo.
+* Opcionais: o que foi copiado num balão sob a pílula (não o dos
+  gerenciadores de senhas, nada é guardado); Win+N e Win+A abrindo as
+  notificações e a central de controle da ilha; o aviso da Ferramenta de
+  Captura mostrando a captura no Explorador.
+
+#### Painéis
+
+Cada um cresce de trás da pílula, embaixo do item clicado, com um leve
+quique.
+
+* **Central de controle** (o ícone dela), como no macOS: Wi-Fi (as redes,
+  conectar com senha, o motivo do Windows quando falha, esquecer uma; o
+  estado e a velocidade do cabo), Bluetooth (os dispositivos pareados; um
+  clique conecta fones e caixas de som), "Não incomodar", luz noturna,
+  projetar, transmitir, legendas ao vivo, acessibilidade (lupa, narrador,
+  filtros de cor, teclas de aderência), brilho (monitores com DDC/CI, um
+  controle para cada), o volume, o dispositivo de saída e o volume de cada
+  app, a bateria, o hotspot móvel e o modo avião. "Editar" escolhe e ordena
+  os controles como no iPhone, com atalhos (modo escuro, captura de tela,
+  bloquear, emojis, área de transferência, Gerenciador de Tarefas,
+  Calculadora, Explorador de Arquivos).
+* **Som**, **bateria** (com o plano e os modos de energia) e **brilho**: só
+  isso, como no macOS.
+* **Calendário** (o relógio): seus eventos, com lembretes na pílula; os
+  feriados do país do Windows (opcional); agendas .ics (um link, como o
+  endereço secreto no formato iCal do Google Agenda, ou um arquivo), só para
+  leitura, cada uma na sua cor, com os próximos eventos embaixo do mês; a cor
+  de hoje; seus eventos passados ocultos depois de um dia, uma semana ou 30
+  dias, a contagem deles (até 200) e apagá-los.
+* **O que está tocando** (a nota): a capa, a música, uma linha do tempo,
+  anterior/tocar/próxima, o volume e o volume do próprio app. Os botões e a
+  capa com o título podem ficar na pílula (com a largura escolhida, rolando
+  enquanto toca se escolhido); com vários apps tocando, uma linha escolhe um
+  ("Automático" segue o Windows), Shift+roda na pílula também. Um clique na
+  capa traz o app para a frente, e o título inteiro e o artista aparecem com
+  o mouse em cima. Só aparecem os apps que dão ao Windows os controles de
+  mídia (o VLC 3, por exemplo, não).
+* **Pastas e locais**: pastas que você fixa e os locais do Windows (Este
+  Computador, a Lixeira, páginas das Configurações...), navegados em colunas
+  como no Finder; uma busca (um nome ou *.pdf), por nome ou mais novos
+  primeiro, "Abrir no Explorador"; arquivos arrastados para fora (copiados
+  ou movidos, perguntado uma vez) ou para uma pasta.
+* **Papéis de parede** de uma pasta que você escolhe: miniaturas, uma
+  transição (esmaecer, círculo, deslizar ou zoom), naquele monitor; a roda no
+  item passa para o próximo.
+* **komorebi** (se instalado): iniciar, parar e recarregar (com o whkd e o
+  masir se escolhidos; um terminal mostra o que falhou; nada é instalado por
+  você, e o mod nunca fecha o komorebi sozinho), e o layout dele na pílula
+  depois de um ponto por área de trabalho, com um menu de layouts (colunas,
+  linhas, grade, BSP, as pilhas, rolagem), tiling, monocle e pausa, como no
+  yasb.
+* **Clima** (agora, as próximas horas e a semana, da cidade que você digitar)
+  e **atualizações** (os apps com versão nova no winget, atualizados num
+  terminal: um, os marcados ou todos, um app pode ser ignorado; e as
+  atualizações do Windows pendentes; verificadas a cada 1 a 24 horas).
+* **Energia**: suspender, reiniciar, desligar (esses dois perguntam antes),
+  bloquear e sair, como o menu Apple do macOS.
+
+#### Ícones da bandeja
+
+* Os ícones dos outros apps: os fixados na pílula, os outros abrindo para o
+  lado pelo "⋯", ou numa lista embaixo da pílula (em grade como a do Windows,
+  ou com os nomes). Os cliques funcionam como na barra, e os nomes aparecem
+  embaixo deles.
+* Fixe um com o clique do meio, ou com o alfinete que aparece depois de dois
+  segundos; arraste para mudar a ordem, para qualquer lugar da pílula (em
+  todo estilo e entalhe), ou entre a lista e a pílula. Cada ilha (ou o perfil
+  dela) guarda os seus.
+* Uma lista longa mostra doze por vez (uma opção) e rola com a roda.
+
+#### Aparência, posição e monitores
+
+* **Cores**: preto, grafite, claro, a cor de destaque do Windows, vidro, preto
+  ou claro seguindo o modo do Windows (ou o contrário), as suas (fundo,
+  textos, ícones; um aviso quando ficam difíceis de ler), ou as cores do app
+  da frente; a opacidade; **vidro** (o desfoque do Windows na ilha em todos
+  os estilos e nos painéis; com os efeitos de transparência do Windows
+  ligados, cor lisa senão ou com a economia de energia), translúcido (tinta
+  mais leve e cores mais vivas) ou não, e mais desfocado que o do Windows se
+  quiser; e o vidro fosco na barra e na faixa do estilo Fixa.
+* **Tamanhos**: a ilha, os ícones e textos, a altura, os cantos e o espaço
+  nas pontas da pílula, e os painéis (de 100% a 150%).
+* **Posição**: em qualquer lugar da tela (ou arraste a pílula, que encaixa
+  nas bordas e cantos); uma posição, ícones e um relógio só deles para alguns
+  apps (no estilo pílula); na metade de baixo os painéis abrem para cima, e
+  em pé nas laterais.
+* **Monitores**: o principal, outro, o do mouse, ou todos (cada um com as
+  configurações da principal ou um perfil próprio); indo para outro monitor,
+  ela desliza até lá.
+* **Perfis** (até 10; um botão na pílula troca), **backup** (exportar e
+  importar) e o **idioma** (inglês, português, chinês, ou o do Windows).
+* **Animações**: efeito de mola em tudo; para computadores mais lentos, só as
+  essenciais ou nenhuma, a velocidade, e cerca de 90, 60 ou 30 quadros por
+  segundo.
 
 #### As configurações da ilha
 
-Um clique com o botão direito na ilha (fora do ícone de outro app ou de uma
-notificação) faz sair um balãozinho com uma engrenagem embaixo dela; clicar
-nele abre a central de controle nas configurações (no estilo barra, o clique
-direito já abre as configurações, no meio da tela). Elas ficam em cinco
-abas (Geral: os perfis, o backup e a posição; Aparência: o estilo com os
-entalhes, as cores, o tamanho e a transparência, as animações; Pílula: a
-ordem dos itens, os do sistema, os da área de trabalho, apps e ferramentas,
-e os botões da central; Bandeja, mídia e relógio; Notificações), com a sexta
-aba Monitores quando há duas ou mais telas conectadas, em duas ou três
-colunas (uma em telas pequenas, rolando), cada opção logo abaixo da que ela
-depende. Digitar
-em qualquer lugar delas faz uma busca em todas (os acentos não importam); a caixa funciona como qualquer
-campo de texto (setas, Home, End, Shift para selecionar, arrastar o mouse,
-dois cliques numa palavra, Ctrl+A, Ctrl+Backspace apaga uma palavra), o Esc
-limpa a busca, e o Esc (ou um clique fora) fecha.
+Clique com o botão direito na ilha e na engrenagem embaixo dela (no estilo
+barra, o clique direito já abre), ou na engrenagem da central de controle.
+Ficam em abas (Geral, Aparência, Pílula, Bandeja mídia e relógio,
+Notificações, e Monitores com duas telas ou mais); digitar busca em todas, e
+uma opção apagada diz o porquê com o mouse em cima. As configurações do
+Windhawk ligam a ilha e ajustam a barra de tarefas, a dock e as animações
+dela.
 
 | Seção | O que ela ajusta |
 | :--- | :--- |
-| Perfis | Até 10 perfis com as configurações da ilha abaixo (para trabalhar, para jogar, um com tudo ligado): o "+" ao lado do título salva as atuais, um clique aplica um, o perfil em uso guarda sozinho toda mudança feita nas configurações, e o lápis renomeia um perfil, salva nele as configurações atuais ou exclui. Um botão na pílula troca de perfil (desligado por padrão): um clique lista os perfis, e Shift e a roda do mouse em cima dele vão para o próximo (mostrado embaixo dele, aplicado quando o Shift é solto). As notificações, anotações e tarefas não fazem parte deles (os ícones fixados da bandeja e os lugares deles fazem). |
-| Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, os links das agendas (o "endereço secreto" do Google Agenda também: guarde o arquivo só para você), pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar; o Windhawk guarda para o computador todo, então todas as contas do Windows nele veem os mesmos. |
-| Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (só no estilo Ilha, a pílula: o estilo Fixa e a barra ficam num lugar só e com os mesmos itens para todos os apps; para alguns apps, escolhidos entre os apps abertos: uma posição, ícones e a ordem deles, as partes do que está tocando, um relógio (e se ele fica no meio), a distância das bordas e o tamanho só deles); mover a pílula arrastando; ficar em pé nas laterais; esconder na linha até o mouse chegar nela (numa borda), depois do tempo escolhido; a distância dela até as bordas da tela. |
-| Aparência | O estilo (a pílula; a pílula fixa, guardando o espaço dela na borda para as janelas maximizadas pararem ao lado; ou a barra), as cores (e as próprias: um clique em "Fundo", "Texto" ou "Ícones" abre a janela de cores do Windows), a opacidade, o vidro fosco (a barra e a faixa do estilo Fixa, sem entalhes), cores seguindo o app da frente (a cor da barra de título dele, quando tem, ou a cor principal do ícone, mudando suave ao trocar de app; nunca lida da tela), o tamanho, e painéis na largura da ilha. |
-| Entalhes (estilo Fixa) | Nenhum, um no meio, um em cada canto de cima, ou três; o tamanho das curvas (75% por padrão, até 200% para curvas largas e abertas); e esconder cada um sozinho (senão, uma linha só, no entalhe do sino, abre todos). |
-| Animações | Ligadas ou não, quantas (todas, parciais, nenhuma), a velocidade e os quadros por segundo, da ilha (as da dock ficam nas configurações do Windhawk; as da ilha começam como aquelas estavam). |
-| Na pílula | A ordem dos itens (arraste-os na pilulinha; com entalhes, de um entalhe para outro), o relógio no meio (os outros itens se dividem dos dois lados, mantendo a ordem), e quais itens ela mostra: a central de controle, volume e bateria (cada um com a porcentagem ao lado, desligada por padrão), o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, os perfis, o brilho da tela, o idioma do teclado, o microfone, a câmera e a localização em uso, os pendrives (o ícone e o aviso ao conectar, os dois ligados por padrão), as áreas de trabalho virtuais, pastas e locais, papéis de parede (e a transição deles), e o uso do processador, da memória e da memória de vídeo. Uma pílula maior que a tela para antes das bordas, e a roda do mouse desliza por ela (Shift+roda em cima do que está tocando). |
-| Botões da central na pílula | Luz noturna, Wi-Fi, Bluetooth, hotspot móvel, modo avião, projetar, transmitir, legendas, acessibilidade, captura de tela, bloquear, emojis, área de transferência, Gerenciador de Tarefas, Calculadora, Explorador de Arquivos e komorebi, cada um por si, com o seu próprio lugar na ordem da pílula (a central mantém a ordem dela). |
-| Bandeja e mídia | Os ícones dos outros apps: os não fixados abrem para o lado na pílula (manter a lista deles aberta, e quantos ela mostra antes de rolar), ou numa lista embaixo dela, em grade de ícones (como a do Windows) ou com os nomes; o que está tocando (a nota), e os botões e a capa com o título na pílula, cada um por si, a roda em cima dele trocando a música em vez do volume e um título longo rolando enquanto toca (os dois desligados por padrão). |
-| Relógio | O formato da hora (o do Windows, 24 horas, ou 12 horas com um AM/PM pequeno depois, também no calendário e nas notificações), segundos, o dia da semana, o dia e o mês, o ano, a ordem da data, o mês em número ("9/10"), e os feriados no calendário (desligado por padrão). A data segue o formato regional do Windows ("Fri Oct 9", "sex 9 out"; em chinês, japonês e coreano do ano ao dia, 2026年10月9日), ou a ordem escolhida (dia, mês, ano; mês, dia, ano; ou ano, mês, dia). |
-| Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows, baixar fotos da internet (desligado por padrão), um ícone por app (os apps do celular do Vincular ao Celular juntos), e mostrar o que foi copiado num balão sob a pílula (desligado por padrão: o começo de um texto, o nome de um arquivo ou uma imagem, menos as da Ferramenta de Captura, que já mostra o aviso dela; nada é guardado, o que os gerenciadores de senhas copiam não aparece, e só diz "Copiado" enquanto o conteúdo das notificações está escondido), Win+N e Win+A abrindo as notificações e a central de controle da ilha no lugar das do Windows (os dois desligados por padrão), e um clique no aviso da Ferramenta de Captura de uma captura que ela acabou de salvar (na pasta Capturas de Tela) mostrando-a no Explorador em vez de abrir a Ferramenta de Captura (desligado por padrão). |
-| Monitores (2+ telas) | Escolha um monitor, todos os monitores ou seguir o mouse. O mapa acompanha a disposição real das telas e usa os números dos dispositivos; clique numa tela para escolher a ilha principal (avisos e bandeja). Entalhes na principal desabilitam seguir o mouse. No modo em todos, cada outra tela usa "Igual à principal" (espelho ao vivo) ou um perfil; as configurações de cada ilha abrem pela engrenagem dela. Uma edição atualiza todo monitor que usa o perfil, inclusive a principal; o "+" em outra ilha copia sua aparência atual para um perfil novo, usado nela. A ordem dos itens e sua distribuição entre entalhes pertencem ao perfil. As opções de notificação são da ilha principal (apagadas nas outras); as de animação continuam compartilhadas. A guia desaparece se restar um monitor; os perfis já atribuídos ficam guardados. |
+| Perfis | Até 10 conjuntos das configurações da ilha: o "+" salva as atuais, um clique aplica, o perfil em uso guarda toda mudança; um botão na pílula troca (Shift+roda). Notificações, anotações e tarefas não fazem parte. |
+| Backup | Exportar ou importar um arquivo com anotações, tarefas, atalhos, eventos, os links das agendas (guarde só para você), pastas fixadas, a pasta dos papéis de parede, perfis e configurações. O Windhawk guarda tudo neste computador, para todas as contas dele. |
+| Idioma | Inglês, português, chinês (simplificado), ou o idioma de exibição do Windows; as datas também seguem. |
+| Posição | Onde ela fica (por monitor); posição e ícones por app (estilo pílula); arrastar a pílula; em pé nas laterais; esconder como linha depois de um tempo (a opacidade dela e o comprimento da área que a traz de volta); a seta de minimizar; a distância das bordas. |
+| Aparência | O estilo, as cores (as suas pela janela de cores do Windows), a opacidade, o vidro (translúcido, o desfoque dele) e o vidro fosco, cores seguindo o app da frente, o tamanho, o tamanho dos ícones e textos, a altura, os cantos e o espaço nas pontas da pílula, a borda em volta da ilha, dos painéis e dos balões (0% para nenhuma), o tamanho dos painéis, painéis na largura da ilha, o destaque sob o mouse e as dicas. |
+| Entalhes (estilo Fixa) | Nenhum, no meio, nos cantos ou três; as curvas (75% por padrão, até 200%); esconder cada um sozinho. |
+| Animações | Ligadas ou não, todas, parciais ou nenhuma, a velocidade e os quadros por segundo (as da dock ficam nas configurações do Windhawk). |
+| Na pílula | A ordem dos itens (arrastando, também entre entalhes), o relógio no meio (na barra, os outros itens podem ir para os cantos da tela), e quais itens aparecem (veja acima); uma pílula maior que a tela rola com a roda. |
+| Botões da central na pílula | Luz noturna, Wi-Fi, Bluetooth, hotspot, modo avião, projetar, transmitir, legendas, acessibilidade, captura de tela, bloquear, emojis, área de transferência, Gerenciador de Tarefas, Calculadora, Explorador de Arquivos e komorebi, cada um no seu lugar; o layout do komorebi. |
+| Bandeja e mídia | Onde os ícones não fixados abrem (para o lado, em grade ou lista com nomes) e quantos aparecem; a nota do que está tocando, os botões, a capa e o título na pílula, a roda trocando a música, a largura do título e a rolagem. |
+| Relógio | 24 ou 12 horas (um AM/PM pequeno), segundos, o dia da semana, a data e a ordem dela, o ano, o mês em número, os feriados. A data segue o formato regional do Windows, no idioma da ilha quando um é escolhido. |
+| Notificações | "A ilha cuida das notificações e dos sons" (veja as observações), avisos na pílula (também minimizada), esconder os avisos do Windows, fotos da internet, os ícones dos apps na pílula e um ícone por app, o que foi copiado, Win+N e Win+A, e as capturas da Ferramenta de Captura no Explorador. |
+| Monitores (2+ telas) | Um monitor, todos ou o do mouse, num mapa da disposição real; a ilha principal (avisos e bandeja); cada outra tela "Igual à principal" ou um perfil; as opções de notificação são da principal. |
 
 #### Imagens
 
@@ -898,7 +688,7 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 
 | As configurações da ilha | Atalhos do teclado |
 | :---: | :---: |
-| ![As configurações da ilha](https://i.imgur.com/nvuBMH9.png) | ![Atalhos do teclado](https://i.imgur.com/q75V4Sm.png) |
+| ![As configurações da ilha](https://i.imgur.com/89DjPMq.png) | ![Atalhos do teclado](https://i.imgur.com/q75V4Sm.png) |
 
 Os ícones dos outros apps na bandeja: a lista deles aberta, e abrindo:
 
@@ -913,23 +703,23 @@ Ou em grade embaixo da pílula:
 Os estilos: a pílula, o estilo Fixa (a pílula guardando o espaço dela, para
 as janelas maximizadas pararem ao lado) e a barra, no topo da tela:
 
-![A pílula](https://i.imgur.com/vujKa2O.png)
+![A pílula](https://i.imgur.com/9eLqY38.png)
 
-![O estilo Fixa](https://i.imgur.com/Be1vKd9.png)
+![O estilo Fixa](https://i.imgur.com/hndh6lx.png)
 
-![O estilo barra](https://i.imgur.com/fcJntKM.png)
+![O estilo barra](https://i.imgur.com/EkIJ4Zl.png)
 
 Os entalhes do estilo Fixa: três, três com as curvas em 200%, nos cantos, e
 um no meio; uma notificação saindo do entalhe com o sino; e os entalhes se
 escondendo juntos numa linha só:
 
-![Três entalhes](https://i.imgur.com/PBWL4HD.png)
+![Três entalhes](https://i.imgur.com/iJUrPeu.png)
 
 ![Três entalhes, curvas em 200%](https://i.imgur.com/YBNVGef.png)
 
-![Entalhes nos cantos](https://i.imgur.com/BDQoBvg.png)
+![Entalhes nos cantos](https://i.imgur.com/oglSDoR.png)
 
-![Um entalhe no meio](https://i.imgur.com/IF2Jfy9.png)
+![Um entalhe no meio](https://i.imgur.com/NxwTVFC.png)
 
 ![Uma notificação saindo do entalhe com o sino](https://i.imgur.com/GiSUBxZ.gif)
 
@@ -942,230 +732,122 @@ escondendo juntos numa linha só:
 | Claro | ![Claro](https://i.imgur.com/B6lsL49.png) |
 | A cor de destaque do Windows | ![Cor de destaque](https://i.imgur.com/Ilr8YHB.png) |
 | Vidro | ![Vidro](https://i.imgur.com/kAsBeR8.png) |
+| A opção vidro (desfoque do Windows, qualquer cor) | ![A opção vidro](https://i.imgur.com/fbAnalU.png) |
 | Seguindo o modo do Windows (preto no modo escuro) | ![Automático](https://i.imgur.com/wNJKUiA.png) |
 | O contrário (claro no modo escuro) | ![Automático invertido](https://i.imgur.com/tMr0Hqo.png) |
 | Cores próprias | ![Cores próprias](https://i.imgur.com/27jYaq7.png) |
 
-### A dock (opcional)
+### A dock em detalhes
 
 A configuração "Barra de tarefas" (por padrão a barra do Windows fica como
 está) transforma a barra do Windows numa dock como a do macOS; ou mantém a
-barra do Windows, transparente só com os apps (com uma sombra suave subindo da borda de baixo, a ampliação e os pulos, entrando e
-saindo com a animação do mod; ela só aparece e só pega os cliques em volta dos
-apps, então o resto da parte de baixo da tela continua clicável), ou como ela
+barra do Windows, transparente só com os apps (com uma sombra suave, a
+ampliação e os pulos; ela só pega os cliques em volta dos apps), ou como ela
 é (inteira, ou só com os apps).
 
 ![A barra do Windows transparente, só com os apps](https://i.imgur.com/z0FMhlK.gif)
 
-* **Compacta e flutuante**: só os ícones dos apps, centralizados, numa pílula
-  arredondada que flutua um pouco acima da borda de baixo.
-* **Fundo desfocado**: as janelas e o papel de parede aparecem atrás dela,
-  desfocados.
-* **Ampliação**: os ícones crescem numa onda que acompanha o mouse.
-* **Ícones que pulam**: o ícone de um app pula enquanto ele abre, e quando o
-  app pede atenção (uma mensagem nova, por exemplo). Depois de clicar num app,
-  a dock espera ele abrir e pular antes de se esconder.
-* **Notificações sem a dock inteira**: quando um app pede atenção com a dock
-  escondida (um número novo no ícone, ou o botão piscando), só o ícone dele
-  aparece na borda de baixo, pula e some de novo.
-  Clicar nele abre o app. Dá para escolher a dock inteira, ou nada, no lugar.
-  Na barra transparente, um app pedindo atenção não pula nem faz a barra
-  aparecer: o botão dele mostra isso quando a barra estiver à vista.
-* **Apps chegando e saindo**: um app abrindo cresce na dock, e os ícones do
-  lado deslizam para abrir espaço (e voltam quando um fecha).
-* **Pontinhos embaixo dos apps abertos**, no lugar do traço do Windows.
-* **Escondida até você precisar** (opcional, desligado por padrão): a barra
-  se oculta sozinha e entra com efeito de mola quando o mouse chega na borda
-  de baixo da tela.
-* **Fora do caminho em tela cheia**: jogos e apps em tela cheia (exclusiva ou
-  sem bordas) não fazem ela aparecer quando o mouse encosta embaixo.
+* **Compacta e flutuante**: os ícones dos apps numa prateleira arredondada um
+  pouco acima da borda de baixo; o tamanho dos ícones, o espaço entre eles, o
+  vão embaixo, os cantos e o fundo (uma cor transparente com uma borda fina,
+  ou nenhum) são configurações.
+* **Ampliação**: os ícones crescem numa onda que acompanha o mouse e afasta
+  os vizinhos (o clique sempre vai para o ícone embaixo do mouse), nítidos
+  com as imagens maiores dos próprios apps; a dock abre espaço acima dela, e
+  as miniaturas das janelas abrem logo acima.
+* **Pulos**: o ícone de um app pula enquanto ele abre e quando pede atenção;
+  depois de um clique, a dock espera o app antes de se esconder.
+* **Atenção com a dock escondida**: só o ícone do app aparece na borda de
+  baixo e pula (ou a dock inteira, ou nada).
+* Os apps crescem ao chegar e os outros deslizam; pontinhos embaixo dos apps
+  abertos.
+* **Escondida até você precisar** (opcional): aparece quando o mouse chega na
+  borda de baixo, não sobre jogos e vídeos em tela cheia.
+* Sem a ilha, o relógio e a bandeja ficam na ponta direita da dock, numa
+  pílula própria (a não ser que sejam escondidos nas configurações).
 
 ### Observações
 
-* Somente Windows 11.
-* Os textos da ilha seguem o idioma de exibição do Windows: inglês, português
-  ou chinês (simplificado).
-* A dock é para a barra embaixo. Com a barra na esquerda, na direita ou no
-  topo (versões novas do Windows 11), ela fica como o Windows a deixa (a
-  barra transparente continua transparente, sem se esconder nem aumentar os
-  ícones, e o ocultar automaticamente do próprio Windows só funciona
-  embaixo), e a ilha continua funcionando: a pílula e a barra não ficam por
-  cima da barra de tarefas em nenhuma borda, e acompanham quando ela muda de
-  lugar. A dock volta quando a barra volta para baixo.
-* **A ilha sem a dock**: a configuração "Barra de tarefas" mantém a barra do
-  Windows como ela é (se quiser, sem o relógio e a bandeja enquanto a ilha
-  está ligada e os mostra), ou só com os apps (a ilha mostra o relógio, a bandeja e as
-  notificações), para combinar a ilha com outros mods de barra.
-* Com "Esconder a barra até o mouse chegar na borda de baixo" ligado
-  (desligado por padrão), o mod liga o ocultar automaticamente da barra (a
-  configuração do Windows) enquanto está ativo, e desliga de novo quando o
-  mod é desativado (se estava desligado antes), também depois de um
-  travamento, no próximo início. Se o Explorer não estiver rodando quando o mod for
-  desativado, desligue nas configurações da barra de tarefas do Windows.
-* **As configurações do próprio Windows**: as chaves e os botões da central
-  de controle mudam as configurações do próprio Windows, como as
-  configurações rápidas dele: o modo escuro, a luz noturna, o plano e o
-  modo de energia, o mudo do microfone, o dispositivo de saída padrão, as
-  redes Wi-Fi (uma rede conectada fica salva pelo Windows, com a senha;
-  "Esquecer" apaga), as
-  Teclas de Aderência e as outras chaves de acessibilidade, o modo de vídeo
-  (Projetar), o brilho do monitor e os rádios. Elas continuam como ficaram
-  depois que o mod é desativado.
-* Sem a ilha, a bandeja do sistema (relógio, rede, volume) fica na ponta
-  direita da barra, numa pílula própria, a não ser que seja escondida nas
-  configurações.
-* **Ampliação maior**: os ícones ampliados só crescem até o topo da barra de
-  tarefas. Para ter espaço acima da dock, deixe a barra mais alta com o mod
-  [Taskbar height and icon size](https://windhawk.net/mods/taskbar-icon-size)
-  (por exemplo, altura 72 e o tamanho de ícone padrão). A dock mantém a altura
-  dela, e o espaço acima fica para os ícones.
-* Não use este mod junto com outros que mudam o visual da barra ou a animação
-  de ocultar, como os temas do Windows 11 Taskbar Styler ou o Taskbar
-  Auto-Hide Instant Show, nem com outros mods de dock. Com a barra do Windows
-  "só com os apps", o Windows 11 Taskbar Styler pode trazer a bandeja de volta
-  e fazer o Explorer parar de responder; para uma barra transparente, use a
-  opção "transparente" deste mod.
-* **Dois processos**: a dock (e o que só a barra sabe: os contadores dos apps e
-  os ícones que os apps mandam para a bandeja) roda no `explorer.exe`, porque
-  mexe na própria barra; a ilha roda num processo `windhawk.exe` só dela, então
-  um problema nela não derruba a barra e a área de trabalho. As duas partes
-  avisam uma à outra o que mudou com mensagens de janela.
-* **Como algumas funções funcionam**: o Windows não tem API pública para
-  algumas delas, então o mod usa o que o próprio Windows usa, e deixa a função
-  de fora quando não encontra o que espera:
-  * As notificações novas (também quando o número de um app não muda, como uma
-    mensagem nova numa conversa que já estava não lida) e a lista de
-    notificações são lidas, somente leitura, do banco de notificações do
-    Windows.
-  * A luz noturna é ligada e desligada pelo estado dela no registro
-    (CloudStore), conferido antes de mudar.
-  * O dispositivo de saída e o modo avião usam interfaces do Windows (as mesmas
-    que os programas de volume e as configurações rápidas usam).
-  * Transmitir, legendas ao vivo, narrador e filtros de cor são ligados pelos
-    atalhos do Windows.
-  * O vidro fosco é o próprio desfoque do Windows atrás de uma janela (o que
-    o shell dele usa), procurado quando o mod começa.
-  * Os apps usando o microfone são os que estão gravando (as sessões de
-    áudio do Windows, que avisam quando uma começa ou para); a câmera, pelo
-    monitor de atividade de sensores do Media Foundation (feito para
-    indicadores de privacidade); a localização, somente leitura, pelo
-    registro que o Windows mantém para as configurações de privacidade
-    (CapabilityAccessManager), que builds mais novos do Windows podem não
-    atualizar mais.
-  * Um pendrive é ejetado como o "Remover hardware com segurança" do
-    Windows faz (pedindo ao dispositivo para ser ejetado; um programa com
-    um arquivo aberto nele o segura). Um cartão num leitor embutido: só o
-    cartão é ejetado, como o "Ejetar" do Explorador.
-  * As áreas de trabalho virtuais são lidas do registro, onde o Windows as
-    guarda (avisado das mudanças, sem ficar consultando); trocar aperta o
-    atalho do Windows (Ctrl+Win+Esquerda ou Direita) quantas vezes for
-    preciso.
-  * Win+N e Win+A são atalhos do próprio Windows: escolhidos para a ilha,
-    um gancho de teclado de baixo nível os pega primeiro, numa thread só
-    dele e só enquanto um deles está ligado.
-  * A transição do papel de parede é desenhada por uma janela do mod logo
-    acima da área de trabalho por um momento; depois o papel de parede é
-    trocado com a interface documentada do Windows (IDesktopWallpaper). Com
-    um app que desenha o próprio papel de parede sobre a área de trabalho
-    (Wallpaper Engine), o do Windows fica embaixo dele.
-  * O modo de digitação (中 ou 英) é perguntado à janela do método de
-    entrada do app em primeiro plano, como as ferramentas de método de
-    entrada fazem.
-  * O "Não incomodar" é ligado e desligado pela interface que a central de
-    notificações do Windows usa.
-  * Os ícones da bandeja são lidos quando os apps os mandam para a barra.
-    Quando o mod começa, ele pede aos apps que os mandem de novo, com a
-    mensagem que o Windows manda quando a barra reinicia; um app que muda um
-    ícone que o mod ainda não viu (aberto antes dele) recebe essa mensagem
-    só para ele, e o ícone de um app que não disse quais mensagens do mouse
-    usa recebe cada clique nas duas formas (os apps antigos não usam a
-    nova). Alguns apps nunca os mandam de novo (Spotify): para os
-    ícones deles não se perderem quando o mod recarrega (configurações
-    salvas, desligar e ligar), a lista fica guardada no armazenamento do mod
-    enquanto ele recarrega e volta para os apps que ainda estão abertos.
-    Limpar as
-    notificações na ilha só as esconde ali (o banco de notificações do Windows
-    é só lido).
-  * Quando a ilha pega uma notificação nova (na pílula, ou, no estilo barra ou
-    com um painel aberto, como o ícone do app com o pontinho vermelho e na
-    lista), o aviso do Windows é tirado da tela (dá para mantê-lo nas
-    configurações da ilha); o Windows o coloca de novo na próxima
-    notificação.
-    O Windows 11 mostra os avisos empilhados numa janela só, então ela sai da
-    tela só enquanto todos os avisos nela são da ilha: chamadas, alarmes e
-    lembretes ficam com o aviso do Windows, com os botões dele, e os outros
-    da pilha aparecem junto. Em tela cheia nada aparece na ilha (a
-    notificação espera na lista) e, como com o "Não incomodar" do Windows, os
-    avisos do Windows não são mexidos. Com os avisos na pílula desligados, ou minimizada sem eles, o
-    aviso do Windows fica. O Windows mostra os avisos um depois do outro,
-    atrasados quando chegam muitos, e toca os sons nessa hora: a opção "A
-    ilha cuida das notificações e dos sons" (desligada por padrão) mantém o
-    "Não incomodar" do Windows ligado enquanto a ilha roda, então o Windows
-    fica quieto e a ilha mostra cada notificação e toca o som dela (o que
-    ela pede) na hora. Chamadas, alarmes e lembretes também aparecem na
-    pílula, na frente das outras (a que estiver na pílula dá lugar e volta
-    depois delas, com o que estava sendo digitado): ficam até serem
-    fechados, com os botões que a ilha consegue apertar (os do próprio app,
-    e "Descartar"), e tocam até serem fechados, por até um minuto. O "Não
-    incomodar" deixa esses passarem por padrão, então o Windows pode mostrar
-    o aviso dele também (e tocar o som dele no lugar do da ilha): a ilha lê
-    esse aviso pela Automação da Interface (a árvore de acessibilidade, só
-    dessa janela) e, quando é o da pílula, assume: o aviso do Windows fica
-    escondido enquanto a pílula o mostra, e os botões da pílula são os do
-    Windows (o "Adiar" também), apertados nele quando os da pílula são. Ele
-    volta assim que a pílula para de mostrá-lo, ou se algo não bater. O "Não incomodar" da ilha passa a ser o
-    dela (a lua do sino), e o do Windows é desligado de novo quando a ilha
-    para (pelo explorer, se o processo da ilha terminar de repente, ou no
-    próximo início depois de um travamento); ele não é mexido se já estava
-    ligado. Se for desligado pelo Windows, ele fica desligado e a ilha
-    funciona como de costume até a opção ser ligada de novo.
-  * As respostas chegam ao app do jeito que o Windows as manda pelos avisos
-    dele: pelo receptor de notificações que o app registrou.
-  * O mod só acessa a internet para o que for ligado nas configurações da
-    ilha (tudo vem desligado; os ícones próprios de um app podem esconder
-    esses itens, mas não ligá-los): "Baixar fotos da internet" (a imagem de uma notificação
-    que está na internet, como as fotos dos contatos do WhatsApp, baixada
-    por https do endereço que o app colocou nela, como o Windows faz, e só
-    para apps com permissão de internet; senão, aparece o ícone do app), o
-    clima ([Open-Meteo](https://open-meteo.com): a cidade digitada, depois a
-    previsão dela a cada 30 minutos enquanto está na pílula), os feriados
-    ([Nager.Date](https://date.nager.at): o país configurado no Windows, uma
-    vez por ano), os links das agendas adicionadas ao calendário (quando ele
-    abre, no máximo a cada 15 minutos) e as atualizações (o winget consulta a fonte da comunidade
-    dele, 20 segundos depois que a ilha começa, a não ser que já tenha
-    consultado nas últimas 6 horas, e depois a cada 6 horas; as atualizações
-    do Windows são lidas, somente leitura e offline, da última verificação
-    do próprio Windows, pelo Windows Update Agent).
-  * As atualizações só são listadas pelo mod (ele não aceita termos por
-    você): um app é atualizado num terminal, onde o "winget upgrade" mostra
-    o que faz e pede o que precisar, só quando pedido no painel.
-  * Os modos de energia são lidos e trocados pelas funções do powrprof.dll
-    que as Configurações do Windows usam; os planos de energia, pelas
-    documentadas.
-  * O uso da GPU vem dos contadores de desempenho do Windows, e a
-    temperatura, a ventoinha e a energia dela, dos números do próprio driver
-    de vídeo (ficam de fora quando o driver não os dá).
-  * Suspender, reiniciar, desligar e sair usam as funções do Windows para
-    isso (com a "Inicialização rápida", desligar funciona como no menu
-    Iniciar). Em PCs com Modern Standby, "Suspender" desliga a tela, que é o
-    que põe esses PCs para dormir.
-* **Atualização do driver de vídeo**: a ilha e os painéis são desenhados
-  com Direct2D em janelas em camadas. Se o driver de vídeo é atualizado ou
-  reiniciado, a ilha começa de novo sozinha (no máximo a cada dois
-  segundos, enquanto o driver ainda está instalando), com tudo desenhado de
-  novo. A imagem é copiada para a janela, então em notebooks com duas placas
-  de vídeo não importa qual delas desenha.
-* **Mods parecidos**: o [Dynamic Island for
-  Windows](https://windhawk.net/mods/dynamic-island-for-windows) é uma pílula
-  que reage a mídia, downloads e área de transferência; o [Island Media
-  Controls](https://windhawk.net/mods/island-media-controls) põe controles de
-  mídia na barra; o [TopBar for
-  Windows](https://windhawk.net/mods/windhawk-topbar) adiciona uma barra no
-  topo com painéis; o [Taskbar Dock
-  Animation](https://windhawk.net/mods/taskbar-dock-animation) amplia os
-  ícones da barra. Este mod junta a ilha (com a central de controle, as
-  notificações e os ícones da bandeja) e a dock, num topo e numa base como os
-  do macOS, sem precisar de outros mods.
+* Feito para o Windows 11. No Windows 10, só a ilha funciona.
+* A dock precisa da barra embaixo: em outra borda, a barra fica como o
+  Windows a deixa, e a ilha sai do caminho dela.
+* **Com outros mods de barra**, escolha "Barra do Windows sem mudanças"
+  (opcionalmente sem o relógio e a bandeja dela) ou "só com os apps". Não
+  combine a dock com mods que mudam o visual da barra ou o ocultar
+  automaticamente (temas do Windows 11 Taskbar Styler, Taskbar Auto-Hide
+  Instant Show) ou com outros mods de dock; para uma barra transparente, use
+  a opção deste mod.
+* **Ocultar automaticamente**: esconder a barra liga o ocultar
+  automaticamente do Windows enquanto o mod está ativo, e desliga depois
+  (também depois de um travamento). Se o Explorer não estiver rodando quando
+  o mod for desligado, desligue nas configurações do Windows.
+* **Configurações do Windows**: a central de controle muda essas
+  configurações ela mesma, como as configurações rápidas do Windows (modo
+  escuro, luz noturna, plano e modo de energia, o mudo do microfone, o
+  dispositivo de saída, redes Wi-Fi, acessibilidade, o modo de projeção, o
+  brilho, os rádios); elas ficam como foram deixadas.
+* **"A ilha cuida das notificações e dos sons"** (desligado por padrão): o
+  "Não incomodar" do Windows fica ligado enquanto a ilha roda ("só alarmes"
+  enquanto o da ilha está ligado), então o Windows fica quieto e a ilha
+  mostra cada notificação e toca o som dela na hora; chamadas, alarmes e
+  lembretes aparecem na pílula com os botões e tocam até serem fechados. Ele
+  é desligado de novo quando a ilha para ou o mod é desligado (também depois
+  de um travamento ou do PC desligado), e fica desligado se for desligado
+  pelo Windows.
+* **Avisos do Windows**: enquanto a ilha mostra uma notificação, o aviso do
+  Windows sai da tela (uma opção); chamadas, alarmes e lembretes mantêm o
+  dele, e nada muda em tela cheia.
+* **Internet só quando ligado** (tudo desligado por padrão): fotos da
+  internet nas notificações (por https, só para apps com acesso à internet),
+  o clima ([Open-Meteo](https://open-meteo.com), a cada 30 minutos enquanto
+  aparece), os feriados ([Nager.Date](https://date.nager.at), uma vez por
+  ano), os links das agendas (no máximo a cada 15 minutos) e as atualizações
+  (winget, a cada algumas horas; as do Windows são lidas sem internet). As
+  atualizações só rodam quando pedidas, num terminal, sem aceitar nada por
+  você.
+* **Armazenamento**: o Windhawk guarda as configurações, anotações e o resto
+  para o computador todo (todas as contas do Windows veem os mesmos);
+  exporte um backup antes de formatar.
+* **Dois processos**: a ilha roda num processo `windhawk.exe` próprio, então
+  um problema nela não derruba a barra; a dock roda no `explorer.exe`. Se o
+  driver de vídeo reiniciar, a ilha recomeça sozinha.
+* **Como algumas funções funcionam** (o Windows não tem API pública para
+  elas; uma função fica de fora se o Windows não corresponder):
+  * notificações: lidas, só leitura, do banco de notificações do Windows,
+    limpas com a interface de histórico de notificações do Windows,
+    respostas pelo próprio app; o aviso de uma chamada ou alarme lido com UI
+    Automation;
+  * luz noturna: o estado dela no registro (CloudStore); dispositivo de saída
+    e modo avião: interfaces do próprio Windows; transmitir, legendas,
+    narrador e filtros de cor: os atalhos do Windows; "Não incomodar": a
+    interface da central de notificações;
+  * o vidro: o próprio desfoque do Windows atrás de uma janela;
+  * apps usando o microfone, a câmera e a localização: as sessões de áudio do
+    Windows, o monitor de sensores do Media Foundation e o registro do
+    CapabilityAccessManager (builds mais novos podem não atualizar mais);
+  * pendrives: ejetados como o "Remover hardware com segurança";
+  * áreas de trabalho virtuais: lidas do registro (observado), trocadas com
+    Ctrl+Win+Esquerda ou Direita;
+  * o layout do komorebi: `komorebic subscribe-pipe`;
+  * Win+N e Win+A: um hook de teclado de baixo nível, só enquanto um está
+    ligado;
+  * papéis de parede: uma janela de transição, depois o IDesktopWallpaper do
+    Windows;
+  * o modo de digitação: perguntado à janela do método de entrada do app;
+  * ícones da bandeja: como os apps mandam para a barra (pedidos de novo
+    quando o mod começa, e guardados enquanto ele recarrega);
+  * modos de energia: as funções do powrprof.dll que as Configurações do
+    Windows usam; a GPU: contadores de desempenho e os números do próprio
+    driver.
+* **Mods parecidos**: [Dynamic Island for
+  Windows](https://windhawk.net/mods/dynamic-island-for-windows) (uma pílula
+  para mídia, downloads e área de transferência), [Island Media
+  Controls](https://windhawk.net/mods/island-media-controls) (controles de
+  mídia na barra), [TopBar for Windows](https://windhawk.net/mods/windhawk-topbar)
+  (uma barra no topo com painéis) e [Taskbar Dock
+  Animation](https://windhawk.net/mods/taskbar-dock-animation) (ícones da
+  barra ampliados). Este mod junta a ilha e a dock, como um topo e uma base
+  no estilo do macOS.
 
 ### Contato
 
@@ -1202,17 +884,17 @@ escrever em português.
   $description:pt-BR: O que acontece com a barra de tarefas do Windows. Cada grupo abaixo diz para quais destas opções ele vale
   $description:zh-CN: Windows 任务栏的样子。下面每个分组都会说明它适用于哪些选项
   $options:
-  - dock: "Dock: compact, blurred and floating, like on macOS"
+  - dock: "Dock: compact and floating, see-through, like on macOS"
   - windowsTransparent: "Windows taskbar, transparent: only the apps, with a soft shadow, hiding itself"
   - windowsApps: "Windows taskbar, only the apps (the island shows the rest)"
   - windows: "Windows taskbar, unchanged (to use other taskbar mods)"
   $options:pt-BR:
-  - dock: "Dock: compacta, desfocada e flutuante, como no macOS"
+  - dock: "Dock: compacta e flutuante, transparente, como no macOS"
   - windowsTransparent: "Barra do Windows transparente: só os apps, com uma sombra suave, se escondendo sozinha"
   - windowsApps: "Barra do Windows só com os apps (a ilha mostra o resto)"
   - windows: "Barra do Windows sem mudanças (para usar outros mods de barra)"
   $options:zh-CN:
-  - dock: "程序坞：紧凑、模糊、悬浮，像 macOS 一样"
+  - dock: "程序坞：紧凑、悬浮、半透明，像 macOS 一样"
   - windowsTransparent: "Windows 任务栏，透明：只显示应用，带柔和阴影，会自动隐藏"
   - windowsApps: "Windows 任务栏，只显示应用（其余由灵动岛显示）"
   - windows: "Windows 任务栏，不做更改（可与其他任务栏 mod 一起使用）"
@@ -1287,20 +969,20 @@ escrever em português.
   $description:pt-BR: Esconder a barra vale para todas as opções acima; as esperas, as animações e a tela cheia só para "Dock" e "Barra do Windows transparente" (as outras se escondem do jeito do Windows)
   $description:zh-CN: 隐藏任务栏适用于上面的所有选项；等待、动画和全屏仅适用于"程序坞"和"Windows 任务栏，透明"（其他选项按 Windows 自己的方式隐藏）
 - icons:
-  - magnification: 150
+  - magnification: 170
     $name: Icon magnification (%)
     $name:pt-BR: Ampliação dos ícones (%)
     $name:zh-CN: 图标放大（%）
-    $description: How big the icon under the mouse gets, in a wave like on macOS; 100 turns it off. On the transparent taskbar the icons can only grow up to its top (100-200, default 150)
-    $description:pt-BR: O quanto o ícone embaixo do mouse cresce, numa onda como no macOS; 100 desliga. Na barra transparente os ícones só crescem até o topo dela (100-200, padrão 150)
-    $description:zh-CN: 鼠标下的图标放大多少，像 macOS 一样呈波浪状；100 为关闭。在透明任务栏上图标最多只能放大到任务栏顶部（100-200，默认 150）
-  - magnificationRange: 120
+    $description: How big the icon under the mouse gets, in a wave like on macOS, pushing its neighbors aside; 100 turns it off. The dock makes room above itself for them; on the transparent taskbar they only grow up to its top (100-200, default 170)
+    $description:pt-BR: O quanto o ícone embaixo do mouse cresce, numa onda como no macOS, afastando os vizinhos; 100 desliga. A dock abre espaço acima dela para eles; na barra transparente eles só crescem até o topo dela (100-200, padrão 170)
+    $description:zh-CN: 鼠标下的图标放大多少，像 macOS 一样呈波浪状，并把相邻图标推开；100 为关闭。程序坞会在上方留出空间；在透明任务栏上图标最多只能放大到任务栏顶部（100-200，默认 170）
+  - magnificationRange: 150
     $name: Magnification reach (px)
     $name:pt-BR: Alcance da ampliação (px)
     $name:zh-CN: 放大范围（像素）
-    $description: How far from the mouse the neighboring icons still grow. Only with magnification above 100 (40-300, default 120)
-    $description:pt-BR: Até que distância do mouse os ícones vizinhos também crescem. Só com ampliação acima de 100 (40-300, padrão 120)
-    $description:zh-CN: 距离鼠标多远的相邻图标也会放大。仅在放大大于 100 时有效（40-300，默认 120）
+    $description: How far from the mouse the neighboring icons still grow. Only with magnification above 100 (40-300, default 150)
+    $description:pt-BR: Até que distância do mouse os ícones vizinhos também crescem. Só com ampliação acima de 100 (40-300, padrão 150)
+    $description:zh-CN: 距离鼠标多远的相邻图标也会放大。仅在放大大于 100 时有效（40-300，默认 150）
   - bounceOnLaunch: true
     $name: Bounce while an app opens
     $name:pt-BR: Pular enquanto um app abre
@@ -1329,34 +1011,48 @@ escrever em português.
   $description:pt-BR: Só para as opções "Dock" e "Barra do Windows transparente" acima
   $description:zh-CN: 仅适用于上面的"程序坞"和"Windows 任务栏，透明"选项
 - dock:
-  - dockHeight: 38
-    $name: Height (px)
-    $name:pt-BR: Altura (px)
-    $name:zh-CN: 高度（像素）
-    $description: Of the dock itself. If the taskbar is taller, the room above the dock is left for the magnified icons (28-64, default 38)
-    $description:pt-BR: Da própria dock. Se a barra de tarefas for mais alta, o espaço acima da dock fica para os ícones ampliados (28-64, padrão 38)
-    $description:zh-CN: 程序坞本身的高度。如果任务栏更高，程序坞上方的空间留给放大的图标（28-64，默认 38）
-  - bottomGap: 6
+  - iconSize: 32
+    $name: Icon size (px)
+    $name:pt-BR: Tamanho dos ícones (px)
+    $name:zh-CN: 图标大小（像素）
+    $description: At rest, like on macOS; the dock's height and margins follow them. When the taskbar doesn't hide itself, the dock at rest fits in the taskbar's height (only the magnified icons go over the windows), so its icons may be smaller (24-64, default 32)
+    $description:pt-BR: Em repouso, como no macOS; a altura e as margens da dock acompanham. Quando a barra não se esconde sozinha, a dock em repouso cabe na altura da barra (só os ícones ampliados passam por cima das janelas), então os ícones podem ficar menores (24-64, padrão 32)
+    $description:zh-CN: 静止时的大小，像 macOS 一样；程序坞的高度和边距随之变化。任务栏不自动隐藏时，静止的程序坞会放进任务栏的高度内（只有放大的图标会盖住窗口），所以图标可能更小（24-64，默认 32）
+  - iconGap: 8
+    $name: Space between icons (px)
+    $name:pt-BR: Espaço entre os ícones (px)
+    $name:zh-CN: 图标间距（像素）
+    $description: The dock gets wider with it (0-32, default 8)
+    $description:pt-BR: A dock fica mais larga junto (0-32, padrão 8)
+    $description:zh-CN: 程序坞会随之变宽（0-32，默认 8）
+  - bottomGap: 2
     $name: Gap at the bottom (px)
     $name:pt-BR: Espaço embaixo (px)
     $name:zh-CN: 底部间距（像素）
-    $description: Between the dock and the bottom edge of the screen (0-16, default 6)
-    $description:pt-BR: Entre a dock e a borda de baixo da tela (0-16, padrão 6)
-    $description:zh-CN: 程序坞与屏幕底部边缘之间的距离（0-16，默认 6）
-  - cornerRadius: 14
+    $description: Between the dock and the bottom edge of the screen (0-24, default 2)
+    $description:pt-BR: Entre a dock e a borda de baixo da tela (0-24, padrão 2)
+    $description:zh-CN: 程序坞与屏幕底部边缘之间的距离（0-24，默认 2）
+  - cornerRadius: 22
     $name: Corner roundness (px)
     $name:pt-BR: Arredondamento dos cantos (px)
     $name:zh-CN: 圆角大小（像素）
-    $description: 0 is square, 24 is very round (0-24, default 14)
-    $description:pt-BR: 0 é quadrado, 24 é bem arredondado (0-24, padrão 14)
-    $description:zh-CN: 0 为直角，24 为很圆（0-24，默认 14）
-  - backgroundOpacity: 55
-    $name: Background tint (%)
+    $description: 0 is square, 32 is very round (0-32, default 22)
+    $description:pt-BR: 0 é quadrado, 32 é bem arredondado (0-32, padrão 22)
+    $description:zh-CN: 0 为直角，32 为很圆（0-32，默认 22）
+  - background: true
+    $name: Background behind the icons
+    $name:pt-BR: Fundo atrás dos ícones
+    $name:zh-CN: 图标后面的背景
+    $description: The rounded shelf with its thin edge (also around the tray). Off, only the icons show, with the same sizes and magnification
+    $description:pt-BR: A base arredondada com a borda fina (também em volta da bandeja). Desligado, só os ícones aparecem, com os mesmos tamanhos e a mesma ampliação
+    $description:zh-CN: 带细边框的圆角底座（托盘周围也有）。关闭后只显示图标，大小和放大效果不变
+  - backgroundOpacity: 50
+    $name: Background color (%)
     $name:pt-BR: Cor do fundo (%)
-    $name:zh-CN: 背景着色（%）
-    $description: How much color over the blur; 0 is only blur, 100 is solid (0-100, default 55)
-    $description:pt-BR: Quanto de cor por cima do desfoque; 0 é só desfoque, 100 é sólido (0-100, padrão 55)
-    $description:zh-CN: 模糊上叠加多少颜色；0 为只有模糊，100 为纯色（0-100，默认 55）
+    $name:zh-CN: 背景颜色（%）
+    $description: How much color the background has, in the theme's color; 0 is see-through (only its edge shows), 100 is solid (0-100, default 50)
+    $description:pt-BR: Quanto de cor o fundo tem, na cor do tema; 0 é transparente (só a borda aparece), 100 é sólido (0-100, padrão 50)
+    $description:zh-CN: 背景的颜色有多浓，使用主题颜色；0 为透明（只显示边框），100 为纯色（0-100，默认 50）
   - dotIndicator: true
     $name: Dots under open apps
     $name:pt-BR: Pontinhos embaixo dos apps abertos
@@ -1469,7 +1165,9 @@ escrever em português.
 #include <cfgmgr32.h>
 #include <commdlg.h>
 #include <d2d1.h>
+#include <d2d1_1.h>
 #include <dbt.h>
+#include <devicetopology.h>
 #include <dwmapi.h>
 #include <dwrite.h>
 #include <endpointvolume.h>
@@ -1505,6 +1203,7 @@ escrever em português.
 #include <userenv.h>
 #include <uiautomation.h>
 #include <wuapi.h>
+#include <dispatcherqueue.h>
 
 #include <algorithm>
 #include <array>
@@ -1517,6 +1216,7 @@ escrever em português.
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -1528,20 +1228,28 @@ escrever em português.
 #include <winrt/Windows.Devices.Radios.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.Graphics.h>
+#include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.Composition.Desktop.h>
 #include <winrt/Windows.Media.Control.h>
 #include <winrt/Windows.Media.Core.h>
+#include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.Media.Playback.h>
 #include <winrt/Windows.Networking.Connectivity.h>
 #include <winrt/Windows.Networking.NetworkOperators.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -1562,8 +1270,10 @@ struct {
     } taskbarMode;
     bool autoHide;
     double cornerRadius;
-    double dockHeight;
+    double dockIconSize;
+    double dockIconGap;
     double bottomGap;
+    bool dockBackground;
     double backgroundOpacity;
     int showDuration;
     int hideDuration;
@@ -1584,6 +1294,8 @@ struct {
     // sideways in the pill, 1 a grid of icons under it (like Windows'), 2 a
     // list with their names (see TrayListPanel).
     int islandTrayStyle;
+    // Files dragged out of the folders panel: 0 asked, 1 copied, 2 moved.
+    int islandFolderDrag;
     bool islandNetwork;
     bool islandVolume;
     bool islandBattery;
@@ -1655,6 +1367,17 @@ struct {
     // Windows' blur behind the bar and the Fixed style's strip (see
     // Island::UpdateGlass).
     bool islandFrosted;
+    // The island and its panels as glass (see GlassLayer).
+    bool islandLiquidGlass;
+    bool islandTips;
+    // The soft gray shape behind the pill's item under the mouse.
+    bool islandHoverHighlight;
+    // The arrow at the pill's end that minimizes it to its line.
+    bool islandMinimizeButton;
+    // The bar's items at the screen's corners, the clock in the middle.
+    bool islandBarCorners;
+    // The glass translucent: a lighter tint and livelier colors.
+    bool islandGlassTranslucent;
     // The date's order on the clock: 0 the Windows regional format's, 1 the
     // day first, 2 the month first, 3 the year first; and the month as a
     // number ("9/10").
@@ -1676,6 +1399,15 @@ struct {
     // One icon on the pill for the notifications of one app, even when they
     // come under IDs of their own (see NotificationAppKey).
     bool islandGroupApps;
+    // The apps with notifications on the pill (their icons and counts).
+    bool islandApps;
+    // komorebi's layout on the pill (its menu changes it), and the app in
+    // focus on the island's monitor.
+    bool komorebiLayout;
+    bool islandFocusedApp;
+    // komorebi's workspaces without windows left out of its dots (the one
+    // shown always there).
+    bool komorebiHideEmpty;
     bool islandVerticalSides;
     // The clock kept in the middle of the pill (or of the bar), and the
     // power button (sleep, restart, shut down) on it.
@@ -1708,6 +1440,29 @@ struct {
     bool islandOwnsNotifications;
     // The island's size (its text, icons and width), in percent.
     int islandSize;
+    // Its icons' own size (their room too, not the texts nor the island's
+    // height), in percent.
+    int islandIconSize;
+    // The minimized line's opacity (percent; at 0 it's unseen, and the mouse
+    // still brings the island back), the length of the strip along the edge
+    // that brings it back (px at 100%), the panels' size (percent of the
+    // screen's scaling) and the widest the playing title gets on the pill
+    // (px at 100%).
+    int islandLineOpacity;
+    int islandActivationWidth;
+    int islandPanelSize;
+    int islandMediaTitleLimit;
+    // The pill's height, how round its corners are and the room at its
+    // ends, in % of the usual (see kPillHeightPctMin).
+    int islandPillHeight;
+    int islandPillCorners;
+    int islandPillEnds;
+    // How much the thin edge around the island, its panels, banners and
+    // bubbles shows (glass's bright one too), in %; the minimized line keeps
+    // its own.
+    int islandEdge;
+    // More blur on the glass than Windows' own, in % (0: Windows' own).
+    int islandGlassBlur;
     // The room between the island and the screen's edges (px at 100%).
     int islandGap;
     // On the monitor where the mouse is (several monitors).
@@ -2523,6 +2278,10 @@ enum IpcKind : ULONG_PTR {
     kIpcAppIcon,
 };
 constexpr UINT kIpcTimeoutMs = 400;
+// The ID the Widgets button's badge goes to the island under (its
+// AutomationId; the Widgets board has news): it isn't an app, so the island
+// shows it with its own name and icon, and a click opens the board.
+constexpr WCHAR kWidgetsBadgeId[] = L"WidgetsButton";
 
 // In explorer (the taskbar's thread), messages sent to it from other threads
 // wait meanwhile (SMTO_BLOCK): the mod's own unloading sends it some (see
@@ -2705,7 +2464,13 @@ bool RectEdge(const RECT& rect, UINT* edge) {
         rect.bottom > info.rcMonitor.bottom) {
         return false;
     }
-    if (rect.right - rect.left < rect.bottom - rect.top) {
+    // (Not a bar: almost square for a moment on its way to another edge.)
+    const LONG width = rect.right - rect.left;
+    const LONG height = rect.bottom - rect.top;
+    if (height * 2 > width && width * 2 > height) {
+        return false;
+    }
+    if (width < height) {
         *edge = rect.left + rect.right <
                         info.rcMonitor.left + info.rcMonitor.right
                     ? ABE_LEFT
@@ -3094,29 +2859,39 @@ bool IsLightTheme() {
     return value != 0;
 }
 
-Media::Brush CreateDockBackground() {
-    const bool light = IsLightTheme();
-    const winrt::Windows::UI::Color tint =
-        light ? winrt::Windows::UI::Color{255, 243, 243, 243}
-              : winrt::Windows::UI::Color{255, 32, 32, 32};
+// The dock's tint, in the theme's color.
+winrt::Windows::UI::Color DockTint() {
+    return IsLightTheme() ? winrt::Windows::UI::Color{255, 255, 255, 255}
+                          : winrt::Windows::UI::Color{255, 30, 30, 36};
+}
 
-    Media::AcrylicBrush brush;
-    // Blurs what's behind the taskbar window: other windows and the desktop.
-    brush.BackgroundSource(Media::AcrylicBackgroundSource::HostBackdrop);
-    brush.TintColor(tint);
-    brush.TintOpacity(g_settings.backgroundOpacity);
-    brush.FallbackColor(tint);
-    return brush;
+// The dock's background (its shelf, and the tray's pill): the tint, as
+// see-through as chosen; none without the background. (XAML's acrylic can't
+// blur behind the taskbar: it drew its fallback color, and black once the
+// taskbar had the focus.)
+Media::Brush CreateDockBackground() {
+    winrt::Windows::UI::Color tint = DockTint();
+    tint.A = g_settings.dockBackground
+                 ? (uint8_t)std::lround(255 * g_settings.backgroundOpacity)
+                 : 0;
+    return Media::SolidColorBrush(tint);
+}
+
+// Its thin edge: a faint white line (a stronger one on the light theme, like
+// light caught by the glass); none without the background.
+winrt::Windows::UI::Color DockEdgeColor() {
+    if (!g_settings.dockBackground) {
+        return {0, 255, 255, 255};
+    }
+    return IsLightTheme() ? winrt::Windows::UI::Color{0xB3, 255, 255, 255}
+                          : winrt::Windows::UI::Color{0x21, 255, 255, 255};
 }
 
 Media::Brush CreateDockBorder() {
-    const bool light = IsLightTheme();
-    return Media::SolidColorBrush(
-        light ? winrt::Windows::UI::Color{0x40, 0, 0, 0}
-              : winrt::Windows::UI::Color{0x30, 255, 255, 255});
+    return Media::SolidColorBrush(DockEdgeColor());
 }
 
-// Styles a Grid or StackPanel as a rounded, blurred pill.
+// Styles a Grid or StackPanel as a rounded pill, on the dock's background.
 void StylePill(FrameworkElement const& element, Thickness margin) {
     const auto radius =
         CornerRadiusHelper::FromUniformRadius(g_settings.cornerRadius);
@@ -3144,26 +2919,76 @@ void StylePill(FrameworkElement const& element, Thickness margin) {
     }
 }
 
-// The dock's background: a rounded, blurred pill, like on current macOS.
-void StyleDockBackground(Shapes::Rectangle const& fill) {
-    const double radius = g_settings.cornerRadius;
-    SetStyled(fill, UIElement::VisibilityProperty(),
-              winrt::box_value(Visibility::Visible));
-    SetStyled(fill, Shapes::Rectangle::RadiusXProperty(),
-              winrt::box_value(radius));
-    SetStyled(fill, Shapes::Rectangle::RadiusYProperty(),
-              winrt::box_value(radius));
-    SetStyled(fill, Shapes::Shape::StrokeThicknessProperty(),
-              winrt::box_value(1.0));
+// The dock's shelf: the rounded glass under its icons, on a canvas of the
+// mod's own behind everything in the taskbar's XAML (see ApplyStyleUnscoped),
+// moved and sized each frame as the icons grow (see CreateDockBackground).
+struct DockShelf {
+    Controls::Border border{nullptr};
+    // Where it was last put, in its canvas's coordinates, and its corners.
+    winrt::Windows::Foundation::Rect placed{};
+    double radius = -1;
+};
 
-    SetStyled(fill, Shapes::Shape::FillProperty(), CreateDockBackground());
-    SetStyled(fill, Shapes::Shape::StrokeProperty(), CreateDockBorder());
+DockShelf MakeDockShelf(Controls::Canvas const& host) {
+    DockShelf shelf;
+    shelf.border = Controls::Border();
+    shelf.border.Background(CreateDockBackground());
+    shelf.border.BorderBrush(CreateDockBorder());
+    shelf.border.BorderThickness(ThicknessHelper::FromUniformLength(1));
+    shelf.border.Width(0);
+    shelf.border.Height(0);
+    if (!g_settings.dockBackground) {
+        shelf.border.Visibility(Visibility::Collapsed);
+    }
+    host.Children().Append(shelf.border);
+    return shelf;
 }
 
-// Gives an element the dock's height, at the bottom of the taskbar.
-void SetDockGeometry(FrameworkElement const& element, double rightMargin) {
+// Puts the shelf at `rect` (its canvas's coordinates).
+void PlaceDockShelf(DockShelf& shelf,
+                    winrt::Windows::Foundation::Rect rect,
+                    double radius) {
+    if (!shelf.border ||
+        (std::fabs(rect.X - shelf.placed.X) < 0.05f &&
+         std::fabs(rect.Y - shelf.placed.Y) < 0.05f &&
+         std::fabs(rect.Width - shelf.placed.Width) < 0.05f &&
+         std::fabs(rect.Height - shelf.placed.Height) < 0.05f &&
+         radius == shelf.radius)) {
+        return;
+    }
+    shelf.placed = rect;
+    Controls::Canvas::SetLeft(shelf.border, rect.X);
+    Controls::Canvas::SetTop(shelf.border, rect.Y);
+    shelf.border.Width(std::max(0.0f, rect.Width));
+    shelf.border.Height(std::max(0.0f, rect.Height));
+    if (radius != shelf.radius) {
+        shelf.radius = radius;
+        shelf.border.CornerRadius(CornerRadiusHelper::FromUniformRadius(radius));
+    }
+}
+
+// The taskbar's background, under the dock's shelf (see DockShelf): nothing
+// of its own shows.
+void StyleDockBackground(Shapes::Rectangle const& fill) {
+    SetStyled(fill, UIElement::VisibilityProperty(),
+              winrt::box_value(Visibility::Visible));
+    SetStyled(fill, Shapes::Shape::FillProperty(),
+              Media::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+    SetStyled(fill, Shapes::Shape::StrokeThicknessProperty(),
+              winrt::box_value(0.0));
+}
+
+// The tray's pill's height, when it's shown beside the dock.
+constexpr double kDockTrayHeight = 40;
+// The element the dock's shelf is drawn on (see ApplyStyleUnscoped).
+constexpr WCHAR kDockShelfHostName[] = L"WindhawkMacIslandDockShelf";
+
+// Gives an element a height at the bottom of the taskbar.
+void SetDockGeometry(FrameworkElement const& element,
+                     double height,
+                     double rightMargin) {
     SetStyled(element, FrameworkElement::HeightProperty(),
-              winrt::box_value(g_settings.dockHeight));
+              winrt::box_value(height));
     SetStyled(element, FrameworkElement::VerticalAlignmentProperty(),
               winrt::box_value(VerticalAlignment::Bottom));
     SetStyled(element, FrameworkElement::MarginProperty(),
@@ -3206,8 +3031,31 @@ struct DockIcon {
     winrt::weak_ref<FrameworkElement> image;
     Media::ScaleTransform scale{nullptr};
     Media::TranslateTransform lift{nullptr};
-    // Eased towards the size the mouse position asks for.
+    // Eased towards the size the mouse position asks for, times the dock's
+    // icon size over the taskbar's (dockIconSize; 1 on the transparent
+    // taskbar).
     double magnification = 1;
+    double baseScale = 1;
+    // Where it takes the mouse: its own room in the row, so a magnified
+    // icon's neighbors don't take its clicks (see OnRenderingUnsafe).
+    Media::RectangleGeometry clip{nullptr};
+    winrt::Windows::Foundation::Rect clipRect{};
+    // An app's button (not Start or the search), and its picture: the app's
+    // own icon as big as it's shown magnified, in place of the taskbar's
+    // small one, which is put back when the mod lets go (see UseBigIcon).
+    bool app = false;
+    Media::ImageSource bigSource{nullptr};
+    Media::ImageSource ownSource{nullptr};
+    // The size of the picture in bigSource (see BigIconPixels), and the app
+    // it's for.
+    int bigPixels = 0;
+    std::wstring bigAppId;
+    // The app's overlay icon (like Discord's red counter) drawn from the
+    // app's own picture, and the taskbar's in its place before (see
+    // UseBigOverlay).
+    winrt::weak_ref<Controls::Image> overlayImage;
+    Media::ImageSource overlayBig{nullptr};
+    Media::ImageSource overlayOwn{nullptr};
     // An app opened: its button grows in (0 to 1, a bit more while
     // bouncing).
     double appear = 1;
@@ -3235,6 +3083,12 @@ struct DockIcon {
     bool badgeShown = false;
     std::wstring badgeAppId;
     double lastNotified = 0;
+    // The small parts drawn over the icon's corners, sticking out of it (the
+    // badge, an app's own overlay icon like Discord's red one): their highest
+    // top and rightmost edge, in the button's coordinates (0 for none). See
+    // MeasureDockExtras.
+    double extrasTop = 0;
+    double extrasRight = 0;
     // The running indicators turned into dots (see UpdateDots).
     struct Dot {
         winrt::weak_ref<Shapes::Rectangle> rectangle;
@@ -3245,11 +3099,25 @@ struct DockIcon {
 };
 
 [[clang::no_destroy]] std::vector<DockIcon> g_dockIcons;
+void UseBigIcon(DockIcon& icon, FrameworkElement const& button, int pixels);
+void UseBigOverlay(DockIcon& icon,
+                   FrameworkElement const& button,
+                   double factor);
+void RestoreDockIcon(DockIcon& icon);
 HWND g_dockWnd;
 winrt::weak_ref<FrameworkElement> g_dockFrame;
 winrt::weak_ref<FrameworkElement> g_dockRepeater;
-// The dock's visible background, which the icons are lined up with.
+// The taskbar's background, which the dock's shelf is drawn on (see
+// DockShelf).
 winrt::weak_ref<FrameworkElement> g_dockBackground;
+[[clang::no_destroy]] DockShelf g_dockShelf;
+// The shelf at rest, in the window's pixels (see ClipDockWindow), and the
+// last frame's, in its XAML coordinates (where the mouse makes it grow).
+RECT g_dockShelfRest{};
+winrt::Windows::Foundation::Rect g_dockShelfNow{};
+// Whether the dock's room above the taskbar takes the mouse (the mouse on the
+// dock, or its icons moving): see ClipDockWindow.
+bool g_dockRoomOpen;
 // The transparent taskbar's shadow, and how strong it's shown.
 winrt::weak_ref<UIElement> g_shadowFill;
 double g_shadowStrength = 0.6;
@@ -3411,6 +3279,10 @@ winrt::weak_ref<FrameworkElement> g_pointerTarget;
 [[clang::no_destroy]] DispatcherTimer g_badgeTimer{nullptr};
 // The whole dock shown for a notification (see ShowDockForNotification).
 [[clang::no_destroy]] DispatcherTimer g_notificationTimer{nullptr};
+// The dock shown for a notification (see ShowDockForNotification), and where
+// it goes back to: each taskbar's own (see DockState).
+bool g_shownForNotification;
+RECT g_notificationHiddenRect;
 [[clang::no_destroy]] std::vector<
     VisualStateGroup::CurrentStateChanged_revoker>
     g_stateRevokers;
@@ -3444,6 +3316,10 @@ struct DockState {
     winrt::weak_ref<FrameworkElement> frame;
     winrt::weak_ref<FrameworkElement> repeater;
     winrt::weak_ref<FrameworkElement> background;
+    DockShelf shelf;
+    RECT shelfRest{};
+    winrt::Windows::Foundation::Rect shelfNow{};
+    bool roomOpen = false;
     winrt::weak_ref<UIElement> shadowFill;
     double shadowStrength = 0.6;
     winrt::Windows::UI::Composition::SpriteVisual shadowVisual{nullptr};
@@ -3468,6 +3344,9 @@ struct DockState {
     winrt::weak_ref<FrameworkElement> pointerTarget;
     FrameworkElement::LayoutUpdated_revoker layoutRevoker;
     bool isMain = false;
+    bool shownForNotification = false;
+    RECT notificationHiddenRect{};
+    DispatcherTimer notificationTimer{nullptr};
 };
 
 [[clang::no_destroy]] std::vector<std::unique_ptr<DockState>> g_otherDocks;
@@ -3478,6 +3357,10 @@ void SwapDockState(DockState& state) {
     std::swap(g_dockFrame, state.frame);
     std::swap(g_dockRepeater, state.repeater);
     std::swap(g_dockBackground, state.background);
+    std::swap(g_dockShelf, state.shelf);
+    std::swap(g_dockShelfRest, state.shelfRest);
+    std::swap(g_dockShelfNow, state.shelfNow);
+    std::swap(g_dockRoomOpen, state.roomOpen);
     std::swap(g_shadowFill, state.shadowFill);
     std::swap(g_shadowStrength, state.shadowStrength);
     std::swap(g_shadowVisual, state.shadowVisual);
@@ -3502,6 +3385,9 @@ void SwapDockState(DockState& state) {
     std::swap(g_pointerTarget, state.pointerTarget);
     std::swap(g_layoutRevoker, state.layoutRevoker);
     std::swap(g_dockIsMain, state.isMain);
+    std::swap(g_shownForNotification, state.shownForNotification);
+    std::swap(g_notificationHiddenRect, state.notificationHiddenRect);
+    std::swap(g_notificationTimer, state.notificationTimer);
 }
 
 DockState* FindOtherDock(HWND wnd) {
@@ -3581,6 +3467,56 @@ bool GetAppsArea(HMONITOR monitor, int* left, int* right) {
 
 // Defined further down.
 bool IsTaskbarHidden(HWND hTaskbarWnd, const RECT& monitorRect);
+HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size);
+
+// An app's icon kept by the island or a panel (see LoadAppIcon). One explorer
+// didn't give (none, or the island's own try: a blank square for some
+// packaged apps while explorer starts again) is looked up again later.
+struct KeptAppIcon {
+    std::wstring appId;
+    winrt::com_ptr<ID2D1Bitmap> bitmap;
+    double retryAt = 0;
+};
+constexpr double kAppIconRetrySeconds = 30;
+
+// A picture drawn smaller than it is (app icons, covers, photos): smoothly,
+// with every pixel counted (Direct2D's usual way skips some, and small icons
+// look jagged); as big or bigger, the usual way.
+void DrawBitmapSmooth(ID2D1RenderTarget* target,
+                      ID2D1Bitmap* bitmap,
+                      const D2D1_RECT_F& rect,
+                      float opacity = 1) {
+    const D2D1_SIZE_F size = bitmap->GetSize();
+    winrt::com_ptr<ID2D1DeviceContext> context;
+    if ((rect.right - rect.left < size.width - 0.5f ||
+         rect.bottom - rect.top < size.height - 0.5f) &&
+        SUCCEEDED(target->QueryInterface(IID_PPV_ARGS(context.put())))) {
+        context->DrawBitmap(bitmap, &rect, opacity,
+                            D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr,
+                            nullptr);
+        return;
+    }
+    target->DrawBitmap(bitmap, rect, opacity);
+}
+
+// A brush painting a picture (scaled by its transform) the same smooth way.
+winrt::com_ptr<ID2D1BitmapBrush> SmoothBitmapBrush(ID2D1RenderTarget* target,
+                                                   ID2D1Bitmap* bitmap) {
+    winrt::com_ptr<ID2D1BitmapBrush> brush;
+    winrt::com_ptr<ID2D1DeviceContext> context;
+    winrt::com_ptr<ID2D1BitmapBrush1> smooth;
+    const D2D1_BITMAP_BRUSH_PROPERTIES1 properties{
+        D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
+        D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC};
+    if (SUCCEEDED(target->QueryInterface(IID_PPV_ARGS(context.put()))) &&
+        SUCCEEDED(context->CreateBitmapBrush(bitmap, &properties, nullptr,
+                                             smooth.put()))) {
+        brush.copy_from(smooth.get());
+    } else {
+        target->CreateBitmapBrush(bitmap, brush.put());
+    }
+    return brush;
+}
 std::wstring GetWindowAppId(HWND hWnd);
 std::wstring WindowAppKey(HWND hWnd);
 void PostAttentionRequest(HWND app, std::wstring appId);
@@ -3590,10 +3526,6 @@ void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show);
 // Whether the taskbar itself has the dock shown: it calls SlideWindow to
 // show and hide it (see TrayUI_SlideWindow_Hook).
 bool g_trayShown;
-// The mod showed the dock for a notification, without the taskbar knowing,
-// and where to put it back (see ShowDockForNotification).
-bool g_shownForNotification;
-RECT g_notificationHiddenRect;
 
 // How long the dock waits at most for a clicked app to open, in seconds.
 constexpr double kLaunchWaitSeconds = 6;
@@ -3612,10 +3544,287 @@ void KeepDockShown(double seconds) {
 
 // How fast the magnification follows the mouse (higher is snappier).
 constexpr double kMagnificationFollow = 18;
-// Diameter of the open-app dot, and its distance below where the running
-// indicator line was, in pixels.
+// Diameter of the open-app dot, and its distance below the icon, in pixels.
 constexpr double kDotSize = 4;
 constexpr double kDotGap = 3;
+
+// The dock's measures around its icons, like the dock on the mod's site
+// (46-pixel icons, 6 pixels apart, the shelf 8 pixels above them, 10 beside
+// and 9 under the dots): the margins grow and shrink with the icons.
+struct DockMetrics {
+    double icon;
+    double gap;
+    double padTop;
+    double padSide;
+    double padBottom;
+    double bottomGap;
+    // The open apps' dots, under the icons.
+    double dotRoom;
+    double Height() const { return padTop + icon + dotRoom + padBottom; }
+};
+
+// How high an icon bounces, for its size at rest.
+constexpr double kDockBounce = 0.55;
+
+// Whether the taskbar hides itself (read on the taskbar's thread as it's
+// styled): otherwise the dock at rest fits in its own height.
+std::atomic<bool> g_taskbarAutoHides{true};
+
+// The dock's measures for the chosen icon size and space between the icons,
+// within `room` (the taskbar's own height, in DIPs) if it isn't 0: all
+// smaller but the dots.
+DockMetrics GetDockMetrics(double room) {
+    const double icon = g_settings.dockIconSize;
+    const double f = icon / 46;
+    DockMetrics m{icon,         g_settings.dockIconGap, 8 * f, 10 * f, 9 * f,
+                  g_settings.bottomGap, kDotGap + kDotSize};
+    const double whole = m.bottomGap + m.Height();
+    if (room > 0 && whole > room) {
+        const double k =
+            std::max(0.3, (room - m.dotRoom) / (whole - m.dotRoom));
+        for (double* part : {&m.icon, &m.gap, &m.padTop, &m.padSide,
+                             &m.padBottom, &m.bottomGap}) {
+            *part *= k;
+        }
+    }
+    // The end icons' top corners clear the shelf's round corners (small
+    // icons make it almost a pill), with as much room as above them.
+    const double radius = std::min(g_settings.cornerRadius, m.Height() / 2);
+    if (m.padTop < radius) {
+        const double curve = radius - m.padTop;
+        const double inset =
+            radius - std::sqrt(std::max(0.0, radius * radius - curve * curve));
+        m.padSide = std::max(m.padSide, inset + m.padTop);
+    }
+    return m;
+}
+
+// The dock's room above the taskbar: the dock is taller than the taskbar (its
+// icons magnified and bouncing, and the dock itself around big icons), so its
+// window is made taller upwards (see GrowTaskbarWindow), shown or hidden
+// (hidden, the room goes down past the screen's edge with the rest), so a
+// slide never lays it out again. The taskbar keeps its own height for what it
+// reserves on the screen, and the room takes no clicks while the dock rests
+// (see ClipDockWindow). Taskbar thread only.
+struct GrownTaskbar {
+    HWND wnd;
+    // The taskbar's own height and the room added, in DIPs.
+    double baseDips;
+    double extraDips;
+    // The room was added upwards (shown) or downwards (hidden), and how
+    // much higher it is hidden (see HiddenLift), in pixels.
+    bool up;
+    int lift = 0;
+    // The top of the dock's shelf on the screen, as last drawn (0 before).
+    LONG shelfTop = 0;
+};
+std::vector<GrownTaskbar> g_grownTaskbars;
+
+GrownTaskbar* FindGrownTaskbar(HWND wnd) {
+    for (auto& grown : g_grownTaskbars) {
+        if (grown.wnd == wnd) {
+            return &grown;
+        }
+    }
+    return nullptr;
+}
+
+// The room the dock needs above the taskbar's own height, in DIPs (none but
+// for the dock).
+double DockRoomDips(double baseDips) {
+    if (!IsDock() || !g_taskbarAtBottom || g_unloading) {
+        return 0;
+    }
+    const DockMetrics m = GetDockMetrics(g_taskbarAutoHides ? 0 : baseDips);
+    const double tallest = m.icon * (g_settings.magnification + kDockBounce);
+    // (A few pixels more above the bounce.)
+    return std::max(0.0, std::ceil(m.bottomGap + m.padBottom + m.dotRoom +
+                                   tallest + 4 - baseDips));
+}
+
+// The mouse is on this dock (the shelf, or its magnified icons): the
+// taskbar doesn't hide meanwhile (see CTaskListWnd_PermitAutoHide_Hook).
+HWND g_dockHovered;
+// When a taskbar was last clicked (see HandFocusBack), and right-clicked
+// (see JumpListOpen).
+double g_dockPressedAt;
+double g_dockRightPressedAt;
+
+// Cuts the dock's window to what it shows (defined further down).
+void ClipDockWindow(HWND hWnd, const RECT* next = nullptr);
+
+// The taskbar's thumbnails of an app's windows (shown with the mouse on its
+// button): the taskbar puts them above its window, whose top is the dock's
+// room (see GrownTaskbar), far above the icons, and the mouse couldn't get
+// to them without leaving the dock; they're moved down to right above the
+// shelf. Classic ones have a window of their own; Windows 11's draw in a XAML
+// window as big as the monitor, above the taskbar's top, which Windows keeps
+// shown (empty) and shows again without placing it: that window is moved down
+// by as much as the shelf's top is below the taskbar's while the mouse is on
+// the dock or right above it (on its thumbnails), and put back otherwise as
+// it shows or moves, when the mouse leaves the dock and when the dock hides
+// (other parts of Windows may show in it).
+std::vector<HWND> g_thumbnailWindows;
+
+// Whether `at` is the monitor's rectangle moved down.
+bool MovedDownMonitor(const RECT& at, const RECT& monitor) {
+    return at.top > monitor.top && at.left == monitor.left &&
+           at.right == monitor.right &&
+           at.bottom - at.top == monitor.bottom - monitor.top;
+}
+
+// Whether the mouse is on the dock `room` (whose window is at `taskbar`), or
+// above it where its thumbnails show.
+bool MouseOnDockOrThumbnails(const GrownTaskbar& room, const RECT& taskbar) {
+    if (g_dockHovered == room.wnd) {
+        return true;
+    }
+    POINT pt{};
+    return GetCursorPos(&pt) && pt.x >= taskbar.left && pt.x < taskbar.right &&
+           pt.y < room.shelfTop &&
+           pt.y >= room.shelfTop - MulDiv(420, GetDpiForWindow(room.wnd), 96);
+}
+
+// Where the thumbnails' window `at` goes on the screen (unchanged if it isn't
+// above a dock).
+RECT PlaceThumbnails(const RECT& at) {
+    RECT placed = at;
+    // (Empty: nothing shows in it yet.)
+    if (at.right <= at.left || at.bottom <= at.top) {
+        return placed;
+    }
+    const HMONITOR monitor = MonitorFromRect(&at, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{sizeof(info)};
+    if (!GetMonitorInfo(monitor, &info)) {
+        return placed;
+    }
+    const bool monitorSized = EqualRect(&at, &info.rcMonitor) ||
+                              MovedDownMonitor(at, info.rcMonitor);
+    for (const auto& room : g_grownTaskbars) {
+        RECT taskbar{};
+        if (!room.shelfTop || !GetWindowRect(room.wnd, &taskbar) ||
+            TaskbarMonitor(room.wnd) != monitor) {
+            continue;
+        }
+        // Its window's top with it shown (it may be on its way up), where
+        // Windows puts the thumbnails above (see GrownTaskbar::shelfTop).
+        const LONG shownTop =
+            info.rcMonitor.bottom - (taskbar.bottom - taskbar.top);
+        if (monitorSized) {
+            placed = info.rcMonitor;
+            if (room.shelfTop > shownTop &&
+                MouseOnDockOrThumbnails(room, taskbar)) {
+                OffsetRect(&placed, 0, room.shelfTop - shownTop);
+            }
+        } else if (const LONG wanted = room.shelfTop -
+                                       MulDiv(8, GetDpiForWindow(room.wnd), 96);
+                   at.bottom <= shownTop + 2 && at.bottom < wanted) {
+            // (Only the ones put above the taskbar's window.)
+            OffsetRect(&placed, 0, wanted - at.bottom);
+        }
+        break;
+    }
+    return placed;
+}
+
+LRESULT CALLBACK ThumbnailSubclassProc(HWND hWnd,
+                                       UINT uMsg,
+                                       WPARAM wParam,
+                                       LPARAM lParam,
+                                       DWORD_PTR) {
+    if (uMsg == WM_WINDOWPOSCHANGING && lParam && !g_unloading && IsDock()) {
+        auto* pos = (WINDOWPOS*)lParam;
+        // (Also shown again where it was, without a move.)
+        if (!(pos->flags & SWP_NOMOVE) || (pos->flags & SWP_SHOWWINDOW)) {
+            RECT now{};
+            GetWindowRect(hWnd, &now);
+            const POINT to = (pos->flags & SWP_NOMOVE)
+                                 ? POINT{now.left, now.top}
+                                 : POINT{pos->x, pos->y};
+            const int height =
+                (pos->flags & SWP_NOSIZE) ? now.bottom - now.top : pos->cy;
+            const int width =
+                (pos->flags & SWP_NOSIZE) ? now.right - now.left : pos->cx;
+            const RECT placed =
+                PlaceThumbnails({to.x, to.y, to.x + width, to.y + height});
+            if (placed.top != to.y) {
+                pos->x = to.x;
+                pos->y = placed.top;
+                pos->flags &= ~SWP_NOMOVE;
+            }
+        }
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Places the watched thumbnails' windows again (see PlaceThumbnails).
+void PlaceThumbnailWindows() {
+    for (HWND thumbnails : g_thumbnailWindows) {
+        RECT at{};
+        if (IsWindowVisible(thumbnails) && GetWindowRect(thumbnails, &at)) {
+            const RECT placed = PlaceThumbnails(at);
+            if (placed.top != at.top) {
+                SetWindowPos(thumbnails, nullptr, placed.left, placed.top, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+}
+
+// Finds the thumbnails' windows (made the first time they show: the classic
+// one, and the XAML ones of newer Windows 11 builds) and watches them. Taskbar
+// thread only.
+void WatchThumbnails() {
+    // (Not the "_WASDK" XAML window: the desktop's context menu shows in
+    // it. Only the ones of this thread, the taskbar's, which shows the
+    // thumbnails: Alt+Tab, Task View and the desktops' switcher show in
+    // windows of the same class on a thread of their own, and
+    // PlaceThumbnails reads the taskbar thread's g_grownTaskbars.)
+    for (PCWSTR className :
+         {L"TaskListThumbnailWnd", L"XamlExplorerHostIslandWindow"}) {
+        HWND thumbnails = nullptr;
+        while ((thumbnails = FindWindowEx(nullptr, thumbnails, className,
+                                          nullptr))) {
+            DWORD processId = 0;
+            const DWORD threadId =
+                GetWindowThreadProcessId(thumbnails, &processId);
+            if (processId != GetCurrentProcessId() ||
+                threadId != GetCurrentThreadId() ||
+                std::find(g_thumbnailWindows.begin(), g_thumbnailWindows.end(),
+                          thumbnails) != g_thumbnailWindows.end()) {
+                continue;
+            }
+            if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                    thumbnails, ThumbnailSubclassProc, 0)) {
+                continue;
+            }
+            g_thumbnailWindows.push_back(thumbnails);
+        }
+    }
+}
+
+void UnwatchThumbnails() {
+    for (HWND thumbnails : g_thumbnailWindows) {
+        // (A monitor-sized one moved down goes back in place.)
+        RECT at{};
+        MONITORINFO info{sizeof(info)};
+        if (GetWindowRect(thumbnails, &at) &&
+            GetMonitorInfo(MonitorFromRect(&at, MONITOR_DEFAULTTONEAREST),
+                           &info) &&
+            MovedDownMonitor(at, info.rcMonitor)) {
+            SetWindowPos(thumbnails, nullptr, info.rcMonitor.left,
+                         info.rcMonitor.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+    for (HWND thumbnails : g_thumbnailWindows) {
+        if (IsWindow(thumbnails)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                thumbnails, ThumbnailSubclassProc);
+        }
+    }
+    g_thumbnailWindows.clear();
+}
 
 void OnRendering(winrt::Windows::Foundation::IInspectable const&,
                  winrt::Windows::Foundation::IInspectable const&);
@@ -3686,6 +3895,8 @@ void RecordAttentionButton(FrameworkElement const& button) {
     g_attentionButtonTime = NowSeconds();
 }
 
+void MakeDots(DockIcon& icon, FrameworkElement const& button);
+
 // The running state comes from the button's "RunningIndicatorStates" visual
 // states: NoRunningIndicator (closed), Active/InactiveRunningIndicator (open)
 // and RequestingAttention... (asking for attention).
@@ -3718,6 +3929,12 @@ void OnRunningStateChanged(winrt::weak_ref<FrameworkElement> weakButton,
     icon->attention = attention;
 
     icon->open = open;
+    // Its line, made by Windows only now for a pinned app: a dot too (see
+    // UpdateDots).
+    if (open) {
+        MakeDots(*icon, button);
+        StartRendering();
+    }
 
     if (wasClosed && open && !attention) {
         if (g_settings.bounceOnLaunch) {
@@ -3796,12 +4013,19 @@ void ShowDockForNotification() {
     }
     g_notificationTimer = DispatcherTimer();
     g_notificationTimer.Interval(std::chrono::milliseconds(kNotificationShowMs));
+    // (The tick comes outside any dock's scope: this dock's state then.)
     g_notificationTimer.Tick(
-        [](winrt::Windows::Foundation::IInspectable const& sender,
-           winrt::Windows::Foundation::IInspectable const&) {
+        [wnd = g_dockWnd](winrt::Windows::Foundation::IInspectable const& sender,
+                          winrt::Windows::Foundation::IInspectable const&) {
+            DockScope scope(wnd);
             auto timer = sender.as<DispatcherTimer>();
-            if (!g_shownForNotification || g_trayShown || g_unloading ||
-                !g_dockWnd) {
+            // (A dock already let go: its window isn't the one in the
+            // globals, so nothing of another dock is touched.)
+            if (g_dockWnd != wnd) {
+                timer.Stop();
+                return;
+            }
+            if (!g_shownForNotification || g_trayShown || g_unloading) {
                 timer.Stop();
                 g_shownForNotification = false;
                 return;
@@ -3876,6 +4100,51 @@ bool IsBadgeShown(const DockIcon& icon) {
 SRWLOCK g_badgeAppsLock = SRWLOCK_INIT;
 std::vector<std::wstring> g_badgeApps;
 std::vector<int> g_badgeCounts;
+// The apps' overlay icons (ITaskbarList3::SetOverlayIcon, like Discord's red
+// counter, which isn't a badge), as the taskbar gets them (see
+// CTaskBand__HandleOverlayIcon_Hook): the app's own picture (a copy; the
+// taskbar draws it at 16 pixels, blurry magnified) and its text (where an
+// app says how many, like "3 unread"). They count as the app's badge (see
+// PublishBadgeApps) and are drawn sharp in the dock (see UseBigOverlay).
+struct OverlayIcon {
+    HWND wnd;
+    std::wstring appId;
+    HICON icon = nullptr;
+    // Its picture's width, in pixels.
+    int size = 0;
+    // Changed with every new picture (see UseBigOverlay).
+    unsigned serial = 0;
+    std::wstring description;
+};
+SRWLOCK g_overlayIconsLock = SRWLOCK_INIT;
+std::vector<OverlayIcon> g_overlayIcons;
+unsigned g_overlaySerial = 0;
+
+// Whether an overlay's text has a count in it (like "0 notifications"):
+// apps also show their status with one (presence, "recording"), without.
+bool OverlayHasCount(const std::wstring& description) {
+    return description.find_first_of(L"0123456789") != std::wstring::npos;
+}
+
+// The count an overlay's text gives (its first number, "99+" as 99), or 0.
+int OverlayCount(const std::wstring& description) {
+    const size_t digit = description.find_first_of(L"0123456789");
+    return digit == std::wstring::npos ? 0
+                                       : _wtoi(description.c_str() + digit);
+}
+
+// The count an app's overlay icon shows. Discord's text ("N notifications",
+// in its own language) says the count before the newest one (its first
+// notification comes with "0 notifications", its picture showing 1): one
+// more.
+int OverlayShownCount(const OverlayIcon& overlay) {
+    const int count = OverlayCount(overlay.description);
+    const bool discord = overlay.icon &&
+                         StrStrI(overlay.appId.c_str(), L"Discord") &&
+                         OverlayHasCount(overlay.description);
+    return discord ? count + 1 : count;
+}
+
 // The island's window, told when they change.
 std::atomic<HWND> g_islandWnd;
 // The message that tells it.
@@ -3904,7 +4173,13 @@ void PublishBadgeApps() {
         if (!button || !icon.badgeShown) {
             continue;
         }
+        // Apps' buttons, and the Widgets button (not Start, search or task
+        // view, which aren't apps either).
         std::wstring appId = GetButtonAppId(button);
+        if (winrt::get_class_name(button) != L"Taskbar.TaskListButton" &&
+            appId != kWidgetsBadgeId) {
+            continue;
+        }
         if (!appId.empty() &&
             std::find(ids.begin(), ids.end(), appId) == ids.end()) {
             apps.push_back(appId + L"\t" +
@@ -3913,6 +4188,26 @@ void PublishBadgeApps() {
             ids.push_back(std::move(appId));
         }
     }
+    // The apps' overlay icons too (their windows still open), with the count
+    // their text gives: only the ones with a count (not a status).
+    AcquireSRWLockExclusive(&g_overlayIconsLock);
+    std::erase_if(g_overlayIcons, [](const OverlayIcon& overlay) {
+        if (IsWindow(overlay.wnd)) {
+            return false;
+        }
+        DestroyIcon(overlay.icon);
+        return true;
+    });
+    for (const auto& overlay : g_overlayIcons) {
+        if (overlay.icon && !overlay.appId.empty() &&
+            OverlayHasCount(overlay.description) &&
+            std::find(ids.begin(), ids.end(), overlay.appId) == ids.end()) {
+            apps.push_back(overlay.appId + L"\t" +
+                           std::to_wstring(OverlayShownCount(overlay)));
+            ids.push_back(overlay.appId);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_overlayIconsLock);
     AcquireSRWLockExclusive(&g_badgeAppsLock);
     const bool changed = apps != g_badgeApps;
     if (changed) {
@@ -4025,6 +4320,70 @@ void WatchBadges() {
     }
 }
 
+// Widens `top` and `right` with the parts under `element` smaller than
+// `limit` (the icon's size) that show, in `button`'s coordinates.
+void FindIconExtras(FrameworkElement const& button,
+                    FrameworkElement const& element,
+                    double limit,
+                    double& top,
+                    double& right,
+                    int depth = 0) {
+    const int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child || child.Visibility() != Visibility::Visible ||
+            child.Opacity() <= 0) {
+            continue;
+        }
+        const double width = child.ActualWidth();
+        const double height = child.ActualHeight();
+        if (width > 0 && height > 0 && width < limit && height < limit) {
+            const auto bounds = child.TransformToVisual(button).TransformBounds(
+                {0, 0, (float)width, (float)height});
+            top = top ? std::min(top, (double)bounds.Y) : bounds.Y;
+            right = std::max(right, (double)(bounds.X + bounds.Width));
+        } else if (depth < 8) {
+            FindIconExtras(button, child, limit, top, right, depth + 1);
+        }
+    }
+}
+
+// Measures each dock's icons' extras (see DockIcon::extrasTop), every second
+// (they come and go): the dock is cut around them (see OnRenderingUnsafe).
+// Every dock's (its badges are only followed on the main one) and also hidden
+// (ready as it shows), every icon (an overlay icon set before the mod started
+// isn't known, see g_overlayIcons).
+void MeasureDockExtras() {
+    const auto measure = [] {
+        bool changed = false;
+        for (auto& icon : g_dockIcons) {
+            auto button = icon.button.get();
+            auto image = icon.image.get();
+            if (!button || !image || image.ActualHeight() <= 0) {
+                continue;
+            }
+            double top = 0;
+            double right = 0;
+            FindIconExtras(button, button, image.ActualHeight() * 0.95, top,
+                           right);
+            if (top != icon.extrasTop || right != icon.extrasRight) {
+                icon.extrasTop = top;
+                icon.extrasRight = right;
+                changed = true;
+            }
+        }
+        if (changed) {
+            StartRendering();
+        }
+    };
+    measure();
+    for (auto& state : g_otherDocks) {
+        DockScope scope(state->wnd);
+        measure();
+    }
+}
+
 void WatchBadgesAndPublish() {
     if (!g_dockIsMain) {
         return;
@@ -4042,9 +4401,15 @@ void WatchRunningState(FrameworkElement const& button) {
         if (group.Name() != L"RunningIndicatorStates") {
             continue;
         }
+        // (Its state now too: one already asking for attention, like an app
+        // flashing before the taskbar's style changed, still lets the
+        // transparent taskbar hide, see CTaskListWnd_PermitAutoHide_Hook.)
         if (DockIcon* icon = FindDockIcon(button)) {
             const auto state = group.CurrentState();
-            icon->open = state && state.Name() != L"NoRunningIndicator";
+            const std::wstring name = state ? state.Name().c_str() : L"";
+            icon->open = state && name != L"NoRunningIndicator";
+            icon->attention =
+                name.find(L"RequestingAttention") != std::wstring::npos;
         }
         g_stateRevokers.push_back(group.CurrentStateChanged(
             winrt::auto_revoke,
@@ -4104,7 +4469,16 @@ void UpdateDots(DockIcon& icon, const IconPlacement& place) {
     if (!button || g_unloading) {
         return;
     }
-    const double magnification = std::max(icon.magnification, 0.01);
+    // An open app without its dot yet: its line came after the button was
+    // seen (a pinned app opened from the dock), made a dot now.
+    if (icon.open && std::none_of(icon.dots.begin(), icon.dots.end(),
+                                  [](const DockIcon::Dot& dot) {
+                                      return dot.rectangle.get() != nullptr;
+                                  })) {
+        MakeDots(icon, button);
+    }
+    const double magnification =
+        std::max(icon.magnification * icon.baseScale, 0.01);
     const double dotCenter =
         std::min(place.iconBottom + kDotGap + kDotSize / 2,
                  place.dockBottom - kDotSize / 2 - 1);
@@ -4155,9 +4529,18 @@ void MakeDots(DockIcon& icon, FrameworkElement const& button) {
     std::vector<FrameworkElement> indicators;
     FindAllByName(button, L"RunningIndicator", indicators);
 
+    // (Again later for new lines: the ones gone let go, the ones already
+    // dots left as they are.)
+    std::erase_if(icon.dots, [](const DockIcon::Dot& dot) {
+        return !dot.rectangle.get();
+    });
     for (const auto& element : indicators) {
         auto rectangle = element.try_as<Shapes::Rectangle>();
-        if (!rectangle) {
+        if (!rectangle || std::any_of(icon.dots.begin(), icon.dots.end(),
+                                      [&](const DockIcon::Dot& dot) {
+                                          return dot.rectangle.get() ==
+                                                 rectangle;
+                                      })) {
             continue;
         }
         DockIcon::Dot dot;
@@ -4232,8 +4615,13 @@ void RescanDockIcons() {
             SetStyled(button, UIElement::RenderTransformOriginProperty(),
                       winrt::box_value(winrt::Windows::Foundation::Point{0, 0}));
         }
-        if (opening &&
-            winrt::get_class_name(button) == L"Taskbar.TaskListButton") {
+        // (Its room in the row, set each frame.)
+        if (AnimatesIcons()) {
+            icon.clip = Media::RectangleGeometry();
+            SetStyled(button, UIElement::ClipProperty(), icon.clip);
+        }
+        icon.app = winrt::get_class_name(button) == L"Taskbar.TaskListButton";
+        if (opening && icon.app) {
             icon.appear = 0;
             added = true;
         }
@@ -4432,6 +4820,7 @@ void ResetAppsArea() {
 }
 
 bool OnRenderingUnsafe(double now, double dt);
+void RaiseOverWindows(HWND hTaskbarWnd);
 
 // The frame's own opacity back (see g_dockScaleSettled).
 void RestoreDockOpacity(FrameworkElement const& frame) {
@@ -4469,6 +4858,9 @@ void OnRendering(winrt::Windows::Foundation::IInspectable const&,
             }
             SetAppsArea(state->appsAreaMonitor, 0, 0);
             std::erase(g_ownClips, state->wnd);
+            if (state->notificationTimer) {
+                state->notificationTimer.Stop();
+            }
             return true;
         });
         for (auto& state : g_otherDocks) {
@@ -4495,34 +4887,44 @@ bool OnRenderingUnsafe(double now, double dt) {
         return false;
     }
 
-    // The mouse, in the taskbar's XAML coordinates.
+    // The mouse, in the taskbar's XAML coordinates, and the XAML's size: its
+    // own (its scale can lag behind the window's as it moves over a monitor
+    // with another scale).
+    auto xamlRoot = frame.XamlRoot();
+    const double scale = xamlRoot ? xamlRoot.RasterizationScale()
+                                  : GetDpiForWindow(g_dockWnd) / 96.0;
     POINT pt;
     double mouseX = 0, mouseY = -1;
     if (GetCursorPos(&pt) && ScreenToClient(g_dockWnd, &pt)) {
-        const UINT dpi = GetDpiForWindow(g_dockWnd);
-        mouseX = pt.x * 96.0 / dpi;
-        mouseY = pt.y * 96.0 / dpi;
+        mouseX = pt.x / scale;
+        mouseY = pt.y / scale;
     }
     RECT client{};
     GetClientRect(g_dockWnd, &client);
-    const double clientHeight =
-        client.bottom * 96.0 / GetDpiForWindow(g_dockWnd);
+    auto content =
+        xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+    const double clientWidth = content && content.ActualWidth() > 0
+                                   ? content.ActualWidth()
+                                   : client.right / scale;
+    const double clientHeight = content && content.ActualHeight() > 0
+                                    ? content.ActualHeight()
+                                    : client.bottom / scale;
 
-    // The dock background's edges: the icons rest on its middle line.
-    double dockTop = 0;
-    double dockBottom = clientHeight;
-    if (auto background = g_dockBackground.get()) {
-        const auto bounds =
-            background.TransformToVisual(nullptr).TransformBounds(
-                {0, 0, (float)background.ActualWidth(),
-                 (float)background.ActualHeight()});
-        dockTop = bounds.Y;
-        dockBottom = bounds.Y + bounds.Height;
-    }
-    const double dockMiddle = (dockTop + dockBottom) / 2;
+    // The dock: its measures (within the taskbar's own height when it doesn't
+    // hide itself, see GrownTaskbar), and the line its icons stand on, above
+    // their dots. The transparent taskbar's icons rest on its middle line.
+    const bool dock = IsDock();
+    const GrownTaskbar* grown = FindGrownTaskbar(g_dockWnd);
+    const DockMetrics metrics = GetDockMetrics(
+        g_taskbarAutoHides ? 0
+                           : clientHeight - (grown ? grown->extraDips : 0));
+    const double shelfBottom = clientHeight - metrics.bottomGap;
+    const double restBottom = shelfBottom - metrics.padBottom - metrics.dotRoom;
+    const double middle = clientHeight / 2;
 
     struct Placed {
         DockIcon* icon;
+        FrameworkElement button{nullptr};
         double center;
         double buttonTop;
         double buttonWidth;
@@ -4530,8 +4932,20 @@ bool OnRenderingUnsafe(double now, double dt) {
         double iconTop;
         double iconHeight;
         // The highest part drawn with the icon: its top, or the top of the
-        // notification badge on it. In the button's coordinates.
+        // notification badge on it; and the badge's right edge (0 without
+        // one). In the button's coordinates.
         double contentTop;
+        double badgeRight;
+        // Its size at rest (the dock's icon size over the taskbar's), how
+        // wide it's drawn then (its icon, or its whole button with its
+        // name), its room in the row (the gap after it included), and where
+        // its middle is then.
+        double base = 1;
+        double width = 0;
+        double slot = 0;
+        double restCenter = 0;
+        // How much wider than at rest it's drawn now.
+        double grow = 0;
     };
     std::vector<Placed> placed;
     double left = std::numeric_limits<double>::max();
@@ -4554,8 +4968,6 @@ bool OnRenderingUnsafe(double now, double dt) {
         const double height = button.ActualHeight();
         // Windows keeps some buttons far off the window (like a hidden
         // Snipping Tool one): not among the apps.
-        const double clientWidth =
-            client.right * 96.0 / GetDpiForWindow(g_dockWnd);
         if (origin.X + width < 0 || origin.X > clientWidth ||
             button.Visibility() != Visibility::Visible) {
             continue;
@@ -4576,26 +4988,78 @@ bool OnRenderingUnsafe(double now, double dt) {
                 iconHeight = image.ActualHeight();
             }
         }
+        if (iconHeight <= 0) {
+            continue;
+        }
 
         left = std::min(left, (double)origin.X);
         right = std::max(right, origin.X + width);
         // The badge sits on the icon's top corner and grows with it.
         double contentTop = iconTop;
+        double badgeRight = 0;
+        // (Where it's drawn: the taskbar moves it with its own transform.)
         if (auto badge = icon.badge.get(); badge && IsBadgeShown(icon)) {
-            if (auto badgeParent = Media::VisualTreeHelper::GetParent(badge)
-                                       .try_as<UIElement>()) {
-                const auto badgeOffset = badge.ActualOffset();
-                contentTop = std::min(
-                    contentTop,
-                    (double)badgeParent.TransformToVisual(button)
-                        .TransformPoint({badgeOffset.x, badgeOffset.y})
-                        .Y);
-            }
+            const auto bounds = badge.TransformToVisual(button).TransformBounds(
+                {0, 0, (float)badge.ActualWidth(),
+                 (float)badge.ActualHeight()});
+            contentTop = std::min(contentTop, (double)bounds.Y);
+            badgeRight = bounds.X + bounds.Width;
+        }
+        // (And the other small parts over its corners, measured every second:
+        // an app's overlay icon, the badges of the other monitors' docks.)
+        if (icon.extrasRight > 0) {
+            contentTop = std::min(contentTop, icon.extrasTop);
+            badgeRight = std::max(badgeRight, icon.extrasRight);
         }
 
-        placed.push_back({&icon, origin.X + width / 2, origin.Y, width,
-                          iconTop, iconHeight, contentTop});
+        Placed item{&icon,      button,     origin.X + width / 2,
+                    origin.Y,   width,      iconTop,
+                    iconHeight, contentTop, badgeRight};
+        placed.push_back(item);
     }
+
+    // At rest, the dock's icons are side by side at its icon size, centered
+    // where the taskbar centers its buttons; the transparent taskbar's stay
+    // where the taskbar puts them.
+    std::sort(placed.begin(), placed.end(),
+              [](const Placed& a, const Placed& b) { return a.center < b.center; });
+    double rowWidth = 0;
+    for (auto& item : placed) {
+        // (With their names shown, "Combine taskbar buttons" off, buttons are
+        // wide: drawn whole.)
+        // (Those keep the taskbar's size.)
+        const bool wide = item.buttonWidth > item.iconHeight * 3;
+        item.base = dock && !wide
+                        ? std::max(0.5, metrics.icon / item.iconHeight)
+                        : 1.0;
+        item.width = wide ? item.buttonWidth : item.iconHeight * item.base;
+        item.slot = dock ? item.width + metrics.gap : item.buttonWidth;
+        rowWidth += item.slot;
+    }
+    if (dock && !placed.empty()) {
+        rowWidth -= placed.back().slot - placed.back().width;
+        const auto bounds = frame.TransformToVisual(nullptr).TransformBounds(
+            {0, 0, (float)frame.ActualWidth(), (float)frame.ActualHeight()});
+        double x = bounds.X + bounds.Width / 2 - rowWidth / 2;
+        for (auto& item : placed) {
+            item.restCenter = x + item.width / 2;
+            x += item.slot;
+        }
+    } else {
+        for (auto& item : placed) {
+            item.restCenter = item.center;
+        }
+    }
+    // The dock's shelf at rest, around its icons.
+    const double restLeft = placed.empty() ? 0
+                                           : placed.front().restCenter -
+                                                 placed.front().width / 2 -
+                                                 metrics.padSide;
+    const double restRight = placed.empty() ? 0
+                                            : placed.back().restCenter +
+                                                  placed.back().width / 2 +
+                                                  metrics.padSide;
+    const double restTop = restBottom - metrics.icon - metrics.padTop;
 
     // After a scale change: settled one frame after its buttons moved (see
     // g_dockScaleSettled), or after a while if they never do.
@@ -4603,7 +5067,7 @@ bool OnRenderingUnsafe(double now, double dt) {
         bool moved = false;
         for (const auto& item : placed) {
             if (!std::isnan(item.icon->lastCenter) &&
-                std::fabs(item.center - item.icon->lastCenter) > 0.5) {
+                std::fabs(item.restCenter - item.icon->lastCenter) > 0.5) {
                 moved = true;
             }
         }
@@ -4638,28 +5102,45 @@ bool OnRenderingUnsafe(double now, double dt) {
         } else {
             RestoreDockOpacity(frame);
         }
+        // (The shelf with the icons: it's not in their frame.)
+        if (auto host = g_dockBackground.get();
+            host && host.Name() == kDockShelfHostName) {
+            host.Opacity(hideContent ? 0 : 1);
+        }
     }
 
-    const bool hovering = !placed.empty() && mouseY >= 0 &&
-                          mouseY <= clientHeight + 2 && mouseX >= left - 16 &&
-                          mouseX <= right + 16;
+    // The mouse on the dock: on its shelf, as big as it grew last frame (its
+    // magnified icons included); on the transparent taskbar, over its apps.
+    bool hovering = false;
+    if (!placed.empty() && mouseY <= clientHeight + 2) {
+        if (dock) {
+            const double shelfLeft = std::min(restLeft, (double)g_dockShelfNow.X);
+            const double shelfRight = std::max(
+                restRight, (double)(g_dockShelfNow.X + g_dockShelfNow.Width));
+            const double shelfTop = g_dockShelfNow.Height > 0
+                                        ? std::min(restTop,
+                                                   (double)g_dockShelfNow.Y)
+                                        : restTop;
+            hovering = mouseX >= shelfLeft - 2 && mouseX <= shelfRight + 2 &&
+                       mouseY >= shelfTop - 2;
+        } else {
+            hovering = mouseY >= 0 && mouseX >= left - 16 &&
+                       mouseX <= right + 16;
+        }
+    }
     const double follow = AnimationLevel() >= 2
                               ? 1.0
                               : 1 - std::exp(-dt * kMagnificationFollow);
 
     bool busy = hovering || !g_dockScaleSettled;
-
-    if (IsTransparentTaskbar() && !placed.empty()) {
-        UpdateAppsArea(left, right, true);
-    }
+    // The icons still moving (growing, sliding, bouncing).
+    bool moving = false;
 
     // The transparent taskbar's shadow: stronger over light windows, and
     // with the mouse on the taskbar.
     if (auto fill = g_shadowFill.get()) {
         const bool over = mouseY >= 0 && mouseY <= clientHeight + 2 &&
-                          mouseX >= 0 &&
-                          mouseX <= client.right * 96.0 /
-                                        GetDpiForWindow(g_dockWnd);
+                          mouseX >= 0 && mouseX <= clientWidth;
         const double target =
             g_dockContentHidden
                 ? 0.0
@@ -4681,38 +5162,43 @@ bool OnRenderingUnsafe(double now, double dt) {
             busy = true;
         }
     }
+
+    // A wave around the mouse, measured from where the icons rest (not from
+    // where they're pushed to, which would chase the mouse): the icon under
+    // it grows the most. Each icon grows from its bottom edge, and its
+    // neighbors make room for it, so it never covers them.
+    double rowGrow = 0;
     for (auto& item : placed) {
         DockIcon& icon = *item.icon;
-        if (item.iconHeight <= 0) {
-            continue;
-        }
-
-        // Moves the icon to the middle of the dock, wherever the taskbar put
-        // it (a taller taskbar centers the icons in its whole height).
-        const double align =
-            dockMiddle - (item.buttonTop + item.iconTop + item.iconHeight / 2);
+        icon.baseScale = item.base;
+        // The icon's bottom edge, which stays put.
         const double iconBottom =
-            item.buttonTop + item.iconTop + item.iconHeight + align;
-
-        // Never taller than the space up to the top of the taskbar, badge
-        // included. `reach` is how far the content goes above the icon's
-        // bottom edge, which stays put.
+            dock ? restBottom : middle + item.iconHeight / 2;
+        // Never taller than the space up to the top of the window, badge
+        // included. `reach` is how far the content goes above the bottom.
         const double reach =
-            item.iconTop + item.iconHeight - item.contentTop;
+            (item.iconTop + item.iconHeight - item.contentTop) * item.base;
         double maxScale = std::max(
             1.0, std::min(g_settings.magnification, (iconBottom - 1) / reach));
-        // With their names shown ("Combine taskbar buttons" off), buttons
-        // are wide and grow with their text: only a few pixels, so they
-        // don't run into the next one.
+        // Wide buttons grow with their text: only a few pixels.
         if (item.buttonWidth > item.iconHeight * 3) {
             maxScale = std::min(maxScale, 1 + 12 / item.buttonWidth);
         }
+        // (As big as it's drawn: last frame's size, see BigAppIcon.)
+        if (icon.app) {
+            UseBigIcon(icon, item.button,
+                       (int)std::ceil(item.iconHeight * item.base *
+                                      std::max(1.0, icon.magnification) *
+                                      scale));
+            UseBigOverlay(icon, item.button,
+                          item.base * std::max(1.0, icon.magnification) *
+                              scale);
+        }
 
-        // A bell curve around the mouse: the icon under it grows the most.
         double target = 1;
         if (hovering && maxScale > 1) {
-            const double distance =
-                std::fabs(mouseX - item.center) / g_settings.magnificationRange;
+            const double distance = std::fabs(mouseX - item.restCenter) /
+                                    g_settings.magnificationRange;
             if (distance < 1) {
                 const double bell = 0.5 + 0.5 * std::cos(3.14159265 * distance);
                 target = 1 + (maxScale - 1) * bell;
@@ -4722,8 +5208,26 @@ bool OnRenderingUnsafe(double now, double dt) {
         if (std::fabs(target - icon.magnification) < 0.002) {
             icon.magnification = target;
         } else {
-            busy = true;
+            moving = true;
         }
+        item.grow = item.width * (icon.magnification - 1);
+        rowGrow += item.grow;
+    }
+
+    double before = 0;
+    double drawnLeft = std::numeric_limits<double>::max();
+    double drawnRight = std::numeric_limits<double>::lowest();
+    double tallest = metrics.icon;
+    for (auto& item : placed) {
+        DockIcon& icon = *item.icon;
+        const double base = item.base;
+        const double iconBottom =
+            dock ? restBottom : middle + item.iconHeight / 2;
+        // Moves the icon's bottom edge to where it rests.
+        const double align =
+            iconBottom - (item.buttonTop + item.iconTop + item.iconHeight);
+        const double reach =
+            (item.iconTop + item.iconHeight - item.contentTop) * base;
 
         // Grows upwards from the icon's bottom edge, around the button's
         // middle, like on macOS.
@@ -4731,44 +5235,672 @@ bool OnRenderingUnsafe(double now, double dt) {
         // Growing in when its app opened.
         if (SpringTowards(icon.appear, icon.appearVelocity, 1, 0.42, dt,
                           0.72)) {
-            busy = true;
+            moving = true;
         }
         const double appear = std::max(icon.appear, 0.0);
+        const double drawnScale = icon.magnification * base * appear;
         icon.scale.CenterX(item.buttonWidth / 2);
         icon.scale.CenterY(originY);
-        icon.scale.ScaleX(icon.magnification * appear);
-        icon.scale.ScaleY(icon.magnification * appear);
+        icon.scale.ScaleX(drawnScale);
+        icon.scale.ScaleY(drawnScale);
 
-        // Moved by the taskbar: it slides there from where it was (not while
-        // an icon is dragged, which the taskbar moves itself, nor just after
-        // its scale changed: see g_dockScaleChangedAt).
+        // Moved (an app opened or closed next to it, or the taskbar's
+        // buttons centered again): it slides there from where it was (not
+        // while an icon is dragged, which the taskbar moves itself, nor just
+        // after its scale changed: see g_dockScaleChangedAt).
         if (!std::isnan(icon.lastCenter) &&
-            std::fabs(item.center - icon.lastCenter) > 0.5 &&
+            std::fabs(item.restCenter - icon.lastCenter) > 0.5 &&
             !(GetAsyncKeyState(VK_LBUTTON) & 0x8000) &&
             now - g_dockScaleChangedAt > kDockScaleSettleSeconds) {
-            icon.slide += icon.lastCenter - item.center;
+            icon.slide += icon.lastCenter - item.restCenter;
         }
-        icon.lastCenter = item.center;
+        icon.lastCenter = item.restCenter;
         if (SpringTowards(icon.slide, icon.slideVelocity, 0, 0.36, dt)) {
-            busy = true;
+            moving = true;
         }
-        icon.lift.X(icon.slide);
+        // Its middle now: pushed aside by the icons growing before it, the
+        // whole row widening on both sides.
+        const double center =
+            item.restCenter + before + item.grow / 2 - rowGrow / 2 + icon.slide;
+        before += item.grow;
+        icon.lift.X(center - item.center);
 
         // The bounce uses what's left above the (possibly magnified) icon.
         const double bounceRoom = iconBottom - 1 - reach * icon.magnification;
         const double bounceHeight =
-            std::min({item.iconHeight * 0.6, 14.0, bounceRoom});
+            dock ? std::min(item.width * kDockBounce, bounceRoom)
+                 : std::min({item.iconHeight * 0.6, 14.0, bounceRoom});
         const double bounce = BounceOffset(icon, now, bounceHeight);
         icon.lift.Y(align + bounce);
         if (icon.bounceStart) {
-            busy = true;
+            moving = true;
         }
 
         UpdateDots(icon, {item.buttonTop, originY, align + bounce, iconBottom,
-                          dockBottom});
+                          dock ? shelfBottom : clientHeight});
+
+        // It takes the mouse only in its own room in the row (its neighbors
+        // take theirs), its badge included: in the button's coordinates,
+        // before the scale.
+        if (icon.clip && drawnScale > 0.05) {
+            const double half =
+                (item.slot + item.grow) / 2 / drawnScale;
+            const double middleX = item.buttonWidth / 2;
+            // (A little more for the badge's antialiased edge.)
+            const double clipRight =
+                std::max(middleX + half,
+                         item.badgeRight > 0
+                             ? item.badgeRight + 2 / drawnScale
+                             : 0.0);
+            const winrt::Windows::Foundation::Rect rect{
+                (float)(middleX - half), -2000.0f,
+                (float)(clipRight - (middleX - half)), 4000.0f};
+            if (std::fabs(rect.X - icon.clipRect.X) > 0.05f ||
+                std::fabs(rect.Width - icon.clipRect.Width) > 0.05f) {
+                icon.clipRect = rect;
+                icon.clip.Rect(rect);
+            }
+        }
+
+        const double drawnHalf = item.width * icon.magnification * appear / 2;
+        drawnLeft = std::min(drawnLeft, center - drawnHalf);
+        drawnRight = std::max(drawnRight, center + drawnHalf);
+        tallest = std::max(tallest, item.iconHeight * base *
+                                        icon.magnification * appear);
+    }
+    busy = busy || moving;
+
+    // The transparent taskbar takes the mouse around its apps, magnified
+    // ones included (in steps, not set again every frame), and puts its
+    // shadow behind them.
+    if (IsTransparentTaskbar() && !placed.empty()) {
+        PlaceShadow(left, right);
+        UpdateAppsArea(std::min(left, std::floor(drawnLeft / 8) * 8),
+                       std::max(right, std::ceil(drawnRight / 8) * 8), false);
+    }
+
+    if (dock) {
+        // The shelf around the icons as they're drawn, as high as the
+        // tallest one.
+        const winrt::Windows::Foundation::Rect shelf =
+            placed.empty()
+                ? winrt::Windows::Foundation::Rect{}
+                : winrt::Windows::Foundation::Rect{
+                      (float)(drawnLeft - metrics.padSide),
+                      (float)(restBottom - tallest - metrics.padTop),
+                      (float)(drawnRight - drawnLeft + metrics.padSide * 2),
+                      (float)(shelfBottom -
+                              (restBottom - tallest - metrics.padTop))};
+        g_dockShelfNow = shelf;
+        if (auto background = g_dockBackground.get()) {
+            const auto origin =
+                background.TransformToVisual(nullptr).TransformPoint({0, 0});
+            PlaceDockShelf(
+                g_dockShelf,
+                {shelf.X - origin.X, shelf.Y - origin.Y, shelf.Width,
+                 shelf.Height},
+                std::min(g_settings.cornerRadius, (double)shelf.Height / 2));
+        }
+
+        // The window takes the mouse only on the taskbar's own height and
+        // the shelf at rest, and on its whole room while the mouse is on the
+        // dock or its icons move (see ClipDockWindow).
+        // (The apps' badges on the icons' top corners stick out of it.)
+        RECT rest{};
+        if (!placed.empty()) {
+            double top = restTop;
+            double right = restRight;
+            for (const auto& item : placed) {
+                if (item.badgeRight > 0) {
+                    top = std::min(top, restBottom - (item.iconTop +
+                                                      item.iconHeight -
+                                                      item.contentTop) *
+                                                         item.base);
+                    right = std::max(
+                        right, item.restCenter + (item.badgeRight -
+                                                  item.buttonWidth / 2) *
+                                                     item.base);
+                }
+            }
+            rest = {(LONG)std::floor(restLeft * scale) - 1,
+                    (LONG)std::floor(top * scale) - 2,
+                    (LONG)std::ceil(right * scale) + 2, client.bottom};
+        }
+        const bool open = hovering || moving;
+        if (open != g_dockRoomOpen || !EqualRect(&rest, &g_dockShelfRest)) {
+            g_dockRoomOpen = open;
+            g_dockShelfRest = rest;
+            ClipDockWindow(g_dockWnd);
+        }
+        // Where the shelf's top is on the screen with the dock shown (it may
+        // be on its way up), for the apps' thumbnails (see PlaceThumbnails).
+        RECT window{};
+        MONITORINFO shownOn{sizeof(shownOn)};
+        if (GrownTaskbar* room = FindGrownTaskbar(g_dockWnd);
+            room && GetWindowRect(g_dockWnd, &window) &&
+            GetMonitorInfo(TaskbarMonitor(g_dockWnd), &shownOn)) {
+            room->shelfTop =
+                shownOn.rcMonitor.bottom - (window.bottom - window.top) +
+                (LONG)std::floor(std::min((double)shelf.Y, restTop) * scale);
+        }
+    }
+
+    // The mouse left the dock with the taskbar holding the focus (a click on
+    // the open app's icon minimized it): the taskbar's hide timer hands the
+    // focus on, so it hides (see HandFocusBack).
+    if (hovering) {
+        if (dock && g_dockHovered != g_dockWnd) {
+            RaiseOverWindows(g_dockWnd);
+        }
+        g_dockHovered = g_dockWnd;
+        // (Windows shows them in its window as it is: placed beforehand.)
+        if (dock) {
+            WatchThumbnails();
+            PlaceThumbnailWindows();
+        }
+    } else if (g_dockHovered == g_dockWnd) {
+        g_dockHovered = nullptr;
+        PlaceThumbnailWindows();
+        if (g_taskbarAutoHides && GetForegroundWindow() == g_dockWnd) {
+            ScheduleTaskbarHide(g_dockWnd,
+                                (UINT)std::max(g_settings.hideDelay, 10));
+        }
     }
 
     return busy;
+}
+
+// The app's own icon, as big as its button shows it now (the taskbar's
+// picture is decoded at its small size and blurs magnified; a much bigger one
+// shrunk to the icon at rest looks jagged), in steps of 16 pixels so a few
+// sizes are made. Kept for each app and size (nullptr if it has none the
+// shell knows). Taskbar thread only.
+constexpr int kBigIconStep = 16;
+
+int BigIconPixels(int pixels) {
+    return std::clamp((pixels + kBigIconStep - 1) / kBigIconStep * kBigIconStep,
+                      kBigIconStep, 256);
+}
+
+// The apps' pictures by app and size, as XAML pictures (made at their first
+// use, freed whole while unloading, see FreeXamlGlobals). Taskbar thread
+// only.
+using DockPictures = std::vector<std::pair<std::wstring, Media::ImageSource>>;
+[[clang::no_destroy]] std::optional<DockPictures> g_bigIcons;
+
+// A 32-bit picture for XAML (nullptr if it can't be read).
+Media::ImageSource PictureFromBitmap(HBITMAP bitmap) {
+    BITMAP info{};
+    GetObject(bitmap, sizeof(info), &info);
+    const int width = info.bmWidth;
+    const int height = std::abs(info.bmHeight);
+    if (width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    Media::ImageSource source{nullptr};
+    Media::Imaging::WriteableBitmap picture(width, height);
+    BITMAPINFO header{};
+    header.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32,
+                        BI_RGB};
+    HDC screen = GetDC(nullptr);
+    uint8_t* pixels = picture.PixelBuffer().data();
+    if (GetDIBits(screen, bitmap, 0, height, pixels, &header,
+                  DIB_RGB_COLORS) == height) {
+        // The picture takes its colors premultiplied by their alpha; the
+        // shell's come as they are for most apps (a color brighter than its
+        // alpha says so). Without any alpha, it's all solid.
+        const size_t count = (size_t)width * height * 4;
+        bool alpha = false;
+        for (size_t i = 3; i < count && !alpha; i += 4) {
+            alpha = pixels[i] != 0;
+        }
+        for (size_t i = 3; !alpha && i < count; i += 4) {
+            pixels[i] = 255;
+        }
+        bool straight = false;
+        for (size_t i = 0; i < count && !straight; i += 4) {
+            straight = std::max({pixels[i], pixels[i + 1], pixels[i + 2]}) >
+                       pixels[i + 3];
+        }
+        for (size_t i = 0; straight && i < count; i += 4) {
+            for (int c = 0; c < 3; c++) {
+                pixels[i + c] = (uint8_t)(pixels[i + c] * pixels[i + 3] / 255);
+            }
+        }
+        picture.Invalidate();
+        source = picture;
+    }
+    ReleaseDC(nullptr, screen);
+    return source;
+}
+
+// The apps' overlay icons as XAML pictures, by app, the picture they come
+// from (its serial, see OverlayIcon) and their size (like g_bigIcons).
+// Taskbar thread only.
+[[clang::no_destroy]] std::optional<DockPictures> g_overlaySources;
+
+// A red bubble with `count` (a smaller dot in its corner for 0), `pixels`
+// wide, for an app's overlay icon the app draws small (see UseBigOverlay).
+Media::ImageSource CountBadgePicture(int count, int pixels) {
+    winrt::com_ptr<IWICImagingFactory> wic;
+    winrt::com_ptr<ID2D1Factory> d2d;
+    winrt::com_ptr<IDWriteFactory> dwrite;
+    winrt::com_ptr<IWICBitmap> bitmap;
+    winrt::com_ptr<ID2D1RenderTarget> target;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(wic.put()))) ||
+        FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                 d2d.put())) ||
+        FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                   __uuidof(IDWriteFactory),
+                                   (IUnknown**)dwrite.put())) ||
+        FAILED(wic->CreateBitmap(pixels, pixels, GUID_WICPixelFormat32bppPBGRA,
+                                 WICBitmapCacheOnLoad, bitmap.put())) ||
+        FAILED(d2d->CreateWicBitmapRenderTarget(
+            bitmap.get(),
+            D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                  D2D1_ALPHA_MODE_PREMULTIPLIED)),
+            target.put()))) {
+        return nullptr;
+    }
+    winrt::com_ptr<ID2D1SolidColorBrush> brush;
+    if (FAILED(target->CreateSolidColorBrush(D2D1::ColorF(0.95f, 0.25f, 0.26f),
+                                             brush.put()))) {
+        return nullptr;
+    }
+    const float size = (float)pixels;
+    const float radius = count > 0 ? size / 2 : size * 0.3f;
+    target->BeginDraw();
+    target->Clear(D2D1::ColorF(0, 0, 0, 0));
+    target->FillEllipse({{size - radius, size - radius}, radius, radius},
+                        brush.get());
+    if (count > 0) {
+        const std::wstring number =
+            count > 99 ? L"99+" : std::to_wstring(count);
+        winrt::com_ptr<IDWriteTextFormat> format;
+        if (SUCCEEDED(dwrite->CreateTextFormat(
+                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD,
+                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                size * (number.size() > 1 ? 0.48f : 0.66f), L"",
+                format.put()))) {
+            format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            brush->SetColor(D2D1::ColorF(1, 1, 1));
+            target->DrawText(number.c_str(), (UINT32)number.size(),
+                             format.get(), D2D1::RectF(0, 0, size, size),
+                             brush.get());
+        }
+    }
+    if (FAILED(target->EndDraw())) {
+        return nullptr;
+    }
+    Media::Imaging::WriteableBitmap picture(pixels, pixels);
+    if (FAILED(bitmap->CopyPixels(nullptr, (UINT)pixels * 4,
+                                  (UINT)(pixels * pixels * 4),
+                                  picture.PixelBuffer().data()))) {
+        return nullptr;
+    }
+    picture.Invalidate();
+    return picture;
+}
+
+// The app's overlay icon drawn sharp, also magnified: as a red bubble with
+// the count its text gives (like Discord's "3 notifications"; its own
+// picture is only as big as its window's DPI makes it), as big as it's
+// shown (`factor` turns its size into pixels), or from the app's own
+// picture when its text has no count and it's bigger than the taskbar's
+// (16 pixels). The taskbar's back when the app has none.
+void UseBigOverlay(DockIcon& icon,
+                   FrameworkElement const& button,
+                   double factor) {
+    // (Every frame: nothing to do while no app has one.)
+    if (!icon.overlayBig) {
+        AcquireSRWLockShared(&g_overlayIconsLock);
+        const bool none = g_overlayIcons.empty();
+        ReleaseSRWLockShared(&g_overlayIconsLock);
+        if (none) {
+            return;
+        }
+    }
+    const std::wstring appId = GetButtonAppId(button);
+    bool has = false;
+    unsigned serial = 0;
+    int size = 0;
+    int count = 0;
+    bool counted = false;
+    AcquireSRWLockShared(&g_overlayIconsLock);
+    for (const auto& overlay : g_overlayIcons) {
+        if (!appId.empty() && overlay.appId == appId && overlay.icon) {
+            counted = OverlayHasCount(overlay.description);
+            has = overlay.size > 16 || counted;
+            serial = overlay.serial;
+            size = overlay.size;
+            count = OverlayShownCount(overlay);
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_overlayIconsLock);
+    auto image = icon.overlayImage.get();
+    if (!has) {
+        if (image && icon.overlayOwn && image.Source() == icon.overlayBig) {
+            image.Source(icon.overlayOwn);
+        }
+        icon.overlayOwn = nullptr;
+        icon.overlayBig = nullptr;
+        return;
+    }
+    if (!image) {
+        image = FindByName(button, L"OverlayIcon").try_as<Controls::Image>();
+        if (!image) {
+            return;
+        }
+        icon.overlayImage = winrt::make_weak(image);
+    }
+    const bool own = size > 16 && !counted;
+    const int pixels =
+        own ? size
+            : BigIconPixels((int)std::ceil(image.ActualWidth() * factor));
+    const std::wstring key = appId + L"|" + std::to_wstring(serial) + L"|" +
+                             std::to_wstring(own ? 0 : pixels);
+    Media::ImageSource big{nullptr};
+    bool made = false;
+    auto& sources =
+        g_overlaySources ? *g_overlaySources : g_overlaySources.emplace();
+    for (const auto& [id, source] : sources) {
+        if (id == key) {
+            big = source;
+            made = true;
+        }
+    }
+    if (!made) {
+        if (own) {
+            HICON copy = nullptr;
+            AcquireSRWLockShared(&g_overlayIconsLock);
+            for (const auto& overlay : g_overlayIcons) {
+                if (overlay.appId == appId && overlay.serial == serial &&
+                    overlay.icon) {
+                    copy = CopyIcon(overlay.icon);
+                }
+            }
+            ReleaseSRWLockShared(&g_overlayIconsLock);
+            ICONINFO info{};
+            if (copy && GetIconInfo(copy, &info)) {
+                if (info.hbmColor) {
+                    big = PictureFromBitmap(info.hbmColor);
+                    DeleteObject(info.hbmColor);
+                }
+                if (info.hbmMask) {
+                    DeleteObject(info.hbmMask);
+                }
+            }
+            if (copy) {
+                DestroyIcon(copy);
+            }
+        } else {
+            big = CountBadgePicture(count, pixels);
+        }
+        // (A few sizes of a few apps' kept.)
+        constexpr size_t kMaxOverlaySources = 16;
+        if (sources.size() >= kMaxOverlaySources) {
+            sources.erase(sources.begin(),
+                          sources.begin() + kMaxOverlaySources / 2);
+        }
+        sources.push_back({key, big});
+    }
+    const auto source = image.Source();
+    if (!big || !source || source == big ||
+        image.ReadLocalValue(Controls::Image::SourceProperty())
+            .try_as<Data::BindingExpression>()) {
+        return;
+    }
+    // (At the size it has: a bigger picture mustn't make it bigger.)
+    if (std::isnan(image.Width()) || std::isnan(image.Height())) {
+        SetStyled(image, FrameworkElement::WidthProperty(),
+                  winrt::box_value(image.ActualWidth()));
+        SetStyled(image, FrameworkElement::HeightProperty(),
+                  winrt::box_value(image.ActualHeight()));
+    }
+    if (source != icon.overlayBig) {
+        icon.overlayOwn = source;
+    }
+    icon.overlayBig = big;
+    image.Source(big);
+}
+
+// The big icons are read from the shell on a thread of their own (it can
+// take longer than a frame, more for a packaged app): asked for by
+// BigAppIcon, which takes them once read; the dock draws again then (see
+// TaskbarSubclassProc). Each one asked for once: 0 waiting, 1 being read, 2
+// read (`bitmap` nullptr if the shell has none).
+struct BigIconJob {
+    std::wstring key;
+    std::wstring appId;
+    int pixels = 0;
+    int state = 0;
+    HBITMAP bitmap = nullptr;
+};
+SRWLOCK g_bigIconJobsLock = SRWLOCK_INIT;
+std::vector<BigIconJob> g_bigIconJobs;
+// (Made by the taskbar's thread under the lock, stopped by the unloading
+// one, see StopBigIcons.)
+HANDLE g_bigIconThread;
+HANDLE g_bigIconWake;
+HANDLE g_bigIconStop;
+const UINT g_bigIconsReadMessage =
+    RegisterWindowMessage(L"WindhawkMacIslandDock_BigIconsRead");
+
+DWORD WINAPI BigIconThreadProc(LPVOID) {
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const HANDLE events[] = {g_bigIconStop, g_bigIconWake};
+    while (WaitForMultipleObjects(2, events, FALSE, INFINITE) ==
+           WAIT_OBJECT_0 + 1) {
+        for (;;) {
+            std::wstring key;
+            std::wstring appId;
+            int pixels = 0;
+            AcquireSRWLockExclusive(&g_bigIconJobsLock);
+            for (auto& job : g_bigIconJobs) {
+                if (job.state == 0) {
+                    job.state = 1;
+                    key = job.key;
+                    appId = job.appId;
+                    pixels = job.pixels;
+                    break;
+                }
+            }
+            ReleaseSRWLockExclusive(&g_bigIconJobsLock);
+            if (key.empty() ||
+                WaitForSingleObject(g_bigIconStop, 0) == WAIT_OBJECT_0) {
+                break;
+            }
+            HBITMAP bitmap = LoadAppIconBitmap(nullptr, appId, pixels);
+            AcquireSRWLockExclusive(&g_bigIconJobsLock);
+            auto it = std::find_if(
+                g_bigIconJobs.begin(), g_bigIconJobs.end(),
+                [&](const BigIconJob& job) { return job.key == key; });
+            if (it != g_bigIconJobs.end()) {
+                it->bitmap = std::exchange(bitmap, nullptr);
+                it->state = 2;
+            }
+            ReleaseSRWLockExclusive(&g_bigIconJobsLock);
+            if (bitmap) {
+                DeleteObject(bitmap);
+            }
+            if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
+                PostMessage(taskbar, g_bigIconsReadMessage, 0, 0);
+            }
+        }
+    }
+    if (SUCCEEDED(com)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
+// Asks for an app's big icon at `pixels` (see BigIconJob); its picture if
+// it's been read (true; nullptr for none), taken out of the jobs.
+bool TakeBigIcon(const std::wstring& key,
+                 const std::wstring& appId,
+                 int pixels,
+                 HBITMAP* bitmap) {
+    *bitmap = nullptr;
+    bool read = false;
+    bool asked = false;
+    AcquireSRWLockExclusive(&g_bigIconJobsLock);
+    auto it =
+        std::find_if(g_bigIconJobs.begin(), g_bigIconJobs.end(),
+                     [&](const BigIconJob& job) { return job.key == key; });
+    if (it != g_bigIconJobs.end()) {
+        if (it->state == 2) {
+            *bitmap = it->bitmap;
+            g_bigIconJobs.erase(it);
+            read = true;
+        }
+    } else if (!g_unloading) {
+        // (Its thread made the first time, never once unloading.)
+        if (!g_bigIconThread) {
+            g_bigIconWake = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+            g_bigIconStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+            if (g_bigIconWake && g_bigIconStop) {
+                g_bigIconThread = CreateThread(nullptr, 0, BigIconThreadProc,
+                                               nullptr, 0, nullptr);
+            }
+        }
+        if (g_bigIconThread) {
+            g_bigIconJobs.push_back({key, appId, pixels});
+            asked = true;
+        }
+    }
+    const HANDLE wake = g_bigIconWake;
+    ReleaseSRWLockExclusive(&g_bigIconJobsLock);
+    if (asked) {
+        SetEvent(wake);
+    }
+    return read;
+}
+
+// Its thread stopped and what it read let go (unloading).
+void StopBigIcons() {
+    AcquireSRWLockExclusive(&g_bigIconJobsLock);
+    const HANDLE thread = std::exchange(g_bigIconThread, nullptr);
+    ReleaseSRWLockExclusive(&g_bigIconJobsLock);
+    if (thread) {
+        SetEvent(g_bigIconStop);
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+    AcquireSRWLockExclusive(&g_bigIconJobsLock);
+    for (const auto& job : g_bigIconJobs) {
+        if (job.bitmap) {
+            DeleteObject(job.bitmap);
+        }
+    }
+    std::vector<BigIconJob>().swap(g_bigIconJobs);
+    for (HANDLE* event : {&g_bigIconWake, &g_bigIconStop}) {
+        if (*event) {
+            CloseHandle(*event);
+            *event = nullptr;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_bigIconJobsLock);
+}
+
+Media::ImageSource BigAppIcon(const std::wstring& appId, int pixels) {
+    pixels = BigIconPixels(pixels);
+    const std::wstring key = std::to_wstring(pixels) + L"|" + appId;
+    auto& icons = g_bigIcons ? *g_bigIcons : g_bigIcons.emplace();
+    for (const auto& [id, source] : icons) {
+        if (id == key) {
+            return source;
+        }
+    }
+    // (Not read yet: the taskbar's own picture meanwhile.)
+    HBITMAP bitmap = nullptr;
+    if (!TakeBigIcon(key, appId, pixels, &bitmap)) {
+        return nullptr;
+    }
+    Media::ImageSource source{nullptr};
+    if (bitmap) {
+        source = PictureFromBitmap(bitmap);
+        DeleteObject(bitmap);
+    }
+    // The oldest go past a limit (the icons showing keep theirs).
+    constexpr size_t kMaxBigIcons = 64;
+    if (icons.size() >= kMaxBigIcons) {
+        icons.erase(icons.begin(), icons.begin() + kMaxBigIcons / 2);
+    }
+    icons.push_back({key, source});
+    return source;
+}
+
+// Shows the app's big icon on its button, unless it already does. The
+// taskbar sets its picture again when the app's icon changes (or the button
+// is reused for another app): the new one is replaced in turn. Not when the
+// picture is bound to the taskbar's data (replacing it would drop that).
+void UseBigIcon(DockIcon& icon, FrameworkElement const& button, int pixels) {
+    auto image = icon.image.get().try_as<Controls::Image>();
+    if (!image) {
+        return;
+    }
+    const auto source = image.Source();
+    const bool shownBig = icon.bigSource && source == icon.bigSource;
+    // (The button reused for another app may keep the big picture of the one
+    // before: the taskbar doesn't always set its own again. Measured at
+    // sign-in: Discord's stayed on Windhawk's button.)
+    const std::wstring appId = GetButtonAppId(button);
+    const bool sameApp = appId == icon.bigAppId;
+    if (!source ||
+        (shownBig && sameApp && icon.bigPixels == BigIconPixels(pixels))) {
+        return;
+    }
+    if (image.ReadLocalValue(Controls::Image::SourceProperty())
+            .try_as<Data::BindingExpression>()) {
+        return;
+    }
+    auto big = appId.empty() ? nullptr : BigAppIcon(appId, pixels);
+    if (!big) {
+        return;
+    }
+    // (The taskbar's own picture kept is the other app's: none to put back.)
+    if (shownBig && !sameApp) {
+        icon.ownSource = nullptr;
+    }
+    // (At the size it has: a bigger picture mustn't make it bigger.)
+    if (std::isnan(image.Width()) || std::isnan(image.Height())) {
+        SetStyled(image, FrameworkElement::WidthProperty(),
+                  winrt::box_value(image.ActualWidth()));
+        SetStyled(image, FrameworkElement::HeightProperty(),
+                  winrt::box_value(image.ActualHeight()));
+    }
+    // (Another size of it: the taskbar's own is still the one kept.)
+    if (!shownBig) {
+        icon.ownSource = source;
+    }
+    icon.bigSource = big;
+    icon.bigPixels = BigIconPixels(pixels);
+    icon.bigAppId = appId;
+    image.Source(big);
+}
+
+// The taskbar's own picture back.
+void RestoreDockIcon(DockIcon& icon) {
+    if (auto image = icon.image.get().try_as<Controls::Image>();
+        image && icon.ownSource && image.Source() == icon.bigSource) {
+        image.Source(icon.ownSource);
+    }
+    icon.ownSource = nullptr;
+    icon.bigSource = nullptr;
+    icon.bigPixels = 0;
+    icon.bigAppId.clear();
+    if (auto image = icon.overlayImage.get();
+        image && icon.overlayOwn && image.Source() == icon.overlayBig) {
+        image.Source(icon.overlayOwn);
+    }
+    icon.overlayOwn = nullptr;
+    icon.overlayBig = nullptr;
 }
 
 void CheckDockItems() {
@@ -4803,6 +5935,12 @@ void SetupDockBehavior(HWND hWnd,
     g_pressedHandler = winrt::box_value(Input::PointerEventHandler(
         [hWnd](winrt::Windows::Foundation::IInspectable const&,
                Input::PointerRoutedEventArgs const& args) {
+            g_dockPressedAt = NowSeconds();
+            if (args.GetCurrentPoint(nullptr)
+                    .Properties()
+                    .IsRightButtonPressed()) {
+                g_dockRightPressedAt = g_dockPressedAt;
+            }
             DockScope scope(hWnd);
             Safely(L"A click on the taskbar", [&] { OnDockPressed(args); });
         }));
@@ -4840,6 +5978,8 @@ void SetupDockBehavior(HWND hWnd,
                          winrt::Windows::Foundation::IInspectable const&) {
         if (!g_unloading) {
             Safely(L"Watching the badges", [] { WatchBadgesAndPublish(); });
+            Safely(L"Measuring the icons' extras",
+                   [] { MeasureDockExtras(); });
         }
     });
     g_badgeTimer.Start();
@@ -4848,6 +5988,7 @@ void SetupDockBehavior(HWND hWnd,
 void ResetDockOfTaskbar();
 
 void ResetDockBehavior() {
+    UnwatchThumbnails();
     for (auto& state : g_otherDocks) {
         DockScope scope(state->wnd);
         ResetDockOfTaskbar();
@@ -4862,21 +6003,6 @@ void ResetDockBehavior() {
     if (g_badgeTimer) {
         g_badgeTimer.Stop();
         g_badgeTimer = nullptr;
-    }
-    // The dock shown for a notification goes back down.
-    if (g_notificationTimer) {
-        g_notificationTimer.Stop();
-        g_notificationTimer = nullptr;
-    }
-    if (g_shownForNotification) {
-        g_shownForNotification = false;
-        if (g_dockWnd) {
-            const RECT& hidden = g_notificationHiddenRect;
-            SetWindowPos(g_dockWnd, nullptr, hidden.left, hidden.top,
-                         hidden.right - hidden.left,
-                         hidden.bottom - hidden.top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-        }
     }
 
     AcquireSRWLockExclusive(&g_badgeAppsLock);
@@ -4897,8 +6023,23 @@ void ResetDockBehavior() {
 }
 
 // The taskbar in the globals (see DockScope): its handlers, icons, shadow
-// and cut go.
+// and cut go. A dock shown for a notification goes back down, and its timer
+// stops (a started DispatcherTimer would tick on after the unload).
 void ResetDockOfTaskbar() {
+    if (g_notificationTimer) {
+        g_notificationTimer.Stop();
+        g_notificationTimer = nullptr;
+    }
+    if (g_shownForNotification) {
+        g_shownForNotification = false;
+        if (g_dockWnd) {
+            const RECT& hidden = g_notificationHiddenRect;
+            SetWindowPos(g_dockWnd, nullptr, hidden.left, hidden.top,
+                         hidden.right - hidden.left,
+                         hidden.bottom - hidden.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
     g_layoutRevoker.revoke();
     if (auto target = g_pointerTarget.get()) {
         if (g_pointerHandler) {
@@ -4913,7 +6054,13 @@ void ResetDockOfTaskbar() {
     g_pointerHandler = nullptr;
     g_pressedHandler = nullptr;
     g_pointerTarget = nullptr;
+    for (auto& icon : g_dockIcons) {
+        RestoreDockIcon(icon);
+    }
     g_dockIcons.clear();
+    if (g_dockHovered == g_dockWnd) {
+        g_dockHovered = nullptr;
+    }
     if (g_dockWnd) {
         KillTimer(g_dockWnd, kAnimatorTimerId);
     }
@@ -4927,6 +6074,22 @@ void ResetDockOfTaskbar() {
     g_dockOpacityKept = nullptr;
     g_dockFrame = nullptr;
     g_dockRepeater = nullptr;
+    // (The mod's own canvas, see ApplyStyleUnscoped.)
+    if (auto background = g_dockBackground.get()) {
+        if (background.Name() == kDockShelfHostName) {
+            if (auto panel = Media::VisualTreeHelper::GetParent(background)
+                                 .try_as<Controls::Panel>()) {
+                uint32_t index = 0;
+                if (panel.Children().IndexOf(background, index)) {
+                    panel.Children().RemoveAt(index);
+                }
+            }
+        }
+    }
+    g_dockShelf = {};
+    g_dockShelfRest = {};
+    g_dockShelfNow = {};
+    g_dockRoomOpen = false;
     g_dockBackground = nullptr;
     if (auto fill = g_shadowFill.get(); fill && g_shadowVisual) {
         Hosting::ElementCompositionPreview::SetElementChildVisual(fill,
@@ -5034,9 +6197,12 @@ bool ApplyStyleUnscoped(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
         return true;
     }
 
-    // Only as wide as the icons, centered.
+    // Only as wide as the icons, centered, at the bottom of the window (its
+    // room above is the dock's, see GrownTaskbar).
     SetStyled(frame, FrameworkElement::HorizontalAlignmentProperty(),
               winrt::box_value(HorizontalAlignment::Center));
+    SetStyled(frame, FrameworkElement::VerticalAlignmentProperty(),
+              winrt::box_value(VerticalAlignment::Bottom));
     SetStyled(frame, FrameworkElement::WidthProperty(),
               winrt::box_value(std::numeric_limits<double>::quiet_NaN()));
     WatchFrameWidth(frame);
@@ -5047,9 +6213,9 @@ bool ApplyStyleUnscoped(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
     SetStyled(rootGrid, Controls::Grid::PaddingProperty(),
               winrt::box_value(ThicknessHelper::FromLengths(8, 0, 8, 0)));
 
-    // The dock's look goes on the taskbar's own background rectangle, which
-    // lies behind the icons. Rounding the panel that holds the icons would
-    // also cut off the magnified icons at its edges.
+    // The dock's shelf is drawn on the taskbar's own background rectangle,
+    // which lies behind the icons (see DockShelf). Rounding the panel that
+    // holds the icons would also cut off the magnified icons at its edges.
     Shapes::Rectangle fill{nullptr};
     if (auto background =
             FindByClassName(rootGrid, L"Taskbar.TaskbarBackground")) {
@@ -5060,19 +6226,27 @@ bool ApplyStyleUnscoped(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
                       winrt::box_value(Visibility::Collapsed));
         }
     }
-    // Only the background gets the dock's height. The buttons keep theirs,
-    // and their icons are lined up with the background (see OnRendering).
+    // The buttons keep their place, and their icons are lined up with the
+    // shelf (see OnRendering).
     FrameworkElement dockBackground{nullptr};
     if (fill) {
         StyleDockBackground(fill);
-        SetDockGeometry(fill, 0);
-        dockBackground = fill;
+    }
+    // The shelf goes on a canvas of its own, behind everything in the
+    // taskbar's XAML and as big as it: the background is cut to the
+    // taskbar's own height, the shelf isn't (see DockShelf).
+    if (auto panel = content.try_as<Controls::Panel>(); fill && panel) {
+        Controls::Canvas shelfHost;
+        shelfHost.Name(kDockShelfHostName);
+        shelfHost.IsHitTestVisible(false);
+        panel.Children().InsertAt(0, shelfHost);
+        g_dockShelf = MakeDockShelf(shelfHost);
+        dockBackground = shelfHost;
     } else {
         Wh_Log(L"BackgroundFill not found, rounding the panel instead");
         StylePill(rootGrid, ThicknessHelper::FromLengths(
                                 0, 0, 0, g_settings.bottomGap));
-        SetDockGeometry(rootGrid, 0);
-        dockBackground = rootGrid;
+        SetDockGeometry(rootGrid, GetDockMetrics(0).Height(), 0);
     }
 
     if (auto tray = FindByClassName(content, L"SystemTray.SystemTrayFrame")) {
@@ -5080,9 +6254,11 @@ bool ApplyStyleUnscoped(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
             SetStyled(tray, UIElement::VisibilityProperty(),
                       winrt::box_value(Visibility::Collapsed));
         } else if (auto trayGrid = FindByName(tray, L"SystemTrayFrameGrid")) {
+            SetStyled(tray, FrameworkElement::VerticalAlignmentProperty(),
+                      winrt::box_value(VerticalAlignment::Bottom));
             StylePill(trayGrid, ThicknessHelper::FromLengths(
                                     0, 0, 6, g_settings.bottomGap));
-            SetDockGeometry(trayGrid, 6);
+            SetDockGeometry(trayGrid, kDockTrayHeight, 6);
         }
     }
 
@@ -5183,6 +6359,16 @@ BOOL CALLBACK ApplyToTaskbarWindowProc(HWND hWnd, LPARAM) {
 // (their destructors never run, see g_styledProperties).
 void FreeXamlGlobals() {
     g_otherDocks.clear();
+    g_dockShelf = {};
+    g_bigIcons.reset();
+    g_overlaySources.reset();
+    // (The overlay icons' copies too.)
+    AcquireSRWLockExclusive(&g_overlayIconsLock);
+    for (const auto& overlay : g_overlayIcons) {
+        DestroyIcon(overlay.icon);
+    }
+    std::vector<OverlayIcon>().swap(g_overlayIcons);
+    ReleaseSRWLockExclusive(&g_overlayIconsLock);
     g_animatorKept = nullptr;
     g_animatorProperty = nullptr;
     g_animatorPropertyTried = false;
@@ -5197,9 +6383,19 @@ void FreeXamlGlobals() {
     g_renderingRevoker = {};
 }
 
+// The dock's room above the taskbars made again (see GrownTaskbar), defined
+// further down.
+void WINAPI RefreshDockRoomProc(void*);
+
 void ApplySettingsFromTaskbarThread() {
     Wh_Log(L"Applying settings");
 
+    // Without the dock now (or unloading), the taskbars get their own height
+    // back first: the styles going would otherwise move a window still
+    // grown for a dock that isn't there.
+    if (!IsDock() || g_unloading) {
+        RefreshDockRoomProc(nullptr);
+    }
     ClearStyles();
     g_mainTaskbarStyled = false;
     if (g_unloading) {
@@ -5213,6 +6409,7 @@ void ApplySettingsFromTaskbarThread() {
     }
 
     EnumThreadWindows(GetCurrentThreadId(), ApplyToTaskbarWindowProc, 0);
+    RefreshDockRoomProc(nullptr);
 }
 
 void WINAPI ApplySettingsProc(void*) {
@@ -5376,7 +6573,9 @@ void ClipToOwnMonitor(HWND hWnd, const RECT* next = nullptr) {
     }
     RECT current{};
     const int kind = GetWindowRgnBox(hWnd, &current);
-    if (ours && kind == SIMPLEREGION && EqualRect(&current, &own)) {
+    // (Unloading: none set again, see ClipDockWindow.)
+    if (g_unloading ||
+        (ours && kind == SIMPLEREGION && EqualRect(&current, &own))) {
         return;
     }
     if (HRGN region = CreateRectRgnIndirect(&own)) {
@@ -5386,6 +6585,494 @@ void ClipToOwnMonitor(HWND hWnd, const RECT* next = nullptr) {
         } else if (!ours) {
             g_ownClips.push_back(hWnd);
         }
+    }
+}
+
+// The monitor a taskbar at `rect` belongs to (the row of it nearest the
+// screen's inside, see TaskbarMonitor), and its scale: the dock's room is
+// measured with it, the same whether the taskbar is shown or hidden (hidden,
+// it's mostly over the next monitor, maybe with another scale, which the
+// window takes then).
+HMONITOR TaskbarMonitorAt(const RECT& rect) {
+    return MonitorFromPoint({(rect.left + rect.right) / 2, rect.top},
+                            MONITOR_DEFAULTTONEAREST);
+}
+
+double TaskbarScaleAt(const RECT& rect) {
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(TaskbarMonitorAt(rect), MDT_EFFECTIVE_DPI,
+                                &dpiX, &dpiY))) {
+        dpiX = 96;
+    }
+    return dpiX / 96.0;
+}
+
+// The room of a grown taskbar, in pixels.
+int GrownExtra(HWND hWnd, const GrownTaskbar& grown) {
+    RECT now{};
+    GetWindowRect(hWnd, &now);
+    return (int)std::lround(grown.extraDips * TaskbarScaleAt(now));
+}
+
+// How close to the bottom edge the mouse brings the taskbar up (DIPs; see
+// EdgeThreadProc): as high as the dock's icons over its gap at the bottom
+// (with a monitor below, the mouse easily goes past the last row), a few
+// pixels for the transparent taskbar.
+double EdgeShowDips() {
+    return IsDock() ? g_settings.dockIconSize + g_settings.bottomGap : 8;
+}
+
+// The mouse came down past the bottom of a monitor with another one right
+// below it, under the dock's icons (or the transparent taskbar's apps): the
+// first rows of the monitor below count as that edge as long as it stays in
+// them (the mouse easily goes past the last row), shown and kept up (see
+// EdgeThreadProc, TrayUI__ShouldAutoHideTray_Hook). Only coming from above:
+// the top of the monitor below is used as it is otherwise. Set by the edge's
+// thread.
+std::atomic<HMONITOR> g_edgeCapture;
+
+// The monitor right above `pt` whose bottom edge it counts for (see
+// g_edgeCapture), or nullptr: `pt` in the first rows of the monitor `below`
+// (as many as the strip over the edge, see EdgeShowDips), under the dock's
+// icons or the apps there.
+HMONITOR EdgeCaptureAbove(POINT pt, const RECT& below) {
+    const HMONITOR above =
+        MonitorFromPoint({pt.x, below.top - 1}, MONITOR_DEFAULTTONULL);
+    MONITORINFO info{sizeof(info)};
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (!above || !GetMonitorInfo(above, &info) ||
+        info.rcMonitor.bottom != below.top ||
+        FAILED(GetDpiForMonitor(above, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) ||
+        pt.y >= below.top + (LONG)std::lround(EdgeShowDips() * dpiX / 96)) {
+        return nullptr;
+    }
+    int appsLeft = 0;
+    int appsRight = 0;
+    if ((IsTransparentTaskbar() || IsDock()) &&
+        GetAppsArea(above, &appsLeft, &appsRight) &&
+        (pt.x < appsLeft || pt.x >= appsRight)) {
+        return nullptr;
+    }
+    return above;
+}
+
+// Whether the mouse is in the rows past `taskbar`'s bottom edge that count
+// for it now (see g_edgeCapture).
+bool EdgeCaptureHolds(HWND taskbar) {
+    const HMONITOR captured = g_edgeCapture;
+    POINT pt{};
+    MONITORINFO info{sizeof(info)};
+    return captured && taskbar && TaskbarMonitor(taskbar) == captured &&
+           GetCursorPos(&pt) &&
+           GetMonitorInfo(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST),
+                          &info) &&
+           EdgeCaptureAbove(pt, info.rcMonitor) == captured;
+}
+
+// How much higher the hidden dock's window (`base` with the room `extra`
+// below) is than Windows puts it, in pixels (the rows above its last 2 on
+// the screen are cut away, see ClipDockWindow): Windows shows a hidden
+// taskbar only with the mouse on its window. With a monitor below, more than
+// half of it stays on its own monitor: it keeps that monitor's scale, or it
+// would change scale on its way up (its content hidden meanwhile, see
+// g_dockContentHidden) whenever the one below has another.
+int HiddenLift(const RECT& base, int extra) {
+    const HMONITOR monitor = TaskbarMonitorAt(base);
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+        dpiX = 96;
+    }
+    int lift = (int)std::lround((EdgeShowDips() - 2) * dpiX / 96);
+    MONITORINFO info{sizeof(info)};
+    if (GetMonitorInfo(monitor, &info) &&
+        MonitorFromPoint({(base.left + base.right) / 2, info.rcMonitor.bottom},
+                         MONITOR_DEFAULTTONULL)) {
+        lift = std::max(lift, (int)(base.bottom - base.top + extra) / 2 +
+                                  MulDiv(4, dpiX, 96));
+    }
+    return std::max(0, lift);
+}
+
+// The taskbar's window with the dock's room (see GrownTaskbar), from where
+// the taskbar puts itself: the room up while all of it is on its monitor
+// (shown), down otherwise (hidden, past the screen's edge with the rest, a
+// little higher: see HiddenLift).
+RECT GrownRect(const RECT& base, int extra, bool* up) {
+    MONITORINFO info{sizeof(info)};
+    const HMONITOR monitor = TaskbarMonitorAt(base);
+    *up = GetMonitorInfo(monitor, &info) && base.bottom <= info.rcMonitor.bottom;
+    RECT grown = base;
+    if (*up) {
+        grown.top -= extra;
+    } else {
+        grown.bottom += extra;
+        OffsetRect(&grown, 0, -HiddenLift(base, extra));
+    }
+    return grown;
+}
+
+// The taskbar placing itself (after its own handling of
+// WM_WINDOWPOSCHANGING): with the dock's room added. A move with the
+// window's size as it is (the room in it) is the taskbar's own height there.
+// A size with the room already in it (the mod's own moves, or Windows' for a
+// new scaling) is left as it is.
+void GrowTaskbarWindow(HWND hWnd, WINDOWPOS* pos) {
+    RECT now;
+    if (!GetWindowRect(hWnd, &now)) {
+        return;
+    }
+    if ((pos->flags & (SWP_NOMOVE | SWP_NOSIZE)) == (SWP_NOMOVE | SWP_NOSIZE)) {
+        // Not grown yet (see RegrowTaskbarProc): the main taskbar's own
+        // handler turns a move it didn't ask for into none at all (measured:
+        // after the mod loaded, only the other monitors' taskbars grew).
+        if (FindGrownTaskbar(hWnd)) {
+            return;
+        }
+        pos->x = now.left;
+        pos->y = now.top;
+        pos->cx = now.right - now.left;
+        pos->cy = now.bottom - now.top;
+        pos->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
+    }
+    // (Upright or almost square: on its way to the left or right edge, see
+    // below.)
+    if (!(pos->flags & SWP_NOSIZE) && pos->cy * 2 > pos->cx) {
+        // Its thickness: its width upright, or its own height (without the
+        // room) at the bottom.
+        LONG thickness = now.bottom - now.top;
+        if (now.right - now.left < now.bottom - now.top) {
+            thickness = now.right - now.left;
+        } else if (const GrownTaskbar* grown = FindGrownTaskbar(hWnd)) {
+            thickness -= GrownExtra(hWnd, *grown);
+        }
+        std::erase_if(g_grownTaskbars, [hWnd](const GrownTaskbar& taskbar) {
+            return taskbar.wnd == hWnd;
+        });
+        // Never wider than a third of its monitor, nor higher than it: until
+        // the dock's look goes (see WatchTaskbarPlace), Windows makes the
+        // main taskbar as big as the screen on its way to a side (1920 by
+        // 1920), keeps that size for the bottom edge too, and everything
+        // freezes.
+        MONITORINFO info{sizeof(info)};
+        if (thickness > 0 &&
+            GetMonitorInfo(TaskbarMonitor(hWnd), &info)) {
+            const RECT& monitor = info.rcMonitor;
+            if (pos->cx > (monitor.right - monitor.left) / 3) {
+                // (On the right: against the monitor's right edge.)
+                if (!(pos->flags & SWP_NOMOVE) && pos->x > monitor.left) {
+                    pos->x = monitor.right - thickness;
+                }
+                pos->cx = thickness;
+            }
+            if (pos->cy > monitor.bottom - monitor.top) {
+                if (!(pos->flags & SWP_NOMOVE)) {
+                    pos->y = monitor.top;
+                }
+                pos->cy = monitor.bottom - monitor.top;
+            }
+        }
+        return;
+    }
+    const double scale = TaskbarScaleAt(now);
+    GrownTaskbar* grown = FindGrownTaskbar(hWnd);
+    const int extraNow = grown ? GrownExtra(hWnd, *grown) : 0;
+    RECT base;
+    if (!(pos->flags & SWP_NOSIZE)) {
+        if (grown && pos->cy / scale > grown->baseDips + grown->extraDips / 2) {
+            return;
+        }
+        base.left = (pos->flags & SWP_NOMOVE) ? now.left : pos->x;
+        base.top = (pos->flags & SWP_NOMOVE)
+                       ? now.top + (!grown       ? 0
+                                    : grown->up ? extraNow
+                                                : grown->lift)
+                       : pos->y;
+        base.right = base.left + pos->cx;
+        base.bottom = base.top + pos->cy;
+    } else {
+        const int height = now.bottom - now.top - extraNow;
+        base = {pos->x, pos->y, pos->x + (now.right - now.left),
+                pos->y + height};
+    }
+    // Moved to another edge (the dock goes away once that's noticed, see
+    // WatchTaskbarPlace, which needs it all on its monitor): no room, and the
+    // size the taskbar chose for that edge left as it is (`base` is measured
+    // the bottom's way).
+    // (Nor a shape that isn't a bar: on its way to a side, Windows sizes it
+    // almost square for a moment.)
+    MONITORINFO info{sizeof(info)};
+    if ((base.bottom - base.top) * 2 > base.right - base.left ||
+        (GetMonitorInfo(TaskbarMonitorAt(base), &info) &&
+         RectSide(base, info.rcMonitor) != ABE_BOTTOM)) {
+        std::erase_if(g_grownTaskbars, [hWnd](const GrownTaskbar& taskbar) {
+            return taskbar.wnd == hWnd;
+        });
+        return;
+    }
+    const double baseDips = (base.bottom - base.top) / scale;
+    const double extraDips = DockRoomDips(baseDips);
+    if (extraDips <= 0) {
+        std::erase_if(g_grownTaskbars, [hWnd](const GrownTaskbar& taskbar) {
+            return taskbar.wnd == hWnd;
+        });
+        if (pos->flags & SWP_NOSIZE) {
+            pos->cy = base.bottom - base.top;
+            pos->cx = base.right - base.left;
+            pos->flags &= ~SWP_NOSIZE;
+        }
+        return;
+    }
+    bool up = false;
+    const RECT target =
+        GrownRect(base, (int)std::lround(extraDips * scale), &up);
+    const int lift = up ? 0 : base.top - target.top;
+    if (!grown) {
+        g_grownTaskbars.push_back({hWnd, baseDips, extraDips, up, lift});
+    } else {
+        *grown = {hWnd, baseDips, extraDips, up, lift};
+    }
+    pos->x = target.left;
+    pos->y = target.top;
+    pos->cx = target.right - target.left;
+    pos->cy = target.bottom - target.top;
+    pos->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
+}
+
+// The taskbars' room made again for the settings now (or taken away: another
+// taskbar mode, or the mod unloading): each window is put back at its own
+// height, and grows again through GrowTaskbarWindow, like the taskbar's own
+// moves.
+BOOL CALLBACK RegrowTaskbarProc(HWND hWnd, LPARAM) {
+    WCHAR className[32];
+    RECT now;
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className)) ||
+        (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+         _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) ||
+        !GetWindowRect(hWnd, &now)) {
+        return TRUE;
+    }
+    RECT base = now;
+    if (const GrownTaskbar* grown = FindGrownTaskbar(hWnd)) {
+        const int extra = GrownExtra(hWnd, *grown);
+        if (grown->up) {
+            base.top += extra;
+        } else {
+            base.bottom -= extra;
+            OffsetRect(&base, 0, grown->lift);
+        }
+        std::erase_if(g_grownTaskbars, [hWnd](const GrownTaskbar& taskbar) {
+            return taskbar.wnd == hWnd;
+        });
+    } else if (!IsDock()) {
+        return TRUE;
+    }
+    SetWindowPos(hWnd, nullptr, base.left, base.top, base.right - base.left,
+                 base.bottom - base.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    return TRUE;
+}
+
+// Whether the taskbar hides itself (Windows' setting): see
+// g_taskbarAutoHides. On the taskbar's thread.
+void ReadTaskbarAutoHide() {
+    APPBARDATA data{sizeof(data)};
+    g_taskbarAutoHides =
+        (SHAppBarMessage(ABM_GETSTATE, &data) & ABS_AUTOHIDE) != 0;
+}
+
+void WINAPI RefreshDockRoomProc(void*) {
+    std::erase_if(g_grownTaskbars, [](const GrownTaskbar& taskbar) {
+        return !IsWindow(taskbar.wnd);
+    });
+    if (!g_unloading) {
+        ReadTaskbarAutoHide();
+    }
+    EnumThreadWindows(GetCurrentThreadId(), RegrowTaskbarProc, 0);
+    StartRendering();
+}
+
+void RefreshDockRoom() {
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, RefreshDockRoomProc, nullptr);
+    }
+}
+
+// Whether an app's jump list is open (defined further down).
+bool JumpListOpen();
+
+// Whether the dock shows the tray (its other end, see ClipDockWindow).
+bool DockTrayShown() {
+    return !g_settings.hideTray && !g_settings.showIsland;
+}
+
+// The shown dock's window may hide with the mouse still on it but off what
+// takes the mouse (see ClipDockWindow): beside the dock, over what's behind.
+// Only while the taskbar hides itself: Windows asks this also with its
+// auto-hide off (as Start closes), and the dock would go.
+bool DockMayHide(HWND hWnd) {
+    if (g_unloading || !g_taskbarAutoHides || !IsDock() || hWnd != g_dockWnd ||
+        g_dockRoomOpen ||
+        g_dockHovered || IsRectEmpty(&g_dockShelfRest) || DockTrayShown() ||
+        NowSeconds() < g_keepShownUntil || JumpListOpen()) {
+        return false;
+    }
+    RECT window{};
+    RECT cut{};
+    POINT pt{};
+    if (!GetWindowRect(hWnd, &window) || !GetCursorPos(&pt) ||
+        !PtInRect(&window, pt) ||
+        GetWindowRgnBox(hWnd, &cut) == ERROR) {
+        return false;
+    }
+    // Not in the strip along the edge under its icons, which brings it up
+    // (see EdgeThreadProc): it would come up and go again, over and over.
+    const HMONITOR monitor = TaskbarMonitor(hWnd);
+    MONITORINFO info{sizeof(info)};
+    int appsLeft = 0;
+    int appsRight = 0;
+    if (GetMonitorInfo(monitor, &info) &&
+        GetAppsArea(monitor, &appsLeft, &appsRight) && pt.x >= appsLeft &&
+        pt.x < appsRight &&
+        pt.y >= info.rcMonitor.bottom -
+                    (LONG)std::lround(EdgeShowDips() * GetDpiForWindow(hWnd) /
+                                      96)) {
+        return false;
+    }
+    HRGN region = CreateRectRgn(0, 0, 0, 0);
+    if (!region) {
+        return false;
+    }
+    const bool off = GetWindowRgn(hWnd, region) != ERROR &&
+                     !PtInRegion(region, pt.x - window.left, pt.y - window.top);
+    DeleteObject(region);
+    return off;
+}
+
+// The dock's window cut to what it shows: its part on its own monitor (see
+// ClipToOwnMonitor), and once all of it is there, the taskbar's own height
+// and the dock's shelf at rest, unless the mouse is on the dock or its icons
+// move (they grow into its whole room then). Windows' own moves drop a
+// region: cut again after them.
+void ClipDockWindow(HWND hWnd, const RECT* next) {
+    // (Unloading: the clips were taken off, none is set again: a last frame
+    // would leave one the next load doesn't know, see ResetDockBehavior.)
+    if (g_unloading) {
+        return;
+    }
+    DockScope scope(hWnd);
+    RECT window;
+    const GrownTaskbar* grown = FindGrownTaskbar(hWnd);
+    if (!grown || hWnd != g_dockWnd || !GetWindowRect(hWnd, &window)) {
+        ClipToOwnMonitor(hWnd, next);
+        return;
+    }
+    const LONG width = window.right - window.left;
+    const LONG height = window.bottom - window.top;
+    const RECT own = TaskbarShownPart(hWnd, next);
+    if (own.left > 0 || own.top > 0 || own.right < width ||
+        own.bottom < height) {
+        // Hidden (only the strip at the edge left): it shows with the mouse
+        // at the edge only under the dock's icons, like the transparent
+        // taskbar under its apps (with the tray shown, all along the edge:
+        // the tray is at the other end).
+        // (No thumbnails with the dock going away: their window goes back.)
+        if (!next) {
+            PlaceThumbnailWindows();
+        }
+        // Only its last 2 pixels show (the rows above, see HiddenLift, take
+        // no clicks).
+        const UINT dpi = GetDpiForWindow(hWnd);
+        const bool trayShown = DockTrayShown();
+        if (!next && !grown->up &&
+            own.bottom - own.top <= grown->lift + MulDiv(4, dpi, 96)) {
+            RECT under = own;
+            under.top = std::max(own.top, own.bottom - MulDiv(2, dpi, 96));
+            const bool onlyIcons =
+                !trayShown && !IsRectEmpty(&g_dockShelfRest);
+            if (onlyIcons) {
+                const int margin = MulDiv((int)kAppsAreaMargin, dpi, 96);
+                under.left = std::max(own.left, g_dockShelfRest.left - margin);
+                under.right =
+                    std::min(own.right, g_dockShelfRest.right + margin);
+            }
+            RECT current{};
+            const bool same = GetWindowRgnBox(hWnd, &current) == SIMPLEREGION &&
+                              EqualRect(&current, &under);
+            if (under.right > under.left && !same) {
+                if (HRGN region = CreateRectRgnIndirect(&under)) {
+                    // (The system owns the region once it's set.)
+                    if (SetWindowRgn(hWnd, region, TRUE)) {
+                        if (std::find(g_ownClips.begin(), g_ownClips.end(),
+                                      hWnd) == g_ownClips.end()) {
+                            g_ownClips.push_back(hWnd);
+                        }
+                    } else {
+                        DeleteObject(region);
+                    }
+                }
+            }
+            // (For the edge's own check, see EdgeThreadProc.)
+            if (onlyIcons) {
+                g_appsAreaMonitor = TaskbarMonitor(hWnd);
+                SetAppsArea(g_appsAreaMonitor, window.left + under.left,
+                            window.left + under.right);
+            }
+            return;
+        }
+        ClipToOwnMonitor(hWnd, next);
+        return;
+    }
+    // (Shown, with the mouse on it or its icons moving: its whole room. Not
+    // while hidden, above: its rows above the edge are on screen then, an
+    // app opening or asking for attention would show the dock there.)
+    if (g_dockRoomOpen) {
+        ClipToOwnMonitor(hWnd, next);
+        return;
+    }
+    const int extra = GrownExtra(hWnd, *grown);
+    // The taskbar's own height: all along with the tray shown (it's at the
+    // other end), otherwise only under the shelf, so the mouse gets past the
+    // dock's sides to what's behind (see DockMayHide).
+    RECT band{0, extra, width, height};
+    if (!IsRectEmpty(&g_dockShelfRest) && !DockTrayShown()) {
+        const int margin =
+            MulDiv((int)kAppsAreaMargin, GetDpiForWindow(hWnd), 96);
+        band.left = std::max(0L, g_dockShelfRest.left - margin);
+        band.right = std::min(width, g_dockShelfRest.right + margin);
+    }
+    HRGN region = CreateRectRgnIndirect(&band);
+    if (!region) {
+        return;
+    }
+    if (!IsRectEmpty(&g_dockShelfRest)) {
+        if (HRGN shelf = CreateRectRgnIndirect(&g_dockShelfRest)) {
+            CombineRgn(region, region, shelf, RGN_OR);
+            DeleteObject(shelf);
+        }
+    }
+    // Already cut so.
+    HRGN current = CreateRectRgn(0, 0, 0, 0);
+    const bool same = current && GetWindowRgn(hWnd, current) != ERROR &&
+                      EqualRgn(current, region);
+    if (current) {
+        DeleteObject(current);
+    }
+    // (The system owns the region once it's set.)
+    if (!same && !SetWindowRgn(hWnd, region, TRUE)) {
+        DeleteObject(region);
+        return;
+    }
+    if (same) {
+        DeleteObject(region);
+    }
+    // (Kept as the mod's also when it was already cut so, like by the mod
+    // before it was turned off and on: the whole room opens again with the
+    // mouse on it, see ClipToOwnMonitor.)
+    if (std::find(g_ownClips.begin(), g_ownClips.end(), hWnd) ==
+        g_ownClips.end()) {
+        g_ownClips.push_back(hWnd);
     }
 }
 
@@ -5400,6 +7087,10 @@ void ClipSlideStep(HWND hWnd, const RECT* next) {
         UpdateAppsArea(g_appsLeft, g_appsRight, false, &shown);
         return;
     }
+    if (IsDock()) {
+        ClipDockWindow(hWnd, next);
+        return;
+    }
     ClipToOwnMonitor(hWnd, next);
 }
 
@@ -5411,6 +7102,18 @@ void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show) {
     if (!GetWindowRect(hWnd, &start) || EqualRect(&start, &target)) {
         return;
     }
+    // A slide asked for during another one's step (the taskbar reacting to
+    // its own move, like a new scale over another monitor): there at once,
+    // or each would start another inside it, and the taskbar would never get
+    // back to its messages.
+    static int sliding = 0;
+    if (sliding) {
+        durationMs = 0;
+    }
+    sliding++;
+    struct Done {
+        ~Done() { sliding--; }
+    } done;
     // Without an animation, it's there at once.
     if (durationMs <= 0) {
         ClipSlideStep(hWnd, &target);
@@ -5454,7 +7157,8 @@ constexpr double kAttentionShowWindow = 1.0;
 // Whether the user is reaching for the taskbar right now: the mouse on it or
 // at the bottom edge, or the Windows key held.
 bool UserIsReachingForTaskbar(HWND hWnd) {
-    if ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) {
+    if (((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) ||
+        EdgeCaptureHolds(hWnd)) {
         return true;
     }
     POINT pt;
@@ -5462,11 +7166,21 @@ bool UserIsReachingForTaskbar(HWND hWnd) {
     if (!GetCursorPos(&pt) || !GetWindowRect(hWnd, &rect)) {
         return true;
     }
+    // (Cut down to a part, like the hidden dock's window to the edge under
+    // its icons: only that part's width counts, all the way up the window,
+    // where the mouse brings the dock, see EdgeShowDips.)
+    RECT cut{};
+    if (GetWindowRgnBox(hWnd, &cut) != ERROR && !IsRectEmpty(&cut)) {
+        rect.left = std::max(rect.left, rect.left + cut.left);
+        rect.right = std::min(rect.right, rect.left + (cut.right - cut.left));
+    }
     if (PtInRect(&rect, pt)) {
         return true;
     }
+    // (At the bottom of its own monitor: another monitor can be below it.)
     MONITORINFO info{sizeof(info)};
     return GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
+           PtInRect(&info.rcMonitor, pt) &&
            pt.y >= info.rcMonitor.bottom - 2;
 }
 
@@ -5526,6 +7240,99 @@ void SampleBackdrop(const RECT& rect) {
     StartRendering();
 }
 
+// A taskbar kept down for an app asking for attention, logged once in a
+// while (the app asks again every second).
+void LogKeptDown() {
+    static std::atomic<double> logged{-100.0};
+    const double now = NowSeconds();
+    if (now - logged >= 10) {
+        logged = now;
+        Wh_Log(L"Not showing the taskbar for an app asking for attention");
+    }
+}
+
+// TrayUI::Unhide's request (TrayCommon::UnhideRequest) for an app asking for
+// attention: measured, the one that comes right after a flash.
+constexpr int kUnhideForAttention = 17;
+// When the main taskbar was last asked to show itself for something else
+// (see TrayUI_Unhide_Hook), and for how long that wins.
+std::atomic<double> g_otherUnhideAt{-100.0};
+constexpr double kOtherUnhideSeconds = 1.0;
+
+// Another request than kUnhideForAttention right after a flash, logged once
+// in a while (like LogKeptDown).
+void LogUnhideAfterFlash(int flags, int request) {
+    static std::atomic<double> logged{-100.0};
+    const double now = NowSeconds();
+    if (now - logged >= 10) {
+        logged = now;
+        Wh_Log(L"Taskbar asked up right after a flash: request %d, flags 0x%X",
+               request, (unsigned)flags);
+    }
+}
+
+// Unless the whole dock is wanted, the taskbar doesn't show itself when an
+// app asks for attention: only the app's icon peeks out (or nothing). The
+// transparent taskbar never does (its button shows it, once up). Not when
+// the user is reaching for it, nor when it was just asked up for something
+// else (like Start opening).
+bool KeepsDownForAttention(HWND hTaskbarWnd) {
+    // (A button asking for attention counts too: an app like Discord gets
+    // the taskbar up before its flash reaches the mod.)
+    return !g_unloading && SlidesItself() &&
+           (!IsDock() || g_settings.attentionMode != AttentionMode::Dock) &&
+           (NowSeconds() - g_lastFlashTime < kAttentionShowWindow ||
+            std::any_of(g_dockIcons.begin(), g_dockIcons.end(),
+                        [](const DockIcon& icon) { return icon.attention; })) &&
+           NowSeconds() - g_otherUnhideAt >= kOtherUnhideSeconds &&
+           !UserIsReachingForTaskbar(hTaskbarWnd);
+}
+
+// The main taskbar asked to show itself: not for an app asking for attention
+// (see KeepsDownForAttention); any other reason goes through, and its show
+// too (see TrayUI_SlideWindow_Hook).
+using TrayUI_Unhide_t = void(WINAPI*)(void* pThis, int flags, int request);
+TrayUI_Unhide_t TrayUI_Unhide_Original;
+void WINAPI TrayUI_Unhide_Hook(void* pThis, int flags, int request) {
+    if (request != kUnhideForAttention) {
+        g_otherUnhideAt = NowSeconds();
+        // (kUnhideForAttention was measured on one build: another one that
+        // numbers it otherwise shows here, right after a flash.)
+        if (NowSeconds() - g_lastFlashTime < kAttentionShowWindow) {
+            LogUnhideAfterFlash(flags, request);
+        }
+    } else if (HWND taskbar = FindCurrentProcessTaskbarWnd();
+               taskbar && KeepsDownForAttention(taskbar)) {
+        LogKeptDown();
+        return;
+    }
+    TrayUI_Unhide_Original(pThis, flags, request);
+}
+
+// Whether the taskbar hides now (its hide timer): also with the mouse
+// beside the shown dock, over what's behind it (see DockMayHide). The
+// argument is forwarded as it came (two registers for an object passed by
+// value on ARM64).
+using TrayUI__ShouldAutoHideTray_t = bool(WINAPI*)(void* pThis,
+                                                   void* telemetry,
+                                                   void* telemetryMore);
+TrayUI__ShouldAutoHideTray_t TrayUI__ShouldAutoHideTray_Original;
+bool WINAPI TrayUI__ShouldAutoHideTray_Hook(void* pThis,
+                                            void* telemetry,
+                                            void* telemetryMore) {
+    if (SlidesItself() && g_dockWnd && DockMayHide(g_dockWnd)) {
+        return true;
+    }
+    // The mouse just past its bottom edge, on the monitor below (see
+    // g_edgeCapture): it stays up.
+    if (SlidesItself() && g_edgeCapture.load() &&
+        EdgeCaptureHolds(FindCurrentProcessTaskbarWnd())) {
+        return false;
+    }
+    return TrayUI__ShouldAutoHideTray_Original(pThis, telemetry,
+                                               telemetryMore);
+}
+
 using TrayUI_SlideWindow_t = void(WINAPI*)(void* pThis,
                                            HWND hWnd,
                                            const RECT* rect,
@@ -5545,14 +7352,9 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
         TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, animate);
         return;
     }
-    // Unless the whole dock is wanted, the taskbar doesn't show itself when an
-    // app asks for attention: only the app's icon peeks out (or nothing). The
-    // transparent taskbar never does (its button shows it, once up).
-    if (show && !g_unloading &&
-        (!IsDock() || g_settings.attentionMode != AttentionMode::Dock) &&
-        NowSeconds() - g_lastFlashTime < kAttentionShowWindow &&
-        !UserIsReachingForTaskbar(hWnd)) {
-        Wh_Log(L"Not showing the taskbar for an app asking for attention");
+    // (Usually stopped earlier, see CTaskBand_UnhideTray_Hook.)
+    if (show && KeepsDownForAttention(hWnd)) {
+        LogKeptDown();
         // The taskbar now takes itself for shown. Its hide timer puts that
         // right, without moving anything.
         PostMessage(hWnd, WM_TIMER, kHideTimerId, 0);
@@ -5569,11 +7371,18 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
         SampleBackdrop(*rect);
     }
 
+    // The window has the dock's room (see GrownTaskbar): it slides with it.
+    RECT target = *rect;
+    if (const GrownTaskbar* grown = FindGrownTaskbar(hWnd);
+        grown && IsDock() && !g_unloading) {
+        bool up = false;
+        target = GrownRect(*rect, GrownExtra(hWnd, *grown), &up);
+    }
+
     // After a full screen app (like a video in a browser), Windows sometimes
-    // leaves the taskbar below other windows, so it would show behind them.
-    if (show && !g_unloading &&
-        !(GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) &&
-        !IsFullscreenAppOnMonitor(hWnd)) {
+    // leaves the taskbar below other windows, so it would show behind them,
+    // even with its "topmost" style still set: on top whenever it shows.
+    if (show && !g_unloading && !IsFullscreenAppOnMonitor(hWnd)) {
         SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
@@ -5588,7 +7397,7 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
 
     // The window is moved by the mod's own animation, then the taskbar
     // finishes the move without its animation, which keeps its state right.
-    SlideTo(hWnd, *rect,
+    SlideTo(hWnd, target,
             AnimationMs(show ? g_settings.showDuration
                              : g_settings.hideDuration),
             show);
@@ -5699,6 +7508,9 @@ bool IsSnippingOn(HMONITOR monitor) {
            ProcessIsOneOf(processId, kSnippingPrograms);
 }
 
+// The island's process, told by its hello (see WatchIslandProcess).
+extern DWORD g_islandProcessId;
+
 // Whether a window covers the whole monitor like a full-screen app (games
 // in exclusive or borderless full screen, videos in full screen).
 // `windowsSaysBusy`: Windows itself takes a full-screen app to be running (a
@@ -5713,9 +7525,11 @@ bool CoversMonitor(HWND hWnd,
         return false;
     }
     DWORD processId = 0;
-    // Not the mod's own windows (the island, its panels).
+    // Not the mod's own windows (the dock's here; the island's, its panels
+    // and the wallpaper's transition, which covers the whole monitor).
     if (GetWindowThreadProcessId(hWnd, &processId) &&
-        processId == GetCurrentProcessId()) {
+        (processId == GetCurrentProcessId() ||
+         processId == g_islandProcessId)) {
         return false;
     }
     RECT rect;
@@ -5767,6 +7581,32 @@ bool FullscreenWindowOnMonitor(HWND hTaskbarWnd) {
                        (info.rcMonitor.top + info.rcMonitor.bottom) / 2};
     return CoversMonitor(GetAncestor(WindowFromPoint(middle), GA_ROOT), monitor,
                          info.rcMonitor);
+}
+
+// Windows sometimes leaves a taskbar under a window with its "topmost" style
+// still set (seen at sign-in: an app opening maximized on the second monitor
+// came out above that monitor's taskbar until Start opened), and the guards
+// that keep it on top (TrayUI_SlideWindow_Hook, TaskbarSubclassProc) only run
+// where the mod hides it: the magnified icons in the dock's room would show
+// behind that window. Raised as the mouse comes in, unless an app is in full
+// screen there.
+void RaiseOverWindows(HWND hTaskbarWnd) {
+    RECT bar{};
+    if (!GetWindowRect(hTaskbarWnd, &bar) ||
+        FullscreenWindowOnMonitor(hTaskbarWnd)) {
+        return;
+    }
+    for (HWND w = GetWindow(hTaskbarWnd, GW_HWNDPREV); w;
+         w = GetWindow(w, GW_HWNDPREV)) {
+        RECT rect{}, both{};
+        if (!(GetWindowLongPtr(w, GWL_EXSTYLE) & WS_EX_TOPMOST) &&
+            IsWindowVisible(w) && GetWindowRect(w, &rect) &&
+            IntersectRect(&both, &rect, &bar)) {
+            SetWindowPos(hTaskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            return;
+        }
+    }
 }
 
 bool IsFullscreenAppOn(HMONITOR monitor) {
@@ -6439,15 +8279,23 @@ bool IsWindowToFocus(HWND hWnd) {
 
 // On the taskbar's hide timer, right after an app closed. Returns whether
 // the focus was moved.
+// (How long after a click on it the taskbar's focus counts as the click's.)
+constexpr double kFocusClickSeconds = 600;
+
 bool HandFocusBack(HWND hWnd) {
     const double now = NowSeconds();
-    if (g_unloading || !SlidesItself() || now - g_appClosedAt > 8 ||
-        now < g_keepShownUntil) {
+    if (g_unloading || !SlidesItself() || now < g_keepShownUntil) {
         return false;
     }
+    // Also when the taskbar has the focus from a click on it (on the open
+    // app's icon, which minimized it): Windows keeps a taskbar that hides
+    // itself up while it has the focus (not when it got it from the
+    // keyboard, to be used with it).
     const HWND foreground = GetForegroundWindow();
-    if ((foreground && foreground != hWnd) ||
-        UserIsReachingForTaskbar(hWnd)) {
+    const bool clicked = g_taskbarAutoHides && foreground == hWnd &&
+                         now - g_dockPressedAt < kFocusClickSeconds;
+    if ((now - g_appClosedAt > 8 && !clicked) ||
+        (foreground && foreground != hWnd) || UserIsReachingForTaskbar(hWnd)) {
         return false;
     }
     g_appClosedAt = 0;
@@ -6475,7 +8323,16 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                      DWORD_PTR) {
     const bool displayChanged =
         DisplayChangedMessage() && uMsg == DisplayChangedMessage();
-    if ((uMsg == WM_DISPLAYCHANGE || displayChanged) && !g_unloading) {
+    // (Windows' transparency effects or its light or dark mode switched: the
+    // dock's glass and colors follow.)
+    // (Its own hiding switched too: the dock's room follows, see
+    // GrownTaskbar.)
+    const bool colorsChanged =
+        uMsg == WM_SETTINGCHANGE && lParam && IsDock() &&
+        (wcscmp((PCWSTR)lParam, L"ImmersiveColorSet") == 0 ||
+         wcscmp((PCWSTR)lParam, L"TraySettings") == 0);
+    if ((uMsg == WM_DISPLAYCHANGE || displayChanged || colorsChanged) &&
+        !g_unloading) {
         if (hWnd == FindCurrentProcessTaskbarWnd()) {
             SetTimer(hWnd, kDisplayRestyleTimerId, 200, nullptr);
         }
@@ -6572,6 +8429,11 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         const bool askedTop = !(pos->flags & SWP_NOZORDER) &&
                               pos->hwndInsertAfter == HWND_TOPMOST;
         const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        // The dock's room above the taskbar (see GrownTaskbar), once the
+        // taskbar placed itself.
+        if (IsDock()) {
+            GrowTaskbarWindow(hWnd, pos);
+        }
         bool goesUnder = askedTop;
         if (!(pos->flags & SWP_NOZORDER)) {
             const HWND after = pos->hwndInsertAfter;
@@ -6613,11 +8475,11 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         IsTaskbarAtBottom() != g_taskbarAtBottom) {
         WatchTaskbarPlace();
     }
-    // The dock: never shown past its monitor (see ClipToOwnMonitor), whoever
-    // moved it.
+    // The dock: never shown past its monitor, nor taking the mouse in its
+    // room at rest (see ClipDockWindow), whoever moved it.
     if (uMsg == WM_WINDOWPOSCHANGED && IsDock() && !g_unloading) {
         const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        ClipToOwnMonitor(hWnd);
+        ClipDockWindow(hWnd);
         return result;
     }
     // An app closed and the taskbar got the focus back (see HandFocusBack):
@@ -6656,6 +8518,13 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
     if (uMsg == g_sendToIslandMessage && g_sendToIslandMessage) {
         SendBadgeApps();
         SendTrayIcons();
+        return 0;
+    }
+    // Big icons read (see BigIconJob): the dock drawn again with them.
+    if (uMsg == g_bigIconsReadMessage && g_bigIconsReadMessage) {
+        if (!g_unloading) {
+            StartRendering();
+        }
         return 0;
     }
     if (uMsg == WM_COPYDATA && lParam &&
@@ -6852,6 +8721,7 @@ DWORD WINAPI LateStartThreadProc(LPVOID) {
         if (g_mainTaskbarStyled) {
             Wh_Log(L"Taskbar ready after %d s", tries + 1);
             UpdateAutoHide();
+            RefreshDockRoom();
             StartTaskbarParts();
             RequestTrayIcons();
             return 0;
@@ -6891,6 +8761,34 @@ void StopLateStart() {
     }
 }
 
+// Whether an app's jump list is in front, opened from the dock: Windows
+// shows them from its Start menu's process (or the shell experience host on
+// older builds), after a right-click on the icon.
+constexpr UINT kJumpListRetryMs = 300;
+
+bool JumpListOpen() {
+    if (NowSeconds() - g_dockRightPressedAt > 60) {
+        return false;
+    }
+    DWORD processId = 0;
+    HWND foreground = GetForegroundWindow();
+    if (!foreground || !GetWindowThreadProcessId(foreground, &processId)) {
+        return false;
+    }
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
+    }
+    WCHAR path[MAX_PATH];
+    DWORD length = ARRAYSIZE(path);
+    const bool named = QueryFullProcessImageName(process, 0, path, &length);
+    CloseHandle(process);
+    const PCWSTR name = named ? PathFindFileName(path) : L"";
+    return _wcsicmp(name, L"StartMenuExperienceHost.exe") == 0 ||
+           _wcsicmp(name, L"ShellExperienceHost.exe") == 0;
+}
+
 // Whether the taskbar may hide now. A button asking for attention keeps it
 // up; unless the whole dock is wanted for that, it hides as usual. An app
 // clicked in the dock that's still opening keeps it up too.
@@ -6900,8 +8798,27 @@ BOOL WINAPI CTaskListWnd_PermitAutoHide_Hook(void* pThis) {
     if (!SlidesItself()) {
         return CTaskListWnd_PermitAutoHide_Original(pThis);
     }
-    // An app clicked in the dock is opening (see KeepDockShown).
-    if (!g_unloading && NowSeconds() < g_keepShownUntil) {
+    // An app clicked in the dock is opening (see KeepDockShown), the mouse
+    // is on the dock (its magnified icons may be above the taskbar's own
+    // height), or an app's jump list is open (its icon right-clicked): tried
+    // again a moment later, as Windows' own taskbar stays up for it.
+    if (!g_unloading && IsDock() && JumpListOpen()) {
+        ScheduleTaskbarHide(g_dockWnd, kJumpListRetryMs);
+        return FALSE;
+    }
+    // (The mouse is off its window already: under the thumbnails' window, as
+    // big as the monitor, the taskbar stops drawing the frames that notice
+    // it, see OnRenderingUnsafe.)
+    if (g_dockHovered) {
+        RECT window{};
+        POINT pt{};
+        if (GetWindowRect(g_dockHovered, &window) && GetCursorPos(&pt) &&
+            !PtInRect(&window, pt)) {
+            g_dockHovered = nullptr;
+        }
+    }
+    if (!g_unloading &&
+        (NowSeconds() < g_keepShownUntil || (IsDock() && g_dockHovered))) {
         return FALSE;
     }
     if (!g_unloading && IsDock() &&
@@ -6987,7 +8904,40 @@ HWND FindTaskbarForMonitor(HMONITOR monitor) {
     return context.result;
 }
 
-// Hidden: less than half of the taskbar is on its monitor.
+// A taskbar showing itself for an app asking for attention: it slides up on
+// its own (before TrayUI::SlideWindow), so it's stopped here, or it would
+// come up and go back down with every flash (see KeepsDownForAttention).
+using CTaskBand_UnhideTray_t = HRESULT(WINAPI*)(void* pThis);
+CTaskBand_UnhideTray_t CTaskBand_UnhideTray_Original;
+HRESULT WINAPI CTaskBand_UnhideTray_Hook(void* pThis) {
+    if (HWND taskbar = FindCurrentProcessTaskbarWnd();
+        taskbar && KeepsDownForAttention(taskbar)) {
+        LogKeptDown();
+        return S_OK;
+    }
+    return CTaskBand_UnhideTray_Original(pThis);
+}
+
+// The same for the other monitors' taskbars (the one where the mouse is,
+// for whether the user is reaching for it).
+CTaskBand_UnhideTray_t CSecondaryTaskBand_UnhideTray_Original;
+HRESULT WINAPI CSecondaryTaskBand_UnhideTray_Hook(void* pThis) {
+    POINT pt{};
+    GetCursorPos(&pt);
+    HWND taskbar =
+        FindTaskbarForMonitor(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
+    if (!taskbar) {
+        taskbar = FindCurrentProcessTaskbarWnd();
+    }
+    if (taskbar && KeepsDownForAttention(taskbar)) {
+        LogKeptDown();
+        return S_OK;
+    }
+    return CSecondaryTaskBand_UnhideTray_Original(pThis);
+}
+
+// Hidden: less than half of the taskbar is on its monitor, or the hidden
+// dock's window, higher (see HiddenLift), cut down to its last pixels.
 bool IsTaskbarHidden(HWND hTaskbarWnd, const RECT& monitorRect) {
     RECT rect, visible;
     if (!GetWindowRect(hTaskbarWnd, &rect)) {
@@ -6996,12 +8946,22 @@ bool IsTaskbarHidden(HWND hTaskbarWnd, const RECT& monitorRect) {
     if (!IntersectRect(&visible, &rect, &monitorRect)) {
         return true;
     }
+    if (!EqualRect(&visible, &rect)) {
+        RECT cut{};
+        if (GetWindowRgnBox(hTaskbarWnd, &cut) == SIMPLEREGION &&
+            cut.bottom - cut.top <=
+                MulDiv(6, GetDpiForWindow(hTaskbarWnd), 96)) {
+            return true;
+        }
+    }
     return (visible.bottom - visible.top) < (rect.bottom - rect.top) / 2;
 }
 
 DWORD WINAPI EdgeThreadProc(LPVOID) {
     ULONGLONG atEdgeSince = 0;
     ULONGLONG lastRequest = 0;
+    // Where the mouse was last time (see g_edgeCapture).
+    HMONITOR lastMonitor = nullptr;
 
     DWORD wait = kEdgeIdlePollMs;
     while (WaitForSingleObject(g_edgeStopEvent, wait) == WAIT_TIMEOUT) {
@@ -7014,23 +8974,51 @@ DWORD WINAPI EdgeThreadProc(LPVOID) {
         MONITORINFO info{sizeof(info)};
         if (!GetMonitorInfo(monitor, &info)) {
             atEdgeSince = 0;
+            g_edgeCapture = nullptr;
             continue;
         }
-        if (pt.y >= info.rcMonitor.bottom - kEdgeNearPixels) {
+        // Just past the bottom edge of the monitor above, come from it: that
+        // edge (see g_edgeCapture).
+        HMONITOR above = EdgeCaptureAbove(pt, info.rcMonitor);
+        if (above && above != g_edgeCapture && above != lastMonitor) {
+            above = nullptr;
+        }
+        g_edgeCapture = above;
+        lastMonitor = monitor;
+        if (above) {
             wait = kEdgePollMs;
-        }
-        if (pt.y < info.rcMonitor.bottom - 1) {
-            atEdgeSince = 0;
-            continue;
-        }
-        // The transparent taskbar: only under its apps (that monitor's).
-        int appsLeft = 0;
-        int appsRight = 0;
-        if (IsTransparentTaskbar() &&
-            GetAppsArea(monitor, &appsLeft, &appsRight) &&
-            (pt.x < appsLeft || pt.x >= appsRight)) {
-            atEdgeSince = 0;
-            continue;
+            monitor = above;
+            if (!GetMonitorInfo(monitor, &info)) {
+                atEdgeSince = 0;
+                continue;
+            }
+        } else {
+            if (pt.y >= info.rcMonitor.bottom - kEdgeNearPixels) {
+                wait = kEdgePollMs;
+            }
+            // A few pixels up from the edge already: with a monitor below,
+            // the mouse easily goes past the last row.
+            UINT dpiX = 96;
+            UINT dpiY = 96;
+            if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX,
+                                        &dpiY))) {
+                dpiX = 96;
+            }
+            if (pt.y < info.rcMonitor.bottom -
+                           (LONG)std::lround(EdgeShowDips() * dpiX / 96)) {
+                atEdgeSince = 0;
+                continue;
+            }
+            // The transparent taskbar: only under its apps (that monitor's);
+            // the dock, under its icons (see ClipDockWindow).
+            int appsLeft = 0;
+            int appsRight = 0;
+            if ((IsTransparentTaskbar() || IsDock()) &&
+                GetAppsArea(monitor, &appsLeft, &appsRight) &&
+                (pt.x < appsLeft || pt.x >= appsRight)) {
+                atEdgeSince = 0;
+                continue;
+            }
         }
 
         const ULONGLONG now = GetTickCount64();
@@ -7079,6 +9067,7 @@ void StopEdgeWatch() {
         CloseHandle(g_edgeThread);
         g_edgeThread = nullptr;
     }
+    g_edgeCapture = nullptr;
     if (g_edgeStopEvent) {
         CloseHandle(g_edgeStopEvent);
         g_edgeStopEvent = nullptr;
@@ -7210,6 +9199,10 @@ struct ToastReply {
         std::wstring activationType;
     };
     std::vector<Action> actions;
+    // Windows' own notification (like Nearby sharing's) with buttons the
+    // island can't press (Windows runs them): its banner stays, and a
+    // click opens Windows' notification center, where they work.
+    bool windowsButtons = false;
     bool CanReply() const { return !inputId.empty() && !arguments.empty(); }
 };
 
@@ -7222,8 +9215,9 @@ ToastReply ParseToastReply(const std::wstring& appId,
 struct IslandToast {
     std::wstring appId;
     // Its ID in the notification database (0 for the island's own, like a
-    // calendar reminder).
+    // calendar reminder), and when it came there (its ArrivalTime).
     long long id = 0;
+    long long arrival = 0;
     std::wstring title;
     std::wstring text;
     // With its own lines (see SplitToastTexts).
@@ -7256,6 +9250,16 @@ struct IslandToast {
 };
 SRWLOCK g_islandToastsLock = SRWLOCK_INIT;
 std::vector<IslandToast> g_islandToasts;
+// The notifications as they came, kept for when their app takes them out of
+// Windows' list itself (like Discord) while its taskbar button still counts
+// them: they stay in the island's list as long as that count does (see
+// NotificationPanel::MergeKeptToasts). With when they were kept.
+struct KeptToast {
+    IslandToast toast;
+    double since;
+};
+SRWLOCK g_keptToastsLock = SRWLOCK_INIT;
+std::vector<KeptToast> g_keptToasts;
 // Tells the island there are new ones.
 constexpr UINT WM_APP_TOAST = WM_APP + 52;
 // Tells the island the notification center changed (some may be gone).
@@ -7318,11 +9322,11 @@ bool ReadNewToasts(Sqlite& sqlite,
     void* statement = nullptr;
     const bool ok =
         sqlite.prepare_v2(db,
-                          "SELECT n.Id, h.PrimaryId, n.Payload FROM "
-                          "Notification n JOIN NotificationHandler h ON "
-                          "h.RecordId = n.HandlerId WHERE n.Id > ?1 AND "
-                          "(?2 = 0 OR n.Id = ?2) AND n.Type = 'toast' "
-                          "ORDER BY n.Id",
+                          "SELECT n.Id, h.PrimaryId, n.Payload, "
+                          "n.ArrivalTime FROM Notification n JOIN "
+                          "NotificationHandler h ON h.RecordId = n.HandlerId "
+                          "WHERE n.Id > ?1 AND (?2 = 0 OR n.Id = ?2) AND "
+                          "n.Type = 'toast' ORDER BY n.Id",
                           -1, &statement, nullptr) == 0;
     if (ok) {
         sqlite.bind_int64(statement, 1, lastId);
@@ -7338,6 +9342,7 @@ bool ReadNewToasts(Sqlite& sqlite,
             }
             IslandToast toast{app};
             toast.id = sqlite.column_int64(statement, 0);
+            toast.arrival = sqlite.column_int64(statement, 3);
             const auto payload = (const char*)sqlite.column_blob(statement, 2);
             const auto texts =
                 payload ? ToastTexts(payload, sqlite.column_bytes(statement, 2))
@@ -7511,6 +9516,18 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
         // (only while it runs: without it, nothing is kept; the latest few
         // while it's starting or busy).
         if (HWND island = g_islandWnd; island && !toasts.empty()) {
+            // (Without their downloaded pictures.)
+            constexpr size_t kMaxKeptToasts = 100;
+            AcquireSRWLockExclusive(&g_keptToastsLock);
+            for (const auto& toast : toasts) {
+                g_keptToasts.push_back({toast, NowSeconds()});
+                g_keptToasts.back().toast.imageData.clear();
+            }
+            if (g_keptToasts.size() > kMaxKeptToasts) {
+                g_keptToasts.erase(g_keptToasts.begin(),
+                                   g_keptToasts.end() - kMaxKeptToasts);
+            }
+            ReleaseSRWLockExclusive(&g_keptToastsLock);
             constexpr size_t kMaxQueuedToasts = 50;
             AcquireSRWLockExclusive(&g_islandToastsLock);
             g_islandToasts.insert(g_islandToasts.end(),
@@ -7635,6 +9652,26 @@ constexpr GUID kFOLDERID_LocalAppData = {
     0x6fba,
     0x4fcf,
     {0x9d, 0x55, 0x7b, 0x8e, 0x7f, 0x15, 0x70, 0x91}};
+// The shell's handler giving an item's data, for dragging it (BHID_DataObject).
+constexpr GUID kBHID_DataObject = {
+    0xb8c0bd9f,
+    0xed24,
+    0x455c,
+    {0x83, 0xe6, 0xd5, 0x39, 0x0c, 0x4f, 0xe8, 0xc4}};
+// The shell's handler of an item's own objects (BHID_SFUIObject): a folder's
+// drop target, the one Explorer uses for files dropped on it.
+constexpr GUID kBHID_SFUIObject = {
+    0x3981e225,
+    0xf559,
+    0x11d3,
+    {0x8e, 0x3a, 0x00, 0xc0, 0x4f, 0x68, 0x37, 0xd5}};
+// Windows' picture of the files dragged, kept over a window they're dragged
+// over (CLSID_DragDropHelper).
+constexpr GUID kCLSID_DragDropHelper = {
+    0x4657278a,
+    0x411b,
+    0x11d2,
+    {0x83, 0x9a, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0xd0}};
 constexpr PROPERTYKEY kPKEY_AppUserModel_ID = {
     {0x9f4c2855,
      0x9f79,
@@ -7699,6 +9736,27 @@ std::wstring GetWindowAppId(HWND hWnd) {
     return appId;
 }
 
+// A text a window gives about its app for the taskbar
+// (PKEY_AppUserModel_*: 2 the command that starts it again, 4 its name), or
+// empty.
+std::wstring GetWindowAppText(HWND hWnd, DWORD id) {
+    std::wstring text;
+    winrt::com_ptr<IPropertyStore> store;
+    if (hWnd && SUCCEEDED(SHGetPropertyStoreForWindow(
+                    hWnd, IID_PPV_ARGS(store.put())))) {
+        PROPERTYKEY key = kPKEY_AppUserModel_ID;
+        key.pid = id;
+        PROPVARIANT value;
+        PropVariantInit(&value);
+        if (SUCCEEDED(store->GetValue(key, &value)) && value.vt == VT_LPWSTR &&
+            value.pwszVal) {
+            text = value.pwszVal;
+        }
+        PropVariantClear(&value);
+    }
+    return text;
+}
+
 // An app to remember things for (its place): its ID, or its program's path
 // when it has none.
 std::wstring WindowAppKey(HWND hWnd) {
@@ -7718,6 +9776,532 @@ std::wstring WindowAppKey(HWND hWnd) {
         CloseHandle(process);
     }
     return key;
+}
+
+// The AppUserModelID the taskbar gives a window's button (its automation ID,
+// see GetButtonAppId), as the shell's app resolver works it out: also for an
+// app that sets it on its process rather than on its windows (like
+// Discord). Its window's own ID if the resolver can't be had.
+std::wstring TaskbarAppIdOfWindow(HWND hWnd) {
+    // CLSID_StartMenuCacheAndAppResolver and IApplicationResolver (Windows 8
+    // and later), as the taskbar uses them.
+    constexpr GUID kCLSID_AppResolver = {
+        0x660b90c8,
+        0x73a9,
+        0x4b58,
+        {0x8c, 0xae, 0x35, 0x5b, 0x7f, 0x55, 0x34, 0x1b}};
+    constexpr GUID kIID_AppResolver8 = {
+        0xde25675a,
+        0x72de,
+        0x44b4,
+        {0x93, 0x73, 0x05, 0x17, 0x04, 0x50, 0xc1, 0x40}};
+    struct IAppResolver8 : IUnknown {
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcut() = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcutObject() = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForWindow(HWND hWnd,
+                                                            PWSTR* appId,
+                                                            void* unknown1,
+                                                            void* unknown2,
+                                                            void* unknown3) = 0;
+    };
+    std::wstring appId;
+    winrt::com_ptr<IAppResolver8> resolver;
+    if (SUCCEEDED(CoCreateInstance(kCLSID_AppResolver, nullptr,
+                                   CLSCTX_INPROC_SERVER, kIID_AppResolver8,
+                                   resolver.put_void()))) {
+        PWSTR id = nullptr;
+        if (SUCCEEDED(resolver->GetAppIDForWindow(hWnd, &id, nullptr, nullptr,
+                                                  nullptr)) &&
+            id) {
+            appId = id;
+        }
+        CoTaskMemFree(id);
+    }
+    return appId.empty() ? GetWindowAppId(hWnd) : appId;
+}
+
+// An app's overlay icon set or cleared (see OverlayIcon): its picture copied
+// (the taskbar keeps its own). Not while unloading: the copies are freed then
+// (see FreeXamlGlobals), and the hooks stay until the unload ends.
+void KeepOverlayIcon(HWND hWnd, HICON icon) {
+    if (g_unloading) {
+        return;
+    }
+    HICON copy = icon ? CopyIcon(icon) : nullptr;
+    int size = 0;
+    ICONINFO info{};
+    if (copy && GetIconInfo(copy, &info)) {
+        BITMAP bitmap{};
+        if (GetObject(info.hbmColor ? info.hbmColor : info.hbmMask,
+                      sizeof(bitmap), &bitmap)) {
+            size = bitmap.bmWidth;
+        }
+        if (info.hbmColor) {
+            DeleteObject(info.hbmColor);
+        }
+        if (info.hbmMask) {
+            DeleteObject(info.hbmMask);
+        }
+    }
+    const std::wstring appId =
+        copy ? TaskbarAppIdOfWindow(hWnd) : std::wstring();
+    AcquireSRWLockExclusive(&g_overlayIconsLock);
+    auto it = std::find_if(
+        g_overlayIcons.begin(), g_overlayIcons.end(),
+        [&](const OverlayIcon& overlay) { return overlay.wnd == hWnd; });
+    if (it != g_overlayIcons.end()) {
+        DestroyIcon(it->icon);
+        it->icon = nullptr;
+    }
+    if (!copy) {
+        if (it != g_overlayIcons.end()) {
+            g_overlayIcons.erase(it);
+        }
+    } else {
+        if (it == g_overlayIcons.end()) {
+            g_overlayIcons.push_back({hWnd});
+            it = g_overlayIcons.end() - 1;
+        }
+        it->appId = appId;
+        it->icon = copy;
+        it->size = size;
+        it->serial = ++g_overlaySerial;
+    }
+    ReleaseSRWLockExclusive(&g_overlayIconsLock);
+}
+
+// (Before the taskbar takes it.)
+using CTaskBand__HandleOverlayIcon_t = void(WINAPI*)(void* pThis,
+                                                     HWND hWnd,
+                                                     HICON icon);
+CTaskBand__HandleOverlayIcon_t CTaskBand__HandleOverlayIcon_Original;
+void WINAPI CTaskBand__HandleOverlayIcon_Hook(void* pThis,
+                                              HWND hWnd,
+                                              HICON icon) {
+    KeepOverlayIcon(hWnd, icon);
+    CTaskBand__HandleOverlayIcon_Original(pThis, hWnd, icon);
+}
+
+// An app's overlay icon's text set (it may come before the picture). Not
+// while unloading (see KeepOverlayIcon).
+void KeepOverlayText(HWND hWnd, PCWSTR text) {
+    if (g_unloading) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_overlayIconsLock);
+    auto it = std::find_if(
+        g_overlayIcons.begin(), g_overlayIcons.end(),
+        [&](const OverlayIcon& overlay) { return overlay.wnd == hWnd; });
+    if (it == g_overlayIcons.end()) {
+        g_overlayIcons.push_back({hWnd});
+        it = g_overlayIcons.end() - 1;
+    }
+    const std::wstring description = text ? text : L"";
+    if (it->description != description) {
+        it->description = description;
+        it->serial = ++g_overlaySerial;
+    }
+    ReleaseSRWLockExclusive(&g_overlayIconsLock);
+}
+
+// An app's overlay icon's text: the taskbar hands it to its item (see
+// CTaskItem_SetOverlayIconDescription_Hook) while this runs, for this
+// window. Taskbar thread only.
+HWND g_overlayTextWnd;
+using CTaskBand__HandleOverlayIconDescription_t =
+    void(WINAPI*)(void* pThis, HWND hWnd, void* text);
+CTaskBand__HandleOverlayIconDescription_t
+    CTaskBand__HandleOverlayIconDescription_Original;
+void WINAPI CTaskBand__HandleOverlayIconDescription_Hook(void* pThis,
+                                                         HWND hWnd,
+                                                         void* text) {
+    g_overlayTextWnd = hWnd;
+    CTaskBand__HandleOverlayIconDescription_Original(pThis, hWnd, text);
+    g_overlayTextWnd = nullptr;
+}
+
+using CTaskItem_SetOverlayIconDescription_t = HRESULT(WINAPI*)(void* pThis,
+                                                               PCWSTR text);
+CTaskItem_SetOverlayIconDescription_t
+    CTaskItem_SetOverlayIconDescription_Original;
+HRESULT WINAPI CTaskItem_SetOverlayIconDescription_Hook(void* pThis,
+                                                        PCWSTR text) {
+    if (HWND hWnd = g_overlayTextWnd) {
+        KeepOverlayText(hWnd, text);
+    }
+    return CTaskItem_SetOverlayIconDescription_Original(pThis, text);
+}
+
+// The apps' overlay icons set before the mod started (like Discord's counter
+// from before the mod was turned on or updated), read from the taskbar's
+// items as if they came now: otherwise they'd stay as the taskbar draws them
+// (see UseBigOverlay) until they change. Through the task band's
+// ITaskListManager (found like its ITaskListWndSite, see
+// GetTaskbarXamlRoot); only the taskbar's own items are read (a window's
+// or a Store app's, by their tables).
+void* CTaskBand_ITaskListManager_vftable;
+void* CWindowTaskItem_ITaskItem_vftable;
+void* CImmersiveTaskItem_ITaskItem_vftable;
+using CTaskBand_GetTaskFromWindow_t = HRESULT(WINAPI*)(void* pThis,
+                                                       HWND hWnd,
+                                                       IUnknown** group,
+                                                       IUnknown** item);
+CTaskBand_GetTaskFromWindow_t CTaskBand_GetTaskFromWindow_Original;
+using CTaskItem_GetOverlayIcon_t = HICON(WINAPI*)(void* pThis);
+CTaskItem_GetOverlayIcon_t CTaskItem_GetOverlayIcon_Original;
+using CTaskItem_GetOverlayIconDescription_t = PCWSTR(WINAPI*)(void* pThis);
+CTaskItem_GetOverlayIconDescription_t
+    CTaskItem_GetOverlayIconDescription_Original;
+
+BOOL CALLBACK ReadOverlayIconProc(HWND hWnd, LPARAM lParam) {
+    if (!IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
+        return TRUE;
+    }
+    AcquireSRWLockShared(&g_overlayIconsLock);
+    const bool known = std::any_of(
+        g_overlayIcons.begin(), g_overlayIcons.end(),
+        [&](const OverlayIcon& overlay) { return overlay.wnd == hWnd; });
+    ReleaseSRWLockShared(&g_overlayIconsLock);
+    IUnknown* group = nullptr;
+    IUnknown* item = nullptr;
+    if (known ||
+        FAILED(CTaskBand_GetTaskFromWindow_Original((void*)lParam, hWnd, &group,
+                                                    &item)) ||
+        !item) {
+        if (group) {
+            group->Release();
+        }
+        return TRUE;
+    }
+    const void* table = *(void**)item;
+    if (table && (table == CWindowTaskItem_ITaskItem_vftable ||
+                  table == CImmersiveTaskItem_ITaskItem_vftable)) {
+        if (HICON icon = CTaskItem_GetOverlayIcon_Original(item)) {
+            KeepOverlayText(hWnd,
+                            CTaskItem_GetOverlayIconDescription_Original(item));
+            KeepOverlayIcon(hWnd, icon);
+        }
+    }
+    item->Release();
+    if (group) {
+        group->Release();
+    }
+    return TRUE;
+}
+
+void WINAPI ReadOverlayIconsProc(void*) {
+    if (!CTaskBand_ITaskListManager_vftable ||
+        (!CWindowTaskItem_ITaskItem_vftable &&
+         !CImmersiveTaskItem_ITaskItem_vftable) ||
+        !CTaskBand_GetTaskFromWindow_Original ||
+        !CTaskItem_GetOverlayIcon_Original ||
+        !CTaskItem_GetOverlayIconDescription_Original) {
+        return;
+    }
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    HWND hTaskSwWnd =
+        hTaskbarWnd ? (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND") : nullptr;
+    void* manager =
+        hTaskSwWnd ? (void*)GetWindowLongPtr(hTaskSwWnd, 0) : nullptr;
+    for (int i = 0;
+         manager && *(void**)manager != CTaskBand_ITaskListManager_vftable;
+         i++) {
+        manager = i == 20 ? nullptr : (void**)manager + 1;
+    }
+    if (manager) {
+        EnumWindows(ReadOverlayIconProc, (LPARAM)manager);
+        StartRendering();
+    }
+}
+
+void ReadOverlayIcons() {
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, ReadOverlayIconsProc, nullptr);
+    }
+}
+
+// A value of an app's registration as a notification sender
+// (Software\Classes\AppUserModelId\<ID>, the user's then the machine's, as
+// Windows' notification center reads it), with environment variables and
+// "@file,-id" or "@{...}" resources resolved. `registered` (optional) tells
+// whether the app has one.
+std::wstring RegisteredAppValue(const std::wstring& appId,
+                                PCWSTR name,
+                                bool* registered = nullptr) {
+    if (registered) {
+        *registered = false;
+    }
+    if (appId.empty() || appId.size() > 256 ||
+        appId.find(L'\\') != std::wstring::npos) {
+        return {};
+    }
+    const std::wstring key = L"Software\\Classes\\AppUserModelId\\" + appId;
+    for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
+        HKEY app = nullptr;
+        if (RegOpenKeyEx(root, key.c_str(), 0, KEY_QUERY_VALUE, &app) !=
+            ERROR_SUCCESS) {
+            continue;
+        }
+        if (registered) {
+            *registered = true;
+        }
+        WCHAR value[1024];
+        DWORD size = sizeof(value);
+        const bool read =
+            RegGetValue(app, nullptr, name,
+                        RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, value,
+                        &size) == ERROR_SUCCESS;
+        RegCloseKey(app);
+        if (!read || !value[0]) {
+            continue;
+        }
+        if (value[0] != L'@') {
+            return value;
+        }
+        WCHAR resolved[1024];
+        if (SUCCEEDED(SHLoadIndirectString(value, resolved,
+                                           ARRAYSIZE(resolved), nullptr))) {
+            return resolved;
+        }
+    }
+    return {};
+}
+
+// A full path on one of this computer's drives (not a share, nor a drive
+// letter mapped to one: no connection to another computer).
+bool IsLocalDrivePath(const std::wstring& path) {
+    if (path.size() < 4 || !iswalpha(path[0]) || path[1] != L':' ||
+        path[2] != L'\\') {
+        return false;
+    }
+    const WCHAR root[] = {path[0], L':', L'\\', 0};
+    return GetDriveType(root) != DRIVE_REMOTE;
+}
+
+// The picture a notification sender registered (IconUri: a file, or a
+// resource of a package or of Windows), as a file; Windows' default picture
+// for its own notifications for one registered without any. Only a file on
+// a drive (never a share: no connection to another computer). Empty if the
+// app isn't registered.
+std::wstring RegisteredAppPicture(const std::wstring& appId) {
+    bool registered = false;
+    std::wstring uri = RegisteredAppValue(appId, L"IconUri", &registered);
+    if (!registered) {
+        return {};
+    }
+    if (uri.empty()) {
+        uri =
+            L"ms-resource://Windows.UI.ShellCommon/Files/Images/"
+            L"DefaultSystemNotification.png";
+    }
+    // (Windows' resources, by the same name as in a package's.)
+    if (uri.starts_with(L"ms-resource://")) {
+        WCHAR resolved[1024];
+        const std::wstring resource = L"@{Windows?" + uri + L"}";
+        uri = SUCCEEDED(SHLoadIndirectString(resource.c_str(), resolved,
+                                             ARRAYSIZE(resolved), nullptr))
+                  ? resolved
+                  : L"";
+    }
+    if (!IsLocalDrivePath(uri)) {
+        return {};
+    }
+    return uri;
+}
+
+// A picture file as a 32-bit bitmap with premultiplied alpha, fit in a
+// square of `size` pixels (like an icon).
+HBITMAP LoadPictureBitmap(PCWSTR path, int size) {
+    winrt::com_ptr<IWICImagingFactory> wic;
+    winrt::com_ptr<IWICBitmapDecoder> decoder;
+    winrt::com_ptr<IWICBitmapFrameDecode> frame;
+    UINT width = 0, height = 0;
+    if (size <= 0 ||
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(wic.put()))) ||
+        FAILED(wic->CreateDecoderFromFilename(path, nullptr, GENERIC_READ,
+                                              WICDecodeMetadataCacheOnDemand,
+                                              decoder.put())) ||
+        FAILED(decoder->GetFrame(0, frame.put())) ||
+        FAILED(frame->GetSize(&width, &height)) || !width || !height) {
+        return nullptr;
+    }
+    const double fit = std::min((double)size / width, (double)size / height);
+    const UINT shownWidth = std::max<UINT>(1, (UINT)std::lround(width * fit));
+    const UINT shownHeight = std::max<UINT>(1, (UINT)std::lround(height * fit));
+    winrt::com_ptr<IWICBitmapScaler> scaler;
+    winrt::com_ptr<IWICFormatConverter> converter;
+    if (FAILED(wic->CreateBitmapScaler(scaler.put())) ||
+        FAILED(scaler->Initialize(frame.get(), shownWidth, shownHeight,
+                                  WICBitmapInterpolationModeFant)) ||
+        FAILED(wic->CreateFormatConverter(converter.put())) ||
+        FAILED(converter->Initialize(scaler.get(),
+                                     GUID_WICPixelFormat32bppPBGRA,
+                                     WICBitmapDitherTypeNone, nullptr, 0,
+                                     WICBitmapPaletteTypeMedianCut))) {
+        return nullptr;
+    }
+    BITMAPINFO header{};
+    header.bmiHeader = {sizeof(BITMAPINFOHEADER), size, -size, 1, 32, BI_RGB};
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(nullptr, &header, DIB_RGB_COLORS, &bits,
+                                      nullptr, 0);
+    if (!bitmap) {
+        return nullptr;
+    }
+    // (Transparent around it; in the middle.)
+    ZeroMemory(bits, (size_t)size * size * 4);
+    const UINT stride = (UINT)size * 4;
+    BYTE* start = (BYTE*)bits + ((size - shownHeight) / 2) * stride +
+                  ((size - shownWidth) / 2) * 4;
+    if (FAILED(converter->CopyPixels(
+            nullptr, stride, (shownHeight - 1) * stride + shownWidth * 4,
+            start))) {
+        DeleteObject(bitmap);
+        return nullptr;
+    }
+    return bitmap;
+}
+
+// An icon as a 32-bit bitmap with premultiplied alpha (nullptr without
+// colors of its own).
+HBITMAP IconBitmap(HICON icon) {
+    ICONINFO info{};
+    if (!GetIconInfo(icon, &info)) {
+        return nullptr;
+    }
+    HBITMAP result = nullptr;
+    BITMAP color{};
+    if (info.hbmColor && GetObject(info.hbmColor, sizeof(color), &color) &&
+        color.bmBitsPixel == 32 && color.bmWidth > 0 && color.bmHeight > 0) {
+        const int width = color.bmWidth;
+        const int height = std::abs(color.bmHeight);
+        BITMAPINFO header{};
+        header.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32,
+                            BI_RGB};
+        void* bits = nullptr;
+        HDC screen = GetDC(nullptr);
+        result = CreateDIBSection(screen, &header, DIB_RGB_COLORS, &bits,
+                                  nullptr, 0);
+        if (result && bits &&
+            GetDIBits(screen, info.hbmColor, 0, height, bits, &header,
+                      DIB_RGB_COLORS) == height) {
+            // (Icons keep their colors as they are: premultiplied here.)
+            auto* pixels = static_cast<uint8_t*>(bits);
+            const size_t count = (size_t)width * height * 4;
+            for (size_t i = 0; i < count; i += 4) {
+                for (int c = 0; c < 3; c++) {
+                    pixels[i + c] =
+                        (uint8_t)(pixels[i + c] * pixels[i + 3] / 255);
+                }
+            }
+        } else if (result) {
+            DeleteObject(result);
+            result = nullptr;
+        }
+        ReleaseDC(nullptr, screen);
+    }
+    if (info.hbmColor) {
+        DeleteObject(info.hbmColor);
+    }
+    if (info.hbmMask) {
+        DeleteObject(info.hbmMask);
+    }
+    return result;
+}
+
+BOOL CALLBACK FindAppIdWindowProc(HWND hWnd, LPARAM lParam) {
+    auto* search = reinterpret_cast<std::pair<const std::wstring*, HWND>*>(
+        lParam);
+    if (IsWindowVisible(hWnd) &&
+        _wcsicmp(GetWindowAppId(hWnd).c_str(), search->first->c_str()) == 0) {
+        search->second = hWnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// The program an app's window gives the taskbar to start it again
+// (PKEY_AppUserModel_RelaunchCommand), when it's a file that's there. The
+// command may be a path with spaces and no quotes, like Steam's
+// "C:\Program Files (x86)\Steam\steam.exe": the whole of it first.
+std::wstring WindowRelaunchProgram(HWND window) {
+    auto isProgram = [](const std::wstring& path) {
+        const DWORD attributes =
+            IsLocalDrivePath(path) ? GetFileAttributes(path.c_str())
+                                   : INVALID_FILE_ATTRIBUTES;
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+               !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+    };
+    const std::wstring command = GetWindowAppText(window, 2);
+    if (command.empty() || isProgram(command)) {
+        return command;
+    }
+    std::wstring program;
+    int count = 0;
+    if (LPWSTR* parts = CommandLineToArgvW(command.c_str(), &count)) {
+        if (count > 0 && isProgram(parts[0])) {
+            program = parts[0];
+        }
+        LocalFree(parts);
+    }
+    return program;
+}
+
+// The icon an app's window gives the taskbar for its own ID (its
+// PKEY_AppUserModel_RelaunchIconResource, "path,index"), like the profile's
+// picture of a browser's second profile, which has no Start menu entry; or,
+// without one (like Steam's window), its relaunch program's or its process
+// file's, as big as asked (the taskbar's own is small).
+HBITMAP WindowRelaunchIconBitmap(const std::wstring& appId, int size) {
+    std::pair<const std::wstring*, HWND> search{&appId, nullptr};
+    EnumWindows(FindAppIdWindowProc, reinterpret_cast<LPARAM>(&search));
+    if (!search.second) {
+        return nullptr;
+    }
+    const std::wstring resource = GetWindowAppText(search.second, 3);
+    if (const size_t comma = resource.rfind(L',');
+        comma != std::wstring::npos && comma != 0) {
+        WCHAR path[MAX_PATH];
+        HICON icon = nullptr;
+        if (ExpandEnvironmentStrings(resource.substr(0, comma).c_str(), path,
+                                     ARRAYSIZE(path)) &&
+            IsLocalDrivePath(path) &&
+            PrivateExtractIcons(path, _wtoi(resource.c_str() + comma + 1),
+                                size, size, &icon, nullptr, 1, 0) == 1 &&
+            icon) {
+            HBITMAP bitmap = IconBitmap(icon);
+            DestroyIcon(icon);
+            return bitmap;
+        }
+    }
+    std::wstring program = WindowRelaunchProgram(search.second);
+    // (Nor a program: its process's file. Not a packaged app's: its window
+    // may be the frame of another process.)
+    DWORD processId = 0;
+    if (program.empty() && appId.find(L'!') == std::wstring::npos &&
+        GetWindowThreadProcessId(search.second, &processId)) {
+        if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                         FALSE, processId)) {
+            WCHAR path[MAX_PATH];
+            DWORD length = ARRAYSIZE(path);
+            if (QueryFullProcessImageName(process, 0, path, &length)) {
+                program = path;
+            }
+            CloseHandle(process);
+        }
+    }
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    HBITMAP bitmap = nullptr;
+    if (program.empty() ||
+        FAILED(SHCreateItemFromParsingName(program.c_str(), nullptr,
+                                           IID_PPV_ARGS(factory.put()))) ||
+        FAILED(factory->GetImage({size, size},
+                                 SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
+                                 &bitmap))) {
+        return nullptr;
+    }
+    return bitmap;
 }
 
 // The app's icon as a 32-bit bitmap with premultiplied alpha, from the shell:
@@ -7744,6 +10328,13 @@ HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size) {
         }
     }
 
+    // An app known by its program file (a window without an ID of its own,
+    // like Discord's): that file's icon (on a drive only, never a network
+    // path).
+    if (!factory && IsLocalDrivePath(appId)) {
+        SHCreateItemFromParsingName(appId.c_str(), nullptr,
+                                    IID_PPV_ARGS(factory.put()));
+    }
     if (!factory && hWnd) {
         DWORD processId = 0;
         GetWindowThreadProcessId(hWnd, &processId);
@@ -7760,12 +10351,27 @@ HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size) {
         }
     }
 
+    // (No Start menu entry: the icon its windows give the taskbar.)
+    if (!factory && !appId.empty()) {
+        if (HBITMAP icon = WindowRelaunchIconBitmap(appId, size)) {
+            return icon;
+        }
+    }
     HBITMAP bitmap = nullptr;
     if (factory &&
         FAILED(factory->GetImage({size, size},
                                  SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
                                  &bitmap))) {
         bitmap = nullptr;
+    }
+    // A sender with no Start menu entry (Windows' own, like Windows
+    // Security's, or an app registered only for its notifications): the
+    // picture it registered.
+    if (!factory && !appId.empty()) {
+        const std::wstring picture = RegisteredAppPicture(appId);
+        if (!picture.empty()) {
+            bitmap = LoadPictureBitmap(picture.c_str(), size);
+        }
     }
     return bitmap;
 }
@@ -7943,8 +10549,11 @@ bool WindowMatchesApp(HWND hWnd, const std::wstring& appId) {
     if (!id.empty()) {
         return _wcsicmp(id.c_str(), appId.c_str()) == 0;
     }
+    // (An app that sets its ID on its process, like Discord: as the taskbar
+    // works it out.)
     if (appId.find(L'\\') == std::wstring::npos) {
-        return false;
+        return _wcsicmp(TaskbarAppIdOfWindow(hWnd).c_str(), appId.c_str()) ==
+               0;
     }
     DWORD processId = 0;
     GetWindowThreadProcessId(hWnd, &processId);
@@ -8348,6 +10957,10 @@ constexpr UINT WM_APP_APPBAR = WM_APP + 50;
 
 // Sizes in pixels at 100% scaling.
 constexpr float kPillHeight = 30;
+// The pill's height chosen (see islandPillHeight), as a factor.
+float PillHeightScale();
+// How much the edges show (see islandEdge), 0 to 1.
+float EdgeAmount();
 // Upright on a side, the pill is this wide.
 constexpr float kVerticalPillWidth = 46;
 constexpr float kPillTopGap = 6;
@@ -8355,7 +10968,9 @@ constexpr float kPillTopGap = 6;
 // kept between notches (each takes at most its share of the screen; the
 // wheel slides along the rest).
 constexpr float kNotchMinWidth = 56;
-constexpr float kNotchGap = 24;
+// Between two notches' curves at the most (they grow with their items until
+// they almost touch, see Island::NotchBodyMax).
+constexpr float kNotchTouchGap = 8;
 
 // A notch's shape: `body` hanging from the screen's top edge (at body.top),
 // round corners under it, and between each side and the edge a curve the
@@ -8436,9 +11051,14 @@ winrt::com_ptr<ID2D1PathGeometry> NotchGeometry(ID2D1Factory* factory,
 constexpr float kBarHeight = 28;
 constexpr float kIslandPadding = 12;
 constexpr float kIslandSpacing = 6;
+// Every icon on the pill the same size: the symbols (the media and control
+// center buttons, the arrows too) and the pictures (apps, tray icons, the app
+// in focus, what's playing's cover), at 100% of the icons' own size (see
+// islandIconSize; their room grows with them). The small one is for the
+// banner's own buttons.
 constexpr float kIslandIconSlot = 26;
-constexpr float kIslandSmallSlot = 20;
 constexpr float kIslandIconSize = 15;
+constexpr float kIslandPictureSize = 15;
 constexpr float kIslandSmallIconSize = 11;
 constexpr float kIslandTextSize = 13;
 // The minimized pill: a thin line against its edge, a bit bigger under the
@@ -8463,12 +11083,30 @@ constexpr float kControlGap = 10;
 constexpr float kTileHeight = 62;
 constexpr float kSoundHeight = 92;
 constexpr float kDisplayHeight = 72;
+// With more monitors: each one's name and slider.
+constexpr float kBrightnessRowHeight = 52;
 constexpr float kShortcutHeight = 64;
 constexpr float kBatteryHeight = 50;
 constexpr float kPowerModeHeight = 76;
 constexpr float kFooterHeight = 30;
 
-// Icons from the Segoe Fluent Icons font.
+// The font the island's icons come from: Segoe Fluent Icons (Windows 11), or
+// on Windows 10, which doesn't have it, Segoe MDL2 Assets (the same icons at
+// the same places, but for a few newer ones).
+PCWSTR IconFont() {
+    static const bool fluent = [] {
+        WCHAR file[MAX_PATH];
+        DWORD size = sizeof(file);
+        return RegGetValue(HKEY_LOCAL_MACHINE,
+                           L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\"
+                           L"Fonts",
+                           L"Segoe Fluent Icons (TrueType)", RRF_RT_REG_SZ,
+                           nullptr, file, &size) == ERROR_SUCCESS;
+    }();
+    return fluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+}
+
+// Icons from the Segoe Fluent Icons font (see IconFont).
 constexpr WCHAR kGlyphWifi[] = {0xE872, 0xE873, 0xE874, 0xE701};
 constexpr WCHAR kGlyphEthernet = 0xE839;
 // The control center's item (sliders, like macOS's).
@@ -8499,7 +11137,12 @@ constexpr WCHAR kGlyphCalendar = 0xE787;
 constexpr WCHAR kGlyphPlay = 0xE768;
 constexpr WCHAR kGlyphStop = 0xE71A;
 constexpr WCHAR kGlyphReload = 0xE72C;
-constexpr WCHAR kGlyphKomorebi = 0xE80A;
+// komorebi's start and stop (its gears), and its layout (a grid).
+constexpr WCHAR kGlyphKomorebi = 0xE9F5;
+constexpr WCHAR kGlyphKomorebiLayout = 0xE80A;
+// The app in focus (see IslandPref::FocusedApp), and the desktop in focus.
+constexpr WCHAR kGlyphFocusedApp = 0xECAA;
+constexpr WCHAR kGlyphDesktop = 0xE7F4;
 constexpr WCHAR kGlyphPause = 0xE769;
 constexpr WCHAR kGlyphPreviousTrack = 0xE892;
 constexpr WCHAR kGlyphNextTrack = 0xE893;
@@ -8507,6 +11150,7 @@ constexpr WCHAR kGlyphSpeaker = 0xE767;
 constexpr WCHAR kGlyphSend = 0xE724;
 constexpr WCHAR kGlyphPower = 0xE7E8;
 constexpr WCHAR kGlyphProfiles = 0xE748;
+constexpr WCHAR kGlyphWidgets = 0xF246;
 
 // What's at each spot of the island.
 enum class IslandItem {
@@ -8582,6 +11226,13 @@ enum class IslandItem {
     // WallpaperPanel).
     Folders,
     Wallpaper,
+    // komorebi's layout on the island's monitor (see KomorebiPanel), and
+    // the app in focus on it (the slot's text is the name shown).
+    KomorebiLayout,
+    FocusedApp,
+    // A komorebi workspace's dot (the slot's text is its number, with "*"
+    // for the one shown).
+    KomorebiWorkspace,
 };
 
 bool IsPrivacyItem(IslandItem item) {
@@ -8617,6 +11268,9 @@ bool HasItemTip(IslandItem item) {
         case IslandItem::Desktops:
         case IslandItem::Folders:
         case IslandItem::Wallpaper:
+        case IslandItem::KomorebiLayout:
+        case IslandItem::FocusedApp:
+        case IslandItem::KomorebiWorkspace:
             return true;
         default:
             return IsPrivacyItem(item);
@@ -8627,8 +11281,8 @@ struct IslandSlot {
     IslandItem item;
     D2D1_RECT_F rect;
     std::wstring text;
-    // 0: text, 1: icon, 2: small icon, 3: the app's icon (see App), 4: a
-    // tray icon (see TrayIcon).
+    // 0: text, 1: icon, 3: the app's icon (see App), 4: a tray icon (see
+    // TrayIcon).
     int font;
     // How far an app's icon has grown in (see Island::AppEntry).
     float scale = 1;
@@ -8654,6 +11308,12 @@ std::wstring SlotKey(const IslandSlot& slot) {
 constexpr int kTrayListFont = 20;
 // The virtual desktops' dots (see IslandItem::Desktops).
 constexpr int kDesktopsFont = 21;
+// An icon and a name (komorebi's layout, the app in focus), the name up to
+// this wide.
+constexpr int kNamedItemFont = 22;
+// komorebi's workspace dot (lit for the one shown).
+constexpr int kWorkspaceDotFont = 23;
+constexpr float kItemNameMaxWidth = 140;
 
 constexpr GUID kCLSID_MMDeviceEnumerator = {
     0xbcde0395,
@@ -8697,24 +11357,32 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L" files", L" 个文件"},
     {L" in progress", L" 项进行中"},
     {L" shortcuts imported", L" 个快捷键已导入"},
+    {L" · almost full", L" · 快满了"},
     {L" · click to hide", L" · 点击隐藏"},
     {L" · drag to move", L" · 拖动以移动"},
     {L" · hidden, click to show", L" · 已隐藏，点击显示"},
+    {L" · plain color while Windows' energy saver is on", L" · Windows 节能模式开启时显示纯色"},
+    {L" · plain color: Windows' transparency effects are off (Personalization > Colors)", L" · 纯色：Windows 透明效果已关闭（个性化 > 颜色）"},
     {L" · this island", L" · 本岛"},
+    {L" · whkd isn't installed (winget install LGUG2Z.whkd)", L" · 未安装 whkd（winget install LGUG2Z.whkd）"},
+    {L"%zu of %zu events", L"%zu / %zu 个事件"},
     {L"(the wheel turns the pages)", L"（滚轮翻页）"},
     {L"+  New event", L"+  新建事件"},
     {L"+  New shortcut", L"+  新建快捷键"},
     {L"+ saves the current settings as a profile, to switch back to them later.", L"+ 将当前设置保存为配置文件，以便以后切换回来。"},
     {L".ics link or file path", L".ics 链接或文件路径"},
+    {L"1 day", L"1 天"},
     {L"12 h AM/PM", L"12 小时 AM/PM"},
     {L"24 h", L"24 小时"},
+    {L"30 days", L"30 天"},
+    {L"7 days", L"7 天"},
     {L"A file with all of it (agenda links too)", L"包含全部内容的文件（包括日程订阅链接）"},
     {L"A long title keeps scrolling while it plays", L"播放时长标题保持滚动"},
     {L"Accent color", L"强调色"},
     {L"Accessibility", L"辅助功能"},
     {L"Add", L"添加"},
     {L"Add  (Enter)", L"添加  (Enter)"},
-    {L"Add a folder…", L"添加文件夹…"},
+    {L"Add a folder", L"添加文件夹"},
     {L"Add an open app", L"添加已打开的应用"},
     {L"Add controls", L"添加控件"},
     {L"Add note  (Ctrl+Enter)", L"添加笔记  (Ctrl+Enter)"},
@@ -8729,10 +11397,13 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Already added", L"已添加"},
     {L"Animations", L"动画"},
     {L"App", L"应用"},
+    {L"App in focus", L"焦点应用"},
     {L"Apps (winget, in a terminal)", L"应用（winget，在终端中）"},
     {L"Apps and tools", L"应用和工具"},
     {L"Apps with notifications", L"有通知的应用"},
     {L"Apps with unsaved work can stop it.", L"有未保存工作的应用可能会阻止它。"},
+    {L"Area that brings it back", L"唤回区域"},
+    {L"Ask", L"询问"},
     {L"At most 8 buttons", L"最多 8 个按钮"},
     {L"At most 8 tiles", L"最多 8 个磁贴"},
     {L"Auto", L"自动"},
@@ -8740,6 +11411,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Auto, inverted (the other way from Windows)", L"自动反转（与 Windows 相反）"},
     {L"Automatic", L"自动"},
     {L"Available", L"可用"},
+    {L"BSP", L"BSP"},
     {L"Back", L"返回"},
     {L"Backup", L"备份"},
     {L"Backup (notes, tasks, profiles and settings)", L"备份（笔记、任务、配置文件和设置）"},
@@ -8747,6 +11419,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Banners even with the pill minimized", L"即使胶囊最小化也显示横幅"},
     {L"Banners in the pill", L"胶囊中的横幅"},
     {L"Bar", L"栏"},
+    {L"Bar: items at the screen's corners (the clock in the middle)", L"条形：项目放在屏幕两角（时钟在中间）"},
     {L"Base frequency", L"基准频率"},
     {L"Battery", L"电池"},
     {L"Battery percentage beside its icon", L"在电池图标旁显示百分比"},
@@ -8759,15 +11432,17 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"CPU, RAM and VRAM use", L"CPU、RAM 和 VRAM 使用率"},
     {L"Cached", L"已缓存"},
     {L"Calculator", L"计算器"},
+    {L"Calendar full: delete past events in the gear", L"日历已满：请在齿轮中删除过去的事件"},
     {L"Camera", L"摄像头"},
     {L"Cancel", L"取消"},
     {L"Captions", L"实时字幕"},
     {L"Cast", L"投屏"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"更改会自动保存到正在使用的配置文件 · 铅笔可重命名、保存或删除"},
     {L"Charging", L"正在充电"},
+    {L"Check every", L"检查间隔"},
+    {L"Choose", L"选择"},
     {L"Choose a power plan", L"选择电源计划"},
     {L"Choose the folder with your pictures", L"选择存放图片的文件夹"},
-    {L"Choose…", L"选择…"},
     {L"Circle", L"圆形"},
     {L"City not found", L"未找到城市"},
     {L"Clear", L"晴"},
@@ -8779,10 +11454,12 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Clock", L"时钟"},
     {L"Clock and calendar (agendas: the calendar's gear)", L"时钟和日历（日程订阅：日历的齿轮）"},
     {L"Clock in the middle (the other items move around it)", L"时钟居中（其他项目围绕它重新排列）"},
+    {L"Close it to finish", L"关闭应用以完成"},
     {L"Clouds", L"云量"},
     {L"Color filters", L"颜色滤镜"},
     {L"Colors", L"颜色"},
     {L"Colors following the app in front (its title bar or its icon)", L"颜色跟随前台应用（标题栏或图标）"},
+    {L"Columns", L"列"},
     {L"Committed", L"已提交"},
     {L"Completed", L"已完成"},
     {L"Connect", L"连接"},
@@ -8793,6 +11470,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Control center", L"控制中心"},
     {L"Control center buttons on the pill", L"胶囊上的控制中心按钮"},
     {L"Copied", L"已复制"},
+    {L"Copy", L"复制"},
     {L"Cores / threads", L"内核 / 线程"},
     {L"Corners", L"角落"},
     {L"Couldn't connect.", L"无法连接。"},
@@ -8800,6 +11478,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Couldn't forget the network.", L"无法忘记该网络。"},
     {L"Couldn't read it", L"无法读取"},
     {L"Cover and title on the pill", L"胶囊上的封面和标题"},
+    {L"Custom", L"自定义"},
     {L"D M Y", L"日 月 年"},
     {L"Dark mode", L"深色模式"},
     {L"Date", L"日期"},
@@ -8807,13 +11486,17 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Day and month", L"日期和月份"},
     {L"Day of the week", L"星期"},
     {L"Delete", L"删除"},
+    {L"Delete %zu past events?", L"删除 %zu 个过去的事件？"},
     {L"Delete it?", L"删除它？"},
+    {L"Delete past events", L"删除过去的事件"},
     {L"Desktop", L"桌面"},
+    {L"Details", L"细节"},
     {L"Device", L"设备"},
     {L"Device Manager", L"设备管理器"},
     {L"Devices", L"设备"},
     {L"Disconnect", L"断开连接"},
     {L"Disconnected", L"已断开连接"},
+    {L"Disconnecting...", L"正在断开连接..."},
     {L"Dismiss", L"关闭"},
     {L"Display", L"显示"},
     {L"Display brightness", L"显示器亮度"},
@@ -8830,6 +11513,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Duplicate", L"复制"},
     {L"Each new one opens the pill for a moment", L"每条新通知都会让胶囊展开片刻"},
     {L"Edge", L"边距"},
+    {L"Edge around", L"外围边框"},
     {L"Edge distance", L"与边缘的距离"},
     {L"Edit", L"编辑"},
     {L"Edit task", L"编辑任务"},
@@ -8843,19 +11527,23 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Even when minimized", L"即使最小化时"},
     {L"Event", L"事件"},
     {L"Events, ", L"事件，"},
+    {L"Export", L"导出"},
     {L"Export the island's backup", L"导出灵动岛备份"},
-    {L"Export…", L"导出…"},
     {L"Extend", L"扩展"},
     {L"Fade", L"淡入"},
     {L"Fan", L"风扇"},
     {L"Feels like", L"体感温度"},
     {L"File Explorer", L"文件资源管理器"},
+    {L"Files dragged out", L"拖出的文件"},
+    {L"Files dragged out of the folders", L"从文件夹拖出的文件"},
+    {L"Files dragged out of the island are:", L"从灵动岛拖出的文件："},
     {L"Fill", L"背景"},
     {L"Fixed", L"固定"},
+    {L"Floating", L"浮动"},
     {L"Fog", L"雾"},
+    {L"Folder", L"文件夹"},
     {L"Folders and places", L"文件夹和位置"},
     {L"Folders and places (your shortcuts)", L"文件夹和位置（你的快捷方式）"},
-    {L"Folder…", L"文件夹…"},
     {L"Following the mouse is unavailable with notches on the main island.", L"主岛使用刘海时无法跟随鼠标。"},
     {L"Follows the mouse", L"跟随鼠标"},
     {L"Forget", L"忘记"},
@@ -8867,6 +11555,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Frosted glass on the bar and the Fixed style's strip", L"栏和固定样式条带使用毛玻璃"},
     {L"General", L"常规"},
     {L"Glass", L"玻璃"},
+    {L"Glass blur", L"玻璃模糊度"},
+    {L"Glass: see-through and blurred, with a bright edge (Windows' blur: needs its transparency effects)", L"玻璃效果：透明、模糊，带亮边（Windows 模糊效果：需要开启它的透明效果）"},
     {L"Graphite", L"石墨"},
     {L"Grid", L"网格"},
     {L"Hard to read: too alike", L"难以阅读：颜色太接近"},
@@ -8874,19 +11564,23 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Hide after", L"多久后隐藏"},
     {L"Hide as its line until the mouse reaches it", L"隐藏为线条，直到鼠标移到它上面"},
     {L"Hide each notch on its own (not all together)", L"每个刘海单独隐藏（而不是一起）"},
+    {L"Hide past events after", L"在此之后隐藏过去的事件"},
     {L"Hide the Windows banners", L"隐藏 Windows 横幅"},
+    {L"Highlight behind the item under the mouse", L"鼠标所指项目后的高亮"},
     {L"Holidays in the calendar (goes online)", L"日历中的节假日（需联网）"},
     {L"Home folder", L"主文件夹"},
+    {L"Horizontal stack", L"水平堆叠"},
     {L"How many", L"数量"},
     {L"Humidity", L"湿度"},
+    {L"Icon and text size", L"图标和文字大小"},
     {L"Icons", L"图标"},
-    {L"Icons before scrolling", L"滚动前显示的图标数"},
+    {L"Icons of the apps with notifications", L"有通知的应用的图标"},
     {L"Icons that aren't pinned", L"未固定的图标"},
     {L"Ignored (not counted)", L"已忽略（不计数）"},
+    {L"Import", L"导入"},
     {L"Import a backup of the island", L"导入灵动岛备份"},
-    {L"Import a file…", L"导入文件…"},
+    {L"Import a file", L"导入文件"},
     {L"Import shortcuts (like komorebi's whkdrc)", L"导入快捷键（如 komorebi 的 whkdrc）"},
-    {L"Import…", L"导入…"},
     {L"In the pill", L"在胶囊中"},
     {L"In the terminal", L"在终端中"},
     {L"In use", L"使用中"},
@@ -8900,12 +11594,15 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Keyboard language (like Windows' input indicator)", L"键盘语言（类似 Windows 的输入指示器）"},
     {L"Keyboard shortcuts", L"键盘快捷键"},
     {L"Keyboard shortcuts button", L"键盘快捷键按钮"},
+    {L"Language", L"语言"},
+    {L"Language of the island's texts (it starts again)", L"灵动岛文字的语言（会重新启动）"},
     {L"Language settings", L"语言设置"},
     {L"Light", L"浅色"},
     {L"Light and dark mode", L"浅色和深色模式"},
     {L"Light and dark mode button", L"浅色和深色模式按钮"},
     {L"Light rain", L"小雨"},
     {L"Like Ctrl+Shift+S, or Ctrl+K, Ctrl+S", L"例如 Ctrl+Shift+S，或 Ctrl+K, Ctrl+S"},
+    {L"Line opacity", L"线条不透明度"},
     {L"Location", L"位置"},
     {L"Lock", L"锁定"},
     {L"Look", L"外观"},
@@ -8914,7 +11611,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"M D Y", L"月 日 年"},
     {L"Magnifier", L"放大镜"},
     {L"Main island", L"主灵动岛"},
-    {L"Manage profiles…", L"管理配置文件…"},
+    {L"Manage profiles", L"管理配置文件"},
     {L"Media buttons on the pill", L"胶囊上的媒体按钮"},
     {L"Memory", L"内存"},
     {L"Memory use (RAM)", L"内存使用率 (RAM)"},
@@ -8923,19 +11620,25 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Microphone, camera and location in use", L"正在使用的麦克风、摄像头和位置"},
     {L"Microphone, camera and location in use (and which app)", L"正在使用的麦克风、摄像头和位置（以及哪个应用）"},
     {L"Middle", L"居中"},
+    {L"Minimize arrow at the end of the pill", L"胶囊末尾的最小化箭头"},
     {L"Mobile hotspot", L"移动热点"},
     {L"Monitor", L"显示器"},
     {L"Monitor ", L"显示器 "},
     {L"Monitors", L"显示器"},
+    {L"Monocle (the window in focus fills the screen)", L"单窗口（焦点窗口占满屏幕）"},
     {L"Month as a number (9/10)", L"月份显示为数字 (9/10)"},
     {L"More Windows controls", L"更多 Windows 控件"},
-    {L"More in Explorer…", L"在资源管理器中查看更多…"},
+    {L"More in Explorer", L"在资源管理器中查看更多"},
     {L"Mostly clear", L"大部晴朗"},
+    {L"Move", L"移动"},
     {L"Move the pill by dragging it", L"拖动以移动胶囊"},
+    {L"Moved", L"移动"},
     {L"Music", L"音乐"},
     {L"Muted", L"已静音"},
+    {L"Name", L"名称"},
     {L"Narrator", L"讲述人"},
     {L"Needs Windows' transparency effects: click to open Personalization > Colors", L"需要 Windows 的透明效果：点击打开 个性化 > 颜色"},
+    {L"Needs the bar style and the clock in the middle", L"需要条形样式并将时钟放在中间"},
     {L"Needs the date or the year on the clock", L"需要时钟显示日期或年份"},
     {L"Needs the notches (Fixed style)", L"需要刘海（固定样式）"},
     {L"Needs “%s” on", L"需要先打开“%s”"},
@@ -8943,6 +11646,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Network & internet", L"网络和 Internet"},
     {L"Network cable", L"网线"},
     {L"Network connections", L"网络连接"},
+    {L"Never", L"从不"},
     {L"New desktop", L"新建桌面"},
     {L"New notification", L"新通知"},
     {L"New task", L"新任务"},
@@ -8972,6 +11676,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Notches", L"刘海"},
     {L"Notes", L"笔记"},
     {L"Notes button", L"笔记按钮"},
+    {L"Nothing found", L"未找到"},
     {L"Nothing playing", L"没有正在播放的内容"},
     {L"Nothing to do", L"没有待办"},
     {L"Nothing waiting", L"没有待更新项"},
@@ -8982,6 +11687,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Now", L"现在"},
     {L"Off", L"关"},
     {L"Off while “%s” is on", L"“%s”打开时不可用"},
+    {L"Off with no animations (“None”)", L"无动画时关闭（“无”）"},
+    {L"Off with the bar style", L"条形样式下关闭"},
     {L"Off with the notches (Fixed style)", L"刘海开启时关闭（固定样式）"},
     {L"Off: only the app's icon peeks out of the line", L"关闭时：只有应用图标从线条中探出"},
     {L"On", L"开"},
@@ -8993,9 +11700,9 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"One icon per app (Phone Link's phone apps together)", L"每个应用一个图标（手机连接的手机应用合并）"},
     {L"Only for the Fixed style", L"仅限固定样式"},
     {L"Only for the Island style: the Fixed style and the bar keep one place and the same items for every app", L"仅限灵动岛样式：固定样式和横条对所有应用使用同一位置和相同项目"},
-    {L"Only for the bar and the Fixed style", L"仅适用于菜单栏和固定样式"},
     {L"Only https links or file paths", L"仅支持 https 链接或文件路径"},
     {L"Only on the main island: change it in its settings", L"仅限主岛：请在主岛的设置中更改"},
+    {L"Only with the Glass off (it blurs them already), on the bar or on the Fixed style without notches and not hiding as a line", L"只在关闭玻璃时可用（玻璃已经会模糊）：条形样式，或没有刘海且不隐藏为线条的固定样式"},
     {L"Only with the icons opening in the pill", L"仅当图标在胶囊中展开时可用"},
     {L"Opacity", L"不透明度"},
     {L"Open", L"打开"},
@@ -9004,20 +11711,26 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Open in Explorer", L"在资源管理器中打开"},
     {L"Open the Windows notification center", L"打开 Windows 通知中心"},
     {L"Order of the items", L"项目顺序"},
+    {L"Other apps' icons before scrolling", L"滚动前显示的其他应用图标数"},
     {L"Other apps' tray icons", L"其他应用的托盘图标"},
     {L"Output", L"输出"},
     {L"Overcast", L"阴"},
     {L"PC screen only", L"仅电脑屏幕"},
     {L"Panels as wide as the island", L"面板与灵动岛同宽"},
+    {L"Panels size", L"面板大小"},
     {L"Partial", L"部分"},
     {L"Partly cloudy", L"局部多云"},
     {L"Password", L"密码"},
     {L"Paste an .ics link (Google Calendar: Settings, your calendar, Secret address in iCal format) or a file's path.", L"粘贴 .ics 链接（Google 日历：设置 > 你的日历 > iCal 格式的私密地址）或文件路径。"},
+    {L"Paused", L"已暂停"},
+    {L"Paused (every monitor)", L"已暂停（所有显示器）"},
     {L"Performance", L"性能"},
     {L"Personalization", L"个性化"},
     {L"Picture copied", L"已复制图片"},
     {L"Pictures", L"图片"},
     {L"Pill", L"胶囊"},
+    {L"Pill corners", L"胶囊圆角"},
+    {L"Pill height", L"胶囊高度"},
     {L"Pin a folder to the island", L"将文件夹固定到灵动岛"},
     {L"Place", L"位置"},
     {L"Place (or drag the pill)", L"位置（或拖动胶囊）"},
@@ -9046,10 +11759,12 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Reading…", L"正在读取…"},
     {L"Recycle Bin", L"回收站"},
     {L"Red", L"红色"},
+    {L"Remember my choice (it's in the island's settings)", L"记住我的选择（可在灵动岛设置中更改）"},
     {L"Reply", L"回复"},
     {L"Restart", L"重启"},
     {L"Restart now?", L"现在重启？"},
-    {L"Restart…", L"重启…"},
+    {L"Room at the pill's ends", L"胶囊两端的空间"},
+    {L"Rows", L"行"},
     {L"Safe to remove", L"可以安全移除"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"与主岛相同：这里的更改也适用于主岛 · + 为此显示器创建配置"},
     {L"Same as the main one", L"与主灵动岛相同"},
@@ -9063,24 +11778,25 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Screen brightness (the mouse wheel changes it)", L"屏幕亮度（用鼠标滚轮调节）"},
     {L"Screenshot", L"截图"},
     {L"Screenshot notifications open the picture (in Explorer)", L"截图通知打开图片（在资源管理器中）"},
+    {L"Scrolling", L"滚动"},
     {L"Search", L"搜索"},
+    {L"Search here (a name or *.pdf)", L"在此搜索（名称或 *.pdf）"},
     {L"Second screen only", L"仅第二屏幕"},
     {L"Seconds", L"秒"},
     {L"See it in a terminal", L"在终端中查看"},
     {L"Settings", L"设置"},
     {L"Shared memory", L"共享内存"},
     {L"Shortcuts", L"快捷键"},
+    {L"Show %zu hidden", L"显示 %zu 个已隐藏的事件"},
     {L"Show what they say", L"显示通知内容"},
     {L"Show what's copied (a bubble under the pill)", L"显示复制的内容（胶囊下方的气泡）"},
     {L"Showers", L"阵雨"},
     {L"Shut down", L"关机"},
     {L"Shut down now?", L"现在关机？"},
-    {L"Shut down…", L"关机…"},
     {L"Sign out", L"注销"},
     {L"Sign out now?", L"现在注销？"},
-    {L"Sign out…", L"注销…"},
     {L"Size", L"大小"},
-    {L"Size and transparency", L"大小和透明度"},
+    {L"Sizes", L"大小"},
     {L"Sleep", L"睡眠"},
     {L"Slide", L"滑动"},
     {L"Snooze", L"稍后提醒"},
@@ -9103,12 +11819,15 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Tasks button", L"任务按钮"},
     {L"Temperature", L"温度"},
     {L"Text", L"文字"},
+    {L"The app in focus on this monitor (its icon and name)", L"此显示器上的焦点应用（图标和名称）"},
+    {L"The bar doesn't minimize", L"栏不会最小化"},
     {L"The folder with your wallpapers", L"存放壁纸的文件夹"},
     {L"The island appears:", L"灵动岛显示在："},
     {L"The island follows the mouse between screens.", L"灵动岛跟随鼠标在屏幕之间移动。"},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"由灵动岛处理通知和声音（Windows 保持安静）"},
     {L"The island's: no banners or sounds from it", L"灵动岛的：它不显示横幅也不发出声音"},
     {L"The password has at least 8 characters.", L"密码至少需要 8 个字符。"},
+    {L"The pill's shape", L"胶囊形状"},
     {L"The title and the text, in the pill and in this list", L"标题和正文，显示在胶囊和此列表中"},
     {L"The weather service didn't answer", L"天气服务没有响应"},
     {L"The wheel on what's playing changes the song (not the volume)", L"在正在播放上滚动滚轮切换歌曲（而不是音量）"},
@@ -9117,16 +11836,19 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Three", L"三个"},
     {L"Thunderstorm", L"雷暴"},
     {L"Thunderstorm with hail", L"雷暴伴有冰雹"},
+    {L"Tiling", L"平铺"},
     {L"Time format", L"时间格式"},
+    {L"Tips under the icons and buttons (their names, an app's notifications)", L"图标和按钮下方的提示（名称、应用的通知）"},
     {L"Title", L"标题"},
+    {L"Title width", L"标题宽度"},
     {L"Today", L"今天"},
     {L"Today's color", L"今天的颜色"},
     {L"Tomorrow", L"明天"},
     {L"Too many agendas", L"日程订阅过多"},
-    {L"Too many events", L"事件太多"},
     {L"Topics", L"主题"},
     {L"Total", L"总计"},
     {L"Transition", L"过渡效果"},
+    {L"Translucent glass: a lighter tint and livelier colors", L"半透明玻璃：更浅的色调和更鲜艳的颜色"},
     {L"Tray, media and clock", L"托盘、媒体和时钟"},
     {L"Type to filter the shortcuts…", L"输入以筛选快捷键…"},
     {L"Type your note here…", L"在这里输入笔记…"},
@@ -9135,6 +11857,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"USB drives", L"U 盘"},
     {L"USB drives icon on the pill (open or eject them)", L"胶囊上的 U 盘图标（打开或弹出）"},
     {L"UV index", L"紫外线指数"},
+    {L"Ultrawide vertical stack", L"超宽垂直堆叠"},
     {L"Unavailable", L"不可用"},
     {L"Upcoming events", L"即将到来的事件"},
     {L"Upcoming holidays", L"即将到来的节假日"},
@@ -9146,6 +11869,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Upright on the left and right edges", L"在左右边缘竖立显示"},
     {L"Usage", L"使用率"},
     {L"Utilization", L"利用率"},
+    {L"Vertical stack", L"垂直堆叠"},
+    {L"Vertical stack, main on the right", L"垂直堆叠（主窗口在右侧）"},
     {L"Video memory in use (VRAM)", L"显存使用量 (VRAM)"},
     {L"Videos", L"视频"},
     {L"Virtual desktops", L"虚拟桌面"},
@@ -9168,14 +11893,17 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"While the app is in front, the pill moves there and shows only the lit icons. Dragging it then changes its place too.", L"当该应用在前台时，胶囊会移到那里并只显示点亮的图标。之后拖动它也会改变它的位置。"},
     {L"Wi-Fi / network", L"Wi-Fi / 网络"},
     {L"Wi-Fi is off", L"Wi-Fi 已关闭"},
+    {L"Widgets", L"小组件"},
     {L"Win+A opens the island's control center", L"Win+A 打开灵动岛的控制中心"},
     {L"Win+N opens the island's notifications", L"Win+N 打开灵动岛的通知"},
     {L"Windows", L"Windows"},
     {L"Windows Update", L"Windows 更新"},
     {L"Windows places", L"Windows 位置"},
+    {L"Windows shows the networks only to apps allowed to use the location: click to turn on \"Let desktop apps access your location\"", L"Windows 只向可以使用位置的应用显示网络：点击开启\u201c允许桌面应用访问你的位置\u201d"},
     {L"Windows' own: no notification sounds", L"Windows 自己的：没有通知声音"},
     {L"With names", L"带名称"},
     {L"Working…", L"正在执行…"},
+    {L"Workspace", L"工作区"},
     {L"Write", L"输入"},
     {L"Y M D", L"年 月 日"},
     {L"Year", L"年份"},
@@ -9188,6 +11916,9 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"komorebi", L"komorebi"},
     {L"komorebi (start, stop, reload)", L"komorebi（启动、停止、重新加载）"},
     {L"komorebi isn't installed", L"未安装 komorebi"},
+    {L"komorebi's layout", L"komorebi 布局"},
+    {L"komorebi: hide the workspaces without windows", L"komorebi：隐藏没有窗口的工作区"},
+    {L"komorebi: its layout on the pill (a menu changes it)", L"komorebi：胶囊上的布局（用菜单切换）"},
     {L"komorebi: with masir (focus follows the mouse)", L"komorebi：同时运行 masir（焦点跟随鼠标）"},
     {L"komorebi: with whkd (its shortcuts)", L"komorebi：同时运行 whkd（它的快捷键）"},
     {L"more", L"更多"},
@@ -9202,13 +11933,25 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
 };
 // clang-format on
 
-// The language of the island's own texts: like the Windows display language,
-// English unless it's Portuguese or Chinese (Simplified; the traditional
-// script reads English).
+// The language of the island's own texts: the one chosen, or like the
+// Windows display language, English unless it's Portuguese or Chinese
+// (Simplified; the traditional script reads English).
 enum class TextLanguage { English, Portuguese, Chinese };
 
+// The one chosen in the island's settings (islandLanguage, for every
+// island): 0 like Windows, 1 English, 2 Portuguese, 3 Chinese.
+int g_textLanguage = 0;
+
 TextLanguage IslandTextLanguage() {
-    static const TextLanguage language = [] {
+    switch (g_textLanguage) {
+        case 1:
+            return TextLanguage::English;
+        case 2:
+            return TextLanguage::Portuguese;
+        case 3:
+            return TextLanguage::Chinese;
+    }
+    static const TextLanguage windows = [] {
         const LANGID id = GetUserDefaultUILanguage();
         if (PRIMARYLANGID(id) == LANG_PORTUGUESE) {
             return TextLanguage::Portuguese;
@@ -9220,7 +11963,54 @@ TextLanguage IslandTextLanguage() {
         }
         return TextLanguage::English;
     }();
-    return language;
+    return windows;
+}
+
+// The names in dates (days, months, AM or PM) in the island's language when
+// one is chosen; otherwise, and for the rest (24 hours, the week's first
+// day, units), the Windows regional format.
+PCWSTR DateLocale() {
+    switch (g_textLanguage) {
+        case 1:
+            return L"en-US";
+        case 2:
+            return L"pt-BR";
+        case 3:
+            return L"zh-CN";
+    }
+    return LOCALE_NAME_USER_DEFAULT;
+}
+
+// The day and the month in the order the dates' language writes them
+// ("October 18", "18 de outubro" without its words, "10月18日"), with the
+// month's name short or whole.
+std::wstring MonthDayPicture(bool shortMonth) {
+    std::wstring kept;
+    WCHAR pattern[64];
+    if (GetLocaleInfoEx(DateLocale(), LOCALE_SMONTHDAY, pattern,
+                        ARRAYSIZE(pattern))) {
+        bool quoted = false;
+        for (PCWSTR c = pattern; *c; c++) {
+            if (*c == L'\'') {
+                quoted = !quoted;
+            } else if (!quoted &&
+                       (*c != L' ' || (!kept.empty() && kept.back() != L' '))) {
+                kept += *c;
+            }
+        }
+        while (!kept.empty() && kept.back() == L' ') {
+            kept.pop_back();
+        }
+    }
+    if (kept.find(L'd') == std::wstring::npos ||
+        kept.find(L'M') == std::wstring::npos) {
+        return shortMonth ? L"d MMM" : L"d MMMM";
+    }
+    if (const size_t month = kept.find(L"MMMM");
+        shortMonth && month != std::wstring::npos) {
+        kept.erase(month, 1);
+    }
+    return kept;
 }
 
 // The island's own texts, in English, Portuguese or Chinese (a text without
@@ -9467,6 +12257,8 @@ BOOL CALLBACK CollectMonitorProc(HMONITOR monitor,
     return TRUE;
 }
 
+// Each physical monitor, with its place in this order (counted over all of
+// them), its display monitor, and its place among that one's.
 template <typename F>
 void ForEachPhysicalMonitor(F&& f) {
     std::vector<HMONITOR> monitors;
@@ -9474,6 +12266,7 @@ void ForEachPhysicalMonitor(F&& f) {
         nullptr, nullptr,
         CollectMonitorProc,
         (LPARAM)&monitors);
+    int index = 0;
     for (HMONITOR monitor : monitors) {
         DWORD count = 0;
         if (!GetNumberOfPhysicalMonitorsFromHMONITOR(monitor, &count) ||
@@ -9485,38 +12278,192 @@ void ForEachPhysicalMonitor(F&& f) {
                                              physical.data())) {
             continue;
         }
-        for (const auto& one : physical) {
-            f(one.hPhysicalMonitor);
+        for (DWORD within = 0; within < count; within++) {
+            f(physical[within], index++, monitor, (int)within);
         }
         DestroyPhysicalMonitors(count, physical.data());
     }
 }
 
-// From 0 to 100, -1 if no monitor answers.
-int ReadBrightness() {
-    int level = -1;
-    ForEachPhysicalMonitor([&](HANDLE monitor) {
-        DWORD minimum, current, maximum;
-        if (level < 0 &&
-            GetMonitorBrightness(monitor, &minimum, &current, &maximum) &&
-            maximum > minimum) {
-            level = (int)std::lround(100.0 * (current - minimum) /
-                                     (maximum - minimum));
+// The monitors' names as Windows' display settings show them, each with
+// the display device it shows ("\\.\DISPLAY1"; one per screen showing it).
+std::vector<std::pair<std::wstring, std::wstring>> MonitorFriendlyNames() {
+    std::vector<std::pair<std::wstring, std::wstring>> names;
+    UINT32 pathCount = 0;
+    UINT32 modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount,
+                                    &modeCount) != ERROR_SUCCESS) {
+        return names;
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                           &modeCount, modes.data(),
+                           nullptr) != ERROR_SUCCESS) {
+        return names;
+    }
+    for (UINT32 i = 0; i < pathCount; i++) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+        source.header = {DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+                         sizeof(source), paths[i].sourceInfo.adapterId,
+                         paths[i].sourceInfo.id};
+        DISPLAYCONFIG_TARGET_DEVICE_NAME target{};
+        target.header = {DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+                         sizeof(target), paths[i].targetInfo.adapterId,
+                         paths[i].targetInfo.id};
+        if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS &&
+            DisplayConfigGetDeviceInfo(&target.header) == ERROR_SUCCESS &&
+            target.monitorFriendlyDeviceName[0]) {
+            names.push_back(
+                {source.viewGdiDeviceName, target.monitorFriendlyDeviceName});
         }
+    }
+    return names;
+}
+
+// A monitor whose brightness can be changed.
+struct BrightnessMonitor {
+    // Its place in ForEachPhysicalMonitor's order (see BrightnessJob).
+    int index = 0;
+    std::wstring name;
+    // From 0 to 100.
+    int level = 0;
+    // The screen it shows (an island's monitor).
+    HMONITOR screen = nullptr;
+};
+
+// The same names numbered ("DELL P2419H (2)"); a missing one is
+// "Monitor 1", "Monitor 2"...
+void NameBrightnessMonitors(std::vector<BrightnessMonitor>& list) {
+    std::vector<std::wstring> names;
+    for (size_t i = 0; i < list.size(); i++) {
+        std::wstring name = list[i].name;
+        if (name.empty()) {
+            name = std::wstring(Tr(L"Monitor", L"Monitor")) + L" " +
+                   std::to_wstring(i + 1);
+        } else {
+            int same = 0;
+            int place = 0;
+            for (size_t j = 0; j < list.size(); j++) {
+                if (list[j].name == list[i].name) {
+                    same++;
+                    place += j < i;
+                }
+            }
+            if (same > 1) {
+                name += L" (" + std::to_wstring(place + 1) + L")";
+            }
+        }
+        names.push_back(std::move(name));
+    }
+    for (size_t i = 0; i < list.size(); i++) {
+        list[i].name = std::move(names[i]);
+    }
+}
+
+// The monitors that tell their brightness, with their names.
+std::vector<BrightnessMonitor> ReadBrightnessMonitors() {
+    const auto names = MonitorFriendlyNames();
+    std::vector<BrightnessMonitor> list;
+    ForEachPhysicalMonitor([&](const PHYSICAL_MONITOR& one, int index,
+                               HMONITOR monitor, int within) {
+        DWORD minimum, current, maximum;
+        if (!GetMonitorBrightness(one.hPhysicalMonitor, &minimum, &current,
+                                  &maximum) ||
+            maximum <= minimum) {
+            return;
+        }
+        BrightnessMonitor entry;
+        entry.index = index;
+        entry.screen = monitor;
+        entry.level = (int)std::lround(100.0 * (current - minimum) /
+                                       (maximum - minimum));
+        MONITORINFOEX info{};
+        info.cbSize = sizeof(info);
+        if (GetMonitorInfo(monitor, &info)) {
+            int k = 0;
+            for (const auto& [device, name] : names) {
+                if (_wcsicmp(device.c_str(), info.szDevice) == 0 &&
+                    k++ == within) {
+                    entry.name = name;
+                    break;
+                }
+            }
+        }
+        // (Windows' generic name otherwise, like "Generic PnP Monitor".)
+        if (entry.name.empty()) {
+            entry.name = one.szPhysicalMonitorDescription;
+        }
+        list.push_back(std::move(entry));
     });
+    NameBrightnessMonitors(list);
+    return list;
+}
+
+// From 0 to 100 (the screen's monitor's, or the first one's), -1 if no
+// monitor answers.
+// Only the monitors asked about are asked over DDC/CI (slow, and some
+// flicker).
+int ReadBrightness(HMONITOR screen) {
+    int level = -1;
+    for (const bool any : {false, true}) {
+        if (!any && !screen) {
+            continue;
+        }
+        ForEachPhysicalMonitor(
+            [&](const PHYSICAL_MONITOR& one, int, HMONITOR monitor, int) {
+                DWORD minimum, current, maximum;
+                if (level >= 0 || (!any && monitor != screen) ||
+                    !GetMonitorBrightness(one.hPhysicalMonitor, &minimum,
+                                          &current, &maximum) ||
+                    maximum <= minimum) {
+                    return;
+                }
+                level = (int)std::lround(100.0 * (current - minimum) /
+                                         (maximum - minimum));
+            });
+        if (level >= 0) {
+            break;
+        }
+    }
     return level;
 }
 
-void WriteBrightness(int level) {
-    ForEachPhysicalMonitor([&](HANDLE monitor) {
-        DWORD minimum, current, maximum;
-        if (GetMonitorBrightness(monitor, &minimum, &current, &maximum) &&
-            maximum > minimum) {
+// Changes of the displays (WM_DISPLAYCHANGE), so a list of monitors read
+// before one is known to be old.
+std::atomic<int> g_displayChanges;
+
+constexpr int kMaxBrightnessMonitors = 8;
+
+// The levels asked for, by monitor (-1: left as it is), and for the
+// monitors of a screen. False if one asked didn't answer (turned off: still
+// a display for Windows, but its DDC/CI is gone).
+bool WriteBrightness(const int (&levels)[kMaxBrightnessMonitors],
+                     HMONITOR screen,
+                     int screenLevel) {
+    bool answered = true;
+    ForEachPhysicalMonitor(
+        [&](const PHYSICAL_MONITOR& one, int index, HMONITOR monitor, int) {
+            const int level =
+                screenLevel >= 0 && monitor == screen ? screenLevel
+                : index < kMaxBrightnessMonitors      ? levels[index]
+                                                      : -1;
+            if (level < 0) {
+                return;
+            }
+            DWORD minimum, current, maximum;
+            if (!GetMonitorBrightness(one.hPhysicalMonitor, &minimum,
+                                      &current, &maximum) ||
+                maximum <= minimum) {
+                answered = false;
+                return;
+            }
             SetMonitorBrightness(
-                monitor, minimum + (DWORD)std::lround((maximum - minimum) *
-                                                      level / 100.0));
-        }
-    });
+                one.hPhysicalMonitor,
+                minimum +
+                    (DWORD)std::lround((maximum - minimum) * level / 100.0));
+        });
+    return answered;
 }
 
 void OpenUri(PCWSTR uri) {
@@ -9547,7 +12494,8 @@ bool IsDoNotDisturbOn() {
 
 // Turns "Do not disturb" on or off, with the interface the Windows
 // notification center uses (the quiet hours settings). It isn't documented;
-// "Do not disturb" on is the "priority only" profile. Returns whether it
+// "Do not disturb" on is the "priority only" profile (or, `alarmsOnly`, the
+// stricter "alarms only" one, which lets no app through). Returns whether it
 // worked.
 struct IQuietHoursSettings : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE get_UserSelectedProfile(LPWSTR* id) = 0;
@@ -9565,7 +12513,7 @@ constexpr GUID kIID_IQuietHoursSettings = {
     0x4ffb,
     {0xae, 0x67, 0xb6, 0xc1, 0xbc, 0x29, 0x63, 0x1f}};
 
-bool SetDoNotDisturb(bool on) {
+bool SetDoNotDisturb(bool on, bool alarmsOnly = false) {
     winrt::com_ptr<IQuietHoursSettings> settings;
     if (FAILED(CoCreateInstance(kCLSID_QuietHoursSettings, nullptr,
                                 CLSCTX_LOCAL_SERVER, kIID_IQuietHoursSettings,
@@ -9574,8 +12522,9 @@ bool SetDoNotDisturb(bool on) {
         return false;
     }
     const HRESULT result = settings->put_UserSelectedProfile(
-        on ? L"Microsoft.QuietHoursProfile.PriorityOnly"
-           : L"Microsoft.QuietHoursProfile.Unrestricted");
+        !on          ? L"Microsoft.QuietHoursProfile.Unrestricted"
+        : alarmsOnly ? L"Microsoft.QuietHoursProfile.AlarmsOnly"
+                     : L"Microsoft.QuietHoursProfile.PriorityOnly");
     if (FAILED(result)) {
         Wh_Log(L"Switching \"Do not disturb\" failed: %08X", (unsigned)result);
     }
@@ -9589,7 +12538,10 @@ bool SetDoNotDisturb(bool on) {
 // notification center and its database, where the island reads them, and
 // the new-notification state still changes); the island shows each one and
 // plays its sound as it comes. Its own "Do not disturb" (g_islandQuiet) then
-// silences only it. Windows' setting goes back when the island stops, the
+// silences only it, and makes Windows' "alarms only" (an app on Windows'
+// priority list would show Windows' banner and play its sound; calls,
+// alarms and reminders still come through the island). Windows' setting
+// goes back when the island stops, the
 // option is turned off, at the next start after a crash ("turnedDndOn"), and
 // from explorer if the island's process ends without doing it (see
 // WatchIslandProcess). If "Do not disturb" was already on, it's left alone.
@@ -9605,6 +12557,21 @@ bool g_dndSwitchFailed;
 // It was seen on while the island wanted it (turned on by the island, or
 // already on), so it going off is Windows' doing.
 bool g_dndSeenOn;
+// The profile the island set while it has it on: 1 "alarms only" (with its
+// own "Do not disturb"), 0 "priority only", -1 not known (just started).
+int g_turnedDndAlarms = -1;
+
+// Whether an island's process runs: its mutex exists while it does (one it
+// can't open exists too). In the island's own process once it released its
+// own (see WhTool_ModUninit): a new version's.
+bool IslandProcessRunning() {
+    if (HANDLE running =
+            OpenMutex(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID)) {
+        CloseHandle(running);
+        return true;
+    }
+    return GetLastError() == ERROR_ACCESS_DENIED;
+}
 
 // In the island's process, on the island's thread (COM is ready there).
 void UpdateWindowsQuiet(bool islandRunning) {
@@ -9640,16 +12607,29 @@ void UpdateWindowsQuiet(bool islandRunning) {
             g_dndSeenOn = true;
             return;
         }
-        if (SetDoNotDisturb(true)) {
+        if (SetDoNotDisturb(true, g_islandQuiet)) {
             g_turnedDndOn = true;
             g_turnedDndOnAt = NowSeconds();
+            g_turnedDndAlarms = g_islandQuiet;
             SetUserIntValue(L"turnedDndOn", 1);
         } else {
             g_dndSwitchFailed = true;
         }
+    } else if (wanted && g_turnedDndOn && g_turnedDndAlarms != g_islandQuiet) {
+        // The island's own "Do not disturb" switched (or not known yet):
+        // Windows' follows it.
+        if (SetDoNotDisturb(true, g_islandQuiet)) {
+            g_turnedDndAlarms = g_islandQuiet;
+        }
     } else if (!wanted && g_turnedDndOn) {
+        // Stopping for a new version's island (it started meanwhile, and goes
+        // on with it): left on.
+        if (g_unloading && IslandProcessRunning()) {
+            return;
+        }
         if (SetDoNotDisturb(false)) {
             g_turnedDndOn = false;
+            g_turnedDndAlarms = -1;
             SetUserIntValue(L"turnedDndOn", 0);
         }
     }
@@ -9707,17 +12687,60 @@ HANDLE g_islandProcessWait;
 DWORD g_islandProcessId;
 SRWLOCK g_islandWatchLock = SRWLOCK_INIT;
 
-VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
-    if (g_unloading || !GetUserIntValue(L"turnedDndOn", 0)) {
-        return;
-    }
+// (On a thread of its own: explorer's threads have their own apartments.)
+DWORD WINAPI TurnLeftoverDndOffThreadProc(LPVOID) {
     const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (SetDoNotDisturb(false)) {
+    if (GetUserIntValue(L"turnedDndOn", 0) && SetDoNotDisturb(false)) {
         SetUserIntValue(L"turnedDndOn", 0);
         Wh_Log(L"The island stopped: \"Do not disturb\" turned back off");
     }
     if (SUCCEEDED(init)) {
         CoUninitialize();
+    }
+    return 0;
+}
+
+VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
+    // A new version's island may still be starting (the old one's process
+    // can end before the new one's is up): given a few seconds to take it
+    // over. (In short steps: StopWatchingIslandProcess waits for this.)
+    constexpr int kTakeOverSteps = 30;
+    for (int step = 0; step < kTakeOverSteps; step++) {
+        if (g_unloading || IslandProcessRunning()) {
+            return;
+        }
+        Sleep(100);
+    }
+    if (g_unloading || IslandProcessRunning()) {
+        return;
+    }
+    TurnLeftoverDndOffThreadProc(nullptr);
+}
+
+// The explorer.exe part unloading (the mod turned off or removed) while no
+// island's process runs (it ended without turning "Do not disturb" back off,
+// and didn't start again): turned back off here, since nothing else would.
+// Not while the island's process is still ending (it releases its mutex
+// first, see WhTool_ModUninit): it turns it off itself, or hands it to a new
+// version's. Only by the taskbar's explorer.exe (the one the island talks
+// to): another one (a folder window's) never knew the island's process.
+void RestoreDndWithoutIsland() {
+    if (!OwnsTaskbar() || !GetUserIntValue(L"turnedDndOn", 0) ||
+        IslandProcessRunning()) {
+        return;
+    }
+    AcquireSRWLockShared(&g_islandWatchLock);
+    const bool ending = g_islandProcess &&
+                        WaitForSingleObject(g_islandProcess, 0) == WAIT_TIMEOUT;
+    ReleaseSRWLockShared(&g_islandWatchLock);
+    if (ending) {
+        return;
+    }
+    if (HANDLE thread = CreateThread(nullptr, 0, TurnLeftoverDndOffThreadProc,
+                                     nullptr, 0, nullptr)) {
+        // (Its code is the mod's, so it ends before the mod unloads.)
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
 }
 
@@ -9754,8 +12777,9 @@ void WatchIslandProcess(HWND island) {
         return;
     }
     HANDLE wait = nullptr;
-    if (!RegisterWaitForSingleObject(&wait, process, IslandProcessEndedCallback,
-                                     nullptr, INFINITE, WT_EXECUTEONLYONCE)) {
+    if (!RegisterWaitForSingleObject(
+            &wait, process, IslandProcessEndedCallback, nullptr, INFINITE,
+            WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
         CloseHandle(process);
         return;
     }
@@ -9912,6 +12936,17 @@ constexpr UINT kAutoHideCheckMs = 120;
 // SaveActiveProfileSoon).
 constexpr UINT_PTR kProfileSaveTimerId = 24;
 constexpr UINT kProfileSaveMs = 800;
+// What's playing's app asked to come back from the tray (its cover
+// clicked): looked for this often, for this long, before it's started by
+// its ID (see Island::WatchMediaAppOpen).
+constexpr UINT_PTR kMediaOpenTimerId = 26;
+constexpr UINT kMediaOpenCheckMs = 100;
+constexpr double kMediaOpenSeconds = 1;
+// Files held on the folders' item while dragged: its panel opens; and a
+// moment after they left the item (gone to the panel, or not).
+constexpr UINT_PTR kFoldersDropTimerId = 27;
+constexpr UINT_PTR kFoldersDragLeftTimerId = 28;
+constexpr UINT kFoldersDragLeftMs = 300;
 constexpr UINT kMonitorCheckMs = 250;
 // How far the island stays open while it glides to another monitor (its
 // dot, see Island::AppearFade).
@@ -9920,6 +12955,11 @@ constexpr double kMoveDot = 0.2;
 // may still be installing (at most this often).
 constexpr UINT_PTR kDeviceRetryTimerId = 19;
 constexpr double kDeviceRetrySeconds = 2;
+// Every glass made again this long after the island starts, then after each
+// next wait (see RenewAllGlass): at sign-in, Windows may not be ready for
+// its blur in the first moments.
+constexpr UINT_PTR kGlassRenewTimerId = 29;
+constexpr UINT kGlassRenewMs[] = {15000, 30000, 75000};
 constexpr UINT kUrgentSoundMaxMs = 60000;
 constexpr UINT kPinDelayMs = 2000;
 constexpr double kPinGrowSeconds = 0.22;
@@ -9927,10 +12967,10 @@ constexpr double kPinGrowSeconds = 0.22;
 // stops (seconds).
 constexpr double kMediaMinShown = 2.0;
 // The title on the pill: a short one gets its artist next to it (so the
-// island doesn't shrink to a sliver), and a long one is cut (with "...").
+// island doesn't shrink to a sliver), and a long one is cut (with "...")
+// past the width chosen (see islandMediaTitleLimit).
 constexpr float kMediaTitleShortWidth = 90;
 constexpr float kMediaTitleMinWidth = 60;
-constexpr float kMediaTitleMaxWidth = 150;
 constexpr double kMediaLinger = 1.5;
 // The wheel on what's playing changing the song: at most once in this long
 // (a touchpad sends many small steps).
@@ -10628,16 +13668,9 @@ class LayeredCanvas {
         if (m_bitmap) {
             DeleteObject(m_bitmap);
             m_bitmap = nullptr;
-            m_bits = nullptr;
         }
         m_room = {};
     }
-
-    // What was last drawn: premultiplied BGRA rows (Stride() bytes apart),
-    // top first.
-    const BYTE* Bits() const { return (const BYTE*)m_bits; }
-    SIZE Size() const { return m_size; }
-    int Stride() const { return m_room.cx * 4; }
 
     // Starts drawing on a canvas of `size`, cleared.
     bool Begin(SIZE size) {
@@ -10665,10 +13698,10 @@ class LayeredCanvas {
             info.bmiHeader.biPlanes = 1;
             info.bmiHeader.biBitCount = 32;
             info.bmiHeader.biCompression = BI_RGB;
-            m_bitmap = CreateDIBSection(m_dc, &info, DIB_RGB_COLORS, &m_bits,
+            void* bits = nullptr;
+            m_bitmap = CreateDIBSection(m_dc, &info, DIB_RGB_COLORS, &bits,
                                         nullptr, 0);
             if (!m_bitmap) {
-                m_bits = nullptr;
                 m_room = {};
                 return false;
             }
@@ -10732,7 +13765,6 @@ class LayeredCanvas {
     HRESULT m_lastError = S_OK;
     HDC m_dc = nullptr;
     HBITMAP m_bitmap = nullptr;
-    void* m_bits = nullptr;
     HGDIOBJ m_oldBitmap = nullptr;
     // What's drawn, and the bitmap's own size (a step bigger).
     SIZE m_size{};
@@ -10744,7 +13776,10 @@ class LayeredCanvas {
 struct NetworkInfo {
     bool connected = false;
     bool internet = false;
-    // -1 when not on Wi-Fi.
+    // On Wi-Fi: its signal (0-100) and name, which Windows gives only to
+    // apps allowed to use the location (on newer Windows 11 builds):
+    // -1 and empty otherwise.
+    bool wifi = false;
     int signal = -1;
     std::wstring wifiName;
     // A Wi-Fi adapter joining a network (looking, associating, signing in).
@@ -10787,9 +13822,762 @@ void StartIslandAnimation();
 // panel draws itself again on the next frame after one (see Panel::Animate).
 unsigned long long g_frameRequests = 0;
 
+////////////////////////////////////////////////////////////////////////////////
+// Liquid Glass (islandLiquidGlass): the island, its notches and its panels
+// drawn as glass, like on macOS: Windows' own blur of what's behind them (the
+// one of its acrylic), cut to their shapes, under a light tint, a soft light
+// and a bright edge. Each glass is a window of its own right under the
+// island's (or a panel's) window, drawn by Windows from composition visuals:
+// screenshots and recordings see it.
+
+// A glass's shape, in its window's coordinates: a rounded rectangle, or a
+// notch (see NotchGeometry) when `shoulder` isn't negative.
+struct GlassShape {
+    D2D1_RECT_F rect{};
+    float radius = 0;
+    float shoulder = -1;
+    bool edgeLeft = false;
+    bool edgeRight = false;
+    // The color over the blur, and how much of it all shows (fading in and
+    // out).
+    D2D1_COLOR_F tint{};
+    float opacity = 1;
+};
+
+bool SameGlassShape(const GlassShape& a, const GlassShape& b) {
+    auto same = [](const D2D1_COLOR_F& x, const D2D1_COLOR_F& y) {
+        return x.r == y.r && x.g == y.g && x.b == y.b && x.a == y.a;
+    };
+    return a.rect.left == b.rect.left && a.rect.top == b.rect.top &&
+           a.rect.right == b.rect.right && a.rect.bottom == b.rect.bottom &&
+           a.radius == b.radius && a.shoulder == b.shoulder &&
+           a.edgeLeft == b.edgeLeft && a.edgeRight == b.edgeRight &&
+           same(a.tint, b.tint) &&
+           a.opacity == b.opacity;
+}
+
+constexpr WCHAR kGlassClassName[] = L"WindhawkMacIslandDockGlass";
+
+// Windows.UI.Composition's interop for a desktop window and for a Direct2D
+// shape, not in the compiler's headers.
+struct ICompositorDesktopInteropLocal : ::IUnknown {
+    virtual HRESULT __stdcall CreateDesktopWindowTarget(HWND window,
+                                                        BOOL isTopmost,
+                                                        void** target) = 0;
+    virtual HRESULT __stdcall EnsureOnThread(DWORD threadId) = 0;
+};
+template <>
+inline constexpr winrt::guid
+    winrt::impl::guid_v<ICompositorDesktopInteropLocal>{
+        0x29E691FA,
+        0x4567,
+        0x4DCA,
+        {0xB3, 0x19, 0xD0, 0xF2, 0x07, 0xEB, 0x68, 0x07}};
+struct IGeometrySource2DInteropLocal : ::IUnknown {
+    virtual HRESULT __stdcall GetGeometry(ID2D1Geometry** value) = 0;
+    virtual HRESULT __stdcall TryGetGeometryUsingFactory(
+        ID2D1Factory* factory,
+        ID2D1Geometry** value) = 0;
+};
+template <>
+inline constexpr winrt::guid
+    winrt::impl::guid_v<IGeometrySource2DInteropLocal>{
+        0x0657AF73,
+        0x53FD,
+        0x47CF,
+        {0x84, 0xFF, 0xC8, 0x49, 0x2D, 0x2A, 0x80, 0xA3}};
+// DWMWA_USE_HOSTBACKDROPBRUSH.
+constexpr DWORD kDwmUseHostBackdropBrush = 17;
+
+// A notch's shape (see NotchGeometry) for a composition clip.
+struct GlassPath
+    : winrt::implements<GlassPath,
+                        winrt::Windows::Graphics::IGeometrySource2D,
+                        IGeometrySource2DInteropLocal> {
+    explicit GlassPath(ID2D1Geometry* geometry) {
+        m_geometry.copy_from(geometry);
+    }
+    HRESULT __stdcall GetGeometry(ID2D1Geometry** value) noexcept override {
+        m_geometry.copy_to(value);
+        return S_OK;
+    }
+    HRESULT __stdcall TryGetGeometryUsingFactory(
+        ID2D1Factory*,
+        ID2D1Geometry** value) noexcept override {
+        *value = nullptr;
+        return E_NOTIMPL;
+    }
+
+   private:
+    winrt::com_ptr<ID2D1Geometry> m_geometry;
+};
+
+// Windows' energy saver: the glass gives way to the plain color while it's
+// on (Windows itself turns its transparency effects off then).
+bool g_energySaver = false;
+// How much of the background's color is over the glass, of the island's and
+// of its panels' (times the backgrounds' opacity slider): enough to read
+// their texts over any window.
+constexpr float kLiquidTint = 0.5f;
+constexpr float kLiquidPanelTint = 0.62f;
+// The translucent glass (see islandGlassTranslucent): that much of the tint,
+// and its colors that much livelier (as a saturation).
+constexpr float kGlassTranslucentTint = 0.5f;
+constexpr float kGlassTranslucentSaturation = 1.5f;
+// The glass's blur slider at 100%: this much more blur (a Gaussian blur's
+// standard deviation, in pixels) over Windows' own.
+constexpr float kGlassBlurMost = 20;
+// Windows refused its blur to a glass's window: tried again this much later.
+constexpr double kGlassRetrySeconds = 5;
+
+// The tint over the glass as chosen (lighter when translucent).
+float GlassTint(float tint) {
+    return g_settings.islandGlassTranslucent ? tint * kGlassTranslucentTint
+                                             : tint;
+}
+
+// Windows.UI.Composition's effects take Direct2D's (more blur, a color
+// matrix) through this interop, not in the compiler's headers.
+struct IGraphicsEffectD2D1InteropLocal : ::IUnknown {
+    virtual HRESULT __stdcall GetEffectId(GUID* id) = 0;
+    virtual HRESULT __stdcall GetNamedPropertyMapping(LPCWSTR name,
+                                                      UINT* index,
+                                                      int* mapping) = 0;
+    virtual HRESULT __stdcall GetPropertyCount(UINT* count) = 0;
+    virtual HRESULT __stdcall GetProperty(UINT index, void** value) = 0;
+    virtual HRESULT __stdcall GetSource(UINT index, void** source) = 0;
+    virtual HRESULT __stdcall GetSourceCount(UINT* count) = 0;
+};
+template <>
+inline constexpr winrt::guid
+    winrt::impl::guid_v<IGraphicsEffectD2D1InteropLocal>{
+        0x2FC57384,
+        0xA068,
+        0x44D7,
+        {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
+// CLSID_D2D1GaussianBlur and CLSID_D2D1ColorMatrix (d2d1effects.h).
+constexpr GUID kD2DGaussianBlur{
+    0x1FEB6D69,
+    0x2FE6,
+    0x4AC9,
+    {0x8C, 0x58, 0x1D, 0x7F, 0x93, 0xE7, 0xA6, 0xA5}};
+constexpr GUID kD2DColorMatrix{
+    0x921F03D6,
+    0x641C,
+    0x47DF,
+    {0x85, 0x2D, 0xB4, 0xBB, 0x61, 0x53, 0xAE, 0x11}};
+
+// One effect over the glass's blur (as the taskbar styler's WindhawkBlur,
+// from TranslucentTB): more blur ("BlurAmount", which can change on the
+// brush), or a color matrix (livelier colors). Its properties: the blur's
+// standard deviation, balanced optimization and hard borders (no faded
+// edge); the matrix, premultiplied alpha and no clamping.
+struct GlassEffect
+    : winrt::implements<
+          GlassEffect,
+          winrt::Windows::Graphics::Effects::IGraphicsEffect,
+          winrt::Windows::Graphics::Effects::IGraphicsEffectSource,
+          IGraphicsEffectD2D1InteropLocal> {
+    bool blurs = true;
+    float blur = 0;
+    float matrix[20] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                        1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
+    winrt::Windows::Graphics::Effects::IGraphicsEffectSource input{nullptr};
+
+    winrt::hstring Name() { return m_name; }
+    void Name(winrt::hstring const& name) { m_name = name; }
+
+    HRESULT __stdcall GetEffectId(GUID* id) noexcept override {
+        if (!id) {
+            return E_INVALIDARG;
+        }
+        *id = blurs ? kD2DGaussianBlur : kD2DColorMatrix;
+        return S_OK;
+    }
+    HRESULT __stdcall GetNamedPropertyMapping(LPCWSTR name,
+                                              UINT* index,
+                                              int* mapping) noexcept override {
+        if (!name || !index || !mapping) {
+            return E_INVALIDARG;
+        }
+        if (blurs && wcscmp(name, L"BlurAmount") == 0) {
+            *index = 0;
+            // GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT.
+            *mapping = 1;
+            return S_OK;
+        }
+        return E_INVALIDARG;
+    }
+    HRESULT __stdcall GetPropertyCount(UINT* count) noexcept override {
+        if (!count) {
+            return E_INVALIDARG;
+        }
+        *count = 3;
+        return S_OK;
+    }
+    HRESULT __stdcall GetProperty(UINT index, void** value) noexcept override {
+        if (!value) {
+            return E_INVALIDARG;
+        }
+        try {
+            namespace Foundation = winrt::Windows::Foundation;
+            winrt::Windows::Foundation::IInspectable property{nullptr};
+            if (index == 0) {
+                property = blurs ? Foundation::PropertyValue::CreateSingle(blur)
+                                 : Foundation::PropertyValue::CreateSingleArray(
+                                       winrt::array_view<const float>(
+                                           matrix, matrix + 20));
+            } else if (index == 1) {
+                // D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED, or
+                // D2D1_COLORMATRIX_ALPHA_MODE_PREMULTIPLIED.
+                property = Foundation::PropertyValue::CreateUInt32(1);
+            } else if (index == 2) {
+                // D2D1_BORDER_MODE_HARD, or no clamping.
+                property =
+                    blurs ? Foundation::PropertyValue::CreateUInt32(1)
+                          : Foundation::PropertyValue::CreateBoolean(false);
+            } else {
+                return E_BOUNDS;
+            }
+            *value = winrt::detach_abi(
+                property.as<winrt::Windows::Foundation::IPropertyValue>());
+            return S_OK;
+        } catch (...) {
+            return winrt::to_hresult();
+        }
+    }
+    HRESULT __stdcall GetSource(UINT index, void** source) noexcept override {
+        if (!source) {
+            return E_INVALIDARG;
+        }
+        if (index != 0 || !input) {
+            return E_BOUNDS;
+        }
+        *source = nullptr;
+        winrt::copy_to_abi(input, *source);
+        return S_OK;
+    }
+    HRESULT __stdcall GetSourceCount(UINT* count) noexcept override {
+        if (!count) {
+            return E_INVALIDARG;
+        }
+        *count = 1;
+        return S_OK;
+    }
+
+   private:
+    winrt::hstring m_name;
+};
+
+// Windows' transparency effects (defined with the island's colors): Windows'
+// blur needs them.
+extern bool g_transparencyEffects;
+
+// Windows' blur for the glass, seen by screenshots and recordings (see
+// GlassLayer::ShowBlurred): the island's thread's compositor, with the
+// dispatcher queue it needs, the blur of what's behind (one brush for every
+// glass), and a factory for the notches' shapes.
+struct GlassComposition {
+    winrt::Windows::System::DispatcherQueueController queue{nullptr};
+    winrt::Windows::UI::Composition::Compositor compositor{nullptr};
+    winrt::Windows::UI::Composition::CompositionBackdropBrush backdrop{nullptr};
+    winrt::com_ptr<ID2D1Factory> factory;
+};
+[[clang::no_destroy]] std::optional<GlassComposition> g_glassComposition;
+// It couldn't be made: not tried again until the island's thread starts
+// again.
+bool g_glassCompositionFailed = false;
+// Each glass's window is made again once this changes (see RenewAllGlass):
+// one made as Windows starts may never get Windows' blur (measured at
+// sign-in: the island's glass stayed black, while the panels' glass made
+// later showed the blur).
+unsigned g_glassGeneration = 0;
+
+// Whether the Liquid Glass shows now (the island's own look, see
+// IslandScope): Windows' blur only with its transparency effects on.
+bool LiquidGlassOn() {
+    return g_settings.islandLiquidGlass && !g_energySaver &&
+           g_transparencyEffects && !g_glassCompositionFailed;
+}
+
+// A glass under one of the island's windows (its owner): a window of its own,
+// which the mouse goes through, right under it.
+class GlassLayer {
+   public:
+    GlassLayer() = default;
+    GlassLayer(const GlassLayer&) = delete;
+    GlassLayer& operator=(const GlassLayer&) = delete;
+    // Shows it under `owner` (on the screen at `position`, `size` big) with
+    // these shapes, in the owner's coordinates; made again if any changed.
+    void Show(HWND owner,
+              POINT position,
+              SIZE size,
+              const std::vector<GlassShape>& shapes);
+    void Hide();
+    void Destroy();
+    // Drawn on the screen with what's behind: the owner leaves its own
+    // background out then.
+    bool Shown() const { return m_visible && m_drawn; }
+    // Right under its owner again (it was put on top of the others).
+    void FollowOwner();
+
+   private:
+    void ShowBlurred(HWND owner,
+                     POINT position,
+                     SIZE size,
+                     const std::vector<GlassShape>& shapes);
+    void UpdateBlurredShape(size_t index, const GlassShape& shape);
+    // The blur of what's behind as chosen: Windows' own, or (more blur or
+    // translucent) an effect over it, made again when it changes.
+    winrt::Windows::UI::Composition::CompositionBrush Backdrop(
+        GlassComposition& parts);
+    // Its window and everything drawn on it gone.
+    void DestroyWindowParts();
+    void Place(HWND owner, POINT position, SIZE size, bool moved);
+
+    HWND m_hwnd = nullptr;
+    HWND m_owner = nullptr;
+    // The window's composition tree, and each shape's visuals (the blur, the
+    // tint, the light over its upper half, the bright edge), with the shape
+    // they were made for.
+    winrt::Windows::UI::Composition::Desktop::DesktopWindowTarget
+        m_desktopTarget{nullptr};
+    winrt::Windows::UI::Composition::ContainerVisual m_root{nullptr};
+    struct BlurredShape {
+        winrt::Windows::UI::Composition::ContainerVisual container{nullptr};
+        winrt::Windows::UI::Composition::SpriteVisual backdrop{nullptr};
+        winrt::Windows::UI::Composition::SpriteVisual tint{nullptr};
+        winrt::Windows::UI::Composition::SpriteVisual sheen{nullptr};
+        winrt::Windows::UI::Composition::ShapeVisual rim{nullptr};
+        winrt::Windows::UI::Composition::CompositionColorBrush tintBrush{
+            nullptr};
+        winrt::Windows::UI::Composition::CompositionLinearGradientBrush
+            sheenBrush{nullptr};
+        winrt::Windows::UI::Composition::CompositionLinearGradientBrush
+            rimBrush{nullptr};
+        winrt::Windows::UI::Composition::CompositionSpriteShape rimShape{
+            nullptr};
+        // The blur it shows (see Backdrop).
+        winrt::Windows::UI::Composition::CompositionBrush backdropBrush{
+            nullptr};
+        GlassShape made;
+        bool hasShape = false;
+    };
+    std::vector<BlurredShape> m_blurred;
+    // The effect over Windows' blur (see Backdrop), the blur it adds, and
+    // whether it's the translucent one; it couldn't be made (Windows'
+    // own then, until the window is made again).
+    winrt::Windows::UI::Composition::CompositionEffectBrush m_effect{nullptr};
+    float m_effectBlur = -1;
+    bool m_effectTranslucent = false;
+    bool m_effectFailed = false;
+    POINT m_position{};
+    SIZE m_size{};
+    std::vector<GlassShape> m_shapes;
+    bool m_visible = false;
+    bool m_drawn = false;
+    // The g_glassGeneration its window was made for.
+    unsigned m_generation = 0;
+    // When Windows last refused its blur to the window (see ShowBlurred):
+    // tried again a while later, the plain color meanwhile.
+    double m_refusedAt = -100;
+};
+
+// The parts for Windows' blur, made the first time (nullptr if they can't
+// be).
+GlassComposition* GlassCompositionParts() {
+    if (g_glassComposition) {
+        return &*g_glassComposition;
+    }
+    if (g_glassCompositionFailed) {
+        return nullptr;
+    }
+    GlassComposition parts;
+    using CreateController_t =
+        HRESULT(WINAPI*)(DispatcherQueueOptions, void**);
+    static const HMODULE messaging = LoadLibraryEx(
+        L"CoreMessaging.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    auto createController =
+        messaging ? (CreateController_t)GetProcAddress(
+                        messaging, "CreateDispatcherQueueController")
+                  : nullptr;
+    const DispatcherQueueOptions options{sizeof(options),
+                                         DQTYPE_THREAD_CURRENT,
+                                         DQTAT_COM_STA};
+    HRESULT hr = E_NOTIMPL;
+    try {
+        if (!createController ||
+            FAILED(hr = createController(options,
+                                         winrt::put_abi(parts.queue))) ||
+            FAILED(hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                          __uuidof(ID2D1Factory), nullptr,
+                                          parts.factory.put_void()))) {
+            Wh_Log(L"Liquid Glass: Windows' blur failed: %08X", (unsigned)hr);
+            g_glassCompositionFailed = true;
+            return nullptr;
+        }
+        parts.compositor = winrt::Windows::UI::Composition::Compositor();
+        parts.backdrop = parts.compositor.CreateHostBackdropBrush();
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Liquid Glass: Windows' blur failed: %08X", (unsigned)e.code());
+        g_glassCompositionFailed = true;
+        return nullptr;
+    }
+    g_glassComposition.emplace(std::move(parts));
+    return &*g_glassComposition;
+}
+
+// With the island's thread, after every glass is gone.
+void ReleaseGlass() {
+    if (g_glassComposition) {
+        auto queue = std::move(g_glassComposition->queue);
+        g_glassComposition.reset();
+        // The queue ends with the messages it still has (pumped here, a
+        // short while at the most).
+        if (queue) {
+            try {
+                const auto shutdown = queue.ShutdownQueueAsync();
+                for (int i = 0;
+                     i < 100 && shutdown.Status() ==
+                                    winrt::Windows::Foundation::AsyncStatus::
+                                        Started;
+                     i++) {
+                    MsgWaitForMultipleObjects(0, nullptr, FALSE, 10,
+                                              QS_ALLINPUT);
+                    MSG msg;
+                    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                        DispatchMessage(&msg);
+                    }
+                }
+            } catch (winrt::hresult_error const& e) {
+                Wh_Log(L"Liquid Glass: ending the queue failed: %08X",
+                       (unsigned)e.code());
+            }
+        }
+    }
+    g_glassCompositionFailed = false;
+}
+
+LRESULT CALLBACK GlassWndProc(HWND hWnd, UINT msg, WPARAM wParam,
+                              LPARAM lParam) {
+    if (msg == WM_NCHITTEST) {
+        return HTTRANSPARENT;
+    }
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+void GlassLayer::Show(HWND owner,
+                      POINT position,
+                      SIZE size,
+                      const std::vector<GlassShape>& shapes) {
+    if (!owner || size.cx <= 0 || size.cy <= 0 || shapes.empty()) {
+        Hide();
+        return;
+    }
+    try {
+        ShowBlurred(owner, position, size, shapes);
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Liquid Glass: Windows' blur failed: %08X", (unsigned)e.code());
+        g_glassCompositionFailed = true;
+        Hide();
+        DestroyWindowParts();
+    }
+}
+
+void GlassLayer::Place(HWND owner, POINT position, SIZE size, bool moved) {
+    if (moved || !IsWindowVisible(m_hwnd) ||
+        GetWindow(owner, GW_HWNDNEXT) != m_hwnd) {
+        SetWindowPos(m_hwnd, owner, position.x, position.y, size.cx, size.cy,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+}
+
+// Windows' blur: the blur of what's behind (Windows' own, the one of its
+// acrylic), cut to each shape, under the tint, with the light over its upper
+// half and the bright edge. Composition visuals, which Windows draws: nothing
+// is drawn here again unless a shape changes, and screenshots and recordings
+// see it.
+void GlassLayer::ShowBlurred(HWND owner,
+                             POINT position,
+                             SIZE size,
+                             const std::vector<GlassShape>& shapes) {
+    GlassComposition* parts = GlassCompositionParts();
+    if (!parts) {
+        Hide();
+        return;
+    }
+    if (m_hwnd && m_generation != g_glassGeneration) {
+        DestroyWindowParts();
+    }
+    if (!m_hwnd && NowSeconds() - m_refusedAt < kGlassRetrySeconds) {
+        Hide();
+        return;
+    }
+    if (!m_hwnd) {
+        // The mouse goes through it.
+        m_hwnd = CreateWindowEx(WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED |
+                                    WS_EX_TRANSPARENT | WS_EX_TOPMOST |
+                                    WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                kGlassClassName, L"", WS_POPUP, 0, 0, 0, 0,
+                                nullptr, nullptr, g_module, nullptr);
+        if (!m_hwnd) {
+            Hide();
+            return;
+        }
+        SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
+        // (A window of an app that isn't from the Store can show Windows'
+        // blur of what's behind it only with this.)
+        const BOOL hostBackdrop = TRUE;
+        const HRESULT hr =
+            DwmSetWindowAttribute(m_hwnd, kDwmUseHostBackdropBrush,
+                                  &hostBackdrop, sizeof(hostBackdrop));
+        if (FAILED(hr)) {
+            Wh_Log(L"Liquid Glass: Windows refused its blur: %08X",
+                   (unsigned)hr);
+            m_refusedAt = NowSeconds();
+            DestroyWindowParts();
+            Hide();
+            return;
+        }
+        m_generation = g_glassGeneration;
+    }
+    if (!m_desktopTarget) {
+        auto interop = parts->compositor.as<ICompositorDesktopInteropLocal>();
+        winrt::check_hresult(interop->CreateDesktopWindowTarget(
+            m_hwnd, TRUE, winrt::put_abi(m_desktopTarget)));
+        m_root = parts->compositor.CreateContainerVisual();
+        m_desktopTarget.Root(m_root);
+    }
+    m_owner = owner;
+    const bool moved = !m_visible || position.x != m_position.x ||
+                       position.y != m_position.y || size.cx != m_size.cx ||
+                       size.cy != m_size.cy;
+    m_position = position;
+    m_size = size;
+    while (m_blurred.size() > shapes.size()) {
+        m_root.Children().Remove(m_blurred.back().container);
+        m_blurred.pop_back();
+    }
+    m_blurred.resize(shapes.size());
+    for (size_t i = 0; i < shapes.size(); i++) {
+        UpdateBlurredShape(i, shapes[i]);
+    }
+    m_shapes = shapes;
+    m_visible = true;
+    m_drawn = true;
+    Place(owner, position, size, moved);
+}
+
+winrt::Windows::UI::Composition::CompositionBrush GlassLayer::Backdrop(
+    GlassComposition& parts) {
+    namespace Composition = winrt::Windows::UI::Composition;
+    const float blur = kGlassBlurMost * g_settings.islandGlassBlur / 100.0f;
+    const bool translucent = g_settings.islandGlassTranslucent;
+    if ((blur <= 0 && !translucent) || m_effectFailed) {
+        return parts.backdrop;
+    }
+    try {
+        if (!m_effect || m_effectTranslucent != translucent) {
+            // Blurred further (its amount changes on the brush), then, when
+            // translucent, livelier: a saturation's matrix (Rec. 709 luma).
+            auto blurred = winrt::make_self<GlassEffect>();
+            blurred->Name(L"Blur");
+            blurred->input =
+                Composition::CompositionEffectSourceParameter(L"backdrop");
+            winrt::Windows::Graphics::Effects::IGraphicsEffect top =
+                blurred
+                    .as<winrt::Windows::Graphics::Effects::IGraphicsEffect>();
+            if (translucent) {
+                auto lively = winrt::make_self<GlassEffect>();
+                lively->Name(L"Lively");
+                lively->blurs = false;
+                const float s = kGlassTranslucentSaturation;
+                const float luma[3] = {0.2126f * (1 - s), 0.7152f * (1 - s),
+                                       0.0722f * (1 - s)};
+                for (int row = 0; row < 3; row++) {
+                    for (int column = 0; column < 3; column++) {
+                        lively->matrix[row * 4 + column] =
+                            luma[row] + (row == column ? s : 0);
+                    }
+                }
+                lively->input = blurred.as<
+                    winrt::Windows::Graphics::Effects::IGraphicsEffectSource>();
+                top = lively.as<
+                    winrt::Windows::Graphics::Effects::IGraphicsEffect>();
+            }
+            const auto factory = parts.compositor.CreateEffectFactory(
+                top, winrt::single_threaded_vector<winrt::hstring>(
+                         {L"Blur.BlurAmount"}));
+            m_effect = factory.CreateBrush();
+            m_effect.SetSourceParameter(L"backdrop", parts.backdrop);
+            m_effectTranslucent = translucent;
+            m_effectBlur = -1;
+        }
+        if (blur != m_effectBlur) {
+            m_effect.Properties().InsertScalar(L"Blur.BlurAmount", blur);
+            m_effectBlur = blur;
+        }
+        return m_effect;
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Liquid Glass: the blur's effect failed: %08X",
+               (unsigned)e.code());
+        m_effect = nullptr;
+        m_effectFailed = true;
+        return parts.backdrop;
+    }
+}
+
+void GlassLayer::UpdateBlurredShape(size_t index, const GlassShape& shape) {
+    namespace Composition = winrt::Windows::UI::Composition;
+    GlassComposition& parts = *g_glassComposition;
+    const Composition::Compositor& compositor = parts.compositor;
+    BlurredShape& v = m_blurred[index];
+    const winrt::Windows::Foundation::Numerics::float2 whole{(float)m_size.cx,
+                                                             (float)m_size.cy};
+    auto color = [](const D2D1_COLOR_F& c) {
+        return winrt::Windows::UI::Color{
+            (uint8_t)std::lround(std::clamp(c.a, 0.0f, 1.0f) * 255),
+            (uint8_t)std::lround(std::clamp(c.r, 0.0f, 1.0f) * 255),
+            (uint8_t)std::lround(std::clamp(c.g, 0.0f, 1.0f) * 255),
+            (uint8_t)std::lround(std::clamp(c.b, 0.0f, 1.0f) * 255)};
+    };
+    if (!v.container) {
+        v.container = compositor.CreateContainerVisual();
+        v.backdrop = compositor.CreateSpriteVisual();
+        v.tintBrush = compositor.CreateColorBrush();
+        v.tint = compositor.CreateSpriteVisual();
+        v.tint.Brush(v.tintBrush);
+        v.sheenBrush = compositor.CreateLinearGradientBrush();
+        v.sheenBrush.MappingMode(Composition::CompositionMappingMode::Absolute);
+        v.sheenBrush.ColorStops().Append(compositor.CreateColorGradientStop(
+            0, winrt::Windows::UI::Color{0x1A, 255, 255, 255}));
+        v.sheenBrush.ColorStops().Append(compositor.CreateColorGradientStop(
+            1, winrt::Windows::UI::Color{0, 255, 255, 255}));
+        v.sheen = compositor.CreateSpriteVisual();
+        v.sheen.Brush(v.sheenBrush);
+        // The bright edge: strongest at the top, faint on the sides, a bit
+        // again at the bottom.
+        v.rimBrush = compositor.CreateLinearGradientBrush();
+        v.rimBrush.MappingMode(Composition::CompositionMappingMode::Absolute);
+        for (const auto& [offset, alpha] :
+             {std::pair{0.0f, 0x80}, std::pair{0.35f, 0x1F},
+              std::pair{0.7f, 0x0F}, std::pair{1.0f, 0x48}}) {
+            v.rimBrush.ColorStops().Append(compositor.CreateColorGradientStop(
+                offset, winrt::Windows::UI::Color{(uint8_t)alpha, 255, 255,
+                                                  255}));
+        }
+        v.rimShape = compositor.CreateSpriteShape();
+        v.rimShape.StrokeBrush(v.rimBrush);
+        v.rimShape.StrokeThickness(1);
+        v.rim = compositor.CreateShapeVisual();
+        v.rim.Shapes().Append(v.rimShape);
+        for (const Composition::Visual& visual :
+             {v.backdrop.as<Composition::Visual>(),
+              v.tint.as<Composition::Visual>(),
+              v.sheen.as<Composition::Visual>(),
+              v.rim.as<Composition::Visual>()}) {
+            v.container.Children().InsertAtTop(visual);
+        }
+        m_root.Children().InsertAtTop(v.container);
+    }
+    for (const Composition::SpriteVisual& sprite :
+         {v.backdrop, v.tint, v.sheen}) {
+        sprite.Size(whole);
+    }
+    v.rim.Size(whole);
+    v.container.Opacity(std::clamp(shape.opacity, 0.0f, 1.0f));
+    v.rim.Opacity(EdgeAmount());
+    if (const Composition::CompositionBrush backdrop = Backdrop(parts);
+        backdrop != v.backdropBrush) {
+        v.backdrop.Brush(backdrop);
+        v.backdropBrush = backdrop;
+    }
+    v.tintBrush.Color(color(shape.tint));
+    if (v.hasShape && SameGlassShape(shape, v.made)) {
+        return;
+    }
+    // Its place changed: cut again.
+    const D2D1_RECT_F& rect = shape.rect;
+    Composition::CompositionGeometry fill{nullptr};
+    Composition::CompositionGeometry edge{nullptr};
+    if (shape.shoulder >= 0) {
+        const auto body =
+            NotchGeometry(parts.factory.get(), rect, shape.radius,
+                          shape.shoulder, shape.edgeLeft, shape.edgeRight, true);
+        const auto outline = NotchGeometry(parts.factory.get(), rect,
+                                           shape.radius, shape.shoulder,
+                                           shape.edgeLeft, shape.edgeRight,
+                                           false);
+        if (!body || !outline) {
+            return;
+        }
+        fill = compositor.CreatePathGeometry(
+            Composition::CompositionPath(winrt::make<GlassPath>(body.get())));
+        edge = compositor.CreatePathGeometry(
+            Composition::CompositionPath(winrt::make<GlassPath>(outline.get())));
+    } else {
+        auto rounded = compositor.CreateRoundedRectangleGeometry();
+        rounded.Offset({rect.left, rect.top});
+        rounded.Size({rect.right - rect.left, rect.bottom - rect.top});
+        rounded.CornerRadius({shape.radius, shape.radius});
+        fill = rounded;
+        const float inset = std::max(0.0f, shape.radius - 0.5f);
+        auto line = compositor.CreateRoundedRectangleGeometry();
+        line.Offset({rect.left + 0.5f, rect.top + 0.5f});
+        line.Size({std::max(0.0f, rect.right - rect.left - 1),
+                   std::max(0.0f, rect.bottom - rect.top - 1)});
+        line.CornerRadius({inset, inset});
+        edge = line;
+    }
+    for (const Composition::SpriteVisual& sprite :
+         {v.backdrop, v.tint, v.sheen}) {
+        sprite.Clip(compositor.CreateGeometricClip(fill));
+    }
+    v.rimShape.Geometry(edge);
+    v.sheenBrush.StartPoint({0, rect.top});
+    v.sheenBrush.EndPoint({0, (rect.top + rect.bottom) / 2});
+    v.rimBrush.StartPoint({0, rect.top});
+    v.rimBrush.EndPoint({0, rect.bottom});
+    v.made = shape;
+    v.hasShape = true;
+}
+
+void GlassLayer::DestroyWindowParts() {
+    m_blurred.clear();
+    m_effect = nullptr;
+    m_effectFailed = false;
+    m_root = nullptr;
+    m_desktopTarget = nullptr;
+    if (m_hwnd) {
+        DestroyWindow(m_hwnd);
+        m_hwnd = nullptr;
+    }
+}
+
+void GlassLayer::FollowOwner() {
+    if (m_visible && m_hwnd && m_owner &&
+        GetWindow(m_owner, GW_HWNDNEXT) != m_hwnd) {
+        SetWindowPos(m_hwnd, m_owner, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
+void GlassLayer::Hide() {
+    if (m_hwnd && IsWindowVisible(m_hwnd)) {
+        ShowWindow(m_hwnd, SW_HIDE);
+    }
+    m_owner = nullptr;
+    m_visible = false;
+    m_drawn = false;
+    m_shapes.clear();
+}
+
+void GlassLayer::Destroy() {
+    Hide();
+    DestroyWindowParts();
+}
+
 class Panel;
-// Gives a panel a new snapshot of the pill (see Island::CapturePill).
-void CapturePillFor(Panel& panel);
 // An island's window (none without one).
 HWND IslandWindow(const Island* island);
 
@@ -10947,20 +14735,19 @@ class Panel {
     bool Create(ID2D1Factory* factory, IDWriteFactory* dwrite);
     void Destroy();
     // `source` is the part of the island it grows out of, on the screen, and
-    // `anchor` the middle of the panel's top. `fromPill`: the pill becomes the
-    // panel (otherwise it drops out of an item of the bar).
-    // `below`: out of the pill, the middle of the panel's top under it (over
-    // it, growing up) when the pill is wider than the panel (unless panels
-    // follow the island's width). `behind`: under the island's window, so it
-    // comes out from behind it.
+    // `anchor` the middle of the panel's top (of its bottom when it opens
+    // up). `fromPill`: it grows out of the pill to under it (over it, on the
+    // lower half of the screen), under the item it opened from (otherwise it
+    // drops out of an item of the bar). `behind`: under the island's window,
+    // so it comes out from behind it (always, out of the pill).
     void Open(POINT anchor,
               float scale,
               D2D1_RECT_F source,
               bool fromPill,
-              const POINT* below = nullptr,
               bool behind = false);
-    // How the pill looks, drawn shrinking away as it stretches.
-    void SetPillSnapshot(const BYTE* bits, int stride, RECT rect);
+    // Open, it glides to another place (another item's view, see
+    // Island::MovePanel); it closes back into `source` then.
+    void MoveTo(POINT anchor, D2D1_RECT_F source);
     void Close();
     bool IsOpen() const { return m_target > 0; }
     // Which way it opens out of the island: down, up (on the lower half of
@@ -10972,6 +14759,7 @@ class Panel {
         if (m_hwnd && (m_open > 0 || m_openX > 0)) {
             SetWindowPos(m_hwnd, ZOrderPlace(), 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            m_liquid.FollowOwner();
         }
     }
     // Over everything, or, out from under a wider pill, right under its
@@ -10988,6 +14776,8 @@ class Panel {
     // fonts and pictures are made beforehand (for one slow to draw the first
     // time).
     void WarmUp(float scale);
+    // Laid out again at another scale while open (another panel size).
+    void Rescale(float scale);
     LRESULT HandleMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
    protected:
@@ -11016,6 +14806,11 @@ class Panel {
     virtual bool OnAppMessage(UINT, WPARAM, LPARAM) { return false; }
     // Before the window goes away.
     virtual void OnDestroy() {}
+    // Starting to close.
+    virtual void OnClose() {}
+    // Whether it stays open when another window takes the focus (closed
+    // otherwise, like a menu).
+    virtual bool StaysWhenDeactivated() const { return false; }
     // The mouse held by the window taken away (it closed, or another window
     // took it).
     virtual void OnCaptureLost() {}
@@ -11123,6 +14918,8 @@ class Panel {
     HWND m_hwnd = nullptr;
     IDWriteFactory* m_dwrite = nullptr;
     LayeredCanvas m_canvas;
+    // Its Liquid Glass (islandLiquidGlass, see GlassLayer).
+    GlassLayer m_liquid;
     float m_scale = 0;
     // The panel's place on the screen when open, and its size.
     POINT m_position{};
@@ -11141,17 +14938,14 @@ class Panel {
     double m_velocityX = 0;
     double m_heightDelay = 0;
     double m_target = 0;
+    // Out of the pill, to under it (see CenterWanted).
     bool m_fromPill = false;
-    // Out of the pill, joined to it (opening over it, as wide as it at
-    // least), or under it.
-    bool m_joinPill = false;
-    // Out from under a pill wider than it (see Open).
+    // Coming out from behind the island (see Open).
     bool m_underIsland = false;
     Direction m_direction = Direction::Down;
-    // Out of the pill, at least as wide as it.
+    // Out of the pill with panels following the island's width: at least as
+    // wide as it.
     float m_minWidth = 0;
-    // Opened under a pill wider than it (see CenterWanted).
-    bool m_belowPill = false;
     POINT m_anchor{};
     RECT m_monitorRect{};
     RECT m_workRect{};
@@ -11169,11 +14963,6 @@ class Panel {
     double m_shownCenter = 0;
     double m_centerVelocity = 0;
     float CenterWanted() const;
-    // The pill's snapshot: its pixels, and the bitmap made from them.
-    std::vector<BYTE> m_snapshotPixels;
-    SIZE m_snapshotSize{};
-    bool m_snapshotChanged = false;
-    winrt::com_ptr<ID2D1Bitmap> m_snapshot;
 };
 
 LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam,
@@ -11201,7 +14990,7 @@ bool Panel::Create(ID2D1Factory* factory, IDWriteFactory* dwrite) {
 
 void Panel::Destroy() {
     OnDestroy();
-    m_snapshot = nullptr;
+    m_liquid.Destroy();
     if (m_hwnd) {
         SetWindowLongPtr(m_hwnd, GWLP_USERDATA, 0);
         DestroyWindow(m_hwnd);
@@ -11236,7 +15025,6 @@ void Panel::Open(POINT anchor,
                  float scale,
                  D2D1_RECT_F source,
                  bool fromPill,
-                 const POINT* below,
                  bool behind) {
     if (!m_hwnd) {
         return;
@@ -11244,10 +15032,13 @@ void Panel::Open(POINT anchor,
     m_scrollSpot = -1;
     m_source = source;
     m_fromPill = fromPill;
-    m_joinPill = fromPill;
-    m_belowPill = false;
-    m_underIsland = behind;
-    m_minWidth = fromPill ? source.right - source.left : 0;
+    // Out of the pill, it grows out of the pill's body from behind the
+    // island (its window right under the island's), and closes back behind
+    // it; stretched to the pill's width, if chosen.
+    m_underIsland = behind || fromPill;
+    m_minWidth = fromPill && g_settings.islandPanelsFollow
+                     ? source.right - source.left
+                     : 0;
     m_scale = scale;
     // Where it opens, first: its layout depends on the room there.
     m_anchor = anchor;
@@ -11256,23 +15047,11 @@ void Panel::Open(POINT anchor,
                    &monitor);
     m_monitorRect = monitor.rcMonitor;
     m_workRect = monitor.rcWork;
+    // (Clicks go to it again; see Close.)
+    SetWindowLongPtr(m_hwnd, GWL_EXSTYLE,
+                     GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) & ~WS_EX_TRANSPARENT);
     Prepare(scale);
     OnOpen();
-    // A pill wider than the panel (as it opens, in its first view): the
-    // panel keeps its own width, stretching out of the pill's body to under
-    // it (or stretched to the pill's width, if chosen).
-    if (fromPill && below && !g_settings.islandPanelsFollow &&
-        source.right - source.left > m_size.cx) {
-        m_joinPill = false;
-        m_minWidth = 0;
-        m_anchor = *below;
-        m_belowPill = true;
-        // Its room depends on where it opens.
-        Prepare(scale);
-        // It grows out of the pill's body from behind the island (its
-        // window right under the island's), and closes back behind it.
-        m_underIsland = true;
-    }
 
     // Closed (not still closing): starts from the island part, at its size.
     if (m_open <= 0.01 && m_openX <= 0.01) {
@@ -11304,35 +15083,42 @@ void Panel::Open(POINT anchor,
     StartIslandAnimation();
 }
 
-void Panel::SetPillSnapshot(const BYTE* bits, int stride, RECT rect) {
-    m_snapshotPixels.clear();
-    m_snapshotSize = {};
-    m_snapshotChanged = true;
-    if (!bits || rect.right <= rect.left || rect.bottom <= rect.top) {
+void Panel::MoveTo(POINT anchor, D2D1_RECT_F source) {
+    if (!m_hwnd || m_target <= 0) {
         return;
     }
-    const int width = rect.right - rect.left;
-    const int height = rect.bottom - rect.top;
-    m_snapshotPixels.resize((size_t)width * height * 4);
-    for (int y = 0; y < height; y++) {
-        memcpy(&m_snapshotPixels[(size_t)y * width * 4],
-               bits + (size_t)(rect.top + y) * stride + rect.left * 4,
-               (size_t)width * 4);
+    m_anchor = anchor;
+    m_source = source;
+    if (m_fromPill && g_settings.islandPanelsFollow) {
+        m_minWidth = source.right - source.left;
     }
-    m_snapshotSize = {width, height};
+    // (The springs take it there, see Render.)
+    StartIslandAnimation();
+}
+
+void Panel::Rescale(float scale) {
+    if (!m_hwnd || m_target <= 0 || scale == m_scale) {
+        return;
+    }
+    m_scale = scale;
+    // (The springs take it to its new size, see Render.)
+    Prepare(scale);
+    StartIslandAnimation();
 }
 
 void Panel::Close() {
     if (m_target > 0) {
         m_target = 0;
+        OnClose();
         // Back behind the island (clicks in it may have brought it over).
         if (m_underIsland) {
             Raise();
         }
-        // The pill may have changed (the clock) since it opened.
-        if (m_fromPill) {
-            CapturePillFor(*this);
-        }
+        // Clicks go through it while it closes (to the island or what's
+        // under it), never to what it showed.
+        SetWindowLongPtr(m_hwnd, GWL_EXSTYLE,
+                         GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) |
+                             WS_EX_TRANSPARENT);
         StartIslandAnimation();
     }
     if (GetCapture() == m_hwnd) {
@@ -11349,6 +15135,12 @@ bool Panel::Animate(double dt) {
         return false;
     }
     if (m_open <= 0 && m_openX <= 0 && m_target <= 0) {
+        // (Opened and closed again before a frame: its window, shown with
+        // its first frame, goes too.)
+        if (IsWindowVisible(m_hwnd)) {
+            ShowWindow(m_hwnd, SW_HIDE);
+        }
+        m_liquid.Hide();
         return false;
     }
     bool moving;
@@ -11397,6 +15189,7 @@ bool Panel::Animate(double dt) {
     }
     if (!moving && m_open <= 0 && m_openX <= 0) {
         ShowWindow(m_hwnd, SW_HIDE);
+        m_liquid.Hide();
         return false;
     }
     // Drawn while something moves, once more as it stops, and after frames
@@ -11439,14 +15232,14 @@ float Panel::CenterWanted() const {
     if (!sideways && !m_fromPill && CentersOnScreen()) {
         return (m_workRect.left + m_workRect.right) / 2.0f;
     }
-    // Under a pill wider than it: under the item it opened from, but not
-    // past the pill's ends (in its middle once it's wider than the pill, or
-    // for a view meant for the screen's middle, like the settings).
-    if (m_belowPill) {
+    // Out of the pill: under the item it opened from, but not past the
+    // pill's ends (in its middle once it's wider than the pill, or for a view
+    // meant for the screen's middle, like the settings).
+    if (m_fromPill) {
         if (CentersOnScreen()) {
             return (m_source.left + m_source.right) / 2;
         }
-        const float half = m_size.cx / 2.0f;
+        const float half = std::max((float)m_size.cx, m_minWidth) / 2.0f;
         const float from = m_source.left + half;
         const float to = m_source.right - half;
         return from <= to ? std::clamp((float)m_anchor.x, from, to)
@@ -11456,10 +15249,9 @@ float Panel::CenterWanted() const {
 }
 
 // The island part stretches into the panel: a black shape going from the
-// island part's rect to the panel's, sideways and downwards on their own
-// springs. Out of the pill, the pill's contents shrink and fade away first,
-// then the panel's contents fade in, sliding down a little. Closing goes back
-// the same way.
+// island part's rect (from behind the pill, out of it) to the panel's,
+// sideways and downwards on their own springs, then the panel's contents
+// fade in, sliding down a little. Closing goes back the same way.
 void Panel::Render() {
     if (!m_hwnd) {
         return;
@@ -11520,20 +15312,6 @@ void Panel::Render() {
     }
     auto* target = m_canvas.target.get();
 
-    if (m_snapshotChanged) {
-        m_snapshotChanged = false;
-        m_snapshot = nullptr;
-        if (!m_snapshotPixels.empty()) {
-            target->CreateBitmap(
-                D2D1::SizeU(m_snapshotSize.cx, m_snapshotSize.cy),
-                m_snapshotPixels.data(), m_snapshotSize.cx * 4,
-                D2D1::BitmapProperties(
-                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                      D2D1_ALPHA_MODE_PREMULTIPLIED)),
-                m_snapshot.put());
-        }
-    }
-
     auto local = [&](const D2D1_RECT_F& r) {
         return D2D1_RECT_F{r.left - windowPosition.x, r.top - windowPosition.y,
                            r.right - windowPosition.x,
@@ -11562,78 +15340,32 @@ void Panel::Render() {
 
     winrt::com_ptr<ID2D1Factory> factory;
     target->GetFactory(factory.put());
-    // Its outline (`inset` in from its edge). Out of the pill, together with
-    // the pill's own shape: the pill stays under the panel, and its less
-    // rounded corners would show past the panel's.
-    auto outline = [&](float inset) {
-        const D2D1_ROUNDED_RECT panelShape{
-            {shape.left + inset, shape.top + inset, shape.right - inset,
-             shape.bottom - inset},
-            std::max(0.0f, radius - inset),
-            std::max(0.0f, radius - inset)};
-        winrt::com_ptr<ID2D1RoundedRectangleGeometry> panelGeometry;
-        factory->CreateRoundedRectangleGeometry(panelShape,
-                                                panelGeometry.put());
-        winrt::com_ptr<ID2D1Geometry> result = panelGeometry;
-        winrt::com_ptr<ID2D1RoundedRectangleGeometry> pillGeometry;
-        winrt::com_ptr<ID2D1PathGeometry> joined;
-        winrt::com_ptr<ID2D1GeometrySink> sink;
-        if (m_fromPill && m_joinPill && panelGeometry &&
-            SUCCEEDED(factory->CreateRoundedRectangleGeometry(
-                {{from.left + inset, from.top + inset, from.right - inset,
-                  from.bottom - inset},
-                 std::max(0.0f, fromRadius - inset),
-                 std::max(0.0f, fromRadius - inset)},
-                pillGeometry.put())) &&
-            SUCCEEDED(factory->CreatePathGeometry(joined.put())) &&
-            SUCCEEDED(joined->Open(sink.put())) &&
-            SUCCEEDED(panelGeometry->CombineWithGeometry(
-                pillGeometry.get(), D2D1_COMBINE_MODE_UNION, nullptr,
-                sink.get())) &&
-            SUCCEEDED(sink->Close())) {
-            result = joined;
-        }
-        return result;
-    };
-
-    // Opaque out of the pill, so the pill under it doesn't show through.
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
+    // Over the Liquid Glass (once it shows), only taking the mouse: the
+    // glass has the color and the bright edge.
+    const bool liquid = LiquidGlassOn();
+    const bool overLiquid = liquid && m_liquid.Shown();
     target->CreateSolidColorBrush(
-        Bg(1), brush.put());
-    if (auto fill = outline(0)) {
-        target->FillGeometry(fill.get(), brush.get());
-    }
-    brush->SetColor(Fg(0.10f * (m_fromPill ? 1.0f : std::clamp(progress * 2, 0.0f, 1.0f))));
-    if (auto edge = outline(0.5f)) {
-        target->DrawGeometry(edge.get(), brush.get(), 1);
+        overLiquid ? D2D1::ColorF(0, 0, 0, 1.0f / 255) : Bg(1), brush.put());
+    target->FillRoundedRectangle({shape, radius, radius}, brush.get());
+    if (!overLiquid) {
+        // Its edge (half a pixel in).
+        brush->SetColor(
+            Fg(0.10f * EdgeAmount() *
+               (m_fromPill ? 1.0f : std::clamp(progress * 2, 0.0f, 1.0f))));
+        const float edgeRadius = std::max(0.0f, radius - 0.5f);
+        target->DrawRoundedRectangle(
+            {{shape.left + 0.5f, shape.top + 0.5f, shape.right - 0.5f,
+              shape.bottom - 0.5f},
+             edgeRadius,
+             edgeRadius},
+            brush.get(), 1);
     }
 
     // Clipped to the rounded shape.
     winrt::com_ptr<ID2D1RoundedRectangleGeometry> clip;
     factory->CreateRoundedRectangleGeometry({shape, radius, radius},
                                             clip.put());
-
-    // The pill's contents, shrinking and fading away in the middle of the
-    // stretching shape.
-    const float pillOpacity = std::clamp(1 - progress * 4, 0.0f, 1.0f);
-    if (m_fromPill && m_joinPill && m_snapshot && pillOpacity > 0.01f &&
-        clip) {
-        const float shrink = 1 - 0.15f * progress;
-        const float w = m_snapshotSize.cx * shrink;
-        const float h = m_snapshotSize.cy * shrink;
-        const float centerX = (shape.left + shape.right) / 2;
-        const float centerY = from.top + m_snapshotSize.cy / 2.0f;
-        winrt::com_ptr<ID2D1Layer> layer;
-        target->CreateLayer(nullptr, layer.put());
-        target->PushLayer(
-            D2D1::LayerParameters(D2D1::InfiniteRect(), clip.get()),
-            layer.get());
-        target->DrawBitmap(m_snapshot.get(),
-                           {centerX - w / 2, centerY - h / 2, centerX + w / 2,
-                            centerY + h / 2},
-                           pillOpacity);
-        target->PopLayer();
-    }
 
     // The panel's contents (laid out at m_size), centered in the shape as
     // it changes size, fading in and sliding down into place.
@@ -11666,6 +15398,21 @@ void Panel::Render() {
     }
 
     m_canvas.End(m_hwnd, windowPosition, m_placing ? 0.0f : 1.0f);
+    if (liquid) {
+        GlassShape glass;
+        glass.rect = shape;
+        glass.radius = radius;
+        glass.tint = Bg(GlassTint(kLiquidPanelTint));
+        glass.opacity = m_placing ? 0.0f : 1.0f;
+        m_liquid.Show(m_hwnd, windowPosition, windowSize, {glass});
+        // (Gone: drawn again with its own background, as the island.)
+        if (overLiquid && !m_liquid.Shown()) {
+            Render();
+            return;
+        }
+    } else {
+        m_liquid.Hide();
+    }
 }
 
 LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
@@ -11676,7 +15423,8 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
     switch (msg) {
         case WM_ACTIVATE:
             // Clicked somewhere else (not a dialog of its own).
-            if (LOWORD(wParam) == WA_INACTIVE && !m_dialogShown) {
+            if (LOWORD(wParam) == WA_INACTIVE && !m_dialogShown &&
+                !StaysWhenDeactivated()) {
                 Close();
             }
             break;
@@ -13498,6 +17246,67 @@ std::vector<CalendarEvent> TakeDueReminders() {
     return due;
 }
 
+// Past events hidden from their day's list a while after their day
+// (calendarHidePastAfter: 0 never, 1 after a day, 2 a week, 3 thirty days),
+// one choice for every island (the events are the same for all), made in the
+// main island's calendar. Still marked on their day, and shown when asked
+// for (see CalendarPanel::DayEvents).
+int g_hidePastAfter = 0;
+
+// The days a calendarHidePastAfter choice waits (0: never hidden).
+int HidePastDays(int choice) {
+    return choice == 1 ? 1 : choice == 2 ? 7 : choice == 3 ? 30 : 0;
+}
+
+// Whether an event's day is at least `days` days before `today` (in
+// LocalMinutes, at midnight).
+bool EventIsPast(const CalendarEvent& event, long long today, int days) {
+    const long long day = LocalMinutes(event.year, event.month, event.day, 0);
+    return days > 0 && day && today - day >= days * 24LL * 60;
+}
+
+// Today in LocalMinutes, at midnight.
+long long TodayMinutes() {
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    return LocalMinutes(now.wYear, now.wMonth, now.wDay, 0);
+}
+
+// The events before today (see DeletePastEvents).
+size_t PastEventCount() {
+    const long long today = TodayMinutes();
+    return std::count_if(g_events.begin(), g_events.end(),
+                         [&](const CalendarEvent& event) {
+                             return EventIsPast(event, today, 1);
+                         });
+}
+
+// Changed when the events or their hiding change elsewhere (see
+// SetHidePastAfter, DeletePastEvents): an open calendar lays itself out
+// again.
+int g_eventsDropped = 0;
+
+void SetHidePastAfter(int choice) {
+    g_hidePastAfter = std::clamp(choice, 0, 3);
+    Wh_SetIntValue(L"calendarHidePastAfter", g_hidePastAfter);
+    g_eventsDropped++;
+}
+
+// Every event before today deleted (the calendar's "Delete past events").
+void DeletePastEvents() {
+    const long long today = TodayMinutes();
+    if (std::erase_if(g_events, [&](const CalendarEvent& event) {
+            return EventIsPast(event, today, 1);
+        })) {
+        SaveEvents();
+        g_eventsDropped++;
+    }
+}
+
+// Whether the island shows the main island's settings (see
+// Island::HasMainSettings); defined further down.
+bool IslandHasMainSettings(const Island* island);
+
 // A time as the clock's format says (see clockFormat), everywhere the island
 // shows one. With 12 hours, AM or PM (the regional format's words, or these)
 // goes in `marker` when it's drawn apart (smaller, on the pill), otherwise
@@ -13519,7 +17328,7 @@ std::wstring FormatClockTime(const SYSTEMTIME& time,
     std::wstring result = text;
     if (format == 2) {
         WCHAR designator[16] = L"";
-        GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &time, L"tt", designator,
+        GetTimeFormatEx(DateLocale(), 0, &time, L"tt", designator,
                         ARRAYSIZE(designator));
         const std::wstring words =
             designator[0] ? designator : time.wHour < 12 ? L"AM" : L"PM";
@@ -13590,6 +17399,21 @@ class CalendarPanel : public Panel {
    public:
     // Called every second while open, for the clock.
     void Refresh() {
+        // Events gone elsewhere, or hidden otherwise (see g_eventsDropped):
+        // the one being changed no longer, the rows laid out again.
+        if (m_eventsDropped != g_eventsDropped) {
+            m_eventsDropped = g_eventsDropped;
+            if (m_adding && m_editingId &&
+                std::none_of(g_events.begin(), g_events.end(),
+                             [&](const CalendarEvent& event) {
+                                 return event.id == m_editingId;
+                             })) {
+                StopEditing();
+            }
+            if (IsOpen()) {
+                Layout();
+            }
+        }
         if (IsOpen()) {
             Render();
         }
@@ -13629,6 +17453,11 @@ class CalendarPanel : public Panel {
         LinkField,
         LinkAdd,
         TodayChoice,
+        // When past events are hidden (the choice's index).
+        DeleteChoice,
+        DeletePast,
+        // "Show N hidden" under the day's events.
+        ShowHidden,
     };
     struct Hit {
         Part part = Part::None;
@@ -13674,7 +17503,7 @@ class CalendarPanel : public Panel {
                    const std::wstring& text,
                    PCWSTR placeholder,
                    bool focused);
-    std::vector<const CalendarEvent*> DayEvents() const;
+    std::vector<const CalendarEvent*> DayEvents(size_t* hidden = nullptr) const;
     void SaveNewEvent();
     void StartEditing(const CalendarEvent* event);
     void StopEditing();
@@ -13715,6 +17544,17 @@ class CalendarPanel : public Panel {
     // title, its time (or the whole day), and the reminder.
     bool m_adding = false;
     long long m_editingId = 0;
+    // g_eventsDropped when last seen (see Refresh).
+    int m_eventsDropped = 0;
+    // The chosen day's events hidden as past (see g_hidePastAfter): how
+    // many, their "Show N hidden" row, and the day they're shown for once
+    // that's clicked (year * 10000 + month * 100 + day).
+    size_t m_hiddenCount = 0;
+    D2D1_RECT_F m_hiddenRow{};
+    int m_showHiddenFor = 0;
+    int SelectedDayKey() const {
+        return m_selectedYear * 10000 + m_selectedMonth * 100 + m_selectedDay;
+    }
     // Where typing goes; in the hour and the minute, how many figures were
     // typed (two move on).
     enum class Field { Title, Hour, Minute } m_focus = Field::Title;
@@ -13739,6 +17579,14 @@ class CalendarPanel : public Panel {
     // The ones added in the calendar (the settings' ones are removed there).
     std::vector<bool> m_agendaRemovable;
     std::array<D2D1_RECT_F, 3> m_todayChips{};
+    // Past events hidden after (see g_hidePastAfter): its header and its
+    // choices, and the events' count with "Delete past events" (pressed
+    // twice) next to it. The main island's calendar only.
+    D2D1_RECT_F m_deleteHeader{};
+    std::array<D2D1_RECT_F, 4> m_deleteChips{};
+    D2D1_RECT_F m_countLine{};
+    D2D1_RECT_F m_deletePastButton{};
+    double m_deletePastArmedAt = -100;
     std::wstring m_newLink;
     std::wstring m_agendaStatusText;
     // The chosen day's agenda events (up to kEventsShown, and how many
@@ -13796,7 +17644,7 @@ void CalendarPanel::Prepare(float scale) {
                                    DWRITE_TEXT_ALIGNMENT_LEADING);
         m_dayFormat = MakeFormat(L"Segoe UI Variable Text",
                                  DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * scale);
-        m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+        m_iconFormat = MakeFormat(IconFont(),
                                   DWRITE_FONT_WEIGHT_NORMAL, 12 * scale);
         m_textFormat =
             MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
@@ -14034,11 +17882,26 @@ void CalendarPanel::ChangeMonth(int delta) {
     Layout();
 }
 
-std::vector<const CalendarEvent*> CalendarPanel::DayEvents() const {
+std::vector<const CalendarEvent*> CalendarPanel::DayEvents(
+    size_t* hidden) const {
     std::vector<const CalendarEvent*> events;
+    // Past the chosen wait (see g_hidePastAfter): only once asked for;
+    // `hidden` gets how many.
+    const int days =
+        m_showHiddenFor == SelectedDayKey() ? 0 : HidePastDays(g_hidePastAfter);
+    const long long today = TodayMinutes();
+    if (hidden) {
+        *hidden = 0;
+    }
     for (const auto& event : g_events) {
         if (event.year == m_selectedYear && event.month == m_selectedMonth &&
             event.day == m_selectedDay) {
+            if (EventIsPast(event, today, days)) {
+                if (hidden) {
+                    (*hidden)++;
+                }
+                continue;
+            }
             events.push_back(&event);
         }
     }
@@ -14064,6 +17927,7 @@ void CalendarPanel::Layout() {
         m_eventRows.clear();
         m_dayAgenda.clear();
         m_agendaEventRows.clear();
+        m_hiddenRow = {};
         m_upcoming.clear();
         m_upcomingAgenda.clear();
         m_agendaMore = 0;
@@ -14077,8 +17941,9 @@ void CalendarPanel::Layout() {
     m_agendaRows.clear();
     m_agendaRemovable.clear();
     m_agendaHint = m_linkField = m_linkAdd = m_agendaStatus =
-        m_todayHeader = {};
+        m_todayHeader = m_deleteHeader = {};
     m_todayChips = {};
+    m_deleteChips = {};
 
     // The days of the month shown, where they are.
     m_dayRects.clear();
@@ -14131,13 +17996,19 @@ void CalendarPanel::Layout() {
         y += row * 0.7f;
     }
     m_eventRows.clear();
-    const auto events = DayEvents();
+    const auto events = DayEvents(&m_hiddenCount);
     for (size_t i = 0; i < events.size() && (int)i < kEventsShown; i++) {
         m_eventRows.push_back(
             {events[i]->id, {padding, y, width - padding, y + row}});
         y += row;
     }
-    if (events.empty() && m_holidayRows.empty() && m_dayAgenda.empty()) {
+    m_hiddenRow = {};
+    if (m_hiddenCount) {
+        m_hiddenRow = {padding, y, width - padding, y + row * 0.7f};
+        y += row * 0.7f;
+    }
+    if (events.empty() && m_hiddenCount == 0 && m_holidayRows.empty() &&
+        m_dayAgenda.empty()) {
         // "No events".
         y += row;
     }
@@ -14230,7 +18101,18 @@ CalendarPanel::Hit CalendarPanel::HitTest(POINT pt) const {
                 return {Part::TodayChoice, (long long)i};
             }
         }
+        for (size_t i = 0; i < m_deleteChips.size(); i++) {
+            if (PointInRect(pt, m_deleteChips[i])) {
+                return {Part::DeleteChoice, (long long)i};
+            }
+        }
+        if (PointInRect(pt, m_deletePastButton)) {
+            return {Part::DeletePast};
+        }
         return {};
+    }
+    if (PointInRect(pt, m_hiddenRow)) {
+        return {Part::ShowHidden};
     }
     if (PointInRect(pt, m_previous)) {
         return {Part::Previous};
@@ -14380,8 +18262,8 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
                                    brush);
         }
         WCHAR date[96] = L"";
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_LONGDATE, &now, nullptr,
-                        date, ARRAYSIZE(date), nullptr);
+        GetDateFormatEx(DateLocale(), DATE_LONGDATE, &now, nullptr, date,
+                        ARRAYSIZE(date), nullptr);
         if (date[0]) {
             date[0] = towupper(date[0]);
         }
@@ -14459,7 +18341,7 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
         const int weekday = (firstDay + column) % 7;
         // LOCALE_SSHORTESTDAYNAME1 is Monday.
         WCHAR name[16] = L"";
-        GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT,
+        GetLocaleInfoEx(DateLocale(),
                         LOCALE_SSHORTESTDAYNAME1 + (weekday + 6) % 7, name,
                         ARRAYSIZE(name));
         const D2D1_RECT_F rect{padding + column * cell, headerTop,
@@ -14488,8 +18370,8 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
     SYSTEMTIME chosen{(WORD)m_selectedYear, (WORD)m_selectedMonth, 0,
                       (WORD)m_selectedDay};
     WCHAR day[64] = L"";
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &chosen, L"d MMMM", day,
-                    ARRAYSIZE(day), nullptr);
+    GetDateFormatEx(DateLocale(), 0, &chosen, MonthDayPicture(false).c_str(),
+                    day, ARRAYSIZE(day), nullptr);
     brush->SetColor(Fg(0.1f));
     target->FillRectangle({padding, m_eventsHeader.top, width - padding,
                            m_eventsHeader.top + 1},
@@ -14560,7 +18442,21 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
             brush);
     }
     const auto events = DayEvents();
-    if (events.empty() && holidays.empty() && m_dayAgenda.empty()) {
+    if (m_hiddenRow.bottom > m_hiddenRow.top) {
+        WCHAR more[64];
+        swprintf_s(more, Tr(L"Show %zu hidden", L"Mostrar %zu ocultos"),
+                   m_hiddenCount);
+        brush->SetColor(Fg(0.45f + 0.4f * Hover(m_hiddenRow,
+                                                m_hover.part ==
+                                                    Part::ShowHidden)));
+        target->DrawText(
+            more, (UINT32)wcslen(more), m_smallFormat.get(),
+            {m_hiddenRow.left + std::round(10 * scale), m_hiddenRow.top,
+             m_hiddenRow.right, m_hiddenRow.bottom},
+            brush);
+    }
+    if (events.empty() && m_hiddenCount == 0 && holidays.empty() &&
+        m_dayAgenda.empty()) {
         PCWSTR none = Tr(L"No events", L"Nenhum evento");
         brush->SetColor(Fg(0.4f));
         target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
@@ -14829,7 +18725,28 @@ void CalendarPanel::LayoutAgendas(float y) {
         const float left = padding + i * (chipWidth + gap);
         m_todayChips[i] = {left, y, left + chipWidth, y + chip};
     }
-    y += chip + padding;
+    y += chip;
+    m_deleteHeader = m_countLine = m_deletePastButton = {};
+    m_deleteChips = {};
+    if (IslandHasMainSettings(m_owner)) {
+        y += std::round(12 * scale);
+        m_deleteHeader = {padding, y, width - padding,
+                          y + std::round(kEventRowHeight * scale)};
+        y = m_deleteHeader.bottom;
+        const float deleteWidth =
+            std::floor((width - padding * 2 - gap * 3) / 4);
+        for (size_t i = 0; i < m_deleteChips.size(); i++) {
+            const float left = padding + i * (deleteWidth + gap);
+            m_deleteChips[i] = {left, y, left + deleteWidth, y + chip};
+        }
+        y += chip + gap;
+        const float button = std::round(170 * scale);
+        m_countLine = {padding, y, width - padding - button - gap, y + chip};
+        m_deletePastButton = {width - padding - button, y, width - padding,
+                              y + chip};
+        y += chip;
+    }
+    y += padding;
     m_size = {(LONG)width, (LONG)std::ceil(y)};
 }
 
@@ -14950,7 +18867,7 @@ void CalendarPanel::DrawAgendas(ID2D1RenderTarget* target,
                      m_todayHeader, brush);
     const int colors[] = {kTodayRed, m_windowsAccent, m_todayColor};
     const PCWSTR names[] = {Tr(L"Red", L"Vermelho"), Tr(L"Windows", L"Windows"),
-                            Tr(L"Choose…", L"Escolher…")};
+                            Tr(L"Choose", L"Escolher")};
     for (size_t i = 0; i < m_todayChips.size(); i++) {
         const D2D1_RECT_F& chip = m_todayChips[i];
         const bool chosen = m_todayMode == (int)i;
@@ -14984,6 +18901,89 @@ void CalendarPanel::DrawAgendas(ID2D1RenderTarget* target,
                           chip.right - std::round(4 * scale), chip.bottom},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
     }
+    // Past events hidden after: never, a day, a week or thirty days (the one
+    // in use outlined); the events' count, and "Delete past events".
+    if (m_deleteHeader.bottom <= m_deleteHeader.top) {
+        return;
+    }
+    brush->SetColor(Fg(0.1f));
+    target->FillRectangle({m_deleteHeader.left, m_deleteHeader.top,
+                           m_deleteHeader.right, m_deleteHeader.top + 1},
+                          brush);
+    PCWSTR deleteHeader =
+        Tr(L"Hide past events after", L"Ocultar eventos passados depois de");
+    brush->SetColor(Fg(0.6f));
+    target->DrawText(deleteHeader, (UINT32)wcslen(deleteHeader),
+                     m_smallFormat.get(), m_deleteHeader, brush,
+                     D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    const PCWSTR waits[] = {Tr(L"Never", L"Nunca"), Tr(L"1 day", L"1 dia"),
+                            Tr(L"7 days", L"7 dias"),
+                            Tr(L"30 days", L"30 dias")};
+    m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    for (size_t i = 0; i < m_deleteChips.size(); i++) {
+        const D2D1_RECT_F& chip = m_deleteChips[i];
+        const bool chosen = g_hidePastAfter == (int)i;
+        const float radius = (chip.bottom - chip.top) / 2;
+        brush->SetColor(Fg(
+            chosen ? 0.18f
+                   : 0.08f + 0.08f * Hover(chip,
+                                           m_hover.part == Part::DeleteChoice &&
+                                               m_hover.value == (long long)i)));
+        target->FillRoundedRectangle({chip, radius, radius}, brush);
+        if (chosen) {
+            brush->SetColor(Fg(0.7f));
+            target->DrawRoundedRectangle(
+                {{chip.left + 0.75f, chip.top + 0.75f, chip.right - 0.75f,
+                  chip.bottom - 0.75f},
+                 radius,
+                 radius},
+                brush, 1.5f);
+        }
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(waits[i], (UINT32)wcslen(waits[i]),
+                         m_smallFormat.get(), chip, brush,
+                         D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    // "Delete 12 past events?" while it waits for the second press.
+    const size_t past = PastEventCount();
+    const bool armed = NowSeconds() - m_deletePastArmedAt < 4 && past > 0;
+    {
+        const D2D1_RECT_F& button = m_deletePastButton;
+        const float radius = (button.bottom - button.top) / 2;
+        const float opacity = past > 0 ? 1.0f : 0.4f;
+        brush->SetColor(
+            armed ? D2D1::ColorF(1.0f, 0.27f, 0.23f, 0.9f)
+                  : Fg((0.08f + 0.08f * Hover(button, m_hover.part ==
+                                                          Part::DeletePast)) *
+                       opacity));
+        target->FillRoundedRectangle({button, radius, radius}, brush);
+        WCHAR label[64];
+        if (armed) {
+            swprintf_s(label, Tr(L"Delete %zu past events?",
+                                 L"Apagar %zu eventos passados?"),
+                       past);
+        } else {
+            wcscpy_s(label, Tr(L"Delete past events", L"Apagar eventos passados"));
+        }
+        brush->SetColor(armed ? D2D1::ColorF(1, 1, 1, 1) : Fg(0.9f * opacity));
+        target->DrawText(label, (UINT32)wcslen(label), m_smallFormat.get(),
+                         button, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    // "180 of 200 events", in orange once it's almost full.
+    WCHAR count[96];
+    swprintf_s(count, Tr(L"%zu of %zu events", L"%zu de %zu eventos"),
+               g_events.size(), kMaxEvents);
+    std::wstring countText = count;
+    const bool almostFull = g_events.size() + 20 >= kMaxEvents;
+    if (almostFull) {
+        countText += Tr(L" · almost full", L" · quase cheio");
+    }
+    brush->SetColor(almostFull ? D2D1::ColorF(1.0f, 0.62f, 0.04f, 1)
+                               : Fg(0.5f));
+    target->DrawText(countText.c_str(), (UINT32)countText.size(),
+                     m_smallFormat.get(), m_countLine, brush,
+                     D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
 
 // A link or a path typed (or pasted) added, and read.
@@ -15080,17 +19080,35 @@ void CalendarPanel::DrawUpcoming(ID2D1RenderTarget* target,
         for (const auto& row : rows) {
             otherYear = otherYear || row.date.wYear != now.wYear;
         }
-        const float dateWidth = std::round((otherYear ? 80 : 46) * scale);
-        float y = header.bottom;
+        // The dates, and their column as wide as the widest needs (longer
+        // in some languages, like "11月20日").
+        const std::wstring monthDay = MonthDayPicture(true);
+        std::vector<std::wstring> dates;
+        float dateWidth = std::round((otherYear ? 80 : 46) * scale);
         for (const auto& row : rows) {
             WCHAR date[32] = L"";
-            GetDateFormatEx(
-                LOCALE_NAME_USER_DEFAULT, 0, &row.date,
-                row.date.wYear != now.wYear ? L"d MMM yyyy" : L"d MMM", date,
-                ARRAYSIZE(date), nullptr);
+            const std::wstring picture =
+                monthDay + (row.date.wYear != now.wYear ? L" yyyy" : L"");
+            GetDateFormatEx(DateLocale(), 0, &row.date, picture.c_str(), date,
+                            ARRAYSIZE(date), nullptr);
+            dates.push_back(date);
+            winrt::com_ptr<IDWriteTextLayout> layout;
+            if (SUCCEEDED(m_dwrite->CreateTextLayout(date, (UINT32)wcslen(date),
+                                                     m_smallFormat.get(), 1000,
+                                                     line, layout.put()))) {
+                DWRITE_TEXT_METRICS metrics{};
+                layout->GetMetrics(&metrics);
+                dateWidth =
+                    std::max(dateWidth, std::ceil(metrics.width + 8 * scale));
+            }
+        }
+        float y = header.bottom;
+        for (size_t i = 0; i < rows.size(); i++) {
+            const Row& row = rows[i];
+            const std::wstring& date = dates[i];
             brush->SetColor(RgbColor(row.color, 1));
             target->DrawText(
-                date, (UINT32)wcslen(date), m_smallFormat.get(),
+                date.c_str(), (UINT32)date.size(), m_smallFormat.get(),
                 {header.left, y, header.left + dateWidth, y + line}, brush);
             brush->SetColor(Fg(0.85f));
             target->DrawText(
@@ -15140,8 +19158,8 @@ void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
     // Title ("Outubro de 2026").
     SYSTEMTIME first{(WORD)year, (WORD)month, 0, 1};
     WCHAR title[64] = L"";
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_YEARMONTH, &first, nullptr,
-                    title, ARRAYSIZE(title), nullptr);
+    GetDateFormatEx(DateLocale(), DATE_YEARMONTH, &first, nullptr, title,
+                    ARRAYSIZE(title), nullptr);
     if (title[0]) {
         title[0] = towupper(title[0]);
     }
@@ -15259,7 +19277,9 @@ void CalendarPanel::SaveNewEvent() {
         g_events.begin(), g_events.end(),
         [&](const CalendarEvent& e) { return m_editingId && e.id == m_editingId; });
     if (edited == g_events.end() && g_events.size() >= kMaxEvents) {
-        m_statusText = Tr(L"Too many events", L"Eventos demais");
+        m_statusText = Tr(L"Calendar full: delete past events in the gear",
+                          L"Calendário cheio: apague os eventos passados na "
+                          L"engrenagem");
         Layout();
         return;
     }
@@ -15411,6 +19431,30 @@ bool CalendarPanel::OnMouseUp(POINT pt) {
             if (hit.value == 2) {
                 StartColorDialog(L"", m_todayColor);
             }
+            return true;
+        case Part::DeleteChoice:
+            SetHidePastAfter((int)hit.value);
+            m_eventsDropped = g_eventsDropped;
+            Layout();
+            return true;
+        case Part::DeletePast:
+            // (Pressed again within a few seconds: deleted.)
+            if (PastEventCount() == 0) {
+                return true;
+            }
+            if (NowSeconds() - m_deletePastArmedAt >= 4) {
+                m_deletePastArmedAt = NowSeconds();
+                Render();
+                return true;
+            }
+            m_deletePastArmedAt = -100;
+            DeletePastEvents();
+            m_eventsDropped = g_eventsDropped;
+            Layout();
+            return true;
+        case Part::ShowHidden:
+            m_showHiddenFor = SelectedDayKey();
+            Layout();
             return true;
         case Part::None:
             break;
@@ -15781,21 +19825,22 @@ std::wstring FreshPath() {
     return path;
 }
 
-// Its tool, on PATH or where its installer or scoop put it; empty if it
+// A tool of komorebi's (komorebic.exe, whkd.exe), on PATH or where its
+// installer (`folder` under Program Files) or scoop put it; empty if it
 // isn't installed.
-std::wstring FindKomorebic() {
+std::wstring FindKomorebiTool(PCWSTR file, PCWSTR folder) {
     WCHAR path[MAX_PATH];
     const std::wstring fresh = FreshPath();
-    const DWORD found =
-        SearchPath(fresh.empty() ? nullptr : fresh.c_str(), L"komorebic.exe",
-                   nullptr, MAX_PATH, path, nullptr);
+    const DWORD found = SearchPath(fresh.empty() ? nullptr : fresh.c_str(),
+                                   file, nullptr, MAX_PATH, path, nullptr);
     if (found > 0 && found < MAX_PATH) {
         return path;
     }
     // (%ProgramW6432%: the island's process is 32-bit.)
-    for (PCWSTR place : {L"%ProgramW6432%\\komorebi\\bin\\komorebic.exe",
-                         L"%USERPROFILE%\\scoop\\shims\\komorebic.exe"}) {
-        if (ExpandEnvironmentStrings(place, path, MAX_PATH) &&
+    for (const std::wstring& place :
+         {L"%ProgramW6432%\\" + std::wstring(folder) + L"\\bin\\" + file,
+          L"%USERPROFILE%\\scoop\\shims\\" + std::wstring(file)}) {
+        if (ExpandEnvironmentStrings(place.c_str(), path, MAX_PATH) &&
             GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
             return path;
         }
@@ -15803,26 +19848,46 @@ std::wstring FindKomorebic() {
     return {};
 }
 
-// Whether komorebi runs, in this session.
-bool KomorebiRunning() {
+std::wstring FindKomorebic() {
+    return FindKomorebiTool(L"komorebic.exe", L"komorebi");
+}
+
+// Whether komorebi and whkd are installed, for the settings (-1 until
+// looked for, see LookForKomorebi).
+int g_komorebiFound = -1;
+int g_whkdFound = -1;
+
+void LookForKomorebi() {
+    g_komorebiFound = !FindKomorebic().empty();
+    g_whkdFound = !FindKomorebiTool(L"whkd.exe", L"whkd").empty();
+}
+
+// komorebi's process in this session, or 0 if it doesn't run.
+DWORD KomorebiProcessId() {
     DWORD session = 0;
     ProcessIdToSessionId(GetCurrentProcessId(), &session);
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
-        return false;
+        return 0;
     }
-    bool running = false;
+    DWORD found = 0;
     PROCESSENTRY32 entry{};
     entry.dwSize = sizeof(entry);
-    for (BOOL more = Process32First(snapshot, &entry); more && !running;
+    for (BOOL more = Process32First(snapshot, &entry); more && !found;
          more = Process32Next(snapshot, &entry)) {
         DWORD its = 0;
-        running = _wcsicmp(entry.szExeFile, L"komorebi.exe") == 0 &&
-                  ProcessIdToSessionId(entry.th32ProcessID, &its) &&
-                  its == session;
+        if (_wcsicmp(entry.szExeFile, L"komorebi.exe") == 0 &&
+            ProcessIdToSessionId(entry.th32ProcessID, &its) &&
+            its == session) {
+            found = entry.th32ProcessID;
+        }
     }
     CloseHandle(snapshot);
-    return running;
+    return found;
+}
+
+bool KomorebiRunning() {
+    return KomorebiProcessId() != 0;
 }
 
 // Its version: from komorebi.exe beside its tool (scoop's shim says where
@@ -16039,6 +20104,53 @@ DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
     return 0;
 }
 
+// A job's commands on a thread of their own, which gets its own copy of the
+// stop event (`*stop` is the caller's, `*thread` the thread); false if it
+// couldn't start.
+bool StartKomorebiJob(const std::wstring& commands,
+                      int button,
+                      HWND notify,
+                      HANDLE* thread,
+                      HANDLE* stop) {
+    HANDLE event = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    HANDLE copy = nullptr;
+    if (!event || !DuplicateHandle(GetCurrentProcess(), event,
+                                   GetCurrentProcess(), &copy, 0, FALSE,
+                                   DUPLICATE_SAME_ACCESS)) {
+        if (event) {
+            CloseHandle(event);
+        }
+        return false;
+    }
+    auto* job = new KomorebiJob{commands, button, notify, copy};
+    *thread = CreateThread(nullptr, 0, KomorebiThreadProc, job, 0, nullptr);
+    if (!*thread) {
+        CloseHandle(copy);
+        CloseHandle(event);
+        delete job;
+        return false;
+    }
+    *stop = event;
+    return true;
+}
+
+// Its thread told to stop and waited for (a while: it owns its job, so it
+// can be left to end by itself). The command itself goes on.
+void EndKomorebiJob(HANDLE* thread, HANDLE* stop) {
+    if (*stop) {
+        SetEvent(*stop);
+    }
+    if (*thread) {
+        WaitForSingleObject(*thread, 5000);
+        CloseHandle(*thread);
+        *thread = nullptr;
+    }
+    if (*stop) {
+        CloseHandle(*stop);
+        *stop = nullptr;
+    }
+}
+
 // The controls that are a shortcut (from the control center or the pill).
 void RunControlShortcut(ControlId id) {
     switch (id) {
@@ -16182,6 +20294,22 @@ enum class IslandPref {
     ScreenshotFolder,
     MediaWheel,
     MediaMarquee,
+    // The icons of the apps with notifications on the pill.
+    NotificationApps,
+    // komorebi's layout on the pill, and the app in focus on the monitor.
+    KomorebiLayout,
+    FocusedApp,
+    KomorebiHideEmpty,
+    // Files dragged out of the folders panel: 0 asked, 1 copied, 2 moved
+    // (chosen on its own row, see kChoiceFolderDrag).
+    FolderDrag,
+    LiquidGlass,
+    // The names under the icons and buttons (see Island::ShowTrayTip).
+    Tips,
+    HoverHighlight,
+    MinimizeButton,
+    BarCorners,
+    GlassTranslucent,
 };
 
 struct IslandPrefInfo {
@@ -16199,7 +20327,8 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Ícones dos outros apps"},
     {IslandPref::TrayOpen, L"trayKeepOpen", 0xE718, L"Keep their list open",
      L"Manter a lista aberta"},
-    {IslandPref::Network, L"islandNetwork", kGlyphControlCenter, L"Control center", L"Central de controle"},
+    {IslandPref::Network, L"islandNetwork", kGlyphControlCenter,
+     L"Control center", L"Central de controle"},
     {IslandPref::Volume, L"islandVolume", 0xE767, L"Volume", L"Volume"},
     {IslandPref::Battery, L"islandBattery", 0xE83F, L"Battery", L"Bateria"},
     {IslandPref::Bell, L"islandBell", 0xEA8F, L"Notifications (bell)",
@@ -16210,8 +20339,8 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Media buttons on the pill", L"Botões de mídia na pílula"},
     {IslandPref::MediaTitle, L"mediaTitle", 0xE93C,
      L"Cover and title on the pill", L"Capa e título na pílula"},
-    {IslandPref::Banner, L"bannerEnabled", 0xE8BD,
-     L"Banners in the pill", L"Avisos na pílula"},
+    {IslandPref::Banner, L"bannerEnabled", 0xE8BD, L"Banners in the pill",
+     L"Avisos na pílula"},
     {IslandPref::BannerMinimized, L"bannerMinimized", 0xE921,
      L"Banners even with the pill minimized",
      L"Avisos mesmo com a pílula minimizada"},
@@ -16248,8 +20377,8 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Uso do processador (CPU)"},
     {IslandPref::UsageRam, L"usageRam", 0xE964, L"Memory use (RAM)",
      L"Uso da memória (RAM)"},
-    {IslandPref::UsageVram, L"usageVram", 0xEEA1,
-     L"Video memory in use (VRAM)", L"Memória de vídeo em uso (VRAM)"},
+    {IslandPref::UsageVram, L"usageVram", 0xEEA1, L"Video memory in use (VRAM)",
+     L"Memória de vídeo em uso (VRAM)"},
     {IslandPref::Microphone, L"islandMicrophone", 0xE720,
      L"Microphone button (mute)", L"Botão do microfone (silenciar)"},
     {IslandPref::Holidays, L"calendarHolidays", 0xE787,
@@ -16261,8 +20390,8 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Botão de tarefas"},
     {IslandPref::Shortcuts, L"islandShortcuts", 0xE765,
      L"Keyboard shortcuts button", L"Botão de atalhos do teclado"},
-    {IslandPref::Weather, L"islandWeather", 0xE753,
-     L"Weather (goes online)", L"Clima (acessa a internet)"},
+    {IslandPref::Weather, L"islandWeather", 0xE753, L"Weather (goes online)",
+     L"Clima (acessa a internet)"},
     {IslandPref::Updates, L"islandUpdates", 0xE895,
      L"Updates (winget and Windows Update)",
      L"Atualizações (winget e Windows Update)"},
@@ -16271,12 +20400,13 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::FollowMouse, L"islandFollowMouse", 0xE962,
      L"On the monitor with the mouse", L"No monitor onde está o mouse"},
     {IslandPref::Profiles, L"islandProfiles", 0xE748,
-     L"Profiles button (switch profiles)", L"Botão de perfis (trocar de perfil)"},
+     L"Profiles button (switch profiles)",
+     L"Botão de perfis (trocar de perfil)"},
     {IslandPref::AutoHide, L"islandAutoHide", 0xE89F,
      L"Hide as its line until the mouse reaches it",
      L"Esconder na linha até o mouse chegar nela"},
-    {IslandPref::AllMonitors, L"islandAllMonitors", 0xE7F4,
-     L"On every monitor", L"Em todos os monitores"},
+    {IslandPref::AllMonitors, L"islandAllMonitors", 0xE7F4, L"On every monitor",
+     L"Em todos os monitores"},
     {IslandPref::VolumePercent, L"islandVolumePercent", 0xE995,
      L"Volume percentage beside its icon",
      L"Porcentagem do volume ao lado do ícone"},
@@ -16319,8 +20449,7 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Colors following the app in front (its title bar or its icon)",
      L"Cores seguindo o app da frente (a barra de título ou o ícone)"},
     {IslandPref::Folders, L"islandFolders", 0xE8B7,
-     L"Folders and places (your shortcuts)",
-     L"Pastas e locais (seus atalhos)"},
+     L"Folders and places (your shortcuts)", L"Pastas e locais (seus atalhos)"},
     {IslandPref::Wallpaper, L"islandWallpaper", 0xE8B9,
      L"Wallpapers from a folder (with a transition)",
      L"Papéis de parede de uma pasta (com transição)"},
@@ -16330,22 +20459,35 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::Desktops, L"islandDesktops", 0xE7C4,
      L"Virtual desktops (the mouse wheel switches them)",
      L"Áreas de trabalho virtuais (a roda do mouse troca)"},
-    {IslandPref::ActionNetwork, L"pillNetwork", 0xE701, L"Wi-Fi / network", L"Wi-Fi / rede"},
-    {IslandPref::ActionBluetooth, L"pillBluetooth", 0xE702, L"Bluetooth", L"Bluetooth"},
-    {IslandPref::ActionNightLight, L"pillNightLight", 0xF08C, L"Night light", L"Luz noturna"},
-    {IslandPref::ActionHotspot, L"pillHotspot", 0xE88A, L"Mobile hotspot", L"Hotspot móvel"},
-    {IslandPref::ActionAirplane, L"pillAirplane", 0xE709, L"Airplane mode", L"Modo avião"},
-    {IslandPref::ActionProject, L"pillProject", 0xEBC6, L"Project", L"Projetar"},
+    {IslandPref::ActionNetwork, L"pillNetwork", 0xE701, L"Wi-Fi / network",
+     L"Wi-Fi / rede"},
+    {IslandPref::ActionBluetooth, L"pillBluetooth", 0xE702, L"Bluetooth",
+     L"Bluetooth"},
+    {IslandPref::ActionNightLight, L"pillNightLight", 0xF08C, L"Night light",
+     L"Luz noturna"},
+    {IslandPref::ActionHotspot, L"pillHotspot", 0xE88A, L"Mobile hotspot",
+     L"Hotspot móvel"},
+    {IslandPref::ActionAirplane, L"pillAirplane", 0xE709, L"Airplane mode",
+     L"Modo avião"},
+    {IslandPref::ActionProject, L"pillProject", 0xEBC6, L"Project",
+     L"Projetar"},
     {IslandPref::ActionCast, L"pillCast", 0xEC15, L"Cast", L"Transmitir"},
-    {IslandPref::ActionCaptions, L"pillCaptions", 0xE7F0, L"Captions", L"Legendas"},
-    {IslandPref::ActionAccessibility, L"pillAccessibility", 0xE776, L"Accessibility", L"Acessibilidade"},
-    {IslandPref::ActionScreenshot, L"pillScreenshot", 0xE722, L"Screenshot", L"Captura de tela"},
+    {IslandPref::ActionCaptions, L"pillCaptions", 0xE7F0, L"Captions",
+     L"Legendas"},
+    {IslandPref::ActionAccessibility, L"pillAccessibility", 0xE776,
+     L"Accessibility", L"Acessibilidade"},
+    {IslandPref::ActionScreenshot, L"pillScreenshot", 0xE722, L"Screenshot",
+     L"Captura de tela"},
     {IslandPref::ActionLock, L"pillLock", 0xE72E, L"Lock", L"Bloquear"},
     {IslandPref::ActionEmoji, L"pillEmoji", 0xE76E, L"Emoji", L"Emojis"},
-    {IslandPref::ActionClipboard, L"pillClipboard", 0xF0E3, L"Clipboard", L"Área de transferência"},
-    {IslandPref::ActionTaskManager, L"pillTaskManager", 0xE9D9, L"Task Manager", L"Gerenciador de Tarefas"},
-    {IslandPref::ActionCalculator, L"pillCalculator", 0xE8EF, L"Calculator", L"Calculadora"},
-    {IslandPref::ActionExplorer, L"pillExplorer", 0xEC50, L"File Explorer", L"Explorador de Arquivos"},
+    {IslandPref::ActionClipboard, L"pillClipboard", 0xF0E3, L"Clipboard",
+     L"Área de transferência"},
+    {IslandPref::ActionTaskManager, L"pillTaskManager", 0xE9D9, L"Task Manager",
+     L"Gerenciador de Tarefas"},
+    {IslandPref::ActionCalculator, L"pillCalculator", 0xE8EF, L"Calculator",
+     L"Calculadora"},
+    {IslandPref::ActionExplorer, L"pillExplorer", 0xEC50, L"File Explorer",
+     L"Explorador de Arquivos"},
     {IslandPref::ShortcutNotifications, L"islandWinN", 0xE765,
      L"Win+N opens the island's notifications",
      L"Win+N abre as notificações da ilha"},
@@ -16353,8 +20495,7 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Win+A opens the island's control center",
      L"Win+A abre a central de controle da ilha"},
     // Chosen on its own row (see kChoiceNotches).
-    {IslandPref::Notches, L"islandNotches", 0xECA5, L"Notches",
-     L"Entalhes"},
+    {IslandPref::Notches, L"islandNotches", 0xECA5, L"Notches", L"Entalhes"},
     {IslandPref::NotchEach, L"islandNotchEach", 0xE921,
      L"Hide each notch on its own (not all together)",
      L"Esconder cada entalhe sozinho (não todos juntos)"},
@@ -16379,6 +20520,42 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::MediaMarquee, L"islandMediaMarquee", 0xE8AB,
      L"A long title keeps scrolling while it plays",
      L"Título longo rolando enquanto toca"},
+    {IslandPref::NotificationApps, L"islandApps", 0xE7E7,
+     L"Icons of the apps with notifications",
+     L"Ícones dos apps com notificações"},
+    {IslandPref::KomorebiLayout, L"islandKomorebiLayout", kGlyphKomorebiLayout,
+     L"komorebi: its layout on the pill (a menu changes it)",
+     L"komorebi: o layout na pílula (um menu troca)"},
+    {IslandPref::FocusedApp, L"islandFocusedApp", kGlyphFocusedApp,
+     L"The app in focus on this monitor (its icon and name)",
+     L"O app em foco neste monitor (ícone e nome)"},
+    {IslandPref::KomorebiHideEmpty, L"islandKomorebiHideEmpty",
+     kGlyphKomorebiLayout, L"komorebi: hide the workspaces without windows",
+     L"komorebi: esconder as áreas de trabalho sem janelas"},
+    // Chosen on its own row (see kChoiceFolderDrag).
+    {IslandPref::FolderDrag, L"islandFolderDrag", 0xE8C8, L"Files dragged out",
+     L"Arquivos arrastados para fora"},
+    {IslandPref::LiquidGlass, L"islandLiquidGlass", 0xE771,
+     L"Glass: see-through and blurred, with a bright edge (Windows' blur: "
+     L"needs its transparency effects)",
+     L"Vidro: transparente e desfocado, com borda de luz (desfoque do "
+     L"Windows: precisa dos efeitos de transparência dele)"},
+    {IslandPref::Tips, L"islandTips", 0xE946,
+     L"Tips under the icons and buttons (their names, an app's notifications)",
+     L"Dicas embaixo dos ícones e botões (os nomes, as notificações de um "
+     L"app)"},
+    {IslandPref::HoverHighlight, L"islandHoverHighlight", 0xE7C9,
+     L"Highlight behind the item under the mouse",
+     L"Destaque atrás do item sob o mouse"},
+    {IslandPref::MinimizeButton, L"islandMinimizeButton", 0xE70E,
+     L"Minimize arrow at the end of the pill",
+     L"Seta de minimizar no fim da pílula"},
+    {IslandPref::BarCorners, L"islandBarCorners", 0xE7C4,
+     L"Bar: items at the screen's corners (the clock in the middle)",
+     L"Barra: itens nos cantos da tela (o relógio no meio)"},
+    {IslandPref::GlassTranslucent, L"islandGlassTranslucent", 0xF4A5,
+     L"Translucent glass: a lighter tint and livelier colors",
+     L"Vidro translúcido: tinta mais leve e cores mais vivas"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -16428,6 +20605,9 @@ enum class PillGroup {
     ActionCalculator,
     ActionExplorer,
     ActionKomorebi,
+    // komorebi's layout on this monitor, and the app in focus on it.
+    KomorebiLayout,
+    FocusedApp,
     Count
 };
 constexpr int kPillGroups = (int)PillGroup::Count;
@@ -16482,6 +20662,8 @@ const PillGroupInfo kPillGroupInfo[kPillGroups] = {
     {0xE8EF, L"Calculator", L"Calculadora"},
     {0xEC50, L"File Explorer", L"Explorador de Arquivos"},
     {kGlyphKomorebi, L"komorebi", L"komorebi"},
+    {kGlyphKomorebiLayout, L"komorebi's layout", L"Layout do komorebi"},
+    {kGlyphFocusedApp, L"App in focus", L"App em foco"},
 };
 
 // Whether any of the processor, memory and video memory use is shown (the
@@ -16611,6 +20793,12 @@ void OpenIslandSettingsFromPanel();
 // The option that shows a group, or -1 for the ones always there.
 int PillGroupPref(PillGroup group) {
     switch (group) {
+        case PillGroup::Apps:
+            return (int)IslandPref::NotificationApps;
+        case PillGroup::KomorebiLayout:
+            return (int)IslandPref::KomorebiLayout;
+        case PillGroup::FocusedApp:
+            return (int)IslandPref::FocusedApp;
         case PillGroup::Tray:
             return (int)IslandPref::Tray;
         case PillGroup::Network:
@@ -16864,6 +21052,8 @@ uint8_t DefaultNotchSide(PillGroup group) {
         case PillGroup::Desktops:
         case PillGroup::Folders:
         case PillGroup::Wallpaper:
+        case PillGroup::KomorebiLayout:
+        case PillGroup::FocusedApp:
             return 0;
         default:
             return 2;
@@ -16949,6 +21139,11 @@ constexpr int kIslandSizeMin = 70;
 constexpr int kIslandSizeMax = 150;
 constexpr int kIslandSizeDefault = 100;
 constexpr int kIslandSizeStep = 5;
+// The icons' own size, in percent (see islandIconSize).
+constexpr int kIconSizeMin = 70;
+constexpr int kIconSizeMax = 150;
+constexpr int kIconSizeDefault = 100;
+constexpr int kIconSizeStep = 5;
 constexpr int kIslandGapMin = 0;
 constexpr int kIslandGapMax = 48;
 constexpr int kIslandGapDefault = 6;
@@ -16959,16 +21154,68 @@ constexpr int kAutoHideDelayMin = 2;
 constexpr int kAutoHideDelayMax = 50;
 constexpr int kAutoHideDelayDefault = 8;
 constexpr int kAutoHideDelayStep = 1;
+// The minimized line's opacity, in percent (0: unseen, see
+// islandLineOpacity).
+constexpr int kLineOpacityMin = 0;
+constexpr int kLineOpacityMax = 100;
+constexpr int kLineOpacityDefault = 100;
+constexpr int kLineOpacityStep = 10;
+// The strip along the edge that brings the minimized line back (px at
+// 100%): at least the line under the mouse and a margin on each side.
+constexpr int kActivationWidthMin = 120;
+constexpr int kActivationWidthMax = 600;
+constexpr int kActivationWidthDefault = 120;
+constexpr int kActivationWidthStep = 20;
+// The panels' size, in percent of the screen's scaling (a 4K screen at
+// 100%: the settings' text was small).
+constexpr int kPanelSizeMin = 100;
+constexpr int kPanelSizeMax = 150;
+constexpr int kPanelSizeDefault = 100;
+constexpr int kPanelSizeStep = 10;
+// The widest the playing title gets on the pill (px at 100%), cut or
+// scrolling past it.
+constexpr int kMediaTitleLimitMin = 100;
+constexpr int kMediaTitleLimitMax = 400;
+constexpr int kMediaTitleLimitDefault = 150;
+constexpr int kMediaTitleLimitStep = 10;
+// The pill's height (and the Fixed style's room, the notches'), how round
+// its corners are (100: round ends) and the room at its ends, in % of the
+// usual.
+constexpr int kPillHeightPctMin = 70;
+constexpr int kPillHeightPctMax = 130;
+constexpr int kPillHeightPctDefault = 100;
+constexpr int kPillHeightPctStep = 5;
+constexpr int kPillCornersMin = 0;
+constexpr int kPillCornersMax = 100;
+constexpr int kPillCornersDefault = 100;
+constexpr int kPillCornersStep = 10;
+constexpr int kPillEndsMin = 50;
+constexpr int kPillEndsMax = 200;
+constexpr int kPillEndsDefault = 100;
+constexpr int kPillEndsStep = 10;
+constexpr int kEdgeMin = 0;
+constexpr int kEdgeMax = 100;
+constexpr int kEdgeDefault = 100;
+constexpr int kEdgeStep = 10;
+// More blur on the glass (see kGlassBlurMost).
+constexpr int kGlassBlurMin = 0;
+constexpr int kGlassBlurMax = 100;
+constexpr int kGlassBlurDefault = 0;
+constexpr int kGlassBlurStep = 10;
 
 // The settings view's sections (see ControlPanel::SettingEntry), in their
 // tabs' order (see SettingSectionTab).
 enum SettingSection {
     kSectionProfiles,
     kSectionBackup,
+    kSectionLanguage,
     kSectionPlace,
     kSectionStyle,
     kSectionColors,
+    kSectionGlass,
+    kSectionShape,
     kSectionLook,
+    kSectionDetails,
     kSectionAnimations,
     kSectionPill,
     kSectionSystem,
@@ -17002,10 +21249,11 @@ int SettingTabCount() {
 
 int SettingSectionTab(int section) {
     static constexpr int kTabs[kSectionCount] = {
-        kTabGeneral,       kTabGeneral, kTabGeneral, kTabLook,  kTabLook,
-        kTabLook,          kTabLook,    kTabPill,    kTabPill,  kTabPill,
-        kTabPill,          kTabPill,    kTabItems,   kTabItems, kTabItems,
-        kTabNotifications, kTabMonitors};
+        kTabGeneral, kTabGeneral, kTabGeneral, kTabGeneral, kTabLook,
+        kTabLook,    kTabLook,    kTabLook,    kTabLook,    kTabLook,
+        kTabLook,    kTabPill,    kTabPill,    kTabPill,    kTabPill,
+        kTabPill,    kTabItems,   kTabItems,   kTabItems,   kTabNotifications,
+        kTabMonitors};
     return kTabs[std::clamp(section, 0, kSectionCount - 1)];
 }
 
@@ -17024,6 +21272,10 @@ enum ChoiceId {
     kChoiceWallpaper,
     // The Fixed style's notches (see islandNotches).
     kChoiceNotches,
+    // Files dragged out of the folders (see islandFolderDrag).
+    kChoiceFolderDrag,
+    // The island's texts' language (see g_textLanguage).
+    kChoiceLanguage,
     kChoiceCount
 };
 
@@ -17056,9 +21308,11 @@ int ChoiceCount(int id) {
             return 4;
         case kChoiceClockFormat:
         case kChoiceTrayStyle:
+        case kChoiceFolderDrag:
             return 3;
         case kChoiceWallpaper:
         case kChoiceNotches:
+        case kChoiceLanguage:
             return 4;
         default:
             return 0;
@@ -17075,8 +21329,8 @@ std::wstring ChoiceOption(int id, int index) {
             return index == 0 ? std::wstring(Tr(L"Screen", L"Tela"))
                               : std::to_wstring(kFrameRates[index]);
         case kChoiceBackup:
-            return index == 0 ? Tr(L"Export…", L"Exportar…")
-                              : Tr(L"Import…", L"Importar…");
+            return index == 0 ? Tr(L"Export", L"Exportar")
+                              : Tr(L"Import", L"Importar");
         case kChoiceColors:
             return index == kColorBackground ? Tr(L"Fill", L"Fundo")
                    : index == kColorText     ? Tr(L"Text", L"Texto")
@@ -17104,6 +21358,16 @@ std::wstring ChoiceOption(int id, int index) {
                    : index == 1 ? Tr(L"Middle", L"Meio")
                    : index == 2 ? Tr(L"Corners", L"Cantos")
                                 : Tr(L"Three", L"Três");
+        case kChoiceFolderDrag:
+            return index == 0   ? Tr(L"Ask", L"Perguntar")
+                   : index == 1 ? Tr(L"Copy", L"Copiar")
+                                : Tr(L"Move", L"Mover");
+        case kChoiceLanguage:
+            // (Each language by its own name.)
+            return index == 0   ? Tr(L"Automatic", L"Automático")
+                   : index == 1 ? L"English"
+                   : index == 2 ? L"Português"
+                                : L"中文";
         default:
             return {};
     }
@@ -17128,6 +21392,10 @@ int ChoiceValue(int id) {
             return g_settings.wallpaperTransition;
         case kChoiceNotches:
             return g_settings.islandNotches;
+        case kChoiceFolderDrag:
+            return g_settings.islandFolderDrag;
+        case kChoiceLanguage:
+            return g_textLanguage;
         default:
             return -1;
     }
@@ -17145,6 +21413,7 @@ bool ChoiceDisabled(int id) {
         case kChoiceBackup:
         case kChoiceColors:
         case kChoiceClockFormat:
+        case kChoiceLanguage:
             return false;
         case kChoiceDateOrder:
             return !g_settings.clockDate && !g_settings.clockYear;
@@ -17154,6 +21423,8 @@ bool ChoiceDisabled(int id) {
             return !g_settings.islandWallpaper;
         case kChoiceNotches:
             return g_settings.islandBar || !g_settings.islandReserve;
+        case kChoiceFolderDrag:
+            return !g_settings.islandFolders;
         default:
             return true;
     }
@@ -17194,12 +21465,23 @@ void SetIslandGap(int pixels, bool keep);
 void SetIslandOpacity(int percent, bool keep);
 void SetAutoHideDelay(int tenths, bool keep);
 void SetNotchCurve(int percent, bool keep);
+void SetLineOpacity(int percent, bool keep);
+void SetActivationWidth(int pixels, bool keep);
+void SetPanelSize(int percent, bool keep);
+void SetMediaTitleLimit(int pixels, bool keep);
+void SetPillLook(int slider, int value, bool keep);
+void SetTextLanguage(int choice);
+void SetIconSize(int percent, bool keep);
 // A custom color chosen (see CustomColor): kept, and the custom colors
 // shown.
 void SetCustomColor(int color, int value);
 // The island's sliders' values (0 size, 1 room from the edges, 2 animation
-// speed, 3 tray icons, 4 the backgrounds' opacity, 5 the auto-hide's delay).
-constexpr int kIslandSliderCount = 7;
+// speed, 3 tray icons, 4 the backgrounds' opacity, 5 the auto-hide's delay,
+// 6 the notches' curves, 7 the icons' and texts' size, 8 the minimized
+// line's opacity, 9 the strip that brings it back, 10 the panels' size, 11
+// the playing title's width, 12 the pill's height, 13 its corners, 14 the
+// room at its ends, 15 the edge around, 16 the glass's blur).
+constexpr int kIslandSliderCount = 17;
 int IslandSliderValue(int slider);
 
 // How many tray icons the open list shows before it scrolls (see
@@ -17610,11 +21892,19 @@ constexpr GUID kPowerModes[3] = {
 constexpr GUID kBalancedPowerPlan = {
     0x381b4222, 0xf694, 0x41f0, {0x96, 0x85, 0xff, 0x5b, 0xb2, 0x60, 0xdf, 0x2e}};
 
+// powrprof.dll, loaded once and kept: setting the power mode leaves work of
+// its own going on in it, and freeing it right after crashed the island
+// (an address in no module any more).
+HMODULE Powrprof() {
+    static const HMODULE module =
+        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    return module;
+}
+
 // The power mode (0 to 2, 3 for one in between, from Windows 10's slider),
 // or -1 when there's none.
 int GetPowerMode() {
-    HMODULE powrprof =
-        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE powrprof = Powrprof();
     if (!powrprof) {
         return -1;
     }
@@ -17641,7 +21931,6 @@ int GetPowerMode() {
     if (plan) {
         LocalFree(plan);
     }
-    FreeLibrary(powrprof);
     return mode;
 }
 
@@ -17656,8 +21945,7 @@ struct PowerPlan {
 std::vector<PowerPlan> GetPowerPlans(int* active) {
     std::vector<PowerPlan> plans;
     *active = -1;
-    HMODULE powrprof =
-        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE powrprof = Powrprof();
     if (!powrprof) {
         return plans;
     }
@@ -17700,40 +21988,32 @@ std::vector<PowerPlan> GetPowerPlans(int* active) {
             LocalFree(current);
         }
     }
-    FreeLibrary(powrprof);
     return plans;
 }
 
 bool SetPowerPlan(const GUID& guid) {
-    HMODULE powrprof =
-        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE powrprof = Powrprof();
     if (!powrprof) {
         return false;
     }
     using SetActive_t = DWORD(WINAPI*)(HKEY, const GUID*);
     auto setActive =
         (SetActive_t)GetProcAddress(powrprof, "PowerSetActiveScheme");
-    const bool set = setActive && setActive(nullptr, &guid) == ERROR_SUCCESS;
-    FreeLibrary(powrprof);
-    return set;
+    return setActive && setActive(nullptr, &guid) == ERROR_SUCCESS;
 }
 
 bool SetPowerMode(int mode) {
     if (mode < 0 || mode > 2) {
         return false;
     }
-    HMODULE powrprof =
-        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE powrprof = Powrprof();
     if (!powrprof) {
         return false;
     }
     using SetOverlay_t = DWORD(WINAPI*)(GUID);
     auto setOverlay =
         (SetOverlay_t)GetProcAddress(powrprof, "PowerSetActiveOverlayScheme");
-    const bool set =
-        setOverlay && setOverlay(kPowerModes[mode]) == ERROR_SUCCESS;
-    FreeLibrary(powrprof);
-    return set;
+    return setOverlay && setOverlay(kPowerModes[mode]) == ERROR_SUCCESS;
 }
 
 constexpr float kHeaderHeight = 40;
@@ -17753,11 +22033,16 @@ constexpr UINT WM_APP_WLAN_CONNECTION = WM_APP + 86;
 // The Wi-Fi networks in reach, read on a thread (lParam: a list, see
 // ControlPanel::WifiListThreadProc).
 constexpr UINT WM_APP_WIFI_LIST = WM_APP + 73;
+// Its lParam when Windows refused the list (no location access, see
+// NetworkInfo); otherwise the networks found, or none.
+constexpr LPARAM kWifiListRefused = 1;
 // The mobile hotspot's and airplane mode's state (wParam and lParam, like a
 // radio's).
 constexpr UINT WM_APP_HOTSPOT = WM_APP + 62;
 // The monitors' brightness (wParam, 0 to 100, or -1).
 constexpr UINT WM_APP_BRIGHTNESS = WM_APP + 63;
+// Each monitor's brightness (see BrightnessListProc).
+constexpr UINT WM_APP_BRIGHTNESS_LIST = WM_APP + 88;
 // The screenshot shortcut, once the control center is gone.
 constexpr UINT WM_APP_SCREENSHOT = WM_APP + 64;
 constexpr UINT_PTR kScreenshotTimerId = kPanelScreenshotTimerId;
@@ -17765,6 +22050,16 @@ constexpr UINT_PTR kScreenshotTimerId = kPanelScreenshotTimerId;
 constexpr UINT_PTR kNightLightTimerId = 31;
 // A Wi-Fi join given up on time (see ControlPanel::CheckConnecting).
 constexpr UINT_PTR kConnectingTimerId = 32;
+// A Bluetooth device connecting or disconnecting from its row: looked at
+// this often, given up after this long, its failure shown this long (see
+// ControlPanel::CheckBluetoothStep).
+constexpr UINT_PTR kBluetoothTimerId = 33;
+constexpr UINT kBluetoothCheckMs = 300;
+constexpr ULONGLONG kBluetoothConnectMs = 12000;
+constexpr ULONGLONG kBluetoothFailedMs = 4000;
+// A Bluetooth device's connection asked for (wParam: whether the device
+// took the request).
+constexpr UINT WM_APP_BLUETOOTH_DONE = WM_APP + 89;
 constexpr UINT kNightLightCheckMs = 800;
 
 // A radio's state for the control center.
@@ -17960,6 +22255,156 @@ DWORD WINAPI RadioThreadProc(LPVOID parameter) {
     return 0;
 }
 
+// A paired Bluetooth audio device connected or disconnected the way
+// Windows' own "Connect" does it: the one-shot reconnect (or disconnect)
+// property of its audio driver (KSPROPSETID_BtAudio, ksmedia.h), asked to
+// the kernel streaming filter behind one of its audio endpoints (present or
+// unplugged), found by the device's address in that filter's ID.
+constexpr GUID kKsPropSetBtAudio = {
+    0x7fa06c40,
+    0xb8f6,
+    0x4c7e,
+    {0x85, 0x56, 0xe8, 0xc3, 0x3a, 0x12, 0xe5, 0x4d}};
+constexpr ULONG kKsPropertyOneShotReconnect = 0;
+constexpr ULONG kKsPropertyOneShotDisconnect = 1;
+constexpr ULONG kKsPropertyTypeGet = 1;
+constexpr GUID kIID_IDeviceTopology = {
+    0x2a07407e,
+    0x6497,
+    0x4a18,
+    {0x97, 0x87, 0x32, 0xf7, 0x9b, 0xd0, 0xd9, 0x8f}};
+constexpr GUID kIID_IKsControl = {
+    0x28f54685,
+    0x06fd,
+    0x11d2,
+    {0xb2, 0x7a, 0x00, 0xa0, 0xc9, 0x22, 0x31, 0x96}};
+
+// KSPROPERTY (ks.h).
+struct KsPropertyRequest {
+    GUID set;
+    ULONG id;
+    ULONG flags;
+};
+
+// IKsControl (ksproxy.h): only its first method is called.
+struct IKsControlProperty : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE KsProperty(KsPropertyRequest* property,
+                                                 ULONG propertyLength,
+                                                 void* data,
+                                                 ULONG dataLength,
+                                                 ULONG* returned) = 0;
+};
+
+// False without an audio endpoint of the device, or when its driver
+// refused.
+bool SetBluetoothAudioConnected(ULONGLONG address, bool connect) {
+    winrt::com_ptr<IMMDeviceEnumerator> devices;
+    winrt::com_ptr<IMMDeviceCollection> endpoints;
+    UINT count = 0;
+    if (FAILED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr,
+                                CLSCTX_ALL, kIID_IMMDeviceEnumerator,
+                                devices.put_void())) ||
+        FAILED(devices->EnumAudioEndpoints(
+            eAll, DEVICE_STATE_ACTIVE | DEVICE_STATE_UNPLUGGED,
+            endpoints.put())) ||
+        FAILED(endpoints->GetCount(&count))) {
+        return false;
+    }
+    // (The address in the filter's ID: "...&0&001A7DDA7113_C00000000#...".)
+    WCHAR wanted[16];
+    swprintf_s(wanted, L"%012llX", address & 0xFFFFFFFFFFFFull);
+    for (UINT i = 0; i < count; i++) {
+        winrt::com_ptr<IMMDevice> endpoint;
+        winrt::com_ptr<IDeviceTopology> topology;
+        winrt::com_ptr<IConnector> connector;
+        LPWSTR filterId = nullptr;
+        if (FAILED(endpoints->Item(i, endpoint.put())) ||
+            FAILED(endpoint->Activate(kIID_IDeviceTopology, CLSCTX_ALL,
+                                      nullptr, topology.put_void())) ||
+            FAILED(topology->GetConnector(0, connector.put())) ||
+            FAILED(connector->GetDeviceIdConnectedTo(&filterId))) {
+            continue;
+        }
+        std::wstring id = filterId;
+        std::transform(id.begin(), id.end(), id.begin(), towupper);
+        winrt::com_ptr<IMMDevice> filter;
+        winrt::com_ptr<IKsControlProperty> control;
+        const bool found =
+            id.find(wanted) != std::wstring::npos &&
+            SUCCEEDED(devices->GetDevice(filterId, filter.put())) &&
+            SUCCEEDED(filter->Activate(kIID_IKsControl, CLSCTX_ALL, nullptr,
+                                       control.put_void()));
+        CoTaskMemFree(filterId);
+        if (!found) {
+            continue;
+        }
+        KsPropertyRequest property{kKsPropSetBtAudio,
+                                   connect ? kKsPropertyOneShotReconnect
+                                           : kKsPropertyOneShotDisconnect,
+                                   kKsPropertyTypeGet};
+        ULONG returned = 0;
+        if (SUCCEEDED(control->KsProperty(&property, sizeof(property),
+                                          nullptr, 0, &returned))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+struct BluetoothConnectRequest {
+    HWND notify;
+    ULONGLONG address;
+    bool connect;
+};
+
+DWORD WINAPI BluetoothConnectProc(LPVOID parameter) {
+    std::unique_ptr<BluetoothConnectRequest> request(
+        (BluetoothConnectRequest*)parameter);
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool done =
+        SetBluetoothAudioConnected(request->address, request->connect);
+    if (SUCCEEDED(com)) {
+        CoUninitialize();
+    }
+    PostMessage(request->notify, WM_APP_BLUETOOTH_DONE, done,
+                (LPARAM)request->address);
+    return 0;
+}
+
+// Where a device connecting or disconnecting from its row is.
+enum class BluetoothStep { None, Connecting, Disconnecting, Failed };
+
+// The step as it stands, `step` having started at `since` (GetTickCount64):
+// one whose checks stopped (the panel closed meanwhile, see
+// ControlPanel::CheckBluetoothStep) is over once its time is, or it would
+// stay on the row and keep the device from being clicked again.
+BluetoothStep LiveBluetoothStep(BluetoothStep step, ULONGLONG since) {
+    const ULONGLONG elapsed = GetTickCount64() - since;
+    if (((step == BluetoothStep::Connecting ||
+          step == BluetoothStep::Disconnecting) &&
+         elapsed > kBluetoothConnectMs + kBluetoothCheckMs) ||
+        (step == BluetoothStep::Failed &&
+         elapsed > kBluetoothFailedMs + kBluetoothCheckMs)) {
+        return BluetoothStep::None;
+    }
+    return step;
+}
+
+// A device's line on its row: what's happening to it (`step`, when it's the
+// one), or that it's connected.
+PCWSTR BluetoothStatusText(bool connected, BluetoothStep step) {
+    switch (step) {
+        case BluetoothStep::Connecting:
+            return Tr(L"Connecting...", L"Conectando...");
+        case BluetoothStep::Disconnecting:
+            return Tr(L"Disconnecting...", L"Desconectando...");
+        case BluetoothStep::Failed:
+            return Tr(L"Couldn't connect.", L"Não foi possível conectar.");
+        default:
+            return connected ? Tr(L"Connected", L"Conectado") : nullptr;
+    }
+}
+
 // Waits for threads that own their jobs, all of them together for at most
 // `ms`: one stuck in a slow call (a monitor, a radio, a media app) ends by
 // itself later, and the tool process exits at unload anyway.
@@ -17973,23 +22418,73 @@ void JoinOwningThreads(std::vector<HANDLE>& threads, DWORD ms) {
     threads.clear();
 }
 
-// Brightness: reads it (BrightnessQueryProc), or sets the latest level asked
-// for until no newer one comes (BrightnessThreadProc), so dragging the slider
+// Brightness: reads it (BrightnessQueryProc, the first monitor's;
+// BrightnessListProc, each monitor's), or sets the latest levels asked for
+// until no newer ones come (BrightnessThreadProc), so dragging a slider
 // doesn't queue up slow calls. Each thread holds the job too (its parameter
 // is a new std::shared_ptr to it), so it can outlive its window; `notify` is
 // cleared when that window goes.
 struct BrightnessJob {
     std::atomic<HWND> notify{nullptr};
-    std::atomic<int> target{-1};
+    // The level asked for each monitor (by its place in
+    // ForEachPhysicalMonitor's order), -1 once written (or none asked).
+    std::atomic<int> targets[kMaxBrightnessMonitors];
+    // An island's screen (read for it, see BrightnessQueryProc), and the
+    // level asked for its monitors (-1 once written).
+    std::atomic<HMONITOR> screen{nullptr};
+    std::atomic<int> screenTarget{-1};
     std::atomic<bool> running{false};
+    // A monitor asked didn't answer: its list is read again (see OnOpen).
+    std::atomic<bool> missed{false};
+
+    BrightnessJob() {
+        for (auto& target : targets) {
+            target = -1;
+        }
+    }
+    // A monitor's level asked for (-1: every monitor's).
+    void Ask(int monitor, int level) {
+        for (int i = 0; i < kMaxBrightnessMonitors; i++) {
+            if (monitor < 0 || monitor == i) {
+                targets[i] = level;
+            }
+        }
+    }
+    void AskScreen(HMONITOR monitor, int level) {
+        screen = monitor;
+        screenTarget = level;
+    }
+    bool Asked() const {
+        return screenTarget >= 0 ||
+               std::any_of(std::begin(targets), std::end(targets),
+                           [](const std::atomic<int>& target) {
+                               return target >= 0;
+                           });
+    }
 };
+
 
 DWORD WINAPI BrightnessQueryProc(LPVOID parameter) {
     const std::unique_ptr<std::shared_ptr<BrightnessJob>> held(
         (std::shared_ptr<BrightnessJob>*)parameter);
-    const int level = ReadBrightness();
+    const int level = ReadBrightness((*held)->screen);
     if (HWND notify = (*held)->notify) {
         PostMessage(notify, WM_APP_BRIGHTNESS, (WPARAM)(INT_PTR)level, 0);
+    }
+    return 0;
+}
+
+// Each monitor's (WM_APP_BRIGHTNESS_LIST, lParam: a new list its window
+// deletes).
+DWORD WINAPI BrightnessListProc(LPVOID parameter) {
+    const std::unique_ptr<std::shared_ptr<BrightnessJob>> held(
+        (std::shared_ptr<BrightnessJob>*)parameter);
+    auto list = std::make_unique<std::vector<BrightnessMonitor>>(
+        ReadBrightnessMonitors());
+    if (HWND notify = (*held)->notify;
+        notify &&
+        PostMessage(notify, WM_APP_BRIGHTNESS_LIST, 0, (LPARAM)list.get())) {
+        list.release();
     }
     return 0;
 }
@@ -17998,17 +22493,23 @@ DWORD WINAPI BrightnessThreadProc(LPVOID parameter) {
     const std::unique_ptr<std::shared_ptr<BrightnessJob>> held(
         (std::shared_ptr<BrightnessJob>*)parameter);
     BrightnessJob* job = held->get();
-    int applied = -1;
     for (;;) {
-        const int level = job->target;
-        if (level != applied) {
-            WriteBrightness(level);
-            applied = level;
+        int levels[kMaxBrightnessMonitors];
+        const int screenLevel = job->screenTarget.exchange(-1);
+        bool any = screenLevel >= 0;
+        for (int i = 0; i < kMaxBrightnessMonitors; i++) {
+            levels[i] = job->targets[i].exchange(-1);
+            any = any || levels[i] >= 0;
+        }
+        if (any) {
+            if (!WriteBrightness(levels, job->screen, screenLevel)) {
+                job->missed = true;
+            }
             continue;
         }
         job->running = false;
         // A level asked for meanwhile starts it again.
-        if (job->target != applied && !job->running.exchange(true)) {
+        if (job->Asked() && !job->running.exchange(true)) {
             continue;
         }
         break;
@@ -18248,6 +22749,14 @@ class ControlPanel : public Panel {
     // while open, it shows the other one.
     // (View: one control's own view alone, from its button on the pill.)
     enum class Only { All, Sound, Battery, Display, View, Komorebi };
+    // The arrow back: not on the settings opened on their own (from the
+    // island's settings bubble), nor on a page opened alone from its icon on
+    // the pill (Wi-Fi, Bluetooth...: nothing to go back to; Escape or a click
+    // outside closes them), except the Wi-Fi password's (back to the list).
+    bool ShowsBack() const {
+        return m_view != View::Settings &&
+               (m_only != Only::View || m_view == View::Password);
+    }
     // The island's settings (from the island's settings bubble): shown now
     // if it's open, or when it opens next.
     void ShowSettings() {
@@ -18371,6 +22880,7 @@ class ControlPanel : public Panel {
         Disconnect,    // "Disconnect" on the connected network (index).
         Forget,        // "Forget" on a saved network (index).
         WifiConnect,   // "Connect" on a network (index).
+        WifiLocation,  // The list's line without the location access.
         BluetoothRow,  // A Bluetooth device (index).
         PasswordField,
         ShowPassword,
@@ -18393,17 +22903,17 @@ class ControlPanel : public Panel {
         EditAdd,           // A control to add (its ControlId).
         EditDone,          // "Done".
         SettingToggle,     // An island option's switch (its IslandPref).
-        // A dimmed option (its IslandPref, or kDisabledChoice + its
-        // ChoiceId): why it is, in a bubble.
+        // A dimmed option (its IslandPref, kDisabledChoice + its ChoiceId,
+        // or kDisabledSlider + its slider): why it is, in a bubble.
         DisabledSetting,
-        StyleSegment,      // See StyleSegmentStyle.
-        ThemeSwatch,       // A theme (its index).
-        PlaceDot,          // A ready place for all apps (0-8).
-        AppPlacesRow,      // "Place per app".
-        AppPlaceDot,       // An app's place (entry * 9 + place).
-        AppPlaceRemove,    // An app's "x" (entry).
-        AppPlaceAdd,       // An open app to give a place (its index).
-        AppItemChip,  // An app's icon to show or hide (see m_appItemChips).
+        StyleSegment,    // See StyleSegmentStyle.
+        ThemeSwatch,     // A theme (its index).
+        PlaceDot,        // A ready place for all apps (0-8).
+        AppPlacesRow,    // "Place per app".
+        AppPlaceDot,     // An app's place (entry * 9 + place).
+        AppPlaceRemove,  // An app's "x" (entry).
+        AppPlaceAdd,     // An open app to give a place (its index).
+        AppItemChip,     // An app's icon to show or hide (see m_appItemChips).
         // The profiles (index: the profile's position; on another island
         // than the main one, its count for the main one's settings), the
         // "+" beside their title, and the one being edited.
@@ -18420,11 +22930,11 @@ class ControlPanel : public Panel {
         MonitorMode,
         MonitorMap,
         MonitorProfile,
-        SizeSlider,   // The island's size.
-        SizeReset,    // Back to its usual size.
-        SearchField,  // The settings' search box.
-        SearchClear,  // Its "x".
-        OrderChip,    // An item in the order strip (its PillGroup).
+        SizeSlider,     // The island's size.
+        SizeReset,      // Back to its usual size.
+        SearchField,    // The settings' search box.
+        SearchClear,    // Its "x".
+        OrderChip,      // An item in the order strip (its PillGroup).
         ChoiceSegment,  // A choice of a row (ChoiceId * 16 + its index).
         SettingsTab,    // A tab of the settings (its SettingTab).
     };
@@ -18440,6 +22950,8 @@ class ControlPanel : public Panel {
     // The sessions of one program playing sound.
     struct MixerApp {
         DWORD processId = 0;
+        // Its program (its sessions from any of its processes go together).
+        std::wstring path;
         bool system = false;
         std::wstring name;
         float volume = 1;
@@ -18466,6 +22978,10 @@ class ControlPanel : public Panel {
         std::wstring name;
         bool connected;
         WCHAR glyph;
+        ULONGLONG address = 0;
+        // Headphones or speakers: connected from its row (others open
+        // Windows' Bluetooth settings).
+        bool audio = false;
     };
 
     // An accessibility feature with an on/off switch.
@@ -18492,6 +23008,8 @@ class ControlPanel : public Panel {
     winrt::com_ptr<IDWriteTextLayout> StatusLayout(const std::wstring& status,
                                                    float width) const;
     void UpdateBluetooth();
+    void ClickBluetoothDevice(int index);
+    void CheckBluetoothStep();
     bool ConnectWifi(const WifiNetwork& network, const std::wstring* key);
     void JoinWifi(int index);
     void SubmitPassword();
@@ -18502,8 +23020,13 @@ class ControlPanel : public Panel {
     void UpdateDisplayMode();
     void UpdateAccessibility();
     void ToggleAccessibility(int index);
-    void SetBrightnessAt(POINT pt);
-    void SetBrightness(int level);
+    void SetBrightnessAt(int row, POINT pt);
+    void SetBrightness(int row, int level);
+
+    public:
+    bool TakeBrightness(HMONITOR screen, int level);
+
+    private:
     std::wstring StatusText() const;
     void Layout();
     void SetView(View view);
@@ -18540,6 +23063,7 @@ class ControlPanel : public Panel {
     void DrawWifi(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawPassword(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawBluetooth(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
+    D2D1_RECT_F BluetoothButtonRect(const D2D1_RECT_F& row) const;
     void DrawProject(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawSettings(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     // One control of the main view, at its place.
@@ -18583,6 +23107,23 @@ class ControlPanel : public Panel {
                 return false;
         }
     }
+    // A slider dimmed (it still moves, for later): the distance from the
+    // edge with the bar or the notches, the speed without animations, the
+    // delay without auto-hide, the notches' curves without them, the line's
+    // with the bar, the title's width without it, the pill's height with the
+    // bar, its corners with the bar or the notches, and the glass's blur
+    // without the glass.
+    static bool SliderDisabled(int slider) {
+        const bool bar = g_settings.islandBar;
+        const bool notches = NotchCountWanted() > 0;
+        return ((slider == 1 || slider == 13) && (bar || notches)) ||
+               (slider == 2 && AnimationLevel() >= 2) ||
+               (slider == 5 && !g_settings.islandAutoHide) ||
+               (slider == 6 && !notches) ||
+               ((slider == 8 || slider == 9 || slider == 12) && bar) ||
+               (slider == 11 && !g_mediaTitleInPill) ||
+               (slider == 16 && !g_settings.islandLiquidGlass);
+    }
     // An option that depends on another one being on (or the main island's
     // only, on another one).
     static bool PrefDisabled(IslandPref pref) {
@@ -18594,8 +23135,15 @@ class ControlPanel : public Panel {
                  pref == IslandPref::VerticalSides ||
                  pref == IslandPref::Frosted) &&
                 notches) ||
-               (pref == IslandPref::Frosted && !g_transparencyEffects) ||
+               (pref == IslandPref::Frosted &&
+                (!g_transparencyEffects || g_settings.islandLiquidGlass)) ||
                (pref == IslandPref::NotchEach && !notches) ||
+               (pref == IslandPref::MinimizeButton && g_settings.islandBar) ||
+               (pref == IslandPref::BarCorners &&
+                (GetIslandPref(IslandPref::Bar) != 1 ||
+                 !GetIslandPref(IslandPref::ClockCenter))) ||
+               (pref == IslandPref::GlassTranslucent &&
+                !GetIslandPref(IslandPref::LiquidGlass)) ||
                (pref == IslandPref::VolumePercent &&
                 !GetIslandPref(IslandPref::Volume)) ||
                (pref == IslandPref::BatteryPercent &&
@@ -18617,7 +23165,10 @@ class ControlPanel : public Panel {
                  pref == IslandPref::WebPictures) &&
                 !GetIslandPref(IslandPref::Banner)) ||
                (pref == IslandPref::HideWindowsBanners &&
-                GetIslandPref(IslandPref::OwnNotifications));
+                GetIslandPref(IslandPref::OwnNotifications)) ||
+               (pref == IslandPref::KomorebiLayout && g_komorebiFound == 0) ||
+               (pref == IslandPref::KomorebiHideEmpty &&
+                !GetIslandPref(IslandPref::KomorebiLayout));
     }
     void DrawShortcut(ID2D1RenderTarget* target,
                       ID2D1SolidColorBrush* brush,
@@ -18652,6 +23203,10 @@ class ControlPanel : public Panel {
     void DrawOutputs(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawMixer(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     ID2D1Bitmap* GetAppBitmap(ID2D1RenderTarget* target, MixerApp& app);
+    static bool SameMixerApp(const MixerApp& app,
+                             bool system,
+                             const std::wstring& path,
+                             DWORD processId);
 
     winrt::com_ptr<IDWriteTextFormat> m_iconFormat;
     winrt::com_ptr<IDWriteTextFormat> m_titleFormat;
@@ -18694,6 +23249,8 @@ class ControlPanel : public Panel {
     std::wstring m_komorebic;
     std::wstring m_komorebiVersion;
     bool m_komorebiLooked = false;
+    // komorebi and whkd looked for, for the settings (see LookForKomorebi).
+    bool m_toolsLooked = false;
     bool m_komorebiRunning = false;
     int m_komorebiBusy = -1;
     double m_komorebiBusySince = 0;
@@ -18754,6 +23311,9 @@ class ControlPanel : public Panel {
     UINT m_wifiListId = 0;
     bool m_wifiListAgain = false;
     bool m_wifiScanAgain = false;
+    // Windows refused the networks in reach (no location access): the
+    // list says so, and its line opens the page that allows it.
+    bool m_wifiRefused = false;
     // The saved network whose "Forget" was clicked once (a second click
     // forgets it).
     std::wstring m_forgetProfile;
@@ -18776,6 +23336,11 @@ class ControlPanel : public Panel {
     int m_wifiRadio = kRadioUnknown;
     int m_bluetoothRadio = kRadioUnknown;
     std::vector<BluetoothDevice> m_bluetoothDevices;
+    // A device connecting or disconnecting from its row (one at a time),
+    // and since when (its failure: since it failed).
+    BluetoothStep m_bluetoothStep = BluetoothStep::None;
+    ULONGLONG m_bluetoothAddress = 0;
+    ULONGLONG m_bluetoothStepAt = 0;
     // The radio and brightness threads (see StartWorker).
     std::vector<HANDLE> m_workers;
     // The mobile hotspot and airplane mode: like a radio.
@@ -18802,12 +23367,16 @@ class ControlPanel : public Panel {
     void OpenControlView(ControlId id);
     int m_openOnControl = -1;
     bool OnTimer(UINT_PTR id) override;
-    // The monitors' brightness, 0 to 100, or -1 (not known or not
-    // adjustable).
+    // The monitors' brightness, 0 to 100 (the first one's), or -1 (not
+    // known or not adjustable); each monitor's, and the row dragged.
     int m_brightness = -1;
+    std::vector<BrightnessMonitor> m_brightnessMonitors;
+    int m_brightnessRow = 0;
     std::shared_ptr<BrightnessJob> m_brightnessJob =
         std::make_shared<BrightnessJob>();
     ULONGLONG m_brightnessReadAt = 0;
+    // g_displayChanges when the list was read (its places are old after one).
+    int m_brightnessDisplays = 0;
     // The display mode (DISPLAYCONFIG_TOPOLOGY_*).
     int m_displayMode = 0;
     std::vector<AccessibilityItem> m_accessibility;
@@ -18817,8 +23386,10 @@ class ControlPanel : public Panel {
         m_mixerButton{}, m_batteryTile{}, m_more{}, m_settingsButton{},
         m_back{}, m_toggle{},
         m_networkIcon{}, m_bluetoothIcon{}, m_field{}, m_eye{}, m_connect{},
-        m_status{}, m_display{}, m_brightnessSlider{},
+        m_status{}, m_display{},
         m_hotspotRow{}, m_airplaneRow{}, m_dndIcon{};
+    // The brightness's sliders: one, or one per monitor.
+    std::vector<D2D1_RECT_F> m_brightnessSliders;
     // Where each control shown is.
     std::vector<std::pair<ControlId, D2D1_RECT_F>> m_controlRects;
     std::vector<ControlId> m_controls;
@@ -18995,6 +23566,7 @@ class ControlPanel : public Panel {
     // (See Part::DisabledSetting.)
     static constexpr int kDisabledChoice = 10000;
     static constexpr int kDisabledAppPlaces = 20000;
+    static constexpr int kDisabledSlider = 30000;
     // Why an option is dimmed (see PrefDisabled and ChoiceDisabled).
     static std::wstring DisabledReason(int index);
     POINT ToSettingsList(POINT pt) const {
@@ -19212,6 +23784,9 @@ class NotificationPanel : public Panel {
     // How many notifications each app has there now (none if it can't be
     // read).
     std::vector<std::pair<std::wstring, int>> CountsInCenter();
+    // How many kept ones each app with a badge has in the list (see
+    // MergeKeptToasts), for its count on the island.
+    std::vector<std::pair<std::wstring, int>> KeptCounts();
     // The latest notification of each app that came after `seenId` (up to
     // a few apps, oldest first), not cleared here; `newestId` gets the
     // newest ID read.
@@ -19303,6 +23878,10 @@ class NotificationPanel : public Panel {
         bool urgent = false;
         std::wstring sound;
         bool loop = false;
+        // Kept by the island after its app took it out (see
+        // MergeKeptToasts): pressing it opens the app, which has no use for
+        // it any more.
+        bool kept = false;
     };
 
     enum class Part {
@@ -19330,6 +23909,7 @@ class NotificationPanel : public Panel {
     };
 
     void Load();
+    void MergeKeptToasts();
     void LoadCleared();
     void SaveCleared();
     void Layout();
@@ -19427,7 +24007,12 @@ class NotificationPanel : public Panel {
     };
     std::vector<CardMotion> m_motions;
     CardMotion* Motion(long long id, bool create);
-    void Remove(long long id, int direction, double delay = 0);
+    // (`center`: gone from Windows' notification center too.)
+    void Remove(long long id,
+                int direction,
+                double delay = 0,
+                bool center = true);
+    void RemoveFromCenter(const std::vector<Notification>& gone);
     // Dragging a card: which, from where, and whether it moved yet.
     long long m_dragId = -1;
     int m_dragStartX = 0;
@@ -19484,8 +24069,7 @@ class NotificationPanel : public Panel {
                        bool enabled = true,
                        bool ownCard = true);
     std::vector<std::pair<std::wstring, std::wstring>> m_names;
-    std::vector<std::pair<std::wstring, winrt::com_ptr<ID2D1Bitmap>>>
-        m_bitmaps;
+    std::vector<KeptAppIcon> m_bitmaps;
     winrt::com_ptr<IWICImagingFactory> m_wic;
     winrt::com_ptr<IDWriteTextFormat> m_headerFormat;
     winrt::com_ptr<IDWriteTextFormat> m_appFormat;
@@ -20241,14 +24825,12 @@ void RunPowerAction(PowerAction action, HWND window) {
                 BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
             bool slept = false;
             DWORD error = ERROR_PROC_NOT_FOUND;
-            if (HMODULE powrprof = LoadLibraryEx(
-                    L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+            if (HMODULE powrprof = Powrprof()) {
                 if (auto suspend = (SetSuspendState_t)GetProcAddress(
                         powrprof, "SetSuspendState")) {
                     slept = suspend(FALSE, FALSE, FALSE) != FALSE;
                     error = GetLastError();
                 }
-                FreeLibrary(powrprof);
             }
             if (!slept) {
                 // PCs with Modern Standby don't sleep that way: turning the
@@ -20290,7 +24872,7 @@ class PowerPanel : public Panel {
     void Prepare(float scale) override {
         if (scale != m_preparedScale) {
             m_preparedScale = scale;
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_iconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 15 * scale);
             m_textFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
@@ -20431,13 +25013,13 @@ class PowerPanel : public Panel {
             case PowerAction::Sleep:
                 return Tr(L"Sleep", L"Suspender");
             case PowerAction::Restart:
-                return Tr(L"Restart…", L"Reiniciar…");
+                return Tr(L"Restart", L"Reiniciar");
             case PowerAction::ShutDown:
-                return Tr(L"Shut down…", L"Desligar…");
+                return Tr(L"Shut down", L"Desligar");
             case PowerAction::Lock:
                 return Tr(L"Lock", L"Bloquear");
             default:
-                return Tr(L"Sign out…", L"Sair…");
+                return Tr(L"Sign out", L"Sair");
         }
     }
 
@@ -20481,7 +25063,34 @@ class PowerPanel : public Panel {
         SetTimer(m_hwnd, kPowerTimerId + (UINT_PTR)action, 380, nullptr);
     }
 
-    float ConfirmHeight() const { return std::round(84 * m_scale); }
+    static PCWSTR Hint() {
+        return Tr(L"Apps with unsaved work can stop it.",
+                  L"Apps com trabalho não salvo podem impedir.");
+    }
+
+    // The question, the hint under it (on as many lines as it takes: never
+    // cut), then the buttons.
+    float HintHeight(float width) const {
+        winrt::com_ptr<IDWriteTextLayout> layout;
+        DWRITE_TEXT_METRICS metrics{};
+        PCWSTR hint = Hint();
+        if (!m_smallFormat || !m_dwrite ||
+            FAILED(m_dwrite->CreateTextLayout(hint, (UINT32)wcslen(hint),
+                                              m_smallFormat.get(), width,
+                                              10000, layout.put())) ||
+            FAILED(layout->GetMetrics(&metrics))) {
+            return std::round(16 * m_scale);
+        }
+        return std::ceil(metrics.height);
+    }
+
+    float ConfirmHeight(float width) const {
+        const float s = m_scale;
+        const float inner = std::round(10 * s);
+        return std::round(4 * s) + std::round(19 * s) +
+               HintHeight(width - inner * 2) + std::round(8 * s) +
+               std::round(28 * s) + inner;
+    }
 
     void Layout() {
         const float s = m_scale;
@@ -20496,7 +25105,7 @@ class PowerPanel : public Panel {
             m_rows[i] = {padding, y, width - padding, y + row};
             y += row;
             if (i == m_confirmShown) {
-                const float height = ConfirmHeight();
+                const float height = ConfirmHeight(width - padding * 2);
                 m_confirmRect = {padding, y, width - padding,
                                  y + height * room};
                 const float button = std::round(28 * s);
@@ -20615,8 +25224,7 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
                      {m_confirmRect.left + inner, top,
                       m_confirmRect.right - inner, top + std::round(18 * s)},
                      brush);
-    PCWSTR hint = Tr(L"Apps with unsaved work can stop it.",
-                     L"Apps com trabalho não salvo podem impedir.");
+    PCWSTR hint = Hint();
     brush->SetColor(Fg(0.55f));
     target->DrawText(hint, (UINT32)wcslen(hint), m_smallFormat.get(),
                      {m_confirmRect.left + inner, top + std::round(19 * s),
@@ -20655,7 +25263,7 @@ class ProfilesPanel : public Panel {
     void Prepare(float scale) override {
         if (scale != m_preparedScale) {
             m_preparedScale = scale;
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_iconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 15 * scale);
             m_textFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
@@ -20828,7 +25436,7 @@ void ProfilesPanel::Draw(ID2D1RenderTarget* target,
                 false);
     }
     drawRow(m_manage, kHitManage, (WCHAR)0xE713,
-            Tr(L"Manage profiles…", L"Gerenciar perfis…"), false);
+            Tr(L"Manage profiles", L"Gerenciar perfis"), false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -21780,8 +26388,8 @@ std::wstring StampText(long long stamp) {
         return {};
     }
     WCHAR date[64] = L"";
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &time, nullptr,
-                    date, ARRAYSIZE(date), nullptr);
+    GetDateFormatEx(DateLocale(), DATE_SHORTDATE, &time, nullptr, date,
+                    ARRAYSIZE(date), nullptr);
     return std::wstring(date) + L"  " + FormatClockTime(time, false);
 }
 
@@ -21816,9 +26424,9 @@ class EditingPanel : public Panel {
                        11 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
         m_buttonFormat = MakeFormat(L"Segoe UI Variable Text",
                                     DWRITE_FONT_WEIGHT_SEMI_BOLD, 12 * scale);
-        m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+        m_iconFormat = MakeFormat(IconFont(),
                                   DWRITE_FONT_WEIGHT_NORMAL, 13 * scale);
-        m_bigIconFormat = MakeFormat(L"Segoe Fluent Icons",
+        m_bigIconFormat = MakeFormat(IconFont(),
                                      DWRITE_FONT_WEIGHT_NORMAL, 15 * scale);
     }
     bool Ready() const {
@@ -24579,7 +29187,7 @@ void ShortcutsPanel::Draw(ID2D1RenderTarget* target,
                    Tr(L"+  New shortcut", L"+  Novo atalho"), false,
                    m_hover.part == Part::New);
         DrawButton(target, brush, m_import,
-                   Tr(L"Import a file…", L"Importar arquivo…"), false,
+                   Tr(L"Import a file", L"Importar arquivo"), false,
                    m_hover.part == Part::Import,
                    m_importThread ? 0.5f : 1.0f);
         if (!m_importStatus.empty()) {
@@ -25059,11 +29667,12 @@ std::wstring WeatherEmoji(int code, bool day) {
             return day ? L"\U0001F324️" : L"\U0001F319";
         case 2:
             return L"⛅";
+        // Fog as a cloud too: Windows 11's fog emoji is a plain light square,
+        // which doesn't read as anything (#6226).
         case 3:
-            return L"☁️";
         case 45:
         case 48:
-            return L"\U0001F32B️";
+            return L"☁️";
         case 51:
         case 53:
         case 55:
@@ -25464,7 +30073,8 @@ class WeatherPanel : public EditingPanel {
         }
         const float left = std::round(rect.left);
         const float top = std::round(rect.top);
-        target->DrawBitmap(bitmap, {left, top, left + width, top + height});
+        DrawBitmapSmooth(target, bitmap,
+                         {left, top, left + width, top + height});
     }
 
     // The chosen day's hours as one long strip (drawn once per day, size
@@ -25611,8 +30221,8 @@ void WeatherPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
             if (swscanf_s(day.date.c_str(), L"%hu-%hu-%hu", &date.wYear,
                           &date.wMonth, &date.wDay) == 3) {
                 WCHAR text[32] = L"";
-                GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &date, L"dddd",
-                                text, ARRAYSIZE(text), nullptr);
+                GetDateFormatEx(DateLocale(), 0, &date, L"dddd", text,
+                                ARRAYSIZE(text), nullptr);
                 name = text;
                 // "segunda-feira": "segunda".
                 const size_t dash = name.find(L'-');
@@ -25696,9 +30306,9 @@ void WeatherPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
             hoursLayer.get());
         if (m_hoursBitmap) {
             const float left = std::round(area.left - scrolled);
-            target->DrawBitmap(m_hoursBitmap.get(),
-                               {left, area.top, left + stripWidth,
-                                area.top + stripHeight});
+            DrawBitmapSmooth(
+                target, m_hoursBitmap.get(),
+                {left, area.top, left + stripWidth, area.top + stripHeight});
         }
         // How far along the day it's scrolled.
         if (hours > (size_t)kHoursShown) {
@@ -25821,7 +30431,9 @@ struct AppUpdate {
     std::wstring id;
     std::wstring version;
     std::wstring available;
-    // 0: waiting, 4: opened in a terminal.
+    // 0: waiting, 4: opened in a terminal, 5: updated in the terminal but
+    // still listed with the same version (an app that finishes its update
+    // when it closes, like VS Code while open).
     int state = 0;
     // Ticked, to update with the others ticked.
     bool ticked = false;
@@ -25849,7 +30461,17 @@ constexpr UINT WM_APP_UPDATES = WM_APP + 68;
 // Windhawk's settings changed (see WhTool_ModSettingsChanged).
 constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 70;
 void LoadSettings();
-constexpr double kUpdatesCheckSeconds = 6 * 60 * 60;
+// How often updates are looked for (updatesCheckEvery, chosen in their
+// panel, for every island: they're looked for once for all): every 1, 3, 6,
+// 12 or 24 hours.
+constexpr int kUpdatesEveryHours[] = {1, 3, 6, 12, 24};
+int g_updatesEvery = 0;
+
+double UpdatesCheckSeconds() {
+    return kUpdatesEveryHours[std::clamp(
+               g_updatesEvery, 0, (int)std::size(kUpdatesEveryHours) - 1)] *
+           60.0 * 60;
+}
 
 UpdatesData GetUpdates() {
     AcquireSRWLockShared(&g_updatesLock);
@@ -26149,6 +30771,10 @@ bool ListWindowsUpdates(std::vector<std::wstring>* titles) {
     return ok;
 }
 
+// The apps sent to the terminal, each with the version it was to get (see
+// AppUpdate::state 5). Under g_updatesLock.
+std::vector<std::pair<std::wstring, std::wstring>> g_updatesRun;
+
 // Opens winget in a terminal for these apps, one after the other (it stays
 // open to show how it went, and asks there for any terms to accept). With no
 // apps, the list itself (to see why it couldn't be read).
@@ -26179,6 +30805,10 @@ void UpdateInTerminal(const std::vector<std::wstring>& ids) {
         if (std::find(run.begin(), run.end(), app.id) != run.end()) {
             app.state = 4;
             app.ticked = false;
+            std::erase_if(g_updatesRun, [&](const auto& entry) {
+                return entry.first == app.id;
+            });
+            g_updatesRun.push_back({app.id, app.available});
         }
     }
     ReleaseSRWLockExclusive(&g_updatesLock);
@@ -26221,11 +30851,17 @@ DWORD WINAPI UpdatesThreadProc(LPVOID parameter) {
         return 0;
     }
     AcquireSRWLockExclusive(&g_updatesLock);
-    // The ones ticked stay ticked.
+    // The ones ticked stay ticked; one updated in the terminal still asking
+    // for the same version finishes when it closes.
     for (auto& app : apps) {
         for (const auto& before : g_updates.apps) {
             if (before.id == app.id) {
                 app.ticked = before.ticked;
+            }
+        }
+        for (const auto& [id, version] : g_updatesRun) {
+            if (id == app.id && version == app.available) {
+                app.state = 5;
             }
         }
     }
@@ -26254,6 +30890,8 @@ class UpdatesPanel : public EditingPanel {
     std::function<void()> check;
     // Tells the island the list changed (an app ignored or shown again).
     std::function<void()> changed;
+    // Tells it how often they're looked for changed (see g_updatesEvery).
+    std::function<void()> everyChanged;
     void Refresh() {
         if (IsOpen()) {
             UpdatesData data = GetUpdates();
@@ -26366,6 +31004,16 @@ class UpdatesPanel : public EditingPanel {
                 ShellExecute(nullptr, L"open", L"ms-settings:windowsupdate",
                              nullptr, nullptr, SW_SHOWNORMAL);
                 return false;
+            case Part::Every:
+                if (hit.index >= 0 && hit.index != g_updatesEvery) {
+                    g_updatesEvery = hit.index;
+                    Wh_SetIntValue(L"updatesCheckEvery", g_updatesEvery);
+                    if (everyChanged) {
+                        everyChanged();
+                    }
+                    Render();
+                }
+                return true;
             default:
                 return false;
         }
@@ -26390,7 +31038,9 @@ class UpdatesPanel : public EditingPanel {
         Tick,
         Ignore,
         WingetTerminal,
-        Windows
+        Windows,
+        // How often they're looked for (the choice's index).
+        Every
     };
     struct Hit {
         Part part = Part::None;
@@ -26460,18 +31110,34 @@ class UpdatesPanel : public EditingPanel {
         m_windowsButton = {padding, listY + gap, width - padding,
                            listY + gap + std::round(32 * s)};
         listY = m_windowsButton.bottom;
+        // Under the list: "Check every" and its choices.
+        const float label = std::round(24 * s);
+        const float chip = std::round(28 * s);
+        const float footer = gap + label + chip;
         const float room = std::max(std::round(120 * s),
-                                    MaxHeight() - y - padding);
+                                    MaxHeight() - y - padding - footer);
         const float viewport = std::min(listY, room);
         m_listViewport = {0, y, width, y + viewport};
         m_scroll.SetSizes(viewport, listY);
-        y += viewport + padding;
+        y += viewport + gap;
+        m_everyLabel = {padding, y, width - padding, y + label};
+        y += label;
+        const size_t choices = std::size(kUpdatesEveryHours);
+        const float chipWidth =
+            std::floor((width - padding * 2 - gap * (choices - 1)) / choices);
+        m_everyChips.clear();
+        for (size_t i = 0; i < choices; i++) {
+            const float left = padding + i * (chipWidth + gap);
+            m_everyChips.push_back({left, y, left + chipWidth, y + chip});
+        }
+        y += chip + padding;
         m_size = {(LONG)width, (LONG)std::ceil(y)};
     }
 
     D2D1_RECT_F AppButton(const D2D1_RECT_F& row) const {
         const float s = m_scale;
-        return {row.right - std::round(108 * s), row.top + std::round(8 * s),
+        // (Wide enough for "Close it to finish" whole.)
+        return {row.right - std::round(136 * s), row.top + std::round(8 * s),
                 row.right, row.bottom - std::round(8 * s)};
     }
     // "Ignore" (or "Show again"), left of it.
@@ -26493,6 +31159,11 @@ class UpdatesPanel : public EditingPanel {
     Hit HitTest(POINT pt) const {
         if (PointInRect(pt, m_checkButton)) {
             return {Part::Check};
+        }
+        for (size_t i = 0; i < m_everyChips.size(); i++) {
+            if (PointInRect(pt, m_everyChips[i])) {
+                return {Part::Every, (int)i};
+            }
         }
         POINT inList;
         if (!ListPoint(pt, &inList)) {
@@ -26528,8 +31199,9 @@ class UpdatesPanel : public EditingPanel {
     Hit m_hover;
     D2D1_RECT_F m_header{}, m_checkButton{}, m_appsTitle{}, m_all{},
         m_windowsTitle{}, m_windowsButton{}, m_wingetButton{},
-        m_ignoredTitle{};
+        m_ignoredTitle{}, m_everyLabel{};
     std::vector<D2D1_RECT_F> m_appRows;
+    std::vector<D2D1_RECT_F> m_everyChips;
     size_t m_windowsRows = 0;
     float m_windowsTop = 0;
 };
@@ -26659,11 +31331,14 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
                        m_hover.part == Part::Ignore && m_hover.index == (int)i,
                        0.7f);
         const bool hover = m_hover.part == Part::App && m_hover.index == (int)i;
-        // Opened in a terminal: can be opened again.
+        // Opened in a terminal, or updated there but finishing when the app
+        // closes: can be opened again.
         DrawButton(target, brush, button,
-                   app.state == 4 ? Tr(L"In the terminal", L"No terminal")
-                                  : Tr(L"Update", L"Atualizar"),
-                   false, hover, app.state == 4 ? 0.6f : 1.0f);
+                   app.state == 4   ? Tr(L"In the terminal", L"No terminal")
+                   : app.state == 5 ? Tr(L"Close it to finish",
+                                         L"Feche para concluir")
+                                    : Tr(L"Update", L"Atualizar"),
+                   false, hover, app.state >= 4 ? 0.6f : 1.0f);
         if (i + 1 < m_appRows.size()) {
             brush->SetColor(Fg(0.07f));
             target->FillRectangle({row.left, row.bottom - 0.5f, row.right,
@@ -26703,6 +31378,39 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
                m_hover.part == Part::Windows);
     EndScrollArea(target);
     DrawScrollBar(target, brush, m_listViewport, m_scroll);
+
+    // "Check every": 1, 3, 6, 12 or 24 hours (the one in use outlined).
+    PCWSTR every = Tr(L"Check every", L"Verificar a cada");
+    brush->SetColor(Fg(0.6f));
+    target->DrawText(every, (UINT32)wcslen(every), m_smallFormat.get(),
+                     m_everyLabel, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    for (size_t i = 0; i < m_everyChips.size(); i++) {
+        const D2D1_RECT_F& chip = m_everyChips[i];
+        const bool chosen = g_updatesEvery == (int)i;
+        const float radius = (chip.bottom - chip.top) / 2;
+        brush->SetColor(Fg(
+            chosen ? 0.18f
+                   : 0.08f + 0.08f * Hover(chip, m_hover.part == Part::Every &&
+                                                     m_hover.index == (int)i)));
+        target->FillRoundedRectangle({chip, radius, radius}, brush);
+        if (chosen) {
+            brush->SetColor(Fg(0.7f));
+            target->DrawRoundedRectangle(
+                {{chip.left + 0.75f, chip.top + 0.75f, chip.right - 0.75f,
+                  chip.bottom - 0.75f},
+                 radius,
+                 radius},
+                brush, 1.5f);
+        }
+        const std::wstring hours =
+            std::to_wstring(kUpdatesEveryHours[i]) + L" h";
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(hours.c_str(), (UINT32)hours.size(),
+                         m_smallFormat.get(), chip, brush,
+                         D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 }
 
 class StatusEvents;
@@ -26921,21 +31629,27 @@ std::vector<std::wstring> RunningPrograms() {
     return running;
 }
 
-// A process's program's name ("Discord"), or empty.
-std::wstring ProcessProgramName(DWORD processId) {
+// A process's program file, or empty.
+std::wstring ProcessImagePath(DWORD processId) {
     HANDLE process =
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (!process) {
         return {};
     }
-    std::wstring name;
+    std::wstring result;
     WCHAR path[MAX_PATH * 2];
     DWORD size = ARRAYSIZE(path);
     if (QueryFullProcessImageName(process, 0, path, &size)) {
-        name = GetProgramName(path);
+        result.assign(path, size);
     }
     CloseHandle(process);
-    return name;
+    return result;
+}
+
+// A process's program's name ("Discord"), or empty.
+std::wstring ProcessProgramName(DWORD processId) {
+    const std::wstring path = ProcessImagePath(processId);
+    return path.empty() ? std::wstring{} : GetProgramName(path.c_str());
 }
 
 // Names joined ("Discord, Chrome"), each once.
@@ -27765,7 +32479,7 @@ class DrivesPanel : public Panel {
     void Prepare(float scale) override {
         if (scale != m_preparedScale) {
             m_preparedScale = scale;
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_iconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 15 * scale);
             m_textFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
@@ -28152,7 +32866,7 @@ class TrayListPanel : public Panel {
             m_nameFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            12 * scale, DWRITE_TEXT_ALIGNMENT_CENTER);
-            m_pinFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_pinFormat = MakeFormat(IconFont(),
                                      DWRITE_FONT_WEIGHT_NORMAL, 9 * scale);
         }
         Layout();
@@ -28484,9 +33198,9 @@ void TrayListPanel::Draw(ID2D1RenderTarget* target,
         const bool dragged =
             g_trayDrag.moved && g_trayDrag.key == entry.icon.key;
         if (ID2D1Bitmap* bitmap = Bitmap(target, entry.icon)) {
-            target->DrawBitmap(
-                bitmap, {iconX, iconY, iconX + iconSize, iconY + iconSize},
-                dragged ? 0.3f : 1.0f);
+            DrawBitmapSmooth(target, bitmap,
+                             {iconX, iconY, iconX + iconSize, iconY + iconSize},
+                             dragged ? 0.3f : 1.0f);
         }
         const bool pinShown = !m_pinKey.empty() && entry.icon.key == m_pinKey;
         if (m_names) {
@@ -28531,8 +33245,9 @@ void TrayListPanel::Draw(ID2D1RenderTarget* target,
                 const float x = (float)(cursor.x - m_position.x);
                 const float y = (float)(cursor.y - m_position.y);
                 const float half = std::round(9 * s);
-                target->DrawBitmap(
-                    bitmap, {x - half, y - half, x + half, y + half}, 0.9f);
+                DrawBitmapSmooth(target, bitmap,
+                                 {x - half, y - half, x + half, y + half},
+                                 0.9f);
             }
         }
     }
@@ -28632,7 +33347,7 @@ class KeyboardPanel : public Panel {
             m_smallFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            11 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_iconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 14 * scale);
         }
         Load();
@@ -28823,6 +33538,988 @@ bool KeyboardPanel::OnMouseUp(POINT pt) {
     return false;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// komorebi's layout on the pill (an option): what each monitor shows comes
+// from komorebi itself, which writes its state into a pipe of the island's
+// at every change (`komorebic subscribe-pipe`, as yasb and komorebi's own
+// bar do), read on a thread of the main island's; nothing is polled. While
+// komorebi doesn't run, the thread waits for komorebi's data folder to
+// change (komorebi writes there as it starts), or for the island's own
+// start button, then subscribes again. The menu's commands run hidden like
+// the start button's (see KomorebiThreadProc).
+
+// Tells the island komorebi's state changed (see g_komorebiState).
+constexpr UINT WM_APP_KOMOREBI = WM_APP + 90;
+
+// A workspace of a monitor: its name ("" without one) and whether it has
+// windows.
+struct KomorebiWorkspace {
+    std::wstring name;
+    bool windows = false;
+    bool operator==(const KomorebiWorkspace&) const = default;
+};
+
+// A monitor komorebi manages, as the pill and the menu show it.
+struct KomorebiMonitor {
+    // Its place in komorebi's list (its commands take it), its screen as
+    // komorebi tells it ("size": left and top, then the width and height),
+    // and its device's name ("DISPLAY1").
+    int index = 0;
+    LONG left = 0;
+    LONG top = 0;
+    LONG right = 0;
+    LONG bottom = 0;
+    std::wstring device;
+    // Its workspaces (up to 9), the one shown on it, and that workspace's
+    // layout (komorebi's name: "BSP", "Grid"..., or "Custom"), tiling and
+    // monocle.
+    std::vector<KomorebiWorkspace> workspaces;
+    int workspace = 0;
+    std::wstring layout;
+    bool tiling = true;
+    bool monocle = false;
+    bool operator==(const KomorebiMonitor&) const = default;
+};
+
+struct KomorebiState {
+    // Subscribed (otherwise nothing of komorebi's shows).
+    bool connected = false;
+    bool paused = false;
+    int focusedMonitor = 0;
+    std::vector<KomorebiMonitor> monitors;
+    // Its tool, for the menu's commands.
+    std::wstring komorebic;
+    bool operator==(const KomorebiState&) const = default;
+};
+SRWLOCK g_komorebiLock = SRWLOCK_INIT;
+KomorebiState g_komorebiState;
+// The islands' copy (their thread's), taken at each WM_APP_KOMOREBI.
+KomorebiState g_komorebiShown;
+// Wakes the thread at once (komorebi started from the island).
+HANDLE g_komorebiKick = nullptr;
+
+void KickKomorebiWatch() {
+    if (g_komorebiKick) {
+        SetEvent(g_komorebiKick);
+    }
+}
+
+// The most of komorebi's state read (its windows' titles are in it too).
+constexpr size_t kKomorebiMaxText = 16 * 1024 * 1024;
+constexpr DWORD kKomorebiPipeBuffer = 64 * 1024;
+// Subscribing again to the same komorebi after failing (it may not take
+// commands yet as it starts): this many times, a second apart.
+constexpr int kKomorebiTries = 3;
+
+// A whole number from komorebi's state, within a sane range (it's another
+// program's data).
+int KomorebiInt(const Json& value, int otherwise = 0) {
+    return value.type == Json::Type::Number && value.number > -1e6 &&
+                   value.number < 1e6
+               ? (int)value.number
+               : otherwise;
+}
+
+// How many a ring of komorebi's state holds (a list, or {"elements": [...]}).
+size_t KomorebiCount(const Json& ring) {
+    return ring.type == Json::Type::Array ? ring.Size()
+                                          : ring[L"elements"].Size();
+}
+
+// komorebi's state (its JSON) as the island keeps it; false if it isn't one.
+bool ReadKomorebiState(const Json& state, KomorebiState* read) {
+    const Json& monitors = state[L"monitors"];
+    if (monitors.type != Json::Type::Object) {
+        return false;
+    }
+    read->paused = state[L"is_paused"].type == Json::Type::Bool &&
+                   state[L"is_paused"].boolean;
+    read->focusedMonitor = KomorebiInt(monitors[L"focused"]);
+    const Json& elements = monitors[L"elements"];
+    for (size_t i = 0; i < elements.Size() && i < 16; i++) {
+        const Json& monitor = elements[i];
+        KomorebiMonitor entry;
+        entry.index = (int)i;
+        const Json& size = monitor[L"size"];
+        entry.left = KomorebiInt(size[L"left"]);
+        entry.top = KomorebiInt(size[L"top"]);
+        entry.right = KomorebiInt(size[L"right"]);
+        entry.bottom = KomorebiInt(size[L"bottom"]);
+        if (monitor[L"name"].type == Json::Type::String) {
+            entry.device = monitor[L"name"].string.substr(0, 64);
+        }
+        const Json& workspaces = monitor[L"workspaces"];
+        for (size_t j = 0; j < workspaces[L"elements"].Size() && j < 9; j++) {
+            const Json& one = workspaces[L"elements"][j];
+            KomorebiWorkspace workspace;
+            if (one[L"name"].type == Json::Type::String) {
+                workspace.name = one[L"name"].string.substr(0, 32);
+            }
+            workspace.windows =
+                KomorebiCount(one[L"containers"]) > 0 ||
+                KomorebiCount(one[L"floating_windows"]) > 0 ||
+                one[L"monocle_container"].type == Json::Type::Object ||
+                one[L"maximized_window"].type == Json::Type::Object;
+            entry.workspaces.push_back(std::move(workspace));
+        }
+        entry.workspace = std::max(0, KomorebiInt(workspaces[L"focused"]));
+        const Json& workspace = workspaces[L"elements"][entry.workspace];
+        // {"Default": "BSP"}, or {"Custom": ...}.
+        const Json& layout = workspace[L"layout"];
+        if (layout.type == Json::Type::Object) {
+            const Json& known = layout[L"Default"];
+            entry.layout = known.type == Json::Type::String
+                               ? known.string.substr(0, 64)
+                               : L"Custom";
+        } else if (layout.type == Json::Type::String) {
+            entry.layout = layout.string.substr(0, 64);
+        }
+        entry.tiling = workspace[L"tile"].type != Json::Type::Bool ||
+                       workspace[L"tile"].boolean;
+        entry.monocle =
+            workspace[L"monocle_container"].type == Json::Type::Object;
+        read->monitors.push_back(std::move(entry));
+    }
+    return true;
+}
+
+// A JSON text (UTF-8) from komorebi: its state, under "state" in what it
+// writes into the pipe; false if it isn't one.
+bool ReadKomorebiText(const char* text,
+                      size_t size,
+                      bool notification,
+                      KomorebiState* state) {
+    if (!size || size > kKomorebiMaxText) {
+        return false;
+    }
+    const int length =
+        MultiByteToWideChar(CP_UTF8, 0, text, (int)size, nullptr, 0);
+    if (length <= 0) {
+        return false;
+    }
+    std::wstring wide(length, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text, (int)size, wide.data(), length);
+    Json json;
+    return JsonReader(wide).Read(&json) &&
+           ReadKomorebiState(notification ? json[L"state"] : json, state);
+}
+
+// komorebi's layouts, in the menu's order: its name in the state, in its
+// commands, and shown.
+struct KomorebiLayoutInfo {
+    PCWSTR id;
+    PCWSTR command;
+    PCWSTR english;
+    PCWSTR portuguese;
+};
+constexpr KomorebiLayoutInfo kKomorebiLayouts[] = {
+    {L"Columns", L"columns", L"Columns", L"Colunas"},
+    {L"Rows", L"rows", L"Rows", L"Linhas"},
+    {L"Grid", L"grid", L"Grid", L"Grade"},
+    {L"BSP", L"bsp", L"BSP", L"BSP"},
+    {L"VerticalStack", L"vertical-stack", L"Vertical stack",
+     L"Pilha vertical"},
+    {L"HorizontalStack", L"horizontal-stack", L"Horizontal stack",
+     L"Pilha horizontal"},
+    {L"UltrawideVerticalStack", L"ultrawide-vertical-stack",
+     L"Ultrawide vertical stack", L"Pilha vertical ultrawide"},
+    {L"RightMainVerticalStack", L"right-main-vertical-stack",
+     L"Vertical stack, main on the right",
+     L"Pilha vertical, principal à direita"},
+    {L"Scrolling", L"scrolling", L"Scrolling", L"Rolagem"},
+};
+constexpr int kKomorebiLayoutCount = (int)ARRAYSIZE(kKomorebiLayouts);
+// The menu's rows after the layouts (see KomorebiPanel).
+constexpr int kKomorebiRowTiling = kKomorebiLayoutCount;
+constexpr int kKomorebiRowMonocle = kKomorebiLayoutCount + 1;
+constexpr int kKomorebiRowPause = kKomorebiLayoutCount + 2;
+constexpr int kKomorebiRows = kKomorebiLayoutCount + 3;
+// (A menu command's KomorebiJob::button.)
+constexpr int kKomorebiMenuButton = 3;
+
+// What the pill shows for a monitor: komorebi paused, then monocle, then
+// tiling off, then the layout.
+std::wstring KomorebiLayoutName(const KomorebiMonitor& monitor, bool paused) {
+    if (paused) {
+        return Tr(L"Paused", L"Pausado");
+    }
+    if (monitor.monocle) {
+        return L"Monocle";
+    }
+    if (!monitor.tiling) {
+        return Tr(L"Floating", L"Flutuante");
+    }
+    for (const auto& info : kKomorebiLayouts) {
+        if (monitor.layout == info.id) {
+            return Tr(info.english, info.portuguese);
+        }
+    }
+    if (monitor.layout == L"Custom") {
+        return Tr(L"Custom", L"Personalizado");
+    }
+    return monitor.layout;
+}
+
+// The icons of komorebi's menu rows (a layout's place in kKomorebiLayouts,
+// then tiling, monocle and pause) and of tiling off (floating).
+constexpr int kKomorebiIconFloating = kKomorebiRows;
+
+// What the pill shows for a monitor, as an icon (see KomorebiLayoutName); -1
+// for a layout without one (a custom one).
+int KomorebiIconOf(const KomorebiMonitor& monitor, bool paused) {
+    if (paused) {
+        return kKomorebiRowPause;
+    }
+    if (monitor.monocle) {
+        return kKomorebiRowMonocle;
+    }
+    if (!monitor.tiling) {
+        return kKomorebiIconFloating;
+    }
+    for (int i = 0; i < kKomorebiLayoutCount; i++) {
+        if (monitor.layout == kKomorebiLayouts[i].id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// A komorebi icon (see KomorebiIconOf) around `middle`: a small screen split
+// the way the layout places the windows (like yasb's), in the brush's color.
+void DrawKomorebiIcon(ID2D1RenderTarget* target,
+                      ID2D1SolidColorBrush* brush,
+                      D2D1_POINT_2F middle,
+                      float scale,
+                      int icon) {
+    const float w = std::round(16 * scale);
+    const float h = std::round(12 * scale);
+    const float stroke = std::max(1.0f, 1.2f * scale);
+    const D2D1_RECT_F frame{std::round(middle.x - w / 2) + 0.5f,
+                            std::round(middle.y - h / 2) + 0.5f,
+                            std::round(middle.x - w / 2) + 0.5f + w,
+                            std::round(middle.y - h / 2) + 0.5f + h};
+    const float radius = 2 * scale;
+    auto x = [&](float f) { return frame.left + (frame.right - frame.left) * f; };
+    auto y = [&](float f) { return frame.top + (frame.bottom - frame.top) * f; };
+    // A line across the frame at `at`, from `from` to `to` (fractions).
+    auto vertical = [&](float at, float from = 0, float to = 1) {
+        target->DrawLine({x(at), y(from)}, {x(at), y(to)}, brush, stroke);
+    };
+    auto horizontal = [&](float at, float from = 0, float to = 1) {
+        target->DrawLine({x(from), y(at)}, {x(to), y(at)}, brush, stroke);
+    };
+    if (icon == kKomorebiRowPause) {
+        const float bar = std::round(3 * scale);
+        const float gap = std::round(3 * scale);
+        const float top = middle.y - h / 2;
+        target->FillRectangle({middle.x - gap / 2 - bar, top,
+                               middle.x - gap / 2, top + h},
+                              brush);
+        target->FillRectangle({middle.x + gap / 2, top,
+                               middle.x + gap / 2 + bar, top + h},
+                              brush);
+        return;
+    }
+    if (icon == kKomorebiIconFloating) {
+        // Two windows over each other, not tiled.
+        const D2D1_RECT_F back{frame.left, frame.top, x(0.7f), y(0.7f)};
+        const D2D1_RECT_F front{x(0.3f), y(0.3f), frame.right, frame.bottom};
+        target->DrawRoundedRectangle({back, radius, radius}, brush, stroke);
+        target->FillRoundedRectangle({front, radius, radius}, brush);
+        return;
+    }
+    // Scrolling: columns going past the screen's sides (no sides drawn).
+    if (icon == 8) {
+        horizontal(0);
+        horizontal(1);
+        vertical(0.18f);
+        vertical(0.82f);
+        return;
+    }
+    target->DrawRoundedRectangle({frame, radius, radius}, brush, stroke);
+    switch (icon) {
+        case 0:  // Columns.
+            vertical(1 / 3.0f);
+            vertical(2 / 3.0f);
+            break;
+        case 1:  // Rows.
+            horizontal(1 / 3.0f);
+            horizontal(2 / 3.0f);
+            break;
+        case 2:  // Grid.
+            vertical(0.5f);
+            horizontal(0.5f);
+            break;
+        case 3:  // BSP: each half split again.
+            vertical(0.5f);
+            horizontal(0.5f, 0.5f, 1);
+            vertical(0.75f, 0.5f, 1);
+            break;
+        case 4:  // Vertical stack: the main one on the left.
+            vertical(0.5f);
+            horizontal(0.5f, 0.5f, 1);
+            break;
+        case 5:  // Horizontal stack: the main one on top.
+            horizontal(0.5f);
+            vertical(0.5f, 0.5f, 1);
+            break;
+        case 6:  // Ultrawide: the main one in the middle.
+            vertical(0.25f);
+            vertical(0.75f);
+            horizontal(0.5f, 0.75f, 1);
+            break;
+        case 7:  // The main one on the right.
+            vertical(0.5f);
+            horizontal(0.5f, 0, 0.5f);
+            break;
+        case kKomorebiRowTiling: {
+            // Tiled: the screen split, one tile filled.
+            vertical(0.5f);
+            horizontal(0.5f, 0.5f, 1);
+            const float inset = stroke * 1.5f;
+            target->FillRectangle({frame.left + inset, frame.top + inset,
+                                   x(0.5f) - inset, frame.bottom - inset},
+                                  brush);
+            break;
+        }
+        case kKomorebiRowMonocle: {
+            // One window filling the screen.
+            const float inset = std::round(2.5f * scale);
+            target->FillRoundedRectangle(
+                {{frame.left + inset, frame.top + inset, frame.right - inset,
+                  frame.bottom - inset},
+                 radius / 2,
+                 radius / 2},
+                brush);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+// A menu row's command for a monitor (its shown workspace), without moving
+// the focus; monocle takes the window in focus, so this monitor's first
+// when another one has it.
+std::wstring KomorebiMenuCommand(const std::wstring& komorebic,
+                                 const KomorebiMonitor& monitor,
+                                 int focusedMonitor,
+                                 int row) {
+    const std::wstring tool = L"\"" + komorebic + L"\"";
+    const std::wstring place = std::to_wstring(monitor.index) + L" " +
+                               std::to_wstring(monitor.workspace);
+    if (row >= 0 && row < kKomorebiLayoutCount) {
+        return tool + L" workspace-layout " + place + L" " +
+               kKomorebiLayouts[row].command;
+    }
+    switch (row) {
+        case kKomorebiRowTiling:
+            return tool + L" workspace-tiling " + place +
+                   (monitor.tiling ? L" disable" : L" enable");
+        case kKomorebiRowMonocle:
+            return (focusedMonitor == monitor.index
+                        ? std::wstring()
+                        : tool + L" focus-monitor " +
+                              std::to_wstring(monitor.index) + L" && ") +
+                   tool + L" toggle-monocle";
+        case kKomorebiRowPause:
+            return tool + L" toggle-pause";
+        default:
+            return {};
+    }
+}
+
+// A workspace of a monitor shown (its dot on the pill clicked).
+std::wstring KomorebiWorkspaceCommand(const std::wstring& komorebic,
+                                      const KomorebiMonitor& monitor,
+                                      int workspace) {
+    return L"\"" + komorebic + L"\" focus-monitor-workspace " +
+           std::to_wstring(monitor.index) + L" " + std::to_wstring(workspace);
+}
+
+// A workspace's name, as its dot's tip says it.
+std::wstring KomorebiWorkspaceName(const KomorebiMonitor& monitor,
+                                   int workspace) {
+    if (workspace >= 0 && workspace < (int)monitor.workspaces.size() &&
+        !monitor.workspaces[workspace].name.empty()) {
+        return monitor.workspaces[workspace].name;
+    }
+    return std::wstring(Tr(L"Workspace", L"Área de trabalho")) + L" " +
+           std::to_wstring(workspace + 1);
+}
+
+// The monitor komorebi knows as this screen: by its place and size (as
+// komorebi gives it, or as a rectangle), else by its device's name
+// ("DISPLAY1" in "\\.\DISPLAY1").
+const KomorebiMonitor* FindKomorebiMonitor(const KomorebiState& state,
+                                           const RECT& rect,
+                                           PCWSTR device) {
+    for (const auto& monitor : state.monitors) {
+        if (monitor.left == rect.left && monitor.top == rect.top &&
+            (monitor.right == rect.right - rect.left ||
+             monitor.right == rect.right) &&
+            (monitor.bottom == rect.bottom - rect.top ||
+             monitor.bottom == rect.bottom)) {
+            return &monitor;
+        }
+    }
+    const size_t length = wcslen(device);
+    for (const auto& monitor : state.monitors) {
+        const size_t name = monitor.device.size();
+        if (name && name <= length &&
+            _wcsicmp(device + length - name, monitor.device.c_str()) == 0) {
+            return &monitor;
+        }
+    }
+    return nullptr;
+}
+
+// The monitor komorebi manages on an island's screen (none while komorebi
+// isn't subscribed to).
+const KomorebiMonitor* KomorebiMonitorOf(HMONITOR screen) {
+    if (!g_komorebiShown.connected || !screen) {
+        return nullptr;
+    }
+    MONITORINFOEX info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfo(screen, &info)) {
+        return nullptr;
+    }
+    return FindKomorebiMonitor(g_komorebiShown, info.rcMonitor, info.szDevice);
+}
+
+struct KomorebiWatchJob {
+    HWND notify;
+    // Its own copies (closed by the thread).
+    HANDLE stop;
+    HANDLE kick;
+};
+
+// A command line run hidden and waited for (up to `timeout`, or until the
+// stop): its exit code, or -1.
+DWORD RunKomorebiHidden(const std::wstring& line, HANDLE stop, DWORD timeout) {
+    PROCESS_INFORMATION process{};
+    if (!StartKomorebiCommand(line, false, &process)) {
+        return (DWORD)-1;
+    }
+    DWORD exitCode = (DWORD)-1;
+    const HANDLE waits[] = {process.hProcess, stop};
+    if (WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, timeout) !=
+            WAIT_OBJECT_0 ||
+        !GetExitCodeProcess(process.hProcess, &exitCode)) {
+        exitCode = (DWORD)-1;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return exitCode;
+}
+
+// Kept for the islands; told to them only when it changed.
+void PublishKomorebiState(HWND notify, KomorebiState state) {
+    AcquireSRWLockExclusive(&g_komorebiLock);
+    const bool changed = !(state == g_komorebiState);
+    g_komorebiState = std::move(state);
+    ReleaseSRWLockExclusive(&g_komorebiLock);
+    if (changed) {
+        PostMessage(notify, WM_APP_KOMOREBI, 0, 0);
+    }
+}
+
+// One subscription: the island's pipe (komorebi connects to it and writes
+// its state at every change), komorebi told about it and its state read now
+// (into a file of the mod's storage, deleted after), then what komorebi
+// writes until it goes (it stopped) or the thread is told to stop. False if
+// komorebi never connected.
+bool KomorebiSession(const KomorebiWatchJob& job,
+                     const std::wstring& komorebic,
+                     int session) {
+    const std::wstring name = L"mac-island-dock-" +
+                              std::to_wstring(GetCurrentProcessId()) + L"-" +
+                              std::to_wstring(session);
+    HANDLE pipe = CreateNamedPipe(
+        (L"\\\\.\\pipe\\" + name).c_str(),
+        PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
+            FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT |
+            PIPE_REJECT_REMOTE_CLIENTS,
+        1, kKomorebiPipeBuffer, kKomorebiPipeBuffer, 0, nullptr);
+    if (pipe == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!overlapped.hEvent) {
+        CloseHandle(pipe);
+        return false;
+    }
+    // The pipe's operation done (true), or not by `timeout` or the stop: then
+    // cancelled and waited for, so nothing writes into `overlapped` after.
+    auto finish = [&](DWORD timeout) {
+        const HANDLE waits[] = {overlapped.hEvent, job.stop};
+        if (WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, timeout) ==
+            WAIT_OBJECT_0) {
+            return true;
+        }
+        DWORD bytes = 0;
+        CancelIoEx(pipe, &overlapped);
+        GetOverlappedResult(pipe, &overlapped, &bytes, TRUE);
+        return false;
+    };
+    bool connected = ConnectNamedPipe(pipe, &overlapped) != FALSE;
+    const DWORD error = connected ? ERROR_SUCCESS : GetLastError();
+    connected = connected || error == ERROR_PIPE_CONNECTED;
+    const bool pending = error == ERROR_IO_PENDING;
+    WCHAR folder[MAX_PATH];
+    WCHAR output[MAX_PATH] = L"";
+    if ((connected || pending) &&
+        Wh_GetModStoragePath(folder, ARRAYSIZE(folder))) {
+        CreateDirectory(folder, nullptr);
+        if (!GetTempFileName(folder, L"kms", 0, output)) {
+            output[0] = L'\0';
+        }
+    }
+    if (connected || pending) {
+        const std::wstring tool = L"\"" + komorebic + L"\"";
+        const DWORD exitCode = RunKomorebiHidden(
+            tool + L" subscribe-pipe " + name +
+                (output[0] ? L" && " + tool + L" state > \"" + output + L"\""
+                           : std::wstring()),
+            job.stop, 10000);
+        if (pending) {
+            DWORD bytes = 0;
+            connected =
+                exitCode == 0 && finish(5000) &&
+                GetOverlappedResult(pipe, &overlapped, &bytes, FALSE);
+            if (exitCode != 0) {
+                CancelIoEx(pipe, &overlapped);
+                GetOverlappedResult(pipe, &overlapped, &bytes, TRUE);
+            }
+        }
+        connected = connected && exitCode == 0;
+    }
+    // Its state now (then each change).
+    if (connected && output[0]) {
+        HANDLE file = CreateFile(output, GENERIC_READ, FILE_SHARE_READ,
+                                 nullptr, OPEN_EXISTING, 0, nullptr);
+        LARGE_INTEGER size{};
+        if (file != INVALID_HANDLE_VALUE && GetFileSizeEx(file, &size) &&
+            size.QuadPart > 0 && (size_t)size.QuadPart <= kKomorebiMaxText) {
+            std::string text((size_t)size.QuadPart, '\0');
+            DWORD read = 0;
+            KomorebiState state;
+            if (ReadFile(file, text.data(), (DWORD)text.size(), &read,
+                         nullptr) &&
+                ReadKomorebiText(text.data(), read, false, &state)) {
+                state.connected = true;
+                state.komorebic = komorebic;
+                PublishKomorebiState(job.notify, std::move(state));
+            }
+        }
+        if (file != INVALID_HANDLE_VALUE) {
+            CloseHandle(file);
+        }
+    }
+    if (output[0]) {
+        DeleteFile(output);
+    }
+    // Each message is a change (in pieces when longer than the buffer).
+    std::string message;
+    std::vector<char> buffer(kKomorebiPipeBuffer);
+    bool tooLong = false;
+    while (connected) {
+        DWORD bytes = 0;
+        ResetEvent(overlapped.hEvent);
+        if (!ReadFile(pipe, buffer.data(), (DWORD)buffer.size(), nullptr,
+                      &overlapped)) {
+            const DWORD readError = GetLastError();
+            if (readError == ERROR_IO_PENDING) {
+                if (!finish(INFINITE)) {
+                    break;
+                }
+            } else if (readError != ERROR_MORE_DATA) {
+                break;
+            }
+        }
+        const bool whole =
+            GetOverlappedResult(pipe, &overlapped, &bytes, FALSE) != FALSE;
+        if (!whole && GetLastError() != ERROR_MORE_DATA) {
+            break;
+        }
+        if (message.size() + bytes > kKomorebiMaxText) {
+            tooLong = true;
+        } else {
+            message.append(buffer.data(), bytes);
+        }
+        if (whole) {
+            KomorebiState state;
+            if (!tooLong && ReadKomorebiText(message.data(), message.size(),
+                                             true, &state)) {
+                state.connected = true;
+                state.komorebic = komorebic;
+                PublishKomorebiState(job.notify, std::move(state));
+            }
+            message.clear();
+            tooLong = false;
+        }
+    }
+    CloseHandle(overlapped.hEvent);
+    CloseHandle(pipe);
+    // (Gone: nothing of komorebi's shows until it's back.)
+    if (connected && WaitForSingleObject(job.stop, 0) != WAIT_OBJECT_0) {
+        PublishKomorebiState(job.notify, {});
+    }
+    return connected;
+}
+
+DWORD WINAPI KomorebiWatchThreadProc(LPVOID parameter) {
+    std::unique_ptr<KomorebiWatchJob> job((KomorebiWatchJob*)parameter);
+    std::wstring local;
+    PWSTR path = nullptr;
+    if (SUCCEEDED(
+            SHGetKnownFolderPath(kFOLDERID_LocalAppData, 0, nullptr, &path))) {
+        local = path;
+    }
+    CoTaskMemFree(path);
+    const std::wstring data = local + L"\\komorebi";
+    // (State files left by an earlier run that didn't end.)
+    WCHAR storage[MAX_PATH];
+    if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
+        const std::wstring base = std::wstring(storage) + L"\\";
+        WIN32_FIND_DATA found;
+        HANDLE find = FindFirstFile((base + L"kms*.tmp").c_str(), &found);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                DeleteFile((base + found.cFileName).c_str());
+            } while (FindNextFile(find, &found));
+            FindClose(find);
+        }
+    }
+    int sessions = 0;
+    DWORD failedProcess = 0;
+    int failures = 0;
+    while (WaitForSingleObject(job->stop, 0) == WAIT_TIMEOUT) {
+        // Given up on this komorebi for now (it didn't take the subscription,
+        // like one still starting at sign-in): tried again every 30 seconds,
+        // at once when it ends or the island starts it (not woken by its
+        // folder, where it keeps writing its log).
+        if (failures >= kKomorebiTries) {
+            // (Gone: looked at again at once. One that can't be opened, like
+            // komorebi run as administrator, is waited for all the same.)
+            HANDLE running = OpenProcess(SYNCHRONIZE, FALSE, failedProcess);
+            const bool gone =
+                !running && GetLastError() == ERROR_INVALID_PARAMETER;
+            DWORD woken = WAIT_TIMEOUT;
+            if (!gone) {
+                const HANDLE waits[] = {job->stop, job->kick, running};
+                woken = WaitForMultipleObjects(running ? 3 : 2, waits, FALSE,
+                                               30000);
+            }
+            if (running) {
+                CloseHandle(running);
+            }
+            if (woken != WAIT_OBJECT_0) {
+                failures = 0;
+                failedProcess = 0;
+            }
+            continue;
+        }
+        // Watched before looking, so komorebi starting in between isn't
+        // missed: its folder (or, before it has one, where it'll be made).
+        const DWORD attributes = GetFileAttributes(data.c_str());
+        const bool hasData = attributes != INVALID_FILE_ATTRIBUTES &&
+                             (attributes & FILE_ATTRIBUTE_DIRECTORY);
+        HANDLE change =
+            local.empty()
+                ? INVALID_HANDLE_VALUE
+                : FindFirstChangeNotification(
+                      (hasData ? data : local).c_str(), FALSE,
+                      hasData ? FILE_NOTIFY_CHANGE_FILE_NAME |
+                                    FILE_NOTIFY_CHANGE_LAST_WRITE
+                              : FILE_NOTIFY_CHANGE_DIR_NAME);
+        const DWORD process = KomorebiProcessId();
+        if (process != failedProcess) {
+            failures = 0;
+        }
+        const std::wstring komorebic =
+            process ? FindKomorebic() : std::wstring();
+        if (process) {
+            if (change != INVALID_HANDLE_VALUE) {
+                FindCloseChangeNotification(change);
+            }
+            // (Running without its komorebic found: as given up.)
+            if (komorebic.empty()) {
+                failedProcess = process;
+                failures = kKomorebiTries;
+                continue;
+            }
+            // (A subscription komorebi drops at once counts as failed: no
+            // command run over and over.)
+            const ULONGLONG start = GetTickCount64();
+            if (KomorebiSession(*job, komorebic, ++sessions) &&
+                GetTickCount64() - start > 5000) {
+                failures = 0;
+            } else {
+                failedProcess = process;
+                failures++;
+                const HANDLE waits[] = {job->stop, job->kick};
+                WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, 1000);
+            }
+            continue;
+        }
+        // Until komorebi starts (or the island starts it).
+        HANDLE waits[3] = {job->stop, job->kick, change};
+        const DWORD count = change != INVALID_HANDLE_VALUE ? 3 : 2;
+        if (WaitForMultipleObjects(count, waits, FALSE, INFINITE) ==
+            WAIT_OBJECT_0 + 1) {
+            failures = 0;
+            failedProcess = 0;
+        }
+        if (change != INVALID_HANDLE_VALUE) {
+            FindCloseChangeNotification(change);
+        }
+    }
+    CloseHandle(job->stop);
+    CloseHandle(job->kick);
+    return 0;
+}
+
+// The menu of komorebi's layout item: the layouts (the one shown marked),
+// then tiling, monocle and pause (marked when on), for the island's monitor.
+// A click runs its command and closes the menu; the pill shows the result
+// when komorebi tells it.
+constexpr float kKomorebiMenuWidth = 280;
+
+class KomorebiPanel : public Panel {
+   public:
+    // The screen of the island it opens from (its commands go there).
+    void SetScreen(HMONITOR screen) { m_screen = screen; }
+    // A command for komorebi, hidden (not while another one runs).
+    void RunCommand(const std::wstring& command) {
+        if (!m_thread && !command.empty()) {
+            StartKomorebiJob(command, kKomorebiMenuButton, m_hwnd, &m_thread,
+                             &m_stop);
+        }
+    }
+    // komorebi's state changed: drawn again, or closed when komorebi no
+    // longer manages this monitor.
+    void Refresh() {
+        if (!IsOpen()) {
+            return;
+        }
+        if (!KomorebiMonitorOf(m_screen)) {
+            Close();
+            return;
+        }
+        StartIslandAnimation();
+    }
+
+   protected:
+    void Prepare(float scale) override {
+        if (scale != m_preparedScale) {
+            m_preparedScale = scale;
+            m_iconFormat = MakeFormat(IconFont(),
+                                      DWRITE_FONT_WEIGHT_NORMAL, 14 * scale);
+            m_textFormat =
+                MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
+                           13 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
+            if (m_textFormat) {
+                m_textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+                DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                                         0, 0};
+                m_textFormat->SetTrimming(&trimming, nullptr);
+            }
+        }
+        Layout();
+    }
+
+    void OnOpen() override {
+        m_hover = -1;
+        Layout();
+    }
+
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+
+    bool OnMouseMove(POINT pt) override {
+        const int hover = HitTest(pt);
+        if (hover == m_hover) {
+            return false;
+        }
+        m_hover = hover;
+        return true;
+    }
+
+    bool OnMouseLeave() override {
+        if (m_hover < 0) {
+            return false;
+        }
+        m_hover = -1;
+        return true;
+    }
+
+    bool OnMouseUp(POINT pt) override {
+        const int hit = HitTest(pt);
+        const KomorebiMonitor* monitor = KomorebiMonitorOf(m_screen);
+        // (One command at a time.)
+        if (hit < 0 || !monitor || m_thread) {
+            return false;
+        }
+        const std::wstring command =
+            KomorebiMenuCommand(g_komorebiShown.komorebic, *monitor,
+                                g_komorebiShown.focusedMonitor, hit);
+        Close();
+        RunCommand(command);
+        return false;
+    }
+
+    // Its command ended (a failure is shown in a terminal).
+    bool OnAppMessage(UINT msg, WPARAM, LPARAM) override {
+        if (msg == WM_APP_KOMOREBI_DONE) {
+            EndKomorebiJob(&m_thread, &m_stop);
+        }
+        return false;
+    }
+
+    void OnDestroy() override { EndKomorebiJob(&m_thread, &m_stop); }
+
+   private:
+    void Layout() {
+        const float s = m_scale;
+        const float width = std::round(kKomorebiMenuWidth * s);
+        const float padding = std::round(6 * s);
+        const float row = std::round(34 * s);
+        const float separator = std::round(9 * s);
+        float y = padding;
+        m_rows.clear();
+        for (int i = 0; i < kKomorebiRows; i++) {
+            if (i == kKomorebiRowTiling) {
+                m_separatorY = y + separator / 2;
+                y += separator;
+            }
+            m_rows.push_back({padding, y, width - padding, y + row});
+            y += row;
+        }
+        y += padding;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    int HitTest(POINT pt) const {
+        for (size_t i = 0; i < m_rows.size(); i++) {
+            if (PointInRect(pt, m_rows[i])) {
+                return (int)i;
+            }
+        }
+        return -1;
+    }
+
+    winrt::com_ptr<IDWriteTextFormat> m_iconFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_textFormat;
+    float m_preparedScale = 0;
+    std::vector<D2D1_RECT_F> m_rows;
+    float m_separatorY = 0;
+    int m_hover = -1;
+    HMONITOR m_screen = nullptr;
+    // The command running (see StartKomorebiJob).
+    HANDLE m_thread = nullptr;
+    HANDLE m_stop = nullptr;
+};
+
+void KomorebiPanel::Draw(ID2D1RenderTarget* target,
+                         ID2D1SolidColorBrush* brush) {
+    if (!m_iconFormat || !m_textFormat) {
+        return;
+    }
+    const KomorebiMonitor* monitor = KomorebiMonitorOf(m_screen);
+    const float s = m_scale;
+    const float radius = std::round(9 * s);
+    const float icon = std::round(34 * s);
+    // Each row: its icon, its name, and a check at the end when on.
+    auto drawRow = [&](int row, PCWSTR name, bool checked) {
+        if (row >= (int)m_rows.size()) {
+            return;
+        }
+        const D2D1_RECT_F& rect = m_rows[row];
+        const float lit = Hover(HoverKey(6200, row), m_hover == row);
+        if (lit > 0.01f) {
+            brush->SetColor(Fg(0.09f * lit));
+            target->FillRoundedRectangle({rect, radius, radius}, brush);
+        }
+        brush->SetColor(checked ? Accent(1) : Fg(0.85f));
+        DrawKomorebiIcon(target, brush,
+                         {rect.left + icon / 2, (rect.top + rect.bottom) / 2},
+                         s, row);
+        const float checkWidth = std::round(28 * s);
+        if (checked) {
+            const WCHAR check = 0xE73E;
+            brush->SetColor(Accent(1));
+            target->DrawText(&check, 1, m_iconFormat.get(),
+                             {rect.right - checkWidth, rect.top, rect.right,
+                              rect.bottom},
+                             brush);
+        }
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(name, (UINT32)wcslen(name), m_textFormat.get(),
+                         {rect.left + icon, rect.top,
+                          rect.right - checkWidth, rect.bottom},
+                         brush);
+    };
+    for (int i = 0; i < kKomorebiLayoutCount; i++) {
+        drawRow(i,
+                Tr(kKomorebiLayouts[i].english, kKomorebiLayouts[i].portuguese),
+                monitor && monitor->layout == kKomorebiLayouts[i].id);
+    }
+    brush->SetColor(Fg(0.10f));
+    target->FillRectangle({std::round(14 * s), m_separatorY,
+                           (float)m_size.cx - std::round(14 * s),
+                           m_separatorY + std::max(1.0f, std::round(s))},
+                          brush);
+    drawRow(kKomorebiRowTiling, Tr(L"Tiling", L"Tiling (organizar as janelas)"),
+            monitor && monitor->tiling);
+    drawRow(kKomorebiRowMonocle,
+            Tr(L"Monocle (the window in focus fills the screen)",
+               L"Monocle (a janela em foco ocupa a tela)"),
+            monitor && monitor->monocle);
+    drawRow(kKomorebiRowPause,
+            Tr(L"Paused (every monitor)", L"Pausado (todos os monitores)"),
+            g_komorebiShown.paused);
+}
+
+// An item's width on the pill following its name's (see Island::Layout):
+// shown (growing or shrinking), wanted, and the name measured last; and the
+// name with its icon (an app's key, or "" for the item's glyph) shown, the
+// one before sliding up and out as it comes up from below (0 to 1).
+struct ItemWidth {
+    double shown = -1;
+    double velocity = 0;
+    float target = 0;
+    std::wstring measuredKey;
+    float measured = 0;
+    std::wstring name;
+    std::wstring icon;
+    std::wstring nameBefore;
+    std::wstring iconBefore;
+    double swap = 0;
+    double swapVelocity = 0;
+};
+
+// Whether a window is hidden by Windows (another virtual desktop, a
+// suspended app).
+bool IsCloakedWindow(HWND window) {
+    BOOL cloaked = FALSE;
+    return SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked,
+                                           sizeof(cloaked))) &&
+           cloaked;
+}
+
+// The desktop's windows (its icons' window behind the apps).
+bool IsDesktopWindow(HWND window) {
+    WCHAR className[16] = L"";
+    GetClassName(window, className, ARRAYSIZE(className));
+    return _wcsicmp(className, L"Progman") == 0 ||
+           _wcsicmp(className, L"WorkerW") == 0;
+}
+
+HWND FindTopAppWindow(HMONITOR screen);
+
 // Virtual desktops (an option): Windows keeps them in the registry (their
 // IDs in order, the current one's, and the names given to them), watched
 // for changes on a thread (RegNotifyChangeKeyValue, no polling). Switching
@@ -28997,7 +34694,7 @@ class DesktopsPanel : public Panel {
             m_textFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            13 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_iconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 14 * scale);
         }
         Load();
@@ -29297,7 +34994,33 @@ struct FolderEntry {
     std::wstring path;
     // Pinned (in the first column).
     bool pinned = false;
+    // When it was last changed (a FILETIME), for sorting by date.
+    ULONGLONG modified = 0;
 };
+
+// A folder's items in the panel's order: folders, then files, then the
+// rest (drives, "More in Explorer"), each by name, or the newest first.
+void SortFolderItems(std::vector<FolderEntry>& items, bool byDate) {
+    auto group = [](const FolderEntry& item) {
+        return item.kind == FolderKind::Folder ? 0
+               : item.kind == FolderKind::File ? 1
+                                               : 2;
+    };
+    std::stable_sort(items.begin(), items.end(),
+                     [&](const FolderEntry& a, const FolderEntry& b) {
+                         if (group(a) != group(b)) {
+                             return group(a) < group(b);
+                         }
+                         if (group(a) == 2) {
+                             return false;
+                         }
+                         if (byDate && a.modified != b.modified) {
+                             return a.modified > b.modified;
+                         }
+                         return StrCmpLogicalW(a.name.c_str(),
+                                               b.name.c_str()) < 0;
+                     });
+}
 
 // Folders with more are cut (the rest opens in Explorer).
 constexpr size_t kFolderListMax = 200;
@@ -29312,26 +35035,293 @@ struct FolderListJob {
     int column;
     UINT generation;
     std::vector<FolderEntry> items;
+    bool byDate = false;
+    // Read again for a change in it (the column stays as it is meanwhile).
+    bool quiet = false;
 };
+// Tells the list a folder shown changed (wParam: the watched set's number,
+// lParam: the folder's place in it; see FolderWatchThreadProc).
+constexpr UINT WM_APP_FOLDER_CHANGED = WM_APP + 91;
+
+// The folders a folders' panel shows, watched while it's open (see
+// FoldersPanel::WatchColumns).
+struct FolderWatch {
+    HWND panel = nullptr;
+    // Stop (manual reset), and the set changed (automatic).
+    HANDLE stop = nullptr;
+    HANDLE kick = nullptr;
+    SRWLOCK lock = SRWLOCK_INIT;
+    // Under the lock.
+    std::vector<std::wstring> paths;
+    UINT set = 0;
+};
+
+// A name added, removed or changed in one of the folders (a file or a
+// folder, by anything) is posted to the panel; the set changed, they're
+// watched again. Only waits (FindFirstChangeNotification), nothing polled.
+DWORD WINAPI FolderWatchThreadProc(LPVOID parameter) {
+    auto* watch = (FolderWatch*)parameter;
+    // (The 32-bit Windhawk process would watch SysWOW64 for System32.)
+    PVOID redirection = nullptr;
+    const bool unredirected =
+        Wow64DisableWow64FsRedirection(&redirection) != FALSE;
+    bool stop = false;
+    while (!stop) {
+        AcquireSRWLockShared(&watch->lock);
+        const std::vector<std::wstring> paths = watch->paths;
+        const UINT set = watch->set;
+        ReleaseSRWLockShared(&watch->lock);
+        std::vector<HANDLE> waits{watch->stop, watch->kick};
+        std::vector<int> places;
+        for (size_t i = 0;
+             i < paths.size() && waits.size() < MAXIMUM_WAIT_OBJECTS; i++) {
+            HANDLE change = FindFirstChangeNotification(
+                paths[i].c_str(), FALSE,
+                FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME);
+            if (change != INVALID_HANDLE_VALUE) {
+                waits.push_back(change);
+                places.push_back((int)i);
+            }
+        }
+        for (;;) {
+            const DWORD woken = WaitForMultipleObjects(
+                (DWORD)waits.size(), waits.data(), FALSE, INFINITE);
+            const size_t k = woken - WAIT_OBJECT_0;
+            if (woken == WAIT_FAILED || k == 0) {
+                stop = true;
+                break;
+            }
+            if (k == 1) {
+                break;
+            }
+            if (k >= waits.size()) {
+                continue;
+            }
+            PostMessage(watch->panel, WM_APP_FOLDER_CHANGED, set,
+                        places[k - 2]);
+            // (A folder gone: no longer watched.)
+            if (!FindNextChangeNotification(waits[k])) {
+                FindCloseChangeNotification(waits[k]);
+                waits.erase(waits.begin() + k);
+                places.erase(places.begin() + (k - 2));
+            }
+        }
+        for (size_t k = 2; k < waits.size(); k++) {
+            FindCloseChangeNotification(waits[k]);
+        }
+    }
+    if (unredirected) {
+        Wow64RevertWow64FsRedirection(redirection);
+    }
+    return 0;
+}
+
+// Files dragged over one of the mod's windows (Windows' own drag, out of the
+// mod or out of another app): what they'd do there, asked of the window's
+// owner, with Windows' picture of them kept over the window. Registered on
+// the island's thread (OLE started there, see IslandThreadProc).
+class DropTarget final : public IDropTarget {
+   public:
+    class Receiver {
+       public:
+        // The files at `screen`: what they'd do (DROPEFFECT_NONE: nothing),
+        // out of what their source allows.
+        virtual DWORD DragOverAt(IDataObject* data,
+                                 POINT screen,
+                                 DWORD keys,
+                                 DWORD allowed) = 0;
+        // Gone out of the window (or the drag ended).
+        virtual void DragGone() = 0;
+        // Let go at `screen`: what was done.
+        virtual DWORD DropAt(IDataObject* data,
+                             POINT screen,
+                             DWORD keys,
+                             DWORD allowed) = 0;
+
+       protected:
+        ~Receiver() = default;
+    };
+
+    DropTarget(HWND hwnd, Receiver* owner) : m_hwnd(hwnd), m_owner(owner) {
+        CoCreateInstance(kCLSID_DragDropHelper, nullptr, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(m_helper.put()));
+    }
+    // Its window going: nothing told to the owner any more.
+    void Forget() {
+        m_owner = nullptr;
+        m_data = nullptr;
+        m_helper = nullptr;
+    }
+
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** object) override {
+        if (riid == IID_IUnknown || riid == IID_IDropTarget) {
+            *object = static_cast<IDropTarget*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    IFACEMETHODIMP_(ULONG) AddRef() override {
+        return InterlockedIncrement(&m_refs);
+    }
+    IFACEMETHODIMP_(ULONG) Release() override {
+        const ULONG refs = InterlockedDecrement(&m_refs);
+        if (!refs) {
+            delete this;
+        }
+        return refs;
+    }
+
+    IFACEMETHODIMP DragEnter(IDataObject* data,
+                             DWORD keys,
+                             POINTL pt,
+                             DWORD* effect) override {
+        m_data.copy_from(data);
+        POINT screen{pt.x, pt.y};
+        *effect = m_owner ? m_owner->DragOverAt(data, screen, keys, *effect)
+                          : DROPEFFECT_NONE;
+        if (m_helper) {
+            m_helper->DragEnter(m_hwnd, data, &screen, *effect);
+        }
+        return S_OK;
+    }
+    IFACEMETHODIMP DragOver(DWORD keys, POINTL pt, DWORD* effect) override {
+        POINT screen{pt.x, pt.y};
+        *effect = m_owner && m_data ? m_owner->DragOverAt(m_data.get(), screen,
+                                                          keys, *effect)
+                                    : DROPEFFECT_NONE;
+        if (m_helper) {
+            m_helper->DragOver(&screen, *effect);
+        }
+        return S_OK;
+    }
+    IFACEMETHODIMP DragLeave() override {
+        if (m_owner) {
+            m_owner->DragGone();
+        }
+        if (m_helper) {
+            m_helper->DragLeave();
+        }
+        m_data = nullptr;
+        return S_OK;
+    }
+    IFACEMETHODIMP Drop(IDataObject* data,
+                        DWORD keys,
+                        POINTL pt,
+                        DWORD* effect) override {
+        POINT screen{pt.x, pt.y};
+        // (The picture goes first: the folder's own drop may ask something.)
+        if (m_helper) {
+            m_helper->Drop(data, &screen, *effect);
+        }
+        *effect = m_owner ? m_owner->DropAt(data, screen, keys, *effect)
+                          : DROPEFFECT_NONE;
+        m_data = nullptr;
+        return S_OK;
+    }
+
+   private:
+    HWND m_hwnd;
+    Receiver* m_owner;
+    winrt::com_ptr<IDropTargetHelper> m_helper;
+    winrt::com_ptr<IDataObject> m_data;
+    ULONG m_refs = 1;
+};
+
+// A window taking Windows' drags, until Revoke (called while the window is
+// still there).
+class DropRegistration {
+   public:
+    void Register(HWND hwnd, DropTarget::Receiver* owner) {
+        if (m_target || !hwnd) {
+            return;
+        }
+        auto* target = new DropTarget(hwnd, owner);
+        if (SUCCEEDED(RegisterDragDrop(hwnd, target))) {
+            m_target = target;
+            m_hwnd = hwnd;
+        } else {
+            target->Release();
+        }
+    }
+    void Revoke() {
+        if (!m_target) {
+            return;
+        }
+        m_target->Forget();
+        RevokeDragDrop(m_hwnd);
+        m_target->Release();
+        m_target = nullptr;
+        m_hwnd = nullptr;
+    }
+
+   private:
+    DropTarget* m_target = nullptr;
+    HWND m_hwnd = nullptr;
+};
+
+// The Windows folder when the path is under System32 and this is the 32-bit
+// Windhawk process, which sees SysWOW64 there (empty otherwise).
+std::wstring Wow64WindowsFolderOf(const std::wstring& path) {
+    BOOL wow64 = FALSE;
+    WCHAR windows[MAX_PATH];
+    if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64 ||
+        !GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
+        return {};
+    }
+    const std::wstring system = std::wstring(windows) + L"\\System32";
+    if (_wcsnicmp(path.c_str(), system.c_str(), system.size()) != 0 ||
+        (path.size() != system.size() && path[system.size()] != L'\\')) {
+        return {};
+    }
+    return windows;
+}
+
+// A folder's own drop target (copies or moves what's dropped on it as
+// Explorer does: its questions for names already there, its progress, undone
+// with Ctrl+Z). Under System32, through Sysnative: the copy runs on a thread
+// of this process, which would put the files in SysWOW64.
+winrt::com_ptr<IDropTarget> FolderDropTargetOf(const std::wstring& path) {
+    std::wstring parsed = path;
+    if (const std::wstring windows = Wow64WindowsFolderOf(path);
+        !windows.empty()) {
+        parsed = windows + L"\\Sysnative" +
+                 path.substr(windows.size() + wcslen(L"\\System32"));
+    }
+    winrt::com_ptr<IShellItem> item;
+    winrt::com_ptr<IDropTarget> target;
+    if (SUCCEEDED(SHCreateItemFromParsingName(parsed.c_str(), nullptr,
+                                              IID_PPV_ARGS(item.put())))) {
+        item->BindToHandler(nullptr, kBHID_SFUIObject,
+                            IID_PPV_ARGS(target.put()));
+    }
+    return target;
+}
+
+// A path without its last backslash ("C:\" stays "C:"), to compare folders.
+std::wstring FolderKey(std::wstring path) {
+    while (!path.empty() && path.back() == L'\\') {
+        path.pop_back();
+    }
+    return path;
+}
+
+// Held this long on a folder (or the island's folders item) while dragging
+// files: it opens.
+constexpr UINT kFolderOpenMs = 600;
 
 // A file or a folder opened as the user would. Under System32 through
 // explorer.exe: the 32-bit Windhawk process would open SysWOW64's copy (a
 // 32-bit cmd.exe, or nothing for what only the 64-bit one has).
 void OpenPath(const std::wstring& path) {
-    BOOL wow64 = FALSE;
-    WCHAR windows[MAX_PATH];
-    if (IsWow64Process(GetCurrentProcess(), &wow64) && wow64 &&
-        GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
-        const std::wstring system = std::wstring(windows) + L"\\System32";
-        if (_wcsnicmp(path.c_str(), system.c_str(), system.size()) == 0 &&
-            (path.size() == system.size() || path[system.size()] == L'\\')) {
-            const std::wstring explorer =
-                std::wstring(windows) + L"\\explorer.exe";
-            const std::wstring quoted = L"\"" + path + L"\"";
-            ShellExecute(nullptr, L"open", explorer.c_str(), quoted.c_str(),
-                         nullptr, SW_SHOWNORMAL);
-            return;
-        }
+    if (const std::wstring windows = Wow64WindowsFolderOf(path);
+        !windows.empty()) {
+        const std::wstring explorer = windows + L"\\explorer.exe";
+        const std::wstring quoted = L"\"" + path + L"\"";
+        ShellExecute(nullptr, L"open", explorer.c_str(), quoted.c_str(),
+                     nullptr, SW_SHOWNORMAL);
+        return;
     }
     ShellExecute(nullptr, L"open", path.c_str(), nullptr, nullptr,
                  SW_SHOWNORMAL);
@@ -29405,26 +35395,25 @@ DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
                 (isFolder ? folders : files)
                     .push_back({isFolder ? FolderKind::Folder
                                          : FolderKind::File,
-                                data.cFileName, folder + data.cFileName});
+                                data.cFileName, folder + data.cFileName, false,
+                                ((ULONGLONG)data.ftLastWriteTime.dwHighDateTime
+                                 << 32) |
+                                    data.ftLastWriteTime.dwLowDateTime});
             } while (FindNextFile(find, &data));
             FindClose(find);
         }
         if (unredirected) {
             Wow64RevertWow64FsRedirection(redirection);
         }
-        auto byName = [](const FolderEntry& a, const FolderEntry& b) {
-            return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
-        };
-        std::sort(folders.begin(), folders.end(), byName);
-        std::sort(files.begin(), files.end(), byName);
         job->items = std::move(folders);
         job->items.insert(job->items.end(),
                           std::make_move_iterator(files.begin()),
                           std::make_move_iterator(files.end()));
+        SortFolderItems(job->items, job->byDate);
         if (more) {
             job->items.push_back(
                 {FolderKind::More,
-                 Tr(L"More in Explorer…", L"Mais no Explorador…"),
+                 Tr(L"More in Explorer", L"Mais no Explorador"),
                  job->path});
         }
     }
@@ -29513,21 +35502,34 @@ void SaveFolderPins(const std::vector<std::wstring>& pins) {
     Wh_SetStringValue(L"folderPins", text.c_str());
 }
 
-class FoldersPanel : public Panel {
+class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
+   public:
+    // Opened under files dragged out of another app, it doesn't take the
+    // focus (a click elsewhere wouldn't close it): closed once they left it
+    // without being dropped (dropped, it stays to show them; a click in it
+    // and then elsewhere, or on the item, closes it).
+    void CloseIfDragLeft() {
+        if (IsOpen() && !m_filesOver && !m_keepOpen &&
+            GetForegroundWindow() != m_hwnd) {
+            Close();
+        }
+    }
+
    protected:
     void Prepare(float scale) override {
         if (!m_wic) {
             CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                              CLSCTX_INPROC_SERVER, IID_PPV_ARGS(m_wic.put()));
         }
-        if (scale != m_preparedScale) {
-            m_preparedScale = scale;
-            m_textFormat =
+        PrepareFormats(scale);
+        if (scale != m_rowScale) {
+            m_rowScale = scale;
+            m_rowFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            12.5f * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_rowIconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 14 * scale);
-            m_smallIconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_rowSmallIconFormat = MakeFormat(IconFont(),
                                            DWRITE_FONT_WEIGHT_NORMAL,
                                            10 * scale);
             m_icons.clear();
@@ -29543,12 +35545,270 @@ class FoldersPanel : public Panel {
         LoadPins();
         m_hover = {-1, -1};
         m_buttonHover = RowButton::None;
+        EndPinDrag();
+        EndFileDrag();
+        ClearSearch();
+        m_asking = false;
+        m_askRemember = true;
+        m_dragOnce = 0;
+        m_arrivals.clear();
+        m_dropped.clear();
+        m_keepOpen = false;
+        m_slideFrom = 0;
+        m_leavingAt = 0;
+        m_dropSpot = {-1, -1};
+        m_drop.Register(m_hwnd, this);
+        m_shown = true;
         Layout();
+    }
+
+    // Files just dropped in it: it stays though the window they came from
+    // takes the focus (see DropAt), until it's clicked.
+    bool StaysWhenDeactivated() const override { return m_keepOpen; }
+
+    void OnClose() override {
+        m_shown = false;
+        m_keepOpen = false;
+        StopWatching();
+        KillTimer(m_hwnd, kFolderOpenTimerId);
+        KillTimer(m_hwnd, kFolderChangeTimerId);
+        m_changePending = false;
+    }
+
+    // A pinned row held: dragged up or down, it goes where it's let go (see
+    // OnMouseMove, OnMouseUp).
+    bool OnMouseDown(POINT pt) override {
+        // (Clicked: a panel like the others again, see m_keepOpen.)
+        m_keepOpen = false;
+        if (SearchShown() && PointInRect(pt, m_searchBox)) {
+            EditTextClick(m_search, m_searchEdit, pt);
+            g_lastTyped = NowSeconds();
+            return true;
+        }
+        RowButton button = RowButton::None;
+        const Spot spot = HitTest(pt, &button);
+        const FolderEntry* item = ItemAt(spot);
+        // A file or a folder held in a folder's column: dragged out once the
+        // mouse moves (see StartFileDrag).
+        if (spot.column > 0 && item && button == RowButton::None &&
+            (item->kind == FolderKind::File ||
+             item->kind == FolderKind::Folder) &&
+            !m_asking) {
+            m_fileDrag = spot;
+            m_fileFrom = pt;
+            SetCapture(m_hwnd);
+            return false;
+        }
+        if (spot.column != 0 || !item || !item->pinned ||
+            button != RowButton::None) {
+            return false;
+        }
+        m_dragRow = spot.row;
+        m_dropRow = spot.row;
+        m_dragFrom = pt;
+        m_dragging = false;
+        SetCapture(m_hwnd);
+        return false;
+    }
+
+    void OnCaptureLost() override {
+        if (m_dragRow >= 0) {
+            EndPinDrag();
+            Render();
+        }
+        m_fileDrag = {-1, -1};
+    }
+
+    // Typing searches the folder shown last (Escape clears it first).
+    bool OnKey(WPARAM key) override {
+        if (!SearchShown()) {
+            return false;
+        }
+        if (key == VK_ESCAPE) {
+            if (m_search.empty()) {
+                return false;
+            }
+            ClearSearch();
+            SearchAgain();
+            return true;
+        }
+        const std::wstring before = m_search;
+        const bool taken = EditTextKey(m_search, m_searchEdit, key);
+        if (taken && m_search != before) {
+            SearchAgain();
+        }
+        return taken;
+    }
+    bool OnChar(WCHAR c) override {
+        if (!SearchShown() || c == L'\r' || c == L'\n' || c == L'\t' ||
+            c == 0x1B) {
+            return false;
+        }
+        const bool taken = EditTextChar(m_search, m_searchEdit, c, 80, m_hwnd);
+        if (taken) {
+            SearchAgain();
+        }
+        return taken;
+    }
+    bool AnimateContents(double) override {
+        const bool typing = AnimateTyping(SearchShown(), false);
+        const double now = NowSeconds();
+        bool moving = false;
+        for (const auto& column : m_columns) {
+            moving = moving || now - column.shownAt < kRowsInSeconds ||
+                     (column.loading &&
+                      now - column.loadingSince < kReadingDelay);
+        }
+        std::erase_if(m_arrivals, [now](const auto& arrival) {
+            return now - arrival.second >= kRowInSeconds;
+        });
+        // (Dropped files never shown are let go after a minute.)
+        std::erase_if(m_dropped, [now](const Dropped& dropped) {
+            return dropped.seenAt ? now - dropped.seenAt >= kDroppedSeconds
+                                  : now - dropped.droppedAt > 60;
+        });
+        moving = moving || now - m_slideAt < kSlideSeconds ||
+                 now - m_leavingAt < kSlideSeconds ||
+                 std::any_of(m_dropped.begin(), m_dropped.end(),
+                             [](const Dropped& dropped) {
+                                 return dropped.seenAt > 0;
+                             });
+        return typing || moving || !m_arrivals.empty();
     }
 
     void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
 
+    // Files dragged over the panel (out of it, or out of Explorer, the
+    // desktop...): dropped on a folder (its row, or a column's own folder
+    // around its files), by that folder's own drop target. A folder held
+    // under them a moment opens beside it.
+    DWORD DragOverAt(IDataObject* data,
+                     POINT screen,
+                     DWORD keys,
+                     DWORD allowed) override {
+        IslandScope scope(Owner());
+        m_filesOver = true;
+        POINT pt = screen;
+        ScreenToClient(m_hwnd, &pt);
+        pt.x -= m_contentOffset.x;
+        pt.y -= m_contentOffset.y;
+        Spot spot{-1, -1};
+        const std::wstring folder = DropFolderAt(pt, &spot);
+        if (!(spot == m_dropSpot)) {
+            m_dropSpot = spot;
+            m_hover = {-1, -1};
+            KillTimer(m_hwnd, kFolderOpenTimerId);
+            if (Navigable(spot) && m_columns[spot.column].opened != spot.row) {
+                SetTimer(m_hwnd, kFolderOpenTimerId, kFolderOpenMs, nullptr);
+            }
+            Render();
+        }
+        const POINTL at{screen.x, screen.y};
+        if (folder != m_dropFolder) {
+            if (m_dropTarget) {
+                m_dropTarget->DragLeave();
+            }
+            m_dropTarget = nullptr;
+            m_dropFolder = folder;
+            DWORD effect = allowed;
+            if (!folder.empty()) {
+                m_dropTarget = FolderDropTargetOf(folder);
+                if (m_dropTarget &&
+                    FAILED(m_dropTarget->DragEnter(data, keys, at, &effect))) {
+                    m_dropTarget = nullptr;
+                }
+            }
+        }
+        DWORD effect = allowed;
+        if (!m_dropTarget ||
+            FAILED(m_dropTarget->DragOver(keys, at, &effect))) {
+            effect = DROPEFFECT_NONE;
+        }
+        return effect;
+    }
+    void DragGone() override {
+        IslandScope scope(Owner());
+        if (m_dropTarget) {
+            m_dropTarget->DragLeave();
+        }
+        EndDropHover();
+        CloseIfDragLeft();
+    }
+    DWORD DropAt(IDataObject* data,
+                 POINT screen,
+                 DWORD keys,
+                 DWORD allowed) override {
+        IslandScope scope(Owner());
+        DWORD effect = allowed;
+        // (Kept open from before: Windows' drop brings the window the files
+        // came from to the front meanwhile.)
+        const bool keptOpen = m_keepOpen;
+        m_keepOpen = true;
+        // (A move within a drive comes back as DROPEFFECT_NONE: Windows'
+        // "optimized move", telling the source not to delete them again.
+        // Dropped all the same.)
+        const bool dropped =
+            m_dropTarget &&
+            SUCCEEDED(m_dropTarget->Drop(data, keys, {screen.x, screen.y},
+                                         &effect));
+        if (!dropped) {
+            effect = DROPEFFECT_NONE;
+            m_keepOpen = keptOpen;
+        }
+        // Dropped: the panel stays, the folder they went in opens beside its
+        // row, and they're lit as they show up there.
+        const Spot spot = m_dropSpot;
+        const std::wstring folder = m_dropFolder;
+        if (dropped) {
+            NoteDropped(data, folder);
+        }
+        EndDropHover();
+        if (dropped && spot.row >= 0 && Navigable(spot) &&
+            m_columns[spot.column].opened != spot.row) {
+            OpenColumn(spot);
+        }
+        CloseIfDragLeft();
+        Render();
+        return effect;
+    }
+
     bool OnMouseMove(POINT pt) override {
+        if (m_fileDrag.column >= 0) {
+            const float reach = std::round(6 * m_scale);
+            if (std::abs(pt.x - m_fileFrom.x) < reach &&
+                std::abs(pt.y - m_fileFrom.y) < reach) {
+                return false;
+            }
+            const Spot spot = m_fileDrag;
+            EndFileDrag();
+            StartFileDrag(spot.column, spot.row);
+            return true;
+        }
+        if (m_asking) {
+            const int hover = AskHit(pt);
+            if (hover == m_askHover) {
+                return false;
+            }
+            m_askHover = hover;
+            return true;
+        }
+        if (m_dragRow >= 0 && !m_columns.empty()) {
+            if (!m_dragging && std::abs(pt.y - m_dragFrom.y) <
+                                   std::round(5 * m_scale)) {
+                return false;
+            }
+            m_dragging = true;
+            const Column& pins = m_columns[0];
+            const int row =
+                pins.top + (int)std::floor((pt.y - pins.rect.top) / m_rowHeight);
+            const int drop =
+                std::clamp(row, 0, std::max(0, (int)m_pins.size() - 1));
+            if (drop == m_dropRow) {
+                return false;
+            }
+            m_dropRow = drop;
+            return true;
+        }
         RowButton button = RowButton::None;
         const Spot hover = HitTest(pt, &button);
         if (hover == m_hover && button == m_buttonHover) {
@@ -29566,6 +35826,7 @@ class FoldersPanel : public Panel {
     }
 
     bool OnMouseUp(POINT pt) override;
+    bool OnTimer(UINT_PTR id) override;
 
     // The wheel scrolls the column under the mouse.
     bool OnWheel(int delta) override {
@@ -29604,6 +35865,9 @@ class FoldersPanel : public Panel {
     bool OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
     void OnDestroy() override {
+        m_drop.Revoke();
+        m_dropTarget = nullptr;
+        StopWatching();
         // (A folder dialog still open is closed.) What the threads posted to
         // this window, about to go, is freed here.
         for (HANDLE& thread : m_threads) {
@@ -29622,6 +35886,273 @@ class FoldersPanel : public Panel {
     }
 
    private:
+    // Files dragged out: the question's parts (see AskHit).
+    static constexpr int kAskCopy = 1;
+    static constexpr int kAskMove = 2;
+    static constexpr int kAskRemember = 3;
+
+    void EndFileDrag() {
+        const bool held = m_fileDrag.column >= 0;
+        m_fileDrag = {-1, -1};
+        if (held && GetCapture() == m_hwnd) {
+            ReleaseCapture();
+        }
+    }
+
+    // A file or a folder dragged out, copied or moved as chosen (asked the
+    // first time: the question shows under the columns, then it's dragged
+    // again); Windows' own drag (its picture, the target's highlight).
+    void StartFileDrag(int column, int row) {
+        const FolderEntry* item = ItemAt({column, row});
+        if (!item) {
+            return;
+        }
+        const int choice =
+            m_dragOnce ? m_dragOnce : g_settings.islandFolderDrag;
+        if (choice == 0) {
+            m_asking = true;
+            m_askHover = 0;
+            Layout();
+            return;
+        }
+        m_dragOnce = 0;
+        // (Under System32, found with the redirection off for a moment, as
+        // the list was read: the 32-bit Windhawk process would look in
+        // SysWOW64. The app it's dropped on gets the System32 path.)
+        PVOID redirection = nullptr;
+        const bool unredirected =
+            !Wow64WindowsFolderOf(item->path).empty() &&
+            Wow64DisableWow64FsRedirection(&redirection) != FALSE;
+        winrt::com_ptr<IShellItem> shellItem;
+        winrt::com_ptr<IDataObject> data;
+        const bool found =
+            SUCCEEDED(SHCreateItemFromParsingName(
+                item->path.c_str(), nullptr, IID_PPV_ARGS(shellItem.put()))) &&
+            SUCCEEDED(shellItem->BindToHandler(nullptr, kBHID_DataObject,
+                                               IID_PPV_ARGS(data.put())));
+        if (unredirected) {
+            Wow64RevertWow64FsRedirection(redirection);
+        }
+        if (!found) {
+            return;
+        }
+        // (Its column may change while it's dragged: a folder opening under
+        // it, the list read again. The moved file's column follows by
+        // itself, see WatchColumns.)
+        m_dragOut = item->path;
+        DWORD effect = DROPEFFECT_NONE;
+        SHDoDragDrop(m_hwnd, data.get(), nullptr,
+                     choice == 2 ? DROPEFFECT_MOVE : DROPEFFECT_COPY, &effect);
+        m_dragOut.clear();
+    }
+
+    // The question's parts: its buttons and its box (0: none).
+    int AskHit(POINT pt) const {
+        return PointInRect(pt, m_askCopy)       ? kAskCopy
+               : PointInRect(pt, m_askMove)     ? kAskMove
+               : PointInRect(pt, m_askRememberRect) ? kAskRemember
+                                                : 0;
+    }
+
+    // The list threads that ended let go (each read starts one).
+    void ForgetEndedThreads() {
+        std::erase_if(m_threads, [](HANDLE thread) {
+            if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
+                CloseHandle(thread);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    // A folder's column read again (its rows as they are now; shown as they
+    // were until then, the new ones coming in).
+    void ReloadColumn(int index) {
+        const Column& column = m_columns[index];
+        if (column.path.empty() || column.loading) {
+            return;
+        }
+        auto* job = new FolderListJob{m_hwnd, column.path, index, m_generation,
+                                      {}, column.byDate, true};
+        ForgetEndedThreads();
+        if (HANDLE thread =
+                CreateThread(nullptr, 0, FolderListThreadProc, job, 0, nullptr)) {
+            m_threads.push_back(thread);
+        } else {
+            delete job;
+        }
+    }
+
+    // The folders shown are watched while the panel is open (only those, and
+    // only then, on a thread of their own): a file added, removed or renamed
+    // in one, by anything, reads its column again (see OnAppMessage,
+    // OnTimer).
+    void WatchColumns() {
+        std::vector<std::wstring> paths;
+        for (size_t i = 1; m_shown && i < m_columns.size(); i++) {
+            const std::wstring& path = m_columns[i].path;
+            if (!path.empty() && !path.starts_with(kPlacePrefix)) {
+                paths.push_back(path);
+            }
+        }
+        if (paths == m_watchedPaths) {
+            return;
+        }
+        if (paths.empty()) {
+            StopWatching();
+            return;
+        }
+        m_watchedPaths = paths;
+        if (m_watchThread) {
+            AcquireSRWLockExclusive(&m_watch->lock);
+            m_watch->paths = std::move(paths);
+            m_watchSet = ++m_watch->set;
+            ReleaseSRWLockExclusive(&m_watch->lock);
+            SetEvent(m_watch->kick);
+            return;
+        }
+        m_watch = std::make_unique<FolderWatch>();
+        m_watch->panel = m_hwnd;
+        m_watch->paths = std::move(paths);
+        m_watchSet = m_watch->set;
+        m_watch->stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        m_watch->kick = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (m_watch->stop && m_watch->kick) {
+            m_watchThread = CreateThread(nullptr, 0, FolderWatchThreadProc,
+                                         m_watch.get(), 0, nullptr);
+        }
+        if (!m_watchThread) {
+            const std::vector<std::wstring> wanted = m_watchedPaths;
+            StopWatching();
+            // (Not tried again for the same folders.)
+            m_watchedPaths = wanted;
+        }
+    }
+    void StopWatching() {
+        if (m_watchThread) {
+            SetEvent(m_watch->stop);
+            WaitForSingleObject(m_watchThread, INFINITE);
+            CloseHandle(m_watchThread);
+            m_watchThread = nullptr;
+        }
+        if (m_watch) {
+            if (m_watch->stop) {
+                CloseHandle(m_watch->stop);
+            }
+            if (m_watch->kick) {
+                CloseHandle(m_watch->kick);
+            }
+            m_watch.reset();
+        }
+        m_watchedPaths.clear();
+    }
+
+    // The column's opened row found again by the folder shown beside it (its
+    // order or its contents changed); that folder gone, the columns after it
+    // go too. `scroll`: the row brought into view.
+    void FindOpened(size_t index, bool scroll) {
+        Column& column = m_columns[index];
+        if (index + 1 >= m_columns.size()) {
+            column.opened = -1;
+            return;
+        }
+        const std::wstring& path = m_columns[index + 1].path;
+        column.opened = -1;
+        for (size_t i = 0; i < column.items.size(); i++) {
+            if (!path.empty() && ItemPath(column.items[i]) == path) {
+                column.opened = (int)i;
+                break;
+            }
+        }
+        if (column.opened < 0) {
+            m_columns.resize(index + 1);
+            m_generation++;
+            m_first = m_columns.size() > kShownColumns
+                          ? m_columns.size() - kShownColumns
+                          : 0;
+            return;
+        }
+        if (scroll) {
+            const int shown = std::max(1, m_visibleRows - 1);
+            const int rows = (int)column.items.size();
+            column.top = std::clamp(column.opened - shown / 2, 0,
+                                    std::max(0, rows - shown));
+        }
+    }
+
+    // The search: in the folder shown last (the box beside "Back"), by name
+    // ("report") or by type ("*.pdf" or ".pdf").
+    bool SearchShown() const { return m_columns.size() > 1; }
+    void ClearSearch() {
+        m_search.clear();
+        m_searchEdit.Reset();
+    }
+    void ApplySearch() {
+        std::wstring query = m_search;
+        while (!query.empty() && query.back() == L' ') {
+            query.pop_back();
+        }
+        while (!query.empty() && query.front() == L' ') {
+            query.erase(0, 1);
+        }
+        std::wstring type;
+        if (query.starts_with(L"*.")) {
+            type = query.substr(1);
+        } else if (query.starts_with(L".") && query.size() > 1) {
+            type = query;
+        }
+        for (size_t i = 1; i < m_columns.size(); i++) {
+            Column& column = m_columns[i];
+            if (i + 1 < m_columns.size() || query.empty()) {
+                column.items = column.all;
+                continue;
+            }
+            column.items.clear();
+            for (const auto& item : column.all) {
+                const bool found =
+                    item.kind == FolderKind::More ||
+                    (!type.empty()
+                         ? item.name.size() >= type.size() &&
+                               _wcsicmp(item.name.c_str() + item.name.size() -
+                                            type.size(),
+                                        type.c_str()) == 0
+                         : MatchesSearch(item.name, query));
+                if (found) {
+                    column.items.push_back(item);
+                }
+            }
+            column.top = 0;
+        }
+    }
+
+    void EndPinDrag() {
+        const bool held = m_dragRow >= 0;
+        m_dragRow = m_dropRow = -1;
+        m_dragging = false;
+        if (held && GetCapture() == m_hwnd) {
+            ReleaseCapture();
+        }
+    }
+
+    // The pin shown on a row of the first column while one is dragged (the
+    // dragged one at the row it would go to).
+    int PinShownAt(int row) const {
+        if (!m_dragging || m_dragRow < 0 || row >= (int)m_pins.size()) {
+            return row;
+        }
+        if (row == m_dropRow) {
+            return m_dragRow;
+        }
+        int from = row;
+        if (m_dragRow < m_dropRow && row >= m_dragRow && row < m_dropRow) {
+            from = row + 1;
+        } else if (m_dragRow > m_dropRow && row > m_dropRow &&
+                   row <= m_dragRow) {
+            from = row - 1;
+        }
+        return from;
+    }
+
     // At most this many columns shown (the first ones slide away).
     static constexpr size_t kShownColumns = 3;
     static constexpr int kPickPin = 1;
@@ -29633,13 +36164,23 @@ class FoldersPanel : public Panel {
         bool operator==(const Spot&) const = default;
     };
     // The buttons at a row's end, under the mouse: a pinned one's "x", a
-    // folder's pin.
-    enum class RowButton { None, Remove, Pin };
+    // folder's pin, the order of a folder's items (on "Open in Explorer").
+    enum class RowButton { None, Remove, Pin, Sort };
     struct Column {
         // The folder it lists ("" for the pins).
         std::wstring path;
+        // What it shows (the search's matches in the last one), and all of
+        // what's in it.
         std::vector<FolderEntry> items;
+        std::vector<FolderEntry> all;
         bool loading = false;
+        // Its items newest first (otherwise by name; each column its own).
+        bool byDate = false;
+        // Since when it's read, and when its rows came in (see RowIn).
+        double loadingSince = 0;
+        double shownAt = 0;
+        // Changed meanwhile: read again (see MarkChanged).
+        bool changed = false;
         // The row opened beside it, and the first row shown.
         int opened = -1;
         int top = 0;
@@ -29686,6 +36227,213 @@ class FoldersPanel : public Panel {
         return place->open ? place->open : KnownFolderPath(place->folder);
     }
 
+    // The search changed: the rows it brings in come in (the ones kept stay
+    // still).
+    void SearchAgain() {
+        std::vector<std::wstring> before;
+        if (!m_columns.empty()) {
+            for (const auto& item : m_columns.back().items) {
+                before.push_back(item.path);
+            }
+        }
+        ApplySearch();
+        const double now = NowSeconds();
+        if (!m_columns.empty()) {
+            for (const auto& item : m_columns.back().items) {
+                if (std::find(before.begin(), before.end(), item.path) ==
+                    before.end()) {
+                    m_arrivals.push_back({item.path, now});
+                }
+            }
+        }
+        StartIslandAnimation();
+        Layout();
+    }
+
+    // Rows coming in: a column's, one after the other (opened, read, sorted;
+    // see Column::shownAt), or single ones (new in a folder, found by the
+    // search; see m_arrivals). From 0 to 1.
+    static constexpr double kRowInSeconds = 0.18;
+    static constexpr double kRowInStep = 0.015;
+    static constexpr int kRowInCascade = 10;
+    static constexpr double kRowsInSeconds =
+        kRowInSeconds + kRowInCascade * kRowInStep;
+    // "Reading..." only for a folder that takes this long (no flash).
+    static constexpr double kReadingDelay = 0.15;
+    float RowIn(const Column& column,
+                int shown,
+                const std::wstring& path,
+                double now) const {
+        double since =
+            now - column.shownAt - std::min(shown, kRowInCascade) * kRowInStep;
+        for (const auto& [arrived, at] : m_arrivals) {
+            if (arrived == path) {
+                since = std::min(since, now - at);
+            }
+        }
+        const double t = std::clamp(since / kRowInSeconds, 0.0, 1.0);
+        return (float)(1 - (1 - t) * (1 - t) * (1 - t));
+    }
+
+    // Where files dragged over the panel would go: a folder's row (a pinned
+    // one, a drive), or the column's own folder around its files; spot: the
+    // row (or {column, -3}: the whole column), also a row that only opens
+    // (This PC). Never where the file dragged out of the panel already is,
+    // or into itself.
+    std::wstring DropFolderAt(POINT pt, Spot* spot) const {
+        *spot = {-1, -1};
+        for (size_t i = m_first; i < m_columns.size(); i++) {
+            const Column& column = m_columns[i];
+            if (pt.x < column.rect.left || pt.x >= column.rect.right ||
+                pt.y < column.rect.top || pt.y >= column.rect.bottom) {
+                continue;
+            }
+            const int header = i > 0 ? 1 : 0;
+            const int shown = (int)((pt.y - column.rect.top) / m_rowHeight);
+            const int row = column.top + shown - header;
+            const FolderEntry* item =
+                shown >= header ? ItemAt({(int)i, row}) : nullptr;
+            std::wstring folder;
+            if (item && Navigable({(int)i, row})) {
+                *spot = {(int)i, row};
+                const FolderPlace* place =
+                    item->kind == FolderKind::Place ? FindFolderPlace(item->path)
+                                                    : nullptr;
+                if (item->kind == FolderKind::Folder ||
+                    item->kind == FolderKind::Drive ||
+                    (place && !place->open)) {
+                    folder = ItemPath(*item);
+                }
+            } else if (i > 0 && !column.loading && !column.path.empty() &&
+                       !column.path.starts_with(kPlacePrefix) &&
+                       (!item || item->kind == FolderKind::File ||
+                        item->kind == FolderKind::More)) {
+                *spot = {(int)i, -3};
+                folder = column.path;
+            }
+            if (!m_dragOut.empty() && !folder.empty()) {
+                const std::wstring key = FolderKey(folder);
+                const std::wstring out = FolderKey(m_dragOut);
+                const size_t slash = out.find_last_of(L'\\');
+                const std::wstring parent = slash == std::wstring::npos
+                                                ? std::wstring()
+                                                : out.substr(0, slash);
+                if (_wcsicmp(key.c_str(), parent.c_str()) == 0 ||
+                    _wcsicmp(key.c_str(), out.c_str()) == 0 ||
+                    (key.size() > out.size() && key[out.size()] == L'\\' &&
+                     _wcsnicmp(key.c_str(), out.c_str(), out.size()) == 0)) {
+                    *spot = {-1, -1};
+                    folder.clear();
+                }
+            }
+            return folder;
+        }
+        return {};
+    }
+    void EndDropHover() {
+        m_filesOver = false;
+        m_dropTarget = nullptr;
+        m_dropFolder.clear();
+        KillTimer(m_hwnd, kFolderOpenTimerId);
+        if (!(m_dropSpot == Spot{-1, -1})) {
+            m_dropSpot = {-1, -1};
+            Render();
+        }
+    }
+
+    // The columns shown slid by as many as went out of view on a side
+    // (opening a folder past the third column, or going back), from where
+    // they were (see ColumnSlide).
+    static constexpr double kSlideSeconds = 0.24;
+    void SlideColumns(size_t firstBefore) {
+        if (m_first == firstBefore) {
+            return;
+        }
+        m_slideFrom = ((float)m_first - (float)firstBefore) * m_columnStep;
+        m_slideAt = NowSeconds();
+        StartIslandAnimation();
+    }
+    float ColumnSlide(double now) const {
+        const double t =
+            std::clamp((now - m_slideAt) / kSlideSeconds, 0.0, 1.0);
+        return (float)(m_slideFrom * (1 - t) * (1 - t) * (1 - t));
+    }
+
+    // Files dropped in `folder` (their names, from Windows' list of them).
+    static constexpr double kDroppedSeconds = 1.6;
+    void NoteDropped(IDataObject* data, const std::wstring& folder) {
+        FORMATETC format{CF_HDROP, nullptr, DVASPECT_CONTENT, -1,
+                         TYMED_HGLOBAL};
+        STGMEDIUM medium{};
+        if (folder.empty() || FAILED(data->GetData(&format, &medium))) {
+            return;
+        }
+        if (auto drop = (HDROP)GlobalLock(medium.hGlobal)) {
+            const double now = NowSeconds();
+            const UINT count = DragQueryFile(drop, 0xFFFFFFFF, nullptr, 0);
+            for (UINT i = 0; i < count && i < 100; i++) {
+                std::wstring path(DragQueryFile(drop, i, nullptr, 0), L'\0');
+                DragQueryFile(drop, i, path.data(), (UINT)path.size() + 1);
+                const size_t slash = FolderKey(path).find_last_of(L'\\');
+                m_dropped.push_back({FolderKey(folder),
+                                     slash == std::wstring::npos
+                                         ? path
+                                         : FolderKey(path).substr(slash + 1),
+                                     now});
+            }
+            GlobalUnlock(medium.hGlobal);
+        }
+        ReleaseStgMedium(&medium);
+    }
+    // A column read: the files dropped in its folder lit now, the first of
+    // them brought into view.
+    void RevealDropped(size_t index) {
+        Column& column = m_columns[index];
+        const std::wstring folder = FolderKey(column.path);
+        bool shown = false;
+        for (auto& dropped : m_dropped) {
+            if (dropped.seenAt || _wcsicmp(dropped.folder.c_str(),
+                                           folder.c_str()) != 0) {
+                continue;
+            }
+            for (size_t k = 0; k < column.items.size(); k++) {
+                if (_wcsicmp(column.items[k].name.c_str(),
+                             dropped.name.c_str()) != 0) {
+                    continue;
+                }
+                dropped.seenAt = NowSeconds();
+                const int rows = std::max(1, m_visibleRows - 1);
+                const int row = (int)k;
+                if (!shown &&
+                    (row < column.top || row >= column.top + rows)) {
+                    column.top = std::clamp(
+                        row - rows / 2, 0,
+                        std::max(0, (int)column.items.size() - rows));
+                }
+                shown = true;
+                break;
+            }
+        }
+        if (shown) {
+            StartIslandAnimation();
+        }
+    }
+    // How lit a row is for a file just dropped (0 to 1).
+    float DroppedLit(const Column& column,
+                     const FolderEntry& item,
+                     double now) const {
+        for (const auto& dropped : m_dropped) {
+            if (dropped.seenAt > 0 &&
+                _wcsicmp(dropped.name.c_str(), item.name.c_str()) == 0 &&
+                _wcsicmp(dropped.folder.c_str(),
+                         FolderKey(column.path).c_str()) == 0) {
+                return (float)std::clamp(
+                    1 - (now - dropped.seenAt) / kDroppedSeconds, 0.0, 1.0);
+            }
+        }
+        return 0;
+    }
+
     void LoadPins() {
         // (Only the ones still known, so a row is its pin.)
         m_pins.clear();
@@ -29712,7 +36460,7 @@ class FoldersPanel : public Panel {
             }
         }
         pins.items.push_back({FolderKind::AddFolder,
-                              Tr(L"Add a folder…", L"Adicionar pasta…"), L""});
+                              Tr(L"Add a folder", L"Adicionar pasta"), L""});
         pins.items.push_back({FolderKind::WindowsPlaces,
                               Tr(L"Windows places", L"Locais do Windows"),
                               L""});
@@ -29723,7 +36471,19 @@ class FoldersPanel : public Panel {
     }
 
     // What's in a folder, in a column beside it (the ones after it go).
-    void OpenColumn(const Spot& spot) {
+    void OpenColumn(Spot spot) {
+        if (const FolderEntry* found = ItemAt(spot);
+            found && !m_search.empty() && spot.column > 0) {
+            const std::wstring path = found->path;
+            ClearSearch();
+            ApplySearch();
+            const auto& all = m_columns[spot.column].items;
+            for (size_t i = 0; i < all.size(); i++) {
+                if (all[i].path == path) {
+                    spot.row = (int)i;
+                }
+            }
+        }
         const FolderEntry* item = ItemAt(spot);
         if (!item || m_columns[spot.column].opened == spot.row) {
             return;
@@ -29744,18 +36504,15 @@ class FoldersPanel : public Panel {
                          Tr(place.english, place.portuguese), place.token});
                 }
             }
+            column.all = column.items;
+            column.shownAt = NowSeconds();
         } else {
             column.path = ItemPath(*item);
             column.loading = true;
+            column.loadingSince = NowSeconds();
             auto* job = new FolderListJob{m_hwnd, column.path,
                                           spot.column + 1, m_generation, {}};
-            std::erase_if(m_threads, [](HANDLE thread) {
-                if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
-                    CloseHandle(thread);
-                    return true;
-                }
-                return false;
-            });
+            ForgetEndedThreads();
             if (HANDLE thread = CreateThread(nullptr, 0, FolderListThreadProc,
                                              job, 0, nullptr)) {
                 m_threads.push_back(thread);
@@ -29764,11 +36521,16 @@ class FoldersPanel : public Panel {
                 column.loading = false;
             }
         }
+        const size_t first = m_first;
         m_columns.push_back(std::move(column));
         m_first = m_columns.size() > kShownColumns
                       ? m_columns.size() - kShownColumns
                       : 0;
+        ClearSearch();
+        ApplySearch();
+        StartIslandAnimation();
         Layout();
+        SlideColumns(first);
     }
 
     void Layout() {
@@ -29800,8 +36562,31 @@ class FoldersPanel : public Panel {
                                         padding + std::round(120 * s),
                                         padding + back}
                           : D2D1_RECT_F{};
-        m_size = {(LONG)(x - gap + padding),
-                  (LONG)std::ceil(padding * 2 + back + rows * row)};
+        // The search beside "Back", as long as the columns.
+        m_searchBox = back > 0 ? D2D1_RECT_F{m_back.right + gap * 2,
+                                             padding + std::round(2 * s),
+                                             x - gap,
+                                             padding + back - std::round(2 * s)}
+                               : D2D1_RECT_F{};
+        float height = padding * 2 + back + rows * row;
+        // The question about files dragged out, under the columns.
+        m_askRect = m_askCopy = m_askMove = m_askRememberRect = {};
+        if (m_asking) {
+            const float top = height - padding + gap;
+            const float button = std::round(30 * s);
+            const float right = x - gap;
+            m_askRect = {padding, top, right, top + std::round(96 * s)};
+            const float buttons = top + std::round(30 * s);
+            const float half = (right - padding - gap) / 2;
+            m_askCopy = {padding, buttons, padding + half, buttons + button};
+            m_askMove = {padding + half + gap, buttons, right, buttons + button};
+            m_askRememberRect = {padding, buttons + button + std::round(4 * s),
+                             right, top + std::round(96 * s)};
+            height = m_askRect.bottom + padding;
+        }
+        m_size = {(LONG)(x - gap + padding), (LONG)std::ceil(height)};
+        m_columnStep = width + gap;
+        WatchColumns();
     }
 
     Spot HitTest(POINT pt, RowButton* button) const {
@@ -29816,9 +36601,13 @@ class FoldersPanel : public Panel {
                 continue;
             }
             const int shown = (int)((pt.y - column.rect.top) / m_rowHeight);
-            // Row -2: "Open in Explorer" (above the items).
+            // Row -2: "Open in Explorer" (above the items), the order at its
+            // end.
             const int header = i > 0 ? 1 : 0;
             if (shown < header) {
+                if (pt.x >= column.rect.right - SortButtonWidth()) {
+                    *button = RowButton::Sort;
+                }
                 return {(int)i, -2};
             }
             const int row = column.top + shown - header;
@@ -29842,11 +36631,13 @@ class FoldersPanel : public Panel {
 
     ID2D1Bitmap* TypeIcon(ID2D1RenderTarget* target, const FolderEntry& item);
 
+    float SortButtonWidth() const { return std::round(76 * m_scale); }
+
     winrt::com_ptr<IWICImagingFactory> m_wic;
-    winrt::com_ptr<IDWriteTextFormat> m_textFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_iconFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_smallIconFormat;
-    float m_preparedScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_rowFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_rowIconFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_rowSmallIconFormat;
+    float m_rowScale = 0;
     std::vector<std::wstring> m_pins;
     std::vector<Column> m_columns;
     size_t m_first = 0;
@@ -29857,6 +36648,66 @@ class FoldersPanel : public Panel {
     Spot m_hover{-1, -1};
     RowButton m_buttonHover = RowButton::None;
     D2D1_RECT_F m_back{};
+    // The search in the folder shown last (see ApplySearch).
+    std::wstring m_search;
+    TextEdit m_searchEdit;
+    D2D1_RECT_F m_searchBox{};
+    // A file or a folder held (to drag out), and where the mouse went down.
+    Spot m_fileDrag{-1, -1};
+    POINT m_fileFrom{};
+    // The question shown (copy or move?), its box and parts, the part under
+    // the mouse, "Remember my choice", and a choice for the next drag only.
+    bool m_asking = false;
+    D2D1_RECT_F m_askRect{}, m_askCopy{}, m_askMove{}, m_askRememberRect{};
+    int m_askHover = 0;
+    bool m_askRemember = true;
+    int m_dragOnce = 0;
+    // A pin held (its row), where it would go, and whether it moved yet.
+    int m_dragRow = -1;
+    int m_dropRow = -1;
+    POINT m_dragFrom{};
+    bool m_dragging = false;
+    // Open (its folders watched), and their watch: the thread, the folders
+    // and their set's number (see WatchColumns).
+    bool m_shown = false;
+    std::unique_ptr<FolderWatch> m_watch;
+    HANDLE m_watchThread = nullptr;
+    std::vector<std::wstring> m_watchedPaths;
+    UINT m_watchSet = 0;
+    // A change seen: the columns read again in a moment (once for many).
+    static constexpr UINT_PTR kFolderChangeTimerId = 42;
+    static constexpr UINT kFolderChangeMs = 300;
+    bool m_changePending = false;
+    // Files dragged over it: the window taking them, the folder they'd go
+    // in, its drop target, the row lit (opened after kFolderOpenMs), and the
+    // file dragged out of the panel itself.
+    static constexpr UINT_PTR kFolderOpenTimerId = 41;
+    DropRegistration m_drop;
+    std::wstring m_dropFolder;
+    winrt::com_ptr<IDropTarget> m_dropTarget;
+    Spot m_dropSpot{-1, -1};
+    bool m_filesOver = false;
+    std::wstring m_dragOut;
+    // Single rows coming in (their paths), since when (see RowIn).
+    std::vector<std::pair<std::wstring, double>> m_arrivals;
+    // Files dropped (on a folder of the panel): it stays open, and they're
+    // lit as they show up there (see NoteDropped, RevealDropped).
+    bool m_keepOpen = false;
+    struct Dropped {
+        std::wstring folder;
+        std::wstring name;
+        double droppedAt;
+        // When it showed in its folder's column (0: not yet).
+        double seenAt = 0;
+    };
+    std::vector<Dropped> m_dropped;
+    // The columns sliding by one (see SlideColumns), the step between two
+    // columns, and the column going back out (see OnMouseUp, Draw).
+    float m_slideFrom = 0;
+    double m_slideAt = 0;
+    float m_columnStep = 0;
+    Column m_leaving;
+    double m_leavingAt = 0;
     std::vector<HANDLE> m_threads;
     // Icons by type (an extension, or "\\" for folders).
     std::vector<std::pair<std::wstring, winrt::com_ptr<ID2D1Bitmap>>> m_icons;
@@ -29904,18 +36755,72 @@ ID2D1Bitmap* FoldersPanel::TypeIcon(ID2D1RenderTarget* target,
     return bitmap.get();
 }
 
-bool FoldersPanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
+bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_APP_FOLDER_LIST) {
         std::unique_ptr<FolderListJob> job((FolderListJob*)lParam);
-        if (job->generation != m_generation ||
-            job->column >= (int)m_columns.size()) {
+        // (Read again: for the folder still shown there, whatever opened
+        // meanwhile.)
+        if (job->column >= (int)m_columns.size() ||
+            (job->quiet ? m_columns[job->column].path != job->path
+                        : job->generation != m_generation)) {
             return false;
         }
         Column& column = m_columns[job->column];
-        column.items = std::move(job->items);
+        // (The order switched while it was read.)
+        if (job->byDate != column.byDate) {
+            SortFolderItems(job->items, column.byDate);
+        }
+        const double now = NowSeconds();
+        if (job->quiet) {
+            for (const auto& item : job->items) {
+                if (std::none_of(column.all.begin(), column.all.end(),
+                                 [&](const FolderEntry& old) {
+                                     return old.path == item.path &&
+                                            old.kind == item.kind;
+                                 })) {
+                    m_arrivals.push_back({item.path, now});
+                }
+            }
+        } else {
+            column.shownAt = now;
+        }
+        const int top = column.top;
+        column.all = std::move(job->items);
         column.loading = false;
+        ApplySearch();
+        if (job->quiet) {
+            column.top =
+                std::clamp(top, 0, std::max(0, (int)column.items.size() - 1));
+            FindOpened(job->column, false);
+        }
+        if ((size_t)job->column < m_columns.size()) {
+            RevealDropped(job->column);
+        }
+        StartIslandAnimation();
         Layout();
         return true;
+    }
+    if (msg == WM_APP_FOLDER_CHANGED) {
+        // (From the folders watched now: their columns read again.)
+        if (!m_watch || (UINT)wParam != m_watchSet ||
+            (size_t)lParam >= m_watchedPaths.size()) {
+            return false;
+        }
+        const std::wstring changed =
+            FolderKey(m_watchedPaths[(size_t)lParam]);
+        bool marked = false;
+        for (size_t i = 1; i < m_columns.size(); i++) {
+            if (_wcsicmp(FolderKey(m_columns[i].path).c_str(),
+                         changed.c_str()) == 0) {
+                m_columns[i].changed = true;
+                marked = true;
+            }
+        }
+        if (marked && !m_changePending && m_shown) {
+            m_changePending = true;
+            SetTimer(m_hwnd, kFolderChangeTimerId, kFolderChangeMs, nullptr);
+        }
+        return false;
     }
     if (msg == WM_APP_FOLDER_PICKED) {
         std::unique_ptr<FolderPickJob> job((FolderPickJob*)lParam);
@@ -29933,24 +36838,139 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
     return false;
 }
 
+bool FoldersPanel::OnTimer(UINT_PTR id) {
+    // Files held on a folder: it opens beside it.
+    if (id == kFolderOpenTimerId) {
+        if (Navigable(m_dropSpot) &&
+            m_columns[m_dropSpot.column].opened != m_dropSpot.row) {
+            OpenColumn(m_dropSpot);
+            return true;
+        }
+        return false;
+    }
+    if (id == kFolderChangeTimerId) {
+        m_changePending = false;
+        for (size_t i = 1; i < m_columns.size(); i++) {
+            if (m_columns[i].changed) {
+                m_columns[i].changed = false;
+                ReloadColumn((int)i);
+            }
+        }
+    }
+    return false;
+}
+
 bool FoldersPanel::OnMouseUp(POINT pt) {
+    // Copy or move, asked once: kept if chosen to be remembered (in the
+    // island's settings too), otherwise for the next drag only.
+    if (m_asking) {
+        switch (AskHit(pt)) {
+            case kAskRemember:
+                m_askRemember = !m_askRemember;
+                return true;
+            case kAskCopy:
+            case kAskMove: {
+                const int choice = AskHit(pt) == kAskCopy ? 1 : 2;
+                if (m_askRemember) {
+                    SetIslandPref(IslandPref::FolderDrag, choice);
+                } else {
+                    m_dragOnce = choice;
+                }
+                m_asking = false;
+                Layout();
+                return true;
+            }
+            default:
+                break;
+        }
+    }
+    if (m_fileDrag.column >= 0) {
+        EndFileDrag();
+    }
+    // A pin let go after a drag: in its new place (kept).
+    if (m_dragRow >= 0) {
+        const int from = m_dragRow;
+        const int to = m_dropRow;
+        const bool dragged = m_dragging;
+        EndPinDrag();
+        if (dragged) {
+            if (from != to && from < (int)m_pins.size() &&
+                to < (int)m_pins.size()) {
+                std::wstring pin = std::move(m_pins[from]);
+                m_pins.erase(m_pins.begin() + from);
+                m_pins.insert(m_pins.begin() + to, std::move(pin));
+                SaveFolderPins(m_pins);
+                // The first column again, the rest as it was (an open
+                // pin's column follows it).
+                const int opened = m_columns[0].opened;
+                std::vector<Column> rest(m_columns.begin() + 1,
+                                         m_columns.end());
+                LoadPins();
+                if (opened >= 0) {
+                    m_columns[0].opened = opened == from ? to
+                                          : from < opened && opened <= to
+                                              ? opened - 1
+                                          : to <= opened && opened < from
+                                              ? opened + 1
+                                              : opened;
+                }
+                m_columns.insert(m_columns.end(), rest.begin(), rest.end());
+                m_first = m_columns.size() > kShownColumns
+                              ? m_columns.size() - kShownColumns
+                              : 0;
+                Layout();
+            }
+            return true;
+        }
+    }
     RowButton button = RowButton::None;
     const Spot spot = HitTest(pt, &button);
     // Back: the last column goes (the ones before it come back into view).
     if (spot.column == -2) {
         if (m_columns.size() > 1) {
+            // (It goes out sliding with the others, or fading where it was.)
+            m_leaving = std::move(m_columns.back());
+            m_leavingAt = NowSeconds();
             m_columns.pop_back();
             m_columns.back().opened = -1;
             m_generation++;
+            ClearSearch();
+            ApplySearch();
+            const size_t first = m_first;
             m_first = m_columns.size() > kShownColumns
                           ? m_columns.size() - kShownColumns
                           : 0;
             Layout();
+            SlideColumns(first);
+            if (m_first != first) {
+                const D2D1_RECT_F& last = m_columns.back().rect;
+                m_leaving.rect = {last.left + m_columnStep, last.top,
+                                  last.right + m_columnStep, last.bottom};
+            }
+            StartIslandAnimation();
         }
         return true;
     }
     if (spot.column < 0) {
         return false;
+    }
+    // The order of a folder's items (that column's own): by name, or the
+    // newest first.
+    if (spot.row == -2 && button == RowButton::Sort) {
+        Column& column = m_columns[spot.column];
+        column.byDate = !column.byDate;
+        SortFolderItems(column.all, column.byDate);
+        column.top = 0;
+        column.shownAt = NowSeconds();
+        ApplySearch();
+        // The folder opened beside it stays open (found again by its path,
+        // brought into view).
+        if ((size_t)spot.column + 1 < m_columns.size()) {
+            FindOpened(spot.column, true);
+        }
+        StartIslandAnimation();
+        Layout();
+        return true;
     }
     // "Open in Explorer": the column's folder.
     if (spot.row == -2) {
@@ -30035,16 +37055,18 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
 
 void FoldersPanel::Draw(ID2D1RenderTarget* target,
                         ID2D1SolidColorBrush* brush) {
-    if (!m_textFormat || !m_iconFormat || !m_smallIconFormat) {
+    if (!m_rowFormat || !m_rowIconFormat || !m_rowSmallIconFormat) {
         return;
     }
     const float s = m_scale;
     const float radius = std::round(8 * s);
     const float icon = std::round(30 * s);
     const float iconSize = std::round(16 * s);
+    const double now = NowSeconds();
     auto drawRow = [&](const D2D1_RECT_F& row, bool lit, bool opened,
                        WCHAR glyph, ID2D1Bitmap* bitmap,
-                       const std::wstring& text, bool arrow, float alpha) {
+                       const std::wstring& text, bool arrow, float alpha,
+                       float endRoom = 0) {
         const float shown = Hover(row, lit);
         if (opened || shown > 0.01f) {
             brush->SetColor(opened ? Accent(0.2f) : Fg(0.09f * shown));
@@ -30053,31 +37075,86 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
         if (bitmap) {
             const float x = row.left + (icon - iconSize) / 2;
             const float y = (row.top + row.bottom - iconSize) / 2;
-            target->DrawBitmap(bitmap, {x, y, x + iconSize, y + iconSize},
-                               alpha);
+            DrawBitmapSmooth(target, bitmap, {x, y, x + iconSize, y + iconSize},
+                             alpha);
         } else if (glyph) {
             brush->SetColor(Fg(0.85f * alpha));
-            target->DrawText(&glyph, 1, m_iconFormat.get(),
+            target->DrawText(&glyph, 1, m_rowIconFormat.get(),
                              {row.left, row.top, row.left + icon, row.bottom},
                              brush);
         }
         brush->SetColor(Fg(0.92f * alpha));
         // (Room for a folder's pin under the mouse.)
         const float right =
-            row.right - std::round(arrow ? (lit ? 50 : 22) : 8) * s;
-        target->DrawText(text.c_str(), (UINT32)text.size(), m_textFormat.get(),
+            row.right -
+            std::max<float>(endRoom,
+                            std::round(arrow ? (lit ? 50 : 22) : 8) * s);
+        target->DrawText(text.c_str(), (UINT32)text.size(), m_rowFormat.get(),
                          {row.left + icon + std::round(2 * s), row.top, right,
                           row.bottom},
                          brush);
         if (arrow) {
             const WCHAR next = 0xE76C;
             brush->SetColor(Fg(0.45f * alpha));
-            target->DrawText(&next, 1, m_smallIconFormat.get(),
+            target->DrawText(&next, 1, m_rowSmallIconFormat.get(),
                              {right, row.top, row.right - std::round(4 * s),
                               row.bottom},
                              brush);
         }
     };
+    // The search in the folder shown last.
+    if (SearchShown()) {
+        DrawTextBox(target, brush, m_searchBox, m_search, m_searchEdit,
+                    Tr(L"Search here (a name or *.pdf)",
+                       L"Buscar aqui (um nome ou *.pdf)"),
+                    true);
+    }
+    // Copy or move? (the first file dragged out).
+    if (m_asking) {
+        const float s = m_scale;
+        const float r = std::round(10 * s);
+        brush->SetColor(Fg(0.06f));
+        target->FillRoundedRectangle({m_askRect, r, r}, brush);
+        PCWSTR question = Tr(L"Files dragged out of the island are:",
+                             L"Arquivos arrastados para fora da ilha são:");
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(question, (UINT32)wcslen(question),
+                         m_rowFormat.get(),
+                         {m_askRect.left + std::round(10 * s), m_askRect.top,
+                          m_askRect.right - std::round(10 * s),
+                          m_askRect.top + std::round(28 * s)},
+                         brush);
+        DrawButton(target, brush, m_askCopy, Tr(L"Copied", L"Copiados"), true,
+                   m_askHover == kAskCopy);
+        DrawButton(target, brush, m_askMove, Tr(L"Moved", L"Movidos"), true,
+                   m_askHover == kAskMove);
+        // "Remember my choice": a box, ticked or not.
+        const float box = std::round(14 * s);
+        const float middle = (m_askRememberRect.top + m_askRememberRect.bottom) / 2;
+        const D2D1_RECT_F tick{m_askRememberRect.left + std::round(10 * s),
+                               middle - box / 2,
+                               m_askRememberRect.left + std::round(10 * s) + box,
+                               middle + box / 2};
+        brush->SetColor(m_askRemember ? Accent(1) : Fg(0.5f));
+        if (m_askRemember) {
+            target->FillRoundedRectangle({tick, 3 * s, 3 * s}, brush);
+            const WCHAR check = 0xE73E;
+            brush->SetColor(AccentInk(1));
+            target->DrawText(&check, 1, m_rowSmallIconFormat.get(), tick,
+                             brush);
+        } else {
+            target->DrawRoundedRectangle({tick, 3 * s, 3 * s}, brush,
+                                         std::max(1.0f, s));
+        }
+        PCWSTR remember =
+            Tr(L"Remember my choice (it's in the island's settings)",
+               L"Lembrar minha escolha (fica nas configurações da ilha)");
+        brush->SetColor(Fg(m_askHover == kAskRemember ? 0.95f : 0.75f));
+        target->DrawText(remember, (UINT32)wcslen(remember), m_rowFormat.get(),
+                         {tick.right + std::round(8 * s), m_askRememberRect.top,
+                          m_askRememberRect.right, m_askRememberRect.bottom},
+                         brush);
+    }
     // The button back, with the folder shown last.
     if (m_back.right > m_back.left) {
         const std::wstring back =
@@ -30085,47 +37162,101 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
         drawRow(m_back, m_hover == Spot{-2, -2}, false, (WCHAR)0xE72B, nullptr,
                 back, false, 0.85f);
     }
-    for (size_t i = m_first; i < m_columns.size(); i++) {
-        const Column& column = m_columns[i];
-        const D2D1_RECT_F& area = column.rect;
+    // A column at `area` (`i`: its place, -1 for the one going out).
+    auto drawColumn = [&](const Column& column, int i,
+                          const D2D1_RECT_F& area) {
         float y = area.top;
-        if (i > 0) {
+        if (i != 0) {
             // A faint line between the columns.
             brush->SetColor(Fg(0.1f));
             target->FillRectangle({area.left - std::round(3 * s), area.top,
                                    area.left - std::round(2 * s), area.bottom},
                                   brush);
-            drawRow({area.left, y, area.right, y + m_rowHeight},
-                    m_hover == Spot{(int)i, -2}, false, (WCHAR)0xE8A7, nullptr,
+            const D2D1_RECT_F header{area.left, y, area.right,
+                                     y + m_rowHeight};
+            const bool onHeader = m_hover == Spot{(int)i, -2};
+            drawRow(header, onHeader && m_buttonHover != RowButton::Sort, false,
+                    (WCHAR)0xE8A7, nullptr,
                     Tr(L"Open in Explorer", L"Abrir no Explorador"), false,
-                    0.75f);
+                    0.75f, SortButtonWidth());
+            // The order: by name or by date, switched with a click.
+            {
+                const D2D1_RECT_F sort{header.right - SortButtonWidth(),
+                                       header.top + std::round(4 * s),
+                                       header.right,
+                                       header.bottom - std::round(4 * s)};
+                const bool sortLit =
+                    onHeader && m_buttonHover == RowButton::Sort;
+                const float sortRadius = (sort.bottom - sort.top) / 2;
+                brush->SetColor(Fg(0.06f + 0.08f * Hover(sort, sortLit)));
+                target->FillRoundedRectangle({sort, sortRadius, sortRadius},
+                                             brush);
+                const WCHAR glyph = 0xE8CB;
+                brush->SetColor(Fg(0.7f));
+                target->DrawText(&glyph, 1, m_rowSmallIconFormat.get(),
+                                 {sort.left + std::round(4 * s), sort.top,
+                                  sort.left + std::round(22 * s), sort.bottom},
+                                 brush);
+                PCWSTR order = column.byDate ? Tr(L"Date", L"Data")
+                                             : Tr(L"Name", L"Nome");
+                target->DrawText(order, (UINT32)wcslen(order),
+                                 m_rowFormat.get(),
+                                 {sort.left + std::round(24 * s), sort.top,
+                                  sort.right - std::round(4 * s), sort.bottom},
+                                 brush);
+            }
             y += m_rowHeight;
         }
-        if (column.loading) {
-            brush->SetColor(Fg(0.5f));
-            PCWSTR text = Tr(L"Reading…", L"Lendo…");
-            target->DrawText(text, (UINT32)wcslen(text), m_textFormat.get(),
-                             {area.left + icon, y, area.right,
-                              y + m_rowHeight},
-                             brush);
-            continue;
+        // Files held over the column's own folder: the column outlined.
+        if (m_dropSpot == Spot{(int)i, -3}) {
+            brush->SetColor(Accent(0.9f));
+            target->DrawRoundedRectangle(
+                {{area.left + s, area.top + s, area.right - s, area.bottom - s},
+                 radius, radius},
+                brush, std::max(1.0f, 1.5f * s));
         }
-        if (column.items.empty() && i > 0) {
+        if (column.loading) {
+            // (Only for a folder that takes a while.)
+            if (now - column.loadingSince >= kReadingDelay) {
+                brush->SetColor(Fg(0.5f));
+                PCWSTR text = Tr(L"Reading…", L"Lendo…");
+                target->DrawText(text, (UINT32)wcslen(text), m_rowFormat.get(),
+                                 {area.left + icon, y, area.right,
+                                  y + m_rowHeight},
+                                 brush);
+            }
+            return;
+        }
+        if (column.items.empty() && i != 0) {
             brush->SetColor(Fg(0.5f));
-            PCWSTR text = Tr(L"Empty", L"Vazia");
-            target->DrawText(text, (UINT32)wcslen(text), m_textFormat.get(),
+            PCWSTR text = !column.all.empty()
+                              ? Tr(L"Nothing found", L"Nada encontrado")
+                              : Tr(L"Empty", L"Vazia");
+            target->DrawText(text, (UINT32)wcslen(text), m_rowFormat.get(),
                              {area.left + icon, y, area.right,
                               y + m_rowHeight},
                              brush);
-            continue;
+            return;
         }
         for (int row = column.top; row < (int)column.items.size(); row++) {
             if (y + m_rowHeight > area.bottom + 0.5f) {
                 break;
             }
-            const FolderEntry& item = column.items[row];
-            const D2D1_RECT_F rect{area.left, y, area.right, y + m_rowHeight};
-            const bool lit = m_hover == Spot{(int)i, row};
+            // (The pins in the order they'd have, one being dragged.)
+            const int source = i == 0 ? PinShownAt(row) : row;
+            const FolderEntry& item = column.items[source];
+            // (Coming in: fading in as it rises into place.)
+            const float in = RowIn(column, row - column.top, item.path, now);
+            const float rise = (1 - in) * std::round(6 * s);
+            const D2D1_RECT_F rect{area.left, y + rise, area.right,
+                                   y + m_rowHeight + rise};
+            const bool held = i == 0 && m_dragging && row == m_dropRow;
+            // (Files held over it: lit too.)
+            const bool lit = held ||
+                             (!m_dragging && m_hover == Spot{(int)i, row}) ||
+                             m_dropSpot == Spot{(int)i, row};
+            // (A row's buttons only under the mouse, not under files.)
+            const bool buttons = lit && m_dropSpot == Spot{-1, -1};
             const FolderPlace* place =
                 item.kind == FolderKind::Place ||
                         item.kind == FolderKind::PlaceToPin
@@ -30148,21 +37279,27 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                         (item.kind == FolderKind::Folder && !item.pinned)
                     ? TypeIcon(target, item)
                     : nullptr;
-            const bool navigable = Navigable({(int)i, row});
-            drawRow(rect, lit, column.opened == row, bitmap ? 0 : glyph,
+            const bool navigable = i >= 0 && Navigable({(int)i, source});
+            // (Just dropped here: lit a moment as it shows.)
+            if (const float dropped = DroppedLit(column, item, now);
+                dropped > 0) {
+                brush->SetColor(Accent(0.35f * dropped));
+                target->FillRoundedRectangle({rect, radius, radius}, brush);
+            }
+            drawRow(rect, lit, column.opened == source, bitmap ? 0 : glyph,
                     bitmap, item.name,
-                    navigable && !(lit && item.pinned), 1);
+                    navigable && !(buttons && item.pinned), in);
             // A pinned row under the mouse: its "x"; a folder: its pin.
-            if (lit && item.pinned) {
+            if (buttons && item.pinned && !m_dragging) {
                 const WCHAR close = 0xE711;
                 brush->SetColor(m_buttonHover == RowButton::Remove
                                     ? D2D1::ColorF(1, 0.36f, 0.3f, 1)
                                     : Fg(0.55f));
-                target->DrawText(&close, 1, m_smallIconFormat.get(),
+                target->DrawText(&close, 1, m_rowSmallIconFormat.get(),
                                  {rect.right - std::round(28 * s), rect.top,
                                   rect.right - std::round(4 * s), rect.bottom},
                                  brush);
-            } else if (lit && item.kind == FolderKind::Folder) {
+            } else if (buttons && item.kind == FolderKind::Folder) {
                 const bool pinned =
                     std::find(m_pins.begin(), m_pins.end(), item.path) !=
                     m_pins.end();
@@ -30171,13 +37308,62 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                 : m_buttonHover == RowButton::Pin
                                     ? Fg(0.95f)
                                     : Fg(0.5f));
-                target->DrawText(&pin, 1, m_smallIconFormat.get(),
+                target->DrawText(&pin, 1, m_rowSmallIconFormat.get(),
                                  {rect.right - std::round(50 * s), rect.top,
                                   rect.right - std::round(26 * s), rect.bottom},
                                  brush);
             }
             y += m_rowHeight;
         }
+    };
+    // The columns, sliding while one goes out of view on a side (the one
+    // leaving drawn too), kept between the panel's sides.
+    const float slide = ColumnSlide(now);
+    const bool leaving = now - m_leavingAt < kSlideSeconds;
+    const bool moving = slide != 0 || leaving;
+    D2D1_MATRIX_3X2_F base;
+    target->GetTransform(&base);
+    if (moving && m_first < m_columns.size()) {
+        const D2D1_RECT_F& first = m_columns[m_first].rect;
+        target->PushAxisAlignedClip(
+            {first.left - std::round(4 * s), first.top,
+             (float)m_size.cx - std::round(4 * s), (float)m_size.cy},
+            D2D1_ANTIALIAS_MODE_ALIASED);
+        target->SetTransform(D2D1::Matrix3x2F::Translation(slide, 0) * base);
+    }
+    if (slide > 0 && m_first > 0 && m_first < m_columns.size()) {
+        const D2D1_RECT_F& first = m_columns[m_first].rect;
+        drawColumn(m_columns[m_first - 1], (int)m_first - 1,
+                   {first.left - m_columnStep, first.top,
+                    first.right - m_columnStep, first.bottom});
+    }
+    for (size_t i = m_first; i < m_columns.size(); i++) {
+        drawColumn(m_columns[i], (int)i, m_columns[i].rect);
+    }
+    if (leaving) {
+        // (Fading where it was, when the others stay.)
+        const float alpha =
+            slide != 0
+                ? 1.0f
+                : (float)std::clamp(1 - (now - m_leavingAt) / kSlideSeconds,
+                                    0.0, 1.0);
+        winrt::com_ptr<ID2D1Layer> layer;
+        if (alpha < 0.999f) {
+            target->CreateLayer(nullptr, layer.put());
+            target->PushLayer(
+                D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr,
+                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                      D2D1::IdentityMatrix(), alpha),
+                layer.get());
+        }
+        drawColumn(m_leaving, -1, m_leaving.rect);
+        if (layer) {
+            target->PopLayer();
+        }
+    }
+    if (moving && m_first < m_columns.size()) {
+        target->SetTransform(base);
+        target->PopAxisAlignedClip();
     }
 }
 
@@ -30301,6 +37487,13 @@ DWORD WINAPI WallpaperListThreadProc(LPVOID parameter) {
     return 0;
 }
 
+// Windows showing a new wallpaper (see WallpaperChangeThreadProc): looked
+// at this often, for this long at most; without a look (an older Windows),
+// the transition's window goes after a moment.
+constexpr DWORD kWallpaperSampleMs = 50;
+constexpr double kWallpaperShownSeconds = 2.5;
+constexpr DWORD kWallpaperShownFallbackMs = 400;
+
 // A picture coming in as the wallpaper of a monitor (see above).
 struct WallpaperChange {
     HWND island;
@@ -30311,11 +37504,28 @@ struct WallpaperChange {
     POINT origin;
 };
 
-// The picture as Windows will show it on the monitor (`size`), by its
-// wallpaper position: cut to fill it ("Fill", and "Span" here), whole
-// inside it ("Fit"), stretched, or at its own size in the middle ("Center",
-// "Tile"); turned as the photo says (its EXIF orientation). `place` gets
-// where it goes on the monitor.
+// The part of a picture scaled to `scaledWidth` x `scaledHeight` shown on a
+// monitor of `size`, cut where it's bigger: in the middle, except for a
+// filling picture's height, where Windows keeps a third of the cut part
+// above and two thirds below (measured on Windows 11 for many sizes).
+WICRect WallpaperCut(UINT scaledWidth,
+                     UINT scaledHeight,
+                     SIZE size,
+                     DESKTOP_WALLPAPER_POSITION position) {
+    const UINT shownWidth = std::min<UINT>(scaledWidth, size.cx);
+    const UINT shownHeight = std::min<UINT>(scaledHeight, size.cy);
+    const bool fills = position == DWPOS_FILL || position == DWPOS_SPAN;
+    return {(INT)(scaledWidth - shownWidth) / 2,
+            (INT)std::lround((scaledHeight - shownHeight) /
+                             (fills ? 3.0 : 2.0)),
+            (INT)shownWidth, (INT)shownHeight};
+}
+
+// The picture as Windows will show it on a monitor of `size`, by its
+// wallpaper position: cut to fill it ("Fill"; "Span" too, set for one
+// monitor as here), whole inside it ("Fit"), stretched, or at its own size
+// in the middle ("Center", "Tile"); turned as the photo says (its EXIF
+// orientation). `place` gets where it goes on the monitor.
 winrt::com_ptr<IWICBitmapSource> LoadWallpaperPicture(
     IWICImagingFactory* wic,
     PCWSTR path,
@@ -30380,12 +37590,10 @@ winrt::com_ptr<IWICBitmapSource> LoadWallpaperPicture(
                 std::max<UINT>(size.cy, (UINT)std::ceil(height * fill));
             break;
     }
-    // Cut to the monitor where it's bigger, in the middle.
-    const UINT shownWidth = std::min<UINT>(scaledWidth, size.cx);
-    const UINT shownHeight = std::min<UINT>(scaledHeight, size.cy);
-    const WICRect crop{(INT)(scaledWidth - shownWidth) / 2,
-                       (INT)(scaledHeight - shownHeight) / 2, (INT)shownWidth,
-                       (INT)shownHeight};
+    const WICRect crop =
+        WallpaperCut(scaledWidth, scaledHeight, size, position);
+    const UINT shownWidth = crop.Width;
+    const UINT shownHeight = crop.Height;
     winrt::com_ptr<IWICBitmapScaler> scaler;
     winrt::com_ptr<IWICBitmapClipper> clipper;
     winrt::com_ptr<IWICFormatConverter> converter;
@@ -30405,6 +37613,87 @@ winrt::com_ptr<IWICBitmapSource> LoadWallpaperPicture(
     const float top = (size.cy - (float)shownHeight) / 2;
     *place = {left, top, left + shownWidth, top + shownHeight};
     return converter.as<IWICBitmapSource>();
+}
+
+// What's on the monitor's screen, shrunk to a few pixels (a window excluded
+// from captures isn't in it): to see when Windows shows a new wallpaper.
+constexpr int kScreenSampleWidth = 48;
+constexpr int kScreenSampleHeight = 27;
+
+std::vector<DWORD> SampleScreen(const RECT& monitor) {
+    std::vector<DWORD> pixels;
+    HDC screen = GetDC(nullptr);
+    HDC dc = screen ? CreateCompatibleDC(screen) : nullptr;
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), kScreenSampleWidth,
+                      -kScreenSampleHeight, 1, 32, BI_RGB};
+    void* bits = nullptr;
+    HBITMAP bitmap = dc ? CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits,
+                                           nullptr, 0)
+                        : nullptr;
+    if (bitmap) {
+        HGDIOBJ old = SelectObject(dc, bitmap);
+        SetStretchBltMode(dc, HALFTONE);
+        if (StretchBlt(dc, 0, 0, kScreenSampleWidth, kScreenSampleHeight,
+                       screen, monitor.left, monitor.top,
+                       monitor.right - monitor.left,
+                       monitor.bottom - monitor.top, SRCCOPY)) {
+            GdiFlush();
+            pixels.assign((const DWORD*)bits,
+                          (const DWORD*)bits +
+                              kScreenSampleWidth * kScreenSampleHeight);
+        }
+        SelectObject(dc, old);
+        DeleteObject(bitmap);
+    }
+    if (dc) {
+        DeleteDC(dc);
+    }
+    if (screen) {
+        ReleaseDC(nullptr, screen);
+    }
+    return pixels;
+}
+
+// Whether two pixels differ by more than `threshold` in a color.
+bool PixelDiffers(DWORD a, DWORD b, int threshold) {
+    for (int shift : {0, 8, 16}) {
+        if (std::abs((int)((a >> shift) & 0xFF) - (int)((b >> shift) & 0xFF)) >
+            threshold) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// How many of two samples' pixels differ by more than `threshold` in a
+// color.
+int SampleChanges(const std::vector<DWORD>& a,
+                  const std::vector<DWORD>& b,
+                  int threshold) {
+    int changes = 0;
+    for (size_t i = 0; i < a.size() && i < b.size(); i++) {
+        changes += PixelDiffers(a[i], b[i], threshold);
+    }
+    return changes;
+}
+
+// Whether the screen (`now`) shows the new picture as the transition's
+// window showed it (`wanted`), at the pixels where it differs from the old
+// wallpaper (`places`): all of them but a few (a video or a moving window
+// there). In between, Windows is still bringing it in (its own fade and
+// zoom).
+bool SampleShows(const std::vector<DWORD>& now,
+                 const std::vector<DWORD>& wanted,
+                 const std::vector<size_t>& places) {
+    size_t off = 0;
+    for (size_t i : places) {
+        if (i >= now.size() || i >= wanted.size() ||
+            PixelDiffers(now[i], wanted[i], 24)) {
+            off++;
+        }
+    }
+    return off * 10 <= places.size();
 }
 
 // Windows' wallpaper of the monitor (all of them if it isn't found).
@@ -30469,8 +37758,9 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
         SUCCEEDED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
                                     factory.put())) &&
         canvas.Create(factory.get()) &&
-        (picture = LoadWallpaperPicture(wic.get(), change->path.c_str(), size,
-                                        wallpaperPosition, &pictureRect))) {
+        (picture = LoadWallpaperPicture(wic.get(), change->path.c_str(),
+                                        size, wallpaperPosition,
+                                        &pictureRect))) {
         // It doesn't take the mouse, and stays under the apps' windows,
         // just above the desktop.
         window = CreateWindowEx(WS_EX_LAYERED | WS_EX_TRANSPARENT |
@@ -30485,11 +37775,30 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
         canvas.Finish();
     }
     const POINT position{change->monitor.left, change->monitor.top};
-    if (window && bitmap) {
+    // Just above the desktop: under the first window shown above it (an
+    // app's, or a taskbar, which isn't always on top while the desktop is in
+    // front: measured, the picture covered the second monitor's taskbar), not
+    // under a hidden one; the top of the windows not on top when none is.
+    auto placeOverDesktop = [window]() {
         HWND progman = FindWindow(L"Progman", nullptr);
         HWND above = progman ? GetWindow(progman, GW_HWNDPREV) : nullptr;
-        SetWindowPos(window, above ? above : HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        for (int i = 0; above && i < 1000 &&
+                        (above == window || !IsWindowVisible(above));
+             i++) {
+            above = GetWindow(above, GW_HWNDPREV);
+        }
+        const bool onTop =
+            above && (GetWindowLongPtr(above, GWL_EXSTYLE) & WS_EX_TOPMOST);
+        SetWindowPos(window, !progman ? HWND_BOTTOM : above && !onTop ? above
+                                                                      : HWND_TOP,
+                     0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    };
+    if (window && bitmap) {
+        // Not a full-screen app to the taskbar (it covers the whole monitor):
+        // measured, a taskbar left showing the desktop stopped being on top
+        // during the transition, under it (explorer's "NonRudeHWND" mark).
+        SetProp(window, L"NonRudeHWND", (HANDLE)TRUE);
+        placeOverDesktop();
         const float w = (float)size.cx;
         const float h = (float)size.cy;
         const D2D1_POINT_2F origin{
@@ -30523,10 +37832,10 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
                     fillBrush->SetOpacity(opacity);
                     target->FillRectangle({x, 0, x + w, h}, fillBrush.get());
                 }
-                target->DrawBitmap(bitmap.get(),
-                                   {pictureRect.left + x, pictureRect.top,
-                                    pictureRect.right + x, pictureRect.bottom},
-                                   opacity);
+                DrawBitmapSmooth(target, bitmap.get(),
+                                 {pictureRect.left + x, pictureRect.top,
+                                  pictureRect.right + x, pictureRect.bottom},
+                                 opacity);
             };
             switch (change->transition) {
                 case WallpaperTransition::Circle: {
@@ -30564,6 +37873,7 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
             canvas.End(window, position, 1);
             if (!shown) {
                 ShowWindow(window, SW_SHOWNOACTIVATE);
+                placeOverDesktop();
                 shown = true;
             }
             if (t >= 1) {
@@ -30572,10 +37882,62 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
             WaitForAnimationFrame(timer);
         }
     }
+    // The screen with the new picture shown, then what's under it: the old
+    // wallpaper. (Left out of captures while it waits for the new one,
+    // screen recordings too, from the next composition on.)
+    std::vector<DWORD> wanted;
+    if (window) {
+        DwmFlush();
+        wanted = SampleScreen(change->monitor);
+    }
+    const bool sampled =
+        !wanted.empty() &&
+        SetWindowDisplayAffinity(window, WDA_EXCLUDEFROMCAPTURE) != FALSE;
+    if (sampled) {
+        DwmFlush();
+    }
+    const std::vector<DWORD> before =
+        sampled ? SampleScreen(change->monitor) : std::vector<DWORD>{};
     SetMonitorWallpaper(change->monitor, change->path.c_str());
     if (window) {
-        // Windows draws the new one under it; then it fades away.
-        Sleep(400);
+        // It stays until Windows shows the new one under it as it does (its
+        // own fade and zoom done: the desktop's pixels look like it and
+        // hold still), not over the old one; then it fades away. With
+        // nothing of the desktop showing (or the same picture), it goes at
+        // once; after a while at most, and at once when the mod is
+        // unloading.
+        const int pixels = kScreenSampleWidth * kScreenSampleHeight;
+        std::vector<size_t> places;
+        if (before.size() == wanted.size()) {
+            for (size_t i = 0; i < before.size(); i++) {
+                if (PixelDiffers(before[i], wanted[i], 24)) {
+                    places.push_back(i);
+                }
+            }
+        }
+        const double since = NowSeconds();
+        std::vector<DWORD> last = before;
+        int still = 0;
+        while (!places.empty() && !g_unloading &&
+               NowSeconds() - since < kWallpaperShownSeconds && still < 2) {
+            Sleep(kWallpaperSampleMs);
+            std::vector<DWORD> now = SampleScreen(change->monitor);
+            if (now.size() != before.size()) {
+                break;
+            }
+            // (A fade moves a few levels a look: "still" is almost none.)
+            still = SampleShows(now, wanted, places) &&
+                            SampleChanges(now, last, 4) <= pixels / 50
+                        ? still + 1
+                        : 0;
+            last = std::move(now);
+        }
+        if (before.empty()) {
+            Sleep(kWallpaperShownFallbackMs);
+        }
+        if (sampled) {
+            SetWindowDisplayAffinity(window, WDA_NONE);
+        }
         for (int step = 8; step >= 0; step--) {
             BLENDFUNCTION blend{AC_SRC_OVER, 0, (BYTE)(step * 255 / 8),
                                 AC_SRC_ALPHA};
@@ -30583,6 +37945,7 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
                                 nullptr, 0, &blend, ULW_ALPHA);
             Sleep(25);
         }
+        RemoveProp(window, L"NonRudeHWND");
         DestroyWindow(window);
     }
     bitmap = nullptr;
@@ -30957,7 +38320,7 @@ void WallpaperPanel::Draw(ID2D1RenderTarget* target,
     brush->SetColor(AccentLit(0.9f, lit));
     target->FillRoundedRectangle({m_folderButton, buttonRadius, buttonRadius},
                                  brush);
-    PCWSTR button = Tr(L"Folder…", L"Pasta…");
+    PCWSTR button = Tr(L"Folder", L"Pasta");
     brush->SetColor(AccentInk(1));
     target->DrawText(button, (UINT32)wcslen(button), m_buttonFormat.get(),
                      m_folderButton, brush);
@@ -31006,8 +38369,9 @@ void WallpaperPanel::Draw(ID2D1RenderTarget* target,
                 SUCCEEDED(target->CreateLayer(nullptr, layer.put()))) {
                 target->PushLayer(D2D1::LayerParameters(rect, clip.get()),
                                   layer.get());
-                target->DrawBitmap(bitmap, {cx - w / 2, cy - h / 2,
-                                            cx + w / 2, cy + h / 2});
+                DrawBitmapSmooth(
+                    target, bitmap,
+                    {cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2});
                 target->PopLayer();
             }
         }
@@ -31070,7 +38434,7 @@ IslandLook g_mainLook;
 int LoadMonitorProfile(const std::wstring& device);
 void SaveMonitorProfile(const std::wstring& device, int id);
 
-class Island {
+class Island final : public DropTarget::Receiver {
    public:
     bool Create();
     void Destroy();
@@ -31078,9 +38442,22 @@ class Island {
     // (first thing as it goes; the main island's before the others go).
     void ReleaseWindowsBanner();
     void Tick();
+    void CheckShown();
     bool Animating() const { return m_animating; }
     void AnimationFrame();
     LRESULT HandleMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    // Files dragged over it (out of Explorer, the desktop...): held on the
+    // folders' item a moment, its panel opens, to drop them in a folder
+    // there. Nothing is dropped on the island itself.
+    DWORD DragOverAt(IDataObject* data,
+                     POINT screen,
+                     DWORD keys,
+                     DWORD allowed) override;
+    void DragGone() override;
+    DWORD DropAt(IDataObject* data,
+                 POINT screen,
+                 DWORD keys,
+                 DWORD allowed) override;
     void StartAnimating();
     // The drawing device was lost (see OnDrawingDeviceLost).
     void OnDeviceLost();
@@ -31197,6 +38574,19 @@ class Island {
     // The notification list was opened: the bell's dot goes.
     void OnNotificationsSeen();
     void CatchUpToasts();
+    // The main island's, once every island is made (see kGlassRenewMs).
+    void StartGlassRenewals() {
+        m_glassRenewals = 0;
+        SetTimer(m_hwnd, kGlassRenewTimerId, kGlassRenewMs[0], nullptr);
+    }
+    // What the islands look for together (the usage, the weather, updates)
+    // looked at again: the main island's, once every island is made (one
+    // only another monitor's profile shows counts then).
+    void RefreshWatches() {
+        UpdateUsageWatch();
+        UpdateWeatherWatch();
+        UpdateUpdatesWatch();
+    }
     // "Snooze" (Windows' own button, pressed on the island): the
     // notification shows again a few minutes later.
     void SnoozeToast(IslandToast toast);
@@ -31275,6 +38665,23 @@ class Island {
         StartAnimating();
         Render();
     }
+    // Drawn again with its glass and its open panels' made again (see
+    // RenewAllGlass).
+    void RenewGlass() {
+        Render(true);
+        for (Panel* panel : Panels()) {
+            if (panel->IsOpen()) {
+                panel->Render();
+            }
+        }
+    }
+    // Another size chosen for the panels (islandPanelSize): the open ones
+    // laid out again at it.
+    void RescalePanels() {
+        for (Panel* panel : Panels()) {
+            panel->Rescale(PanelScale());
+        }
+    }
 
    private:
     void UpdateClock();
@@ -31288,23 +38695,41 @@ class Island {
     std::wstring VolumeGlyph();
     std::wstring BatteryGlyph();
     void UpdateFormats(float scale);
+    // The icons' size the formats were made for (see UpdateFormats).
+    int m_formatIconSize = 0;
+    bool m_formatVertical = false;
+    // The pill's texts' scale: with the icons' own size (islandIconSize), the
+    // whole content growing in the pill; upright, the island's (that pill is
+    // narrow). The uses' two lines grow as far as they fit the pill.
+    float m_textScale = 1;
+    float m_usageScale = 1;
+    static constexpr float kUsageMostScale = 1.15f;
     bool IsCovered() const;
     // The screen's scaling (m_scale also has the island's size in it).
     float m_dpiScale = 1;
+    // The panels': the screen's, times their chosen size (islandPanelSize).
+    float PanelScale() const {
+        return m_dpiScale * g_settings.islandPanelSize / 100.0f;
+    }
     void Layout();
     // A notch's place and window (see Layout), and its curves' size.
     void LayoutNotch(float contentWidth,
                      float height,
                      float padding,
                      float scale);
-    float NotchCurve() const { return NotchRadius(kPillHeight * m_scale); }
+    float NotchCurve() const {
+        return NotchRadius(kPillHeight * PillHeightScale() * m_scale);
+    }
     float NotchShoulderWidth() const {
-        return NotchShoulder(kPillHeight * m_scale);
+        return NotchShoulder(kPillHeight * PillHeightScale() * m_scale);
     }
     int m_notch = -1;
     int m_notchCount = 0;
     Island* m_notchBase = nullptr;
     std::vector<Island*> m_notchSiblings;
+    // How wide its body would be with all its items (see NotchBodyMax).
+    float m_notchWanted = 0;
+    float NotchBodyMax(float scale);
     // All the notches on its monitor (this one alone when not a notch).
     std::vector<Island*> NotchSet() {
         Island* base = m_notchBase ? m_notchBase : this;
@@ -31358,6 +38783,20 @@ class Island {
     void TogglePanel(Panel& panel,
                      IslandItem item,
                      const std::wstring& key = {});
+    // An open panel showing another item's view (the control center's Wi-Fi
+    // page from its pill button): it glides to under that item.
+    void MovePanel(Panel& panel,
+                   IslandItem item,
+                   const std::wstring& key = {});
+    // Where a panel opens for that item (see TogglePanel): false if there's
+    // no place for it.
+    bool PanelPlace(IslandItem item,
+                    const std::wstring& key,
+                    POINT* anchor,
+                    D2D1_RECT_F* source,
+                    Panel::Direction* direction,
+                    bool* fromPill,
+                    bool* behind);
     // Kept for next time unless the auto-hide does it (`keep` false).
     void SetMinimized(bool minimized, bool keep = true);
     // Hiding as its line while the mouse is away (islandAutoHide): turned on
@@ -31368,10 +38807,6 @@ class Island {
     // When the mouse left it (0 while it's on it or something's open).
     double m_autoHideAwaySince = 0;
 
-   public:
-    void CapturePill(Panel& panel);
-
-   private:
     // New notifications taken (by the main island) and shown on each.
     void ShowBanner();
     void ShowToasts(std::vector<IslandToast> toasts);
@@ -31424,6 +38859,10 @@ class Island {
     D2D1_COLOR_F m_glassColor{};
     BYTE m_glassOpacity = 255;
     void UpdateGlass();
+    // The Liquid Glass under the island's window (islandLiquidGlass, see
+    // GlassLayer), and its shapes found while drawing (see Render).
+    GlassLayer m_liquid;
+    std::vector<GlassShape> m_liquidShapes;
     // What's copied, in the bubble (islandClipboard): listened to while it's
     // on, and read again a moment later while the clipboard is busy; the
     // last one shown, so the same copy isn't shown twice in a row.
@@ -31443,6 +38882,9 @@ class Island {
     UINT m_inputMethodId = 0;
     bool m_inputMethodAgain = false;
     std::wstring m_inputMethodText;
+    // The app in front when it was read, by its process (see
+    // OnInputMethod).
+    DWORD m_inputMethodProcess = 0;
     // Apps using the microphone, the camera or the location (the main
     // island watches them, see PrivacyThreadProc); the camera's icon blinks
     // a moment when it starts.
@@ -31509,6 +38951,11 @@ class Island {
     // A strip along the screen's edge it's against, across from the pill's
     // middle: the minimized line.
     D2D1_RECT_F EdgeLineRect(float length, float thickness) const;
+    // The strip along that edge that brings the minimized line back
+    // (islandActivationWidth), at `scale`.
+    static float ActivationLength(float scale) {
+        return std::round(g_settings.islandActivationWidth * scale);
+    }
     bool BannerHovered() const {
         return m_hover == IslandItem::Banner ||
                m_hover == IslandItem::BannerReply ||
@@ -31605,7 +39052,12 @@ class Island {
     KeyboardPanel m_keyboardPanel;
     DesktopsPanel m_desktopsPanel;
     FoldersPanel m_foldersPanel;
+    // Taking Windows' drags; files held on the folders' item (see
+    // DragOverAt).
+    DropRegistration m_drop;
+    bool m_dropOnFolders = false;
     WallpaperPanel m_wallpaperPanel;
+    KomorebiPanel m_komorebiPanel;
     // A wallpaper coming in (see WallpaperChangeThreadProc), and the folder's
     // pictures for the wheel (with the one last chosen).
     HANDLE m_wallpaperThread = nullptr;
@@ -31616,6 +39068,8 @@ class Island {
 
    public:
     void ChangeWallpaper(const std::vector<std::wstring>& paths, int index);
+    static void ShareBrightness(HMONITOR screen, int level);
+    void WatchMediaAppOpen(const std::wstring& appId);
 
    private:
     // The last app window in front (not the island's own windows), for the
@@ -31627,6 +39081,29 @@ class Island {
     HANDLE m_desktopsStop = nullptr;
     void UpdateDesktopsWatch();
     void StopDesktopsWatch();
+    // komorebi's state, read on a thread by the main island while an island
+    // shows its layout (see KomorebiWatchThreadProc).
+    HANDLE m_komorebiWatch = nullptr;
+    HANDLE m_komorebiWatchStop = nullptr;
+    void UpdateKomorebiWatch();
+    void StopKomorebiWatch();
+    // The app in focus on this island's monitor (see NoteFocusedApp): its
+    // window, or the desktop; its key (for its icon) and its name. A window
+    // left out (a menu, Start) isn't looked at again while it's in front.
+    HWND m_focusWindow = nullptr;
+    bool m_focusDesktop = false;
+    std::wstring m_focusKey;
+    std::wstring m_focusName;
+    HWND m_focusSkipped = nullptr;
+    void NoteFocusedApp(HWND window);
+    void CheckFocusedApp();
+    void ClearFocusedApp();
+    // komorebi's layout's and the app's widths on the pill.
+    ItemWidth m_komorebiWidth;
+    ItemWidth m_focusWidth;
+    float MeasureItemName(ItemWidth& width,
+                          const std::wstring& name,
+                          float height);
     // A control center button on the pill, clicked (an index in
     // kPillActions).
     void RunPillAction(int action);
@@ -31635,21 +39112,23 @@ class Island {
     // Night light's state as last read (see PillActionLit).
     int m_nightLightState = -1;
     // All of them, for what's done to each.
-    std::array<Panel*, 18> Panels() {
+    std::array<Panel*, 19> Panels() {
         return {&m_calendar,       &m_control,       &m_notifications,
                 &m_mediaPanel,     &m_power,         &m_profilesPanel,
                 &m_usagePanel,     &m_notesPanel,    &m_tasksPanel,
                 &m_shortcutsPanel, &m_weatherPanel,  &m_updatesPanel,
                 &m_drivesPanel,    &m_trayListPanel, &m_keyboardPanel,
-                &m_desktopsPanel,  &m_foldersPanel,  &m_wallpaperPanel};
+                &m_desktopsPanel,  &m_foldersPanel,  &m_wallpaperPanel,
+                &m_komorebiPanel};
     }
-    std::array<const Panel*, 18> Panels() const {
+    std::array<const Panel*, 19> Panels() const {
         return {&m_calendar,       &m_control,       &m_notifications,
                 &m_mediaPanel,     &m_power,         &m_profilesPanel,
                 &m_usagePanel,     &m_notesPanel,    &m_tasksPanel,
                 &m_shortcutsPanel, &m_weatherPanel,  &m_updatesPanel,
                 &m_drivesPanel,    &m_trayListPanel, &m_keyboardPanel,
-                &m_desktopsPanel,  &m_foldersPanel,  &m_wallpaperPanel};
+                &m_desktopsPanel,  &m_foldersPanel,  &m_wallpaperPanel,
+                &m_komorebiPanel};
     }
     bool AnyPanelOpen() const {
         for (const Panel* panel : Panels()) {
@@ -31716,6 +39195,10 @@ class Island {
     int m_mediaWheelDelta = 0;
     double m_mediaWheelAt = 0;
     double m_mediaSkippedAt = 0;
+    // What's playing's app clicked in the tray, and when (see
+    // WatchMediaAppOpen).
+    std::wstring m_mediaOpenApp;
+    double m_mediaOpenAt = 0;
     // Another song: the title before slides up and away as the new one comes
     // up from below, the cover before fades into the new one (1 to 0), and
     // the pill's width follows the new title smoothly.
@@ -31815,11 +39298,22 @@ class Island {
                      ID2D1SolidColorBrush* brush,
                      const IslandSlot& slot,
                      float opacity);
+    // An app's icon on the pill (`icon` is where it goes): the Widgets
+    // button's badge with the Widgets glyph (see kWidgetsBadgeId), a missing
+    // icon as a faint square, unless `missingShown` is false.
+    void DrawAppIcon(ID2D1RenderTarget* target,
+                     ID2D1SolidColorBrush* brush,
+                     const std::wstring& appId,
+                     const D2D1_RECT_F& icon,
+                     float opacity,
+                     bool missingShown);
     float m_usageWidth = 0;
     winrt::com_ptr<IDWriteTextFormat> m_weatherEmojiFormat;
     float m_weatherEmojiScale = 0;
     winrt::com_ptr<IDWriteTextFormat> m_usageLabelFormat;
     winrt::com_ptr<IDWriteTextFormat> m_usageValueFormat;
+    // What's playing's title on the pill.
+    winrt::com_ptr<IDWriteTextFormat> m_mediaTitleFormat;
     void UpdateUsageWatch();
     void StopUsageWatch();
     void OnUsage();
@@ -31949,6 +39443,10 @@ class Island {
         const IslandPlace* place = FindAppPlace(m_placeApp);
         return place && place->gap >= 0 && !m_bar ? place->gap
                                                   : g_settings.islandGap;
+    }
+    // The icons' scale: the island's, times their own size.
+    float IconScale() const {
+        return m_scale * g_settings.islandIconSize / 100.0f;
     }
     int SizeWanted() const {
         const IslandPlace* place = FindAppPlace(m_placeApp);
@@ -32087,7 +39585,7 @@ class Island {
         }
         m_pillScrollTarget =
             std::clamp(m_pillScrollTarget +
-                           notches * 2 * kIslandIconSlot * m_scale,
+                           notches * 2 * kIslandIconSlot * IconScale(),
                        0.0, (double)m_pillOverflow);
         StartAnimating();
         return true;
@@ -32272,12 +39770,13 @@ class Island {
     winrt::com_ptr<IDWriteTextFormat> m_bannerTimeFormat;
     winrt::com_ptr<IDWriteTextFormat> m_bannerTitleFormat;
     winrt::com_ptr<IDWriteTextFormat> m_bannerTextFormat;
+    // A name beside its icon on the pill (see kNamedItemFont).
+    winrt::com_ptr<IDWriteTextFormat> m_itemNameFormat;
     // An app that just got a badge while the pill is minimized peeks out.
     std::wstring m_peekApp;
     double m_peekStart = 0;
     float PeekAmount(double now);
-    std::vector<std::pair<std::wstring, winrt::com_ptr<ID2D1Bitmap>>>
-        m_appBitmaps;
+    std::vector<KeptAppIcon> m_appBitmaps;
     winrt::com_ptr<IWICImagingFactory> m_wic;
     // The banner's picture (see IslandToast::image), loaded for it.
     ID2D1Bitmap* GetBannerImage();
@@ -32310,7 +39809,7 @@ class Island {
     DWORD m_networkCookie = 0;
     winrt::com_ptr<IConnectionPoint> m_networkPoint;
     bool m_wlanWatched = false;
-    HPOWERNOTIFY m_powerNotifications[2]{};
+    HPOWERNOTIFY m_powerNotifications[3]{};
     void* m_dndSubscription = nullptr;
     int m_raiseTicks = 0;
 
@@ -32362,6 +39861,9 @@ class Island {
     std::vector<PillGroup> m_layoutOrder;
     // A restart after a lost device waits for this timer (see OnDeviceLost).
     bool m_deviceRetryPending = false;
+    // The glass made again so many times since the island started (see
+    // kGlassRenewMs).
+    int m_glassRenewals = 0;
     // The monitor it's on (see WantedMonitor), and moving to another one: it
     // closes into its dot (1), the dot glides there (2), and it opens again
     // (m_moveT from 0 to 1 while gliding, from where it was).
@@ -32505,6 +40007,17 @@ void ForEachIsland(Action action) {
     }
 }
 
+// Every glass's window made again (see g_glassGeneration): a while after the
+// island starts, when the displays change, and when Windows' transparency
+// effects or the energy saver let the glass show again.
+void RenewAllGlass() {
+    if (!LiquidGlassOn()) {
+        return;
+    }
+    g_glassGeneration++;
+    ForEachIsland([](Island& island) { island.RenewGlass(); });
+}
+
 Island* MainIsland() {
     return g_islands.empty() ? g_island : g_islands.front();
 }
@@ -32544,13 +40057,17 @@ void SaveOwnLookSoon() {
     }
 }
 
+// Whether `island` shows the main island's settings (none: the main ones).
+bool IslandHasMainSettings(const Island* island) {
+    return !island || island->HasMainSettings();
+}
+
 // What every island shares, whatever profile it shows (the main island runs
 // it for all of them): always in the main settings.
 bool IsSharedPref(IslandPref pref) {
     switch (pref) {
         case IslandPref::AllMonitors:
         case IslandPref::FollowMouse:
-        case IslandPref::Profiles:
         case IslandPref::Animations:
         case IslandPref::HideWindowsBanners:
         case IslandPref::OwnNotifications:
@@ -32568,9 +40085,13 @@ bool IsLookValue(PCWSTR name) {
             return !IsSharedPref(info.pref);
         }
     }
-    for (PCWSTR look : {L"islandSize", L"islandGap", L"islandOpacity",
-                        L"islandAutoHideDelay", L"islandNotchCurve",
-                        L"trayListIsland"}) {
+    for (PCWSTR look :
+         {L"islandSize", L"islandGap", L"islandOpacity", L"islandAutoHideDelay",
+          L"islandNotchCurve", L"islandIconSize", L"islandLineOpacity",
+          L"islandActivationWidth", L"islandPanelSize",
+          L"islandMediaTitleLimit", L"islandPillHeight", L"islandPillCorners",
+          L"islandPillEnds", L"islandEdge", L"islandGlassBlur",
+          L"trayListIsland"}) {
         if (wcscmp(look, name) == 0) {
             return true;
         }
@@ -32624,7 +40145,7 @@ void ControlPanel::Prepare(float scale) {
 
 void ControlPanel::PrepareFormats(float scale) {
     m_preparedScale = scale;
-    m_iconFormat = MakeFormat(L"Segoe Fluent Icons", DWRITE_FONT_WEIGHT_NORMAL,
+    m_iconFormat = MakeFormat(IconFont(), DWRITE_FONT_WEIGHT_NORMAL,
                               15 * scale);
     m_titleFormat = MakeFormat(L"Segoe UI Variable Text",
                                DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * scale,
@@ -32642,11 +40163,11 @@ void ControlPanel::PrepareFormats(float scale) {
                               DWRITE_FONT_WEIGHT_NORMAL, 12 * scale);
     m_smallFormat = MakeFormat(L"Segoe UI Variable Text",
                                DWRITE_FONT_WEIGHT_NORMAL, 10.5f * scale);
-    m_badgeFormat = MakeFormat(L"Segoe Fluent Icons", DWRITE_FONT_WEIGHT_NORMAL,
+    m_badgeFormat = MakeFormat(IconFont(), DWRITE_FONT_WEIGHT_NORMAL,
                                9 * scale);
-    m_smallIconFormat = MakeFormat(L"Segoe Fluent Icons",
+    m_smallIconFormat = MakeFormat(IconFont(),
                                    DWRITE_FONT_WEIGHT_NORMAL, 13 * scale);
-    m_komorebiIconFormat = MakeFormat(L"Segoe Fluent Icons",
+    m_komorebiIconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 20 * scale);
 }
 
@@ -32672,47 +40193,17 @@ void ControlPanel::RunKomorebi(int button) {
         }
         StopKomorebiJob();
     }
-    HANDLE stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    HANDLE copy = nullptr;
-    if (!stop || !DuplicateHandle(GetCurrentProcess(), stop,
-                                  GetCurrentProcess(), &copy, 0, FALSE,
-                                  DUPLICATE_SAME_ACCESS)) {
-        if (stop) {
-            CloseHandle(stop);
-        }
+    if (!StartKomorebiJob(KomorebiCommands(m_komorebic, button), button,
+                          m_hwnd, &m_komorebiThread, &m_komorebiStop)) {
         return;
     }
-    auto* job = new KomorebiJob{KomorebiCommands(m_komorebic, button), button,
-                                m_hwnd, copy};
-    m_komorebiThread =
-        CreateThread(nullptr, 0, KomorebiThreadProc, job, 0, nullptr);
-    if (!m_komorebiThread) {
-        CloseHandle(copy);
-        CloseHandle(stop);
-        delete job;
-        return;
-    }
-    m_komorebiStop = stop;
     m_komorebiBusy = button;
     m_komorebiBusySince = NowSeconds();
     m_komorebiFailed = false;
 }
 
-// Its thread told to stop and waited for (a while: it owns its job, so it
-// can be left to end by itself). The command itself goes on.
 void ControlPanel::StopKomorebiJob() {
-    if (m_komorebiStop) {
-        SetEvent(m_komorebiStop);
-    }
-    if (m_komorebiThread) {
-        WaitForSingleObject(m_komorebiThread, 5000);
-        CloseHandle(m_komorebiThread);
-        m_komorebiThread = nullptr;
-    }
-    if (m_komorebiStop) {
-        CloseHandle(m_komorebiStop);
-        m_komorebiStop = nullptr;
-    }
+    EndKomorebiJob(&m_komorebiThread, &m_komorebiStop);
 }
 
 // Read while its section is shown (with the rest, every couple of seconds
@@ -32765,6 +40256,7 @@ void ControlPanel::OnOpen() {
     m_viewInVelocity = 0;
     // (Installed or removed meanwhile: looked for again.)
     m_komorebiLooked = false;
+    m_toolsLooked = false;
     if (KomorebiShown()) {
         UpdateKomorebi();
     }
@@ -32784,13 +40276,31 @@ void ControlPanel::OnOpen() {
     }
     // The radios' and the brightness's state come a moment later.
     SwitchRadio(-1, false);
-    // The monitor is asked once, and again only after a while: asking over
-    // DDC/CI can make some monitors flicker.
+    // The monitor is asked once, and again only after a while (asking over
+    // DDC/CI can make some monitors flicker), or once a monitor came or went
+    // (each slider knows its monitor by its place in the list).
+    // A monitor just plugged in answers only after a few seconds: fewer
+    // listed than there are (counted without asking them) is read again.
+    // One turned off (not answering a level set) is read again too.
     const ULONGLONG now = GetTickCount64();
+    int physical = 0;
+    ForEachPhysicalMonitor(
+        [&](const PHYSICAL_MONITOR&, int, HMONITOR, int) { physical++; });
+    const bool missed =
+        !m_brightnessJob->running && m_brightnessJob->missed.exchange(false);
     if (!m_brightnessJob->running &&
-        (!m_brightnessReadAt || now - m_brightnessReadAt > 10 * 60 * 1000)) {
+        (!m_brightnessReadAt || now - m_brightnessReadAt > 10 * 60 * 1000 ||
+         m_brightnessDisplays != g_displayChanges || missed ||
+         ((int)m_brightnessMonitors.size() < physical &&
+          now - m_brightnessReadAt > 2000))) {
         m_brightnessReadAt = now;
-        StartBrightnessWorker(BrightnessQueryProc);
+        // (Not changed meanwhile through places that may be old: after a
+        // monitor came or went.)
+        if (m_brightnessDisplays != g_displayChanges) {
+            m_brightnessMonitors.clear();
+        }
+        m_brightnessDisplays = g_displayChanges;
+        StartBrightnessWorker(BrightnessListProc);
     }
 }
 
@@ -33049,7 +40559,9 @@ void ControlPanel::StopWifi() {
         MSG msg;
         while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_WIFI_LIST,
                                      WM_APP_WIFI_LIST, PM_REMOVE)) {
-            delete (std::vector<WifiNetwork>*)msg.lParam;
+            if (msg.lParam != kWifiListRefused) {
+                delete (std::vector<WifiNetwork>*)msg.lParam;
+            }
         }
     }
     m_wifiListAgain = m_wifiScanAgain = false;
@@ -33134,19 +40646,25 @@ void ControlPanel::UpdateWifi(bool scan) {
 }
 
 // The networks in reach, one per name: the connected one first, then by
-// signal.
+// signal. Refused by Windows (see kWifiListRefused): access denied, or
+// only networks with their names hidden (what it does for apps without the
+// location on newer Windows 11 builds).
 DWORD WINAPI ControlPanel::WifiListThreadProc(LPVOID parameter) {
     std::unique_ptr<WifiListJob> job((WifiListJob*)parameter);
     if (job->scan) {
         WlanScan(job->wlan, &job->wifiInterface, nullptr, nullptr, nullptr);
     }
     PWLAN_AVAILABLE_NETWORK_LIST list = nullptr;
-    if (WlanGetAvailableNetworkList(job->wlan, &job->wifiInterface, 0, nullptr,
-                                    &list) != ERROR_SUCCESS) {
+    if (const DWORD error = WlanGetAvailableNetworkList(
+            job->wlan, &job->wifiInterface, 0, nullptr, &list);
+        error != ERROR_SUCCESS) {
+        Wh_Log(L"The Wi-Fi networks couldn't be listed: 0x%08X", error);
         // (Told anyway: the panel waits for this thread's answer.)
-        PostMessage(job->notify, WM_APP_WIFI_LIST, job->id, 0);
+        PostMessage(job->notify, WM_APP_WIFI_LIST, job->id,
+                    error == ERROR_ACCESS_DENIED ? kWifiListRefused : 0);
         return 0;
     }
+    bool unnamed = false;
     auto* found = new std::vector<WifiNetwork>;
     std::vector<WifiNetwork>& networks = *found;
     for (DWORD i = 0; i < list->dwNumberOfItems; i++) {
@@ -33154,6 +40672,7 @@ DWORD WINAPI ControlPanel::WifiListThreadProc(LPVOID parameter) {
         // Hidden networks have no name to show.
         if (available.dot11Ssid.uSSIDLength == 0 ||
             available.dot11BssType != dot11_BSS_type_infrastructure) {
+            unnamed = unnamed || available.dot11Ssid.uSSIDLength == 0;
             continue;
         }
         WifiNetwork network;
@@ -33195,6 +40714,11 @@ DWORD WINAPI ControlPanel::WifiListThreadProc(LPVOID parameter) {
                      });
     if (networks.size() > kMaxNetworks) {
         networks.resize(kMaxNetworks);
+    }
+    if (networks.empty() && unnamed) {
+        delete found;
+        PostMessage(job->notify, WM_APP_WIFI_LIST, job->id, kWifiListRefused);
+        return 0;
     }
     if (!PostMessage(job->notify, WM_APP_WIFI_LIST, job->id, (LPARAM)found)) {
         delete found;
@@ -33255,8 +40779,9 @@ void ControlPanel::UpdateBluetooth() {
             glyph = (GET_COD_MINOR(info.ulClassofDevice) & 0x20) ? kGlyphMouse
                                                                  : kGlyphKeyboard;
         }
-        m_bluetoothDevices.push_back(
-            {info.szName, info.fConnected != FALSE, glyph});
+        m_bluetoothDevices.push_back({info.szName, info.fConnected != FALSE,
+                                      glyph, info.Address.ullLong,
+                                      major == COD_MAJOR_AUDIO});
         info.dwSize = sizeof(info);
     } while (BluetoothFindNextDevice(find, &info));
     BluetoothFindDeviceClose(find);
@@ -33266,6 +40791,75 @@ void ControlPanel::UpdateBluetooth() {
                      });
     if (m_bluetoothDevices.size() > kMaxBluetoothDevices) {
         m_bluetoothDevices.resize(kMaxBluetoothDevices);
+    }
+}
+
+// A device's row clicked: headphones or speakers connect (or disconnect),
+// showing it on the row; other devices open Windows' Bluetooth settings.
+void ControlPanel::ClickBluetoothDevice(int index) {
+    if (index < 0 || index >= (int)m_bluetoothDevices.size()) {
+        return;
+    }
+    const BluetoothDevice& device = m_bluetoothDevices[index];
+    if (!device.audio) {
+        OpenUri(L"ms-settings:bluetooth");
+        return;
+    }
+    // (One at a time.)
+    const BluetoothStep step =
+        LiveBluetoothStep(m_bluetoothStep, m_bluetoothStepAt);
+    if (step == BluetoothStep::Connecting ||
+        step == BluetoothStep::Disconnecting) {
+        return;
+    }
+    m_bluetoothAddress = device.address;
+    m_bluetoothStep = device.connected ? BluetoothStep::Disconnecting
+                                       : BluetoothStep::Connecting;
+    m_bluetoothStepAt = GetTickCount64();
+    auto* request = new BluetoothConnectRequest{m_hwnd, device.address,
+                                                !device.connected};
+    if (!StartWorker(BluetoothConnectProc, request)) {
+        delete request;
+        m_bluetoothStep = BluetoothStep::Failed;
+    }
+    SetTimer(m_hwnd, kBluetoothTimerId, kBluetoothCheckMs, nullptr);
+}
+
+// The device asked to connect or disconnect, looked at again: done when it
+// is (or not after a while: "Couldn't connect" for a moment).
+void ControlPanel::CheckBluetoothStep() {
+    UpdateBluetooth();
+    const ULONGLONG since = GetTickCount64() - m_bluetoothStepAt;
+    auto it = std::find_if(m_bluetoothDevices.begin(),
+                           m_bluetoothDevices.end(),
+                           [&](const BluetoothDevice& device) {
+                               return device.address == m_bluetoothAddress;
+                           });
+    const bool connected = it != m_bluetoothDevices.end() && it->connected;
+    switch (m_bluetoothStep) {
+        case BluetoothStep::Connecting:
+            if (connected) {
+                m_bluetoothStep = BluetoothStep::None;
+            } else if (since > kBluetoothConnectMs) {
+                m_bluetoothStep = BluetoothStep::Failed;
+                m_bluetoothStepAt = GetTickCount64();
+            }
+            break;
+        case BluetoothStep::Disconnecting:
+            if (!connected || since > kBluetoothConnectMs) {
+                m_bluetoothStep = BluetoothStep::None;
+            }
+            break;
+        case BluetoothStep::Failed:
+            if (since > kBluetoothFailedMs) {
+                m_bluetoothStep = BluetoothStep::None;
+            }
+            break;
+        default:
+            break;
+    }
+    if (m_bluetoothStep == BluetoothStep::None) {
+        KillTimer(m_hwnd, kBluetoothTimerId);
     }
 }
 
@@ -33541,6 +41135,11 @@ bool ControlPanel::OnTimer(UINT_PTR id) {
         Layout();
         return true;
     }
+    if (id == kBluetoothTimerId) {
+        CheckBluetoothStep();
+        Layout();
+        return true;
+    }
     if (id != kNightLightTimerId || !m_nightLightChecking) {
         return false;
     }
@@ -33718,19 +41317,45 @@ void ControlPanel::ToggleAccessibility(int index) {
     item.on = !item.on;
 }
 
-void ControlPanel::SetBrightness(int level) {
-    m_brightness = std::clamp(level, 0, 100);
-    m_brightnessJob->target = m_brightness;
+// A monitor's brightness (its row; the only one with a single monitor).
+void ControlPanel::SetBrightness(int row, int level) {
+    if (row < 0 || row >= (int)m_brightnessMonitors.size()) {
+        return;
+    }
+    BrightnessMonitor& monitor = m_brightnessMonitors[row];
+    monitor.level = std::clamp(level, 0, 100);
+    m_brightness = m_brightnessMonitors.front().level;
+    m_brightnessJob->Ask(monitor.index, monitor.level);
     if (!m_brightnessJob->running.exchange(true) &&
         !StartBrightnessWorker(BrightnessThreadProc)) {
         m_brightnessJob->running = false;
     }
+    Island::ShareBrightness(monitor.screen, monitor.level);
 }
 
-void ControlPanel::SetBrightnessAt(POINT pt) {
-    const D2D1_RECT_F& rect = m_brightnessSlider;
+// A screen's brightness changed elsewhere (an island's wheel): shown here
+// too. Whether it changed.
+bool ControlPanel::TakeBrightness(HMONITOR screen, int level) {
+    bool changed = false;
+    for (auto& monitor : m_brightnessMonitors) {
+        if (monitor.screen == screen && monitor.level != level) {
+            monitor.level = level;
+            changed = true;
+        }
+    }
+    if (!m_brightnessMonitors.empty()) {
+        m_brightness = m_brightnessMonitors.front().level;
+    }
+    return changed;
+}
+
+void ControlPanel::SetBrightnessAt(int row, POINT pt) {
+    if (row < 0 || row >= (int)m_brightnessSliders.size()) {
+        return;
+    }
+    const D2D1_RECT_F& rect = m_brightnessSliders[row];
     const float knob = rect.bottom - rect.top;
-    SetBrightness((int)std::lround(
+    SetBrightness(row, (int)std::lround(
         100 * std::clamp((pt.x - rect.left - knob / 2) /
                              (rect.right - rect.left - knob),
                          0.0f, 1.0f)));
@@ -33755,6 +41380,16 @@ std::wstring ControlPanel::StatusText() const {
         }
         if (!m_wifiStatus.empty()) {
             return m_wifiStatus;
+        }
+        if (m_networks.empty() && m_wifiRefused) {
+            return Tr(
+                L"Windows shows the networks only to apps allowed to "
+                L"use the location: click to turn on \"Let desktop "
+                L"apps access your location\"",
+                L"O Windows só mostra as redes para apps com acesso à "
+                L"localização: clique para ligar \"Permitir que "
+                L"aplicativos da área de trabalho acessem sua "
+                L"localização\"");
         }
         if (m_networks.empty()) {
             return Tr(L"Looking for networks...", L"Procurando redes...");
@@ -33869,7 +41504,27 @@ void ControlPanel::ClearApps() {
     m_apps.clear();
 }
 
-// The programs playing sound on the default device, one entry per program.
+// Whether a session (of the system sounds, or of a process and its program
+// file) goes in the app's entry: the same program, or the same process when
+// its file can't be read.
+bool ControlPanel::SameMixerApp(const MixerApp& app,
+                                bool system,
+                                const std::wstring& path,
+                                DWORD processId) {
+    if (app.system != system) {
+        return false;
+    }
+    if (system) {
+        return true;
+    }
+    return path.empty() || app.path.empty()
+               ? app.processId == processId
+               : _wcsicmp(app.path.c_str(), path.c_str()) == 0;
+}
+
+// The programs playing sound on the default device, one entry per program
+// (like Windows' mixer: Spotify, for one, plays from more than one of its
+// processes).
 void ControlPanel::UpdateApps() {
     // Icons and bitmaps are kept for the programs still there.
     std::vector<MixerApp> previous = std::move(m_apps);
@@ -33905,11 +41560,13 @@ void ControlPanel::UpdateApps() {
             const bool system = control2->IsSystemSoundsSession() == S_OK;
             DWORD processId = 0;
             control2->GetProcessId(&processId);
+            const std::wstring path =
+                system ? std::wstring{} : ProcessImagePath(processId);
 
             auto it = std::find_if(m_apps.begin(), m_apps.end(),
                                    [&](const MixerApp& app) {
-                                       return app.system == system &&
-                                              app.processId == processId;
+                                       return SameMixerApp(app, system, path,
+                                                           processId);
                                    });
             if (it == m_apps.end()) {
                 if (m_apps.size() >= kMaxMixerApps) {
@@ -33917,6 +41574,7 @@ void ControlPanel::UpdateApps() {
                 }
                 MixerApp app;
                 app.processId = processId;
+                app.path = path;
                 app.system = system;
                 float level = 1;
                 BOOL muted = FALSE;
@@ -33934,8 +41592,9 @@ void ControlPanel::UpdateApps() {
     for (auto& app : m_apps) {
         auto old = std::find_if(previous.begin(), previous.end(),
                                 [&](const MixerApp& other) {
-                                    return other.system == app.system &&
-                                           other.processId == app.processId;
+                                    return SameMixerApp(other, app.system,
+                                                        app.path,
+                                                        app.processId);
                                 });
         if (old != previous.end()) {
             app.name = old->name;
@@ -33948,16 +41607,9 @@ void ControlPanel::UpdateApps() {
                           L"Sons do sistema (notificações)");
             continue;
         }
-        HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
-                                     app.processId);
-        if (process) {
-            WCHAR path[MAX_PATH];
-            DWORD length = ARRAYSIZE(path);
-            if (QueryFullProcessImageName(process, 0, path, &length)) {
-                app.name = GetProgramName(path);
-                ExtractIconEx(path, 0, &app.icon, nullptr, 1);
-            }
-            CloseHandle(process);
+        if (!app.path.empty()) {
+            app.name = GetProgramName(app.path.c_str());
+            ExtractIconEx(app.path.c_str(), 0, &app.icon, nullptr, 1);
         }
         if (app.name.empty()) {
             app.name = Tr(L"App", L"App");
@@ -34377,8 +42029,9 @@ void ControlPanel::Layout() {
     LoadControls();
     m_controlRects.clear();
     m_networkIcon = m_bluetoothIcon = m_dndIcon = {};
-    m_display = m_brightnessSlider = m_sound = m_slider = m_volumeIcon =
-        m_deviceRow = m_mixerButton = m_batteryTile = m_powerModeRect = {};
+    m_display = m_sound = m_slider = m_volumeIcon = m_deviceRow =
+        m_mixerButton = m_batteryTile = m_powerModeRect = {};
+    m_brightnessSliders.clear();
     const float tile = std::round(kTileHeight * s);
     const float half = (width - padding * 2 - gap) / 2;
     const float shortcut = std::round(kShortcutHeight * s);
@@ -34430,20 +42083,30 @@ void ControlPanel::Layout() {
                 endRow();
             }
         } else if (id == ControlId::Display) {
-            // Only when the monitor lets it be changed (while editing, its
-            // place is shown anyway).
+            // Only when a monitor lets it be changed (while editing, its
+            // place is shown anyway). One slider; with more monitors, one
+            // for each, under its name.
             if (m_brightness < 0 && !m_editing) {
                 continue;
             }
-            const float display = std::round(kDisplayHeight * s);
+            const size_t rows =
+                std::max<size_t>(1, m_brightnessMonitors.size());
+            const float rowHeight = std::round(kBrightnessRowHeight * s);
+            const float display =
+                rows > 1 ? std::round(40 * s) + rowHeight * rows
+                         : std::round(kDisplayHeight * s);
             rect = {padding, y, width - padding, y + display};
             if (m_brightness >= 0) {
                 m_display = rect;
                 const float inner = std::round(12 * s);
-                const float sliderTop = y + std::round(34 * s);
-                m_brightnessSlider = {padding + inner, sliderTop,
-                                      width - padding - inner,
-                                      sliderTop + std::round(26 * s)};
+                for (size_t row = 0; row < rows; row++) {
+                    const float sliderTop =
+                        y + std::round(34 * s) +
+                        (rows > 1 ? rowHeight * row + std::round(20 * s) : 0);
+                    m_brightnessSliders.push_back(
+                        {padding + inner, sliderTop, width - padding - inner,
+                         sliderTop + std::round(26 * s)});
+                }
             }
             y += display + gap;
         } else if (id == ControlId::Sound) {
@@ -34750,16 +42413,49 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
             WCHAR seconds[16];
             swprintf_s(seconds, L"%.1f s", size / 10.0);
             std::wstring name =
-                slider == 6 ? std::wstring(
-                                  Tr(L"Notch curves", L"Curvas dos entalhes")) +
-                                  L" \u00B7 " + std::to_wstring(size) + L"%"
+                slider == 16
+                    ? std::wstring(Tr(L"Glass blur", L"Desfoque do vidro")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 15
+                    ? std::wstring(Tr(L"Edge around", L"Borda em volta")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 14
+                    ? std::wstring(Tr(L"Room at the pill's ends",
+                                      L"Espaço nas pontas da pílula")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 13
+                    ? std::wstring(Tr(L"Pill corners", L"Cantos da pílula")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 12
+                    ? std::wstring(Tr(L"Pill height", L"Altura da pílula")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 11
+                    ? std::wstring(Tr(L"Title width", L"Largura do título")) +
+                          L" \u00B7 " + std::to_wstring(size) + L" px"
+                : slider == 10
+                    ? std::wstring(Tr(L"Panels size", L"Tamanho dos painéis")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 9 ? std::wstring(Tr(L"Area that brings it back",
+                                                L"Área que traz de volta")) +
+                                    L" \u00B7 " + std::to_wstring(size) + L" px"
+                : slider == 8
+                    ? std::wstring(Tr(L"Line opacity", L"Opacidade da linha")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 7
+                    ? std::wstring(Tr(L"Icon and text size",
+                                      L"Tamanho dos ícones e textos")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 6 ? std::wstring(Tr(L"Notch curves",
+                                                L"Curvas dos entalhes")) +
+                                    L" \u00B7 " + std::to_wstring(size) + L"%"
                 : slider == 5
                     ? std::wstring(Tr(L"Hide after", L"Esconder depois de")) +
                           L" \u00B7 " + seconds
                 : slider == 4 ? std::wstring(Tr(L"Opacity", L"Opacidade")) +
                                     L" \u00B7 " + std::to_wstring(size) + L"%"
-                : slider == 3 ? std::wstring(Tr(L"Icons before scrolling",
-                                                L"Ícones antes de rolar")) +
+                : slider == 3 ? std::wstring(Tr(
+                                    L"Other apps' icons before scrolling",
+                                    L"Ícones de outros apps antes de rolar")) +
                                     L" \u00B7 " + std::to_wstring(size)
                 : slider == 2 ? std::wstring(Tr(L"Speed", L"Velocidade")) +
                                     L" \u00B7 " + std::to_wstring(size) + L"%"
@@ -34799,9 +42495,16 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
                 : id == kChoiceWallpaper ? Tr(L"Wallpaper transition",
                                               L"Transição do papel de parede")
                 : id == kChoiceNotches   ? Tr(L"Notches", L"Entalhes")
-                                         : L"";
+                : id == kChoiceFolderDrag
+                    ? Tr(L"Files dragged out of the folders",
+                         L"Arquivos arrastados das pastas")
+                : id == kChoiceLanguage
+                    ? Tr(L"Language of the island's texts (it starts again)",
+                         L"Idioma dos textos da ilha (ela reinicia)")
+                    : L"";
             if (otherIsland &&
-                (id == kChoiceAnimationLevel || id == kChoiceFrameRate)) {
+                (id == kChoiceAnimationLevel || id == kChoiceFrameRate ||
+                 id == kChoiceLanguage)) {
                 name += Tr(L" (all monitors)", L" (todos os monitores)");
             }
             return name;
@@ -34812,6 +42515,28 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
             std::wstring name = Tr(info.english, info.portuguese);
             if (otherIsland && IsSharedPref(pref) && !MainIslandOnly(pref)) {
                 name += Tr(L" (all monitors)", L" (todos os monitores)");
+            }
+            // (komorebi starting with whkd, which isn't there: it'd fail.)
+            // (The glass giving way to the plain color for now.)
+            if (pref == IslandPref::LiquidGlass && g_settings.islandLiquidGlass &&
+                g_energySaver) {
+                name += Tr(L" · plain color while Windows' energy saver is on",
+                           L" · cor lisa enquanto a economia de energia do Windows "
+                           L"está ligada");
+            } else if (pref == IslandPref::LiquidGlass &&
+                       g_settings.islandLiquidGlass &&
+                       !g_transparencyEffects) {
+                name += Tr(L" · plain color: Windows' transparency effects are "
+                           L"off (Personalization > Colors)",
+                           L" · cor lisa: os efeitos de transparência do "
+                           L"Windows estão desligados (Personalização > Cores)");
+            }
+            if (pref == IslandPref::KomorebiWhkd && g_settings.komorebiWhkd &&
+                g_komorebiFound == 1 && g_whkdFound == 0) {
+                name += Tr(L" · whkd isn't installed (winget install "
+                           L"LGUG2Z.whkd)",
+                           L" · o whkd não está instalado (winget install "
+                           L"LGUG2Z.whkd)");
             }
             return name;
         }
@@ -34859,10 +42584,14 @@ PCWSTR SettingSectionTitle(int section, bool english) {
         {L"Profiles", L"Perfis"},
         {L"Backup (notes, tasks, profiles and settings)",
          L"Backup (notas, tarefas, perfis e configurações)"},
+        {L"Language", L"Idioma"},
         {L"Place", L"Posição"},
         {L"Style", L"Estilo"},
         {L"Colors", L"Cores"},
-        {L"Size and transparency", L"Tamanho e transparência"},
+        {L"Glass", L"Vidro"},
+        {L"The pill's shape", L"Forma da pílula"},
+        {L"Sizes", L"Tamanhos"},
+        {L"Details", L"Detalhes"},
         {L"Animations", L"Animações"},
         {L"Order of the items", L"Ordem dos itens"},
         {L"System", L"Sistema"},
@@ -34916,7 +42645,39 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                 L"personalizadas";
             break;
         case SettingKind::Size:
-            text += entry.value == 6
+            text += entry.value == 16
+                        ? L" Glass blur blurred frosted strength Liquid "
+                          L"Desfoque do vidro desfocado fosco força"
+                    : entry.value == 15
+                        ? L" Edge around border outline line glow rim "
+                          L"Borda em volta contorno linha brilho"
+                    : entry.value == 14
+                        ? L" Room at the pill's ends width wide narrow "
+                          L"Espaço nas pontas da pílula largura larga "
+                          L"estreita"
+                    : entry.value == 13
+                        ? L" Pill corners round square radius Cantos da "
+                          L"pílula redondos quadrados"
+                    : entry.value == 12
+                        ? L" Pill height thin fat tall Altura da pílula "
+                          L"fina gorda alta"
+                    : entry.value == 11
+                        ? L" Title width length song scroll What's playing "
+                          L"Largura do título comprimento música rolar"
+                    : entry.value == 10
+                        ? L" Panels size settings text zoom bigger 4K "
+                          L"Tamanho dos painéis configurações texto maior"
+                    : entry.value == 9
+                        ? L" Area that brings it back activation hot corner "
+                          L"line auto-hide Área que traz de volta ativação "
+                          L"canto linha"
+                    : entry.value == 8
+                        ? L" Line opacity transparent invisible auto-hide "
+                          L"Opacidade da linha transparente invisível"
+                    : entry.value == 7
+                        ? L" Icon and text size icons texts font small big "
+                          L"Tamanho dos ícones e textos fonte pequenos grandes"
+                    : entry.value == 6
                         ? L" Notch curves round corners MacBook Curvas dos "
                           L"entalhes cantos redondos"
                     : entry.value == 5
@@ -34969,6 +42730,12 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                     : entry.value == kChoiceNotches
                         ? L" Notches notch MacBook corners middle three Fixed "
                           L"Entalhes entalhe cantos meio três Fixa"
+                    : entry.value == kChoiceFolderDrag
+                        ? L" Folders drag files copy move ask Pastas arrastar "
+                          L"arquivos copiar mover perguntar"
+                    : entry.value == kChoiceLanguage
+                        ? L" Language English Portuguese Chinese translation "
+                          L"Idioma inglês português chinês tradução 语言"
                         : L"";
             break;
         case SettingKind::AppPlaces:
@@ -35168,12 +42935,18 @@ void ControlPanel::PlaceOrderChips(const std::vector<PillGroup>& groups,
 }
 
 void ControlPanel::LayoutSettings() {
+    if (!m_toolsLooked) {
+        m_toolsLooked = true;
+        LookForKomorebi();
+    }
     if (m_settings.empty()) {
         static const SettingSpec kSpecs[] = {
             {(int)SettingKind::Label, 0, kSectionProfiles},
             {(int)SettingKind::Profiles, 0, kSectionProfiles},
             {(int)SettingKind::Label, 0, kSectionBackup},
             {(int)SettingKind::Choice, kChoiceBackup, kSectionBackup},
+            {(int)SettingKind::Label, 0, kSectionLanguage},
+            {(int)SettingKind::Choice, kChoiceLanguage, kSectionLanguage},
             {(int)SettingKind::Label, 0, kSectionPlace},
             {(int)SettingKind::Place, 0, kSectionPlace},
             {(int)SettingKind::AppPlaces, 0, kSectionPlace},
@@ -35182,6 +42955,10 @@ void ControlPanel::LayoutSettings() {
              kSectionPlace},
             {(int)SettingKind::Pref, (int)IslandPref::AutoHide, kSectionPlace},
             {(int)SettingKind::Size, 5, kSectionPlace, 1},
+            {(int)SettingKind::Size, 8, kSectionPlace},
+            {(int)SettingKind::Size, 9, kSectionPlace},
+            {(int)SettingKind::Pref, (int)IslandPref::MinimizeButton,
+             kSectionPlace},
             {(int)SettingKind::Size, 1, kSectionPlace},
             {(int)SettingKind::Label, 0, kSectionStyle},
             {(int)SettingKind::Style, 0, kSectionStyle},
@@ -35194,12 +42971,30 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Choice, kChoiceColors, kSectionColors, 1},
             {(int)SettingKind::Pref, (int)IslandPref::WindowColor,
              kSectionColors},
+            {(int)SettingKind::Size, 4, kSectionColors, 1},
+            {(int)SettingKind::Label, 0, kSectionGlass},
+            {(int)SettingKind::Pref, (int)IslandPref::LiquidGlass,
+             kSectionGlass},
+            {(int)SettingKind::Pref, (int)IslandPref::GlassTranslucent,
+             kSectionGlass, 1},
+            {(int)SettingKind::Size, 16, kSectionGlass, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::Frosted, kSectionGlass,
+             1},
+            {(int)SettingKind::Label, 0, kSectionShape},
+            {(int)SettingKind::Size, 12, kSectionShape},
+            {(int)SettingKind::Size, 13, kSectionShape, 1},
+            {(int)SettingKind::Size, 14, kSectionShape, 1},
+            {(int)SettingKind::Size, 15, kSectionShape, 1},
             {(int)SettingKind::Label, 0, kSectionLook},
             {(int)SettingKind::Size, 0, kSectionLook},
-            {(int)SettingKind::Size, 4, kSectionLook},
-            {(int)SettingKind::Pref, (int)IslandPref::Frosted, kSectionLook},
+            {(int)SettingKind::Size, 7, kSectionLook, 1},
+            {(int)SettingKind::Size, 10, kSectionLook, 1},
             {(int)SettingKind::Pref, (int)IslandPref::PanelsFollow,
-             kSectionLook},
+             kSectionLook, 1},
+            {(int)SettingKind::Label, 0, kSectionDetails},
+            {(int)SettingKind::Pref, (int)IslandPref::Tips, kSectionDetails},
+            {(int)SettingKind::Pref, (int)IslandPref::HoverHighlight,
+             kSectionDetails, 1},
             {(int)SettingKind::Label, 0, kSectionAnimations},
             {(int)SettingKind::Pref, (int)IslandPref::Animations,
              kSectionAnimations},
@@ -35211,6 +43006,7 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Order, 0, kSectionPill},
             {(int)SettingKind::Pref, (int)IslandPref::ClockCenter,
              kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::BarCorners, kSectionPill},
             {(int)SettingKind::Label, 0, kSectionSystem},
             {(int)SettingKind::Pref, (int)IslandPref::Network, kSectionSystem},
             {(int)SettingKind::Pref, (int)IslandPref::Volume, kSectionSystem},
@@ -35233,7 +43029,10 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Label, 0, kSectionDesktop},
             {(int)SettingKind::Pref, (int)IslandPref::Desktops,
              kSectionDesktop},
+            {(int)SettingKind::Pref, (int)IslandPref::FocusedApp,
+             kSectionDesktop},
             {(int)SettingKind::Pref, (int)IslandPref::Folders, kSectionDesktop},
+            {(int)SettingKind::Choice, kChoiceFolderDrag, kSectionDesktop, 1},
             {(int)SettingKind::Pref, (int)IslandPref::Wallpaper,
              kSectionDesktop},
             {(int)SettingKind::Choice, kChoiceWallpaper, kSectionDesktop, 1},
@@ -35290,6 +43089,10 @@ void ControlPanel::LayoutSettings() {
              kSectionActions, 1},
             {(int)SettingKind::Pref, (int)IslandPref::KomorebiMasir,
              kSectionActions, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::KomorebiLayout,
+             kSectionActions},
+            {(int)SettingKind::Pref, (int)IslandPref::KomorebiHideEmpty,
+             kSectionActions, 1},
             {(int)SettingKind::Label, 0, kSectionTray},
             {(int)SettingKind::Pref, (int)IslandPref::Tray, kSectionTray},
             {(int)SettingKind::Choice, kChoiceTrayStyle, kSectionTray, 1},
@@ -35302,6 +43105,7 @@ void ControlPanel::LayoutSettings() {
              kSectionMedia, 1},
             {(int)SettingKind::Pref, (int)IslandPref::MediaTitle, kSectionMedia,
              1},
+            {(int)SettingKind::Size, 11, kSectionMedia, 1},
             {(int)SettingKind::Pref, (int)IslandPref::MediaMarquee,
              kSectionMedia, 1},
             {(int)SettingKind::Pref, (int)IslandPref::MediaWheel, kSectionMedia,
@@ -35309,15 +43113,18 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Label, 0, kSectionClock},
             {(int)SettingKind::Choice, kChoiceClockFormat, kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::ClockSeconds,
-             kSectionClock},
+             kSectionClock, 1},
             {(int)SettingKind::Pref, (int)IslandPref::ClockWeekday,
-             kSectionClock},
-            {(int)SettingKind::Pref, (int)IslandPref::ClockDate, kSectionClock},
-            {(int)SettingKind::Pref, (int)IslandPref::ClockYear, kSectionClock},
+             kSectionClock, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::ClockDate, kSectionClock,
+             1},
+            {(int)SettingKind::Pref, (int)IslandPref::ClockYear, kSectionClock,
+             1},
             {(int)SettingKind::Choice, kChoiceDateOrder, kSectionClock, 1},
             {(int)SettingKind::Pref, (int)IslandPref::MonthNumber,
              kSectionClock, 1},
-            {(int)SettingKind::Pref, (int)IslandPref::Holidays, kSectionClock},
+            {(int)SettingKind::Pref, (int)IslandPref::Holidays, kSectionClock,
+             1},
             {(int)SettingKind::Label, 0, kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::OwnNotifications,
              kSectionNotifications},
@@ -35333,6 +43140,8 @@ void ControlPanel::LayoutSettings() {
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::WebPictures,
              kSectionNotifications, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::NotificationApps,
+             kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::GroupApps,
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::Clipboard,
@@ -35466,8 +43275,9 @@ void ControlPanel::LayoutSettings() {
     float filled = 0;
     int columnNow = 0;
     if (m_search.empty()) {
-        // (A title stays with the option after it, and an option with the
-        // one it depends on.)
+        // (A title stays with the option after it, and a row marked to
+        // follow with the one before: an option it depends on, or the rest
+        // of a section kept in one column.)
         bool afterTitle = false;
         for (size_t i = 0; i < m_settings.size(); i++) {
             const SettingEntry& entry = m_settings[i];
@@ -35475,9 +43285,24 @@ void ControlPanel::LayoutSettings() {
                 continue;
             }
             const float height = heights[i];
+            // (Weighed with the rows that can't be parted from it: after a
+            // title, its first option and the ones following that.)
+            float block = height;
+            bool titled = entry.kind == SettingKind::Label;
+            for (size_t j = i + 1; j < m_settings.size(); j++) {
+                const SettingEntry& next = m_settings[j];
+                if (!next.shown || acrossColumns(next)) {
+                    continue;
+                }
+                if (!next.follows && !titled) {
+                    break;
+                }
+                titled = false;
+                block += heights[j];
+            }
             if (columnNow < m_columns - 1 && filled > 0 && !afterTitle &&
                 !entry.follows &&
-                filled + height / 2 > total * (columnNow + 1) / m_columns) {
+                filled + block / 2 > total * (columnNow + 1) / m_columns) {
                 columnNow++;
             }
             entryColumn[i] = columnNow;
@@ -35854,7 +43679,7 @@ void ControlPanel::SaveControls() {
 
 ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
     if (m_view == View::Wifi || m_view == View::Bluetooth) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         const bool wifi = m_view == View::Wifi;
@@ -35876,6 +43701,10 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                 }
             }
             return {Part::WifiRow, (int)i};
+        }
+        if (wifi && m_wifiRefused && m_networks.empty() &&
+            m_wifiStatus.empty() && PointInRect(pt, m_status)) {
+            return {Part::WifiLocation};
         }
         if (wifi && m_hotspot >= 0 && PointInRect(pt, m_hotspotRow)) {
             return {Part::HotspotToggle};
@@ -35933,6 +43762,10 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                     }
                     if (PointInRect(list, m_sizeSlider[slider])) {
                         return {Part::SizeSlider, slider};
+                    }
+                    if (SliderDisabled(slider)) {
+                        return {Part::DisabledSetting,
+                                kDisabledSlider + slider};
                     }
                     break;
                 }
@@ -36022,7 +43855,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::AppPlaces) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         if (!PointInRect(pt, m_appPlacesViewport)) {
@@ -36057,7 +43890,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::Project || m_view == View::Accessibility) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         for (size_t i = 0; i < m_rows.size(); i++) {
@@ -36070,7 +43903,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::Password) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         if (PointInRect(pt, m_eye)) {
@@ -36085,7 +43918,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view != View::Main) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         for (size_t i = 0; i < m_rows.size(); i++) {
@@ -36157,8 +43990,16 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                 return {m_hotspot >= 0 ? Part::HotspotToggle : Part::None};
             case ControlId::Airplane:
                 return {m_airplane >= 0 ? Part::AirplaneToggle : Part::None};
-            case ControlId::Display:
-                return {Part::BrightnessSlider};
+            case ControlId::Display: {
+                // (The row under the mouse: its name and its slider.)
+                int row = 0;
+                for (size_t i = 1; i < m_brightnessSliders.size(); i++) {
+                    if (pt.y >= m_brightnessSliders[i - 1].bottom) {
+                        row = (int)i;
+                    }
+                }
+                return {Part::BrightnessSlider, row};
+            }
             case ControlId::Sound:
                 if (PointInRect(pt, m_volumeIcon)) {
                     return {Part::VolumeIcon};
@@ -36580,7 +44421,14 @@ void ControlPanel::DrawStatus(ID2D1RenderTarget* target,
     if (!layout || FAILED(layout->GetMetrics(&metrics))) {
         return;
     }
-    brush->SetColor(Fg(0.55f));
+    // (The line that opens the location's page: a link.)
+    if (m_hover.part == Part::WifiLocation) {
+        layout->SetUnderline(true, {0, (UINT32)status.size()});
+    }
+    brush->SetColor(m_view == View::Wifi && m_wifiRefused &&
+                            m_networks.empty() && m_wifiStatus.empty()
+                        ? AccentInk(1)
+                        : Fg(0.55f));
     target->DrawTextLayout(
         {m_status.left,
          (m_status.top + m_status.bottom - metrics.height) / 2},
@@ -36591,9 +44439,7 @@ void ControlPanel::DrawHeader(ID2D1RenderTarget* target,
                               ID2D1SolidColorBrush* brush,
                               PCWSTR title,
                               int toggle) {
-    // The settings open on their own (from the island's settings bubble):
-    // nothing to go back to there, Escape or a click outside closes them.
-    const bool back = m_view != View::Settings;
+    const bool back = ShowsBack();
     if (const float lit =
             back ? Hover(m_back, m_hover.part == Part::Back) : 0.0f;
         lit > 0.01f) {
@@ -37002,6 +44848,19 @@ constexpr IslandSlider kIslandSliders[kIslandSliderCount] = {
     {kAutoHideDelayMin, kAutoHideDelayMax, kAutoHideDelayDefault,
      kAutoHideDelayStep},
     {kNotchCurveMin, kNotchCurveMax, kNotchCurveDefault, kNotchCurveStep},
+    {kIconSizeMin, kIconSizeMax, kIconSizeDefault, kIconSizeStep},
+    {kLineOpacityMin, kLineOpacityMax, kLineOpacityDefault, kLineOpacityStep},
+    {kActivationWidthMin, kActivationWidthMax, kActivationWidthDefault,
+     kActivationWidthStep},
+    {kPanelSizeMin, kPanelSizeMax, kPanelSizeDefault, kPanelSizeStep},
+    {kMediaTitleLimitMin, kMediaTitleLimitMax, kMediaTitleLimitDefault,
+     kMediaTitleLimitStep},
+    {kPillHeightPctMin, kPillHeightPctMax, kPillHeightPctDefault,
+     kPillHeightPctStep},
+    {kPillCornersMin, kPillCornersMax, kPillCornersDefault, kPillCornersStep},
+    {kPillEndsMin, kPillEndsMax, kPillEndsDefault, kPillEndsStep},
+    {kEdgeMin, kEdgeMax, kEdgeDefault, kEdgeStep},
+    {kGlassBlurMin, kGlassBlurMax, kGlassBlurDefault, kGlassBlurStep},
 };
 
 // The apps with a place of their own, and the open ones to add.
@@ -37238,7 +45097,19 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
 // The island's own options: its style, its colors, and what it shows.
 // A slider moved: its value set (kept when `keep`).
 void SetIslandSlider(int slider, int value, bool keep) {
-    if (slider == 6) {
+    if (slider >= 12) {
+        SetPillLook(slider, value, keep);
+    } else if (slider == 11) {
+        SetMediaTitleLimit(value, keep);
+    } else if (slider == 10) {
+        SetPanelSize(value, keep);
+    } else if (slider == 9) {
+        SetActivationWidth(value, keep);
+    } else if (slider == 8) {
+        SetLineOpacity(value, keep);
+    } else if (slider == 7) {
+        SetIconSize(value, keep);
+    } else if (slider == 6) {
         SetNotchCurve(value, keep);
     } else if (slider == 5) {
         SetAutoHideDelay(value, keep);
@@ -37258,14 +45129,32 @@ void SetIslandSlider(int slider, int value, bool keep) {
     }
 }
 
+float PillHeightScale() {
+    return g_settings.islandPillHeight / 100.0f;
+}
+
+float EdgeAmount() {
+    return g_settings.islandEdge / 100.0f;
+}
+
 int IslandSliderValue(int slider) {
-    return slider == 6   ? g_settings.islandNotchCurve
-           : slider == 5 ? g_settings.islandAutoHideDelay
-           : slider == 4 ? g_islandOpacity
-           : slider == 3 ? g_trayListIcons
-           : slider == 2 ? g_animationChoice.speed
-           : slider == 1 ? g_settings.islandGap
-                         : g_settings.islandSize;
+    return slider == 16   ? g_settings.islandGlassBlur
+           : slider == 15 ? g_settings.islandEdge
+           : slider == 14 ? g_settings.islandPillEnds
+           : slider == 13 ? g_settings.islandPillCorners
+           : slider == 12 ? g_settings.islandPillHeight
+           : slider == 11 ? g_settings.islandMediaTitleLimit
+           : slider == 10 ? g_settings.islandPanelSize
+           : slider == 9  ? g_settings.islandActivationWidth
+           : slider == 8  ? g_settings.islandLineOpacity
+           : slider == 7  ? g_settings.islandIconSize
+           : slider == 6  ? g_settings.islandNotchCurve
+           : slider == 5  ? g_settings.islandAutoHideDelay
+           : slider == 4  ? g_islandOpacity
+           : slider == 3  ? g_trayListIcons
+           : slider == 2  ? g_animationChoice.speed
+           : slider == 1  ? g_settings.islandGap
+                          : g_settings.islandSize;
 }
 
 // Editing a profile: its name typed in the box (`fresh`: a new one, whose
@@ -37781,12 +45670,17 @@ void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
     }
     for (const auto& entry : m_settings) {
         const bool appPlaces = m_hover.index == kDisabledAppPlaces;
-        const bool choice = !appPlaces && m_hover.index >= kDisabledChoice;
-        if (appPlaces ? entry.kind != SettingKind::AppPlaces
-                      : entry.kind != (choice ? SettingKind::Choice
-                                              : SettingKind::Pref) ||
-                            entry.value != m_hover.index -
-                                               (choice ? kDisabledChoice : 0)) {
+        const bool slider = m_hover.index >= kDisabledSlider;
+        const bool choice =
+            !appPlaces && !slider && m_hover.index >= kDisabledChoice;
+        if (appPlaces
+                ? entry.kind != SettingKind::AppPlaces
+                : entry.kind != (slider   ? SettingKind::Size
+                                 : choice ? SettingKind::Choice
+                                          : SettingKind::Pref) ||
+                      entry.value != m_hover.index - (slider   ? kDisabledSlider
+                                                      : choice ? kDisabledChoice
+                                                               : 0)) {
             continue;
         }
         const std::wstring reason = DisabledReason(m_hover.index);
@@ -37823,7 +45717,7 @@ void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
         target->FillRoundedRectangle({bubble, radius, radius}, brush);
         brush->SetColor(Fg(0.1f));
         target->FillRoundedRectangle({bubble, radius, radius}, brush);
-        brush->SetColor(Fg(0.22f));
+        brush->SetColor(Fg(0.22f * EdgeAmount()));
         target->DrawRoundedRectangle(
             {{bubble.left + 0.5f, bubble.top + 0.5f, bubble.right - 0.5f,
               bubble.bottom - 0.5f},
@@ -37835,6 +45729,16 @@ void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
                                layout.get(), brush);
         break;
     }
+}
+
+// The frosted glass dimmed only for Windows' transparency effects being off
+// (everything else it needs is there): its reason says where to turn them
+// on, and a click opens that page.
+bool FrostedNeedsOnlyTransparency() {
+    return !g_transparencyEffects && !g_settings.islandLiquidGlass &&
+           GetIslandPref(IslandPref::Bar) && NotchCountWanted() == 0 &&
+           !(GetIslandPref(IslandPref::Bar) == 2 &&
+             GetIslandPref(IslandPref::AutoHide));
 }
 
 std::wstring ControlPanel::DisabledReason(int index) {
@@ -37870,6 +45774,8 @@ std::wstring ControlPanel::DisabledReason(int index) {
             case kChoiceNotches:
                 return Tr(L"Only for the Fixed style",
                           L"Só no estilo Fixa");
+            case kChoiceFolderDrag:
+                return needs(IslandPref::Folders);
             default:
                 return {};
         }
@@ -37878,6 +45784,37 @@ std::wstring ControlPanel::DisabledReason(int index) {
     const std::wstring notches =
         Tr(L"Off with the notches (Fixed style)",
            L"Desligado com os entalhes (estilo Fixa)");
+    if (index >= kDisabledSlider) {
+        const int slider = index - kDisabledSlider;
+        const std::wstring bar =
+            Tr(L"Off with the bar style", L"Desligado no estilo barra");
+        switch (slider) {
+            case 1:
+            case 13:
+                return g_settings.islandBar ? bar : notches;
+            case 2:
+                return !g_animationChoice.on
+                           ? needs(IslandPref::Animations)
+                           : Tr(L"Off with no animations (“None”)",
+                                L"Desligado sem animações (“Nenhuma”)");
+            case 5:
+                return needs(IslandPref::AutoHide);
+            case 6:
+                return Tr(L"Needs the notches (Fixed style)",
+                          L"Precisa dos entalhes (estilo Fixa)");
+            case 8:
+            case 9:
+                return Tr(L"The bar doesn't minimize", L"A barra não minimiza");
+            case 11:
+                return needs(IslandPref::MediaTitle);
+            case 12:
+                return bar;
+            case 16:
+                return needs(IslandPref::LiquidGlass);
+            default:
+                return {};
+        }
+    }
     if (index == kDisabledAppPlaces) {
         return Tr(L"Only for the Island style: the Fixed style and the bar "
                   L"keep one place and the same items for every app",
@@ -37889,6 +45826,11 @@ std::wstring ControlPanel::DisabledReason(int index) {
                   L"Só na ilha principal: mude nas configurações dela");
     }
     switch ((IslandPref)index) {
+        case IslandPref::KomorebiLayout:
+            return Tr(L"komorebi isn't installed",
+                      L"O komorebi não está instalado");
+        case IslandPref::KomorebiHideEmpty:
+            return needs(IslandPref::KomorebiLayout);
         case IslandPref::FollowMouse:
             return GetIslandPref(IslandPref::AllMonitors)
                        ? offWhile(IslandPref::AllMonitors)
@@ -37899,6 +45841,13 @@ std::wstring ControlPanel::DisabledReason(int index) {
         case IslandPref::NotchEach:
             return Tr(L"Needs the notches (Fixed style)",
                       L"Precisa dos entalhes (estilo Fixa)");
+        case IslandPref::MinimizeButton:
+            return Tr(L"The bar doesn't minimize", L"A barra não minimiza");
+        case IslandPref::BarCorners:
+            return Tr(L"Needs the bar style and the clock in the middle",
+                      L"Precisa do estilo barra e do relógio no meio");
+        case IslandPref::GlassTranslucent:
+            return needs(IslandPref::LiquidGlass);
         case IslandPref::VolumePercent:
             return needs(IslandPref::Volume);
         case IslandPref::BatteryPercent:
@@ -37909,16 +45858,20 @@ std::wstring ControlPanel::DisabledReason(int index) {
                        : Tr(L"Only with the icons opening in the pill",
                             L"Só com os ícones abrindo na pílula");
         case IslandPref::Frosted:
-            return !GetIslandPref(IslandPref::Bar)
-                       ? Tr(L"Only for the bar and the Fixed style",
-                            L"Só na barra e no estilo Fixa")
-                   : NotchCountWanted() > 0 ? notches
-                   : !g_transparencyEffects
-                       ? Tr(L"Needs Windows' transparency effects: click to "
-                            L"open Personalization > Colors",
-                            L"Precisa dos efeitos de transparência do Windows: "
-                            L"clique para abrir Personalização > Cores")
-                       : offWhile(IslandPref::AutoHide);
+            if (FrostedNeedsOnlyTransparency()) {
+                return Tr(
+                    L"Needs Windows' transparency effects: click to "
+                    L"open Personalization > Colors",
+                    L"Precisa dos efeitos de transparência do Windows: "
+                    L"clique para abrir Personalização > Cores");
+            }
+            return Tr(
+                L"Only with the Glass off (it blurs them already), on "
+                L"the bar or on the Fixed style without notches and "
+                L"not hiding as a line",
+                L"Só com o Vidro desligado (ele já desfoca), na barra "
+                L"ou no estilo Fixa sem entalhes e sem esconder como "
+                L"linha");
         case IslandPref::MonthNumber:
             return needs(IslandPref::ClockDate);
         case IslandPref::HideWindowsBanners:
@@ -38111,6 +46064,8 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                                     : id == kChoiceTrayStyle    ? 0xE712
                                     : id == kChoiceWallpaper    ? 0xE8B9
                                     : id == kChoiceNotches      ? 0xECA5
+                                    : id == kChoiceFolderDrag   ? 0xE8C8
+                                    : id == kChoiceLanguage     ? 0xE774
                                                                 : 0;
                 // (Hard to read: in orange, like a warning.)
                 label(m_choiceRow[id], glyph, m_choiceRow[id].right,
@@ -38296,20 +46251,25 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                 const D2D1_RECT_F& sizeSlider = m_sizeSlider[slider];
                 const D2D1_RECT_F& sizeReset = m_sizeReset[slider];
                 const int size = IslandSliderValue(slider);
-                const bool bar =
-                    (slider == 1 &&
-                     (g_settings.islandBar || NotchCountWanted() > 0)) ||
-                    (slider == 2 && AnimationLevel() >= 2) ||
-                    (slider == 5 && !g_settings.islandAutoHide) ||
-                    (slider == 6 && NotchCountWanted() == 0);
+                const bool bar = SliderDisabled(slider);
                 label(sizeRow,
-                      slider == 6   ? 0xE8B4
-                      : slider == 5 ? 0xE916
-                      : slider == 4 ? 0xE790
-                      : slider == 3 ? 0xE8FD
-                      : slider == 2 ? 0xEC4A
-                      : slider == 1 ? 0xE9A6
-                                    : 0xE740,
+                      slider == 16   ? 0xEDA8
+                      : slider == 15 ? 0xEA3A
+                      : slider == 14 ? 0xE90C
+                      : slider == 13 ? 0xE71A
+                      : slider == 12 ? 0xE9A6
+                      : slider == 11 ? 0xE8D6
+                      : slider == 10 ? 0xE8A3
+                      : slider == 9  ? 0xE7C9
+                      : slider == 8  ? 0xE7B3
+                      : slider == 7  ? 0xE8E9
+                      : slider == 6  ? 0xE8B4
+                      : slider == 5  ? 0xE916
+                      : slider == 4  ? 0xE790
+                      : slider == 3  ? 0xE8FD
+                      : slider == 2  ? 0xEC4A
+                      : slider == 1  ? 0xE9A6
+                                     : 0xE740,
                       sizeRow.right, Fg(bar ? 0.38f : 0.95f));
                 DrawSliderTrack(
                     target, brush, sizeSlider, info.min, info.max, info.usual,
@@ -38574,6 +46534,15 @@ void ControlPanel::DrawPassword(ID2D1RenderTarget* target,
     DrawStatus(target, brush);
 }
 
+// The "Disconnect" button at a device row's end (see DrawBluetooth).
+D2D1_RECT_F ControlPanel::BluetoothButtonRect(const D2D1_RECT_F& row) const {
+    const float s = m_scale;
+    const float height = std::round(26 * s);
+    const float middle = (row.top + row.bottom) / 2;
+    return {row.right - std::round(102 * s), std::round(middle - height / 2),
+            row.right - std::round(8 * s), std::round(middle + height / 2)};
+}
+
 void ControlPanel::DrawBluetooth(ID2D1RenderTarget* target,
                                  ID2D1SolidColorBrush* brush) {
     const float s = m_scale;
@@ -38599,10 +46568,26 @@ void ControlPanel::DrawBluetooth(ID2D1RenderTarget* target,
         target->DrawText(device.name.c_str(), (UINT32)device.name.size(),
                          m_subtitleFormat.get(),
                          {row.left + icon, row.top, right, row.bottom}, brush);
-        if (device.connected) {
-            PCWSTR connected = Tr(L"Connected", L"Conectado");
+        const BluetoothStep step =
+            device.address == m_bluetoothAddress
+                ? LiveBluetoothStep(m_bluetoothStep, m_bluetoothStepAt)
+                : BluetoothStep::None;
+        // Headphones or speakers connected: a button that disconnects them
+        // (as the row's click does).
+        if (device.audio && device.connected && step == BluetoothStep::None) {
+            PCWSTR text = Tr(L"Disconnect", L"Desconectar");
+            const D2D1_RECT_F button = BluetoothButtonRect(row);
+            const float round = (button.bottom - button.top) / 2;
+            brush->SetColor(Fg(0.10f + 0.08f * Hover(button, hover)));
+            target->FillRoundedRectangle({button, round, round}, brush);
+            brush->SetColor(Fg(0.95f));
+            target->DrawText(text, (UINT32)wcslen(text), m_linkFormat.get(),
+                             button, brush);
+            continue;
+        }
+        if (PCWSTR status = BluetoothStatusText(device.connected, step)) {
             brush->SetColor(Fg(0.5f));
-            target->DrawText(connected, (UINT32)wcslen(connected),
+            target->DrawText(status, (UINT32)wcslen(status),
                              m_linkFormat.get(),
                              {right, row.top, row.right - std::round(8 * s),
                               row.bottom},
@@ -38712,9 +46697,11 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
             // Wi-Fi with its name, or the cable.
             WCHAR networkGlyph = kGlyphEthernet;
             std::wstring networkName = Tr(L"Ethernet", L"Cabo");
-            if (m_network.signal >= 0) {
+            if (m_network.wifi) {
                 networkGlyph =
-                    kGlyphWifi[std::clamp(m_network.signal / 25, 0, 3)];
+                    m_network.signal >= 0
+                        ? kGlyphWifi[std::clamp(m_network.signal / 25, 0, 3)]
+                        : kGlyphWifi[3];
                 networkName = m_network.wifiName.empty()
                                   ? L"Wi-Fi"
                                   : m_network.wifiName;
@@ -38728,15 +46715,13 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
                 : m_network.internet  ? Tr(L"Connected", L"Conectado")
                 : m_network.connected ? Tr(L"No internet", L"Sem internet")
                                       : Tr(L"Disconnected", L"Desconectado");
-            if (m_wifiRadio == 0 && m_network.signal < 0 &&
-                !m_network.connected) {
+            if (m_wifiRadio == 0 && !m_network.wifi && !m_network.connected) {
                 networkGlyph = kGlyphWifi[3];
                 networkName = L"Wi-Fi";
                 networkState = Tr(L"Off", L"Desligado");
             }
             DrawTile(target, brush, rect, networkGlyph,
-                     m_network.internet ||
-                         (m_wifiRadio == 1 && m_network.signal >= 0),
+                     m_network.internet || (m_wifiRadio == 1 && m_network.wifi),
                      networkName.c_str(), networkState,
                      m_hover.part == Part::Network ||
                          m_hover.part == Part::WifiToggle);
@@ -38815,17 +46800,39 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
         const float sectionInner = std::round(12 * s);
         const D2D1_RECT_F displayTitle{
             m_display.left + sectionInner, m_display.top + 6 * s,
-            m_display.right - sectionInner, m_brightnessSlider.top - 4 * s};
+            m_display.right - sectionInner, m_display.top + 30 * s};
         PCWSTR title = Tr(L"Display", L"Tela");
         brush->SetColor(Fg(0.95f));
         target->DrawText(title, (UINT32)wcslen(title), m_sectionFormat.get(),
                          displayTitle, brush);
-        const std::wstring level = std::to_wstring(m_brightness) + L"%";
-        brush->SetColor(Fg(0.55f));
-        target->DrawText(level.c_str(), (UINT32)level.size(),
-                         m_percentFormat.get(), displayTitle, brush);
-        DrawSlider(target, brush, m_brightnessSlider, m_brightness / 100.0f,
-                   kGlyphBrightness, false);
+        const bool rows = m_brightnessSliders.size() > 1;
+        for (size_t row = 0; row < m_brightnessSliders.size(); row++) {
+            const D2D1_RECT_F& slider = m_brightnessSliders[row];
+            const int value = row < m_brightnessMonitors.size()
+                                  ? m_brightnessMonitors[row].level
+                                  : m_brightness;
+            // The level on the title; with more monitors, on each one's line
+            // with its name.
+            const D2D1_RECT_F line =
+                rows ? D2D1_RECT_F{slider.left, slider.top - 20 * s,
+                                   slider.right, slider.top - 2 * s}
+                     : displayTitle;
+            if (rows && row < m_brightnessMonitors.size()) {
+                const std::wstring& name = m_brightnessMonitors[row].name;
+                brush->SetColor(Fg(0.75f));
+                target->DrawText(name.c_str(), (UINT32)name.size(),
+                                 m_subtitleFormat.get(),
+                                 {line.left, line.top, line.right - 44 * s,
+                                  line.bottom},
+                                 brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            }
+            const std::wstring level = std::to_wstring(value) + L"%";
+            brush->SetColor(Fg(0.55f));
+            target->DrawText(level.c_str(), (UINT32)level.size(),
+                             m_percentFormat.get(), line, brush);
+            DrawSlider(target, brush, slider, value / 100.0f, kGlyphBrightness,
+                       false);
+        }
     }
 
     // Sound: title, percentage, the slider, the output device and the mixer.
@@ -39103,10 +47110,10 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
                                                                id, rect, margin)
                                               : nullptr) {
             const D2D1_SIZE_F size = tile->GetSize();
-            target->DrawBitmap(tile,
-                               {rect.left - margin, rect.top - margin,
-                                rect.left - margin + size.width,
-                                rect.top - margin + size.height});
+            DrawBitmapSmooth(target, tile,
+                             {rect.left - margin, rect.top - margin,
+                              rect.left - margin + size.width,
+                              rect.top - margin + size.height});
         } else {
             DrawControl(target, brush, id, rect);
         }
@@ -39193,7 +47200,7 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
             m_edit.right - m_edit.left, m_edit.bottom - m_edit.top,
             editLayout.put()))) {
         // The pencil in the icon font.
-        editLayout->SetFontFamilyName(L"Segoe Fluent Icons", {0, 1});
+        editLayout->SetFontFamilyName(IconFont(), {0, 1});
         target->DrawTextLayout({m_edit.left, m_edit.top}, editLayout.get(),
                                brush);
     }
@@ -39334,11 +47341,10 @@ void ControlPanel::DrawMixer(ID2D1RenderTarget* target,
             index >= 0 ? GetAppBitmap(target, m_apps[index]) : nullptr;
         if (bitmap) {
             const float inset = std::round(5 * m_scale);
-            target->DrawBitmap(bitmap,
-                               {iconRect.left + inset, iconRect.top + inset,
-                                iconRect.right - inset,
-                                iconRect.bottom - inset},
-                               muted ? 0.4f : 1.0f);
+            DrawBitmapSmooth(target, bitmap,
+                             {iconRect.left + inset, iconRect.top + inset,
+                              iconRect.right - inset, iconRect.bottom - inset},
+                             muted ? 0.4f : 1.0f);
         } else {
             const WCHAR glyph = index < 0 ? kGlyphHeadphones : kGlyphSpeakers;
             brush->SetColor(Fg(muted ? 0.4f : 0.9f));
@@ -39631,7 +47637,7 @@ bool ControlPanel::OnMouseMove(POINT pt) {
         } else if (m_dragIndex <= kDragIslandSize) {
             SetIslandSizeAt(kDragIslandSize - m_dragIndex, pt, false);
         } else if (m_dragIndex == kDragBrightness) {
-            SetBrightnessAt(pt);
+            SetBrightnessAt(m_brightnessRow, pt);
         } else if (m_dragIndex < 0) {
             SetVolumeAt(pt);
         } else {
@@ -39718,12 +47724,14 @@ bool ControlPanel::OnMouseDown(POINT pt) {
         SetIslandSizeAt(hit.index, pt, false);
         return true;
     }
-    if (hit.part == Part::BrightnessSlider &&
-        PointInRect(pt, m_brightnessSlider)) {
+    if (hit.part == Part::BrightnessSlider && hit.index >= 0 &&
+        hit.index < (int)m_brightnessSliders.size() &&
+        PointInRect(pt, m_brightnessSliders[hit.index])) {
         m_dragging = true;
         m_dragIndex = kDragBrightness;
+        m_brightnessRow = hit.index;
         SetCapture(m_hwnd);
-        SetBrightnessAt(pt);
+        SetBrightnessAt(hit.index, pt);
         return true;
     }
     if (hit.part == Part::Slider ||
@@ -39858,6 +47866,10 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             UpdateBluetooth();
             Layout();
             return true;
+        case Part::BluetoothRow:
+            ClickBluetoothDevice(hit.index);
+            Layout();
+            return true;
         case Part::WifiRow:
             JoinWifi(hit.index);
             Layout();
@@ -39874,6 +47886,10 @@ bool ControlPanel::OnMouseUp(POINT pt) {
         case Part::WifiConnect:
             JoinWifi(hit.index);
             Layout();
+            return true;
+        case Part::WifiLocation:
+            ShellExecute(nullptr, L"open", L"ms-settings:privacy-location",
+                         nullptr, nullptr, SW_SHOWNORMAL);
             return true;
         case Part::ShowPassword:
             m_showPassword = !m_showPassword;
@@ -40045,7 +48061,7 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             // The glass without Windows' transparency effects: where to turn
             // them on.
             if (hit.index == (int)IslandPref::Frosted &&
-                !g_transparencyEffects) {
+                FrostedNeedsOnlyTransparency()) {
                 ShellExecute(nullptr, L"open", L"ms-settings:colors", nullptr,
                              nullptr, SW_SHOWNORMAL);
             }
@@ -40079,6 +48095,10 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                 SetIslandPref(IslandPref::WallpaperTransition, index);
             } else if (id == kChoiceNotches) {
                 SetIslandPref(IslandPref::Notches, index);
+            } else if (id == kChoiceFolderDrag) {
+                SetIslandPref(IslandPref::FolderDrag, index);
+            } else if (id == kChoiceLanguage) {
+                SetTextLanguage(index);
             } else {
                 AnimationChoice choice = g_animationChoice;
                 (id == kChoiceAnimationLevel ? choice.level : choice.rate) =
@@ -40438,10 +48458,14 @@ bool ControlPanel::OnWheel(int delta) {
         return false;
     }
     const float step = 0.02f * delta / WHEEL_DELTA;
-    // Over the display, the wheel changes the brightness, 5% a notch.
+    // Over the display, the wheel changes the brightness (the monitor's
+    // under it), 5% a notch.
     if (m_view == View::Main && m_hover.part == Part::BrightnessSlider &&
-        m_brightness >= 0) {
-        SetBrightness(m_brightness + 5 * delta / WHEEL_DELTA);
+        m_hover.index >= 0 &&
+        m_hover.index < (int)m_brightnessMonitors.size()) {
+        SetBrightness(m_hover.index,
+                      m_brightnessMonitors[m_hover.index].level +
+                          5 * delta / WHEEL_DELTA);
         return true;
     }
     // In the mixer, the wheel over an app's row changes that app.
@@ -40591,6 +48615,8 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         if (lParam) {
             m_komorebiFailed = true;
             m_komorebiBusy = -1;
+        } else if (wParam != 1) {
+            KickKomorebiWatch();
         }
         Refresh();
         return true;
@@ -40682,20 +48708,40 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         Layout();
         return true;
     }
-    if (msg == WM_APP_BRIGHTNESS) {
+    if (msg == WM_APP_BLUETOOTH_DONE) {
+        // Its driver didn't take it (no audio endpoint): not connecting.
+        if (!wParam && (ULONGLONG)lParam == m_bluetoothAddress) {
+            if (m_bluetoothStep == BluetoothStep::Connecting) {
+                m_bluetoothStep = BluetoothStep::Failed;
+                m_bluetoothStepAt = GetTickCount64();
+            } else if (m_bluetoothStep == BluetoothStep::Disconnecting) {
+                m_bluetoothStep = BluetoothStep::None;
+            }
+            Layout();
+        }
+        return true;
+    }
+    if (msg == WM_APP_BRIGHTNESS_LIST) {
+        std::unique_ptr<std::vector<BrightnessMonitor>> list(
+            (std::vector<BrightnessMonitor>*)lParam);
         // Not while it's being changed here.
         if (!m_brightnessJob->running) {
-            m_brightness = (int)(INT_PTR)wParam;
+            m_brightnessMonitors = std::move(*list);
+            m_brightness = m_brightnessMonitors.empty()
+                               ? -1
+                               : m_brightnessMonitors.front().level;
         }
         Layout();
         return true;
     }
     if (msg == WM_APP_WIFI_LIST) {
+        const bool refused = lParam == kWifiListRefused;
         std::unique_ptr<std::vector<WifiNetwork>> found(
-            (std::vector<WifiNetwork>*)lParam);
+            refused ? nullptr : (std::vector<WifiNetwork>*)lParam);
         if ((UINT)wParam != m_wifiListId || !m_wifiListThread) {
             return false;
         }
+        m_wifiRefused = refused;
         WaitForSingleObject(m_wifiListThread, INFINITE);
         CloseHandle(m_wifiListThread);
         m_wifiListThread = nullptr;
@@ -41243,6 +49289,8 @@ ToastReply ParseToastReply(const std::wstring& appId,
     // own ones are left out when it has no notification handler.
     bool activatorKnown = false;
     bool activator = false;
+    const bool fromWindows = appId.starts_with(L"Windows.SystemToast.") ||
+                             appId.starts_with(L"Microsoft.Windows.");
     for (const auto& tag : actions) {
         if (reply.actions.size() >= 3) {
             break;
@@ -41271,6 +49319,7 @@ ToastReply ParseToastReply(const std::wstring& appId,
                     action.label = Tr(L"Dismiss", L"Ignorar");
                 }
             } else {
+                reply.windowsButtons = reply.windowsButtons || fromWindows;
                 continue;
             }
         } else if (action.activationType != L"protocol") {
@@ -41280,6 +49329,7 @@ ToastReply ParseToastReply(const std::wstring& appId,
                 activator = FindToastActivator(appId, &actionClsid);
             }
             if (!activator) {
+                reply.windowsButtons = reply.windowsButtons || fromWindows;
                 continue;
             }
         }
@@ -41560,10 +49610,10 @@ void PostTrayIconRelease(const TrayIcon& icon, UINT released) {
 bool ProcessIsMediaApp(DWORD processId, const std::wstring& appId);
 
 // An app hidden in the tray (like many chat apps, with no window to bring
-// up): its tray icon is clicked, as the user would. False without one. With
-// `byProgram`, the ID can also be the app's program's name (what's playing's,
+// up): its tray icon is clicked, as the user would. False without one. The
+// ID can also be the app's program's name (like QQ's notifications, "QQ";
 // see ProcessIsMediaApp).
-bool OpenFromTrayIcon(const std::wstring& appId, bool byProgram = false) {
+bool OpenFromTrayIcon(const std::wstring& appId) {
     AcquireSRWLockShared(&g_trayIconsLock);
     const std::vector<TrayIcon> icons = g_trayIcons;
     ReleaseSRWLockShared(&g_trayIconsLock);
@@ -41571,7 +49621,7 @@ bool OpenFromTrayIcon(const std::wstring& appId, bool byProgram = false) {
         DWORD processId = 0;
         if (icon.callback && IsWindow(icon.owner) &&
             (WindowMatchesApp(icon.owner, appId) ||
-             (byProgram && GetWindowThreadProcessId(icon.owner, &processId) &&
+             (GetWindowThreadProcessId(icon.owner, &processId) &&
               ProcessIsMediaApp(processId, appId)))) {
             PostTrayIconMessage(icon, WM_LBUTTONDOWN);
             PostTrayIconMessage(icon, WM_LBUTTONUP);
@@ -41660,6 +49710,13 @@ bool OpenNotification(const std::wstring& appId, const ToastReply& reply) {
     }
     if (g_settings.islandScreenshotFolder && IsSnippingToolApp(appId) &&
         ShowNewestScreenshot()) {
+        return true;
+    }
+    // Its buttons are Windows' (see ToastReply::windowsButtons): Windows'
+    // notification center has them (the key pressed passes the island's
+    // own Win+N, see the keyboard hook).
+    if (reply.windowsButtons) {
+        PressWindowsKey('N');
         return true;
     }
     if (!reply.launch.empty() &&
@@ -41761,8 +49818,8 @@ std::wstring NotificationTimeText(long long arrival) {
     if (minutes < 48 * 60) {
         return Tr(L"yesterday", L"ontem");
     }
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"d MMM", text,
-                    ARRAYSIZE(text), nullptr);
+    GetDateFormatEx(DateLocale(), 0, &local, MonthDayPicture(true).c_str(),
+                    text, ARRAYSIZE(text), nullptr);
     return text;
 }
 
@@ -41792,7 +49849,7 @@ void NotificationPanel::Prepare(float scale) {
                        12.5f * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
         m_linkFormat = MakeFormat(L"Segoe UI Variable Text",
                                   DWRITE_FONT_WEIGHT_NORMAL, 12 * scale);
-        m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+        m_iconFormat = MakeFormat(IconFont(),
                                   DWRITE_FONT_WEIGHT_NORMAL, 14 * scale);
     }
     Load();
@@ -41840,6 +49897,17 @@ void NotificationPanel::ClearApp(const std::wstring& appId) {
         m_sqlite.finalize(statement);
     }
     m_sqlite.close(db);
+    // (The kept ones too, see MergeKeptToasts.)
+    AcquireSRWLockShared(&g_keptToastsLock);
+    for (const auto& kept : g_keptToasts) {
+        if (SameNotificationApp(kept.toast.appId, appId) &&
+            std::find(m_dismissed.begin(), m_dismissed.end(), kept.toast.id) ==
+                m_dismissed.end()) {
+            m_dismissed.push_back(kept.toast.id);
+            changed = true;
+        }
+    }
+    ReleaseSRWLockShared(&g_keptToastsLock);
     if (changed) {
         SaveCleared();
         Refresh();
@@ -42248,6 +50316,109 @@ void NotificationPanel::Load() {
         m_sqlite.finalize(statement);
     }
     m_sqlite.close(db);
+    MergeKeptToasts();
+}
+
+std::vector<std::pair<std::wstring, int>> NotificationPanel::KeptCounts() {
+    LoadCleared();
+    AcquireSRWLockShared(&g_badgeAppsLock);
+    const std::vector<std::wstring> apps = g_badgeApps;
+    ReleaseSRWLockShared(&g_badgeAppsLock);
+    std::vector<std::pair<std::wstring, int>> counts;
+    AcquireSRWLockShared(&g_keptToastsLock);
+    for (const auto& kept : g_keptToasts) {
+        const IslandToast& toast = kept.toast;
+        if (toast.arrival <= m_clearedUntil ||
+            std::find(m_dismissed.begin(), m_dismissed.end(), toast.id) !=
+                m_dismissed.end() ||
+            std::none_of(apps.begin(), apps.end(), [&](const std::wstring& id) {
+                return _wcsicmp(id.c_str(), toast.appId.c_str()) == 0;
+            })) {
+            continue;
+        }
+        auto it = std::find_if(counts.begin(), counts.end(),
+                               [&](const auto& entry) {
+                                   return _wcsicmp(entry.first.c_str(),
+                                                   toast.appId.c_str()) == 0;
+                               });
+        if (it == counts.end()) {
+            counts.push_back({toast.appId, 1});
+        } else {
+            it->second++;
+        }
+    }
+    ReleaseSRWLockShared(&g_keptToastsLock);
+    return counts;
+}
+
+// The kept notifications (see g_keptToasts) their app took out of Windows'
+// list while its taskbar button still counts them: back in the list, the
+// newest ones, as many as the count says (all of them without a number).
+// Forgotten once the count is gone (a few seconds after they came: the count
+// may come after them).
+void NotificationPanel::MergeKeptToasts() {
+    AcquireSRWLockShared(&g_badgeAppsLock);
+    const std::vector<std::wstring> apps = g_badgeApps;
+    const std::vector<int> counts = g_badgeCounts;
+    ReleaseSRWLockShared(&g_badgeAppsLock);
+    // The app's count, 0 without a number, -1 without a badge.
+    auto countOf = [&](const std::wstring& appId) {
+        for (size_t i = 0; i < apps.size(); i++) {
+            if (_wcsicmp(apps[i].c_str(), appId.c_str()) == 0) {
+                return i < counts.size() ? counts[i] : 0;
+            }
+        }
+        return -1;
+    };
+    const double now = NowSeconds();
+    bool added = false;
+    AcquireSRWLockExclusive(&g_keptToastsLock);
+    std::erase_if(g_keptToasts, [&](const KeptToast& kept) {
+        return countOf(kept.toast.appId) < 0 && now - kept.since > 10;
+    });
+    for (auto it = g_keptToasts.rbegin(); it != g_keptToasts.rend(); ++it) {
+        const IslandToast& toast = it->toast;
+        const int count = countOf(toast.appId);
+        auto sameApp = [&](const Notification& n) {
+            return _wcsicmp(n.appId.c_str(), toast.appId.c_str()) == 0;
+        };
+        if (count < 0 || toast.arrival <= m_clearedUntil ||
+            std::find(m_dismissed.begin(), m_dismissed.end(), toast.id) !=
+                m_dismissed.end() ||
+            std::any_of(m_notifications.begin(), m_notifications.end(),
+                        [&](const Notification& n) {
+                            return n.id == toast.id;
+                        }) ||
+            (count > 0 &&
+             std::count_if(m_notifications.begin(), m_notifications.end(),
+                           sameApp) >= count)) {
+            continue;
+        }
+        Notification notification;
+        notification.id = toast.id;
+        notification.appId = toast.appId;
+        notification.title = toast.title;
+        notification.text = toast.text;
+        notification.fullText = toast.fullText;
+        notification.arrival = toast.arrival;
+        notification.reply = toast.reply;
+        notification.urgent = toast.urgent;
+        notification.sound = toast.sound;
+        notification.loop = toast.loop;
+        notification.kept = true;
+        m_notifications.push_back(std::move(notification));
+        added = true;
+    }
+    ReleaseSRWLockExclusive(&g_keptToastsLock);
+    if (added) {
+        std::stable_sort(m_notifications.begin(), m_notifications.end(),
+                         [](const Notification& a, const Notification& b) {
+                             return a.arrival > b.arrival;
+                         });
+        if ((int)m_notifications.size() > kMaxNotifications) {
+            m_notifications.resize(kMaxNotifications);
+        }
+    }
 }
 
 void NotificationPanel::Layout() {
@@ -42544,15 +50715,18 @@ NotificationPanel::Hit NotificationPanel::HitTest(POINT panelPt) const {
     return {};
 }
 
-// The app's name, as the Start menu shows it.
-// An app's name, as the Start menu shows it, by its AppUserModelID;
-// remembered.
+// An app's name, as the Start menu shows it, by its AppUserModelID (as
+// Windows' notification center shows it for a sender without a Start menu
+// entry); remembered.
 std::wstring AppDisplayName(const std::wstring& appId) {
     static std::vector<std::pair<std::wstring, std::wstring>> names;
     for (const auto& [id, name] : names) {
         if (id == appId) {
             return name;
         }
+    }
+    if (appId == kWidgetsBadgeId) {
+        return Tr(L"Widgets", L"Widgets");
     }
     std::wstring name;
     winrt::com_ptr<IShellItem> item;
@@ -42564,6 +50738,15 @@ std::wstring AppDisplayName(const std::wstring& appId) {
         if (SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &display))) {
             name = display;
             CoTaskMemFree(display);
+        }
+    }
+    // A sender without one (Windows' own, like Windows Security's
+    // "Windows.Defender.SecurityCenter"): the name it registered (not a
+    // file's resource left unresolved).
+    if (name.empty()) {
+        name = RegisteredAppValue(appId, L"DisplayName");
+        if (name.find(L":\\") != std::wstring::npos) {
+            name.clear();
         }
     }
     if (name.empty()) {
@@ -42608,13 +50791,18 @@ const std::wstring& NotificationPanel::AppName(const std::wstring& appId) {
 
 // An app's icon for the island and its panels, at `size` pixels: from
 // explorer, which has the shell give the icons of packaged apps too (not
-// always given in the island's process), or loaded here if it can't.
+// always given in the island's process), or loaded here if it can't
+// (`fromExplorer` says which).
 winrt::com_ptr<ID2D1Bitmap> LoadAppIcon(ID2D1RenderTarget* target,
                                         IWICImagingFactory* wic,
                                         HWND from,
                                         const std::wstring& appId,
-                                        int size) {
+                                        int size,
+                                        bool* fromExplorer = nullptr) {
     winrt::com_ptr<ID2D1Bitmap> bitmap;
+    if (fromExplorer) {
+        *fromExplorer = false;
+    }
     if (!target || !wic) {
         return bitmap;
     }
@@ -42654,6 +50842,9 @@ winrt::com_ptr<ID2D1Bitmap> LoadAppIcon(ID2D1RenderTarget* target,
             convert(wicBitmap.get());
         }
         DestroyIcon(taskbarIcon);
+        if (fromExplorer) {
+            *fromExplorer = bitmap != nullptr;
+        }
     }
     if (!bitmap) {
         if (HBITMAP icon = LoadAppIconBitmap(nullptr, appId, size)) {
@@ -42671,14 +50862,22 @@ winrt::com_ptr<ID2D1Bitmap> LoadAppIcon(ID2D1RenderTarget* target,
 
 ID2D1Bitmap* NotificationPanel::AppBitmap(ID2D1RenderTarget* target,
                                           const std::wstring& appId) {
-    for (const auto& [id, bitmap] : m_bitmaps) {
-        if (id == appId) {
-            return bitmap.get();
+    const double now = NowSeconds();
+    for (auto it = m_bitmaps.begin(); it != m_bitmaps.end(); ++it) {
+        if (it->appId == appId) {
+            if (!it->retryAt || now < it->retryAt) {
+                return it->bitmap.get();
+            }
+            m_bitmaps.erase(it);
+            break;
         }
     }
-    winrt::com_ptr<ID2D1Bitmap> bitmap = LoadAppIcon(
-        target, m_wic.get(), m_hwnd, appId, (int)std::round(32 * m_scale));
-    m_bitmaps.push_back({appId, bitmap});
+    bool fromExplorer = false;
+    winrt::com_ptr<ID2D1Bitmap> bitmap =
+        LoadAppIcon(target, m_wic.get(), m_hwnd, appId,
+                    (int)std::round(32 * m_scale), &fromExplorer);
+    m_bitmaps.push_back(
+        {appId, bitmap, fromExplorer ? 0 : now + kAppIconRetrySeconds});
     return bitmap.get();
 }
 
@@ -42889,7 +51088,7 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
         const D2D1_RECT_F iconRect{card.left + inner, top,
                                    card.left + inner + icon, top + icon};
         if (ID2D1Bitmap* bitmap = AppBitmap(target, n.appId)) {
-            target->DrawBitmap(bitmap, iconRect);
+            DrawBitmapSmooth(target, bitmap, iconRect);
         } else {
             brush->SetColor(Fg(0.3f));
             target->FillRoundedRectangle({iconRect, icon / 4, icon / 4},
@@ -43409,7 +51608,77 @@ NotificationPanel::CardMotion* NotificationPanel::Motion(long long id,
 }
 
 // Slides a card away (right for 1, left for -1), then closes its room.
-void NotificationPanel::Remove(long long id, int direction, double delay) {
+// Gone from Windows' notification center too (the island's X, a swipe, a
+// card's button, "Clear all"), like Windows' own list does: each by its tag
+// and group (ToastNotificationHistory, documented; it refuses an empty
+// group, like WhatsApp's); one without both only with all of its app's,
+// when every one of that app in the center is among them, by their IDs read
+// before any is removed (nothing the island's list doesn't show goes).
+void NotificationPanel::RemoveFromCenter(const std::vector<Notification>& gone) {
+    using winrt::Windows::UI::Notifications::ToastNotificationManager;
+    const bool anyUntagged =
+        std::any_of(gone.begin(), gone.end(), [](const Notification& n) {
+            return !n.appId.empty() && (n.tag.empty() || n.group.empty());
+        });
+    std::vector<std::pair<std::wstring, long long>> inCenter;
+    const bool read =
+        anyUntagged &&
+        ReadCenter(
+            "SELECT h.PrimaryId, n.Id FROM Notification n JOIN "
+            "NotificationHandler h ON h.RecordId = n.HandlerId WHERE "
+            "n.Type = 'toast'",
+            [&](void* statement) {
+                if (auto app =
+                        (PCWSTR)m_sqlite.column_text16(statement, 0)) {
+                    inCenter.push_back(
+                        {app, m_sqlite.column_int64(statement, 1)});
+                }
+            });
+    std::vector<std::wstring> cleared;
+    for (const auto& n : gone) {
+        if (n.appId.empty()) {
+            continue;
+        }
+        try {
+            if (!n.tag.empty() && !n.group.empty()) {
+                ToastNotificationManager::History().Remove(n.tag, n.group,
+                                                           n.appId);
+                continue;
+            }
+            const auto sameApp = [&](const std::wstring& app) {
+                return _wcsicmp(app.c_str(), n.appId.c_str()) == 0;
+            };
+            if (!read ||
+                std::any_of(cleared.begin(), cleared.end(), sameApp)) {
+                continue;
+            }
+            bool any = false;
+            const bool allGone = std::all_of(
+                inCenter.begin(), inCenter.end(), [&](const auto& entry) {
+                    if (!sameApp(entry.first)) {
+                        return true;
+                    }
+                    any = true;
+                    return std::any_of(gone.begin(), gone.end(),
+                                       [&](const Notification& other) {
+                                           return other.id == entry.second;
+                                       });
+                });
+            if (any && allGone) {
+                ToastNotificationManager::History().Clear(n.appId);
+                cleared.push_back(n.appId);
+            }
+        } catch (winrt::hresult_error const& e) {
+            Wh_Log(L"Removing a notification from the center: %08X",
+                   (unsigned)e.code());
+        }
+    }
+}
+
+void NotificationPanel::Remove(long long id,
+                               int direction,
+                               double delay,
+                               bool center) {
     CardMotion* motion = Motion(id, true);
     motion->removing = true;
     motion->delay = delay;
@@ -43429,6 +51698,9 @@ void NotificationPanel::Remove(long long id, int direction, double delay) {
             appId = n.appId;
             if (const std::wstring key = DismissKey(n); !key.empty()) {
                 m_dismissedTexts.push_back(key);
+            }
+            if (center) {
+                RemoveFromCenter({n});
             }
         }
     }
@@ -43495,7 +51767,7 @@ bool NotificationPanel::OnMouseUp(POINT pt) {
         case Part::Card:
             if (hit.index >= 0 && hit.index < (int)m_notifications.size()) {
                 const Notification n = m_notifications[hit.index];
-                if (OpenNotification(n.appId, n.reply)) {
+                if (OpenNotification(n.appId, n.kept ? ToastReply{} : n.reply)) {
                     if (g_island) {
                         ForEachIsland([&](Island& island) {
                             island.MarkAppRead(n.appId);
@@ -43591,9 +51863,12 @@ bool NotificationPanel::OnMouseUp(POINT pt) {
                 if (m_cards[i].bottom < top || m_cards[i].top > bottom) {
                     continue;
                 }
-                Remove(m_notifications[i].id, 1, delay);
+                Remove(m_notifications[i].id, 1, delay, false);
                 delay += 0.045;
             }
+            // Every one the list shows leaves Windows' center too (the
+            // ones it doesn't show stay there).
+            RemoveFromCenter(m_notifications);
             m_clearAllPending = true;
             m_hover = {};
             // Kept at once: everything that arrived until now (the clock,
@@ -43754,9 +52029,9 @@ void MediaPanel::Prepare(float scale) {
         m_timeRightFormat =
             MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                        11 * scale, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+        m_iconFormat = MakeFormat(IconFont(),
                                   DWRITE_FONT_WEIGHT_NORMAL, 18 * scale);
-        m_bigIconFormat = MakeFormat(L"Segoe Fluent Icons",
+        m_bigIconFormat = MakeFormat(IconFont(),
                                      DWRITE_FONT_WEIGHT_NORMAL, 26 * scale);
         m_chipFormat = MakeFormat(L"Segoe UI Variable Text",
                                   DWRITE_FONT_WEIGHT_NORMAL, 11.5f * scale);
@@ -43877,26 +52152,40 @@ BOOL CALLBACK FindMediaWindowProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
-// What's playing's app brought to the front (its cover clicked): its
-// window, the app hidden in the tray, or a Store app started by its ID.
-void OpenMediaApp(const std::wstring& appId) {
-    if (appId.empty()) {
-        return;
-    }
+// A window of what's playing's app on the screen, or null.
+HWND FindMediaWindow(const std::wstring& appId) {
     AppWindowSearch search{&appId, nullptr};
     EnumWindows(FindMediaWindowProc, (LPARAM)&search);
-    if (search.found) {
-        ActivateApp(search.found);
-        return;
-    }
-    if (OpenFromTrayIcon(appId, true)) {
-        return;
-    }
+    return search.found;
+}
+
+// A Store app started by its ID (started again while it runs, it shows its
+// window).
+void LaunchMediaApp(const std::wstring& appId) {
     if (appId.find(L'!') != std::wstring::npos) {
         const std::wstring target = L"shell:AppsFolder\\" + appId;
         ShellExecute(nullptr, L"open", target.c_str(), nullptr, nullptr,
                      SW_SHOWNORMAL);
     }
+}
+
+// What's playing's app brought to the front (its cover clicked): its
+// window, the app hidden in the tray (its icon clicked: true, for the
+// island to see whether it came, see Island::WatchMediaAppOpen), or a Store
+// app started by its ID.
+bool OpenMediaApp(const std::wstring& appId) {
+    if (appId.empty()) {
+        return false;
+    }
+    if (HWND window = FindMediaWindow(appId)) {
+        ActivateApp(window);
+        return false;
+    }
+    if (OpenFromTrayIcon(appId)) {
+        return true;
+    }
+    LaunchMediaApp(appId);
+    return false;
 }
 
 // A text too long for its place scrolls to its end and back while the
@@ -44259,8 +52548,8 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         const float h = size.height * fill;
         const float cx = (m_cover.left + m_cover.right) / 2;
         const float cy = (m_cover.top + m_cover.bottom) / 2;
-        target->DrawBitmap(cover, {cx - w / 2, cy - h / 2, cx + w / 2,
-                                   cy + h / 2});
+        DrawBitmapSmooth(target, cover,
+                         {cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2});
         target->PopLayer();
     } else {
         brush->SetColor(Fg(0.1f));
@@ -44610,7 +52899,9 @@ bool MediaPanel::OnMouseUp(POINT pt) {
             SetAppMute(!m_appMuted);
             return true;
         case Part::Cover:
-            OpenMediaApp(m_state.appId);
+            if (OpenMediaApp(m_state.appId) && g_island) {
+                g_island->WatchMediaAppOpen(m_state.appId);
+            }
             return true;
         case Part::Previous:
             SendMediaCommand(MediaCommand::Previous);
@@ -44776,6 +53067,18 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.islandClipboard;
         case IslandPref::Frosted:
             return g_settings.islandFrosted;
+        case IslandPref::LiquidGlass:
+            return g_settings.islandLiquidGlass;
+        case IslandPref::Tips:
+            return g_settings.islandTips;
+        case IslandPref::HoverHighlight:
+            return g_settings.islandHoverHighlight;
+        case IslandPref::MinimizeButton:
+            return g_settings.islandMinimizeButton;
+        case IslandPref::BarCorners:
+            return g_settings.islandBarCorners;
+        case IslandPref::GlassTranslucent:
+            return g_settings.islandGlassTranslucent;
         case IslandPref::DateOrder:
             return g_settings.clockDateOrder;
         case IslandPref::ClockFormat:
@@ -44790,6 +53093,16 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.islandFolders;
         case IslandPref::Wallpaper:
             return g_settings.islandWallpaper;
+        case IslandPref::NotificationApps:
+            return g_settings.islandApps;
+        case IslandPref::KomorebiLayout:
+            return g_settings.komorebiLayout;
+        case IslandPref::FocusedApp:
+            return g_settings.islandFocusedApp;
+        case IslandPref::KomorebiHideEmpty:
+            return g_settings.komorebiHideEmpty;
+        case IslandPref::FolderDrag:
+            return g_settings.islandFolderDrag;
         case IslandPref::WallpaperTransition:
             return g_settings.wallpaperTransition;
         case IslandPref::ActionNetwork:
@@ -44929,6 +53242,115 @@ void SetNotchCurve(int percent, bool keep) {
     if (g_island && !g_applyingProfile) {
         ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
     }
+}
+
+void SetIconSize(int percent, bool keep) {
+    percent = std::clamp(percent, kIconSizeMin, kIconSizeMax);
+    if (keep) {
+        StoreProfileInt(L"islandIconSize", percent);
+    }
+    if (percent == g_settings.islandIconSize) {
+        return;
+    }
+    g_settings.islandIconSize = percent;
+    if (g_island && !g_applyingProfile) {
+        ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
+    }
+}
+
+void SetLineOpacity(int percent, bool keep) {
+    percent = std::clamp(percent, kLineOpacityMin, kLineOpacityMax);
+    if (keep) {
+        StoreProfileInt(L"islandLineOpacity", percent);
+    }
+    if (percent == g_settings.islandLineOpacity) {
+        return;
+    }
+    g_settings.islandLineOpacity = percent;
+    if (g_island && !g_applyingProfile) {
+        ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
+    }
+}
+
+void SetActivationWidth(int pixels, bool keep) {
+    pixels = std::clamp(pixels, kActivationWidthMin, kActivationWidthMax);
+    if (keep) {
+        StoreProfileInt(L"islandActivationWidth", pixels);
+    }
+    if (pixels == g_settings.islandActivationWidth) {
+        return;
+    }
+    g_settings.islandActivationWidth = pixels;
+    if (g_island && !g_applyingProfile) {
+        ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
+    }
+}
+
+void SetPanelSize(int percent, bool keep) {
+    percent = std::clamp(percent, kPanelSizeMin, kPanelSizeMax);
+    if (keep) {
+        StoreProfileInt(L"islandPanelSize", percent);
+    }
+    g_settings.islandPanelSize = percent;
+    // (The open panels laid out again once the slider is let go, not under
+    // the mouse while it moves.)
+    if (keep && g_island && !g_applyingProfile) {
+        ForEachIsland([](Island& island) { island.RescalePanels(); });
+    }
+}
+
+void SetMediaTitleLimit(int pixels, bool keep) {
+    pixels = std::clamp(pixels, kMediaTitleLimitMin, kMediaTitleLimitMax);
+    if (keep) {
+        StoreProfileInt(L"islandMediaTitleLimit", pixels);
+    }
+    if (pixels == g_settings.islandMediaTitleLimit) {
+        return;
+    }
+    g_settings.islandMediaTitleLimit = pixels;
+    if (g_island && !g_applyingProfile) {
+        ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
+    }
+}
+
+// The pill's height, corners, the room at its ends, the edge around or the
+// glass's blur (sliders 12 to 16): kept in the profile, every island laid
+// out again.
+void SetPillLook(int slider, int value, bool keep) {
+    const IslandSlider& info = kIslandSliders[slider];
+    value = std::clamp(value, info.min, info.max);
+    int& setting = slider == 12   ? g_settings.islandPillHeight
+                   : slider == 13 ? g_settings.islandPillCorners
+                   : slider == 14 ? g_settings.islandPillEnds
+                   : slider == 15 ? g_settings.islandEdge
+                                  : g_settings.islandGlassBlur;
+    if (keep) {
+        StoreProfileInt(slider == 12   ? L"islandPillHeight"
+                        : slider == 13 ? L"islandPillCorners"
+                        : slider == 14 ? L"islandPillEnds"
+                        : slider == 15 ? L"islandEdge"
+                                       : L"islandGlassBlur",
+                        value);
+    }
+    if (value == setting) {
+        return;
+    }
+    setting = value;
+    if (g_island && !g_applyingProfile) {
+        ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
+    }
+}
+
+// The island's texts in another language (see g_textLanguage), for every
+// island: they're kept in many places, so it starts again with them.
+void SetTextLanguage(int choice) {
+    choice = std::clamp(choice, 0, 3);
+    if (choice == g_textLanguage) {
+        return;
+    }
+    g_textLanguage = choice;
+    Wh_SetIntValue(L"islandLanguage", choice);
+    RestartIslandSoon();
 }
 
 void SetAutoHideDelay(int tenths, bool keep) {
@@ -45127,6 +53549,24 @@ void SetIslandPref(IslandPref pref, int value) {
         case IslandPref::Frosted:
             g_settings.islandFrosted = on;
             break;
+        case IslandPref::LiquidGlass:
+            g_settings.islandLiquidGlass = on;
+            break;
+        case IslandPref::Tips:
+            g_settings.islandTips = on;
+            break;
+        case IslandPref::HoverHighlight:
+            g_settings.islandHoverHighlight = on;
+            break;
+        case IslandPref::MinimizeButton:
+            g_settings.islandMinimizeButton = on;
+            break;
+        case IslandPref::BarCorners:
+            g_settings.islandBarCorners = on;
+            break;
+        case IslandPref::GlassTranslucent:
+            g_settings.islandGlassTranslucent = on;
+            break;
         case IslandPref::DateOrder:
             g_settings.clockDateOrder = std::clamp(value, 0, 3);
             break;
@@ -45144,6 +53584,21 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::Wallpaper:
             g_settings.islandWallpaper = on;
+            break;
+        case IslandPref::NotificationApps:
+            g_settings.islandApps = on;
+            break;
+        case IslandPref::KomorebiLayout:
+            g_settings.komorebiLayout = on;
+            break;
+        case IslandPref::FocusedApp:
+            g_settings.islandFocusedApp = on;
+            break;
+        case IslandPref::KomorebiHideEmpty:
+            g_settings.komorebiHideEmpty = on;
+            break;
+        case IslandPref::FolderDrag:
+            g_settings.islandFolderDrag = std::clamp(value, 0, 2);
             break;
         case IslandPref::WallpaperTransition:
             g_settings.wallpaperTransition =
@@ -45404,8 +53859,7 @@ constexpr ProfileText kProfileTexts[] = {
 };
 
 // Everything the island's settings choose, the tray icons pinned and their
-// places too (not its notifications, notes or tasks; not whether the
-// profiles' button is on).
+// places too (not its notifications, notes or tasks).
 // `texts`: the texts kept (another monitor's profile), not the stored ones.
 std::wstring CaptureProfile(
     const std::unordered_map<std::wstring, std::wstring>* texts = nullptr) {
@@ -45415,7 +53869,7 @@ std::wstring CaptureProfile(
                 L"\n";
     };
     for (const auto& info : kIslandPrefs) {
-        if (info.key && info.pref != IslandPref::Profiles) {
+        if (info.key) {
             number(info.key, GetIslandPref(info.pref));
         }
     }
@@ -45424,6 +53878,16 @@ std::wstring CaptureProfile(
     number(L"islandOpacity", g_islandOpacity);
     number(L"islandAutoHideDelay", g_settings.islandAutoHideDelay);
     number(L"islandNotchCurve", g_settings.islandNotchCurve);
+    number(L"islandIconSize", g_settings.islandIconSize);
+    number(L"islandLineOpacity", g_settings.islandLineOpacity);
+    number(L"islandActivationWidth", g_settings.islandActivationWidth);
+    number(L"islandPanelSize", g_settings.islandPanelSize);
+    number(L"islandMediaTitleLimit", g_settings.islandMediaTitleLimit);
+    number(L"islandPillHeight", g_settings.islandPillHeight);
+    number(L"islandPillCorners", g_settings.islandPillCorners);
+    number(L"islandPillEnds", g_settings.islandPillEnds);
+    number(L"islandEdge", g_settings.islandEdge);
+    number(L"islandGlassBlur", g_settings.islandGlassBlur);
     for (int i = 0; i < kCustomColors; i++) {
         number(kCustomColorKeys[i], g_customColors[i]);
     }
@@ -45696,6 +54160,7 @@ bool ApplyProfileSettings(
             ApplyThemeIndex(true);
         }
     }
+    // (Not the profiles' button: the one switching profiles stays.)
     for (const auto& info : kIslandPrefs) {
         if (!info.key || info.pref == IslandPref::Profiles) {
             continue;
@@ -45721,6 +54186,35 @@ bool ApplyProfileSettings(
     if (const auto it = numbers.find(L"islandNotchCurve");
         it != numbers.end()) {
         SetNotchCurve(it->second, true);
+    }
+    if (const auto it = numbers.find(L"islandIconSize"); it != numbers.end()) {
+        SetIconSize(it->second, true);
+    }
+    if (const auto it = numbers.find(L"islandLineOpacity");
+        it != numbers.end()) {
+        SetLineOpacity(it->second, true);
+    }
+    if (const auto it = numbers.find(L"islandActivationWidth");
+        it != numbers.end()) {
+        SetActivationWidth(it->second, true);
+    }
+    if (const auto it = numbers.find(L"islandPanelSize");
+        it != numbers.end()) {
+        SetPanelSize(it->second, true);
+    }
+    if (const auto it = numbers.find(L"islandMediaTitleLimit");
+        it != numbers.end()) {
+        SetMediaTitleLimit(it->second, true);
+    }
+    for (int slider = 12; slider <= 16; slider++) {
+        if (const auto it = numbers.find(slider == 12   ? L"islandPillHeight"
+                                         : slider == 13 ? L"islandPillCorners"
+                                         : slider == 14 ? L"islandPillEnds"
+                                         : slider == 15 ? L"islandEdge"
+                                                        : L"islandGlassBlur");
+            it != numbers.end()) {
+            SetPillLook(slider, it->second, true);
+        }
     }
     if (const auto it = numbers.find(L"trayListIsland"); it != numbers.end()) {
         SetTrayListIcons(it->second, true);
@@ -46113,6 +54607,24 @@ void SetIslandPrefValue(IslandPref pref, int value) {
         case IslandPref::Frosted:
             g_settings.islandFrosted = on;
             break;
+        case IslandPref::LiquidGlass:
+            g_settings.islandLiquidGlass = on;
+            break;
+        case IslandPref::Tips:
+            g_settings.islandTips = on;
+            break;
+        case IslandPref::HoverHighlight:
+            g_settings.islandHoverHighlight = on;
+            break;
+        case IslandPref::MinimizeButton:
+            g_settings.islandMinimizeButton = on;
+            break;
+        case IslandPref::BarCorners:
+            g_settings.islandBarCorners = on;
+            break;
+        case IslandPref::GlassTranslucent:
+            g_settings.islandGlassTranslucent = on;
+            break;
         case IslandPref::DateOrder:
             g_settings.clockDateOrder = std::clamp(value, 0, 3);
             break;
@@ -46131,12 +54643,31 @@ void SetIslandPrefValue(IslandPref pref, int value) {
         case IslandPref::Wallpaper:
             g_settings.islandWallpaper = on;
             break;
+        case IslandPref::NotificationApps:
+            g_settings.islandApps = on;
+            break;
+        case IslandPref::KomorebiLayout:
+            g_settings.komorebiLayout = on;
+            break;
+        case IslandPref::FocusedApp:
+            g_settings.islandFocusedApp = on;
+            break;
+        case IslandPref::KomorebiHideEmpty:
+            g_settings.komorebiHideEmpty = on;
+            break;
+        case IslandPref::FolderDrag:
+            g_settings.islandFolderDrag = std::clamp(value, 0, 2);
+            break;
         case IslandPref::WallpaperTransition:
             g_settings.wallpaperTransition =
                 std::clamp(value, 0, (int)WallpaperTransition::Count - 1);
             break;
         case IslandPref::WindowColor:
             g_settings.islandWindowColor = on;
+            // (The colors depend on it: a profile's look, put together option
+            // by option, mustn't keep the colors made while it still had the
+            // main island's choice.)
+            ApplyThemeIndex(false);
             break;
         case IslandPref::ActionNetwork:
         case IslandPref::ActionBluetooth:
@@ -46197,8 +54728,9 @@ void SetIslandPrefValue(IslandPref pref, int value) {
     }
 }
 
-// The main island's settings with a profile's put over them, in memory only
-// (the main settings are back in memory after).
+// The main island's settings with a profile's put over them, in memory (the
+// main settings are back in memory after); only the options the profile
+// lacks are written into it.
 IslandLook LookFromProfile(int id) {
     const IslandLook main = CaptureLook();
     const std::wstring value = ReadProfileText(id);
@@ -46212,13 +54744,28 @@ IslandLook LookFromProfile(int id) {
             g_customColors[i] = it->second & 0xFFFFFF;
         }
     }
+    // An option the profile doesn't have (saved before the option came):
+    // what it shows now (the main island's) is written into it, so the main
+    // island changing it later doesn't change this profile's monitor.
+    std::wstring missing;
     for (const auto& info : kIslandPrefs) {
         if (!info.key || IsSharedPref(info.pref)) {
             continue;
         }
         if (const auto it = numbers.find(info.key); it != numbers.end()) {
             SetIslandPrefValue(info.pref, it->second);
+        } else if (!value.empty()) {
+            missing += L"i" + std::wstring(info.key) + L"=" +
+                       std::to_wstring(GetIslandPref(info.pref)) + L"\n";
         }
+    }
+    if (!missing.empty()) {
+        std::wstring text = value;
+        if (text.back() != L'\n') {
+            text += L'\n';
+        }
+        Wh_SetStringValue(ProfileValueName(id).c_str(),
+                          (text + missing).c_str());
     }
     if (const auto it = numbers.find(L"islandSize"); it != numbers.end()) {
         g_settings.islandSize =
@@ -46244,6 +54791,51 @@ IslandLook LookFromProfile(int id) {
         it != numbers.end()) {
         g_settings.islandNotchCurve =
             std::clamp(it->second, kNotchCurveMin, kNotchCurveMax);
+    }
+    if (const auto it = numbers.find(L"islandIconSize"); it != numbers.end()) {
+        g_settings.islandIconSize =
+            std::clamp(it->second, kIconSizeMin, kIconSizeMax);
+    }
+    if (const auto it = numbers.find(L"islandLineOpacity");
+        it != numbers.end()) {
+        g_settings.islandLineOpacity =
+            std::clamp(it->second, kLineOpacityMin, kLineOpacityMax);
+    }
+    if (const auto it = numbers.find(L"islandActivationWidth");
+        it != numbers.end()) {
+        g_settings.islandActivationWidth =
+            std::clamp(it->second, kActivationWidthMin, kActivationWidthMax);
+    }
+    if (const auto it = numbers.find(L"islandPanelSize");
+        it != numbers.end()) {
+        g_settings.islandPanelSize =
+            std::clamp(it->second, kPanelSizeMin, kPanelSizeMax);
+    }
+    if (const auto it = numbers.find(L"islandMediaTitleLimit");
+        it != numbers.end()) {
+        g_settings.islandMediaTitleLimit =
+            std::clamp(it->second, kMediaTitleLimitMin, kMediaTitleLimitMax);
+    }
+    if (const auto it = numbers.find(L"islandPillHeight");
+        it != numbers.end()) {
+        g_settings.islandPillHeight =
+            std::clamp(it->second, kPillHeightPctMin, kPillHeightPctMax);
+    }
+    if (const auto it = numbers.find(L"islandPillCorners");
+        it != numbers.end()) {
+        g_settings.islandPillCorners =
+            std::clamp(it->second, kPillCornersMin, kPillCornersMax);
+    }
+    if (const auto it = numbers.find(L"islandPillEnds"); it != numbers.end()) {
+        g_settings.islandPillEnds =
+            std::clamp(it->second, kPillEndsMin, kPillEndsMax);
+    }
+    if (const auto it = numbers.find(L"islandEdge"); it != numbers.end()) {
+        g_settings.islandEdge = std::clamp(it->second, kEdgeMin, kEdgeMax);
+    }
+    if (const auto it = numbers.find(L"islandGlassBlur"); it != numbers.end()) {
+        g_settings.islandGlassBlur =
+            std::clamp(it->second, kGlassBlurMin, kGlassBlurMax);
     }
     if (const auto it = texts.find(L"islandOrder"); it != texts.end()) {
         if (std::vector<PillGroup> order = DecodePillOrder(it->second);
@@ -46499,6 +55091,12 @@ constexpr GUID kGUID_AcDcPowerSource = {
     0xe9d5,
     0x4b00,
     {0xa6, 0xbd, 0xff, 0x34, 0xff, 0x51, 0x65, 0x48}};
+// GUID_POWER_SAVING_STATUS: Windows' energy saver (battery saver) on or off.
+constexpr GUID kGUID_PowerSavingStatus = {
+    0xe00958c0,
+    0xc213,
+    0x4ace,
+    {0xac, 0x77, 0xfe, 0xcc, 0xed, 0x2e, 0xee, 0xa5}};
 constexpr ULONGLONG kWnfQuietHoursState = 0x0D83063EA3BF1C75;
 
 class StatusEvents final : public IAudioEndpointVolumeCallback,
@@ -46656,6 +55254,9 @@ void Island::StartStatusWatch() {
         m_powerNotifications[1] = RegisterPowerSettingNotification(
             m_hwnd, &kGUID_AcDcPowerSource, DEVICE_NOTIFY_WINDOW_HANDLE);
     }
+    // The energy saver (which the Liquid Glass gives way to), told at once.
+    m_powerNotifications[2] = RegisterPowerSettingNotification(
+        m_hwnd, &kGUID_PowerSavingStatus, DEVICE_NOTIFY_WINDOW_HANDLE);
 
     // "Do not disturb".
     using Subscribe_t = LONG(NTAPI*)(void**, ULONGLONG, ULONG, void*, void*,
@@ -47168,6 +55769,7 @@ void Island::OnForegroundChanged() {
             return;
         }
     }
+    NoteFocusedApp(foreground);
     // (Nor an app's menu: the app in front, its colors and its place stay.)
     if (IsShellFlyout(foreground) || !IsAppWindow(foreground)) {
         return;
@@ -47243,6 +55845,8 @@ bool Island::GroupWanted(PillGroup group) const {
         }
     }
     switch (group) {
+        case PillGroup::Apps:
+            return g_settings.islandApps;
         case PillGroup::Network:
             return g_settings.islandNetwork;
         case PillGroup::Volume:
@@ -47290,6 +55894,13 @@ bool Island::GroupWanted(PillGroup group) const {
             return g_settings.islandFolders;
         case PillGroup::Wallpaper:
             return g_settings.islandWallpaper;
+        case PillGroup::KomorebiLayout:
+            // (Only while komorebi runs and manages this monitor.)
+            return g_settings.komorebiLayout &&
+                   KomorebiMonitorOf(m_monitorHandle);
+        case PillGroup::FocusedApp:
+            return g_settings.islandFocusedApp &&
+                   (m_focusWindow || m_focusDesktop);
         default: {
             // A control center button: its own option.
             const int action = PillActionOfGroup(group);
@@ -47492,10 +56103,18 @@ void Island::OnPreferencesChanged() {
     UpdatePrivacyWatch();
     UpdateDrivesWatch();
     UpdateDesktopsWatch();
+    UpdateKomorebiWatch();
+    // The app in focus, as its option is turned on or off.
+    if (!g_settings.islandFocusedApp) {
+        ClearFocusedApp();
+    } else if (!m_focusWindow && !m_focusDesktop) {
+        NoteFocusedApp(FindTopAppWindow(m_monitorHandle));
+    }
 }
 
 // Updates are looked for while their item is on the pill: 20 seconds after
-// it's on (or the island starts), then every 6 hours.
+// it's on (or the island starts), then as often as chosen (see
+// UpdatesCheckSeconds).
 void Island::UpdateUpdatesWatch() {
     if (!m_hwnd) {
         return;
@@ -47516,7 +56135,7 @@ void Island::UpdateUpdatesWatch() {
     }
     if (!m_updatesWatched) {
         m_updatesWatched = true;
-        // (A moment after the island starts, then every 6 hours.)
+        // (A moment after the island starts, then as often as chosen.)
         SetTimer(m_hwnd, kUpdatesTimerId, 20 * 1000, nullptr);
     }
 }
@@ -47706,7 +56325,7 @@ void Island::OnWeather(int problem) {
     m_weatherPanel.OnWeather(problem);
     // Its emojis made now, not as it opens.
     if (problem == 0) {
-        m_weatherPanel.WarmUp(m_dpiScale);
+        m_weatherPanel.WarmUp(PanelScale());
     }
     Relayout();
 }
@@ -47743,6 +56362,7 @@ bool Island::Create() {
         return false;
     }
     SetWindowLongPtr(m_hwnd, GWLP_USERDATA, (LONG_PTR)this);
+    m_drop.Register(m_hwnd, this);
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
                                  m_d2d.put())) ||
@@ -47765,6 +56385,7 @@ bool Island::Create() {
         !m_desktopsPanel.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_foldersPanel.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_wallpaperPanel.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_komorebiPanel.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_usagePanel.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_notesPanel.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_tasksPanel.Create(m_d2d.get(), m_dwrite.get()) ||
@@ -47790,6 +56411,12 @@ bool Island::Create() {
     };
     m_updatesPanel.check = [this] { StartUpdatesJob(); };
     m_updatesPanel.changed = [this] { OnUpdates(); };
+    // (Another interval: the timer looks at once when the next look is due.)
+    m_updatesPanel.everyChanged = [] {
+        if (Island* main = MainIsland(); main && main->m_updatesWatched) {
+            SetTimer(main->m_hwnd, kUpdatesTimerId, 1000, nullptr);
+        }
+    };
     m_updatesStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     UpdateClock();
     UpdateStatus();
@@ -47810,6 +56437,8 @@ bool Island::Create() {
     UpdatePrivacyWatch();
     UpdateDrivesWatch();
     UpdateDesktopsWatch();
+    UpdateKomorebiWatch();
+    NoteFocusedApp(FindTopAppWindow(m_monitorHandle));
 
     m_trayKeepOpen = Wh_GetIntValue(L"trayKeepOpen",
                                     g_settings.islandTrayOpen ? 1 : 0) != 0 &&
@@ -48018,6 +56647,7 @@ void Island::Destroy() {
         m_inputMethodThread = nullptr;
     }
     StopDesktopsWatch();
+    StopKomorebiWatch();
     // (They own their jobs: one still busy, on a sleeping network drive or
     // a drive slow to answer, is let go.)
     for (HANDLE* thread :
@@ -48042,6 +56672,7 @@ void Island::Destroy() {
             *window = nullptr;
         }
     }
+    m_liquid.Destroy();
     m_bubbleCanvas.Destroy();
     m_tipCanvas.Destroy();
     m_tipLayout = nullptr;
@@ -48049,6 +56680,9 @@ void Island::Destroy() {
     m_tipDrawnKey.clear();
     m_barBlurred = false;
     if (m_hwnd) {
+        m_drop.Revoke();
+        KillTimer(m_hwnd, kFoldersDropTimerId);
+        KillTimer(m_hwnd, kFoldersDragLeftTimerId);
         KillTimer(m_hwnd, kIslandTimerId);
         DestroyWindow(m_hwnd);
         m_hwnd = nullptr;
@@ -48081,7 +56715,8 @@ void Island::SetAppBarPosition(bool force) {
             std::any_of(
                 notches.begin(), notches.end(),
                 [](const Island* notch) { return !notch->m_minimized; })) {
-            thickness = (int)std::lround(kPillHeight * m_scale);
+            thickness =
+                (int)std::lround(kPillHeight * PillHeightScale() * m_scale);
         }
     } else if (!m_bar) {
         const IslandPlace& place = g_islandPlace;
@@ -48094,8 +56729,8 @@ void Island::SetAppBarPosition(bool force) {
         thickness = 0;
         if (MinimizableAt(place) && !m_minimized &&
             !g_settings.islandAutoHide) {
-            const float across =
-                (upright ? kVerticalPillWidth : kPillHeight) * m_scale;
+            const float across = (upright ? kVerticalPillWidth : kPillHeight) *
+                                 PillHeightScale() * m_scale;
             thickness = (int)std::lround(across + GapShown() * m_dpiScale * 2);
         }
     }
@@ -48220,21 +56855,32 @@ void Island::CheckAutoHide() {
         !MinimizableAt(CurrentPlace()) || (together && m_notchBase)) {
         return;
     }
+    const std::vector<Island*> set =
+        together ? NotchSet() : std::vector<Island*>{this};
     if (m_minimized) {
-        if (m_hover == IslandItem::Line) {
-            SetMinimized(false, false);
+        // (Notches hiding together: any one's line brings them all back.)
+        for (Island* island : set) {
+            if (island->m_hover == IslandItem::Line) {
+                SetMinimized(false, false);
+                break;
+            }
         }
         return;
     }
     POINT cursor;
     GetCursorPos(&cursor);
     bool used = m_bannerWanted || m_dragMoved;
-    for (Island* island : together ? NotchSet() : std::vector<Island*>{this}) {
+    // On it: on its window, or (notches hiding together) on the edge between
+    // them too, so going from one to another doesn't hide them on the way.
+    RECT span{};
+    for (Island* island : set) {
         const RECT window{island->m_position.x, island->m_position.y,
                           island->m_position.x + island->m_size.cx,
                           island->m_position.y + island->m_size.cy};
-        used = used || PtInRect(&window, cursor) || island->AnyPanelOpen();
+        UnionRect(&span, &span, &window);
+        used = used || island->AnyPanelOpen();
     }
+    used = used || PtInRect(&span, cursor);
     if (used) {
         m_autoHideAwaySince = 0;
         return;
@@ -48269,8 +56915,9 @@ void Island::UpdateClock() {
         place && place->clock >= 0 ? place->clock : GlobalClockParts();
     // Chinese, Japanese and Korean dates go from the year to the day
     // ("2026年10月9日"), the day of the week after them; or in the order
-    // chosen.
-    const LANGID language = PRIMARYLANGID(LANGIDFROMLCID(GetUserDefaultLCID()));
+    // chosen. (In the island's language, when one is chosen.)
+    const LANGID language =
+        PRIMARYLANGID(LANGIDFROMLCID(LocaleNameToLCID(DateLocale(), 0)));
     const int order = g_settings.clockDateOrder;
     const bool eastAsian = language == LANG_KOREAN ||
                            language == LANG_CHINESE ||
@@ -48285,8 +56932,8 @@ void Island::UpdateClock() {
     std::wstring regional = order >= 2 ? L"MMM d" : L"d MMM";
     if (order == 0 && !eastAsian) {
         WCHAR pattern[64];
-        if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SMONTHDAY,
-                            pattern, ARRAYSIZE(pattern))) {
+        if (GetLocaleInfoEx(DateLocale(), LOCALE_SMONTHDAY, pattern,
+                            ARRAYSIZE(pattern))) {
             std::wstring kept;
             bool quoted = false;
             for (PCWSTR c = pattern; *c; c++) {
@@ -48350,8 +56997,8 @@ void Island::UpdateClock() {
     }
     WCHAR date[64] = L"";
     if (!format.empty()) {
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &now, format.c_str(),
-                        date, ARRAYSIZE(date), nullptr);
+        GetDateFormatEx(DateLocale(), 0, &now, format.c_str(), date,
+                        ARRAYSIZE(date), nullptr);
     }
     // (With 12 hours, AM or PM after the time, drawn smaller: see
     // SmallClockMarker.)
@@ -48375,7 +57022,7 @@ void Island::UpdateClock() {
     std::wstring shortMarker;
     m_clockTime = FormatClockTime(now, false, &shortMarker);
     WCHAR shortDate[32] = L"";
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &now, monthDay, shortDate,
+    GetDateFormatEx(DateLocale(), 0, &now, monthDay, shortDate,
                     ARRAYSIZE(shortDate), nullptr);
     m_clockDate =
         shortMarker.empty() ? shortDate : shortMarker + L" " + shortDate;
@@ -48722,8 +57369,7 @@ NetworkInfo Island::QueryNetwork() {
     PWLAN_INTERFACE_INFO_LIST interfaces = nullptr;
     if (m_wlan && WlanEnumInterfaces(m_wlan, nullptr, &interfaces) ==
                       ERROR_SUCCESS) {
-        for (DWORD i = 0; i < interfaces->dwNumberOfItems && info.signal < 0;
-             i++) {
+        for (DWORD i = 0; i < interfaces->dwNumberOfItems && !info.wifi; i++) {
             const auto& adapter = interfaces->InterfaceInfo[i];
             if (adapter.isState == wlan_interface_state_associating ||
                 adapter.isState == wlan_interface_state_discovering ||
@@ -48733,12 +57379,23 @@ NetworkInfo Island::QueryNetwork() {
             if (adapter.isState != wlan_interface_state_connected) {
                 continue;
             }
+            info.wifi = true;
             DWORD size = 0;
             PWLAN_CONNECTION_ATTRIBUTES attributes = nullptr;
-            if (WlanQueryInterface(m_wlan, &adapter.InterfaceGuid,
+            const DWORD queried =
+                WlanQueryInterface(m_wlan, &adapter.InterfaceGuid,
                                    wlan_intf_opcode_current_connection, nullptr,
-                                   &size, (PVOID*)&attributes,
-                                   nullptr) == ERROR_SUCCESS) {
+                                   &size, (PVOID*)&attributes, nullptr);
+            // (Once per answer: this runs on every network change.)
+            static DWORD loggedQuery = ERROR_SUCCESS;
+            if (queried != loggedQuery) {
+                loggedQuery = queried;
+                if (queried != ERROR_SUCCESS) {
+                    Wh_Log(L"The Wi-Fi network couldn't be read: 0x%08X",
+                           queried);
+                }
+            }
+            if (queried == ERROR_SUCCESS) {
                 info.signal =
                     attributes->wlanAssociationAttributes.wlanSignalQuality;
                 const auto& ssid = attributes->wlanAssociationAttributes.dot11Ssid;
@@ -48794,7 +57451,7 @@ std::wstring Island::NetworkGlyph() {
     } else {
         m_netConnectingSince = 0;
     }
-    m_netWifi = info.signal >= 0 || (info.wifiConnecting && !info.connected);
+    m_netWifi = info.wifi || (info.wifiConnecting && !info.connected);
     m_netBars = info.signal >= 0 ? std::clamp(info.signal / 25, 0, 3) : 3;
     m_netState = state;
     switch (state) {
@@ -48867,14 +57524,13 @@ void Island::DrawNetwork(ID2D1RenderTarget* target,
                          ID2D1SolidColorBrush* brush,
                          const IslandSlot& slot,
                          float opacity) {
-    IDWriteTextFormat* format =
-        slot.font == 2 ? m_smallIconFormat.get() : m_iconFormat.get();
+    IDWriteTextFormat* format = m_iconFormat.get();
     if (!format) {
         return;
     }
     const D2D1_POINT_2F center{(slot.rect.left + slot.rect.right) / 2,
                                (slot.rect.top + slot.rect.bottom) / 2};
-    const float full = std::round(kIslandIconSlot * m_scale);
+    const float full = std::round(kIslandIconSlot * IconScale());
     const D2D1_RECT_F rect{center.x - full / 2, slot.rect.top,
                            center.x + full / 2, slot.rect.bottom};
     auto drawGlyph = [&](const std::wstring& text, float alpha, float size) {
@@ -49108,6 +57764,22 @@ void Island::StartBrightnessThread(LPTHREAD_START_ROUTINE proc) {
     }
 }
 
+// A screen's brightness changed here: every island on it and every control
+// center showing it take it.
+void Island::ShareBrightness(HMONITOR screen, int level) {
+    ForEachIsland([&](Island& island) {
+        bool changed = island.m_control.TakeBrightness(screen, level);
+        if (island.m_monitorHandle == screen && island.m_brightness >= 0 &&
+            island.m_brightness != level) {
+            island.m_brightness = level;
+            changed = true;
+        }
+        if (changed) {
+            StartIslandAnimation();
+        }
+    });
+}
+
 // (Changed elsewhere meanwhile, like with the keyboard's keys.)
 void Island::ReadBrightnessSoon() {
     if (!g_settings.islandBrightness || m_brightnessJob->running ||
@@ -49115,16 +57787,19 @@ void Island::ReadBrightnessSoon() {
         return;
     }
     m_brightnessReadAt = NowSeconds();
+    m_brightnessJob->screen = m_monitorHandle;
     StartBrightnessThread(BrightnessQueryProc);
 }
 
 void Island::SetBrightness(int level) {
     m_brightness = std::clamp(level, 0, 100);
     m_brightnessReadAt = NowSeconds();
-    m_brightnessJob->target = m_brightness;
+    // (Its own monitor's: an island on each monitor changes each one.)
+    m_brightnessJob->AskScreen(m_monitorHandle, m_brightness);
     if (!m_brightnessJob->running.exchange(true)) {
         StartBrightnessThread(BrightnessThreadProc);
     }
+    ShareBrightness(m_monitorHandle, m_brightness);
     ShowTextBubble(std::wstring(Tr(L"Brightness", L"Brilho")) + L" " +
                        std::to_wstring(m_brightness) + L"%",
                    SlotMiddle(IslandItem::Brightness));
@@ -49188,12 +57863,45 @@ void Island::UpdateStatus() {
     m_bellGlyph = {IsIslandQuiet() ? kGlyphMoon : kGlyphBell};
 }
 
+// A short text (a count) in the middle of `rect` by its own ink, not the
+// font's line box (which puts figures lower), and not snapped to pixels like
+// the shape around it (the Fixed style's notches sit between pixels).
+void DrawInkCentered(IDWriteFactory* dwrite,
+                     ID2D1RenderTarget* target,
+                     ID2D1Brush* brush,
+                     const std::wstring& text,
+                     IDWriteTextFormat* format,
+                     const D2D1_RECT_F& rect) {
+    const float width = rect.right - rect.left;
+    const float height = rect.bottom - rect.top;
+    winrt::com_ptr<IDWriteTextLayout> layout;
+    if (!dwrite || FAILED(dwrite->CreateTextLayout(
+                       text.c_str(), (UINT32)text.size(), format, width,
+                       height, layout.put()))) {
+        return;
+    }
+    D2D1_POINT_2F origin{rect.left, rect.top};
+    DWRITE_OVERHANG_METRICS overhang{};
+    if (SUCCEEDED(layout->GetOverhangMetrics(&overhang))) {
+        // The ink's box: from -left to width + right (and likewise down).
+        origin.x += (overhang.left - overhang.right) / 2;
+        origin.y += (overhang.top - overhang.bottom) / 2;
+    }
+    target->DrawTextLayout(origin, layout.get(), brush,
+                           D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+}
+
 void Island::UpdateFormats(float scale) {
-    if (scale == m_scale && m_iconFormat && m_smallIconFormat &&
+    if (scale == m_scale && g_settings.islandIconSize == m_formatIconSize &&
+        m_vertical == m_formatVertical && m_iconFormat && m_smallIconFormat &&
         m_textFormat && m_badgeFormat) {
         return;
     }
     m_scale = scale;
+    m_formatIconSize = g_settings.islandIconSize;
+    m_formatVertical = m_vertical;
+    m_textScale = m_vertical ? scale : IconScale();
+    m_usageScale = std::min(m_textScale, scale * kUsageMostScale);
     m_iconFormat = nullptr;
     m_smallIconFormat = nullptr;
     m_textFormat = nullptr;
@@ -49203,24 +57911,22 @@ void Island::UpdateFormats(float scale) {
                                DWRITE_FONT_STYLE_NORMAL,
                                DWRITE_FONT_STRETCH_NORMAL, 8.5f * scale, L"",
                                m_badgeFormat.put());
-    m_dwrite->CreateTextFormat(L"Segoe Fluent Icons", nullptr,
+    m_dwrite->CreateTextFormat(IconFont(), nullptr,
                                DWRITE_FONT_WEIGHT_NORMAL,
                                DWRITE_FONT_STYLE_NORMAL,
                                DWRITE_FONT_STRETCH_NORMAL,
-                               kIslandIconSize * scale, L"",
+                               kIslandIconSize * IconScale(), L"",
                                m_iconFormat.put());
-    m_dwrite->CreateTextFormat(L"Segoe Fluent Icons", nullptr,
+    m_dwrite->CreateTextFormat(IconFont(), nullptr,
                                DWRITE_FONT_WEIGHT_NORMAL,
                                DWRITE_FONT_STYLE_NORMAL,
                                DWRITE_FONT_STRETCH_NORMAL,
                                kIslandSmallIconSize * scale, L"",
                                m_smallIconFormat.put());
-    m_dwrite->CreateTextFormat(L"Segoe UI Variable Text", nullptr,
-                               DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                               DWRITE_FONT_STYLE_NORMAL,
-                               DWRITE_FONT_STRETCH_NORMAL,
-                               kIslandTextSize * scale, L"",
-                               m_textFormat.put());
+    m_dwrite->CreateTextFormat(
+        L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        kIslandTextSize * m_textScale, L"", m_textFormat.put());
     for (auto* format : {m_iconFormat.get(), m_smallIconFormat.get(),
                          m_textFormat.get(), m_badgeFormat.get()}) {
         if (format) {
@@ -49234,14 +57940,15 @@ void Island::UpdateFormats(float scale) {
         m_tabular->AddFontFeature({DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
     }
 
-    // The banner's texts: one line each, ending with "..." when too long.
+    // The banner's texts (and the pill's names): one line each, ending with
+    // "..." when too long; `size` in pixels.
     auto make = [&](DWRITE_FONT_WEIGHT weight, float size,
                     DWRITE_TEXT_ALIGNMENT alignment) {
         winrt::com_ptr<IDWriteTextFormat> format;
         if (SUCCEEDED(m_dwrite->CreateTextFormat(
                 L"Segoe UI Variable Text", nullptr, weight,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                size * scale, L"", format.put()))) {
+                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"",
+                format.put()))) {
             format->SetTextAlignment(alignment);
             format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -49253,20 +57960,25 @@ void Island::UpdateFormats(float scale) {
         }
         return format;
     };
-    m_bannerAppFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 11.5f,
+    m_bannerAppFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 11.5f * scale,
                              DWRITE_TEXT_ALIGNMENT_LEADING);
-    m_bannerTimeFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 11.5f,
+    m_bannerTimeFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 11.5f * scale,
                               DWRITE_TEXT_ALIGNMENT_TRAILING);
-    m_bannerTitleFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 13,
+    m_bannerTitleFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * scale,
                                DWRITE_TEXT_ALIGNMENT_LEADING);
-    m_bannerTextFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 12.5f,
+    m_bannerTextFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 12.5f * scale,
                               DWRITE_TEXT_ALIGNMENT_LEADING);
-    m_usageLabelFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 7.5f,
+    m_mediaTitleFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 12.5f * m_textScale,
+                              DWRITE_TEXT_ALIGNMENT_LEADING);
+    m_itemNameFormat =
+        make(DWRITE_FONT_WEIGHT_SEMI_BOLD, kIslandTextSize * m_textScale,
+             DWRITE_TEXT_ALIGNMENT_LEADING);
+    m_usageLabelFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 7.5f * m_usageScale,
                               DWRITE_TEXT_ALIGNMENT_CENTER);
-    m_usageValueFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 11,
+    m_usageValueFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 11 * m_usageScale,
                               DWRITE_TEXT_ALIGNMENT_CENTER);
     // As wide as the widest value (figures of equal width) or name.
-    m_usageWidth = std::round(34 * scale);
+    m_usageWidth = std::round(34 * m_usageScale);
     for (PCWSTR sample : {L"100%", L"88.8G", L"888M"}) {
         winrt::com_ptr<IDWriteTextLayout> layout;
         if (m_usageValueFormat &&
@@ -49279,10 +57991,10 @@ void Island::UpdateFormats(float scale) {
             }
             DWRITE_TEXT_METRICS metrics;
             layout->GetMetrics(&metrics);
-            m_usageWidth = std::max(
-                m_usageWidth,
-                std::ceil(metrics.widthIncludingTrailingWhitespace +
-                          6 * scale));
+            m_usageWidth =
+                std::max(m_usageWidth,
+                         std::ceil(metrics.widthIncludingTrailingWhitespace +
+                                   6 * m_usageScale));
         }
     }
 }
@@ -49332,13 +58044,16 @@ void Island::Layout() {
         }
     }
     // Across the pill (its height, or its width when upright).
-    const float height = std::round(
-        (m_bar ? kBarHeight : m_vertical ? kVerticalPillWidth : kPillHeight) *
-        scale);
-    const float padding = std::round(kIslandPadding * scale);
+    const float height =
+        std::round((m_bar        ? kBarHeight
+                    : m_vertical ? kVerticalPillWidth * PillHeightScale()
+                                 : kPillHeight * PillHeightScale()) *
+                   scale);
+    const float padding =
+        std::round(kIslandPadding * scale * g_settings.islandPillEnds / 100);
     const float spacing = std::round(kIslandSpacing * scale);
-    const float iconSlot = std::round(kIslandIconSlot * scale);
-    const float smallSlot = std::round(kIslandSmallSlot * scale);
+    const float iconSlot = std::round(kIslandIconSlot * scale *
+                                      g_settings.islandIconSize / 100.0f);
 
     // The clock's width, measured with every figure as a 0, so that it stays
     // the same as the time changes.
@@ -49350,7 +58065,7 @@ void Island::Layout() {
             c = L'0';
         }
     }
-    const std::wstring clockKey = widest + L"|" + std::to_wstring(scale);
+    const std::wstring clockKey = widest + L"|" + std::to_wstring(m_textScale);
     if (clockKey != m_clockMeasuredKey) {
         m_clockMeasuredKey = clockKey;
         m_clockMeasured = 100 * scale;
@@ -49381,24 +58096,21 @@ void Island::Layout() {
 
     m_slots.clear();
     float x = 0;
-    auto addIcon = [&](IslandItem item, const std::wstring& glyph,
-                       bool small = false) {
+    auto addIcon = [&](IslandItem item, const std::wstring& glyph) {
         if (glyph.empty()) {
             return;
         }
-        const float slot = small ? smallSlot : iconSlot;
-        m_slots.push_back(
-            {item, {x, 0, x + slot, height}, glyph, small ? 2 : 1});
-        x += slot + spacing;
+        m_slots.push_back({item, {x, 0, x + iconSlot, height}, glyph, 1});
+        x += iconSlot + spacing;
     };
     // A percentage beside an item, as part of it (clicked, scrolled).
     auto addSideText = [&](IslandItem item, SideText& side) {
         if (side.text.empty() || !m_textFormat) {
             return;
         }
-        if (side.text != side.measured || scale != side.scale) {
+        if (side.text != side.measured || m_textScale != side.scale) {
             side.measured = side.text;
-            side.scale = scale;
+            side.scale = m_textScale;
             side.width = 0;
             winrt::com_ptr<IDWriteTextLayout> layout;
             if (SUCCEEDED(m_dwrite->CreateTextLayout(
@@ -49412,7 +58124,11 @@ void Island::Layout() {
         if (side.width <= 0) {
             return;
         }
-        x -= std::round(spacing / 2);
+        // Close to its icon's glyph (centered in its slot, see
+        // kIslandIconSize), not to the slot.
+        x -= std::round(spacing +
+                        iconSlot * (1 - kIslandIconSize / kIslandIconSlot) / 2 -
+                        3 * scale);
         m_slots.push_back({item, {x, 0, x + side.width, height}, side.text, 0});
         x += side.width + spacing;
     };
@@ -49665,20 +58381,19 @@ void Island::Layout() {
                 // What's playing, next to the bell, and its buttons: they take
                 // room as they grow in, so the pill widens with them.
                 auto addGrowing = [&](IslandItem item,
-                                      const std::wstring& glyph, bool small,
-                                      float room, float amount) {
+                                      const std::wstring& glyph, float room,
+                                      float amount) {
                     if (room <= 0.001f && amount <= 0.001f) {
                         return;
                     }
                     room = std::clamp(room, 0.0f, 1.0f);
-                    const float slot = small ? smallSlot : iconSlot;
                     IslandSlot entry{item,
-                                     {x, 0, x + slot * room, height},
+                                     {x, 0, x + iconSlot * room, height},
                                      glyph,
-                                     small ? 2 : 1};
+                                     1};
                     entry.scale = std::max(amount, 0.0f);
                     m_slots.push_back(entry);
-                    x += (slot + spacing) * room;
+                    x += (iconSlot + spacing) * room;
                 };
                 const float mediaRoom =
                     (float)std::clamp(m_mediaRoom, 0.0, 1.0);
@@ -49691,7 +58406,7 @@ void Island::Layout() {
                 const bool titleShown = !m_vertical && titleRoom > 0.001f &&
                                         (mediaRoom > 0.001f || media > 0.001f);
                 if (noteWanted && titleShown) {
-                    addGrowing(IslandItem::Media, {kGlyphMusic}, false,
+                    addGrowing(IslandItem::Media, {kGlyphMusic},
                                mediaRoom, media);
                 }
                 if (titleShown) {
@@ -49699,15 +58414,16 @@ void Island::Layout() {
                     // limit), opening out of the note.
                     const std::wstring measuredKey =
                         MediaTitleText() + L"\n" + m_mediaShown.artist + L"\n" +
-                        std::to_wstring(scale);
+                        std::to_wstring(m_textScale) + L"\n" +
+                        std::to_wstring(g_settings.islandMediaTitleLimit);
                     if (measuredKey != m_mediaTitleMeasured) {
                         m_mediaTitleMeasured = measuredKey;
                         auto measure = [&](const std::wstring& text) {
                             winrt::com_ptr<IDWriteTextLayout> layout;
-                            if (!m_bannerTextFormat ||
+                            if (!m_mediaTitleFormat ||
                                 FAILED(m_dwrite->CreateTextLayout(
                                     text.c_str(), (UINT32)text.size(),
-                                    m_bannerTextFormat.get(), 10000, height,
+                                    m_mediaTitleFormat.get(), 10000, height,
                                     layout.put()))) {
                                 return 0.0f;
                             }
@@ -49729,7 +58445,8 @@ void Island::Layout() {
                         m_mediaTitleWidth = std::clamp(
                             m_mediaTitleWidth,
                             std::round(kMediaTitleMinWidth * scale),
-                            std::round(kMediaTitleMaxWidth * scale));
+                            std::round(g_settings.islandMediaTitleLimit *
+                                       scale));
                         // Another title on the pill: it swaps in, and the
                         // width follows; the same one (another size of the
                         // island) or the first one is just there.
@@ -49762,7 +58479,7 @@ void Island::Layout() {
                     m_slots.push_back(entry);
                     x += width + spacing * mediaRoom;
                 } else if (noteWanted) {
-                    addGrowing(IslandItem::Media, {kGlyphMusic}, false,
+                    addGrowing(IslandItem::Media, {kGlyphMusic},
                                mediaRoom, media);
                 }
                 const float buttonsRoom =
@@ -49771,11 +58488,11 @@ void Island::Layout() {
                     std::min(media, 1.0f) *
                     (float)std::clamp(m_mediaButtonsAmount, 0.0, 1.15);
                 addGrowing(IslandItem::MediaPrevious, {kGlyphPreviousTrack},
-                           true, buttonsRoom, buttons);
+                           buttonsRoom, buttons);
                 addGrowing(IslandItem::MediaPlayPause,
                            {m_mediaShown.playing ? kGlyphPause : kGlyphPlay},
-                           true, buttonsRoom, buttons);
-                addGrowing(IslandItem::MediaNext, {kGlyphNextTrack}, true,
+                           buttonsRoom, buttons);
+                addGrowing(IslandItem::MediaNext, {kGlyphNextTrack},
                            buttonsRoom, buttons);
                 break;
             }
@@ -49905,10 +58622,10 @@ void Island::Layout() {
                     // The sky, and the temperature as wide as it is
                     // (measured again only when it changes).
                     const std::wstring weatherKey =
-                        m_weatherShown + L"|" + std::to_wstring(scale);
+                        m_weatherShown + L"|" + std::to_wstring(m_textScale);
                     if (weatherKey != m_weatherMeasuredKey) {
                         m_weatherMeasuredKey = weatherKey;
-                        m_weatherMeasured = std::round(26 * scale);
+                        m_weatherMeasured = std::round(26 * m_textScale);
                         const size_t tab = m_weatherShown.find(L'\t');
                         winrt::com_ptr<IDWriteTextLayout> measure;
                         if (tab != std::wstring::npos && m_textFormat &&
@@ -49923,9 +58640,9 @@ void Island::Layout() {
                         }
                     }
                     const float temperatureWidth = m_weatherMeasured;
-                    m_weatherWidthTarget = std::round(20 * scale) +
+                    m_weatherWidthTarget = std::round(20 * m_textScale) +
                                            temperatureWidth +
-                                           std::round(4 * scale);
+                                           std::round(4 * m_textScale);
                     if (m_weatherWidth < 0) {
                         m_weatherWidth = m_weatherWidthTarget;
                     }
@@ -49937,6 +58654,95 @@ void Island::Layout() {
                     x += weatherWidth + spacing;
                 }
                 break;
+            case PillGroup::KomorebiLayout:
+            case PillGroup::FocusedApp: {
+                // komorebi's layout on this monitor, or the app in focus on
+                // it: an icon and the name, as wide as the name up to a
+                // limit (the whole name in its tip); upright, the icon.
+                const bool komorebi = group == PillGroup::KomorebiLayout;
+                ItemWidth& width = komorebi ? m_komorebiWidth : m_focusWidth;
+                const KomorebiMonitor* monitor =
+                    komorebi ? KomorebiMonitorOf(m_monitorHandle) : nullptr;
+                if (komorebi ? !monitor : !m_focusWindow && !m_focusDesktop) {
+                    // (Back later: at its width at once, nothing swapping.)
+                    width.shown = -1;
+                    width.name.clear();
+                    break;
+                }
+                // komorebi's workspaces of this monitor first, a dot each
+                // (like yasb's), when there's more than one: the one shown
+                // ("*"), ones with windows ("+"), empty ones (left out if
+                // chosen).
+                if (komorebi && !m_vertical && monitor->workspaces.size() > 1) {
+                    // (Spaced like the other items: their shadows don't
+                    // meet.)
+                    const float dot = std::round(iconSlot * 0.7f);
+                    for (int i = 0; i < (int)monitor->workspaces.size(); i++) {
+                        const bool here = i == monitor->workspace;
+                        const bool windows = monitor->workspaces[i].windows;
+                        if (g_settings.komorebiHideEmpty && !here && !windows) {
+                            continue;
+                        }
+                        m_slots.push_back(
+                            {IslandItem::KomorebiWorkspace,
+                             {x, 0, x + dot, height},
+                             std::to_wstring(i) + (here      ? L"*"
+                                                   : windows ? L"+"
+                                                             : L""),
+                             kWorkspaceDotFont});
+                        x += dot + spacing;
+                    }
+                }
+                const std::wstring name =
+                    komorebi
+                        ? KomorebiLayoutName(*monitor, g_komorebiShown.paused)
+                        : m_focusName;
+                // (komorebi's: "\x1" and its icon's number, see
+                // DrawKomorebiIcon; the desktop's: its glyph.)
+                const int komorebiIcon =
+                    komorebi ? KomorebiIconOf(*monitor, g_komorebiShown.paused)
+                             : -1;
+                const std::wstring icon =
+                    komorebi ? (komorebiIcon >= 0
+                                    ? L"\x1" + std::to_wstring(komorebiIcon)
+                                    : std::wstring())
+                    : m_focusDesktop ? std::wstring()
+                                     : m_focusKey;
+                // Another name: the one before slides up and out.
+                if (name != width.name || icon != width.icon) {
+                    if (!width.name.empty() && width.shown >= 0 &&
+                        !m_vertical) {
+                        width.nameBefore = width.name;
+                        width.iconBefore = width.icon;
+                        width.swap = 1;
+                        width.swapVelocity = 0;
+                        StartAnimating();
+                    }
+                    width.name = name;
+                    width.icon = icon;
+                }
+                width.target =
+                    m_vertical
+                        ? iconSlot
+                        : std::round(22 * scale) +
+                              std::min(MeasureItemName(width, name, height),
+                                       std::round(kItemNameMaxWidth * scale)) +
+                              std::round(6 * scale);
+                if (width.shown < 0 || m_vertical) {
+                    width.shown = width.target;
+                    width.velocity = 0;
+                } else if (std::fabs(width.shown - width.target) > 0.5) {
+                    StartAnimating();
+                }
+                const float room = (float)width.shown;
+                m_slots.push_back({komorebi ? IslandItem::KomorebiLayout
+                                            : IslandItem::FocusedApp,
+                                   {x, 0, x + room, height},
+                                   name,
+                                   kNamedItemFont});
+                x += room + spacing;
+                break;
+            }
             case PillGroup::Theme:
                 // Drawn turning (see m_themeTurn).
                 m_slots.push_back({IslandItem::ThemeSwitch,
@@ -49953,8 +58759,7 @@ void Island::Layout() {
                     addIcon(IslandItem::QuickAction,
                             id == ControlId::Network && !m_networkGlyph.empty()
                                 ? m_networkGlyph
-                                : std::wstring(1, GetControlInfo(id).glyph),
-                            true);
+                                : std::wstring(1, GetControlInfo(id).glyph));
                     m_slots.back().action = action;
                 }
                 break;
@@ -49988,8 +58793,9 @@ void Island::Layout() {
     // (Notches hiding together: one button, on the bell's, which keeps the
     // line too.)
     const float tail = MinimizableAt(CurrentPlace()) &&
+                               g_settings.islandMinimizeButton &&
                                (!m_notchBase || g_settings.islandNotchEach)
-                           ? smallSlot + spacing
+                           ? iconSlot + spacing
                            : 0;
     const bool centered = PlaceClockCenter(orderPlace);
     bool slideGroups = false;
@@ -50111,7 +58917,7 @@ void Island::Layout() {
         if (place.y > 0.001 && place.y < 0.999) {
             glyph = place.x < 0.5 ? kGlyphPrevious : kGlyphNext;
         }
-        addIcon(IslandItem::Minimize, {glyph}, true);
+        addIcon(IslandItem::Minimize, {glyph});
     }
     float contentWidth = x - spacing;
     float clockMiddle = -1;
@@ -50181,15 +58987,25 @@ void Island::Layout() {
                                  insets.bottom)
                        : (float)(m_monitor.right - m_monitor.left -
                                  insets.left - insets.right);
-        // A notch: its share of the screen, so they never meet.
-        if (m_notch >= 0) {
-            along = along / std::max(1, m_notchCount) -
-                    NotchShoulderWidth() * 2 - std::round(kNotchGap * scale);
-        }
         // (Its items show between its round ends, where they're cut.)
         const float ends = std::max(0.0f, height / 2 - padding);
-        const float room = along - std::round(GapShown() * m_dpiScale) * 2 -
-                           padding * 2 - ends * 2 - std::round(24 * scale);
+        float room = along - std::round(GapShown() * m_dpiScale) * 2 -
+                     padding * 2 - ends * 2 - std::round(24 * scale);
+        // A notch: as long as its neighbors leave (they almost touch).
+        if (m_notch >= 0) {
+            const float wanted = std::max(contentWidth + padding * 2,
+                                          std::round(kNotchMinWidth * scale));
+            if (std::fabs(wanted - m_notchWanted) > 0.5f) {
+                m_notchWanted = wanted;
+                // (The others' room changes too.)
+                for (Island* notch : NotchSet()) {
+                    if (notch != this) {
+                        notch->StartAnimating();
+                    }
+                }
+            }
+            room = NotchBodyMax(scale) - padding * 2 - ends * 2;
+        }
         if (room > iconSlot * 2 && contentWidth > room) {
             m_pillOverflow = contentWidth - room;
             m_pillScrollTarget =
@@ -50222,9 +59038,29 @@ void Island::Layout() {
                 ? std::clamp(std::round(width / 2 - clockMiddle), padding,
                              std::max(padding, width - padding - contentWidth))
                 : width - padding - contentWidth;
+        // At the screen's corners (an option): the items before the clock
+        // against the left edge, the ones after it against the right.
+        // (Off: nothing is before or after it.)
+        float clockLeft = std::numeric_limits<float>::lowest();
+        float clockRight = std::numeric_limits<float>::max();
+        if (centered && clockMiddle >= 0 && g_settings.islandBarCorners) {
+            clockLeft = std::numeric_limits<float>::max();
+            clockRight = std::numeric_limits<float>::lowest();
+            for (const auto& slot : m_slots) {
+                if (slot.group == (int)PillGroup::Clock) {
+                    clockLeft = std::min(clockLeft, slot.rect.left);
+                    clockRight = std::max(clockRight, slot.rect.right);
+                }
+            }
+        }
         for (auto& slot : m_slots) {
-            slot.rect.left += shift;
-            slot.rect.right += shift;
+            const float slotShift =
+                slot.rect.right <= clockLeft ? padding
+                : slot.rect.left >= clockRight
+                    ? std::max(shift, width - padding - contentWidth)
+                    : shift;
+            slot.rect.left += slotShift;
+            slot.rect.right += slotShift;
         }
         // A banner: the window grows down for it, out of the bar's middle
         // (its transparent parts let clicks through; the bar keeps its
@@ -50254,7 +59090,10 @@ void Island::Layout() {
         const float length = contentWidth + padding * 2;
         const float edgeGap = std::round(kPillTopGap * scale);
         float windowWidth = height + edgeGap;
-        float windowHeight = std::ceil(length / 2) * 2 + 2;
+        // (Long enough for the strip that brings the line back: its
+        // transparent parts let clicks through.)
+        float windowHeight =
+            std::ceil(std::max(length, ActivationLength(scale)) / 2) * 2 + 2;
         if (m_bannerWanted || m_bannerAmount > 0) {
             const float bannerHeight =
                 kBannerHeight +
@@ -50325,7 +59164,10 @@ void Island::Layout() {
     // under it on the lower half, where the minimized line is), or the banner
     // with its bounce; its transparent parts let clicks through.
     const float top = std::round(kPillTopGap * scale);
-    float windowWidth = std::ceil(pillWidth / 2) * 2 + 2;
+    // (Wide enough for the strip that brings the line back: its transparent
+    // parts let clicks through.)
+    float windowWidth =
+        std::ceil(std::max(pillWidth, ActivationLength(scale)) / 2) * 2 + 2;
     float windowHeight = top + height;
     if (m_bannerWanted || m_bannerAmount > 0) {
         windowWidth = std::max(
@@ -50390,6 +59232,45 @@ void Island::Layout() {
                   (LONG)std::lround(pillY - pillTop)};
 }
 
+// A notch's longest body: as long as its items want, until it almost
+// touches its neighbors (a small gap between their curves); when they all
+// want more, each keeps its share of the screen (the middle one stays in
+// the middle). From the others' wanted lengths (their last layouts).
+float Island::NotchBodyMax(float scale) {
+    const RECT insets = TaskbarInsets();
+    const float width =
+        (float)(m_monitor.right - m_monitor.left - insets.left - insets.right);
+    const float curve = NotchShoulderWidth();
+    const float gap = std::round(kNotchTouchGap * scale);
+    float wanted[3] = {0, 0, 0};
+    for (Island* notch : NotchSet()) {
+        if (notch->m_notch >= 0 && notch->m_notch < 3) {
+            wanted[notch->m_notch] = notch->m_notchWanted;
+        }
+    }
+    if (m_notchCount <= 1) {
+        return std::max(0.0f, width - curve * 2 - gap * 2);
+    }
+    if (m_notchCount == 2) {
+        // Left and right: what the other one takes of its share is left.
+        const float both = width - curve * 2 - gap;
+        const float other = wanted[m_notch == 0 ? 2 : 0];
+        return std::max(0.0f, both - std::min(other, both / 2));
+    }
+    // Three: the middle one between the sides' needs (up to their shares),
+    // the sides on what the middle one leaves of each half.
+    const float all = width - curve * 4 - gap * 2;
+    const float share = all / 3;
+    const float sides =
+        std::max(std::min(wanted[0], share), std::min(wanted[2], share));
+    const float middleMax = std::max(0.0f, all - sides * 2);
+    if (m_notch == 1) {
+        return middleMax;
+    }
+    const float middle = std::min(std::max(wanted[1], 0.0f), middleMax);
+    return std::max(0.0f, (width - middle) / 2 - curve * 2 - gap);
+}
+
 // A notch: against the top edge (the left and right ones touching the
 // screen's corners), as wide as its items (small when it has none), its
 // curves beside it. The window is as big as a banner or the settings bubble
@@ -50425,6 +59306,8 @@ void Island::LayoutNotch(float contentWidth,
         left = std::min(left, from);
         right = std::max(right, from + width);
     };
+    // The strip that brings the line back (cut at the screen's corners).
+    makeRoom(ActivationLength(scale));
     if (m_bannerWanted || m_bannerAmount > 0) {
         const float bannerHeight =
             kBannerHeight +
@@ -50770,6 +59653,7 @@ void NoteToastsSeen(const std::vector<IslandToast>& toasts);
 // of the line when minimized. Not with "Do not disturb", in the bar, or over
 // an open panel.
 void Island::ShowBanner() {
+    CheckShown();
     AcquireSRWLockExclusive(&g_islandToastsLock);
     std::vector<IslandToast> toasts = std::move(g_islandToasts);
     g_islandToasts.clear();
@@ -50809,7 +59693,8 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
         for (const auto& toast : toasts) {
             if (!toast.appId.empty() && !toast.sticky &&
                 AppShowsBanners(toast.appId)) {
-                OweWindowsBanner(canTake && !toast.urgent);
+                OweWindowsBanner(canTake && !toast.urgent &&
+                                 !toast.reply.windowsButtons);
             }
         }
     }
@@ -50840,10 +59725,12 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
             QueueUrgentSound(*newestUrgent);
         }
     } else {
-        // Otherwise Windows' banner shows them, with their buttons: not in
-        // the pill too.
-        std::erase_if(toasts,
-                      [](const IslandToast& toast) { return toast.urgent; });
+        // Otherwise Windows' banner shows them, with their buttons (also
+        // Windows' own ones, see ToastReply::windowsButtons): not in the
+        // pill too.
+        std::erase_if(toasts, [](const IslandToast& toast) {
+            return toast.urgent || toast.reply.windowsButtons;
+        });
     }
     if (g_settings.islandOwnsNotifications && g_islandQuiet) {
         std::erase_if(toasts, [](const IslandToast& toast) {
@@ -51163,16 +60050,19 @@ void Island::Render(bool force) {
                         g_theme.foreground[1] * 17 +
                         g_theme.foreground[2] * 19 + g_theme.icon[0] * 23 +
                         g_theme.icon[1] * 29 + g_theme.icon[2] * 31) +
-        std::to_wstring(m_barBlurred) + L"|";
+        std::to_wstring(m_barBlurred) + std::to_wstring(LiquidGlassOn()) +
+        std::to_wstring(m_liquid.Shown()) + L"|";
     for (const auto& slot : m_slots) {
         key += slot.text + L"|" + std::to_wstring((int)(slot.scale * 1000)) +
                L"|" + std::to_wstring((int)std::round(slot.rect.left)) + L"|" +
                std::to_wstring((int)(slot.alpha * 100)) + L"|";
-        // An icon changing: the one before goes as this one comes.
-        if (slot.item == IslandItem::Volume ||
-            slot.item == IslandItem::Battery ||
-            slot.item == IslandItem::Bell ||
-            slot.item == IslandItem::Microphone) {
+        // An icon changing: the one before goes as this one comes. (Only
+        // the icon: the volume's and the battery's percentages beside them
+        // are slots of the same item, see addSideText.)
+        if (slot.font == 1 && (slot.item == IslandItem::Volume ||
+                               slot.item == IslandItem::Battery ||
+                               slot.item == IslandItem::Bell ||
+                               slot.item == IslandItem::Microphone)) {
             auto swap = std::find_if(
                 m_glyphSwaps.begin(), m_glyphSwaps.end(),
                 [&](const GlyphSwap& entry) { return entry.item == slot.item; });
@@ -51213,17 +60103,35 @@ void Island::Render(bool force) {
     m_mediaMarquee = false;
     auto* target = m_canvas.target.get();
     const float scale = m_scale;
+    const float iconScale = IconScale();
 
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     // Opaque (only the glass theme lets what's behind show, by its own
     // opacity).
     target->CreateSolidColorBrush(Bg(1), brush.put());
+    // Over the Liquid Glass (once it shows), the shapes are only there to
+    // take the mouse: the glass has the color (see GlassLayer).
+    const bool liquid = LiquidGlassOn() && !m_away;
+    const bool overLiquid = liquid && m_liquid.Shown();
+    m_liquidShapes.clear();
+    auto addLiquid = [&](const D2D1_RECT_F& rect, float radius,
+                         float opacity) {
+        GlassShape shape;
+        shape.rect = rect;
+        shape.radius = radius;
+        shape.tint = Bg(GlassTint(kLiquidTint));
+        shape.opacity = opacity;
+        m_liquidShapes.push_back(shape);
+    };
 
     if (m_bar) {
         // Over the frosted glass, its strip has the color (see UpdateGlass);
         // the bar only takes the mouse.
-        if (m_barBlurred) {
+        if (m_barBlurred || overLiquid) {
             brush->SetColor(D2D1::ColorF(0, 0, 0, 1.0f / 255));
+        }
+        if (liquid) {
+            addLiquid(m_pill, 0, (float)std::clamp(m_appear, 0.0, 1.0));
         }
         target->FillRectangle(m_pill, brush.get());
         brush->SetColor(Fg(0.08f));
@@ -51252,15 +60160,24 @@ void Island::Render(bool force) {
             const float opacity = std::clamp(banner * 3, 0.0f, 1.0f);
             D2D1_COLOR_F fill = Bg(1);
             fill.a *= opacity;
+            if (liquid) {
+                addLiquid(rect, radius,
+                          opacity * (float)std::clamp(m_appear, 0.0, 1.0));
+            }
+            if (overLiquid) {
+                fill = D2D1::ColorF(0, 0, 0, 1.0f / 255);
+            }
             brush->SetColor(fill);
             target->FillRoundedRectangle({rect, radius, radius}, brush.get());
-            brush->SetColor(Fg(0.10f * opacity));
-            target->DrawRoundedRectangle(
-                {{rect.left + 0.5f, rect.top + 0.5f, rect.right - 0.5f,
-                  rect.bottom - 0.5f},
-                 radius,
-                 radius},
-                brush.get(), 1);
+            if (!overLiquid) {
+                brush->SetColor(Fg(0.10f * EdgeAmount() * opacity));
+                target->DrawRoundedRectangle(
+                    {{rect.left + 0.5f, rect.top + 0.5f, rect.right - 0.5f,
+                      rect.bottom - 0.5f},
+                     radius,
+                     radius},
+                    brush.get(), 1);
+            }
         }
     } else {
         // Between the thin line (0) and the pill (1).
@@ -51268,18 +60185,15 @@ void Island::Render(bool force) {
         const float centerX = (m_pill.left + m_pill.right) / 2;
         const float centerY = (m_pill.top + m_pill.bottom) / 2;
         const float hover = (float)std::clamp(m_lineHover, 0.0, 1.2);
-        // An invisible strip along the edge, so the mouse pushed against it
-        // reaches the line rather than the window behind it.
-        // (Notches hiding together: only the bell's has its line, the others
-        // fade away.)
-        const float shapeOpacity =
-            m_notchBase && !g_settings.islandNotchEach
-                ? std::clamp(e * 2.5f, 0.0f, 1.0f)
-                : 1.0f;
-        if (e < 0.5f && m_bannerAmount <= 0 && shapeOpacity >= 1) {
+        // An invisible strip along the edge (as long as chosen, see
+        // islandActivationWidth), so the mouse pushed against it reaches the
+        // line rather than the window behind it; also with the line unseen.
+        // (Notches hiding together: each one has its line, any one bringing
+        // them all back.)
+        if (e < 0.5f && m_bannerAmount <= 0) {
             brush->SetColor(D2D1::ColorF(0, 0, 0, 1.0f / 255));
             target->FillRectangle(
-                EdgeLineRect((kLineHoverWidth + 24) * scale,
+                EdgeLineRect(ActivationLength(scale),
                              (kLineHeight + kLineHoverGrowth + 8) * scale),
                 brush.get());
         }
@@ -51346,8 +60260,14 @@ void Island::Render(bool force) {
         // Round ends, whichever way it stands (a notch: its curves' size).
         const float pillRadius =
             std::min(rect.bottom - rect.top, rect.right - rect.left) / 2;
+        // (Corners chosen less round: the pill's, not its line's.)
         const float shapeRadius =
-            m_notch >= 0 ? std::min(pillRadius, NotchCurve()) : pillRadius;
+            m_notch >= 0
+                ? std::min(pillRadius, NotchCurve())
+                : pillRadius *
+                      (g_settings.islandPillCorners +
+                       (100 - g_settings.islandPillCorners) * lineMix) /
+                      100;
         const float bannerRadius = kIslandPanelRadius * scale;
         const float radius = std::min(
             pillRadius,
@@ -51355,12 +60275,18 @@ void Island::Render(bool force) {
                               std::clamp(banner, 0.0f, 1.0f) *
                               std::clamp(open, 0.0f, 1.0f));
         // The line is light, to be seen over dark and light windows alike.
+        // (Over the Liquid Glass, only the line has a color, fading as the
+        // pill opens, and the glass shows as much as it's gone.)
         const D2D1_COLOR_F background = Bg(1);
-        brush->SetColor(D2D1::ColorF(
-            background.r + (0.55f - background.r) * lineMix,
-            background.g + (0.55f - background.g) * lineMix,
-            background.b + (0.55f - background.b) * lineMix,
-            background.a + (0.74f - background.a) * lineMix));
+        brush->SetColor(
+            overLiquid
+                ? D2D1::ColorF(0.55f, 0.55f, 0.55f,
+                               std::max(0.74f * lineMix, 1.0f / 255))
+                : D2D1::ColorF(
+                      background.r + (0.55f - background.r) * lineMix,
+                      background.g + (0.55f - background.g) * lineMix,
+                      background.b + (0.55f - background.b) * lineMix,
+                      background.a + (0.74f - background.a) * lineMix));
         // A notch against the top edge: square there, its curves growing
         // out of the line as it opens (and staying with a banner).
         ID2D1PathGeometry* notchFill = nullptr;
@@ -51383,15 +60309,34 @@ void Island::Render(bool force) {
             }
             notchFill = m_notchFill.get();
             notchLine = m_notchLine.get();
+            if (liquid) {
+                GlassShape shape;
+                shape.rect = rect;
+                shape.radius = radius;
+                shape.shoulder = shoulder;
+                shape.edgeLeft = edgeLeft;
+                shape.edgeRight = edgeRight;
+                shape.tint = Bg(GlassTint(kLiquidTint));
+                shape.opacity = (1 - lineMix) * AppearFade();
+                m_liquidShapes.push_back(shape);
+            }
+        } else if (liquid) {
+            addLiquid(rect, radius, (1 - lineMix) * AppearFade());
         }
-        brush->SetOpacity(shapeOpacity);
+        // The line as see-through as chosen (islandLineOpacity); the pill,
+        // a peeking app and a banner opening out of it as usual.
+        brush->SetOpacity(
+            1 - lineMix * (1 - g_settings.islandLineOpacity / 100.0f));
+        // (Over the Liquid Glass, its own bright edge; only the line's.)
+        const float edge =
+            (overLiquid ? 0.0f : 0.10f * EdgeAmount()) + 0.3f * lineMix;
         if (notchFill && notchLine) {
             target->FillGeometry(notchFill, brush.get());
-            brush->SetColor(Fg(0.10f + 0.3f * lineMix));
+            brush->SetColor(Fg(edge));
             target->DrawGeometry(notchLine, brush.get(), 1);
         } else {
             target->FillRoundedRectangle({rect, radius, radius}, brush.get());
-            brush->SetColor(Fg(0.10f + 0.3f * lineMix));
+            brush->SetColor(Fg(edge));
             target->DrawRoundedRectangle(
                 {{rect.left + 0.5f, rect.top + 0.5f, rect.right - 0.5f,
                   rect.bottom - 0.5f},
@@ -51407,9 +60352,7 @@ void Island::Render(bool force) {
             const D2D1_RECT_F icon{middleX - size / 2, middleY - size / 2,
                                    middleX + size / 2, middleY + size / 2};
             const float opacity = std::clamp((peek - 0.3f) / 0.5f, 0.0f, 1.0f);
-            if (ID2D1Bitmap* bitmap = GetAppBitmap(m_peekApp)) {
-                target->DrawBitmap(bitmap, icon, opacity);
-            }
+            DrawAppIcon(target, brush.get(), m_peekApp, icon, opacity, false);
             const float dot = 3.5f * scale * std::clamp(peek, 0.0f, 1.0f);
             brush->SetColor(D2D1::ColorF(1.0f, 0.27f, 0.23f, opacity));
             target->FillEllipse({{icon.right - dot / 2, icon.top + dot / 2},
@@ -51449,7 +60392,7 @@ void Island::Render(bool force) {
                 target->FillRoundedRectangle(
                     {bubble, bubbleRadius, bubbleRadius}, brush.get());
             }
-            brush->SetColor(Fg(0.10f * opacity));
+            brush->SetColor(Fg(0.10f * EdgeAmount() * opacity));
             target->DrawRoundedRectangle(
                 {{bubble.left + 0.5f, bubble.top + 0.5f, bubble.right - 0.5f,
                   bubble.bottom - 0.5f},
@@ -51519,9 +60462,8 @@ void Island::Render(bool force) {
             const float fill =
                 iconSize / std::max(1.0f, std::min(imageSize.width,
                                                    imageSize.height));
-            winrt::com_ptr<ID2D1BitmapBrush> imageBrush;
-            if (SUCCEEDED(
-                    target->CreateBitmapBrush(image, imageBrush.put()))) {
+            if (winrt::com_ptr<ID2D1BitmapBrush> imageBrush =
+                    SmoothBitmapBrush(target, image)) {
                 imageBrush->SetOpacity(bannerContents);
                 imageBrush->SetTransform(
                     D2D1::Matrix3x2F::Scale(fill, fill) *
@@ -51542,15 +60484,16 @@ void Island::Render(bool force) {
                                          icon.bottom - small + outside,
                                          icon.right + outside,
                                          icon.bottom + outside};
-                target->DrawBitmap(bitmap, corner, bannerContents);
+                DrawBitmapSmooth(target, bitmap, corner, bannerContents);
             }
         } else if (ID2D1Bitmap* bitmap = GetAppBitmap(m_banner.appId)) {
-            target->DrawBitmap(bitmap, icon, bannerContents);
+            DrawBitmapSmooth(target, bitmap, icon, bannerContents);
         }
         const float left = icon.right + std::round(12 * scale);
         const float right = open.right - inner - std::round(4 * scale);
         const float line = std::round(18 * scale);
-        const float top = middle - line * 1.5f;
+        // The title and the text (two lines) centered by the icon.
+        const float top = middle - line;
         // The time gives way to the "x" under the mouse (fading, the "x"
         // growing in); the "x" lights up under the mouse.
         const float closeShown =
@@ -51851,9 +60794,11 @@ void Island::Render(bool force) {
             const SlotFade slotFade{target, slot.alpha < 0.999f};
             // (An app's or a tray icon's by its key, what's playing's by its
             // part.)
+            // (komorebi's workspace dots each on its own too.)
             const bool byText = slot.item == IslandItem::App ||
                                 slot.item == IslandItem::TrayIcon ||
-                                slot.item == IslandItem::QuickAction;
+                                slot.item == IslandItem::QuickAction ||
+                                slot.item == IslandItem::KomorebiWorkspace;
             const bool byPart = slot.item == IslandItem::Media;
             const bool hovered =
                 (slot.item == m_hover ||
@@ -51871,7 +60816,7 @@ void Island::Render(bool force) {
                          : byPart ? (slot.font == 6 ? 1 : 2)
                                   : 0),
                 hovered || (slot.item == IslandItem::Overflow && m_trayOpen));
-            if (lit > 0.01f) {
+            if (lit > 0.01f && g_settings.islandHoverHighlight) {
                 const float inset = std::round(4 * scale);
                 const D2D1_RECT_F rect =
                     m_vertical
@@ -51925,12 +60870,12 @@ void Island::Render(bool force) {
                     m_press.target == (int)IslandItem::Media
                         ? (float)m_press.Amount(NowSeconds())
                         : 0.0f;
-                const float size = std::round(18 * scale) *
+                const float size = std::round(kIslandPictureSize * iconScale) *
                                    (1 - 0.15f * std::clamp(press, -0.3f, 1.0f));
                 const float middle = (slot.rect.top + slot.rect.bottom) / 2;
                 // Where the cover sits: from the note's middle to the left.
                 const float noteCenter =
-                    slot.rect.left + std::round(kIslandIconSlot * scale) / 2;
+                    slot.rect.left + std::round(kIslandIconSlot * iconScale) / 2;
                 const float coverCenter =
                     noteCenter + (slot.rect.left + std::round(2 * scale) +
                                   size / 2 - noteCenter) *
@@ -51963,9 +60908,9 @@ void Island::Render(bool force) {
                         size / std::max(bitmapSize.height, 1.0f));
                     const float w = bitmapSize.width * fill;
                     const float h = bitmapSize.height * fill;
-                    target->DrawBitmap(image,
-                                       {coverCenter - w / 2, middle - h / 2,
-                                        coverCenter + w / 2, middle + h / 2});
+                    DrawBitmapSmooth(target, image,
+                                     {coverCenter - w / 2, middle - h / 2,
+                                      coverCenter + w / 2, middle + h / 2});
                     target->PopLayer();
                 };
                 const float coverSwap =
@@ -51985,7 +60930,7 @@ void Island::Render(bool force) {
                     target->DrawText(&kGlyphMusic, 1, m_iconFormat.get(), cover,
                                      brush.get());
                 }
-                if (title > 0.01f && m_bannerTextFormat) {
+                if (title > 0.01f && m_mediaTitleFormat) {
                     const float textLeft = slot.rect.left + std::round(2 * scale) +
                                            size + std::round(8 * scale);
                     const float textRight = std::max(
@@ -52000,7 +60945,7 @@ void Island::Render(bool force) {
                         target->DrawText(
                             m_mediaTitleBefore.c_str(),
                             (UINT32)m_mediaTitleBefore.size(),
-                            m_bannerTextFormat.get(),
+                            m_mediaTitleFormat.get(),
                             {textLeft, slot.rect.top - rise * (1 - swap),
                              std::max(textRight,
                                       textLeft + (float)m_mediaTitleWidth),
@@ -52016,7 +60961,7 @@ void Island::Render(bool force) {
                         m_mediaTitleFullWidth > textRight - textLeft + 1 &&
                         SUCCEEDED(m_dwrite->CreateTextLayout(
                             slot.text.c_str(), (UINT32)slot.text.size(),
-                            m_bannerTextFormat.get(), 10000,
+                            m_mediaTitleFormat.get(), 10000,
                             slot.rect.bottom - slot.rect.top,
                             scrolling.put()))) {
                         m_mediaMarquee = true;
@@ -52040,7 +60985,7 @@ void Island::Render(bool force) {
                     } else {
                         target->DrawText(
                             slot.text.c_str(), (UINT32)slot.text.size(),
-                            m_bannerTextFormat.get(),
+                            m_mediaTitleFormat.get(),
                             {textLeft, slot.rect.top + rise * swap, textRight,
                              slot.rect.bottom + rise * swap},
                             brush.get());
@@ -52088,8 +61033,8 @@ void Island::Render(bool force) {
                 const float shown =
                     contentOpacity * std::clamp(slot.scale, 0.0f, 1.0f);
                 const float middle = (slot.rect.top + slot.rect.bottom) / 2;
-                const float nameHeight = std::round(9 * scale);
-                const float valueHeight = std::round(13 * scale);
+                const float nameHeight = std::round(9 * m_usageScale);
+                const float valueHeight = std::round(13 * m_usageScale);
                 const float top =
                     std::round(middle - (nameHeight + valueHeight) / 2);
                 const float width = slot.rect.right - slot.rect.left;
@@ -52098,9 +61043,9 @@ void Island::Render(bool force) {
                         name.c_str(), (UINT32)name.size(),
                         m_usageLabelFormat.get(), width, nameHeight,
                         nameLayout.put()))) {
-                    nameLayout->SetFontFamilyName(L"Segoe Fluent Icons",
+                    nameLayout->SetFontFamilyName(IconFont(),
                                                   {0, 1});
-                    nameLayout->SetFontSize(7 * scale, {0, 1});
+                    nameLayout->SetFontSize(7 * m_usageScale, {0, 1});
                     brush->SetColor(Fg(0.55f * shown));
                     target->DrawTextLayout({slot.rect.left, top},
                                            nameLayout.get(), brush.get());
@@ -52135,6 +61080,99 @@ void Island::Render(bool force) {
                 target->PopAxisAlignedClip();
                 continue;
             }
+            if (slot.font == kNamedItemFont && m_itemNameFormat) {
+                // komorebi's grid, the desktop's glyph or the app's own icon,
+                // then the name (upright, the icon alone); another one comes
+                // up from below as the one before slides up and out.
+                const bool komorebi = slot.item == IslandItem::KomorebiLayout;
+                const ItemWidth& width = komorebi ? m_komorebiWidth
+                                                  : m_focusWidth;
+                const float shown =
+                    contentOpacity * std::clamp(slot.scale, 0.0f, 1.0f);
+                const float iconWidth = std::round(22 * scale);
+                const float iconLeft =
+                    m_vertical
+                        ? (slot.rect.left + slot.rect.right - iconWidth) / 2
+                        : slot.rect.left;
+                auto drawNamed = [&](const std::wstring& iconKey,
+                                     const std::wstring& name, float alpha,
+                                     float shift) {
+                    if (alpha <= 0.004f) {
+                        return;
+                    }
+                    const D2D1_RECT_F icon{iconLeft, slot.rect.top + shift,
+                                           iconLeft + iconWidth,
+                                           slot.rect.bottom + shift};
+                    if (iconKey.starts_with(L'\x1')) {
+                        brush->SetColor(FgIcon(0.95f * alpha));
+                        DrawKomorebiIcon(
+                            target, brush.get(),
+                            {(icon.left + icon.right) / 2,
+                             (icon.top + icon.bottom) / 2},
+                            iconScale, _wtoi(iconKey.c_str() + 1));
+                    } else if (!iconKey.empty()) {
+                        const float size = kIslandPictureSize * iconScale;
+                        const float middleX = (icon.left + icon.right) / 2;
+                        const float middleY = (icon.top + icon.bottom) / 2;
+                        DrawAppIcon(target, brush.get(), iconKey,
+                                    {middleX - size / 2, middleY - size / 2,
+                                     middleX + size / 2, middleY + size / 2},
+                                    alpha, true);
+                    } else if (m_smallIconFormat) {
+                        const WCHAR glyph =
+                            komorebi ? kGlyphKomorebiLayout : kGlyphDesktop;
+                        brush->SetColor(FgIcon(0.95f * alpha));
+                        target->DrawText(&glyph, 1, m_smallIconFormat.get(),
+                                         icon, brush.get());
+                    }
+                    if (!m_vertical) {
+                        brush->SetColor(Fg(0.95f * alpha));
+                        target->DrawText(
+                            name.c_str(), (UINT32)name.size(),
+                            m_itemNameFormat.get(),
+                            {icon.right, icon.top,
+                             slot.rect.right - std::round(4 * scale),
+                             icon.bottom},
+                            brush.get());
+                    }
+                };
+                const float swap = (float)std::clamp(width.swap, 0.0, 1.0);
+                if (swap > 0.004f && !width.nameBefore.empty()) {
+                    drawNamed(width.iconBefore, width.nameBefore,
+                              shown * swap * swap, -(1 - swap) * 8 * scale);
+                }
+                drawNamed(width.name.empty() ? std::wstring() : width.icon,
+                          width.name.empty() ? slot.text : width.name,
+                          shown * (1 - swap * swap), swap * 8 * scale);
+                continue;
+            }
+            if (slot.font == kWorkspaceDotFont) {
+                // A workspace's dot: lit for the one shown, faint for one
+                // with windows, a ring for an empty one; brighter under the
+                // mouse.
+                const float shown =
+                    contentOpacity * std::clamp(slot.scale, 0.0f, 1.0f);
+                const bool lit = slot.text.ends_with(L"*");
+                const bool windows = slot.text.ends_with(L"+");
+                const bool hover = m_hover == IslandItem::KomorebiWorkspace &&
+                                   m_hoverApp == slot.text;
+                const D2D1_ELLIPSE dot{{(slot.rect.left + slot.rect.right) / 2,
+                                        (slot.rect.top + slot.rect.bottom) / 2},
+                                       3.5f * scale,
+                                       3.5f * scale};
+                if (lit || windows) {
+                    brush->SetColor(Fg((lit ? 0.95f : hover ? 0.65f : 0.45f) *
+                                       shown));
+                    target->FillEllipse(dot, brush.get());
+                } else {
+                    brush->SetColor(Fg((hover ? 0.65f : 0.4f) * shown));
+                    target->DrawEllipse(
+                        {dot.point, dot.radiusX - 0.6f * scale,
+                         dot.radiusY - 0.6f * scale},
+                        brush.get(), 1.2f * scale);
+                }
+                continue;
+            }
             if (slot.font == 9 && m_textFormat) {
                 const size_t tab = slot.text.find(L'\t');
                 const std::wstring emoji = slot.text.substr(0, tab);
@@ -52143,13 +61181,14 @@ void Island::Render(bool force) {
                                               : slot.text.substr(tab + 1);
                 const float shown =
                     contentOpacity * std::clamp(slot.scale, 0.0f, 1.0f);
-                if (!m_weatherEmojiFormat || m_weatherEmojiScale != scale) {
-                    m_weatherEmojiScale = scale;
+                if (!m_weatherEmojiFormat ||
+                    m_weatherEmojiScale != m_textScale) {
+                    m_weatherEmojiScale = m_textScale;
                     m_weatherEmojiFormat = nullptr;
                     m_dwrite->CreateTextFormat(
                         L"Segoe UI Emoji", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
                         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                        13 * scale, L"", m_weatherEmojiFormat.put());
+                        13 * m_textScale, L"", m_weatherEmojiFormat.put());
                     if (m_weatherEmojiFormat) {
                         m_weatherEmojiFormat->SetTextAlignment(
                             DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -52157,7 +61196,7 @@ void Island::Render(bool force) {
                             DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                     }
                 }
-                const float emojiWidth = std::round(20 * scale);
+                const float emojiWidth = std::round(20 * m_textScale);
                 // The weather before fading out, sliding up, as this one
                 // comes up from below.
                 const float swap =
@@ -52217,7 +61256,7 @@ void Island::Render(bool force) {
                     D2D1::Matrix3x2F::Scale(size, size, center) *
                     D2D1::Matrix3x2F::Rotation((float)m_themeTurn * 180,
                                                center));
-                const float full = std::round(kIslandIconSlot * scale);
+                const float full = std::round(kIslandIconSlot * iconScale);
                 const WCHAR glyph = 0xE7A1;
                 brush->SetColor(FgIcon(0.95f * contentOpacity *
                                        std::clamp(slot.scale, 0.0f, 1.0f)));
@@ -52247,7 +61286,7 @@ void Island::Render(bool force) {
             if (slot.font == 4) {
                 const TrayIcon* icon = FindTrayIcon(slot.text);
                 const float shown = std::max(slot.scale, 0.0f);
-                const float size = 16 * scale * shown;
+                const float size = kIslandPictureSize * iconScale * shown;
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 const float centerY = (slot.rect.top + slot.rect.bottom) / 2;
                 const D2D1_RECT_F rect{centerX - size / 2, centerY - size / 2,
@@ -52264,7 +61303,7 @@ void Island::Render(bool force) {
                         m_vertical ? trayList->rect.top : trayList->rect.left;
                     const float end = m_vertical ? trayList->rect.bottom
                                                  : trayList->rect.right;
-                    const float fade = kIslandIconSlot * scale * 1.2f;
+                    const float fade = kIslandIconSlot * iconScale * 1.2f;
                     if (m_trayMoreBefore) {
                         opacity *= std::clamp((center - start) / fade, 0.15f,
                                               1.0f);
@@ -52275,7 +61314,7 @@ void Island::Render(bool force) {
                     }
                 }
                 if (ID2D1Bitmap* bitmap = icon ? GetTrayBitmap(*icon) : nullptr) {
-                    target->DrawBitmap(bitmap, rect, opacity);
+                    DrawBitmapSmooth(target, bitmap, rect, opacity);
                 }
                 // The pin, on the icon under the mouse after a moment
                 // (growing in): filled when pinned.
@@ -52312,20 +61351,15 @@ void Island::Render(bool force) {
             }
             if (slot.font == 3) {
                 const float shown = std::max(slot.scale, 0.0f);
-                const float size = 18 * scale * shown;
+                const float size = kIslandPictureSize * iconScale * shown;
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 const float centerY = (slot.rect.top + slot.rect.bottom) / 2;
                 const D2D1_RECT_F icon{centerX - size / 2, centerY - size / 2,
                                        centerX + size / 2, centerY + size / 2};
                 const float opacity =
                     contentOpacity * std::clamp(shown, 0.0f, 1.0f);
-                if (ID2D1Bitmap* bitmap = GetAppBitmap(slot.text)) {
-                    target->DrawBitmap(bitmap, icon, opacity);
-                } else {
-                    brush->SetColor(Fg(0.3f * opacity));
-                    target->FillRoundedRectangle(
-                        {icon, size / 4, size / 4}, brush.get());
-                }
+                DrawAppIcon(target, brush.get(), slot.text, icon, opacity,
+                            true);
                 const int count = AppCount(slot.text);
                 if (count > 0 && m_badgeFormat) {
                     // A red bubble with the count, over the icon's corner;
@@ -52348,9 +61382,8 @@ void Island::Render(bool force) {
                     const float ink = g_theme.light > 0.5f ? 0.0f : 1.0f;
                     brush->SetColor(D2D1::ColorF(ink, ink, ink, opacity));
                     if (shown > 0.6f) {
-                        target->DrawText(number.c_str(), (UINT32)number.size(),
-                                         m_badgeFormat.get(), bubble,
-                                         brush.get());
+                        DrawInkCentered(m_dwrite.get(), target, brush.get(),
+                                        number, m_badgeFormat.get(), bubble);
                     }
                     continue;
                 }
@@ -52452,9 +61485,8 @@ void Island::Render(bool force) {
                                  m_iconFormat.get(), slot.rect, brush.get());
                 continue;
             }
-            auto* format = slot.font == 1   ? m_iconFormat.get()
-                           : slot.font == 2 ? m_smallIconFormat.get()
-                                            : m_textFormat.get();
+            auto* format =
+                slot.font == 1 ? m_iconFormat.get() : m_textFormat.get();
             if (!format) {
                 continue;
             }
@@ -52469,10 +61501,15 @@ void Island::Render(bool force) {
                 glyphScale *=
                     1 - 0.55f * (float)std::clamp(m_playSwap, 0.0, 1.0);
             }
+            // The battery's glyph is low and wide, smaller-looking than the
+            // others: a bit bigger, as big as them (at every icon size).
+            if (slot.item == IslandItem::Battery && slot.font == 1) {
+                glyphScale *= 1.2f;
+            }
             float glyphOpacity = std::clamp(slot.scale, 0.0f, 1.0f);
             // Another icon for it (see m_glyphSwaps): the one before shrinks
             // and fades out as this one grows in.
-            if (slot.font == 1 || slot.font == 2) {
+            if (slot.font == 1) {
                 for (const auto& swap : m_glyphSwaps) {
                     if (swap.item != slot.item || swap.t <= 0.004 ||
                         swap.from.empty()) {
@@ -52482,9 +61519,7 @@ void Island::Render(bool force) {
                     const D2D1_POINT_2F middle{
                         (slot.rect.left + slot.rect.right) / 2,
                         (slot.rect.top + slot.rect.bottom) / 2};
-                    const float full = std::round(
-                        (slot.font == 2 ? kIslandSmallSlot : kIslandIconSlot) *
-                        scale);
+                    const float full = std::round(kIslandIconSlot * iconScale);
                     const float beforeScale =
                         std::max(glyphScale, 0.0f) * (0.6f + 0.4f * t);
                     target->SetTransform(D2D1::Matrix3x2F::Scale(
@@ -52509,13 +61544,22 @@ void Island::Render(bool force) {
                      (slot.rect.top + slot.rect.bottom) / 2}));
             }
             // (Icons in their own color, see FgIcon.)
-            auto* ink = slot.font == 1 || slot.font == 2 ? FgIcon : Fg;
+            auto* ink = slot.font == 1 ? FgIcon : Fg;
             brush->SetColor(
                 ink((slot.item == IslandItem::Minimize ? 0.6f : 0.95f) *
                     contentOpacity * glyphOpacity));
+            // Charging (its glyph with the bolt, see BatteryGlyph): green,
+            // like a phone's.
+            if (slot.item == IslandItem::Battery && !slot.text.empty() &&
+                (slot.text[0] == 0xEA93 ||
+                 (slot.text[0] >= 0xE85A && slot.text[0] <= 0xE863))) {
+                brush->SetColor(
+                    D2D1::ColorF(0.19f, 0.82f, 0.35f,
+                                 0.95f * contentOpacity * glyphOpacity));
+            }
             // A control center button whose thing is on: on a round fill of
-            // the accent, in its ink (like the control center's tiles), seen
-            // whatever the colors.
+            // the icons' color, the glyph in the background's (seen whatever
+            // the colors, and colored like every other item).
             if (slot.item == IslandItem::QuickAction && slot.action >= 0 &&
                 slot.action < (int)ARRAYSIZE(kPillActions) &&
                 PillActionLit(kPillActions[slot.action].id)) {
@@ -52524,13 +61568,13 @@ void Island::Render(bool force) {
                     std::min(slot.rect.right - slot.rect.left,
                              slot.rect.bottom - slot.rect.top) *
                     0.42f;
-                brush->SetColor(Accent(lit));
+                brush->SetColor(FgIcon(0.95f * lit));
                 target->FillEllipse({{(slot.rect.left + slot.rect.right) / 2,
                                       (slot.rect.top + slot.rect.bottom) / 2},
                                      round,
                                      round},
                                     brush.get());
-                brush->SetColor(AccentInk(lit));
+                brush->SetColor(Bg(lit));
             }
             // Upright, the clock is two lines: the time, the date under it.
             if (slot.font == 0 && m_vertical && m_bannerTimeFormat) {
@@ -52597,10 +61641,7 @@ void Island::Render(bool force) {
             // squeezed into their room.
             D2D1_RECT_F glyphRect = slot.rect;
             if (slot.scale < 1) {
-                const float full =
-                    std::round((slot.font == 2 ? kIslandSmallSlot
-                                               : kIslandIconSlot) *
-                               scale);
+                const float full = std::round(kIslandIconSlot * iconScale);
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 glyphRect.left = centerX - full / 2;
                 glyphRect.right = centerX + full / 2;
@@ -52720,6 +61761,18 @@ void Island::Render(bool force) {
                               : AppearFade())) {
         m_drawnKey.clear();
     }
+    // (Its shapes already fade with the island, see addLiquid.)
+    if (liquid) {
+        m_liquid.Show(m_hwnd, m_position, m_size, m_liquidShapes);
+        // Drawn for the glass, which is gone (Windows refused its blur):
+        // drawn again with its own background.
+        if (overLiquid && !m_liquid.Shown()) {
+            Render(true);
+            return;
+        }
+    } else {
+        m_liquid.Hide();
+    }
     RenderBarBubble();
     PublishTrayPlaces();
 }
@@ -52804,7 +61857,7 @@ void Island::RenderBarBubble() {
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     if (SUCCEEDED(target->CreateSolidColorBrush(fill, brush.put()))) {
         target->FillRoundedRectangle({bubble, radius, radius}, brush.get());
-        brush->SetColor(Fg(0.10f * opacity));
+        brush->SetColor(Fg(0.10f * EdgeAmount() * opacity));
         target->DrawRoundedRectangle(
             {{bubble.left + 0.5f, bubble.top + 0.5f, bubble.right - 0.5f,
               bubble.bottom - 0.5f},
@@ -52841,8 +61894,9 @@ void Island::RenderBarBubble() {
 // full-screen app): it fades with the bar, or as the pill closes into its
 // dot, going away and coming back.
 void Island::UpdateGlass() {
-    const bool wanted = g_settings.islandFrosted && g_transparencyEffects &&
-                        !m_away && m_notch < 0;
+    const bool wanted = g_settings.islandFrosted &&
+                        !g_settings.islandLiquidGlass &&
+                        g_transparencyEffects && !m_away && m_notch < 0;
     m_barBlurred = wanted && m_bar;
     RECT strip{};
     if (m_barBlurred) {
@@ -52918,7 +61972,7 @@ void Island::UpdateInputMethodWatch() {
     if (!m_hwnd || !m_main) {
         return;
     }
-    if (!g_settings.islandInputMethod) {
+    if (!AnyIslandLook([](Island&) { return g_settings.islandInputMethod; })) {
         for (HWINEVENTHOOK& hook : m_inputMethodHooks) {
             if (hook) {
                 UnhookWinEvent(hook);
@@ -52926,7 +61980,8 @@ void Island::UpdateInputMethodWatch() {
             }
         }
         KillTimer(m_hwnd, kInputMethodTimerId);
-        m_inputMethodText.clear();
+        ForEachIsland(
+            [](Island& island) { island.m_inputMethodText.clear(); });
         return;
     }
     if (!m_inputMethodHooks[0]) {
@@ -52976,7 +62031,12 @@ void Island::StartInputMethodQuery() {
 
 // Its short text: the input method's letters ("中" or "英", "あ" or "A",
 // "가" or "A"), or the keyboard's language ("PT") when there are others to
-// switch to. Changed while the pill is minimized: said once in its bubble.
+// switch to. Changed while the pill is minimized: said once in its bubble
+// (over the line, by the island with its item), only when it changed in the
+// same app (each window keeps its own: opening Start or going to another
+// app isn't a change). A window in front that isn't an app's (an input
+// method's question as the mode switches, like Microsoft Pinyin's) keeps
+// the app behind it; Start and the search count as their own.
 void Island::OnInputMethod(WPARAM state, LPARAM layouts) {
     const LANGID language = LOWORD(state);
     const WORD mode = HIWORD(state);
@@ -53003,20 +62063,34 @@ void Island::OnInputMethod(WPARAM state, LPARAM layouts) {
             }
             break;
     }
+    const HWND window = GetForegroundWindow();
+    WCHAR className[32] = L"";
+    GetClassName(window, className, ARRAYSIZE(className));
+    DWORD process = m_inputMethodProcess;
+    if (IsAppWindow(window) ||
+        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0) {
+        GetWindowThreadProcessId(window, &process);
+    }
+    const bool sameApp = process && process == m_inputMethodProcess;
+    m_inputMethodProcess = process;
     if (text == m_inputMethodText) {
         return;
     }
-    const bool told = !m_inputMethodText.empty();
+    const bool told = !m_inputMethodText.empty() && sameApp;
     m_inputMethodText = text;
-    if (told && !text.empty() && m_minimized && !m_bar) {
+    if (told && !text.empty() && m_main && m_minimized && !m_bar &&
+        HasMainSettings() && InThisNotch(PillGroup::InputMethod)) {
         WCHAR native[64] = L"";
         GetLocaleInfo(MAKELCID(language, SORT_DEFAULT),
                       LOCALE_SNATIVELANGUAGENAME, native, ARRAYSIZE(native));
-        ShowTextBubble(text + L"  " +
-                           (mode == 2 ? std::wstring(Tr(L"English letters",
-                                                        L"Letras em inglês"))
-                                      : std::wstring(native)),
-                       SlotMiddle(IslandItem::Minimize));
+        // ("中文(简体)" alone: it starts with its letter already.)
+        ShowTextBubble(mode == 2 ? text + L"  " +
+                                       Tr(L"English letters",
+                                          L"Letras em inglês")
+                       : std::wstring_view{native}.starts_with(text)
+                           ? std::wstring(native)
+                           : text + L"  " + native,
+                       -1);
     }
     Relayout();
 }
@@ -53025,10 +62099,12 @@ void Island::UpdatePrivacyWatch() {
     if (!m_hwnd || !m_main) {
         return;
     }
-    if (g_settings.islandPrivacy == (g_privacyThread != nullptr)) {
+    const bool wanted =
+        AnyIslandLook([](Island&) { return g_settings.islandPrivacy; });
+    if (wanted == (g_privacyThread != nullptr)) {
         return;
     }
-    if (!g_settings.islandPrivacy) {
+    if (!wanted) {
         // (The islands hear it's empty now.)
         StopPrivacyWatch();
         PostMessage(m_hwnd, WM_APP_PRIVACY, 0, 0);
@@ -53087,6 +62163,22 @@ std::wstring Island::ItemTip(IslandItem item, const std::wstring& text) const {
     }
     if (item == IslandItem::Folders) {
         return Tr(L"Folders and places", L"Pastas e locais");
+    }
+    if (item == IslandItem::KomorebiLayout) {
+        const KomorebiMonitor* monitor = KomorebiMonitorOf(m_monitorHandle);
+        return monitor ? L"komorebi \u00B7 " +
+                             KomorebiLayoutName(*monitor,
+                                                g_komorebiShown.paused)
+                       : L"komorebi";
+    }
+    if (item == IslandItem::FocusedApp) {
+        return m_focusName;
+    }
+    if (item == IslandItem::KomorebiWorkspace) {
+        const KomorebiMonitor* monitor = KomorebiMonitorOf(m_monitorHandle);
+        return monitor ? L"komorebi \u00B7 " +
+                             KomorebiWorkspaceName(*monitor, _wtoi(text.c_str()))
+                       : std::wstring();
     }
     // The others: their group's name (with the percentage for the volume
     // and the battery).
@@ -53209,7 +62301,7 @@ void Island::UpdateDesktopsWatch() {
     if (!m_hwnd || !m_main) {
         return;
     }
-    if (!g_settings.islandDesktops) {
+    if (!AnyIslandLook([](Island&) { return g_settings.islandDesktops; })) {
         StopDesktopsWatch();
         if (!m_desktops.names.empty()) {
             ForEachIsland([](Island& island) {
@@ -53253,6 +62345,285 @@ void Island::StopDesktopsWatch() {
     }
 }
 
+// komorebi's state is read by the main island while one of the islands
+// shows its layout (each with its own look), for all of them.
+void Island::UpdateKomorebiWatch() {
+    if (!m_main) {
+        if (Island* main = MainIsland(); main && main != this) {
+            IslandScope scope(main);
+            main->UpdateKomorebiWatch();
+        }
+        return;
+    }
+    if (!m_hwnd) {
+        return;
+    }
+    if (!AnyIslandLook([](Island&) { return g_settings.komorebiLayout; })) {
+        const bool shown = g_komorebiShown.connected;
+        StopKomorebiWatch();
+        if (shown) {
+            ForEachIsland([](Island& island) {
+                island.m_komorebiPanel.Close();
+                island.Relayout();
+            });
+        }
+        return;
+    }
+    if (m_komorebiWatch) {
+        return;
+    }
+    // The thread gets its own copies of the events (it closes them).
+    HANDLE stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    HANDLE kick = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    HANDLE stopCopy = nullptr;
+    HANDLE kickCopy = nullptr;
+    const HANDLE process = GetCurrentProcess();
+    if (!stop || !kick ||
+        !DuplicateHandle(process, stop, process, &stopCopy, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS) ||
+        !DuplicateHandle(process, kick, process, &kickCopy, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS)) {
+        for (HANDLE handle : {stop, kick, stopCopy, kickCopy}) {
+            if (handle) {
+                CloseHandle(handle);
+            }
+        }
+        return;
+    }
+    auto* job = new KomorebiWatchJob{m_hwnd, stopCopy, kickCopy};
+    m_komorebiWatch =
+        CreateThread(nullptr, 0, KomorebiWatchThreadProc, job, 0, nullptr);
+    if (!m_komorebiWatch) {
+        delete job;
+        for (HANDLE handle : {stop, kick, stopCopy, kickCopy}) {
+            CloseHandle(handle);
+        }
+        return;
+    }
+    m_komorebiWatchStop = stop;
+    g_komorebiKick = kick;
+}
+
+// Its thread told to stop and waited for (every wait in it ends with the
+// stop: a while at most); what it read is forgotten. Only the island that
+// runs it.
+void Island::StopKomorebiWatch() {
+    if (!m_komorebiWatch && !m_komorebiWatchStop) {
+        return;
+    }
+    if (m_komorebiWatchStop) {
+        SetEvent(m_komorebiWatchStop);
+    }
+    if (m_komorebiWatch) {
+        WaitForSingleObject(m_komorebiWatch, 5000);
+        CloseHandle(m_komorebiWatch);
+        m_komorebiWatch = nullptr;
+    }
+    if (m_komorebiWatchStop) {
+        CloseHandle(m_komorebiWatchStop);
+        m_komorebiWatchStop = nullptr;
+    }
+    if (g_komorebiKick) {
+        CloseHandle(g_komorebiKick);
+        g_komorebiKick = nullptr;
+    }
+    AcquireSRWLockExclusive(&g_komorebiLock);
+    g_komorebiState = {};
+    ReleaseSRWLockExclusive(&g_komorebiLock);
+    g_komorebiShown = {};
+}
+
+// A name's width on the pill (measured again only when it or the size
+// changes).
+float Island::MeasureItemName(ItemWidth& width,
+                              const std::wstring& name,
+                              float height) {
+    const std::wstring key = name + L"|" + std::to_wstring(m_textScale);
+    if (key != width.measuredKey) {
+        width.measuredKey = key;
+        width.measured = 0;
+        winrt::com_ptr<IDWriteTextLayout> layout;
+        if (m_itemNameFormat &&
+            SUCCEEDED(m_dwrite->CreateTextLayout(
+                name.c_str(), (UINT32)name.size(), m_itemNameFormat.get(),
+                10000, height, layout.put()))) {
+            DWRITE_TEXT_METRICS metrics{};
+            layout->GetMetrics(&metrics);
+            width.measured = std::ceil(metrics.widthIncludingTrailingWhitespace);
+        }
+    }
+    return width.measured;
+}
+
+// An app's name, as Windows' Start lists it, or as its program file
+// describes it ("Google Chrome").
+std::wstring FocusedAppName(const std::wstring& key) {
+    return key.find(L'\\') != std::wstring::npos ? GetProgramName(key.c_str())
+                                                 : AppDisplayName(key);
+}
+
+// The app in focus as the taskbar knows it: by its ID when Windows lists the
+// app under it (Start, or a notification sender's registration); otherwise
+// (like Steam's window: "Valve.Steam.Client", listed nowhere, in its helper
+// steamwebhelper.exe) by the program the window says starts it again and the
+// name it gives (`name`, empty if none), or by its process's file.
+std::wstring FocusedAppKey(HWND window, std::wstring* name) {
+    name->clear();
+    std::wstring key = GetWindowAppId(window);
+    if (!key.empty()) {
+        winrt::com_ptr<IShellItem> item;
+        bool registered = false;
+        // (A packaged app's: its package's icon if not its own.)
+        if (key.find(L'!') != std::wstring::npos ||
+            SUCCEEDED(SHCreateItemInKnownFolder(kFOLDERID_AppsFolder, 0,
+                                                key.c_str(),
+                                                IID_PPV_ARGS(item.put()))) ||
+            (RegisteredAppValue(key, L"DisplayName", &registered),
+             registered)) {
+            return key;
+        }
+    }
+    // (Its relaunch program, see WindowRelaunchProgram.)
+    if (const std::wstring program = WindowRelaunchProgram(window);
+        !program.empty()) {
+        *name = GetWindowAppText(window, 4);
+        if (!name->empty() && (*name)[0] == L'@') {
+            WCHAR resolved[256];
+            *name = SUCCEEDED(SHLoadIndirectString(name->c_str(), resolved,
+                                                   ARRAYSIZE(resolved),
+                                                   nullptr))
+                        ? resolved
+                        : L"";
+        }
+        return program;
+    }
+    // (Its process's file, as for a window without an ID.)
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (HANDLE process =
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
+        WCHAR path[MAX_PATH];
+        DWORD length = ARRAYSIZE(path);
+        if (QueryFullProcessImageName(process, 0, path, &length)) {
+            key = path;
+        }
+        CloseHandle(process);
+    }
+    return key;
+}
+
+// The app window on top on a screen (not the island's own, hidden,
+// minimized or on another desktop), for the app in focus before any focus
+// change says so; none if there isn't one.
+HWND FindTopAppWindow(HMONITOR screen) {
+    if (!screen) {
+        return nullptr;
+    }
+    HWND window = GetTopWindow(nullptr);
+    for (int i = 0; window && i < 1000;
+         i++, window = GetWindow(window, GW_HWNDNEXT)) {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(window, &processId);
+        if (processId != GetCurrentProcessId() && !IsIconic(window) &&
+            IsAppWindow(window) && !IsCloakedWindow(window) &&
+            !IsDesktopWindow(window) &&
+            !(GetWindowLong(window, GWL_EXSTYLE) & WS_EX_TOPMOST) &&
+            MonitorFromWindow(window, MONITOR_DEFAULTTONULL) == screen) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+void Island::ClearFocusedApp() {
+    if (!m_focusWindow && !m_focusDesktop) {
+        return;
+    }
+    m_focusWindow = nullptr;
+    m_focusDesktop = false;
+    m_focusKey.clear();
+    m_focusName.clear();
+    Relayout();
+}
+
+// The app in focus on this island's monitor (an option): the window in
+// front when it's on this monitor (not Windows' menus, Start and flyouts),
+// or the desktop when it's clicked here. Kept until it closes, is minimized,
+// or goes to another monitor or desktop (see CheckFocusedApp).
+void Island::NoteFocusedApp(HWND window) {
+    if (!g_settings.islandFocusedApp || !window) {
+        return;
+    }
+    if (IsDesktopWindow(window)) {
+        // (One window for every monitor: the one clicked is the mouse's.)
+        POINT cursor;
+        if (m_focusDesktop || !GetCursorPos(&cursor) ||
+            MonitorFromPoint(cursor, MONITOR_DEFAULTTONULL) !=
+                m_monitorHandle) {
+            return;
+        }
+        m_focusWindow = nullptr;
+        m_focusDesktop = true;
+        m_focusKey.clear();
+        m_focusName = Tr(L"Desktop", L"Área de trabalho");
+        Relayout();
+        return;
+    }
+    if (window == m_focusWindow || window == m_focusSkipped ||
+        MonitorFromWindow(window, MONITOR_DEFAULTTONULL) != m_monitorHandle) {
+        return;
+    }
+    // (Not the mod's own windows: a dialog of the island's, like its color
+    // picker or a backup's file dialog.)
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    std::wstring key;
+    std::wstring name;
+    if (processId == GetCurrentProcessId() || IsShellFlyout(window) ||
+        !IsAppWindow(window) || IsCloakedWindow(window) ||
+        (key = FocusedAppKey(window, &name)).empty()) {
+        m_focusSkipped = window;
+        return;
+    }
+    m_focusWindow = window;
+    m_focusSkipped = nullptr;
+    if (key == m_focusKey && !m_focusDesktop) {
+        return;
+    }
+    m_focusDesktop = false;
+    m_focusKey = key;
+    m_focusName = name.empty() ? FocusedAppName(key) : name;
+    // (Its icon read now, not while drawing a frame.)
+    if (m_canvas.target) {
+        GetAppBitmap(m_focusKey);
+    }
+    Relayout();
+}
+
+// Each second: the app shown gone (closed, minimized, hidden, on another
+// monitor or desktop), or the window in front moved onto this monitor
+// (no focus change says so).
+void Island::CheckFocusedApp() {
+    if (!g_settings.islandFocusedApp) {
+        return;
+    }
+    if (m_focusWindow &&
+        (!IsWindow(m_focusWindow) || !IsWindowVisible(m_focusWindow) ||
+         IsIconic(m_focusWindow) || IsCloakedWindow(m_focusWindow) ||
+         MonitorFromWindow(m_focusWindow, MONITOR_DEFAULTTONULL) !=
+             m_monitorHandle)) {
+        ClearFocusedApp();
+    }
+    HWND foreground = GetForegroundWindow();
+    DWORD processId = 0;
+    if (foreground && foreground != m_focusWindow &&
+        !IsDesktopWindow(foreground) &&
+        GetWindowThreadProcessId(foreground, &processId) &&
+        processId != GetCurrentProcessId()) {
+        NoteFocusedApp(foreground);
+    }
+}
+
 void ChooseWallpaper(Island* island,
                      const std::vector<std::wstring>& paths,
                      int index) {
@@ -53287,6 +62658,14 @@ void Island::ChangeWallpaper(const std::vector<std::wstring>& paths,
     if (!m_wallpaperThread) {
         delete change;
     }
+}
+
+// What's playing's app was asked to come back by its tray icon: looked for
+// a moment, then started by its ID if its window didn't come.
+void Island::WatchMediaAppOpen(const std::wstring& appId) {
+    m_mediaOpenApp = appId;
+    m_mediaOpenAt = NowSeconds();
+    SetTimer(m_hwnd, kMediaOpenTimerId, kMediaOpenCheckMs, nullptr);
 }
 
 // The wheel on the item: the next picture (the folder read again the first
@@ -53368,11 +62747,14 @@ void Island::RunPillAction(int action) {
             break;
         case ControlId::Komorebi:
             // Its own small panel: the control center with only its
-            // buttons (clicked again: closed).
+            // buttons (clicked again: closed; open for another item: it
+            // goes under this one).
             HideGearBubble();
             if (!m_control.SetOnly(ControlPanel::Only::Komorebi) ||
                 !m_control.IsOpen()) {
                 TogglePanel(m_control, IslandItem::QuickAction, key);
+            } else {
+                MovePanel(m_control, IslandItem::QuickAction, key);
             }
             break;
         case ControlId::Network:
@@ -53388,6 +62770,8 @@ void Island::RunPillAction(int action) {
             m_control.ShowControl(id);
             if (!m_control.IsOpen()) {
                 TogglePanel(m_control, IslandItem::QuickAction, key);
+            } else {
+                MovePanel(m_control, IslandItem::QuickAction, key);
             }
             break;
         }
@@ -53476,9 +62860,11 @@ int WindowColor(HWND hWnd) {
 }
 
 // Whether USB drives are watched: for their icon, or to tell when one is
-// plugged in.
+// plugged in (by any island, each with its own look).
 bool UsbDrivesWatched() {
-    return g_settings.islandUsbDrives || g_settings.islandUsbNotify;
+    return AnyIslandLook([](Island&) {
+        return g_settings.islandUsbDrives || g_settings.islandUsbNotify;
+    });
 }
 
 // Listed by the main island while one of the options is on: when it starts,
@@ -53827,17 +63213,65 @@ ID2D1Bitmap* Island::GetBannerImage() {
     return m_bannerImage.get();
 }
 
+void Island::DrawAppIcon(ID2D1RenderTarget* target,
+                         ID2D1SolidColorBrush* brush,
+                         const std::wstring& appId,
+                         const D2D1_RECT_F& icon,
+                         float opacity,
+                         bool missingShown) {
+    const float size = icon.right - icon.left;
+    if (appId == kWidgetsBadgeId) {
+        if (!m_iconFormat || size <= 0) {
+            return;
+        }
+        // (The glyph at the icon's size, as it grows in.)
+        const WCHAR glyph[] = {kGlyphWidgets, 0};
+        D2D1_MATRIX_3X2_F transform;
+        target->GetTransform(&transform);
+        target->SetTransform(
+            D2D1::Matrix3x2F::Scale(size / (18 * m_scale), size / (18 * m_scale),
+                                    {(icon.left + icon.right) / 2,
+                                     (icon.top + icon.bottom) / 2}) *
+            transform);
+        brush->SetColor(FgIcon(0.95f * opacity));
+        target->DrawText(glyph, 1, m_iconFormat.get(), icon, brush);
+        target->SetTransform(transform);
+        return;
+    }
+    if (ID2D1Bitmap* bitmap = GetAppBitmap(appId)) {
+        DrawBitmapSmooth(target, bitmap, icon, opacity);
+    } else if (missingShown) {
+        brush->SetColor(Fg(0.3f * opacity));
+        target->FillRoundedRectangle({icon, size / 4, size / 4}, brush);
+    }
+}
+
 ID2D1Bitmap* Island::GetAppBitmap(const std::wstring& appId) {
-    for (const auto& [id, bitmap] : m_appBitmaps) {
-        if (id == appId) {
-            return bitmap.get();
+    const double now = NowSeconds();
+    for (auto it = m_appBitmaps.begin(); it != m_appBitmaps.end(); ++it) {
+        if (it->appId == appId) {
+            if (!it->retryAt || now < it->retryAt) {
+                return it->bitmap.get();
+            }
+            m_appBitmaps.erase(it);
+            break;
         }
     }
+    bool fromExplorer = false;
     winrt::com_ptr<ID2D1Bitmap> bitmap =
         LoadAppIcon(m_canvas.target.get(), m_wic.get(), m_hwnd, appId,
-                    (int)std::round(32 * m_scale));
-    // Remembered even when missing, so it isn't looked up every frame.
-    m_appBitmaps.push_back({appId, bitmap});
+                    (int)std::round(32 * m_scale), &fromExplorer);
+    // Remembered even when missing, so it isn't looked up every frame (one
+    // explorer didn't give, again after a while); the oldest are let go past
+    // a limit (every app focused for a day: those still shown are read
+    // again).
+    constexpr size_t kMostAppBitmaps = 64;
+    if (m_appBitmaps.size() >= kMostAppBitmaps) {
+        m_appBitmaps.erase(m_appBitmaps.begin(),
+                           m_appBitmaps.begin() + kMostAppBitmaps / 2);
+    }
+    m_appBitmaps.push_back(
+        {appId, bitmap, fromExplorer ? 0 : now + kAppIconRetrySeconds});
     return bitmap.get();
 }
 
@@ -54095,6 +63529,17 @@ void Island::AnimationFrame() {
         SpringTowards(m_weatherWidth, m_weatherWidthVelocity,
                       m_weatherWidthTarget, 0.45, dt)) {
         apps = true;
+    }
+    for (ItemWidth* width : {&m_komorebiWidth, &m_focusWidth}) {
+        if (width->shown >= 0 && SpringTowards(width->shown, width->velocity,
+                                               width->target, 0.45, dt)) {
+            apps = true;
+        }
+        if (SpringDecoration(width->swap, width->swapVelocity, 0, 0.5, dt)) {
+            apps = true;
+        } else {
+            width->nameBefore.clear();
+        }
     }
     if (SpringDecoration(m_weatherSwap, m_weatherSwapVelocity, 0, 0.5, dt)) {
         apps = true;
@@ -54377,6 +63822,39 @@ bool Island::IsCovered() const {
     return covered;
 }
 
+// Shown, or hidden: not over a full-screen app (a game or a video), nor over
+// the screenshot's selection after a moment (it's in the picture taken, and
+// then out of the way of the selection's buttons). On each tick, and as a
+// notification comes (the selection may be gone already).
+void Island::CheckShown() {
+    const double now = NowSeconds();
+    if (!IsSnippingOn(CurrentMonitor())) {
+        m_snippingSince = 0;
+    } else if (!m_snippingSince) {
+        m_snippingSince = now;
+    }
+    const bool show = !IsFullscreenAppOn(CurrentMonitor()) &&
+                      !(m_snippingSince &&
+                        now - m_snippingSince >= kSnippingHideSeconds);
+    if (show != m_visible) {
+        m_visible = show;
+        // Hidden once it has closed into the dot and faded (see
+        // AnimationFrame).
+        if (show) {
+            m_away = false;
+            // Shown once, still fully transparent; never hidden again.
+            if (!m_shownOnce) {
+                m_shownOnce = true;
+                ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
+            }
+        } else {
+            CloseAllPanels();
+            EndTakeover();
+        }
+        StartAnimating();
+    }
+}
+
 void Island::Tick() {
     // Windows' "Do not disturb" follows the island's own notifications (the
     // notification watch may become ready after the island).
@@ -54416,38 +63894,12 @@ void Island::Tick() {
     }
     // On the monitor it should be on (another one chosen, unplugged...).
     CheckMonitor();
-    // Not over a full-screen app (a game or a video), nor over the
-    // screenshot's selection after a moment (it's in the picture taken, and
-    // then out of the way of the selection's buttons).
-    const double now = NowSeconds();
-    if (!IsSnippingOn(CurrentMonitor())) {
-        m_snippingSince = 0;
-    } else if (!m_snippingSince) {
-        m_snippingSince = now;
-    }
-    const bool show = !IsFullscreenAppOn(CurrentMonitor()) &&
-                      !(m_snippingSince &&
-                        now - m_snippingSince >= kSnippingHideSeconds);
-    if (show != m_visible) {
-        m_visible = show;
-        // Hidden once it has closed into the dot and faded (see
-        // AnimationFrame).
-        if (show) {
-            m_away = false;
-            // Shown once, still fully transparent; never hidden again.
-            if (!m_shownOnce) {
-                m_shownOnce = true;
-                ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
-            }
-        } else {
-            CloseAllPanels();
-            EndTakeover();
-        }
-        StartAnimating();
-    }
-    if (!show) {
+    CheckShown();
+    CheckFocusedApp();
+    if (!m_visible) {
         return;
     }
+    const double now = NowSeconds();
     if (++m_ticks >= kIslandStatusTicks) {
         m_ticks = 0;
         UpdateStatus();
@@ -54484,11 +63936,12 @@ void Island::Tick() {
             for (Panel* panel : Panels()) {
                 panel->Raise();
             }
-            // The frosted strip right under it again.
+            // The frosted strip (or the Liquid Glass) right under it again.
             if (m_glassStrip && IsWindowVisible(m_glassStrip)) {
                 SetWindowPos(m_glassStrip, m_hwnd, 0, 0, 0, 0,
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
+            m_liquid.FollowOwner();
         }
     }
     UpdateClock();
@@ -54708,6 +64161,10 @@ void Island::OnToastsChanged() {
     if (urgentShown && !present(m_banner.appId)) {
         HideBanner();
     }
+    // (An app's kept ones count as there, see MergeKeptToasts.)
+    for (const auto& [id, kept] : m_notifications.KeptCounts()) {
+        inCenter.push_back(id);
+    }
     DropGoneUnread(inCenter);
 }
 
@@ -54870,6 +64327,19 @@ void Island::UpdateAppCounts() {
     std::vector<std::pair<std::wstring, int>> counts;
     if (!m_appEntries.empty() || !m_unreadApps.empty()) {
         counts = m_notifications.CountsInCenter();
+        // (With the kept ones an app took out itself, see MergeKeptToasts.)
+        for (const auto& [id, kept] : m_notifications.KeptCounts()) {
+            auto it = std::find_if(counts.begin(), counts.end(),
+                                   [&](const auto& entry) {
+                                       return _wcsicmp(entry.first.c_str(),
+                                                       id.c_str()) == 0;
+                                   });
+            if (it == counts.end()) {
+                counts.push_back({id, kept});
+            } else {
+                it->second = std::max(it->second, kept);
+            }
+        }
     }
     ShowCenterCounts(counts);
     for (Island* other : g_islands) {
@@ -55478,6 +64948,7 @@ void Island::OnWindowsBanner(HWND banner, bool appeared) {
         // alarms and reminders: hidden at once while it's read (see
         // OnWindowsBannersRead), back if it isn't the island's.
         m_stackChangedAt = now;
+        CheckShown();
         if (CanTakeOverAhead()) {
             m_stackHidden = m_stackWaiting = true;
             SetTimer(m_hwnd, kBannerRestoreTimerId, kBannerRestoreMs, nullptr);
@@ -55681,14 +65152,18 @@ void Island::OnWindowsBannersRead() {
                     [&](const WindowsBannerView& view) {
                         return !view.title.empty() && pillShows(view.title);
                     });
-    // Calls, alarms and reminders only, one of them not read by the island
-    // yet, the stack having just changed: it waits for it, hidden.
+    // Calls, alarms and reminders only (or any notification, a priority
+    // app's coming through "Do not disturb", when the island hides Windows'
+    // banners), one of them not read by the island yet, the stack having
+    // just changed: it waits for it, hidden (not shown for a moment, then
+    // hidden once the pill shows it).
     const bool waitForIsland =
         !ours && m_stackShowing && CanTakeOverAhead() && !views.empty() &&
-        std::all_of(views.begin(), views.end(),
-                    [](const WindowsBannerView& view) {
-                        return view.priority;
-                    }) &&
+        (g_settings.islandHideWindowsBanners ||
+         std::all_of(views.begin(), views.end(),
+                     [](const WindowsBannerView& view) {
+                         return view.priority;
+                     })) &&
         NowSeconds() - m_stackChangedAt < kBannerRestoreMs / 1000.0;
     if (ours) {
         KillTimer(m_hwnd, kBannerRestoreTimerId);
@@ -56285,8 +65760,9 @@ void Island::DrawTrayDrag(ID2D1RenderTarget* target,
     const float size = std::round(18 * m_scale);
     const float x = (float)(cursor.x - m_position.x);
     const float y = (float)(cursor.y - m_position.y);
-    target->DrawBitmap(
-        bitmap, {x - size / 2, y - size / 2, x + size / 2, y + size / 2}, 0.9f);
+    DrawBitmapSmooth(target, bitmap,
+                     {x - size / 2, y - size / 2, x + size / 2, y + size / 2},
+                     0.9f);
 }
 
 // The pin's circle, at the top right of a tray icon's slot.
@@ -56365,7 +65841,7 @@ void Island::ShowTrayTip(const std::wstring& key) {
         }
     }
     winrt::com_ptr<IDWriteTextLayout> layout;
-    if (text.empty() || !at || !m_textFormat ||
+    if (!g_settings.islandTips || text.empty() || !at || !m_textFormat ||
         FAILED(m_dwrite->CreateTextLayout(
             text.c_str(), (UINT32)text.size(), m_textFormat.get(),
             std::round(320 * m_scale), 1000, layout.put()))) {
@@ -56525,7 +66001,7 @@ void Island::RenderTrayTip() {
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     if (SUCCEEDED(target->CreateSolidColorBrush(fill, brush.put()))) {
         target->FillRoundedRectangle({bubble, radius, radius}, brush.get());
-        brush->SetColor(Fg(0.10f * opacity));
+        brush->SetColor(Fg(0.10f * EdgeAmount() * opacity));
         target->DrawRoundedRectangle(
             {{bubble.left + 0.5f, bubble.top + 0.5f, bubble.right - 0.5f,
               bubble.bottom - 0.5f},
@@ -56776,6 +66252,49 @@ bool Island::PressBannerReply(POINT pt) {
     return true;
 }
 
+DWORD Island::DragOverAt(IDataObject*, POINT screen, DWORD, DWORD) {
+    IslandScope scope(this);
+    POINT pt = screen;
+    ScreenToClient(m_hwnd, &pt);
+    std::wstring key;
+    const bool over = HitTest(pt, &key) == IslandItem::Folders;
+    if (over != m_dropOnFolders) {
+        m_dropOnFolders = over;
+        KillTimer(m_hwnd, kFoldersDropTimerId);
+        if (over && !m_foldersPanel.IsOpen()) {
+            SetTimer(m_hwnd, kFoldersDropTimerId, kFolderOpenMs, nullptr);
+        }
+        // (Lit while the files are on it.)
+        if (over) {
+            m_hover = IslandItem::Folders;
+        } else if (m_hover == IslandItem::Folders) {
+            m_hover = IslandItem::None;
+        }
+        StartAnimating();
+    }
+    return DROPEFFECT_NONE;
+}
+
+void Island::DragGone() {
+    IslandScope scope(this);
+    KillTimer(m_hwnd, kFoldersDropTimerId);
+    if (m_foldersPanel.IsOpen()) {
+        SetTimer(m_hwnd, kFoldersDragLeftTimerId, kFoldersDragLeftMs, nullptr);
+    }
+    if (m_dropOnFolders) {
+        m_dropOnFolders = false;
+        if (m_hover == IslandItem::Folders) {
+            m_hover = IslandItem::None;
+        }
+        StartAnimating();
+    }
+}
+
+DWORD Island::DropAt(IDataObject*, POINT, DWORD, DWORD) {
+    DragGone();
+    return DROPEFFECT_NONE;
+}
+
 // Mouse buttons: on a tray icon, passed on to its app (see ClickTrayIcon).
 // Elsewhere, a click (on release) is the island's own.
 void Island::OnMouseButton(UINT msg, LPARAM lParam) {
@@ -56973,31 +66492,6 @@ IslandItem Island::HitTest(POINT pt, std::wstring* appId) const {
     return IslandItem::None;
 }
 
-// Gives the panel the pill as it's drawn now (nothing on the bar).
-void Island::CapturePill(Panel& panel) {
-    const BYTE* bits = m_canvas.Bits();
-    const SIZE size = m_canvas.Size();
-    if (m_bar || !bits) {
-        panel.SetPillSnapshot(nullptr, 0, {});
-        return;
-    }
-    // Drawing may still be queued.
-    GdiFlush();
-    RECT rect{(LONG)std::floor(m_pill.left), (LONG)std::floor(m_pill.top),
-              (LONG)std::ceil(m_pill.right), (LONG)std::ceil(m_pill.bottom)};
-    rect.left = std::max(rect.left, 0L);
-    rect.top = std::max(rect.top, 0L);
-    rect.right = std::min(rect.right, size.cx);
-    rect.bottom = std::min(rect.bottom, size.cy);
-    panel.SetPillSnapshot(bits, m_canvas.Stride(), rect);
-}
-
-void CapturePillFor(Panel& panel) {
-    if (g_island) {
-        g_island->CapturePill(panel);
-    }
-}
-
 // When the island last restarted for a lost device (kept across restarts).
 double g_deviceRestartAt = -100;
 
@@ -57028,31 +66522,17 @@ void Island::OnDeviceLost() {
     RestartIslandSoon();
 }
 
-// Opens a panel out of the island, or closes it if it's open. Only one panel
-// is open at a time. The pill itself becomes the panel; on the bar, the panel
-// drops out of the clicked item.
-void Island::TogglePanel(Panel& panel,
-                         IslandItem item,
-                         const std::wstring& key) {
-    HideGearBubble();
-    EndBannerTyping();
-    // A banner shown: it shrinks back into the pill (behind the panel); the
-    // panel opens out of the pill as it'll be without it (drawn so, for its
-    // picture, then the banner goes on from where it was).
-    double bannerLeft = 0;
-    if (m_bannerWanted || m_bannerAmount > 0) {
-        HideBanner();
-        bannerLeft = m_bannerAmount;
-        m_bannerAmount = 0;
-        Render(true);
-    }
-    for (Panel* other : Panels()) {
-        if (other != &panel) {
-            other->Close();
-        }
-    }
-    // The item clicked (the one with the key, or under the mouse, or the
-    // first of its kind), the same in every style: the panel opens there.
+// Where a panel opens for the item clicked (the one with the key, or under
+// the mouse, or the first of its kind), the same in every style: under it,
+// out of the pill (over it, growing up, on the lower half of the screen);
+// on the bar, dropping out of the item; upright on a side, beside it.
+bool Island::PanelPlace(IslandItem item,
+                        const std::wstring& key,
+                        POINT* anchor,
+                        D2D1_RECT_F* source,
+                        Panel::Direction* direction,
+                        bool* fromPill,
+                        bool* behind) {
     const IslandSlot* clicked = nullptr;
     POINT cursor;
     GetCursorPos(&cursor);
@@ -57065,77 +66545,107 @@ void Island::TogglePanel(Panel& panel,
             clicked = &slot;
         }
     }
-    if (panel.IsOpen()) {
-        panel.Close();
-    } else if (m_vertical) {
+    const D2D1_RECT_F pill{m_position.x + m_pill.left,
+                           m_position.y + m_pill.top,
+                           m_position.x + m_pill.right,
+                           m_position.y + m_pill.bottom};
+    const float gap = kPanelGap * m_scale;
+    if (m_vertical) {
         // Upright on a side: beside the pill, towards the middle of the
         // screen, on its own (the shape that grows out of the pill is made
         // for it lying down), coming out from behind it, beside the item.
-        const float gap = kPanelGap * m_scale;
-        const POINT anchor{
+        *anchor = {
             m_position.x + (LONG)(m_sideLeft ? m_pill.right + gap
                                              : m_pill.left - gap),
             m_position.y +
                 (LONG)(clicked ? (clicked->rect.top + clicked->rect.bottom) / 2
                                : (m_pill.top + m_pill.bottom) / 2)};
-        panel.SetPillSnapshot(nullptr, 0, {});
-        panel.SetDirection(m_sideLeft ? Panel::Direction::Right
-                                      : Panel::Direction::Left);
-        panel.Open(anchor, m_dpiScale,
-                   {m_position.x + m_pill.left, m_position.y + m_pill.top,
-                    m_position.x + m_pill.right, m_position.y + m_pill.bottom},
-                   false, nullptr, true);
-    } else if (!m_bar) {
-        // From the pill's top (growing down), or its bottom (growing up, on
-        // the lower half of the screen).
-        const POINT anchor{
-            m_position.x + (LONG)((m_pill.left + m_pill.right) / 2),
-            m_position.y + (LONG)(AtBottom() ? m_pill.bottom : m_pill.top)};
-        panel.SetDirection(AtBottom() ? Panel::Direction::Up
-                                      : Panel::Direction::Down);
-        CapturePill(panel);
-        // Or under the pill (over it, growing up), when the pill is wider
-        // than the panel.
-        const float gap = kPanelGap * m_scale;
-        const POINT below{
+        *source = pill;
+        *direction =
+            m_sideLeft ? Panel::Direction::Right : Panel::Direction::Left;
+        *fromPill = false;
+        *behind = true;
+        return true;
+    }
+    if (!m_bar) {
+        // Under the pill, under the item clicked (its middle for the
+        // settings), coming out from behind it.
+        *anchor = {
             m_position.x +
                 (LONG)(clicked ? (clicked->rect.left + clicked->rect.right) / 2
                                : (m_pill.left + m_pill.right) / 2),
             m_position.y +
                 (LONG)(AtBottom() ? m_pill.top - gap : m_pill.bottom + gap)};
-        panel.Open(anchor, m_dpiScale,
-                   {m_position.x + m_pill.left, m_position.y + m_pill.top,
-                    m_position.x + m_pill.right, m_position.y + m_pill.bottom},
-                   true, &below);
+        *source = pill;
+        *direction =
+            AtBottom() ? Panel::Direction::Up : Panel::Direction::Down;
+        *fromPill = true;
+        *behind = true;
+        return true;
+    }
+    // Out of the item clicked (the clock if it isn't shown), or out of the
+    // bar's middle.
+    D2D1_RECT_F from{};
+    if (clicked) {
+        from = clicked->rect;
+    } else if (item == IslandItem::None) {
+        const float middle = (m_pill.left + m_pill.right) / 2;
+        const float half = std::round(kIslandIconSlot * IconScale()) / 2;
+        from = {middle - half, m_pill.top, middle + half, m_pill.bottom};
     } else {
-        // Out of the item clicked (the clock if it isn't shown), or out of
-        // the bar's middle.
-        D2D1_RECT_F from{};
-        if (clicked) {
-            from = clicked->rect;
-        } else if (item == IslandItem::None) {
-            const float middle = (m_pill.left + m_pill.right) / 2;
-            const float half = std::round(kIslandIconSlot * m_scale) / 2;
-            from = {middle - half, m_pill.top, middle + half, m_pill.bottom};
-        } else {
-            for (const auto& slot : m_slots) {
-                if (slot.item == IslandItem::Clock) {
-                    from = slot.rect;
-                    break;
-                }
+        for (const auto& slot : m_slots) {
+            if (slot.item == IslandItem::Clock) {
+                from = slot.rect;
+                break;
             }
         }
-        if (from.right > from.left) {
-            const POINT anchor{
-                m_position.x + (LONG)((from.left + from.right) / 2),
-                m_position.y + (LONG)(m_pill.bottom + kPanelGap * m_scale)};
-            panel.SetPillSnapshot(nullptr, 0, {});
-            panel.SetDirection(Panel::Direction::Down);
-            panel.Open(anchor, m_dpiScale,
-                       {m_position.x + from.left, m_position.y + from.top,
-                        m_position.x + from.right, m_position.y + from.bottom},
-                       false);
+    }
+    if (from.right <= from.left) {
+        return false;
+    }
+    *anchor = {m_position.x + (LONG)((from.left + from.right) / 2),
+               m_position.y + (LONG)(m_pill.bottom + gap)};
+    *source = {m_position.x + from.left, m_position.y + from.top,
+               m_position.x + from.right, m_position.y + from.bottom};
+    *direction = Panel::Direction::Down;
+    *fromPill = false;
+    *behind = false;
+    return true;
+}
+
+// Opens a panel out of the island (see PanelPlace), or closes it if it's
+// open. Only one panel is open at a time.
+void Island::TogglePanel(Panel& panel,
+                         IslandItem item,
+                         const std::wstring& key) {
+    HideGearBubble();
+    EndBannerTyping();
+    // A banner shown: it shrinks back into the pill (behind the panel); the
+    // panel opens under the pill as it'll be without it (laid out so, then
+    // the banner goes on from where it was).
+    double bannerLeft = 0;
+    if (m_bannerWanted || m_bannerAmount > 0) {
+        HideBanner();
+        bannerLeft = m_bannerAmount;
+        m_bannerAmount = 0;
+        Render(true);
+    }
+    for (Panel* other : Panels()) {
+        if (other != &panel) {
+            other->Close();
         }
+    }
+    POINT anchor;
+    D2D1_RECT_F source;
+    Panel::Direction direction;
+    bool fromPill;
+    bool behind;
+    if (panel.IsOpen()) {
+        panel.Close();
+    } else if (PanelPlace(item, key, &anchor, &source, &direction, &fromPill,
+                          &behind)) {
+        panel.SetDirection(direction);
+        panel.Open(anchor, PanelScale(), source, fromPill, behind);
     }
     if (bannerLeft > 0) {
         m_bannerAmount = bannerLeft;
@@ -57144,12 +66654,32 @@ void Island::TogglePanel(Panel& panel,
     StartAnimating();
 }
 
+void Island::MovePanel(Panel& panel,
+                       IslandItem item,
+                       const std::wstring& key) {
+    POINT anchor;
+    D2D1_RECT_F source;
+    Panel::Direction direction;
+    bool fromPill;
+    bool behind;
+    if (panel.IsOpen() && PanelPlace(item, key, &anchor, &source, &direction,
+                                     &fromPill, &behind)) {
+        panel.MoveTo(anchor, source);
+    }
+}
+
 void Island::OnClick(IslandItem item, const std::wstring& appId) {
     switch (item) {
         case IslandItem::App: {
             // An app with a badge on the taskbar opens; one with unread
             // notifications opens at its latest one, or, with nothing to
-            // open, its notifications are shown in the list.
+            // open, its notifications are shown in the list. The Widgets
+            // button's badge opens the Widgets board (Win+W, its own
+            // shortcut).
+            if (appId == kWidgetsBadgeId) {
+                PressKeys({VK_LWIN, 'W'});
+                break;
+            }
             const UnreadApp* unread = FindUnread(appId);
             const bool badge = std::find(m_badgeApps.begin(), m_badgeApps.end(),
                                          appId) != m_badgeApps.end();
@@ -57343,7 +66873,7 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
             // The volume opens only the sound, the battery only itself and
             // the power mode, the brightness only itself; the control
             // center's item, all of it (open already the other way: it
-            // switches).
+            // switches, going under this item).
             if (!m_control.SetOnly(item == IslandItem::Volume
                                        ? ControlPanel::Only::Sound
                                    : item == IslandItem::Battery
@@ -57353,6 +66883,8 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
                                        : ControlPanel::Only::All) ||
                 !m_control.IsOpen()) {
                 TogglePanel(m_control, item);
+            } else {
+                MovePanel(m_control, item);
             }
             break;
         case IslandItem::Clock:
@@ -57413,6 +66945,25 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
             break;
         case IslandItem::Wallpaper:
             TogglePanel(m_wallpaperPanel, item);
+            break;
+        case IslandItem::KomorebiLayout:
+            m_komorebiPanel.SetScreen(m_monitorHandle);
+            TogglePanel(m_komorebiPanel, item);
+            break;
+        case IslandItem::KomorebiWorkspace:
+            // Another workspace on this monitor (the one shown: nothing).
+            if (const KomorebiMonitor* monitor =
+                    KomorebiMonitorOf(m_monitorHandle);
+                monitor && !appId.ends_with(L"*")) {
+                m_komorebiPanel.RunCommand(KomorebiWorkspaceCommand(
+                    g_komorebiShown.komorebic, *monitor, _wtoi(appId.c_str())));
+            }
+            break;
+        case IslandItem::FocusedApp:
+            // (The desktop: nothing to bring.)
+            if (m_focusWindow) {
+                ActivateApp(m_focusWindow);
+            }
             break;
         case IslandItem::QuickAction: {
             const int action = appId.empty() ? -1 : _wtoi(appId.c_str());
@@ -57547,6 +67098,9 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             CheckMonitor();
             return 0;
         case WM_DISPLAYCHANGE:
+            if (m_main) {
+                g_displayChanges++;
+            }
             // A monitor plugged in or out (or its handle changed): with one
             // on each monitor, they start again for the monitors there are
             // now. Another resolution only lays them out again.
@@ -57561,6 +67115,9 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             CheckMonitor();
             m_control.ReloadControls();
             Relayout();
+            if (m_main) {
+                RenewAllGlass();
+            }
             break;
         case WM_SETTINGCHANGE:
             // The taskbar moved to another edge (or a bar came or went): the
@@ -57580,8 +67137,15 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 FollowWindowsMode();
                 // Windows' transparency effects (the frosted glass needs
                 // them) may have been switched.
-                g_transparencyEffects = TransparencyEffectsOn();
+                // (Back on: Windows' blur too, see RenewAllGlass. This comes
+                // often with nothing switched, like as the work area changes.)
+                const bool effects = TransparencyEffectsOn();
+                const bool effectsBack = effects && !g_transparencyEffects;
+                g_transparencyEffects = effects;
                 Render(true);
+                if (effectsBack) {
+                    RenewAllGlass();
+                }
             }
             break;
         case WM_APP_INPUT_METHOD:
@@ -57598,12 +67162,16 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                     StartInputMethodQuery();
                 }
             }
-            if (g_settings.islandInputMethod) {
-                OnInputMethod(wParam, lParam & 0xFFFF);
-            }
+            // (Each island showing the item, as itself.)
+            ForEachIsland([&](Island& island) {
+                if (g_settings.islandInputMethod) {
+                    island.OnInputMethod(wParam, lParam & 0xFFFF);
+                }
+            });
             return 0;
         case WM_APP_PRIVACY:
-            OnPrivacy();
+            // (Read by the main island's thread; the others follow.)
+            ForEachIsland([](Island& island) { island.OnPrivacy(); });
             return 0;
         case WM_APP_WALLPAPER_LIST: {
             std::unique_ptr<WallpaperListJob> job((WallpaperListJob*)lParam);
@@ -57630,6 +67198,20 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 m_wallpaperThread = nullptr;
             }
             return 0;
+        case WM_APP_KOMOREBI: {
+            // (Read by the main island's thread; the others follow.)
+            AcquireSRWLockShared(&g_komorebiLock);
+            const KomorebiState state = g_komorebiState;
+            ReleaseSRWLockShared(&g_komorebiLock);
+            if (!(state == g_komorebiShown)) {
+                g_komorebiShown = state;
+                ForEachIsland([](Island& island) {
+                    island.m_komorebiPanel.Refresh();
+                    island.Relayout();
+                });
+            }
+            return 0;
+        }
         case WM_APP_DESKTOPS: {
             // (Read by the main island's thread; the others follow.)
             AcquireSRWLockShared(&g_desktopsLock);
@@ -57671,11 +67253,14 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 }
             }
             AcquireSRWLockShared(&g_drivesLock);
-            std::vector<RemovableDrive> drives = g_drives;
+            const std::vector<RemovableDrive> drives = g_drives;
             ReleaseSRWLockShared(&g_drivesLock);
-            m_drives = drives;
-            m_drivesPanel.SetDrives(std::move(drives));
-            Relayout();
+            // (Listed by the main island; the others follow.)
+            ForEachIsland([&](Island& island) {
+                island.m_drives = drives;
+                island.m_drivesPanel.SetDrives(drives);
+                island.Relayout();
+            });
             return 0;
         }
         case WM_DEVICECHANGE:
@@ -57702,6 +67287,18 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 StartInputMethodQuery();
                 return 0;
             }
+            if (wParam == kFoldersDropTimerId) {
+                KillTimer(m_hwnd, kFoldersDropTimerId);
+                if (m_dropOnFolders && !m_foldersPanel.IsOpen()) {
+                    TogglePanel(m_foldersPanel, IslandItem::Folders);
+                }
+                return 0;
+            }
+            if (wParam == kFoldersDragLeftTimerId) {
+                KillTimer(m_hwnd, kFoldersDragLeftTimerId);
+                m_foldersPanel.CloseIfDragLeft();
+                return 0;
+            }
             if (wParam == kProfileSaveTimerId) {
                 if (m_main) {
                     SaveActiveProfile();
@@ -57718,6 +67315,15 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 KillTimer(m_hwnd, kDeviceRetryTimerId);
                 m_deviceRetryPending = false;
                 OnDeviceLost();
+                return 0;
+            }
+            if (wParam == kGlassRenewTimerId) {
+                KillTimer(m_hwnd, kGlassRenewTimerId);
+                RenewAllGlass();
+                if (++m_glassRenewals < (int)std::size(kGlassRenewMs)) {
+                    SetTimer(m_hwnd, kGlassRenewTimerId,
+                             kGlassRenewMs[m_glassRenewals], nullptr);
+                }
                 return 0;
             }
             if (wParam == kTrayAppTimerId) {
@@ -57751,21 +67357,34 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 const UpdatesData updates = GetUpdates();
                 const double since = NowSeconds() - updates.checkedAt;
                 if (updates.checked && since >= 0 &&
-                    since < kUpdatesCheckSeconds) {
+                    since < UpdatesCheckSeconds()) {
                     SetTimer(m_hwnd, kUpdatesTimerId,
-                             (UINT)((kUpdatesCheckSeconds - since) * 1000) +
+                             (UINT)((UpdatesCheckSeconds() - since) * 1000) +
                                  1000,
                              nullptr);
                     return 0;
                 }
                 SetTimer(m_hwnd, kUpdatesTimerId,
-                         (UINT)(kUpdatesCheckSeconds * 1000), nullptr);
+                         (UINT)(UpdatesCheckSeconds() * 1000), nullptr);
                 StartUpdatesJob();
                 return 0;
             }
             if (wParam == kMediaTimerId) {
                 KillTimer(m_hwnd, kMediaTimerId);
                 UpdateMediaShown();
+                return 0;
+            }
+            if (wParam == kMediaOpenTimerId) {
+                // Its window came; or the app didn't answer its tray icon's
+                // click (like Spotify from the Store): started by its ID.
+                const bool came = FindMediaWindow(m_mediaOpenApp) != nullptr;
+                if (came || NowSeconds() - m_mediaOpenAt >= kMediaOpenSeconds) {
+                    KillTimer(m_hwnd, kMediaOpenTimerId);
+                    if (!came) {
+                        LaunchMediaApp(m_mediaOpenApp);
+                    }
+                    m_mediaOpenApp.clear();
+                }
                 return 0;
             }
             if (wParam == kBannerNextTimerId) {
@@ -57931,6 +67550,20 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
 
         case WM_POWERBROADCAST:
             if (wParam == PBT_POWERSETTINGCHANGE) {
+                const auto* setting = (const POWERBROADCAST_SETTING*)lParam;
+                if (setting &&
+                    IsEqualGUID(setting->PowerSetting,
+                                kGUID_PowerSavingStatus) &&
+                    setting->DataLength >= sizeof(DWORD)) {
+                    const bool saver = *(const DWORD*)setting->Data != 0;
+                    if (saver != g_energySaver) {
+                        g_energySaver = saver;
+                        ForEachIsland([](Island& island) { island.Relayout(); });
+                        RenewAllGlass();
+                        StartIslandAnimation();
+                    }
+                    return TRUE;
+                }
                 PostMessage(hWnd, WM_APP_STATUS, kStatusBattery, 0);
                 return TRUE;
             }
@@ -58398,12 +68031,47 @@ bool RegisterIslandClasses() {
         UnregisterClass(kIslandClassName, g_module);
         return false;
     }
+    windowClass.hCursor = nullptr;
+    windowClass.lpfnWndProc = GlassWndProc;
+    windowClass.lpszClassName = kGlassClassName;
+    if (!RegisterClass(&windowClass)) {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        UnregisterClass(kIslandClassName, g_module);
+        UnregisterClass(kPanelClassName, g_module);
+        return false;
+    }
     return true;
 }
 
 void UnregisterIslandClasses() {
     UnregisterClass(kIslandClassName, g_module);
     UnregisterClass(kPanelClassName, g_module);
+    UnregisterClass(kGlassClassName, g_module);
+}
+
+// Times in a row the main island couldn't be made (see IslandThreadProc).
+int g_islandTries = 0;
+
+// Waits `ms`, handling the thread's messages, unless it's told to quit
+// meanwhile (false then).
+bool WaitUnlessQuit(DWORD ms) {
+    const ULONGLONG end = GetTickCount64() + ms;
+    for (;;) {
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                return false;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        const ULONGLONG now = GetTickCount64();
+        if (now >= end) {
+            return true;
+        }
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, (DWORD)(end - now),
+                                  QS_ALLINPUT);
+    }
 }
 
 DWORD WINAPI IslandThreadProc(LPVOID parameter) {
@@ -58414,7 +68082,11 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const HRESULT comResult =
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // (Files dragged out of the folders' panel and dropped on the islands:
+    // Windows' drag and drop needs OLE, not only COM.)
+    const HRESULT oleResult = OleInitialize(nullptr);
 
+    bool made = false;
     const bool classes = RegisterIslandClasses();
     if (classes) {
         FrameTimer frames;
@@ -58455,6 +68127,7 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
         };
         chooseNotch(main);
         const bool created = main.Create();
+        made = created;
         if (created) {
             g_islands.push_back(&main);
             if (main.Notch() >= 0) {
@@ -58490,6 +68163,8 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
             {
                 IslandScope scope(&main);
                 main.CatchUpToasts();
+                main.RefreshWatches();
+                main.StartGlassRenewals();
             }
             ForEachIsland([](Island& island) { island.Tick(); });
             // While one is animating, a frame per display refresh (or fewer,
@@ -58535,11 +68210,25 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
         main.Destroy();
         g_islands.clear();
         g_island = nullptr;
+        ReleaseGlass();
         UnregisterIslandClasses();
     }
 
+    if (SUCCEEDED(oleResult)) {
+        OleUninitialize();
+    }
     if (SUCCEEDED(comResult)) {
         CoUninitialize();
+    }
+    // Not made (at sign-in, Windows may not be ready for it yet): tried
+    // again 5 seconds later, a dozen times at most, unless the island is
+    // stopped meanwhile.
+    if (made) {
+        g_islandTries = 0;
+    } else if (g_settings.showIsland && ++g_islandTries < 12 &&
+               WaitUnlessQuit(5000)) {
+        Wh_Log(L"The island couldn't be made: trying again");
+        RestartIslandSoon();
     }
     return 0;
 }
@@ -58666,12 +68355,97 @@ bool HookTaskbarDllSymbols() {
             &TrayUI_SlideWindow_Original,
             TrayUI_SlideWindow_Hook,
         },
+        // Without it, the shown dock stays up with the mouse beside it.
+        {
+            {LR"(public: bool __cdecl TrayUI::_ShouldAutoHideTray(class AutoHideTelemetry::TaskbarAutoHideTelemetry::AutoHideOnTaskbarHide))"},
+            &TrayUI__ShouldAutoHideTray_Original,
+            TrayUI__ShouldAutoHideTray_Hook,
+            true,
+        },
+        // Without these, a taskbar may still come up for an instant when an
+        // app asks for attention (SlideWindow sends it back down).
+        {
+            {LR"(public: virtual void __cdecl TrayUI::Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
+            &TrayUI_Unhide_Original,
+            TrayUI_Unhide_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual long __cdecl CTaskBand::UnhideTray(void))"},
+            &CTaskBand_UnhideTray_Original,
+            CTaskBand_UnhideTray_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual long __cdecl CSecondaryTaskBand::UnhideTray(void))"},
+            &CSecondaryTaskBand_UnhideTray_Original,
+            CSecondaryTaskBand_UnhideTray_Hook,
+            true,
+        },
         {
             {LR"(public: virtual int __cdecl CTaskListWnd::PermitAutoHide(void))"},
             &CTaskListWnd_PermitAutoHide_Original,
             CTaskListWnd_PermitAutoHide_Hook,
             // Without it, the taskbar just shows itself for attention as
             // usual.
+            true,
+        },
+        // Without these, apps' overlay icons (like Discord's counter) don't
+        // count as badges and stay as the taskbar draws them.
+        {
+            {LR"(protected: void __cdecl CTaskBand::_HandleOverlayIcon(struct HWND__ *,struct HICON__ *))"},
+            &CTaskBand__HandleOverlayIcon_Original,
+            CTaskBand__HandleOverlayIcon_Hook,
+            true,
+        },
+        {
+            {LR"(protected: void __cdecl CTaskBand::_HandleOverlayIconDescription(struct HWND__ *,void *))"},
+            &CTaskBand__HandleOverlayIconDescription_Original,
+            CTaskBand__HandleOverlayIconDescription_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual long __cdecl CTaskItem::SetOverlayIconDescription(unsigned short const *))"},
+            &CTaskItem_SetOverlayIconDescription_Original,
+            CTaskItem_SetOverlayIconDescription_Hook,
+            true,
+        },
+        // Without these, an overlay icon set before the mod started stays as
+        // the taskbar draws it until it changes (see ReadOverlayIcons).
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListManager'})"},
+            &CTaskBand_ITaskListManager_vftable,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(const CWindowTaskItem::`vftable'{for `ITaskItem'})"},
+            &CWindowTaskItem_ITaskItem_vftable,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(const CImmersiveTaskItem::`vftable'{for `ITaskItem'})"},
+            &CImmersiveTaskItem_ITaskItem_vftable,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual long __cdecl CTaskBand::GetTaskFromWindow(struct HWND__ *,struct ITaskGroup * *,struct ITaskItem * *))"},
+            &CTaskBand_GetTaskFromWindow_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual struct HICON__ * __cdecl CTaskItem::GetOverlayIcon(void))"},
+            &CTaskItem_GetOverlayIcon_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual unsigned short const * __cdecl CTaskItem::GetOverlayIconDescription(void))"},
+            &CTaskItem_GetOverlayIconDescription_Original,
+            nullptr,
             true,
         },
     };
@@ -58712,9 +68486,13 @@ void LoadSettings() {
     }
     g_settings.autoHide = Wh_GetIntSetting(L"hiding.autoHide") != 0;
     g_settings.cornerRadius =
-        std::clamp(Wh_GetIntSetting(L"dock.cornerRadius"), 0, 24);
-    g_settings.dockHeight = std::clamp(Wh_GetIntSetting(L"dock.dockHeight"), 28, 64);
-    g_settings.bottomGap = std::clamp(Wh_GetIntSetting(L"dock.bottomGap"), 0, 16);
+        std::clamp(Wh_GetIntSetting(L"dock.cornerRadius"), 0, 32);
+    g_settings.dockIconSize =
+        std::clamp(Wh_GetIntSetting(L"dock.iconSize"), 24, 64);
+    g_settings.dockIconGap =
+        std::clamp(Wh_GetIntSetting(L"dock.iconGap"), 0, 32);
+    g_settings.bottomGap = std::clamp(Wh_GetIntSetting(L"dock.bottomGap"), 0, 24);
+    g_settings.dockBackground = Wh_GetIntSetting(L"dock.background") != 0;
     g_settings.backgroundOpacity =
         std::clamp(Wh_GetIntSetting(L"dock.backgroundOpacity"), 0, 100) / 100.0;
     g_settings.showDuration =
@@ -58767,6 +68545,17 @@ void LoadSettings() {
     g_settings.islandUsbDrives = Wh_GetIntValue(L"islandUsbDrives", 1) != 0;
     g_settings.islandUsbNotify = Wh_GetIntValue(L"islandUsbNotify", 1) != 0;
     g_settings.islandFrosted = Wh_GetIntValue(L"islandFrosted", 0) != 0;
+    g_settings.islandLiquidGlass =
+        Wh_GetIntValue(L"islandLiquidGlass", 0) != 0;
+    g_settings.islandTips = Wh_GetIntValue(L"islandTips", 1) != 0;
+    g_settings.islandHoverHighlight =
+        Wh_GetIntValue(L"islandHoverHighlight", 1) != 0;
+    g_settings.islandMinimizeButton =
+        Wh_GetIntValue(L"islandMinimizeButton", 1) != 0;
+    g_settings.islandBarCorners = Wh_GetIntValue(L"islandBarCorners", 0) != 0;
+    g_settings.islandGlassTranslucent =
+        Wh_GetIntValue(L"islandGlassTranslucent", 0) != 0;
+    g_textLanguage = std::clamp(Wh_GetIntValue(L"islandLanguage", 0), 0, 3);
     g_settings.clockDateOrder =
         std::clamp(Wh_GetIntValue(L"islandDateOrder", 0), 0, 3);
     g_settings.clockFormat =
@@ -58804,8 +68593,45 @@ void LoadSettings() {
     g_settings.islandNotchCurve =
         std::clamp(Wh_GetIntValue(L"islandNotchCurve", kNotchCurveDefault),
                    kNotchCurveMin, kNotchCurveMax);
+    g_settings.islandIconSize =
+        std::clamp(Wh_GetIntValue(L"islandIconSize", kIconSizeDefault),
+                   kIconSizeMin, kIconSizeMax);
+    g_settings.islandLineOpacity =
+        std::clamp(Wh_GetIntValue(L"islandLineOpacity", kLineOpacityDefault),
+                   kLineOpacityMin, kLineOpacityMax);
+    g_settings.islandActivationWidth = std::clamp(
+        Wh_GetIntValue(L"islandActivationWidth", kActivationWidthDefault),
+        kActivationWidthMin, kActivationWidthMax);
+    g_settings.islandPanelSize =
+        std::clamp(Wh_GetIntValue(L"islandPanelSize", kPanelSizeDefault),
+                   kPanelSizeMin, kPanelSizeMax);
+    g_settings.islandMediaTitleLimit = std::clamp(
+        Wh_GetIntValue(L"islandMediaTitleLimit", kMediaTitleLimitDefault),
+        kMediaTitleLimitMin, kMediaTitleLimitMax);
+    g_settings.islandPillHeight =
+        std::clamp(Wh_GetIntValue(L"islandPillHeight", kPillHeightPctDefault),
+                   kPillHeightPctMin, kPillHeightPctMax);
+    g_settings.islandPillCorners =
+        std::clamp(Wh_GetIntValue(L"islandPillCorners", kPillCornersDefault),
+                   kPillCornersMin, kPillCornersMax);
+    g_settings.islandPillEnds =
+        std::clamp(Wh_GetIntValue(L"islandPillEnds", kPillEndsDefault),
+                   kPillEndsMin, kPillEndsMax);
+    g_settings.islandEdge = std::clamp(
+        Wh_GetIntValue(L"islandEdge", kEdgeDefault), kEdgeMin, kEdgeMax);
+    g_settings.islandGlassBlur =
+        std::clamp(Wh_GetIntValue(L"islandGlassBlur", kGlassBlurDefault),
+                   kGlassBlurMin, kGlassBlurMax);
     g_settings.islandNotchEach = Wh_GetIntValue(L"islandNotchEach", 0) != 0;
     g_settings.islandGroupApps = Wh_GetIntValue(L"islandGroupApps", 1) != 0;
+    g_settings.islandApps = Wh_GetIntValue(L"islandApps", 1) != 0;
+    g_settings.komorebiLayout =
+        Wh_GetIntValue(L"islandKomorebiLayout", 0) != 0;
+    g_settings.islandFocusedApp = Wh_GetIntValue(L"islandFocusedApp", 0) != 0;
+    g_settings.komorebiHideEmpty =
+        Wh_GetIntValue(L"islandKomorebiHideEmpty", 1) != 0;
+    g_settings.islandFolderDrag =
+        std::clamp(Wh_GetIntValue(L"islandFolderDrag", 0), 0, 2);
     g_settings.islandScreenshotFolder =
         Wh_GetIntValue(L"islandScreenshotFolder", 0) != 0;
     g_settings.islandMediaWheel = Wh_GetIntValue(L"islandMediaWheel", 0) != 0;
@@ -58825,6 +68651,8 @@ void LoadSettings() {
     g_settings.usageVram = Wh_GetIntValue(L"usageVram", 0) != 0;
     g_settings.islandMicrophone = Wh_GetIntValue(L"islandMicrophone", 0) != 0;
     g_settings.calendarHolidays = Wh_GetIntValue(L"calendarHolidays", 0) != 0;
+    g_hidePastAfter =
+        std::clamp(Wh_GetIntValue(L"calendarHidePastAfter", 0), 0, 3);
     g_calendarIcs.clear();
     for (int i = 0; i < (int)kMaxAgendas; i++) {
         const auto value =
@@ -58841,6 +68669,9 @@ void LoadSettings() {
     g_settings.islandShortcuts = Wh_GetIntValue(L"islandShortcuts", 0) != 0;
     g_settings.islandWeather = Wh_GetIntValue(L"islandWeather", 0) != 0;
     g_settings.islandUpdates = Wh_GetIntValue(L"islandUpdates", 0) != 0;
+    g_updatesEvery =
+        std::clamp(Wh_GetIntValue(L"updatesCheckEvery", 0), 0,
+                   (int)std::size(kUpdatesEveryHours) - 1);
     g_settings.islandProfiles = Wh_GetIntValue(L"islandProfiles", 0) != 0;
     LoadProfiles();
     LoadIgnoredUpdates();
@@ -58912,8 +68743,10 @@ void ExplorerModAfterInit() {
     ApplySettings();
     SubclassTaskbars();
     UpdateAutoHide();
+    RefreshDockRoom();
     StartEdgeWatch();
     RequestTrayIcons();
+    ReadOverlayIcons();
     StartLateStart();
 }
 
@@ -58925,11 +68758,14 @@ void ExplorerModBeforeUninit() {
     StopLateStart();
     StopEdgeWatch();
     StopAttentionThread();
+    StopBigIcons();
     ApplySettings();
     UnsubclassTaskbars();
     // (One may have started in the subclass meanwhile.)
     StopWatchingTaskbarPlace();
     KeepTrayIcons();
+    // (While it still knows the island's process, see there.)
+    RestoreDndWithoutIsland();
     StopWatchingIslandProcess();
     FreeIslandAppIcons();
     UpdateAutoHide();
@@ -58952,7 +68788,9 @@ void ExplorerModSettingsChanged();
 
 // (Its stop event is its parameter.)
 DWORD WINAPI TaskbarPlaceThreadProc(LPVOID parameter) {
-    if (WaitForSingleObject((HANDLE)parameter, 800) == WAIT_TIMEOUT &&
+    // (Soon: the dock's look on a taskbar at another edge makes Windows lay
+    // it out wrong, see GrowTaskbarWindow.)
+    if (WaitForSingleObject((HANDLE)parameter, 150) == WAIT_TIMEOUT &&
         !g_unloading && IsTaskbarAtBottom() != g_taskbarAtBottom) {
         ExplorerModSettingsChanged();
     }
@@ -59056,11 +68894,21 @@ BOOL WhTool_ModInit() {
     return TRUE;
 }
 
+// The tool mod's process mutex (see Wh_ModInit).
+extern HANDLE g_toolModProcessMutex;
+
 void WhTool_ModUninit() {
     Wh_Log(L">");
 
     // (No restart starts once this is set.)
     g_unloading = true;
+    // Released first: a new version's process starts while this one still
+    // tears the island down (it takes a moment), and would leave on finding
+    // the mutex held.
+    if (g_toolModProcessMutex) {
+        CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex = nullptr;
+    }
     WaitForIslandRestart();
     AcquireSRWLockExclusive(&g_islandLifeLock);
     StopIslandThread();
