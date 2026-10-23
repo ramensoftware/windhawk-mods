@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              minecraft-launcher-region-spoof
-// @name            Minecraft laucnher region detection spoof
+// @name            Minecraft launcher region detection spoof
 // @name:zh-CN      启动器设备区域伪装
 // @description     Spoof process region signals for PCL CE and HMCL.
 // @description:zh-CN 伪装PCL CE和HMCL读取到的设备信息
@@ -11,17 +11,56 @@
 // @include         HMCL*.exe
 // @include         java.exe
 // @include         javaw.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Spoof region signals to Minecraft launchers with regional restrictions.
+# Minecraft launcher region detection spoof
 
-Workaround for [PCL-CE#3673](https://github.com/PCL-Community/PCL-CE/pull/3673), [PCL-CE#3676](https://github.com/PCL-Community/PCL-CE/pull/3676)
+Presents Singapore region information to PCL CE and HMCL to bypass their
+mainland China restrictions on downloading, installing and repairing Minecraft.
+The purpose is to give users the same choice of launcher features across regions.
 
-and [HMCL#7017](https://github.com/HMCL-dev/HMCL/pull/7017)
+## Region and time zone
+
+- PCL CE: user region `SG`, Windows device region GeoID `215`, and
+  `Singapore Standard Time`.
+- HMCL: Windows user GeoID `215`, JVM country `SG`, and JVM time zone
+  `Asia/Singapore`. Existing `user.country` and `user.timezone` JVM options are
+  replaced, and legacy `user.region` options are removed.
+- The affected launcher's time zone is fixed to UTC+8, without daylight saving
+  time. Local times shown by the launcher use UTC+8 even when Windows is set to
+  another time zone.
+- Language settings are preserved. Locale-dependent formats can reflect the
+  Singapore region. The overrides apply within the target processes.
+
+## Target processes
+
+Supports 64-bit x64 and ARM64 processes with these executable names:
+
+- `PCL2_CE*.exe` for PCL CE.
+- `HMCL*.exe` for HMCL executables.
+- `java.exe` and `javaw.exe` when the command line launches `HMCL*.jar`,
+  a JAR embedded in `HMCL*.exe`, or the main class `org.jackhuang.hmcl.Main`.
+
+## Usage
+
+Enable the mod before starting HMCL so that its region options are set before
+JVM creation. Restart PCL CE after enabling the mod to refresh its cached region
+and local time zone. To restore the original region behavior, disable the mod and
+fully restart the affected launcher.
+
+## Upstream changes
+
+- [PCL CE #3673](https://github.com/PCL-Community/PCL-CE/pull/3673) introduces
+  mainland China restrictions for Minecraft and modpack downloads, installation
+  and repair, using Windows region, locale, language and time zone signals.
+- [PCL CE #3676](https://github.com/PCL-Community/PCL-CE/pull/3676) adds the Windows
+  device region as an additional detection signal.
+- [HMCL #7017](https://github.com/HMCL-dev/HMCL/pull/7017) introduces mainland China
+  restrictions for game downloads.
 */
 // ==/WindhawkModReadme==
 
