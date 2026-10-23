@@ -1,12 +1,13 @@
 // ==WindhawkMod==
 // @id              startpad
 // @name            StartPad
-// @description     macOS-style fullscreen app launcher that replaces the Start menu
+// @description     macOS-style fullscreen app launcher with pages, folders, and drag-and-drop organization
 // @version         1.0
 // @author          Frankh93
 // @github          https://github.com/frankh93
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32
+// @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -29,10 +30,55 @@
 
 // ==WindhawkModReadme==
 /*
-# Launchpad Start
-Fullscreen macOS-style app launcher that replaces the Start menu.
-Hooks `XamlLauncher::ShowStartView` in `twinui.pcshell.dll` so the original
-Start menu never opens.
+# StartPad
+
+![StartPad Preview](https://raw.githubusercontent.com/frankh93/StartPad/main/startpad-preview.png)
+
+A macOS Launchpad-style fullscreen app launcher that replaces the Windows 11 Start menu, featuring horizontal paginated grids, interactive app folders, drag-and-drop reordering, and customizable visual themes.
+
+## Features & How to Use
+
+### Pages & Navigation
+- **Horizontal Pages**: Apps are organized into pages rather than a vertical scrolling list.
+- **Switching Pages**: Click and drag horizontally with the mouse, scroll the mouse wheel (vertical or horizontal), click the pagination dots at the bottom, or use **Page Up / Page Down**.
+- **2D Arrow Key Navigation**: Use the **Arrow keys** or **Tab** to move selection across icons. Moving past the left or right edge of the grid automatically flips to the previous or next page.
+
+### Drag-and-Drop & Folders
+- **Reorder Apps**: **Click and hold** (~320 ms) on any app or folder icon to pick it up, then drag it to a new position on the grid or across pages (hold near the screen edge to flip pages).
+- **Create Folders**:
+  - **Drag & Drop**: Drag one app icon directly onto another app icon (or into an existing folder).
+  - **Selection Mode**: Click the **More (`...`)** button on the right side of the search bar and choose **Create folder**, click the apps you want to bundle (marked with a blue checkmark), and click the **Done (`✓`)** button in the search bar (or press **Enter**).
+- **Rename Folders**: When a folder is open, **click its title** at the top or press **F2** (also works when a folder is selected on the main grid), type the new name, and press **Enter**.
+- **Remove or Ungroup**: Drag an icon outside the open folder panel to move it back to the main grid, or right-click a folder and select **Ungroup folder**.
+- **Persistent Layout**: Your custom icon order, folders, and hidden apps are automatically saved to Windhawk's mod storage per user.
+
+### Search & Launching
+- **Instant Search**: Start typing anywhere to filter apps immediately. Press **Esc** or click the clear (`×`) button to reset the search.
+- **Launch App**: Click an icon or press **Enter** on the selected app.
+- **Run as Administrator**: Hold **Ctrl + Shift + Enter** on a selected app, or right-click the app and choose **Run as administrator**.
+- **Context Menu**: Right-click any app to **Open**, **Run as administrator**, **Open file location**, **Remove from folder**, or **Hide**.
+
+### More Options (`...`) & Hiding Apps
+Click the **`...`** button inside the right side of the search bar to access:
+- **Create folder**: Interactively select multiple apps to group into a new folder.
+- **Edit hidden apps**: Toggle visibility badges on all apps to hide or unhide multiple items at once, then click the **Done (`✓`)** button in the search bar to save.
+- **Search in hidden apps**: When checked, typing a search query will also return matching apps that you have hidden.
+- **Reset layout**: Restores the default alphabetical layout and removes all custom folders and hidden-app rules.
+
+### Power Menu & Visuals
+- **Power Button**: Located at the bottom right (aligned with the page dots and last column), providing quick access to **Lock**, **Sign out**, **Sleep**, **Shut down**, and **Restart**.
+- **Visual Styles**: Choose between **MacOS Style** (pill search bar & squircle folders) and **Windows 11 Fluent** (Acrylic-inspired search box with system accent bar), automatically adapting to Windows Light and Dark modes.
+- **Legacy Icon Cleanup**: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.
+- **Localized UI**: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.
+
+## How StartPad differs from "fullscreen-start" mod
+Both mods replace the Start menu with a fullscreen app launcher, and **they cannot be enabled at the same time** because both intercept `XamlLauncher::ShowStartView`.
+- **StartPad** focuses on a **paginated macOS Launchpad workflow**: horizontal pages with spring physics, **folders** (creation, renaming, ungrouping), **drag-and-drop icon reordering** with persistent layout storage, **hiding apps**, a **right-click context menu** (Run as administrator, Open file location), an integrated **Power menu**, a **Windows 11 Fluent visual style**, and **multilingual UI strings**.
+- **Fullscreen Start (`fullscreen-start`)** by Rafael Mendes focuses on a single **vertically scrolled grid** with Direct2D rendering, live DWM Acrylic/Blur backdrops, `Ctrl+V` clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.
+
+## Credits & License
+- Hooking `XamlLauncher::ShowStartView` in `twinui.pcshell.dll` (`kShowMethodKeyboard` / `kShowFlagKeyboard`), secondary folder-process detection (`IsFolderWindowsProcess`), and thread initialization/uninitialization structure are adapted from [**Fullscreen Start (Launchpad style)** (`fullscreen-start`)](https://github.com/RafaelMendes1407) by **Rafael Mendes**, licensed under the MIT License (Copyright (c) Rafael Mendes).
+- Licensed under the **MIT License**.
 */
 // ==/WindhawkModReadme==
 
@@ -40,6 +86,7 @@ Start menu never opens.
 #include <windowsx.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <sddl.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -799,17 +846,40 @@ void GoToPage(int p) {
     StartPageAnim();
 }
 
-std::wstring LayoutPath(bool makeDir) {
-    std::wstring path;
-    PWSTR base = nullptr;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &base)) && base) {
-        path = base;
-        path += L"\\LaunchpadStart";
-        if (makeDir) CreateDirectoryW(path.c_str(), nullptr);
-        path += L"\\layout.txt";
+std::wstring GetCurrentUserSidString() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return std::wstring();
     }
-    if (base) CoTaskMemFree(base);
-    return path;
+    DWORD len = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &len);
+    std::wstring result;
+    if (len > 0) {
+        std::vector<BYTE> buf(len);
+        if (GetTokenInformation(token, TokenUser, buf.data(), len, &len)) {
+            auto* tu = reinterpret_cast<TOKEN_USER*>(buf.data());
+            LPWSTR sidStr = nullptr;
+            if (ConvertSidToStringSidW(tu->User.Sid, &sidStr) && sidStr) {
+                result = sidStr;
+                LocalFree(sidStr);
+            }
+        }
+    }
+    CloseHandle(token);
+    return result;
+}
+
+// Stores layout inside Windhawk's mod storage path so it is removed when the
+// mod is uninstalled, scoped by user SID so each user keeps their own layout.
+std::wstring LayoutPath(bool makeDir) {
+    WCHAR dir[MAX_PATH];
+    if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir))) return std::wstring();
+    if (makeDir) CreateDirectoryW(dir, nullptr);
+    std::wstring sid = GetCurrentUserSidString();
+    if (!sid.empty()) {
+        return std::wstring(dir) + L"\\layout_" + sid + L".txt";
+    }
+    return std::wstring(dir) + L"\\layout.txt";
 }
 
 std::string ToUtf8(const std::wstring& s) {
@@ -1020,9 +1090,6 @@ HBITMAP CreatePremultipliedDIB(int w, int h, const uint32_t* pixels) {
     return dib;
 }
 
-// Resamples a sub-rectangle [sx0..sx1, sy0..sy1] of `in` (sw x sh) into a
-// `dst x dst` bitmap using area-averaging when downscaling and smooth bilinear
-// interpolation when upscaling (so 32x32/48x48 icons scale up cleanly).
 HBITMAP ResampleSubRect(const uint32_t* in, int sw, int sh,
                         int sx0, int sy0, int sx1, int sy1, int dst) {
     int cw = std::max(1, sx1 - sx0);
@@ -1052,7 +1119,6 @@ HBITMAP ResampleSubRect(const uint32_t* in, int sw, int sh,
     };
 
     if (side >= dst) {
-        // Area-averaging box filter for downscaling
         for (int y = 0; y < dst; y++) {
             int y0 = (int)std::floor(yStart + (double)y * side / dst);
             int y1 = std::max(y0 + 1, (int)std::ceil(yStart + (double)(y + 1) * side / dst));
@@ -1073,7 +1139,6 @@ HBITMAP ResampleSubRect(const uint32_t* in, int sw, int sh,
             }
         }
     } else {
-        // Smooth bilinear filter for upscaling small icons
         for (int y = 0; y < dst; y++) {
             double fy = yStart + ((y + 0.5) * side / dst) - 0.5;
             int y0 = (int)std::floor(fy);
@@ -1108,9 +1173,6 @@ HBITMAP ResampleSubRect(const uint32_t* in, int sw, int sh,
     return out;
 }
 
-// Normalizes alpha to premultiplied BGRA, detects if Windows Shell drew a
-// thin 1-2px frame box around a small legacy icon (like 7-Zip ZS), strips
-// the outer border box, crops to the inner icon, and scales it to `targetPx`!
 HBITMAP NormalizeAndTrimIcon(HBITMAP hbm, int targetPx) {
     if (!hbm) return nullptr;
     BITMAP bm = {};
@@ -1181,15 +1243,12 @@ HBITMAP NormalizeAndTrimIcon(HBITMAP hbm, int targetPx) {
         return CreatePremultipliedDIB(w, h, px.data());
     }
 
-    // Check if the outer bounding box is a hollow 1-3px Windows Shell frame
-    // around a smaller centered icon (the exact issue in 7-Zip ZS):
     int bw = r - l, bh = b - t;
     if (bw >= 24 && bh >= 24) {
         int inset = std::max(3, std::min(bw, bh) / 14);
         int ringTotal = 0, ringTransparent = 0;
         for (int y = t + inset; y < b - inset; y++) {
             for (int x = l + inset; x < r - inset; x++) {
-                // Check pixels just inside the border ring
                 if (x < l + inset * 2 || x >= r - inset * 2 ||
                     y < t + inset * 2 || y >= b - inset * 2) {
                     ringTotal++;
@@ -1197,8 +1256,6 @@ HBITMAP NormalizeAndTrimIcon(HBITMAP hbm, int targetPx) {
                 }
             }
         }
-        // If >92% of the ring just inside the outer edge is transparent, the
-        // outer edge is a hollow frame! Find the true inner icon bounds.
         if (ringTotal > 0 && ringTransparent * 100 / ringTotal >= 92) {
             int il = 0, it = 0, ir = 0, ib = 0;
             if (findBounds(l + inset * 2, t + inset * 2, r - inset * 2, b - inset * 2,
@@ -1211,8 +1268,6 @@ HBITMAP NormalizeAndTrimIcon(HBITMAP hbm, int targetPx) {
 
     int full = std::max(w, h);
     int content = std::max(bw, bh);
-    // If the icon content is smaller than 68% of the canvas, crop & enlarge it
-    // (with a 6% breathing margin) so it matches all other full-bleed icons!
     if (content < (int)(full * 0.68)) {
         int pad = std::max(1, (int)std::lround(content * 0.04));
         int sx0 = std::max(l - pad, 0);
@@ -1272,9 +1327,6 @@ void EnsureAppIcon(App& a, int px) {
                                                nullptr, IID_PPV_ARGS(&item))) && item) {
         IShellItemImageFactory* factory = nullptr;
         if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory)))) {
-            // Request 256x256 with SIIGBF_BIGGERSIZEOK so Windows gives us the
-            // highest resolution available, then NormalizeAndTrimIcon strips any
-            // legacy border box and scales cleanly to `px`!
             int reqPx = std::max(px, 256);
             SIZE sz = {reqPx, reqPx};
             HBITMAP raw = nullptr;
@@ -2710,13 +2762,6 @@ int ContextMenu(HWND hwnd, int x, int y, const std::vector<std::pair<int, const 
     return cmd;
 }
 
-// Ordered exactly as requested:
-// 1. Create folder
-// 2. Separator
-// 3. Edit hidden apps
-// 4. Search in hidden apps
-// 5. Separator
-// 6. Reset layout
 void ShowMoreOptionsMenu(HWND hwnd, const RECT& btnRect) {
     const UiStrings& str = GetStrings();
     HMENU menu = CreatePopupMenu();
@@ -3208,10 +3253,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
 
-        case WM_LP_SHELLCHANGE:
+        case WM_LP_SHELLCHANGE: {
+            PIDLIST_ABSOLUTE* pidls = nullptr;
+            LONG event = 0;
+            HANDLE lock = SHChangeNotification_Lock(
+                reinterpret_cast<HANDLE>(wp), static_cast<DWORD>(lp), &pidls,
+                &event);
+            if (lock) {
+                SHChangeNotification_Unlock(lock);
+            }
             InterlockedExchange(&g_appsDirty, 1);
             SetTimer(hwnd, kShellDebounceTimer, 600, nullptr);
             return 0;
+        }
 
         case WM_LP_PREWARM: {
             if (IsWindowVisible(hwnd) || g_loadPx <= 0) return 0;
@@ -3744,6 +3798,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 // ---------------------------------------------------------------------------
 // Native `XamlLauncher::ShowStartView` Symbol Hook (twinui.pcshell.dll)
+// Adapted from fullscreen-start by Rafael Mendes (MIT License)
 // ---------------------------------------------------------------------------
 constexpr int kShowMethodKeyboard = 1;
 constexpr int kShowFlagKeyboard = 0x8;
@@ -3834,11 +3889,22 @@ DWORD WINAPI ThreadProc(LPVOID) {
     wc.hInstance = inst;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kClassName;
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {
+        CoUninitialize();
+        SetEvent(g_ready);
+        return 0;
+    }
 
     g_wnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED,
-                            kClassName, L"Launchpad", WS_POPUP, 0, 0, 0, 0,
+                            kClassName, L"StartPad", WS_POPUP, 0, 0, 0, 0,
                             nullptr, nullptr, inst, nullptr);
+    if (!g_wnd) {
+        UnregisterClassW(kClassName, inst);
+        CoUninitialize();
+        SetEvent(g_ready);
+        return 0;
+    }
+
     SetLayeredWindowAttributes(g_wnd, 0, 255, LWA_ALPHA);
     RegisterShellAppWatcher(g_wnd);
 
@@ -3888,7 +3954,7 @@ void Wh_ModSettingsChanged() {
 
 BOOL Wh_ModInit() {
     if (IsFolderWindowsProcess()) {
-        Wh_Log(L"Folder windows process; skipping Launchpad Start");
+        Wh_Log(L"Folder windows process; skipping StartPad");
         return FALSE;
     }
     LoadSettings();
@@ -3911,6 +3977,8 @@ void Wh_ModUninit() {
     WaitForSingleObject(g_ready, INFINITE);
     if (HWND wnd = g_wnd) {
         PostMessageW(wnd, WM_LP_QUIT, 0, 0);
+    } else if (g_threadId) {
+        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
     }
     WaitForSingleObject(g_thread, INFINITE);
     CloseHandle(g_thread);
