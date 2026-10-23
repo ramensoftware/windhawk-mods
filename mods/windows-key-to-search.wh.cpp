@@ -57,7 +57,7 @@ pressed. UAC's secure desktop is outside the scope of the mod.
 
 #include <windows.h>
 #include <shellapi.h>
-#include <cstdio>
+#include <cwchar>
 
 namespace {
 constexpr ULONG_PTR kInputTag = 0x57485352;
