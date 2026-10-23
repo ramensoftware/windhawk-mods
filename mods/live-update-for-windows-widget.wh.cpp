@@ -60,7 +60,7 @@ Overview: Wi-Fi Hotspot
 
 ## Quick toggles, positioning & notes
 
-- **Taskbar position (`root_left` on centered taskbar, automatic `tray_left` on left-aligned taskbar):** By default (`root_left`), when the Windows 11 taskbar is centered, the widget sits on the far left of the taskbar and automatically collapses the native Windows 11 Widgets button so the two never overlap. Whenever the taskbar is left-aligned (`TaskbarAl = 0`), `root_left` automatically falls back to the system tray (`tray_left`) so the Start button and app icons are never covered.
+- **Taskbar position (`root_left` on centered taskbar, automatic `tray_left` on left-aligned taskbar):** By default (`root_left`), when the Windows 11 taskbar is centered, the widget sits on the left side of the taskbar right after the native Windows Widgets button (or at the left edge if Widgets is turned off in Windows Settings). You can optionally enable **Hide Windows Widgets button in left corner** (`appearance.hideWidgetsButton`, off by default) to collapse the native Widgets button while using `root_left` and restore its original state when disabled. Whenever the taskbar is left-aligned (`TaskbarAl = 0`), `root_left` automatically falls back to the system tray (`tray_left`) so the Start button and app icons are never covered.
 - **Right-click quick toggles vs. Windhawk settings:** Toggles in the widget's right-click context menu save quick runtime overrides (`ui.*`) that take precedence over the Windhawk settings tab. Saving settings in Windhawk (or choosing **Reset to Windhawk settings** in the context menu) clears all runtime overrides.
 - **OBS WebSocket password:** The `obs.password` field is stored as a standard Windhawk mod setting, so it is included in Windhawk settings exports.
 
@@ -98,7 +98,7 @@ Overview: Wi-Fi Hotspot
 - **Quay màn hình OBS (tùy chọn, tắt mặc định):** Kết nối cục bộ (`127.0.0.1`) với OBS WebSocket v5 khi bật trong cài đặt để hiển thị thời lượng quay và nút Tạm dừng/Tiếp tục/Dừng.
 
 ### Lưu ý về vị trí, menu chuột phải & mật khẩu OBS
-- **Vị trí mặc định (`root_left` khi taskbar căn giữa, tự động về `tray_left` khi taskbar căn trái):** Mặc định khi thanh taskbar Windows 11 căn giữa, widget nằm ở góc trái (`root_left`) để cân đối bố cục và tự động ẩn nút Widgets gốc của Windows để không chồng lấp (tự khôi phục khi đổi vị trí hoặc tắt mod). Khi thanh taskbar được căn trái (`TaskbarAl = 0`), mod sẽ tự động chuyển vị trí về khay hệ thống (`tray_left`) để không bao giờ đè lên nút Start và các biểu tượng ứng dụng.
+- **Vị trí mặc định (`root_left` khi taskbar căn giữa, tự động về `tray_left` khi taskbar căn trái):** Mặc định khi thanh taskbar Windows 11 căn giữa, widget nằm ở góc trái (`root_left`) ngay sau nút Các tiện ích (Widgets) của Windows để không chồng lấp (hoặc sát mép trái nếu bạn đã tắt Widgets trong cài đặt Windows). Bạn có thể bật tùy chọn **Ẩn nút Các tiện ích (Widgets) ở góc trái** (`appearance.hideWidgetsButton`, tắt mặc định) nếu muốn ẩn nút Widgets gốc khi dùng `root_left` (tự khôi phục đúng trạng thái ban đầu khi tắt). Khi thanh taskbar được căn trái (`TaskbarAl = 0`), mod sẽ tự động chuyển vị trí về khay hệ thống (`tray_left`) để không bao giờ đè lên nút Start và các biểu tượng ứng dụng.
 - **Menu chuột phải và cài đặt Windhawk:** Các tùy chọn bật/tắt nhanh trong menu chuột phải lưu trạng thái ghi đè tạm thời (`ui.*`) và được ưu tiên hơn trang cài đặt Windhawk. Khi bạn bấm Lưu trong trang cài đặt Windhawk (hoặc chọn **Khôi phục theo cài đặt Windhawk** trong menu chuột phải), các ghi đè tạm thời này sẽ được xóa.
 - **Mật khẩu OBS WebSocket:** Trường `obs.password` là cài đặt thông thường của Windhawk nên sẽ được bao gồm khi xuất (export) cài đặt Windhawk.
 */
@@ -145,6 +145,10 @@ Overview: Wi-Fi Hotspot
     $name:vi-VN: Lề trái khi đặt đè (0–2500 DIP)
     #! $min: 0
     #! $max: 2500
+    #! $showIf: {position: root_left}
+  - hideWidgetsButton: false
+    $name: Hide Windows Widgets button in left corner
+    $name:vi-VN: Ẩn nút Các tiện ích (Widgets) ở góc trái
     #! $showIf: {position: root_left}
   - widgetWidth: 270
     $name: Compact widget width (140–480 DIP)
@@ -359,7 +363,6 @@ Overview: Wi-Fi Hotspot
 #include <shellapi.h>
 #include <propsys.h>
 #include <propkey.h>
-#include <intrin.h>
 #include <cstring>
 #include <wincodec.h>
 #include <powrprof.h>
@@ -468,17 +471,23 @@ bool HasSupportedWindowsVersion() {
     return SupportedTaskbarBuild(version.dwMajorVersion, version.dwBuildNumber);
 }
 
-bool IsTaskbarLeftAligned() {
+std::atomic<bool> g_taskbarLeftAligned{false};
+
+void RefreshTaskbarAlignment() {
     DWORD alignment = 1; // Windows 11 default is 1 (centered).
     DWORD size = sizeof(alignment);
-    if (RegGetValueW(
+    bool leftAligned =
+        RegGetValueW(
             HKEY_CURRENT_USER,
             L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
             L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &alignment,
-            &size) == ERROR_SUCCESS) {
-        return alignment == 0;
-    }
-    return false;
+            &size) == ERROR_SUCCESS &&
+        alignment == 0;
+    g_taskbarLeftAligned.store(leftAligned);
+}
+
+bool IsTaskbarLeftAligned() {
+    return g_taskbarLeftAligned.load();
 }
 
 struct ModSettings {
@@ -486,6 +495,7 @@ struct ModSettings {
     bool enableTaskbarWidget = true;
     std::wstring position = L"root_left";
     int widgetLeftOffset = 12;
+    bool hideWidgetsButton = false;
     int widgetWidth = 270;
     int expandedWidth = 540;
     std::wstring progressStyle = L"capsule";
@@ -601,11 +611,11 @@ bool ReadUiOverrideFlag(PCWSTR key, bool fallback) {
 
 void ClearUiOverrides() {
     for (PCWSTR key : {
-             L"collapsedTaskbar", L"popupTheme", L"position", L"progressStyle",
-             L"enableLunarWidget", L"enableCultureWidget", L"enableMediaWidget",
-             L"enableClockWidget", L"enableBatteryWidget", L"bluetoothBattery",
-             L"enablePrivacyWidget", L"enableTaskProgress", L"display.enabled",
-             L"hotspot.enabled", L"enableObsWidget"
+             L"collapsedTaskbar", L"popupTheme", L"position", L"hideWidgetsButton",
+             L"progressStyle", L"enableLunarWidget", L"enableCultureWidget",
+             L"enableMediaWidget", L"enableClockWidget", L"enableBatteryWidget",
+             L"bluetoothBattery", L"enablePrivacyWidget", L"enableTaskProgress",
+             L"display.enabled", L"hotspot.enabled", L"enableObsWidget"
          }) {
         std::wstring fullKey = std::wstring(L"ui.") + key;
         Wh_DeleteValue(fullKey.c_str());
@@ -616,6 +626,7 @@ void LoadSettings(bool resetQuickOverrides = false) {
     if (resetQuickOverrides) {
         ClearUiOverrides();
     }
+    RefreshTaskbarAlignment();
 
     ModSettings s;
     std::wstring lang = WindhawkUtils::StringSetting::make(L"language").get();
@@ -653,6 +664,8 @@ void LoadSettings(bool resetQuickOverrides = false) {
 
     s.widgetLeftOffset =
         ClampVal(Wh_GetIntSetting(L"appearance.widgetLeftOffset"), 0, 2500);
+    s.hideWidgetsButton = ReadUiOverrideFlag(
+        L"hideWidgetsButton", Wh_GetIntSetting(L"appearance.hideWidgetsButton") != 0);
     s.widgetWidth =
         ClampVal(Wh_GetIntSetting(L"appearance.widgetWidth"), 140, 480);
     s.expandedWidth =
@@ -936,14 +949,19 @@ struct MemorySnapshot {
     std::vector<MemoryApplication> top;
 };
 struct MemoryAlerts {
+    bool initialized = false;
     unsigned fired = 0;
     int Observe(unsigned percent) {
         int level = 0;
         constexpr unsigned levels[] = {80, 90, 95};
         for (unsigned i = 0; i < 3; ++i) {
             if (percent + 3 < levels[i]) fired &= ~(1u << i);
-            if (percent >= levels[i] && !(fired & (1u << i))) { fired |= 1u << i; level = levels[i]; }
+            if (percent >= levels[i] && !(fired & (1u << i))) {
+                fired |= 1u << i;
+                if (initialized) level = levels[i];
+            }
         }
+        initialized = true;
         return level;
     }
 };
@@ -952,6 +970,7 @@ struct TemperatureSnapshot {
     bool operator==(TemperatureSnapshot const&) const = default;
 };
 struct TemperatureAlerts {
+    bool initialized = false;
     unsigned fired = 0;
     int Observe(int value) {
         if (value < 0) return 0;
@@ -961,9 +980,10 @@ struct TemperatureAlerts {
             if (value <= levels[i] - 5) fired &= ~(1u << i);
             if (value >= levels[i] && !(fired & (1u << i))) {
                 fired |= 1u << i;
-                level = levels[i];
+                if (initialized) level = levels[i];
             }
         }
+        initialized = true;
         return level;
     }
 };
@@ -980,8 +1000,10 @@ struct StorageVolume {
     bool operator==(StorageVolume const&) const = default;
 };
 struct StorageAlerts {
+    bool initialized = false;
     std::set<std::wstring> alerted;
     bool Observe(std::vector<StorageVolume> const& volumes) {
+        if (volumes.empty()) return false;
         bool triggered = false;
         std::set<std::wstring> seen;
         for (auto const& v : volumes) {
@@ -992,10 +1014,11 @@ struct StorageAlerts {
                 alerted.erase(v.root);
             }
             if (v.free * 10 < v.total && alerted.insert(v.root).second) {
-                triggered = true;
+                if (initialized) triggered = true;
             }
         }
         std::erase_if(alerted, [&](auto const& root) { return !seen.contains(root); });
+        initialized = true;
         return triggered;
     }
 };
@@ -6346,52 +6369,111 @@ struct ShiftedTrayChild {
 };
 // Contains only weak UI references; automatic destruction is safe at process exit.
 std::vector<ShiftedTrayChild> g_shiftedTrayChildren;
-std::vector<winrt::weak_ref<wux::FrameworkElement>> g_hiddenNativeWidgetsButtons;
+struct SavedNativeWidgetsButtonState {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    wux::Visibility visibility = wux::Visibility::Visible;
+    double opacity = 1.0;
+    bool isHitTestVisible = true;
+};
+std::vector<SavedNativeWidgetsButtonState> g_hiddenNativeWidgetsButtons;
+std::vector<winrt::weak_ref<wux::FrameworkElement>> g_cachedNativeWidgetsButtons;
+struct WatchedNativeWidgetsButton {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    winrt::event_token sizeChangedToken{};
+};
+std::vector<WatchedNativeWidgetsButton> g_watchedNativeWidgetsButtons;
+bool g_nativeWidgetsButtonsLookedUp = false;
+
+void UnwatchNativeWidgetsButtons() {
+    for (auto const& watched : g_watchedNativeWidgetsButtons) {
+        if (auto btn = watched.element.get()) {
+            try { btn.SizeChanged(watched.sizeChangedToken); } catch (...) {}
+        }
+    }
+    g_watchedNativeWidgetsButtons.clear();
+}
 
 void RestoreNativeWidgetsButton() {
-    for (auto const& weakBtn : g_hiddenNativeWidgetsButtons) {
-        if (auto btn = weakBtn.get()) {
+    for (auto const& saved : g_hiddenNativeWidgetsButtons) {
+        if (auto btn = saved.element.get()) {
             try {
-                btn.IsHitTestVisible(true);
-                btn.Opacity(1.0);
-                btn.Visibility(wux::Visibility::Visible);
+                btn.IsHitTestVisible(saved.isHitTestVisible);
+                btn.Opacity(saved.opacity);
+                btn.Visibility(saved.visibility);
             } catch (...) {}
         }
     }
     g_hiddenNativeWidgetsButtons.clear();
 }
 
-void UpdateNativeWidgetsButtonVisibility(wux::FrameworkElement const& root,
-                                         ModSettings const& settings,
-                                         std::wstring const& effectivePos) {
-    // Hide the native Windows 11 Widgets button both when sitting at root_left (centered taskbar)
-    // and when root_left automatically falls back to tray_left (left-aligned taskbar, where
-    // Windows 11 moves the native Widgets button right next to the system tray).
-    if (settings.position != L"root_left" && effectivePos != L"root_left" &&
-        effectivePos != L"tray_left") {
+[[clang::no_destroy]] wuxc::Border g_playerGrid{nullptr}; // The compact taskbar widget root border
+
+void CacheNativeWidgetsButtons(wux::FrameworkElement const& root);
+
+void ApplyNativeWidgetsButtonState(ModSettings const& settings,
+                                   std::wstring const& effectivePos) {
+    if (effectivePos != L"root_left" || !settings.hideWidgetsButton) {
         RestoreNativeWidgetsButton();
         return;
     }
-    if (!root) return;
-    auto buttons = FindNativeWidgetsButtons(root);
-    for (auto const& btn : buttons) {
+    if (!g_nativeWidgetsButtonsLookedUp && g_playerGrid && g_playerGrid.XamlRoot()) {
+        CacheNativeWidgetsButtons(
+            g_playerGrid.XamlRoot().Content().try_as<wux::FrameworkElement>());
+    }
+    for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
+        auto btn = weakBtn.get();
+        if (!btn) continue;
         try {
-            if (btn.Visibility() == wux::Visibility::Visible || btn.IsHitTestVisible()) {
+            bool alreadyTracked = std::any_of(
+                g_hiddenNativeWidgetsButtons.begin(),
+                g_hiddenNativeWidgetsButtons.end(),
+                [&](auto const& saved) { return saved.element.get() == btn; });
+            if (!alreadyTracked) {
+                g_hiddenNativeWidgetsButtons.push_back({
+                    winrt::make_weak(btn),
+                    btn.Visibility(),
+                    btn.Opacity(),
+                    btn.IsHitTestVisible(),
+                });
                 btn.IsHitTestVisible(false);
                 btn.Opacity(0.0);
                 btn.Visibility(wux::Visibility::Collapsed);
-                bool alreadyTracked = std::any_of(
-                    g_hiddenNativeWidgetsButtons.begin(),
-                    g_hiddenNativeWidgetsButtons.end(),
-                    [&](auto const& w) { return w.get() == btn; });
-                if (!alreadyTracked) {
-                    g_hiddenNativeWidgetsButtons.push_back(winrt::make_weak(btn));
-                }
             }
         } catch (...) {}
     }
 }
-[[clang::no_destroy]] wuxc::Border g_playerGrid{nullptr}; // The compact taskbar widget root border
+
+double ComputeRootLeftOffsetDip(ModSettings const& settings) {
+    double baseOffset = static_cast<double>(settings.widgetLeftOffset);
+    if (settings.hideWidgetsButton) {
+        return baseOffset;
+    }
+    double shiftAfterWidgets = baseOffset;
+    for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
+        auto btn = weakBtn.get();
+        if (!btn) continue;
+        try {
+            if (btn.Visibility() != wux::Visibility::Visible) continue;
+            double width = btn.ActualWidth();
+            double height = btn.ActualHeight();
+            if (width <= 0.0 || height <= 0.0) continue;
+            if (g_injectedParentPanel) {
+                auto bounds = btn.TransformToVisual(g_injectedParentPanel).TransformBounds({
+                    0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)
+                });
+                // Only offset past a native Widgets button situated on the left side of the taskbar.
+                if (bounds.X >= 0.0f && bounds.X < 300.0f) {
+                    shiftAfterWidgets = std::max(
+                        shiftAfterWidgets,
+                        static_cast<double>(bounds.X + bounds.Width) + baseOffset);
+                }
+            } else {
+                shiftAfterWidgets = std::max(shiftAfterWidgets, width + baseOffset);
+            }
+        } catch (...) {}
+    }
+    return shiftAfterWidgets;
+}
 [[clang::no_destroy]] wuxc::Border g_widgetBadgeBorder{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_widgetZodiacText{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_widgetLine1Text{nullptr};
@@ -6462,6 +6544,9 @@ LiveSnapshot g_uiLive;
 BatteryAlertTracker g_batteryAlertTracker;
 BatteryAlert g_batteryNotice = BatteryAlert::None;
 BluetoothAlertTracker g_bluetoothAlerts;
+TemperatureAlerts g_cpuTempAlerts, g_gpuTempAlerts;
+MemoryAlerts g_memoryAlerts;
+StorageAlerts g_storageAlerts;
 BluetoothDeviceBattery g_bluetoothNotice;
 uint64_t g_bluetoothNoticeUntil = 0;
 std::map<ActivityKind, std::wstring> g_hiddenActivities;
@@ -6497,6 +6582,23 @@ bool g_renderedBatteryAttention = false;
 [[clang::no_destroy]] wuxc::Button g_popupMediaNext{nullptr};
 
 void RefreshTaskbarWidgetData();
+
+void CacheNativeWidgetsButtons(wux::FrameworkElement const& root) {
+    if (g_nativeWidgetsButtonsLookedUp || !root) return;
+    UnwatchNativeWidgetsButtons();
+    g_cachedNativeWidgetsButtons.clear();
+    auto buttons = FindNativeWidgetsButtons(root);
+    for (auto const& btn : buttons) {
+        g_cachedNativeWidgetsButtons.push_back(winrt::make_weak(btn));
+        try {
+            auto token = btn.SizeChanged([](auto const&, auto const&) {
+                if (!g_shuttingDown) RefreshTaskbarWidgetData();
+            });
+            g_watchedNativeWidgetsButtons.push_back({winrt::make_weak(btn), token});
+        } catch (...) {}
+    }
+    g_nativeWidgetsButtonsLookedUp = true;
+}
 void RefreshExpandedPopupData();
 void RequestPopupRefresh() { NotifyLiveUi(); }
 void BeginCloseExpandedPopup(HWND hwnd);
@@ -6583,11 +6685,8 @@ winrt::Windows::UI::Color SystemAccentColor() {
 }
 [[clang::no_destroy]] wuxc::ControlTemplate g_glassButtonTemplate{nullptr};
 bool g_glassTemplateFailed = false;
-std::wstring EffectivePopupTheme(ModSettings const& settings) {
-    return settings.popupTheme;
-}
 bool UseGlassSurfaces() {
-    return g_effectsAllowed.load() && EffectivePopupTheme(GetSettings()) == L"glass";
+    return g_effectsAllowed.load() && GetSettings().popupTheme == L"glass";
 }
 wuxm::LinearGradientBrush GlassEdgeBrush() {
     wuxm::LinearGradientBrush edge;edge.StartPoint({0,0});edge.EndPoint({1,1});
@@ -7063,7 +7162,7 @@ std::wstring FormatPlaybackTime(int64_t seconds);
 [[clang::no_destroy]] wuxc::Button g_obsPause{nullptr};
 [[clang::no_destroy]] wuxc::Button g_obsStop{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_batteryTools{nullptr};
-[[clang::no_destroy]] wuxc::Button g_usageButton{nullptr};
+[[clang::no_destroy]] wuxc::Button g_powerSettingsButton{nullptr};
 [[clang::no_destroy]] wuxc::Border g_compactNotice{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_noticeText{nullptr};
 std::wstring g_selectedPrivacy = L"microphone";
@@ -7186,8 +7285,8 @@ void RefreshBluetoothList(bool vi) {
 
 void RefreshBatteryTools(bool vi) {
     RefreshBluetoothList(vi);
-    if (g_usageButton) {
-        g_usageButton.Content(winrt::box_value(
+    if (g_powerSettingsButton) {
+        g_powerSettingsButton.Content(winrt::box_value(
             PickText(vi, L"Cài đặt nguồn & pin", L"Power & battery settings")));
     }
 }
@@ -7199,7 +7298,7 @@ void ReleaseAdaptiveControls() {
     g_renderedBluetooth.clear(); g_renderedBluetoothLanguage = -1;
     g_tabsHost = nullptr; g_tabsPrevious = nullptr; g_tabsNext = nullptr; g_popupHeader = nullptr; g_popupDivider = nullptr;
     g_cultureButton = nullptr; g_privacySelector = nullptr; g_privacyAppList = nullptr; g_batteryTools = nullptr;
-    g_usageButton = nullptr;
+    g_powerSettingsButton = nullptr;
     g_compactNotice = nullptr; g_noticeText = nullptr; g_renderedPrivacy.clear(); g_renderedPrivacySelection.clear();
     g_renderedPrivacyLanguage = -1; g_batteryPageOpen = false;
 }
@@ -7696,6 +7795,8 @@ void SetQuickOption(PCWSTR key,std::wstring const& value) {
     std::wstring uiKey = std::wstring(L"ui.") + key;
     Wh_SetStringValue(uiKey.c_str(), value.c_str());
     LoadSettings();
+    auto settings = GetSettings();
+    ApplyNativeWidgetsButtonState(settings, EffectiveTaskbarPosition(settings));
     ++g_settingsRevision;
     g_popupBackdropDirty = true;
     WakeSettingsProviders();
@@ -7786,6 +7887,16 @@ void ShowTaskbarContextMenu(wux::FrameworkElement const& anchor) {
         });
         positions.Items().Append(item);
     }
+    positions.Items().Append(wuxc::MenuFlyoutSeparator());
+    wuxc::ToggleMenuFlyoutItem hideWidgetsItem;
+    hideWidgetsItem.Text(PickText(
+        vi, L"Ẩn nút Các tiện ích ở góc trái", L"Hide Widgets button in left corner"));
+    hideWidgetsItem.IsChecked(settings.hideWidgetsButton);
+    std::wstring nextHideWidgets = settings.hideWidgetsButton ? L"0" : L"1";
+    hideWidgetsItem.Click([nextHideWidgets](auto const&, auto const&) {
+        try { SetQuickOption(L"hideWidgetsButton", nextHideWidgets); } catch (...) {}
+    });
+    positions.Items().Append(hideWidgetsItem);
     g_quickMenu.Items().Append(positions);
 
     wuxc::MenuFlyoutSubItem styles;
@@ -7821,6 +7932,9 @@ void ShowTaskbarContextMenu(wux::FrameworkElement const& anchor) {
         try {
             g_hiddenActivities.clear();
             LoadSettings(true);
+            auto currentSettings = GetSettings();
+            ApplyNativeWidgetsButtonState(
+                currentSettings, EffectiveTaskbarPosition(currentSettings));
             ++g_settingsRevision;
             g_popupBackdropDirty = true;
             WakeSettingsProviders();
@@ -8312,7 +8426,7 @@ void RefreshTaskbarWidgetData() {
         if (g_widgetBadgeBorder) g_widgetBadgeBorder.Margin({0, 0, settingsOnly ? 0.0 : 8.0, 0});
         if (g_widgetLine2Text) g_widgetLine2Text.Visibility(settingsOnly || collapsed ? wux::Visibility::Collapsed : wux::Visibility::Visible);
         if (EffectiveTaskbarPosition(settings) == L"root_left") {
-            g_playerGrid.Margin({static_cast<double>(settings.widgetLeftOffset), 0.0, 0.0, 0.0});
+            g_playerGrid.Margin({ComputeRootLeftOffsetDip(settings), 0.0, 0.0, 0.0});
         } else {
             g_playerGrid.Margin({4.0, 0.0, 4.0, 0.0});
         }
@@ -8640,7 +8754,7 @@ void CapturePopupSourceGeometry(int& outCardWidthDip, int& outCardHeightDip) {
     RECT taskbar{};
     GetWindowRect(g_taskbarWnd, &taskbar);
     if (!GetElementScreenRect(g_playerGrid, g_popupSourceRect)) {
-        int leftPx = PopupDipToPx(settings.widgetLeftOffset, g_taskbarWnd);
+        int leftPx = PopupDipToPx(ComputeRootLeftOffsetDip(settings), g_taskbarWnd);
         g_popupSourceRect = {
             taskbar.left + leftPx, taskbar.top,
             taskbar.left + leftPx + PopupDipToPx(settings.widgetWidth, g_taskbarWnd),
@@ -8896,7 +9010,7 @@ void UpdateWidgetMaterial(bool light, bool open) {
         return;
     }
     bool allowed = g_effectsAllowed.load();
-    bool glass = allowed && EffectivePopupTheme(GetSettings()) == L"glass";
+    bool glass = allowed && GetSettings().popupTheme == L"glass";
     int style = (light ? 1 : 0) | (glass ? 2 : 0) | (allowed ? 4 : 0);
     if (style != g_widgetMaterialStyle) {
         wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer, nullptr);
@@ -9085,7 +9199,7 @@ bool SetPopupCompositionBackdrop(bool light) {
 
 void ApplyPopupBackdrop(bool light) {
     if (!g_popupRootCard || !g_expandedPopup) return;
-    auto theme = EffectivePopupTheme(GetSettings());
+    auto theme = GetSettings().popupTheme;
     bool glass = theme == L"glass";
     bool allowed = g_effectsAllowed.load() && theme != L"solid";
     int state = int(light) | (allowed ? 2 : 0) | (glass ? 4 : 0);
@@ -9697,12 +9811,12 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_privacyAppList = wuxc::StackPanel(); g_privacyAppList.Spacing(6);
         liveBody.Children().Append(g_privacyAppList); liveBody.Children().Append(g_privacySelector);
         g_batteryTools = wuxc::StackPanel(); g_batteryTools.Spacing(0);
-        g_usageButton = wuxc::Button(); g_usageButton.CornerRadius({6, 6, 6, 6}); g_usageButton.Margin({0, 0, 0, 8});
-        g_usageButton.Click([](auto const&, auto const&) {
+        g_powerSettingsButton = wuxc::Button(); g_powerSettingsButton.CornerRadius({6, 6, 6, 6}); g_powerSettingsButton.Margin({0, 0, 0, 8});
+        g_powerSettingsButton.Click([](auto const&, auto const&) {
             ShellExecuteW(nullptr, L"open", L"ms-settings:powersleep", nullptr, nullptr, SW_SHOWNORMAL);
             if (g_liveWakeEvent) SetEvent(g_liveWakeEvent); RequestPopupRefresh();
         });
-        g_batteryTools.Children().Append(g_usageButton);
+        g_batteryTools.Children().Append(g_powerSettingsButton);
         g_obsControls = wuxc::StackPanel(); g_obsControls.Orientation(wuxc::Orientation::Horizontal);
         g_obsControls.Spacing(10); g_obsControls.Margin({0, 12, 0, 8});
         g_obsControls.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -10038,21 +10152,24 @@ void ProcessLiveActivityAlerts() {
     bool stoppedObs = settings.enableObsWidget && g_uiLive.obs.stoppedSerial != announcedObsStop && GetTickCount64() < g_uiLive.obs.stoppedUntil;
     announcedObsStop = g_uiLive.obs.stoppedSerial;
     if (stoppedObs) show = ActivityKind::Obs;
-    static TemperatureAlerts cpuAlerts, gpuAlerts;
     if (settings.temperatureAlerts &&
-        (cpuAlerts.Observe(g_uiLive.temperature.cpu) | gpuAlerts.Observe(g_uiLive.temperature.gpu))) {
+        (g_cpuTempAlerts.Observe(g_uiLive.temperature.cpu) |
+         g_gpuTempAlerts.Observe(g_uiLive.temperature.gpu))) {
         show = ActivityKind::Memory;
+    } else if (!settings.temperatureAlerts) {
+        g_cpuTempAlerts = {};
+        g_gpuTempAlerts = {};
     }
-    static MemoryAlerts memoryAlerts;
     if (settings.memoryAlerts && g_uiLive.memory.valid &&
-        memoryAlerts.Observe(g_uiLive.memory.percent)) {
+        g_memoryAlerts.Observe(g_uiLive.memory.percent)) {
         show = ActivityKind::Memory;
+    } else if (!settings.memoryAlerts) {
+        g_memoryAlerts = {};
     }
-    static StorageAlerts storageAlerts;
-    if (settings.storageAlerts && storageAlerts.Observe(g_uiLive.storage)) {
+    if (settings.storageAlerts && g_storageAlerts.Observe(g_uiLive.storage)) {
         show = ActivityKind::Memory;
     } else if (!settings.storageAlerts) {
-        storageAlerts.alerted.clear();
+        g_storageAlerts = {};
     }
     if (show != ActivityKind::None) g_hiddenActivities.erase(show);
     bool manual = g_popupMode == PopupMode::Manual && g_expandedPopup && IsWindowVisible(g_expandedPopup);
@@ -10289,7 +10406,10 @@ void RemoveInjectedTaskbarWidget() {
         } catch (...) {}
     }
 
+    UnwatchNativeWidgetsButtons();
     RestoreNativeWidgetsButton();
+    g_cachedNativeWidgetsButtons.clear();
+    g_nativeWidgetsButtonsLookedUp = false;
     g_glassButtonTemplate = nullptr;
     g_glassTemplateFailed = false;
     g_playerGrid = nullptr;
@@ -10548,6 +10668,9 @@ LRESULT CALLBACK LiveUiWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
             if (g_bluetoothWake) SetEvent(g_bluetoothWake);
         }
         if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED || message == WM_DWMCOMPOSITIONCHANGED) {
+            if (message == WM_SETTINGCHANGE) {
+                RefreshTaskbarAlignment();
+            }
             ++g_settingsRevision;
             ++g_progressVisualRevision;
             g_renderedTabLanguage = -1; g_renderedPrivacyLanguage = -1; g_renderedMediaSelection = 0; g_renderedMonth = -1;
@@ -10618,9 +10741,6 @@ void EnsureTaskbarWidgetInjectedOnThread() {
                 uint32_t idx = 0;
                 if (g_injectedParentPanel.Children().IndexOf(g_playerGrid, idx) &&
                     g_playerGrid.XamlRoot() != nullptr) {
-                    UpdateNativeWidgetsButtonVisibility(
-                        g_playerGrid.XamlRoot().Content().try_as<wux::FrameworkElement>(),
-                        settings, effectivePos);
                     RefreshTaskbarWidgetData();
                     if (g_playerGrid.ActualWidth() <= 0 || g_playerGrid.ActualHeight() <= 0 ||
                         g_playerGrid.Visibility() != wux::Visibility::Visible) {
@@ -10661,17 +10781,19 @@ void EnsureTaskbarWidgetInjectedOnThread() {
             return;
         }
 
-        UpdateNativeWidgetsButtonVisibility(rootElement, settings, effectivePos);
-
         wuxc::Border widget = BuildTaskbarWidgetElement(settings);
         // Set ownership before mutation so an exception can roll back insertion.
         g_playerGrid = widget;
         g_injectedParentPanel = target.panel;
+        if (effectivePos == L"root_left") {
+            CacheNativeWidgetsButtons(rootElement);
+        }
+        ApplyNativeWidgetsButtonState(settings, effectivePos);
         auto targetGrid = target.panel.try_as<wuxc::Grid>();
 
         if (target.overlay) {
             widget.HorizontalAlignment(wux::HorizontalAlignment::Left);
-            widget.Margin({static_cast<double>(settings.widgetLeftOffset), 0.0, 0.0, 0.0});
+            widget.Margin({ComputeRootLeftOffsetDip(settings), 0.0, 0.0, 0.0});
             wuxc::Grid::SetColumn(widget, 0);
             wuxc::Grid::SetColumnSpan(widget, std::max(1, static_cast<int>(targetGrid.ColumnDefinitions().Size())));
             wuxc::Grid::SetRow(widget, 0);
@@ -10987,10 +11109,14 @@ void Wh_ModSettingsChanged() {
                 HideExpandedPopupImmediately(g_expandedPopup);
                 ++g_settingsRevision;
                 g_batteryAlertTracker = {}; g_bluetoothAlerts = {}; g_hiddenActivities.clear();
+                g_cpuTempAlerts = {}; g_gpuTempAlerts = {}; g_memoryAlerts = {}; g_storageAlerts = {};
                 g_alertPrivacyUses.clear(); g_alertTasks.clear(); g_privacyAlerts = {}; g_systemAlerts = {};
                 g_pendingSystemAlert = g_systemNoticeActivity = ActivityKind::None; g_systemNoticeUntil = 0;
                 g_renderedCultureRevision = ~0ULL;
                 g_batteryNeedsAttention = false;
+                auto currentSettings = GetSettings();
+                ApplyNativeWidgetsButtonState(
+                    currentSettings, EffectiveTaskbarPosition(currentSettings));
                 EnsureTaskbarWidgetInjectedOnThread();
                 if (g_expandedPopup && IsWindowVisible(g_expandedPopup)) {
                     RefreshExpandedPopupData();
