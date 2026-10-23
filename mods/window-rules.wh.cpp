@@ -107,8 +107,8 @@ field you leave blank matches anything. The fields are:
 
 All matching is case-insensitive. `*` and `?` are wildcards, so `chrome*` matches
 `chrome.exe` and `Untitled*` matches any title starting that way. To use a full
-regular expression, wrap it in slashes: `/^Document - \\w+\\.txt$/`. Nothing else
-is treated as a pattern, so a path like `C:\\Program Files (x86)\\Steam\\steam.exe`
+regular expression, wrap it in slashes: `/^Document - \w+\.txt$/`. Nothing else
+is treated as a pattern, so a path like `C:\Program Files (x86)\Steam\steam.exe`
 or a title like `Inbox | Outlook` matches literally.
 
 ## What it does not do, and where the limits are
@@ -136,18 +136,20 @@ or a title like `Inbox | Outlook` matches literally.
 * **Change a window's size when the app is in charge of it.** Some apps re-create
   their window when resized; they are left as they are after the single retry.
 * **The invisible border.** Since Windows 10 a window's rectangle includes about
-  seven pixels of invisible resize border per edge, so `position: 0,0` leaves a
-  small visible gap at the left and top, and a `800x600` rule looks about 14 pixels
-  smaller than 800 by 600. The mod does exactly what the numbers say in the
-  coordinates Windows reports, and the journal prints those numbers.
+  seven pixels of invisible resize border on the left, right and bottom, so
+  `position: 0,0` leaves a small visible gap at the left, and an `800x600` window
+  looks about 14 pixels narrower and 7 shorter. The mod does exactly what the
+  numbers say in the coordinates Windows reports, and the journal prints them.
 * **File Explorer windows are not matched.** `explorer.exe` is on the built-in
   exclude list, because the same process owns the taskbar, the desktop and the
   shell's own windows. Explorer windows cannot be targeted by a rule in this
   version.
-* **A window on another virtual desktop is skipped until you switch to it.** Those
-  windows are cloaked, and the mod ignores cloaked windows on purpose, so a rule
-  you delete reaches such a window the next time you are on its desktop or when
-  the mod is turned off. Nothing is left behind permanently.
+* **A window on another virtual desktop is left alone until you save the
+  settings while it is in front of you.** Those windows are cloaked, and the mod
+  ignores cloaked windows on purpose. So if you delete a rule while one of its
+  windows sits on another desktop, that window keeps its opacity and its always on
+  top until the next settings save with it visible, or until you turn the mod off.
+  Nothing is left behind after that.
 * **Always on top and fullscreen is detected geometrically.** A window counts as
   fullscreen when it covers a monitor and is not maximized. A window that nearly
   covers a monitor is not detected, so a pinned window can stay above it.
@@ -250,7 +252,8 @@ window on purpose, put a `*` in one of the match fields.
         or a colon is matched against the full path instead, and wildcards work
         there too. Wrap the value in slashes to use a regular expression:
         /^(chrome|msedge)/ . Anything not in slashes is matched literally, so a
-        path with brackets in it is fine.
+        path with brackets in it is fine. A regular expression in slashes is
+        matched against the file name, not the full path.
     - windowClass: ""
       $name: Window class
       $description: >-
@@ -317,6 +320,7 @@ window on purpose, put a `*` in one of the match fields.
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <sddl.h>
 #include <windhawk_api.h>
 
 // swprintf_s and wcscmp below are CRT functions; windows.h does not declare
@@ -340,8 +344,8 @@ window on purpose, put a `*` in one of the match fields.
 // matches them. It injects nothing, reads no memory of another process, and
 // writes nothing to disk except its own journal.
 //
-// * One event thread with its own message loop, and three out-of-context
-//   SetWinEventHook ranges on it:
+// * One event thread with its own message loop, and four out-of-context
+//   SetWinEventHook registrations on it:
 //     - EVENT_OBJECT_CREATE..EVENT_OBJECT_SHOW, for a window appearing;
 //     - EVENT_SYSTEM_MOVESIZEEND, for the user placing a window by hand;
 //     - EVENT_SYSTEM_MINIMIZEEND, for a window whose rule was deferred while it
@@ -567,9 +571,18 @@ static CompiledPattern CompilePattern(const std::wstring& value) {
     compiled.literal = ToLowerCopy(value);
 
     if (compiled.kind == PatternKind::Regex) {
+        const std::wstring inner = InnerRegexText(value);
+        if (inner.empty()) {
+            // "//" compiles to an empty pattern, which matches every string. That
+            // is the same "applies to everything" failure the blank match fields
+            // were rejected for, wearing a regular expression's clothes.
+            compiled.usable = false;
+            compiled.problem = L"a regular expression between slashes is empty";
+            return compiled;
+        }
         try {
             compiled.regex =
-                std::wregex(InnerRegexText(value), std::regex_constants::icase);
+                std::wregex(inner, std::regex_constants::icase);
         } catch (const std::regex_error&) {
             // A pattern that does not compile is reported once at load time and
             // then never matches. Silently ignoring it would leave the user
@@ -1102,8 +1115,8 @@ static TargetPlan ComputeTargetPlan(const RuleRect& current,
 
     if (!position.empty() && ParsePositionValue(position, x, y)) {
         plan.setPosition = true;
-        const long width = RuleRectWidth(plan.target);
-        const long height = RuleRectHeight(plan.target);
+        const long currentWidth = RuleRectWidth(plan.target);
+        const long currentHeight = RuleRectHeight(plan.target);
         plan.target.left = monitor.left + x;
         plan.target.top = monitor.top + y;
         // Moving a window must not resize it. With no size in the rule, the far
@@ -1111,8 +1124,8 @@ static TargetPlan ComputeTargetPlan(const RuleRect& current,
         // they were, which silently resized every window a position-only rule
         // touched. The unit tests caught it before it reached a desktop.
         if (!plan.setSize) {
-            plan.target.right = plan.target.left + width;
-            plan.target.bottom = plan.target.top + height;
+            plan.target.right = plan.target.left + currentWidth;
+            plan.target.bottom = plan.target.top + currentHeight;
         }
     }
 
@@ -1388,10 +1401,10 @@ static OpacityDecision DecideOpacity(bool styleSet, bool ours, int currentAlpha,
 
 // Does this window rectangle cover this monitor? "Cover" is containment, not
 // equality, deliberately: a maximized window with an auto-hide taskbar is the
-// monitor plus about eight pixels of invisible resize border per side, so an
-// equality test would read a maximize as a fullscreen app. The state test in
-// IsFullscreenCandidate is what separates the two, and this function stays purely
-// geometric so that it can be tested with numbers.
+// monitor plus about seven pixels of invisible resize border on the left, right
+// and bottom, so an equality test would read a maximize as a fullscreen app. The
+// state test in IsFullscreenCandidate is what separates the two, and this
+// function stays purely geometric so that it can be tested with numbers.
 static bool RectsCoverMonitor(const RuleRect& window, const RuleRect& monitor,
                               long tolerance) {
     return window.left <= monitor.left + tolerance &&
@@ -1503,12 +1516,13 @@ static SettleDecision DecideSettle(bool atTarget, int retriesLeft,
     return SettleDecision::Wait;
 }
 
-// The SID text the per-user folder is named after.
+// The SID text the per-user folder is named after, rendered by hand.
 //
-// Plain arithmetic over values the caller has already read, so the half that can
-// be wrong is a pure function with unit tests over it. ConvertSidToStringW would
-// do the same job and allocates a string the caller then has to free; this way the
-// rendering is checked by the unit tests rather than trusted.
+// ConvertSidToStringSidW does this job and is what the mod calls first. This stays
+// underneath it for two reasons: the conversion decides a directory name, so a
+// failed call must not silently turn diagnostics off, and the arithmetic is a pure
+// function that the unit tests pin against strings the field scripts also compare
+// file names against.
 //
 // An identifier authority larger than 32 bits is rendered in hexadecimal by the
 // SID documentation. A process token's authority is 5 on every installation this
@@ -1580,9 +1594,9 @@ static void LoadRules() {
         // missing key and for a blank one alike. A rule written by hand and a
         // rule saved by the settings UI therefore load identically.
         const std::wstring indexText = std::to_wstring(index);
-        const auto keyFor = [&key](const std::wstring& indexText,
+        const auto keyFor = [&key](const std::wstring& entry,
                                    const wchar_t* field) {
-            swprintf_s(key, L"rules[%s].%s", indexText.c_str(), field);
+            swprintf_s(key, L"rules[%s].%s", entry.c_str(), field);
         };
 
         keyFor(indexText, L"name");
@@ -1634,7 +1648,7 @@ static bool g_diagnosticsLog = false;
 // Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
 // numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
 // of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r11-2026-10-21";
+static constexpr PCWSTR kJournalBuild = L"r13-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -1682,6 +1696,21 @@ static std::wstring SidToString(PSID sid) {
     if (!sid) {
         return std::wstring();
     }
+
+    // The operating system's own conversion, which is the one worth trusting for
+    // a string that becomes a directory name.
+    LPWSTR converted = nullptr;
+    if (ConvertSidToStringSidW(sid, &converted) && converted) {
+        std::wstring text(converted);
+        LocalFree(converted);
+        if (!text.empty()) {
+            return text;
+        }
+    }
+
+    // Reached only when the conversion failed, which it does not do for a token's
+    // own SID. The bytes are still unpacked here rather than the journal being
+    // lost: a wrong folder name would be a nuisance, no journal at all is worse.
     const SID* parsed = reinterpret_cast<const SID*>(sid);
     // A pointer into a token buffer: a count this large can only mean the buffer
     // is not what it claims to be.
@@ -1885,16 +1914,21 @@ static bool EnsurePrivateFolder(const std::wstring& path,
 // journal is off: a user who never turns diagnostics on never gets a folder, a
 // SID lookup or an access control list. That is why this is not resolved at init.
 //
-// Latched, so the first call does the work and every later one reads the result;
-// the journal path is the event thread's, so there is no race to guard.
-static const std::wstring& UserDataFolder() {
-    static bool attempted = false;
-    static std::wstring cached;
+// Cached once the folder exists. A failure is retried a few times and then given
+// up on for this session, so a transient refusal does not cost the journal for
+// good. The journal path is the event thread's, so there is no race to guard.
+//
+// How many times the private folder is created before it is given up on.
+static constexpr int kMaxFolderAttempts = 3;
 
-    if (attempted) {
+static const std::wstring& UserDataFolder() {
+    static std::wstring cached;
+    static int attempts = 0;
+
+    if (!cached.empty() || attempts >= kMaxFolderAttempts) {
         return cached;
     }
-    attempted = true;
+    attempts++;
 
     const UserTokenSid& sid = CurrentUserTokenSid();
     if (sid.text.empty()) {
@@ -1917,6 +1951,10 @@ static const std::wstring& UserDataFolder() {
     folder += L"\\";
     folder += sid.text;
 
+    // A failure is not latched for the session: turning the journal off and on
+    // again, or fixing whatever was in the way, gets another try. The attempt
+    // count is what stops a single stuck failure turning every journal line into
+    // a directory creation call.
     if (EnsurePrivateFolder(folder, sid.bytes)) {
         cached = std::move(folder);
     }
@@ -1939,6 +1977,7 @@ static bool BuildJournalPath(PWSTR buffer, size_t bufferSize) {
 // and a line saying so is written first, rather than growing without limit in
 // someone's AppData.
 static constexpr long long kMaxJournalBytes = 1024 * 1024;
+
 
 static void AppendDiagnosticsJournal(const std::wstring& line) {
     if (!g_diagnosticsLog) {
@@ -2006,7 +2045,8 @@ static std::wstring RuleNameText(int index) {
     if (index < 0 || index >= (int)g_rules.size()) {
         return L"(none)";
     }
-    return g_rules[index].name.empty() ? L"(unnamed)" : g_rules[index].name;
+    return g_rules[(size_t)index].name.empty() ? L"(unnamed)"
+                                               : g_rules[(size_t)index].name;
 }
 
 static void JournalRulesLoaded() {
@@ -2050,15 +2090,30 @@ static void JournalRulesLoaded() {
 
 static void JournalRuleHit(int ruleIndex, const MatchOutcome& outcome,
                            const std::wstring& exeName) {
+    if (!g_diagnosticsLog) {
+        return;
+    }
+    // The index comes from the matcher and the three rule vectors are filled in
+    // lockstep, so this cannot be out of range. It is still bounded here: the
+    // journal is the one thing that runs on every match, and an out-of-range read
+    // in it would be a crash in the code that exists to explain crashes.
+    const std::wstring actions =
+        ruleIndex >= 0 && ruleIndex < (int)g_ruleActions.size()
+            ? DescribeRequestedActions(g_ruleActions[(size_t)ruleIndex])
+            : std::wstring(L"none");
     AppendDiagnosticsJournal(
         L"RULE-HIT exe=" + exeName + L" rule=" + std::to_wstring(ruleIndex) +
         L" name=\"" + RuleNameText(ruleIndex) + L"\" matched=" + outcome.field +
-        L":\"" + outcome.value + L"\" actions=" +
-        DescribeRequestedActions(g_ruleActions[(size_t)ruleIndex]));
+        L":\"" + outcome.value + L"\" actions=" + actions);
 }
 
 static void JournalNoMatch(const std::wstring& exeName,
                            const std::wstring& title) {
+    // Before the budget, not after: with the journal off nothing is built, and
+    // nothing is counted, so turning it on starts from a full budget.
+    if (!g_diagnosticsLog) {
+        return;
+    }
     if (!TakeBudget(g_noMatchCounts, exeName, kMaxNoMatchLinesPerApp)) {
         return;
     }
@@ -2120,7 +2175,10 @@ static std::wstring GetWindowTitle(HWND hwnd) {
         return std::wstring();
     }
 
-    std::wstring title((size_t)length, L'\0');
+    // length + 1 characters, because the count passed to GetWindowTextW includes
+    // the terminator. Sized to exactly that rather than to `length` plus the
+    // string's own null slot, which works but reads like an off-by-one.
+    std::wstring title((size_t)length + 1, L'\0');
     int copied = GetWindowTextW(hwnd, &title[0], length + 1);
     if (copied <= 0) {
         return std::wstring();
@@ -2192,8 +2250,16 @@ static bool ResolveWindowFacts(HWND hwnd, WindowFacts& facts,
                                const wchar_t** reason) {
     DWORD processId = 0;
     GetWindowThreadProcessId(hwnd, &processId);
-    if (!processId || processId == GetCurrentProcessId()) {
+    if (!processId) {
         *reason = L"no process id";
+        return false;
+    }
+    // This mod runs inside windhawk.exe, so any window of this process is one of
+    // Windhawk's own. Named separately because reporting "no process id" for a
+    // window that has a perfectly good process id sent a field run looking in the
+    // wrong place.
+    if (processId == GetCurrentProcessId()) {
+        *reason = L"window belongs to Windhawk itself";
         return false;
     }
 
@@ -2472,6 +2538,9 @@ static DWORD ApplyWindowPos(HWND hwnd, const RuleRect* rect, HWND insertAfter) {
 static void JournalApply(const WindowFacts& facts, int ruleIndex, PCWSTR source,
                          PCWSTR result, const RuleRect& target,
                          const RuleRect& current, DWORD error) {
+    if (!g_diagnosticsLog) {
+        return;
+    }
     AppendDiagnosticsJournal(
         std::wstring(L"APPLY exe=") + facts.exeName + L" rule=" +
         std::to_wstring(ruleIndex) + L" source=" + source +
@@ -2500,6 +2569,9 @@ static PCWSTR TopmostStateOf(HWND hwnd) {
 // at", and a combined move and pin writes one line of each for a single call.
 static void JournalTopmost(const std::wstring& exeName, int ruleIndex,
                            PCWSTR source, PCWSTR result, PCWSTR state) {
+    if (!g_diagnosticsLog) {
+        return;
+    }
     AppendDiagnosticsJournal(
         std::wstring(L"TOPMOST exe=") + exeName + L" rule=" +
         std::to_wstring(ruleIndex) + L" source=" +
@@ -2508,6 +2580,9 @@ static void JournalTopmost(const std::wstring& exeName, int ruleIndex,
 
 static void JournalOpacity(const std::wstring& exeName, int ruleIndex,
                            PCWSTR source, PCWSTR result, int alpha) {
+    if (!g_diagnosticsLog) {
+        return;
+    }
     AppendDiagnosticsJournal(
         std::wstring(L"OPACITY exe=") + exeName + L" rule=" +
         std::to_wstring(ruleIndex) + L" source=" +
@@ -2554,8 +2629,11 @@ static void WithdrawTopmost(HWND hwnd, const std::wstring& exeName,
     if (error == ERROR_SUCCESS) {
         g_topmostWindows.erase(claim);
     }
+    // Read back rather than assumed: a withdrawal the window refused leaves the
+    // bit set, and the journal is the only place that shows.
     JournalTopmost(exeName, ruleIndex, source,
-                   error == ERROR_SUCCESS ? L"withdrawn" : L"failed", L"off");
+                   error == ERROR_SUCCESS ? L"withdrawn" : L"failed",
+                   TopmostStateOf(hwnd));
 }
 
 // Everything the mod owns goes back down: the mod was turned off, or it is
@@ -2577,7 +2655,8 @@ static void ReleaseAllTopmost(PCWSTR source) {
         }
         const DWORD error = ApplyWindowPos(claim.first, nullptr, HWND_NOTOPMOST);
         JournalTopmost(claim.second, -1, source,
-                       error == ERROR_SUCCESS ? L"withdrawn" : L"failed", L"off");
+                       error == ERROR_SUCCESS ? L"withdrawn" : L"failed",
+                       TopmostStateOf(claim.first));
     }
 }
 
@@ -2598,20 +2677,28 @@ static void ApplyOpacity(HWND hwnd, int alpha, const WindowFacts& facts,
     const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     auto mine = g_opacityWindows.find(hwnd);
     const bool ours = mine != g_opacityWindows.end();
+    // Copied before anything can erase the record: the branch below does exactly
+    // that, and reading the iterator afterwards would be reading a dead node.
+    const int recordedAlpha = ours ? mine->second.alpha : 0;
     const bool styleSet = (exStyle & WS_EX_LAYERED) != 0;
 
     // The app cleared the style itself. The record goes with it, exactly as the
     // topmost claim goes when an app clears that bit: the mod does not spend the
     // session putting back a style that something else keeps removing. A settings
     // save is a fresh instruction and applies it again.
+    bool oursNow = ours;
     if (ours && !styleSet) {
         g_opacityWindows.erase(mine);
         JournalOpacity(facts.exeName, ruleIndex, source, L"app-cleared", alpha);
-        return;
+        // And then carry on into the apply path in the same pass. A settings save
+        // is a fresh instruction, so the level goes back on now rather than on the
+        // next save; topmost already behaves that way, and a save that visibly
+        // does nothing half the time is worse than no save at all.
+        oursNow = false;
     }
 
     const OpacityDecision decision =
-        DecideOpacity(styleSet, ours, ours ? mine->second.alpha : 0, alpha);
+        DecideOpacity(styleSet, oursNow, recordedAlpha, alpha);
 
     if (decision == OpacityDecision::SkipAppLayered) {
         JournalOpacity(facts.exeName, ruleIndex, source, L"already-layered",
@@ -2633,10 +2720,10 @@ static void ApplyOpacity(HWND hwnd, int alpha, const WindowFacts& facts,
     }
     g_opacityWindows[hwnd] = OpacityRecord{alpha, facts.exeName};
 
-    // No re-assert, deliberately: if the application clears the style later,
-    // that is the application's decision about its own window, and the branch
-    // above forgets the record rather than restoring it. The journal records what
-    // was set and what was taken away, so "the opacity went back" has an answer.
+    // No re-assert on every event, deliberately: if the application clears the
+    // style, the record goes with it and nothing is put back until something asks
+    // again. A settings save is something asking again, and the branch above
+    // applies the level in that same pass.
     JournalOpacity(facts.exeName, ruleIndex, source,
                    decision == OpacityDecision::AlreadyThere ? L"already-there"
                                                              : L"applied",
@@ -2809,23 +2896,33 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
         return;
     }
 
-    // Resolve the monitor first: a rule that names a monitor that is not there
-    // must not move the window to a guessed one.
-    const MonitorSpec spec = ParseMonitorSpec(actions.monitor);
-    const MonitorChoice choice =
-        ResolveRuleMonitor(g_monitors, spec, MonitorIndexForWindow(hwnd));
-
-    if (!choice.usable) {
-        AppendDiagnosticsJournal(L"MONITOR-SKIP exe=" + facts.exeName + L" rule=" +
-                                 std::to_wstring(ruleIndex) + L" spec=\"" +
-                                 actions.monitor + L"\" reason=\"" +
-                                 choice.reason + L"\"");
-        return;
+    // The monitor is what a position and a size are measured from, and nothing
+    // else uses it, so it is resolved only when the rule asks for geometry. Doing
+    // it unconditionally meant an opacity-only or always-on-top-only rule did
+    // nothing at all when the window's monitor could not be resolved -- right
+    // after a monitor was unplugged, for instance, while the cached list is a
+    // moment out of date.
+    //
+    // A rule that names a monitor that is not there still moves nothing rather
+    // than guessing, and the journal says MONITOR-SKIP.
+    const bool wantsGeometry = !actions.position.empty() || !actions.size.empty();
+    TargetPlan plan;
+    plan.target = current;
+    if (wantsGeometry) {
+        const MonitorSpec spec = ParseMonitorSpec(actions.monitor);
+        const MonitorChoice choice =
+            ResolveRuleMonitor(g_monitors, spec, MonitorIndexForWindow(hwnd));
+        if (!choice.usable) {
+            AppendDiagnosticsJournal(L"MONITOR-SKIP exe=" + facts.exeName +
+                                     L" rule=" + std::to_wstring(ruleIndex) +
+                                     L" spec=\"" + actions.monitor +
+                                     L"\" reason=\"" + choice.reason + L"\"");
+        } else {
+            plan = ComputeTargetPlan(current,
+                                     g_monitors[(size_t)choice.index].pixelRect,
+                                     actions.position, actions.size);
+        }
     }
-
-    const RuleRect& monitor = g_monitors[(size_t)choice.index].pixelRect;
-    const TargetPlan plan = ComputeTargetPlan(current, monitor, actions.position,
-                                              actions.size);
 
     const bool minimized = IsIconic(hwnd) != FALSE;
     const bool overridden = g_overriddenWindows.count(hwnd) != 0;
@@ -2930,7 +3027,11 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
             if (error == ERROR_SUCCESS) {
                 ClaimTopmost(hwnd, facts.exeName, ruleIndex, source);
             } else {
-                JournalTopmost(facts.exeName, ruleIndex, source, L"failed", L"on");
+                // The state is read back rather than assumed: a pin that failed is
+                // not a pinned window, and the journal is the only place that
+                // difference is visible.
+                JournalTopmost(facts.exeName, ruleIndex, source, L"failed",
+                               TopmostStateOf(hwnd));
             }
         }
     }
@@ -2958,10 +3059,10 @@ static void ApplyRuleToWindow(HWND hwnd, const WindowFacts& facts,
         if (ParseOpacityValue(actions.opacity, alpha)) {
             ApplyOpacity(hwnd, alpha, facts, ruleIndex, source);
         } else {
-            // The rules load validates this, so reaching here means the value is
-            // unusable in a way the load did not catch. Giving the level back is
-            // the honest answer: leaving the window at the previous level would
-            // be the mod applying a rule it cannot read.
+            // The load journals an unreadable level but does not stop the rule,
+            // so this is reachable. Giving the level back is the honest answer:
+            // leaving the window at the previous level would be the mod applying
+            // a rule it cannot read.
             WithdrawOpacity(hwnd, facts.exeName, ruleIndex, source);
         }
     }
@@ -3174,6 +3275,11 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     WithdrawTopmost(hwnd, facts.exeName, -1, source);
     WithdrawOpacity(hwnd, facts.exeName, -1, source);
     g_governedWindows.erase(hwnd);
+    // A window that was waiting to be restored and now matches no rule has
+    // nothing left to wait for. Left in the set it would be re-evaluated on every
+    // event for the rest of the session, which is work and journal lines about a
+    // decision that has already been made.
+    g_deferredWindows.erase(hwnd);
 
     // A window with no title yet is not decided either: the title is the last of
     // its facts to settle, so a rule that matches on the title would have missed
@@ -3238,7 +3344,7 @@ static void OnForegroundChanged() {
                 }
                 JournalTopmost(exeName, -1, L"foreground",
                                error == ERROR_SUCCESS ? L"yielded" : L"failed",
-                               L"off");
+                               TopmostStateOf(hwnd));
                 break;
             }
             case YieldDecision::AppCleared:
@@ -3258,7 +3364,7 @@ static void OnForegroundChanged() {
                 }
                 JournalTopmost(exeName, -1, L"foreground",
                                error == ERROR_SUCCESS ? L"reclaimed" : L"failed",
-                               L"on");
+                               TopmostStateOf(hwnd));
                 break;
             }
             case YieldDecision::Nothing:
@@ -3469,6 +3575,12 @@ static void ApplySettingsOnEventThread(bool initial) {
         return;
     }
 
+    // A pending retry belongs to the rule as it was before this save. Left in
+    // place, the settle poll would put the window back at the old target up to
+    // 800 ms after the save moved it, and then call that target reached: the
+    // window ends up where the previous rule wanted it, with no line saying why.
+    g_pendingApplies.clear();
+
     RunReapplyPass();
 }
 
@@ -3493,6 +3605,10 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             // the geometry-memory mod owns the "a monitor went away" behaviour for
             // its own remembered geometry.
             RefreshMonitorViews();
+            // A pending retry aims at coordinates that may now belong to a
+            // different monitor or to none: dropping it is the only answer that
+            // cannot put a window somewhere nobody asked for.
+            g_pendingApplies.clear();
             AppendDiagnosticsJournal(
                 L"DISPLAYCHANGE monitors=" + std::to_wstring(g_monitors.size()));
             return 0;
@@ -3526,7 +3642,10 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             return 0;
 
         case WM_CLOSE:
+            // Destroying the window alone leaves the loop with nothing to
+            // dispatch and nothing to end it; the quit is what ends the thread.
             DestroyWindow(hwnd);
+            PostQuitMessage(0);
             return 0;
     }
 
@@ -3545,9 +3664,15 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
     windowClass.lpszClassName = kMessageWindowClassName;
 
     if (!RegisterClassExW(&windowClass)) {
-        Wh_Log(L"RegisterClassExW failed (last error %lu)",
-               GetLastError());
-        return 1;
+        // A class left behind by an earlier instance that died without
+        // unregistering it is not a reason to do nothing for the session: the
+        // name belongs to this mod, and the window can be created from it.
+        const DWORD error = GetLastError();
+        if (error != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"RegisterClassExW failed (last error %lu)", error);
+            return 1;
+        }
+        Wh_Log(L"the message window class already existed; reusing it");
     }
 
     HWND hwnd = CreateWindowExW(0, kMessageWindowClassName, L"", WS_POPUP, 0, 0,
