@@ -4,12 +4,12 @@
 // @name:vi-VN      Live Update for Windows 11
 // @description     Live taskbar activities: media, Windows Clock, battery, tasks, recording, displays, hotspot, privacy and lunar almanac
 // @description:vi-VN Widget đa năng: Phương tiện, Đồng hồ, Pin, Tiến trình, Quay OBS, Trình chiếu, Quyền riêng tư, Âm lịch & Tử vi
-// @version         2.10.4
+// @version         2.0.206
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -luser32 -lwindowscodecs -luuid -ladvapi32 -lshell32 -lversion -lsetupapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -luser32 -lwindowscodecs -luuid -ladvapi32 -lshell32 -lversion -lsetupapi -lpowrprof
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -17,585 +17,74 @@
 /*
 # Live Update for Windows 11
 
-Live activities in one slot on the native Windows 11 primary taskbar: **Media**, **Battery**,
-**Windows Clock**, **Lunar calendar & Almanac**, **Privacy activity**, **Task progress**, **OBS recording**,
-**Displays & projection**, **Wi-Fi hotspot**, **UltraViewer sessions**, and optional **RAM/temperature alerts**.
-The Vietnamese culture reader is a subpage of Lunar & Almanac.
-Each activity can be enabled independently. The mod uses the technical ID
-`live-update-for-windows-widget`. Disable the old mod before enabling this one;
-Windhawk treats different IDs as separate installations and does not migrate settings automatically.
-
-## Live activities
-
-- **Media:** album artwork, track title and `elapsed / duration · artist`. The popup
-  has Fluent previous/next controls and a larger circular play/pause button, with
-  pointer, keyboard, disabled states and accessible names. Only players integrated
-  with Windows media controls are supported. The most recently started playback is selected. Numbered buttons let you select a session until new playback starts.
-- **Battery:** charge percentage, external-power/charging state and estimated time
-  to full or remaining runtime. It uses Windows estimates, capacity/rate reports, then
-  measured capacity changes when rate data is absent. Measuring needs at least two
-  minutes and a measurable change (two percentage points on percentage-only hardware).
-  Estimates reset on charging/discharging changes or sleep gaps. Charge limits or
-  unsupported controllers may prevent an estimate; no constant charging speed is assumed.
-  Connecting external power or crossing 20%, 10% or 5% opens an optional preview
-  for 3–5 seconds (default 4). A threshold rearms after a 3-point recovery.
-- **Automatic selection:** new playback, an observed clock start, connecting power or newly reported privacy
-  use can select that activity. Track progress does not repeatedly change selection.
-  A manually opened popup is not replaced. Closing a charging preview keeps the
-  Battery activity selected. Disable automatic selection in Settings if preferred.
-- **Independent activities:** disable Lunar calendar & Almanac without disabling
-  Media or Battery. One activity has no switching arrows or popup tabs. With no
-  available enabled activities, a compact settings gear remains.
-
-Media changes use Windows media-session events; power changes use power notifications.
-Commands do not wait for metadata or artwork downloads. Artwork is decoded on its
-own background worker. The one-second tick updates elapsed time and the local calendar;
-a slower recovery read handles missed provider events. A player's own response time
-still depends on that application.
-
-## Windows Clock (experimental reader)
-
-The Clock activity shows **Stopwatch**, **Timer** and enabled **Alarm** entries
-observed in Microsoft's Windows Clock app. It is status-only: it does not launch,
-navigate or control the app, and it does not create independent timers.
-
-Version 2.10.2 separates a countdown's remaining duration from the ending-time
-badge (for example, `00:02:48` versus `18:46`). Three-part durations and identified
-remaining-time readouts take priority over labels. The taskbar prefers a running
-timer over paused presets. English/Vietnamese spoken durations, split digits and
-stopwatch readouts are supported; lap rows are excluded.
-
-Once a counter has been observed running, its last sampled value and monotonic
-time anchor keep the display advancing when Clock is minimized, closed, or on
-another page. Timer values count down to zero; paused values stay unchanged.
-Reopening a readable page resynchronizes its state, including pauses and resets.
-Missing scans do not erase known counters or repeat start/completion previews.
-
-**Source limitation:** Windows Clock still needs to expose a readable page for
-the initial observation and for later external changes. When a source cannot be
-read, the status says **Last synced state**; an inferred expiry is **Estimated**.
-The mod cannot confirm an unseen pause, cancellation, reset or alarm change.
-These are bounded, in-memory observations for the current mod session, not a
-replacement background alarm service and not persistence across Explorer restarts.
-
-An observed start or timer completion can show a brief preview. A previously read,
-enabled alarm with a readable schedule can show a reminder within 15 minutes and
-a due-time preview, once per occurrence. Unavailable-source reminders are marked
-as based on the last synced state. Windows Clock remains responsible for sounds.
-
-The reader uses bounded raw-view UI Automation scans on a worker thread. Only
-plain counter values are retained, with at most 48 entries; no UI Automation
-objects survive a scan. Minimized/closed windows are not scanned. Controls are
-in Settings > Live activities > Windows Clock.
-
-## Lunar calendar & Almanac
-
-Local UTC+7 calculations use the Hồ Ngọc Đức algorithm. The compact first line
-includes the lunar date and Can Chi year; the second line rotates almanac information
-at 15-second intervals and pins holidays instead of rotating them.
-
-The daily popup includes Can Chi, zodiac, Nạp Âm, auspicious hours, Trực, suggested
-activities and travel directions. Traditional almanac content is cultural information.
-
-- **Previous / Today / Next:** navigate days, or months while Month view is open.
-- **Month:** a seven-column calendar with solar and lunar dates. A third line marks
-  holidays; select a day to read full holiday names and its almanac. Leap months use `*`.
-- **List:** 13 lunar festival entries and 37 solar holidays/commemorations. Lunar New
-  Year's Eve uses the actual final day of the lunar year, including 29-day months.
-- **Culture:** opens the Vietnamese culture reader within Lunar & Almanac; Back returns to the calendar.
-- **Regional default:** -1 enables Lunar & Almanac only when Windows country/region is Vietnam.
-  Set 0 to disable or 1 to enable anywhere. Saved 0/1 preferences remain unchanged.
-
-## Popup behavior and appearance
-
-Click the taskbar widget to open or close its popup. A manual popup has no timeout.
-Interacting with an automatic preview keeps it open. Click outside or press Esc to close.
-Opening animates for 300 ms, closing for 240 ms. Switching activities, calendar pages,
-privacy categories, media sessions, culture pages or app usage adds a 220 ms fade/slide.
-The compact left/right arrows slide content horizontally in the selected direction;
-the arrows stay still. Activity tabs also use a horizontal transition.
-Content updates do not restart navigation animations; Windows reduced-motion settings
-are respected for these transitions. Full popups measure their page content;
-Month view shows all six weeks when screen space permits. Day view sizes holiday
-text to its content and removes the holiday banner when there is no holiday. Long lists and small screens retain vertical scrolling. Activity tabs use
-left/right navigation buttons with no horizontal scrollbar and disappear with one activity.
-Automatic charging, low-battery, privacy, task, display and hotspot previews use a compact card. Clicking
-one opens its full page and removes the timeout.
-
-The gear opens a separate settings process with a wide, centered search field,
-a sidebar, section headings and rounded setting cards. Seven pages cover General,
-Appearance & layout, Live activities, Task progress, OBS, Lunar & Almanac, and Device management.
-The sidebar collapses to icons. Settings has optional Windows Desktop Acrylic on supported
-Windows 11 builds, with an opaque fallback when effects are unavailable.
-Related controls are grouped within each page, including Battery & Bluetooth,
-Privacy, Browsers & downloads, and Files & archives. Search spans all pages and is debounced.
-
-The interface runs on demand in Windows PowerShell/.NET WPF, with its own window
-and taskbar identity. Its embedded script is sent over stdin: no helper executable
-or script file is installed. A local pipe is restricted to the current user and
-verified against the child process ID. Closing the settings window exits that
-process and releases its memory. The taskbar component still runs in Explorer;
-this does not move the entire mod out of Explorer. Windows policy must allow
-Windows PowerShell and WPF to run. No execution-policy bypass or elevation is used.
-
-Switches and lists save immediately; text/number fields have Save buttons.
-The three shared Windhawk fields remain Language and the two widths. Existing
-preferences are preserved. A compact settings gear remains when no activity is active.
-
-**Liquid glass** is the default for new settings. Existing theme choices are preserved.
-Choose **Windows blur**, **Liquid glass**, or **Off (opaque)** for the popup.
-This mod's CPU policy falls back to Windows Blur for Intel Core i 6th generation or older,
-and AMD processors before Ryzen/Zen. Unrecognized CPUs also fall back to Blur. This is a
-product performance policy, not a claim that these CPUs cannot render Windows effects.
-If Windows disables transparency, the surface becomes opaque.
-Glass adds a GPU-transformed backdrop with a slight lens magnification, lower tint,
-a bright edge and pointer-following specular highlights. This is an approximation
-using Windows composition, not Apple's Liquid Glass renderer. The effect falls back
-when unsupported and respects high contrast. The mod no longer disables effects because battery saver is active.
-Glass popup text switches between light and dark according to the background.
-A temporary 16×16 luminance sample is taken on opening and at most every two seconds
-while visible; no image is saved or transmitted. The taskbar root stays transparent
-and its text continues to follow the taskbar theme. Its background is a separate layer:
-idle is transparent, hover shows 30% opacity, and press/open-popup shows the full
-material. Liquid Glass is used when selected and supported; otherwise the taskbar
-uses Windows composition blur, including when the popup theme is Off. The blur
-source is behind the background layer, never the text. A native Acrylic/opaque
-fallback handles unavailable composition; high contrast takes priority. No
-Explorer-wide transparency settings are modified. Glass buttons retain their rims
-and pointer/pressed states.
-Selected buttons follow Windows' accent color;
-high-contrast colors take priority.
-
-Activity preferences have one canonical per-mod store; the old quick-menu override
-layer is migrated once. Windhawk's Settings tab contains only Language, Compact width
-and Popup width. Saving those fields imports them without resetting activity switches.
-When `windhawk-cli.exe` with the current `mod settings set <id> key=value` syntax is
-available and permitted to write, widget changes to the shared fields are sent back
-through that supported CLI. The command uses this mod's actual runtime ID.
-**Windhawk 1.x has no settings-write API or CLI**, and some Windhawk 2 installations
-reject writes from an unelevated process. In either case the widget keeps its saved
-values and reports that sync is unavailable/rejected; it does not pretend that the
-Windhawk form changed, elevate a process, or directly edit engine registry/INI files.
-On these installations, save Language/Width from Windhawk when both views must match.
-
-The **Hide** button in each full popup temporarily removes that activity. New relevant
-activity can reveal it again: new playback/task, a power or low-battery change,
-new privacy use, recording, projection/hotspot change, or a new calendar day.
-Ordinary elapsed-time and percentage updates do not repeatedly reveal it.
-**Show hidden widgets** in General settings restores hidden activities immediately.
-Hide is distinct from disabling an activity in Settings.
-
-The selected theme controls the mod's effects. Battery saver no longer changes the
-mod's blur/glass eligibility, and the `AdvancedEffectsEnabled` power-saving signal is
-not used as a veto. High contrast retains an opaque fallback. Windows' compositor can
-still limit actual transparency independently of the mod. No Explorer-wide transparency
-setting is changed.
-
-## Controls and compact mode
-
-Settings text/password fields and dropdowns use rounded templates with system-accent
-focus indicators, a floating dropdown surface and a selected-item marker. Liquid glass
-uses two non-interactive rim strokes above the content; routine data updates no longer
-replace the glass border with a flat theme border.
-
-**Collapsed taskbar** shows a Live Update icon and one line with the number of available
-activity categories, without switching arrows. This counts live activities, not Windows
-notifications. Toggle it beside the popup gear or in Appearance & layout. Clicking the
-collapsed slot opens the selected activity as usual.
-
-**Memory & storage** lists fixed local volumes with total/free space and a usage bar,
-and opens Windows storage settings on request. It does not delete files or modify partitions.
-Volumes are queried only while the settings resource page is open.
-
-## Media controls and multiple sessions
-
-Drag or click the seek slider to change position when the player supports Windows
-media seeking. The thumb tooltip uses `m:ss` or `h:mm:ss`, not raw seconds. Elapsed time is left of the centered transport buttons; total duration
-is on the right. Numbered buttons below select among up to 16 playing/paused Windows
-media sessions; they disappear when only one session exists. These are media sessions,
-not playlist entries or a guaranteed list of every browser tab. Commands target the
-selected session. Artwork is fetched separately and cannot block transport commands.
-
-## Privacy activity
-
-Microphone activity uses Core Audio capture sessions. Camera activity uses the Windows
-Media Foundation sensor activity monitor and process IDs; neither provider records or
-opens a capture stream. Capability Access Manager records from the current user and
-machine are a fallback. Location also reads the passive Windows location-use signal
-(WNF_LFS_STATE), at most four times per second, without requesting coordinates. If it
-reports use, the mod also reads the visible native tray location label on the taskbar
-UI thread to obtain the application's display name. It does not open the tooltip or
-guess from the foreground app. If neither Windows source exposes a usable identity,
-the list says Windows Location Service. Native labels can remain in the Windows UI language.
-The private signal is validated and falls back to activity records when unavailable.
-Registry changes wake the provider; a recovery read handles missed events.
-Privacy previews use capability sessions with a 15-second quiet period and a startup
-baseline: app-name resolution, brief signal gaps and recent-history rows do not reopen previews.
-
-Application rows appear above capability buttons for Microphone, Camera and Location.
-Combined native tooltips are parsed one sensor section at a time. A Location row
-cannot include a Microphone heading. Identical display names within a capability
-are merged; active use takes precedence over a recent-history row.
-Each button filters the list and uses its matching icon. Short location
-requests may finish between refreshes: completed requests remain visible for 15 seconds
-as **Recently accessed**, rather than being labelled active. Coverage still depends on
-Windows reporting the activity; an empty list does not prove that a sensor is unused.
-
-## Bluetooth batteries
-
-The Battery page includes connected Bluetooth devices, their names and the battery
-percentage Windows reports. It also works on a desktop without an internal battery.
-A newly connected device or a new 20% / 10% low-battery threshold can show a short
-Battery preview; the initial device list is a silent baseline. Thresholds rearm after
-three percentage points of recovery. Disable **Battery · Bluetooth devices** to stop
-this provider, or disable Battery automatic popup to keep the section without previews.
-
-A dedicated worker watches Classic and LE device changes and uses a 15-second
-recovery scan, so slow Bluetooth reads cannot block other system providers. It merges the two Windows container identity properties, reads driver battery
-properties and, for already connected LE devices without a value, tries the standard
-GATT Battery Service. Reads are bounded; at most four GATT devices are probed per scan.
-It does not pair devices, change the radio, open audio streams or force a GATT connection.
-Unknown levels are displayed as unavailable, not 0%. Some devices/drivers do not publish
-battery data, and driver reports may arrive more slowly than the device's actual level.
-
-## Memory monitoring
-
-The Memory settings page shows physical RAM usage, the separate settings process,
-and up to 100 application groups sorted by working set. Explorer's working set is
-labelled as including Windows and other mods: Windows does not provide an accurate
-per-mod share of that process's XAML/heap allocations. Shared pages can appear in
-more than one application's working set; the list is not a sum of physical RAM.
-
-Optional alerts cross 80%, 90% and 95%, show the top five application groups, and
-rearm only after usage drops more than three percentage points below a threshold.
-They use the same manual/automatic popup rules as other activities. The RAM activity
-appears during memory pressure; ordinary RAM management remains in Settings.
-The page opens Task Manager for managing applications. It does not kill applications
-or force working-set trimming. Closing settings releases its own process normally.
-
-Physical memory is sampled every five seconds. Process enumeration runs only during
-memory pressure or while the Memory page is being watched. Only the top five entries
-are retained outside that page, and all process handles are closed after each read.
-
-## Battery controls and app usage
-
-Two power-mode selectors control **Plugged in** and **On battery**, using Windows'
-PowerGet/SetUserConfiguredAC/DCPowerMode APIs. Unsupported configurations disable the
-selector; failed changes display an error instead of pretending the mode was applied.
-Windows energy-saving policies can override the effective mode.
-
-**App usage time** opens a dedicated page with a Back button and application/time rows.
-It shows foreground application time, excluding sleep, the lock screen
-and idle periods longer than a minute. While plugged in it shows the current observed
-PC session; on battery it shows time since the observed unplug event. Collection starts
-when the mod is enabled: it cannot reconstruct earlier boot/unplug history. Reloading
-the mod resets the in-memory counters. No app-usage log is written to disk. At most 128
-application totals are retained, and the usage list refreshes only while its page is open.
-
-## Task progress and application selection
-
-Choose supported source applications in Settings. Downloads show **Downloading N files**
-with one row per identified active download; filenames stay internal for matching status updates. File operations retain their operation and filename where available.
-When the application exposes only aggregate taskbar progress, the widget shows
-**Downloading / Overall progress**: it cannot infer a file count or individual percentages.
-
-This widget monitors progress only, including downloads and file operations. It has no
-Pause, Resume or Cancel commands. Open application brings the existing source window
-forward; manage the operation in that application. Background observation never opens
-browser download UI or invokes application controls.
-
-The provider reads exposed progress/status data and optionally a browser's download table.
-Database locks are respected. Per-file information depends on the source application.
-Missing percentages are indeterminate; aggregate progress is not duplicated across files.
-Completion/cancellation previews require a reported outcome. No process is suspended or killed.
-
-## UltraViewer connections
-
-Active UltraViewer session windows supply outgoing peer names/IDs. Native incoming-session
-labels are recognized where exposed. The mod does not read passwords, chat, or the remote
-desktop. Opening the main window alone is not treated as a connection. Two consecutive
-missing samples confirm disconnection; a compact receipt closes after four seconds.
-Incoming labels that the installed version does not expose cannot be detected reliably.
-Completed-session log records are no longer used as live connection events.
-
-## Device temperature
-
-Enable LibreHardwareMonitor's **Remote Web Server** on this PC. The local port defaults
-to **8085** and is configurable under Device management. This optional source is required;
-the mod does not install a sensor driver. Only `http://127.0.0.1:<port>/data.json` is read,
-with redirects disabled, a 256 KiB response cap and bounded waits on a separate worker.
-Supported CPU/GPU readings are sampled every five seconds; unavailable sources retry
-after 30 seconds. Missing readings show Unavailable, never zero. Alerts trigger at
-70/80/90 °C and rearm five degrees below each threshold. These are configurable-feature
-notification thresholds, not universal hardware damage limits.
-
-Right-click the taskbar widget to collapse it, select a surface theme or open Settings.
-A confirmed OBS recording stop produces a compact four-second receipt, including when
-Stop was pressed in the OBS widget. Losing the OBS connection is not a confirmed stop.
-
-
-
-## Displays & projection
-
-The display widget shows active external Windows display paths, monitor names,
-the reported connection type and duplicate/extend mode. It reads
-[QueryDisplayConfig](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-querydisplayconfig),
-with display-change notifications and a five-second recovery check. Connecting,
-disconnecting or changing the projection topology can open a short preview;
-the initial configuration does not produce a startup popup.
-
-HDMI, DisplayPort, DVI, VGA, indirect displays and Miracast paths are recognized when
-Windows reports them. USB-C display output often appears as DisplayPort: the API
-cannot reliably identify the physical cable. Browser-only casting to Chromecast
-or a remote video receiver is outside this provider. Merely opening Win+P is not
-treated as casting. **Projection options** opens Windows' native projection menu;
-**Display settings** opens Windows Settings. No display mode is changed automatically.
-
-## Wi-Fi hotspot
-
-The widget reads Windows Mobile hotspot state, SSID, connected-client count and the device list via
-[NetworkOperatorTetheringManager](https://learn.microsoft.com/en-us/uwp/api/windows.networking.networkoperators.networkoperatortetheringmanager).
-The full popup lists device hostnames when provided, plus reported IP/MAC addresses.
-If a hostname is unavailable, the MAC address identifies the device. An unavailable
-list is labelled explicitly rather than presented as an empty list.
-It checks once per second while enabled and reacts to network-status changes.
-Turning the hotspot on/off or a confirmed client-count change can show a short
-preview. Startup, profile refreshes and temporary unavailable readings do not
-repeat the preview. Unknown client counts are not presented as zero.
-
-The provider needs Windows and the Wi-Fi driver to expose the tethering APIs to
-Explorer. If access is denied or the provider fails, status is unavailable, not Off.
-**Turn off hotspot** calls Windows' `StopTetheringAsync` only when pressed. The button
-is disabled while the request is pending; failures are reported. No hotspot is started
-automatically. The Settings button opens **Mobile hotspot**. SSID/password and sharing
-configuration are left unchanged.
-
-## OBS Studio recording
-
-Enable **Tools > WebSocket Server Settings > Enable WebSocket server** in OBS Studio
-(WebSocket 5, included in OBS 28+). Set the mod's **OBS WebSocket port** (default 4455)
-and **OBS WebSocket password** to match OBS. The password is stored in mod settings;
-remove it before sharing settings exports. The connection is restricted to `127.0.0.1`.
-
-The Recording widget appears while OBS is recording. Its clock is anchored to
-OBS milliseconds and advances locally between responses, with half-round-trip
-latency compensation (capped at 250 ms). A lightweight 100 ms UI tick changes text
-only when the displayed second changes. Responses predating a recording-state
-event are discarded. This is a status clock, not a frame-accurate OBS timecode. It includes **Pause / Resume** and **Stop recording** buttons. A new recording can
-automatically select the widget. Paused time does not advance; a stopped recording
-disappears unless its manual page is open. Some OBS encoders/output configurations
-do not support pausing; rejected commands display an error.
-
-The mod checks for the OBS process before opening a connection.
-Status uses OBS output events and one-second queries while recording (three seconds
-while idle). Disconnections clear stale recording state and retry after five seconds.
-No recording is started automatically, no OBS hotkeys are simulated, and no recordings
-or credentials are sent to a remote service. This feature does not monitor other recorders.
-
-## Vietnamese culture reader
-
-The built-in topic index includes clothing, festivals, customs, arts, food and crafts.
-Article text and thumbnails are fetched only when opened. The default provider is
-**Wikipedia in the selected language**, with a source/revision-history link and CC BY-SA attribution.
-English articles use Wikipedia language links; unavailable translations show an English message.
-These are community-written reference articles, not a separately verified editorial
-collection. Consult their cited sources for historical claims.
-
-Only the currently viewed page is retained. There is no article history cache and no
-local content/image cache file. Leaving the culture page or closing the popup cancels
-obsolete requests and releases article text, images and their XAML controls. Opening
-an article again fetches it again. Temporary download/render buffers still use memory;
-this is not a zero-RAM reader. Other activities work without an Internet connection.
-HTTPS requests, parsing and image decoding run off the taskbar thread with size and
-time limits. The culture worker starts only when the reader is first opened.
-
-To maintain your own editorial collection, set **Custom culture catalog URL** to a
-public HTTPS JSON endpoint with this structure:
-
-```json
-{"articles":[{"id":"ao-dai","title":"Áo dài","category":"Trang phục","articleUrl":"https://YOUR-HOST/articles/ao-dai.json"}]}
-```
-
-Each article endpoint returns:
-
-```json
-{"title":"Áo dài","content":"Your sourced article text…","sourceUrl":"https://YOUR-SOURCE/","imageUrl":"https://YOUR-HOST/ao-dai.jpg","imageSourceUrl":"https://YOUR-IMAGE-CREDIT/"}
-```
-
-For English catalogs, add `language: "en"` to each entry and point to English article
-content, or supply `titleEn`, `categoryEn` and `articleUrlEn`. The mod does not translate
-custom article text. Replace the illustrative URLs with your actual endpoints. Images are optional.
-The catalog is limited to 200 topics; JSON responses to 1 MiB, compressed image bytes
-to 4 MiB, and displayed article text to 24,000 characters. Longer articles link to the
-full source. No account, API key or additional local program is required.
-
-## Settings and compatibility
-
-English labels are the default; Auto uses Vietnamese on a Vietnamese Windows UI.
-English also localizes almanac terms, hours, stems, branches and the built-in culture index.
-All settings are grouped in the gear window; Windhawk exposes only language and sizes.
-Existing activity preferences are migrated when the previous keys remain available.
-Choose **Appearance · Progress bar style**: Thin (classic), Rounded capsule (default),
-or Segmented. This applies to battery/task bars; the media seek slider stays interactive.
-Unknown progress and high-contrast mode use the native Windows progress bar.
-
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| Enable taskbar widget | On | Master switch |
-| Lunar calendar & Almanac | -1 (region) | Windows region Vietnam; 0 off, 1 on |
-| Displays / Wi-Fi hotspot | On | Independent providers with optional change previews |
-| Progress bar style | Rounded capsule | Thin, capsule or segmented |
-| Media / Battery / OBS recording | On | Independent activity switches; OBS requires WebSocket setup |
-| Windows Clock / Clock preview | On | Status-only reader; background estimate after first sync; alarm reminder within 15 minutes |
-| Privacy activity / Task progress | On | Independent activity switches |
-| Culture reader | On | Button inside Lunar & Almanac |
-| Privacy / Task automatic popup | On | Four-second previews; manual view takes priority |
-| Automatically select new activities | On | React to newly started activities |
-| Always show battery | Off | Otherwise shows on external power or at 20% or below |
-| Battery automatic popup | On | Charging / low-battery previews |
-| Preview duration | 4 s | Range 3–5 s |
-| Position | `tray_left` | Tray placement reserves its own space |
-| Widget width | 270 DIP | Range 140–480 |
-| Popup width | 540 DIP | Range 320–640 |
-| Left overlay offset | 12 DIP | Range 0–2500; only for `root_left` |
-
-Other tray positions are before/after the clock and rightmost. Optional `root_left`
-is an overlay and can cover native buttons; adjust its offset or use a tray position.
-**Compatibility:** Windows 11 x64, build 22000 or later, with the native primary
-XAML taskbar. Windows 10, replacement taskbars and secondary taskbars are not supported.
-Unsupported Windows versions are rejected before hooks or provider threads start.
-The mod does not alter the native clock, clock tooltip, calendar flyout or application notifications.
-Task progress support is limited to the reporting applications and protocol described above.
-
-Install from the Windhawk catalog and configure activities from the widget gear.
-For diagnostics, enable Detailed debug logs and open the log viewer before enabling the mod.
-The current implementation targets x64.
+A unified, single-slot "Live Activity" widget injected natively into the primary Windows 11 XAML taskbar. Instead of running multiple separate taskbar widgets or external desktop overlay windows, **Live Update** multiplexes contextual activities into one compact taskbar slot with a native XAML flyout popup.
+
+![Overview: Media](https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview1.png)
+
+Overview: Media
+
+![Overview: RAM Alert](https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview2.png)
+
+Overview: RAM Alert
+
+![Overview: Device Battery & Bluetooth Battery](https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview3.png)
+
+Overview: Device Battery & Bluetooth Battery
+
+![Overview: Sensitive Permission](https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview4.png)
+
+Overview: Sensitive Permission
+
+![Overview: Wi-Fi Hotspot](https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview5.png)
+
+Overview: Wi-Fi Hotspot
+
+## How this mod differs from existing mods
+
+- **Native single-slot multiplexer vs. external overlays:** Unlike *Dynamic Island for Windows* (which runs as a separate overlay window at the top of the screen), this mod embeds directly inside the native Windows 11 taskbar layout (`SystemTrayFrameGrid` / `RootGrid`) and shares a single compact slot across all active providers.
+- **Contextual activity switching vs. single-purpose widgets:** Unlike standalone media mods (*Taskbar Music Lounge*, *Taskbar Fluent Media Player*, *Island Media Controls*) or calendar-only mods (*Lunar & Holiday Calendar*), this widget automatically switches to newly started activities (such as media playback, power connection, timer start, or microphone/camera access) while keeping a Vietnamese lunar calendar & almanac as the idle baseline.
+
+## Features
+
+- **Media:** Shows album artwork, track title, artist, interactive seek bar, and Fluent transport controls for players integrated with Windows Global System Media Transport Controls (GSMTC), with session switching for up to 16 active sessions.
+- **Battery & Bluetooth:** Displays charge percentage, charging/discharging state, estimated remaining/full time, connected Bluetooth device battery levels, and a shortcut to Windows Power & battery settings (`ms-settings:powersleep`).
+- **Windows Clock (status reader):** Displays active Stopwatch, Timer, and enabled Alarm entries observed from the Windows Clock app, continuing to advance locally from the last synced state when the app is minimized.
+- **Lunar Calendar, Almanac & Vietnamese Culture Index:** Computes UTC+7 Vietnamese lunar dates, Can Chi, Nạp Âm, auspicious hours (Giờ Hoàng Đạo), and 12 Trực using the Hồ Ngọc Đức algorithm. Includes a monthly calendar view, Vietnamese holiday list, and a built-in Vietnamese culture topic index that opens reference articles in your default browser.
+- **Privacy Activity:** Passively monitors active Microphone (Core Audio), Camera (Media Foundation sensor monitor), and Location usage and lists the reporting applications.
+- **Task Progress:** Passively observes taskbar progress (`ITaskbarList3`) for File Explorer, browsers, and archivers to display ongoing transfers in one place.
+- **Displays & Wi-Fi Hotspot:** Shows active external monitors/projection mode (`QueryDisplayConfig`) and Windows Mobile Hotspot status/connected client count (`NetworkOperatorTetheringManager`).
+- **OBS Studio Recording (optional, off by default):** Connects to local OBS WebSocket v5 (`ws://127.0.0.1:<port>`) when OBS is running to display recording elapsed time and Pause/Resume/Stop buttons.
+- **RAM & Temperature Alerts (optional, off by default):** Shows an alert when physical RAM crosses 80%/90%/95% or when CPU/GPU temperatures from a local LibreHardwareMonitor web server (`http://127.0.0.1:<port>/data.json`) cross 70/80/90 °C.
+
+## Optional local integrations setup
+
+- **OBS Studio:** Enable **Tools > WebSocket Server Settings > Enable WebSocket server** in OBS Studio (v28+), then enable **OBS recording** in the mod settings and match the port (default `4455`) and password.
+- **LibreHardwareMonitor (Temperature):** In LibreHardwareMonitor, enable **Options > Remote Web Server > Run**, then enable **Temperature alerts** in the mod settings and match the local port (default `8085`).
+
+## Compatibility
+
+- **Supported OS:** Windows 11 (build 22000 or later) with the native primary XAML taskbar.
+- Windows 10 and third-party replacement taskbars are not supported.
+
+---
 
 ## Tiếng Việt
 
-**Live Update for Windows 11** gom nhiều hoạt động vào một vị trí trên taskbar.
-Có công tắc riêng **Âm lịch & Tử vi**, Phương tiện, Pin, Quyền riêng tư, Tiến trình,
-Quay OBS, Trình chiếu và Điểm phát sóng.
-Văn hóa Việt nằm trong nút **Văn hóa** của Âm lịch & Tử vi. Mặc định -1 bật lịch
-khi Quốc gia/khu vực Windows là Việt Nam; 0 tắt, 1 bật mọi khu vực. Giữ lựa chọn cũ 0/1.
-Chỉ một mục thì ẩn nút chuyển/tab; không có hoạt động thì giữ bánh răng cài đặt nhỏ.
+**Live Update for Windows 11** tích hợp nhiều hoạt động trực tiếp (Live Activities) vào **một vị trí duy nhất** trên thanh taskbar gốc của Windows 11.
 
-**Bản 2.9:** cửa sổ cài đặt chạy trong tiến trình riêng, thanh tìm kiếm dài ở giữa,
-chia 7 trang và các nhóm chức năng ngay trong từng trang. Đóng cửa sổ thì tiến trình
-cài đặt thoát; phần gắn vào taskbar vẫn nằm trong Explorer. Giao diện dùng Windows
-PowerShell/WPF có sẵn, mã nhúng trong file mod, không tạo file script riêng.
+### Điểm khác biệt so với các mod hiện có
+- **Tích hợp trực tiếp vào taskbar thay vì cửa sổ nổi:** Khác với *Dynamic Island for Windows* (tạo cửa sổ nổi riêng phía trên màn hình), mod này gắn trực tiếp vào cây giao diện XAML của taskbar Windows 11 và dùng chung một ô hiển thị duy nhất.
+- **Tự động chuyển đổi theo ngữ cảnh:** Khác với các mod chỉ hiển thị nhạc hoặc chỉ hiển thị âm lịch, Live Update tự động ưu tiên hoạt động mới phát sinh (như phát nhạc, cắm sạc, bật hẹn giờ, dùng micro/camera, quay OBS) và hiển thị Âm lịch & Tử vi khi ở trạng thái nghỉ.
 
-**RAM:** trang cài đặt hiển thị mức dùng RAM, tiến trình cài đặt và danh sách ứng dụng.
-RAM của Explorer được ghi riêng, không coi đó là RAM của mod. Cảnh báo 80%/90%/95%
-hiện top 5 ứng dụng; có chống lặp khi phần trăm dao động. Nút Trình quản lý tác vụ
-giúp quản lý ứng dụng; không ép dọn RAM hay tự tắt ứng dụng.
-
-**Bluetooth:** theo dõi riêng Classic/LE, ghép container và bổ sung Battery Service
-cho thiết bị LE đã kết nối. Thiết bị không cung cấp mức pin vẫn ghi chưa có dữ liệu.
-
-**Tải xuống:** hiển thị số file và các thanh tiến trình riêng khi ứng dụng cung cấp dữ liệu;
-không hiển thị tên file. Nếu chỉ có tiến độ tổng, hiển thị Tổng tiến độ, không đoán số file.
-Chỉ theo dõi trạng thái; bỏ toàn bộ nút Tạm dừng/Tiếp tục/Hủy, kể cả thao tác tệp.
-Nút Mở ứng dụng đưa cửa sổ nguồn ra trước để bạn thao tác trong ứng dụng đó.
-
-**UltraViewer:** đọc cửa sổ phiên đang hoạt động để hiện tên máy/ID kết nối đi;
-nhận kết nối đến khi phiên bản UltraViewer xuất nhãn tương ứng. Khi ngắt kết nối,
-preview tự đóng sau 4 giây; không dùng nhật ký phiên đã kết thúc làm sự kiện kết nối mới.
-
-**OBS:** chỉ báo đã dừng sau khi OBS xác nhận dừng quay; mất kết nối không được coi là dừng.
-**Nhiệt độ:** trong Quản lý thiết bị, bật cảnh báo CPU/GPU 70/80/90 °C. Cần chạy
-LibreHardwareMonitor và bật Remote Web Server, cổng mặc định 8085. Nếu không có cảm biến,
-hiện Chưa có dữ liệu. Theo dõi mỗi 5 giây, cảnh báo lặp lại sau khi nhiệt độ giảm 5 °C.
-**Chuột phải:** thu gọn Live Update, chọn giao diện hoặc mở cài đặt.
-
-**Thu gọn:** nút cạnh bánh răng và mục Giao diện chuyển taskbar thành biểu tượng + số hoạt động,
-không có mũi tên chuyển. Menu cài đặt thu gọn thành biểu tượng và có blur Windows.
-**Quản lý thiết bị:** dung lượng ổ cục bộ, thanh mức sử dụng và nút mở cài đặt lưu trữ Windows.
-
-**Bản 2.10.2:** sửa đọc nhầm giờ kết thúc thành thời gian hẹn giờ còn lại;
-ưu tiên bộ hẹn giờ đang chạy trên taskbar. Bộ đếm đã đọc được tiếp tục hiển thị
-khi thu nhỏ/đóng Đồng hồ hoặc đổi trang, không bị xóa sau 4 giây. Khi đọc lại được
-thì đồng bộ trạng thái tạm dừng, đặt lại và thời gian mới. Bỏ nút Mở Đồng hồ Windows.
-
-**Nền taskbar:** bình thường trong suốt; rê chuột hiện nền 30%; bấm/đang mở popup
-hiện đầy đủ. Nền có lớp riêng, không làm mờ chữ. Chọn Liquid Glass thì dùng kính khi
-được hỗ trợ; Blur hoặc Off của popup vẫn dùng blur trên taskbar.
-
-**Đồng hồ:** chỉ hiển thị trạng thái Bấm giờ, Hẹn giờ và Báo thức từ Đồng hồ
-Windows (tiếng Việt/Anh). Cần đọc được trang tương ứng ít nhất một lần. Khi ứng
-dụng thu nhỏ, đóng hoặc trang không còn đọc được, widget tiếp tục từ mốc chạy đã
-ghi nhận và hiện **Theo lần đồng bộ cuối**; hết giờ suy ra từ mốc này có ghi
-**Ước tính**. Không thể xác nhận các thay đổi chưa đọc được trong ứng dụng.
-Nhắc trước 15 phút dựa trên lịch báo thức đang bật đã đọc được; ứng dụng Đồng hồ
-vẫn chịu trách nhiệm phát chuông. Dữ liệu giữ trong phiên mod, không qua khởi động
-lại Explorer. Widget không mở hay điều khiển ứng dụng, không tạo bộ đếm độc lập.
-
-**Tương thích:** chỉ hỗ trợ Windows 11 x64, build 22000 trở lên, với taskbar XAML
-chính của Windows. Không hỗ trợ Windows 10, taskbar thay thế hoặc taskbar màn hình phụ.
-Mod kiểm tra phiên bản Windows trước khi cài hook và khởi động các luồng theo dõi.
-**Mặc định:** Liquid Glass cho cấu hình mới, giữ lựa chọn đã lưu. Intel Core i thế hệ 6 trở xuống,
-AMD trước Ryzen/Zen hoặc CPU chưa nhận diện sẽ dùng Windows Blur; tắt trong suốt thì dùng nền đặc.
-**Kính:** thêm phóng nền nhẹ, viền sáng và phản sáng theo con trỏ bằng Windows
-Composition; popup đổi màu chữ theo độ sáng nền từ mẫu 16×16 tạm thời. Nền taskbar trong suốt, màu chữ taskbar giữ theo hệ thống. Đây là hiệu ứng mô phỏng,
-không phải bộ dựng Liquid Glass của Apple.
-Windhawk chỉ còn ngôn ngữ và hai chiều rộng. Lưu tại Windhawk không đặt lại các công
-tắc widget. Khi Windhawk 2 có CLI phù hợp và quyền ghi, ba mục chung được đồng bộ
-ngược; Windhawk 1.x hoặc CLI bị từ chối thì chỉ lưu trong widget và báo rõ giới hạn.
-Không tự nâng quyền hoặc sửa registry/INI của engine.
-
-Chỉ báo quyền riêng tư tách đúng từng mục trong tooltip Windows, không lặp tên ứng
-dụng hoặc đưa dòng Micro vào Vị trí. **Tắt điểm phát sóng** thực hiện yêu cầu tắt qua
-Windows, có trạng thái đang tắt và báo lỗi. Không có hoạt động vẫn giữ bánh răng nhỏ
-để mở lại cài đặt.
-
-**Pin Bluetooth** nằm trong widget Pin: tên thiết bị, phần trăm do Windows báo và
-preview khi kết nối / pin 20% / 10%. Không giả mức pin khi thiết bị không cung cấp.
-**Điểm phát sóng** có danh sách thiết bị, tên khi có, địa chỉ IP/MAC.
-Lịch ngày bỏ chiều cao tối thiểu thừa của ô ngày lễ. Tên ứng dụng được hiển thị dễ đọc.
-
-Phương tiện có ảnh bìa, tên bài và dòng `thời gian · nghệ sĩ`; cụm nút Fluent có nút phát/tạm
- dừng lớn ở giữa. Thay đổi nhạc và nguồn điện được nhận theo sự kiện; việc tải ảnh
-không chặn lệnh điều khiển. Bật nhạc/cắm nguồn có thể tự chọn mục tương ứng.
-
-Popup mở bằng tay không tự hết giờ; preview sạc/pin yếu mặc định 4 giây. Bấm hoặc
-cuộn trong preview để giữ mở. Chiều cao theo nội dung từng trang. Mod không còn tự
-vô hiệu blur/kính vì chế độ tiết kiệm pin; vẫn ưu tiên tương phản cao. Windows có thể
-giới hạn hiệu ứng ở cấp compositor. Animation mở 300 ms,
-đóng 240 ms. Âm lịch & Tử vi vẫn luân chuyển 15 giây và ghim ngày lễ.
-
-Nút **Tháng** hiển thị cả Dương/Âm lịch và tên lễ ở dòng thứ ba. Bấm ngày để xem
-chi tiết. Nút **Lễ** giữ danh sách lễ, kỷ niệm. **Văn hóa** mở trang đọc có nút quay lại.
-
-**Phương tiện:** có thanh tua nếu trình phát hỗ trợ; thời gian ở hai bên cụm nút điều khiển.
-Các ô số bên dưới chọn phiên media; chỉ một phiên thì ẩn hàng này. Phiên vừa bắt đầu
-phát được ưu tiên. Không hiển thị tên ứng dụng phát nhạc. Thời gian sử dụng ứng dụng
-của mục Pin có trang riêng và nút Quay lại.
-
-**Quyền riêng tư:** theo dõi phiên thu âm của micro; camera/vị trí dùng hoạt động
-Windows ghi nhận nên vẫn có giới hạn. Có thể tự mở popup 4 giây khi có hoạt động mới.
-
-**Tiến trình:** chọn ứng dụng trong Settings, thêm tên `.exe` cách nhau bằng dấu `;`
-nếu cần. Tên file/nút điều khiển được đọc thêm từ giao diện tải xuống hoặc hộp thoại
-tệp nếu ứng dụng cung cấp qua UI Automation. Trình duyệt có thể cần mở trang Tải xuống
-để các nút còn tồn tại. Nếu chưa có nguồn, bấm **Mở mục tải xuống** để mở giao diện tải của trình duyệt.
-Nút chưa được nguồn hỗ trợ sẽ bị vô hiệu hóa; không giả tên file hoặc gửi lệnh mù.
-Chỉ báo hoàn thành/hủy khi có bằng chứng tương ứng; nếu mới gửi được lệnh hủy thì ghi
-**Đã yêu cầu hủy**. Không suy ra thành công chỉ vì thanh tiến trình biến mất.
-
-**Văn hóa Việt:** chỉ tải khi mở, bỏ cache bài đã xem; rời trang/đóng popup thì giải
-phóng nội dung và ảnh. Mở lại cần Internet. Vẫn cần RAM tạm để tải và hiển thị nội dung.
-
-Các phần mạng, giải mã ảnh và kiểm tra tiến trình chạy ngoài luồng giao diện. Dữ liệu
-và danh sách đều có giới hạn; thao tác mở bằng tay được ưu tiên trước popup tự động.
-**Trình chiếu:** hiển thị màn hình ngoài đang hoạt động, kết nối Windows báo và chế
-độ nhân đôi/mở rộng; có preview khi đổi kết nối. USB-C có thể hiện là DisplayPort;
-không theo dõi truyền riêng tab Chrome. **Điểm phát sóng:** trạng thái bật/tắt, tên
-mạng, số thiết bị và danh sách thiết bị khi Windows cung cấp; không tự đổi cấu hình mạng.
-
-Trong Settings, mục **Giao diện · Kiểu thanh tiến trình** có Mảnh / Bo tròn / Chia
-đoạn. Ghi chú hướng dẫn được chuyển khỏi nội dung live; thông báo lỗi cần thao tác
-và trạng thái chưa có dữ liệu vẫn được giữ lại.
-
+### Các hoạt động hỗ trợ
+- **Phương tiện (Media):** Ảnh bìa, tên bài hát, nghệ sĩ, thanh tua và nút điều khiển nhạc hỗ trợ nhiều phiên phát cùng lúc.
+- **Pin & Thiết bị Bluetooth:** Phần trăm pin, thời gian ước tính, mức pin thiết bị Bluetooth đang kết nối và nút mở nhanh cài đặt Nguồn & Pin của Windows.
+- **Đồng hồ Windows:** Đọc trạng thái Bấm giờ, Hẹn giờ và Báo thức từ ứng dụng Đồng hồ Windows; tiếp tục đếm từ mốc đồng bộ cuối khi thu nhỏ ứng dụng.
+- **Âm lịch, Tử vi & Danh mục Văn hóa Việt:** Tính ngày âm lịch, Can Chi, Nạp Âm, Giờ Hoàng Đạo, Trực, lịch tháng và danh sách ngày lễ Việt Nam. Mục **Văn hóa** cung cấp danh mục chủ đề văn hóa Việt Nam và mở bài viết tham khảo trong trình duyệt mặc định khi bấm vào.
+- **Quyền riêng tư:** Hiển thị ứng dụng đang sử dụng Micro, Camera hoặc Vị trí.
+- **Tiến trình tác vụ:** Theo dõi trạng thái tiến độ trên taskbar của File Explorer, trình duyệt và phần mềm giải nén.
+- **Trình chiếu & Điểm phát sóng Wi-Fi:** Hiển thị màn hình phụ đang kết nối và trạng thái Mobile Hotspot cùng danh sách thiết bị.
+- **Quay màn hình OBS & Cảnh báo Nhiệt độ / RAM (tùy chọn):** Kết nối cục bộ (`127.0.0.1`) với OBS WebSocket v5 và LibreHardwareMonitor Remote Web Server khi người dùng bật trong cài đặt.
 */
 // ==/WindhawkModReadme==
 
@@ -604,20 +93,229 @@ và trạng thái chưa có dữ liệu vẫn được giữ lại.
 - language: auto
   $name: Language
   $name:vi-VN: Ngôn ngữ
-  $description: Open the gear on the widget for all settings. These three fields are also imported when saved here.
-  $description:vi-VN: Mở bánh răng trên widget để chỉnh toàn bộ cài đặt. Ba mục này cũng được áp dụng khi lưu tại đây.
   $options:
   - auto: System default (Auto)
   - en: English
   - vi: Tiếng Việt
-- widgetWidth: 270
-  $name: Compact widget width (DIP)
-  $name:vi-VN: Chiều rộng widget thu gọn (DIP)
-  $description: "Range: 140–480 DIP."
-- expandedWidth: 540
-  $name: Popup width (DIP)
-  $name:vi-VN: Chiều rộng popup (DIP)
-  $description: "Range: 320–640 DIP."
+
+- enableTaskbarWidget: true
+  $name: Enable Live Update widget
+  $name:vi-VN: Bật widget Live Update
+
+- autoSelectActivity: true
+  #! $showIf: enableTaskbarWidget
+  $name: Automatically select newly started activities
+  $name:vi-VN: Tự chọn hoạt động mới bắt đầu
+
+- batteryAutoPopupSeconds: 4
+  #! $showIf: enableTaskbarWidget
+  $name: Automatic preview duration (3–5 seconds)
+  $name:vi-VN: Thời gian hiện preview tự động (3–5 giây)
+
+- appearance:
+  - position: root_left
+    $name: Taskbar position
+    $name:vi-VN: Vị trí trên taskbar
+    $options:
+    - tray_left: Tray · Leftmost
+    - tray_before_clock: Tray · Before clock
+    - tray_after_clock: Tray · After clock
+    - tray_right: Tray · Rightmost
+    - root_left: Left overlay (root_left)
+  - widgetLeftOffset: 12
+    #! $showIf: appearance.position == 'root_left'
+    $name: Left overlay offset (0–2500 DIP)
+    $name:vi-VN: Lề trái khi đặt đè (0–2500 DIP)
+  - widgetWidth: 270
+    $name: Compact widget width (140–480 DIP)
+    $name:vi-VN: Chiều rộng widget thu gọn (140–480 DIP)
+  - expandedWidth: 540
+    $name: Popup width (320–640 DIP)
+    $name:vi-VN: Chiều rộng popup (320–640 DIP)
+  - popupTheme: glass
+    $name: Surface theme
+    $name:vi-VN: Giao diện bề mặt
+    $options:
+    - glass: Liquid glass
+    - blur: Windows blur
+    - solid: Off (opaque)
+  - progressStyle: capsule
+    $name: Progress bar style
+    $name:vi-VN: Kiểu thanh tiến trình
+    $options:
+    - capsule: Rounded capsule
+    - thin: Thin
+    - segments: Segmented
+  - collapsedTaskbar: false
+    $name: Collapsed taskbar mode (icon + activity count)
+    $name:vi-VN: Chế độ thu gọn trên taskbar (biểu tượng + số hoạt động)
+  #! $showIf: enableTaskbarWidget
+  $name: Appearance & Layout
+  $name:vi-VN: Giao diện & Bố cục
+  $description: Position, dimensions, surface material, and progress bar style.
+  $description:vi-VN: Vị trí trên taskbar, kích thước, hiệu ứng nền và kiểu thanh tiến trình.
+
+- lunar:
+  - enabled: -1
+    $name: Enable Lunar calendar & Almanac
+    $name:vi-VN: Bật Âm lịch & Tử vi
+    $options:
+    - -1: Auto (Vietnam region only)
+    - 1: Always on
+    - 0: Off
+  - enableCultureWidget: true
+    #! $showIf: lunar.enabled != 0
+    $name: Enable Vietnamese culture topic index
+    $name:vi-VN: Bật danh mục chủ đề Văn hóa Việt
+  #! $showIf: enableTaskbarWidget
+  $name: Lunar Calendar & Almanac
+  $name:vi-VN: Âm lịch & Tử vi
+
+- media:
+  - enabled: true
+    $name: Enable Media activity
+    $name:vi-VN: Bật hoạt động Phương tiện
+  #! $showIf: enableTaskbarWidget
+  $name: Media
+  $name:vi-VN: Phương tiện
+
+- clock:
+  - enabled: true
+    $name: Enable Windows Clock reader (Stopwatch, Timer, Alarm)
+    $name:vi-VN: Bật đọc Đồng hồ Windows (Bấm giờ, Hẹn giờ, Báo thức)
+  - autoPopup: true
+    #! $showIf: clock.enabled
+    $name: Automatic previews & 15-minute alarm reminder
+    $name:vi-VN: Tự mở preview & nhắc báo thức trước 15 phút
+  #! $showIf: enableTaskbarWidget
+  $name: Windows Clock
+  $name:vi-VN: Đồng hồ Windows
+
+- battery:
+  - enabled: true
+    $name: Enable Battery activity
+    $name:vi-VN: Bật hoạt động Pin
+  - alwaysShow: false
+    #! $showIf: battery.enabled
+    $name: Always show battery (even when discharging above 20%)
+    $name:vi-VN: Luôn hiển thị pin (kể cả khi dùng pin trên 20%)
+  - autoPopup: true
+    #! $showIf: battery.enabled
+    $name: Automatic preview on charging / low battery
+    $name:vi-VN: Tự mở preview khi cắm sạc / pin yếu
+  - bluetoothBattery: true
+    #! $showIf: battery.enabled
+    $name: Show connected Bluetooth device batteries
+    $name:vi-VN: Hiển thị pin thiết bị Bluetooth đã kết nối
+  #! $showIf: enableTaskbarWidget
+  $name: Battery & Bluetooth
+  $name:vi-VN: Pin & Bluetooth
+
+- privacy:
+  - enabled: true
+    $name: Enable Microphone, Camera & Location activity
+    $name:vi-VN: Bật theo dõi Micro, Camera & Vị trí
+  - autoPopup: true
+    #! $showIf: privacy.enabled
+    $name: Automatic preview on new sensor use
+    $name:vi-VN: Tự mở preview khi có truy cập mới
+  #! $showIf: enableTaskbarWidget
+  $name: Privacy Activity
+  $name:vi-VN: Quyền riêng tư
+
+- taskProgress:
+  - enabled: true
+    $name: Enable Task progress monitor
+    $name:vi-VN: Bật theo dõi tiến trình tác vụ
+  - autoPopup: true
+    #! $showIf: taskProgress.enabled
+    $name: Automatic preview on new/completed tasks
+    $name:vi-VN: Tự mở preview khi có tác vụ mới/hoàn tất
+  - explorer: true
+    #! $showIf: taskProgress.enabled
+    $name: File Explorer (explorer.exe)
+    $name:vi-VN: File Explorer (explorer.exe)
+  - chrome: true
+    #! $showIf: taskProgress.enabled
+    $name: Google Chrome (chrome.exe)
+    $name:vi-VN: Google Chrome (chrome.exe)
+  - edge: true
+    #! $showIf: taskProgress.enabled
+    $name: Microsoft Edge (msedge.exe)
+    $name:vi-VN: Microsoft Edge (msedge.exe)
+  - firefox: false
+    #! $showIf: taskProgress.enabled
+    $name: Mozilla Firefox (firefox.exe)
+    $name:vi-VN: Mozilla Firefox (firefox.exe)
+  - sevenZip: false
+    #! $showIf: taskProgress.enabled
+    $name: 7-Zip (7zfm.exe / 7zg.exe)
+    $name:vi-VN: 7-Zip (7zfm.exe / 7zg.exe)
+  - otherApps: ""
+    #! $showIf: taskProgress.enabled
+    $name: Additional executables (separated by ;)
+    $name:vi-VN: Ứng dụng khác (cách nhau bởi dấu ;)
+  #! $showIf: enableTaskbarWidget
+  $name: Task Progress
+  $name:vi-VN: Tiến trình tác vụ
+
+- display:
+  - enabled: true
+    $name: Enable Displays & projection activity
+    $name:vi-VN: Bật hoạt động Màn hình & Trình chiếu
+  - autoPopup: true
+    #! $showIf: display.enabled
+    $name: Automatic preview on display changes
+    $name:vi-VN: Tự mở preview khi thay đổi kết nối màn hình
+  #! $showIf: enableTaskbarWidget
+  $name: Displays & Projection
+  $name:vi-VN: Màn hình & Trình chiếu
+
+- hotspot:
+  - enabled: true
+    $name: Enable Wi-Fi hotspot activity
+    $name:vi-VN: Bật hoạt động Điểm phát sóng Wi-Fi
+  - autoPopup: true
+    #! $showIf: hotspot.enabled
+    $name: Automatic preview on hotspot/client changes
+    $name:vi-VN: Tự mở preview khi bật/tắt hoặc đổi số thiết bị
+  #! $showIf: enableTaskbarWidget
+  $name: Wi-Fi Hotspot
+  $name:vi-VN: Điểm phát sóng Wi-Fi
+
+- obs:
+  - enabled: false
+    $name: Enable OBS WebSocket recording monitor
+    $name:vi-VN: Bật theo dõi quay OBS qua WebSocket
+  - port: 4455
+    #! $showIf: obs.enabled
+    $name: Local WebSocket port (127.0.0.1)
+    $name:vi-VN: Cổng WebSocket cục bộ (127.0.0.1)
+  - password: ""
+    #! $showIf: obs.enabled
+    $name: WebSocket password
+    $name:vi-VN: Mật khẩu WebSocket
+  #! $showIf: enableTaskbarWidget
+  $name: OBS Studio Recording
+  $name:vi-VN: Quay màn hình OBS Studio
+
+- alerts:
+  - memoryAlerts: true
+    $name: RAM alerts at 80%, 90%, 95%
+    $name:vi-VN: Cảnh báo RAM ở mức 80%, 90%, 95%
+  - storageAlerts: true
+    $name: Storage (ROM/Disk) alerts when free space is below 10%
+    $name:vi-VN: Cảnh báo bộ nhớ (ROM/Ổ đĩa) khi dung lượng trống dưới 10%
+  - temperatureAlerts: false
+    $name: CPU/GPU temperature alerts at 70, 80, 90 °C (requires LibreHardwareMonitor)
+    $name:vi-VN: Cảnh báo nhiệt độ CPU/GPU ở 70, 80, 90 °C (cần LibreHardwareMonitor)
+  - temperaturePort: 8085
+    #! $showIf: alerts.temperatureAlerts
+    $name: LibreHardwareMonitor local web server port
+    $name:vi-VN: Cổng máy chủ cục bộ LibreHardwareMonitor
+  #! $showIf: enableTaskbarWidget
+  $name: System Alerts (RAM, ROM & Temperature)
+  $name:vi-VN: Cảnh báo hệ thống (RAM, ROM & Nhiệt độ)
 */
 // ==/WindhawkModSettings==
 
@@ -694,7 +392,6 @@ và trạng thái chưa có dữ liệu vẫn được giữ lại.
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
-#include <limits>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
@@ -786,33 +483,43 @@ bool HasSupportedWindowsVersion() {
 struct ModSettings {
     ModLanguage language = ModLanguage::Auto;
     bool enableTaskbarWidget = true;
-    std::wstring position = L"tray_left";
+    std::wstring position = L"root_left";
     int widgetLeftOffset = 12;
     int widgetWidth = 270;
     int expandedWidth = 540;
     std::wstring progressStyle = L"capsule";
     std::wstring popupTheme = L"glass";
     bool bluetoothBattery = true;
-    bool memoryAlerts = true, temperatureAlerts = true;
+    bool memoryAlerts = true;
+    bool storageAlerts = true;
+    bool temperatureAlerts = false;
     int temperaturePort = 8085;
-    bool collapsedTaskbar = false, settingsBlur = true, remoteAlerts = true;
-    bool browserDownloadNames = true;
-    bool enableDisplayWidget = true, displayAutoPopup = true;
-    bool enableHotspotWidget = true, hotspotAutoPopup = true;
+    bool collapsedTaskbar = false;
+    bool settingsBlur = true;
+    bool remoteAlerts = false;
+    bool browserDownloadNames = false;
+    bool enableDisplayWidget = true;
+    bool displayAutoPopup = true;
+    bool enableHotspotWidget = true;
+    bool hotspotAutoPopup = true;
     bool enableLunarWidget = true;
     bool autoSelectActivity = true;
     bool enablePrivacyWidget = true;
     bool privacyAutoPopup = true;
     bool enableTaskProgress = true;
     bool taskProgressAutoPopup = true;
-    bool progressExplorer = true, progressChrome = true, progressEdge = true;
-    bool progressFirefox = false, progressSevenZip = false;
+    bool progressExplorer = true;
+    bool progressChrome = true;
+    bool progressEdge = true;
+    bool progressFirefox = false;
+    bool progressSevenZip = false;
     std::wstring progressOtherApps;
     bool enableCultureWidget = true;
     std::wstring cultureCatalogUrl;
-    bool enableClockWidget = true, clockAutoPopup = true;
+    bool enableClockWidget = true;
+    bool clockAutoPopup = true;
     bool enableMediaWidget = true;
-    bool enableObsWidget = true;
+    bool enableObsWidget = false;
     int obsPort = 4455;
     std::wstring obsPassword;
     bool enableBatteryWidget = true;
@@ -832,191 +539,192 @@ T ClampVal(T val, T minVal, T maxVal) {
 bool ResolveLunarEnabled(int preference, bool vietnamRegion) {
     return preference < 0 ? vietnamRegion : preference != 0;
 }
-enum class WidgetSettingType { Toggle, Number, Choice, Text, Password };
-struct WidgetSettingSpec {
-    PCWSTR key; int section; WidgetSettingType type;
-    PCWSTR en; PCWSTR vi; PCWSTR defaultValue;
-    int minimum, maximum;
-};
-constexpr WidgetSettingSpec kWidgetSettings[] = {
-    {L"collapsedTaskbar", 1, WidgetSettingType::Toggle, L"Collapsed taskbar · activity count", L"Thu gọn taskbar · số hoạt động", L"0", 0, 1},
-    {L"settingsBlur", 1, WidgetSettingType::Toggle, L"Windows blur in settings", L"Làm mờ Windows trong cài đặt", L"1", 0, 1},
-    {L"remoteAlerts", 2, WidgetSettingType::Toggle, L"UltraViewer connection alerts", L"Cảnh báo kết nối UltraViewer", L"1", 0, 1},
-    {L"language", 0, WidgetSettingType::Choice, L"Language", L"Ngôn ngữ", L"auto", 0, 0},
-    {L"enableTaskbarWidget", 0, WidgetSettingType::Toggle, L"Enable Live Update", L"Bật Live Update", L"1", 0, 1},
-    {L"autoSelectActivity", 0, WidgetSettingType::Toggle, L"Follow new activities", L"Tự chọn hoạt động mới", L"1", 0, 1},
-    {L"batteryAutoPopupSeconds", 0, WidgetSettingType::Number, L"Preview duration (seconds)", L"Thời gian preview (giây)", L"4", 3, 5},
-    {L"position", 1, WidgetSettingType::Choice, L"Taskbar position", L"Vị trí trên taskbar", L"tray_left", 0, 0},
-    {L"widgetWidth", 1, WidgetSettingType::Number, L"Compact width (DIP)", L"Chiều rộng thu gọn (DIP)", L"270", 140, 480},
-    {L"expandedWidth", 1, WidgetSettingType::Number, L"Popup width (DIP)", L"Chiều rộng popup (DIP)", L"540", 320, 640},
-    {L"widgetLeftOffset", 1, WidgetSettingType::Number, L"Left overlay offset (DIP)", L"Lề trái khi đặt đè (DIP)", L"12", 0, 2500},
-    {L"popupTheme", 1, WidgetSettingType::Choice, L"Surface theme", L"Giao diện bề mặt", L"glass", 0, 0},
-    {L"progressStyle", 1, WidgetSettingType::Choice, L"Progress bar style", L"Kiểu thanh tiến trình", L"capsule", 0, 0},
-    {L"enableClockWidget", 2, WidgetSettingType::Toggle, L"Windows Clock · Stopwatch, timers & alarms", L"Đồng hồ Windows · Bấm giờ, hẹn giờ & báo thức", L"1", 0, 1},
-    {L"clockAutoPopup", 2, WidgetSettingType::Toggle, L"Clock · Previews & 15-minute alarm reminder", L"Đồng hồ · Preview & nhắc báo thức trước 15 phút", L"1", 0, 1},
-    {L"enableMediaWidget", 2, WidgetSettingType::Toggle, L"Media", L"Phương tiện", L"1", 0, 1},
-    {L"enableBatteryWidget", 2, WidgetSettingType::Toggle, L"Battery", L"Pin", L"1", 0, 1},
-    {L"alwaysShowBattery", 2, WidgetSettingType::Toggle, L"Battery · Always visible", L"Pin · Luôn hiển thị", L"0", 0, 1},
-    {L"batteryAutoPopup", 2, WidgetSettingType::Toggle, L"Battery · Automatic preview", L"Pin · Tự mở preview", L"1", 0, 1},
-    {L"bluetoothBattery", 2, WidgetSettingType::Toggle, L"Battery · Bluetooth devices", L"Pin · Thiết bị Bluetooth", L"1", 0, 1},
-    {L"enablePrivacyWidget", 2, WidgetSettingType::Toggle, L"Privacy activity", L"Quyền riêng tư", L"1", 0, 1},
-    {L"privacyAutoPopup", 2, WidgetSettingType::Toggle, L"Privacy · Automatic preview", L"Quyền riêng tư · Tự mở preview", L"1", 0, 1},
-    {L"display.enabled", 2, WidgetSettingType::Toggle, L"Displays & projection", L"Màn hình & Trình chiếu", L"1", 0, 1},
-    {L"display.autoPopup", 2, WidgetSettingType::Toggle, L"Displays · Automatic preview", L"Trình chiếu · Tự mở preview", L"1", 0, 1},
-    {L"hotspot.enabled", 2, WidgetSettingType::Toggle, L"Wi-Fi hotspot", L"Điểm phát sóng Wi-Fi", L"1", 0, 1},
-    {L"hotspot.autoPopup", 2, WidgetSettingType::Toggle, L"Hotspot · Automatic preview", L"Điểm phát sóng · Tự mở preview", L"1", 0, 1},
-    {L"enableTaskProgress", 3, WidgetSettingType::Toggle, L"Task progress", L"Tiến trình tác vụ", L"1", 0, 1},
-    {L"taskProgressAutoPopup", 3, WidgetSettingType::Toggle, L"Automatic preview", L"Tự mở preview", L"1", 0, 1},
-    {L"progressExplorer", 3, WidgetSettingType::Toggle, L"File Explorer", L"File Explorer", L"1", 0, 1},
-    {L"progressChrome", 3, WidgetSettingType::Toggle, L"Google Chrome", L"Google Chrome", L"1", 0, 1},
-    {L"progressEdge", 3, WidgetSettingType::Toggle, L"Microsoft Edge", L"Microsoft Edge", L"1", 0, 1},
-    {L"progressFirefox", 3, WidgetSettingType::Toggle, L"Mozilla Firefox", L"Mozilla Firefox", L"0", 0, 1},
-    {L"progressSevenZip", 3, WidgetSettingType::Toggle, L"7-Zip", L"7-Zip", L"0", 0, 1},
-    {L"progressOtherApps", 3, WidgetSettingType::Text, L"Additional applications (.exe; .exe)", L"Ứng dụng khác (.exe; .exe)", L"", 0, 4096},
-    {L"browserDownloadNames", 3, WidgetSettingType::Toggle, L"Per-download progress details", L"Tiến độ từng lượt tải", L"1", 0, 1},
-    {L"temperatureAlerts", 6, WidgetSettingType::Toggle, L"CPU/GPU alerts at 70, 80, 90 °C", L"Cảnh báo CPU/GPU ở 70, 80, 90 °C", L"1", 0, 1},
-    {L"temperaturePort", 6, WidgetSettingType::Number, L"Local sensor server port", L"Cổng máy chủ cảm biến cục bộ", L"8085", 1, 65535},
-    {L"memoryAlerts", 6, WidgetSettingType::Toggle, L"RAM alerts at 80%, 90%, 95%", L"Cảnh báo RAM ở 80%, 90%, 95%", L"1", 0, 1},
-    {L"enableObsWidget", 4, WidgetSettingType::Toggle, L"OBS recording", L"Quay màn hình OBS", L"1", 0, 1},
-    {L"obsPort", 4, WidgetSettingType::Number, L"WebSocket port", L"Cổng WebSocket", L"4455", 1024, 65535},
-    {L"obsPassword", 4, WidgetSettingType::Password, L"WebSocket password", L"Mật khẩu WebSocket", L"", 0, 1024},
-    {L"enableLunarWidget", 5, WidgetSettingType::Choice, L"Lunar calendar & Almanac", L"Âm lịch & Tử vi", L"-1", -1, 1},
-    {L"enableCultureWidget", 5, WidgetSettingType::Toggle, L"Vietnamese culture reader", L"Mục Văn hóa Việt", L"1", 0, 1},
-    {L"cultureCatalogUrl", 5, WidgetSettingType::Text, L"Custom culture catalog (HTTPS)", L"Danh mục văn hóa riêng (HTTPS)", L"", 0, 2048},
+
+struct SettingOption {
+    PCWSTR value;
+    PCWSTR en;
+    PCWSTR vi;
 };
 
-struct SettingOption { PCWSTR value, en, vi; };
 std::vector<SettingOption> WidgetSettingOptions(std::wstring_view key) {
-    if (key == L"language") return {{L"auto", L"System default", L"Theo hệ thống"}, {L"vi", L"Vietnamese", L"Tiếng Việt"}, {L"en", L"English", L"English"}};
-    if (key == L"position") return {{L"tray_left", L"Tray · Leftmost", L"Khay hệ thống · Bên trái"},
-        {L"tray_before_clock", L"Tray · Before clock", L"Khay hệ thống · Trước đồng hồ"},
-        {L"tray_after_clock", L"Tray · After clock", L"Khay hệ thống · Sau đồng hồ"},
-        {L"tray_right", L"Tray · Rightmost", L"Khay hệ thống · Bên phải"},
-        {L"root_left", L"Left overlay", L"Đè lên góc trái taskbar"}};
-    if (key == L"popupTheme") return {{L"blur", L"Windows blur", L"Làm mờ Windows"}, {L"glass", L"Liquid glass", L"Liquid glass"}, {L"solid", L"Off (opaque)", L"Tắt (nền đặc)"}};
-    if (key == L"progressStyle") return {{L"thin", L"Thin", L"Mảnh"}, {L"capsule", L"Rounded", L"Bo tròn"}, {L"segments", L"Segmented", L"Chia đoạn"}};
-    if (key == L"enableLunarWidget") return {{L"-1", L"Auto · Vietnam region", L"Tự động · Khu vực Việt Nam"}, {L"1", L"On", L"Bật"}, {L"0", L"Off", L"Tắt"}};
+    if (key == L"language") {
+        return {
+            {L"auto", L"System default", L"Theo hệ thống"},
+            {L"vi", L"Vietnamese", L"Tiếng Việt"},
+            {L"en", L"English", L"English"},
+        };
+    }
+    if (key == L"position") {
+        return {
+            {L"tray_left", L"Tray · Leftmost", L"Khay hệ thống · Bên trái"},
+            {L"tray_before_clock", L"Tray · Before clock", L"Khay hệ thống · Trước đồng hồ"},
+            {L"tray_after_clock", L"Tray · After clock", L"Khay hệ thống · Sau đồng hồ"},
+            {L"tray_right", L"Tray · Rightmost", L"Khay hệ thống · Bên phải"},
+            {L"root_left", L"Left overlay", L"Đè lên góc trái taskbar"},
+        };
+    }
+    if (key == L"popupTheme") {
+        return {
+            {L"blur", L"Windows blur", L"Làm mờ Windows"},
+            {L"glass", L"Liquid glass", L"Liquid glass"},
+            {L"solid", L"Off (opaque)", L"Tắt (nền đặc)"},
+        };
+    }
+    if (key == L"progressStyle") {
+        return {
+            {L"thin", L"Thin", L"Mảnh"},
+            {L"capsule", L"Rounded", L"Bo tròn"},
+            {L"segments", L"Segmented", L"Chia đoạn"},
+        };
+    }
     return {};
 }
-bool SharedHostSetting(std::wstring_view key) {
-    return key == L"language" || key == L"widgetWidth" || key == L"expandedWidth";
-}
-std::wstring ReadStoredText(std::wstring const& key, PCWSTR fallback = L"") {
-    WCHAR buffer[4098]{};
-    return Wh_GetStringValue(key.c_str(), buffer, ARRAYSIZE(buffer)) ? std::wstring(buffer) : fallback;
-}
-std::wstring HostSettingValue(WidgetSettingSpec const& spec) {
-    if (spec.type == WidgetSettingType::Toggle || spec.type == WidgetSettingType::Number ||
-        std::wstring_view(spec.key) == L"enableLunarWidget") return std::to_wstring(Wh_GetIntSetting(spec.key));
-    return WindhawkUtils::StringSetting::make(spec.key).get();
-}
-bool ValidateWidgetSetting(WidgetSettingSpec const& spec, std::wstring const& value) {
-    if (spec.type == WidgetSettingType::Toggle) return value == L"0" || value == L"1";
-    if (spec.type == WidgetSettingType::Choice) {
-        auto options = WidgetSettingOptions(spec.key);
-        return std::any_of(options.begin(), options.end(), [&](auto const& option) { return value == option.value; });
-    }
-    if (spec.type == WidgetSettingType::Number) {
-        if (value.empty() || value.size() > 8 || value.find_first_not_of(L"0123456789") != std::wstring::npos) return false;
-        auto number = wcstol(value.c_str(), nullptr, 10);
-        return number >= spec.minimum && number <= spec.maximum;
-    }
-    if (value.size() > static_cast<size_t>(spec.maximum)) return false;
-    if (std::wstring_view(spec.key) == L"cultureCatalogUrl" && !value.empty()) return value.starts_with(L"https://");
-    return true;
-}
-std::wstring WidgetSettingValue(WidgetSettingSpec const& spec) {
-    auto value = ReadStoredText(std::wstring(L"config.") + spec.key, spec.defaultValue);
-    return ValidateWidgetSetting(spec, value) ? value : spec.defaultValue;
-}
-// One canonical store for widget preferences. Only the three shared host fields
-// are imported; saving Windhawk settings never resets the activity switches.
-std::mutex g_configStorageMutex;
-std::atomic<bool> g_hostSyncInFlight{false};
-void ImportHostSettings(bool force) {
-    std::lock_guard<std::mutex> lock(g_configStorageMutex);
-    bool first = !Wh_GetIntValue(L"config.schema28", 0);
-    bool legacy = first && Wh_GetIntSetting(L"obsPort") >= 1024;
-    bool saved = true;
-    for (auto const& spec : kWidgetSettings) {
-        std::wstring key = std::wstring(L"config.") + spec.key;
-        if (first) {
-            auto value = legacy ? HostSettingValue(spec) : std::wstring(spec.defaultValue);
-            if (!ValidateWidgetSetting(spec, value)) value = spec.defaultValue;
-            int quick = Wh_GetIntValue((std::wstring(L"quick.") + spec.key).c_str(), -1);
-            if (quick >= 0 && (spec.type == WidgetSettingType::Toggle || std::wstring_view(spec.key) == L"enableLunarWidget"))
-                value = quick ? L"1" : L"0";
-            if (std::wstring_view(spec.key) == L"popupTheme" && quick >= 0 && quick < 3)
-                value = quick == 0 ? L"blur" : quick == 1 ? L"glass" : L"solid";
-            saved = Wh_SetStringValue(key.c_str(), value.c_str()) && saved;
-        }
-        if (!SharedHostSetting(spec.key)) continue;
-        auto host = HostSettingValue(spec);
-        if (!ValidateWidgetSetting(spec, host)) host = spec.defaultValue;
-        auto baseline = ReadStoredText(std::wstring(L"host.") + spec.key, L"<unset>");
-        if (first || force || host != baseline) {
-            if (!g_hostSyncInFlight) saved = Wh_SetStringValue(key.c_str(), host.c_str()) && saved;
-            saved = Wh_SetStringValue((std::wstring(L"host.") + spec.key).c_str(), host.c_str()) && saved;
-        }
-    }
-    if (first && saved) Wh_SetIntValue(L"config.schema28", 1);
-}
-void LoadSettings(bool importHost = false) {
-    ImportHostSettings(importHost);
-    ModSettings s;
-    auto value = [](PCWSTR key) -> std::wstring {
-        for (auto const& spec : kWidgetSettings) if (!wcscmp(spec.key, key)) return WidgetSettingValue(spec);
-        return {};
-    };
-    auto flag = [&](PCWSTR key) { return value(key) == L"1"; };
-    auto number = [&](PCWSTR key) { return static_cast<int>(wcstol(value(key).c_str(), nullptr, 10)); };
-    auto lang = value(L"language");
-    s.language = lang == L"vi" ? ModLanguage::Vietnamese : lang == L"en" ? ModLanguage::English : ModLanguage::Auto;
-    WCHAR region[16]{};
-    bool vietnamRegion = GetUserDefaultGeoName(region, ARRAYSIZE(region)) > 0 && !_wcsicmp(region, L"VN");
-    s.enableLunarWidget = ResolveLunarEnabled(number(L"enableLunarWidget"), vietnamRegion);
 
-    s.enableTaskbarWidget = flag(L"enableTaskbarWidget");
-    s.autoSelectActivity = flag(L"autoSelectActivity");
-    s.batteryAutoPopupSeconds = number(L"batteryAutoPopupSeconds");
-    s.position = value(L"position");
-    s.widgetWidth = number(L"widgetWidth");
-    s.expandedWidth = number(L"expandedWidth");
-    s.widgetLeftOffset = number(L"widgetLeftOffset");
-    s.popupTheme = value(L"popupTheme");
-    s.progressStyle = value(L"progressStyle");
-    s.enableMediaWidget = flag(L"enableMediaWidget");
-    s.enableBatteryWidget = flag(L"enableBatteryWidget");
-    s.alwaysShowBattery = flag(L"alwaysShowBattery");
-    s.batteryAutoPopup = flag(L"batteryAutoPopup");
-    s.bluetoothBattery = flag(L"bluetoothBattery");
-    s.memoryAlerts = flag(L"memoryAlerts");
-    s.temperatureAlerts = flag(L"temperatureAlerts"); s.temperaturePort = number(L"temperaturePort");
-    s.collapsedTaskbar = flag(L"collapsedTaskbar");
-    s.settingsBlur = flag(L"settingsBlur");
-    s.remoteAlerts = flag(L"remoteAlerts");
-    s.browserDownloadNames = flag(L"browserDownloadNames");
-    s.enablePrivacyWidget = flag(L"enablePrivacyWidget");
-    s.privacyAutoPopup = flag(L"privacyAutoPopup");
-    s.enableDisplayWidget = flag(L"display.enabled");
-    s.displayAutoPopup = flag(L"display.autoPopup");
-    s.enableHotspotWidget = flag(L"hotspot.enabled");
-    s.hotspotAutoPopup = flag(L"hotspot.autoPopup");
-    s.enableTaskProgress = flag(L"enableTaskProgress");
-    s.taskProgressAutoPopup = flag(L"taskProgressAutoPopup");
-    s.progressExplorer = flag(L"progressExplorer");
-    s.progressChrome = flag(L"progressChrome");
-    s.progressEdge = flag(L"progressEdge");
-    s.progressFirefox = flag(L"progressFirefox");
-    s.progressSevenZip = flag(L"progressSevenZip");
-    s.progressOtherApps = value(L"progressOtherApps");
-    s.enableClockWidget = flag(L"enableClockWidget"); s.clockAutoPopup = flag(L"clockAutoPopup");
-    s.enableObsWidget = flag(L"enableObsWidget");
-    s.obsPort = number(L"obsPort");
-    s.obsPassword = value(L"obsPassword");
-    s.enableCultureWidget = flag(L"enableCultureWidget");
-    s.cultureCatalogUrl = value(L"cultureCatalogUrl");
-    std::lock_guard<std::mutex> lock(g_settingsMutex); g_settings = std::move(s);
+std::wstring ReadUiOverrideText(PCWSTR key) {
+    WCHAR buffer[256]{};
+    std::wstring fullKey = std::wstring(L"ui.") + key;
+    return Wh_GetStringValue(fullKey.c_str(), buffer, ARRAYSIZE(buffer))
+        ? std::wstring(buffer)
+        : std::wstring{};
+}
+
+bool ReadUiOverrideFlag(PCWSTR key, bool fallback) {
+    auto val = ReadUiOverrideText(key);
+    if (val == L"1") return true;
+    if (val == L"0") return false;
+    return fallback;
+}
+
+void ClearUiOverrides() {
+    for (PCWSTR key : {
+             L"collapsedTaskbar", L"popupTheme", L"position", L"progressStyle",
+             L"enableLunarWidget", L"enableCultureWidget", L"enableMediaWidget",
+             L"enableClockWidget", L"enableBatteryWidget", L"bluetoothBattery",
+             L"enablePrivacyWidget", L"enableTaskProgress", L"display.enabled",
+             L"hotspot.enabled", L"enableObsWidget"
+         }) {
+        std::wstring fullKey = std::wstring(L"ui.") + key;
+        Wh_SetStringValue(fullKey.c_str(), L"");
+    }
+}
+
+void LoadSettings(bool resetQuickOverrides = false) {
+    if (resetQuickOverrides) {
+        ClearUiOverrides();
+    }
+
+    ModSettings s;
+    std::wstring lang = WindhawkUtils::StringSetting::make(L"language").get();
+    s.language = lang == L"vi" ? ModLanguage::Vietnamese
+               : lang == L"en" ? ModLanguage::English
+                               : ModLanguage::Auto;
+
+    WCHAR region[16]{};
+    bool vietnamRegion = GetUserDefaultGeoName(region, ARRAYSIZE(region)) > 0 &&
+                         _wcsicmp(region, L"VN") == 0;
+    bool baseLunar = ResolveLunarEnabled(
+        ClampVal(Wh_GetIntSetting(L"lunar.enabled"), -1, 1), vietnamRegion);
+    s.enableLunarWidget = ReadUiOverrideFlag(L"enableLunarWidget", baseLunar);
+    s.enableCultureWidget = ReadUiOverrideFlag(
+        L"enableCultureWidget", Wh_GetIntSetting(L"lunar.enableCultureWidget") != 0);
+
+    s.enableTaskbarWidget = Wh_GetIntSetting(L"enableTaskbarWidget") != 0;
+    s.autoSelectActivity = Wh_GetIntSetting(L"autoSelectActivity") != 0;
+    s.batteryAutoPopupSeconds =
+        ClampVal(Wh_GetIntSetting(L"batteryAutoPopupSeconds"), 3, 5);
+
+    s.position = WindhawkUtils::StringSetting::make(L"appearance.position").get();
+    auto posOverride = ReadUiOverrideText(L"position");
+    if (!posOverride.empty()) {
+        s.position = posOverride;
+    }
+    if (s.position != L"tray_left" && s.position != L"tray_before_clock" &&
+        s.position != L"tray_after_clock" && s.position != L"tray_right" &&
+        s.position != L"root_left") {
+        s.position = L"root_left";
+    }
+
+    s.widgetLeftOffset =
+        ClampVal(Wh_GetIntSetting(L"appearance.widgetLeftOffset"), 0, 2500);
+    s.widgetWidth =
+        ClampVal(Wh_GetIntSetting(L"appearance.widgetWidth"), 140, 480);
+    s.expandedWidth =
+        ClampVal(Wh_GetIntSetting(L"appearance.expandedWidth"), 320, 640);
+
+    s.popupTheme =
+        WindhawkUtils::StringSetting::make(L"appearance.popupTheme").get();
+    auto themeOverride = ReadUiOverrideText(L"popupTheme");
+    if (!themeOverride.empty()) {
+        s.popupTheme = themeOverride;
+    }
+    if (s.popupTheme != L"glass" && s.popupTheme != L"blur" &&
+        s.popupTheme != L"solid") {
+        s.popupTheme = L"glass";
+    }
+
+    s.progressStyle =
+        WindhawkUtils::StringSetting::make(L"appearance.progressStyle").get();
+    auto progOverride = ReadUiOverrideText(L"progressStyle");
+    if (!progOverride.empty()) {
+        s.progressStyle = progOverride;
+    }
+    if (s.progressStyle != L"capsule" && s.progressStyle != L"thin" &&
+        s.progressStyle != L"segments") {
+        s.progressStyle = L"capsule";
+    }
+
+    s.collapsedTaskbar = ReadUiOverrideFlag(
+        L"collapsedTaskbar", Wh_GetIntSetting(L"appearance.collapsedTaskbar") != 0);
+
+    s.enableMediaWidget = ReadUiOverrideFlag(
+        L"enableMediaWidget", Wh_GetIntSetting(L"media.enabled") != 0);
+    s.enableClockWidget = ReadUiOverrideFlag(
+        L"enableClockWidget", Wh_GetIntSetting(L"clock.enabled") != 0);
+    s.clockAutoPopup = Wh_GetIntSetting(L"clock.autoPopup") != 0;
+
+    s.enableBatteryWidget = ReadUiOverrideFlag(
+        L"enableBatteryWidget", Wh_GetIntSetting(L"battery.enabled") != 0);
+    s.alwaysShowBattery = Wh_GetIntSetting(L"battery.alwaysShow") != 0;
+    s.batteryAutoPopup = Wh_GetIntSetting(L"battery.autoPopup") != 0;
+    s.bluetoothBattery = ReadUiOverrideFlag(
+        L"bluetoothBattery", Wh_GetIntSetting(L"battery.bluetoothBattery") != 0);
+
+    s.enablePrivacyWidget = ReadUiOverrideFlag(
+        L"enablePrivacyWidget", Wh_GetIntSetting(L"privacy.enabled") != 0);
+    s.privacyAutoPopup = Wh_GetIntSetting(L"privacy.autoPopup") != 0;
+
+    s.enableTaskProgress = ReadUiOverrideFlag(
+        L"enableTaskProgress", Wh_GetIntSetting(L"taskProgress.enabled") != 0);
+    s.taskProgressAutoPopup = Wh_GetIntSetting(L"taskProgress.autoPopup") != 0;
+    s.progressExplorer = Wh_GetIntSetting(L"taskProgress.explorer") != 0;
+    s.progressChrome = Wh_GetIntSetting(L"taskProgress.chrome") != 0;
+    s.progressEdge = Wh_GetIntSetting(L"taskProgress.edge") != 0;
+    s.progressFirefox = Wh_GetIntSetting(L"taskProgress.firefox") != 0;
+    s.progressSevenZip = Wh_GetIntSetting(L"taskProgress.sevenZip") != 0;
+    s.progressOtherApps =
+        WindhawkUtils::StringSetting::make(L"taskProgress.otherApps").get();
+
+    s.enableDisplayWidget = ReadUiOverrideFlag(
+        L"display.enabled", Wh_GetIntSetting(L"display.enabled") != 0);
+    s.displayAutoPopup = Wh_GetIntSetting(L"display.autoPopup") != 0;
+
+    s.enableHotspotWidget = ReadUiOverrideFlag(
+        L"hotspot.enabled", Wh_GetIntSetting(L"hotspot.enabled") != 0);
+    s.hotspotAutoPopup = Wh_GetIntSetting(L"hotspot.autoPopup") != 0;
+
+    s.enableObsWidget = ReadUiOverrideFlag(
+        L"enableObsWidget", Wh_GetIntSetting(L"obs.enabled") != 0);
+    s.obsPort = ClampVal(Wh_GetIntSetting(L"obs.port"), 1024, 65535);
+    s.obsPassword = WindhawkUtils::StringSetting::make(L"obs.password").get();
+
+    s.memoryAlerts = Wh_GetIntSetting(L"alerts.memoryAlerts") != 0;
+    s.storageAlerts = Wh_GetIntSetting(L"alerts.storageAlerts") != 0;
+    s.temperatureAlerts = Wh_GetIntSetting(L"alerts.temperatureAlerts") != 0;
+    s.temperaturePort =
+        ClampVal(Wh_GetIntSetting(L"alerts.temperaturePort"), 1, 65535);
+
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = std::move(s);
 }
 
 ModSettings GetSettings() {
@@ -1348,101 +1056,137 @@ struct ClockTracker {
         state.noticeEstimated=estimated;++state.noticeSerial;state.noticeUntil=now+4000;
     }
 
-    void Update(std::vector<ClockEntry> observations,uint64_t now,int64_t utc,bool enabled) {
-        if(!enabled) {
-            state.entries.clear();state.sampledAt=0;state.notice=ClockNotice::None;
-            state.noticeUntil=0;state.noticeLabel.clear();state.noticeKey.clear();
+    void Update(std::vector<ClockEntry> observations, uint64_t now, int64_t utc,
+                bool enabled, bool appOpen = true, int observedPage = -1) {
+        if (!enabled) {
+            state.entries.clear(); state.sampledAt = 0; state.notice = ClockNotice::None;
+            state.noticeUntil = 0; state.noticeLabel.clear(); state.noticeKey.clear();
             return;
         }
-        if(!observations.empty())state.sampledAt=now;
-        std::vector<std::wstring> used;
-        for(auto entry:observations) {
-            auto sourceKey=entry.key;
-            auto old=std::find_if(state.entries.begin(),state.entries.end(),[&](auto const& e) {
-                return e.sourceKey==sourceKey && e.kind==entry.kind;
+        if (!observations.empty()) state.sampledAt = now;
+
+        // Nếu đang nhìn thấy trực tiếp một trang trên ứng dụng Đồng hồ (0: Bấm giờ, 1: Hẹn giờ, 2: Báo thức),
+        // những mục thuộc trang đó mà đã bị xóa hoặc đưa về 00:00:00 trên giao diện sẽ bị loại bỏ ngay:
+        if (appOpen && observedPage >= 0) {
+            ClockKind activePageKind = static_cast<ClockKind>(observedPage);
+            std::erase_if(state.entries, [&](auto const& existing) {
+                if (existing.kind != activePageKind) return false;
+                return std::none_of(observations.begin(), observations.end(), [&](auto const& obs) {
+                    return obs.kind == existing.kind &&
+                           (obs.key == existing.sourceKey || (!obs.label.empty() && obs.label == existing.label));
+                });
             });
-            // Runtime IDs can change when the page/app is recreated. Only rematch
-            // unambiguous labels; two same-name timers must never become one timer.
-            if(old==state.entries.end()) {
-                auto same=[&](auto const& e){return e.kind==entry.kind && e.label==entry.label;};
-                if(std::count_if(observations.begin(),observations.end(),same)==1 &&
-                    std::count_if(state.entries.begin(),state.entries.end(),same)==1)
-                    old=std::find_if(state.entries.begin(),state.entries.end(),same);
-            }
-            if(old!=state.entries.end() && std::find(used.begin(),used.end(),old->key)!=used.end())continue;
-            if(!entry.enabled) {
-                if(old!=state.entries.end())state.entries.erase(old);
-                continue;
-            }
-            const bool previous=old!=state.entries.end();
-            entry.key=previous?old->key:L"clock:"+std::to_wstring(++nextIdentity);
-            entry.sourceKey=sourceKey;entry.observedAt=now;
-            entry.sourceMilliseconds=entry.milliseconds;entry.sourceRun=entry.run;
-            used.push_back(entry.key);
-            if(previous && old->finishedEstimated && entry.kind==ClockKind::Timer && entry.milliseconds>0 &&
-                entry.milliseconds==old->sourceMilliseconds && entry.run==old->sourceRun) {
-                // A frozen provider must not restart a completed local estimate
-                // indefinitely. A changed value/state will resynchronize it.
-                old->sourceKey=sourceKey;old->observedAt=now;
-                continue;
-            }
-            if(entry.kind==ClockKind::Alarm) {
-                if(previous) {
-                    entry.remindedAlarmUtc=old->remindedAlarmUtc;
-                    entry.announcedAlarmUtc=old->announcedAlarmUtc;
-                }
-            } else {
-                if(previous && entry.run==ClockRunState::Unknown) {
-                    const auto elapsed=now>=old->observedAt?now-old->observedAt:0;
-                    const int64_t movement=entry.kind==ClockKind::Timer?
-                        old->milliseconds-entry.milliseconds:entry.milliseconds-old->milliseconds;
-                    if(elapsed<=4000 && movement>0 && movement<=static_cast<int64_t>(elapsed)+2000)
-                        entry.run=ClockRunState::Running;
-                    else if(old->run==ClockRunState::Running && entry.milliseconds==old->milliseconds)
-                        entry.run=ClockRunState::Running;
-                }
-                if(previous && entry.run==ClockRunState::Running && old->run==entry.run &&
-                    old->milliseconds==entry.milliseconds)entry.sampledAt=old->sampledAt;
-                if(entry.kind==ClockKind::Timer && entry.milliseconds==0 && previous &&
-                    (old->run==ClockRunState::Running || old->finished))entry.finished=true;
-                if(entry.finished) {
-                    entry.milliseconds=0;entry.run=ClockRunState::Paused;
-                    if(previous && old->finished)entry.sampledAt=old->sampledAt;
-                    else Notice(ClockNotice::TimerFinished,entry,now);
-                } else if(entry.run==ClockRunState::Running && (!previous || old->run!=ClockRunState::Running)) {
-                    ++state.activitySerial;Notice(ClockNotice::Started,entry,now);
-                }
-            }
-            if(previous)*old=std::move(entry);else state.entries.push_back(std::move(entry));
         }
 
-        // Only counters that were actually observed running advance in the background.
-        // Missing/empty scans, page switches and closing the source app are not resets.
-        for(auto& entry:state.entries) {
-            if(entry.kind==ClockKind::Timer && !entry.finished && entry.run==ClockRunState::Running &&
-                ClockReading(entry,now)==0) {
-                entry.finishedEstimated=true;entry.finished=true;entry.run=ClockRunState::Paused;
-                entry.milliseconds=0;entry.sampledAt=now;
-                Notice(ClockNotice::TimerFinished,entry,now,true);
-            } else if(entry.kind==ClockKind::Alarm) {
-                if(AlarmInReminderWindow(entry.alarmUtc,utc) && entry.remindedAlarmUtc!=entry.alarmUtc) {
-                    entry.remindedAlarmUtc=entry.alarmUtc;++state.activitySerial;
-                    Notice(ClockNotice::AlarmSoon,entry,now,!ClockEntryFresh(entry,now));
+        std::vector<std::wstring> used;
+        for (auto entry : observations) {
+            // Bỏ qua Bấm giờ đang nằm ở 00:00:00 và không chạy
+            if (entry.kind == ClockKind::Stopwatch && entry.run != ClockRunState::Running && entry.milliseconds <= 0) {
+                continue;
+            }
+            auto sourceKey = entry.key;
+            auto old = std::find_if(state.entries.begin(), state.entries.end(), [&](auto const& e) {
+                return e.sourceKey == sourceKey && e.kind == entry.kind;
+            });
+            if (old == state.entries.end()) {
+                auto same = [&](auto const& e) { return e.kind == entry.kind && e.label == entry.label; };
+                if (std::count_if(observations.begin(), observations.end(), same) == 1 &&
+                    std::count_if(state.entries.begin(), state.entries.end(), same) == 1)
+                    old = std::find_if(state.entries.begin(), state.entries.end(), same);
+            }
+            if (old != state.entries.end() && std::find(used.begin(), used.end(), old->key) != used.end()) continue;
+            if (!entry.enabled) {
+                if (old != state.entries.end()) state.entries.erase(old);
+                continue;
+            }
+            const bool previous = old != state.entries.end();
+            entry.key = previous ? old->key : L"clock:" + std::to_wstring(++nextIdentity);
+            entry.sourceKey = sourceKey; entry.observedAt = now;
+            entry.sourceMilliseconds = entry.milliseconds; entry.sourceRun = entry.run;
+            used.push_back(entry.key);
+            if (previous && old->finishedEstimated && entry.kind == ClockKind::Timer && entry.milliseconds > 0 &&
+                entry.milliseconds == old->sourceMilliseconds && entry.run == old->sourceRun) {
+                old->sourceKey = sourceKey; old->observedAt = now;
+                continue;
+            }
+            if (entry.kind == ClockKind::Alarm) {
+                if (previous) {
+                    entry.remindedAlarmUtc = old->remindedAlarmUtc;
+                    entry.announcedAlarmUtc = old->announcedAlarmUtc;
                 }
-                if(entry.alarmUtc<=utc && utc-entry.alarmUtc<60000 && entry.announcedAlarmUtc!=entry.alarmUtc) {
-                    entry.announcedAlarmUtc=entry.alarmUtc;
-                    Notice(ClockNotice::AlarmDue,entry,now,!ClockEntryFresh(entry,now));
+            } else {
+                if (previous && entry.run == ClockRunState::Unknown) {
+                    const auto elapsed = now >= old->observedAt ? now - old->observedAt : 0;
+                    const int64_t movement = entry.kind == ClockKind::Timer ?
+                        old->milliseconds - entry.milliseconds : entry.milliseconds - old->milliseconds;
+                    if (elapsed <= 4000 && movement > 0 && movement <= static_cast<int64_t>(elapsed) + 2000)
+                        entry.run = ClockRunState::Running;
+                    else if (old->run == ClockRunState::Running && entry.milliseconds == old->milliseconds)
+                        entry.run = ClockRunState::Running;
+                }
+                if (previous && entry.run == ClockRunState::Running && old->run == entry.run &&
+                    old->milliseconds == entry.milliseconds) entry.sampledAt = old->sampledAt;
+                if (entry.kind == ClockKind::Timer && entry.milliseconds == 0 && previous &&
+                    (old->run == ClockRunState::Running || old->finished)) entry.finished = true;
+                if (entry.finished) {
+                    entry.milliseconds = 0; entry.run = ClockRunState::Paused;
+                    if (previous && old->finished) entry.sampledAt = old->sampledAt;
+                    else Notice(ClockNotice::TimerFinished, entry, now);
+                } else if (entry.run == ClockRunState::Running && (!previous || old->run != ClockRunState::Running)) {
+                    ++state.activitySerial; Notice(ClockNotice::Started, entry, now);
+                }
+            }
+            if (previous) *old = std::move(entry); else state.entries.push_back(std::move(entry));
+        }
+
+        for (auto& entry : state.entries) {
+            if (entry.kind == ClockKind::Timer && !entry.finished && entry.run == ClockRunState::Running &&
+                ClockReading(entry, now) == 0) {
+                entry.finishedEstimated = true; entry.finished = true; entry.run = ClockRunState::Paused;
+                entry.milliseconds = 0; entry.sampledAt = now;
+                Notice(ClockNotice::TimerFinished, entry, now, true);
+            } else if (entry.kind == ClockKind::Alarm) {
+                if (AlarmInReminderWindow(entry.alarmUtc, utc) && entry.remindedAlarmUtc != entry.alarmUtc) {
+                    entry.remindedAlarmUtc = entry.alarmUtc; ++state.activitySerial;
+                    Notice(ClockNotice::AlarmSoon, entry, now, !ClockEntryFresh(entry, now));
+                }
+                if (entry.alarmUtc <= utc && utc - entry.alarmUtc < 60000 && entry.announcedAlarmUtc != entry.alarmUtc) {
+                    entry.announcedAlarmUtc = entry.alarmUtc;
+                    Notice(ClockNotice::AlarmDue, entry, now, !ClockEntryFresh(entry, now));
                 }
             }
         }
-        std::erase_if(state.entries,[&](auto const& entry) {
-            return entry.kind==ClockKind::Alarm && entry.alarmUtc<utc-60000;
+
+        // Tự động loại bỏ:
+        // 1. Báo thức đã qua hoặc đã tắt.
+        // 2. Bộ đếm đã hết giờ (finished) sau khi hết thời gian thông báo 4 giây.
+        // 3. Bấm giờ / Hẹn giờ đang Tạm dừng (không chạy) khi người dùng đã tắt ứng dụng Đồng hồ,
+        //    hoặc Bấm giờ đang ở 00:00:00.
+        std::erase_if(state.entries, [&](auto const& entry) {
+            if (entry.kind == ClockKind::Alarm) {
+                return !entry.enabled || entry.alarmUtc < utc - 60000;
+            }
+            if (entry.finished) {
+                return now >= state.noticeUntil;
+            }
+            if (entry.kind == ClockKind::Stopwatch && entry.milliseconds <= 0 && entry.run != ClockRunState::Running) {
+                return true;
+            }
+            // Khi ứng dụng Đồng hồ đã đóng/thu nhỏ, chỉ giữ lại Bấm giờ / Hẹn giờ ĐANG CHẠY:
+            if (!appOpen && entry.run != ClockRunState::Running) {
+                return true;
+            }
+            // Ngay cả khi mở app nhưng chuyển sang tab khác quá 4 giây, mục đang tạm dừng cũng không giữ trên taskbar:
+            if (entry.run != ClockRunState::Running && !ClockEntryFresh(entry, now)) {
+                return true;
+            }
+            return false;
         });
-        // Bounded session history: unseen inactive entries are evicted first.
-        while(state.entries.size()>48) {
-            auto oldest=std::min_element(state.entries.begin(),state.entries.end(),[](auto const& a,auto const& b) {
-                if((a.run==ClockRunState::Running)!=(b.run==ClockRunState::Running))return a.run!=ClockRunState::Running;
-                return a.observedAt<b.observedAt;
+
+        while (state.entries.size() > 48) {
+            auto oldest = std::min_element(state.entries.begin(), state.entries.end(), [](auto const& a, auto const& b) {
+                if ((a.run == ClockRunState::Running) != (b.run == ClockRunState::Running)) return a.run != ClockRunState::Running;
+                return a.observedAt < b.observedAt;
             });
             state.entries.erase(oldest);
         }
@@ -1462,6 +1206,7 @@ struct LiveSnapshot {
     BluetoothSnapshot bluetooth;
     TaskNotice taskNotice;
     MemorySnapshot memory;
+    std::vector<StorageVolume> storage;
     RemoteSnapshot remote;
     TemperatureSnapshot temperature;
 };
@@ -1535,7 +1280,13 @@ std::vector<ActivityKind> AvailableActivities(LiveSnapshot const& state, ModSett
     if (settings.remoteAlerts && state.remote.serial &&
         (state.remote.active || GetTickCount64() - state.remote.observedAt < 4500 || (keepSelected && selected == ActivityKind::Remote)))
         result.push_back(ActivityKind::Remote);
-    if ((settings.memoryAlerts && state.memory.valid && state.memory.percent >= 80) || (settings.temperatureAlerts && std::max(state.temperature.cpu,state.temperature.gpu)>=70) || (keepSelected && selected==ActivityKind::Memory))
+    bool lowStorage = settings.storageAlerts && std::any_of(state.storage.begin(), state.storage.end(), [](auto const& v) {
+        return v.total > 0 && v.free * 10 < v.total;
+    });
+    if ((settings.memoryAlerts && state.memory.valid && state.memory.percent >= 80) ||
+        lowStorage ||
+        (settings.temperatureAlerts && std::max(state.temperature.cpu, state.temperature.gpu) >= 70) ||
+        (keepSelected && selected == ActivityKind::Memory))
         result.push_back(ActivityKind::Memory);
     return result;
 }
@@ -1594,6 +1345,7 @@ LiveSnapshot ReadLiveSnapshot() {
     result.bluetooth = g_bluetoothSnapshot;
     result.taskNotice = g_taskNotice;
     result.memory = g_memorySnapshot;
+    result.storage = g_storageVolumes;
     result.remote = g_remoteSnapshot;
     result.temperature = g_temperatureSnapshot;
     std::vector<TaskProgress> detailed;
@@ -1699,21 +1451,27 @@ BatterySnapshot ReadBatterySnapshot(bool winrtReady, BatteryEstimateState& estim
         }
     } catch (...) {}
     // SYSTEM_BATTERY_STATE::Rate is signed despite its DWORD declaration (Microsoft Learn).
-    using QueryPower = LONG (WINAPI*)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
-    HMODULE powerLibrary = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (powerLibrary) {
-        auto query = reinterpret_cast<QueryPower>(GetProcAddress(powerLibrary, "CallNtPowerInformation"));
-        SYSTEM_BATTERY_STATE native{};
-        if (query && query(SystemBatteryState, nullptr, 0, &native, sizeof(native)) >= 0 && native.BatteryPresent) {
-            b.charging = native.Charging != FALSE;
-            if (!b.pluggedIn && b.minutesRemaining < 0 && native.EstimatedTime != DWORD(-1) && native.EstimatedTime <= 86400)
-                b.minutesRemaining = static_cast<int>((native.EstimatedTime + 59) / 60);
-            if (!source && native.MaxCapacity > 0 && native.MaxCapacity != DWORD(-1) && native.RemainingCapacity <= native.MaxCapacity) {
-                full = native.MaxCapacity; remaining = native.RemainingCapacity;
-                rate = native.Rate == DWORD(-1) ? 0 : static_cast<LONG>(native.Rate); source = 2;
-            } else if (source && !rate && native.Rate != DWORD(-1)) rate = static_cast<LONG>(native.Rate);
+    SYSTEM_BATTERY_STATE native{};
+    if (CallNtPowerInformation(SystemBatteryState, nullptr, 0, &native,
+                               sizeof(native)) >= 0 &&
+        native.BatteryPresent) {
+        b.charging = native.Charging != FALSE;
+        if (!b.pluggedIn && b.minutesRemaining < 0 &&
+            native.EstimatedTime != DWORD(-1) &&
+            native.EstimatedTime <= 86400) {
+            b.minutesRemaining =
+                static_cast<int>((native.EstimatedTime + 59) / 60);
         }
-        FreeLibrary(powerLibrary);
+        if (!source && native.MaxCapacity > 0 &&
+            native.MaxCapacity != DWORD(-1) &&
+            native.RemainingCapacity <= native.MaxCapacity) {
+            full = native.MaxCapacity;
+            remaining = native.RemainingCapacity;
+            rate = native.Rate == DWORD(-1) ? 0 : static_cast<LONG>(native.Rate);
+            source = 2;
+        } else if (source && !rate && native.Rate != DWORD(-1)) {
+            rate = static_cast<LONG>(native.Rate);
+        }
     }
     if (!source && b.percent >= 0) { full = 100; remaining = b.percent; source = 3; }
     if (b.percent < 0 && full > 0) b.percent = static_cast<int>(remaining * 100 / full);
@@ -2092,93 +1850,9 @@ UsageSnapshot g_usageSnapshot;
 std::atomic<int> g_powerModeRequest{-1};
 std::atomic<bool> g_batteryPageOpen{false};
 std::atomic<bool> g_usageForegroundChanged{false};
-void CALLBACK UsageForegroundEvent(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
-    g_usageForegroundChanged = true;
-    if (g_liveWakeEvent) SetEvent(g_liveWakeEvent);
-}
-uint64_t ForegroundUsageInterval(uint64_t now, uint64_t previous, uint32_t lastInput, bool foreground) {
-    if (!foreground || now < previous || now - previous > 2000 || uint32_t(now) - lastInput >= 60000) return 0;
-    return now - previous;
-}
 class BatteryTools {
-    using GetMode = DWORD (WINAPI*)(GUID*);
-    using SetMode = DWORD (WINAPI*)(const GUID*);
-    HMODULE library = nullptr;
-    GetMode getAc = nullptr, getDc = nullptr;
-    SetMode setAc = nullptr, setDc = nullptr;
-    PowerModeSnapshot modes;
-    std::map<std::wstring, uint64_t> bootUsage, batteryUsage;
-    uint64_t lastTick = 0, started = 0, unpluggedAt = 0, nextPublish = 0, revision = 0;
-    bool wasPlugged = true, initialized = false;
-    HWND lastWindow = nullptr;
-    std::wstring foreground;
-    HWINEVENTHOOK foregroundHook = nullptr;
-    static const GUID& ModeGuid(int index) {
-        static constexpr GUID modes[] = {
-            {0x961cc777,0x2547,0x4f9d,{0x81,0x74,0x7d,0x86,0x18,0x1b,0x8a,0x7a}},
-            {}, {0xded574b5,0x45a0,0x4f42,{0x87,0x37,0x46,0x34,0x5c,0x09,0xc2,0x38}}};
-        return modes[index];
-    }
-    int Read(GetMode get) {
-        GUID guid{};
-        if (!get || get(&guid) != ERROR_SUCCESS) return -1;
-        for (int i = 0; i < 3; ++i) if (IsEqualGUID(guid, ModeGuid(i))) return i;
-        return -1;
-    }
 public:
-    BatteryTools() {
-        library = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (library) {
-            getAc = reinterpret_cast<GetMode>(GetProcAddress(library, "PowerGetUserConfiguredACPowerMode"));
-            getDc = reinterpret_cast<GetMode>(GetProcAddress(library, "PowerGetUserConfiguredDCPowerMode"));
-            setAc = reinterpret_cast<SetMode>(GetProcAddress(library, "PowerSetUserConfiguredACPowerMode"));
-            setDc = reinterpret_cast<SetMode>(GetProcAddress(library, "PowerSetUserConfiguredDCPowerMode"));
-        }
-        foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
-            nullptr, UsageForegroundEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
-    }
-    ~BatteryTools() { if (foregroundHook) UnhookWinEvent(foregroundHook); if (library) FreeLibrary(library); }
-    void Tick(bool enabled, bool force) {
-        uint64_t now = GetTickCount64();
-        if (!enabled) { initialized = false; bootUsage.clear(); batteryUsage.clear(); g_powerModeRequest = -1; return; }
-        SYSTEM_POWER_STATUS status{};
-        if (!GetSystemPowerStatus(&status)) return;
-        bool plugged = status.ACLineStatus != 0;
-        if (!initialized) { started = now; unpluggedAt = now; lastTick = now; wasPlugged = plugged; initialized = true; }
-        if (wasPlugged && !plugged) { batteryUsage.clear(); unpluggedAt = now; }
-        LASTINPUTINFO input{sizeof(input), 0};
-        bool hasInput = GetLastInputInfo(&input) != FALSE;
-        HWND window = GetForegroundWindow();
-        uint64_t delta = ForegroundUsageInterval(now, lastTick, input.dwTime, hasInput && window);
-        // Exclude sleep, a stalled worker, the lock screen, and idle periods.
-        if (delta && !foreground.empty()) {
-            if (bootUsage.size() < 128 || bootUsage.contains(foreground)) bootUsage[foreground] += delta;
-            if (!wasPlugged && !plugged && (batteryUsage.size() < 128 || batteryUsage.contains(foreground)))
-                batteryUsage[foreground] += delta;
-        }
-        if (window != lastWindow || g_usageForegroundChanged.exchange(false)) {
-            DWORD pid = 0; GetWindowThreadProcessId(window, &pid);
-            foreground = ProcessName(pid); lastWindow = window;
-            if (_wcsicmp(foreground.c_str(), L"LockApp.exe") == 0 || _wcsicmp(foreground.c_str(), L"LogonUI.exe") == 0)
-                foreground.clear();
-        }
-        lastTick = now; wasPlugged = plugged;
-        int request = g_powerModeRequest.exchange(-1);
-        if (request >= 0 && request < 6) {
-            auto set = request < 3 ? setAc : setDc;
-            modes.error = set ? set(&ModeGuid(request % 3)) : ERROR_NOT_SUPPORTED;
-            force = true;
-        }
-        if (force || (g_batteryPageOpen && now >= nextPublish)) {
-            modes.ac = setAc ? Read(getAc) : -1; modes.dc = setDc ? Read(getDc) : -1;
-            UsageSnapshot usage; usage.onBattery = !plugged; usage.revision = ++revision;
-            usage.measuredSince = plugged ? started : unpluggedAt;
-            for (auto const& [app, ms] : plugged ? bootUsage : batteryUsage) if (ms) usage.apps.push_back({app, ms});
-            std::sort(usage.apps.begin(), usage.apps.end(), [](auto const& a, auto const& b) { return a.milliseconds > b.milliseconds; });
-            { std::lock_guard<std::mutex> lock(g_liveMutex); g_powerModes = modes; g_usageSnapshot = std::move(usage); }
-            nextPublish = now + 5000; NotifyLiveUi();
-        }
-    }
+    void Tick(bool, bool) {}
 };
 
 // Explorer's taskband message protocol; observed passively, never consumed or redirected.
@@ -2978,194 +2652,41 @@ std::vector<CultureTopic> BuiltinCultureTopics(bool vi) {
     return topics;
 }
 
-template<class Operation, class T>
-bool WaitCultureOperation(Operation const& operation, T& result, DWORD timeout = 5000) {
-    const auto deadline = GetTickCount64() + timeout;
-    try {
-        while (operation.Status() == wf::AsyncStatus::Started) {
-            if (g_cultureRequestId.load() != t_cultureRequestId || GetTickCount64() >= deadline ||
-                WaitForSingleObject(g_liveStopEvent, 25) == WAIT_OBJECT_0) { operation.Cancel(); return false; }
-        }
-        if (g_cultureRequestId.load() != t_cultureRequestId || operation.Status() != wf::AsyncStatus::Completed) return false;
-        result = operation.GetResults(); return true;
-    } catch (...) { return false; }
+CultureState ReadCultureState() {
+    std::lock_guard<std::mutex> lock(g_cultureMutex);
+    return g_culture;
 }
-std::vector<uint8_t> FetchHttps(winrt::Windows::Web::Http::HttpClient const& client,
-                               std::wstring const& url, size_t limit) {
-    using namespace winrt::Windows::Web::Http;
-    using namespace winrt::Windows::Storage::Streams;
-    if (url.size() > 2048 || url.rfind(L"https://", 0) != 0) throw std::runtime_error("HTTPS required");
-    wf::Uri uri(url);
-    if (!uri.UserName().empty() || !uri.Password().empty()) throw std::runtime_error("URL credentials rejected");
-    HttpResponseMessage response{nullptr};
-    if (!WaitCultureOperation(client.GetAsync(uri, HttpCompletionOption::ResponseHeadersRead), response, 6000) ||
-        !response || !response.IsSuccessStatusCode()) throw std::runtime_error("HTTP request failed");
-    auto length = response.Content().Headers().ContentLength();
-    if (length && length.Value() > limit) throw std::runtime_error("Response too large");
-    IInputStream stream{nullptr};
-    if (!WaitCultureOperation(response.Content().ReadAsInputStreamAsync(), stream, 3000))
-        throw std::runtime_error("Response stream unavailable");
-    DataReader reader(stream); reader.InputStreamOptions(InputStreamOptions::Partial);
-    std::vector<uint8_t> data;
-    ULONGLONG deadline = GetTickCount64() + 10000;
-    while (GetTickCount64() < deadline) {
-        uint32_t count = 0;
-        if (!WaitCultureOperation(reader.LoadAsync(8192), count, 3000)) throw std::runtime_error("Read cancelled");
-        if (!count) { reader.Close(); response.Close(); return data; }
-        if (data.size() + count > limit) throw std::runtime_error("Response too large");
-        size_t offset = data.size(); data.resize(offset + count);
-        reader.ReadBytes(winrt::array_view<uint8_t>(data.data() + offset, data.data() + data.size()));
+
+void OpenCultureTopicInBrowser(std::wstring const& topicId, bool vi) {
+    if (topicId.empty()) {
+        return;
     }
-    throw std::runtime_error("Read timed out");
+    std::wstring escaped = wf::Uri::EscapeComponent(topicId).c_str();
+    std::wstring url = vi
+        ? (L"https://vi.wikipedia.org/wiki/" + escaped)
+        : (L"https://en.wikipedia.org/w/index.php?search=" + escaped);
+    ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
-winrt::Windows::Data::Json::JsonObject FetchJson(winrt::Windows::Web::Http::HttpClient const& client,
-                                               std::wstring const& url) {
-    auto bytes = FetchHttps(client, url, 1024 * 1024);
-    auto text = winrt::to_hstring(std::string_view(reinterpret_cast<char const*>(bytes.data()), bytes.size()));
-    return winrt::Windows::Data::Json::JsonObject::Parse(text);
-}
-CultureState ReadCultureState() { std::lock_guard<std::mutex> lock(g_cultureMutex); return g_culture; }
-DWORD WINAPI CultureThreadProc(void*);
+
 void RequestCulture(std::wstring const& id) {
-    if (g_shuttingDown) return;
-    {
-        std::lock_guard<std::mutex> lock(g_cultureThreadMutex);
-        if (g_shuttingDown) return;
-        if (g_cultureThread && WaitForSingleObject(g_cultureThread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(g_cultureThread); g_cultureThread = nullptr;
-        }
-        if (!g_cultureThread && g_cultureWake) g_cultureThread = CreateThread(nullptr, 0, CultureThreadProc, nullptr, 0, nullptr);
-        if (!g_cultureThread) {
-            { std::lock_guard<std::mutex> stateLock(g_cultureMutex);
-              g_culture.error = PickText(UseVietnameseLabels(GetSettings()), L"Không khởi động được trình đọc", L"Unable to start reader");
-              g_culture.loading = g_culture.catalogLoading = false; ++g_culture.revision; }
-            NotifyLiveUi(); return;
-        }
+    if (g_shuttingDown) {
+        return;
     }
     auto settings = GetSettings();
+    const bool vi = UseVietnameseLabels(settings);
+    if (!id.empty()) {
+        OpenCultureTopicInBrowser(id, vi);
+    }
     {
         std::lock_guard<std::mutex> lock(g_cultureMutex);
-        g_cultureRequest = id; g_cultureCatalogUrl = settings.cultureCatalogUrl;
-        ++g_cultureRequestId;
-        g_culture.loading = !id.empty(); g_culture.catalogLoading = id.empty();
-        g_culture.error.clear();
+        g_culture.topics = BuiltinCultureTopics(vi);
         g_culture.article = {};
+        g_culture.error.clear();
+        g_culture.loading = false;
+        g_culture.catalogLoading = false;
         ++g_culture.revision;
     }
-    if (g_cultureWake) SetEvent(g_cultureWake);
     NotifyLiveUi();
-}
-DWORD WINAPI CultureThreadProc(void*) {
-    try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        {
-            using namespace winrt::Windows::Web::Http;
-            using namespace winrt::Windows::Web::Http::Filters;
-            HANDLE events[] = {g_liveStopEvent, g_cultureWake};
-            while (WaitForMultipleObjects(2, events, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
-                const bool vi = UseVietnameseLabels(GetSettings());
-                std::wstring id, catalog; uint64_t requestId;
-                { std::lock_guard<std::mutex> lock(g_cultureMutex);
-                  id = g_cultureRequest; catalog = g_cultureCatalogUrl; requestId = g_cultureRequestId; }
-                HttpBaseProtocolFilter filter;
-                filter.CacheControl().ReadBehavior(HttpCacheReadBehavior::NoCache);
-                filter.CacheControl().WriteBehavior(HttpCacheWriteBehavior::NoCache);
-                filter.CookieUsageBehavior(HttpCookieUsageBehavior::NoCookies);
-                filter.AllowUI(false);
-                HttpClient client(filter);
-                client.DefaultRequestHeaders().UserAgent().ParseAdd(L"LiveUpdateForWindows11/2.4 (Windhawk; culture reader)");
-                CultureArticle article; article.id = id;
-                std::vector<CultureTopic> topics;
-                std::wstring error;
-                try {
-                    t_cultureRequestId = requestId;
-                    if (id.empty()) {
-                        if (catalog.empty()) topics = BuiltinCultureTopics(vi);
-                        else {
-                            auto json = FetchJson(client, catalog);
-                            auto entries = json.GetNamedArray(L"articles");
-                            for (auto entry : entries) {
-                                if (topics.size() >= 200) break;
-                                auto value = entry.GetObject();
-                                bool localized = !vi && value.GetNamedString(L"language", L"") != L"en";
-                                CultureTopic topic{std::wstring(value.GetNamedString(L"id", L"")),
-                                    std::wstring(value.GetNamedString(localized ? L"titleEn" : L"title", L"")),
-                                    std::wstring(value.GetNamedString(localized ? L"categoryEn" : L"category", L"")),
-                                    std::wstring(value.GetNamedString(localized ? L"articleUrlEn" : L"articleUrl", L""))};
-                                if (!topic.id.empty() && topic.id.size() <= 200 && !topic.title.empty() &&
-                                    topic.title.size() <= 200 && topic.articleUrl.rfind(L"https://", 0) == 0)
-                                    topics.push_back(std::move(topic));
-                            }
-                            if (topics.empty()) throw std::runtime_error("Empty catalog");
-                        }
-                    } else {
-                        {
-                            std::wstring imageUrl;
-                            if (catalog.empty()) {
-                                std::wstring articleTitle = id;
-                                if (!vi) {
-                                    auto languageLinks = FetchJson(client, std::wstring(L"https://vi.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=langlinks&lllang=en&titles=") + wf::Uri::EscapeComponent(id).c_str());
-                                    auto pages = languageLinks.GetNamedObject(L"query").GetNamedArray(L"pages");
-                                    if (!pages.Size() || !pages.GetAt(0).GetObject().HasKey(L"langlinks"))
-                                        throw std::runtime_error("English article unavailable");
-                                    auto links = pages.GetAt(0).GetObject().GetNamedArray(L"langlinks");
-                                    if (!links.Size()) throw std::runtime_error("English article unavailable");
-                                    auto link = links.GetAt(0).GetObject();
-                                    articleTitle = link.GetNamedString(L"title", link.GetNamedString(L"*", L""));
-                                    if (articleTitle.empty()) throw std::runtime_error("English article unavailable");
-                                }
-                                auto escaped = wf::Uri::EscapeComponent(articleTitle);
-                                auto json = FetchJson(client, std::wstring(vi ? L"https://vi.wikipedia.org" : L"https://en.wikipedia.org") +
-                                    L"/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=extracts%7Cpageimages%7Cinfo&inprop=url&explaintext=1&piprop=thumbnail&pithumbsize=480&titles=" + escaped.c_str());
-                                auto pages = json.GetNamedObject(L"query").GetNamedArray(L"pages");
-                                if (!pages.Size()) throw std::runtime_error("Missing article");
-                                auto page = pages.GetAt(0).GetObject();
-                                article.title = page.GetNamedString(L"title", id);
-                                article.text = page.GetNamedString(L"extract", L"");
-                                article.source = page.GetNamedString(L"fullurl", L"");
-                                if (page.HasKey(L"thumbnail")) imageUrl = page.GetNamedObject(L"thumbnail").GetNamedString(L"source", L"");
-                                article.imageSource = article.source;
-                            } else {
-                                auto state = ReadCultureState();
-                                auto topic = std::find_if(state.topics.begin(), state.topics.end(), [&](auto const& item) { return item.id == id; });
-                                if (topic == state.topics.end()) throw std::runtime_error("Unknown topic");
-                                auto json = FetchJson(client, topic->articleUrl);
-                                article.title = json.GetNamedString(L"title", topic->title);
-                                article.text = json.GetNamedString(L"content", L"");
-                                article.source = json.GetNamedString(L"sourceUrl", L"");
-                                article.imageSource = json.GetNamedString(L"imageSourceUrl", article.source);
-                                imageUrl = json.GetNamedString(L"imageUrl", L"");
-                            }
-                            if (article.text.empty()) throw std::runtime_error("Empty article");
-                            if (article.title.size() > 200) article.title.resize(200);
-                            if (article.text.size() > 24000) article.text = article.text.substr(0, 24000) + L"\n…";
-                            if (!imageUrl.empty()) try { article.image = DecodeImage(FetchHttps(client, imageUrl, 4 * 1024 * 1024), 640); } catch (...) {}
-
-                        }
-                    }
-                } catch (...) {
-                    error = PickText(vi, L"Không tải được nội dung. Kiểm tra kết nối hoặc thử lại.",
-                        L"Unable to load an article in this language. Check your connection or choose another topic.");
-                }
-                { std::lock_guard<std::mutex> lock(g_cultureMutex);
-                  if (requestId != g_cultureRequestId) continue;
-                  if (id.empty() && error.empty()) g_culture.topics = std::move(topics);
-                  if (!id.empty()) g_culture.article = std::move(article);
-                  g_culture.error = error; g_culture.loading = false; g_culture.catalogLoading = false;
-                  ++g_culture.revision; }
-                client.Close(); filter.Close();
-                NotifyLiveUi();
-            }
-        }
-        winrt::uninit_apartment();
-    } catch (...) {
-        std::lock_guard<std::mutex> lock(g_cultureMutex);
-        g_culture.loading = false; g_culture.catalogLoading = false;
-        g_culture.error = L"HTTP provider unavailable / Không khởi tạo được kết nối";
-        ++g_culture.revision;
-        NotifyLiveUi();
-    }
-    return 0;
 }
 
 DWORD WINAPI LiveProviderThreadProc(void*) {
@@ -3655,125 +3176,108 @@ struct BluetoothAlertTracker {
 
 // Supported Windhawk 2 CLI sync. Never writes the engine's registry/INI files
 // and never requests elevation. Windhawk 1.x retains local preferences instead.
-std::atomic<bool> g_hostSyncRequested{false};
-std::atomic<int> g_hostSyncStatus{0}; // 0 idle, 1 queued, 2 synced, 3 unavailable, 4 rejected
-void NotifySettingsStatus(int status) {
-    g_hostSyncStatus = status; ++g_settingsRevision;
-}
-std::wstring FindWindhawkCli() {
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
-    if (snapshot == INVALID_HANDLE_VALUE) return {};
-    MODULEENTRY32W module{}; module.dwSize = sizeof(module); std::wstring result;
-    if (Module32FirstW(snapshot, &module)) do {
-        if (_wcsicmp(module.szModule, L"windhawk.dll")) continue;
-        std::wstring directory = module.szExePath;
-        for (int level = 0; level < 6; ++level) {
-            auto slash = directory.find_last_of(L"\\/"); if (slash == std::wstring::npos) break;
-            directory.resize(slash);
-            auto file = directory + L"\\windhawk-cli.exe";
-            DWORD attributes = GetFileAttributesW(file.c_str());
-            if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY)) { result = file; break; }
-        }
-        if (!result.empty()) break;
-    } while (Module32NextW(snapshot, &module));
-    CloseHandle(snapshot); return result;
-}
-struct HostSettingsSync {
-    HANDLE process = nullptr;
-    uint64_t deadline = 0;
-    ~HostSettingsSync() { if (process) CloseHandle(process); }
-    void Tick() {
-        if (process) {
-            if (WaitForSingleObject(process, 0) == WAIT_OBJECT_0) {
-                DWORD code = 1; GetExitCodeProcess(process, &code); CloseHandle(process); process = nullptr;
-                if (!g_hostSyncRequested) g_hostSyncInFlight = false;
-                NotifySettingsStatus(code == 0 ? 2 : 4);
-            } else if (GetTickCount64() >= deadline) {
-                // Do not kill another executable. This process contains no mod callbacks.
-                CloseHandle(process); process = nullptr; NotifySettingsStatus(4);
-                g_hostSyncRequested = false; g_hostSyncInFlight = false;
-            }
-            return;
-        }
-        if (!g_hostSyncRequested.exchange(false) || g_shuttingDown) return;
-        auto cli = FindWindhawkCli();
-        if (cli.empty()) { g_hostSyncInFlight = false; NotifySettingsStatus(3); return; }
-        auto settings = GetSettings();
-        auto lang = settings.language == ModLanguage::Vietnamese ? L"vi" : settings.language == ModLanguage::English ? L"en" : L"auto";
-        std::wstring command = L"\"" + cli + L"\" mod settings set " + std::wstring(WH_MOD_ID) +
-            L" language=" + lang + L" widgetWidth=" + std::to_wstring(settings.widgetWidth) +
-            L" expandedWidth=" + std::to_wstring(settings.expandedWidth);
-        STARTUPINFOW startup{}; startup.cb = sizeof(startup); PROCESS_INFORMATION info{};
-        if (!CreateProcessW(cli.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                nullptr, nullptr, &startup, &info)) { g_hostSyncInFlight = false; NotifySettingsStatus(4); return; }
-        CloseHandle(info.hThread); process = info.hProcess; deadline = GetTickCount64() + 10000;
-    }
-};
-
-// Physical load is cheap to sample. Enumerate processes only for an open RAM
-// page or memory pressure, and retain five aggregate entries, never process handles.
 MemorySnapshot SampleMemory(bool detail) {
+    (void)detail;
     MemorySnapshot result;
-    MEMORYSTATUSEX status{}; status.dwLength = sizeof(status);
-    if (!GlobalMemoryStatusEx(&status)) return result;
-    result.valid = true; result.percent = status.dwMemoryLoad;
-    result.total = status.ullTotalPhys; result.available = status.ullAvailPhys;
-    result.sampledAt = GetTickCount64();
-    PROCESS_MEMORY_COUNTERS_EX own{};
-    if (K32GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&own), sizeof(own)))
-        result.explorerWorkingSet = own.WorkingSetSize;
-    DWORD settingsPid = g_settingsHostPid.load();
-    if (settingsPid) {
-        HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, settingsPid);
-        if (process) {
-            PROCESS_MEMORY_COUNTERS_EX counts{};
-            if (K32GetProcessMemoryInfo(process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counts), sizeof(counts)))
-                result.settingsWorkingSet = counts.WorkingSetSize;
-            CloseHandle(process);
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof(status);
+    if (!GlobalMemoryStatusEx(&status)) {
+        return result;
+    }
+    std::vector<StorageVolume> volumes;
+    DWORD drives = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if (!(drives & (1u << i))) continue;
+        WCHAR root[] = { static_cast<WCHAR>(L'A' + i), L':', L'\\', 0 };
+        if (GetDriveTypeW(root) != DRIVE_FIXED) continue;
+        ULARGE_INTEGER freeBytes{}, totalBytes{};
+        if (GetDiskFreeSpaceExW(root, &freeBytes, &totalBytes, nullptr) && totalBytes.QuadPart > 0) {
+            WCHAR label[64]{};
+            GetVolumeInformationW(root, label, ARRAYSIZE(label), nullptr, nullptr, nullptr, nullptr, 0);
+            volumes.push_back({ std::wstring(root, 2), label, totalBytes.QuadPart, freeBytes.QuadPart });
         }
     }
+    {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        g_storageVolumes = std::move(volumes);
+    }
+    result.valid = true;
+    result.percent = status.dwMemoryLoad;
+    result.total = status.ullTotalPhys;
+    result.available = status.ullAvailPhys;
+    result.sampledAt = GetTickCount64();
     auto settings = GetSettings();
-    if (!detail && (!settings.enableTaskbarWidget || !settings.memoryAlerts || result.percent < 80)) return result;
+    if (!settings.enableTaskbarWidget || !settings.memoryAlerts ||
+        result.percent < 80) {
+        return result;
+    }
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) return result;
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return result;
+    }
     std::map<std::wstring, MemoryApplication> groups;
-    PROCESSENTRY32W entry{}; entry.dwSize = sizeof(entry);
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
     unsigned visited = 0;
-    if (Process32FirstW(snapshot, &entry)) do {
-        if (++visited > 4096 || g_shuttingDown) break;
-        HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, entry.th32ProcessID);
-        if (!process) continue;
-        PROCESS_MEMORY_COUNTERS_EX counts{};
-        if (K32GetProcessMemoryInfo(process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counts), sizeof(counts))) {
-            auto key = LowerText(entry.szExeFile);
-            if (entry.th32ProcessID == settingsPid) key = L"live-update-settings";
-            auto& group = groups[key];
-            group.name = key == L"live-update-settings" ? L"Live Update · Settings" : FriendlyAppName(entry.szExeFile);
-            group.workingSet += counts.WorkingSetSize;
-            group.privateBytes += counts.PrivateUsage; ++group.processes;
-        }
-        CloseHandle(process);
-    } while (Process32NextW(snapshot, &entry));
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (++visited > 4096 || g_shuttingDown) {
+                break;
+            }
+            HANDLE process = OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE,
+                entry.th32ProcessID);
+            if (!process) {
+                continue;
+            }
+            PROCESS_MEMORY_COUNTERS_EX counts{};
+            if (K32GetProcessMemoryInfo(
+                    process,
+                    reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counts),
+                    sizeof(counts))) {
+                auto key = LowerText(entry.szExeFile);
+                auto& group = groups[key];
+                group.name = FriendlyAppName(entry.szExeFile);
+                group.workingSet += counts.WorkingSetSize;
+                group.privateBytes += counts.PrivateUsage;
+                ++group.processes;
+            }
+            CloseHandle(process);
+        } while (Process32NextW(snapshot, &entry));
+    }
     CloseHandle(snapshot);
-    for (auto& [key, group] : groups) result.top.push_back(std::move(group));
-    auto count = std::min<size_t>(detail ? 100 : 5, result.top.size());
-    std::partial_sort(result.top.begin(), result.top.begin() + count, result.top.end(),
+    for (auto& [key, group] : groups) {
+        result.top.push_back(std::move(group));
+    }
+    auto count = std::min<size_t>(5, result.top.size());
+    std::partial_sort(
+        result.top.begin(), result.top.begin() + count, result.top.end(),
         [](auto const& a, auto const& b) { return a.workingSet > b.workingSet; });
-    result.top.resize(count); result.top.shrink_to_fit();
+    result.top.resize(count);
+    result.top.shrink_to_fit();
     return result;
 }
+
 std::wstring MemorySize(uint64_t bytes) {
     wchar_t buffer[40];
-    if (bytes >= 1024ull * 1024 * 1024) swprintf_s(buffer, L"%.1f GB", bytes / (1024.0 * 1024 * 1024));
-    else swprintf_s(buffer, L"%.0f MB", bytes / (1024.0 * 1024));
+    if (bytes >= 1024ull * 1024 * 1024) {
+        swprintf_s(buffer, L"%.1f GB", bytes / (1024.0 * 1024 * 1024));
+    } else {
+        swprintf_s(buffer, L"%.0f MB", bytes / (1024.0 * 1024));
+    }
     return buffer;
 }
+
 std::wstring MemoryTopText(MemorySnapshot const& state) {
     std::wstring text;
     size_t count = 0;
     for (auto const& app : state.top) {
-        if (++count > 5) break;
-        if (!text.empty()) text += L"\n";
+        if (++count > 5) {
+            break;
+        }
+        if (!text.empty()) {
+            text += L"\n";
+        }
         text += app.name + L"  ·  " + MemorySize(app.workingSet);
     }
     return text;
@@ -3783,246 +3287,277 @@ struct SystemWakeSignal {
     HANDLE event = nullptr;
     std::atomic<bool> networkChanged{true};
 };
+
 struct BluetoothChangeWatch {
     using Watcher = winrt::Windows::Devices::Enumeration::DeviceWatcher;
-    std::array<Watcher,2> watchers{nullptr,nullptr};
-    std::array<Watcher::Added_revoker,2> added;
-    std::array<Watcher::Updated_revoker,2> updated;
-    std::array<Watcher::Removed_revoker,2> removed;
+    std::array<Watcher, 2> watchers{nullptr, nullptr};
+    std::array<Watcher::Added_revoker, 2> added;
+    std::array<Watcher::Updated_revoker, 2> updated;
+    std::array<Watcher::Removed_revoker, 2> removed;
+
     void Stop() {
-        for(size_t i=0;i<watchers.size();++i) {
-            added[i].revoke();updated[i].revoke();removed[i].revoke();
-            if(watchers[i]) {try{watchers[i].Stop();}catch(...){} watchers[i]=nullptr;}
+        for (size_t i = 0; i < watchers.size(); ++i) {
+            added[i].revoke();
+            updated[i].revoke();
+            removed[i].revoke();
+            if (watchers[i]) {
+                try {
+                    watchers[i].Stop();
+                } catch (...) {}
+                watchers[i] = nullptr;
+            }
         }
     }
-    ~BluetoothChangeWatch(){Stop();}
+
+    ~BluetoothChangeWatch() {
+        Stop();
+    }
+
     void Start(std::shared_ptr<SystemWakeSignal> const& signal) {
         using namespace winrt::Windows::Devices::Enumeration;
         using namespace winrt::Windows::Devices::Bluetooth;
-        auto changed=[signal](auto const&,auto const&) noexcept {g_bluetoothDirty=true;SetEvent(signal->event);};
-        for(size_t i=0;i<2;++i) {
-            if(watchers[i])continue;
+        auto changed = [signal](auto const&, auto const&) noexcept {
+            g_bluetoothDirty = true;
+            SetEvent(signal->event);
+        };
+        for (size_t i = 0; i < 2; ++i) {
+            if (watchers[i]) {
+                continue;
+            }
             try {
-                auto selector=i ? BluetoothLEDevice::GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus::Connected)
-                    : BluetoothDevice::GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus::Connected);
-                auto properties=winrt::single_threaded_vector<winrt::hstring>({L"System.Devices.Aep.IsConnected",L"System.Devices.BatteryLife"});
-                watchers[i]=DeviceInformation::CreateWatcher(selector,properties,DeviceInformationKind::AssociationEndpoint);
-                added[i]=watchers[i].Added(winrt::auto_revoke,changed);
-                updated[i]=watchers[i].Updated(winrt::auto_revoke,changed);
-                removed[i]=watchers[i].Removed(winrt::auto_revoke,changed);
+                auto selector =
+                    i ? BluetoothLEDevice::GetDeviceSelectorFromConnectionStatus(
+                            BluetoothConnectionStatus::Connected)
+                      : BluetoothDevice::GetDeviceSelectorFromConnectionStatus(
+                            BluetoothConnectionStatus::Connected);
+                auto properties = winrt::single_threaded_vector<winrt::hstring>(
+                    {L"System.Devices.Aep.IsConnected",
+                     L"System.Devices.BatteryLife"});
+                watchers[i] = DeviceInformation::CreateWatcher(
+                    selector, properties,
+                    DeviceInformationKind::AssociationEndpoint);
+                added[i] = watchers[i].Added(winrt::auto_revoke, changed);
+                updated[i] = watchers[i].Updated(winrt::auto_revoke, changed);
+                removed[i] = watchers[i].Removed(winrt::auto_revoke, changed);
                 watchers[i].Start();
-            } catch(...) {added[i].revoke();updated[i].revoke();removed[i].revoke();watchers[i]=nullptr;}
+            } catch (...) {
+                added[i].revoke();
+                updated[i].revoke();
+                removed[i].revoke();
+                watchers[i] = nullptr;
+            }
         }
     }
 };
 
-// Bluetooth drivers may respond slowly. Keep discovery/GATT on its own worker
-// so it cannot stall memory sampling, hotspot commands or settings synchronization.
 DWORD WINAPI BluetoothProviderThreadProc(void*) {
     bool initialized = false;
     try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded); initialized = true;
-        auto signal = std::make_shared<SystemWakeSignal>(); signal->event = g_bluetoothWake;
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        initialized = true;
+        auto signal = std::make_shared<SystemWakeSignal>();
+        signal->event = g_bluetoothWake;
         struct CallbackGuard {
             std::shared_ptr<SystemWakeSignal>& signal;
-            ~CallbackGuard() { while (signal.use_count() > 1) WaitForSingleObject(signal->event, 10); }
+            ~CallbackGuard() {
+                while (signal.use_count() > 1) {
+                    WaitForSingleObject(signal->event, 10);
+                }
+            }
         } guard{signal};
         BluetoothChangeWatch watcher;
         BluetoothSnapshot snapshot;
         uint64_t readAt = 0, goodAt = 0;
         while (WaitForSingleObject(g_liveStopEvent, 0) != WAIT_OBJECT_0) {
-            auto settings = GetSettings(); auto now = GetTickCount64();
-
-            bool enabled = settings.enableTaskbarWidget && settings.enableBatteryWidget && settings.bluetoothBattery;
+            auto settings = GetSettings();
+            auto now = GetTickCount64();
+            bool enabled = settings.enableTaskbarWidget &&
+                           settings.enableBatteryWidget &&
+                           settings.bluetoothBattery;
             if (enabled) {
                 watcher.Start(signal);
-                // Coalesce bursts from the device watcher. Disabling the feature
-                // still takes effect immediately; recovery reads are every 15 s.
-                if (!readAt || now - readAt >= 15000 || (g_bluetoothDirty.load() && now - readAt >= 1000)) {
+                if (!readAt || now - readAt >= 15000 ||
+                    (g_bluetoothDirty.load() && now - readAt >= 1000)) {
                     g_bluetoothDirty = false;
-                    auto value = ReadBluetoothBatteries(); readAt = GetTickCount64();
-                    if (value.available) { snapshot = std::move(value); goodAt = readAt; }
-                    else { snapshot.available = false; if (readAt - goodAt > 30000) snapshot.devices.clear(); }
+                    auto value = ReadBluetoothBatteries();
+                    readAt = GetTickCount64();
+                    if (value.available) {
+                        snapshot = std::move(value);
+                        goodAt = readAt;
+                    } else {
+                        snapshot.available = false;
+                        if (readAt - goodAt > 30000) {
+                            snapshot.devices.clear();
+                        }
+                    }
                 }
-            } else { watcher.Stop(); snapshot = {}; readAt = 0; }
-            bool changed;
-            { std::lock_guard<std::mutex> lock(g_liveMutex);
-              changed = !(g_bluetoothSnapshot == snapshot); g_bluetoothSnapshot = snapshot; }
-            if (changed) NotifyLiveUi();
+            } else {
+                watcher.Stop();
+                snapshot = {};
+                readAt = 0;
+            }
+            bool changed = false;
+            {
+                std::lock_guard<std::mutex> lock(g_liveMutex);
+                changed = !(g_bluetoothSnapshot == snapshot);
+                g_bluetoothSnapshot = snapshot;
+            }
+            if (changed) {
+                NotifyLiveUi();
+            }
             HANDLE events[] = {g_liveStopEvent, g_bluetoothWake};
-            WaitForMultipleObjects(2, events, FALSE, enabled ? (g_bluetoothDirty.load() ? 1000 : 15000) : INFINITE);
+            WaitForMultipleObjects(
+                2, events, FALSE,
+                enabled ? (g_bluetoothDirty.load() ? 1000 : 15000) : INFINITE);
         }
-    } catch (...) { Wh_Log(L"Bluetooth battery provider unavailable"); }
-    if (initialized) winrt::uninit_apartment();
+    } catch (...) {
+        Wh_Log(L"Bluetooth battery provider unavailable");
+    }
+    if (initialized) {
+        winrt::uninit_apartment();
+    }
     return 0;
 }
 
-// Fixed volumes only: never wake removable drives or wait on network shares.
-std::vector<StorageVolume> ReadStorageVolumes() {
-    std::vector<StorageVolume> result;
-    DWORD drives = GetLogicalDrives();
-    DWORD oldMode = 0; SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldMode);
-    for (unsigned i = 0; i < 26 && !g_shuttingDown; ++i) {
-        if (!(drives & (1u << i))) continue;
-        WCHAR root[] = L"A:\\"; root[0] += i;
-        if (GetDriveTypeW(root) != DRIVE_FIXED) continue;
-        ULARGE_INTEGER available{}, total{}, free{};
-        if (!GetDiskFreeSpaceExW(root,&available,&total,&free) || !total.QuadPart) continue;
-        WCHAR label[256]{};
-        GetVolumeInformationW(root,label,ARRAYSIZE(label),nullptr,nullptr,nullptr,nullptr,0);
-        result.push_back({root,label,total.QuadPart,std::min(total.QuadPart,free.QuadPart)});
+std::wstring RemoteConnectionText(RemoteSnapshot const& remote, bool vi) {
+    if (!remote.active) {
+        return PickText(vi, L"Đã ngắt kết nối", L"Disconnected");
     }
-    SetThreadErrorMode(oldMode,nullptr);
-    return result;
+    return remote.incoming
+        ? PickText(vi, L"Máy này đang được điều khiển",
+                   L"This PC is being controlled")
+        : PickText(vi, L"Đang điều khiển máy từ xa",
+                   L"Controlling a remote PC");
 }
 
-// Observe native session windows. Completed-session logs are not live state.
-std::wstring UltraPeerFromTitle(std::wstring title) {
-    constexpr std::wstring_view suffix = L" - UltraViewer";
-    if (!title.ends_with(suffix)) return {};
-    title.resize(title.size() - suffix.size());
-    auto start = title.find_last_of(L'(');
-    if (start == std::wstring::npos || start == 0 || title.back() != L')') return {};
-    auto id = title.substr(start + 1, title.size() - start - 2);
-    std::erase(id, L' ');
-    if (id.size() < 5 || id.size() > 16 || id.find_first_not_of(L"0123456789") != std::wstring::npos) return {};
-    return title;
-}
-class UltraConnectionReader {
-    RemoteSnapshot latest;
-    unsigned missing = 0;
-public:
-    void Reset() { latest = {}; missing = 0; }
-    RemoteSnapshot Read(uint64_t now) {
-        struct Scan { std::vector<std::wstring> peers; bool incoming = false; std::map<DWORD,bool> owners; } scan;
-        EnumWindows([](HWND window, LPARAM parameter)->BOOL {
-            auto& scan = *reinterpret_cast<Scan*>(parameter);
-            if (!IsWindowVisible(window) || scan.peers.size() >= 16) return TRUE;
-            WCHAR title[512]{}; GetWindowTextW(window,title,ARRAYSIZE(title));
-            if (!wcsstr(title,L"UltraViewer")) return TRUE;
-            DWORD pid = 0; GetWindowThreadProcessId(window,&pid);
-            if (!scan.owners.contains(pid)) { auto exe = LowerText(ProcessName(pid)); scan.owners[pid] = exe == L"ultraviewer_desktop.exe" || exe == L"ultraviewer.exe"; }
-            if (!scan.owners[pid]) return TRUE;
-            auto peer = UltraPeerFromTitle(title);
-            if (!peer.empty()) { scan.peers.push_back(std::move(peer)); return TRUE; }
-            if (!std::wstring_view(title).starts_with(L"UltraViewer (")) return TRUE;
-            struct Labels { bool incoming=false; unsigned count=0; } labels;
-            EnumChildWindows(window,[](HWND child, LPARAM context)->BOOL {
-                auto& labels=*reinterpret_cast<Labels*>(context);
-                if (++labels.count > 128) return FALSE;
-                WCHAR cls[32]{};GetClassNameW(child,cls,ARRAYSIZE(cls));
-                if (_wcsicmp(cls,L"Static") || !IsWindowVisible(child)) return TRUE;
-                WCHAR value[512]{};DWORD_PTR result=0;
-                if (!SendMessageTimeoutW(child,WM_GETTEXT,ARRAYSIZE(value),reinterpret_cast<LPARAM>(value),SMTO_ABORTIFHUNG|SMTO_BLOCK,50,&result)) return TRUE;
-                auto text=LowerText(value);
-                if(text.find(L"đang xem máy tính của bạn")!=std::wstring::npos || text.find(L"máy tính đang xem bạn")!=std::wstring::npos ||
-                   text.find(L"controlling your computer")!=std::wstring::npos || text.find(L"viewing your computer")!=std::wstring::npos) labels.incoming=true;
-                return TRUE;
-            },reinterpret_cast<LPARAM>(&labels));
-            scan.incoming = scan.incoming || labels.incoming;
-            return TRUE;
-        },reinterpret_cast<LPARAM>(&scan));
-        std::sort(scan.peers.begin(),scan.peers.end());
-        scan.peers.erase(std::unique(scan.peers.begin(),scan.peers.end()),scan.peers.end());
-        bool active = !scan.peers.empty() || scan.incoming;
-        if (!active && latest.active && ++missing < 2) return latest;
-        if (active) missing = 0;
-        if (active != latest.active || (active && (scan.peers != latest.peers || scan.incoming != latest.incoming))) {
-            ++latest.serial; latest.observedAt=now; latest.active=active;
-            if (active) { latest.peers=std::move(scan.peers); latest.incoming=scan.incoming; }
-        }
-        return latest;
-    }
-};
-std::wstring RemoteConnectionText(RemoteSnapshot const& remote,bool vi) {
-    if (!remote.active) return PickText(vi,L"Đã ngắt kết nối",L"Disconnected");
-    return remote.incoming ? PickText(vi,L"Máy này đang được điều khiển",L"This PC is being controlled") :
-        PickText(vi,L"Đang điều khiển máy từ xa",L"Controlling a remote PC");
-}
 std::wstring RemotePeerText(RemoteSnapshot const& remote) {
     std::wstring text;
-    for(auto const& peer:remote.peers) { if(!text.empty()) text+=L"\n"; text+=peer; }
+    for (auto const& peer : remote.peers) {
+        if (!text.empty()) {
+            text += L"\n";
+        }
+        text += peer;
+    }
     return text;
 }
 
 DWORD WINAPI SystemActivityThreadProc(void*) {
     bool initialized = false;
     try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded); initialized = true;
-        auto signal = std::make_shared<SystemWakeSignal>(); signal->event = g_systemWake;
-        winrt::Windows::Networking::Connectivity::NetworkInformation::NetworkStatusChanged_revoker changed;
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        initialized = true;
+        auto signal = std::make_shared<SystemWakeSignal>();
+        signal->event = g_systemWake;
+        winrt::Windows::Networking::Connectivity::NetworkInformation::
+            NetworkStatusChanged_revoker changed;
         struct SubscriptionGuard {
             decltype(changed)& subscription;
             std::shared_ptr<SystemWakeSignal>& signal;
             ~SubscriptionGuard() {
                 subscription.revoke();
-                while (signal.use_count() > 1) WaitForSingleObject(signal->event, 10);
+                while (signal.use_count() > 1) {
+                    WaitForSingleObject(signal->event, 10);
+                }
             }
         } guard{changed, signal};
         try {
-            changed = winrt::Windows::Networking::Connectivity::NetworkInformation::NetworkStatusChanged(
-                winrt::auto_revoke, [signal](auto const&) {
-                    signal->networkChanged = true; SetEvent(signal->event);
-                });
+            changed = winrt::Windows::Networking::Connectivity::
+                NetworkInformation::NetworkStatusChanged(
+                    winrt::auto_revoke, [signal](auto const&) {
+                        signal->networkChanged = true;
+                        SetEvent(signal->event);
+                    });
         } catch (...) {}
         {
-            HostSettingsSync settingsSync;
             HotspotReader hotspot;
             bool hotspotCommandFailed = false;
-            uint64_t displayRead = 0, memoryRead = 0, storageRead = 0;
-            UltraConnectionReader ultra; bool remoteVisible=false;
+            uint64_t displayRead = 0, memoryRead = 0;
             DisplaySnapshot display;
             while (WaitForSingleObject(g_liveStopEvent, 0) != WAIT_OBJECT_0) {
-                settingsSync.Tick();
-                auto memoryNow = GetTickCount64();
-                if (!memoryRead || memoryNow - memoryRead >= 5000) {
-                    auto memory = SampleMemory(g_memoryDetailsRequested.load()); memoryRead = memoryNow;
-                    { std::lock_guard<std::mutex> lock(g_liveMutex); g_memorySnapshot = std::move(memory); }
+                auto settings = GetSettings();
+                auto now = GetTickCount64();
+                if (settings.enableTaskbarWidget && (settings.memoryAlerts || settings.storageAlerts)) {
+                    if (!memoryRead || now - memoryRead >= 5000) {
+                        auto memory = SampleMemory(false);
+                        memoryRead = now;
+                        {
+                            std::lock_guard<std::mutex> lock(g_liveMutex);
+                            g_memorySnapshot = std::move(memory);
+                        }
+                        NotifyLiveUi();
+                    }
+                } else if (memoryRead) {
+                    memoryRead = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(g_liveMutex);
+                        g_memorySnapshot = {};
+                    }
                     NotifyLiveUi();
                 }
-                auto settings = GetSettings(); auto now = GetTickCount64();
-                if (g_memoryDetailsRequested && (!storageRead || now-storageRead >= 10000)) {
-                    auto volumes=ReadStorageVolumes(); storageRead=now;
-                    std::lock_guard<std::mutex> lock(g_liveMutex); g_storageVolumes=std::move(volumes);
-                }
-                RemoteSnapshot remote;
-                if(settings.enableTaskbarWidget && settings.remoteAlerts) remote=ultra.Read(now); else ultra.Reset();
-                bool visible=remote.serial && (remote.active || now-remote.observedAt<4500);
-                bool remoteUpdated=visible!=remoteVisible;remoteVisible=visible;
-                {std::lock_guard<std::mutex> lock(g_liveMutex);remoteUpdated=remoteUpdated||g_remoteSnapshot.serial!=remote.serial;g_remoteSnapshot=remote;}
-                if (settings.enableTaskbarWidget && settings.enableDisplayWidget) {
-                    if (g_displayDirty.exchange(false) || !displayRead || now - displayRead >= 5000) {
-                        display = ReadDisplaySnapshot(); displayRead = now;
+
+                if (settings.enableTaskbarWidget &&
+                    settings.enableDisplayWidget) {
+                    if (g_displayDirty.exchange(false) || !displayRead ||
+                        now - displayRead >= 5000) {
+                        display = ReadDisplaySnapshot();
+                        displayRead = now;
                     }
-                } else { display = {}; displayRead = 0; }
+                } else {
+                    display = {};
+                    displayRead = 0;
+                }
+
                 HotspotSnapshot network;
-                if (settings.enableTaskbarWidget && settings.enableHotspotWidget)
-                    network = hotspot.Read(now, signal->networkChanged.exchange(false));
-                else hotspot.Reset();
+                if (settings.enableTaskbarWidget &&
+                    settings.enableHotspotWidget) {
+                    network = hotspot.Read(
+                        now, signal->networkChanged.exchange(false));
+                } else {
+                    hotspot.Reset();
+                }
+
                 if (g_hotspotStopRequested.exchange(false)) {
-                    if (settings.enableTaskbarWidget && settings.enableHotspotWidget) {
+                    if (settings.enableTaskbarWidget &&
+                        settings.enableHotspotWidget) {
                         network.commandPending = true;
-                        { std::lock_guard<std::mutex> lock(g_liveMutex); g_hotspotSnapshot = network; }
+                        {
+                            std::lock_guard<std::mutex> lock(g_liveMutex);
+                            g_hotspotSnapshot = network;
+                        }
                         NotifyLiveUi();
                         hotspotCommandFailed = !hotspot.Stop();
                         network = hotspot.Read(GetTickCount64(), true);
                     }
                 }
-                if (network.available && !network.on && !network.changing) hotspotCommandFailed = false;
+                if (network.available && !network.on && !network.changing) {
+                    hotspotCommandFailed = false;
+                }
                 network.commandFailed = hotspotCommandFailed;
-                bool update;
-                { std::lock_guard<std::mutex> lock(g_liveMutex);
-                  update = !(g_displaySnapshot == display) || !(g_hotspotSnapshot == network);
-                  g_displaySnapshot = display; g_hotspotSnapshot = network; }
-                if (update || remoteUpdated) NotifyLiveUi();
+                bool update = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_liveMutex);
+                    update = !(g_displaySnapshot == display) ||
+                             !(g_hotspotSnapshot == network);
+                    g_displaySnapshot = display;
+                    g_hotspotSnapshot = network;
+                }
+                if (update) {
+                    NotifyLiveUi();
+                }
                 HANDLE events[] = {g_liveStopEvent, g_systemWake};
-                WaitForMultipleObjects(2, events, FALSE,
-                    settingsSync.process || g_hostSyncRequested ? 100 : settings.enableTaskbarWidget && (settings.enableHotspotWidget || settings.remoteAlerts) ? 1000 : 5000);
+                WaitForMultipleObjects(
+                    2, events, FALSE,
+                    settings.enableTaskbarWidget && settings.enableHotspotWidget
+                        ? 1000
+                        : 5000);
             }
         }
-
-    } catch (...) { Wh_Log(L"System activity provider unavailable"); }
-    if (initialized) winrt::uninit_apartment();
+    } catch (...) {
+        Wh_Log(L"System activity provider unavailable");
+    }
+    if (initialized) {
+        winrt::uninit_apartment();
+    }
     return 0;
 }
 
@@ -4400,119 +3935,6 @@ void PublishTaskNotice(std::wstring filename, TaskOutcome outcome) {
       g_taskNotice = {g_taskNotice.serial + 1, GetTickCount64() + 6000, std::move(filename), outcome}; }
     NotifyLiveUi();
 }
-// Read only download metadata, not browsing URLs, cookies or credentials.
-// No copy of History is made and no database is ever opened read/write.
-struct sqlite3;
-struct sqlite3_stmt;
-struct BrowserDownloadReader {
-    HMODULE module = nullptr;
-    bool reportedReadFailure = false;
-    int (*open)(const char*, sqlite3**, int, const char*) = nullptr;
-    int (*close)(sqlite3*) = nullptr;
-    int (*prepare)(sqlite3*, const char*, int, sqlite3_stmt**, const char**) = nullptr;
-    int (*step)(sqlite3_stmt*) = nullptr;
-    int (*finalize)(sqlite3_stmt*) = nullptr;
-    int (*limit)(sqlite3*,int,int) = nullptr;
-    int (*busyTimeout)(sqlite3*,int) = nullptr;
-    const void* (*text16)(sqlite3_stmt*, int) = nullptr;
-    int64_t (*integer)(sqlite3_stmt*, int) = nullptr;
-    void (*progress)(sqlite3*, int, int (*)(void*), void*) = nullptr;
-    struct Cached { uint64_t sampled = 0; std::vector<TaskFileInfo> files; };
-    std::map<std::wstring, Cached> cache;
-    BrowserDownloadReader() {
-        module = LoadLibraryExW(L"winsqlite3.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!module) return;
-        open = reinterpret_cast<decltype(open)>(GetProcAddress(module, "sqlite3_open_v2"));
-        close = reinterpret_cast<decltype(close)>(GetProcAddress(module, "sqlite3_close"));
-        prepare = reinterpret_cast<decltype(prepare)>(GetProcAddress(module, "sqlite3_prepare_v2"));
-        step = reinterpret_cast<decltype(step)>(GetProcAddress(module, "sqlite3_step"));
-        finalize = reinterpret_cast<decltype(finalize)>(GetProcAddress(module, "sqlite3_finalize"));
-        limit = reinterpret_cast<decltype(limit)>(GetProcAddress(module, "sqlite3_limit"));
-        busyTimeout = reinterpret_cast<decltype(busyTimeout)>(GetProcAddress(module, "sqlite3_busy_timeout"));
-        text16 = reinterpret_cast<decltype(text16)>(GetProcAddress(module, "sqlite3_column_text16"));
-        integer = reinterpret_cast<decltype(integer)>(GetProcAddress(module, "sqlite3_column_int64"));
-        progress = reinterpret_cast<decltype(progress)>(GetProcAddress(module, "sqlite3_progress_handler"));
-    }
-    ~BrowserDownloadReader() { if (module) FreeLibrary(module); }
-    void ReadProfile(std::wstring const& path, std::vector<TaskFileInfo>& result, uint64_t deadline) {
-        if (!open || !close || !prepare || !step || !finalize || !text16 || !integer || !progress || !limit) return;
-        sqlite3* db = nullptr;
-        // SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_PRIVATECACHE.
-        int code = open(winrt::to_string(path).c_str(), &db, 0x1 | 0x8000 | 0x40000, nullptr);
-        struct Close { sqlite3*& db; decltype(close) fn; ~Close() { if (db) fn(db); } } closer{db, close};
-        if (code || !db) return;
-        limit(db,0,65536); limit(db,1,4096);
-        if (busyTimeout) busyTimeout(db, static_cast<int>(std::min<uint64_t>(60, deadline > GetTickCount64() ? deadline - GetTickCount64() : 0)));
-        progress(db, 500, [](void* value) -> int { return g_shuttingDown || GetTickCount64() > *static_cast<uint64_t*>(value); }, &deadline);
-        sqlite3_stmt* statement = nullptr;
-        const char* sql = "SELECT target_path,current_path,received_bytes,total_bytes,state FROM "
-            "(SELECT id,target_path,current_path,received_bytes,total_bytes,state FROM downloads ORDER BY id DESC LIMIT 128) WHERE state=0";
-        int prepared = prepare(db, sql, -1, &statement, nullptr);
-        if (prepared != 0) {
-            if (!reportedReadFailure) { Wh_Log(L"Download metadata unavailable (SQLite %d); using accessible download rows", prepared); reportedReadFailure = true; }
-            if (statement) finalize(statement);
-            return;
-        }
-        struct Finalize { sqlite3_stmt* s; decltype(finalize) fn; ~Finalize() { fn(s); } } finalizer{statement, finalize};
-        while (result.size() < 32 && step(statement) == 100 && GetTickCount64() <= deadline) {
-            auto target = static_cast<PCWSTR>(text16(statement, 0));
-            if (!target || !*target) continue; // Unconfirmed name: do not guess from a URL or temp filename.
-            std::wstring filename(target); if (filename.size() > 32768) continue;
-            auto slash = filename.find_last_of(L"\\/"); if (slash != std::wstring::npos) filename.erase(0, slash + 1);
-            if (filename.empty() || filename.size() > 512) continue;
-            std::erase_if(filename, [](wchar_t c) { return c < 32 || (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069); });
-            auto received = integer(statement, 2), total = integer(statement, 3);
-            TaskFileInfo file; file.filename = std::move(filename);
-            if (total > 0 && received >= 0) file.percent = static_cast<int>(std::clamp(100.0 * received / total, 0.0, 100.0));
-            result.push_back(std::move(file));
-        }
-    }
-    std::vector<TaskFileInfo> Read(std::wstring const& app, int aggregatePercent) {
-        PCWSTR suffix = app == L"chrome.exe" ? L"\\Google\\Chrome\\User Data" :
-            app == L"msedge.exe" ? L"\\Microsoft\\Edge\\User Data" :
-            app == L"brave.exe" ? L"\\BraveSoftware\\Brave-Browser\\User Data" : nullptr;
-        if (!suffix) return {};
-        auto& saved = cache[app]; auto now = GetTickCount64();
-        if (!saved.sampled || now - saved.sampled >= (saved.files.empty() ? 10000u : 2000u)) {
-            saved.sampled = now; saved.files.clear();
-            WCHAR local[32768]; DWORD size = GetEnvironmentVariableW(L"LOCALAPPDATA", local, ARRAYSIZE(local));
-            if (!size || size >= ARRAYSIZE(local)) return {};
-            std::wstring root = std::wstring(local) + suffix;
-            auto deadline = now + 200; // Bounded total SQL budget, never on the taskbar/UI thread.
-            ReadProfile(root + L"\\Default\\History", saved.files, deadline);
-            WIN32_FIND_DATAW entry{}; HANDLE search = FindFirstFileW((root + L"\\Profile *").c_str(), &entry);
-            if (search != INVALID_HANDLE_VALUE) {
-                unsigned profiles = 0;
-                do {
-                    if (++profiles > 16 || GetTickCount64() > deadline || g_shuttingDown) break;
-                    if (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                        ReadProfile(root + L"\\" + entry.cFileName + L"\\History", saved.files, deadline);
-                } while (FindNextFileW(search, &entry));
-                FindClose(search);
-            }
-        }
-        auto files = saved.files;
-        // Chromium publishes live aggregate progress more often than its History DB.
-        // It is safe to use it for one file only; never assign aggregate % to each of several files.
-        if (files.size() == 1 && aggregatePercent >= 0) files.front().percent = aggregatePercent;
-        return files;
-    }
-};
-void MergeBrowserDownloadNames(TaskControlState& state, std::vector<TaskFileInfo> files) {
-    if (files.empty()) return;
-    if (!state.files.empty()) {
-        for (auto& live : state.files) {
-            if (live.percent >= 0) continue;
-            auto found = std::find_if(files.begin(), files.end(), [&](auto const& f) { return f.filename == live.filename; });
-            if (found != files.end()) live.percent = found->percent;
-        }
-    } else state.files = std::move(files);
-    state.operation = TaskOperation::Download;
-    state.filename = state.files.size() == 1 ? state.files.front().filename : L"";
-    state.controls = state.files.size() == 1 ? state.files.front().controls : 0;
-    state.sampledAt = GetTickCount64();
-}
-
 void PreserveDownloadIdentity(TaskControlState& state, TaskControlState const& previous, TaskProgress const& task) {
     if (OperationFromTask(task) != TaskOperation::Download || !state.files.empty() || state.sampledAt ||
         !previous.sampledAt || previous.files.empty() || previous.window != task.window) return;
@@ -4538,7 +3960,6 @@ DWORD WINAPI TaskControlThreadProc(void*) {
                 automation->put_AutoSetFocus(FALSE);
             }
             std::map<uint64_t, TaskProgress> observedTasks;
-            BrowserDownloadReader downloads;
             while (WaitForSingleObject(g_liveStopEvent, 0) != WAIT_OBJECT_0) {
                 std::vector<TaskProgress> tasks;
                 { std::lock_guard<std::mutex> lock(g_liveMutex);
@@ -4546,7 +3967,6 @@ DWORD WINAPI TaskControlThreadProc(void*) {
                 auto settings = GetSettings();
                 bool enabled = settings.enableTaskbarWidget && settings.enableTaskProgress;
                 if (!enabled) tasks.clear();
-                if (tasks.empty() || !settings.browserDownloadNames) downloads.cache.clear();
                 std::vector<RawTaskProgress> ended;
                 { std::lock_guard<std::mutex> lock(g_taskProgressMutex); ended.swap(g_endedTaskSignals); }
                 for (auto const& task : tasks) observedTasks[task.id] = task;
@@ -4572,8 +3992,6 @@ DWORD WINAPI TaskControlThreadProc(void*) {
                     TaskControlState state;
                     try { state=ProbeTaskControls(automation.get(),task); }
                     catch(...) {state.window=task.window;}
-                    if (settings.browserDownloadNames && OperationFromTask(task) == TaskOperation::Download)
-                        MergeBrowserDownloadNames(state, downloads.Read(LowerText(task.app), task.percent));
                     TaskControlState previous;
                     { std::lock_guard<std::mutex> lock(g_liveMutex); auto old = g_taskControls.find(task.id);
                       if (old != g_taskControls.end()) previous = old->second; }
@@ -4678,7 +4096,7 @@ DWORD WINAPI TemperatureThreadProc(void*) {
             filter.CacheControl().ReadBehavior(HttpCacheReadBehavior::NoCache);filter.CacheControl().WriteBehavior(HttpCacheWriteBehavior::NoCache);
             HttpClient client(filter);uint64_t next=0;int lastPort=0;
             while(WaitForSingleObject(g_liveStopEvent,0)!=WAIT_OBJECT_0) {
-                auto settings=GetSettings();auto now=GetTickCount64();bool enabled=settings.temperatureAlerts || g_memoryDetailsRequested;
+                auto settings=GetSettings();auto now=GetTickCount64();bool enabled = settings.enableTaskbarWidget && settings.temperatureAlerts;
                 if(lastPort!=settings.temperaturePort){next=0;lastPort=settings.temperaturePort;}
                 if(!enabled || now>=next) {
                     TemperatureSnapshot value;
@@ -4688,7 +4106,7 @@ DWORD WINAPI TemperatureThreadProc(void*) {
                     if(changed)NotifyLiveUi();
                     next=now+(value.cpu<0 && value.gpu<0 ? 30000 : 5000);
                 }
-                if(WaitForSingleObject(g_liveStopEvent,1000)==WAIT_OBJECT_0)break;
+                if(WaitForSingleObject(g_liveStopEvent, enabled ? 1000 : 5000)==WAIT_OBJECT_0)break;
             }
         }
     }catch(...){}
@@ -5036,22 +4454,35 @@ DWORD WINAPI ClockProviderThreadProc(void*) {
                     }
                     window=cachedWindow;
                 }
+                if (window.element && (!IsWindow(window.element) || !IsWindowVisible(window.top))) {
+                    cachedWindow = {};
+                    nextDiscovery = 0;
+                    window = {};
+                }
                 std::vector<ClockEntry> entries;
-                if(window.element && !IsIconic(window.top))try {
-                    DWORD pid=0;GetWindowThreadProcessId(window.element,&pid);
-                    if(pid==window.pid) {
-                        auto nodes=ReadClockNodes(automation.get(),window.element);
-                        now=GetTickCount64();utc=ClockUtcMilliseconds();entries=DecodeClockNodes(nodes,utc,now);
-                        int diagnostic=ClockPage(nodes)*1000+static_cast<int>(entries.size());
-                        if(diagnostic!=lastDiagnostic){Wh_Log(L"Windows Clock: page=%d, nodes=%zu, activities=%zu",ClockPage(nodes),nodes.size(),entries.size());lastDiagnostic=diagnostic;}
-                    }else{cachedWindow={};nextDiscovery=0;window={};}
-                }catch(...){}
-                auto const previous=tracker.state;
-                // Prefix transient runtime IDs with their source process/window.
-                for(auto& entry:entries)entry.key=std::to_wstring(window.pid)+L":"+
-                    std::to_wstring(reinterpret_cast<uintptr_t>(window.element))+L":"+entry.key;
-                tracker.state.window=reinterpret_cast<uintptr_t>(window.top);
-                tracker.Update(std::move(entries),now,utc,settings.enableTaskbarWidget && settings.enableClockWidget);
+                int observedPage = -1;
+                bool appVisible = window.element && !IsIconic(window.top);
+                if (appVisible) try {
+                    DWORD pid = 0; GetWindowThreadProcessId(window.element, &pid);
+                    if (pid == window.pid) {
+                        auto nodes = ReadClockNodes(automation.get(), window.element);
+                        observedPage = ClockPage(nodes);
+                        now = GetTickCount64(); utc = ClockUtcMilliseconds();
+                        entries = DecodeClockNodes(nodes, utc, now);
+                        int diagnostic = observedPage * 1000 + static_cast<int>(entries.size());
+                        if (diagnostic != lastDiagnostic) {
+                            Wh_Log(L"Windows Clock: page=%d, nodes=%zu, activities=%zu", observedPage, nodes.size(), entries.size());
+                            lastDiagnostic = diagnostic;
+                        }
+                    } else { cachedWindow = {}; nextDiscovery = 0; window = {}; appVisible = false; }
+                } catch (...) {}
+                auto const previous = tracker.state;
+                for (auto& entry : entries) entry.key = std::to_wstring(window.pid) + L":" +
+                    std::to_wstring(reinterpret_cast<uintptr_t>(window.element)) + L":" + entry.key;
+                tracker.state.window = reinterpret_cast<uintptr_t>(window.top);
+                tracker.Update(std::move(entries), now, utc,
+                               settings.enableTaskbarWidget && settings.enableClockWidget,
+                               appVisible, observedPage);
                 auto const& next=tracker.state;
                 bool sameEntries=next.entries.size()==previous.entries.size() && std::equal(next.entries.begin(),next.entries.end(),previous.entries.begin(),[&](auto const& a,auto const& b) {
                     return a.key==b.key && a.label==b.label && a.kind==b.kind && a.run==b.run && a.finished==b.finished &&
@@ -5101,9 +4532,6 @@ void StopLiveProviders() {
     if (g_bluetoothThread) { WaitForSingleObject(g_bluetoothThread, INFINITE); CloseHandle(g_bluetoothThread); g_bluetoothThread = nullptr; }
     if (g_taskControlThread) { WaitForSingleObject(g_taskControlThread, INFINITE); CloseHandle(g_taskControlThread); g_taskControlThread = nullptr; }
     if (g_obsThread) { WaitForSingleObject(g_obsThread, INFINITE); CloseHandle(g_obsThread); g_obsThread = nullptr; }
-    HANDLE cultureThread = nullptr;
-    { std::lock_guard<std::mutex> lock(g_cultureThreadMutex); cultureThread = std::exchange(g_cultureThread, nullptr); }
-    if (cultureThread) { WaitForSingleObject(cultureThread, INFINITE); CloseHandle(cultureThread); }
     if (g_artThread) { WaitForSingleObject(g_artThread, INFINITE); CloseHandle(g_artThread); g_artThread = nullptr; }
     if (g_liveThread) {
         // Called on Windhawk's engine thread, never while holding a UI/data lock.
@@ -6966,53 +6394,29 @@ bool HasTaskNotice(LiveSnapshot const& state) { return state.taskNotice.serial &
 void RefreshTaskProgressPage(bool vi) {
     if (!g_taskProgressList) return;
     auto const& tasks = g_uiLive.tasks;
-    bool sameRows = tasks.size() == g_renderedTaskProgress.size() &&
-        g_taskProgressList.Children().Size() == tasks.size() && g_renderedTaskLanguage == int(vi);
-    for (size_t i = 0; sameRows && i < tasks.size(); ++i)
-        sameRows = g_renderedTaskProgress[i].id == tasks[i].id && g_renderedTaskProgress[i].window == tasks[i].window && g_renderedTaskProgress[i].fileKey == tasks[i].fileKey;
-    if (!sameRows) {
-        g_taskProgressList.Children().Clear();
-        for (auto const& task : tasks) {
-            wuxc::StackPanel row; row.Spacing(7); row.Margin({0, 2, 0, 8});
-            auto heading = WrappedText(L"", 14); heading.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            row.Children().Append(heading); row.Children().Append(WrappedText(L"", 12));
-            row.Children().Append(CreateProgressView());
-            wuxc::StackPanel buttons; buttons.Orientation(wuxc::Orientation::Horizontal); buttons.Spacing(6);
-            wuxc::Button button;button.Padding({10,5,10,5});button.CornerRadius({6,6,6,6});
-            button.Click([id=task.id,window=task.window](auto const&,auto const&) noexcept {
-                if(g_shuttingDown)return;
-                try {
-                    PromotePopupToManual();auto state=ReadLiveSnapshot();
-                    auto found=std::find_if(state.tasks.begin(),state.tasks.end(),[&](auto const& t){return t.id==id && t.window==window;});
-                    if(found==state.tasks.end() || !TaskStillActive(*found))return;
-                    HWND hwnd=reinterpret_cast<HWND>(found->control.sourceWindow?found->control.sourceWindow:window);
-                    if(IsIconic(hwnd))ShowWindowAsync(hwnd,SW_RESTORE);SetForegroundWindow(hwnd);
-                }catch(...){}
-            });
-            buttons.Children().Append(button);row.Children().Append(buttons);
-            g_taskProgressList.Children().Append(row);
-        }
+    if (tasks == g_renderedTaskProgress && g_renderedTaskLanguage == int(vi)) return;
+    g_renderedTaskProgress = tasks;
+    g_renderedTaskLanguage = int(vi);
+    g_taskProgressList.Children().Clear();
+
+    for (auto const& task : tasks) {
+        wuxc::Border card;
+        card.Padding({10, 8, 10, 8});
+        card.CornerRadius({7, 7, 7, 7});
+        card.Background(wuxm::SolidColorBrush({18, 128, 128, 128}));
+
+        wuxc::StackPanel row;
+        row.Spacing(6);
+        row.Children().Append(WrappedText(TaskDisplayName(task, vi), 13));
+        row.Children().Append(WrappedText(TaskProgressText(task, vi), 12));
+
+        auto bar = CreateProgressView();
+        UpdateProgressView(bar, task.percent, task.state);
+        row.Children().Append(bar);
+
+        card.Child(row);
+        g_taskProgressList.Children().Append(card);
     }
-    unsigned downloadIndex=0;
-    for (uint32_t i = 0; i < tasks.size(); ++i) {
-        auto const& task = tasks[i]; auto row = g_taskProgressList.Children().GetAt(i).as<wuxc::StackPanel>();
-        bool fileDownload = OperationFromTask(task) == TaskOperation::Download;
-        if(fileDownload)++downloadIndex;
-        auto name = fileDownload ? (task.fileKey.empty() ? std::wstring(PickText(vi,L"Tổng tiến độ",L"Overall progress")) :
-            std::wstring(PickText(vi,L"File ",L"File ")) + std::to_wstring(downloadIndex)) : TaskDisplayName(task, vi);
-        auto caption = name + L" · " + TaskProgressText(task, vi);
-        row.Children().GetAt(0).as<wuxc::TextBlock>().Text(caption);
-        auto title = row.Children().GetAt(1).as<wuxc::TextBlock>();
-        bool download = OperationFromTask(task) == TaskOperation::Download;
-        title.Text(download || OperationFromTask(task) == TaskOperation::Files ? L"" : task.title);
-        title.Visibility(title.Text().empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
-        UpdateProgressView(row.Children().GetAt(2).as<wuxc::Grid>(), task.percent, task.state);
-        auto buttons = row.Children().GetAt(3).as<wuxc::StackPanel>();
-        auto open = buttons.Children().GetAt(0).as<wuxc::Button>();
-        open.Content(winrt::box_value(PickText(vi,L"Mở ứng dụng",L"Open application")));
-        wuxc::ToolTipService::SetToolTip(open,winrt::box_value(FriendlyAppName(task.app)));
-    }
-    g_renderedTaskProgress = tasks; g_renderedTaskLanguage = int(vi);
 }
 
 std::wstring FormatPlaybackTime(int64_t seconds);
@@ -7157,37 +6561,26 @@ void RefreshBluetoothList(bool vi) {
 }
 void RefreshBatteryTools(bool vi) {
     RefreshBluetoothList(vi);
-    PowerModeSnapshot modes; UsageSnapshot usage;
-    { std::lock_guard<std::mutex> lock(g_liveMutex); modes = g_powerModes; if (g_showUsage) usage = g_usageSnapshot; }
-    g_updatingPowerModes = true;
-    if (g_powerControlLanguage != int(vi)) {
-        g_powerControlLanguage = int(vi);
-        for (auto combo : {g_powerAcCombo, g_powerDcCombo}) {
-            combo.Items().Clear();
-            for (PCWSTR label : {PickText(vi, L"Hiệu suất nguồn tốt nhất", L"Best power efficiency"),
-                PickText(vi, L"Cân bằng", L"Balanced"), PickText(vi, L"Hiệu suất tốt nhất", L"Best performance")})
-                combo.Items().Append(winrt::box_value(label));
-        }
-        g_powerAcCombo.Header(winrt::box_value(PickText(vi, L"Đã cắm điện", L"Plugged in")));
-        g_powerDcCombo.Header(winrt::box_value(PickText(vi, L"Đang dùng pin", L"On battery")));
+    UsageSnapshot usage;
+    {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        if (g_showUsage) usage = g_usageSnapshot;
     }
-    g_powerAcCombo.SelectedIndex(modes.ac); g_powerAcCombo.IsEnabled(modes.ac >= 0);
-    g_powerDcCombo.SelectedIndex(modes.dc); g_powerDcCombo.IsEnabled(modes.dc >= 0);
-    g_updatingPowerModes = false;
-    std::wstring status = modes.ac < 0 || modes.dc < 0 ? PickText(vi,
-        L"Chế độ nguồn không khả dụng trên cấu hình Windows này.", L"Power mode is unavailable on this Windows configuration.") : L"";
-    if (modes.error) status = std::wstring(PickText(vi, L"Windows chưa áp dụng thay đổi. Mã lỗi: ", L"Windows did not apply the change. Error: ")) + std::to_wstring(modes.error);
-    g_powerModeStatus.Text(status);
-    g_powerModeStatus.Visibility(status.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
-    for (auto control : {g_powerAcCombo, g_powerDcCombo}) control.Visibility(g_showUsage ? wux::Visibility::Collapsed : wux::Visibility::Visible);
-    if (g_showUsage) g_powerModeStatus.Visibility(wux::Visibility::Collapsed);
-    g_usageButton.Content(winrt::box_value(g_showUsage ? PickText(vi, L"← Quay lại", L"← Back") : PickText(vi, L"Thời gian sử dụng ứng dụng", L"App usage time")));
-    g_usageList.Visibility(g_showUsage ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    if (g_usageButton) {
+        g_usageButton.Content(winrt::box_value(g_showUsage
+            ? PickText(vi, L"← Quay lại", L"← Back")
+            : PickText(vi, L"Cài đặt nguồn & pin", L"Power & battery settings")));
+    }
+    if (g_usageList) {
+        g_usageList.Visibility(g_showUsage ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    }
     if (!g_showUsage) return;
     if (usage.revision == g_renderedUsageRevision && g_renderedUsageLanguage == int(vi)) return;
-    g_renderedUsageRevision = usage.revision; g_renderedUsageLanguage = int(vi);
+    g_renderedUsageRevision = usage.revision;
+    g_renderedUsageLanguage = int(vi);
     g_usageList.Children().Clear();
-    auto scope = PickText(vi, usage.onBattery ? L"Phiên dùng pin" : L"Phiên máy hiện tại", usage.onBattery ? L"Battery session" : L"Current PC session");
+    auto scope = PickText(vi, usage.onBattery ? L"Phiên dùng pin" : L"Phiên máy hiện tại",
+                          usage.onBattery ? L"Battery session" : L"Current PC session");
     uint64_t elapsed = GetTickCount64() >= usage.measuredSince ? GetTickCount64() - usage.measuredSince : 0;
     std::wstring note = std::wstring(scope) + PickText(vi, L" · Đã theo dõi ", L" · Observed for ") + FormatPlaybackTime(elapsed / 1000);
     auto summary = WrappedText(note, 12);
@@ -7195,20 +6588,29 @@ void RefreshBatteryTools(bool vi) {
         L"Chỉ tính thời gian tương tác từ lúc bật mod; bỏ qua ngủ, khóa máy và không thao tác quá 1 phút.",
         L"Measured since enabling the mod. Sleep, lock and idle over one minute are excluded.")));
     g_usageList.Children().Append(summary);
-    if (usage.apps.empty()) g_usageList.Children().Append(WrappedText(PickText(vi, L"Chưa có dữ liệu sử dụng.", L"No usage data yet."), 12));
+    if (usage.apps.empty()) {
+        g_usageList.Children().Append(WrappedText(PickText(vi, L"Chưa có dữ liệu sử dụng.", L"No usage data yet."), 12));
+    }
     for (auto const& item : usage.apps) {
-        wuxc::Border row; row.Padding({12, 10, 12, 10}); row.CornerRadius({8, 8, 8, 8});
+        wuxc::Border row;
+        row.Padding({12, 10, 12, 10});
+        row.CornerRadius({8, 8, 8, 8});
         row.Background(wuxm::SolidColorBrush({18, 128, 128, 128}));
         wuxc::Grid grid;
         wuxc::ColumnDefinition nameColumn, timeColumn;
         nameColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
         timeColumn.Width(wux::GridLengthHelper::Auto());
-        grid.ColumnDefinitions().Append(nameColumn); grid.ColumnDefinitions().Append(timeColumn);
+        grid.ColumnDefinitions().Append(nameColumn);
+        grid.ColumnDefinitions().Append(timeColumn);
         auto name = WrappedText(FriendlyAppName(item.app), 13);
         auto time = WrappedText(FormatPlaybackTime(item.milliseconds / 1000), 13);
-        time.Margin({12, 0, 0, 0}); time.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-        wuxc::Grid::SetColumn(time, 1); grid.Children().Append(name); grid.Children().Append(time);
-        row.Child(grid); g_usageList.Children().Append(row);
+        time.Margin({12, 0, 0, 0});
+        time.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        wuxc::Grid::SetColumn(time, 1);
+        grid.Children().Append(name);
+        grid.Children().Append(time);
+        row.Child(grid);
+        g_usageList.Children().Append(row);
     }
 }
 void ReleaseAdaptiveControls() {
@@ -7430,7 +6832,7 @@ void RefreshCultureResults() {
             wuxc::Button button; button.MinWidth(0); button.CornerRadius({7, 7, 7, 7});
             button.HorizontalAlignment(wux::HorizontalAlignment::Stretch); button.HorizontalContentAlignment(wux::HorizontalAlignment::Left);
             button.Content(WrappedText(topic.title + (topic.category.empty() ? L"" : L" · " + topic.category), 13));
-            button.Click([id = topic.id](auto const&, auto const&) { g_cultureSelectedId = id; RequestCulture(id); });
+            button.Click([id = topic.id](auto const&, auto const&) { RequestCulture(id); });
             g_cultureResults.Children().Append(button); any = true;
         }
         if (!any) add(PickText(vi, L"Không có chủ đề phù hợp.", L"No matching topics."));
@@ -7715,693 +7117,170 @@ PCWSTR SettingsSectionName(int section, bool vi) {
     static constexpr PCWSTR vn[] = {L"Chung", L"Giao diện & Bố cục", L"Hoạt động trực tiếp", L"Tiến trình tác vụ", L"Quay màn hình OBS", L"Âm lịch & Tử vi", L"Quản lý thiết bị"};
     return vi ? vn[ClampVal(section, 0, 6)] : en[ClampVal(section, 0, 6)];
 }
-PCWSTR SettingsGroup(WidgetSettingSpec const& spec, bool vi) {
-    std::wstring_view key = spec.key;
-    switch (spec.section) {
-        case 0: return key == L"language" ? PickText(vi,L"Ngôn ngữ",L"Language") : PickText(vi,L"Hoạt động & Preview",L"Activities & previews");
-        case 1: return key == L"popupTheme" || key == L"progressStyle" || key == L"settingsBlur" ? PickText(vi,L"Hiệu ứng & Màu sắc",L"Effects & colors") : PickText(vi,L"Vị trí & Kích thước",L"Position & size");
-        case 2:
-            if(key==L"enableClockWidget" || key==L"clockAutoPopup")return PickText(vi,L"Đồng hồ Windows",L"Windows Clock");
-            if (key == L"remoteAlerts") return PickText(vi,L"Điều khiển từ xa",L"Remote control");
-            if (key == L"enableMediaWidget") return PickText(vi,L"Phương tiện",L"Media");
-            if (key == L"enableBatteryWidget" || key == L"alwaysShowBattery" || key == L"batteryAutoPopup" || key == L"bluetoothBattery") return PickText(vi,L"Pin & Bluetooth",L"Battery & Bluetooth");
-            if (key == L"enablePrivacyWidget" || key == L"privacyAutoPopup") return PickText(vi,L"Quyền riêng tư",L"Privacy");
-            if (key.starts_with(L"display.")) return PickText(vi,L"Trình chiếu",L"Displays");
-            return PickText(vi,L"Điểm phát sóng",L"Hotspot");
-        case 3:
-            if (key == L"enableTaskProgress" || key == L"taskProgressAutoPopup") return PickText(vi,L"Hiển thị",L"Display");
-            if (key == L"progressExplorer" || key == L"progressSevenZip") return PickText(vi,L"Tệp & Lưu trữ",L"Files & archives");
-            if (key == L"progressOtherApps") return PickText(vi,L"Ứng dụng khác",L"Other applications");
-            return PickText(vi,L"Trình duyệt & Tải xuống",L"Browsers & downloads");
-        case 4: return PickText(vi,L"Kết nối OBS",L"OBS connection");
-        case 5: return key == L"enableLunarWidget" ? PickText(vi,L"Âm lịch & Tử vi",L"Lunar & Almanac") : PickText(vi,L"Văn hóa Việt",L"Vietnamese culture");
-        default: return PickText(vi,L"Cảnh báo & Theo dõi",L"Alerts & monitoring");
-    }
-}
-std::wstring SettingHelp(WidgetSettingSpec const& spec, bool vi) {
-    std::wstring_view key = spec.key;
-    if(key==L"enableClockWidget" || key==L"clockAutoPopup")return PickText(vi,
-        L"Chỉ hiển thị trạng thái. Sau lần đọc đầu, tiếp tục từ mốc đã ghi nhận khi thu nhỏ/đóng ứng dụng; đánh dấu Theo lần đồng bộ cuối cho đến khi đọc lại được. Không xác nhận được thay đổi chưa đồng bộ.",
-        L"Status only. After the first observation, counters continue from their last anchor while the app is minimized/closed, marked Last synced state until read again. Unobserved changes cannot be confirmed.");
-    if(key==L"popupTheme") return g_glassCpuSupported ? PickText(vi,L"Mặc định Liquid Glass. Off chỉ tắt hiệu ứng popup; nền taskbar vẫn dùng blur khi rê/bấm, không làm mờ chữ.",L"Liquid Glass by default. Off applies to the popup; taskbar hover/press keeps blur on a separate background layer.") :
-        PickText(vi,L"Liquid Glass không dùng trên CPU này; tự chuyển sang Windows Blur. Mốc: Intel Core i thế hệ 7+, AMD Ryzen/Zen trở lên; CPU chưa nhận diện dùng Blur.",L"Liquid Glass is unavailable on this CPU; Windows Blur is used. Policy: Intel Core i 7th gen+, AMD Ryzen/Zen or newer; unrecognized CPUs use Blur.");
-    if (key == L"temperatureAlerts" || key == L"temperaturePort") return PickText(vi,L"Cần LibreHardwareMonitor bật Remote Web Server trên máy này (mặc định 8085). Không có cảm biến sẽ hiện Chưa có dữ liệu.",L"Requires LibreHardwareMonitor Remote Web Server on this PC (default 8085). Missing sensors show Unavailable.");
-    if (spec.type == WidgetSettingType::Number) return std::to_wstring(spec.minimum) + L"–" + std::to_wstring(spec.maximum);
-    if (key == L"position") return PickText(vi,L"Vị trí khay hệ thống chừa chỗ riêng.",L"Tray positions reserve their own space.");
-    if (key == L"browserDownloadNames") return PickText(vi,L"Tách tiến độ khi trình duyệt cung cấp từng lượt tải; không hiển thị tên file.",L"Separate progress when individual downloads are available; filenames stay hidden.");
-    if (key == L"remoteAlerts") return PickText(vi,L"Theo dõi cửa sổ phiên UltraViewer đang hoạt động; không đọc mật khẩu hay nội dung điều khiển.",L"Observe active UltraViewer session windows; no passwords or remote desktop content are read.");
-    if (key == L"bluetoothBattery") return PickText(vi,L"Chỉ thiết bị đang kết nối có cung cấp mức pin.",L"Connected devices that report their battery level.");
-    if (key == L"enableLunarWidget") return PickText(vi,L"Tự động dựa trên khu vực Windows là Việt Nam.",L"Auto uses the Windows country/region setting.");
-    if (key == L"progressOtherApps") return PickText(vi,L"Ngăn cách tên .exe bằng dấu ;",L"Separate executable names with ;");
-    if (key == L"cultureCatalogUrl") return PickText(vi,L"Để trống để dùng Wikipedia.",L"Leave empty to use Wikipedia.");
-    return {};
-}
-winrt::Windows::Data::Json::JsonObject SettingsSchema() {
-    using namespace winrt::Windows::Data::Json;
-    auto settings = GetSettings(); bool vi = UseVietnameseLabels(settings);
-    JsonObject result; JsonArray sections, specs;
-    auto put = [&](PCWSTR key, std::wstring_view value) { result.SetNamedValue(key, JsonValue::CreateStringValue(value)); };
-    put(L"title",PickText(vi,L"Live Update · Cài đặt",L"Live Update · Settings"));
-    result.SetNamedValue(L"vi",JsonValue::CreateBooleanValue(vi));
-    DWORD light = 1, size = sizeof(light);
-    RegGetValueW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",L"AppsUseLightTheme",RRF_RT_REG_DWORD,nullptr,&light,&size);
-    result.SetNamedValue(L"light",JsonValue::CreateBooleanValue(light != 0));
-    result.SetNamedValue(L"blur",JsonValue::CreateBooleanValue(settings.settingsBlur && g_effectsAllowed.load()));
-    result.SetNamedValue(L"sidebarCompact",JsonValue::CreateBooleanValue(Wh_GetIntValue(L"ui.sidebarCompact",0) != 0));
-    auto accent = SystemAccentColor(); WCHAR color[12]; swprintf_s(color,L"#%02X%02X%02X",accent.R,accent.G,accent.B); put(L"accent",color);
-    put(L"accentText",accent.R * .299 + accent.G * .587 + accent.B * .114 > 155 ? L"#161616" : L"#FFFFFF");
-    result.SetNamedValue(L"revision",JsonValue::CreateNumberValue(static_cast<double>(g_settingsRevision.load() * 2 + (g_effectsAllowed.load() ? 1 : 0))));
-    put(L"status",PickText(vi,L"Lưu tự động. Đóng cửa sổ để giải phóng bộ nhớ của giao diện cài đặt.",L"Changes save automatically. Close this window to release the settings process memory."));
-    PCWSTR icons[] = {L"⚙",L"◈",L"▦",L"↓",L"●",L"▦",L"▤"};
-    for (int i = 0; i < 7; ++i) {
-        JsonObject section; section.SetNamedValue(L"id",JsonValue::CreateNumberValue(i));
-        section.SetNamedValue(L"label",JsonValue::CreateStringValue(SettingsSectionName(i,vi)));
-        section.SetNamedValue(L"glyph",JsonValue::CreateStringValue(icons[i])); sections.Append(section);
-    }
-    // Stable grouping: a group's cards stay adjacent even if preference keys were added later.
-    for (int section = 0; section < 7; ++section) {
-        std::vector<std::wstring> groups;
-        for (auto const& spec : kWidgetSettings) if (spec.section == section) {
-            std::wstring group = SettingsGroup(spec,vi);
-            if (std::find(groups.begin(),groups.end(),group) == groups.end()) groups.push_back(group);
-        }
-        for (auto const& group : groups) for (auto const& spec : kWidgetSettings) {
-            if (spec.section != section || group != SettingsGroup(spec,vi)) continue;
-            JsonObject row;
-            auto field = [&](PCWSTR key,std::wstring_view value) { row.SetNamedValue(key,JsonValue::CreateStringValue(value)); };
-            field(L"key",spec.key); field(L"label",vi ? spec.vi : spec.en); field(L"group",group);
-            field(L"search",std::wstring(spec.en)+L" "+spec.vi); field(L"help",SettingHelp(spec,vi)); field(L"value",WidgetSettingValue(spec));
-            field(L"type",spec.type == WidgetSettingType::Toggle ? L"toggle" : spec.type == WidgetSettingType::Choice ? L"choice" :
-                spec.type == WidgetSettingType::Number ? L"number" : spec.type == WidgetSettingType::Password ? L"password" : L"text");
-            row.SetNamedValue(L"section",JsonValue::CreateNumberValue(section));
-            row.SetNamedValue(L"maximum",JsonValue::CreateNumberValue(spec.maximum));
-            JsonArray options; for (auto const& option : WidgetSettingOptions(spec.key)) {
-                JsonObject value; value.SetNamedValue(L"value",JsonValue::CreateStringValue(option.value));
-                value.SetNamedValue(L"label",JsonValue::CreateStringValue(vi ? option.vi : option.en)); options.Append(value);
-            }
-            row.SetNamedValue(L"options",options); specs.Append(row);
-        }
-    }
-    result.SetNamedValue(L"sections",sections); result.SetNamedValue(L"settings",specs);
-    JsonObject words;
-    auto word = [&](PCWSTR key,PCWSTR en,PCWSTR vn){ words.SetNamedValue(key,JsonValue::CreateStringValue(vi ? vn : en)); };
-    word(L"save",L"Save",L"Lưu"); word(L"search",L"Find a setting",L"Tìm cài đặt");
-    word(L"results",L"Search results",L"Kết quả tìm kiếm"); word(L"restore",L"Show hidden widgets",L"Hiện lại các widget đã ẩn");
-    word(L"taskmgr",L"Open Task Manager",L"Mở Trình quản lý tác vụ");
-    word(L"closeSettings",L"Close settings",L"Đóng cài đặt");
-    word(L"storage",L"Volumes · Capacity and free space",L"Ổ đĩa · Dung lượng và chỗ trống");
-    word(L"storageSettings",L"Windows storage settings",L"Cài đặt lưu trữ Windows");
-    word(L"sidebar",L"Collapse / expand navigation",L"Thu gọn / mở rộng menu");
-    word(L"apps",L"Applications · Working set",L"Ứng dụng · Bộ nhớ đang dùng");
-    if (g_hostSyncStatus == 3) put(L"status",PickText(vi,L"Đã lưu. Windhawk này không có CLI đồng bộ ngược ba mục chung.",L"Saved. This Windhawk has no CLI to sync the three shared fields back."));
-    if (g_hostSyncStatus == 4) put(L"status",PickText(vi,L"Đã lưu. Windhawk chưa chấp nhận đồng bộ ngược.",L"Saved. Windhawk has not accepted reverse synchronization."));
-    result.SetNamedValue(L"words",words); return result;
-}
-void IdentifySettingsWindow() {
-    DWORD process = g_settingsHostPid.load();
-    if (!process) return;
-    EnumWindows([](HWND window, LPARAM value) -> BOOL {
-        DWORD pid = 0; GetWindowThreadProcessId(window, &pid);
-        if (pid != static_cast<DWORD>(value) || !IsWindowVisible(window)) return TRUE;
-        winrt::com_ptr<IPropertyStore> store;
-        if (SUCCEEDED(SHGetPropertyStoreForWindow(window, __uuidof(IPropertyStore), store.put_void()))) {
-            PROPVARIANT id{}; id.vt = VT_LPWSTR; id.pwszVal = const_cast<PWSTR>(L"Windhawk.LiveUpdate.Settings");
-            store->SetValue(PKEY_AppUserModel_ID, id);
-        }
-        return FALSE;
-    }, process);
-}
-winrt::Windows::Data::Json::JsonObject SettingsRequest(winrt::Windows::Data::Json::JsonObject const& request) {
-    using namespace winrt::Windows::Data::Json;
-    auto op = request.GetNamedString(L"op",L""); bool vi = UseVietnameseLabels(GetSettings());
-    JsonObject response; response.SetNamedValue(L"ok",JsonValue::CreateBooleanValue(true));
-    if (op == L"schema") return SettingsSchema();
-    if (op == L"ready") IdentifySettingsWindow();
-    if (op == L"version") response.SetNamedValue(L"revision",JsonValue::CreateNumberValue(static_cast<double>(g_settingsRevision.load() * 2 + (g_effectsAllowed.load() ? 1 : 0))));
-    else if (op == L"set") {
-        std::wstring key(request.GetNamedString(L"key",L"")), value(request.GetNamedString(L"value",L""));
-        auto spec = std::find_if(std::begin(kWidgetSettings),std::end(kWidgetSettings),[&](auto const& s){return key == s.key;});
-        bool ok = spec != std::end(kWidgetSettings) && ValidateWidgetSetting(*spec,value);
-        if (ok) {
-            { std::lock_guard<std::mutex> lock(g_configStorageMutex); ok = Wh_SetStringValue((L"config."+key).c_str(),value.c_str()); }
-            if (ok) {
-                LoadSettings(); ++g_settingsRevision;
-                if (SharedHostSetting(key)) { g_hostSyncInFlight = true; NotifySettingsStatus(1); g_hostSyncRequested = true; }
-                g_forcePowerRefresh = true; g_displayDirty = true; g_bluetoothDirty = true; WakeSettingsProviders();
-                if (auto window = g_liveUiWindow.load()) PostMessageW(window,kApplyRemoteSettings,0,0);
-            }
-        }
-        response.SetNamedValue(L"ok",JsonValue::CreateBooleanValue(ok));
-        response.SetNamedValue(L"message",JsonValue::CreateStringValue(ok ? PickText(vi,L"Đã lưu.",L"Saved.") : PickText(vi,L"Không lưu được. Kiểm tra giá trị.",L"Could not save. Check the value.")));
-    } else if (op == L"memory") {
-        MemorySnapshot memory; { std::lock_guard<std::mutex> lock(g_liveMutex); memory = g_memorySnapshot; }
-        response.SetNamedValue(L"valid",JsonValue::CreateBooleanValue(memory.valid));
-        response.SetNamedValue(L"percent",JsonValue::CreateNumberValue(memory.percent));
-        auto summary = std::to_wstring(memory.percent)+L"% · "+MemorySize(memory.total-memory.available)+L" / "+MemorySize(memory.total);
-        response.SetNamedValue(L"summary",JsonValue::CreateStringValue(summary));
-        TemperatureSnapshot temperature;{std::lock_guard<std::mutex> lock(g_liveMutex);temperature=g_temperatureSnapshot;}
-        response.SetNamedValue(L"temperature",JsonValue::CreateStringValue(TemperatureText(temperature,vi)));
-        auto details = std::wstring(PickText(vi,L"Cửa sổ cài đặt: ",L"Settings process: "))+MemorySize(memory.settingsWorkingSet)+
-            PickText(vi,L"\nExplorer (gồm các thành phần khác): ",L"\nExplorer (includes other components): ")+MemorySize(memory.explorerWorkingSet)+
-            PickText(vi,L"\nKhông thể tách chính xác RAM riêng của mod trong Explorer. Bộ nhớ dùng chung có thể được tính ở nhiều ứng dụng.",
-                L"\nMod-only RAM inside Explorer cannot be isolated. Shared pages can be counted in multiple applications.");
-        response.SetNamedValue(L"details",JsonValue::CreateStringValue(details));
-        JsonArray apps; for (auto const& app : memory.top) {
-            JsonObject row; row.SetNamedValue(L"name",JsonValue::CreateStringValue(app.name));
-            row.SetNamedValue(L"size",JsonValue::CreateStringValue(MemorySize(app.workingSet))); apps.Append(row);
-        }
-        response.SetNamedValue(L"apps",apps);
-        std::vector<StorageVolume> volumes; {std::lock_guard<std::mutex> lock(g_liveMutex);volumes=g_storageVolumes;}
-        JsonArray disks;
-        for(auto const& volume:volumes){JsonObject disk;
-            disk.SetNamedValue(L"name",JsonValue::CreateStringValue(volume.root+L"  "+volume.label));
-            disk.SetNamedValue(L"percent",JsonValue::CreateNumberValue(volume.total ? 100.0*(volume.total-volume.free)/volume.total : 0));
-            disk.SetNamedValue(L"size",JsonValue::CreateStringValue(MemorySize(volume.free)+PickText(vi,L" trống / ",L" free / ")+MemorySize(volume.total)));
-            disks.Append(disk);
-        }
-        response.SetNamedValue(L"volumes",disks);
-    } else if (op == L"watchMemory") { g_memoryDetailsRequested = request.GetNamedBoolean(L"on",false); if(g_systemWake) SetEvent(g_systemWake); }
-    else if (op == L"restore") { if(auto window=g_liveUiWindow.load()) PostMessageW(window,kRestoreHiddenActivities,0,0); }
-    else if (op == L"sidebar") { Wh_SetIntValue(L"ui.sidebarCompact",request.GetNamedBoolean(L"compact",false)); }
-    else if (op == L"storageSettings") { ShellExecuteW(nullptr,L"open",L"ms-settings:storagesense",nullptr,nullptr,SW_SHOWNORMAL); }
-    else if (op == L"taskmgr") {
-        WCHAR path[MAX_PATH]; UINT n=GetSystemDirectoryW(path,ARRAYSIZE(path));
-        if(n && n < ARRAYSIZE(path)-14) { std::wstring exe=std::wstring(path)+L"\\Taskmgr.exe"; ShellExecuteW(nullptr,L"open",exe.c_str(),nullptr,nullptr,SW_SHOWNORMAL); }
-    }
-    return response;
-}
-// All outstanding IPC is cancelable before DLL unload. A child never receives a
-// function pointer into Explorer; the pipe contains bounded UTF-8 JSON only.
-bool SettingsPipeIO(HANDLE pipe,HANDLE child,void* data,DWORD bytes,bool writing,DWORD& transferred) {
-    OVERLAPPED ov{}; ov.hEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr); if(!ov.hEvent) return false;
-    BOOL ok=writing ? WriteFile(pipe,data,bytes,&transferred,&ov) : ReadFile(pipe,data,bytes,&transferred,&ov);
-    if(!ok && GetLastError()==ERROR_IO_PENDING) {
-        HANDLE wait[]={g_liveStopEvent,child,ov.hEvent}; DWORD status=WaitForMultipleObjects(3,wait,FALSE,INFINITE);
-        if(status!=WAIT_OBJECT_0+2) { CancelIoEx(pipe,&ov); GetOverlappedResult(pipe,&ov,&transferred,TRUE); ok=FALSE; }
-        else ok=GetOverlappedResult(pipe,&ov,&transferred,FALSE);
-    }
-    CloseHandle(ov.hEvent); return ok != FALSE;
-}
-constexpr char kSettingsScript[] = R"V29PS(
-& {
-$ErrorActionPreference='Stop'
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
-$global:LU_pipe=New-Object System.IO.Pipes.NamedPipeClientStream('.', '__PIPE__', [System.IO.Pipes.PipeDirection]::InOut)
-$global:LU_pipe.Connect(8000)
-$global:LU_reader=New-Object System.IO.StreamReader($global:LU_pipe,[System.Text.Encoding]::UTF8,$false,4096,$true)
-$global:LU_writer=New-Object System.IO.StreamWriter($global:LU_pipe,(New-Object System.Text.UTF8Encoding($false)),4096,$true)
-$global:LU_writer.AutoFlush=$true
-function global:Rpc($value) {
-    $global:LU_writer.WriteLine(($value | ConvertTo-Json -Compress -Depth 8))
-    $pending=$global:LU_reader.ReadLineAsync()
-    if (!$pending.Wait(2000)) { $global:LU_pipe.Dispose(); throw 'Live Update is not responding.' }
-    if ($null -eq $pending.Result) { throw 'Live Update has stopped.' }
-    return ($pending.Result | ConvertFrom-Json)
-}
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class LuBackdrop {
- [StructLayout(LayoutKind.Sequential)] public struct Margins { public int L,R,T,B; }
- [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int n);
- [DllImport("dwmapi.dll")] static extern int DwmExtendFrameIntoClientArea(IntPtr h,ref Margins m);
- public static bool Apply(IntPtr h,bool enabled,bool dark) {
-  int d=dark?1:0;DwmSetWindowAttribute(h,20,ref d,4);
-  int material=enabled?3:1;
-  int hr=DwmSetWindowAttribute(h,38,ref material,4);
-  bool ok=enabled&&hr>=0;
-  var margin=new Margins();if(ok){margin.L=margin.R=margin.T=margin.B=-1;}
-  if(DwmExtendFrameIntoClientArea(h,ref margin)<0) ok=false;
-  return ok;
- }
-}
-'@
-$global:LU_data=Rpc @{op='schema'}
-$global:LU_sidebarCompact=$global:LU_data.sidebarCompact
-$global:LU_section=0; $global:LU_building=$false
-$global:LU_brush=New-Object System.Windows.Media.BrushConverter
-function global:Brush($color) { return $global:LU_brush.ConvertFromString($color) }
-function global:Text($value,$size=14) {
-    $t=New-Object System.Windows.Controls.TextBlock
-    $t.Text=[string]$value; $t.FontSize=$size; $t.TextWrapping='Wrap'; $t.VerticalAlignment='Center'
-    return $t
-}
-function global:Pick($en,$vi) { if ($global:LU_data.vi) { return $vi }; return $en }
-[xml]$markup=@'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Live Update" Width="1080" Height="740" MinWidth="800" MinHeight="480" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI" FontSize="14" ShowInTaskbar="True">
- <Window.Icon><DrawingImage><DrawingImage.Drawing><DrawingGroup>
-  <GeometryDrawing Brush="#7460CE" Geometry="M 2,2 L 30,2 30,30 2,30 Z"/>
-  <GeometryDrawing Brush="White" Geometry="M 7,8 L 25,8 25,12 7,12 Z M 7,15 L 18,15 18,18 7,18 Z M 7,21 L 23,21 23,24 7,24 Z"/>
- </DrawingGroup></DrawingImage.Drawing></DrawingImage></Window.Icon>
- <Window.Resources>
-  <SolidColorBrush x:Key="Accent" Color="#6750A4"/>
-  <SolidColorBrush x:Key="Card" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="Edge" Color="#20000000"/>
-  <Style TargetType="Button">
-   <Setter Property="Padding" Value="14,9"/><Setter Property="Margin" Value="0,0,6,0"/>
-   <Setter Property="Background" Value="{DynamicResource Card}"/><Setter Property="Foreground" Value="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Window}}"/>
-   <Setter Property="BorderBrush" Value="{DynamicResource Edge}"/><Setter Property="BorderThickness" Value="1"/>
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-    <Border x:Name="Frame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}"><ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/></Border>
-    <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="Opacity" Value="0.8"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Frame" Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
-  <SolidColorBrush x:Key="TextColor" Color="#202024"/>
-  <SolidColorBrush x:Key="ControlFill" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="ControlEdge" Color="#26000000"/>
-  <SolidColorBrush x:Key="ControlHover" Color="#0B000000"/>
-  <SolidColorBrush x:Key="SelectionFill" Color="#10000000"/>
-  <SolidColorBrush x:Key="PopupFill" Color="#FAFAFC"/>
-  <Style TargetType="TextBox">
-   <Setter Property="MinHeight" Value="36"/><Setter Property="Padding" Value="11,7"/>
-   <Setter Property="Background" Value="{DynamicResource ControlFill}"/>
-   <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-   <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
-   <Setter Property="BorderBrush" Value="{DynamicResource ControlEdge}"/>
-   <Setter Property="BorderThickness" Value="1"/><Setter Property="VerticalContentAlignment" Value="Center"/>
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
-    <Grid><Border x:Name="Field" CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-     <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
-    </Border><Border x:Name="FocusLine" Height="2" CornerRadius="1" Margin="2,0,2,0" VerticalAlignment="Bottom" Background="{DynamicResource Accent}" Visibility="Collapsed"/></Grid>
-    <ControlTemplate.Triggers>
-     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="FocusLine" Property="Visibility" Value="Visible"/></Trigger>
-     <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Field" Property="Opacity" Value="0.45"/></Trigger>
-    </ControlTemplate.Triggers>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
-  <Style TargetType="PasswordBox">
-   <Setter Property="MinHeight" Value="36"/><Setter Property="Padding" Value="11,7"/>
-   <Setter Property="Background" Value="{DynamicResource ControlFill}"/>
-   <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-   <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
-   <Setter Property="BorderBrush" Value="{DynamicResource ControlEdge}"/>
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="PasswordBox">
-    <Grid><Border CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
-     <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
-    </Border><Border x:Name="FocusLine" Height="2" CornerRadius="1" Margin="2,0,2,0" VerticalAlignment="Bottom" Background="{DynamicResource Accent}" Visibility="Collapsed"/></Grid>
-    <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="FocusLine" Property="Visibility" Value="Visible"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
-  <Style TargetType="ComboBoxItem">
-   <Setter Property="Foreground" Value="{DynamicResource TextColor}"/><Setter Property="MinHeight" Value="38"/>
-   <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
-    <Grid Margin="4,2"><Border x:Name="ItemFrame" CornerRadius="5" Background="Transparent" Padding="14,8,12,8">
-     <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
-    </Border><Border x:Name="SelectionMark" Width="3" Height="16" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="{DynamicResource Accent}" Visibility="Collapsed"/></Grid>
-    <ControlTemplate.Triggers>
-     <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemFrame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
-     <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemFrame" Property="Background" Value="{DynamicResource SelectionFill}"/><Setter TargetName="SelectionMark" Property="Visibility" Value="Visible"/></Trigger>
-     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
-    </ControlTemplate.Triggers>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
-  <Style TargetType="ComboBox">
-   <Setter Property="MinHeight" Value="36"/><Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-   <Setter Property="Background" Value="{DynamicResource ControlFill}"/><Setter Property="BorderBrush" Value="{DynamicResource ControlEdge}"/>
-   <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-   <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
-    <Grid>
-     <ToggleButton x:Name="DropButton" Style="{x:Null}" Focusable="False" ClickMode="Press" HorizontalContentAlignment="Stretch"
-       IsChecked="{Binding IsDropDownOpen,Mode=TwoWay,RelativeSource={RelativeSource TemplatedParent}}">
-      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
-       <Border x:Name="ToggleFrame" CornerRadius="6" Background="{DynamicResource ControlFill}" BorderBrush="{DynamicResource ControlEdge}" BorderThickness="1">
-        <Grid><Border x:Name="Hover" CornerRadius="6" Background="Transparent"/>
-         <Path x:Name="Chevron" Data="M 0,0 L 4,4 8,0" Stroke="{DynamicResource TextColor}" StrokeThickness="1.2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"/></Grid>
-       </Border><ControlTemplate.Triggers>
-        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Hover" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
-        <Trigger Property="IsChecked" Value="True"><Setter TargetName="ToggleFrame" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
-       </ControlTemplate.Triggers>
-      </ControlTemplate></ToggleButton.Template>
-     </ToggleButton>
-     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-       Margin="12,6,32,6" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"/>
-     <Border x:Name="KeyboardFocus" BorderThickness="1" CornerRadius="6" BorderBrush="{DynamicResource Accent}" IsHitTestVisible="False" Visibility="Collapsed"/>
-     <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="3" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade" IsOpen="{TemplateBinding IsDropDownOpen}">
-      <Border Background="{DynamicResource PopupFill}" BorderBrush="{DynamicResource ControlEdge}" BorderThickness="1" CornerRadius="8" Padding="0,4" Margin="7,3,7,10"
-        MinWidth="{Binding ActualWidth,RelativeSource={RelativeSource TemplatedParent}}" TextElement.Foreground="{DynamicResource TextColor}">
-       <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.18"/></Border.Effect>
-       <ScrollViewer MaxHeight="360" CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
-       </ScrollViewer>
-      </Border>
-     </Popup>
-    </Grid>
-    <ControlTemplate.Triggers>
-     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="KeyboardFocus" Property="Visibility" Value="Visible"/></Trigger>
-     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
-    </ControlTemplate.Triggers>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
-  <Style TargetType="ToggleButton">
-   <Setter Property="Width" Value="42"/><Setter Property="Height" Value="24"/>
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton">
-    <Border x:Name="Track" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource Edge}" Background="#777777"><Ellipse x:Name="Thumb" Fill="White" Width="16" Height="16" Margin="3" HorizontalAlignment="Left"/></Border>
-    <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/></Trigger></ControlTemplate.Triggers>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
- </Window.Resources>
- <Grid Margin="24,18,24,18">
-  <Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <Grid.ColumnDefinitions><ColumnDefinition x:Name="NavColumn" Width="212"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-  <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
-   <Button x:Name="NavToggle" Width="40" Height="38" Padding="0" Margin="0,0,10,0" FontFamily="Segoe MDL2 Assets" Content="&#xE700;"/>
-   <TextBlock x:Name="NavTitle" Text="Live Update" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
-  </StackPanel>
-  <Border x:Name="SearchFrame" Grid.ColumnSpan="3" Width="520" Height="38" HorizontalAlignment="Center" VerticalAlignment="Top" Background="{DynamicResource Card}" BorderBrush="{DynamicResource Edge}" BorderThickness="1" CornerRadius="19">
-   <Grid Margin="14,0,12,0"><Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
-    <TextBox x:Name="Search" Grid.Column="1" BorderThickness="0" Background="Transparent" Padding="4,7,4,7" MaxLength="80"/>
-    <TextBlock x:Name="SearchHint" Grid.Column="1" Margin="6,0,0,0" Opacity="0.55" IsHitTestVisible="False" VerticalAlignment="Center"/>
-   </Grid>
-  </Border>
-  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="Navigation"/></ScrollViewer>
-  <Grid Grid.Row="1" Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-   <TextBlock x:Name="Heading" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,18"/>
-   <ScrollViewer x:Name="ContentScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="Body" Margin="0,0,14,12"/></ScrollViewer>
-  </Grid>
-  <TextBlock x:Name="Status" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,12,0,0" FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
- </Grid>
-</Window>
-'@
-$global:LU_window=[System.Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader($markup)))
-foreach ($name in @('Search','SearchFrame','SearchHint','Navigation','Heading','Body','Status','ContentScroll','NavToggle','NavTitle','NavColumn')) { Set-Variable -Name ('LU_'+$name) -Scope Global -Value $global:LU_window.FindName($name) }
-function global:Theme {
-    $light=$global:LU_data.light
-    $handle=(New-Object System.Windows.Interop.WindowInteropHelper($global:LU_window)).Handle
-    $glass=$false
-    if($handle -ne [IntPtr]::Zero){
-        $glass=[LuBackdrop]::Apply($handle,($global:LU_data.blur -and ![System.Windows.SystemParameters]::HighContrast),!$light)
-        $source=[System.Windows.Interop.HwndSource]::FromHwnd($handle)
-        if($source){$source.CompositionTarget.BackgroundColor=[System.Windows.Media.Colors]::Transparent}
-    }
-    $global:LU_window.Background=Brush $(if($glass){'#12000000'}elseif($light){'#F3F3F7'}else{'#202022'})
-    $global:LU_window.Foreground=Brush $(if($light){'#202024'}else{'#F4F4F6'})
-    $global:LU_window.Resources['Card']=Brush $(if($glass){if($light){'#A8FFFFFF'}else{'#A82D2D30'}}elseif($light){'#FFFFFF'}else{'#2D2D30'})
-    $global:LU_window.Resources['Edge']=Brush $(if($light){'#20000000'}else{'#30FFFFFF'})
-    $global:LU_window.Resources['Accent']=Brush $global:LU_data.accent
-    $global:LU_window.Resources['TextColor']=Brush $(if($light){'#202024'}else{'#F4F4F6'})
-    $global:LU_window.Resources['ControlFill']=Brush $(if($light){'#FEFEFE'}else{'#38383B'})
-    $global:LU_window.Resources['ControlEdge']=Brush $(if($light){'#26000000'}else{'#28FFFFFF'})
-    $global:LU_window.Resources['ControlHover']=Brush $(if($light){'#0B000000'}else{'#10FFFFFF'})
-    $global:LU_window.Resources['SelectionFill']=Brush $(if($light){'#10000000'}else{'#18FFFFFF'})
-    $global:LU_window.Resources['PopupFill']=Brush $(if($light){'#FAFAFC'}else{'#2C2C30'})
-}
-function global:Save($key,$value) {
-    if($global:LU_building){return}
-    try {
-        $r=Rpc @{op='set';key=$key;value=[string]$value}
-        $global:LU_Status.Text=$r.message
-        if(!$r.ok){return}
-        $global:LU_data=Rpc @{op='schema'}
-        if($key -eq 'language' -or $key -eq 'settingsBlur'){ Build }
-    } catch { $global:LU_Status.Text=$_.Exception.Message }
-}
-function global:Button($caption,$action) {
-    $b=New-Object System.Windows.Controls.Button; $b.Content=$caption
-    $b.Add_Click($action); return $b
-}
-function global:Card($spec) {
-    $card=New-Object System.Windows.Controls.Border
-    $card.CornerRadius=7; $card.BorderThickness=1; $card.Padding='16,14,16,14'; $card.Margin='0,0,0,3'
-    $card.SetResourceReference([System.Windows.Controls.Border]::BackgroundProperty,'Card')
-    $card.SetResourceReference([System.Windows.Controls.Border]::BorderBrushProperty,'Edge')
-    $row=New-Object System.Windows.Controls.Grid
-    $a=New-Object System.Windows.Controls.ColumnDefinition; $a.Width=New-Object System.Windows.GridLength(1,[System.Windows.GridUnitType]::Star)
-    $b=New-Object System.Windows.Controls.ColumnDefinition; $b.Width=[System.Windows.GridLength]::Auto
-    $row.ColumnDefinitions.Add($a);$row.ColumnDefinitions.Add($b)
-    $label=New-Object System.Windows.Controls.StackPanel; $label.Margin='0,0,20,0'; $label.VerticalAlignment='Center'
-    $label.Children.Add((Text $spec.label)) > $null
-    if($spec.help){$h=Text $spec.help 12; $h.Opacity=.65;$h.Margin='0,4,0,0';$label.Children.Add($h)>$null}
-    $row.Children.Add($label)>$null
-    $key=[string]$spec.key
-    if($spec.type -eq 'toggle') {
-        $editor=New-Object System.Windows.Controls.Primitives.ToggleButton; $editor.IsChecked=($spec.value -eq '1')
-        [System.Windows.Automation.AutomationProperties]::SetName($editor,$spec.label)
-        $editor.Add_Click({param($sender,$e);Save $key $(if($sender.IsChecked){'1'}else{'0'})}.GetNewClosure())
-    } elseif($spec.type -eq 'choice') {
-        $editor=New-Object System.Windows.Controls.ComboBox; $editor.Width=215; $editor.Padding='8,6,8,6'
-        foreach($o in $spec.options){$item=New-Object System.Windows.Controls.ComboBoxItem;$item.Content=$o.label;$item.Tag=$o.value;$editor.Items.Add($item)>$null;if($o.value -eq $spec.value){$editor.SelectedItem=$item}}
-        $editor.Add_SelectionChanged({param($sender,$e);if($sender.SelectedItem){Save $key ([string]$sender.SelectedItem.Tag)}}.GetNewClosure())
-    } else {
-        $editor=New-Object System.Windows.Controls.StackPanel; $editor.Orientation='Horizontal'
-        if($spec.type -eq 'password') {$box=New-Object System.Windows.Controls.PasswordBox;$box.Password=$spec.value;$box.MaxLength=$spec.maximum}
-        else {$box=New-Object System.Windows.Controls.TextBox;$box.Text=$spec.value;$box.MaxLength=$(if($spec.type -eq 'number'){8}else{$spec.maximum})}
-        $box.Width=$(if($spec.type -eq 'number'){90}else{190});$box.Margin='0,0,6,0';$box.VerticalContentAlignment='Center'
-        $type=[string]$spec.type
-        $save=Button $global:LU_data.words.save ({ $value=if($type -eq 'password'){$box.Password}else{$box.Text};Save $key $value }.GetNewClosure())
-        $editor.Children.Add($box)>$null;$editor.Children.Add($save)>$null
-    }
-    $editor.VerticalAlignment='Center';[System.Windows.Controls.Grid]::SetColumn($editor,1);$row.Children.Add($editor)>$null
-    $card.Child=$row;return $card
-}
-function global:RenderMemory {
-    if($global:LU_section -ne 6 -or $global:LU_Search.Text){return}
-    try {
-        $m=Rpc @{op='memory'}
-        if(!$m.valid){return}
-        $global:LU_Temperature.Text=$m.temperature
-        $global:LU_MemorySummary.Text=$m.summary
-        $global:LU_MemoryProgress.Value=$m.percent
-        $global:LU_MemoryDetails.Text=$m.details
-        $global:LU_DiskList.Children.Clear()
-        foreach($disk in $m.volumes){
-            $box=New-Object System.Windows.Controls.Border;$box.Padding='14';$box.Margin='0,0,0,6';$box.CornerRadius=7
-            $box.SetResourceReference([System.Windows.Controls.Border]::BackgroundProperty,'Card')
-            $stack=New-Object System.Windows.Controls.StackPanel
-            $title=Text $disk.name;$title.FontWeight='SemiBold';$stack.Children.Add($title)>$null
-            $bar=New-Object System.Windows.Controls.ProgressBar;$bar.Height=6;$bar.Maximum=100;$bar.Value=$disk.percent;$bar.Margin='0,9,0,7'
-            $bar.Foreground=Brush $(if($disk.percent -ge 90){'#C94F45'}else{$global:LU_data.accent})
-            $stack.Children.Add($bar)>$null;$stack.Children.Add((Text $disk.size 12))>$null
-            $box.Child=$stack;$global:LU_DiskList.Children.Add($box)>$null
-        }
-        $global:LU_MemoryList.Children.Clear()
-        foreach($app in $m.apps){
-            $line=New-Object System.Windows.Controls.Grid;$line.Margin='0,7,0,7'
-            $column=New-Object System.Windows.Controls.ColumnDefinition;$column.Width=New-Object System.Windows.GridLength(1,[System.Windows.GridUnitType]::Star);$line.ColumnDefinitions.Add($column)
-            $column=New-Object System.Windows.Controls.ColumnDefinition;$column.Width=[System.Windows.GridLength]::Auto;$line.ColumnDefinitions.Add($column)
-            $line.Children.Add((Text $app.name))>$null;$usage=Text $app.size;$usage.FontWeight='SemiBold';[System.Windows.Controls.Grid]::SetColumn($usage,1);$line.Children.Add($usage)>$null
-            $global:LU_MemoryList.Children.Add($line)>$null
-        }
-    } catch {$global:LU_Status.Text=$_.Exception.Message}
-}
-function global:Build {
-    $global:LU_building=$true
-    try {
-        Theme
-        $global:LU_window.Title=$global:LU_data.title;$global:LU_SearchHint.Text=$global:LU_data.words.search
-        $global:LU_NavColumn.Width=New-Object System.Windows.GridLength($(if($global:LU_sidebarCompact){54}else{212}))
-        $global:LU_NavTitle.Visibility=$(if($global:LU_sidebarCompact){'Collapsed'}else{'Visible'})
-        $global:LU_NavToggle.ToolTip=$global:LU_data.words.sidebar
-        $global:LU_Navigation.Children.Clear();$global:LU_Body.Children.Clear()
-        foreach($section in $global:LU_data.sections){
-            $id=[int]$section.id
-            $button=Button $(if($global:LU_sidebarCompact){$section.glyph}else{$section.glyph+'   '+$section.label}) ({ $global:LU_section=$id;$global:LU_Search.Text='';$null=Rpc @{op='watchMemory';on=($id -eq 6)};Build;$global:LU_ContentScroll.ScrollToTop() }.GetNewClosure())
-            $button.ToolTip=$section.label;[System.Windows.Automation.AutomationProperties]::SetName($button,$section.label)
-            $button.FontFamily='Segoe UI';$button.HorizontalContentAlignment='Left';$button.Margin='0,0,0,5';$button.MinHeight=44
-            if($id -eq $global:LU_section -and !$global:LU_Search.Text){$button.Background=Brush $global:LU_data.accent;$button.Foreground=Brush $global:LU_data.accentText}
-            $global:LU_Navigation.Children.Add($button)>$null
-        }
-        $query=$global:LU_Search.Text.Trim().ToLowerInvariant()
-        $global:LU_Heading.Text=$(if($query){$global:LU_data.words.results}else{$global:LU_data.sections[$global:LU_section].label})
-        $lastGroup=''
-        foreach($spec in $global:LU_data.settings){
-            if($query){if(($spec.label+' '+$spec.key+' '+$spec.group+' '+$spec.search).ToLowerInvariant().IndexOf($query) -lt 0){continue}}
-            elseif([int]$spec.section -ne $global:LU_section){continue}
-            if($spec.group -ne $lastGroup){$heading=Text $spec.group 14;$heading.FontWeight='SemiBold';$heading.Margin='2,20,0,10';$global:LU_Body.Children.Add($heading)>$null;$lastGroup=$spec.group}
-            $global:LU_Body.Children.Add((Card $spec))>$null
-        }
-        if(!$query -and $global:LU_section -eq 0){
-            $button=Button $global:LU_data.words.restore { $null=Rpc @{op='restore'} }
-            $button.HorizontalAlignment='Left';$button.Margin='0,14,0,0';$global:LU_Body.Children.Add($button)>$null
-        }
-        if(!$query -and $global:LU_section -eq 6){
-            $global:LU_Temperature=Text '' 18;$global:LU_Temperature.Margin='0,16,0,8';$global:LU_Body.Children.Add($global:LU_Temperature)>$null
-            $global:LU_MemorySummary=Text '' 24;$global:LU_MemorySummary.Margin='0,20,0,12';$global:LU_Body.Children.Add($global:LU_MemorySummary)>$null
-            $global:LU_MemoryProgress=New-Object System.Windows.Controls.ProgressBar;$global:LU_MemoryProgress.Height=8;$global:LU_MemoryProgress.Maximum=100;$global:LU_MemoryProgress.Foreground=Brush $global:LU_data.accent;$global:LU_Body.Children.Add($global:LU_MemoryProgress)>$null
-            $global:LU_MemoryDetails=Text '' 12;$global:LU_MemoryDetails.Opacity=.7;$global:LU_MemoryDetails.Margin='0,12,0,14';$global:LU_Body.Children.Add($global:LU_MemoryDetails)>$null
-            $buttons=New-Object System.Windows.Controls.StackPanel;$buttons.Orientation='Horizontal'
-            $buttons.Children.Add((Button $global:LU_data.words.taskmgr {$null=Rpc @{op='taskmgr'}}))>$null
-            $buttons.Children.Add((Button $global:LU_data.words.closeSettings {$global:LU_window.Close()}))>$null
-            $global:LU_Body.Children.Add($buttons)>$null
-            $heading=Text $global:LU_data.words.storage 16;$heading.FontWeight='SemiBold';$heading.Margin='0,24,0,12';$global:LU_Body.Children.Add($heading)>$null
-            $global:LU_DiskList=New-Object System.Windows.Controls.StackPanel;$global:LU_Body.Children.Add($global:LU_DiskList)>$null
-            $storageButton=Button $global:LU_data.words.storageSettings {$null=Rpc @{op='storageSettings'}};$storageButton.HorizontalAlignment='Left';$global:LU_Body.Children.Add($storageButton)>$null
-            $heading=Text $global:LU_data.words.apps 16;$heading.FontWeight='SemiBold';$heading.Margin='0,24,0,12';$global:LU_Body.Children.Add($heading)>$null
-            $global:LU_MemoryList=New-Object System.Windows.Controls.StackPanel;$global:LU_Body.Children.Add($global:LU_MemoryList)>$null
-            RenderMemory
-        }
-        $global:LU_Status.Text=$global:LU_data.status
-    } finally {$global:LU_building=$false}
-}
-$global:LU_NavToggle.Add_Click({
-    $global:LU_sidebarCompact=!$global:LU_sidebarCompact
-    try{$null=Rpc @{op='sidebar';compact=$global:LU_sidebarCompact}}catch{}
-    Build
-})
-$global:LU_searchTimer=New-Object System.Windows.Threading.DispatcherTimer
-$global:LU_searchTimer.Interval=[TimeSpan]::FromMilliseconds(200)
-$global:LU_searchTimer.Add_Tick({$global:LU_searchTimer.Stop();Build})
-$global:LU_Search.Add_TextChanged({$global:LU_SearchHint.Visibility=$(if($global:LU_Search.Text){'Collapsed'}else{'Visible'});if(!$global:LU_building){$global:LU_searchTimer.Stop();$global:LU_searchTimer.Start()}})
-$global:LU_window.Add_SizeChanged({
-    $global:LU_SearchFrame.Width=[Math]::Min(560,[Math]::Max(300,$global:LU_window.ActualWidth-450))
-})
-$global:LU_timer=New-Object System.Windows.Threading.DispatcherTimer
-$global:LU_timer.Interval=[TimeSpan]::FromSeconds(5)
-$global:LU_timer.Add_Tick({
-    try {
-        if($global:LU_window.WindowState -eq 'Minimized'){return}
-        $v=Rpc @{op='version'}
-        if($v.revision -ne $global:LU_data.revision -and !($global:LU_window.IsKeyboardFocusWithin -and ([System.Windows.Input.Keyboard]::FocusedElement -is [System.Windows.Controls.TextBox] -or [System.Windows.Input.Keyboard]::FocusedElement -is [System.Windows.Controls.PasswordBox]))){$global:LU_data=Rpc @{op='schema'};Build}
-        RenderMemory
-    } catch { $global:LU_timer.Stop();$global:LU_window.Close() }
-})
-$global:LU_window.Add_StateChanged({try{$null=Rpc @{op='watchMemory';on=($global:LU_section -eq 6 -and $global:LU_window.WindowState -ne 'Minimized')}}catch{}})
-$global:LU_window.Add_ContentRendered({try{$null=Rpc @{op='ready'};Theme}catch{}})
-$global:LU_window.Add_Closed({$global:LU_timer.Stop();$global:LU_searchTimer.Stop();try{$null=Rpc @{op='close'}}catch{};$global:LU_pipe.Dispose()})
-Build
-$global:LU_timer.Start()
-$null=$global:LU_window.ShowDialog()
-}
 
-
-)V29PS";
-DWORD WINAPI SettingsHostThread(void*) {
-    HANDLE pipe=INVALID_HANDLE_VALUE, child=nullptr, inputRead=nullptr, inputWrite=nullptr, nullOutput=INVALID_HANDLE_VALUE, job=nullptr;
-    bool apartment=false;
-    try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded); apartment=true;
-        GUID guid; winrt::check_hresult(CoCreateGuid(&guid));
-        std::wstring pipeName=L"LiveUpdate.Settings."+std::wstring(winrt::to_hstring(guid));
-        // Use the current user SID, not Everyone/Authenticated Users.
-        HANDLE token=nullptr; winrt::check_bool(OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token));
-        DWORD length=0; GetTokenInformation(token,TokenUser,nullptr,0,&length);
-        std::vector<BYTE> user(length); BOOL got=GetTokenInformation(token,TokenUser,user.data(),length,&length); CloseHandle(token); winrt::check_bool(got);
-        LPWSTR sid=nullptr; winrt::check_bool(ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(user.data())->User.Sid,&sid));
-        std::wstring acl=L"D:P(A;;GA;;;SY)(A;;GA;;;"+std::wstring(sid)+L")"; LocalFree(sid);
-        PSECURITY_DESCRIPTOR descriptor=nullptr; winrt::check_bool(ConvertStringSecurityDescriptorToSecurityDescriptorW(acl.c_str(),SDDL_REVISION_1,&descriptor,nullptr));
-        SECURITY_ATTRIBUTES pipeSecurity{sizeof(pipeSecurity),descriptor,FALSE};
-        pipe=CreateNamedPipeW((L"\\\\.\\pipe\\"+pipeName).c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED|FILE_FLAG_FIRST_PIPE_INSTANCE,
-            PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,1,65536,65536,0,&pipeSecurity);
-        LocalFree(descriptor); winrt::check_bool(pipe!=INVALID_HANDLE_VALUE);
-        SECURITY_ATTRIBUTES inherit{sizeof(inherit),nullptr,TRUE};
-        winrt::check_bool(CreatePipe(&inputRead,&inputWrite,&inherit,65536)); SetHandleInformation(inputWrite,HANDLE_FLAG_INHERIT,0);
-        nullOutput=CreateFileW(L"NUL",GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,&inherit,OPEN_EXISTING,0,nullptr);
-        winrt::check_bool(nullOutput!=INVALID_HANDLE_VALUE);
-        STARTUPINFOEXW startup{}; startup.StartupInfo.cb=sizeof(startup);
-        startup.StartupInfo.dwFlags=STARTF_USESTDHANDLES; startup.StartupInfo.hStdInput=inputRead;
-        startup.StartupInfo.hStdOutput=nullOutput; startup.StartupInfo.hStdError=nullOutput;
-        SIZE_T attributeBytes=0; InitializeProcThreadAttributeList(nullptr,1,0,&attributeBytes);
-        std::vector<BYTE> attributes(attributeBytes); startup.lpAttributeList=reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
-        winrt::check_bool(InitializeProcThreadAttributeList(startup.lpAttributeList,1,0,&attributeBytes));
-        HANDLE handles[]={inputRead,nullOutput};
-        BOOL attributeOk=UpdateProcThreadAttribute(startup.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,handles,sizeof(handles),nullptr,nullptr);
-        WCHAR directory[MAX_PATH]; UINT n=GetSystemDirectoryW(directory,ARRAYSIZE(directory));
-        std::wstring executable=n && n<ARRAYSIZE(directory) ? std::wstring(directory)+L"\\WindowsPowerShell\\v1.0\\powershell.exe" : L"";
-        std::wstring command=L"\""+executable+L"\" -NoLogo -NoProfile -NonInteractive -STA -WindowStyle Hidden -Command -";
-        PROCESS_INFORMATION process{};
-        BOOL launched=attributeOk && !executable.empty() && CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,TRUE,
-            CREATE_NO_WINDOW|CREATE_SUSPENDED|EXTENDED_STARTUPINFO_PRESENT,nullptr,nullptr,&startup.StartupInfo,&process);
-        DeleteProcThreadAttributeList(startup.lpAttributeList); winrt::check_bool(launched);
-        child=process.hProcess; g_settingsHostPid=process.dwProcessId;
-        job=CreateJobObjectW(nullptr,nullptr);
-        if(job) { JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{}; limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,&limits,sizeof(limits)) || !AssignProcessToJobObject(job,child)) {CloseHandle(job);job=nullptr;} }
-        ResumeThread(process.hThread);
-        CloseHandle(process.hThread);
-        CloseHandle(inputRead);
-        inputRead = nullptr;
-        CloseHandle(nullOutput);
-        nullOutput = INVALID_HANDLE_VALUE;
-        std::string script=kSettingsScript; auto marker=script.find("__PIPE__"); script.replace(marker,8,winrt::to_string(pipeName));
-        DWORD sent=0; winrt::check_bool(WriteFile(inputWrite,script.data(),static_cast<DWORD>(script.size()),&sent,nullptr) && sent==script.size());
-        CloseHandle(inputWrite); inputWrite=nullptr;
-        OVERLAPPED connection{}; connection.hEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr); winrt::check_bool(connection.hEvent!=nullptr);
-        BOOL connected=ConnectNamedPipe(pipe,&connection); DWORD error=GetLastError();
-        if(!connected && error==ERROR_IO_PENDING) {
-            HANDLE waits[]={g_liveStopEvent,child,connection.hEvent}; auto status=WaitForMultipleObjects(3,waits,FALSE,15000); DWORD bytes=0;
-            if(status==WAIT_OBJECT_0+2) connected=GetOverlappedResult(pipe,&connection,&bytes,FALSE);
-            else {CancelIoEx(pipe,&connection);GetOverlappedResult(pipe,&connection,&bytes,TRUE);}
-        } else if(!connected && error==ERROR_PIPE_CONNECTED) connected=TRUE;
-        CloseHandle(connection.hEvent); winrt::check_bool(connected);
-        ULONG client=0; winrt::check_bool(GetNamedPipeClientProcessId(pipe,&client) && client==process.dwProcessId);
-        std::string pending;
-        while(!g_shuttingDown) {
-            char bytes[4096]; DWORD received=0;
-            if(!SettingsPipeIO(pipe,child,bytes,sizeof(bytes),false,received) || !received) break;
-            pending.append(bytes,received); if(pending.size()>65536) break;
-            auto newline=pending.find('\n'); if(newline==std::string::npos) continue;
-            auto request=winrt::Windows::Data::Json::JsonObject::Parse(winrt::to_hstring(pending.substr(0,newline)));
-            pending.erase(0,newline+1);
-            auto response=winrt::to_string(SettingsRequest(request).Stringify())+"\n";
-            DWORD written=0; if(!SettingsPipeIO(pipe,child,response.data(),static_cast<DWORD>(response.size()),true,written) || written!=response.size()) break;
-            if(request.GetNamedString(L"op",L"")==L"close") break;
-        }
-    } catch (...) { if(!g_shuttingDown) Wh_Log(L"Settings host could not be started or disconnected"); }
-    g_memoryDetailsRequested=false; g_settingsHostPid=0;
-    if(pipe!=INVALID_HANDLE_VALUE){CancelIoEx(pipe,nullptr);DisconnectNamedPipe(pipe);CloseHandle(pipe);}
-    if(inputRead)CloseHandle(inputRead); if(inputWrite)CloseHandle(inputWrite); if(nullOutput!=INVALID_HANDLE_VALUE)CloseHandle(nullOutput);
-    if(job)CloseHandle(job); // Only this mod's settings child belongs to the job.
-    if(child)CloseHandle(child); if(apartment)winrt::uninit_apartment(); return 0;
-}
-void ShowQuickSettings() {
-    if(g_shuttingDown) return;
-    HideExpandedPopupImmediately(g_expandedPopup);
-    std::lock_guard<std::mutex> lock(g_settingsHostMutex);
-    if(g_settingsHostThread && WaitForSingleObject(g_settingsHostThread,0)==WAIT_TIMEOUT) {
-        DWORD pid=g_settingsHostPid.load();
-        EnumWindows([](HWND window,LPARAM value)->BOOL { DWORD pid=0;GetWindowThreadProcessId(window,&pid);
-            if (pid == static_cast<DWORD>(value) && IsWindowVisible(window)) {
-              ShowWindowAsync(window, SW_RESTORE);
-              SetForegroundWindow(window);
-              return FALSE;
-            }
-            return TRUE;
-        }, pid);
-        return;
-    }
-    if(g_settingsHostThread) CloseHandle(g_settingsHostThread);
-    g_settingsHostThread=CreateThread(nullptr,0,SettingsHostThread,nullptr,0,nullptr);
-}
 void SetQuickOption(PCWSTR key,std::wstring const& value) {
-    {std::lock_guard<std::mutex> lock(g_configStorageMutex);if(!Wh_SetStringValue((std::wstring(L"config.")+key).c_str(),value.c_str()))return;}
-    LoadSettings();++g_settingsRevision;g_popupBackdropDirty=true;WakeSettingsProviders();
+    std::wstring uiKey = std::wstring(L"ui.") + key;
+    Wh_SetStringValue(uiKey.c_str(), value.c_str());
+    LoadSettings();
+    ++g_settingsRevision;
+    g_popupBackdropDirty = true;
+    WakeSettingsProviders();
+    EnsureTaskbarWidgetInjectedOnThread();
     RefreshTaskbarWidgetData();
-}
-void ShowTaskbarContextMenu(wf::Point point) {
-    auto settings=GetSettings();bool vi=UseVietnameseLabels(settings);
-    if(g_quickMenu)g_quickMenu.Hide();
-    g_quickMenu=wuxc::MenuFlyout();
-    wuxc::ToggleMenuFlyoutItem collapse;collapse.Text(PickText(vi,L"Thu gọn Live Update",L"Collapse Live Update"));collapse.IsChecked(settings.collapsedTaskbar);
-    collapse.Click([](auto const& sender,auto const&){try{SetQuickOption(L"collapsedTaskbar",sender.template as<wuxc::ToggleMenuFlyoutItem>().IsChecked()?L"1":L"0");}catch(...){}});
-    g_quickMenu.Items().Append(collapse);
-    wuxc::MenuFlyoutSubItem themes;themes.Text(PickText(vi,L"Giao diện",L"Appearance"));
-    for(auto const& choice:WidgetSettingOptions(L"popupTheme")) {
-        wuxc::ToggleMenuFlyoutItem item;item.Text(vi?choice.vi:choice.en);item.IsChecked(settings.popupTheme==choice.value);
-        std::wstring value=choice.value;item.Click([value](auto const&,auto const&){try{SetQuickOption(L"popupTheme",value);}catch(...){}});themes.Items().Append(item);
-    }
-    g_quickMenu.Items().Append(themes);g_quickMenu.Items().Append(wuxc::MenuFlyoutSeparator());
-    wuxc::MenuFlyoutItem options;
-    options.Text(PickText(vi, L"Cài đặt", L"Settings"));
-    options.Click([](auto const&, auto const&) {
-        try { ShowQuickSettings(); } catch (...) {}
-    });
-    g_quickMenu.Items().Append(options);
-    g_quickMenu.Opened([](auto const&,auto const&){g_quickMenuOpen=true;});
-    g_quickMenu.Closed([](auto const&,auto const&){g_quickMenuOpen=false;});
-    g_quickMenu.ShowAt(g_playerGrid,point);
+    RequestPopupRefresh();
 }
 
-void StopSettingsHost() {
-    std::lock_guard<std::mutex> lock(g_settingsHostMutex);
-    if (g_settingsHostThread) {
-        CancelSynchronousIo(g_settingsHostThread);
-        WaitForSingleObject(g_settingsHostThread, INFINITE);
-        CloseHandle(g_settingsHostThread);
-        g_settingsHostThread = nullptr;
+void ShowTaskbarContextMenu(wux::FrameworkElement const& anchor) {
+    if (!anchor || !anchor.XamlRoot()) return;
+    auto settings = GetSettings();
+    bool vi = UseVietnameseLabels(settings);
+    if (g_quickMenu) {
+        try { g_quickMenu.Hide(); } catch (...) {}
+        g_quickMenu = nullptr;
+    }
+    g_quickMenu = wuxc::MenuFlyout();
+    g_quickMenu.XamlRoot(anchor.XamlRoot());
+    g_quickMenu.Opened([](auto const&, auto const&) { g_quickMenuOpen = true; });
+    g_quickMenu.Closed([](auto const&, auto const&) { g_quickMenuOpen = false; });
+
+    wuxc::ToggleMenuFlyoutItem collapse;
+    collapse.Text(PickText(vi, L"Thu gọn Live Update", L"Collapse Live Update"));
+    collapse.IsChecked(settings.collapsedTaskbar);
+    std::wstring nextCollapse = settings.collapsedTaskbar ? L"0" : L"1";
+    collapse.Click([nextCollapse](auto const&, auto const&) {
+        try { SetQuickOption(L"collapsedTaskbar", nextCollapse); } catch (...) {}
+    });
+    g_quickMenu.Items().Append(collapse);
+
+    wuxc::MenuFlyoutSubItem activities;
+    activities.Text(PickText(vi, L"Hoạt động hiển thị", L"Active widgets"));
+    struct QuickToggle {
+        PCWSTR key;
+        PCWSTR viName;
+        PCWSTR enName;
+        bool active;
+    };
+    const QuickToggle items[] = {
+        {L"enableLunarWidget", L"Âm lịch & Tử vi", L"Lunar calendar & Almanac", settings.enableLunarWidget},
+        {L"enableCultureWidget", L"Danh mục Văn hóa Việt", L"Vietnamese culture index", settings.enableCultureWidget},
+        {L"enableMediaWidget", L"Phương tiện", L"Media", settings.enableMediaWidget},
+        {L"enableClockWidget", L"Đồng hồ Windows", L"Windows Clock", settings.enableClockWidget},
+        {L"enableBatteryWidget", L"Pin", L"Battery", settings.enableBatteryWidget},
+        {L"bluetoothBattery", L"Pin Bluetooth", L"Bluetooth batteries", settings.bluetoothBattery},
+        {L"enablePrivacyWidget", L"Quyền riêng tư", L"Privacy activity", settings.enablePrivacyWidget},
+        {L"enableTaskProgress", L"Tiến trình tác vụ", L"Task progress", settings.enableTaskProgress},
+        {L"display.enabled", L"Màn hình & Trình chiếu", L"Displays & projection", settings.enableDisplayWidget},
+        {L"hotspot.enabled", L"Điểm phát sóng Wi-Fi", L"Wi-Fi hotspot", settings.enableHotspotWidget},
+        {L"enableObsWidget", L"Quay màn hình OBS", L"OBS recording", settings.enableObsWidget},
+    };
+    for (auto const& entry : items) {
+        wuxc::ToggleMenuFlyoutItem toggle;
+        toggle.Text(PickText(vi, entry.viName, entry.enName));
+        toggle.IsChecked(entry.active);
+        PCWSTR key = entry.key;
+        std::wstring nextVal = entry.active ? L"0" : L"1";
+        toggle.Click([key, nextVal](auto const&, auto const&) {
+            try { SetQuickOption(key, nextVal); } catch (...) {}
+        });
+        activities.Items().Append(toggle);
+    }
+    g_quickMenu.Items().Append(activities);
+
+    wuxc::MenuFlyoutSubItem themes;
+    themes.Text(PickText(vi, L"Giao diện bề mặt", L"Surface theme"));
+    for (auto const& choice : WidgetSettingOptions(L"popupTheme")) {
+        wuxc::ToggleMenuFlyoutItem item;
+        item.Text(vi ? choice.vi : choice.en);
+        item.IsChecked(settings.popupTheme == choice.value);
+        std::wstring value = choice.value;
+        item.Click([value](auto const&, auto const&) {
+            try { SetQuickOption(L"popupTheme", value); } catch (...) {}
+        });
+        themes.Items().Append(item);
+    }
+    g_quickMenu.Items().Append(themes);
+
+    wuxc::MenuFlyoutSubItem positions;
+    positions.Text(PickText(vi, L"Vị trí trên taskbar", L"Taskbar position"));
+    for (auto const& choice : WidgetSettingOptions(L"position")) {
+        wuxc::ToggleMenuFlyoutItem item;
+        item.Text(vi ? choice.vi : choice.en);
+        item.IsChecked(settings.position == choice.value);
+        std::wstring value = choice.value;
+        item.Click([value](auto const&, auto const&) {
+            try { SetQuickOption(L"position", value); } catch (...) {}
+        });
+        positions.Items().Append(item);
+    }
+    g_quickMenu.Items().Append(positions);
+
+    wuxc::MenuFlyoutSubItem styles;
+    styles.Text(PickText(vi, L"Kiểu thanh tiến trình", L"Progress bar style"));
+    for (auto const& choice : WidgetSettingOptions(L"progressStyle")) {
+        wuxc::ToggleMenuFlyoutItem item;
+        item.Text(vi ? choice.vi : choice.en);
+        item.IsChecked(settings.progressStyle == choice.value);
+        std::wstring value = choice.value;
+        item.Click([value](auto const&, auto const&) {
+            try { SetQuickOption(L"progressStyle", value); } catch (...) {}
+        });
+        styles.Items().Append(item);
+    }
+    g_quickMenu.Items().Append(styles);
+
+    if (!g_hiddenActivities.empty()) {
+        g_quickMenu.Items().Append(wuxc::MenuFlyoutSeparator());
+        wuxc::MenuFlyoutItem restore;
+        restore.Text(PickText(vi, L"Hiện lại các mục đã ẩn", L"Show hidden widgets"));
+        restore.Click([](auto const&, auto const&) {
+            g_hiddenActivities.clear();
+            RefreshTaskbarWidgetData();
+            RequestPopupRefresh();
+        });
+        g_quickMenu.Items().Append(restore);
+    }
+
+    g_quickMenu.Items().Append(wuxc::MenuFlyoutSeparator());
+    wuxc::MenuFlyoutItem reset;
+    reset.Text(PickText(vi, L"Khôi phục theo cài đặt Windhawk", L"Reset to Windhawk settings"));
+    reset.Click([](auto const&, auto const&) {
+        try {
+            g_hiddenActivities.clear();
+            LoadSettings(true);
+            ++g_settingsRevision;
+            g_popupBackdropDirty = true;
+            WakeSettingsProviders();
+            EnsureTaskbarWidgetInjectedOnThread();
+            RefreshTaskbarWidgetData();
+            RequestPopupRefresh();
+        } catch (...) {}
+    });
+    g_quickMenu.Items().Append(reset);
+
+    HWND hostWnd = (anchor == g_playerGrid) ? g_taskbarWnd : g_expandedPopup;
+    if (hostWnd) {
+        SetForegroundWindow(hostWnd);
+    }
+    wuxc::Primitives::FlyoutShowOptions options;
+    options.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+    g_quickMenu.ShowAt(anchor, options);
+}
+
+void ShowTaskbarContextMenu(wf::Point point) {
+    if (!g_playerGrid || !g_playerGrid.XamlRoot()) return;
+    ShowTaskbarContextMenu(g_playerGrid);
+    (void)point;
+}
+
+void ShowQuickSettings() {
+    if (g_quickSettings && g_expandedPopup && IsWindowVisible(g_expandedPopup)) {
+        ShowTaskbarContextMenu(g_quickSettings);
+    } else if (g_playerGrid) {
+        ShowTaskbarContextMenu(g_playerGrid);
     }
 }
+
+void StopSettingsHost() {}
 void RefreshSettingsWindow() { ++g_settingsRevision; }
 
 std::vector<ActivityKind> CurrentActivities(ModSettings const& settings) {
@@ -8666,7 +7545,7 @@ void RefreshLivePopupPage(bool vi, bool light) {
         g_popupLiveProgress.Visibility(!g_showUsage && b.valid && b.present && b.percent >= 0
             ? wux::Visibility::Visible : wux::Visibility::Collapsed);
         if (g_showUsage) {
-            g_popupTitleSolar.Text(PickText(vi, L"Thời gian sử dụng ứng dụng", L"App usage time"));
+            g_popupTitleSolar.Text(PickText(vi, L"Cài đặt nguồn & pin", L"Power & battery settings"));
             g_popupLiveTitle.Text(L""); g_popupLiveDetail.Text(L""); g_popupLiveStatus.Text(L"");
         }
     }
@@ -10072,25 +8951,9 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_privacyAppList = wuxc::StackPanel(); g_privacyAppList.Spacing(6);
         liveBody.Children().Append(g_privacyAppList); liveBody.Children().Append(g_privacySelector);
         g_batteryTools = wuxc::StackPanel(); g_batteryTools.Spacing(0);
-        g_powerAcCombo = wuxc::ComboBox(); g_powerDcCombo = wuxc::ComboBox();
-        for (auto combo : {g_powerAcCombo, g_powerDcCombo}) {
-            combo.HorizontalAlignment(wux::HorizontalAlignment::Stretch); combo.MinWidth(0); combo.Margin({0, 0, 0, 8});
-            g_batteryTools.Children().Append(combo);
-        }
-        g_powerAcCombo.SelectionChanged([](auto const&, auto const&) {
-            if (g_updatingPowerModes || g_powerAcCombo.SelectedIndex() < 0) return;
-            PromotePopupToManual(); g_powerModeRequest = g_powerAcCombo.SelectedIndex();
-            if (g_liveWakeEvent) SetEvent(g_liveWakeEvent);
-        });
-        g_powerDcCombo.SelectionChanged([](auto const&, auto const&) {
-            if (g_updatingPowerModes || g_powerDcCombo.SelectedIndex() < 0) return;
-            PromotePopupToManual(); g_powerModeRequest = 3 + g_powerDcCombo.SelectedIndex();
-            if (g_liveWakeEvent) SetEvent(g_liveWakeEvent);
-        });
-        g_powerModeStatus = WrappedText(L"", 11); g_batteryTools.Children().Append(g_powerModeStatus);
         g_usageButton = wuxc::Button(); g_usageButton.CornerRadius({6, 6, 6, 6}); g_usageButton.Margin({0, 0, 0, 8});
         g_usageButton.Click([](auto const&, auto const&) {
-            PromotePopupToManual(); g_showUsage = !g_showUsage; g_forcePowerRefresh = true;
+            ShellExecuteW(nullptr, L"open", L"ms-settings:powersleep", nullptr, nullptr, SW_SHOWNORMAL);
             if (g_liveWakeEvent) SetEvent(g_liveWakeEvent); RequestPopupRefresh();
         });
         g_batteryTools.Children().Append(g_usageButton);
@@ -10172,7 +9035,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_quickSettings.Content(FluentIcon(L"\uE713", 17)); g_quickSettings.Margin({6, 0, 0, 0});
         g_collapseTaskbar = makeNavBtn(L"", [](auto const&, auto const&) noexcept {
             try { PromotePopupToManual(); auto value=GetSettings().collapsedTaskbar ? L"0" : L"1";
-                { std::lock_guard<std::mutex> lock(g_configStorageMutex); if(!Wh_SetStringValue(L"config.collapsedTaskbar",value)) return; }
+                if (!Wh_SetStringValue(L"ui.collapsedTaskbar", value)) return;
                 LoadSettings(); ++g_settingsRevision; RefreshTaskbarWidgetData(); RequestPopupRefresh();
             } catch (...) {}
         });
@@ -10865,18 +9728,48 @@ wuxc::Border BuildTaskbarWidgetElement(ModSettings const& settings) {
         args.Handled(true);
     });
 
-    rootBorder.PointerPressed([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const& args) {
-        if(!IsSourceInsideButton(args.OriginalSource()) && args.GetCurrentPoint(g_playerGrid).Properties().IsLeftButtonPressed()) {
-            g_widgetPressed=true;UpdateWidgetHoverVisual();
+rootBorder.PointerPressed([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const& args) {
+        if (g_shuttingDown) return;
+        auto props = args.GetCurrentPoint(g_playerGrid).Properties();
+        if (props.IsRightButtonPressed()) {
+            args.Handled(true);
+            return;
+        }
+        if (!IsSourceInsideButton(args.OriginalSource()) && props.IsLeftButtonPressed()) {
+            g_widgetPressed = true;
+            UpdateWidgetHoverVisual();
         }
         args.Handled(true);
     });
-    auto release=[](wf::IInspectable const&,wuxi::PointerRoutedEventArgs const&){g_widgetPressed=false;UpdateWidgetHoverVisual();};
-    rootBorder.PointerReleased(release);rootBorder.PointerCanceled(release);rootBorder.PointerCaptureLost(release);
 
-    rootBorder.RightTapped([](wf::IInspectable const&,wuxi::RightTappedRoutedEventArgs const& args){
-        args.Handled(true);if(!g_shuttingDown)try{ShowTaskbarContextMenu(args.GetPosition(g_playerGrid));}catch(...){}
+    rootBorder.PointerReleased([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const& args) {
+        if (g_shuttingDown) return;
+        auto pt = args.GetCurrentPoint(g_playerGrid);
+        if (pt.Properties().PointerUpdateKind() == winrt::Windows::UI::Input::PointerUpdateKind::RightButtonReleased) {
+            g_widgetPressed = false;
+            UpdateWidgetHoverVisual();
+            args.Handled(true);
+            try { ShowTaskbarContextMenu(g_playerGrid); } catch (...) {}
+            return;
+        }
+        g_widgetPressed = false;
+        UpdateWidgetHoverVisual();
     });
+
+    auto cancelRelease = [](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const&) {
+        g_widgetPressed = false;
+        UpdateWidgetHoverVisual();
+    };
+    rootBorder.PointerCanceled(cancelRelease);
+    rootBorder.PointerCaptureLost(cancelRelease);
+
+    rootBorder.RightTapped([](wf::IInspectable const&, wuxi::RightTappedRoutedEventArgs const& args) {
+        args.Handled(true);
+        if (!g_shuttingDown) {
+            try { ShowTaskbarContextMenu(g_playerGrid); } catch (...) {}
+        }
+    });
+
     rootBorder.Tapped([](wf::IInspectable const&, wuxi::TappedRoutedEventArgs const& args) {
         if (!g_shuttingDown && !IsSourceInsideButton(args.OriginalSource())) ToggleExpandedPopup();
         args.Handled(true);
