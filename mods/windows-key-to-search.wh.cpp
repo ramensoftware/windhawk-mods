@@ -8,7 +8,6 @@
 // @include         windhawk.exe
 // @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
-// @include         windhawk-mod-elevated.exe
 // @compilerOptions -luser32 -lshell32 -ladvapi32 -lole32
 // @license         MIT
 // ==/WindhawkMod==
@@ -19,25 +18,42 @@
 
 Tap either Windows key to open Search instead of Start. Search opens when the
 key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
-and Win+S continue to work normally. Mouse activity and keys held before a
-Windows-key tap no longer cancel Search. The generated Win+S is held briefly
-(50 ms) before release, matching a normal shortcut press.
+and Win+S continue to work normally. The generated shortcut is held for 50 ms
+before release.
 
-The mod runs in a separate helper process with a dedicated keyboard thread.
-On Windhawk 1.7.3, enabling the mod explicitly launches its helper with the
-Windows "Run as administrator" verb. Accept the Windows UAC prompt if shown.
-The helper verifies administrator access before installing the keyboard hook;
-it logs an error rather than silently running with insufficient access.
-After updating, disable and re-enable the mod to restart the helper.
+By default, the helper runs without requesting administrator privileges. On
+Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
+On Windhawk 2.0 alpha 4 or later, the mod requests UIAccess, which also covers
+administrator windows when that host is available.
 
-On Windhawk 2.0 alpha 4 or later, the mod requests the elevated host, with
-UIAccess as a fallback. UAC's secure desktop is outside the scope of the mod.
+The optional **Support administrator windows on Windhawk 1.7.3** setting launches
+an elevated helper. It is off by default. Enabling it can show a UAC prompt at
+every sign-in, and after enabling or updating the mod. The prompt runs on a
+background thread, and an already-running helper prevents another prompt.
+If elevation is cancelled, the helper runs normally instead. Disable and
+re-enable the mod after changing this setting. On Windhawk 2.0, leave this
+setting off and use its UIAccess host.
 
-The launcher is adapted from the [official tool-mod implementation](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process),
-with explicit elevation instead of inherited launch privileges.
-Other keyboard remappers may interact with this mod.
+The helper uses Windhawk's [tool-mod launcher](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process),
+with an optional background elevation path on older Windhawk versions.
+
+Windows-key mouse gestures used by tools such as AltDrag or AltSnap are not
+supported: the mod withholds the Windows key until another keyboard key is
+pressed. UAC's secure desktop is outside the scope of the mod.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- supportAdministratorWindows: false
+  $name: Support administrator windows on Windhawk 1.7.3
+  $description: >-
+    Launch an administrator helper. This can show a UAC prompt at every sign-in
+    and after enabling or updating the mod. Off by default. If cancelled, normal
+    windows still work. Disable and re-enable the mod after changing this option.
+    Leave off on Windhawk 2.0, which provides a UIAccess host.
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
@@ -46,13 +62,17 @@ Other keyboard remappers may interact with this mod.
 namespace {
 constexpr ULONG_PTR kInputTag = 0x57485352;
 constexpr UINT kOpenSearchMessage = WM_APP + 1;
-constexpr UINT kTraceKeyMessage = WM_APP + 2;
 // Unassigned virtual key, used to prevent a Win release from opening Start.
 constexpr WORD kMenuMaskKey = 0xE8;
 HANDLE g_thread;
 HANDLE g_ready;
 DWORD g_threadId;
 bool g_hooksInstalled;
+bool g_hasElevatedInputAccess;
+bool g_canRemapForeground;
+HWND g_cachedForeground;
+HANDLE g_elevationThread;
+HANDLE g_elevationThreadDone;
 bool g_keys[256];
 bool g_tap[2];
 bool g_pending[2];
@@ -137,10 +157,6 @@ bool CompleteSearch(const KBDLLHOOKSTRUCT* replay = nullptr, bool up = false) {
 
 void OpenSearch(WORD win) {
     CompleteSearch();
-    DWORD foregroundPid = 0;
-    GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
-    Wh_Log(L"Search request: foreground PID=%lu; hold=%u ms", foregroundPid,
-           kSearchHoldMs);
     // Query held keys only after the physical Win-up callback has returned.
     const WORD keys[] = {VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
                          VK_LMENU, VK_RMENU, 'S'};
@@ -158,7 +174,6 @@ void OpenSearch(WORD win) {
     g_searchWin = win;
     g_searchActive = true;
     const bool accepted = Inject(inputs, count);
-    Wh_Log(L"Search key-down batch: events=%u accepted=%d", count, accepted);
     if (!accepted) {
         CompleteSearch();
         return;
@@ -177,22 +192,21 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         return CallNextHookEx(nullptr, code, message, param);
     }
     const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
-    // Log only Windows-key events and our generated shortcut. Queue the trace
-    // so debugger output cannot block the low-level hook callback itself.
-    if (IsWindowsKey(key.vkCode) ||
-        (key.dwExtraInfo == kInputTag && key.vkCode == 'S')) {
-        const LPARAM trace = key.flags |
-            (key.dwExtraInfo == kInputTag ? 0x100 : 0) |
-            ((message == WM_KEYDOWN || message == WM_SYSKEYDOWN) ? 0x200 : 0) |
-            (g_pending[0] ? 0x400 : 0) | (g_pending[1] ? 0x800 : 0);
-        PostThreadMessageW(g_threadId, kTraceKeyMessage, key.vkCode, trace);
-    }
     if (key.dwExtraInfo == kInputTag || key.vkCode >= 256) {
         return CallNextHookEx(nullptr, code, message, param);
     }
     const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
     const bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
     if (!down && !up) {
+        return CallNextHookEx(nullptr, code, message, param);
+    }
+    if (!g_hasElevatedInputAccess &&
+        (!g_canRemapForeground || GetForegroundWindow() != g_cachedForeground)) {
+        // Inaccessible/elevated foreground windows retain their original input.
+        ZeroMemory(g_keys, sizeof(g_keys));
+        ZeroMemory(g_pending, sizeof(g_pending));
+        ZeroMemory(g_tap, sizeof(g_tap));
+        ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
         return CallNextHookEx(nullptr, code, message, param);
     }
     if (g_searchActive) {
@@ -208,6 +222,17 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
     }
     const bool win = IsWindowsKey(key.vkCode);
     const int index = key.vkCode == VK_LWIN ? 0 : 1;
+    if (win && up && !g_keys[key.vkCode]) {
+        // A down outside our desktop/access scope must keep its original up.
+        return CallNextHookEx(nullptr, code, message, param);
+    }
+    if (win && down && g_keys[key.vkCode] && !g_swallowUp[index] &&
+        !(GetAsyncKeyState(key.vkCode) & 0x8000)) {
+        // This is the state BEFORE the current down. A forwarded key which is
+        // now up lost its release (for example, to Win+L's lock desktop).
+        g_keys[key.vkCode] = false;
+        g_pending[index] = g_tap[index] = false;
+    }
     if (down && win && g_keys[key.vkCode]) {
         // Discard repeat events while the initial down is withheld.
         if (g_swallowUp[index]) {
@@ -289,6 +314,52 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
     return CallNextHookEx(nullptr, code, message, param);
 }
 
+void ResetKeyTracking() {
+    ZeroMemory(g_keys, sizeof(g_keys));
+    ZeroMemory(g_pending, sizeof(g_pending));
+    ZeroMemory(g_tap, sizeof(g_tap));
+    ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
+}
+
+void RefreshForegroundAccess() {
+    g_cachedForeground = GetForegroundWindow();
+    g_canRemapForeground = g_hasElevatedInputAccess;
+    if (g_hasElevatedInputAccess) {
+        return;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(g_cachedForeground, &pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    HANDLE token = nullptr;
+    if (process && OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        TOKEN_ELEVATION elevation = {};
+        DWORD uiAccess = 0;
+        DWORD length = 0;
+        const BOOL readElevation = GetTokenInformation(
+            token, TokenElevation, &elevation, sizeof(elevation), &length);
+        const BOOL readUiAccess = GetTokenInformation(
+            token, TokenUIAccess, &uiAccess, sizeof(uiAccess), &length);
+        g_canRemapForeground = readElevation && readUiAccess &&
+                              !elevation.TokenIsElevated && !uiAccess;
+        CloseHandle(token);
+    }
+    if (process) {
+        CloseHandle(process);
+    }
+    if (!g_canRemapForeground) {
+        ResetKeyTracking();
+    }
+}
+
+void CALLBACK InputContextChanged(HWINEVENTHOOK, DWORD event, HWND, LONG,
+                                  LONG, DWORD, DWORD) {
+    if (event == EVENT_SYSTEM_DESKTOPSWITCH) {
+        // Releases on the lock screen/UAC desktop are invisible to our hook.
+        ResetKeyTracking();
+    }
+    RefreshForegroundAccess();
+}
+
 DWORD WINAPI HookThread(void*) {
     // Create the message queue before publishing readiness to ModInit.
     MSG message;
@@ -304,8 +375,15 @@ DWORD WINAPI HookThread(void*) {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       reinterpret_cast<LPCWSTR>(&KeyboardProc), &module);
+    HWINEVENTHOOK foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        InputContextChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+    HWINEVENTHOOK desktopHook = SetWinEventHook(
+        EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
+        InputContextChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+    RefreshForegroundAccess();
     HHOOK keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, module, 0);
-    g_hooksInstalled = keyboard != nullptr;
+    g_hooksInstalled = keyboard && foregroundHook && desktopHook;
     SetEvent(g_ready);
 
     if (g_hooksInstalled) {
@@ -314,20 +392,15 @@ DWORD WINAPI HookThread(void*) {
                 message.wParam == g_searchTimer) {
                 // Timer IDs can be reused while an old WM_TIMER is queued.
                 if (GetTickCount64() >= g_searchReleaseAt) {
-                    const bool released = CompleteSearch();
-                    Wh_Log(L"Search key-up batch: accepted=%d", released);
+                    CompleteSearch();
                 }
                 continue;
             }
-            if (message.message == kTraceKeyMessage) {
-                Wh_Log(L"Key trace: vk=%u down=%d own=%d flags=0x%02X pending=%d/%d",
-                       static_cast<UINT>(message.wParam),
-                       !!(message.lParam & 0x200), !!(message.lParam & 0x100),
-                       static_cast<UINT>(message.lParam & 0xFF),
-                       !!(message.lParam & 0x400), !!(message.lParam & 0x800));
-                continue;
-            }
             if (message.message == kOpenSearchMessage) {
+                RefreshForegroundAccess();
+                if (!g_canRemapForeground) {
+                    continue;
+                }
                 OpenSearch(static_cast<WORD>(message.wParam));
                 continue;
             }
@@ -338,6 +411,12 @@ DWORD WINAPI HookThread(void*) {
     CompleteSearch();
     if (keyboard) {
         UnhookWindowsHookEx(keyboard);
+    }
+    if (foregroundHook) {
+        UnhookWinEvent(foregroundHook);
+    }
+    if (desktopHook) {
+        UnhookWinEvent(desktopHook);
     }
     // A forwarded Windows key may still be held when the mod is disabled.
     INPUT releases[6] = {};
@@ -390,10 +469,7 @@ bool HasElevatedInputAccess() {
 }
 
 BOOL WhTool_ModInit() {
-    if (!HasElevatedInputAccess()) {
-        Wh_Log(L"Keyboard helper needs administrator access or UIAccess; not installing hook");
-        return FALSE;
-    }
+    g_hasElevatedInputAccess = HasElevatedInputAccess();
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_ready) {
         Cleanup();
@@ -420,7 +496,8 @@ void WhTool_ModSettingsChanged() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Adapted Windhawk tool mod implementation with explicit helper elevation.
+// Windhawk tool-mod launcher. The default CreateProcessInternalW path follows
+// the wiki snippet. The optional elevation path runs on a background thread.
 // For mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
@@ -519,11 +596,10 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+void LaunchStandardHelper() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
-
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
@@ -532,17 +608,84 @@ void Wh_ModAfterInit() {
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
 
-    // Explicit elevation is required: the regular Windhawk tray process can
-    // be unelevated even with its SYSTEM service running in the background.
-    // Inherited CreateProcess privileges therefore aren't sufficient here.
+bool IsToolHelperRunning() {
+    HANDLE helper = OpenMutexW(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+    if (helper) {
+        CloseHandle(helper);
+        return true;
+    }
+    // A higher-integrity helper may deny access; it still exists.
+    return GetLastError() == ERROR_ACCESS_DENIED;
+}
+
+DWORD WINAPI OptionalElevationThread(void*) {
+    // Hold a separate reservation through the prompt and helper startup. This
+    // prevents two launcher instances from showing concurrent UAC prompts.
+    HANDLE reservation = CreateMutexW(
+        nullptr, FALSE, L"Local\\Windhawk.Search.Launch_" WH_MOD_ID);
+    if (!reservation) {
+        Wh_Log(L"Could not reserve elevated helper launch");
+        return 0;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS || IsToolHelperRunning() ||
+        WaitForSingleObject(g_elevationThreadDone, 0) == WAIT_OBJECT_0) {
+        CloseHandle(reservation);
+        return 0;
+    }
+    WCHAR path[MAX_PATH];
+    DWORD pathLength = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!pathLength || pathLength == ARRAYSIZE(path)) {
+        CloseHandle(reservation);
+        return 0;
+    }
     WCHAR parameters[sizeof(L"-tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)];
     swprintf_s(parameters, L"-tool-mod \"%s\"", WH_MOD_ID);
     SHELLEXECUTEINFOW launch = {};
     launch.cbSize = sizeof(launch);
     launch.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
     launch.lpVerb = L"runas";
-    launch.lpFile = currentProcessPath;
+    launch.lpFile = path;
     launch.lpParameters = parameters;
     launch.nShow = SW_HIDE;
     const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -551,12 +694,50 @@ void Wh_ModAfterInit() {
     if (SUCCEEDED(com)) {
         CoUninitialize();
     }
-    if (!launched) {
-        Wh_Log(L"Elevated helper launch failed or was cancelled (error %lu)", error);
-        return;
+    if (!launched && WaitForSingleObject(g_elevationThreadDone, 0) != WAIT_OBJECT_0) {
+        Wh_Log(L"Elevation cancelled or unavailable (error %lu); using normal helper", error);
+        LaunchStandardHelper();
+    }
+    // Process creation can finish before Windhawk loads the mod into it. Keep
+    // the reservation until the helper owns its mutex (or startup times out).
+    const ULONGLONG deadline = GetTickCount64() + 10000;
+    while (GetTickCount64() < deadline && !IsToolHelperRunning() &&
+           WaitForSingleObject(g_elevationThreadDone, 50) == WAIT_TIMEOUT) {
+        if (launched && launch.hProcess &&
+            WaitForSingleObject(launch.hProcess, 0) == WAIT_OBJECT_0) {
+            break;
+        }
     }
     if (launch.hProcess) {
         CloseHandle(launch.hProcess);
+    }
+    CloseHandle(reservation);
+    return 0;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    if (!Wh_GetIntSetting(L"supportAdministratorWindows")) {
+        LaunchStandardHelper();
+        return;
+    }
+    if (IsToolHelperRunning()) {
+        return;
+    }
+    g_elevationThreadDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_elevationThreadDone) {
+        g_elevationThread = CreateThread(nullptr, 0, OptionalElevationThread,
+                                         nullptr, 0, nullptr);
+    }
+    if (!g_elevationThread) {
+        Wh_Log(L"Could not start elevation worker; using normal helper");
+        if (g_elevationThreadDone) {
+            CloseHandle(g_elevationThreadDone);
+            g_elevationThreadDone = nullptr;
+        }
+        LaunchStandardHelper();
     }
 }
 
@@ -570,6 +751,19 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
+        if (g_elevationThreadDone) {
+            SetEvent(g_elevationThreadDone);
+        }
+        if (g_elevationThread) {
+            // The DLL must remain mapped until its worker has returned.
+            WaitForSingleObject(g_elevationThread, INFINITE);
+            CloseHandle(g_elevationThread);
+            g_elevationThread = nullptr;
+        }
+        if (g_elevationThreadDone) {
+            CloseHandle(g_elevationThreadDone);
+            g_elevationThreadDone = nullptr;
+        }
         return;
     }
     WhTool_ModUninit();
