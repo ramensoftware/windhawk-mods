@@ -90,7 +90,7 @@ Windows without a saved preview use the regular theme-colored minimized card.
 - Stop navigation wrapping in stacks of five or more desktops and animate desktop-to-desktop transitions.
 - Add optional Alt+Tab navigation across virtual desktops and refine quick-tap/hold Win+Tab behavior.
 - Add live wallpaper-host previews while the switcher is open, with a static fallback.
-- Rebuild search indices after entering the overview to prevent stale Desktop-card access.
+- Rebuild search indices after entering the overview or removing closed windows, including Enchanted before typing.
 - Use cached snapshots or icons for minimized previews without restoring other apps.
 
 ## Modes
@@ -116,7 +116,7 @@ unselected windows when Hover Behavior is None. Click a preview to activate it.
 ## Search
 While CoverTabby is open, press **Alt+S**, type a window title or application name, then press **Enter**.
 Search Bar Scale changes the bar, icon and text together. Width adapts automatically.
-Disable Search Bar to remove its reserved space and center the content. Search is unavailable in Windowed mode and Tiles.
+Disable Search Bar to remove its reserved space and center the content. Search is unavailable in Windowed mode, Tiles and Aero 3D. Aero 3D also omits the icon strip, process statistics, hover Close/Pin/Kill controls, window count and reflections.
 
 ## Virtual desktops
 In the Win+Tab overview, desktop cards include the Windows taskbar on the current
@@ -184,7 +184,7 @@ Win+Tab opens the optional desktop overview. A quick tap leaves it open. Holding
 
 One to three desktops use a perspective carousel, four use a 2×2 grid, and larger sets use a Flip 3D stack. Click a desktop to activate it and close the overview; right-click to expand its preview and keep the overview open. The expanded view preserves each window's desktop position. The Desktops button returns to the gallery. Each HWND remains separate, including windows belonging to the same app.
 
-Minimized windows appear in a top strip with their icon, title and available thumbnail. Missing previews are requested one window at a time by temporarily restoring without activation, then restoring its minimized placement. This attempt has a 250 ms deadline and is cleaned up on cancellation or exit. Applications that do not provide a frame use an icon fallback. Click once to restore a minimized window without leaving the overview, and again to focus it and close. Drag windows to desktop cards or the desktop destination strip. Rename supports Enter and Escape. Closing an occupied desktop asks to move its windows to the first desktop; an empty desktop asks for confirmation. Desktop 1 remains protected.
+Minimized windows appear in a top strip with their icon, title and available thumbnail. Previews use cached snapshots when available, otherwise the icon. Opening the overview never restores minimized windows to obtain a preview. Click once to restore a minimized window without leaving the overview, and again to focus it and close. Drag windows to desktop cards or the desktop destination strip. Rename supports Enter and Escape. Closing an occupied desktop asks to move its windows to the first desktop; an empty desktop asks for confirmation. Desktop 1 remains protected.
 
 Live Desktop Wallpaper captures an icon-free Wallpaper Engine host while CoverTabby is open, with a static-image fallback. Host discovery repeats once per second to follow playlist changes and recreated wallpaper hosts. It displays the frames Wallpaper Engine supplies; it cannot animate a wallpaper that Wallpaper Engine itself has paused. Windows on other desktops may only supply cached frames. Wallpaper textures, gallery surfaces and additional live window captures are bounded; there is no wallpaper capture while the switcher is closed.
 
@@ -425,7 +425,7 @@ The optional Show Windows from Other Desktops setting applies only to Alt+Tab. S
 - liveDesktopWallpaper: true
   $name: Live Desktop Wallpaper
   $name:it: "Sfondo desktop animato"
-  $description: "Use a live preview of the wallpaper host when available, including Wallpaper Engine. Capture runs only while CoverTabby is open. Static wallpaper is the fallback."
+  $description: "Use a live preview of the wallpaper host when available, from Wallpaper Engine. Capture runs only while CoverTabby is open. Static wallpaper is the fallback."
   $description:it: "Mostra lo sfondo animato quando disponibile, incluso Wallpaper Engine. L'acquisizione avviene solo mentre CoverTabby è aperto. In alternativa usa lo sfondo statico."
 */
 // ==/WindhawkModSettings==
@@ -2442,8 +2442,6 @@ class Switcher {
     void DrawUiPanel(D2D1_RECT_F rect,float radius,float opacity,float defaultTint=.92f,bool backdrop=true);
     void DrawAnimatedUiText(UiTextAnimation& state,const std::wstring& text,IDWriteTextFormat* format,
         D2D1_RECT_F rect,float opacity,bool selected=false,bool caret=false,bool placeholder=false);
-    void DrawUiAction(D2D1_RECT_F rect,const wchar_t* glyph,const wchar_t* label,float hover,float opacity,
-        D2D1_COLOR_F accent,IDWriteTextFormat* symbols,IDWriteTextFormat* textFormat,float iconWidth);
     bool EnsureChain(EffectChain& chain);
 
     com_ptr<ID2D1Bitmap1> GetIconBitmap(HWND hwnd);
@@ -2501,8 +2499,6 @@ class Switcher {
     GUID m_overviewDeleteId{};
     bool m_overviewDeletePending=false;
     D2D1_RECT_F m_overviewDeleteAccept{},m_overviewDeleteCancel{};
-    double m_overviewDockTransition=0;
-    float m_overviewDockHeight=0;
     HWND m_overviewPress=nullptr;
     DWORD m_overviewPressPid=0;
     POINT m_overviewPressPoint{};
@@ -2528,7 +2524,7 @@ class Switcher {
         Quad quad{};
         bool tried = false;
         D2D1_RECT_F hit{}, rename{}, remove{};
-        float hoverAmount = 0, focusAmount = 0, renameHover = 0, removeHover = 0;
+        float hoverAmount = 0;
     };
     D2D1_RECT_F m_overviewAdd{},m_overviewRenameBox{},m_overviewBack{};
     GUID m_overviewRenameId{};
@@ -3522,6 +3518,7 @@ void Switcher::ToggleDesktopOverview(bool force) {
     }
     m_overviewDesktops.clear();m_overviewWindows.clear();m_overviewSelected=0;
     m_drawList.clear();
+    const int target=SelectedIndex(); // Normalize cyclic navigation before changing the item count.
     std::erase_if(m_items,[](const auto& item){return item->showDesktop;});
     if(m_items.empty()) {
         auto item=std::make_unique<Item>();item->desktopPlaceholder=true;item->minimized=true;
@@ -3529,9 +3526,8 @@ void Switcher::ToggleDesktopOverview(bool force) {
     }
     // Search/Enchanted indices refer to m_items, even with an empty query.
     // Rebuild after removing Desktop and adding any empty-desktop placeholder.
-    const long long target=m_target;
     UpdateSearch();
-    m_target=std::clamp(target,0LL,(long long)m_items.size()-1);
+    m_target=std::min(target,(int)m_items.size()-1);
     m_scroll=(double)m_target;m_iconScroll=m_scroll;
     m_overviewExpanded=false;m_overviewDeletePending=false;
     m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
@@ -3568,7 +3564,7 @@ void Switcher::ToggleDesktopOverview(bool force) {
     Wh_Log(L"Desktop overview: %u desktops, %u windows, %u File Explorer windows",
         (UINT)m_overviewDesktops.size(),(UINT)m_overviewWindows.size(),(UINT)explorerWindows);
     EnumWindows(FindOverviewTaskbar,reinterpret_cast<LPARAM>(this));
-    m_overviewDockTransition=NowSeconds();m_overviewDockHeight=0;
+
     m_overviewLayoutWidth=0;m_overviewLayoutHeight=0;
     LoadOverviewWallpaper();
 }
@@ -3615,14 +3611,13 @@ void Switcher::RefreshOverviewDesktops(const GUID& selected) {
         OverviewDesktop desktop;desktop.id=entry.id;desktop.name=entry.name;
         for(auto& old:m_overviewDesktops) if(IsEqualGUID(old.id,entry.id)) {
             desktop.wallpaper=std::move(old.wallpaper);desktop.tried=old.tried;
-            desktop.hoverAmount=old.hoverAmount;desktop.focusAmount=old.focusAmount;
-            desktop.renameHover=old.renameHover;desktop.removeHover=old.removeHover;break;
+            desktop.hoverAmount=old.hoverAmount;break;
         }
         desktops.push_back(std::move(desktop));
     }
     m_overviewDesktops=std::move(desktops);m_overviewSelected=0;
     for(int i=0;i<(int)m_overviewDesktops.size();++i) if(IsEqualGUID(m_overviewDesktops[i].id,selected)) m_overviewSelected=i;
-    m_overviewRefreshAt=0;m_overviewTransition=NowSeconds();m_overviewDockTransition=NowSeconds();
+    m_overviewRefreshAt=0;m_overviewTransition=NowSeconds();
 }
 
 void Switcher::FinishDesktopRename(bool save) {
@@ -3877,17 +3872,6 @@ void Switcher::LoadOverviewWallpaper() {
 struct OverviewLayout {
     float width,height,centerX,centerY,sidebar;
 };
-
-static OverviewLayout CalculateOverviewLayout(float screenWidth,float screenHeight,float dpi,float aspect,bool minimized,bool apps) {
-    const float sidebar=apps ? 96*dpi : 0;
-    const float top=minimized ? screenHeight*.20f+86*dpi : screenHeight*.14f;
-    const float bottom=std::max(top+1,screenHeight-72*dpi);
-    const float availableWidth=std::max(1.f,screenWidth-sidebar-40*dpi);
-    const float width=std::min({screenWidth*.56f,availableWidth,screenHeight*.48f*aspect,(bottom-top)*aspect});
-    const float height=width/aspect;
-    return {width,height,(screenWidth+sidebar)*.5f,
-        std::clamp(screenHeight*(minimized ? .56f : .48f),top+height*.5f,bottom-height*.5f),sidebar};
-}
 
 static Pose DesktopGalleryPose(int count,int index,float relative,float screenWidth,float screenHeight,
     float worldWidth,float worldHeight,float dpi) {
@@ -4146,16 +4130,8 @@ void Switcher::DrawDesktopOverview(float opacity) {
             (IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id) || IsEqualGUID(window.desktop,GUID_NULL)))
             minimized.push_back(&window);
     }
-    auto layout=CalculateOverviewLayout(m_width,m_height,m_dpiScale,worldWidth/worldHeight,!minimized.empty(),false);
-    {
-        // The selected desktop grows into a full-screen canvas. The overview's
-        // existing eased layout values animate the gallery card into place.
-        layout.width=m_width;
-        layout.height=m_height;
-        layout.centerX=m_width*.5f;
-        layout.centerY=m_height*.5f;
-        layout.sidebar=0;
-    }
+    // Ease the selected gallery card into a full-screen canvas.
+    const OverviewLayout layout{m_width,m_height,m_width*.5f,m_height*.5f,0};
     if(m_overviewLayoutWidth<=0) {
         m_overviewLayoutWidth=layout.width;m_overviewLayoutHeight=layout.height;
         m_overviewLayoutX=layout.centerX;m_overviewLayoutY=layout.centerY;
@@ -4260,7 +4236,6 @@ void Switcher::DrawDesktopOverview(float opacity) {
                 window.alive && !window.minimized) cardWindows.push_back(&window);
         }
         std::reverse(cardWindows.begin(),cardWindows.end());
-        const bool currentDesktop=IsEqualGUID(desktop.id,m_overviewCurrentDesktop);
         const int count=(int)cardWindows.size();
         for(int tileIndex=0;tileIndex<count;++tileIndex) {
             auto& window=*cardWindows[tileIndex];DWORD pid=0;GetWindowThreadProcessId(window.hwnd,&pid);
@@ -4783,7 +4758,7 @@ void Switcher::OnStep(int step) {
                 m_overviewDesktopTransition=NowSeconds();
             }
             m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
-            m_overviewDockTransition=NowSeconds();
+
 
         } else {
             std::vector<const OverviewWindow*> windows;
@@ -5171,7 +5146,7 @@ void Switcher::OnClick(POINT pt) {
         if(desktopHit>=0) {
             const int i=desktopHit;
             m_overviewSelected=(int)i;m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
-            m_overviewDockTransition=NowSeconds();
+
             EndSwitching();OnCommit(-1);
         }
         return;
@@ -5308,7 +5283,7 @@ void Switcher::OnPointerUp() {
                 const HRESULT hr=m_desktopBridge.Move(target,desktop);
                 if(SUCCEEDED(hr)) {
                     for(auto& window:m_overviewWindows) if(window.hwnd==target && window.pid==pid) window.desktop=desktop;
-                    m_overviewSelected=destination;m_overviewDockTransition=NowSeconds();
+                    m_overviewSelected=destination;
                 } else {m_overviewActionErrorUntil=NowSeconds()+3;Wh_Log(L"Desktop drop failed: 0x%08X",(UINT)hr);}
             }
         } else {
@@ -7616,22 +7591,6 @@ void Switcher::DrawUiPanel(D2D1_RECT_F rect,float radius,float opacity,float def
     m_brush->SetColor(UiSurface(opacity,backdrop && m_background ? defaultTint : 1.f));
     m_ctx->FillRoundedRectangle({rect,radius,radius},m_brush.get());
 }
-void Switcher::DrawUiAction(D2D1_RECT_F rect,const wchar_t* glyph,const wchar_t* label,float hover,float opacity,
-    D2D1_COLOR_F accent,IDWriteTextFormat* symbols,IDWriteTextFormat* textFormat,float iconWidth) {
-    if(opacity<=.001f || rect.right<=rect.left) return;
-    hover=std::clamp(hover,0.f,1.f);
-    const float radius=8*m_dpiScale;
-    m_brush->SetColor(StyleColor(accent,opacity*(.12f+.20f*hover)));
-    m_ctx->FillRoundedRectangle({rect,radius,radius},m_brush.get());
-    m_brush->SetColor(StyleColor(accent,opacity*(.45f+.4f*hover)));
-    m_ctx->DrawRoundedRectangle({rect,radius,radius},m_brush.get(),m_dpiScale);
-    m_brush->SetColor(StyleColor(accent,opacity));
-    if(symbols) m_ctx->DrawText(glyph,1,symbols,{rect.left,rect.top,rect.left+iconWidth,rect.bottom},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    if(hover>.005f && textFormat) {
-        m_brush->SetColor(UiForeground(opacity*hover));
-        m_ctx->DrawText(label,(UINT32)wcslen(label),textFormat,{rect.left+iconWidth,rect.top,rect.right-4*m_dpiScale,rect.bottom},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    }
-}
 void Switcher::DrawAnimatedUiText(UiTextAnimation& state,const std::wstring& text,IDWriteTextFormat* format,
     D2D1_RECT_F rect,float opacity,bool selected,bool caret,bool placeholder) {
     if(!format || opacity<=.001f || rect.right<=rect.left || rect.bottom<=rect.top) return;
@@ -8320,7 +8279,12 @@ void Switcher::RenderFrame() {
             m_items[i]->reflowOffset += (i>=removed ? 1.0f : 0.0f) + selected-oldSelected;
         m_titleIndex=-1; m_titleLayout=nullptr;
         ComputeLayout();
-        if (m_searchActive) UpdateSearch();
+        if (m_searchActive || m_settings.simpleStyle>=4) {
+            const long long target=m_target;
+            UpdateSearch();
+            // Enchanted uses search indices even before the user starts typing.
+            if(!m_searchActive) m_target=target;
+        }
     }
     const float contentT=t;
     if(!simple) {UpdateAppGroups();BuildDrawList(contentT);} else m_drawList.clear();
