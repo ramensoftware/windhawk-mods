@@ -5120,6 +5120,33 @@
         "version": "0.3.9"
       }
     },
+    "dynamicdock": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792782081000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792782081000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "IIKiiNGsLYII",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid",
+        "description": "For Ultrawide Monitors: Force the taskbar to follow your mouse when it touches the edge and your icons will be centered on your mouse. Works with default and modded taskbars.",
+        "github": "https://github.com/IIKiiNGsLYII",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "DynamicDock",
+        "version": "1.0"
+      }
+    },
     "edge-doubleclick-resize": {
       "details": {
         "defaultSorting": 4950,
