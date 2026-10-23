@@ -4,6 +4,7 @@
 // @description     macOS-style dock with magnification, Apple logo Start button, fast Launchpad and smart auto-hide
 // @version         1.3
 // @author          stack0ntop
+// @github          stack0ntop
 // @include         explorer.exe
 // @architecture    amd64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshlwapi -luuid -lshcore -ladvapi32 -ldwmapi
