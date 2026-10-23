@@ -1115,6 +1115,13 @@ struct ClockTracker {
             state.noticeUntil = 0; state.noticeLabel.clear(); state.noticeKey.clear();
             return;
         }
+        // Filter out an idle/reset stopwatch (00:00:00) BEFORE pruning so any existing
+        // running stopwatch entry in state.entries is immediately removed when reset.
+        std::erase_if(observations, [](auto const& entry) {
+            return entry.kind == ClockKind::Stopwatch &&
+                   entry.run != ClockRunState::Running &&
+                   entry.milliseconds <= 0;
+        });
         if (!observations.empty()) state.sampledAt = now;
 
         // When a specific Clock page is currently visible (0: Stopwatch, 1: Timer, 2: Alarm),
@@ -1132,10 +1139,6 @@ struct ClockTracker {
 
         std::vector<std::wstring> used;
         for (auto entry : observations) {
-            // Ignore an idle stopwatch sitting at 00:00:00.
-            if (entry.kind == ClockKind::Stopwatch && entry.run != ClockRunState::Running && entry.milliseconds <= 0) {
-                continue;
-            }
             auto sourceKey = entry.key;
             auto old = std::find_if(state.entries.begin(), state.entries.end(), [&](auto const& e) {
                 return e.sourceKey == sourceKey && e.kind == entry.kind;
@@ -1171,13 +1174,25 @@ struct ClockTracker {
                     const auto elapsed = now >= old->observedAt ? now - old->observedAt : 0;
                     const int64_t movement = entry.kind == ClockKind::Timer ?
                         old->milliseconds - entry.milliseconds : entry.milliseconds - old->milliseconds;
-                    if (elapsed <= 4000 && movement > 0 && movement <= static_cast<int64_t>(elapsed) + 2000)
+                    if (elapsed <= 4000 && movement > 0 && movement <= static_cast<int64_t>(elapsed) + 2000) {
                         entry.run = ClockRunState::Running;
-                    else if (old->run == ClockRunState::Running && entry.milliseconds == old->milliseconds)
+                    } else if (old->run == ClockRunState::Running &&
+                               entry.milliseconds == old->milliseconds &&
+                               now >= old->sampledAt && now - old->sampledAt <= 1200) {
                         entry.run = ClockRunState::Running;
+                    } else {
+                        entry.run = ClockRunState::Paused;
+                    }
                 }
                 if (previous && entry.run == ClockRunState::Running && old->run == entry.run &&
-                    old->milliseconds == entry.milliseconds) entry.sampledAt = old->sampledAt;
+                    old->milliseconds == entry.milliseconds) {
+                    if (now >= old->sampledAt && now - old->sampledAt > 1500) {
+                        // Readout on the visible Clock page has been stationary for > 1.5s -> paused.
+                        entry.run = ClockRunState::Paused;
+                    } else {
+                        entry.sampledAt = old->sampledAt;
+                    }
+                }
                 if (entry.kind == ClockKind::Timer && entry.milliseconds == 0 && previous &&
                     (old->run == ClockRunState::Running || old->finished)) entry.finished = true;
                 if (entry.finished) {
@@ -4562,14 +4577,26 @@ int ClockRow(std::vector<ClockNode> const& nodes, int index, int page) {
 
 ClockRunState ClockRowRun(std::vector<ClockNode> const& nodes, int row) {
     bool pause = false, start = false;
+    bool specificPause = false, specificStart = false;
     for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
         auto const& n = nodes[i];
         if (!ClockTransport(n) || !ClockNodeUnder(nodes, i, row)) {
             continue;
         }
         auto name = LowerText(n.name);
+        bool isPrimaryPlayPause = ClockTextHas(n.id, {
+            L"stopwatchplaypause", L"timerplaypause", L"playpausebutton"
+        });
         bool namedPause = ClockTextHas(name, {L"pause", L"tạm dừng"}) || name == L"stop" || name == L"dừng";
         bool namedStart = ClockTextHas(name, {L"start", L"resume", L"bắt đầu", L"tiếp tục"});
+        if (!namedPause && !namedStart && isPrimaryPlayPause && n.toggle >= 0) {
+            namedPause = (n.toggle == ToggleState_On);
+            namedStart = (n.toggle == ToggleState_Off);
+        }
+        if (isPrimaryPlayPause && (namedPause || namedStart)) {
+            specificPause |= namedPause;
+            specificStart |= namedStart;
+        }
         if (namedPause || namedStart) {
             pause |= namedPause;
             start |= namedStart;
@@ -4580,6 +4607,9 @@ ClockRunState ClockRowRun(std::vector<ClockNode> const& nodes, int row) {
             pause |= ClockTextHas(n.id, {L"pausebutton"});
             start |= ClockTextHas(n.id, {L"startbutton", L"resumebutton"});
         }
+    }
+    if (specificPause != specificStart) {
+        return specificPause ? ClockRunState::Running : ClockRunState::Paused;
     }
     return pause == start ? ClockRunState::Unknown
          : pause          ? ClockRunState::Running
