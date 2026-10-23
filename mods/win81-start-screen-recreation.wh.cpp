@@ -16,7 +16,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof
+// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore
 // ==/WindhawkMod==
 //
 // ==WindhawkModReadme==
@@ -310,6 +310,7 @@ The mod does **not** replace system files.
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <wtsapi32.h>
+#include <shellscalingapi.h>
 #include <powrprof.h>
 #include <sddl.h>
 #include <knownfolders.h>
@@ -5297,18 +5298,19 @@ static void UpdateDpiMetrics() {
     SB_W = ScI(346); SB_PAD = ScI(40);
     kBarH = ScI(100); kBarBtnW = ScI(100);
 }
-static void UpdateDpi() {
-    int dpi = 0;
-    if (g_wnd) dpi = (int)GetDpiForWindow(g_wnd);
+static bool UpdateDpi(int forcedDpi = 0) {
+    int dpi = forcedDpi;
+    if (!dpi && g_wnd) dpi = (int)GetDpiForWindow(g_wnd);
     if (!dpi) dpi = (int)GetDpiForSystem();
     if (!dpi) { HDC dc = GetDC(NULL); if (dc) { dpi = GetDeviceCaps(dc, LOGPIXELSY); ReleaseDC(NULL, dc); } }
     if (dpi < 96) dpi = 96; if (dpi > 480) dpi = 480;
-    if (dpi == g_dpi) return;
+    if (dpi == g_dpi) return false;
     g_dpi = dpi; g_dpiScale = (float)dpi / 96.0f;
     UpdateDpiMetrics();
     RecreateFonts();
     ReleaseAvatarPicture();
     ReleaseUiIcons();
+    return true;
 }
 static const int kAdvW = 256, kAdvRowH = 42, kAdvPad = 12;
 
@@ -5470,17 +5472,8 @@ static std::wstring ItemFile(const SelectedItem& item) {
 
 static void ShellActionError(const wchar_t* message) {
     Wh_Log(L"Shell action failed: %s", message);
-    MessageBeep(MB_ICONINFORMATION);
-    // Show it off the UI thread so the Start screen keeps pumping messages.
-    wchar_t* copy = _wcsdup(message);
-    if (!copy) return;
-    HANDLE th = CreateThread(NULL, 0, [](LPVOID p) -> DWORD {
-        wchar_t* m = (wchar_t*)p;
-        MessageBoxW(NULL, m, L"Start", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
-        free(m);
-        return 0;
-    }, copy, 0, NULL);
-    if (th) CloseHandle(th); else free(copy);
+    // Modal loop on the UI thread keeps dispatching Start's messages and ends on WM_QUIT at uninit.
+    MessageBoxW(NULL, message, T(STR_START), MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
 }
 
 static bool ShortcutCommand(const std::wstring& file, std::wstring* executable, std::wstring* args) {
@@ -7344,10 +7337,9 @@ static bool DismissCompanionSearchCharm(POINT screenPt, bool havePt) {
         screenPt.x = GetSystemMetrics(SM_XVIRTUALSCREEN);
         screenPt.y = GetSystemMetrics(SM_YVIRTUALSCREEN);
     }
-    // Shared, named message so both mods agree on the id regardless of WM_APP allocation.
-    static const UINT kDismissMsg = RegisterWindowMessageW(L"Win81SearchCharmMod.Dismiss");
-    if (!kDismissMsg) return false;
-    PostMessageW(other, kDismissMsg, (WPARAM)(LONG_PTR)screenPt.x, (LPARAM)(LONG_PTR)screenPt.y);
+    // Search Charm mod currently only handles WM_APP + 3 (WM_APP_POINTER_DOWN); keep using it
+    // until a Search Charm update that accepts a named message is published.
+    PostMessageW(other, WM_APP + 3, (WPARAM)(LONG_PTR)screenPt.x, (LPARAM)(LONG_PTR)screenPt.y);
     return true;
 }
 static void SuppressOtherSearchCharm() { POINT z = { 0, 0 }; DismissCompanionSearchCharm(z, false); }
@@ -8159,18 +8151,24 @@ static void CaptureDesktop() {
 
 static void OpenStart(bool atLogon = false) {
     if (!g_wnd) return;
-    UpdateDpi();
     if (g_appsRefresh && InterlockedCompareExchange(&g_appsReady, 0, 0) &&
         GetTickCount64() - g_catalogBuiltTick > kCatalogMaxAgeMs)
         SetEvent(g_appsRefresh);   // catalog is stale: rebuild apps (and files, if they were requested)
     // Open on the monitor that holds the cursor (the primary one at logon).
     int monX = 0, monY = 0;
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    int targetDpi = 0;
     {
         POINT cp = { 0, 0 };
+        HMONITOR mon = NULL;
+        if (atLogon || !GetCursorPos(&cp)) { cp.x = 0; cp.y = 0; }
+        mon = MonitorFromPoint(cp, MONITOR_DEFAULTTOPRIMARY);
+        if (mon) {
+            UINT dx = 0, dy = 0;
+            if (SUCCEEDED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy)) && dx) targetDpi = (int)dx;
+        }
         if (!atLogon && GetCursorPos(&cp)) {
             MONITORINFO mi = { sizeof(mi) };
-            HMONITOR mon = MonitorFromPoint(cp, MONITOR_DEFAULTTOPRIMARY);
             if (mon && GetMonitorInfoW(mon, &mi)) {
                 monX = mi.rcMonitor.left; monY = mi.rcMonitor.top;
                 sw = mi.rcMonitor.right - mi.rcMonitor.left;
@@ -8179,7 +8177,8 @@ static void OpenStart(bool atLogon = false) {
         }
     }
     bool wasVisible = IsWindowVisible(g_wnd) != 0;
-    if (sw != g_sw || sh != g_sh || monX != g_monX || monY != g_monY || !g_bgBmp) {
+    bool dpiChanged = UpdateDpi(targetDpi);
+    if (dpiChanged || sw != g_sw || sh != g_sh || monX != g_monX || monY != g_monY || !g_bgBmp) {
         if (wasVisible) ShowWindow(g_wnd, SW_HIDE);
         g_sw = sw; g_sh = sh; g_monX = monX; g_monY = monY;
         for (int i = 0; i < g_tileCount; ++i) g_tileGroup[i] = g_committedGroup[i];
@@ -8424,7 +8423,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_DPICHANGED:
         UpdateDpi();
-        if (g_open && !g_closing) { Relayout(true); ClampScroll(); }
+        Relayout(g_open && !g_closing);
+        ClampScroll();
         BuildBuffers();
         InitGpu();
         RepaintNow();
@@ -8556,6 +8556,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         g_pendingApps = NULL;
         if (fresh) {
             g_apps.swap(*fresh);
+            for (IconSlot& sl : g_icons) {
+                if (sl.gpu) { sl.gpu->Release(); sl.gpu = NULL; }
+                delete[] sl.px; sl.px = NULL;
+            }
             g_icons.clear();
             g_icons.resize(g_apps.size());
         }
