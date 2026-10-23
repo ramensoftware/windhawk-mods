@@ -35,6 +35,8 @@ Note: This is a best-effort modification. The Windows 8 network flyout and its d
 - 64-bit Windows 10 (build 17763 or later) or Windows 11.
 - Windhawk 1.4 or later.
 - An internet connection for the first download, if additional components are needed.
+- Native ARM64 Windows is not supported: fallback artifacts are AMD64-only and
+  the native component route is unavailable on ARM64 builds.
 
 ## How it works
 
@@ -61,11 +63,13 @@ original Windows language is retained. Restart Explorer after changing the panel
 The mod does not create or modify entries in the live HKCU/HKLM registry and
 does not create system-wide COM registrations. In fallback mode, registry access
 needed by the legacy components is redirected to a private application hive
-loaded with `RegLoadAppKeyW` from a file in this mod's Windhawk storage. The hive
-is not mounted under HKCU/HKLM and is not visible to other processes. Explorer
-closes the hive when the mod unloads; the hive file remains as mod data and is
-reused on the next start. Downloaded components are also kept in Windhawk
-storage to avoid downloading them at every start.
+loaded with `RegLoadAppKeyW` from a unique file in this mod's Windhawk storage.
+Each `explorer.exe` instance gets its own hive file, so concurrent Explorer
+processes do not contend for one backing file. The hive is not mounted under
+HKCU/HKLM and is not visible to other processes. On normal unload the mod closes
+the hive and attempts to remove its file; a crash can leave an orphaned hive
+file in mod storage. Downloaded components are also kept in Windhawk storage to
+avoid downloading them at every start.
 
 If you used an earlier release, its `HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry`
 subtree (or the older `windows-8-network-flyout-restorer` name) may still be
@@ -237,10 +241,7 @@ constexpr const wchar_t* kHydrationManifestName = L"runtime.sha256";
 // XWizards is copied into the private application hive without inheriting
 // the machine key's security descriptor.
 constexpr const wchar_t* kXWizardsHiveSubKey = L"XWizardsV2";
-constexpr const wchar_t* kPrivateHiveFileName = L"win8-network-flyout-private.hiv";
 constexpr const wchar_t* kProvisionMutexName = L"Local\\Windhawk_Win8NetworkFlyout_ProvisionMutex";
-constexpr const wchar_t* kPrivateHiveMutexName =
-    L"Local\\Windhawk_Win8NetworkFlyout_PrivateHiveMutex";
 constexpr const wchar_t* kVanHostWndClassName = L"WindhawkWin8VanHostWnd";
 constexpr const wchar_t* kVanCtrlWndClassName = L"WindhawkWin8VanCtrlWnd";
 constexpr const wchar_t* kVanIpcMessageName = L"Windhawk.Win8NetworkFlyout.Show";
@@ -1952,6 +1953,7 @@ std::atomic<bool> g_shuttingDown{false};
 std::atomic<bool> g_vanStoreReady{false};
 std::atomic<bool> g_privateRegistryHiveReady{false};
 HKEY g_privateRegistryHive = nullptr;  // RegLoadAppKeyW: isolated from HKCU/HKLM
+std::filesystem::path g_privateRegistryHiveFile;  // unique to this mod instance
 std::atomic<bool> g_nativeSystemVan{false};
 std::atomic<bool> g_unloadSafetyFailure{false};
 std::atomic<DWORD> g_staThreadId{0};
@@ -1988,7 +1990,6 @@ HANDLE g_workerThread = nullptr;
 // modules must then stay loaded (leak) to avoid use-after-free crashes.
 std::atomic<bool> g_workerStillRunning{false};
 HANDLE g_provisionMutex = nullptr;
-HANDLE g_privateHiveMutex = nullptr;
 DLL_DIRECTORY_COOKIE g_dllDirectoryCookie = nullptr;
 UINT g_wmShowVanIpc = 0;
 HMODULE g_vanModule = nullptr;
@@ -2088,33 +2089,6 @@ struct ScopedComActivationGuard {
     }
     ScopedComActivationGuard(const ScopedComActivationGuard&) = delete;
     ScopedComActivationGuard& operator=(const ScopedComActivationGuard&) = delete;
-};
-
-class ScopedPrivateHiveMutex {
-  public:
-    ScopedPrivateHiveMutex(HANDLE mutex, DWORD timeoutMs) noexcept : m_mutex(mutex) {
-        if (!m_mutex) {
-            return;
-        }
-        const DWORD result = WaitForSingleObject(m_mutex, timeoutMs);
-        m_locked = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
-        if (result == WAIT_ABANDONED) {
-            Wh_Log(L"Private-hive mutex was abandoned; initialization will validate the hive and rebuild "
-                   L"its owned subtrees if needed");
-        }
-    }
-    ~ScopedPrivateHiveMutex() noexcept {
-        if (m_locked) {
-            ReleaseMutex(m_mutex);
-        }
-    }
-    ScopedPrivateHiveMutex(const ScopedPrivateHiveMutex&) = delete;
-    ScopedPrivateHiveMutex& operator=(const ScopedPrivateHiveMutex&) = delete;
-    bool locked() const noexcept { return m_locked; }
-
-  private:
-    HANDLE m_mutex = nullptr;
-    bool m_locked = false;
 };
 
 // ===========================================================================
@@ -4018,8 +3992,10 @@ bool OpenPrivateRegistryHive() {
         return true;
     }
 
-    // Wh_GetModStoragePath is per-mod storage. Include the current user's SID
-    // because the storage directory can be shared between Windows accounts.
+    // Wh_GetModStoragePath is per-mod storage. Keep one directory per user,
+    // then a GUID-named hive file per Explorer/mod instance. RegLoadAppKeyW
+    // holds its backing file exclusively for the lifetime of the loaded hive,
+    // so sharing a path between explorer.exe processes is not safe.
     std::wstring userSid;
     const size_t sidSeparator = g_hkcuNtPrefix.find_last_of(L'\\');
     if (sidSeparator != std::wstring::npos && sidSeparator + 1 < g_hkcuNtPrefix.size()) {
@@ -4030,8 +4006,19 @@ bool OpenPrivateRegistryHive() {
         return false;
     }
 
+    GUID hiveInstanceId{};
+    const HRESULT guidStatus = CoCreateGuid(&hiveInstanceId);
+    if (FAILED(guidStatus)) {
+        Wh_Log(L"Could not generate a unique private-hive file name (0x%08lX)",
+               static_cast<unsigned long>(guidStatus));
+        return false;
+    }
+
     const std::filesystem::path storageDir = g_vanStoreBaseDir.parent_path() / userSid;
-    const std::filesystem::path hiveFile = storageDir / kPrivateHiveFileName;
+    const std::wstring fileName =
+        L"win8-network-flyout-private-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+        GuidToUpperBraceString(hiveInstanceId) + L".hiv";
+    const std::filesystem::path hiveFile = storageDir / fileName;
     std::error_code ec;
     std::filesystem::create_directories(storageDir, ec);
     if (ec) {
@@ -4039,15 +4026,43 @@ bool OpenPrivateRegistryHive() {
         return false;
     }
 
+    constexpr unsigned kLoadAttempts = 5;
+    LSTATUS status = ERROR_GEN_FAILURE;
     HKEY hive = nullptr;
-    const LSTATUS status = RegLoadAppKeyW(hiveFile.c_str(), &hive, KEY_ALL_ACCESS, 0, 0);
+    for (unsigned attempt = 0; attempt < kLoadAttempts; ++attempt) {
+        hive = nullptr;
+        status = RegLoadAppKeyW(hiveFile.c_str(), &hive, KEY_ALL_ACCESS, 0, 0);
+        if (status == ERROR_SUCCESS) {
+            break;
+        }
+
+        if ((status != ERROR_SHARING_VIOLATION && status != ERROR_LOCK_VIOLATION) ||
+            attempt + 1 >= kLoadAttempts) {
+            break;
+        }
+
+        const DWORD delayMs = 50u << attempt;  // 50, 100, 200, 400 ms
+        Wh_Log(L"RegLoadAppKeyW hit a transient file lock; retry %u/%u after %lu ms",
+               attempt + 1, kLoadAttempts, static_cast<unsigned long>(delayMs));
+        if (g_stopEvent) {
+            if (WaitForSingleObject(g_stopEvent, delayMs) == WAIT_OBJECT_0) {
+                break;
+            }
+        } else {
+            Sleep(delayMs);
+        }
+    }
+
     if (status != ERROR_SUCCESS) {
-        Wh_Log(L"RegLoadAppKeyW failed for the private hive (%ld)", static_cast<long>(status));
+        Wh_Log(L"RegLoadAppKeyW failed for this instance's private hive (%ld)",
+               static_cast<long>(status));
+        std::filesystem::remove(hiveFile, ec);
         return false;
     }
 
     g_privateRegistryHive = hive;
-    Wh_Log(L"Loaded private application registry hive from Windhawk mod storage");
+    g_privateRegistryHiveFile = hiveFile;
+    Wh_Log(L"Loaded this Explorer instance's private application hive from Windhawk storage");
     return true;
 }
 
@@ -4190,10 +4205,9 @@ bool PopulatePrivateRegistryHiveOnce() {
             ++verifiedManagers;
         }
     }
-    // Only the Control_VAN media managers are mandatory. Write failures
-    // elsewhere (typically access denied on pre-existing XWizards keys left by
-    // stale values from an earlier hive version) were always silent and the flyout works with them,
-    // so they are reported as a warning, never as a reason to stay passive.
+    // Only the Control_VAN media managers are mandatory. Failures copying
+    // optional XWizards data are reported as warnings, not as a reason to stay
+    // passive.
     if (verifiedManagers != ARRAYSIZE(managers)) {
         Wh_Log(L"[private hive] incomplete: verified=%u/%u failures=%u",
                verifiedManagers, static_cast<unsigned>(ARRAYSIZE(managers)), failures);
@@ -4207,7 +4221,7 @@ bool PopulatePrivateRegistryHiveOnce() {
 
 // Populates the private hive. On a partial first attempt, discard only the
 // mod-owned hive subtrees and retry once. No key in HKCU/HKLM is created,
-// modified, or deleted here. Callers hold g_privateHiveMutex.
+// modified, or deleted here. The hive is unique to this Explorer instance.
 bool PopulatePrivateRegistryHive() {
     if (!g_privateRegistryHive) {
         return false;
@@ -6457,20 +6471,14 @@ void RunVanStaWorkerBody() {
             g_staThreadId.store(0, std::memory_order_release);
             return;
         }
-        ScopedPrivateHiveMutex hiveLock(g_privateHiveMutex, 5000);
-        if (!hiveLock.locked()) {
-            Wh_Log(L"Could not acquire the private-hive mutex; staying passive");
-            g_staThreadId.store(0, std::memory_order_release);
-            return;
-        }
         if (!OpenPrivateRegistryHive()) {
             Wh_Log(L"Private application hive could not be opened; staying passive");
             g_staThreadId.store(0, std::memory_order_release);
             return;
         }
         if (!PopulatePrivateRegistryHive()) {
-            Wh_Log(L"Private registry hive population failed; staying passive; hive file "
-                   L"will be retained for diagnostics and reused on a later start");
+            Wh_Log(L"Private registry hive population failed; staying passive; this instance's "
+                   L"hive file will be removed on normal unload");
             g_staThreadId.store(0, std::memory_order_release);
             return;
         }
@@ -6713,18 +6721,6 @@ BOOL Wh_ModInit() try {
         if (!g_provisionMutex) {
             Wh_Log(L"CreateMutexW(provision) failed (%lu); refusing unsafe fallback init",
                    GetLastError());
-            CloseHandle(g_stopEvent);
-            g_stopEvent = nullptr;
-            return FALSE;
-        }
-        // Private-hive load/population must be serialized across Explorer processes
-        // that use the same per-user hive file.
-        g_privateHiveMutex = CreateMutexW(nullptr, FALSE, kPrivateHiveMutexName);
-        if (!g_privateHiveMutex) {
-            Wh_Log(L"CreateMutexW(private hive) failed (%lu); refusing unsafe fallback init",
-                   GetLastError());
-            CloseHandle(g_provisionMutex);
-            g_provisionMutex = nullptr;
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
             return FALSE;
@@ -6988,7 +6984,6 @@ BOOL Wh_ModInit() try {
 } catch (...) {
     DisableModAfterCppException(L"initialization");
     // No worker has started: pending hooks are discarded by Windhawk after FALSE.
-    if (g_privateHiveMutex) { CloseHandle(g_privateHiveMutex); g_privateHiveMutex = nullptr; }
     if (g_provisionMutex) { CloseHandle(g_provisionMutex); g_provisionMutex = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     return FALSE;
@@ -7095,19 +7090,15 @@ void Wh_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
-    if (g_privateHiveMutex) {
-        CloseHandle(g_privateHiveMutex);
-        g_privateHiveMutex = nullptr;
-    }
 
-    // 7. Drop the resolved van.dll exports. The module itself is released
+    // 6. Drop the resolved van.dll exports. The module itself is released
     //    below through the balanced runtime reference list.
     g_pfnShowVAN = nullptr;
     g_pfnHideVAN = nullptr;
     g_pfnShutdownVAN = nullptr;
     g_vanModule = nullptr;
 
-    // 8. Release every managed runtime module and every verified-file handle
+    // 7. Release every managed runtime module and every verified-file handle
     //    under the hook guard, so the redirection hooks do not observe
     //    half-torn state while FreeLibrary/CloseHandle run.
     {
@@ -7138,8 +7129,20 @@ void Wh_ModUninit() {
     // Stop redirection before unmounting the isolated application hive.
     g_privateRegistryHiveReady.store(false, std::memory_order_release);
     if (g_privateRegistryHive) {
-        RegCloseKey(g_privateRegistryHive);
+        const LSTATUS closeStatus = RegCloseKey(g_privateRegistryHive);
         g_privateRegistryHive = nullptr;
+        if (closeStatus != ERROR_SUCCESS) {
+            Wh_Log(L"RegCloseKey for the private application hive returned %ld",
+                   static_cast<long>(closeStatus));
+        }
+    }
+    if (!g_privateRegistryHiveFile.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(g_privateRegistryHiveFile, ec);
+        if (ec) {
+            Wh_Log(L"Could not remove this instance's private-hive file (code %d)", ec.value());
+        }
+        g_privateRegistryHiveFile.clear();
     }
 
     // Publish the final "not ready" state so any late hook entry fails closed.
