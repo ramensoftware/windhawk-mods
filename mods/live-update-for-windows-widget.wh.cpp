@@ -103,14 +103,16 @@ Overview: Wi-Fi Hotspot
   $name:vi-VN: Bật widget Live Update
 
 - autoSelectActivity: true
-  #! $showIf: enableTaskbarWidget
   $name: Automatically select newly started activities
   $name:vi-VN: Tự chọn hoạt động mới bắt đầu
+  #! $showIf: {enableTaskbarWidget: true}
 
 - batteryAutoPopupSeconds: 4
-  #! $showIf: enableTaskbarWidget
   $name: Automatic preview duration (3–5 seconds)
   $name:vi-VN: Thời gian hiện preview tự động (3–5 giây)
+  #! $min: 3
+  #! $max: 5
+  #! $showIf: {enableTaskbarWidget: true}
 
 - appearance:
   - position: root_left
@@ -123,15 +125,21 @@ Overview: Wi-Fi Hotspot
     - tray_right: Tray · Rightmost
     - root_left: Left overlay (root_left)
   - widgetLeftOffset: 12
-    #! $showIf: appearance.position == 'root_left'
     $name: Left overlay offset (0–2500 DIP)
     $name:vi-VN: Lề trái khi đặt đè (0–2500 DIP)
+    #! $min: 0
+    #! $max: 2500
+    #! $showIf: {position: root_left}
   - widgetWidth: 270
     $name: Compact widget width (140–480 DIP)
     $name:vi-VN: Chiều rộng widget thu gọn (140–480 DIP)
+    #! $min: 140
+    #! $max: 480
   - expandedWidth: 540
     $name: Popup width (320–640 DIP)
     $name:vi-VN: Chiều rộng popup (320–640 DIP)
+    #! $min: 320
+    #! $max: 640
   - popupTheme: glass
     $name: Surface theme
     $name:vi-VN: Giao diện bề mặt
@@ -149,155 +157,157 @@ Overview: Wi-Fi Hotspot
   - collapsedTaskbar: false
     $name: Collapsed taskbar mode (icon + activity count)
     $name:vi-VN: Chế độ thu gọn trên taskbar (biểu tượng + số hoạt động)
-  #! $showIf: enableTaskbarWidget
   $name: Appearance & Layout
   $name:vi-VN: Giao diện & Bố cục
   $description: Position, dimensions, surface material, and progress bar style.
   $description:vi-VN: Vị trí trên taskbar, kích thước, hiệu ứng nền và kiểu thanh tiến trình.
+  #! $showIf: {enableTaskbarWidget: true}
 
 - lunar:
-  - enabled: -1
+  - enabled: auto
     $name: Enable Lunar calendar & Almanac
     $name:vi-VN: Bật Âm lịch & Tử vi
     $options:
-    - -1: Auto (Vietnam region only)
-    - 1: Always on
-    - 0: Off
+    - auto: Auto (Vietnam region only)
+    - always: Always on
+    - disabled: Off
   - enableCultureWidget: true
-    #! $showIf: lunar.enabled != 0
     $name: Enable Vietnamese culture topic index
     $name:vi-VN: Bật danh mục chủ đề Văn hóa Việt
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: [auto, always]}
   $name: Lunar Calendar & Almanac
   $name:vi-VN: Âm lịch & Tử vi
+  #! $showIf: {enableTaskbarWidget: true}
 
 - media:
   - enabled: true
     $name: Enable Media activity
     $name:vi-VN: Bật hoạt động Phương tiện
-  #! $showIf: enableTaskbarWidget
   $name: Media
   $name:vi-VN: Phương tiện
+  #! $showIf: {enableTaskbarWidget: true}
 
 - clock:
   - enabled: true
     $name: Enable Windows Clock reader (Stopwatch, Timer, Alarm)
     $name:vi-VN: Bật đọc Đồng hồ Windows (Bấm giờ, Hẹn giờ, Báo thức)
   - autoPopup: true
-    #! $showIf: clock.enabled
     $name: Automatic previews & 15-minute alarm reminder
     $name:vi-VN: Tự mở preview & nhắc báo thức trước 15 phút
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: Windows Clock
   $name:vi-VN: Đồng hồ Windows
+  #! $showIf: {enableTaskbarWidget: true}
 
 - battery:
   - enabled: true
     $name: Enable Battery activity
     $name:vi-VN: Bật hoạt động Pin
   - alwaysShow: false
-    #! $showIf: battery.enabled
     $name: Always show battery (even when discharging above 20%)
     $name:vi-VN: Luôn hiển thị pin (kể cả khi dùng pin trên 20%)
+    #! $showIf: {enabled: true}
   - autoPopup: true
-    #! $showIf: battery.enabled
     $name: Automatic preview on charging / low battery
     $name:vi-VN: Tự mở preview khi cắm sạc / pin yếu
+    #! $showIf: {enabled: true}
   - bluetoothBattery: true
-    #! $showIf: battery.enabled
     $name: Show connected Bluetooth device batteries
     $name:vi-VN: Hiển thị pin thiết bị Bluetooth đã kết nối
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: Battery & Bluetooth
   $name:vi-VN: Pin & Bluetooth
+  #! $showIf: {enableTaskbarWidget: true}
 
 - privacy:
   - enabled: true
     $name: Enable Microphone, Camera & Location activity
     $name:vi-VN: Bật theo dõi Micro, Camera & Vị trí
   - autoPopup: true
-    #! $showIf: privacy.enabled
     $name: Automatic preview on new sensor use
     $name:vi-VN: Tự mở preview khi có truy cập mới
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: Privacy Activity
   $name:vi-VN: Quyền riêng tư
+  #! $showIf: {enableTaskbarWidget: true}
 
 - taskProgress:
   - enabled: true
     $name: Enable Task progress monitor
     $name:vi-VN: Bật theo dõi tiến trình tác vụ
   - autoPopup: true
-    #! $showIf: taskProgress.enabled
     $name: Automatic preview on new/completed tasks
     $name:vi-VN: Tự mở preview khi có tác vụ mới/hoàn tất
+    #! $showIf: {enabled: true}
   - explorer: true
-    #! $showIf: taskProgress.enabled
     $name: File Explorer (explorer.exe)
     $name:vi-VN: File Explorer (explorer.exe)
+    #! $showIf: {enabled: true}
   - chrome: true
-    #! $showIf: taskProgress.enabled
     $name: Google Chrome (chrome.exe)
     $name:vi-VN: Google Chrome (chrome.exe)
+    #! $showIf: {enabled: true}
   - edge: true
-    #! $showIf: taskProgress.enabled
     $name: Microsoft Edge (msedge.exe)
     $name:vi-VN: Microsoft Edge (msedge.exe)
+    #! $showIf: {enabled: true}
   - firefox: false
-    #! $showIf: taskProgress.enabled
     $name: Mozilla Firefox (firefox.exe)
     $name:vi-VN: Mozilla Firefox (firefox.exe)
+    #! $showIf: {enabled: true}
   - sevenZip: false
-    #! $showIf: taskProgress.enabled
     $name: 7-Zip (7zfm.exe / 7zg.exe)
     $name:vi-VN: 7-Zip (7zfm.exe / 7zg.exe)
+    #! $showIf: {enabled: true}
   - otherApps: ""
-    #! $showIf: taskProgress.enabled
     $name: Additional executables (separated by ;)
     $name:vi-VN: Ứng dụng khác (cách nhau bởi dấu ;)
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: Task Progress
   $name:vi-VN: Tiến trình tác vụ
+  #! $showIf: {enableTaskbarWidget: true}
 
 - display:
   - enabled: true
     $name: Enable Displays & projection activity
     $name:vi-VN: Bật hoạt động Màn hình & Trình chiếu
   - autoPopup: true
-    #! $showIf: display.enabled
     $name: Automatic preview on display changes
     $name:vi-VN: Tự mở preview khi thay đổi kết nối màn hình
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: Displays & Projection
   $name:vi-VN: Màn hình & Trình chiếu
+  #! $showIf: {enableTaskbarWidget: true}
 
 - hotspot:
   - enabled: true
     $name: Enable Wi-Fi hotspot activity
     $name:vi-VN: Bật hoạt động Điểm phát sóng Wi-Fi
   - autoPopup: true
-    #! $showIf: hotspot.enabled
     $name: Automatic preview on hotspot/client changes
     $name:vi-VN: Tự mở preview khi bật/tắt hoặc đổi số thiết bị
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: Wi-Fi Hotspot
   $name:vi-VN: Điểm phát sóng Wi-Fi
+  #! $showIf: {enableTaskbarWidget: true}
 
 - obs:
   - enabled: false
     $name: Enable OBS WebSocket recording monitor
     $name:vi-VN: Bật theo dõi quay OBS qua WebSocket
   - port: 4455
-    #! $showIf: obs.enabled
     $name: Local WebSocket port (127.0.0.1)
     $name:vi-VN: Cổng WebSocket cục bộ (127.0.0.1)
+    #! $min: 1024
+    #! $max: 65535
+    #! $showIf: {enabled: true}
   - password: ""
-    #! $showIf: obs.enabled
     $name: WebSocket password
     $name:vi-VN: Mật khẩu WebSocket
-  #! $showIf: enableTaskbarWidget
+    #! $showIf: {enabled: true}
   $name: OBS Studio Recording
   $name:vi-VN: Quay màn hình OBS Studio
+  #! $showIf: {enableTaskbarWidget: true}
 
 - alerts:
   - memoryAlerts: true
@@ -310,12 +320,14 @@ Overview: Wi-Fi Hotspot
     $name: CPU/GPU temperature alerts at 70, 80, 90 °C (requires LibreHardwareMonitor)
     $name:vi-VN: Cảnh báo nhiệt độ CPU/GPU ở 70, 80, 90 °C (cần LibreHardwareMonitor)
   - temperaturePort: 8085
-    #! $showIf: alerts.temperatureAlerts
     $name: LibreHardwareMonitor local web server port
     $name:vi-VN: Cổng máy chủ cục bộ LibreHardwareMonitor
-  #! $showIf: enableTaskbarWidget
+    #! $min: 1
+    #! $max: 65535
+    #! $showIf: {temperatureAlerts: true}
   $name: System Alerts (RAM, ROM & Temperature)
   $name:vi-VN: Cảnh báo hệ thống (RAM, ROM & Nhiệt độ)
+  #! $showIf: {enableTaskbarWidget: true}
 */
 // ==/WindhawkModSettings==
 
@@ -622,8 +634,12 @@ void LoadSettings(bool resetQuickOverrides = false) {
     WCHAR region[16]{};
     bool vietnamRegion = GetUserDefaultGeoName(region, ARRAYSIZE(region)) > 0 &&
                          _wcsicmp(region, L"VN") == 0;
-    bool baseLunar = ResolveLunarEnabled(
-        ClampVal(Wh_GetIntSetting(L"lunar.enabled"), -1, 1), vietnamRegion);
+    std::wstring lunarMode = WindhawkUtils::StringSetting::make(L"lunar.enabled").get();
+    int lunarPref = (lunarMode == L"always" || lunarMode == L"1") ? 1
+                  : (lunarMode == L"disabled" || lunarMode == L"off" || lunarMode == L"0") ? 0
+                  : (lunarMode == L"auto" || lunarMode == L"-1") ? -1
+                  : ClampVal(Wh_GetIntSetting(L"lunar.enabled"), -1, 1);
+    bool baseLunar = ResolveLunarEnabled(lunarPref, vietnamRegion);
     s.enableLunarWidget = ReadUiOverrideFlag(L"enableLunarWidget", baseLunar);
     s.enableCultureWidget = ReadUiOverrideFlag(
         L"enableCultureWidget", Wh_GetIntSetting(L"lunar.enableCultureWidget") != 0);
