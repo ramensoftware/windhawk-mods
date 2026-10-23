@@ -1,3 +1,9 @@
+## 1.5.7 ([Oct 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7f63d65fc05d4235f2404ba2d507504073a69c3/mods/better-volume-mixer.wh.cpp))
+
+* Added option to stop Windows notifications from covering the mixer
+* Improved audio device selection
+* Slight visual tweaks
+
 ## 1.5.4 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e8bbf8d63cb754e7d160f8a4162abd9b5b0ee855/mods/better-volume-mixer.wh.cpp))
 
 * Scroll over the tray icon to change master volume

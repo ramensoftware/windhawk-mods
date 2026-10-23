@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-23T09:04:11.000Z</updated>
+    <updated>2026-10-23T10:00:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.5.7]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#b7f63d65fc05d4235f2404ba2d507504073a69c3</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-10-23T10:00:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added option to stop Windows notifications from covering the mixer</li>
+<li>Improved audio device selection</li>
+<li>Slight visual tweaks</li>
+</ul>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Caption Buttons Customizer 1.1]]></title>
         <id>https://windhawk.net/mods/caption-buttons-customizer#1a95de3f8c479a7032dbdaf5ee43df7f1fda1d71</id>
@@ -598,19 +613,6 @@ Draws a pulsing, bright overlay with an optional counter over the taskbar notifi
         <author>
             <name>mwalker212</name>
             <uri>https://github.com/mwalker212</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multi PrintScreen 1.0.2]]></title>
-        <id>https://windhawk.net/mods/multi-printscreen#f7976748878b7344e86d65b4388252c1227a7a31</id>
-        <link href="https://windhawk.net/mods/multi-printscreen"/>
-        <updated>2026-10-21T11:41:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Update author name to sharexza and update GitHub profile link in metadata.</li>
-</ul>]]></content>
-        <author>
-            <name>sharexza</name>
-            <uri>https://github.com/sharexza</uri>
         </author>
     </entry>
 </feed>
