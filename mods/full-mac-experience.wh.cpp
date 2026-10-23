@@ -4581,7 +4581,7 @@ HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int showMethod, int 
 bool HookShowStartView() {
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
             &XamlLauncher_ShowStartView_Original,
@@ -4589,8 +4589,10 @@ bool HookShowStartView() {
             true,
         },
     };
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)) &&
-           XamlLauncher_ShowStartView_Original;
+    return WindhawkUtils::HookSymbols(
+           module, twinuiPcshellDllHooks,
+           ARRAYSIZE(twinuiPcshellDllHooks)) &&
+       XamlLauncher_ShowStartView_Original;
 }
 
 bool HookTaskbarDllSymbols() {
