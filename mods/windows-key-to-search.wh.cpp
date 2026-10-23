@@ -77,6 +77,7 @@ bool g_keys[256];
 bool g_tap[2];
 bool g_pending[2];
 bool g_swallowUp[2];
+bool g_shortcutUsed[2];
 bool g_searchActive;
 WORD g_searchWin;
 UINT_PTR g_searchTimer;
@@ -87,6 +88,13 @@ constexpr UINT kSearchHoldMs = 50;
 
 bool IsWindowsKey(DWORD vk) {
     return vk == VK_LWIN || vk == VK_RWIN;
+}
+
+bool IsModifierKey(DWORD vk) {
+    return vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU ||
+           vk == VK_LSHIFT || vk == VK_RSHIFT ||
+           vk == VK_LCONTROL || vk == VK_RCONTROL ||
+           vk == VK_LMENU || vk == VK_RMENU;
 }
 
 INPUT KeyboardInput(WORD vk, DWORD flags = 0, WORD scan = 0) {
@@ -207,6 +215,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         ZeroMemory(g_pending, sizeof(g_pending));
         ZeroMemory(g_tap, sizeof(g_tap));
         ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
+        ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
         return CallNextHookEx(nullptr, code, message, param);
     }
     if (g_searchActive) {
@@ -231,7 +240,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         // This is the state BEFORE the current down. A forwarded key which is
         // now up lost its release (for example, to Win+L's lock desktop).
         g_keys[key.vkCode] = false;
-        g_pending[index] = g_tap[index] = false;
+        g_pending[index] = g_tap[index] = g_shortcutUsed[index] = false;
     }
     if (down && win && g_keys[key.vkCode]) {
         // Discard repeat events while the initial down is withheld.
@@ -244,6 +253,15 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         // Repeats of a key held before Win are not a new Win shortcut.
         if (!win && repeat && (g_pending[0] || g_pending[1])) {
             return CallNextHookEx(nullptr, code, message, param);
+        }
+        if (win && !repeat) {
+            g_shortcutUsed[index] = false;
+        } else if (!win && !IsModifierKey(key.vkCode)) {
+            for (int i = 0; i < 2; ++i) {
+                if (g_keys[i == 0 ? VK_LWIN : VK_RWIN]) {
+                    g_shortcutUsed[i] = true;
+                }
+            }
         }
         if (g_pending[0] || g_pending[1]) {
             // Send the withheld Win-down AND this key together. Passing this
@@ -285,7 +303,9 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         if (win) {
             const bool tap = g_pending[index] && g_tap[index];
             const bool swallow = g_swallowUp[index];
+            const bool shortcutUsed = g_shortcutUsed[index];
             g_pending[index] = g_tap[index] = g_swallowUp[index] = false;
+            g_shortcutUsed[index] = false;
             if (tap) {
                 // Post to our own thread so input is sent after this hook
                 // returns, rather than during the physical Win-up callback.
@@ -297,8 +317,13 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
             if (swallow) {
                 return 1;
             }
+            if (shortcutUsed) {
+                // Win+V and other flyouts must receive the real release, with
+                // no fresh Win-down or mask keystroke to dismiss their UI.
+                return CallNextHookEx(nullptr, code, message, param);
+            }
             // Modifier-only combinations (e.g. Win+Shift) can still be
-            // interpreted as a bare Win tap. Mask every forwarded release.
+            // interpreted as a bare Win tap. Only those need a masked release.
             INPUT release[] = {
                 KeyboardInput(static_cast<WORD>(key.vkCode), KEYEVENTF_EXTENDEDKEY),
                 KeyboardInput(kMenuMaskKey),
@@ -319,6 +344,7 @@ void ResetKeyTracking() {
     ZeroMemory(g_pending, sizeof(g_pending));
     ZeroMemory(g_tap, sizeof(g_tap));
     ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
+    ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
 }
 
 void RefreshForegroundAccess() {
