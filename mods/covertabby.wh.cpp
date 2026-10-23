@@ -49,7 +49,10 @@ CoverTabby is distributed under GPL-2.0-only; MIT terms remain applicable to the
 | No thumbnail | ![No thumbnail](https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/list-full.jpg) |
 | Text only | ![Text only](https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/text-full.jpg) |
 | Search | ![Search](https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/search-full.jpg) |
+| Aero 3D | Parallel tilted previews with cyclic navigation. |
 | Windows 10/11 Enchanted | ![Windows 10/11 Enchanted](https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/enchanted-full.png) |
+
+The optional Win+Tab overview opens a desktop gallery; selecting a desktop expands its windows into a full-screen view with a minimized-window strip and rename/delete controls. Gallery, expanded-view and Aero 3D captures are pending manual visual validation.
 
 These screenshots were captured using a macro. The same macro can generate fresh screenshots whenever I update CoverTabby.
 
@@ -464,7 +467,6 @@ static PCWSTR CoverTabbyIconFont();
 #include <atomic>
 #include <cmath>
 #include <cwctype>
-#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -491,9 +493,6 @@ static int LoadIntSetting(LPCWSTR settingName) {
     return Wh_GetIntSetting(settingName);
 }
 
-#include <algorithm>
-#include <cmath>
-#include <vector>
 namespace CoverTabbyPosition {
 struct Selection {int total=0,count=0,rank=-1;};
 template<class Items>
@@ -557,27 +556,6 @@ inline int tabStep(bool expanded,bool backwards) {
 }
 
 namespace covertabby {
-static void TraceDesktop(const char* event,int first=0,int second=0,HRESULT status=S_OK) {
-#ifdef COVERTABBY_LOCAL_DIAGNOSTICS
-    // Local troubleshooting build only: bounded event metadata, no titles or content.
-    wchar_t path[MAX_PATH]{};
-    if(!GetTempPathW(MAX_PATH,path) || wcslen(path)+32>=MAX_PATH) return;
-    wcscat_s(path,L"CoverTabby-navigation.log");
-    static bool firstEvent=true;
-    HANDLE file=CreateFileW(path,FILE_APPEND_DATA|GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,
-        nullptr,firstEvent ? CREATE_ALWAYS : OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-    if(file==INVALID_HANDLE_VALUE) return;
-    firstEvent=false;
-    LARGE_INTEGER size{};
-    if(GetFileSizeEx(file,&size) && size.QuadPart<65536) {
-        char line[192]{};
-        const int length=std::snprintf(line,sizeof(line),"%llu %s a=%d b=%d hr=%08lX\r\n",
-            GetTickCount64(),event,first,second,(unsigned long)status);
-        DWORD written=0;if(length>0) WriteFile(file,line,(DWORD)std::min(length,(int)sizeof(line)-1),&written,nullptr);
-    }
-    CloseHandle(file);
-#endif
-}
 namespace wgc = winrt::Windows::Graphics::Capture;
 namespace wgdx = winrt::Windows::Graphics::DirectX;
 namespace wgd3d = winrt::Windows::Graphics::DirectX::Direct3D11;
@@ -1805,7 +1783,7 @@ public:
             using Fn=HRESULT(STDMETHODCALLTYPE*)(IUnknown*,Desktop*);
             result=Method<Fn>(m_internal.get(),9)(m_internal.get(),desktop->object.get());
         }
-        TraceDesktop("Switch-call",(int)(desktop-entries.begin()),(int)entries.size(),result);
+
         return result;
     }
     HRESULT Create(GUID* id) {
@@ -3494,7 +3472,7 @@ void Switcher::TickTouchpadTaps(double now) {
 }
 
 void Switcher::OnDesktopHotkey(bool backwards) {
-    TraceDesktop("WinTab",m_overviewSelected,m_overviewExpanded);
+
     if(m_desktopOverview && (m_state==State::Pending || m_state==State::Open)) {
         OnStep(backwards ? -1 : 1);
     } else {
@@ -3505,7 +3483,7 @@ void Switcher::OnDesktopHotkey(bool backwards) {
 }
 
 void Switcher::OnDesktopWinReleased() {
-    TraceDesktop("Win-release",m_overviewSelected,(int)m_state);
+
     if(!m_desktopOverview || (m_state!=State::Pending && m_state!=State::Open)) return;
     if(g_physicalWinKeys.load()!=0 || g_desktopRenameTyping || m_overviewDeletePending || m_overviewPress) return;
     EndSwitching();OnCommit(-1);
@@ -3580,7 +3558,7 @@ void Switcher::ToggleDesktopOverview(bool force) {
     }
     m_overviewScroll=m_overviewSelected;
     EnumWindows(EnumOverviewWindow,reinterpret_cast<LPARAM>(this));
-    TraceDesktop("Overview-open",(int)m_overviewDesktops.size(),(int)m_overviewWindows.size());
+
     size_t explorerWindows=0;
     for(const auto& window:m_overviewWindows) {
         wchar_t className[64]{};GetClassNameW(window.hwnd,className,64);
@@ -4152,6 +4130,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
         const auto error=Text(L"Desktop overview unavailable on this Windows build",L"Panoramica desktop non disponibile su questa versione di Windows");
         m_ctx->DrawText(error,(UINT32)wcslen(error),m_overviewFormat.get(),{0,m_height*.4f,m_width,m_height*.6f},m_brush.get());return;
     }
+
     if(!m_overviewExpanded) {DrawDesktopGallery(opacity);DrawDesktopRemoval(opacity);return;}
     m_overviewBack={20*m_dpiScale,20*m_dpiScale,140*m_dpiScale,58*m_dpiScale};
     DrawUiPanel(m_overviewBack,9*m_dpiScale,opacity);
@@ -4161,17 +4140,14 @@ void Switcher::DrawDesktopOverview(float opacity) {
     m_overviewScroll+=(m_overviewSelected-m_overviewScroll)*(1-std::exp(-18*m_motionDt));
     const float worldWidth=std::max(1L,m_overviewWorld.right-m_overviewWorld.left);
     const float worldHeight=std::max(1L,m_overviewWorld.bottom-m_overviewWorld.top);
-    std::vector<OverviewWindow*> minimized,active;
+    std::vector<OverviewWindow*> minimized;
     for(auto& window:m_overviewWindows) {
         if(window.alive && (window.minimized || window.restoredInOverview) &&
             (IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id) || IsEqualGUID(window.desktop,GUID_NULL)))
             minimized.push_back(&window);
-        else if(window.alive && !window.minimized && !window.restoredInOverview &&
-            (IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id) || IsEqualGUID(window.desktop,GUID_NULL)))
-            active.push_back(&window);
     }
     auto layout=CalculateOverviewLayout(m_width,m_height,m_dpiScale,worldWidth/worldHeight,!minimized.empty(),false);
-    if(m_overviewExpanded) {
+    {
         // The selected desktop grows into a full-screen canvas. The overview's
         // existing eased layout values animate the gallery card into place.
         layout.width=m_width;
@@ -4194,13 +4170,12 @@ void Switcher::DrawDesktopOverview(float opacity) {
     const float width=m_overviewLayoutWidth,height=m_overviewLayoutHeight,sidebar=layout.sidebar;
     const float centerX=m_overviewLayoutX,centerY=m_overviewLayoutY+10*m_dpiScale*(1-EaseOutQuart(transition));
     const float dockClose=m_state==State::Closing ? EaseOutQuart(m_open.Progress(overviewNow)) : 0;
-    const float spacing=width+28*m_dpiScale;
     POINT cursor{};const bool hasCursor=GetCursorPos(&cursor) && ScreenToClient(m_hwnd,&cursor);
     const auto pointer=LayoutPoint(cursor);
     std::wstring hoveredTitle;
     if(!minimized.empty()) {
         const float tileWidth=172*m_dpiScale,tileHeight=110*m_dpiScale,gap=8*m_dpiScale;
-        const float top=(m_overviewExpanded ? 74*m_dpiScale : m_height*.15f)-12*m_dpiScale*dockClose;
+        const float top=(74*m_dpiScale)-12*m_dpiScale*dockClose;
         const int visible=std::max(1,(int)((m_width-sidebar-80*m_dpiScale)/(tileWidth+gap)));
         int selectedMini=-1;
         for(int i=0;i<(int)minimized.size();++i) if(minimized[i]->hwnd==m_overviewSelectedWindow) selectedMini=i;
@@ -4208,9 +4183,9 @@ void Switcher::DrawDesktopOverview(float opacity) {
         const int count=std::min(visible,(int)minimized.size());
         const float left=centerX-(count*tileWidth+(count-1)*gap)*.5f;
         const D2D1_RECT_F dock{
-            m_overviewExpanded ? 24*m_dpiScale : left-12*m_dpiScale,
+            24*m_dpiScale,
             top-10*m_dpiScale,
-            m_overviewExpanded ? m_width-24*m_dpiScale : left+count*tileWidth+(count-1)*gap+12*m_dpiScale,
+            m_width-24*m_dpiScale,
             top+tileHeight+10*m_dpiScale};
         m_brush->SetColor(m_settings.darkBackground ? D2D1::ColorF(.10f,.10f,.12f,opacity*.96f) : D2D1::ColorF(.94f,.94f,.96f,opacity*.96f));
         m_ctx->FillRoundedRectangle({dock,18*m_dpiScale,18*m_dpiScale},m_brush.get());
@@ -4247,25 +4222,23 @@ void Switcher::DrawDesktopOverview(float opacity) {
             if(hovered) hoveredTitle=window.title;
         }
     }
-    m_ctx->PushAxisAlignedClip(m_overviewExpanded ? D2D1::RectF(0,0,m_width,m_height) :
-        D2D1::RectF(std::max(20*m_dpiScale,sidebar),0,m_width-20*m_dpiScale,m_height),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    m_ctx->PushAxisAlignedClip(D2D1::RectF(0,0,m_width,m_height),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     for(int index=0;index<(int)m_overviewDesktops.size();++index) {
-        const bool previousDesktop=m_overviewExpanded && !IsEqualGUID(m_overviewPreviousDesktop,GUID_NULL) &&
+        const bool previousDesktop= !IsEqualGUID(m_overviewPreviousDesktop,GUID_NULL) &&
             IsEqualGUID(m_overviewDesktops[index].id,m_overviewPreviousDesktop) && index!=m_overviewSelected;
-        if(m_overviewExpanded && index!=m_overviewSelected && !previousDesktop) continue;
+        if(index!=m_overviewSelected && !previousDesktop) continue;
         auto& desktop=m_overviewDesktops[index];
-        const float slide=m_overviewExpanded ? (previousDesktop
+        const float slide=(previousDesktop
             ? -m_overviewTransitionDirection*m_width*switchProgress
-            : m_overviewTransitionDirection*m_width*(1-switchProgress)) : 0;
-        const float center=centerX+(m_overviewExpanded ? slide : (index-(float)m_overviewScroll)*spacing);
-        const float desktopOpacity=opacity*(m_overviewExpanded ? (previousDesktop ? 1-switchProgress : switchProgress) : 1.f);
+            : m_overviewTransitionDirection*m_width*(1-switchProgress));
+        const float center=centerX+slide;
+        const float desktopOpacity=opacity*(previousDesktop ? 1-switchProgress : switchProgress);
         const D2D1_RECT_F card{center-width*.5f,centerY-height*.5f,center+width*.5f,centerY+height*.5f};
-        desktop.hit=m_overviewExpanded && !previousDesktop ? D2D1::RectF(0,0,m_width,m_height) :
-            D2D1::RectF(std::max(card.left,std::max(20*m_dpiScale,sidebar)),card.top,std::min(card.right,m_width-20*m_dpiScale),card.bottom);
+        desktop.hit=!previousDesktop ? D2D1::RectF(0,0,m_width,m_height) : D2D1_RECT_F{};
         if(card.right<0 || card.left>m_width) continue;
         if(!m_overviewCardMask || m_overviewMaskWidth!=width || m_overviewMaskHeight!=height || m_overviewMaskDpi!=m_dpiScale) {
             m_overviewCardMask=nullptr;
-            const float corner=m_overviewExpanded ? 0.f : 8*m_dpiScale;
+            const float corner=0.f;
             if(FAILED(m_d2dFactory->CreateRoundedRectangleGeometry({{0,0,width,height},corner,corner},m_overviewCardMask.put()))) continue;
             m_overviewMaskWidth=width;m_overviewMaskHeight=height;m_overviewMaskDpi=m_dpiScale;
         }
@@ -4288,21 +4261,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
         }
         std::reverse(cardWindows.begin(),cardWindows.end());
         const bool currentDesktop=IsEqualGUID(desktop.id,m_overviewCurrentDesktop);
-        float taskbarHeight=0;
-        if(currentDesktop) {
-            taskbarHeight=std::max(22*m_dpiScale,height*.047f);
-            if(m_overviewTaskbar) taskbarHeight=std::max(taskbarHeight,
-                (m_overviewTaskbar->rect.bottom-m_overviewTaskbar->rect.top)*height/worldHeight);
-        }
-        const float gridPad=8*m_dpiScale,gap=7*m_dpiScale;
-        const D2D1_RECT_F grid{card.left+gridPad,card.top+gridPad,
-            card.right-gridPad,card.bottom-taskbarHeight-gridPad};
         const int count=(int)cardWindows.size();
-        const float gridWidth=std::max(1.f,grid.right-grid.left),gridHeight=std::max(1.f,grid.bottom-grid.top);
-        const int columns=count ? std::max(1,(int)std::ceil(std::sqrt(count*gridWidth/gridHeight))) : 1;
-        const int rows=count ? (count+columns-1)/columns : 1;
-        const float cellWidth=(gridWidth-gap*(columns-1))/columns;
-        const float cellHeight=(gridHeight-gap*(rows-1))/rows;
         for(int tileIndex=0;tileIndex<count;++tileIndex) {
             auto& window=*cardWindows[tileIndex];DWORD pid=0;GetWindowThreadProcessId(window.hwnd,&pid);
             GetWindowBounds(window.hwnd,false,&window.rect);
@@ -4313,9 +4272,9 @@ void Switcher::DrawDesktopOverview(float opacity) {
                 card.top+(window.rect.top-m_overviewWorld.top)*height/worldHeight,
                 card.left+(window.rect.right-m_overviewWorld.left)*width/worldWidth,
                 card.top+(window.rect.bottom-m_overviewWorld.top)*height/worldHeight};
-            const bool windowHovered=m_overviewExpanded && hasCursor && InRect(pointer,destination);
+            const bool windowHovered=hasCursor && InRect(pointer,destination);
             window.overviewHover+=(float)(((windowHovered ? 1.f : 0.f)-window.overviewHover)*(1-std::exp(-18*m_motionDt)));
-            if(m_overviewExpanded && window.overviewHover>.001f) {
+            if(window.overviewHover>.001f) {
                 const float grow=1.f+.025f*window.overviewHover;
                 const float cx=(destination.left+destination.right)*.5f;
                 const float cy=(destination.top+destination.bottom)*.5f-10*m_dpiScale*window.overviewHover;
@@ -4323,7 +4282,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
                 const float halfHeight=(destination.bottom-destination.top)*grow*.5f;
                 destination={cx-halfWidth,cy-halfHeight,cx+halfWidth,cy+halfHeight};
             }
-            if(index==m_overviewSelected || (!m_overviewExpanded && window.hitDesktop<0)) {
+            if(index==m_overviewSelected) {
                 window.hit={std::max(card.left,destination.left),std::max(card.top,destination.top),
                     std::min(card.right,destination.right),std::min(card.bottom,destination.bottom)};
                 if(window.hit.right>window.hit.left && window.hit.bottom>window.hit.top) window.hitDesktop=index;
@@ -4346,7 +4305,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
                         (destination.top+destination.bottom-icon)*.5f,(destination.left+destination.right+icon)*.5f,
                         (destination.top+destination.bottom+icon)*.5f},1,D2D1_INTERPOLATION_MODE_LINEAR);}
             }
-            if(m_overviewExpanded && window.overviewHover>.005f) {
+            if(window.overviewHover>.005f) {
                 const float glow=opacity*window.overviewHover;
                 for(int halo=3;halo>=1;--halo) {
                     const float spread=halo*2*m_dpiScale;
@@ -4389,16 +4348,8 @@ void Switcher::DrawDesktopOverview(float opacity) {
             }
         }
         m_ctx->PopLayer();
-        if(m_overviewExpanded && previousDesktop) continue;
-        desktop.focusAmount+=(float)(((index==m_overviewSelected ? 1.0f : 0.0f)-desktop.focusAmount)*(1-std::exp(-18*m_motionDt)));
-        auto outline=m_settings.borderColor;
-        outline.r+=(m_settings.highlightColor.r-outline.r)*desktop.focusAmount;
-        outline.g+=(m_settings.highlightColor.g-outline.g)*desktop.focusAmount;
-        outline.b+=(m_settings.highlightColor.b-outline.b)*desktop.focusAmount;
-        m_brush->SetColor(StyleColor(outline,opacity*(.3f+.7f*desktop.focusAmount)));
-        if(!m_overviewExpanded)
-            m_ctx->DrawRoundedRectangle({card,8*m_dpiScale,8*m_dpiScale},m_brush.get(),(1+desktop.focusAmount)*m_dpiScale);
-        if(m_overviewExpanded) {
+        if(previousDesktop) continue;
+        {
             const bool editing=g_desktopRenameTyping && IsEqualGUID(desktop.id,m_overviewRenameId);
             const float buttonWidth=std::min(360*m_dpiScale,m_width*.42f),buttonHeight=44*m_dpiScale;
             const D2D1_RECT_F nameButton{(m_width-buttonWidth)*.5f,m_height-62*m_dpiScale,
@@ -4436,109 +4387,9 @@ void Switcher::DrawDesktopOverview(float opacity) {
             }
             continue;
         }
-        m_brush->SetColor(D2D1::ColorF(1,1,1,opacity));
-        const bool editing=g_desktopRenameTyping && IsEqualGUID(desktop.id,m_overviewRenameId);
-        const float pad=8*m_dpiScale,buttonHeight=30*m_dpiScale;
-        const D2D1_RECT_F footer{card.left,card.bottom+8*m_dpiScale,card.right,card.bottom+52*m_dpiScale};
-        const bool overCard=hasCursor && (InRect(pointer,desktop.hit) || InRect(pointer,footer));
-        desktop.hoverAmount+=(float)(((editing || overCard ? 1.0f : 0.0f)-desktop.hoverAmount)*(1-std::exp(-20*m_motionDt)));
-        const float menuAlpha=opacity*(editing ? 1.f : desktop.hoverAmount);
-        const float titleReserve=std::min(106*m_dpiScale,width*.36f);
-        const D2D1_RECT_F nameBox{footer.left+titleReserve,footer.top+5*m_dpiScale,
-            footer.right-titleReserve,footer.bottom-5*m_dpiScale};
-        if(menuAlpha>.005f) {
-            DrawUiPanel(footer,10*m_dpiScale,menuAlpha);
-        }
-        if(editing) {
-            m_overviewRenameBox=nameBox;
-            m_brush->SetColor(StyleColor(m_settings.highlightColor,menuAlpha*.12f));
-            m_ctx->FillRoundedRectangle({m_overviewRenameBox,8*m_dpiScale,8*m_dpiScale},m_brush.get());
-            m_brush->SetColor(StyleColor(m_settings.highlightColor,menuAlpha));
-            m_ctx->DrawRoundedRectangle({m_overviewRenameBox,8*m_dpiScale,8*m_dpiScale},m_brush.get(),m_dpiScale);
-        }
-        const auto& name=editing ? m_overviewRenameText : desktop.name;
-        m_brush->SetColor(D2D1::ColorF(1,1,1,opacity));
-        if(editing) {
-            DrawAnimatedUiText(m_renameTextAnimation,name,m_overviewTitleFormat.get(),nameBox,
-                menuAlpha,m_overviewRenameSelectAll,true,false);
-        } else {
-            m_brush->SetColor(m_settings.darkBackground ? D2D1::ColorF(1,1,1,menuAlpha) : D2D1::ColorF(.08f,.08f,.10f,menuAlpha));
-            m_ctx->DrawText(name.c_str(),(UINT32)name.size(),m_overviewTitleFormat.get(),nameBox,m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        }
-        if(desktop.hoverAmount>.02f) {
-            const float ease=(float)(1-std::exp(-20*m_motionDt));
-            const float controlsTop=(footer.top+footer.bottom-buttonHeight)*.5f;
-            const float base=32*m_dpiScale,label=62*m_dpiScale;
-            desktop.rename={footer.left+pad,controlsTop,
-                footer.left+pad+base+label*desktop.renameHover,controlsTop+buttonHeight};
-            desktop.remove=index>0 && !editing ? D2D1_RECT_F{footer.right-pad-base-label*desktop.removeHover,controlsTop,
-                footer.right-pad,controlsTop+buttonHeight} : D2D1_RECT_F{};
-            const bool renameHovered=hasCursor && InRect(pointer,desktop.rename);
-            const bool removeHovered=index>0 && !editing && hasCursor && InRect(pointer,desktop.remove);
-            desktop.renameHover+=(float)(((renameHovered ? 1.f : 0.f)-desktop.renameHover)*ease);
-            desktop.removeHover+=(float)(((removeHovered ? 1.f : 0.f)-desktop.removeHover)*ease);
-            // Recalculate with the updated animation values, like Alt+Tab's expanding controls.
-            desktop.rename.right=footer.left+pad+base+label*desktop.renameHover;
-            if(index>0) desktop.remove.left=footer.right-pad-base-label*desktop.removeHover;
-            auto control=[&](const D2D1_RECT_F& rect,const wchar_t* icon,const wchar_t* text,float hover,bool danger) {
-                DrawUiAction(rect,icon,text,hover,menuAlpha,
-                    danger ? D2D1::ColorF(.95f,.22f,.25f) : m_settings.highlightColor,
-                    m_overviewSymbolFormat.get(),m_overviewButtonFormat.get(),base);
-            };
-            control(desktop.rename,editing ? L"\uE73E" : L"\uE70F",
-                editing ? Text(L"Save",L"Salva") : Text(L"Rename",L"Rinomina"),desktop.renameHover,false);
-            if(index>0 && !editing)
-                control(desktop.remove,L"\uE74D",Text(L"Delete",L"Cancella"),desktop.removeHover,true);
-        }
-    }
-    if(!m_overviewExpanded) {
-        const float addLeft=centerX+((int)m_overviewDesktops.size()-1-(float)m_overviewScroll)*spacing+width*.5f+28*m_dpiScale;
-        m_overviewAdd={addLeft,centerY-32*m_dpiScale,addLeft+64*m_dpiScale,centerY+32*m_dpiScale};
-        m_brush->SetColor(StyleColor(m_settings.highlightColor,opacity*(hasCursor && InRect(pointer,m_overviewAdd) ? .35f : .18f)));
-        m_ctx->FillRoundedRectangle({m_overviewAdd,16*m_dpiScale,16*m_dpiScale},m_brush.get());
-        m_brush->SetColor(D2D1::ColorF(1,1,1,opacity));
-        const float plusX=addLeft+32*m_dpiScale;
-        m_ctx->DrawLine({plusX-10*m_dpiScale,centerY},{plusX+10*m_dpiScale,centerY},m_brush.get(),2*m_dpiScale);
-        m_ctx->DrawLine({plusX,centerY-10*m_dpiScale},{plusX,centerY+10*m_dpiScale},m_brush.get(),2*m_dpiScale);
     }
     m_ctx->PopAxisAlignedClip();
-    if(!active.empty() && !m_overviewExpanded) {
-        const float tile=54*m_dpiScale,gap=8*m_dpiScale;
-        const int visible=std::max(1,(int)((m_height*.76f-24*m_dpiScale+gap)/(tile+gap)));
-        int chosen=0;for(int i=0;i<(int)active.size();++i) if(active[i]->hwnd==m_overviewSelectedWindow) chosen=i;
-        const int start=std::clamp(chosen-visible/2,0,std::max(0,(int)active.size()-visible));
-        const int count=std::min(visible,(int)active.size());
-        const float target=count*tile+(count-1)*gap+24*m_dpiScale;
-        if(m_overviewDockHeight<=0) m_overviewDockHeight=target;
-        m_overviewDockHeight+=(target-m_overviewDockHeight)*(float)(1-std::exp(-18*m_motionDt));
-        const float entry=EaseOutQuart(std::clamp((float)((NowSeconds()-m_overviewDockTransition)/.2),0.0f,1.0f));
-        const float top=m_height*.5f-(count*tile+(count-1)*gap)*.5f,left=(24-10*(1-entry)-22*dockClose)*m_dpiScale,alpha=opacity*entry;
-        const D2D1_RECT_F dock{left-8*m_dpiScale,(m_height-m_overviewDockHeight)*.5f,left+tile+8*m_dpiScale,(m_height+m_overviewDockHeight)*.5f};
-        m_brush->SetColor(m_settings.darkBackground ? D2D1::ColorF(.10f,.10f,.12f,alpha*.96f) : D2D1::ColorF(.94f,.94f,.96f,alpha*.96f));
-        m_ctx->FillRoundedRectangle({dock,18*m_dpiScale,18*m_dpiScale},m_brush.get());
-        m_brush->SetColor(StyleColor(m_settings.borderColor,alpha*.3f));
-        m_ctx->DrawRoundedRectangle({dock,18*m_dpiScale,18*m_dpiScale},m_brush.get(),m_dpiScale);
-        for(int i=0;i<count;++i) {
-            auto& window=*active[start+i];
-            const D2D1_RECT_F targetRect{left,top+i*(tile+gap),left+tile,top+i*(tile+gap)+tile};
-            window.dockTarget=true;
-            if(window.dockAmount<0.001f) window.dockVisual={targetRect.left-8*m_dpiScale,targetRect.top,targetRect.right-8*m_dpiScale,targetRect.bottom};
-            window.dockAmount+=(1-window.dockAmount)*dockBlend;
-            window.dockVisual={Lerp(window.dockVisual.left,targetRect.left,dockBlend),Lerp(window.dockVisual.top,targetRect.top,dockBlend),Lerp(window.dockVisual.right,targetRect.right,dockBlend),Lerp(window.dockVisual.bottom,targetRect.bottom,dockBlend)};
-            const auto rect=window.dockVisual;
-            window.dockHit=rect;window.hitDesktop=m_overviewSelected;
-            const bool over=hasCursor && InRect(pointer,rect);
-            window.dockHover+=(float)(((over ? 1.f : 0.f)-window.dockHover)*(1-std::exp(-20*m_motionDt)));
-            window.dockFocus+=(float)(((window.hwnd==m_overviewSelectedWindow ? 1.f : 0.f)-window.dockFocus)*(1-std::exp(-18*m_motionDt)));
-            m_brush->SetColor(StyleColor(m_settings.highlightColor,alpha*(.22f*window.dockFocus+.12f*window.dockHover)));
-            m_ctx->FillRoundedRectangle({rect,12*m_dpiScale,12*m_dpiScale},m_brush.get());
-            m_brush->SetColor(StyleColor(m_settings.highlightColor,alpha*window.dockFocus));
-            m_ctx->DrawRoundedRectangle({rect,12*m_dpiScale,12*m_dpiScale},m_brush.get(),m_dpiScale);
-            const float size=(34+5*window.dockHover)*m_dpiScale,x=(rect.left+rect.right-size)*.5f,y=rect.top+(tile-size)*.5f-4*m_dpiScale*window.dockHover;
-            if(window.icon) m_ctx->DrawBitmap(window.icon.get(),{x,y,x+size,y+size},alpha*window.dockAmount,D2D1_INTERPOLATION_MODE_LINEAR);
-            if(over) hoveredTitle=window.title;
-        }
-    }
+
     for(auto& window:m_overviewWindows) if(!window.dockTarget && window.dockAmount>0.001f) {
         window.dockAmount*=1-dockBlend;
         if(window.alive && window.icon) {
@@ -4933,7 +4784,7 @@ void Switcher::OnStep(int step) {
             }
             m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
             m_overviewDockTransition=NowSeconds();
-            TraceDesktop("Desktop-step",m_overviewSelected,step);
+
         } else {
             std::vector<const OverviewWindow*> windows;
             for(const auto& window:m_overviewWindows) {
@@ -5031,7 +4882,7 @@ void Switcher::OnStep(int step) {
 }
 
 void Switcher::OnCommit(int index) {
-    TraceDesktop("Commit",m_overviewSelected,m_desktopOverview);
+
     if(m_overviewDeletePending) {RemoveOverviewDesktop();return;}
     if(g_desktopRenameTyping) {FinishDesktopRename(true);return;}
     if(m_desktopOverview) {
@@ -5316,7 +5167,7 @@ void Switcher::OnClick(POINT pt) {
             m_overviewDragging=false;m_overviewPressFromDock=false;g_desktopWinHoldSession=false;g_stickyControls=true;SetCapture(m_hwnd);return;
         }
         const int desktopHit=HitOverviewDesktop(point);
-        TraceDesktop("Desktop-click",desktopHit,m_overviewExpanded);
+
         if(desktopHit>=0) {
             const int i=desktopHit;
             m_overviewSelected=(int)i;m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
@@ -6333,7 +6184,7 @@ void Switcher::ReopenDuringClose(bool backwards) {
 }
 
 void Switcher::FinishClose() {
-    TraceDesktop("Finish-close",m_overviewSelected,m_commitDesktop);
+
     if(m_commitDesktop) {
         const GUID destination=m_destinationDesktop;
         const HWND target=m_overviewSelectedWindow;const DWORD expectedPid=m_overviewSelectedPid;
@@ -8728,7 +8579,7 @@ void Switcher::RenderFrame() {
     }
     if (FAILED(hr)) {
         Wh_Log(L"Rendering failed: 0x%08X", (UINT)hr);
-        TraceDesktop("Render-failed",(int)m_state,m_commitDesktop,hr);
+
         HandleDeviceLost();
         return;
     }
