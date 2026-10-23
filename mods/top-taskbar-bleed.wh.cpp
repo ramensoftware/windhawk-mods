@@ -6,6 +6,7 @@
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
+// @license         GPL-3.0
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -ldwmapi -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
@@ -66,6 +67,13 @@ rounded corners are normally the top ones).
   previous theme when the panel hides. This is done per taskbar through XAML's
   `RequestedTheme`, so only the affected monitor changes and the system theme
   itself is untouched.
+
+## Credits
+
+The taskbar-thread helpers (`RunFromWindowThread`, `FindCurrentProcessTaskbarWnd`)
+and the `taskbar.dll` XAML-root lookup are ported from
+[Taskbar multi-row](https://windhawk.net/mods/taskbar-multirow) by m417z,
+licensed under the GNU GPL v3.0. This mod is published under the same license.
 */
 // ==/WindhawkModReadme==
 
@@ -114,7 +122,6 @@ rounded corners are normally the top ones).
 #include <windhawk_utils.h>
 
 #include <dwmapi.h>
-#include <objbase.h>
 
 #undef GetCurrentTime
 
@@ -250,11 +257,9 @@ void LoadSettings() {
     s.minCommitIntervalMs = std::max(0, Wh_GetIntSetting(L"Smoothing.MinCommitIntervalMs"));
 
     for (int i = 0;; i++) {
-        PCWSTR p = Wh_GetStringSetting(L"Behavior.ExcludedProcesses[%d]", i);
-        bool empty = !*p;
-        if (!empty) s.excludedProcesses.push_back(ToLowerBasename(p));
-        Wh_FreeStringSetting(p);
-        if (empty) break;
+        auto p = WindhawkUtils::StringSetting::make(L"Behavior.ExcludedProcesses[%d]", i);
+        if (!*p.get()) break;
+        s.excludedProcesses.push_back(ToLowerBasename(p.get()));
     }
 
     std::lock_guard lock(g_settingsMutex);
@@ -995,7 +1000,6 @@ void AddWinEventHook(DWORD minEvent, DWORD maxEvent) {
 
 DWORD WINAPI TrackerThreadProc(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);  // physical pixels everywhere
-    HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the queue
@@ -1038,8 +1042,6 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
     if (g_pollTimer) KillTimer(nullptr, g_pollTimer);
     g_debounceTimer = g_pollTimer = 0;
     g_track.clear();
-
-    if (SUCCEEDED(coHr)) CoUninitialize();
     return 0;
 }
 
@@ -1247,6 +1249,14 @@ void TeardownIsland(Island& isl) try {
 // Drops islands whose taskbar window is gone (monitor unplugged) or whose
 // panel lost its parent (frame re-templated), so a rebuilt frame on the same
 // window can be attached again and the tracker stops serving dead windows.
+bool IsPanelParented(Island const& isl) {
+    try {
+        return isl.panel && isl.panel.Parent();
+    } catch (...) {
+        return false;
+    }
+}
+
 void PruneDeadIslands() {
     std::vector<std::shared_ptr<Island>> dead;
     {
@@ -1254,8 +1264,7 @@ void PruneDeadIslands() {
         if (!g_islands) return;
         for (auto it = g_islands->begin(); it != g_islands->end();) {
             auto& isl = *it;
-            bool parented = isl->panel && isl->panel.Parent();
-            if (!IsWindow(isl->hwnd) || !parented) {
+            if (!IsWindow(isl->hwnd) || !IsPanelParented(*isl)) {
                 dead.push_back(isl);
                 it = g_islands->erase(it);
             } else {
@@ -1308,7 +1317,7 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
 
     void* frameId = IdentityOf(frame);
 
-    if (auto existing = FindIslandByFrameId(frameId); existing && existing->panel && existing->panel.Parent()) {
+    if (auto existing = FindIslandByFrameId(frameId); existing && IsPanelParented(*existing)) {
         return true;  // already attached
     }
 
@@ -1364,7 +1373,7 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
 
 // Attach to every taskbar owned by this (the taskbar) thread, straight from the
 // taskbar windows. Used at enable time and after settings changes.
-void WINAPI AttachAllTaskbars(void*) {
+void WINAPI AttachAllTaskbars(void*) try {
     if (g_unloading) return;
     PruneDeadIslands();
     EnumThreadWindows(
@@ -1387,6 +1396,8 @@ void WINAPI AttachAllTaskbars(void*) {
             return TRUE;
         },
         0);
+} catch (...) {
+    Wh_Log(L"AttachAllTaskbars failed");
 }
 
 // Hook path: a TaskbarFrame announced a layout change. Covers taskbars created
@@ -1396,7 +1407,7 @@ void WINAPI AttachAllTaskbars(void*) {
 void DiscoverFromFrame(wux::DependencyObject const& frame) {
     if (g_unloading || !frame) return;
     void* frameId = IdentityOf(frame);
-    if (auto isl = FindIslandByFrameId(frameId); isl && isl->panel && isl->panel.Parent()) return;
+    if (auto isl = FindIslandByFrameId(frameId); isl && IsPanelParented(*isl)) return;
 
     ULONGLONG now = GetTickCount64();
     if (auto it = g_failedFrames.find(frameId); it != g_failedFrames.end() && now - it->second < kFailedRetryMs) {
@@ -1518,7 +1529,10 @@ TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t TaskbarFrame_OnTaskbarLayoutChi
 void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
     TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original(pThis);
     if (g_unloading) return;
-    if (auto frame = ElementFromImplThis(pThis)) DiscoverFromFrame(frame);
+    try {  // never let a winrt exception unwind into Taskbar.View.dll frames
+        if (auto frame = ElementFromImplThis(pThis)) DiscoverFromFrame(frame);
+    } catch (...) {
+    }
 }
 
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
@@ -1526,8 +1540,11 @@ TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
-    if (auto btn = ElementFromImplThis(pThis)) {
-        if (auto frame = FindTaskbarFrameAncestor(btn)) DiscoverFromFrame(frame);
+    try {  // never let a winrt exception unwind into Taskbar.View.dll frames
+        if (auto btn = ElementFromImplThis(pThis)) {
+            if (auto frame = FindTaskbarFrameAncestor(btn)) DiscoverFromFrame(frame);
+        }
+    } catch (...) {
     }
 }
 
