@@ -22,8 +22,8 @@ folder contents and location.
 ![File Hover Info card](https://i.imgur.com/Gk2ZcFl.png)
 
 The card follows the Windows display language (English, Italian, Spanish,
-French, German, Portuguese and Simplified Chinese are included; other languages fall back to
-English), or you can pick one.
+French, German, Portuguese and Simplified Chinese are included; other
+languages fall back to English), or you can pick one.
 
 Everything is configurable: which fields to show, date style (absolute,
 relative or both), theme (follow Windows, dark, light or fully custom colors),
@@ -77,7 +77,7 @@ free space instead of being scanned.
   - fr: Français
   - de: Deutsch
   - pt: Português
-  - chs: 简体中文
+  - zh: 简体中文 (Simplified Chinese)
 - folderSizeLimit: 10
   $name: Folder size - maximum calculation time (seconds)
   $description: Large folders are summed in the background. When the limit is hit the card shows a partial total.
@@ -438,7 +438,7 @@ static void LoadSettings() {
     g_set.onDesktop = GetBool(L"showOnDesktop");
     g_set.inExplorer = GetBool(L"showInExplorer");
     {
-        static const wchar_t* codes[] = {L"en", L"it", L"es", L"fr", L"de", L"pt", L"chs"};
+        static const wchar_t* codes[] = {L"en", L"it", L"es", L"fr", L"de", L"pt", L"zh"};
         std::wstring lang = GetStr(L"language");
         g_set.lang = -1;
         for (int i = 0; i < 7; i++)
@@ -450,7 +450,17 @@ static void LoadSettings() {
                 case LANG_FRENCH: g_set.lang = 3; break;
                 case LANG_GERMAN: g_set.lang = 4; break;
                 case LANG_PORTUGUESE: g_set.lang = 5; break;
-                case LANG_CHINESE_SIMPLIFIED: g_set.lang = 6; break;
+                case LANG_CHINESE: {
+                    // LANG_CHINESE covers both scripts: use Simplified only
+                    // for mainland China and Singapore. Traditional Chinese
+                    // (Taiwan, Hong Kong, Macau) falls back to English.
+                    WORD sub = SUBLANGID(GetUserDefaultUILanguage());
+                    g_set.lang = (sub == SUBLANG_CHINESE_SIMPLIFIED ||
+                                  sub == SUBLANG_CHINESE_SINGAPORE)
+                                     ? 6
+                                     : 0;
+                    break;
+                }
                 default: g_set.lang = 0;
             }
         }
