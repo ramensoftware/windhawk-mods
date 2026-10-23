@@ -473,7 +473,6 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
@@ -1534,7 +1533,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::OnTaskbarLayoutChildBoundsChanged(void))"},
             &TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original,
@@ -1548,7 +1547,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed (Taskbar.View.dll)");
         return false;
     }
