@@ -756,7 +756,13 @@ void Fill(const D2D1_RECT_F& r, D2D1_COLOR_F color, float radius = 0) {
 ////////////////////////////////////////////////////////////////////////////////
 // Background (Blur Mode: Adjustable)
 
-struct Backdrop { std::vector<UINT32> pixels; int width = 0, height = 0; float sourceWidth = 0, sourceHeight = 0; ComPtr<ID2D1Bitmap> bitmap; UINT generation = 0; };
+struct Backdrop {
+    std::vector<UINT32> pixels;
+    int width = 0, height = 0;
+    float sourceWidth = 0, sourceHeight = 0;
+    ComPtr<ID2D1Bitmap> bitmap;
+    UINT generation = 0;
+};
 [[clang::no_destroy]] Backdrop g_backdropImage;
 
 void BoxBlurPass(const UINT32* src, UINT32* dst, int lines, int length, int lineStep, int step, int radius) {
@@ -769,7 +775,9 @@ void BoxBlurPass(const UINT32* src, UINT32* dst, int lines, int length, int line
         for (int i = 0; i < length; i++) {
             d[(size_t)i * step] = 0xFF000000 | ((sum[2] / window) << 16) | ((sum[1] / window) << 8) | (sum[0] / window);
             UINT32 in = at(i + radius + 1), out = at(i - radius);
-            sum[0] += (int)(in & 0xFF) - (int)(out & 0xFF); sum[1] += (int)((in >> 8) & 0xFF) - (int)((out >> 8) & 0xFF); sum[2] += (int)((in >> 16) & 0xFF) - (int)((out >> 16) & 0xFF);
+            sum[0] += (int)(in & 0xFF) - (int)(out & 0xFF);
+            sum[1] += (int)((in >> 8) & 0xFF) - (int)((out >> 8) & 0xFF);
+            sum[2] += (int)((in >> 16) & 0xFF) - (int)((out >> 16) & 0xFF);
         }
     }
 }
@@ -1948,8 +1956,26 @@ void OnChar(WCHAR ch) {
     bool edits = ch == 8 || ch == 0x7F || ch == 0x16 || ch >= 32;
     if (edits && g_openFolderIndex >= 0) { FinishFolderClose(); Render(); }
     switch (ch) {
-        case 8: if (!g_query.empty()) { g_query.pop_back(); if (!g_query.empty() && IS_HIGH_SURROGATE(g_query.back())) g_query.pop_back(); QueryChanged(); } return;
-        case 0x7F: { size_t end = g_query.find_last_not_of(L' '); if (end == std::wstring::npos) g_query.clear(); else { size_t space = g_query.find_last_of(L' ', end); g_query.resize(space == std::wstring::npos ? 0 : space + 1); } QueryChanged(); return; }
+        case 8:
+            if (!g_query.empty()) {
+                g_query.pop_back();
+                if (!g_query.empty() && IS_HIGH_SURROGATE(g_query.back())) {
+                    g_query.pop_back();
+                }
+                QueryChanged();
+            }
+            return;
+        case 0x7F: {
+            size_t end = g_query.find_last_not_of(L' ');
+            if (end == std::wstring::npos) {
+                g_query.clear();
+            } else {
+                size_t space = g_query.find_last_of(L' ', end);
+                g_query.resize(space == std::wstring::npos ? 0 : space + 1);
+            }
+            QueryChanged();
+            return;
+        }
         case 0x16: PasteText(); return;
     }
     if (ch >= 32 && g_query.size() < 200) { g_query += ch; QueryChanged(); }
@@ -2448,7 +2474,12 @@ DWORD WINAPI StartThread(void*) {
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)g_dwrite.GetAddressOf());
     HINSTANCE instance = (HINSTANCE)&__ImageBase;
 
-    WNDCLASSEXW wc{sizeof(wc)}; wc.lpfnWndProc = WndProc; wc.hInstance = instance; wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.lpszClassName = kWindowClass; RegisterClassExW(&wc);
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = instance;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = kWindowClass;
+    RegisterClassExW(&wc);
 
     HWND wnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED, kWindowClass, L"Start", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
     bool ok = g_d2d && g_dwrite && wnd;
@@ -2475,8 +2506,15 @@ bool IsFolderWindowsProcess() {
 bool HookShowStartView() {
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = { { {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"}, &XamlLauncher_ShowStartView_Original, XamlLauncher_ShowStartView_Hook } };
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK twinui_pcshell_hooks[] = {
+        {
+            {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
+            &XamlLauncher_ShowStartView_Original,
+            XamlLauncher_ShowStartView_Hook,
+        },
+    };
+    return WindhawkUtils::HookSymbols(module, twinui_pcshell_hooks, ARRAYSIZE(twinui_pcshell_hooks));
 }
 
 } // namespace
