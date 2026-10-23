@@ -62,6 +62,7 @@ Advanced options (e.g. EcoQoS, P/E-core affinity, power schemes) can be enabled 
 - **Foreground priority boost (ProBalance)**: Automatically increases the CPU priority of the active foreground window.
 - **Suggest P-cores to foreground window**: Directs the active foreground app to Performance Cores on hybrid CPUs.
 - **Dynamic high-performance power scheme**: Temporarily activates the High Performance power scheme for demanding workloads on AC power.
+- **Game Alt-Tab grace period**: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (default: 30 seconds).
 - **Throttle CPU-heavy background processes**: Temporarily lowers priority of background processes consuming excessive CPU.
 - **Restrict throttled background apps to E-cores**: Confines throttled background tasks to Efficiency Cores on hybrid CPUs.
 - **Windows efficiency mode (EcoQoS)**: Applies Windows power throttling to background processes.
@@ -112,6 +113,9 @@ If you find this mod useful, you can support its development and maintenance:
 - enableDynamicPowerPlan: false
   $name: Dynamic High-Performance Power Scheme
   $description: Automatically engages the High Performance power plan while a heavy application or game is active on AC power, and restores your plan on desktop.
+- gameAltTabGracePeriodSeconds: 30
+  $name: Game Alt-Tab Grace Period (seconds)
+  $description: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (0 to 300s, default 30s).
 - enableBackgroundThrottling: true
   $name: 2. Throttle CPU-Heavy Background Processes
   $description: Temporarily lowers the priority of background processes consuming excessive CPU while you are working.
@@ -141,7 +145,7 @@ If you find this mod useful, you can support its development and maintenance:
   $description: Optional comma-separated list of executable names to treat as local AI workloads.
 - freeRamThresholdPercent: 0
   $name: 4. Standard Free RAM Threshold (%)
-  $description: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive, 5% to 80%). Automatically adapts thresholds to your installed RAM (e.g. cleans at 60% free RAM on 32 GB).
+  $description: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive, 5% to 80%). Automatically adapts thresholds to your installed RAM (e.g. cleans at 20% free RAM on 32 GB).
 - trimMinimizedWindows: true
   $name: Clean Minimized Windows
   $description: Reclaims unused memory in the background from applications minimized to the taskbar.
@@ -311,7 +315,6 @@ struct SystemHardwareProfile {
     double totalRamGb = 0.0;
     DWORD coreCount = 0;
     bool isLowRamTier = false;         // < 12 GB
-    bool isHighRamTier = false;        // >= 24 GB
     bool isLowCoreCount = false;       // <= 4 cores
     bool isHybridCpu = false;          // Heterogeneous CPU architecture
     std::vector<ULONG> pCoreCpuSetIds; // Performance core IDs
@@ -328,7 +331,6 @@ static const SystemHardwareProfile& GetHardwareProfile() {
         }
         p.coreCount = GetSystemCoreCount();
         p.isLowRamTier = (p.totalRamGb > 0.0 && p.totalRamGb < 12.0);
-        p.isHighRamTier = (p.totalRamGb >= 24.0);
         p.isLowCoreCount = (p.coreCount <= 4);
 
         HMODULE hK32 = GetModuleHandleW(L"kernel32.dll");
@@ -471,7 +473,7 @@ struct ModSettings {
     bool enableDynamicPowerPlan = false;
     bool enableBrowserTabTrim = true;
     int browserTabInactivityMinutes = 10;
-    int gameAltTabGracePeriodSeconds = 180;
+    int gameAltTabGracePeriodSeconds = 30;
     int ioActivityWriteThresholdKbps = 250;
     int ioActivityTransferThresholdKbps = 100;
     int compressionBurstHysteresisSeconds = 20;
@@ -793,7 +795,7 @@ static void ClearGameSanctuary() {
 // or within a configurable Alt-Tab grace period after losing focus.
 static bool IsGamingLockdownActive(DWORD fgPid,
                                    std::chrono::steady_clock::time_point now,
-                                   int gracePeriodSeconds = 180) {
+                                   int gracePeriodSeconds = 30) {
     DWORD sanctuaryPid = GetLiveGameSanctuaryPid();
     if (sanctuaryPid == 0) {
         return false;
@@ -1069,7 +1071,7 @@ static std::wstring BuildSessionStatsString() {
     swprintf_s(buf, _countof(buf),
                L"SmartOptimizer Session Report\n"
                L"  Uptime: %s\n"
-               L"  RAM reclaimed: %llu MB freed (%u passes)\n"
+               L"  RAM reclaimed: %llu MB trimmed from working sets (%u passes)\n"
                L"  ProBalance boosts: %u transitions\n"
                L"  Background throttles: %u transitions\n"
                L"  Processes trimmed: %u hard, %u soft deprioritized",
@@ -1344,7 +1346,8 @@ static bool IsAiProcess(DWORD pid,
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                                now - itCache->second.lastEvaluated)
                                .count();
-            if (elapsed < 60)
+            int64_t ttl = 60 + static_cast<int64_t>(pid % 15);
+            if (elapsed < ttl)
                 return false;
         }
         if (itCache->second.status == AiClassification::Pending) {
@@ -1981,11 +1984,11 @@ static void RestoreForegroundBoostLocked() {
             !primary.procName.empty() ? primary.procName.c_str() : L"process";
         if (g_boostedProcesses.size() > 1) {
             LogEvent(LogCategory::ProBalance,
-                     L"Restoring priority for background %s (PID %u) and %zu related processes",
+                     L"Restoring priority for %s (PID %u) and %zu related processes",
                      pName, primary.pid, g_boostedProcesses.size() - 1);
         } else {
             LogEvent(LogCategory::ProBalance,
-                     L"Restoring priority for background %s (PID %u)",
+                     L"Restoring priority for %s (PID %u)",
                      pName, primary.pid);
         }
     }
@@ -2125,6 +2128,10 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                 : ABOVE_NORMAL_PRIORITY_CLASS;
         constexpr ULONG targetIo = IoPriorityNormal;
 
+        size_t initialBoostedCount = g_boostedProcesses.size();
+        bool foregroundBoosted = false;
+        std::wstring fgName = L"process";
+
         for (DWORD pid : pidsToBoost) {
             if (pid == 0 || pid == 4 || pid == currentPid)
                 continue;
@@ -2216,21 +2223,11 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                     }
 
                     if (pid == newForegroundPid) {
-                        g_sessionBoostTransitions.fetch_add(1, std::memory_order_relaxed);
-                        size_t childCount = (pidsToBoost.size() > 1) ? (pidsToBoost.size() - 1) : 0;
-                        if (childCount > 0) {
-                            LogEvent(LogCategory::ProBalance,
-                                     L"Elevating foreground %s (PID %u) and %zu child processes -> Priority: %s",
-                                     (itName != nameByPid.end()) ? itName->second.c_str() : L"process",
-                                     pid, childCount,
-                                     (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
-                        } else {
-                            LogEvent(LogCategory::ProBalance,
-                                     L"Elevating foreground %s (PID %u) -> Priority: %s",
-                                     (itName != nameByPid.end()) ? itName->second.c_str() : L"process",
-                                     pid,
-                                     (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
+                        foregroundBoosted = true;
+                        if (itName != nameByPid.end()) {
+                            fgName = itName->second;
                         }
+                        g_sessionBoostTransitions.fetch_add(1, std::memory_order_relaxed);
                     }
 
                     BoostedProcessEntry entry;
@@ -2249,6 +2246,22 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
             }
 
             CloseHandle(hProc);
+        }
+
+        if (foregroundBoosted) {
+            size_t addedCount = g_boostedProcesses.size() - initialBoostedCount;
+            size_t childCount = (addedCount > 1) ? (addedCount - 1) : 0;
+            if (childCount > 0) {
+                LogEvent(LogCategory::ProBalance,
+                         L"Elevating foreground %s (PID %u) and %zu child processes -> Priority: %s",
+                         fgName.c_str(), newForegroundPid, childCount,
+                         (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
+            } else {
+                LogEvent(LogCategory::ProBalance,
+                         L"Elevating foreground %s (PID %u) -> Priority: %s",
+                         fgName.c_str(), newForegroundPid,
+                         (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
+            }
         }
 
         g_currentBoostedPid.store(newForegroundPid, std::memory_order_release);
@@ -3723,15 +3736,15 @@ static bool HasGameRuntimeSignature(HANDLE hProc) {
     DWORD pathLen = _countof(imagePath);
     if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
         std::wstring fullPathLower = ToLower(imagePath);
-        // Common verified game directories
+        // Exclude Epic Games store launcher itself while supporting game directories
+        if (fullPathLower.find(L"\\epic games\\launcher\\") != std::wstring::npos) {
+            return false;
+        }
+        // Common verified game directories without store client collision
         if (fullPathLower.find(L"\\steamapps\\common\\") != std::wstring::npos ||
             fullPathLower.find(L"\\epic games\\") != std::wstring::npos ||
             fullPathLower.find(L"\\gog games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\xboxgames\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\riot games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\ubisoft\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\ea games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\battle.net\\") != std::wstring::npos) {
+            fullPathLower.find(L"\\xboxgames\\") != std::wstring::npos) {
             return true;
         }
     }
@@ -3760,18 +3773,13 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (kSystemClasses.count(className) != 0)
         return false;
 
-    // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
-    // not dedicated 3D games, unless running exclusive D3D above.
-    HANDLE hCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (hCheck) {
-        bool isPkg = IsPackagedAppCached(pid, hCheck);
-        bool hasGameDir = HasGameRuntimeSignature(hCheck);
-        CloseHandle(hCheck);
-        if (isPkg) {
-            return false;
-        }
-        if (hasGameDir) {
-            return true;
+    // Direct3D exclusive fullscreen check (fast-path, Windows Shell certified).
+    if (g_pfnSHQueryUserNotificationState) {
+        QUERY_USER_NOTIFICATION_STATE quns = QUNS_NOT_PRESENT;
+        if (SUCCEEDED(g_pfnSHQueryUserNotificationState(&quns))) {
+            if (quns == QUNS_RUNNING_D3D_FULL_SCREEN && hwnd == GetForegroundWindow()) {
+                return true;
+            }
         }
     }
 
@@ -3789,13 +3797,18 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         return true;
     }
 
-    // Direct3D exclusive fullscreen check (fast-path, Windows Shell certified).
-    if (g_pfnSHQueryUserNotificationState) {
-        QUERY_USER_NOTIFICATION_STATE quns = QUNS_NOT_PRESENT;
-        if (SUCCEEDED(g_pfnSHQueryUserNotificationState(&quns))) {
-            if (quns == QUNS_RUNNING_D3D_FULL_SCREEN && hwnd == GetForegroundWindow()) {
-                return true;
-            }
+    // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
+    // not dedicated 3D games, unless running exclusive D3D above or registered as a game.
+    HANDLE hCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hCheck) {
+        bool isPkg = IsPackagedAppCached(pid, hCheck);
+        bool hasGameDir = HasGameRuntimeSignature(hCheck);
+        CloseHandle(hCheck);
+        if (hasGameDir) {
+            return true;
+        }
+        if (isPkg) {
+            return false;
         }
     }
 
@@ -3854,7 +3867,6 @@ struct AppTrimEntry {
     DWORD pid = 0;
     bool isSoftTrim = false;
     SIZE_T bytesFreed = 0;
-    SIZE_T standbyDemotedBytes = 0;
     SIZE_T beforeBytes = 0;
     SIZE_T afterBytes = 0;
 };
@@ -3865,7 +3877,6 @@ struct TrimStats {
     DWORD processesHardTrimmed = 0;
     DWORD processesSkippedRecent = 0;
     SIZE_T bytesReclaimed = 0;
-    SIZE_T bytesStandbyDemoted = 0;
     std::vector<AppTrimEntry> topApps;
 };
 
@@ -3873,7 +3884,6 @@ struct TrimAttemptResult {
     bool trimmed = false;
     bool isSoftTrim = false;
     SIZE_T freedBytes = 0;
-    SIZE_T standbyDemotedBytes = 0;
     SIZE_T beforeBytes = 0;
     SIZE_T afterBytes = 0;
 };
@@ -3983,7 +3993,6 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
                                 result.afterBytes = afterPmc.WorkingSetSize;
                                 result.freedBytes =
                                     beforeBytes - afterPmc.WorkingSetSize;
-                                result.standbyDemotedBytes = 0;
                             }
                         }
                     }
@@ -4013,7 +4022,6 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
                         result.beforeBytes = pmc.WorkingSetSize;
                         result.afterBytes = pmc.WorkingSetSize;
                         result.freedBytes = 0;
-                        result.standbyDemotedBytes = pmc.WorkingSetSize;
                     }
                 }
             } else {
@@ -4042,7 +4050,6 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
                     result.beforeBytes = pmc.WorkingSetSize;
                     result.afterBytes = pmc.WorkingSetSize;
                     result.freedBytes = 0;
-                    result.standbyDemotedBytes = 0;
                 }
             }
         }
@@ -4114,6 +4121,23 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
         }
     }
 
+    // Immunize descendants of visible non-minimized windows (e.g. apps on secondary monitors)
+    for (const auto& kv : windowStates) {
+        if (kv.second.hasVisibleWindow && !kv.second.isMinimized) {
+            immuneFamilyPids.insert(kv.first);
+            auto itName = procNames.find(kv.first);
+            if (itName != procNames.end() && IsShellOrLauncherProcessName(itName->second)) {
+                continue;
+            }
+            std::vector<DWORD> desc;
+            std::unordered_set<DWORD> visited;
+            CollectDescendants(kv.first, childrenOf, desc, visited);
+            for (DWORD dPid : desc) {
+                immuneFamilyPids.insert(dPid);
+            }
+        }
+    }
+
     DWORD gameSanctuaryPid = GetLiveGameSanctuaryPid();
     auto sanctuaryRoot = byPid.find(gameSanctuaryPid);
     if (sanctuaryRoot != byPid.end()) {
@@ -4138,7 +4162,6 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             stats.processesTrimmed++;
             if (attempt.isSoftTrim) {
                 stats.processesSoftTrimmed++;
-                stats.bytesStandbyDemoted += attempt.standbyDemotedBytes;
             } else {
                 stats.processesHardTrimmed++;
                 stats.bytesReclaimed += attempt.freedBytes;
@@ -4148,7 +4171,6 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             appEntry.pid = pid;
             appEntry.isSoftTrim = attempt.isSoftTrim;
             appEntry.bytesFreed = attempt.freedBytes;
-            appEntry.standbyDemotedBytes = attempt.standbyDemotedBytes;
             appEntry.beforeBytes = attempt.beforeBytes;
             appEntry.afterBytes = attempt.afterBytes;
             trimmedEntries.push_back(std::move(appEntry));
@@ -4324,8 +4346,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
 
     std::sort(trimmedEntries.begin(), trimmedEntries.end(),
               [](const AppTrimEntry& a, const AppTrimEntry& b) {
-                  return (a.bytesFreed + a.standbyDemotedBytes) >
-                         (b.bytesFreed + b.standbyDemotedBytes);
+                  return a.bytesFreed > b.bytesFreed;
               });
 
     size_t count =
@@ -4423,19 +4444,19 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
         wchar_t detailStr[256];
         if (trimStats.processesHardTrimmed > 0 && trimStats.processesSoftTrimmed > 0) {
             swprintf_s(detailStr, _countof(detailStr),
-                       L"+%.1f MB freed (%u hard, %u soft deprioritized)",
+                       L"%.1f MB trimmed (%u hard, %u soft deprioritized)",
                        freedMb, trimStats.processesHardTrimmed, trimStats.processesSoftTrimmed);
         } else if (trimStats.processesSoftTrimmed > 0) {
             swprintf_s(detailStr, _countof(detailStr),
-                       L"+0.0 MB freed (%u soft deprioritized)",
+                       L"0.0 MB trimmed (%u soft deprioritized)",
                        trimStats.processesSoftTrimmed);
         } else {
             swprintf_s(detailStr, _countof(detailStr),
-                       L"+%.1f MB freed", freedMb);
+                       L"%.1f MB trimmed", freedMb);
         }
 
         LogEvent(LogCategory::Memory,
-                 L"%s -> %s (Avail: %.2f/%.1f GB | %u trimmed [%u soft, %u hard], %u kept warm) | Session: %.2f GB freed across %u passes (%u hard, %u soft), %s uptime",
+                 L"%s -> %s (Avail: %.2f/%.1f GB | %u trimmed [%u soft, %u hard], %u kept warm) | Session: %.2f GB trimmed across %u passes (%u hard, %u soft), %s uptime",
                  triggerReason, detailStr, availAfterGb, totalGb,
                  trimStats.processesTrimmed, trimStats.processesSoftTrimmed, trimStats.processesHardTrimmed,
                  trimStats.processesSkippedRecent,
@@ -5002,6 +5023,9 @@ static void LoadSettings() {
         RequestPowerSchemeAsync(false);
     }
 
+    int gameGrace = (int)Wh_GetIntSetting(L"gameAltTabGracePeriodSeconds");
+    g_settings.gameAltTabGracePeriodSeconds = std::clamp(gameGrace, 0, 300);
+
     // Section 4: Process Lists & Hotkeys
     auto customListStr = WindhawkUtils::StringSetting::make(L"customTargetList");
     g_settings.customTargetList = ParseProcessList(customListStr.get());
@@ -5201,8 +5225,10 @@ void WhTool_ModUninit() {
         RestoreForegroundBoostLocked();
     }
     RestoreOriginalPowerScheme();
+    size_t immuneCount = 0;
     {
         std::lock_guard<std::mutex> lock(g_immunitySetMutex);
+        immuneCount = g_accessDeniedImmunitySet.size();
         g_accessDeniedImmunitySet.clear();
     }
     {
@@ -5229,16 +5255,11 @@ void WhTool_ModUninit() {
         // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
         std::wstring uptime =
             FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
-        size_t immuneCount = 0;
-        {
-            std::lock_guard<std::mutex> lock(g_immunitySetMutex);
-            immuneCount = g_accessDeniedImmunitySet.size();
-        }
         Wh_Log(L"========================================");
         Wh_Log(L"Smart Process Priority & RAM Optimizer");
         Wh_Log(L"Session Summary Report:");
         Wh_Log(L"  Total Uptime: %s", uptime.c_str());
-        Wh_Log(L"  Total RAM Reclaimed: %.2f GB freed across %u passes (%u hard, %u soft trimmings)",
+        Wh_Log(L"  Total RAM Reclaimed: %.2f GB trimmed from working sets across %u passes (%u hard, %u soft trimmings)",
                sessionGb,
                g_sessionCleanupPasses.load(std::memory_order_relaxed),
                g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed),
