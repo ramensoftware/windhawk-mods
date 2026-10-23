@@ -2,7 +2,7 @@
 // @id              global-drag-to-scroll
 // @name            Global Drag-to-Scroll
 // @description     Hold Ctrl + Right-Click and drag to scroll smoothly in any application with adaptive line precision, dynamic velocity, and hands-free cruising.
-// @version         0.2.0
+// @version         0.3.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @license         MIT
@@ -11,7 +11,6 @@
 // ==/WindhawkMod==
 
 // clang-format off
-
 // ==WindhawkModReadme==
 /*
 # Global Drag-to-Scroll
@@ -54,7 +53,6 @@ If you use CAD software (like AutoCAD/Blender) or games that rely heavily on `Ct
   $description: "Injects smaller scroll chunks for smoother movement in modern apps (Chrome, Edge). Disable this if scrolling feels completely broken in older desktop apps."
 */
 // ==/WindhawkModSettings==
-
 // clang-format on
 
 #include <windhawk_api.h>
@@ -65,10 +63,9 @@ If you use CAD software (like AutoCAD/Blender) or games that rely heavily on `Ct
 #include <cmath>
 #include <cwctype>
 
-
-constexpr ULONG_PTR MASK_EXTRA_INFO = 0x5343524C;    // 'SCRL'
-constexpr ULONG_PTR REPLAY_EXTRA_INFO = 0x5245504C;  // 'REPL'
-constexpr int SMOOTH_SCROLL_CHUNK = 15;  // 1/8th of WHEEL_DELTA for smooth UI
+constexpr ULONG_PTR MASK_EXTRA_INFO = 0x5343524C;
+constexpr ULONG_PTR REPLAY_EXTRA_INFO = 0x5245504C;
+constexpr int SMOOTH_SCROLL_CHUNK = 15;
 
 struct ModSettings {
     bool touch_style = true;
@@ -82,7 +79,6 @@ struct ModSettings {
 static ModSettings g_settings;
 
 enum class ScrollState { Idle, Pending, Scrolling, Cruising };
-
 static std::atomic<ScrollState> g_state{ScrollState::Idle};
 static std::atomic<bool> g_swallowRButtonUp{false};
 static std::atomic<UINT> g_swallowButtonUp{0};
@@ -93,13 +89,11 @@ static double g_accumY = 0.0;
 static RECT g_windowBounds = {0, 0, 0, 0};
 static HWND g_captureHwnd = nullptr;
 
-// Event-driven thread management
 static HANDLE g_hCruiseThread = nullptr;
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_cruiseEvent = nullptr;
 static std::atomic<bool> g_threadCreated{false};
 
-// Synchronized parameters for the Cruise thread
 struct CruiseContext {
     POINT anchorPt;
     RECT windowBounds;
@@ -114,11 +108,10 @@ static CRITICAL_SECTION g_cruiseCs;
 void LoadSettings() {
     g_settings.touch_style = Wh_GetIntSetting(L"touch_style") != 0;
     g_settings.enable_cruising = Wh_GetIntSetting(L"enable_cruising") != 0;
-    int ppn = Wh_GetIntSetting(L"pixels_per_notch");
-    g_settings.pixels_per_notch = static_cast<double>(std::max(10, ppn));
+    g_settings.pixels_per_notch = static_cast<double>(
+        std::max(10, Wh_GetIntSetting(L"pixels_per_notch")));
     g_settings.enable_velocity = Wh_GetIntSetting(L"enable_velocity") != 0;
-    int deadzone = Wh_GetIntSetting(L"deadzone");
-    g_settings.deadzone = std::max(0, deadzone);
+    g_settings.deadzone = std::max(0, Wh_GetIntSetting(L"deadzone"));
     g_settings.smooth_wheel = Wh_GetIntSetting(L"smooth_wheel") != 0;
 }
 
@@ -135,8 +128,6 @@ void SendMaskedWheelAsync(int deltaY) {
     SendInput(1, &input, sizeof(INPUT));
 }
 
-// Determines if window is a classic Win32 discrete control (ListView, TreeView,
-// Edit)
 bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
     outTarget = WindowFromPoint(pt);
     if (!outTarget)
@@ -144,7 +135,6 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
 
     WCHAR cls[64] = {};
     GetClassNameW(outTarget, cls, ARRAYSIZE(cls));
-
     if (_wcsicmp(cls, L"SysHeader32") == 0) {
         HWND hParent = GetParent(outTarget);
         if (hParent) {
@@ -154,9 +144,8 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
     }
 
     WCHAR lowerCls[64] = {};
-    for (int i = 0; cls[i] && i < 63; ++i) {
+    for (int i = 0; cls[i] && i < 63; ++i)
         lowerCls[i] = static_cast<WCHAR>(towlower(cls[i]));
-    }
 
     return (_wcsicmp(cls, L"SysListView32") == 0 ||
             _wcsicmp(cls, L"SysTreeView32") == 0 ||
@@ -179,14 +168,12 @@ void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
 
 DWORD WINAPI CruiseWorkerThread(LPVOID) {
     HANDLE handles[] = {g_stopEvent, g_cruiseEvent};
-
     while (true) {
         DWORD waitRes = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
         if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED)
             return 0;
 
         double cruiseAccum = 0.0;
-
         EnterCriticalSection(&g_cruiseCs);
         CruiseContext ctx = g_cruiseCtx;
         LeaveCriticalSection(&g_cruiseCs);
@@ -194,7 +181,6 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
         while (g_state.load() == ScrollState::Cruising) {
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0)
                 return 0;
-
             if (!(GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
                 g_state.store(ScrollState::Idle);
                 break;
@@ -202,14 +188,12 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
             POINT curPt;
             GetCursorPos(&curPt);
-
             if (!PtInRect(&ctx.windowBounds, curPt)) {
                 g_state.store(ScrollState::Idle);
                 break;
             }
 
             int distY = curPt.y - ctx.anchorPt.y;
-
             if (std::abs(distY) >= ctx.deadzone) {
                 double direction = ctx.touch_style ? 1.0 : -1.0;
                 double notchRate =
@@ -222,34 +206,33 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
                 bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
 
                 if (isDiscrete) {
-                    int notchesToEmit = 0;
+                    int notches = 0;
                     while (cruiseAccum <= -WHEEL_DELTA) {
-                        notchesToEmit -= WHEEL_DELTA;
+                        notches -= WHEEL_DELTA;
                         cruiseAccum += WHEEL_DELTA;
                     }
                     while (cruiseAccum >= WHEEL_DELTA) {
-                        notchesToEmit += WHEEL_DELTA;
+                        notches += WHEEL_DELTA;
                         cruiseAccum -= WHEEL_DELTA;
                     }
-                    if (notchesToEmit != 0)
-                        DispatchScroll(notchesToEmit, hTarget, true);
+                    if (notches != 0)
+                        DispatchScroll(notches, hTarget, true);
                 } else {
-                    int chunk_size =
+                    int chunk =
                         ctx.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
                     int emitDelta = 0;
-                    while (cruiseAccum <= -chunk_size) {
-                        emitDelta -= chunk_size;
-                        cruiseAccum += chunk_size;
+                    while (cruiseAccum <= -chunk) {
+                        emitDelta -= chunk;
+                        cruiseAccum += chunk;
                     }
-                    while (cruiseAccum >= chunk_size) {
-                        emitDelta += chunk_size;
-                        cruiseAccum -= chunk_size;
+                    while (cruiseAccum >= chunk) {
+                        emitDelta += chunk;
+                        cruiseAccum -= chunk;
                     }
                     if (emitDelta != 0)
                         DispatchScroll(emitDelta, hTarget, false);
                 }
             }
-
             if (WaitForSingleObject(g_stopEvent, 20) == WAIT_OBJECT_0)
                 return 0;
         }
@@ -276,15 +259,14 @@ void StartCruiseThreadIfNeeded() {
         SetEvent(g_cruiseEvent);
 }
 
-bool ProcessScrollInput(MSG* pMsg) {
+// Memory-safe processor block
+bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
     if (!pMsg || !pMsg->hwnd)
         return false;
-
     ULONG_PTR extra = GetMessageExtraInfo();
     if (extra == REPLAY_EXTRA_INFO)
         return false;
 
-    // Clear stale button-up flags if a new click starts
     if (pMsg->message == WM_LBUTTONDOWN || pMsg->message == WM_LBUTTONDBLCLK ||
         pMsg->message == WM_RBUTTONDOWN || pMsg->message == WM_RBUTTONDBLCLK ||
         pMsg->message == WM_MBUTTONDOWN || pMsg->message == WM_MBUTTONDBLCLK ||
@@ -298,7 +280,6 @@ bool ProcessScrollInput(MSG* pMsg) {
         return true;
     }
 
-    // Cleanup stale capture/swallow flags
     if (pMsg->message == WM_MOUSEMOVE && !(pMsg->wParam & MK_RBUTTON)) {
         if (g_swallowRButtonUp.load()) {
             g_swallowRButtonUp.store(false);
@@ -308,18 +289,11 @@ bool ProcessScrollInput(MSG* pMsg) {
             g_state.store(ScrollState::Idle);
         }
     }
-    if ((pMsg->message == WM_RBUTTONDOWN ||
-         pMsg->message == WM_RBUTTONDBLCLK) &&
-        !(pMsg->wParam & MK_CONTROL)) {
-        if (g_swallowRButtonUp.load()) {
-            g_swallowRButtonUp.store(false);
-            g_state.store(ScrollState::Idle);
-        }
-    }
 
     if (pMsg->message == WM_MOUSEWHEEL) {
         if (g_state.load() != ScrollState::Idle || extra == MASK_EXTRA_INFO) {
-            pMsg->wParam &= ~((WPARAM)MK_CONTROL);
+            if (canMutate)
+                pMsg->wParam &= ~((WPARAM)MK_CONTROL);
             return false;
         }
     }
@@ -333,21 +307,18 @@ bool ProcessScrollInput(MSG* pMsg) {
         }
     }
 
-    // Keyup break condition: Leave Pending untouched so taps resolve correctly
     if (pMsg->message == WM_KEYUP || pMsg->message == WM_SYSKEYUP) {
         if (pMsg->wParam == VK_CONTROL) {
             if (!(GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
                 ScrollState cur = g_state.load();
                 if (cur == ScrollState::Cruising ||
-                    cur == ScrollState::Scrolling) {
+                    cur == ScrollState::Scrolling)
                     g_state.store(ScrollState::Idle);
-                }
             }
             return false;
         }
     }
 
-    // Mouse click break condition
     if (g_state.load() == ScrollState::Cruising) {
         if ((pMsg->message == WM_RBUTTONDOWN ||
              pMsg->message == WM_RBUTTONDBLCLK) &&
@@ -408,23 +379,19 @@ bool ProcessScrollInput(MSG* pMsg) {
 
     if (pMsg->message == WM_MOUSEMOVE) {
         ScrollState cur = g_state.load();
-
         if (cur == ScrollState::Pending || cur == ScrollState::Scrolling) {
             POINT curPt;
             GetCursorPos(&curPt);
-
             if (!PtInRect(&g_windowBounds, curPt)) {
                 g_state.store(ScrollState::Idle);
                 return false;
             }
 
             int totalDy = curPt.y - g_anchorPt.y;
-
-            if (cur == ScrollState::Pending) {
-                if (std::abs(totalDy) >= g_settings.deadzone) {
-                    g_state = ScrollState::Scrolling;
-                    g_lastPt = curPt;
-                }
+            if (cur == ScrollState::Pending &&
+                std::abs(totalDy) >= g_settings.deadzone) {
+                g_state = ScrollState::Scrolling;
+                g_lastPt = curPt;
             }
 
             if (g_state.load() == ScrollState::Scrolling) {
@@ -445,39 +412,37 @@ bool ProcessScrollInput(MSG* pMsg) {
                                 std::min(2.5, 1.0 + ((absDy - 6) * 0.06));
                     }
 
-                    double wheelUnitsPerPixel =
-                        (static_cast<double>(WHEEL_DELTA) /
-                         g_settings.pixels_per_notch);
-                    g_accumY +=
-                        (dy * direction * wheelUnitsPerPixel * velocityFactor);
+                    double wheelUnits = (static_cast<double>(WHEEL_DELTA) /
+                                         g_settings.pixels_per_notch);
+                    g_accumY += (dy * direction * wheelUnits * velocityFactor);
 
                     HWND hTarget = nullptr;
                     bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
 
                     if (isDiscrete) {
-                        int notchesToEmit = 0;
+                        int notches = 0;
                         while (g_accumY <= -WHEEL_DELTA) {
-                            notchesToEmit -= WHEEL_DELTA;
+                            notches -= WHEEL_DELTA;
                             g_accumY += WHEEL_DELTA;
                         }
                         while (g_accumY >= WHEEL_DELTA) {
-                            notchesToEmit += WHEEL_DELTA;
+                            notches += WHEEL_DELTA;
                             g_accumY -= WHEEL_DELTA;
                         }
-                        if (notchesToEmit != 0)
-                            DispatchScroll(notchesToEmit, hTarget, true);
+                        if (notches != 0)
+                            DispatchScroll(notches, hTarget, true);
                     } else {
-                        int chunk_size = g_settings.smooth_wheel
-                                             ? SMOOTH_SCROLL_CHUNK
-                                             : WHEEL_DELTA;
+                        int chunk = g_settings.smooth_wheel
+                                        ? SMOOTH_SCROLL_CHUNK
+                                        : WHEEL_DELTA;
                         int emitDelta = 0;
-                        while (g_accumY <= -chunk_size) {
-                            emitDelta -= chunk_size;
-                            g_accumY += chunk_size;
+                        while (g_accumY <= -chunk) {
+                            emitDelta -= chunk;
+                            g_accumY += chunk;
                         }
-                        while (g_accumY >= chunk_size) {
-                            emitDelta += chunk_size;
-                            g_accumY -= chunk_size;
+                        while (g_accumY >= chunk) {
+                            emitDelta += chunk;
+                            g_accumY -= chunk;
                         }
                         if (emitDelta != 0)
                             DispatchScroll(emitDelta, hTarget, false);
@@ -496,12 +461,10 @@ bool ProcessScrollInput(MSG* pMsg) {
             g_captureHwnd = nullptr;
 
             ScrollState cur = g_state.load();
-
             if (cur == ScrollState::Scrolling) {
                 g_accumY = 0.0;
-                bool ctrlPhysicallyDown =
-                    (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-                if (g_settings.enable_cruising && ctrlPhysicallyDown) {
+                if (g_settings.enable_cruising &&
+                    (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
                     g_state.store(ScrollState::Cruising);
                     StartCruiseThreadIfNeeded();
                 } else {
@@ -519,22 +482,94 @@ bool ProcessScrollInput(MSG* pMsg) {
                 inputs[1].mi.dwExtraInfo = REPLAY_EXTRA_INFO;
                 SendInput(2, inputs, sizeof(INPUT));
                 return true;
-            } else {
-                return true;
             }
         }
     }
     return false;
 }
 
+// --- STANDARD MESSAGE LOOPS ---
+using GetMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
+GetMessageW_t pfnGetMessageW_Original = nullptr;
+BOOL WINAPI GetMessageW_Hook(LPMSG lpMsg,
+                             HWND hWnd,
+                             UINT wMsgFilterMin,
+                             UINT wMsgFilterMax) {
+    BOOL ret =
+        pfnGetMessageW_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
+    if (ret > 0 && ProcessScrollInput(lpMsg, true))
+        lpMsg->message = WM_NULL;
+    return ret;
+}
+
+using PeekMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
+PeekMessageW_t pfnPeekMessageW_Original = nullptr;
+BOOL WINAPI PeekMessageW_Hook(LPMSG lpMsg,
+                              HWND hWnd,
+                              UINT wMsgFilterMin,
+                              UINT wMsgFilterMax,
+                              UINT wRemoveMsg) {
+    BOOL ret = pfnPeekMessageW_Original(lpMsg, hWnd, wMsgFilterMin,
+                                        wMsgFilterMax, wRemoveMsg);
+    if (ret && (wRemoveMsg & PM_REMOVE) && ProcessScrollInput(lpMsg, true))
+        lpMsg->message = WM_NULL;
+    return ret;
+}
+
+using GetMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
+GetMessageA_t pfnGetMessageA_Original = nullptr;
+BOOL WINAPI GetMessageA_Hook(LPMSG lpMsg,
+                             HWND hWnd,
+                             UINT wMsgFilterMin,
+                             UINT wMsgFilterMax) {
+    BOOL ret =
+        pfnGetMessageA_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
+    if (ret > 0 && ProcessScrollInput(lpMsg, true))
+        lpMsg->message = WM_NULL;
+    return ret;
+}
+
+using PeekMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
+PeekMessageA_t pfnPeekMessageA_Original = nullptr;
+BOOL WINAPI PeekMessageA_Hook(LPMSG lpMsg,
+                              HWND hWnd,
+                              UINT wMsgFilterMin,
+                              UINT wMsgFilterMax,
+                              UINT wRemoveMsg) {
+    BOOL ret = pfnPeekMessageA_Original(lpMsg, hWnd, wMsgFilterMin,
+                                        wMsgFilterMax, wRemoveMsg);
+    if (ret && (wRemoveMsg & PM_REMOVE) && ProcessScrollInput(lpMsg, true))
+        lpMsg->message = WM_NULL;
+    return ret;
+}
+
+// --- SAFE UWP/XAML DISPATCH HOOKS ---
+using DispatchMessageW_t = LRESULT(WINAPI*)(const MSG*);
+DispatchMessageW_t pfnDispatchMessageW_Original = nullptr;
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
+    MSG msgCopy = *lpMsg;
+    if (ProcessScrollInput(&msgCopy, false))
+        return 0;  // Return 0 without mutating read-only MSG
+    return pfnDispatchMessageW_Original(lpMsg);
+}
+
+using DispatchMessageA_t = LRESULT(WINAPI*)(const MSG*);
+DispatchMessageA_t pfnDispatchMessageA_Original = nullptr;
+LRESULT WINAPI DispatchMessageA_Hook(const MSG* lpMsg) {
+    MSG msgCopy = *lpMsg;
+    if (ProcessScrollInput(&msgCopy, false))
+        return 0;  // Return 0 without mutating read-only MSG
+    return pfnDispatchMessageA_Original(lpMsg);
+}
+
+// --- KEY MASKING ---
 using GetKeyState_t = SHORT(WINAPI*)(int);
 GetKeyState_t pfnGetKeyState_Original = nullptr;
 SHORT WINAPI GetKeyState_Hook(int nVirtKey) {
     if (g_state.load() != ScrollState::Idle &&
         (nVirtKey == VK_CONTROL || nVirtKey == VK_LCONTROL ||
-         nVirtKey == VK_RCONTROL)) {
+         nVirtKey == VK_RCONTROL))
         return 0;
-    }
     return pfnGetKeyState_Original(nVirtKey);
 }
 
@@ -542,9 +577,8 @@ using GetAsyncKeyState_t = SHORT(WINAPI*)(int);
 GetAsyncKeyState_t pfnGetAsyncKeyState_Original = nullptr;
 SHORT WINAPI GetAsyncKeyState_Hook(int vKey) {
     if (g_state.load() != ScrollState::Idle &&
-        (vKey == VK_CONTROL || vKey == VK_LCONTROL || vKey == VK_RCONTROL)) {
+        (vKey == VK_CONTROL || vKey == VK_LCONTROL || vKey == VK_RCONTROL))
         return 0;
-    }
     return pfnGetAsyncKeyState_Original(vKey);
 }
 
@@ -560,64 +594,10 @@ BOOL WINAPI GetKeyboardState_Hook(PBYTE lpKeyState) {
     return ret;
 }
 
-// Wide Message Loops
-using GetMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
-GetMessageW_t pfnGetMessageW_Original = nullptr;
-BOOL WINAPI GetMessageW_Hook(LPMSG lpMsg,
-                             HWND hWnd,
-                             UINT wMsgFilterMin,
-                             UINT wMsgFilterMax) {
-    BOOL ret =
-        pfnGetMessageW_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
-    if (ret > 0 && ProcessScrollInput(lpMsg))
-        lpMsg->message = WM_NULL;
-    return ret;
-}
-
-using PeekMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
-PeekMessageW_t pfnPeekMessageW_Original = nullptr;
-BOOL WINAPI PeekMessageW_Hook(LPMSG lpMsg,
-                              HWND hWnd,
-                              UINT wMsgFilterMin,
-                              UINT wMsgFilterMax,
-                              UINT wRemoveMsg) {
-    BOOL ret = pfnPeekMessageW_Original(lpMsg, hWnd, wMsgFilterMin,
-                                        wMsgFilterMax, wRemoveMsg);
-    if (ret && (wRemoveMsg & PM_REMOVE) && ProcessScrollInput(lpMsg))
-        lpMsg->message = WM_NULL;
-    return ret;
-}
-
-// ANSI Message Loops
-using GetMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
-GetMessageA_t pfnGetMessageA_Original = nullptr;
-BOOL WINAPI GetMessageA_Hook(LPMSG lpMsg,
-                             HWND hWnd,
-                             UINT wMsgFilterMin,
-                             UINT wMsgFilterMax) {
-    BOOL ret =
-        pfnGetMessageA_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
-    if (ret > 0 && ProcessScrollInput(lpMsg))
-        lpMsg->message = WM_NULL;
-    return ret;
-}
-
-using PeekMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
-PeekMessageA_t pfnPeekMessageA_Original = nullptr;
-BOOL WINAPI PeekMessageA_Hook(LPMSG lpMsg,
-                              HWND hWnd,
-                              UINT wMsgFilterMin,
-                              UINT wMsgFilterMax,
-                              UINT wRemoveMsg) {
-    BOOL ret = pfnPeekMessageA_Original(lpMsg, hWnd, wMsgFilterMin,
-                                        wMsgFilterMax, wRemoveMsg);
-    if (ret && (wRemoveMsg & PM_REMOVE) && ProcessScrollInput(lpMsg))
-        lpMsg->message = WM_NULL;
-    return ret;
-}
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing globally in PID: %lu", GetCurrentProcessId());
+    Wh_Log(
+        L"Initializing dynamically across standard and elevated UIPI "
+        L"processes");
     LoadSettings();
     InitializeCriticalSection(&g_cruiseCs);
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -632,6 +612,10 @@ BOOL Wh_ModInit() {
                                    &pfnGetMessageA_Original);
     WindhawkUtils::SetFunctionHook(PeekMessageA, PeekMessageA_Hook,
                                    &pfnPeekMessageA_Original);
+    WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
+                                   &pfnDispatchMessageW_Original);
+    WindhawkUtils::SetFunctionHook(DispatchMessageA, DispatchMessageA_Hook,
+                                   &pfnDispatchMessageA_Original);
     WindhawkUtils::SetFunctionHook(GetKeyState, GetKeyState_Hook,
                                    &pfnGetKeyState_Original);
     WindhawkUtils::SetFunctionHook(GetAsyncKeyState, GetAsyncKeyState_Hook,
