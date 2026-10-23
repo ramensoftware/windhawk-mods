@@ -162,10 +162,11 @@ storage folder is readable by every account on the machine, so the file is kept
 where only you can read it. If that folder cannot be created the journal is simply
 not written; the mod itself is unaffected.
 
-The journal is capped at 1 MB (past that it starts again from empty, with a line
-saying so). It is **off by default**; turn it on when a rule does something you
-did not expect, or when reporting a bug, and the file will say what the mod decided
-and why. Every line is prefixed with what it is doing:
+Neither the file nor the folder exists until you turn the journal on. It is capped
+at 1 MB (past that it starts again from empty, with a line saying so), and it is
+**off by default**; turn it on when a rule does something you did not expect, or
+when reporting a bug, and the file will say what the mod decided and why. Every
+line is prefixed with what it is doing:
 
 * `RULES-LOADED` and `RULE-LOADED` -- the rules as the mod understood them, with
   any problem it found in a rule, so a typo is visible instead of silent.
@@ -209,9 +210,10 @@ at load time as `RULE-BROAD`, because that is almost never what someone means.
     Appends a line to window-rules-journal.txt for every decision: which rule
     matched which window, which field decided it, which windows were rejected
     before matching, and what happened to the z-order. The file lives in a folder
-    only your Windows account can read, because its lines contain window titles.
-    Off by default; turn it on when a rule does something you did not expect, or
-    when reporting a bug. The file is capped at 1 MB.
+    only your Windows account can read, because its lines contain window titles;
+    neither the file nor the folder is created until this is turned on. Off by
+    default; turn it on when a rule does something you did not expect, or when
+    reporting a bug. The file is capped at 1 MB.
 - rules:
   - - name: ""
       $name: Rule name
@@ -1589,7 +1591,7 @@ static bool g_diagnosticsLog = false;
 // Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
 // numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
 // of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r9-2026-10-21";
+static constexpr PCWSTR kJournalBuild = L"r10-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -1836,9 +1838,12 @@ static bool EnsurePrivateFolder(const std::wstring& path,
 // This user's folder, created on first use. Empty means "not available", and the
 // journal is then simply not written.
 //
-// Resolved from WhTool_ModInit before the event thread exists, so the folder and
-// the SID behind it are set up by one thread; everything else only reads the
-// result.
+// Called only from the journal's own write path, which returns early while the
+// journal is off: a user who never turns diagnostics on never gets a folder, a
+// SID lookup or an access control list. That is why this is not resolved at init.
+//
+// Latched, so the first call does the work and every later one reads the result;
+// the journal path is the event thread's, so there is no race to guard.
 static const std::wstring& UserDataFolder() {
     static bool attempted = false;
     static std::wstring cached;
@@ -1902,8 +1907,14 @@ static void AppendDiagnosticsJournal(const std::wstring& line) {
         return;
     }
 
-    HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
-                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    // Write access, not FILE_APPEND_DATA. An append-only handle cannot truncate:
+    // SetEndOfFile needs FILE_WRITE_DATA, and an append handle sends every write
+    // to the end whatever the file pointer says. The cap this file advertises was
+    // silently doing nothing for exactly that reason, which is the sort of thing a
+    // log is supposed to be immune from. The file is seeked by hand instead.
+    HANDLE file = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
+                              nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         return;
     }
@@ -1913,9 +1924,9 @@ static void AppendDiagnosticsJournal(const std::wstring& line) {
     if (GetFileSizeEx(file, &size) && size.QuadPart > kMaxJournalBytes) {
         SetFilePointer(file, 0, nullptr, FILE_BEGIN);
         truncated = SetEndOfFile(file) != FALSE;
-    } else {
-        SetFilePointer(file, 0, nullptr, FILE_END);
     }
+    // Seek to the end in both cases: after a truncation that is position 0.
+    SetFilePointer(file, 0, nullptr, FILE_END);
 
     std::wstring stamped;
     if (truncated) {
@@ -3470,12 +3481,6 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"init");
-
-    // Before the event thread exists, so this user's private folder and the SID
-    // behind it are set up by one thread and everything after only reads them.
-    // Nothing depends on it succeeding: no folder means no journal, and the mod
-    // itself works either way.
-    UserDataFolder();
 
     g_eventThread = CreateThread(nullptr, 0, EventThreadProc, nullptr, 0,
                                  nullptr);
