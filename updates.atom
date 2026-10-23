@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-22T23:04:14.000Z</updated>
+    <updated>2026-10-23T09:04:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Caption Buttons Customizer 1.1]]></title>
+        <id>https://windhawk.net/mods/caption-buttons-customizer#1a95de3f8c479a7032dbdaf5ee43df7f1fda1d71</id>
+        <link href="https://windhawk.net/mods/caption-buttons-customizer"/>
+        <updated>2026-10-23T09:04:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <em>Tighten button spacing</em> to bring the caption buttons closer together.</li>
+<li>The maximize/restore hover symbol is now two triangles, macOS style, and hover symbols are more saturated.</li>
+<li>Fixed wrong maximize/restore colors and sizes at 125%, 150% and 175% scaling, and distorted custom images.</li>
+<li>Fixed DWM freezing when an app hangs.</li>
+<li>Fixed the old icon area still opening the system menu or closing the window after the icon was moved.</li>
+</ul>]]></content>
+        <author>
+            <name>grn15RenS</name>
+            <uri>https://github.com/grn15RenS</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 0.7.0]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#6fcd3d85b84e3caf6c8ff1add265132f272a0735</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-10-23T09:04:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a <strong>Files</strong> mode: browse drives and folders in the launcher with location chips, a path bar, folder history, an actions menu (rename, copy, new folder, terminal, properties, Recycle Bin), filters and image thumbnails.</li>
+<li>Added <strong>deep search</strong> in the current folder and all its subfolders, with results appearing while the background scan runs.</li>
+<li>Added <strong>web search</strong> results with a configurable engine (Google, Bing, DuckDuckGo, YouTube, Wikipedia) and <code>?</code>, <code>g:</code>, <code>b:</code>, <code>d:</code>, <code>y:</code>, <code>w:</code> prefixes.</li>
+<li>Added <strong>Windows Settings</strong> results for common settings pages.</li>
+<li>Added an <strong>F1 help sheet</strong> with all shortcuts, prefixes and file filters, plus a second page documenting the calculator syntax.</li>
+<li>Added the <strong>Open on monitor</strong> setting (monitor with the mouse, active window or primary).</li>
+<li>Added the <strong>File browser</strong> setting to turn Files mode off; the folder button is hidden and Tab goes back to the app list.</li>
+<li>Grouped the settings into <strong>Appearance</strong>, <strong>Behavior</strong>, <strong>Shortcuts</strong>, <strong>Apps</strong>, <strong>Features</strong> and <strong>Sounds</strong>.</li>
+<li>Improved Files performance: metadata is built lazily, very large folders are capped at 5,000 folders and 5,000 files, and image previews decode in the background (network and cloud placeholders are skipped).</li>
+<li><strong>Live acrylic</strong> now also drives Glass in real time; <strong>Blur strength</strong> applies to Mica and, while Live acrylic is off, to the other effects.</li>
+<li>Removed <strong>Open with</strong> from the Files actions menu.</li>
+<li>Fixed the bar closing after deleting a file or folder, and the acrylic backdrop lingering briefly after the bar is hidden.</li>
+</ul>]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar System Info 1.9.0]]></title>
         <id>https://windhawk.net/mods/taskbar-system-info#7bceda88d81084e19f4eaced0cac413d2b41df30</id>
@@ -570,116 +611,6 @@ Draws a pulsing, bright overlay with an optional counter over the taskbar notifi
         <author>
             <name>sharexza</name>
             <uri>https://github.com/sharexza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Maximized Window Margins 1.1]]></title>
-        <id>https://windhawk.net/mods/maximized-window-margins#a9084d98e7b3af5bf30b70b44332bb77430bc405</id>
-        <link href="https://windhawk.net/mods/maximized-window-margins"/>
-        <updated>2026-10-21T11:01:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New "Gap between snapped windows" setting (default 10, 0 turns it off): windows arranged with Snap / Snap Layouts keep a gap between them.</li>
-<li>Snapped windows still resize together with any gap size: drag the gap itself or the edge of a window.</li>
-</ul>]]></content>
-        <author>
-            <name>Mário Barbosa</name>
-            <uri>https://github.com/mariogomesbarbosa</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.0.1]]></title>
-        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#f6287775fe5cae1cda1d96364d744d008dd3db07</id>
-        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
-        <updated>2026-10-21T11:01:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="smartprocesspriorityramoptimizer">Smart Process Priority &amp; RAM Optimizer</h1>
-<p>Dynamically manages process priorities and memory allocation to keep foreground applications responsive and prevent background tasks from causing system hitches.</p>
-<h2 id="expectations">Expectations</h2>
-<ul>
-<li><strong>What it does</strong>: Mitigates micro-stutters and input latency spikes caused by background processes competing for CPU resources.</li>
-<li><strong>What it does not do</strong>: It does not increase maximum hardware performance or raw gaming FPS.</li>
-<li><strong>Plug & Play</strong>: Safe, balanced defaults work out of the box without requiring any configuration.</li>
-<li><strong>Advanced tuning</strong>: Deeper options (e.g. EcoQoS, P/E-core affinity, power plans) are disabled by default.</li>
-</ul>
-<h2 id="keyfeatures">Key Features</h2>
-<h3 id="1foregroundpriorityboost">1. Foreground Priority Boost</h3>
-<ul>
-<li>Elevates the CPU priority of the active window and its related child processes.</li>
-<li>Optionally assigns the active application to performance cores on hybrid CPU architectures.</li>
-</ul>
-<h3 id="2backgroundthrottling">2. Background Throttling</h3>
-<ul>
-<li>Temporarily reduces the CPU priority of background processes exceeding defined utilization thresholds.</li>
-<li>Optionally restricts throttled tasks to efficiency cores or applies Windows EcoQoS.</li>
-</ul>
-<h3 id="3audionetworkprotection">3. Audio &amp; Network Protection</h3>
-<ul>
-<li>Shields processes with active audio playback from throttling and memory trimming via WASAPI real-time peak metering.</li>
-<li>Intelligently distinguishes sustained media playback from transient notification sounds or terminal bells.</li>
-<li>Shields processes performing active network transfers from throttling.</li>
-</ul>
-<h3 id="4computeaiworkloadprotection">4. Compute &amp; AI Workload Protection</h3>
-<ul>
-<li>Prevents throttling of intensive background computation, shader compilation, and local AI inference tasks.</li>
-</ul>
-<h3 id="5memoryoptimization">5. Memory Optimization</h3>
-<ul>
-<li>Gradually trims unused working set memory from idle applications via Windows memory APIs.</li>
-<li>Automatically suspends trimming on battery power and during post-sleep transitions.</li>
-<li>Includes a configurable hotkey (<code>Ctrl+Alt+F11</code>) with audio confirmation for manual memory cleanup.</li>
-</ul>
-<h3 id="6dynamicpowerscheme">6. Dynamic Power Scheme</h3>
-<ul>
-<li>Automatically engages the High Performance power plan during demanding workloads on AC power.</li>
-<li>Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while High Performance is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).</li>
-</ul>
-<h3 id="7inactivebrowsertabtrimming">7. Inactive Browser Tab Trimming</h3>
-<ul>
-<li>Detects dormant background browser renderers and trims their unused memory while keeping active tabs intact.</li>
-<li>Dynamically adapts to multi-process browser architectures (Chromium, Gecko, etc.) without hardcoded process names.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p>All settings are optional and pre-configured for balanced out-of-the-box use.
-Advanced options (e.g. EcoQoS, P/E-core affinity, power schemes) can be enabled in the mod settings if desired.</p>
-<ul>
-<li><strong>Foreground priority boost (ProBalance)</strong>: Automatically increases the CPU priority of the active foreground window.</li>
-<li><strong>Suggest P-cores to foreground window</strong>: Directs the active foreground app to Performance Cores on hybrid CPUs.</li>
-<li><strong>Dynamic high-performance power scheme</strong>: Temporarily activates the High Performance power scheme for demanding workloads on AC power.</li>
-<li><strong>Throttle CPU-heavy background processes</strong>: Temporarily lowers priority of background processes consuming excessive CPU.</li>
-<li><strong>Restrict throttled background apps to E-cores</strong>: Confines throttled background tasks to Efficiency Cores on hybrid CPUs.</li>
-<li><strong>Windows efficiency mode (EcoQoS)</strong>: Applies Windows power throttling to background processes.</li>
-<li><strong>Audio & music protection shield</strong>: Protects applications actively streaming or playing audio against throttling and memory sweeps.</li>
-<li><strong>Network activity shield</strong>: Protects applications actively downloading or streaming data.</li>
-<li><strong>Protect local AI & shader compilers</strong>: Prevents throttling during local AI inference (Ollama, LM Studio) and shader compilation.</li>
-<li><strong>Process startup grace period</strong>: Minimum age in seconds a newly spawned process must reach before being eligible for memory trimming or priority throttling (default: 5 seconds).</li>
-<li><strong>Standard free RAM threshold</strong>: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive).</li>
-<li><strong>Inactive browser tabs memory trim</strong>: Reclaims unused memory from dormant background browser renderer tabs.</li>
-<li><strong>Early memory cap for heavy apps</strong>: Reclaims memory from listed heavy apps once their memory exceeds the configured cap.</li>
-<li><strong>Emergency clean hotkey (<code>Ctrl+Alt+F11</code>)</strong>: Triggers an immediate memory reclamation pass with optional audio confirmation.</li>
-<li><strong>Excluded processes</strong>: Comma-separated list of executable names that must never be throttled or trimmed.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Supported OS: Windows 11 (all versions including 24H2).</li>
-<li>Windows 10: Untested and unsupported (not officially validated, though core Win32 APIs may function).</li>
-<li>Supported Architectures: x86 (32-bit), x64 (64-bit), and ARM64.</li>
-<li>Compatible with standard and hybrid Intel/AMD CPUs (P/E-cores).</li>
-<li>Avoid running alongside similar tools (e.g. Process Lasso, Mem Reduct) to prevent conflicting adjustments.</li>
-</ul>
-<h2 id="support">Support</h2>
-<p>If you find this mod useful, you can support its development and maintenance:</p>
-<ul>
-<li><a href="https://ko-fi.com/gilnet">Support on Ko-fi</a></li>
-</ul>
-<h2 id="creditsacknowledgments">Credits &amp; Acknowledgments</h2>
-<ul>
-<li><strong>Process Lasso (Bitsum)</strong>: Inspiration for the ProBalance concept and foreground responsiveness prioritization.</li>
-<li><strong>LiveTuner (LT)</strong>: Inspiration for dynamic real-time priority tuning heuristics.</li>
-<li><strong>ISLC (Intelligent Standby List Cleaner by Wagnardsoft)</strong>: Inspiration for adaptive threshold triggers and gaming memory management.</li>
-<li><strong>Mem Reduct (Henry++)</strong>: Inspiration for safe working-set trimming techniques.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
         </author>
     </entry>
 </feed>

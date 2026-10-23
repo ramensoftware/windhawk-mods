@@ -2,7 +2,7 @@
 // @id              caption-buttons-customizer
 // @name            Caption Buttons Customizer
 // @description     Move the caption buttons to the left, reposition the window icon and title, and optionally draw macOS-style traffic lights (or your own button images).
-// @version         1.0
+// @version         1.1
 // @author          grn15RenS
 // @github          https://github.com/grn15RenS
 // @donateUrl       https://ko-fi.com/grn15rens
@@ -16,127 +16,143 @@
 // ==WindhawkModReadme==
 /*
 # Caption Buttons Customizer
+![MainScreenshots](https://i.imgur.com/zw9t06n.jpeg)
 
-Moves the caption buttons (minimize, maximize, close) to the left side of the title bar and repositions the window icon and title to match. It can also draw macOS-style traffic lights (red / yellow / green circles) or your own button images.
+Moves the caption buttons (minimize, maximize, close) to the left side of the title bar and repositions the window icon and title to match. It can also draw macOS-style traffic lights (red / yellow / green circles) or your own button images. It works by hooking internal functions of the Desktop Window Manager (`dwm.exe` / `uDWM.dll`), so it works on standard Win32 windows. See *Compatibility and known issues* for apps it cannot change.
 
-It works by hooking internal functions of the Desktop Window Manager (`dwm.exe` / `uDWM.dll`), so it affects every standard Windows window.
-
-## Setup
+## ⚙️ Setup
 
 `dwm.exe` is a critical system process, so Windhawk does not inject into it by default. To use this mod, add `dwm.exe` to the process inclusion list: *Windhawk Settings > Advanced settings > More advanced settings > Process inclusion list*. Without it, only the `explorer.exe` part of the mod loads and the caption buttons will not move.
 
-# Features & Preview
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 
-## Caption Buttons
-**Buttons on the left**, with a left margin and three order presets: close / minimize / maximize (macOS), close / maximize / minimize, minimize / maximize / close.
+&nbsp;
 
-### Move caption buttons to the left = on
-Turn on *Move caption buttons to the left* to move the buttons to the left side of the title bar. When it is off, they stay in their default place on the right.
+# 🔧 Features & Preview 🖼️
 
-| Before | After |
-|---------|---------|
-| ![Before](https://i.imgur.com/TPtC4TD.png) | ![After](https://i.imgur.com/uhoUYhp.png) |
+## 1. Caption Buttons on the Left
 
-### Button order
+|        |                                                 |
+|--------|-------------------------------------------------|
+| Before | ![Before](https://i.imgur.com/ScuG5Rl.png)      |
+| After  | ![After](https://i.imgur.com/GhBj3BJ.png)       |
+
+- Turn on *Move caption buttons to the left* to move the buttons to the left side of the title bar. When it is off, they stay in their default place on the right.
+- If the buttons don't sit where you want them, adjust *Left margin (px)*.
+- If the buttons look too far apart, raise *Tighten button spacing (px)*. It works on the left and on the right, and in File Explorer once `CabinetWClass` is removed from *Excluded window classes*. Values above about 20 have no extra effect, so the middle button stays usable. The clickable area of each button gets narrower along with the spacing.
+- *Tighten button spacing* is meant for the macOS and Custom images styles. The circles are smaller than the button slot (46 px at 100% scaling), and the effect is capped, so the buttons cannot get quite as close together as on macOS.
+
+## 2. Button order
+
 Pick one of three presets in the *Button order* setting. The order is counted from the left edge of the window.
 
 | Close, minimize, maximize | Close, maximize, minimize | Minimize, maximize, close |
 |---------------------------|---------------------------|---------------------------|
-| ![1](https://i.imgur.com/uhoUYhp.png) | ![2](https://i.imgur.com/bdPirba.png) | ![3](https://i.imgur.com/5ZXtvpB.png) |
+| ![1](https://i.imgur.com/LW23zBN.png) | ![2](https://i.imgur.com/SlyZTmQ.png) | ![3](https://i.imgur.com/wfLhnCN.png) |
 
-### Show the close button on dialogs
-Windows with only a close button (message boxes, About windows, Properties dialogs) and very narrow windows are handled. The close button of dialogs can be hidden with *Show the close button on dialogs*, and their icon and title can have their own alignment.
+## 3. Show the close button on dialogs
 
-| Dialog On | Dialog Off |
+Windows with only a close button (message boxes, About windows, Properties dialogs) can hide that button with *Show the close button on dialogs*. Alt+F4 and Esc still close the window. Their icon and title have their own alignment, set with *Icon and title alignment in dialogs*. Very narrow windows hide the icon and title when there is no room for them.
+
+| Close Button and Left Alignment | No Close Button and Center Alignment |
 |--------|-------|
-| ![Dialog On](https://i.imgur.com/IlUb9kF.png) | ![Dialog Off](https://i.imgur.com/Iq9MAWu.png) |
+| ![Dialog On](https://i.imgur.com/mZ8opqQ.png) | ![Dialog Off](https://i.imgur.com/DALB17X.png) |
 
-## Caption Button Style
-Three button styles are available in *Caption button style*: the default Windows glyphs (default), macOS circles in colors you choose (with the x, - and + symbols on hover), or your own images (png, jpg or bmp).
+## 4. Caption Button Style
+Three button styles are available in *Caption button style*: the default Windows glyphs (default), macOS circles in colors you choose (a symbol appears on hover: × for close, − for minimize, two triangles for maximize and restore), or your own images (png, jpg or bmp).
 
 | macOS style (circles) | Custom images | Windows default |
 |-----------------------|---------------|-----------------|
-| ![macOS style (circles)](https://i.imgur.com/dOdqDHp.png) | ![Custom images](https://i.imgur.com/OmjIMoI.png) | ![Windows default](https://i.imgur.com/KAHAbN0.png) |
+| ![macOS style (circles)](https://i.imgur.com/SnThhQY.png) | ![Custom images](https://i.imgur.com/KPPIp9R.png) | ![Windows default](https://i.imgur.com/NmmLJ5E.png) |
 
-### Custom button images
+### Note for custom button images
 1. Set *Caption button style* to **Custom images**. (With the macOS style, the image settings are ignored and the circles stay as they are.)
 2. Set **Icon folder** (or the path of each button image) to any folder you can read, for example `C:\Users\You\Pictures\ButtonIcons`.
 3. Name the files `minimize`, `restore`, `maximize`, `close` (+ `.png`, `.jpg`, `.jpeg` or `.bmp`).
 4. Optional state variants: `close_hover` (mouse is over the button), `close_pressed` (button is being clicked) and `close_disabled` (button is greyed out). Same for the other buttons. If a variant is missing, the base image is used (darkened for pressed). The four base images are enough.
-5. Images are scaled down to fit the button slot (about 12 px at 100% DPI) and keep their own shape. They are not cut into a circle, so square images stay square. Use transparent PNGs and simple designs.
+5. Images are scaled to fit the button slot. The slot is about 12 px at 100% scaling and grows with scaling (about 15 px at 125%, 18 px at 150%, 21 px at 175%). Images keep their own shape and are not cut into a circle, so square images stay square. Use transparent PNGs with simple designs; a square image of 32-64 px works at every scale.
 6. A button without an image keeps its circle.
+
+Want to try it quickly? Download my ready-made set from [here](https://drive.google.com/drive/folders/1FPw3GCr8Xz-18HW6veTPc7TIgY6IFyIO), extract it, and set *Icon folder* to the extracted folder. The images are transparent PNGs and already use the right file names.
 
 `dwm.exe` runs under its own account and usually cannot read your profile folders. To get around that, the part of the mod running inside `explorer.exe` (which can read your folders) decodes your images, shrinks them to at most 64 px, and hands the pixels to `dwm.exe` through the mod's own storage in Windhawk. No image files are copied anywhere, and `dwm.exe` never opens or decodes an image file.
 
-If a changed image doesn't show up right away, move the mouse over a title bar button.
-
-## Icon and title text
-**Flexible icon and title layout:** next to the buttons, centered on the window, or right-aligned; icon on either side of the title, far left or far right; hide the icon, the title, or both.
-
-### Icon and title alignment
+## 5. Icon and title alignment
 *Icon and title alignment* decides where the icon and title sit in the title bar. Left puts them right after the buttons, Center puts them in the middle of the window, and Right puts them at the right edge.
 
 | Left | Center | Right |
 |------|--------|-------|
-| ![Left](https://i.imgur.com/uhoUYhp.png) | ![Center](https://i.imgur.com/DsKWlzm.png) | ![Right](https://i.imgur.com/ja4fJzt.png) |
+| ![Left](https://i.imgur.com/mKIRXkV.png) | ![Center](https://i.imgur.com/w52f183.png) | ![Right](https://i.imgur.com/zDbGFzh.png) |
 
-### Icon Position
-*Icon position* decides where the window icon goes. Left or right of the title keeps the icon attached to the title, while far left or far right pins the icon to that edge.
+## 6. Icon Position
 
-To pin the icon to the left edge of the window instead of right after the buttons, turn off *Move caption buttons to the left*. To pin it to the right edge, turn that option on (with it off, a far right icon sits next to the buttons on the right instead). For the best look with an icon pinned to a corner, set *Icon and title alignment* to Center.
+*Icon position* decides where the window icon goes. Left or right of the title keeps the icon attached to the title, while far left or far right pins the icon to that edge. To pin the icon to the left edge of the window instead of right after the buttons, turn off *Move caption buttons to the left*. To pin it to the right edge, turn that option on (with it off, a far right icon sits next to the buttons on the right instead). For the best look with an icon pinned to a corner, set *Icon and title alignment* to Center.
 
 | Left of the title | Right of the title |
 |-------------------|--------------------|
-| ![Left of the title](https://i.imgur.com/DsKWlzm.png) | ![Right of the title](https://i.imgur.com/77UoaGz.png) |
+| ![Left of the title](https://i.imgur.com/w52f183.png) | ![Right of the title](https://i.imgur.com/2WBbHkC.png) |
 | **Far left** | **Far right** |
-| ![Far left](https://i.imgur.com/8djx87p.png) | ![Far right](https://i.imgur.com/tUx3iGd.png) |
+| ![Far left](https://i.imgur.com/pUYiOq3.png) | ![Far right](https://i.imgur.com/ZyPJTJz.png) |
 
-### Hide window icon and title
+## 7. Hide window icon and title
+
 Use *Hide window icon and title* to hide only the icon, only the title, or both.
 
 | Hide icon only | Hide title only | Hide both |
 |----------------|-----------------|-----------|
-| ![Hide icon only](https://i.imgur.com/KPXmVYy.png) | ![Hide title only](https://i.imgur.com/e1M8jnX.png) | ![Hide both](https://i.imgur.com/GMB5Wjq.png) |
+| ![Hide icon only](https://i.imgur.com/NiBzo8C.png) | ![Hide title only](https://i.imgur.com/PDNFpQb.png) | ![Hide both](https://i.imgur.com/hOEi0Bo.png) |
 
-### Icon responds to click and double-click
-By default, Windows treats the window icon as a button: clicking it opens the window menu (Restore, Move, Size, Minimize, Maximize and Close), and double-clicking it closes the window.
+## 8. Icon responds to click and double-click
 
-This can get in the way when *Icon and title alignment* is set to Center, because the icon then sits in the middle of the title bar, where it's easy to double-click by accident and close the window. Turn off *Icon responds to click and double-click* to prevent that. The icon then behaves like an empty part of the title bar: you can drag the window by it, and double-clicking it maximizes or restores the window.
+By default, Windows treats the window icon as a button: clicking it opens the window menu (Restore, Move, Size, Minimize, Maximize and Close), and double-clicking it closes the window. While this option is on, the menu opens after a short delay (up to 250 ms), so a double-click can be told apart from a single click. This can get in the way when *Icon and title alignment* is set to Center, because the icon then sits in the middle of the title bar, where it's easy to double-click by accident and close the window. Turn off *Icon responds to click and double-click* to prevent that. The icon then behaves like an empty part of the title bar: you can drag the window by it, and double-clicking it maximizes or restores the window.
 
-### File Explorer
-The tab bar of File Explorer covers the left part of the title bar and blocks the buttons. The mod (running inside `explorer.exe`) makes the buttons clickable again, but the tabs themselves must be shifted with a separate mod.
+![Window menu](https://i.imgur.com/dEM6EiY.png)
+
+## 9. File Explorer
+
+By default File Explorer keeps the Windows layout (buttons on the right), because `CabinetWClass` is in *Excluded window classes*.
+
+To put the buttons on the left in File Explorer:
+
+1. Remove `CabinetWClass` from *Excluded window classes*.
+2. Keep *Make caption buttons clickable in File Explorer* on (it is on by default). Without it, the tab bar covers the buttons and they cannot be clicked.
+3. The tabs still overlap the buttons, so move them with one of these:
+   - **Recommended:** the [Windows 11 File Explorer Styler](https://windhawk.net/mods/windows-11-file-explorer-styler) mod by [m417z](https://github.com/m417z), installed separately. It moves only the tabs, so the navigation buttons, address bar and search box stay where they are, right under the caption buttons (target `FileExplorerExtensions.FileExplorerTabControl`, style `Margin=187,0,0,0`; adjust to taste).
+   - *Shift tab bar and toolbar (px)* in *File Explorer tabs*. It moves the whole tab bar and toolbar to the right, including the navigation buttons, address bar and search box. About 145 is enough to clear the buttons (less when *Tighten button spacing* is used). A larger value, for example 190, can line the tab bar up with the edge of the navigation pane, so the best value depends on your navigation pane width. The space under the caption buttons, where the navigation buttons used to be, stays empty, which not everyone likes. For that reason the default is 0 (no shift). The value is scaled by display scaling.
+
 | File Explorer caption buttons on the right (default) | File Explorer caption buttons on the left |
-|------------------------------------------------------|-------------------------------------------|
-| ![File Explorer caption buttons on the right (default)](https://i.imgur.com/cZHP6po.png) | ![File Explorer caption buttons on the left](https://i.imgur.com/LarGnlp.png) |
+|---|---|
+| ![File Explorer caption buttons on the right (default)](https://i.imgur.com/rXYTLkE.png) | ![File Explorer caption buttons on the left](https://i.imgur.com/f8lG1yT.png) |
 
-Notes:
-- **File Explorer caption buttons on the right (default):** CabinetWClass is in Excluded window classes by default, so File Explorer keeps the default Windows layout. To keep this, leave it in the list. 
-- **File Explorer caption buttons on the left:** Remove `CabinetWClass` from *Excluded window classes*, then turn on *Make caption buttons clickable in File Explorer* so the buttons can be clicked. The tabs stay where they are and still visually overlap the buttons, so shift them with the [Windows 11 File Explorer Styler](https://windhawk.net/mods/windows-11-file-explorer-styler) mod by [m417z](https://github.com/m417z) (target `FileExplorerExtensions.FileExplorerTabControl`, style `Margin=187,0,0,0`; this value works well for me, so adjust it to taste).
-- Alternatively, set *Shift tab bar and toolbar (px)* in *File Explorer tabs* (for example 145) to move the whole tab bar and toolbar to the right of the buttons instead of using Styler. This also moves the navigation arrows, address bar and search box.
+## 10. Excluded apps
 
-## Excluded apps
 Apps that draw their own tabs in the title bar can conflict with buttons on the left. Add their executable names to *Excluded apps* (or their window class names to *Excluded window classes*) and every window of those apps keeps the default Windows layout.
 
-By default *Excluded apps* contains `notepad.exe`, `taskmgr.exe` and `WindowsTerminal.exe`. The icon and title of Task Manager overlap the buttons, and the tabs of Notepad and Windows Terminal overlap the buttons when they are on the left. To see how these apps look with the buttons on the left, remove them from the list. Fixing them properly is planned for later, when time allows.
+By default *Excluded apps* contains `notepad.exe`, `taskmgr.exe` and `WindowsTerminal.exe`. The icon and title of Task Manager overlap the buttons, and the tabs of Notepad and Windows Terminal overlap the buttons when they are on the left. To see how these apps look with the buttons on the left, remove them from the list. They are not supported yet, so their layout may look broken.
 
 `CabinetWClass` (File Explorer) is in *Excluded window classes* by default, see the File Explorer section above.
 
-## Files created by the mod
+## 📁 Files created by the mod
 
 None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and with *Write debug log* on (off by default) the mod writes detailed messages to the Windhawk log output instead of files. Logs can contain folder paths (including your Windows user name), so check them before sharing.
 
-## Important notes
+## ⚠️ Important notes
 
-- When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open). Until then, a button can look wrong or be missing after the mod is turned off, for example the maximize button when the mod was turned on while a window was maximized and turned off before it was restored. dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.
+- When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open).
+- Until dwm.exe restarts, a button can look wrong or be missing after the mod is turned off. For example, the maximize button can go missing if the mod was turned on while a window was maximized and turned off before it was restored.
+- dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.
+- After you change display scaling, the screen may flicker briefly while the buttons are redrawn. If the buttons of a window stay blank, click that window once; Windows only creates the active-window button images when a window becomes active.
 - The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.
 - When the mod is turned on or off, or when a layout, exclusion, color or style setting changes, DWM is asked to refresh itself so that open windows get the new layout; no window is resized. Changing the debug log does not trigger a refresh.
-- The mod hooks internal, undocumented functions of `uDWM.dll`. A Windows update can change them and stop the mod until it is updated.
 - If you report a bug, turn on *Write debug log* and attach the Windhawk log output.
 
-## Compatibility and known issues
+## ⚠️ Compatibility and known issues
 
+- **Tested only on Windows 11 25H2 (build 26200.9457), x86-64.** The mod hooks internal, undocumented functions of `uDWM.dll`. On other Windows versions or builds the mod may fail to load or some features may be disabled, and a Windows update can break it until the mod is updated.
+- **Display scaling:** tested at 100%, 125%, 150% and 175%. Scaling above 175% and custom scaling values are untested, so the buttons may look wrong there.
+- **UWP and other packaged Microsoft apps** (Settings, Calculator, Microsoft Store, Phone Link and some others) are not supported: their caption buttons cannot be moved to the left and stay in their default place on the right. Support is being looked into, but there is no date.
 - **Apps that draw their own title bar** (Office apps, Chrome, Edge and others) cannot be changed by this mod. The [Titlebar For Everyone](https://windhawk.net/mods/titlebar-for-everyone) mod by [Ingan121](https://github.com/Ingan121) can make them use the standard title bar.
-- At 125% and 150% display scaling, the maximize circle can show the wrong color (known issue).
+- **Apps with tabs in the title bar** (Notepad, Windows Terminal, File Explorer) are excluded by default because their tabs overlap buttons on the left. See *Excluded apps* and *File Explorer*.
 */
 // ==/WindhawkModReadme==
 
@@ -149,6 +165,9 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
   - leftMargin: 0
     $name: Left margin (px)
     $description: Gap between the left window edge and the first button
+  - buttonTighten: 0
+    $name: Tighten button spacing (px)
+    $description: "0 = default spacing. Higher = buttons closer together (limited to about 20 px so the middle button stays usable). Works on the left and on the right, and in File Explorer once CabinetWClass is removed from Excluded window classes. Meant for the macOS / Custom image style."
   - order: closeMinMax
     $name: Button order
     $description: Order of the three buttons, from the left edge.
@@ -197,7 +216,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
     $name: Restart dwm.exe when the mod is unloaded
     $description: "Off (recommended): the painted glyphs stay until dwm.exe restarts, so after the mod is turned off a button can look wrong or be missing. On: dwm.exe is terminated when the mod is unloaded (disable, recompile, Windhawk restart) so the original glyphs come back; the screen flickers briefly and apps stay open. dwm.exe is never restarted twice within 30 seconds."
   $name: Button style
-  $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.  
+  $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.
 - titleText:
   - titleAlign: left
     $name: Icon and title alignment
@@ -296,7 +315,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 // ======================================================================
 
 static struct {
-    int leftMargin, order;
+    int leftMargin, order, tighten;
     bool moveButtons, moveTitle;
     int titleAlign, iconPosition, iconSide, titleGap, iconTitleGap, rightEdgeGap;
     int explorerMargin;
@@ -329,6 +348,16 @@ static int EffLeftMargin(HWND hwnd) {
     return m;
 }
 
+// Overlap (px) between neighbouring caption buttons for the given DPI.
+// midW = width of the middle button; the overlap is capped so it stays usable.
+static int TightenPx(int dpi, int midW) {
+    if (g_settings.tighten <= 0) return 0;
+    int T = MulDiv(g_settings.tighten, dpi, 96);
+    int maxT = (midW - 6) / 2;
+    if (T > maxT) T = maxT;
+    return T < 0 ? 0 : T;
+}
+
 // True when the layout depends on the measured width of the title text
 // (centered/right title, or the icon placed to the right of the title).
 static bool TitleWidthMatters() {
@@ -359,6 +388,7 @@ static void LoadExclusions();
 static void LoadSettings() {
     g_settings.moveButtons = Wh_GetIntSetting(L"buttons.moveButtons") != 0;
     g_settings.leftMargin = Clamp(Wh_GetIntSetting(L"buttons.leftMargin"), 0, 300);
+    g_settings.tighten = Clamp(Wh_GetIntSetting(L"buttons.buttonTighten"), 0, 40);
     g_settings.explorerMargin = Clamp(Wh_GetIntSetting(L"explorerTabs.buttonsExtraMargin"), -50, 300);
     g_settings.order = GetChoice(L"buttons.order", kOrderKeys, 3);
     g_settings.showDialogClose = Wh_GetIntSetting(L"buttons.showDialogClose") != 0;
@@ -572,12 +602,30 @@ typedef BOOL (WINAPI *SPIForDpi_t)(UINT, UINT, PVOID, UINT, UINT);
 static GetDpiForWindow_t g_pGetDpiForWindow = nullptr;
 static GetDpiForSystem_t g_pGetDpiForSystem = nullptr;
 static SPIForDpi_t g_pSPIForDpi = nullptr;
+typedef int  (WINAPI *InternalGetWindowText_t)(HWND, LPWSTR, int);
+typedef BOOL (WINAPI *IsHungAppWindow_t)(HWND);
+static InternalGetWindowText_t g_pInternalGetWindowText = nullptr;
+static IsHungAppWindow_t g_pIsHungAppWindow = nullptr;
+
+static const unsigned kHashUnsafe = 0xFFFFFFFFu;
+
+// Reads the title WITHOUT sending any message to the window (safe on the DWM thread).
+// Returns -1 when the window is hung or the API is unavailable.
+static int SafeGetWindowText(HWND hwnd, wchar_t* buf, int cap) {
+    if (!hwnd || !g_pInternalGetWindowText) return -1;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    // Ghost windows belong to dwm.exe itself: reading their text never blocks.
+    if (pid != GetCurrentProcessId() && g_pIsHungAppWindow && g_pIsHungAppWindow(hwnd)) return -1;
+    return g_pInternalGetWindowText(hwnd, buf, cap);
+}
 
 static int MeasureTitleWidth(HWND hwnd, int dpi) {
     if (!hwnd || !g_pSPIForDpi) return -1;
     wchar_t text[300] = {};
-    int n = GetWindowTextW(hwnd, text, 300);
-    if (n <= 0) return 0;
+    int n = SafeGetWindowText(hwnd, text, 300);
+    if (n < 0) return -1;   // hung / unavailable: caller falls back to the safe left layout
+    if (n == 0) return 0;
     NONCLIENTMETRICSW ncm = {};
     ncm.cbSize = sizeof(ncm);
     if (!g_pSPIForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi)) return -1;
@@ -599,7 +647,8 @@ static int MeasureTitleWidth(HWND hwnd, int dpi) {
 static unsigned HashWindowText(HWND hwnd) {
     if (!hwnd) return 0;
     wchar_t t[300] = {};
-    int n = GetWindowTextW(hwnd, t, 300);
+    int n = SafeGetWindowText(hwnd, t, 300);
+    if (n < 0) return kHashUnsafe;
     unsigned h = 2166136261u;
     for (int i = 0; i < n; i++) {
         h ^= (unsigned)t[i];
@@ -677,7 +726,7 @@ static HWND HwndFromTopLevelWindow(void* pThis) {
 }
 
 // ---------------- per-window button rectangles (window-local X) ----------------
-struct WinLayout { HWND hwnd; int left[4]; int right[4]; int band; bool valid; };
+struct WinLayout { HWND hwnd; int left[4]; int right[4]; int band; bool valid; bool iconSet; int iconL, iconR; };
 // One entry per CTopLevelWindow that this mod has laid out. No size limit: an entry is
 // only dropped when its window is gone (see StoreWinLayout).
 static std::unordered_map<void*, WinLayout> g_winLayouts;
@@ -701,6 +750,7 @@ static void StoreWinLayout(void* win, const int* l, const int* r, int band, HWND
     e.hwnd = hwnd;
     e.band = band;
     e.valid = true;
+    e.iconSet = false; e.iconL = 0; e.iconR = 0;
     ReleaseSRWLockExclusive(&g_layoutLock);
 }
 
@@ -722,6 +772,37 @@ static bool GetWinLayout(void* win, int* l, int* r, int* band) {
     }
     ReleaseSRWLockShared(&g_layoutLock);
     return ok;
+}
+
+static void SetWinIcon(void* win, bool visible, int l, int r) {
+    AcquireSRWLockExclusive(&g_layoutLock);
+    auto it = g_winLayouts.find(win);
+    if (it != g_winLayouts.end()) {
+        it->second.iconSet = true;
+        it->second.iconL = visible ? l : 0;
+        it->second.iconR = visible ? r : 0;
+    }
+    ReleaseSRWLockExclusive(&g_layoutLock);
+}
+
+static bool GetWinIcon(void* win, int* l, int* r) {
+    bool set = false;
+    AcquireSRWLockShared(&g_layoutLock);
+    auto it = g_winLayouts.find(win);
+    if (it != g_winLayouts.end() && it->second.valid && it->second.iconSet) {
+        *l = it->second.iconL; *r = it->second.iconR; set = true;
+    }
+    ReleaseSRWLockShared(&g_layoutLock);
+    return set;
+}
+
+static HWND GetWinHwnd(void* win) {
+    HWND h = nullptr;
+    AcquireSRWLockShared(&g_layoutLock);
+    auto it = g_winLayouts.find(win);
+    if (it != g_winLayouts.end() && it->second.valid) h = it->second.hwnd;
+    ReleaseSRWLockShared(&g_layoutLock);
+    return h;
 }
 
 // ---------------- per-window title-text state ----------------
@@ -781,6 +862,7 @@ struct Seq {
     int winW;
     int dpi;
     HWND hwnd;
+    void* win;
     int count;
     VisEntry vis[6];
 };
@@ -908,6 +990,7 @@ static bool RepositionTitle(VisEntry* title) {
         else if (showIcon) SetInsetLeft_Orig(icon->v, iconX);
     }
 
+    if (icon) SetWinIcon(t_seq.win, showIcon, iconX, iconX + iconW);
     if (!showTitle) {
         SetInsetLeft_Orig(title->v, t_seq.winW + 100);
         SetInsetRight_Orig(title->v, -200);
@@ -1020,13 +1103,26 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     // are positioned slightly differently by DWM, so they get their own offset.
     bool closeOnly = (w[1] <= 0 && w[2] <= 0);
 
+    // Tighten: buttons 2 and 3 overlap the previous one by T px (0 = default).
+    // Works on both sides and in File Explorer.
+    int T = 0;
+    if (g_settings.tighten > 0 && w[1] > 0 && w[2] > 0) {
+        int dpiT = 0;
+        if (hwndUsed && g_pGetDpiForWindow) dpiT = (int)g_pGetDpiForWindow(hwndUsed);
+        if (dpiT <= 0 && g_pGetDpiForSystem) dpiT = (int)g_pGetDpiForSystem();
+        if (dpiT <= 0) dpiT = 96;
+        // Middle button: on the left it depends on the order, on the right it is maximize
+        int midW = g_settings.moveButtons ? w[kOrders[o][1]] : w[2];
+        T = TightenPx(dpiT, midW);
+    }
+
     int x = 0;                 // right edge of the button group (from the left)
     int rightMargin = baseOut; // space reserved on the right for the title area
     if (g_settings.moveButtons) {
         x = baseOut + EffLeftMargin(hwndUsed) + (closeOnly ? kCloseOnlyOffset : 0);
         for (int i = 0; i < 3; i++) {
             int t = kOrders[o][i];
-            x += w[t];
+            x += w[t] - (i > 0 ? T : 0);
             t_seq.outBefore[t] = winW - x;
         }
     } else {
@@ -1036,7 +1132,7 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
         for (int i = 0; i < 3; i++) {
             int t = kStock[i];
             t_seq.outBefore[t] = out;
-            out += w[t];
+            out += w[t] - ((i < 2) ? T : 0);
         }
         rightMargin = out;  // the buttons occupy the right side
     }
@@ -1059,6 +1155,7 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     t_seq.rightMargin = rightMargin;
     t_seq.winW = winW;
     t_seq.hwnd = hwndUsed;
+    t_seq.win = pThis;
     t_seq.closeOnly = closeOnly;
 
     int dpi = 0;
@@ -1078,6 +1175,7 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     for (int t = 1; t <= 3; t++) {
         br[t] = winW - t_seq.outBefore[t];
         bl[t] = br[t] - w[t];
+        if (T > 0 && w[t] > 0) { bl[t] += T / 2; br[t] -= T - T / 2; }   // hit slot = narrower than the 46px visual
     }
     StoreWinLayout(pThis, bl, br, b + a + 2, hwndUsed);
 
@@ -1117,8 +1215,6 @@ static long UpdateNCAreaButton_Hook(void* pThis, int type, int a, int b, int* pO
     long r = UpdateNCAreaButton_Orig(pThis, type, a, b, pOut);
 
     if (type == 0) {
-        DebugLog(L"[Seq] this=%p valid=%d moveTitle=%d hasPosHook=%d posDepth=%d",
-                 pThis, (int)t_seq.valid, (int)g_settings.moveTitle, (int)g_hasPosHook, t_posDepth);
         if (t_seq.valid && g_settings.moveTitle && g_hasPosHook && t_posDepth > 0) {
             t_seq.active = true;
         }
@@ -1162,7 +1258,10 @@ static bool RelayoutIfTitleChanged(void* pThis, const wchar_t* tag) {
     HWND hw = nullptr;
     unsigned oldHash = 0;
     bool hasState = GetTitleState(pThis, &hw, &oldHash);
-    if (hasState && hw && IsWindow(hw) && HashWindowText(hw) == oldHash) return false;
+    if (hasState && hw && IsWindow(hw)) {
+        unsigned nowHash = HashWindowText(hw);
+        if (nowHash == kHashUnsafe || nowHash == oldHash) return false;   // hung window: don't relayout
+    }
 
     DoRelayout(pThis, tag);
     return true;
@@ -1187,6 +1286,39 @@ static void OnTitleUpdated_Hook(void* pThis) {
     if (pre && t_posDepth == 0 && !t_relayout) DoRelayout(pThis, L"OnTitleUpdated-post");
 }
 
+// The icon menu is delayed briefly. If a second click (double-click) arrives
+// before the timer fires, the menu is cancelled and the window is closed instead.
+#ifndef WM_POPUPSYSTEMMENU
+#define WM_POPUPSYSTEMMENU 0x0313
+#endif
+
+static PTP_TIMER g_menuTimer;
+static SRWLOCK g_menuLock = SRWLOCK_INIT;
+static HWND g_menuHwnd;
+static POINT g_menuPt;
+
+static VOID CALLBACK MenuTimerCallback(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+    AcquireSRWLockExclusive(&g_menuLock);
+    HWND hw = g_menuHwnd;
+    POINT pt = g_menuPt;
+    g_menuHwnd = nullptr;
+    ReleaseSRWLockExclusive(&g_menuLock);
+    if (hw && !g_unloading && IsWindow(hw))
+        PostMessageW(hw, WM_POPUPSYSTEMMENU, 0, MAKELPARAM(pt.x, pt.y));
+}
+
+static void QueueIconMenu(HWND hw, int x, int y) {
+    if (!g_menuTimer) return;
+    AcquireSRWLockExclusive(&g_menuLock);
+    g_menuHwnd = hw;
+    g_menuPt = {x, y};
+    ReleaseSRWLockExclusive(&g_menuLock);
+    UINT dc = GetDoubleClickTime();
+    LONGLONG due = -(LONGLONG)(dc > 250 ? 250 : dc) * 10000;   // relative, 100 ns units; change 250 for a faster/slower menu
+    FILETIME ft = {(DWORD)due, (DWORD)(due >> 32)};
+    SetThreadpoolTimer(g_menuTimer, &ft, 0, 0);
+}
+
 // ---------------- hit-test fix ----------------
 // DWM stretches the close button's hit area (in maximized windows) over most of
 // the title bar, assuming close is the last button. When the reported button
@@ -1204,7 +1336,7 @@ static unsigned g_lastRawCode = 0xFFFFFFF0u;
 static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsigned int* pFlags) {
     bool r = DoHitTest_Orig(pThis, pt, ppVisual, pFlags);
 
-    if (g_settings.debugLog && pt && pFlags && pt->y <= 40 && pt->x < 200) {
+    if (g_settings.debugLog && pt && pFlags && pt->y <= 40) {
         unsigned c = r ? *pFlags : 0xFFFFFFF1u;
         if (pThis != g_lastRawWin || c != g_lastRawCode) {
             g_lastRawWin = pThis;
@@ -1216,11 +1348,52 @@ static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsign
     if (!r || !pt || !pFlags) return r;
 
     unsigned int code = *pFlags;
-    if (code == 3 && !g_settings.iconClickable) {   // HTSYSMENU: the icon, which the mod may have moved anywhere in the title bar
-        int l0[4] = {}, r0[4] = {}, b0 = 0;
-        if (GetWinLayout(pThis, l0, r0, &b0)) {
-            *pFlags = 2;   // HTCAPTION
-            return r;
+    if (g_settings.debugLog && pt->y <= 40 && pt->x > 200) {
+        int la[4] = {}, ra[4] = {}, ba = 0, ia = 0, ib = 0;
+        HitLog(L"[IconChk] pt=(%ld,%ld) code=%u hasLayout=%d hasIcon=%d",
+               pt->x, pt->y, code, (int)GetWinLayout(pThis, la, ra, &ba), (int)GetWinIcon(pThis, &ia, &ib));
+    }
+    if (code == 3 || code == 2) {
+        int l0[4] = {}, r0[4] = {}, b0 = 0, il = 0, ir = 0;
+        if (GetWinLayout(pThis, l0, r0, &b0) && GetWinIcon(pThis, &il, &ir)) {
+            bool onIcon = g_settings.iconClickable && ir > il &&
+                          pt->y >= 0 && pt->y <= b0 &&
+                          pt->x >= il - 1 && pt->x < ir + 1;
+            if (onIcon) {
+                for (int t = 1; t <= 3; t++)
+                    if (pt->x >= l0[t] && pt->x < r0[t]) { onIcon = false; break; }
+            }
+            HitLog(L"[IconHit] pt=(%ld,%ld) code=%u icon=[%d,%d] onIcon=%d clickable=%d band=%d",
+                   pt->x, pt->y, code, il, ir, (int)onIcon, (int)g_settings.iconClickable, b0);
+            static bool s_down = false;
+            static ULONGLONG s_lastMenu = 0;
+            static ULONGLONG s_lastDown = 0;
+            bool down = (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000) != 0;
+            ULONGLONG nowTick = GetTickCount64();
+            bool within = (nowTick - s_lastMenu) <= (ULONGLONG)GetDoubleClickTime();
+            bool newPress = down && (!s_down || (nowTick - s_lastDown) > 100);
+            bool dblIcon = false;
+            if (down) s_lastDown = nowTick;
+            if (g_settings.iconClickable && onIcon && newPress) {
+                HWND hw = GetWinHwnd(pThis);
+                if (within) {
+                    // second click on the icon = double-click -> close the window
+                    s_lastMenu = 0;
+                    AcquireSRWLockExclusive(&g_menuLock); g_menuHwnd = nullptr; ReleaseSRWLockExclusive(&g_menuLock);   // cancel the pending menu
+                    dblIcon = true;   // let Windows close it itself (HTSYSMENU)
+                } else {
+                    s_lastMenu = nowTick;
+                    RECT wr;
+                    if (hw && GetWindowRect(hw, &wr)) {
+                        int sx = wr.left + il;
+                        int sy = wr.top + b0 - (IsZoomed(hw) ? 6 : 0);
+                        QueueIconMenu(hw, sx, sy);
+                    }
+                }
+            }
+            s_down = down;
+            if (dblIcon) { *pFlags = 3; code = 3; }   // second click: double-click on the icon = close
+            else { *pFlags = 2; code = 2; }           // everything else is caption, including the icon
         }
     }
     int type = (code == 20) ? 3 : (code == 9) ? 2 : (code == 8) ? 1 : 0;
@@ -1305,7 +1478,7 @@ static void TL_LoadSettings() {
     g_debug = Wh_GetIntSetting(L"debugLog") ? 1 : 0;
     PCWSTR style = Wh_GetStringSetting(L"buttonStyle.style");
     g_tlEnabled = (style && wcscmp(style, L"windows") != 0 && !g_painterBroken) ? 1 : 0;
-    g_styleCustom = (style && wcscmp(style, L"custom") == 0) ? 1 : 0;    
+    g_styleCustom = (style && wcscmp(style, L"custom") == 0) ? 1 : 0;
     Wh_FreeStringSetting(style);
     g_restartOnUnload = Wh_GetIntSetting(L"buttonStyle.restartDwmOnUnload") ? 1 : 0;
 
@@ -1381,9 +1554,44 @@ static ArrInfo g_arr[192];
 static int g_arrCount = 0;
 static int g_curSet = -1, g_curSetCount = 0;
 static float g_curSetF = -1.0f;
+static unsigned g_curSetH = 0;
+static volatile LONG g_dpiChanged = 0;
+static ULONGLONG g_lastDpiRefresh = 0;
+static void RequestDwmRefresh();   // defined in the lifecycle section
+// After a DPI change DWM only rebuilds the inactive glyph set (f=0.4). The active set (f=1.0) is
+// created when a window's active state changes, so we flip the foreground window's frame state once.
+static HANDLE g_nudgeThread = nullptr;
+
+static DWORD WINAPI ActivateNudgeThread(LPVOID) {
+    for (int i = 0; i < 12 && !g_unloading; i++) Sleep(100);   // let DWM finish rebuilding (~1.2 s)
+    if (g_unloading) return 0;
+
+    // Pick a visible window that this mod laid out (a normal caption window, not a frame host)
+    HWND target = nullptr;
+    HWND fg = GetForegroundWindow();
+    AcquireSRWLockShared(&g_layoutLock);
+    for (auto& p : g_winLayouts) {
+        HWND h = p.second.hwnd;
+        if (!(p.second.valid && h && IsWindow(h) && IsWindowVisible(h) && !IsIconic(h))) continue;
+        if (h == fg) { target = h; break; }   // prefer the foreground window
+        if (!target) target = h;              // otherwise the first usable one
+    }
+    ReleaseSRWLockShared(&g_layoutLock);
+
+    if (target) {
+        bool isFg = (GetForegroundWindow() == target);
+        DWORD_PTR res = 0;
+        // Flip the active state and put it back, so the final state is what it was
+        SendMessageTimeoutW(target, WM_NCACTIVATE, isFg ? FALSE : TRUE, 0, SMTO_ABORTIFHUNG, 300, &res);
+        SendMessageTimeoutW(target, WM_NCACTIVATE, isFg ? TRUE : FALSE, 0, SMTO_ABORTIFHUNG, 300, &res);
+        LogCat(0, 200, L"[DpiRefresh] activation nudge sent to hwnd=%p fg=%d", target, (int)isFg);
+    }
+    return 0;
+}
+
 static SRWLOCK g_arrLock = SRWLOCK_INIT;
 
-struct Glyph { const void* obj; const void* a0; int role, state; unsigned rc[4]; unsigned sz[2]; void* vt; };
+struct Glyph { const void* obj; const void* a0; int role, state; unsigned rc[4]; unsigned sz[2]; void* vt; float f; };
 static Glyph g_gl[256];
 static int g_glN = 0;
 static int g_extR = 64, g_extB = 864;
@@ -1410,15 +1618,43 @@ static bool ReadArr(const void* arr, const void** out4) {
     return true;
 }
 
-// Each role has its own cell in the free area of the atlas (y >= 808).
-// kind 0 = minimize 12x12, 1 = restore 12x12, 2 = maximize 14x12, 3 = close 12x12
-static int CellKind(int role, unsigned w) { return role == 2 ? 3 : (role == 1 ? (w == 14 ? 2 : 1) : 0); }
+// Cells live in the free area of the atlas (y >= 808). Each glyph height class (12, 15, 18, 21, 24 px =
+// 100%..200% scaling) has its own 4x4 block of cells: 4 kinds x 4 states. A glyph of one DPI never shares a cell
+// with a glyph of another DPI. Kinds: 0 = minimize, 1 = restore, 2 = maximize, 3 = close.
+static const int kClsPitch[5] = { 15, 16, 21, 26, 30 };
+static const int kClsX[5]     = {  1, 61, 125,  1, 105 };
+static const int kClsY[5]     = { 808, 808, 808, 892, 892 };
+
+static int SizeClass(unsigned h) {
+    int c = ((int)h - 12) / 3;   // 12..14 -> 0, 15..17 -> 1, 18..20 -> 2, 21..23 -> 3, 24..26 -> 4
+    return c < 0 ? 0 : (c > 4 ? 4 : c);
+}
+
+// role 0 = minimize, 1 = maximize, 2 = close, 3 = restore
+static int CellKind(int role, unsigned w, unsigned h) {
+    return role == 2 ? 3 : (role == 3 ? 1 : (role == 1 ? 2 : 0));
+}
+
+static void CellRect(unsigned w, unsigned h, int role, int state, unsigned* rc) {
+    int cls = SizeClass(h);
+    unsigned x = (unsigned)(kClsX[cls] + kClsPitch[cls] * CellKind(role, w, h));
+    unsigned y = (unsigned)(kClsY[cls] + kClsPitch[cls] * state);
+    rc[0] = x; rc[1] = y; rc[2] = x + w; rc[3] = y + h;
+}
+
+// Kind of the cell that contains (x, y), or -1 when the point is not inside one of our blocks
+static int KindFromCell(unsigned x, unsigned y) {
+    for (int c = 0; c < 5; c++) {
+        int p = kClsPitch[c];
+        if ((int)x >= kClsX[c] && (int)x < kClsX[c] + 4 * p && (int)y >= kClsY[c] && (int)y < kClsY[c] + 4 * p)
+            return ((int)x - kClsX[c]) / p;
+    }
+    return -1;
+}
 
 static void MoveToCell(Glyph& g) {
     if (!GlyphStillValid(g)) return;
-    unsigned x = 1 + 16 * (unsigned)CellKind(g.role, g.sz[0]);
-    unsigned y = 808 + 14 * (unsigned)g.state;
-    g.rc[0] = x; g.rc[1] = y; g.rc[2] = x + g.sz[0]; g.rc[3] = y + g.sz[1];
+    CellRect(g.sz[0], g.sz[1], g.role, g.state, g.rc);
     unsigned* d = (unsigned*)g.obj;
     d[20] = g.rc[0]; d[21] = g.rc[1]; d[22] = g.rc[2]; d[23] = g.rc[3];
 }
@@ -1429,11 +1665,36 @@ static int DetectRole(const void* a0, const void* b0, int fallback) {
     if (Readable(a0, 0x70) && Readable(b0, 0x70)) {
         const unsigned* da = (const unsigned*)a0;
         const unsigned* db = (const unsigned*)b0;
-        if (da[8] == 4) return 2;
-        if (db[6] == 14) return 1;
-        return 0;
+        if (da[8] < 8) return 2;                  // close: margin A = 4 px at every DPI (12 for min/max)
+        if (db[6] > db[7]) return 1;              // maximize: wider than tall (100%, 150%+)
+        // 125%: minimize and maximize are both square, so tell them apart by order within the set
+        return (fallback == 0 || fallback == 1) ? fallback : 0;
     }
     return fallback;
+}
+
+// Middle button: maximize (role 1) or restore (role 3).
+// At 100% they differ in size (14x12 vs 12x12). At other DPIs the sizes are equal or
+// unreliable, so the second middle set of the same size class and opacity is the other kind.
+// Caller must hold g_glLock.
+static int MiddleRoleLocked(const void* const* fam, float f, unsigned w, unsigned h) {
+    int cls = SizeClass(h);
+    if (cls == 0) return w > h ? 1 : 3;
+    for (int i = 0; i < g_glN; i++) {
+        const Glyph& g = g_gl[i];
+        if ((g.role != 1 && g.role != 3) || g.f != f || SizeClass(g.sz[1]) != cls) continue;
+        bool self = false;
+        for (int s = 0; s < 4; s++) if (fam[s] && fam[s] == g.obj) self = true;
+        if (self || !GlyphStillValid(g)) continue;
+        return g.role == 1 ? 3 : 1;
+    }
+    // No sibling yet. The active set (f ~ 1.0) is built for the window that just became
+    // active, so the foreground window tells whether this set is restore or maximize.
+    if (f > 0.7f) {
+        HWND fg = GetForegroundWindow();
+        if (fg && IsZoomed(fg)) return 3;
+    }
+    return 1;
 }
 
 static void CorrectRole(const void* bmp, int role) {
@@ -1450,13 +1711,24 @@ static void CorrectRole(const void* bmp, int role) {
     if (!have) return;
     bool changed = false;
     AcquireSRWLockExclusive(&g_glLock);
+    int midRole = -1;
     for (int i = 0; i < g_glN; i++) {
         for (int s = 0; s < 4; s++) {
-            if (g_gl[i].obj == fam[s] && g_gl[i].role != role && g_gl[i].role != 2) {
-                g_gl[i].role = role;
-                MoveToCell(g_gl[i]);
-                changed = true;
+            if (!fam[s] || g_gl[i].obj != fam[s]) continue;
+            int cur = g_gl[i].role;
+            if (cur == 2) continue;
+            int want = role;
+            if (role == 1) {
+                if (cur == 1 || cur == 3) continue;   // already the middle button
+                if (midRole < 0) midRole = MiddleRoleLocked(fam, g_gl[i].f, g_gl[i].sz[0], g_gl[i].sz[1]);
+                want = midRole;
+            } else if (g_gl[i].sz[0] > g_gl[i].sz[1]) {
+                continue;   // a wide glyph must not become minimize
             }
+            if (cur == want) continue;
+            g_gl[i].role = want;
+            MoveToCell(g_gl[i]);
+            changed = true;
         }
     }
     ReleaseSRWLockExclusive(&g_glLock);
@@ -1468,6 +1740,13 @@ static void AddExtent(const void* obj) {
     const unsigned* d = (const unsigned*)obj;
     if (d[22] > 0 && d[22] < 4096 && (int)d[22] > g_extR) g_extR = (int)d[22];
     if (d[23] > 0 && d[23] < 8192 && (int)d[23] > g_extB) g_extB = (int)d[23];
+}
+
+// Caller holds g_glLock.
+static bool HeightIsLiveLocked(unsigned h) {
+    for (int i = 0; i < g_glN; i++)
+        if (g_gl[i].sz[1] == h && GlyphStillValid(g_gl[i])) return true;
+    return false;
 }
 
 static bool RegisterPair(const void* a, const void* b, float f) {
@@ -1503,29 +1782,40 @@ static bool RegisterPair(const void* a, const void* b, float f) {
         if (g_arr[i].kind == 'B' && g_arr[i].bm[0] == vb[0]) { found = true; break; }
     }
     if (!found && g_arrCount + 2 <= 192) {
-        if (g_curSet < 0 || g_curSetCount >= 3 || f != g_curSetF) {
+        unsigned hNow = ((const unsigned*)vb[0])[7];
+        if (g_curSet >= 0 && hNow != g_curSetH) {
+            // Only a height with no live registered glyph counts as a DPI change
+            AcquireSRWLockShared(&g_glLock);
+            if (!HeightIsLiveLocked(hNow)) g_dpiChanged = 1;
+            ReleaseSRWLockShared(&g_glLock);
+        }
+        if (g_curSet < 0 || g_curSetCount >= 3 || f != g_curSetF || hNow != g_curSetH) {
             g_curSet++;
             g_curSetCount = 0;
             g_curSetF = f;
+            g_curSetH = hNow;
         }
         set = g_curSet;
         int idx = g_curSetCount++;
         role = DetectRole(va[0], vb[0], idx == 1 ? 1 : 0);
-        // A glyph that an earlier session already moved to its cell (y >= 808) keeps its role:
-        // the cell column says which button it is (0 minimize, 1 restore, 2 maximize, 3 close)
-        {
+        // A glyph that an earlier session already moved to its cell (y >= 808): only the
+        // minimize cell and the wide shape are trusted. Maximize vs restore is decided below.
+        if (role != 2) {
             const unsigned* movedRc = (const unsigned*)vb[0];
-            if (movedRc[21] >= 808 && movedRc[20] >= 1) {
-                unsigned cellKind = (movedRc[20] - 1) / 16;
-                if (cellKind == 0) role = 0;
-                else if (cellKind == 1 || cellKind == 2) role = 1;
-                else if (cellKind == 3) role = 2;
-            }
-        }        
-        // Creation order inside a set is minimize, maximize/restore, close. With a maximized
-        // window the middle glyph is the 12x12 restore glyph, which looks like minimize by size.
-        // So the second glyph of a set that was not detected as close is the middle button.
+            int cellKind = KindFromCell(movedRc[20], movedRc[21]);
+            bool wide = movedRc[6] > movedRc[7];
+            if (cellKind == 0 && !wide) role = 0;
+            else if (cellKind == 1 || cellKind == 2) role = 1;   // middle button: maximize vs restore is decided below, not from the old cell
+            else if (wide && role == 0) role = 1;
+        }
+        // The second glyph of a set that is not close is the middle button
         if (idx == 1 && role == 0) role = 1;
+        // Middle button: maximize (role 1) or restore (role 3)
+        if (role == 1) {
+            AcquireSRWLockShared(&g_glLock);
+            role = MiddleRoleLocked(vb, f, ((const unsigned*)vb[0])[6], ((const unsigned*)vb[0])[7]);
+            ReleaseSRWLockShared(&g_glLock);
+        }
         memcpy(g_arr[g_arrCount].bm, vb, sizeof(vb));
         g_arr[g_arrCount].kind = 'B'; g_arr[g_arrCount].set = set; g_arr[g_arrCount].role = role;
         g_arrCount++;
@@ -1555,6 +1845,7 @@ static bool RegisterPair(const void* a, const void* b, float f) {
                 g.sz[0] = d[6]; g.sz[1] = d[7];
                 g.a0 = va[0];
                 g.vt = *(void* const*)vb[i];
+                g.f = f;
                 MoveToCell(g);
             }
         }
@@ -1562,8 +1853,24 @@ static bool RegisterPair(const void* a, const void* b, float f) {
 
         const unsigned* d0 = (const unsigned*)vb[0];
         unsigned lr[6] = { d0[20], d0[21], d0[22], d0[23], d0[6], d0[7] };
-        LogCat(0, 60, L"[Pair] set=%d role=%d f=%f A0=%p B0=%p rc=(%u,%u)-(%u,%u) size=%ux%u",
-               set, role, (double)f, va[0], vb[0], lr[0], lr[1], lr[2], lr[3], lr[4], lr[5]);
+        unsigned aMargin = Readable(va[0], 0x70) ? ((const unsigned*)va[0])[8] : 0;
+        unsigned aW = Readable(va[0], 0x70) ? ((const unsigned*)va[0])[6] : 0;
+        unsigned aH = Readable(va[0], 0x70) ? ((const unsigned*)va[0])[7] : 0;
+        LogCat(0, 200, L"[Pair] set=%d role=%d f=%f A0=%p B0=%p rc=(%u,%u)-(%u,%u) size=%ux%u margin=%u Asize=%ux%u",
+               set, role, (double)f, va[0], vb[0], lr[0], lr[1], lr[2], lr[3], lr[4], lr[5], aMargin, aW, aH);
+        if (InterlockedExchange(&g_dpiChanged, 0)) {
+            ULONGLONG nowTick = GetTickCount64();
+            if (nowTick - g_lastDpiRefresh > 3000) {
+                g_lastDpiRefresh = nowTick;
+                InterlockedExchange(&g_pending, 1);
+                RequestDwmRefresh();   // posted message: runs after this hook returns
+                LogCat(0, 200, L"[DpiRefresh] glyph size changed, DWM refresh requested");
+                if (!g_nudgeThread || WaitForSingleObject(g_nudgeThread, 0) == WAIT_OBJECT_0) {
+                    if (g_nudgeThread) CloseHandle(g_nudgeThread);
+                    g_nudgeThread = CreateThread(nullptr, 0, ActivateNudgeThread, nullptr, 0, nullptr);
+                }
+            }
+        }
     }
     return isNew;
 }
@@ -1610,19 +1917,25 @@ static bool InSymbol(int role, float ux, float uy) {
     const float th = 0.6f, L = 2.4f;
     if (role == 2) return DistSeg(ux, uy, -L, -L, L, L) <= th || DistSeg(ux, uy, -L, L, L, -L) <= th;
     if (role == 0) return DistSeg(ux, uy, -L - 0.4f, 0.0f, L + 0.4f, 0.0f) <= th;
-    return DistSeg(ux, uy, -L, 0.0f, L, 0.0f) <= th || DistSeg(ux, uy, 0.0f, -L, 0.0f, L) <= th;
+    // macOS-style maximize: two right triangles (top-right and bottom-left) with a gap between them
+    const float a = 3.0f, d = 4.8f;
+    bool tr = ux <= a && uy >= -a && (ux - uy) >= (2.0f * a - d);
+    bool bl = ux >= -a && uy <= a && (ux - uy) <= (d - 2.0f * a);
+    return tr || bl;
 }
 
 static void RenderGlyph(BYTE* px, int w, int h, int role, int state) {
+    if (role == 3) role = 1;   // restore uses the maximize colors
     if (role < 0 || role > 2) role = 0;
     int bg[3], sym[3];
     for (int i = 0; i < 3; i++) {
         bg[i] = state == 2 ? g_base[role][i] * 78 / 100 : g_base[role][i];
-        sym[i] = g_base[role][i] * 28 / 100;
+        sym[i] = g_base[role][i] * g_base[role][i] / 255 * 60 / 100;
     }
     bool drawSym = (state == 1 || state == 2);
     float cx = w / 2.0f, cy = h / 2.0f;
     float rad = (w < h ? w : h) / 2.0f - 0.25f;
+    float k = 12.0f / (float)(w < h ? w : h);   // keeps the x / - / + symbols proportional at high DPI
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int nBg = 0, nSym = 0;
@@ -1631,7 +1944,7 @@ static void RenderGlyph(BYTE* px, int w, int h, int role, int state) {
                     float ux = x + (sx + 0.5f) / 4.0f - cx;
                     float uy = y + (sy + 0.5f) / 4.0f - cy;
                     if (ux * ux + uy * uy <= rad * rad) {
-                        if (drawSym && InSymbol(role, ux, uy)) nSym++;
+                        if (drawSym && InSymbol(role, ux * k, uy * k)) nSym++;
                         else nBg++;
                     }
                 }
@@ -1953,8 +2266,8 @@ static void BlitIcon(BYTE* cell, int cw, int ch, const IconImg& im) {
     }
 }
 
-static bool RenderCustomCell(BYTE* cell, int w, int h, int role, int state, unsigned origW) {
-    int kind = CellKind(role, origW);
+static bool RenderCustomCell(BYTE* cell, int w, int h, int role, int state, unsigned origW, unsigned origH) {
+    int kind = CellKind(role, origW, origH);
     if (kind < 0 || kind > 3 || state < 0 || state > 3) return false;
     AcquireSRWLockShared(&g_iconLock);
     const IconImg* im = nullptr;
@@ -2012,10 +2325,10 @@ static void PaintAtlas() {
         int w = (int)snap[i].rc[2] - x0, h = (int)snap[i].rc[3] - y0;
         if (w < 4 || h < 4 || w > 64 || h > 64) continue;
         if (x0 < 0 || y0 < 0 || x0 + w > W || y0 + h > H) continue;
-        if (y0 >= 808 && snap[i].state >= 0 && snap[i].state < 4)
-            painted[CellKind(snap[i].role, snap[i].sz[0])][snap[i].state] = true;        
+        if (y0 >= 808 && snap[i].state >= 0 && snap[i].state < 4 && SizeClass(snap[i].sz[1]) == 0)
+            painted[CellKind(snap[i].role, snap[i].sz[0], snap[i].sz[1])][snap[i].state] = true;
         BYTE cell[64 * 64 * 4];
-        if (!RenderCustomCell(cell, w, h, snap[i].role, snap[i].state, snap[i].sz[0]))
+        if (!RenderCustomCell(cell, w, h, snap[i].role, snap[i].state, snap[i].sz[0], snap[i].sz[1]))
             RenderGlyph(cell, w, h, snap[i].role, snap[i].state);
         for (int y = 0; y < h; y++) {
             memcpy(px + ((size_t)(y0 + y) * W + x0) * 4, cell + y * w * 4, (size_t)w * 4);
@@ -2028,17 +2341,17 @@ static void PaintAtlas() {
         for (int st = 0; st < 4; st++) {
             if (painted[kind][st]) continue;
             int w = (kind == 2) ? 14 : 12, h = 12;
-            int x0 = 1 + 16 * kind, y0 = 808 + 14 * st;
+            int x0 = kClsX[0] + kClsPitch[0] * kind, y0 = kClsY[0] + kClsPitch[0] * st;
             if (x0 + w > W || y0 + h > H) continue;
-            int role = (kind == 0) ? 0 : (kind == 3 ? 2 : 1);
+            int role = (kind == 0) ? 0 : (kind == 3 ? 2 : (kind == 1 ? 3 : 1));
             BYTE cell[64 * 64 * 4];
-            if (!RenderCustomCell(cell, w, h, role, st, (unsigned)w))
+            if (!RenderCustomCell(cell, w, h, role, st, (unsigned)w, (unsigned)h))
                 RenderGlyph(cell, w, h, role, st);
             for (int y = 0; y < h; y++) {
                 memcpy(px + ((size_t)(y0 + y) * W + x0) * 4, cell + y * w * 4, (size_t)w * 4);
             }
         }
-    }    
+    }
 
     HRESULT hrInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IWICImagingFactory* fac = nullptr;
@@ -2205,13 +2518,25 @@ static void SetGlyph_Hook(void* img, void* bmp, int align, int off) {
 
 typedef void (*ImgSetSize_t)(void*, const SIZE*);
 static ImgSetSize_t ImgSetSize_Orig;
+static unsigned char g_seenW[256];   // button widths seen so far (index = width in px)
 static void ImgSetSize_Hook(void* img, const SIZE* sz) {
     ImgSetSize_Orig(img, sz);
     if (g_tlEnabled && sz) {
         const void* bmp = LookupImg(img);
         if (bmp) {
-            if (sz->cx == 46) CorrectRole(bmp, 1);       // middle button (maximize/restore) is 46 wide
-            else if (sz->cx == 47) CorrectRole(bmp, 0);  // minimize and close are 47 (close is left alone)
+            int cx = (int)sz->cx;
+            if (cx == 46) CorrectRole(bmp, 1);           // 100%: middle button is 46 wide
+            else if (cx == 47) CorrectRole(bmp, 0);      // minimize and close are 47 (close is left alone)
+            else if (cx >= 30 && cx <= 250) {
+                g_seenW[cx] = 1;
+                bool lo = g_seenW[cx - 1] != 0;
+                bool hi = g_seenW[cx + 1] != 0;
+                // At other DPIs the middle button is 1 px narrower than minimize and close.
+                // Only decide when exactly one neighbour width has been seen.
+                if (hi && !lo) CorrectRole(bmp, 1);
+                else if (lo && !hi) CorrectRole(bmp, 0);
+                LogCat(5, 300, L"[ImgSize] bmp=%p cx=%d lo=%d hi=%d", bmp, cx, (int)lo, (int)hi);
+            }
         }
     }
 }
@@ -2430,7 +2755,8 @@ static void ApplyButtonHole(HWND h) {
 
     int baseOut = IsZoomed(top) ? 8 : 1;
     int bx1 = tr.left + baseOut + EffLeftMargin(top) - wr.left;
-    int bx2 = bx1 + MulDiv(46, dpi, 96) * 3;
+    int bwH = MulDiv(46, dpi, 96);
+    int bx2 = bx1 + bwH * 3 - 2 * TightenPx(dpi, bwH);
     int by1 = -10000;
     int by2 = tr.top + MulDiv(35, dpi, 96) + baseOut - wr.top;
 
@@ -2476,7 +2802,8 @@ static LRESULT TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             int baseOut = IsZoomed(top) ? 8 : 1;
             int topBand = MulDiv(35, dpi, 96) + baseOut;
             int b1 = baseOut + EffLeftMargin(top);
-            int b4 = b1 + MulDiv(46, dpi, 96) * 3;
+            int bwT = MulDiv(46, dpi, 96);
+            int b4 = b1 + bwT * 3 - 2 * TightenPx(dpi, bwT);
             if (y >= 0 && y <= topBand && x >= b1 && x < b4) return HTTRANSPARENT;
             // Pointer is over the tab bar, not over a button: tell DWM, so a button that was hot loses its hover look
             LRESULT dr = 0;
@@ -2592,8 +2919,9 @@ static LRESULT CALLBACK CabinetSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, 
             if (y >= 0 && y <= topBand) {
                 int lm = EffLeftMargin(hwnd);
                 int bw = MulDiv(46, dpi, 96);
+                int Tx = TightenPx(dpi, bw);
                 int b1 = baseOut + lm;
-                int b4 = b1 + bw * 3;
+                int b4 = b1 + bw * 3 - 2 * Tx;
                 if (x >= b1 && x < b4) {
 
                     // Let DWM answer the hit-test so it keeps drawing the hover animation
@@ -2602,7 +2930,8 @@ static LRESULT CALLBACK CabinetSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, 
                         return lRes;
                     }
 
-                    int idx = (x - b1) / bw;
+                    int idx = (x - b1) / (bw - Tx);
+                    if (idx > 2) idx = 2;
                     int o = g_settings.order;
                     int type = 0;
                     if (o == 0) type = (idx == 0) ? 3 : (idx == 1 ? 1 : 2);
@@ -2825,6 +3154,8 @@ static void LoadUser32Procs() {
         g_pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(user32, "GetDpiForWindow");
         g_pGetDpiForSystem = (GetDpiForSystem_t)GetProcAddress(user32, "GetDpiForSystem");
         g_pSPIForDpi = (SPIForDpi_t)GetProcAddress(user32, "SystemParametersInfoForDpi");
+        g_pInternalGetWindowText = (InternalGetWindowText_t)GetProcAddress(user32, "InternalGetWindowText");
+        g_pIsHungAppWindow = (IsHungAppWindow_t)GetProcAddress(user32, "IsHungAppWindow");
     }
 }
 
@@ -2864,6 +3195,7 @@ static unsigned long long LayoutSignature() {
     unsigned long long h = 1469598103934665603ull;
     h = Fnv(h, (unsigned long long)(long long)g_settings.moveButtons);
     h = Fnv(h, (unsigned long long)(long long)g_settings.leftMargin);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.tighten);
     h = Fnv(h, (unsigned long long)(long long)g_settings.explorerMargin);
     h = Fnv(h, (unsigned long long)(long long)g_settings.order);
     h = Fnv(h, (unsigned long long)(long long)g_settings.showDialogClose);
@@ -2973,7 +3305,7 @@ void Wh_ModAfterInit() {
         RequestDwmRefresh();         // windows that are already open get the new layout right away
         if (g_tlEnabled && g_styleCustom) {
             g_iconWaitThread = CreateThread(nullptr, 0, IconWaitThread, nullptr, 0, nullptr);
-        }        
+        }
     }
 }
 
@@ -2988,6 +3320,18 @@ void Wh_ModUninit() {
         WaitForSingleObject(g_iconWaitThread, INFINITE);   // the thread checks g_unloading every 100 ms
         CloseHandle(g_iconWaitThread);
         g_iconWaitThread = nullptr;
+    }
+    if (g_menuTimer) {
+        SetThreadpoolTimer(g_menuTimer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(g_menuTimer, TRUE);
+        CloseThreadpoolTimer(g_menuTimer);
+        g_menuTimer = nullptr;
+    }
+    if (g_nudgeThread) {
+        InterlockedExchange(&g_unloading, 1);
+        WaitForSingleObject(g_nudgeThread, INFINITE);   // the thread checks g_unloading every 100 ms and sends at most two 300 ms messages
+        CloseHandle(g_nudgeThread);
+        g_nudgeThread = nullptr;
     }
     if (g_everPainted && g_restartOnUnload) RestartDwm();
     FreeIcons();
@@ -3077,20 +3421,21 @@ BOOL Wh_ModInit() {
           (void**)&ImgSetSize_Orig, (void*)ImgSetSize_Hook, true },
         { { LR"(private: void __cdecl CButton::UpdateAtlasPositionAndSize(void))" },
           (void**)&UpdatePos_Orig, (void*)UpdatePos_Hook, true },
-  
+
         // Address only (no hook): called by PaintAtlas
         { { LR"(private: long __cdecl CBitmapSource::Update(struct IWICBitmap *))" },
           (void**)&g_updateBmp, nullptr, true },
         // Frees of glyph objects: drop them from our registries
         { { LR"(protected: virtual __cdecl CBitmapSource::~CBitmapSource(void))" },
-          (void**)&BmpDtor_Orig, (void*)BmpDtor_Hook, true },          
+          (void**)&BmpDtor_Orig, (void*)BmpDtor_Hook, true },
     };
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
+    if (ok) g_menuTimer = CreateThreadpoolTimer(MenuTimerCallback, nullptr, nullptr);
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
     DeriveHwndOffset();
 
     if (!g_updateBmp) Wh_Log(L"CBitmapSource::Update not found, custom button styles will not be painted");
-    if (!BmpDtor_Orig) Wh_Log(L"CBitmapSource destructor not found, freed glyph objects are not tracked");     
+    if (!BmpDtor_Orig) Wh_Log(L"CBitmapSource destructor not found, freed glyph objects are not tracked");
     return ok;
 }

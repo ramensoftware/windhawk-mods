@@ -1303,7 +1303,7 @@
         "ratingUsers": 13,
         "reviews": 1,
         "trendingSorting": 25.2,
-        "updated": 1792328536000,
+        "updated": 1792746251000,
         "users": 252
       },
       "metadata": {
@@ -1321,7 +1321,7 @@
         ],
         "license": "MIT",
         "name": "Caption Buttons Customizer",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "ce-disable-process-button-flashing": {
@@ -13762,7 +13762,7 @@
         "ratingUsers": 33,
         "reviews": 1,
         "trendingSorting": 25.28814927603446,
-        "updated": 1792310681000,
+        "updated": 1792746246000,
         "users": 548
       },
       "metadata": {
@@ -13775,7 +13775,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "0.6.0"
+        "version": "0.7.0"
       }
     },
     "standard-title-bar-colors": {
