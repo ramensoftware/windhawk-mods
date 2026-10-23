@@ -6,14 +6,17 @@
 // @author          Mokafela
 // @github          https://github.com/Mokafela
 // @license         MIT
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Edge Gradient Glow
+
+![Gradient glow spreading around a screen corner](
+https://raw.githubusercontent.com/Mokafela/windhawk-mods/edge-gradient-glow-media/edge-gradient-glow.png
+)
 
 Touch any screen edge with your mouse: a cyan-to-purple line grows outwards from
 the contact point, wrapping smoothly around corners. Move away and it fades out.
@@ -27,7 +30,7 @@ A line length of `0` spreads around the entire monitor. The effect works on each
 connected monitor, including the boundaries between monitors, and never
 intercepts mouse clicks.
 
-The effect runs in the Windows desktop shell. Disabling this mod removes it
+The effect runs in its own dedicated process. Disabling this mod removes it
 immediately. Display layout changes are detected automatically. Exclusive
 fullscreen applications and the Windows secure desktop may cover the glow.
 */
@@ -75,12 +78,13 @@ fullscreen applications and the Windows secure desktop may cover the glow.
 
 #define NOMINMAX
 #include <windows.h>
+#include <shellapi.h>
+#include <shellapi.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <list>
 #include <vector>
 
@@ -94,11 +98,11 @@ struct Settings {
     int length = 1000, thickness = 3, glow = 12, opacity = 90;
     int spread = 420, fade = 320, linger = 90, threshold = 2, fps = 60;
 } g_settings;
-HANDLE g_stop = nullptr, g_thread = nullptr, g_ready = nullptr,
-       g_singleton = nullptr;
+HANDLE g_stop = nullptr, g_thread = nullptr, g_ready = nullptr;
 HMODULE g_module = nullptr;
 std::atomic_bool g_started{false};
-bool g_displayChanged = false;
+bool g_displayChanged = false, g_mouseMoved = false;
+constexpr DWORD kCursorFallbackMs = 200;
 
 double Smooth(double t) {
     t = std::clamp(t, 0.0, 1.0);
@@ -142,13 +146,13 @@ double CircularDistance(double a, double b, double perimeter) {
 }
 
 struct Wave {
-    bool active = false, touching = false;
+    bool touching = false;
     RECT monitor{};
     double origin = 0, leaveAlpha = 1;
     ULONGLONG born = 0, left = 0;
 
     void Begin(RECT r, double contact, ULONGLONG now) {
-        active = touching = true;
+        touching = true;
         monitor = r;
         origin = contact;
         born = now;
@@ -177,8 +181,6 @@ struct Wave {
     }
 };
 
-// Contact updates are kept separate from Win32 rendering so input sequences can
-// be checked directly without moving the user's mouse.
 struct Contacts {
     std::vector<Wave> waves;
     bool Touching(const RECT& monitor) const {
@@ -270,6 +272,8 @@ struct PaintWave {
 };
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == WM_INPUT)
+        g_mouseMoved = true;
     if (message == WM_NCHITTEST)
         return HTTRANSPARENT;
     if (message == WM_MOUSEACTIVATE)
@@ -332,6 +336,7 @@ struct Strip {
             CreateDIBSection(dc, &info, DIB_RGB_COLORS,
                              reinterpret_cast<void**>(&pixels), nullptr, 0);
         if (!hwnd || !dc || !bitmap || !pixels) {
+            Wh_Log(L"Creating an overlay strip failed: %lu", GetLastError());
             Destroy();
             return false;
         }
@@ -378,9 +383,11 @@ struct Strip {
         BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
         if (UpdateLayeredWindow(hwnd, nullptr, &dest, &size, dc, &source, 0,
                                 &blend, ULW_ALPHA)) {
-            SetWindowPos(
-                hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            if (!visible) {
+                SetWindowPos(
+                    hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
             visible = true;
         }
     }
@@ -432,13 +439,14 @@ BOOL CALLBACK CollectMonitor(HMONITOR, HDC, LPRECT rect, LPARAM data) {
 }
 
 DWORD WINAPI Worker(void*) {
-    // This changes only this worker thread, never Explorer's DPI mode.
+    // Keep strip coordinates in physical pixels on every monitor.
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     WNDCLASSW wc{};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = g_module;
     wc.lpszClassName = kClass;
     if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
         SetEvent(g_ready);
         return 1;
     }
@@ -447,15 +455,24 @@ DWORD WINAPI Worker(void*) {
                         L"Edge Gradient Glow Controller", WS_POPUP, 0, 0, 0, 0,
                         nullptr, nullptr, g_module, nullptr);
     if (!control) {
+        Wh_Log(L"Creating the input controller failed: %lu", GetLastError());
         UnregisterClassW(kClass, g_module);
         SetEvent(g_ready);
         return 1;
     }
+    RAWINPUTDEVICE mouse{0x01, 0x02, RIDEV_INPUTSINK, control};
+    bool rawInput = RegisterRawInputDevices(&mouse, 1, sizeof(mouse)) != FALSE;
+    if (!rawInput)
+        Wh_Log(L"Raw mouse input unavailable; using the slow fallback: %lu",
+               GetLastError());
     std::list<MonitorSurface> surfaces;
     std::vector<RECT> monitors;
     Contacts contacts;
-    bool painted = false, wasAnimating = false;
-    ULONGLONG nextMonitorCheck = 0, lastPaint = 0;
+    bool painted = false, wasAnimating = false, dirty = false;
+    POINT cursor{};
+    bool haveCursor = false;
+    ULONGLONG nextMonitorCheck = 0, nextCursorCheck = 0, lastPaint = 0;
+    g_displayChanged = g_mouseMoved = false;
     g_started = true;
     SetEvent(g_ready);
 
@@ -485,10 +502,16 @@ DWORD WINAPI Worker(void*) {
             nextMonitorCheck = now + 2000;
         }
 
-        POINT cursor{};
+        // Coalesce a batch of raw input into one cursor sample. The slow poll
+        // also handles elevated foreground apps, which can block raw input.
+        if (g_mouseMoved || now >= nextCursorCheck) {
+            haveCursor = GetCursorPos(&cursor) != FALSE;
+            g_mouseMoved = false;
+            nextCursorCheck = now + kCursorFallbackMs;
+        }
         const RECT* hit = nullptr;
         double contact = 0;
-        if (GetCursorPos(&cursor)) {
+        if (haveCursor) {
             for (const RECT& monitor : monitors) {
                 if (!PtInRect(&monitor, cursor))
                     continue;
@@ -506,8 +529,8 @@ DWORD WINAPI Worker(void*) {
         bool changed = contacts.Update(hit, contact, now);
         bool animating = contacts.Animating(now);
         DWORD interval = (1000 + g_settings.fps - 1) / g_settings.fps;
-        if (changed || !painted || (wasAnimating && !animating) ||
-            (animating && now - lastPaint >= interval)) {
+        dirty |= changed || (wasAnimating && !animating);
+        if (!painted || ((dirty || animating) && now - lastPaint >= interval)) {
             for (const auto& wave : contacts.waves) {
                 auto surface = std::find_if(surfaces.begin(), surfaces.end(),
                                             [&](const MonitorSurface& item) {
@@ -521,20 +544,31 @@ DWORD WINAPI Worker(void*) {
                 surface.Paint(contacts, now);
             lastPaint = now;
             painted = true;
+            dirty = false;
         }
         wasAnimating = animating;
-        if (contacts.waves.empty())
-            interval = 16;
-        MsgWaitForMultipleObjectsEx(1, &g_stop, interval, QS_ALLINPUT,
+        // Only animations and pending paints need the frame timer. A settled
+        // glow sleeps just like an empty screen until input or a fallback poll.
+        ULONGLONG wake = std::min(nextCursorCheck, nextMonitorCheck);
+        if (animating || dirty)
+            wake = std::min(wake, lastPaint + interval);
+        ULONGLONG afterPaint = GetTickCount64();
+        DWORD timeout =
+            wake > afterPaint ? static_cast<DWORD>(wake - afterPaint) : 0;
+        MsgWaitForMultipleObjectsEx(1, &g_stop, timeout, QS_ALLINPUT | QS_RAWINPUT,
                                     MWMO_INPUTAVAILABLE);
     }
     surfaces.clear();
+    if (rawInput) {
+        RAWINPUTDEVICE remove{0x01, 0x02, RIDEV_REMOVE, nullptr};
+        if (!RegisterRawInputDevices(&remove, 1, sizeof(remove)))
+            Wh_Log(L"Removing raw mouse input failed: %lu", GetLastError());
+    }
     DestroyWindow(control);
     UnregisterClassW(kClass, g_module);
     return 0;
 }
 
-#ifndef EDGE_GLOW_STANDALONE
 Color ReadColor(PCWSTR name, Color fallback) {
     PCWSTR value = Wh_GetStringSetting(name);
     PCWSTR p = value;
@@ -581,7 +615,6 @@ void LoadSettings() {
     g_settings.threshold = read(L"edgeDistance", 1, 20);
     g_settings.fps = read(L"frameRate", 30, 144);
 }
-#endif
 
 void Stop() {
     if (g_stop)
@@ -596,31 +629,26 @@ void Stop() {
         CloseHandle(g_stop);
     if (g_ready)
         CloseHandle(g_ready);
-    if (g_singleton)
-        CloseHandle(g_singleton);
-    g_thread = g_stop = g_ready = g_singleton = nullptr;
+    g_thread = g_stop = g_ready = nullptr;
     g_started = false;
 }
 
 BOOL Start() {
-    g_singleton =
-        CreateMutexW(nullptr, FALSE, L"Local\\Windhawk.EdgeGradientGlow.1");
-    if (!g_singleton || GetLastError() == ERROR_ALREADY_EXISTS) {
-        Stop();
-        return FALSE;
-    }
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<PCWSTR>(&WindowProc), &g_module);
     g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stop || !g_ready) {
+        Wh_Log(L"Creating worker events failed: %lu", GetLastError());
         Stop();
         return FALSE;
     }
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     if (!g_thread || WaitForSingleObject(g_ready, 5000) != WAIT_OBJECT_0 ||
         !g_started) {
+        Wh_Log(L"The worker failed to become ready within 5 seconds: %lu",
+               GetLastError());
         Stop();
         return FALSE;
     }
@@ -628,36 +656,197 @@ BOOL Start() {
 }
 }  // namespace
 
-#ifndef EDGE_GLOW_STANDALONE
-BOOL Wh_ModInit() {
-    // Separate Explorer folder processes must not create duplicate overlays.
-    HWND shell = GetShellWindow();
-    DWORD shellPid = 0;
-    if (shell)
-        GetWindowThreadProcessId(shell, &shellPid);
-    if (shellPid && shellPid != GetCurrentProcessId())
-        return FALSE;
+BOOL WhTool_ModInit() {
     LoadSettings();
     return Start();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Stop();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    *reload = TRUE;
+void WhTool_ModSettingsChanged() {
+    Stop();
+    LoadSettings();
+    if (!Start())
+        Wh_Log(L"Restarting the worker after a settings change failed");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
-#else
-// Preview host uses the exact same renderer, input loop and cleanup as the mod.
-int main(int argc, char** argv) {
-    if (!Start())
-        return 1;
-    DWORD duration =
-        argc > 1 ? std::clamp(std::atoi(argv[1]), 1, 120) * 1000 : 20000;
-    WaitForSingleObject(g_stop, duration);
-    Stop();
-    return 0;
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
-#endif
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
