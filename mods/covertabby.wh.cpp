@@ -2,7 +2,7 @@
 // @id              covertabby
 // @name            CoverTabby
 // @description     An animated Alt+Tab switcher with live previews and multiple layouts
-// @version         1.0
+// @version         1.1
 // @author          LTHC
 // @github          https://github.com/LoreTheHolyChip
 // @license         GPL-2.0-only
@@ -76,6 +76,17 @@ If CoverTabby previously captured the window, its last preview is kept in memory
 and shown blurred and darkened while minimized. Holding the top grip reveals
 the restored real window with sharp content; moving starts the held drag.
 Windows without a saved preview use the regular theme-colored minimized card.
+
+## Changelog
+
+### v1.1
+- Add Aero 3D, with parallel tilted Alt+Tab previews and cyclic navigation.
+- Add a bottom selection indicator and localized window count that follow search results.
+- Expand Win+Tab with desktop gallery layouts, an animated full-screen desktop view, and accent hover feedback.
+- Add a minimized-window strip, desktop rename/delete controls, and window actions in the expanded overview.
+- Stop navigation wrapping in stacks of five or more desktops and animate desktop-to-desktop transitions.
+- Add optional Alt+Tab navigation across virtual desktops and refine quick-tap/hold Win+Tab behavior.
+- Add live wallpaper-host previews while the switcher is open, with a static fallback.
 
 ## Modes
 - **Full** fills the monitor. Background Style chooses Blur, Opaque or Transparent.
