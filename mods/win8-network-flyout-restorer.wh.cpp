@@ -58,12 +58,20 @@ original Windows language is retained. Restart Explorer after changing the panel
 
 ## Privacy and system changes
 
-The mod does not change the system's network-panel setting or create system-wide
-COM registrations. Registry access needed by the downloaded panel is redirected
-to a separate area owned by the mod in the current user's registry. This area is
-normally removed when the last active instance stops. After a crash or forced
-shutdown, temporary entries may remain until a later successful cleanup.
-Downloaded components remain cached to avoid downloading them at every start.
+The mod does not create or modify entries in the live HKCU/HKLM registry and
+does not create system-wide COM registrations. In fallback mode, registry access
+needed by the legacy components is redirected to a private application hive
+loaded with `RegLoadAppKeyW` from a file in this mod's Windhawk storage. The hive
+is not mounted under HKCU/HKLM and is not visible to other processes. Explorer
+closes the hive when the mod unloads; the hive file remains as mod data and is
+reused on the next start. Downloaded components are also kept in Windhawk
+storage to avoid downloading them at every start.
+
+If you used an earlier release, its `HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry`
+subtree (or the older `windows-8-network-flyout-restorer` name) may still be
+present. This release does not delete old registry data automatically; after
+all older mod/Explorer instances have stopped, remove those legacy entries
+manually if you want to clean them up.
 
 ## Troubleshooting
 
@@ -226,21 +234,13 @@ constexpr size_t kRuntimeDllCount = ARRAYSIZE(kRuntimeDllNames);
 // has mapped (that always fails with a sharing violation on a mapped image).
 constexpr const wchar_t* kHydrationStampName = L"hydrated_v1_2_1_integrity.txt";
 constexpr const wchar_t* kHydrationManifestName = L"runtime.sha256";
-constexpr const wchar_t* kVirtualRegRootSubkey =
-    L"Software\\Windhawk\\Mods\\win8-network-flyout-restorer\\VirtualRegistry";
-constexpr const wchar_t* kLegacyVirtualRegRootSubkey =
-    L"Software\\Windhawk\\Mods\\windows-8-network-flyout-restorer\\VirtualRegistry";
-// Overlay subkey that mirrors HKLM\...\XWizards. The name is versioned on
-// purpose: earlier releases seeded "XWizards" with RegCopyTreeW, which also
-// copies the source key's security descriptor, so that tree can carry the
-// machine ACL and reject every write from a standard user (access denied).
-// Such a stale tree cannot be repaired or deleted by this process, so the
-// current layout simply lives next to it under a new name.
-constexpr const wchar_t* kXWizardsOverlaySub = L"XWizardsV2";
-constexpr const wchar_t* kInstancePidValueName = L"InstancePids";
-constexpr const wchar_t* kComMarkerValueName = L"WindhawkWin8Van";
+// XWizards is copied into the private application hive without inheriting
+// the machine key's security descriptor.
+constexpr const wchar_t* kXWizardsHiveSubKey = L"XWizardsV2";
+constexpr const wchar_t* kPrivateHiveFileName = L"win8-network-flyout-private.hiv";
 constexpr const wchar_t* kProvisionMutexName = L"Local\\Windhawk_Win8NetworkFlyout_ProvisionMutex";
-constexpr const wchar_t* kOverlayMutexName = L"Local\\Windhawk_Win8NetworkFlyout_OverlayMutex";
+constexpr const wchar_t* kPrivateHiveMutexName =
+    L"Local\\Windhawk_Win8NetworkFlyout_PrivateHiveMutex";
 constexpr const wchar_t* kVanHostWndClassName = L"WindhawkWin8VanHostWnd";
 constexpr const wchar_t* kVanCtrlWndClassName = L"WindhawkWin8VanCtrlWnd";
 constexpr const wchar_t* kVanIpcMessageName = L"Windhawk.Win8NetworkFlyout.Show";
@@ -1950,9 +1950,9 @@ std::atomic<bool> g_enableHotkey{false};
 
 std::atomic<bool> g_shuttingDown{false};
 std::atomic<bool> g_vanStoreReady{false};
-std::atomic<bool> g_registryOverlayReady{false};
+std::atomic<bool> g_privateRegistryHiveReady{false};
+HKEY g_privateRegistryHive = nullptr;  // RegLoadAppKeyW: isolated from HKCU/HKLM
 std::atomic<bool> g_nativeSystemVan{false};
-std::atomic<bool> g_overlayInstanceRegistered{false};
 std::atomic<bool> g_unloadSafetyFailure{false};
 std::atomic<DWORD> g_staThreadId{0};
 std::atomic<int> g_hostRole{static_cast<int>(HostRole::Undetermined)};
@@ -1988,7 +1988,7 @@ HANDLE g_workerThread = nullptr;
 // modules must then stay loaded (leak) to avoid use-after-free crashes.
 std::atomic<bool> g_workerStillRunning{false};
 HANDLE g_provisionMutex = nullptr;
-HANDLE g_overlayMutex = nullptr;
+HANDLE g_privateHiveMutex = nullptr;
 DLL_DIRECTORY_COOKIE g_dllDirectoryCookie = nullptr;
 UINT g_wmShowVanIpc = 0;
 HMODULE g_vanModule = nullptr;
@@ -2090,26 +2090,26 @@ struct ScopedComActivationGuard {
     ScopedComActivationGuard& operator=(const ScopedComActivationGuard&) = delete;
 };
 
-class ScopedOverlayMutex {
+class ScopedPrivateHiveMutex {
   public:
-    ScopedOverlayMutex(HANDLE mutex, DWORD timeoutMs) noexcept : m_mutex(mutex) {
+    ScopedPrivateHiveMutex(HANDLE mutex, DWORD timeoutMs) noexcept : m_mutex(mutex) {
         if (!m_mutex) {
             return;
         }
         const DWORD result = WaitForSingleObject(m_mutex, timeoutMs);
         m_locked = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
         if (result == WAIT_ABANDONED) {
-            Wh_Log(L"Overlay mutex was abandoned; PID and registry state will be validated "
-                   L"conservatively before cleanup");
+            Wh_Log(L"Private-hive mutex was abandoned; initialization will validate the hive and rebuild "
+                   L"its owned subtrees if needed");
         }
     }
-    ~ScopedOverlayMutex() noexcept {
+    ~ScopedPrivateHiveMutex() noexcept {
         if (m_locked) {
             ReleaseMutex(m_mutex);
         }
     }
-    ScopedOverlayMutex(const ScopedOverlayMutex&) = delete;
-    ScopedOverlayMutex& operator=(const ScopedOverlayMutex&) = delete;
+    ScopedPrivateHiveMutex(const ScopedPrivateHiveMutex&) = delete;
+    ScopedPrivateHiveMutex& operator=(const ScopedPrivateHiveMutex&) = delete;
     bool locked() const noexcept { return m_locked; }
 
   private:
@@ -3796,17 +3796,15 @@ bool EnsureVanStoreProvisioned() {
 }
 
 // ===========================================================================
-// Private per-user registry overlay (registry writes stay out of system/COM keys)
+// Private application registry hive (isolated from the live registry)
 // -------------------------------------------------------------------------
-// In fallback mode, registry state created by this mod lives in the mod-owned
-// HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry tree,
-// backing selected legacy HKLM/HKCR paths. Win32 and native key opens/creates for
-// those paths are redirected; write-capable opens fail closed if the overlay is
-// unavailable. Normally it is removed when the last tracked fallback instance
-// unloads. The mod issues no direct HKLM or live COM registration writes: managed
-// classes are resolved by the in-proc CoGetClassObject/CoCreateInstance hooks.
-// Legacy marker-tagged COM entries are deleted only after the old PID state proves
-// no older Explorer process can still be using them.
+// In fallback mode, definitions are written only to a private application hive
+// loaded with RegLoadAppKeyW from Windhawk mod storage. Win32 and native key
+// opens/creates for selected legacy HKLM/HKCR paths are redirected to that hive;
+// write-capable opens fail closed if it is unavailable. It is never mounted under
+// HKCU/HKLM, and this code does not clean or otherwise write any old registry
+// entries left by previous versions. Managed classes are also activated by the
+// in-proc CoGetClassObject/CoCreateInstance hooks.
 // ===========================================================================
 // Small noncopyable owners. Destructors only release the resource they own;
 // UI/legacy teardown remains explicit on its owning STA, never on an arbitrary thread.
@@ -3822,8 +3820,8 @@ class ScopedRegistryKey {
 
 void DisableModAfterCppException(const wchar_t* phase) noexcept {
     g_vanStoreReady.store(false, std::memory_order_release);
-    // Keep registry redirection alive until owning-thread cleanup finishes:
-    // legacy teardown must not fall through and write real system/COM keys.
+    // Keep private-hive redirection alive until owning-thread cleanup finishes:
+    // legacy teardown must not fall through to real system/COM registry keys.
     g_shuttingDown.store(true, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent);
     Wh_Log(L"C++ exception in %s: mod disabled for this session; STA cleanup requested", phase);
@@ -3861,16 +3859,16 @@ class ScopedComReference {
     Interface* value_;
 };
 
-// Overlay write failures are counted so PopulateVirtualRegistryOverlay can
+// Private-hive write failures are counted so PopulatePrivateRegistryHive can
 // refuse to report success for a partially written tree. Only the first few
 // failures are logged (compact, non-verbose).
-std::atomic<unsigned> g_overlayWriteFailures{0};
-std::atomic<unsigned> g_overlayWriteFailureLogs{0};
+std::atomic<unsigned> g_privateHiveWriteFailures{0};
+std::atomic<unsigned> g_privateHiveWriteFailureLogs{0};
 
-void NoteOverlayWriteFailure(const std::wstring& subKey, LSTATUS status) noexcept {
-    g_overlayWriteFailures.fetch_add(1, std::memory_order_relaxed);
-    if (g_overlayWriteFailureLogs.fetch_add(1, std::memory_order_relaxed) < 6) {
-        Wh_Log(L"[registry] overlay write failed: key=%.80s status=%ld",
+void NotePrivateHiveWriteFailure(const std::wstring& subKey, LSTATUS status) noexcept {
+    g_privateHiveWriteFailures.fetch_add(1, std::memory_order_relaxed);
+    if (g_privateHiveWriteFailureLogs.fetch_add(1, std::memory_order_relaxed) < 6) {
+        Wh_Log(L"[registry] private-hive write failed: key=%.80s status=%ld",
                subKey.c_str(), static_cast<long>(status));
     }
 }
@@ -3881,7 +3879,7 @@ bool RegWriteSz(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName
     LSTATUS status = RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
                                      KEY_SET_VALUE, nullptr, &hKey, nullptr);
     if (status != ERROR_SUCCESS) {
-        NoteOverlayWriteFailure(subKey, status);
+        NotePrivateHiveWriteFailure(subKey, status);
         return false;
     }
     ScopedRegistryKey owner(hKey);
@@ -3889,7 +3887,7 @@ bool RegWriteSz(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueName
         hKey, valueName, 0, type, reinterpret_cast<const BYTE*>(value.c_str()),
         static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
     if (status != ERROR_SUCCESS) {
-        NoteOverlayWriteFailure(subKey, status);
+        NotePrivateHiveWriteFailure(subKey, status);
         return false;
     }
     return true;
@@ -3901,14 +3899,14 @@ bool RegWriteDword(HKEY hRoot, const std::wstring& subKey, const wchar_t* valueN
     LSTATUS status = RegCreateKeyExW(hRoot, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
                                      KEY_SET_VALUE, nullptr, &hKey, nullptr);
     if (status != ERROR_SUCCESS) {
-        NoteOverlayWriteFailure(subKey, status);
+        NotePrivateHiveWriteFailure(subKey, status);
         return false;
     }
     ScopedRegistryKey owner(hKey);
     status = RegSetValueExW(hKey, valueName, 0, REG_DWORD,
                             reinterpret_cast<const BYTE*>(&value), sizeof(value));
     if (status != ERROR_SUCCESS) {
-        NoteOverlayWriteFailure(subKey, status);
+        NotePrivateHiveWriteFailure(subKey, status);
         return false;
     }
     return true;
@@ -3983,85 +3981,84 @@ LSTATUS CopyRegistryTreeWithoutSecurity(HKEY hSrc, HKEY hDst, int depth) {
 }
 
 void WriteXwComponentNode(
-    HKEY hOverlayRoot, const GUID& compGuid, DWORD classType, const wchar_t* name,
+    HKEY hPrivateHiveRoot, const GUID& compGuid, DWORD classType, const wchar_t* name,
     const std::filesystem::path& dllPath) {
-    const std::wstring base = std::wstring(kXWizardsOverlaySub) + L"\\Components\\" +
+    const std::wstring base = std::wstring(kXWizardsHiveSubKey) + L"\\Components\\" +
                               GuidToUpperBraceString(compGuid);
-    RegWriteSz(hOverlayRoot, base, nullptr, name);
-    RegWriteSz(hOverlayRoot, base, L"Class Description", name);
-    RegWriteDword(hOverlayRoot, base, L"Class Type", classType);
-    RegWriteDword(hOverlayRoot, base, L"Behavior", 0);
-    RegWriteSz(hOverlayRoot, base, L"File Name", dllPath.wstring(), REG_EXPAND_SZ);
+    RegWriteSz(hPrivateHiveRoot, base, nullptr, name);
+    RegWriteSz(hPrivateHiveRoot, base, L"Class Description", name);
+    RegWriteDword(hPrivateHiveRoot, base, L"Class Type", classType);
+    RegWriteDword(hPrivateHiveRoot, base, L"Behavior", 0);
+    RegWriteSz(hPrivateHiveRoot, base, L"File Name", dllPath.wstring(), REG_EXPAND_SZ);
 }
 
 void WriteXwLink(
-    HKEY hOverlayRoot, const GUID& parentGuid, DWORD parentType, const wchar_t* parentName,
+    HKEY hPrivateHiveRoot, const GUID& parentGuid, DWORD parentType, const wchar_t* parentName,
     const GUID& childGuid, DWORD childType, const wchar_t* childName, DWORD ordinal) {
     const std::wstring pStr = GuidToUpperBraceString(parentGuid);
     const std::wstring cStr = GuidToUpperBraceString(childGuid);
 
-    const std::wstring childKey = std::wstring(kXWizardsOverlaySub) + L"\\Components\\" +
+    const std::wstring childKey = std::wstring(kXWizardsHiveSubKey) + L"\\Components\\" +
                                   pStr + L"\\Children\\" + cStr;
-    RegWriteSz(hOverlayRoot, childKey, nullptr, childName);
-    RegWriteSz(hOverlayRoot, childKey, L"Class Description", childName);
-    RegWriteDword(hOverlayRoot, childKey, L"Class Type", childType);
-    RegWriteDword(hOverlayRoot, childKey, L"Ordinal", ordinal);
-    RegWriteDword(hOverlayRoot, childKey, L"User Flags", 0);
+    RegWriteSz(hPrivateHiveRoot, childKey, nullptr, childName);
+    RegWriteSz(hPrivateHiveRoot, childKey, L"Class Description", childName);
+    RegWriteDword(hPrivateHiveRoot, childKey, L"Class Type", childType);
+    RegWriteDword(hPrivateHiveRoot, childKey, L"Ordinal", ordinal);
+    RegWriteDword(hPrivateHiveRoot, childKey, L"User Flags", 0);
 
-    const std::wstring parentKey = std::wstring(kXWizardsOverlaySub) + L"\\Components\\" +
+    const std::wstring parentKey = std::wstring(kXWizardsHiveSubKey) + L"\\Components\\" +
                                    cStr + L"\\Parents\\" + pStr;
-    RegWriteSz(hOverlayRoot, parentKey, nullptr, parentName);
-    RegWriteSz(hOverlayRoot, parentKey, L"Class Description", parentName);
-    RegWriteDword(hOverlayRoot, parentKey, L"Class Type", parentType);
+    RegWriteSz(hPrivateHiveRoot, parentKey, nullptr, parentName);
+    RegWriteSz(hPrivateHiveRoot, parentKey, L"Class Description", parentName);
+    RegWriteDword(hPrivateHiveRoot, parentKey, L"Class Type", parentType);
 }
 
-bool RemoveLegacyTaggedHkcuComRegistration(const GUID& clsid) {
-    const std::wstring guidStr = GuidToUpperBraceString(clsid);
-    const std::wstring base = L"Software\\Classes\\CLSID\\" + guidStr;
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, KEY_QUERY_VALUE, &hKey) !=
-        ERROR_SUCCESS) {
+bool OpenPrivateRegistryHive() {
+    if (g_privateRegistryHive) {
+        return true;
+    }
+
+    // Wh_GetModStoragePath is per-mod storage. Include the current user's SID
+    // because the storage directory can be shared between Windows accounts.
+    std::wstring userSid;
+    const size_t sidSeparator = g_hkcuNtPrefix.find_last_of(L'\\');
+    if (sidSeparator != std::wstring::npos && sidSeparator + 1 < g_hkcuNtPrefix.size()) {
+        userSid = g_hkcuNtPrefix.substr(sidSeparator + 1);
+    }
+    if (userSid.empty()) {
+        Wh_Log(L"Cannot identify the current user's SID for the private registry hive");
         return false;
     }
 
-    wchar_t marker[8]{};
-    DWORD size = sizeof(marker);
-    DWORD type = 0;
-    const bool tagged =
-        RegQueryValueExW(hKey, kComMarkerValueName, nullptr, &type,
-                         reinterpret_cast<BYTE*>(marker), &size) == ERROR_SUCCESS &&
-        type == REG_SZ && wcscmp(marker, L"1") == 0;
-    RegCloseKey(hKey);
-    return tagged && RegDeleteTreeW(HKEY_CURRENT_USER, base.c_str()) == ERROR_SUCCESS;
-}
-
-void RemoveLegacyTaggedHkcuComRegistrations() {
-    ScopedHookGuard guard;
-    size_t removed = 0;
-    for (const auto& entry : kInProcComTable) {
-        removed += RemoveLegacyTaggedHkcuComRegistration(entry.clsid) ? 1 : 0;
-    }
-    removed += RemoveLegacyTaggedHkcuComRegistration(CLSID_PopupWindowFactory) ? 1 : 0;
-    if (removed != 0) {
-        Wh_Log(L"Removed %llu marker-tagged COM key(s) left by an older mod version",
-               static_cast<unsigned long long>(removed));
-    }
-}
-
-bool PruneAndAddInstancePid();  // defined below, used by the rebuild path
-
-bool PopulateVirtualRegistryOverlayOnce() {
-    ScopedHookGuard guard;
-    g_overlayWriteFailures.store(0, std::memory_order_relaxed);
-
-    HKEY hOverlayRoot = nullptr;
-    if (RegCreateKeyExW(
-            HKEY_CURRENT_USER, kVirtualRegRootSubkey, 0, nullptr, REG_OPTION_NON_VOLATILE,
-            KEY_ALL_ACCESS, nullptr, &hOverlayRoot, nullptr) != ERROR_SUCCESS) {
+    const std::filesystem::path storageDir = g_vanStoreBaseDir.parent_path() / userSid;
+    const std::filesystem::path hiveFile = storageDir / kPrivateHiveFileName;
+    std::error_code ec;
+    std::filesystem::create_directories(storageDir, ec);
+    if (ec) {
+        Wh_Log(L"Could not create private-hive storage directory (code %d)", ec.value());
         return false;
     }
 
-    ScopedRegistryKey rootOwner(hOverlayRoot);
+    HKEY hive = nullptr;
+    const LSTATUS status = RegLoadAppKeyW(hiveFile.c_str(), &hive, KEY_ALL_ACCESS, 0, 0);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"RegLoadAppKeyW failed for the private hive (%ld)", static_cast<long>(status));
+        return false;
+    }
+
+    g_privateRegistryHive = hive;
+    Wh_Log(L"Loaded private application registry hive from Windhawk mod storage");
+    return true;
+}
+
+bool PopulatePrivateRegistryHiveOnce() {
+    ScopedHookGuard guard;
+    g_privateHiveWriteFailures.store(0, std::memory_order_relaxed);
+
+    HKEY hPrivateHiveRoot = g_privateRegistryHive;
+    if (!hPrivateHiveRoot) {
+        return false;
+    }
 
     // 1a. HKLM\SYSTEM\CurrentControlSet\Control\VAN\{CLSID} media managers.
     struct MediaManagerSpec {
@@ -4076,11 +4073,11 @@ bool PopulateVirtualRegistryOverlayOnce() {
     };
     for (const auto& mm : managers) {
         const std::wstring sub = L"Control_VAN\\" + GuidToUpperBraceString(mm.clsid);
-        RegWriteDword(hOverlayRoot, sub, L"Active", 1);
-        RegWriteDword(hOverlayRoot, sub, L"Ordinal", mm.ordinal);
-        RegWriteDword(hOverlayRoot, sub, L"PreLogon", 1);
-        RegWriteDword(hOverlayRoot, sub, L"NotInOOBE", 0);
-        RegWriteSz(hOverlayRoot, sub, L"DisplayName", (g_vanStoreDir / mm.dllName).wstring());
+        RegWriteDword(hPrivateHiveRoot, sub, L"Active", 1);
+        RegWriteDword(hPrivateHiveRoot, sub, L"Ordinal", mm.ordinal);
+        RegWriteDword(hPrivateHiveRoot, sub, L"PreLogon", 1);
+        RegWriteDword(hPrivateHiveRoot, sub, L"NotInOOBE", 0);
+        RegWriteSz(hPrivateHiveRoot, sub, L"DisplayName", (g_vanStoreDir / mm.dllName).wstring());
     }
 
     // 1b. Master VAN component key {8B9D20EE-...}: Active=0 plus the
@@ -4088,16 +4085,16 @@ bool PopulateVirtualRegistryOverlayOnce() {
     //     real Windows machine with the View Available Networks stack).
     {
         const std::wstring master = L"Control_VAN\\" + GuidToUpperBraceString(CLSID_VanMasterComponent);
-        RegWriteDword(hOverlayRoot, master, L"Active", 0);
-        RegWriteSz(hOverlayRoot, master, L"100", GuidToUpperBraceString(CLSID_Dot3MediaManager));
-        RegWriteSz(hOverlayRoot, master, L"200", GuidToUpperBraceString(CLSID_RasMediaManager));
-        RegWriteSz(hOverlayRoot, master, L"300", GuidToUpperBraceString(CLSID_WlanMediaManager));
+        RegWriteDword(hPrivateHiveRoot, master, L"Active", 0);
+        RegWriteSz(hPrivateHiveRoot, master, L"100", GuidToUpperBraceString(CLSID_Dot3MediaManager));
+        RegWriteSz(hPrivateHiveRoot, master, L"200", GuidToUpperBraceString(CLSID_RasMediaManager));
+        RegWriteSz(hPrivateHiveRoot, master, L"300", GuidToUpperBraceString(CLSID_WlanMediaManager));
     }
 
     // 1c. VAN settings key (HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\VAN)
-    RegWriteDword(hOverlayRoot, L"Software_VAN", L"Initialized", 1);
+    RegWriteDword(hPrivateHiveRoot, L"Software_VAN", L"Initialized", 1);
 
-    // 2. Seed overlay XWizards from the machine's real HKLM tree (read-only
+    // 2. Seed private-hive XWizards from the machine's real HKLM tree (read-only
     //    copy) so built-in Root / Wizard Types / system components stay
     //    visible, then add our task + page component graph.
     {
@@ -4108,11 +4105,11 @@ bool PopulateVirtualRegistryOverlayOnce() {
                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", 0, KEY_READ,
                 &hRealXw) == ERROR_SUCCESS) {
             if (RegCreateKeyExW(
-                    hOverlayRoot, kXWizardsOverlaySub, 0, nullptr, REG_OPTION_NON_VOLATILE,
+                    hPrivateHiveRoot, kXWizardsHiveSubKey, 0, nullptr, REG_OPTION_NON_VOLATILE,
                     KEY_ALL_ACCESS, nullptr, &hVirtXw, nullptr) == ERROR_SUCCESS) {
                 // RegCopyTreeW also copies the source security descriptor
                 // (Microsoft docs, RegCopyTree remarks), which would make the
-                // overlay read-only for this user. Copy values and subkeys by
+                // private-hive key read-only. Copy values and subkeys by
                 // hand instead: RegCreateKeyExW with NULL security attributes
                 // gives every new key the ACL inherited from its parent.
                 const LSTATUS copyStatus = CopyRegistryTreeWithoutSecurity(hRealXw, hVirtXw, 0);
@@ -4125,7 +4122,7 @@ bool PopulateVirtualRegistryOverlayOnce() {
             RegCloseKey(hRealXw);
         } else {
             RegCreateKeyExW(
-                hOverlayRoot, kXWizardsOverlaySub, 0, nullptr, REG_OPTION_NON_VOLATILE,
+                hPrivateHiveRoot, kXWizardsHiveSubKey, 0, nullptr, REG_OPTION_NON_VOLATILE,
                 KEY_ALL_ACCESS, nullptr, &hVirtXw, nullptr);
             if (hVirtXw) {
                 RegCloseKey(hVirtXw);
@@ -4138,7 +4135,7 @@ bool PopulateVirtualRegistryOverlayOnce() {
 
     const wchar_t* taskName = L"Connect to a network";
     WriteXwComponentNode(
-        hOverlayRoot, CLSID_VanGenericCFETask, kXwComponentTypeTask, taskName, vanDll);
+        hPrivateHiveRoot, CLSID_VanGenericCFETask, kXwComponentTypeTask, taskName, vanDll);
 
     struct WlanPageLink {
         GUID guid;
@@ -4162,396 +4159,128 @@ bool PopulateVirtualRegistryOverlayOnce() {
     DWORD ordinal = 1;
     for (const auto& pg : pages) {
         WriteXwComponentNode(
-            hOverlayRoot, pg.guid, kXwComponentTypePage, pg.name, wlanConnDll);
+            hPrivateHiveRoot, pg.guid, kXwComponentTypePage, pg.name, wlanConnDll);
         WriteXwLink(
-            hOverlayRoot, CLSID_VanGenericCFETask, kXwComponentTypeTask, taskName, pg.guid,
+            hPrivateHiveRoot, CLSID_VanGenericCFETask, kXwComponentTypeTask, taskName, pg.guid,
             kXwComponentTypePage, pg.name, ordinal++);
     }
 
-    // 3. Overlay CLSID mirror (used by the HKCR / HKLM registry redirects).
+    // 3. Private-hive CLSID mirror (used by the HKCR / HKLM registry redirects).
     for (const auto& entry : kInProcComTable) {
         const std::wstring clsidBase =
             L"CLSID\\" + GuidToUpperBraceString(entry.clsid);
         const std::wstring inproc = clsidBase + L"\\InProcServer32";
-        RegWriteSz(hOverlayRoot, clsidBase, nullptr, entry.description);
-        RegWriteSz(hOverlayRoot, inproc, nullptr, (g_vanStoreDir / entry.dllBaseName).wstring());
-        RegWriteSz(hOverlayRoot, inproc, L"ThreadingModel", entry.threadingModel);
+        RegWriteSz(hPrivateHiveRoot, clsidBase, nullptr, entry.description);
+        RegWriteSz(hPrivateHiveRoot, inproc, nullptr, (g_vanStoreDir / entry.dllBaseName).wstring());
+        RegWriteSz(hPrivateHiveRoot, inproc, L"ThreadingModel", entry.threadingModel);
     }
 
     // 4. Read-back verification: every media manager must be visible with
     //    Active=1, and no write may have failed. A silently incomplete
     //    Control_VAN tree makes van.dll find zero providers ("No connections
     //    are available") without any other symptom.
-    const unsigned failures = g_overlayWriteFailures.load(std::memory_order_relaxed);
+    const unsigned failures = g_privateHiveWriteFailures.load(std::memory_order_relaxed);
     unsigned verifiedManagers = 0;
     for (const auto& mm : managers) {
         const std::wstring sub = L"Control_VAN\\" + GuidToUpperBraceString(mm.clsid);
         DWORD active = 0;
         DWORD size = sizeof(active);
-        if (RegGetValueW(hOverlayRoot, sub.c_str(), L"Active", RRF_RT_REG_DWORD, nullptr,
+        if (RegGetValueW(hPrivateHiveRoot, sub.c_str(), L"Active", RRF_RT_REG_DWORD, nullptr,
                          &active, &size) == ERROR_SUCCESS && active == 1) {
             ++verifiedManagers;
         }
     }
     // Only the Control_VAN media managers are mandatory. Write failures
     // elsewhere (typically access denied on pre-existing XWizards keys left by
-    // an earlier overlay) were always silent and the flyout works with them,
+    // stale values from an earlier hive version) were always silent and the flyout works with them,
     // so they are reported as a warning, never as a reason to stay passive.
     if (verifiedManagers != ARRAYSIZE(managers)) {
-        Wh_Log(L"[registry] overlay incomplete: verified=%u/%u failures=%u",
+        Wh_Log(L"[private hive] incomplete: verified=%u/%u failures=%u",
                verifiedManagers, static_cast<unsigned>(ARRAYSIZE(managers)), failures);
         return false;
     }
 
-    Wh_Log(L"[registry] overlay verified: media managers=%u/%u, non-critical write failures=%u",
+    Wh_Log(L"[private hive] verified: media managers=%u/%u, non-critical write failures=%u",
            verifiedManagers, static_cast<unsigned>(ARRAYSIZE(managers)), failures);
     return true;
 }
 
-// Populates the overlay and, if the result is incomplete, rebuilds it from
-// scratch exactly once. Callers hold g_overlayMutex.
-bool PopulateVirtualRegistryOverlay() {
-    if (PopulateVirtualRegistryOverlayOnce()) {
-        return true;
-    }
-    {
-        ScopedHookGuard guard;
-        const LSTATUS deleteStatus = RegDeleteTreeW(HKEY_CURRENT_USER, kVirtualRegRootSubkey);
-        Wh_Log(L"[registry] rebuilding overlay: delete status=%ld", static_cast<long>(deleteStatus));
-        // The PID marker lives in the same key; restore it after the wipe.
-    }
-    if (!PruneAndAddInstancePid()) {
-        Wh_Log(L"[registry] rebuild: PID marker could not be restored");
+// Populates the private hive. On a partial first attempt, discard only the
+// mod-owned hive subtrees and retry once. No key in HKCU/HKLM is created,
+// modified, or deleted here. Callers hold g_privateHiveMutex.
+bool PopulatePrivateRegistryHive() {
+    if (!g_privateRegistryHive) {
         return false;
     }
-    const bool ok = PopulateVirtualRegistryOverlayOnce();
-    Wh_Log(L"[registry] rebuild result: %s", ok ? L"ok" : L"failed");
+    if (PopulatePrivateRegistryHiveOnce()) {
+        return true;
+    }
+
+    ScopedHookGuard guard;
+    const wchar_t* const ownedSubkeys[] = {
+        L"Control_VAN", L"Software_VAN", kXWizardsHiveSubKey, L"CLSID",
+    };
+    bool cleared = true;
+    for (const wchar_t* subkey : ownedSubkeys) {
+        const LSTATUS status = RegDeleteTreeW(g_privateRegistryHive, subkey);
+        if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND &&
+            status != ERROR_PATH_NOT_FOUND) {
+            cleared = false;
+            Wh_Log(L"[private hive] could not reset %s (%ld)", subkey,
+                   static_cast<long>(status));
+        }
+    }
+    if (!cleared) {
+        Wh_Log(L"[private hive] reset failed; refusing to use a potentially partial hive");
+        return false;
+    }
+
+    Wh_Log(L"[private hive] rebuilding owned subtrees after an incomplete population");
+    const bool ok = PopulatePrivateRegistryHiveOnce();
+    Wh_Log(L"[private hive] rebuild result: %s", ok ? L"ok" : L"failed");
     return ok;
 }
 
-// ---------------------------------------------------------------------------
-// Instance tracking (crash-healing PID list stored in the overlay root) so
-// registry artifacts are only removed when the LAST mod instance unloads.
-// All callers hold g_overlayMutex; unknown/malformed PID state fails closed.
-// ---------------------------------------------------------------------------
-enum class TrackedPidState { Dead, Live, Unknown };
-
-TrackedPidState QueryTrackedPidState(DWORD pid) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) {
-        const DWORD error = GetLastError();
-        return error == ERROR_INVALID_PARAMETER ? TrackedPidState::Dead
-                                                : TrackedPidState::Unknown;
-    }
-    DWORD exitCode = 0;
-    const BOOL queried = GetExitCodeProcess(process, &exitCode);
-    CloseHandle(process);
-    if (!queried) {
-        return TrackedPidState::Unknown;
-    }
-    return exitCode == STILL_ACTIVE ? TrackedPidState::Live : TrackedPidState::Dead;
-}
-
-bool ReadTrackedPidList(HKEY hKey, std::wstring& outPids) {
-    wchar_t buffer[4096]{};
-    DWORD size = sizeof(buffer);
-    DWORD type = 0;
-    const LSTATUS status = RegQueryValueExW(
-        hKey, kInstancePidValueName, nullptr, &type,
-        reinterpret_cast<BYTE*>(buffer), &size);
-    if (status == ERROR_FILE_NOT_FOUND) {
-        outPids.clear();
-        return true;
-    }
-    if (status != ERROR_SUCCESS || type != REG_SZ || size < sizeof(wchar_t) ||
-        size > sizeof(buffer) || size % sizeof(wchar_t) != 0) {
-        return false;
-    }
-
-    const size_t charCount = size / sizeof(wchar_t);
-    if (buffer[charCount - 1] != L'\0' ||
-        (charCount > 1 &&
-         std::find(buffer, buffer + charCount - 1, L'\0') != buffer + charCount - 1)) {
-        return false;
-    }
-    outPids.assign(buffer, charCount - 1);
-    return true;
-}
-
-bool ParseTrackedPidToken(std::wstring_view token, DWORD& outPid) {
-    if (token.empty()) {
-        return false;
-    }
-    ULONGLONG value = 0;
-    for (wchar_t ch : token) {
-        if (ch < L'0' || ch > L'9') {
-            return false;
-        }
-        const DWORD digit = static_cast<DWORD>(ch - L'0');
-        if (value > (static_cast<ULONGLONG>(MAXDWORD) - digit) / 10) {
-            return false;
-        }
-        value = value * 10 + digit;
-    }
-    if (value == 0) {
-        return false;
-    }
-    outPid = static_cast<DWORD>(value);
-    return true;
-}
-
-bool ParseTrackedPidList(const std::wstring& text, std::vector<DWORD>& outPids) {
-    outPids.clear();
-    size_t start = 0;
-    while (start < text.size()) {
-        const size_t delimiter = text.find(L';', start);
-        const size_t end = delimiter == std::wstring::npos ? text.size() : delimiter;
-        DWORD pid = 0;
-        if (!ParseTrackedPidToken(std::wstring_view(text).substr(start, end - start), pid)) {
-            return false;
-        }
-        outPids.push_back(pid);
-        if (delimiter == std::wstring::npos) {
-            break;
-        }
-        start = delimiter + 1;
-    }
-    return true;  // A single trailing semicolon is allowed.
-}
-
-bool AppendTrackedPid(std::wstring& text, DWORD pid) {
-    const std::wstring value = std::to_wstring(pid) + L';';
-    constexpr size_t kMaxPidListChars = 4095;
-    if (text.size() + value.size() > kMaxPidListChars) {
-        return false;
-    }
-    text += value;
-    return true;
-}
-
-bool WriteTrackedPidList(HKEY hKey, const std::wstring& text) {
-    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
-    if (bytes > MAXDWORD) {
-        return false;
-    }
-    return RegSetValueExW(
-               hKey, kInstancePidValueName, 0, REG_SZ,
-               reinterpret_cast<const BYTE*>(text.c_str()), static_cast<DWORD>(bytes)) ==
-           ERROR_SUCCESS;
-}
-
-bool PruneAndAddInstancePid() {
-    ScopedHookGuard guard;
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(
-            HKEY_CURRENT_USER, kVirtualRegRootSubkey, 0, nullptr, REG_OPTION_NON_VOLATILE,
-            KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
-        return false;
-    }
-
-    std::wstring existing;
-    std::vector<DWORD> pids;
-    if (!ReadTrackedPidList(hKey, existing) || !ParseTrackedPidList(existing, pids)) {
-        RegCloseKey(hKey);
-        Wh_Log(L"Overlay PID list is unreadable or malformed; refusing to overwrite it");
-        return false;
-    }
-
-    const DWORD myPid = GetCurrentProcessId();
-    std::wstring updated;
-    std::vector<DWORD> retained;
-    for (DWORD pid : pids) {
-        if (pid == myPid ||
-            std::find(retained.begin(), retained.end(), pid) != retained.end()) {
-            continue;
-        }
-        const TrackedPidState state = QueryTrackedPidState(pid);
-        if (state != TrackedPidState::Dead) {
-            if (!AppendTrackedPid(updated, pid)) {
-                RegCloseKey(hKey);
-                return false;
-            }
-            retained.push_back(pid);
-            if (state == TrackedPidState::Unknown) {
-                Wh_Log(L"Could not determine whether tracked PID %lu is alive; retaining it",
-                       static_cast<unsigned long>(pid));
-            }
-        }
-    }
-    if (!AppendTrackedPid(updated, myPid)) {
-        RegCloseKey(hKey);
-        return false;
-    }
-
-    const bool written = WriteTrackedPidList(hKey, updated);
-    RegCloseKey(hKey);
-    return written;
-}
-
-bool RemoveInstancePidAndCheckLast() {
-    ScopedHookGuard guard;
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(
-            HKEY_CURRENT_USER, kVirtualRegRootSubkey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE,
-            &hKey) != ERROR_SUCCESS) {
-        return false;
-    }
-
-    std::wstring existing;
-    std::vector<DWORD> pids;
-    if (!ReadTrackedPidList(hKey, existing) || !ParseTrackedPidList(existing, pids)) {
-        RegCloseKey(hKey);
-        Wh_Log(L"Overlay PID list is unreadable or malformed; preserving registry overlay");
-        return false;
-    }
-
-    const DWORD myPid = GetCurrentProcessId();
-    bool foundThisPid = false;
-    std::wstring updated;
-    std::vector<DWORD> retained;
-    for (DWORD pid : pids) {
-        if (pid == myPid) {
-            foundThisPid = true;
-            continue;
-        }
-        if (std::find(retained.begin(), retained.end(), pid) != retained.end()) {
-            continue;
-        }
-        const TrackedPidState state = QueryTrackedPidState(pid);
-        if (state != TrackedPidState::Dead) {
-            if (!AppendTrackedPid(updated, pid)) {
-                RegCloseKey(hKey);
-                return false;
-            }
-            retained.push_back(pid);
-            if (state == TrackedPidState::Unknown) {
-                Wh_Log(L"Could not determine whether tracked PID %lu is alive; preserving overlay",
-                       static_cast<unsigned long>(pid));
-            }
-        }
-    }
-
-    if (!foundThisPid) {
-        RegCloseKey(hKey);
-        Wh_Log(L"Current PID was absent from the overlay marker; refusing to delete shared state");
-        return false;
-    }
-
-    if (!updated.empty()) {
-        const bool written = WriteTrackedPidList(hKey, updated);
-        RegCloseKey(hKey);
-        if (!written) {
-            Wh_Log(L"Could not update the remaining overlay PID list; preserving registry state");
-        }
-        return false;
-    }
-
-    const LSTATUS deleteStatus = RegDeleteValueW(hKey, kInstancePidValueName);
-    RegCloseKey(hKey);
-    return deleteStatus == ERROR_SUCCESS;
-}
-
-bool CleanupStaleLegacyVirtualRegistryRoot();
-
-void CleanupRegistryArtifacts() {
-    ScopedHookGuard guard;
-    const LSTATUS status = RegDeleteTreeW(HKEY_CURRENT_USER, kVirtualRegRootSubkey);
-    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
-        Wh_Log(L"Could not remove private virtual registry overlay (%ld); it may remain", status);
-        return;
-    }
-
-    if (CleanupStaleLegacyVirtualRegistryRoot()) {
-        RemoveLegacyTaggedHkcuComRegistrations();
-    } else {
-        Wh_Log(L"Legacy registry PID state is not provably stale; preserving marker-tagged "
-               L"HKCU COM entries from older versions");
-    }
-    Wh_Log(L"Private virtual registry overlay removed");
-}
-
-bool CleanupStaleLegacyVirtualRegistryRoot() {
-    ScopedHookGuard guard;
-    HKEY hKey = nullptr;
-    const LSTATUS openStatus = RegOpenKeyExW(
-        HKEY_CURRENT_USER, kLegacyVirtualRegRootSubkey, 0, KEY_QUERY_VALUE, &hKey);
-    if (openStatus == ERROR_FILE_NOT_FOUND || openStatus == ERROR_PATH_NOT_FOUND) {
-        return true;  // No prior overlay can be in use.
-    }
-    if (openStatus != ERROR_SUCCESS) {
-        return false;
-    }
-
-    std::wstring pidText;
-    std::vector<DWORD> pids;
-    const bool parsed = ReadTrackedPidList(hKey, pidText) &&
-                        ParseTrackedPidList(pidText, pids);
-    RegCloseKey(hKey);
-    if (!parsed || pids.empty()) {
-        // Without a valid, nonempty marker, ownership cannot be established.
-        return false;
-    }
-
-    for (DWORD pid : pids) {
-        // Even our own PID is treated as live here: an older mod image in this
-        // process might still own a callback or COM object during an update.
-        if (QueryTrackedPidState(pid) != TrackedPidState::Dead) {
-            return false;
-        }
-    }
-
-    const LSTATUS deleteStatus =
-        RegDeleteTreeW(HKEY_CURRENT_USER, kLegacyVirtualRegRootSubkey);
-    if (deleteStatus == ERROR_SUCCESS || deleteStatus == ERROR_FILE_NOT_FOUND ||
-        deleteStatus == ERROR_PATH_NOT_FOUND) {
-        Wh_Log(L"Removed a stale legacy virtual-registry subtree after confirming all tracked "
-               L"Explorer PIDs were gone");
-        return true;
-    }
-    Wh_Log(L"Could not remove the stale legacy virtual-registry subtree (%ld)", deleteStatus);
-    return false;
-}
-
 // ===========================================================================
-// Registry path mapping: Win32 open/create + NT NtOpenKey/NtOpenKeyEx/NtCreateKey
+// Private-hive path mapping: Win32 open/create + NT NtOpenKey/NtOpenKeyEx/NtCreateKey
 // ===========================================================================
-struct OverlayPrefixMap {
+struct PrivateHivePrefixMap {
     const wchar_t* regPrefix;   // queried subkey prefix (case-insensitive)
-    const wchar_t* overlaySub;  // overlay subkey it maps to
+    const wchar_t* hiveSubKey;  // hive subkey it maps to
 };
 
 // Selected HKLM accesses and the managed CLSID mirror are redirected into the
-// private overlay. Native COM activation is handled separately by the hooks.
-constexpr OverlayPrefixMap kHklmOverlayMaps[] = {
+// private application hive. Native COM activation is handled separately by the hooks.
+constexpr PrivateHivePrefixMap kHklmHiveMaps[] = {
     {L"SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN"},
-    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", kXWizardsOverlaySub},
+    {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards", kXWizardsHiveSubKey},
     {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN", L"Software_VAN"},
     {L"SOFTWARE\\Classes\\CLSID", L"CLSID"},
 };
-constexpr OverlayPrefixMap kHkcrOverlayMaps[] = {
+constexpr PrivateHivePrefixMap kHkcrHiveMaps[] = {
     {L"CLSID", L"CLSID"},
     {L"Software\\Classes\\CLSID", L"CLSID"},
 };
-constexpr OverlayPrefixMap kHkcuOverlayMaps[] = {
+constexpr PrivateHivePrefixMap kHkcuHiveMaps[] = {
     {L"Software\\Classes\\CLSID", L"CLSID"},
 };
 
-// Stack-only overlay path builder (loader-lock friendly).
-bool BuildOverlayPath(HKEY hKey, const wchar_t* subKey, wchar_t* out, size_t cchOut) {
+// Stack-only private-hive path builder (loader-lock friendly).
+bool BuildPrivateHivePath(HKEY hKey, const wchar_t* subKey, wchar_t* out, size_t cchOut) {
     if (!subKey || !subKey[0]) {
         return false;
     }
-    const OverlayPrefixMap* maps = nullptr;
+    const PrivateHivePrefixMap* maps = nullptr;
     size_t mapCount = 0;
     if (hKey == HKEY_LOCAL_MACHINE) {
-        maps = kHklmOverlayMaps;
-        mapCount = ARRAYSIZE(kHklmOverlayMaps);
+        maps = kHklmHiveMaps;
+        mapCount = ARRAYSIZE(kHklmHiveMaps);
     } else if (hKey == HKEY_CLASSES_ROOT) {
-        maps = kHkcrOverlayMaps;
-        mapCount = ARRAYSIZE(kHkcrOverlayMaps);
+        maps = kHkcrHiveMaps;
+        mapCount = ARRAYSIZE(kHkcrHiveMaps);
     } else if (hKey == HKEY_CURRENT_USER) {
-        maps = kHkcuOverlayMaps;
-        mapCount = ARRAYSIZE(kHkcuOverlayMaps);
+        maps = kHkcuHiveMaps;
+        mapCount = ARRAYSIZE(kHkcuHiveMaps);
     } else {
         return false;
     }
@@ -4572,9 +4301,8 @@ bool BuildOverlayPath(HKEY hKey, const wchar_t* subKey, wchar_t* out, size_t cch
         // Non-trailing prefixes consume up to (not including) the separator,
         // so `rest` carries its own leading '\\' when present.
         const wchar_t* rest = sub.data() + prefix.size();
-        int n = swprintf(out, cchOut, L"%s\\%s%s", kVirtualRegRootSubkey, maps[m].overlaySub,
-                         rest);
-        if (n > 0) {
+        int n = swprintf(out, cchOut, L"%s%s", maps[m].hiveSubKey, rest);
+        if (n > 0 && static_cast<size_t>(n) < cchOut) {
             return true;
         }
     }
@@ -4596,16 +4324,23 @@ bool HasRegistryWriteAccess(ACCESS_MASK desiredAccess) noexcept {
 LSTATUS WINAPI Hook_RegOpenKeyExW(
     HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
     if (phkResult && lpSubKey && lpSubKey[0] &&
-        g_registryOverlayReady.load(std::memory_order_acquire) && !g_inHookGuard &&
+        g_privateRegistryHiveReady.load(std::memory_order_acquire) && !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t mapped[1024];
-        if (BuildOverlayPath(hKey, lpSubKey, mapped, ARRAYSIZE(mapped))) {
+        if (BuildPrivateHivePath(hKey, lpSubKey, mapped, ARRAYSIZE(mapped))) {
             ScopedHookGuard guard;
+            HKEY hive = g_privateRegistryHive;
+            if (!hive) {
+                return HasRegistryWriteAccess(samDesired) ? ERROR_FILE_NOT_FOUND
+                                                          : g_origRegOpenKeyExW(
+                                                                hKey, lpSubKey, ulOptions,
+                                                                samDesired, phkResult);
+            }
             LSTATUS st = g_origRegOpenKeyExW(
-                HKEY_CURRENT_USER, mapped, ulOptions, samDesired, phkResult);
+                hive, mapped, ulOptions, samDesired, phkResult);
             // Compact diagnostic: does VAN actually reach the private
             // Control_VAN tree? Only the first few opens are logged.
-            if (wcsstr(mapped, L"\\Control_VAN") &&
+            if (wcsstr(mapped, L"Control_VAN") &&
                 g_controlVanOpenLogs.fetch_add(1, std::memory_order_relaxed) < 8) {
                 Wh_Log(L"[registry] Control_VAN open: status=%ld access=0x%lX",
                        static_cast<long>(st), static_cast<unsigned long>(samDesired));
@@ -4614,7 +4349,7 @@ LSTATUS WINAPI Hook_RegOpenKeyExW(
                 return st;  // genuine kernel HKEY - RegNotifyChangeKeyValue works
             }
             // Preserve read-only fallback behavior, but never hand out a live
-            // system/class key for a write-capable request when its overlay is
+            // system/class key for a write-capable request when the private hive is
             // missing or inaccessible.
             if (HasRegistryWriteAccess(samDesired)) {
                 return st;
@@ -4630,16 +4365,23 @@ RegOpenKeyExA_t g_origRegOpenKeyExA = nullptr;
 LSTATUS WINAPI Hook_RegOpenKeyExA(
     HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
     if (phkResult && lpSubKey && lpSubKey[0] &&
-        g_registryOverlayReady.load(std::memory_order_acquire) && !g_inHookGuard &&
+        g_privateRegistryHiveReady.load(std::memory_order_acquire) && !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t subWide[512];
         int n = MultiByteToWideChar(CP_ACP, 0, lpSubKey, -1, subWide, ARRAYSIZE(subWide));
         if (n > 0) {
             wchar_t mapped[1024];
-            if (BuildOverlayPath(hKey, subWide, mapped, ARRAYSIZE(mapped))) {
+            if (BuildPrivateHivePath(hKey, subWide, mapped, ARRAYSIZE(mapped))) {
                 ScopedHookGuard guard;
+                HKEY hive = g_privateRegistryHive;
+                if (!hive) {
+                    return HasRegistryWriteAccess(samDesired) ? ERROR_FILE_NOT_FOUND
+                                                              : g_origRegOpenKeyExA(
+                                                                    hKey, lpSubKey, ulOptions,
+                                                                    samDesired, phkResult);
+                }
                 LSTATUS st = g_origRegOpenKeyExW(
-                    HKEY_CURRENT_USER, mapped, ulOptions, samDesired, phkResult);
+                    hive, mapped, ulOptions, samDesired, phkResult);
                 if (st == ERROR_SUCCESS) {
                     return st;
                 }
@@ -4660,16 +4402,20 @@ LSTATUS WINAPI Hook_RegCreateKeyExW(
     HKEY hKey, LPCWSTR lpSubKey, DWORD reserved, LPWSTR lpClass, DWORD options,
     REGSAM samDesired, LPSECURITY_ATTRIBUTES securityAttributes, PHKEY phkResult,
     LPDWORD disposition) {
-    if (phkResult && lpSubKey && g_registryOverlayReady.load(std::memory_order_acquire) &&
+    if (phkResult && lpSubKey && g_privateRegistryHiveReady.load(std::memory_order_acquire) &&
         !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t mapped[1024];
-        if (BuildOverlayPath(hKey, lpSubKey, mapped, ARRAYSIZE(mapped))) {
+        if (BuildPrivateHivePath(hKey, lpSubKey, mapped, ARRAYSIZE(mapped))) {
             ScopedHookGuard guard;
             // A mapped create must never fall through to the live HKLM/HKCR
-            // key, even if the private overlay cannot be written.
+            // key, even if the private application hive cannot be written.
+            HKEY hive = g_privateRegistryHive;
+            if (!hive) {
+                return ERROR_FILE_NOT_FOUND;
+            }
             return g_origRegCreateKeyExW(
-                HKEY_CURRENT_USER, mapped, reserved, lpClass, options, samDesired,
+                hive, mapped, reserved, lpClass, options, samDesired,
                 securityAttributes, phkResult, disposition);
         }
     }
@@ -4686,7 +4432,7 @@ LSTATUS WINAPI Hook_RegCreateKeyExA(
     HKEY hKey, LPCSTR lpSubKey, DWORD reserved, LPSTR lpClass, DWORD options,
     REGSAM samDesired, LPSECURITY_ATTRIBUTES securityAttributes, PHKEY phkResult,
     LPDWORD disposition) {
-    if (phkResult && lpSubKey && g_registryOverlayReady.load(std::memory_order_acquire) &&
+    if (phkResult && lpSubKey && g_privateRegistryHiveReady.load(std::memory_order_acquire) &&
         !g_inHookGuard &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t subWide[512];
@@ -4694,7 +4440,7 @@ LSTATUS WINAPI Hook_RegCreateKeyExA(
             CP_ACP, 0, lpSubKey, -1, subWide, ARRAYSIZE(subWide));
         if (wideCount > 0) {
             wchar_t mapped[1024];
-            if (BuildOverlayPath(hKey, subWide, mapped, ARRAYSIZE(mapped))) {
+            if (BuildPrivateHivePath(hKey, subWide, mapped, ARRAYSIZE(mapped))) {
                 char mappedAnsi[4096];
                 const int ansiCount = WideCharToMultiByte(
                     CP_ACP, 0, mapped, -1, mappedAnsi, ARRAYSIZE(mappedAnsi), nullptr, nullptr);
@@ -4703,8 +4449,12 @@ LSTATUS WINAPI Hook_RegCreateKeyExA(
                     return error ? static_cast<LSTATUS>(error) : ERROR_NO_UNICODE_TRANSLATION;
                 }
                 ScopedHookGuard guard;
+                HKEY hive = g_privateRegistryHive;
+                if (!hive) {
+                    return ERROR_FILE_NOT_FOUND;
+                }
                 return g_origRegCreateKeyExA(
-                    HKEY_CURRENT_USER, mappedAnsi, reserved, lpClass, options, samDesired,
+                    hive, mappedAnsi, reserved, lpClass, options, samDesired,
                     securityAttributes, phkResult, disposition);
             }
         }
@@ -4782,12 +4532,12 @@ bool BuildRedirectedNtKeyPath(
     USHORT* outLengthBytes) {
     struct NtPrefixMap {
         const wchar_t* from;
-        const wchar_t* to;  // overlay-relative path component
+        const wchar_t* to;  // private-hive-relative path component
     };
     static constexpr NtPrefixMap kMaps[] = {
         {L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\VAN", L"Control_VAN"},
         {L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\XWizards",
-         kXWizardsOverlaySub},
+         kXWizardsHiveSubKey},
         {L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\VAN",
          L"Software_VAN"},
         {L"\\Registry\\Machine\\SOFTWARE\\Classes\\CLSID", L"CLSID"},
@@ -4806,9 +4556,8 @@ bool BuildRedirectedNtKeyPath(
         }
 
         const wchar_t* suffix = atEnd ? L"" : fullPath + fromLen;
-        int n = swprintf(out, cchOut, L"%s\\%s\\%s%s", g_hkcuNtPrefix.c_str(),
-                         kVirtualRegRootSubkey, m.to, suffix);
-        if (n <= 0) {
+        int n = swprintf(out, cchOut, L"%s%s", m.to, suffix);
+        if (n <= 0 || static_cast<size_t>(n) >= cchOut) {
             return false;
         }
         *outLengthBytes = static_cast<USHORT>(n * sizeof(wchar_t));
@@ -4829,9 +4578,8 @@ bool BuildRedirectedNtKeyPath(
         const bool boundary = atEnd || fullPath[matchedLen] == L'\\';
         if (boundary) {
             const wchar_t* suffix = atEnd ? L"" : fullPath + matchedLen;
-            int n = swprintf(out, cchOut, L"%s\\%s\\CLSID%s", g_hkcuNtPrefix.c_str(),
-                             kVirtualRegRootSubkey, suffix);
-            if (n <= 0) {
+            int n = swprintf(out, cchOut, L"CLSID%s", suffix);
+            if (n <= 0 || static_cast<size_t>(n) >= cchOut) {
                 return false;
             }
             *outLengthBytes = static_cast<USHORT>(n * sizeof(wchar_t));
@@ -4841,9 +4589,9 @@ bool BuildRedirectedNtKeyPath(
     return false;
 }
 
-// Builds the absolute NT path for an OBJECT_ATTRIBUTES (handles both absolute
-// names and RootDirectory-relative key operations) and, if it targets one of our
-// virtualized keys, writes the redirected HKCU NT path into `outPath`.
+// Builds the full source NT path for an OBJECT_ATTRIBUTES (including
+// RootDirectory-relative opens) and, if it targets a virtualized key, returns
+// the corresponding key name relative to g_privateRegistryHive.
 bool TryBuildRedirectedNtKeyPath(
     POBJECT_ATTRIBUTES objectAttributes, wchar_t* outPath, size_t cchOut,
     USHORT* outLengthBytes) {
@@ -4859,9 +4607,9 @@ bool TryBuildRedirectedNtKeyPath(
         objectAttributes->ObjectName->Length / sizeof(wchar_t);
 
     if (objectAttributes->RootDirectory != nullptr) {
-        // Resolve the root handle name so relative opens can be mapped too.
-        // NtQueryKey(KeyNameInformation) is the only reliable way to obtain
-        // the full NT path of a registry key handle.
+        // Resolve the root handle name so relative opens of live registry keys can
+        // be mapped too. Private-hive handles do not match these source paths
+        // and therefore pass through unchanged.
         if (!g_pfnNtQueryKey) {
             return false;
         }
@@ -4905,16 +4653,16 @@ bool TryBuildRedirectedNtKeyPath(
     return BuildRedirectedNtKeyPath(full, nameLen, outPath, cchOut, outLengthBytes);
 }
 
-// RegSetValueExA/W and native writers ultimately use NtSetValueKey. A key
+// RegSetValueExA/W and native writers ultimately use NtSetValueKey. A handle
 // opened before our hooks were enabled must not bypass path redirection.
-// Genuine overlay handles retain all standard registry API behavior; no fake HKEYs.
+// Private-hive handles retain ordinary registry API behavior; no fake HKEYs.
 using NtSetValueKey_t = NTSTATUS(NTAPI*)(HANDLE, PUNICODE_STRING, ULONG, ULONG, PVOID, ULONG);
 NtSetValueKey_t g_origNtSetValueKey = nullptr;
 
 NTSTATUS NTAPI Hook_NtSetValueKey(HANDLE key, PUNICODE_STRING valueName,
     ULONG titleIndex, ULONG type, PVOID data, ULONG dataSize) {
-    if (!g_inHookGuard && g_registryOverlayReady.load(std::memory_order_acquire) &&
-        g_pfnNtQueryKey && !g_hkcuNtPrefix.empty() &&
+    if (!g_inHookGuard && g_privateRegistryHiveReady.load(std::memory_order_acquire) &&
+        g_pfnNtQueryKey && g_privateRegistryHive &&
         (GetCurrentThreadId() == g_staThreadId.load(std::memory_order_acquire) ||
          IsCallerManagedVanModule(__builtin_return_address(0)))) {
         // Scope the extra stale-handle guard to the mod's STA/direct managed
@@ -4934,7 +4682,7 @@ NTSTATUS NTAPI Hook_NtSetValueKey(HANDLE key, PUNICODE_STRING valueName,
                         info->NameLength / sizeof(wchar_t), redirected,
                         ARRAYSIZE(redirected), &length)) {
                     // Do not silently grant rights by reopening a read-only real
-                    // handle against our writable overlay. Deny stale real handles;
+                    // handle against our writable private hive. Deny stale real handles;
                     // callers must reopen through the ordinary redirection hooks.
                     return static_cast<NTSTATUS>(0xC0000022L); // STATUS_ACCESS_DENIED
                 }
@@ -4949,8 +4697,8 @@ NtCreateKey_t g_origNtCreateKey = nullptr;
 NTSTATUS NTAPI Hook_NtCreateKey(
     PHANDLE KeyHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
     ULONG TitleIndex, PUNICODE_STRING Class, ULONG CreateOptions, PULONG Disposition) {
-    if (KeyHandle && g_registryOverlayReady.load(std::memory_order_acquire) &&
-        !g_inHookGuard && !g_hkcuNtPrefix.empty() &&
+    if (KeyHandle && g_privateRegistryHiveReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard && g_privateRegistryHive &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t redirected[1100];
         USHORT redirectedLen = 0;
@@ -4964,6 +4712,7 @@ NTSTATUS NTAPI Hook_NtCreateKey(
 
             OBJECT_ATTRIBUTES oa{};
             oa.Length = sizeof(oa);
+            oa.RootDirectory = g_privateRegistryHive;
             oa.ObjectName = &us;
             oa.Attributes = ObjectAttributes->Attributes;
             oa.SecurityDescriptor = ObjectAttributes->SecurityDescriptor;
@@ -4984,8 +4733,8 @@ NtOpenKey_t g_origNtOpenKey = nullptr;
 
 NTSTATUS NTAPI Hook_NtOpenKey(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
                               POBJECT_ATTRIBUTES ObjectAttributes) {
-    if (KeyHandle && g_registryOverlayReady.load(std::memory_order_acquire) &&
-        !g_inHookGuard && !g_hkcuNtPrefix.empty() &&
+    if (KeyHandle && g_privateRegistryHiveReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard && g_privateRegistryHive &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t redirected[1100];
         USHORT redirectedLen = 0;
@@ -4999,6 +4748,7 @@ NTSTATUS NTAPI Hook_NtOpenKey(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
 
             OBJECT_ATTRIBUTES oa{};
             oa.Length = sizeof(oa);
+            oa.RootDirectory = g_privateRegistryHive;
             oa.ObjectName = &us;
             oa.Attributes = ObjectAttributes->Attributes;
             oa.SecurityDescriptor = ObjectAttributes->SecurityDescriptor;
@@ -5006,7 +4756,7 @@ NTSTATUS NTAPI Hook_NtOpenKey(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
 
             NTSTATUS st = g_origNtOpenKey(KeyHandle, DesiredAccess, &oa);
             if (NT_SUCCESS(st)) {
-                return st;  // real kernel HKEY into our HKCU overlay
+                return st;  // real kernel HKEY into the private application hive
             }
             // Read-only lookups may still consult the system key. A write-capable
             // open must fail closed instead of returning a live machine key.
@@ -5022,8 +4772,8 @@ NtOpenKeyEx_t g_origNtOpenKeyEx = nullptr;
 
 NTSTATUS NTAPI Hook_NtOpenKeyEx(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
                                 POBJECT_ATTRIBUTES ObjectAttributes, ULONG OpenOptions) {
-    if (KeyHandle && g_registryOverlayReady.load(std::memory_order_acquire) &&
-        !g_inHookGuard && !g_hkcuNtPrefix.empty() &&
+    if (KeyHandle && g_privateRegistryHiveReady.load(std::memory_order_acquire) &&
+        !g_inHookGuard && g_privateRegistryHive &&
         IsManagedVanCallContext(__builtin_return_address(0))) {
         wchar_t redirected[1100];
         USHORT redirectedLen = 0;
@@ -5037,6 +4787,7 @@ NTSTATUS NTAPI Hook_NtOpenKeyEx(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
 
             OBJECT_ATTRIBUTES oa{};
             oa.Length = sizeof(oa);
+            oa.RootDirectory = g_privateRegistryHive;
             oa.ObjectName = &us;
             oa.Attributes = ObjectAttributes->Attributes;
             oa.SecurityDescriptor = ObjectAttributes->SecurityDescriptor;
@@ -5610,7 +5361,7 @@ void ArmShowWatchdog(UINT delayMs) {
 
 // Runs on the STA thread ~2.5 s after the first ShowVAN of the session. At
 // boot, ShowVAN can return S_OK while van.dll never even opens Control_VAN or
-// activates a provider (log evidence: overlay verified 3/3, zero opens, zero
+// activates a provider (log evidence: private hive verified 3/3, zero opens, zero
 // COM activations, and a ShutdownVAN+ShowVAN retry changes nothing; only a
 // full reload of the DLLs recovers). So: reload the managed runtime and show
 // again, at most twice (the second time after a pause in case this is timing).
@@ -6696,31 +6447,34 @@ void RunVanStaWorkerBody() {
         Wh_Log(L"Verified VanStore ready at %s", g_vanStoreDir.c_str());
     }
 
-    // 3. The downloaded route needs its private COM/XWizards overlay. Native
-    //    ReplaceVan mode leaves persistent registry state unchanged; only the
-    //    exact RegGetValueW result is virtualized in-process.
+    // 3. The downloaded route uses a private application hive. Native
+    //    ReplaceVan mode leaves registry state unchanged and only virtualizes
+    //    the exact RegGetValueW result in-process.
     if (!nativeMode) {
-        ScopedOverlayMutex overlayLock(g_overlayMutex, 5000);
-        if (!overlayLock.locked()) {
-            Wh_Log(L"Could not acquire the overlay mutex; staying passive rather than using "
-                   L"untracked registry state");
+        if (g_hkcuNtPrefix.empty()) {
+            Wh_Log(L"HKCU NT path is unavailable; refusing fallback activation to keep "
+                   L"registry redirection fail-closed");
             g_staThreadId.store(0, std::memory_order_release);
             return;
         }
-        if (!PruneAndAddInstancePid()) {
-            Wh_Log(L"Overlay PID tracking failed; staying passive and leaving the overlay "
-                   L"untouched for later recovery");
+        ScopedPrivateHiveMutex hiveLock(g_privateHiveMutex, 5000);
+        if (!hiveLock.locked()) {
+            Wh_Log(L"Could not acquire the private-hive mutex; staying passive");
             g_staThreadId.store(0, std::memory_order_release);
             return;
         }
-        g_overlayInstanceRegistered.store(true, std::memory_order_release);
-        if (!PopulateVirtualRegistryOverlay()) {
-            Wh_Log(L"Virtual registry overlay population failed; staying passive; tracked "
-                   L"state will be removed or retained according to the PID list");
+        if (!OpenPrivateRegistryHive()) {
+            Wh_Log(L"Private application hive could not be opened; staying passive");
             g_staThreadId.store(0, std::memory_order_release);
             return;
         }
-        g_registryOverlayReady.store(true, std::memory_order_release);
+        if (!PopulatePrivateRegistryHive()) {
+            Wh_Log(L"Private registry hive population failed; staying passive; hive file "
+                   L"will be retained for diagnostics and reused on a later start");
+            g_staThreadId.store(0, std::memory_order_release);
+            return;
+        }
+        g_privateRegistryHiveReady.store(true, std::memory_order_release);
     }
     if (!WaitForWlanStartupOnSta() || g_shuttingDown.load(std::memory_order_acquire)) {
         Wh_Log(L"WLAN startup cancelled; legacy runtime was not activated");
@@ -6835,7 +6589,7 @@ void CleanupVanStaOnOwningThread() {
     UnregisterStaWindowClasses();
     g_hostRole.store(static_cast<int>(HostRole::Undetermined), std::memory_order_release);
     g_vanStoreReady.store(false, std::memory_order_release);
-    g_registryOverlayReady.store(false, std::memory_order_release);
+    g_privateRegistryHiveReady.store(false, std::memory_order_release);
     g_staThreadId.store(0, std::memory_order_release);
 
 }
@@ -6910,8 +6664,7 @@ BOOL Wh_ModInit() try {
     }
 
     g_vanStoreReady.store(false, std::memory_order_release);
-    g_registryOverlayReady.store(false, std::memory_order_release);
-    g_overlayInstanceRegistered.store(false, std::memory_order_release);
+    g_privateRegistryHiveReady.store(false, std::memory_order_release);
     g_workerStillRunning.store(false, std::memory_order_release);
     g_unloadSafetyFailure.store(false, std::memory_order_release);
     g_pnidTrayHwnd.store(nullptr, std::memory_order_release);
@@ -6923,8 +6676,8 @@ BOOL Wh_ModInit() try {
     g_firstShowChecked.store(false, std::memory_order_relaxed);
     g_showWatchdogRetryDone.store(false, std::memory_order_relaxed);
     g_showWatchdogTimerId = 0;
-    g_overlayWriteFailures.store(0, std::memory_order_relaxed);
-    g_overlayWriteFailureLogs.store(0, std::memory_order_relaxed);
+    g_privateHiveWriteFailures.store(0, std::memory_order_relaxed);
+    g_privateHiveWriteFailureLogs.store(0, std::memory_order_relaxed);
     g_controlVanOpenLogs.store(0, std::memory_order_relaxed);
 
     std::filesystem::path nativeSystemDir;
@@ -6964,11 +6717,11 @@ BOOL Wh_ModInit() try {
             g_stopEvent = nullptr;
             return FALSE;
         }
-        // PID registration, overlay population, and last-instance cleanup must
-        // be serialized across every Explorer process using this overlay.
-        g_overlayMutex = CreateMutexW(nullptr, FALSE, kOverlayMutexName);
-        if (!g_overlayMutex) {
-            Wh_Log(L"CreateMutexW(overlay) failed (%lu); refusing unsafe fallback init",
+        // Private-hive load/population must be serialized across Explorer processes
+        // that use the same per-user hive file.
+        g_privateHiveMutex = CreateMutexW(nullptr, FALSE, kPrivateHiveMutexName);
+        if (!g_privateHiveMutex) {
+            Wh_Log(L"CreateMutexW(private hive) failed (%lu); refusing unsafe fallback init",
                    GetLastError());
             CloseHandle(g_provisionMutex);
             g_provisionMutex = nullptr;
@@ -6977,21 +6730,9 @@ BOOL Wh_ModInit() try {
             return FALSE;
         }
     }
-    if (g_overlayMutex) {
-        ScopedOverlayMutex legacyCleanupLock(g_overlayMutex, 5000);
-        if (legacyCleanupLock.locked()) {
-            CleanupStaleLegacyVirtualRegistryRoot();
-        } else {
-            Wh_Log(L"Could not acquire the overlay mutex for legacy-tree cleanup; leaving it "
-                   L"for a later safe pass");
-        }
-    } else {
-        CleanupStaleLegacyVirtualRegistryRoot();
-    }
-
     // Resolve ntdll helpers + capture the NT path of HKCU (e.g.
-    // "\Registry\User\S-1-5-21-...") so NtOpenKey/NtOpenKeyEx redirection can
-    // build absolute redirect targets.
+    // "\Registry\User\S-1-5-21-...") for matching the per-user Classes path.
+    // Redirected keys themselves are opened relative to the private hive handle.
     {
         HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
         if (hNtdll) {
@@ -7247,7 +6988,7 @@ BOOL Wh_ModInit() try {
 } catch (...) {
     DisableModAfterCppException(L"initialization");
     // No worker has started: pending hooks are discarded by Windhawk after FALSE.
-    if (g_overlayMutex) { CloseHandle(g_overlayMutex); g_overlayMutex = nullptr; }
+    if (g_privateHiveMutex) { CloseHandle(g_privateHiveMutex); g_privateHiveMutex = nullptr; }
     if (g_provisionMutex) { CloseHandle(g_provisionMutex); g_provisionMutex = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     return FALSE;
@@ -7343,21 +7084,9 @@ void Wh_ModUninit() {
         g_dllDirectoryCookie = nullptr;
     }
 
-    // 5. Only the last tracked fallback-overlay instance may remove the
-    //    private registry tree. The overlay mutex is best-effort: if it cannot
-    //    be acquired, the PID marker and subtree are preserved for a later
-    //    recovery pass instead of being deleted under a live instance.
-    if (g_overlayInstanceRegistered.exchange(false, std::memory_order_acq_rel)) {
-        ScopedOverlayMutex overlayLock(g_overlayMutex, 5000);
-        if (!overlayLock.locked()) {
-            Wh_Log(L"Could not acquire the overlay mutex during unload; keeping the PID "
-                   L"marker and registry subtree for later recovery");
-        } else if (RemoveInstancePidAndCheckLast()) {
-            CleanupRegistryArtifacts();
-        }
-    }
-
-    // 6. Close the cross-process coordination handles.
+    // 5. Close the cross-process coordination handles. The private application
+    //    hive file is mod data; unmount it after all managed modules are released.
+    //    No live HKCU/HKLM registry keys are created or removed by teardown.
     if (g_provisionMutex) {
         CloseHandle(g_provisionMutex);
         g_provisionMutex = nullptr;
@@ -7366,9 +7095,9 @@ void Wh_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
-    if (g_overlayMutex) {
-        CloseHandle(g_overlayMutex);
-        g_overlayMutex = nullptr;
+    if (g_privateHiveMutex) {
+        CloseHandle(g_privateHiveMutex);
+        g_privateHiveMutex = nullptr;
     }
 
     // 7. Drop the resolved van.dll exports. The module itself is released
@@ -7406,9 +7135,14 @@ void Wh_ModUninit() {
         }
     }
 
-    // 9. Publish the final "not ready" state so any late hook entry fails
-    //    closed instead of touching released state.
+    // Stop redirection before unmounting the isolated application hive.
+    g_privateRegistryHiveReady.store(false, std::memory_order_release);
+    if (g_privateRegistryHive) {
+        RegCloseKey(g_privateRegistryHive);
+        g_privateRegistryHive = nullptr;
+    }
+
+    // Publish the final "not ready" state so any late hook entry fails closed.
     g_vanStoreReady.store(false, std::memory_order_release);
-    g_registryOverlayReady.store(false, std::memory_order_release);
     Wh_Log(L"Windows 8 Network Flyout Restorer unloaded cleanly");
 }
