@@ -4700,7 +4700,7 @@ bool HookTaskbarDllSymbols() {
 using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
 
 std::vector<COMBINED_SH> GetTrayHooks() {
-    WindhawkUtils::SYMBOL_HOOK trayHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &SystemTrayController_GetFrameSize_Original,
@@ -4732,8 +4732,8 @@ std::vector<COMBINED_SH> GetTrayHooks() {
             true,
         },
     };
-    return {std::make_move_iterator(std::begin(trayHooks)),
-            std::make_move_iterator(std::end(trayHooks))};
+    return {std::make_move_iterator(std::begin(systemTrayHooks)),
+        std::make_move_iterator(std::end(systemTrayHooks))};
 }
 
 bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
