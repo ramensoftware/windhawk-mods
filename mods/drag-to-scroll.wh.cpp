@@ -11,14 +11,13 @@
 // ==/WindhawkMod==
 
 // clang-format off
-
 // ==WindhawkModReadme==
 /*
-# Drag-to-Scroll
+# Drag to Scroll
 
 Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and naturally across desktop applications, including web browsers (Chrome, Edge, Firefox), text editors (VS Code, Notepad++), File Explorer, and legacy Win32 utilities.
 
-![Drag-to-Scroll Demo](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/preview-global-drag-to-scroll.webp)
+![Drag to Scroll Demo](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/preview-global-drag-to-scroll.webp)
 
 ## Key Features
 
@@ -30,8 +29,8 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 
 ## Compatibility & Limitations
 
-* **Microsoft Store & Packaged Apps:** Due to AppContainer sandboxing and Windows DirectInput mechanics, this mod does not inject into packaged Microsoft Store apps, the Windows Start Menu, or certain system XAML surfaces.
-* **CAD & 3D Software:** If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to `Ctrl + Right-Click`, consider excluding those executables under the mod's **Advanced** tab in Windhawk.
+* **Packaged & Modern UI Surfaces:** Certain modern Windows interfaces (such as the Windows Start Menu or some packaged store apps) do not process standard Win32 mouse-drag messages through the message queue and are not supported.
+* **CAD & 3D Software:** If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to `Ctrl + Right-Click`, you can exclude those executables under the mod's **Advanced** tab in Windhawk.
 */
 // ==/WindhawkModReadme==
 
@@ -57,7 +56,6 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
   $description: "Injects high-precision fractional wheel deltas for fluid movement in modern browsers. Disable this if scrolling is unresponsive in older desktop programs."
 */
 // ==/WindhawkModSettings==
-
 // clang-format on
 
 #include <windhawk_api.h>
@@ -68,7 +66,6 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 #include <cmath>
 #include <cwctype>
 
-// Unique tags for identifying synthetic input injected by this mod
 constexpr ULONG_PTR MASK_EXTRA_INFO = 0x5343524C;    // Tag: 'SCRL'
 constexpr ULONG_PTR REPLAY_EXTRA_INFO = 0x5245504C;  // Tag: 'REPL'
 constexpr int SMOOTH_SCROLL_CHUNK = 15;
@@ -84,7 +81,6 @@ struct ModSettings {
 
 static ModSettings g_settings;
 
-// Core gesture state machine
 enum class ScrollState { Idle, Pending, Scrolling, Cruising };
 static std::atomic<ScrollState> g_state{ScrollState::Idle};
 static std::atomic<bool> g_swallowRButtonUp{false};
@@ -96,7 +92,6 @@ static double g_accumY = 0.0;
 static RECT g_windowBounds = {0, 0, 0, 0};
 static HWND g_captureHwnd = nullptr;
 
-// Background worker thread for hands-free continuous cruising
 static HANDLE g_hCruiseThread = nullptr;
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_cruiseEvent = nullptr;
@@ -113,6 +108,19 @@ struct CruiseContext {
 static CruiseContext g_cruiseCtx;
 static CRITICAL_SECTION g_cruiseCs;
 
+// Forward declare the original API pointer so the mod can check real hardware
+// key states
+using GetAsyncKeyState_t = SHORT(WINAPI*)(int);
+static GetAsyncKeyState_t pfnGetAsyncKeyState_Original = nullptr;
+
+// Queries physical key state directly, bypassing our own hook that masks Ctrl
+static inline bool IsCtrlPhysicallyDown() {
+    if (pfnGetAsyncKeyState_Original) {
+        return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
+    }
+    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+}
+
 void LoadSettings() {
     g_settings.touch_style = Wh_GetIntSetting(L"touch_style") != 0;
     g_settings.enable_cruising = Wh_GetIntSetting(L"enable_cruising") != 0;
@@ -127,7 +135,6 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
-// Injects synthetic mouse wheel input tagged with MASK_EXTRA_INFO
 void SendMaskedWheelAsync(int deltaY) {
     INPUT input = {};
     input.type = INPUT_MOUSE;
@@ -137,7 +144,6 @@ void SendMaskedWheelAsync(int deltaY) {
     SendInput(1, &input, sizeof(INPUT));
 }
 
-// Detects classic Win32 controls requiring discrete line-by-line scrolling
 bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
     outTarget = WindowFromPoint(pt);
     if (!outTarget)
@@ -164,7 +170,6 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
             wcsstr(lowerCls, L"richedit") != nullptr);
 }
 
-// Routes scroll actions to either classic controls or standard wheel events
 void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
     if (isDiscrete && hTarget) {
         int steps = std::max(1, std::abs(deltaY) / WHEEL_DELTA);
@@ -178,7 +183,6 @@ void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
     SendMaskedWheelAsync(deltaY);
 }
 
-// Background loop driving the hands-free cruise momentum
 DWORD WINAPI CruiseWorkerThread(LPVOID) {
     HANDLE handles[] = {g_stopEvent, g_cruiseEvent};
     while (true) {
@@ -194,7 +198,9 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
         while (g_state.load() == ScrollState::Cruising) {
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0)
                 return 0;
-            if (!(GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
+
+            // Check physical hardware Ctrl state via unhooked call
+            if (!IsCtrlPhysicallyDown()) {
                 g_state.store(ScrollState::Idle);
                 break;
             }
@@ -272,36 +278,39 @@ void StartCruiseThreadIfNeeded() {
         SetEvent(g_cruiseEvent);
 }
 
-// Evaluates and intercepts mouse and keyboard input inside application message
-// loops
 bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
     if (!pMsg || !pMsg->hwnd)
         return false;
+
+    // Fast reject: only mouse and keyboard messages are processed
+    UINT m = pMsg->message;
+    if (!(m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) &&
+        !(m >= WM_KEYFIRST && m <= WM_KEYLAST)) {
+        return false;
+    }
+
     ULONG_PTR extra = GetMessageExtraInfo();
     if (extra == REPLAY_EXTRA_INFO)
         return false;
 
     // Reset swallow flags on any explicit user button-down action
-    if (pMsg->message == WM_LBUTTONDOWN || pMsg->message == WM_LBUTTONDBLCLK ||
-        pMsg->message == WM_RBUTTONDOWN || pMsg->message == WM_RBUTTONDBLCLK ||
-        pMsg->message == WM_MBUTTONDOWN || pMsg->message == WM_MBUTTONDBLCLK ||
-        pMsg->message == WM_XBUTTONDOWN || pMsg->message == WM_XBUTTONDBLCLK) {
+    if (m == WM_LBUTTONDOWN || m == WM_LBUTTONDBLCLK || m == WM_RBUTTONDOWN ||
+        m == WM_RBUTTONDBLCLK || m == WM_MBUTTONDOWN || m == WM_MBUTTONDBLCLK ||
+        m == WM_XBUTTONDOWN || m == WM_XBUTTONDBLCLK) {
         g_swallowButtonUp.store(0);
     }
 
-    // Swallow paired button-up message when cruising was stopped by a click
-    if (g_swallowButtonUp.load() != 0 &&
-        pMsg->message == g_swallowButtonUp.load()) {
+    // Swallow button-up message when cruising was stopped by a click
+    if (g_swallowButtonUp.load() != 0 && m == g_swallowButtonUp.load()) {
         g_swallowButtonUp.store(0);
         return true;
     }
 
-    // Clear capture and pending state if right button was released outside the
-    // window
-    if (pMsg->message == WM_MOUSEMOVE && !(pMsg->wParam & MK_RBUTTON)) {
+    // Clear stale swallow/capture if mouse moves without right button pressed
+    if (m == WM_MOUSEMOVE && !(pMsg->wParam & MK_RBUTTON)) {
         if (g_swallowRButtonUp.load()) {
             g_swallowRButtonUp.store(false);
-            if (GetCapture() == g_captureHwnd && g_captureHwnd != nullptr) {
+            if (g_captureHwnd && GetCapture() == g_captureHwnd) {
                 ReleaseCapture();
             }
             g_captureHwnd = nullptr;
@@ -309,9 +318,9 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
         }
     }
 
-    // Strip MK_CONTROL from wheel messages during active drag to prevent
-    // unwanted zooming
-    if (pMsg->message == WM_MOUSEWHEEL) {
+    // Strip MK_CONTROL from wheel messages during active drag to avoid
+    // unintended zooming
+    if (m == WM_MOUSEWHEEL) {
         if (g_state.load() != ScrollState::Idle || extra == MASK_EXTRA_INFO) {
             if (canMutate)
                 pMsg->wParam &= ~((WPARAM)MK_CONTROL);
@@ -319,8 +328,8 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
         }
     }
 
-    // Cruising termination conditions
-    if (pMsg->message == WM_KEYDOWN || pMsg->message == WM_SYSKEYDOWN) {
+    // Key presses end cruising
+    if (m == WM_KEYDOWN || m == WM_SYSKEYDOWN) {
         if (g_state.load() == ScrollState::Cruising) {
             if (pMsg->wParam != VK_CONTROL && pMsg->wParam != VK_LCONTROL &&
                 pMsg->wParam != VK_RCONTROL) {
@@ -329,9 +338,9 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
         }
     }
 
-    if (pMsg->message == WM_KEYUP || pMsg->message == WM_SYSKEYUP) {
+    if (m == WM_KEYUP || m == WM_SYSKEYUP) {
         if (pMsg->wParam == VK_CONTROL) {
-            if (!(GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
+            if (!IsCtrlPhysicallyDown()) {
                 ScrollState cur = g_state.load();
                 if (cur == ScrollState::Cruising ||
                     cur == ScrollState::Scrolling) {
@@ -342,14 +351,14 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
         }
     }
 
+    // Mouse click ends cruising
     if (g_state.load() == ScrollState::Cruising) {
-        if ((pMsg->message == WM_RBUTTONDOWN ||
-             pMsg->message == WM_RBUTTONDBLCLK) &&
+        if ((m == WM_RBUTTONDOWN || m == WM_RBUTTONDBLCLK) &&
             (pMsg->wParam & MK_CONTROL)) {
             g_state.store(ScrollState::Idle);
         } else {
             UINT upToSwallow = 0;
-            switch (pMsg->message) {
+            switch (m) {
                 case WM_LBUTTONDOWN:
                 case WM_LBUTTONDBLCLK:
                     upToSwallow = WM_LBUTTONUP;
@@ -376,9 +385,9 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
     }
 
     // Gesture initiation: Ctrl + Right Mouse Down
-    if (pMsg->message == WM_RBUTTONDOWN || pMsg->message == WM_RBUTTONDBLCLK) {
+    if (m == WM_RBUTTONDOWN || m == WM_RBUTTONDBLCLK) {
         if (pMsg->wParam & MK_CONTROL) {
-            g_state = ScrollState::Pending;
+            g_state.store(ScrollState::Pending);
             g_swallowRButtonUp.store(true);
             g_captureHwnd = pMsg->hwnd;
             SetCapture(g_captureHwnd);
@@ -402,7 +411,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
     }
 
     // Gesture dragging & displacement accumulation
-    if (pMsg->message == WM_MOUSEMOVE) {
+    if (m == WM_MOUSEMOVE) {
         ScrollState cur = g_state.load();
         if (cur == ScrollState::Pending || cur == ScrollState::Scrolling) {
             POINT curPt;
@@ -415,7 +424,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
             int totalDy = curPt.y - g_anchorPt.y;
             if (cur == ScrollState::Pending &&
                 std::abs(totalDy) >= g_settings.deadzone) {
-                g_state = ScrollState::Scrolling;
+                g_state.store(ScrollState::Scrolling);
                 g_lastPt = curPt;
             }
 
@@ -478,45 +487,41 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
         }
     }
 
-    // Gesture release: transition to cruising, idle, or replay an un-dragged
-    // tap
-    if (pMsg->message == WM_RBUTTONUP) {
-        if (g_swallowRButtonUp.load()) {
-            g_swallowRButtonUp.store(false);
-            if (GetCapture() == g_captureHwnd && g_captureHwnd != nullptr) {
-                ReleaseCapture();
-            }
-            g_captureHwnd = nullptr;
-
-            ScrollState cur = g_state.load();
-            if (cur == ScrollState::Scrolling) {
-                g_accumY = 0.0;
-                if (g_settings.enable_cruising &&
-                    (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
-                    g_state.store(ScrollState::Cruising);
-                    StartCruiseThreadIfNeeded();
-                } else {
-                    g_state.store(ScrollState::Idle);
-                }
-                return true;
-            } else if (cur == ScrollState::Pending) {
-                g_state.store(ScrollState::Idle);
-                INPUT inputs[2] = {};
-                inputs[0].type = INPUT_MOUSE;
-                inputs[0].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
-                inputs[0].mi.dwExtraInfo = REPLAY_EXTRA_INFO;
-                inputs[1].type = INPUT_MOUSE;
-                inputs[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
-                inputs[1].mi.dwExtraInfo = REPLAY_EXTRA_INFO;
-                SendInput(2, inputs, sizeof(INPUT));
-                return true;
-            }
+    // Always intercept and swallow WM_RBUTTONUP if we swallowed the matching
+    // WM_RBUTTONDOWN
+    if (m == WM_RBUTTONUP && g_swallowRButtonUp.load()) {
+        g_swallowRButtonUp.store(false);
+        if (g_captureHwnd && GetCapture() == g_captureHwnd) {
+            ReleaseCapture();
         }
+        g_captureHwnd = nullptr;
+
+        ScrollState cur = g_state.load();
+        if (cur == ScrollState::Pending) {
+            g_state.store(ScrollState::Idle);
+            INPUT inputs[2] = {};
+            inputs[0].type = INPUT_MOUSE;
+            inputs[0].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+            inputs[0].mi.dwExtraInfo = REPLAY_EXTRA_INFO;
+            inputs[1].type = INPUT_MOUSE;
+            inputs[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
+            inputs[1].mi.dwExtraInfo = REPLAY_EXTRA_INFO;
+            SendInput(2, inputs, sizeof(INPUT));
+        } else if (cur == ScrollState::Scrolling &&
+                   g_settings.enable_cruising && IsCtrlPhysicallyDown()) {
+            g_state.store(ScrollState::Cruising);
+            StartCruiseThreadIfNeeded();
+        } else {
+            g_state.store(ScrollState::Idle);
+        }
+        // App never saw WM_RBUTTONDOWN, so never let WM_RBUTTONUP through
+        return true;
     }
+
     return false;
 }
 
-// --- STANDARD MESSAGE LOOP HOOKS ---
+// --- STANDARD MESSAGE RETRIEVAL HOOKS ---
 using GetMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
 GetMessageW_t pfnGetMessageW_Original = nullptr;
 BOOL WINAPI GetMessageW_Hook(LPMSG lpMsg,
@@ -571,24 +576,6 @@ BOOL WINAPI PeekMessageA_Hook(LPMSG lpMsg,
     return ret;
 }
 
-using DispatchMessageW_t = LRESULT(WINAPI*)(const MSG*);
-DispatchMessageW_t pfnDispatchMessageW_Original = nullptr;
-LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
-    MSG msgCopy = *lpMsg;
-    if (ProcessScrollInput(&msgCopy, false))
-        return 0;
-    return pfnDispatchMessageW_Original(lpMsg);
-}
-
-using DispatchMessageA_t = LRESULT(WINAPI*)(const MSG*);
-DispatchMessageA_t pfnDispatchMessageA_Original = nullptr;
-LRESULT WINAPI DispatchMessageA_Hook(const MSG* lpMsg) {
-    MSG msgCopy = *lpMsg;
-    if (ProcessScrollInput(&msgCopy, false))
-        return 0;
-    return pfnDispatchMessageA_Original(lpMsg);
-}
-
 // --- SYNCHRONOUS KEY STATE MASKING ---
 using GetKeyState_t = SHORT(WINAPI*)(int);
 GetKeyState_t pfnGetKeyState_Original = nullptr;
@@ -601,8 +588,6 @@ SHORT WINAPI GetKeyState_Hook(int nVirtKey) {
     return pfnGetKeyState_Original(nVirtKey);
 }
 
-using GetAsyncKeyState_t = SHORT(WINAPI*)(int);
-GetAsyncKeyState_t pfnGetAsyncKeyState_Original = nullptr;
 SHORT WINAPI GetAsyncKeyState_Hook(int vKey) {
     if (g_state.load() != ScrollState::Idle &&
         (vKey == VK_CONTROL || vKey == VK_LCONTROL || vKey == VK_RCONTROL)) {
@@ -625,7 +610,7 @@ BOOL WINAPI GetKeyboardState_Hook(PBYTE lpKeyState) {
 
 // --- WINDHAWK LIFECYCLE ---
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Drag-to-Scroll mod");
+    Wh_Log(L"Initializing Drag to Scroll mod");
     LoadSettings();
     InitializeCriticalSection(&g_cruiseCs);
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -640,10 +625,6 @@ BOOL Wh_ModInit() {
                                    &pfnGetMessageA_Original);
     WindhawkUtils::SetFunctionHook(PeekMessageA, PeekMessageA_Hook,
                                    &pfnPeekMessageA_Original);
-    WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
-                                   &pfnDispatchMessageW_Original);
-    WindhawkUtils::SetFunctionHook(DispatchMessageA, DispatchMessageA_Hook,
-                                   &pfnDispatchMessageA_Original);
     WindhawkUtils::SetFunctionHook(GetKeyState, GetKeyState_Hook,
                                    &pfnGetKeyState_Original);
     WindhawkUtils::SetFunctionHook(GetAsyncKeyState, GetAsyncKeyState_Hook,
@@ -655,7 +636,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Unloading Drag-to-Scroll mod");
+    Wh_Log(L"Unloading Drag to Scroll mod");
     if (g_stopEvent)
         SetEvent(g_stopEvent);
     if (g_hCruiseThread) {
