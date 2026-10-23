@@ -6,7 +6,7 @@
 // @description:ru-RU Настраиваемая дополнительная панель: приложения, часы, календарь, погода, Wi-Fi, громкость, раскладка, батарея, плеер, таймеры и многое другое
 // @version         0.14
 // @author          MrAllayi
-// @github          https://github.com/MrAllayi
+// @github          https://github.com/mrallayi
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -luser32 -lshell32 -liphlpapi -lkernel32 -lwinhttp -lwlanapi -lbthprops -lshcore -ldwmapi -lole32 -lpowrprof -ladvapi32 -lws2_32
 // @license         MIT
