@@ -87,6 +87,8 @@ Windows without a saved preview use the regular theme-colored minimized card.
 - Stop navigation wrapping in stacks of five or more desktops and animate desktop-to-desktop transitions.
 - Add optional Alt+Tab navigation across virtual desktops and refine quick-tap/hold Win+Tab behavior.
 - Add live wallpaper-host previews while the switcher is open, with a static fallback.
+- Rebuild search indices after entering the overview to prevent stale Desktop-card access.
+- Use cached snapshots or icons for minimized previews without restoring other apps.
 
 ## Modes
 - **Full** fills the monitor. Background Style chooses Blur, Opaque or Transparent.
@@ -2334,7 +2336,6 @@ class Switcher {
     void ClearLiveWallpaper();
     bool DrawLiveWallpaper(const D2D1_RECT_F& destination,float opacity);
     bool RestoreOverviewWindow(HWND hwnd,DWORD pid);
-    void FinishOverviewPreview(bool keepRestored=false);
     void DrawDesktopRemoval(float opacity);
     void RemoveOverviewDesktop();
     void RefreshOverviewDesktops(const GUID& selected);
@@ -2522,10 +2523,6 @@ class Switcher {
     GUID m_overviewDeleteId{};
     bool m_overviewDeletePending=false;
     D2D1_RECT_F m_overviewDeleteAccept{},m_overviewDeleteCancel{};
-    HWND m_overviewPreviewWindow=nullptr;
-    DWORD m_overviewPreviewPid=0;
-    WINDOWPLACEMENT m_overviewPreviewPlacement{};
-    double m_overviewPreviewDeadline=0;
     double m_overviewDockTransition=0;
     float m_overviewDockHeight=0;
     HWND m_overviewPress=nullptr;
@@ -2575,7 +2572,7 @@ class Switcher {
         float overviewHover = 0;
         D2D1_RECT_F dockVisual{};
         bool dockTarget = false, alive = true, minimized = false;
-        bool previewTried=false,restoredInOverview=false;
+        bool restoredInOverview=false;
         double validateAt = 0;
     };
     std::vector<OverviewDesktop> m_overviewDesktops;
@@ -3552,6 +3549,12 @@ void Switcher::ToggleDesktopOverview(bool force) {
         auto item=std::make_unique<Item>();item->desktopPlaceholder=true;item->minimized=true;
         item->rect=m_monitor;item->title=Text(L"Desktops",L"Desktop");m_items.push_back(std::move(item));
     }
+    // Search/Enchanted indices refer to m_items, even with an empty query.
+    // Rebuild after removing Desktop and adding any empty-desktop placeholder.
+    const long long target=m_target;
+    UpdateSearch();
+    m_target=std::clamp(target,0LL,(long long)m_items.size()-1);
+    m_scroll=(double)m_target;m_iconScroll=m_scroll;
     m_overviewExpanded=false;m_overviewDeletePending=false;
     m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
     m_overviewRefreshAt=0;m_overviewTooltip.clear();m_overviewTooltipOpacity=0;
@@ -3661,32 +3664,16 @@ void Switcher::FinishDesktopRename(bool save) {
 }
 
 void Switcher::ClearOverviewCaptures() {
-    FinishOverviewPreview();
     if(m_overviewTaskbar) {StopCapture(*m_overviewTaskbar);m_overviewTaskbar.reset();}
     for(auto& window:m_overviewWindows) if(window.capture) {
         SaveWindowSnapshot(*window.capture);StopCapture(*window.capture);window.capture.reset();
     }
 }
 
-void Switcher::FinishOverviewPreview(bool keepRestored) {
-    if(!m_overviewPreviewWindow) return;
-    const HWND target=m_overviewPreviewWindow;DWORD pid=0;GetWindowThreadProcessId(target,&pid);
-    for(auto& window:m_overviewWindows) if(window.hwnd==target && window.pid==m_overviewPreviewPid && window.capture) {
-        PollFrames(*window.capture);SaveWindowSnapshot(*window.capture);
-        StopCapture(*window.capture);window.capture.reset();
-    }
-    if(!keepRestored && IsWindow(target) && pid==m_overviewPreviewPid) {
-        auto placement=m_overviewPreviewPlacement;placement.flags|=WPF_ASYNCWINDOWPLACEMENT;
-        SetWindowPlacement(target,&placement);
-    }
-    m_overviewPreviewWindow=nullptr;m_overviewPreviewPid=0;
-}
-
 bool Switcher::RestoreOverviewWindow(HWND target,DWORD expected) {
     DWORD pid=0;GetWindowThreadProcessId(target,&pid);
     if(!IsWindow(target) || pid!=expected) return false;
-    if(m_overviewPreviewWindow==target) FinishOverviewPreview(true);
-    else {
+    {
         WINDOWPLACEMENT placement{};placement.length=sizeof(placement);
         if(!GetWindowPlacement(target,&placement)) return false;
         placement.flags|=WPF_ASYNCWINDOWPLACEMENT;placement.showCmd=SW_SHOWNOACTIVATE;
@@ -3703,7 +3690,6 @@ void Switcher::RemoveOverviewDesktop() {
     if(!m_overviewDeletePending || m_overviewDesktops.size()<2) return;
     const GUID id=m_overviewDeleteId,fallback=m_overviewDesktops.front().id;
     m_overviewDeletePending=false;
-    FinishOverviewPreview();
     // The shell operation atomically moves remaining windows to the fallback.
     // Refresh before invoking it so an externally removed desktop cannot be reused.
     const HRESULT refreshed=m_desktopBridge.Refresh();
@@ -3842,13 +3828,6 @@ void Switcher::UpdateOverviewCaptures() {
     if(m_overviewDesktops.empty()) return;
     if(m_overviewTaskbar) PollFrames(*m_overviewTaskbar);
     const double now=NowSeconds();
-    if(m_overviewPreviewWindow) {
-        bool ready=false;
-        for(auto& window:m_overviewWindows) if(window.hwnd==m_overviewPreviewWindow && window.capture) {
-            PollFrames(*window.capture);ready=window.capture->content!=nullptr;
-        }
-        if(ready || now>=m_overviewPreviewDeadline) FinishOverviewPreview();
-    }
     if(now>=m_overviewRefreshAt) {
         m_overviewRefreshAt=now+0.75;
         GUID current{};
@@ -3862,24 +3841,7 @@ void Switcher::UpdateOverviewCaptures() {
         });
         EnumWindows(EnumOverviewWindow,reinterpret_cast<LPARAM>(this));
     }
-    // Obtain missing minimized previews one at a time, without focusing apps.
-    // Every attempt has a deadline and restores its original placement even on exit.
-    if(!m_overviewPreviewWindow && !m_overviewPress && !m_overviewDeletePending) {
-        for(auto& window:m_overviewWindows) {
-            if(window.previewTried || !IsIconic(window.hwnd) ||
-                !IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id)) continue;
-            window.previewTried=true;
-            if(m_windowSnapshots.contains(window.hwnd)) continue;
-            WINDOWPLACEMENT original{};original.length=sizeof(original);
-            if(!GetWindowPlacement(window.hwnd,&original)) continue;
-            m_overviewPreviewWindow=window.hwnd;m_overviewPreviewPid=window.pid;
-            m_overviewPreviewPlacement=original;m_overviewPreviewDeadline=now+.25;
-            auto visible=original;visible.showCmd=SW_SHOWNOACTIVATE;visible.flags|=WPF_ASYNCWINDOWPLACEMENT;
-            if(!SetWindowPlacement(window.hwnd,&visible)) {m_overviewPreviewWindow=nullptr;break;}
-            auto item=std::make_unique<Item>();item->hwnd=window.hwnd;item->pid=window.pid;item->rect=window.rect;item->title=window.title;
-            StartCapture(*item);window.capture=std::move(item);break;
-        }
-    }
+    // Never restore minimized apps for previews: use cached snapshots or icons.
     const size_t limit=m_settings.energySaver ? 2 : 4;
     size_t active=0;
     for(auto& window:m_overviewWindows) if(window.capture) {
@@ -4179,7 +4141,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
         if(overviewNow>=window.validateAt) {
             DWORD pid=0;GetWindowThreadProcessId(window.hwnd,&pid);
             window.alive=IsWindow(window.hwnd) && pid==window.pid;
-            window.minimized=window.alive && (IsIconic(window.hwnd) || window.hwnd==m_overviewPreviewWindow);
+            window.minimized=window.alive && IsIconic(window.hwnd);
             window.validateAt=overviewNow+0.20;
         }
     }
@@ -5314,7 +5276,7 @@ void Switcher::OnClick(POINT pt) {
             return;
         }
         if(m_overviewExpanded && InRect(point,m_overviewBack)) {
-            m_overviewExpanded=false;FinishOverviewPreview();return;
+            m_overviewExpanded=false;return;
         }
         if(g_desktopRenameTyping) {
             if(InRect(point,m_overviewRenameBox)) return;
@@ -5345,7 +5307,6 @@ void Switcher::OnClick(POINT pt) {
             if(i>0 && InRect(point,desktop.remove)) {
                 m_overviewDeleteId=desktop.id;m_overviewDeletePending=true;
                 g_desktopWinHoldSession=false;g_stickyControls=true;
-                FinishOverviewPreview();
                 return;
             }
         }
@@ -5500,7 +5461,7 @@ void Switcher::OnPointerUp() {
                 } else {m_overviewActionErrorUntil=NowSeconds()+3;Wh_Log(L"Desktop drop failed: 0x%08X",(UINT)hr);}
             }
         } else {
-            bool minimized=IsIconic(target) || target==m_overviewPreviewWindow;
+            bool minimized=IsIconic(target);
             for(const auto& window:m_overviewWindows) if(window.hwnd==target && window.pid==expected) minimized|=window.minimized;
             if(minimized) RestoreOverviewWindow(target,expected);
             else {EndSwitching();OnCommit(-1);}
@@ -6373,7 +6334,6 @@ void Switcher::ReopenDuringClose(bool backwards) {
 
 void Switcher::FinishClose() {
     TraceDesktop("Finish-close",m_overviewSelected,m_commitDesktop);
-    FinishOverviewPreview();
     if(m_commitDesktop) {
         const GUID destination=m_destinationDesktop;
         const HWND target=m_overviewSelectedWindow;const DWORD expectedPid=m_overviewSelectedPid;
