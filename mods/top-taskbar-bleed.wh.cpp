@@ -20,8 +20,9 @@ edge, so the window's title bar appears to continue up into the bar.
 
 ![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif)
 
-The mod only activates for a taskbar docked at the top of the screen; on other
-dock positions it stays idle.
+**Requires a taskbar docked at the top of the screen.** Windows 11 doesn't
+offer that natively; use a mod such as *Taskbar on top for Windows 11*. On
+other dock positions this mod stays idle.
 
 How it works:
 
@@ -45,28 +46,24 @@ rounded corners are normally the top ones).
 
 ## Notes
 
-- The taskbar is discovered through `Taskbar.View.dll` hooks (symbols are
-  downloaded by Windhawk on first run), not through XAML diagnostics, so the mod
-  coexists with Windows 11 Taskbar Styler and other XAML-diagnostics consumers.
-- The bleed applies as soon as the mod is enabled. Discovery rides on taskbar
-  layout events, so when the mod is enabled mid-session it adds and removes an
-  invisible window on each monitor once, which makes every taskbar lay out its
-  buttons and announce itself. Each taskbar is matched to its monitor through
-  the screen position its XAML automation peers report, so multiple monitors
-  are told apart without any interaction.
+- The taskbar's XAML tree is reached through `taskbar.dll` and
+  `Taskbar.View.dll` symbols (downloaded by Windhawk on first run), not through
+  XAML diagnostics, so the mod coexists with Windows 11 Taskbar Styler and other
+  XAML-diagnostics consumers. The bleed applies as soon as the mod is enabled.
 - With a maximized window present, the mod samples a few thousand pixels every
   few hundred milliseconds. This is cheap, but set **Poll interval** higher if
   you want it even lighter.
 - Windows that exclude themselves from capture (protected media, some
   remote-desktop clients) return no usable pixels; the panel then keeps its
-  last color.
+  last color. Flyouts that open right under the taskbar (Start, tray flyouts,
+  thumbnails) are sampled like anything else on screen.
 - The 1px taskbar border line (`BackgroundStroke`) breaks the illusion; it is
   hidden while a panel is showing and restored when the panel hides.
 - Readability: a light title bar bled into a dark-mode taskbar leaves white
   labels on a light panel (and vice versa). While a panel is showing, the mod
   switches that monitor's taskbar to the theme that matches the bled color
-  (light panel -> light mode, dark panel -> dark mode) and restores the normal
-  theme when the panel hides. This is done per taskbar island through XAML's
+  (light panel -> light mode, dark panel -> dark mode) and restores the
+  previous theme when the panel hides. This is done per taskbar through XAML's
   `RequestedTheme`, so only the affected monitor changes and the system theme
   itself is untouched.
 */
@@ -111,11 +108,6 @@ rounded corners are normally the top ones).
     $name: Excluded programs
     $description: Executable names (e.g. game.exe) whose windows never trigger the bleed.
   $name: Behavior
-- Debug:
-  - LogWindowDecisions: false
-    $name: Log window decisions
-    $description: Log why the foreground window was or wasn't chosen as the bleed source, and the sampled colors (diagnostics only).
-  $name: Debug
 */
 // ==/WindhawkModSettings==
 
@@ -128,8 +120,6 @@ rounded corners are normally the top ones).
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -143,6 +133,7 @@ rounded corners are normally the top ones).
 #include <cwctype>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -150,10 +141,8 @@ rounded corners are normally the top ones).
 
 namespace wf = winrt::Windows::Foundation;
 namespace wu = winrt::Windows::UI;
-namespace wuc = winrt::Windows::UI::Core;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
-namespace wuxap = winrt::Windows::UI::Xaml::Automation::Peers;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
 // ============================================================================
@@ -180,8 +169,6 @@ struct Settings {
     int minCommitIntervalMs = 400;
 
     std::vector<std::wstring> excludedProcesses;  // lowercase basenames
-
-    bool logDecisions = false;
 };
 
 std::mutex g_settingsMutex;
@@ -200,7 +187,8 @@ bool ParseFour(std::wstring_view text, int (&out)[4]) {
     size_t pos = 0;
     while (pos <= text.size()) {
         size_t comma = text.find(L',', pos);
-        std::wstring_view tok = text.substr(pos, comma == std::wstring_view::npos ? std::wstring_view::npos : comma - pos);
+        std::wstring_view tok =
+            text.substr(pos, comma == std::wstring_view::npos ? std::wstring_view::npos : comma - pos);
         while (!tok.empty() && iswspace(tok.front())) tok.remove_prefix(1);
         while (!tok.empty() && iswspace(tok.back())) tok.remove_suffix(1);
         if (tok.empty() || n == 4) return false;
@@ -223,20 +211,6 @@ bool ParseFour(std::wstring_view text, int (&out)[4]) {
     return false;
 }
 
-std::wstring GetStringSettingStr(PCWSTR name) {
-    PCWSTR s = Wh_GetStringSetting(name);
-    std::wstring r = s ? s : L"";
-    Wh_FreeStringSetting(s);
-    return r;
-}
-
-std::wstring GetStringSettingIdx(PCWSTR fmt, int index) {
-    PCWSTR s = Wh_GetStringSetting(fmt, index);
-    std::wstring r = s ? s : L"";
-    Wh_FreeStringSetting(s);
-    return r;
-}
-
 std::wstring ToLowerBasename(std::wstring s) {
     size_t pos = s.find_last_of(L"\\/");
     if (pos != std::wstring::npos) s = s.substr(pos + 1);
@@ -249,8 +223,8 @@ void LoadSettings() {
 
     {
         int m[4] = {0, 0, 0, 0};
-        std::wstring text = GetStringSettingStr(L"Panel.Margins");
-        if (!ParseFour(text, m)) Wh_Log(L"[bleed] Margins '%s' not understood, using defaults", text.c_str());
+        auto text = WindhawkUtils::StringSetting::make(L"Panel.Margins");
+        if (!ParseFour(text.get(), m)) Wh_Log(L"Margins '%s' not understood, using defaults", text.get());
         s.marginLeft = m[0];
         s.marginTop = m[1];
         s.marginRight = m[2];
@@ -258,8 +232,8 @@ void LoadSettings() {
     }
     {
         int r[4] = {0, 0, 0, 0};
-        std::wstring text = GetStringSettingStr(L"Panel.CornerRadius");
-        if (!ParseFour(text, r)) Wh_Log(L"[bleed] CornerRadius '%s' not understood, using defaults", text.c_str());
+        auto text = WindhawkUtils::StringSetting::make(L"Panel.CornerRadius");
+        if (!ParseFour(text.get(), r)) Wh_Log(L"CornerRadius '%s' not understood, using defaults", text.get());
         s.radiusTopLeft = std::max(0, r[0]);
         s.radiusTopRight = std::max(0, r[1]);
         s.radiusBottomRight = std::max(0, r[2]);
@@ -276,55 +250,298 @@ void LoadSettings() {
     s.minCommitIntervalMs = std::max(0, Wh_GetIntSetting(L"Smoothing.MinCommitIntervalMs"));
 
     for (int i = 0;; i++) {
-        std::wstring p = GetStringSettingIdx(L"Behavior.ExcludedProcesses[%d]", i);
-        if (p.empty()) break;
-        s.excludedProcesses.push_back(ToLowerBasename(std::move(p)));
+        PCWSTR p = Wh_GetStringSetting(L"Behavior.ExcludedProcesses[%d]", i);
+        bool empty = !*p;
+        if (!empty) s.excludedProcesses.push_back(ToLowerBasename(p));
+        Wh_FreeStringSetting(p);
+        if (empty) break;
     }
-
-    s.logDecisions = Wh_GetIntSetting(L"Debug.LogWindowDecisions") != 0;
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
 }
 
 // ============================================================================
-// Shared state between the tracker thread and the XAML UI thread
+// Taskbar-thread helpers (from taskbar-multirow)
 // ============================================================================
 
 std::atomic<bool> g_unloading{false};
 
-// One per taskbar XAML island. Mutated only on the island's UI thread; the
-// tracker thread only reads plain fields (hwnd, dispatcher) under the mutex.
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) && dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) && _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+// Runs `proc` synchronously on the thread that owns `hWnd`.
+bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param = (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+// ---- taskbar.dll: XAML root of a taskbar window ----------------------------
+
+void* CTaskBand_ITaskListWndSite_vftable;
+
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 &&
+            b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
+            (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto* taskbarElementIUnknown = *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + taskbarElementIUnknownOffset);
+
+    wux::FrameworkElement taskbarElement = nullptr;
+    if (taskbarElementIUnknown) {  // null while the host is still being set up (hook path)
+        taskbarElementIUnknown->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
+                                               winrt::put_abi(taskbarElement));
+    }
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
+
+wux::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    if (!taskBand) {
+        return nullptr;  // taskbar still being constructed (hook path at logon)
+    }
+
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite != CTaskBand_ITaskListWndSite_vftable; i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite, taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+wux::XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
+    HWND hTaskSwWnd = (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    if (!taskBand) {
+        return nullptr;  // taskbar still being constructed (hook path)
+    }
+
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite != CSecondaryTaskBand_ITaskListWndSite_vftable; i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite, taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+// XAML root of a Shell_TrayWnd / Shell_SecondaryTrayWnd window; nullptr for other windows.
+wux::XamlRoot XamlRootOfTaskbarWindow(HWND hWnd) {
+    WCHAR cls[32];
+    if (!GetClassName(hWnd, cls, ARRAYSIZE(cls))) return nullptr;
+    if (_wcsicmp(cls, L"Shell_TrayWnd") == 0) return GetTaskbarXamlRoot(hWnd);
+    if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0) return GetSecondaryTaskbarXamlRoot(hWnd);
+    return nullptr;
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module = LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed (taskbar.dll)");
+        return false;
+    }
+
+    return true;
+}
+
+// ============================================================================
+// Islands: one per taskbar, owned by the taskbar thread
+// ============================================================================
+
+constexpr int ThemeNone = 0, ThemeLight = 1, ThemeDark = 2;
+
+// Mutated only on the taskbar thread. The tracker thread reads `hwnd` under
+// g_islandsMutex and sends its updates through RunFromWindowThread.
 struct Island {
-    HWND hwnd = nullptr;               // DesktopWindowContentBridge window of this taskbar
-    void* gridId = nullptr;            // identity of the hosting Grid
-    void* frameId = nullptr;           // identity of the Taskbar.TaskbarFrame element
-    ULONGLONG lastMapAttemptTick = 0;  // throttles hwnd re-mapping of an unresolved island
+    HWND hwnd = nullptr;      // Shell_TrayWnd / Shell_SecondaryTrayWnd
+    void* frameId = nullptr;  // identity of the Taskbar.TaskbarFrame element
     winrt::weak_ref<wux::FrameworkElement> stroke;
+    winrt::weak_ref<wux::FrameworkElement> themeRoot;  // island root content; RequestedTheme is set here
     wuxc::Border panel{nullptr};
     wuxm::SolidColorBrush brush{nullptr};
-    wuc::CoreDispatcher dispatcher{nullptr};
     bool shown = false;
     bool strokeHidden = false;
-    bool unparentedLogged = false;
-    winrt::weak_ref<wux::FrameworkElement> themeRoot;  // island root content; RequestedTheme is set here
-    int forcedTheme = 0;                                // 0 none (Default), 1 light, 2 dark
+    int forcedTheme = ThemeNone;
+    wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // RequestedTheme before we forced one
     Rgb color{};
 };
 
 std::mutex g_islandsMutex;
-std::vector<std::shared_ptr<Island>> g_islands;  // guarded by g_islandsMutex
+// Holds strong XAML refs. Released with g_islands.reset() on the taskbar
+// thread in Wh_ModUninit, never by a destructor at process exit.
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<Island>>> g_islands{std::in_place};
 
-struct IslandSnapshot {
-    HWND hwnd;
-    wuc::CoreDispatcher dispatcher;
-};
-
-std::vector<IslandSnapshot> SnapshotIslands() {
-    std::vector<IslandSnapshot> out;
+std::vector<HWND> SnapshotIslandWindows() {
+    std::vector<HWND> out;
     std::lock_guard lock(g_islandsMutex);
-    for (auto& isl : g_islands) {
-        if (isl->hwnd && isl->dispatcher) out.push_back({isl->hwnd, isl->dispatcher});
+    if (!g_islands) return out;
+    for (auto& isl : *g_islands) {
+        if (isl->hwnd && IsWindow(isl->hwnd)) out.push_back(isl->hwnd);
     }
     return out;
 }
@@ -340,18 +557,20 @@ wu::Color ToColor(Rgb c) {
                      (uint8_t)std::clamp(c.b, 0, 255)};
 }
 
-void ApplyIslandUpdateOnUiThread(HWND hwnd, bool active, Rgb color);
+// Tracker -> taskbar thread, synchronously. The tracker is joined before the
+// islands are torn down, so no update can arrive after cleanup.
+struct IslandUpdate {
+    HWND hwnd;
+    bool active;
+    Rgb color;
+};
 
-void PostIslandUpdate(wuc::CoreDispatcher const& dispatcher, HWND hwnd, bool active, Rgb color) {
+void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param);
+
+void SendIslandUpdate(HWND hwnd, bool active, Rgb color) {
     if (g_unloading) return;
-    try {
-        dispatcher.RunAsync(wuc::CoreDispatcherPriority::High,
-                            [hwnd, active, color]() { ApplyIslandUpdateOnUiThread(hwnd, active, color); });
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"[bleed] RunAsync failed: %08X", e.code().value);
-    } catch (...) {
-        Wh_Log(L"[bleed] RunAsync failed");
-    }
+    IslandUpdate upd{hwnd, active, color};
+    RunFromWindowThread(hwnd, ApplyIslandUpdateOnTaskbarThread, &upd);
 }
 
 // ============================================================================
@@ -387,11 +606,8 @@ struct TrackState {
     bool haveLastSample = false;
     Rgb lastSample{};
     bool blockedLogged = false;
-    // Diagnostics (Log window decisions).
-    RECT lastStrip{};
-    Rgb lastRowFirst{}, lastRowLast{};
 };
-std::unordered_map<HWND, TrackState> g_track;  // keyed by island hwnd
+std::unordered_map<HWND, TrackState> g_track;  // keyed by taskbar window
 
 void RequestTick() {
     if (g_trackerThreadId) PostThreadMessageW(g_trackerThreadId, WM_TRACKER_TICK, 0, 0);
@@ -434,12 +650,8 @@ std::wstring DescribeWindow(HWND hwnd) {
     std::wstring exe = ProcessBasename(hwnd);
     RECT wr{};
     GetFrameBounds(hwnd, wr);
-    DWORD cloaked = 0;
-    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    WCHAR buf[512];
-    swprintf_s(buf, L"%p %s [%s] vis=%d iconic=%d zoomed=%d cloaked=%u ex=%08X frame=(%d,%d,%d,%d)", hwnd, cls,
-               exe.empty() ? L"?" : exe.c_str(), IsWindowVisible(hwnd) ? 1 : 0, IsIconic(hwnd) ? 1 : 0,
-               IsZoomed(hwnd) ? 1 : 0, cloaked, (unsigned)GetWindowLongPtrW(hwnd, GWL_EXSTYLE), wr.left, wr.top,
+    WCHAR buf[256];
+    swprintf_s(buf, L"%p %s [%s] frame=(%d,%d,%d,%d)", hwnd, cls, exe.empty() ? L"?" : exe.c_str(), wr.left, wr.top,
                wr.right, wr.bottom);
     return buf;
 }
@@ -490,12 +702,7 @@ RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar, const Setti
     return clipped;
 }
 
-struct StripBitmap {
-    std::vector<uint32_t> px;  // BGRX, top-down
-    int w = 0, h = 0;
-};
-
-bool CaptureStrip(const RECT& strip, StripBitmap& out) {
+bool CaptureStrip(const RECT& strip, std::vector<uint32_t>& px) {
     int w = strip.right - strip.left, h = strip.bottom - strip.top;
     if (w <= 0 || h <= 0 || (long long)w * h > 8192LL * 64) return false;
 
@@ -521,11 +728,7 @@ bool CaptureStrip(const RECT& strip, StripBitmap& out) {
         HGDIOBJ old = SelectObject(mem, bmp);
         ok = BitBlt(mem, 0, 0, w, h, screen, strip.left, strip.top, SRCCOPY) != FALSE;
         GdiFlush();
-        if (ok) {
-            out.w = w;
-            out.h = h;
-            out.px.assign(static_cast<uint32_t*>(bits), static_cast<uint32_t*>(bits) + (size_t)w * h);
-        }
+        if (ok) px.assign(static_cast<uint32_t*>(bits), static_cast<uint32_t*>(bits) + (size_t)w * h);
         SelectObject(mem, old);
     }
     if (bmp) DeleteObject(bmp);
@@ -545,7 +748,7 @@ uint64_t HashPixels(const std::vector<uint32_t>& px) {
 
 // Dominant color: 5-bit-per-channel histogram mode, refined by two mean-shift
 // passes so a tight cluster straddling a bin edge (Mica, acrylic, dithered flat
-// colors) still yields its true center.
+// colors) still yields its true center. Tracker thread only (static buffers).
 Rgb DominantColor(const std::vector<uint32_t>& px) {
     struct Bin {
         uint32_t count = 0;
@@ -613,38 +816,32 @@ int ColorDistance(Rgb a, Rgb b) {
     return std::max({std::abs(a.r - b.r), std::abs(a.g - b.g), std::abs(a.b - b.b)});
 }
 
-void Commit(TrackState& st, const IslandSnapshot& isl, Rgb c, ULONGLONG now, const Settings& s) {
-    if (s.logDecisions) {
-        Wh_Log(L"[bleed] island %p: commit #%02X%02X%02X (target %p, strip=(%d,%d,%d,%d), first row #%02X%02X%02X, "
-               L"last row #%02X%02X%02X, fg=%p)",
-               isl.hwnd, c.r, c.g, c.b, st.target, st.lastStrip.left, st.lastStrip.top, st.lastStrip.right,
-               st.lastStrip.bottom, st.lastRowFirst.r, st.lastRowFirst.g, st.lastRowFirst.b, st.lastRowLast.r,
-               st.lastRowLast.g, st.lastRowLast.b, GetForegroundWindow());
-    }
+void Commit(TrackState& st, HWND taskbar, Rgb c, ULONGLONG now) {
+    Wh_Log(L"taskbar %p: commit #%02X%02X%02X (target %p)", taskbar, c.r, c.g, c.b, st.target);
     st.active = true;
     st.committed = c;
     st.candidateCount = 0;
     st.driftSinceTick = 0;
     st.lastCommitTick = now;
-    PostIslandUpdate(isl.dispatcher, isl.hwnd, true, c);
+    SendIslandUpdate(taskbar, true, c);
 }
 
-void Deactivate(TrackState& st, const IslandSnapshot& isl) {
-    if (st.active) PostIslandUpdate(isl.dispatcher, isl.hwnd, false, st.committed);
+void Deactivate(TrackState& st, HWND taskbar) {
+    if (st.active) SendIslandUpdate(taskbar, false, st.committed);
     bool notTopLogged = st.notTopLogged;
     st = TrackState{};
     st.notTopLogged = notTopLogged;
 }
 
-void Smooth(TrackState& st, const IslandSnapshot& isl, Rgb c, bool targetChanged, const Settings& s) {
+void Smooth(TrackState& st, HWND taskbar, Rgb c, bool targetChanged, const Settings& s) {
     ULONGLONG now = GetTickCount64();
     if (!st.active || targetChanged) {
-        Commit(st, isl, c, now, s);
+        Commit(st, taskbar, c, now);
         return;
     }
     if (ColorDistance(c, st.committed) <= s.changeThreshold) {
         st.candidateCount = 0;
-        // Sub-threshold difference: not a change worth animating on its own,
+        // Sub-threshold difference: not a change worth applying on its own,
         // but if it persists it is the real edge color (the first commit may
         // have landed mid-transition), so converge on it after the settle time.
         if (c == st.committed) {
@@ -653,7 +850,7 @@ void Smooth(TrackState& st, const IslandSnapshot& isl, Rgb c, bool targetChanged
             st.drift = c;
             st.driftSinceTick = now;
         } else if (now - st.driftSinceTick >= (ULONGLONG)s.settleMs) {
-            Commit(st, isl, c, now, s);
+            Commit(st, taskbar, c, now);
         }
         return;
     }
@@ -665,34 +862,33 @@ void Smooth(TrackState& st, const IslandSnapshot& isl, Rgb c, bool targetChanged
         st.candidateCount = 1;
     }
     if (st.candidateCount >= s.confirmSamples && now - st.lastCommitTick >= (ULONGLONG)s.minCommitIntervalMs) {
-        Commit(st, isl, st.candidate, now, s);
+        Commit(st, taskbar, st.candidate, now);
     }
 }
 
 // Capture failed (protected content, capture-excluded window, transient GDI
 // failure): log once per target and keep whatever the panel shows.
-void HandleBlocked(TrackState& st, const IslandSnapshot& isl, HWND target) {
+void HandleBlocked(TrackState& st, HWND taskbar, HWND target) {
     if (!st.blockedLogged) {
-        Wh_Log(L"[bleed] island %p: capture blocked for target %p, keeping last color", isl.hwnd, target);
+        Wh_Log(L"taskbar %p: capture blocked for target %p, keeping last color", taskbar, target);
         st.blockedLogged = true;
     }
 }
 
-void ProcessIsland(const IslandSnapshot& isl, const Settings& s, const std::unordered_map<HMONITOR, HWND>& foremost,
-                   bool& anyTarget) {
-    TrackState& st = g_track[isl.hwnd];
+void ProcessTaskbar(HWND taskbar, const Settings& s, const std::unordered_map<HMONITOR, HWND>& foremost,
+                    bool& anyTarget) {
+    TrackState& st = g_track[taskbar];
 
-    HMONITOR hmon = MonitorFromWindow(isl.hwnd, MONITOR_DEFAULTTONEAREST);
+    HMONITOR hmon = MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{sizeof(mi)};
     if (!hmon || !GetMonitorInfoW(hmon, &mi)) {
-        Deactivate(st, isl);
+        Deactivate(st, taskbar);
         return;
     }
 
-    HWND taskbar = GetAncestor(isl.hwnd, GA_ROOT);
     if (!IsTaskbarTopDocked(taskbar, mi.rcMonitor)) {
-        if (!st.notTopLogged) Wh_Log(L"[bleed] island %p: taskbar not docked at top, idle", isl.hwnd);
-        Deactivate(st, isl);
+        if (!st.notTopLogged) Wh_Log(L"taskbar %p: not docked at top, idle", taskbar);
+        Deactivate(st, taskbar);
         st.notTopLogged = true;
         return;
     }
@@ -701,16 +897,14 @@ void ProcessIsland(const IslandSnapshot& isl, const Settings& s, const std::unor
     auto it = foremost.find(hmon);
     HWND target = it == foremost.end() ? nullptr : it->second;
     if (!target) {
-        if (st.target) Wh_Log(L"[bleed] island %p: no maximized window", isl.hwnd);
-        Deactivate(st, isl);
+        if (st.target) Wh_Log(L"taskbar %p: no maximized window", taskbar);
+        Deactivate(st, taskbar);
         return;
     }
 
     anyTarget = true;
     bool targetChanged = target != st.target;
     if (targetChanged) {
-        if (s.logDecisions) Wh_Log(L"[bleed] island %p: target %s", isl.hwnd, DescribeWindow(target).c_str());
-        else Wh_Log(L"[bleed] island %p: target %p", isl.hwnd, target);
         st.target = target;
         st.haveLastSample = false;
         st.lastHash = 0;
@@ -719,39 +913,33 @@ void ProcessIsland(const IslandSnapshot& isl, const Settings& s, const std::unor
 
     RECT wr;
     if (!GetFrameBounds(target, wr)) {
-        HandleBlocked(st, isl, target);
+        HandleBlocked(st, taskbar, target);
         return;
     }
     RECT strip = ComputeStrip(wr, mi.rcWork, taskbar, s);
-    st.lastStrip = strip;
-    if (targetChanged && s.logDecisions) {
-        Wh_Log(L"[bleed] island %p: strip=(%d,%d,%d,%d)", isl.hwnd, strip.left, strip.top, strip.right, strip.bottom);
+    if (targetChanged) {
+        Wh_Log(L"taskbar %p: target %s strip=(%d,%d,%d,%d)", taskbar, DescribeWindow(target).c_str(), strip.left,
+               strip.top, strip.right, strip.bottom);
     }
 
-    StripBitmap bmp;
-    if (!CaptureStrip(strip, bmp) || bmp.px.empty()) {
-        HandleBlocked(st, isl, target);
+    std::vector<uint32_t> px;
+    if (!CaptureStrip(strip, px) || px.empty()) {
+        HandleBlocked(st, taskbar, target);
         return;
     }
 
-    uint64_t hash = HashPixels(bmp.px);
+    uint64_t hash = HashPixels(px);
     Rgb sampled;
     if (st.haveLastSample && hash == st.lastHash) {
         sampled = st.lastSample;
     } else {
-        sampled = DominantColor(bmp.px);
+        sampled = DominantColor(px);
         st.lastHash = hash;
         st.lastSample = sampled;
         st.haveLastSample = true;
-        if (s.logDecisions) {
-            std::vector<uint32_t> row(bmp.px.begin(), bmp.px.begin() + bmp.w);
-            st.lastRowFirst = DominantColor(row);
-            row.assign(bmp.px.end() - bmp.w, bmp.px.end());
-            st.lastRowLast = DominantColor(row);
-        }
     }
 
-    Smooth(st, isl, sampled, targetChanged, s);
+    Smooth(st, taskbar, sampled, targetChanged, s);
 }
 
 void SetPollTimer(bool enable, int intervalMs) {
@@ -770,50 +958,17 @@ void SetPollTimer(bool enable, int intervalMs) {
 void Tick() {
     if (g_unloading) return;
     Settings s = GetSettings();
-    auto islands = SnapshotIslands();
-
-    {
-        static bool emptyLogged = false;
-        if (islands.empty() && !emptyLogged) {
-            emptyLogged = true;
-            size_t total;
-            {
-                std::lock_guard lock(g_islandsMutex);
-                total = g_islands.size();
-            }
-            Wh_Log(L"[bleed] tick: %zu islands known, none mapped to a taskbar window yet", total);
-        } else if (!islands.empty()) {
-            emptyLogged = false;
-        }
-    }
+    auto taskbars = SnapshotIslandWindows();
 
     EnumCtx ctx{&s, {}};
     EnumWindows(EnumWindowsForemostProc, reinterpret_cast<LPARAM>(&ctx));
 
-    if (s.logDecisions) {
-        static HWND lastFg = nullptr;
-        static HWND lastChosen = nullptr;
-        HWND fg = GetForegroundWindow();
-        HMONITOR fgMon = fg ? MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) : nullptr;
-        auto it = fgMon ? ctx.foremost.find(fgMon) : ctx.foremost.end();
-        HWND chosen = it == ctx.foremost.end() ? nullptr : it->second;
-        if (fg && (fg != lastFg || chosen != lastChosen)) {
-            lastFg = fg;
-            lastChosen = chosen;
-            MONITORINFO mi{sizeof(mi)};
-            if (fgMon) GetMonitorInfoW(fgMon, &mi);
-            Wh_Log(L"[bleed] foreground %s | work=(%d,%d,%d,%d) | chosen=%s", DescribeWindow(fg).c_str(), mi.rcWork.left,
-                   mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom,
-                   chosen ? (chosen == fg ? L"foreground" : DescribeWindow(chosen).c_str()) : L"none");
-        }
-    }
-
     bool anyTarget = false;
-    for (auto& isl : islands) ProcessIsland(isl, s, ctx.foremost, anyTarget);
+    for (HWND tb : taskbars) ProcessTaskbar(tb, s, ctx.foremost, anyTarget);
 
-    // Drop state for islands that disappeared.
+    // Drop state for taskbars that disappeared.
     for (auto it = g_track.begin(); it != g_track.end();) {
-        bool alive = std::any_of(islands.begin(), islands.end(), [&](auto& i) { return i.hwnd == it->first; });
+        bool alive = std::find(taskbars.begin(), taskbars.end(), it->first) != taskbars.end();
         it = alive ? std::next(it) : g_track.erase(it);
     }
 
@@ -836,16 +991,11 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 void AddWinEventHook(DWORD minEvent, DWORD maxEvent) {
     HWINEVENTHOOK h = SetWinEventHook(minEvent, maxEvent, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (h) g_winEventHooks.push_back(h);
-    else Wh_Log(L"[bleed] SetWinEventHook(%04X-%04X) failed", minEvent, maxEvent);
+    else Wh_Log(L"SetWinEventHook(%04X-%04X) failed", minEvent, maxEvent);
 }
 
 DWORD WINAPI TrackerThreadProc(LPVOID) {
-    using SetThreadDpiAwarenessContext_t = HANDLE(WINAPI*)(HANDLE);
-    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-        if (auto fn = (SetThreadDpiAwarenessContext_t)GetProcAddress(user32, "SetThreadDpiAwarenessContext")) {
-            fn((HANDLE)-4);  // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: physical pixels everywhere
-        }
-    }
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);  // physical pixels everywhere
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     MSG msg;
@@ -903,16 +1053,16 @@ bool StartTracker() {
         g_trackerReady = nullptr;
         return false;
     }
-    WaitForSingleObject(g_trackerReady, 5000);
+    WaitForSingleObject(g_trackerReady, INFINITE);
     return true;
 }
 
+// Joins the tracker. It only ever blocks on the taskbar thread (SendMessage in
+// RunFromWindowThread), never on the engine thread, so INFINITE cannot deadlock.
 void StopTracker() {
     if (g_trackerThread) {
         PostThreadMessageW(g_trackerThreadId, WM_QUIT, 0, 0);
-        if (WaitForSingleObject(g_trackerThread, 5000) == WAIT_TIMEOUT) {
-            Wh_Log(L"[bleed] tracker thread did not exit in time");
-        }
+        WaitForSingleObject(g_trackerThread, INFINITE);
         CloseHandle(g_trackerThread);
         g_trackerThread = nullptr;
         g_trackerThreadId = 0;
@@ -924,7 +1074,7 @@ void StopTracker() {
 }
 
 // ============================================================================
-// Painter: XAML panel per taskbar island (UI thread only)
+// Painter: XAML panel per taskbar (taskbar thread only)
 // ============================================================================
 
 wux::FrameworkElement FindDescendantByName(wux::DependencyObject const& root, std::wstring_view name, int depth) {
@@ -940,21 +1090,16 @@ wux::FrameworkElement FindDescendantByName(wux::DependencyObject const& root, st
 
 std::shared_ptr<Island> FindIslandByHwnd(HWND hwnd) {
     std::lock_guard lock(g_islandsMutex);
-    for (auto& isl : g_islands)
+    if (!g_islands) return nullptr;
+    for (auto& isl : *g_islands)
         if (isl->hwnd == hwnd) return isl;
-    return nullptr;
-}
-
-std::shared_ptr<Island> FindIslandByGridId(void* gridId) {
-    std::lock_guard lock(g_islandsMutex);
-    for (auto& isl : g_islands)
-        if (isl->gridId == gridId) return isl;
     return nullptr;
 }
 
 std::shared_ptr<Island> FindIslandByFrameId(void* frameId) {
     std::lock_guard lock(g_islandsMutex);
-    for (auto& isl : g_islands)
+    if (!g_islands) return nullptr;
+    for (auto& isl : *g_islands)
         if (isl->frameId == frameId) return isl;
     return nullptr;
 }
@@ -985,10 +1130,15 @@ void SetPanelVisible(Island& isl, bool visible) {
 // ---- Adaptive theme ---------------------------------------------------------
 // RequestedTheme on the island's root content re-resolves every theme-resource
 // brush under it (labels, monochrome icons, hover highlights, the tray) for
-// this island only, i.e. for this monitor's taskbar. Reset to Default when the
-// panel hides.
+// this island only, i.e. for this monitor's taskbar. The root's previous
+// RequestedTheme is saved the first time a theme is forced and restored when
+// the panel hides, so a value set by another mod survives.
 
-constexpr int ThemeNone = 0, ThemeLight = 1, ThemeDark = 2;
+// Perceived brightness above which a bled color counts as light (black text
+// starts out-contrasting white around here), with an 8-level hysteresis band so
+// a color sitting on the threshold can't flip the theme back and forth.
+constexpr int kLightThreshold = 120;
+constexpr int kThemeHysteresis = 8;
 
 int PerceivedBrightness(Rgb c) {
     return (int)std::lround(0.299 * c.r + 0.587 * c.g + 0.114 * c.b);
@@ -1010,13 +1160,7 @@ wux::FrameworkElement ThemeRootOf(Island& isl) {
     return nullptr;
 }
 
-// Perceived brightness above which a bled color counts as light (black text
-// starts out-contrasting white around here), with an 8-level hysteresis band so
-// a color sitting on the threshold can't flip the theme back and forth.
-constexpr int kLightThreshold = 120;
-constexpr int kThemeHysteresis = 8;
-
-void ApplyTheme(Island& isl, bool active, Rgb color, const Settings& s) {
+void ApplyTheme(Island& isl, bool active, Rgb color) {
     int want = ThemeNone;
     int lum = 0;
     if (active) {
@@ -1030,16 +1174,15 @@ void ApplyTheme(Island& isl, bool active, Rgb color, const Settings& s) {
 
     auto root = ThemeRootOf(isl);
     if (!root) return;
-    // Forced unconditionally while the panel shows (identical to Default when it
-    // happens to match the system theme, and immune to the system theme changing
-    // underneath); Default again when the panel hides.
+    if (isl.forcedTheme == ThemeNone) isl.originalTheme = root.RequestedTheme();
+    // Forced unconditionally while the panel shows (identical to the original
+    // when it happens to match, and immune to the system theme changing
+    // underneath); the original value again when the panel hides.
     root.RequestedTheme(want == ThemeLight  ? wux::ElementTheme::Light
                         : want == ThemeDark ? wux::ElementTheme::Dark
-                                            : wux::ElementTheme::Default);
-    if (s.logDecisions) {
-        Wh_Log(L"[bleed] island %p: theme %s (brightness %d)", isl.hwnd,
-               want == ThemeLight ? L"light" : want == ThemeDark ? L"dark" : L"restored", lum);
-    }
+                                            : isl.originalTheme);
+    Wh_Log(L"taskbar %p: theme %s (brightness %d)", isl.hwnd,
+           want == ThemeLight ? L"light" : want == ThemeDark ? L"dark" : L"restored", lum);
     isl.forcedTheme = want;
 }
 
@@ -1054,44 +1197,36 @@ void SetStrokeHidden(Island& isl, bool hide) {
     isl.strokeHidden = hide;
 }
 
-void ApplyIslandUpdateOnUiThread(HWND hwnd, bool active, Rgb color) try {
+void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
     if (g_unloading) return;
-    auto isl = FindIslandByHwnd(hwnd);
-    if (!isl || !isl->panel) return;
-
-    if (!isl->panel.Parent()) {
-        if (!isl->unparentedLogged) {
-            Wh_Log(L"[bleed] island %p: panel lost its parent, waiting for rediscovery", hwnd);
-            isl->unparentedLogged = true;
-        }
-        return;
-    }
-    isl->unparentedLogged = false;
+    auto& upd = *static_cast<IslandUpdate*>(param);
+    auto isl = FindIslandByHwnd(upd.hwnd);
+    if (!isl || !isl->panel || !isl->panel.Parent()) return;
 
     Settings s = GetSettings();
     if (!isl->shown) UpdateExtent(*isl, s);
 
-    if (active) {
-        if (!isl->shown || isl->color != color) SetPanelColor(*isl, ToColor(color));
+    if (upd.active) {
+        if (!isl->shown || isl->color != upd.color) SetPanelColor(*isl, ToColor(upd.color));
         if (!isl->shown) SetPanelVisible(*isl, true);
-        isl->color = color;
+        isl->color = upd.color;
         SetStrokeHidden(*isl, true);
-        ApplyTheme(*isl, true, color, s);
+        ApplyTheme(*isl, true, upd.color);
     } else if (isl->shown) {
         SetPanelVisible(*isl, false);
         SetStrokeHidden(*isl, false);
-        ApplyTheme(*isl, false, color, s);
+        ApplyTheme(*isl, false, upd.color);
     }
-    isl->shown = active;
+    isl->shown = upd.active;
 } catch (winrt::hresult_error const& e) {
-    Wh_Log(L"[bleed] ApplyIslandUpdate failed: %08X", e.code().value);
+    Wh_Log(L"ApplyIslandUpdate failed: %08X", e.code().value);
 } catch (...) {
-    Wh_Log(L"[bleed] ApplyIslandUpdate failed");
+    Wh_Log(L"ApplyIslandUpdate failed");
 }
 
-void TeardownIslandOnUiThread(Island& isl) try {
+void TeardownIsland(Island& isl) try {
     if (isl.forcedTheme != ThemeNone) {
-        if (auto root = ThemeRootOf(isl)) root.RequestedTheme(wux::ElementTheme::Default);
+        if (auto root = ThemeRootOf(isl)) root.RequestedTheme(isl.originalTheme);
         isl.forcedTheme = ThemeNone;
     }
     SetStrokeHidden(isl, false);
@@ -1105,163 +1240,47 @@ void TeardownIslandOnUiThread(Island& isl) try {
     isl.brush = nullptr;
     isl.shown = false;
 } catch (winrt::hresult_error const& e) {
-    Wh_Log(L"[bleed] teardown failed: %08X", e.code().value);
+    Wh_Log(L"teardown failed: %08X", e.code().value);
 } catch (...) {
-    Wh_Log(L"[bleed] teardown failed");
+    Wh_Log(L"teardown failed");
 }
 
-// ----------------------------------------------------------------------------
-// Island -> taskbar window mapping
-// ----------------------------------------------------------------------------
-
-HWND BridgeHwndForTray(HWND tray) {
-    if (HWND direct = FindWindowExW(tray, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr)) {
-        return direct;
-    }
-    // Not a direct child on this build: search all descendants.
-    HWND found = nullptr;
-    EnumChildWindows(
-        tray,
-        [](HWND h, LPARAM lp) -> BOOL {
-            WCHAR cls[128];
-            if (GetClassNameW(h, cls, ARRAYSIZE(cls)) &&
-                wcscmp(cls, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
-                *reinterpret_cast<HWND*>(lp) = h;
-                return FALSE;
+// Drops islands whose taskbar window is gone (monitor unplugged) or whose
+// panel lost its parent (frame re-templated), so a rebuilt frame on the same
+// window can be attached again and the tracker stops serving dead windows.
+void PruneDeadIslands() {
+    std::vector<std::shared_ptr<Island>> dead;
+    {
+        std::lock_guard lock(g_islandsMutex);
+        if (!g_islands) return;
+        for (auto it = g_islands->begin(); it != g_islands->end();) {
+            auto& isl = *it;
+            bool parented = isl->panel && isl->panel.Parent();
+            if (!IsWindow(isl->hwnd) || !parented) {
+                dead.push_back(isl);
+                it = g_islands->erase(it);
+            } else {
+                ++it;
             }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&found));
-    return found;
-}
-
-std::vector<HWND> AllTaskbarBridges() {
-    std::vector<HWND> out;
-    if (HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        if (HWND b = BridgeHwndForTray(primary)) out.push_back(b);
-    }
-    for (HWND sec = FindWindowExW(nullptr, nullptr, L"Shell_SecondaryTrayWnd", nullptr); sec;
-         sec = FindWindowExW(nullptr, sec, L"Shell_SecondaryTrayWnd", nullptr)) {
-        if (HWND b = BridgeHwndForTray(sec)) out.push_back(b);
-    }
-    return out;
-}
-
-// Bridge windows already owned by other islands.
-std::vector<HWND> ClaimedBridges() {
-    std::vector<HWND> out;
-    std::lock_guard lock(g_islandsMutex);
-    for (auto& isl : g_islands)
-        if (isl->hwnd) out.push_back(isl->hwnd);
-    return out;
-}
-
-// Screen rectangle of an element, via its automation peer (peers report bounds
-// in screen coordinates - that is how UI Automation locates taskbar buttons).
-// Not every element has a peer, so the first descendant that does is used.
-bool ScreenRectOf(wux::DependencyObject const& start, RECT& out) {
-    try {
-        std::vector<wux::DependencyObject> queue{start};
-        for (size_t i = 0; i < queue.size() && i < 64; i++) {
-            auto node = queue[i];
-            if (auto fe = node.try_as<wux::UIElement>()) {
-                if (auto peer = wuxap::FrameworkElementAutomationPeer::CreatePeerForElement(fe)) {
-                    auto r = peer.GetBoundingRectangle();
-                    if (r.Width > 0 && r.Height > 0) {
-                        out = RECT{(LONG)std::lround(r.X), (LONG)std::lround(r.Y), (LONG)std::lround(r.X + r.Width),
-                                   (LONG)std::lround(r.Y + r.Height)};
-                        return true;
-                    }
-                }
-            }
-            int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
-            for (int c = 0; c < n && queue.size() < 64; c++) queue.push_back(wuxm::VisualTreeHelper::GetChild(node, c));
-        }
-    } catch (...) {
-    }
-    return false;
-}
-
-// Map the island hosting `fe` to its DesktopWindowContentBridge window.
-//   screen      - a peer's screen rect lies inside exactly one bridge window (normal case)
-//   elimination - every other bridge is already claimed by another island
-//   thread      - the only unclaimed bridge owned by the current UI thread
-//   size        - the only unclaimed bridge whose client size matches the island
-// nullptr = still ambiguous; retried on a later layout event.
-HWND ResolveIslandHwnd(wux::FrameworkElement const& fe, const wchar_t** how) {
-    *how = L"UNRESOLVED";
-    std::vector<HWND> all = AllTaskbarBridges();
-    if (all.empty()) {
-        Wh_Log(L"[bleed] no DesktopWindowContentBridge window found under any taskbar window");
-        return nullptr;
-    }
-    std::vector<HWND> claimed = ClaimedBridges();
-    auto isClaimed = [&](HWND h) { return std::find(claimed.begin(), claimed.end(), h) != claimed.end(); };
-
-    RECT elemRect;
-    if (ScreenRectOf(fe, elemRect)) {
-        POINT center{(elemRect.left + elemRect.right) / 2, (elemRect.top + elemRect.bottom) / 2};
-        std::vector<HWND> hits;
-        for (HWND b : all) {
-            RECT rc;
-            if (GetWindowRect(b, &rc) && PtInRect(&rc, center)) hits.push_back(b);
-        }
-        if (hits.size() == 1 && !isClaimed(hits[0])) {
-            *how = L"screen";
-            return hits[0];
         }
     }
-
-    std::vector<HWND> unclaimed;
-    for (HWND b : all)
-        if (!isClaimed(b)) unclaimed.push_back(b);
-    if (unclaimed.size() == 1) {
-        *how = claimed.empty() ? L"single" : L"elimination";
-        return unclaimed[0];
+    for (auto& isl : dead) {
+        Wh_Log(L"taskbar %p: island dropped (window gone or panel detached)", isl->hwnd);
+        TeardownIsland(*isl);
     }
-
-    DWORD tid = GetCurrentThreadId();
-    std::vector<HWND> byThread;
-    for (HWND b : unclaimed)
-        if (GetWindowThreadProcessId(b, nullptr) == tid) byThread.push_back(b);
-    if (byThread.size() == 1) {
-        *how = L"thread";
-        return byThread[0];
-    }
-    std::vector<HWND>& pool = byThread.empty() ? unclaimed : byThread;
-
-    auto xr = fe.XamlRoot();
-    if (!xr) return nullptr;
-    auto size = xr.Size();
-    double scale = xr.RasterizationScale();
-    int pw = (int)std::lround(size.Width * scale), ph = (int)std::lround(size.Height * scale);
-    std::vector<HWND> bySize;
-    for (HWND b : pool) {
-        RECT rc;
-        if (!GetClientRect(b, &rc)) continue;
-        if (std::abs((rc.right - rc.left) - pw) <= 1 && std::abs((rc.bottom - rc.top) - ph) <= 1) bySize.push_back(b);
-    }
-    if (bySize.size() == 1) {
-        *how = L"size";
-        return bySize[0];
-    }
-    static ULONGLONG lastAmbiguousLog = 0;
-    ULONGLONG now = GetTickCount64();
-    if (now - lastAmbiguousLog > 5000) {
-        lastAmbiguousLog = now;
-        Wh_Log(L"[bleed] island mapping ambiguous: %zu unclaimed bridges, %zu on thread %u, %zu match %dx%d; will retry",
-               unclaimed.size(), byThread.size(), tid, bySize.size(), pw, ph);
-    }
-    return nullptr;
 }
 
 // ----------------------------------------------------------------------------
-// Island creation
+// Island creation (taskbar thread)
 // ----------------------------------------------------------------------------
 
-void OnRepeaterDiscovered(wux::FrameworkElement const& rep) {
-    Settings s = GetSettings();
+// Frames whose attachment failed (taskbar window not ready yet at logon, or an
+// unexpected tree), with the tick of the last attempt, so hover/state events
+// don't re-walk the tree continuously. Taskbar thread only.
+std::unordered_map<void*, ULONGLONG> g_failedFrames;
+constexpr ULONGLONG kFailedRetryMs = 3000;
 
+bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
     // Nearest Grid ancestor hosts the panel; `anchor` is that grid's direct child on the path.
     wuxc::Grid grid{nullptr};
     wux::UIElement anchor{nullptr};
@@ -1282,53 +1301,22 @@ void OnRepeaterDiscovered(wux::FrameworkElement const& rep) {
         prev = cur;
         cur = wuxm::VisualTreeHelper::GetParent(cur);
     }
-    if (!frame) {
-        Wh_Log(L"[bleed] TaskbarFrameRepeater without a Taskbar.TaskbarFrame ancestor, ignored");
-        return;
-    }
-    if (!grid || !anchor) {
-        Wh_Log(L"[bleed] no Grid ancestor for TaskbarFrameRepeater");
-        return;
+    if (!frame || !grid || !anchor) {
+        Wh_Log(L"taskbar %p: unexpected tree around TaskbarFrameRepeater (frame=%d grid=%d)", taskbarWnd,
+               frame ? 1 : 0, grid ? 1 : 0);
+        return false;
     }
 
-    void* gridId = IdentityOf(grid);
     void* frameId = IdentityOf(frame);
 
-    std::shared_ptr<Island> isl = FindIslandByGridId(gridId);
-    if (isl && isl->panel && isl->panel.Parent()) {
-        // Already set up; only a late hwnd mapping may be outstanding.
-        if (!isl->hwnd) {
-            isl->lastMapAttemptTick = GetTickCount64();
-            const wchar_t* how = nullptr;
-            if (HWND hwnd = ResolveIslandHwnd(rep, &how)) {
-                std::lock_guard lock(g_islandsMutex);
-                isl->hwnd = hwnd;
-                Wh_Log(L"[bleed] island grid=%p mapped late to hwnd=%p (%s)", gridId, hwnd, how);
-                RequestTick();
-            }
-        }
-        return;
-    }
-    if (isl) {
-        // Stale island (panel lost its parent, e.g. the frame was re-templated).
-        TeardownIslandOnUiThread(*isl);
-        {
-            std::lock_guard lock(g_islandsMutex);
-            g_islands.erase(std::remove(g_islands.begin(), g_islands.end(), isl), g_islands.end());
-        }
-        isl = nullptr;
+    if (auto existing = FindIslandByFrameId(frameId); existing && existing->panel && existing->panel.Parent()) {
+        return true;  // already attached
     }
 
-    const wchar_t* how = nullptr;
-    HWND hwnd = ResolveIslandHwnd(rep, &how);
-    Wh_Log(L"[bleed] host grid=%p (%s) frame=%p hwnd=%p (%s)", gridId, grid.Name().c_str(), frameId, hwnd, how);
-
-    isl = std::make_shared<Island>();
-    isl->hwnd = hwnd;
-    isl->lastMapAttemptTick = GetTickCount64();
-    isl->gridId = gridId;
+    Settings s = GetSettings();
+    auto isl = std::make_shared<Island>();
+    isl->hwnd = taskbarWnd;
     isl->frameId = frameId;
-    isl->dispatcher = rep.Dispatcher();
     isl->brush = wuxm::SolidColorBrush(wu::Color{255, 0, 0, 0});
 
     wuxc::Border panel;
@@ -1352,8 +1340,8 @@ void OnRepeaterDiscovered(wux::FrameworkElement const& rep) {
             }
         }
         if (!inserted) {
-            Wh_Log(L"[bleed] could not find an insertion point in the taskbar grid");
-            return;
+            Wh_Log(L"taskbar %p: no insertion point in the taskbar grid", taskbarWnd);
+            return false;
         }
     }
 
@@ -1362,51 +1350,143 @@ void OnRepeaterDiscovered(wux::FrameworkElement const& rep) {
 
     {
         std::lock_guard lock(g_islandsMutex);
-        g_islands.push_back(isl);
+        if (!g_islands) {
+            TeardownIsland(*isl);
+            return false;
+        }
+        g_islands->push_back(isl);
     }
 
-    HMONITOR hmon = hwnd ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : nullptr;
-    Wh_Log(L"[bleed] island created: grid=%p hwnd=%p monitor=%p stroke=%d mapping=%s", gridId, hwnd, hmon,
-           isl->stroke.get() ? 1 : 0, how);
+    Wh_Log(L"taskbar %p: island attached (grid=%s stroke=%d)", taskbarWnd, grid.Name().c_str(),
+           isl->stroke.get() ? 1 : 0);
     RequestTick();
+    return true;
 }
 
-void RefreshIslandsOnThisThread() {
-    std::vector<std::shared_ptr<Island>> mine;
+// Attach to every taskbar owned by this (the taskbar) thread, straight from the
+// taskbar windows. Used at enable time and after settings changes.
+void WINAPI AttachAllTaskbars(void*) {
+    if (g_unloading) return;
+    PruneDeadIslands();
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM) -> BOOL {
+            try {
+                auto xamlRoot = XamlRootOfTaskbarWindow(hWnd);
+                if (!xamlRoot) return TRUE;
+                auto rep = FindDescendantByName(xamlRoot.Content(), L"TaskbarFrameRepeater", 12);
+                if (!rep) {
+                    Wh_Log(L"taskbar %p: TaskbarFrameRepeater not found", hWnd);
+                    return TRUE;
+                }
+                AttachIsland(rep, hWnd);
+            } catch (winrt::hresult_error const& e) {
+                Wh_Log(L"taskbar %p: attach failed: %08X", hWnd, e.code().value);
+            } catch (...) {
+                Wh_Log(L"taskbar %p: attach failed", hWnd);
+            }
+            return TRUE;
+        },
+        0);
+}
+
+// Hook path: a TaskbarFrame announced a layout change. Covers taskbars created
+// later (monitor plugged in) and the logon case, where the frame exists before
+// Wh_ModAfterInit. The frame's window is found by matching its XamlRoot against
+// each taskbar window's root. Runs directly in the hook, on the taskbar thread.
+void DiscoverFromFrame(wux::DependencyObject const& frame) {
+    if (g_unloading || !frame) return;
+    void* frameId = IdentityOf(frame);
+    if (auto isl = FindIslandByFrameId(frameId); isl && isl->panel && isl->panel.Parent()) return;
+
+    ULONGLONG now = GetTickCount64();
+    if (auto it = g_failedFrames.find(frameId); it != g_failedFrames.end() && now - it->second < kFailedRetryMs) {
+        return;
+    }
+
+    try {
+        PruneDeadIslands();
+
+        auto fe = frame.try_as<wux::FrameworkElement>();
+        auto xr = fe ? fe.XamlRoot() : nullptr;
+        void* rootId = xr ? IdentityOf(xr.Content()) : nullptr;
+        HWND taskbarWnd = nullptr;
+        if (rootId) {
+            struct Ctx {
+                void* rootId;
+                HWND found;
+            } ctx{rootId, nullptr};
+            EnumThreadWindows(
+                GetCurrentThreadId(),
+                [](HWND hWnd, LPARAM lp) -> BOOL {
+                    auto* c = reinterpret_cast<Ctx*>(lp);
+                    try {
+                        auto root = XamlRootOfTaskbarWindow(hWnd);
+                        if (root && IdentityOf(root.Content()) == c->rootId) {
+                            c->found = hWnd;
+                            return FALSE;
+                        }
+                    } catch (...) {
+                    }
+                    return TRUE;
+                },
+                reinterpret_cast<LPARAM>(&ctx));
+            taskbarWnd = ctx.found;
+        }
+
+        auto rep = fe ? FindDescendantByName(fe, L"TaskbarFrameRepeater", 10) : nullptr;
+        if (!taskbarWnd || !rep) {
+            g_failedFrames[frameId] = now;
+            Wh_Log(L"frame %p: attach deferred (window %s, repeater %s)", frameId,
+                   taskbarWnd ? L"found" : L"not found", rep ? L"found" : L"not found");
+            return;
+        }
+        if (AttachIsland(rep, taskbarWnd)) g_failedFrames.erase(frameId);
+        else g_failedFrames[frameId] = now;
+    } catch (winrt::hresult_error const& e) {
+        g_failedFrames[frameId] = now;
+        Wh_Log(L"frame %p: discovery failed: %08X", frameId, e.code().value);
+    } catch (...) {
+        g_failedFrames[frameId] = now;
+        Wh_Log(L"frame %p: discovery failed", frameId);
+    }
+}
+
+void WINAPI RefreshIslandsOnTaskbarThread(void*) {
+    if (g_unloading) return;
+    AttachAllTaskbars(nullptr);  // picks up taskbars added since, prunes dead ones
+    std::vector<std::shared_ptr<Island>> all;
     {
         std::lock_guard lock(g_islandsMutex);
-        for (auto& isl : g_islands)
-            if (isl->dispatcher && isl->dispatcher.HasThreadAccess()) mine.push_back(isl);
+        if (g_islands) all = *g_islands;
     }
     Settings s = GetSettings();
-    for (auto& isl : mine) {
+    for (auto& isl : all) {
         try {
             UpdateExtent(*isl, s);
-            ApplyTheme(*isl, isl->shown, isl->color, s);
         } catch (...) {
         }
     }
 }
 
-void CleanupIslandsOnThisThread() {
-    std::vector<std::shared_ptr<Island>> mine;
+// Final teardown on the taskbar thread: remove every panel, restore themes and
+// strokes, and release the island container itself.
+void WINAPI CleanupIslandsOnTaskbarThread(void*) {
+    std::vector<std::shared_ptr<Island>> all;
     {
         std::lock_guard lock(g_islandsMutex);
-        for (auto it = g_islands.begin(); it != g_islands.end();) {
-            if ((*it)->dispatcher && (*it)->dispatcher.HasThreadAccess()) {
-                mine.push_back(*it);
-                it = g_islands.erase(it);
-            } else {
-                ++it;
-            }
+        if (g_islands) {
+            all.swap(*g_islands);
+            g_islands.reset();
         }
     }
-    for (auto& isl : mine) TeardownIslandOnUiThread(*isl);
-    mine.clear();  // destroy XAML objects here, on their thread
+    for (auto& isl : all) TeardownIsland(*isl);
+    all.clear();  // XAML objects released here, on their thread
+    g_failedFrames.clear();
 }
 
 // ============================================================================
-// Taskbar.View.dll hooks (island discovery without XAML diagnostics)
+// Taskbar.View.dll hooks (layout-driven discovery for taskbars created later)
 // ============================================================================
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
@@ -1434,70 +1514,12 @@ wux::DependencyObject FindTaskbarFrameAncestor(wux::DependencyObject const& star
     return nullptr;
 }
 
-std::mutex g_pendingMutex;
-std::vector<void*> g_pendingFrames;  // frames with a discovery post in flight
-
-// Called on the island's UI thread from inside a hook. Does a cheap dedupe and
-// defers the actual tree work to the dispatcher queue, so nothing is inserted
-// while the taskbar is in the middle of a layout pass.
-void DiscoverFromFrame(wux::DependencyObject const& frame) {
-    if (g_unloading || !frame) return;
-    void* frameId = IdentityOf(frame);
-    if (auto isl = FindIslandByFrameId(frameId)) {
-        bool parented = isl->panel && isl->panel.Parent();
-        if (parented && isl->hwnd) return;  // fully set up
-        if (parented && GetTickCount64() - isl->lastMapAttemptTick < 2000) return;  // mapping retry throttled
-    }
-    auto fe = frame.try_as<wux::FrameworkElement>();
-    if (!fe) return;
-    {
-        std::lock_guard lock(g_pendingMutex);
-        if (std::find(g_pendingFrames.begin(), g_pendingFrames.end(), frameId) != g_pendingFrames.end()) return;
-        g_pendingFrames.push_back(frameId);
-    }
-    auto clearPending = [frameId]() {
-        std::lock_guard lock(g_pendingMutex);
-        g_pendingFrames.erase(std::remove(g_pendingFrames.begin(), g_pendingFrames.end(), frameId), g_pendingFrames.end());
-    };
-    try {
-        fe.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, [fe, clearPending]() {
-            clearPending();
-            if (g_unloading) return;
-            try {
-                auto rep = FindDescendantByName(fe, L"TaskbarFrameRepeater", 10);
-                if (!rep) {
-                    static bool logged = false;
-                    if (!logged) {
-                        logged = true;
-                        Wh_Log(L"[bleed] TaskbarFrameRepeater not found under Taskbar.TaskbarFrame");
-                    }
-                    return;
-                }
-                OnRepeaterDiscovered(rep);
-            } catch (winrt::hresult_error const& e) {
-                Wh_Log(L"[bleed] discovery failed: %08X %s", e.code().value, e.message().c_str());
-            } catch (...) {
-                Wh_Log(L"[bleed] discovery failed");
-            }
-        });
-    } catch (...) {
-        clearPending();
-    }
-}
-
 using TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t = void(WINAPI*)(void* pThis);
 TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original;
 void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
     TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original(pThis);
     if (g_unloading) return;
-    static std::atomic<int> logged{0};
-    auto frame = ElementFromImplThis(pThis);
-    if (logged < 3) {
-        logged++;
-        Wh_Log(L"[bleed] frame hook fired (thread %u): element=%s", GetCurrentThreadId(),
-               frame ? winrt::get_class_name(frame).c_str() : L"<unresolved>");
-    }
-    if (frame) DiscoverFromFrame(frame);
+    if (auto frame = ElementFromImplThis(pThis)) DiscoverFromFrame(frame);
 }
 
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
@@ -1505,19 +1527,14 @@ TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
-    static std::atomic<int> logged{0};
-    auto btn = ElementFromImplThis(pThis);
-    auto frame = btn ? FindTaskbarFrameAncestor(btn) : nullptr;
-    if (logged < 3) {
-        logged++;
-        Wh_Log(L"[bleed] button hook fired (thread %u): element=%s frame=%d", GetCurrentThreadId(),
-               btn ? winrt::get_class_name(btn).c_str() : L"<unresolved>", frame ? 1 : 0);
+    if (auto btn = ElementFromImplThis(pThis)) {
+        if (auto frame = FindTaskbarFrameAncestor(btn)) DiscoverFromFrame(frame);
     }
-    if (frame) DiscoverFromFrame(frame);
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::OnTaskbarLayoutChildBoundsChanged(void))"},
             &TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original,
@@ -1531,17 +1548,14 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
-        Wh_Log(L"[bleed] HookSymbols failed");
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
+        Wh_Log(L"HookSymbols failed (Taskbar.View.dll)");
         return false;
     }
     if (!TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original && !TaskListButton_UpdateVisualStates_Original) {
-        Wh_Log(L"[bleed] no discovery symbol resolved");
+        Wh_Log(L"no discovery symbol resolved");
         return false;
     }
-    Wh_Log(L"[bleed] Taskbar.View.dll hooks: frame=%d button=%d",
-           TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original ? 1 : 0,
-           TaskListButton_UpdateVisualStates_Original ? 1 : 0);
     return true;
 }
 
@@ -1553,7 +1567,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR name) {
     if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module && !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"[bleed] loaded %s", name ? name : L"?");
+        Wh_Log(L"loaded %s", name ? name : L"?");
         if (HookTaskbarViewDllSymbols(module)) Wh_ApplyHookOperations();
     }
 }
@@ -1570,173 +1584,83 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 // Mod lifecycle
 // ============================================================================
 
-// One RunAsync per distinct island dispatcher.
-std::vector<wuc::CoreDispatcher> IslandDispatchers() {
-    std::vector<wuc::CoreDispatcher> out;
-    std::lock_guard lock(g_islandsMutex);
-    for (auto& isl : g_islands) {
-        if (!isl->dispatcher) continue;
-        bool dup = std::any_of(out.begin(), out.end(),
-                               [&](auto& d) { return winrt::get_abi(d) == winrt::get_abi(isl->dispatcher); });
-        if (!dup) out.push_back(isl->dispatcher);
-    }
-    return out;
-}
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"[bleed] init");
+    Wh_Log(L">");
     LoadSettings();
+
+    if (!HookTaskbarDllSymbols()) return FALSE;
 
     if (HMODULE taskbarView = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
         if (!HookTaskbarViewDllSymbols(taskbarView)) return FALSE;
     } else {
-        Wh_Log(L"[bleed] Taskbar.View.dll not loaded yet, hooking LoadLibraryExW");
+        Wh_Log(L"Taskbar.View.dll not loaded yet, hooking LoadLibraryExW");
         HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-        auto pLoadLibraryExW = kernelBase ? (decltype(&LoadLibraryExW))GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
+        auto pLoadLibraryExW =
+            kernelBase ? (decltype(&LoadLibraryExW))GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
         if (!pLoadLibraryExW) {
-            Wh_Log(L"[bleed] kernelbase!LoadLibraryExW not found");
+            Wh_Log(L"kernelbase!LoadLibraryExW not found");
             return FALSE;
         }
         WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
     }
 
     if (!StartTracker()) {
-        Wh_Log(L"[bleed] failed to start tracker thread");
+        Wh_Log(L"failed to start tracker thread");
         return FALSE;
     }
-    Wh_Log(L"[bleed] tracker running (thread %u)", g_trackerThreadId);
     return TRUE;
 }
 
-// Discovery rides on taskbar layout events, which a mid-session enable doesn't
-// get by itself. Adding a taskbar button and removing it again makes every
-// taskbar lay out its buttons once (TaskbarFrame::OnTaskbarLayoutChildBoundsChanged).
-// The button belongs to a 1x1, fully transparent, non-activating window placed
-// on each monitor, so it is never seen; it lives for a few hundred milliseconds.
-HANDLE g_nudgeThread = nullptr;
-
-DWORD WINAPI NudgeThreadProc(LPVOID) {
-    struct Ctx {
-        std::vector<HWND> windows;
-    } ctx;
-    EnumDisplayMonitors(
-        nullptr, nullptr,
-        [](HMONITOR hmon, HDC, LPRECT, LPARAM lp) -> BOOL {
-            MONITORINFO mi{sizeof(mi)};
-            if (!GetMonitorInfoW(hmon, &mi)) return TRUE;
-            HWND w = CreateWindowExW(WS_EX_APPWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT, L"Static", L"",
-                                     WS_POPUP, mi.rcWork.left + 8, mi.rcWork.top + 8, 1, 1, nullptr, nullptr,
-                                     GetModuleHandleW(nullptr), nullptr);
-            if (!w) return TRUE;
-            SetLayeredWindowAttributes(w, 0, 0, LWA_ALPHA);
-            ShowWindow(w, SW_SHOWNOACTIVATE);
-            reinterpret_cast<Ctx*>(lp)->windows.push_back(w);
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&ctx));
-    Wh_Log(L"[bleed] discovery nudge: %zu window(s)", ctx.windows.size());
-
-    // Pump messages so the shell's queries to these windows don't time out.
-    ULONGLONG until = GetTickCount64() + 400;
-    MSG msg;
-    while (!g_unloading && GetTickCount64() < until) {
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        MsgWaitForMultipleObjects(0, nullptr, FALSE, 50, QS_ALLINPUT);
-    }
-    for (HWND w : ctx.windows) DestroyWindow(w);
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-    return 0;
-}
-
-void StartDiscoveryNudge() {
-    if (g_nudgeThread) return;
-    g_nudgeThread = CreateThread(nullptr, 0, NudgeThreadProc, nullptr, 0, nullptr);
-    if (!g_nudgeThread) Wh_Log(L"[bleed] could not start the discovery nudge");
-}
-
 void Wh_ModAfterInit() {
-    bool taskbarAlreadyUp = g_taskbarViewDllLoaded.load();
+    Wh_Log(L">");
 
     // Taskbar.View.dll may have loaded between Wh_ModInit and the hook taking effect.
-    if (!taskbarAlreadyUp) {
+    if (!g_taskbarViewDllLoaded) {
         if (HMODULE taskbarView = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"[bleed] got Taskbar.View.dll after init");
+                Wh_Log(L"got Taskbar.View.dll after init");
                 if (HookTaskbarViewDllSymbols(taskbarView)) Wh_ApplyHookOperations();
-                taskbarAlreadyUp = true;
             }
         }
     }
 
-    // Mid-session enable: the taskbar is already laid out, so provoke one layout pass.
-    if (taskbarAlreadyUp) StartDiscoveryNudge();
+    // Attach to the taskbars that already exist; later ones arrive via the hooks.
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, AttachAllTaskbars, nullptr);
+    }
 }
 
 void Wh_ModBeforeUninit() {
-    Wh_Log(L"[bleed] before uninit");
-    g_unloading = true;
-
-    if (g_nudgeThread) {
-        WaitForSingleObject(g_nudgeThread, 2000);
-        CloseHandle(g_nudgeThread);
-        g_nudgeThread = nullptr;
-    }
-
-    // 1. No more tracker posts after this returns.
-    StopTracker();
-    {
-        std::lock_guard lock(g_pendingMutex);
-        g_pendingFrames.clear();
-    }
-
-    // 2. Remove panels on their UI threads and wait. Hooks still fire until
-    //    Windhawk removes them, but bail on g_unloading before touching anything.
-    auto dispatchers = IslandDispatchers();
-    if (!dispatchers.empty()) {
-        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        auto pending = std::make_shared<std::atomic<int>>((int)dispatchers.size());
-        for (auto& d : dispatchers) {
-            bool posted = false;
-            try {
-                d.RunAsync(wuc::CoreDispatcherPriority::High, [pending, done]() {
-                    CleanupIslandsOnThisThread();
-                    if (--(*pending) == 0 && done) SetEvent(done);
-                });
-                posted = true;
-            } catch (...) {
-            }
-            if (!posted && --(*pending) == 0 && done) SetEvent(done);
-        }
-        if (done) {
-            if (WaitForSingleObject(done, 3000) == WAIT_TIMEOUT) Wh_Log(L"[bleed] cleanup wait timed out");
-            CloseHandle(done);
-        }
-    }
+    Wh_Log(L">");
+    g_unloading = true;  // hooks are still installed; they bail on this
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"[bleed] uninit");
+    Wh_Log(L">");
+
+    // Hooks are gone, so nothing new can arrive. The tracker is joined first
+    // (its updates are synchronous SendMessages, so joining it covers them),
+    // then the panels are removed synchronously on the taskbar thread.
+    StopTracker();
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, CleanupIslandsOnTaskbarThread, nullptr);
+    } else {
+        // No taskbar window (Explorer is going away): there is no tree to clean
+        // and no taskbar thread to release XAML objects on. g_islands is
+        // no_destroy, so leaving it alone leaks the few refs instead of
+        // releasing them from this thread.
+        Wh_Log(L"no taskbar window, skipping UI teardown");
+    }
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"[bleed] settings changed");
+    Wh_Log(L">");
     LoadSettings();
 
     if (g_trackerThreadId) PostThreadMessageW(g_trackerThreadId, WM_TRACKER_SETTINGS, 0, 0);
 
-    for (auto& d : IslandDispatchers()) {
-        try {
-            d.RunAsync(wuc::CoreDispatcherPriority::High, []() {
-                if (!g_unloading) RefreshIslandsOnThisThread();
-            });
-        } catch (...) {
-        }
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, RefreshIslandsOnTaskbarThread, nullptr);
     }
 }
