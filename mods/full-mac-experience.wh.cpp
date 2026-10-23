@@ -93,7 +93,7 @@ This is an independent community project and is not affiliated with, endorsed by
       $name: Dock blur
     - color: 0
       $name: Dock color
-  $name: Dock appearance and sizeC:\ProgramData\Windhawk\EditorWorkspace\mod.wh.cpp
+  $name: Dock appearance and size
 - magnification:
     - amount: 40
       $name: Magnification amount
