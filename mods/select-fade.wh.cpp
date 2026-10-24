@@ -2,7 +2,7 @@
 // @id              select-fade
 // @name            SelectFade
 // @description     Replaces the system marquee with a custom-drawn rectangle that fades out smoothly on release.
-// @version         2.0
+// @version         2.5
 // @author          434e5b58
 // @github          https://github.com/434e5b58
 // @license         MIT
@@ -110,7 +110,6 @@ HWND g_hLiveOverlay = NULL;
 std::atomic<HWND> g_hDesktopListViewAtomic{NULL};
 
 #define TIMER_ID_FADE        1
-#define WM_START_ANIMATION   (WM_USER + 1)
 #define WM_PRECHECK_START    (WM_USER + 2)
 #define WM_UPDATE_LIVE       (WM_USER + 3)
 #define WM_STOP_LIVE         (WM_USER + 4)
@@ -328,7 +327,7 @@ LRESULT CALLBACK ManagerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 L"FadeMarqueeOverlayClass", NULL, WS_POPUP, 0, 0, 0, 0,
                 NULL, NULL, g_hModInstance, NULL);
             if (g_hLiveOverlay) {
-                HWND hAbove = GetWindow(g_hCachedDesktopTopLevel, GW_HWNDPREV);
+                HWND hAbove = g_hCachedDesktopTopLevel ? GetWindow(g_hCachedDesktopTopLevel, GW_HWNDPREV) : NULL;
                 SetWindowPos(g_hLiveOverlay, hAbove ? hAbove : HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
         }
@@ -378,7 +377,9 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
             g_isDragging = true;
             g_isStartPointValid = false;
             POINT* ppt = new POINT{pMouse->pt.x, pMouse->pt.y};
-            PostMessageW(g_hManagerWnd, WM_PRECHECK_START, 0, (LPARAM)ppt);
+            if (!PostMessageW(g_hManagerWnd, WM_PRECHECK_START, 0, (LPARAM)ppt)) {
+                delete ppt;
+            }
         } else if (wParam == WM_MOUSEMOVE && g_isDragging) {
             g_dragCurrent = pMouse->pt;
             if (!g_updatePending) {
@@ -430,10 +431,28 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
     g_hManagerWnd = CreateWindowExW(0, L"FadeMarqueeManagerClass", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInst, NULL);
-    g_hMouseHook  = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, hInst, 0);
+    if (!g_hManagerWnd) {
+        UnregisterClassW(L"FadeMarqueeManagerClass", hInst);
+        UnregisterClassW(L"FadeMarqueeOverlayClass", hInst);
+        return 0;
+    }
+
+    g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, hInst, 0);
+    if (!g_hMouseHook) {
+        DestroyWindow(g_hManagerWnd);
+        UnregisterClassW(L"FadeMarqueeManagerClass", hInst);
+        UnregisterClassW(L"FadeMarqueeOverlayClass", hInst);
+        return 0;
+    }
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) DispatchMessage(&msg);
+
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_PRECHECK_START && msg.lParam) {
+            delete (POINT*)msg.lParam;
+        }
+    }
 
     if (g_hMouseHook) UnhookWindowsHookEx(g_hMouseHook);
     if (g_hManagerWnd) DestroyWindow(g_hManagerWnd);
@@ -465,7 +484,6 @@ BOOL Wh_ModInit() {
         if (shellPid != 0 && shellPid != GetCurrentProcessId()) return FALSE;
     }
 
-    // Get the mod's own module instance safely
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&Wh_ModInit, &g_hModInstance);
 
