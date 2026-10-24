@@ -50,17 +50,19 @@ How it works:
   taskbar background and below the buttons. The panel mirrors the edge: window
   changes (switching, maximizing, minimizing) are picked up from window events
   and applied on the next composed frame, and the edge is re-sampled in
-  between - every 100 ms while it is static, every 25 ms while it is changing,
-  so a title bar that recolors in place (focus fade, tab switch, app theme
-  change) is followed frame by frame. With Windows animations on, a window
-  being zoomed into place isn't committed until its edge has actually landed,
-  so the panel never flashes the background behind it; with animations off the
-  first sample is applied as is.
+  between - every **Poll interval** (250 ms by default) while it is static,
+  every 25 ms while it is changing - so a title bar that recolors in place
+  (focus fade, tab switch, app theme change) is followed frame by frame. With
+  Windows animations on, a window being zoomed into place isn't committed
+  until its edge has actually landed, so the panel never flashes the background
+  behind it; with animations off the first sample is applied as is.
 
 Supports multiple monitors (each taskbar follows its own monitor).
 
-Settings: **Excluded programs** (executables whose windows should never trigger
-the bleed) and the experimental **Gradient bleed** toggle described above.
+Settings: **Poll interval** (how often a static edge is re-checked; window
+changes are event-driven regardless), **Excluded programs** (executables whose
+windows should never trigger the bleed) and the experimental **Gradient bleed**
+toggle described above.
 
 The panel is a regular XAML `Border` named `TaskbarBleedPanel`, so its shape can
 be styled with *Windows 11 Taskbar Styler* like any other taskbar element.
@@ -105,6 +107,9 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
 
 // ==WindhawkModSettings==
 /*
+- PollIntervalMs: 250
+  $name: Poll interval (ms)
+  $description: How often the window edge is re-checked while nothing is happening. Window changes (switching, maximizing, minimizing) are picked up from events immediately regardless; this only decides how soon a title bar that recolors on its own (a tab switch, an app theme change) is followed. Lower is more responsive, higher costs less.
 - ExcludedProcesses: [""]
   $name: Excluded programs
   $description: Executable names (e.g. game.exe) whose windows never trigger the bleed.
@@ -134,6 +139,7 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cwchar>
 #include <cwctype>
 #include <memory>
 #include <mutex>
@@ -166,6 +172,7 @@ constexpr int kGradientPoints = 4;
 using Gradient = std::array<Rgb, kGradientPoints>;
 
 struct Settings {
+    int pollIntervalMs = 250;                     // steady-state re-check of a static edge
     std::vector<std::wstring> excludedProcesses;  // lowercase basenames
     bool gradient = false;                        // experimental: four-point gradient instead of one color
 };
@@ -193,6 +200,7 @@ void LoadSettings() {
         if (!*p.get()) break;
         s.excludedProcesses.push_back(ToLowerBasename(p.get()));
     }
+    s.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"PollIntervalMs"), 50, 60000);
     s.gradient = Wh_GetIntSetting(L"Experimental.Gradient") != 0;
 
     std::lock_guard lock(g_settingsMutex);
@@ -546,6 +554,7 @@ double MsSinceLastEvent() {
 // ============================================================================
 
 constexpr UINT WM_TRACKER_TICK = WM_APP + 1;
+constexpr UINT WM_TRACKER_SETTINGS = WM_APP + 2;  // re-run the color pipeline on the next tick
 
 // ---- Timing ----------------------------------------------------------------
 // Window events (switch, maximize, minimize, move) trigger a tick kDebounceMs
@@ -560,19 +569,21 @@ constexpr UINT WM_TRACKER_TICK = WM_APP + 1;
 // hook delivers only once the loop pumps messages again.
 //
 // While a maximized window is present the edge is re-sampled: every
-// kSlowPollMs when the strip is static, every kFastPollMs while it is changing
+// Poll interval (setting) when the strip is static, every kFastPollMs while it is changing
 // (a focus fade, a window landing after an animation), so the panel follows a
-// transition frame by frame instead of in 100 ms steps. Fast polling is capped
-// at kFastMaxMs per transition so content that never settles (video at the top
-// edge) can't keep it on; it re-arms once the strip has been still for
-// kFastRearmTicks slow polls. Each poll is one small screen readback; neither
-// rate registers in Task Manager.
+// transition frame by frame instead of in coarse steps. The slow poll only has
+// to catch an edge that recolors on its own (a tab switch, an app theme
+// change) - every window change already gets the event tick - so it can be
+// leisurely; it is the steady-state cost of the mod, one EnumWindows pass and
+// one screen readback per poll. Fast polling is capped at kFastMaxMs per
+// transition so content that never settles (video at the top edge) can't keep
+// it on; it re-arms once the strip has been still for kFastRearmTicks slow
+// polls.
 //
 // Both schedules run on one high-resolution waitable timer rather than
 // SetTimer, whose 15.6 ms granularity would turn these values into 16-47 ms.
 constexpr double kDebounceMs = 3;
 constexpr ULONGLONG kEventFollowUpMs = 200;
-constexpr double kSlowPollMs = 100;
 constexpr double kFastPollMs = 25;
 constexpr ULONGLONG kFastMaxMs = 1000;
 constexpr int kFastRearmTicks = 3;
@@ -823,14 +834,20 @@ RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar) {
     return clipped;
 }
 
-// Capture target, kept between polls (tracker thread only): the memory DC and
-// DIB are recreated only when the strip size changes.
+// Capture target, kept between polls (tracker thread only, one per taskbar so
+// monitors of different widths don't evict each other): the memory DC and DIB
+// are recreated only when the strip size changes.
 struct CaptureCache {
     HDC mem = nullptr;
     HBITMAP bmp = nullptr;
     HGDIOBJ old = nullptr;
     void* bits = nullptr;
     int w = 0, h = 0;
+
+    CaptureCache() = default;
+    CaptureCache(const CaptureCache&) = delete;
+    CaptureCache& operator=(const CaptureCache&) = delete;
+    ~CaptureCache() { Release(); }
 
     bool Prepare(HDC screen, int width, int height) {
         if (bmp && w == width && h == height) return true;
@@ -866,19 +883,18 @@ struct CaptureCache {
         w = h = 0;
     }
 };
-CaptureCache g_capture;
+std::unordered_map<HWND, CaptureCache> g_captures;  // keyed by taskbar window
 
-bool CaptureStrip(const RECT& strip, std::vector<uint32_t>& px) {
+bool CaptureStrip(const RECT& strip, CaptureCache& cache, std::vector<uint32_t>& px) {
     int w = strip.right - strip.left, h = strip.bottom - strip.top;
     if (w <= 0 || h <= 0 || (long long)w * h > 8192LL * 64) return false;
 
     HDC screen = GetDC(nullptr);
     if (!screen) return false;
-    bool ok = g_capture.Prepare(screen, w, h) &&
-              BitBlt(g_capture.mem, 0, 0, w, h, screen, strip.left, strip.top, SRCCOPY) != FALSE;
+    bool ok = cache.Prepare(screen, w, h) && BitBlt(cache.mem, 0, 0, w, h, screen, strip.left, strip.top, SRCCOPY) != FALSE;
     if (ok) {
         GdiFlush();
-        auto* bits = static_cast<uint32_t*>(g_capture.bits);
+        auto* bits = static_cast<uint32_t*>(cache.bits);
         px.assign(bits, bits + (size_t)w * h);
     }
     ReleaseDC(nullptr, screen);
@@ -1175,7 +1191,7 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
     }
 
     std::vector<uint32_t> px;
-    if (!CaptureStrip(strip, px) || px.empty()) {
+    if (!CaptureStrip(strip, g_captures[taskbar], px) || px.empty()) {
         HandleBlocked(st, taskbar, target);
         return;
     }
@@ -1261,7 +1277,7 @@ void SetPollTimer(double intervalMs) {
 
 // Picks the poll rate for the next tick: fast while something is changing or
 // an event just happened, slow once still, off with nothing to follow.
-void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now) {
+void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slowPollMs) {
     g_stillTicks = anyChanging ? 0 : g_stillTicks + 1;
     bool followUp = now < g_followUpUntil;
     bool busy = anyChanging || followUp;
@@ -1279,7 +1295,7 @@ void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now) {
     }
 
     bool wantPoll = anyTarget || followUp;
-    SetPollTimer(!wantPoll ? 0 : g_fastSince ? kFastPollMs : kSlowPollMs);
+    SetPollTimer(!wantPoll ? 0 : g_fastSince ? kFastPollMs : slowPollMs);
 }
 
 void Tick() {
@@ -1317,10 +1333,11 @@ void Tick() {
     for (auto it = g_track.begin(); it != g_track.end();) {
         bool alive = std::find(taskbars.begin(), taskbars.end(), it->first) != taskbars.end();
         if (alive && (it->second.changedThisTick || it->second.holdSince)) anyChanging = true;
+        if (!alive) g_captures.erase(it->first);
         it = alive ? std::next(it) : g_track.erase(it);
     }
 
-    UpdatePollRate(anyTarget, anyChanging, GetTickCount64());
+    UpdatePollRate(anyTarget, anyChanging, GetTickCount64(), (double)s.pollIntervalMs);
 }
 
 // Window events arrive in bursts (a restore fires many over 100-300 ms). The
@@ -1399,6 +1416,11 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
             }
             if (msg.message == WM_TRACKER_TICK) {
                 ScheduleDebouncedTick();
+            } else if (msg.message == WM_TRACKER_SETTINGS) {
+                // The gradient option changes what a static strip maps to;
+                // drop the cached samples so the next tick recomputes them.
+                for (auto& kv : g_track) kv.second.haveLastSample = false;
+                ScheduleDebouncedTick();
             } else {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
@@ -1431,7 +1453,7 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
     g_track.clear();
     g_maximizedNow.clear();
     g_maximizedPrev.clear();
-    g_capture.Release();
+    g_captures.clear();
     return 0;
 }
 
@@ -2063,7 +2085,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
 
-    RequestTick();  // the exclusion list may change which window is the target
+    if (g_trackerThreadId) PostThreadMessageW(g_trackerThreadId, WM_TRACKER_SETTINGS, 0, 0);
 
     // Nothing in the settings touches the panels themselves; re-running the
     // attach pass just picks up taskbars added since and prunes dead ones.
