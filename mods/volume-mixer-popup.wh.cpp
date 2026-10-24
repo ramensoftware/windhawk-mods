@@ -64,9 +64,9 @@ Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Gr
 Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
 frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
 
-- Once the pointer moves onto the OSD, it stays on screen until the pointer leaves; the mouse wheel over it
-  changes the volume it shows (the master volume or the app). Clicks always pass through it (unless dragging is
-  enabled), and a hidden pointer (games) is ignored.
+- Once the pointer moves onto the OSD, it stays on screen until the pointer leaves; the mouse wheel or touchpad
+  scrolling over it changes the volume it shows (the master volume or the app), and a click closes it. Otherwise
+  clicks pass through it (unless dragging is enabled), and a hidden pointer (games) is ignored.
 - **Replace the Windows volume flyout**: the media volume keys and the mouse wheel over the taskbar notification
   area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
   tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
@@ -1577,6 +1577,13 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     $name:fr-FR: "Masquer les applications silencieuses"
     $name:es-ES: "Ocultar apps que no reproducen"
     $name:ru-RU: "Скрывать приложения без звука"
+    $description: "Apps whose audio stays open but silent (a paused video, a quiet voice chat) are hidden too, a few seconds after their last sound. Muted apps stay, so that they can be turned back on."
+    $description:uk-UA: "Ховаються й програми, у яких звук відкритий, але тихий (відео на паузі, тиха голосова розмова), через кілька секунд після останнього звуку. Вимкнені програми лишаються, щоб їх можна було ввімкнути."
+    $description:pl-PL: "Ukrywane są też aplikacje z otwartym, ale cichym dźwiękiem (wstrzymane wideo, cicha rozmowa głosowa), kilka sekund po ostatnim dźwięku. Wyciszone aplikacje zostają, aby można je było włączyć."
+    $description:de-DE: "Auch Apps mit offenem, aber stillem Ton (pausiertes Video, stiller Sprachchat) werden ausgeblendet, einige Sekunden nach dem letzten Ton. Stummgeschaltete Apps bleiben, damit man sie wieder einschalten kann."
+    $description:fr-FR: "Les applications dont le son reste ouvert mais silencieux (vidéo en pause, chat vocal calme) sont aussi masquées, quelques secondes après leur dernier son. Les applications coupées restent pour pouvoir les réactiver."
+    $description:es-ES: "También se ocultan las apps con el audio abierto pero en silencio (vídeo en pausa, chat de voz callado), unos segundos después de su último sonido. Las apps silenciadas se quedan para poder reactivarlas."
+    $description:ru-RU: "Скрываются и приложения, у которых звук открыт, но молчит (видео на паузе, тихий голосовой чат), через несколько секунд после последнего звука. Выключенные приложения остаются, чтобы их можно было включить."
   - wheelStep: 2
     $name: "Volume step (%)"
     $name:uk-UA: "Крок гучності (%)"
@@ -3100,6 +3107,32 @@ static bool LockedLevel(const std::wstring& key, float* level) {
     return true;
 }
 
+// "Hide apps that are not playing": many apps keep an active audio session
+// while they only play silence (a paused video, a voice chat, a game menu), so
+// the peak meter decides. An app stays listed for a few seconds after its last
+// sound, so pauses between tracks don't make it jump in and out.
+std::map<std::wstring, DWORD> g_lastHeard;  // "key|deviceId" -> when it was last heard
+constexpr float kHeardPeak = 0.0001f;
+constexpr DWORD kQuietGraceMs = 8000;
+
+static void NoteHeard(const Item& app) {
+    g_lastHeard[app.key + L"|" + app.deviceId] = GetTickCount();
+}
+
+// A muted or zeroed app stays listed, so that it can be turned back up.
+static bool AppIsPlaying(const Item& app) {
+    if (app.mute || app.vol < 0.005f || app.meters.empty()) return true;
+    for (IAudioMeterInformation* m : app.meters) {
+        float p = 0.0f;
+        if (SUCCEEDED(m->GetPeakValue(&p)) && p > kHeardPeak) {
+            NoteHeard(app);
+            return true;
+        }
+    }
+    auto it = g_lastHeard.find(app.key + L"|" + app.deviceId);
+    return it != g_lastHeard.end() && GetTickCount() - it->second < kQuietGraceMs;
+}
+
 // Identity of an app across its processes and sessions: the lower-case image
 // path, or the file name / PID for processes whose path can't be read.
 std::wstring SessionKeyForPid(DWORD pid, std::wstring* pathOut) {
@@ -3153,6 +3186,7 @@ void AddDevice(IMMDevice* dev, std::vector<Item>& out, bool forceIncludeInactive
     IAudioSessionManager2* mgr = nullptr;
     if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr)) || !mgr) return;
 
+    const size_t firstApp = out.size();
     IAudioSessionEnumerator* enm = nullptr;
     if (SUCCEEDED(mgr->GetSessionEnumerator(&enm)) && enm) {
         int count = 0;
@@ -3250,6 +3284,20 @@ void AddDevice(IMMDevice* dev, std::vector<Item>& out, bool forceIncludeInactive
         enm->Release();
     }
     mgr->Release();
+
+    // Decided per app, after the sessions of merged processes are together.
+    if (g_cfg.hideInactive && !forceIncludeInactive) {
+        std::vector<Item> quiet;
+        for (size_t i = firstApp; i < out.size();) {
+            if (out[i].kind == 2 && !AppIsPlaying(out[i])) {
+                quiet.push_back(std::move(out[i]));
+                out.erase(out.begin() + (ptrdiff_t)i);
+            } else {
+                i++;
+            }
+        }
+        ReleaseItems(quiet);
+    }
 }
 
 // Default device first, then the other active render devices.
@@ -3398,6 +3446,7 @@ bool UpdatePeakValues() {
             float p = 0.0f;
             if (SUCCEEDED(m->GetPeakValue(&p)) && p > target) target = p;
         }
+        if (it.kind == 2 && target > kHeardPeak && g_cfg.hideInactive) NoteHeard(it);
         const float k = target > it.peak ? attack : release;
         const float prev = it.peak;
         float next = prev + (target - prev) * k;
@@ -5419,12 +5468,14 @@ static HMONITOR OsdTargetMonitor() {
 
 void UpdateHooks();
 
-// Click-through unless the user wants to drag the OSD. The wheel over it is
-// taken by the mouse hook, so it never swallows clicks.
+// Click-through unless the user wants to drag the OSD or a visible pointer
+// rests on it. Then it takes the wheel itself: scrolling on a precision
+// touchpad never reaches the low-level mouse hook. A click there closes it.
 void ApplyOsdWindowStyle() {
     if (!g_hwndOsd) return;
+    const bool interactive = g_cfg.osdAllowDrag || g_hookOsdHover;
     const LONG_PTR ex = GetWindowLongPtrW(g_hwndOsd, GWL_EXSTYLE);
-    const LONG_PTR want = g_cfg.osdAllowDrag ? (ex & ~(LONG_PTR)WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
+    const LONG_PTR want = interactive ? (ex & ~(LONG_PTR)WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
     if (want != ex) SetWindowLongPtrW(g_hwndOsd, GWL_EXSTYLE, want);
 }
 
@@ -5447,6 +5498,7 @@ void UpdateOsdHover() {
     }
     if (hover == g_hookOsdHover) return;
     g_hookOsdHover = hover;
+    ApplyOsdWindowStyle();
     UpdateHooks();
     if (!hover) {
         const DWORD linger = GetTickCount() + 1000;
@@ -5459,6 +5511,7 @@ void HideOsd() {
     ShowWindow(g_hwndOsd, SW_HIDE);
     if (g_hookOsdHover) {
         g_hookOsdHover = false;
+        ApplyOsdWindowStyle();
         UpdateHooks();
     }
 }
@@ -5761,7 +5814,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return MA_NOACTIVATE;
 
     case WM_NCHITTEST:
-        return g_cfg.osdAllowDrag ? HTCLIENT : HTTRANSPARENT;
+        return (g_cfg.osdAllowDrag || g_hookOsdHover) ? HTCLIENT : HTTRANSPARENT;
 
     case WM_SETCURSOR:
         if (g_cfg.osdAllowDrag) {
@@ -5772,6 +5825,10 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_MOUSEWHEEL:
         OnOsdWheel(GET_WHEEL_DELTA_WPARAM(wParam));
+        return 0;
+
+    case WM_RBUTTONDOWN:
+        HideOsd();
         return 0;
 
     case WM_TIMER:
@@ -5790,6 +5847,8 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             GetWindowRect(hwnd, &r);
             g_osdWinStart.x = r.left;
             g_osdWinStart.y = r.top;
+        } else {
+            HideOsd();  // a click on the OSD closes it, so it never stands in the way
         }
         return 0;
 
