@@ -1,3 +1,11 @@
+## 1.2 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7986323bd6b7c28686248b4347550ea9df58d723/mods/windows-11-settings-styler.wh.cpp))
+
+* Added the Translucent Seamless theme.
+* Fixed the mod not detecting a newly created Settings window in some cases, requiring to re-enable the mod to apply the styling.
+* Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.
+* Added `skip()` which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. `{{width > 0 ? width : skip()}}` applies only once `width` is positive.
+* Improved handling for `NaN` and `Infinity` values in expressions.
+
 ## 1.1 ([Aug 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8be5d442cd3d958f58b91428d3cf9039536924bd/mods/windows-11-settings-styler.wh.cpp))
 
 * Added the following themes: Translucent Settings11, WindowGlass, OLED (Modirinth Green), OLED (System Ascent).

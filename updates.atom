@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T21:01:00.000Z</updated>
+    <updated>2026-10-24T21:56:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Settings Styler 1.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-settings-styler#7986323bd6b7c28686248b4347550ea9df58d723</id>
+        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
+        <updated>2026-10-24T21:56:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the Translucent Seamless theme.</li>
+<li>Fixed the mod not detecting a newly created Settings window in some cases, requiring to re-enable the mod to apply the styling.</li>
+<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
+<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
+<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Key to Search 1.0]]></title>
         <id>https://windhawk.net/mods/windows-key-to-search#1e165a9cf47b589451bf8628cbf6395ba53c745d</id>
@@ -749,37 +766,6 @@ reproduce it, and share the lines from the mod's log. You should see logs being 
         <author>
             <name>ali0zdas</name>
             <uri>https://github.com/ali0zdas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enter to Rename in File Explorer 0.4.0]]></title>
-        <id>https://windhawk.net/mods/macos-enter-rename#9f270d11043b5f657484cc66bcf077aa80b2036d</id>
-        <link href="https://windhawk.net/mods/macos-enter-rename"/>
-        <updated>2026-10-23T16:02:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="entertorenameinfileexplorer">Enter to Rename in File Explorer</h1>
-<p>Use <strong>Enter</strong> to rename a selected file or folder in Windows File Explorer,
-like in macOS Finder. Press <strong>Enter</strong> again to confirm the new name.
-The standard <strong>F2</strong> shortcut is unchanged.</p>
-<h2 id="scope">Scope</h2>
-<ul>
-<li>Works only in File Explorer windows, not on the desktop or in file dialogs,
-and only when the keyboard focus appears to be inside Explorer's shell file
-list.</li>
-<li>Does not intercept Enter while editing text, in the address/search controls,
-or with Ctrl, Alt, or Shift pressed.</li>
-<li>This mod intentionally does <em>not</em> remap Ctrl+Enter to open a file.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested by the original user on Windows 11 for files, folders, rename confirmation,
-search, and multi-selection. Other Windows versions, Explorer extensions and
-alternative list controls have not yet been validated.</p>
-<h2 id="notes">Notes</h2>
-<p>The mod intercepts Enter and synthesizes an F2 key press. The context check
-is based on Explorer window classes, which might differ across builds.
-If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
-        <author>
-            <name>emagiaco</name>
-            <uri>https://github.com/emagiaco</uri>
         </author>
     </entry>
 </feed>
