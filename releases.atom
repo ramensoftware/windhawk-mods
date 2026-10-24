@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-24T18:00:22.000Z</updated>
+    <updated>2026-10-24T21:01:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Key to Search 1.0]]></title>
+        <id>https://windhawk.net/mods/windows-key-to-search#1e165a9cf47b589451bf8628cbf6395ba53c745d</id>
+        <link href="https://windhawk.net/mods/windows-key-to-search"/>
+        <updated>2026-10-24T21:01:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowskeytosearch">Windows Key to Search</h1>
+<p>Tap either Windows key to open Search instead of Start. Search opens when the
+key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
+and Win+S continue to work normally. The generated shortcut is held for 50 ms
+before release.</p>
+<p>By default, the helper runs without requesting administrator privileges. On
+Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
+On Windhawk 2.0 alpha 4 or later, the mod requests UIAccess, which also covers
+administrator windows when that host is available.</p>
+<p>The optional <strong>Support administrator windows on Windhawk 1.7.3</strong> setting launches
+an elevated helper. It is off by default. Enabling it can show a UAC prompt at
+every sign-in, and after enabling or updating the mod. The prompt runs on a
+background thread, and an already-running helper prevents another prompt.
+If elevation is cancelled, the helper runs normally instead. Disable and
+re-enable the mod after changing this setting. On Windhawk 2.0, leave this
+setting off and use its UIAccess host.</p>
+<p>The helper uses Windhawk's <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">tool-mod launcher</a>,
+with an optional background elevation path on older Windhawk versions.</p>
+<p>Windows-key mouse gestures used by tools such as AltDrag or AltSnap are not
+supported: the mod withholds the Windows key until another keyboard key is
+pressed. UAC's secure desktop is outside the scope of the mod.</p>]]></content>
+        <author>
+            <name>Tyler</name>
+            <uri>https://github.com/snowtyler</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Minecraft launcher region detection spoof 0.1.0]]></title>
         <id>https://windhawk.net/mods/minecraft-launcher-region-spoof#59268a9c67ff2f2a6709162c426e1eacbf525832</id>
@@ -1064,68 +1095,6 @@ Ctrl+V may occasionally land before the pasted image.</p>]]></content>
         <author>
             <name>@sharexza</name>
             <uri>https://github.com/raviadityasetiawan-oss</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 11 2.0.15]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#d66466c25b0eeda4428a0294b2726ec94b9c4276</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-10-21T10:04:47.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="modernrundialoguiforwindows11">Modern Run Dialog UI For Windows 11</h1>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/screenshot1.png" alt="Modern Run Dialog UI Preview" /></p>
-<p>Modern Run Dialog UI Preview</p>
-<hr />
-<h2 id="english">🌐 English</h2>
-<p><strong>Modern Run Dialog UI For Windows 11</strong> replaces the classic Win32 <strong>Run (<code>Win + R</code>)</strong> dialog with a sleek, borderless <strong>Fluent Design / Command Palette</strong> interface tailored for Windows 11.</p>
-<h3 id="keyfeatures">✨ Key Features</h3>
-<ul>
-<li><p><strong>Fluent UI & Acrylic Blur:</strong></p></li>
-<li><p>Completely removes the classic title bar and legacy window frames while preserving native Windows 11 rounded corners.</p></li>
-<li><p>Full-window <strong>Acrylic Blur</strong> background with customizable opacity.</p></li>
-<li><p><strong>GDI+ 32-bit ARGB (Premultiplied Alpha)</strong> rendering engine with crisp system <strong>Segoe UI</strong> typography and full Per-Monitor DPI scaling.</p></li>
-<li><p><strong>Smart History List:</strong></p></li>
-<li><p>Displays up to <strong>5 recently executed commands</strong> right above the input bar.</p></li>
-<li><p>Automatically extracts <strong>native application icons</strong> and <strong>friendly application names</strong> in the <code>command - App Name</code> format.</p></li>
-<li><p>Shows the <strong>last executed timestamp</strong> next to the history clock icon on each row (stored cleanly in Windhawk mod storage).</p></li>
-<li><p>Supports single-click to fill the input box, double-click to execute immediately, or <strong>Up / Down (<code>↑</code> / <code>↓</code>)</strong> arrow keys to cycle through history.</p></li>
-<li><p><strong>Modern Input Bar & Action Buttons:</strong></p></li>
-<li><p>Borderless single-line input box with automatic horizontal scrolling for long file paths.</p></li>
-<li><p><strong>Browse Button (<code>Browse 📁</code>):</strong> Opens the native Windows file picker (<code>*.exe</code>, <code>*.bat</code>, <code>*.cmd</code>, <code>*.msc</code>, <code>*.cpl</code>) and inserts the full path into the input bar.</p></li>
-<li><p><strong>Run (<code>Run ↵</code>) & Exit (<code>Exit ✕</code>) Buttons:</strong> High-contrast Fluent accent buttons with smooth hover and press states.</p></li>
-<li><p><strong>Quality-of-Life Fixes:</strong></p></li>
-<li><p><strong>Taskbar Icon Click to Minimize / Restore:</strong> Click the Run icon on the Taskbar to minimize (hide) or restore the Run window like a normal app.</p></li>
-<li><p><strong><code>Win + R</code> Toggle:</strong> Pressing <code>Win + R</code> while the Run dialog is open will immediately close it (or restore it if minimized).</p></li>
-<li><p><strong>Flawless IME Input:</strong> Works seamlessly with Windows IME (Vietnamese Telex/VNI, CJK) and Unikey without composition glitches.</p></li>
-<li><p><strong>Multilingual Interface:</strong></p></li>
-<li><p>Automatically detects the Windows UI language or lets you manually choose from 10 languages.</p></li>
-</ul>
-<hr />
-<h2 id="tingvit">🇻🇳 Tiếng Việt</h2>
-<p><strong>Modern Run Dialog UI For Windows 11</strong> thay thế hộp thoại <strong>Run (<code>Win + R</code>)</strong> cổ điển bằng giao diện <strong>Fluent Design / Command Palette</strong> hiện đại, không viền và trong suốt chuẩn Windows 11.</p>
-<h3 id="tnhnngnibt">✨ Tính năng nổi bật</h3>
-<ul>
-<li><p><strong>Giao diện Fluent & Kính mờ (Acrylic Blur):</strong></p></li>
-<li><p>Loại bỏ thanh tiêu đề và khung viền cổ điển, giữ góc bo tròn tự nhiên của Windows 11.</p></li>
-<li><p>Làm mờ nền trong suốt (<strong>Acrylic Blur</strong>) toàn cửa sổ, tùy chỉnh độ trong suốt linh hoạt.</p></li>
-<li><p>Kết xuất đồ họa bằng <strong>GDI+ 32-bit ARGB</strong> với phông chữ hệ thống <strong>Segoe UI</strong> sắc nét, hỗ trợ tự động co giãn theo DPI trên từng màn hình.</p></li>
-<li><p><strong>Lịch sử thông minh:</strong></p></li>
-<li><p>Hiển thị tối đa <strong>5 lệnh chạy gần nhất</strong> kèm biểu tượng gốc và tên ứng dụng (<code>lệnh - Tên ứng dụng</code>).</p></li>
-<li><p>Hiển thị <strong>thời gian chạy lệnh gần nhất</strong> ngay bên cạnh biểu tượng đồng hồ ở mỗi dòng.</p></li>
-<li><p>Hỗ trợ bấm chọn nhanh, nhấp đúp để chạy ngay, hoặc dùng phím <strong>Lên / Xuống (<code>↑</code> / <code>↓</code>)</strong>.</p></li>
-<li><p><strong>Thanh nhập liệu & Nút chức năng:</strong></p></li>
-<li><p>Ô nhập lệnh không viền, tự cuộn ngang khi đường dẫn dài.</p></li>
-<li><p><strong>Nút Duyệt (<code>Duyệt 📁</code>):</strong> Mở hộp thoại chọn tệp hệ thống (<code>*.exe</code>, <code>*.bat</code>, <code>*.cmd</code>, <code>*.msc</code>, <code>*.cpl</code>) và đưa đường dẫn lên thanh nhập.</p></li>
-<li><p><strong>Nút Chạy (<code>Chạy ↵</code>) & Thoát (<code>Thoát ✕</code>):</strong> Nổi bật, trực quan với hiệu ứng chuyển màu khi rê chuột.</p></li>
-<li><p><strong>Cải tiến trải nghiệm (Quality-of-Life):</strong></p></li>
-<li><p><strong>Bấm icon Taskbar để Ẩn / Mở cửa sổ:</strong> Cho phép click vào icon Run dưới thanh Taskbar để thu nhỏ hoặc khôi phục cửa sổ.</p></li>
-<li><p><strong>Nhấn <code>Win + R</code> để đóng nhanh:</strong> Nhấn lại <code>Win + R</code> khi hộp thoại đang mở sẽ lập tức đóng hoặc khôi phục cửa sổ.</p></li>
-<li><p><strong>Tương thích hoàn hảo bộ gõ Tiếng Việt (IME):</strong> Hoạt động mượt mà với Unikey, EVKey và bộ gõ Windows, không bị lỗi khung trắng đè chữ.</p></li>
-<li><p><strong>Hỗ trợ Đa ngôn ngữ:</strong></p></li>
-<li><p>Tự động nhận diện ngôn ngữ Windows hoặc tùy chọn cố định 10 ngôn ngữ.</p></li>
-</ul>]]></content>
-        <author>
-            <name>caotu2k5</name>
-            <uri>https://github.com/caotu2k5</uri>
         </author>
     </entry>
 </feed>

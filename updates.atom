@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T19:02:19.000Z</updated>
+    <updated>2026-10-24T21:01:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Key to Search 1.0]]></title>
+        <id>https://windhawk.net/mods/windows-key-to-search#1e165a9cf47b589451bf8628cbf6395ba53c745d</id>
+        <link href="https://windhawk.net/mods/windows-key-to-search"/>
+        <updated>2026-10-24T21:01:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowskeytosearch">Windows Key to Search</h1>
+<p>Tap either Windows key to open Search instead of Start. Search opens when the
+key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
+and Win+S continue to work normally. The generated shortcut is held for 50 ms
+before release.</p>
+<p>By default, the helper runs without requesting administrator privileges. On
+Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
+On Windhawk 2.0 alpha 4 or later, the mod requests UIAccess, which also covers
+administrator windows when that host is available.</p>
+<p>The optional <strong>Support administrator windows on Windhawk 1.7.3</strong> setting launches
+an elevated helper. It is off by default. Enabling it can show a UAC prompt at
+every sign-in, and after enabling or updating the mod. The prompt runs on a
+background thread, and an already-running helper prevents another prompt.
+If elevation is cancelled, the helper runs normally instead. Disable and
+re-enable the mod after changing this setting. On Windhawk 2.0, leave this
+setting off and use its UIAccess host.</p>
+<p>The helper uses Windhawk's <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">tool-mod launcher</a>,
+with an optional background elevation path on older Windhawk versions.</p>
+<p>Windows-key mouse gestures used by tools such as AltDrag or AltSnap are not
+supported: the mod withholds the Windows key until another keyboard key is
+pressed. UAC's secure desktop is outside the scope of the mod.</p>]]></content>
+        <author>
+            <name>Tyler</name>
+            <uri>https://github.com/snowtyler</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TopBar for Windows 1.4.1]]></title>
         <id>https://windhawk.net/mods/windhawk-topbar#cc988a903bbf7aad82025e31a485561824478fa2</id>
@@ -749,24 +780,6 @@ If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
         <author>
             <name>emagiaco</name>
             <uri>https://github.com/emagiaco</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island for Windows 1.4.0]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-for-windows#54af632874bbd94e0a49897b9c0905e9ebe97635</id>
-        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
-        <updated>2026-10-23T16:02:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added real Windows DWM blur and acrylic backdrop material support.</li>
-<li>Added Live Lyrics with inline collapsed view, dedicated lyrics tab, and Quick Lookup.</li>
-<li>Added cross-source media switching between multiple playing apps.</li>
-<li>Added persistent disk storage for File Tray items across restarts.</li>
-<li>Rebuilt volume flyout to be event-driven with smooth spring animation and automatic device switching.</li>
-<li>Improved calendar regional locale support and weekday headers.</li>
-</ul>]]></content>
-        <author>
-            <name>Himanshu</name>
-            <uri>https://github.com/devcode90</uri>
         </author>
     </entry>
 </feed>
