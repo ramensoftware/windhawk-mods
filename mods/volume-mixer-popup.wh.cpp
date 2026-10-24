@@ -69,9 +69,11 @@ frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
   enabled), and a hidden pointer (games) is ignored.
 - **Replace the Windows volume flyout**: the media volume keys and the mouse wheel over the taskbar notification
   area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
-  tooltip. While it's on, other tray apps and mods that react to the wheel there (for example Taskbar Volume
-  Control with the tray area as its scroll area) don't get it. Volume indicators of manufacturer utilities
-  (laptop or keyboard software) are separate programs and aren't affected.
+  tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
+  Windows itself; when Windows shows its flyout for one of them, the mod hides that flyout right away and shows
+  its own OSD. While the option is on, other tray apps and mods that react to the wheel in the notification area
+  (for example Taskbar Volume Control with the tray area as its scroll area) don't get it. Volume indicators of
+  manufacturer utilities (laptop or keyboard software) are separate programs and aren't affected.
 
 ## ⌨️ Hotkeys
 | Action | Default |
@@ -994,13 +996,13 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     $name:fr-FR: "Remplacer l'indicateur de Windows"
     $name:es-ES: "Reemplazar el indicador de Windows"
     $name:ru-RU: "Заменить системный индикатор Windows"
-    $description: "Media volume keys and the mouse wheel over the taskbar notification area change the volume through this mod and show its OSD instead of the Windows flyout or volume tooltip, even when the volume OSD above is off. Indicators of the manufacturer's own software (laptop or keyboard utilities) are not affected."
-    $description:uk-UA: "Медіаклавіші гучності та колесо миші над областю сповіщень панелі завдань змінюють гучність через цей мод і показують його OSD замість системного індикатора чи підказки гучності, навіть якщо OSD вище вимкнено. Не діє на індикатори програм виробника (утиліт ноутбука чи клавіатури)."
-    $description:pl-PL: "Klawisze głośności i kółko myszy nad obszarem powiadomień paska zadań zmieniają głośność przez ten mod i pokazują jego OSD zamiast wskaźnika lub podpowiedzi głośności Windows, nawet gdy OSD powyżej jest wyłączone. Nie dotyczy wskaźników oprogramowania producenta (narzędzi laptopa lub klawiatury)."
-    $description:de-DE: "Medien-Lautstärketasten und das Mausrad über dem Infobereich der Taskleiste ändern die Lautstärke über diesen Mod und zeigen sein OSD statt der Windows-Anzeige oder -Lautstärke-QuickInfo, auch wenn das OSD oben aus ist. Anzeigen von Herstellersoftware (Laptop- oder Tastatur-Tools) sind nicht betroffen."
-    $description:fr-FR: "Les touches de volume et la molette au-dessus de la zone de notification de la barre des tâches règlent le volume via ce mod et affichent son OSD au lieu de l'indicateur ou de l'info-bulle de volume de Windows, même si l'OSD ci-dessus est désactivé. Sans effet sur les indicateurs des logiciels du fabricant (outils du portable ou du clavier)."
-    $description:es-ES: "Las teclas de volumen y la rueda del ratón sobre el área de notificación de la barra de tareas cambian el volumen mediante este mod y muestran su OSD en lugar del indicador o la información de volumen de Windows, aunque el OSD de arriba esté desactivado. No afecta a los indicadores del software del fabricante (utilidades del portátil o del teclado)."
-    $description:ru-RU: "Медиаклавиши громкости и колесо мыши над областью уведомлений панели задач меняют громкость через этот мод и показывают его OSD вместо системного индикатора или подсказки громкости, даже если OSD выше выключен. Не действует на индикаторы программ производителя (утилит ноутбука или клавиатуры)."
+    $description: "Media volume keys and the mouse wheel over the taskbar notification area change the volume through this mod. For them and for other volume changes that bring up the Windows flyout (touchpad gestures, headset buttons), the mod's OSD is shown instead, even when the volume OSD above is off. Indicators of the manufacturer's own software (laptop or keyboard utilities) are not affected."
+    $description:uk-UA: "Медіаклавіші гучності та колесо миші над областю сповіщень панелі завдань змінюють гучність через цей мод. Для них і для інших змін гучності, на які Windows показує свій індикатор (жести тачпада, кнопки навушників), замість нього показується OSD мода, навіть якщо OSD вище вимкнено. Не діє на індикатори програм виробника (утиліт ноутбука чи клавіатури)."
+    $description:pl-PL: "Klawisze głośności i kółko myszy nad obszarem powiadomień paska zadań zmieniają głośność przez ten mod. Dla nich i dla innych zmian głośności, przy których Windows pokazuje swój wskaźnik (gesty touchpada, przyciski słuchawek), zamiast niego pokazywane jest OSD moda, nawet gdy OSD powyżej jest wyłączone. Nie dotyczy wskaźników oprogramowania producenta (narzędzi laptopa lub klawiatury)."
+    $description:de-DE: "Medien-Lautstärketasten und das Mausrad über dem Infobereich der Taskleiste ändern die Lautstärke über diesen Mod. Dafür und für andere Lautstärkeänderungen, bei denen Windows seine Anzeige einblendet (Touchpad-Gesten, Headset-Tasten), erscheint stattdessen das OSD des Mods, auch wenn das OSD oben aus ist. Anzeigen von Herstellersoftware (Laptop- oder Tastatur-Tools) sind nicht betroffen."
+    $description:fr-FR: "Les touches de volume et la molette au-dessus de la zone de notification de la barre des tâches règlent le volume via ce mod. Pour elles et pour les autres changements de volume qui font apparaître l'indicateur de Windows (gestes du pavé tactile, boutons du casque), l'OSD du mod s'affiche à la place, même si l'OSD ci-dessus est désactivé. Sans effet sur les indicateurs des logiciels du fabricant (outils du portable ou du clavier)."
+    $description:es-ES: "Las teclas de volumen y la rueda del ratón sobre el área de notificación de la barra de tareas cambian el volumen mediante este mod. Para ellas y para otros cambios de volumen que muestran el indicador de Windows (gestos del panel táctil, botones de los auriculares), se muestra en su lugar el OSD del mod, aunque el OSD de arriba esté desactivado. No afecta a los indicadores del software del fabricante (utilidades del portátil o del teclado)."
+    $description:ru-RU: "Медиаклавиши громкости и колесо мыши над областью уведомлений панели задач меняют громкость через этот мод. Для них и для других изменений громкости, на которые Windows показывает свой индикатор (жесты тачпада, кнопки наушников), вместо него показывается OSD мода, даже если OSD выше выключен. Не действует на индикаторы программ производителя (утилит ноутбука или клавиатуры)."
   - osdStyle: "capsule"
     $name: "OSD style"
     $name:uk-UA: "Стиль OSD"
@@ -6686,6 +6688,87 @@ void SyncPopupHookState() {
     UpdateHooks();
 }
 
+// Touchpad gestures, headset buttons and laptop hotkey drivers change the volume
+// without going through the keyboard hook, and Windows then shows its own
+// flyout. With "Replace the Windows volume flyout", that flyout is hidden as
+// soon as it appears and this mod's OSD is shown instead.
+HWINEVENTHOOK g_flyoutHook = nullptr;
+DWORD g_flyoutHookPid = 0;
+HWND g_sysFlyout = nullptr;
+DWORD g_sysFlyoutTick = 0;
+DWORD g_volumeChangeTick = 0;
+constexpr DWORD kFlyoutMatchMs = 500;  // the flyout and the volume event arrive in either order
+
+// Windows' indicator window in Explorer: an untitled, non-activating XAML
+// island host on Windows 11, a NativeHWNDHost with a DirectUIHWND on Windows 10.
+// It also shows brightness and other indicators, so it's only hidden right
+// after a volume change.
+static bool IsSystemIndicatorWindow(HWND hwnd) {
+    if (GetAncestor(hwnd, GA_ROOT) != hwnd || GetWindowTextLengthW(hwnd) != 0) return false;
+    WCHAR cls[64] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0) {
+        return (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE) != 0;
+    }
+    return wcscmp(cls, L"NativeHWNDHost") == 0 && FindWindowExW(hwnd, nullptr, L"DirectUIHWND", nullptr);
+}
+
+static void ShowMasterVolumeOsd() {
+    std::wstring devName;
+    IAudioEndpointVolume* ep = GetDefaultEndpointVolume(&devName);
+    if (!ep) return;
+    float v = 0.0f;
+    BOOL m = FALSE;
+    ep->GetMasterVolumeLevelScalar(&v);
+    ep->GetMute(&m);
+    ep->Release();
+    g_osdTarget = OsdTarget::Master;
+    ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, OsdKind::Always, devName);
+}
+
+static void ReplaceSystemFlyout() {
+    if (g_sysFlyout && IsWindowVisible(g_sysFlyout)) {
+        ShowWindow(g_sysFlyout, SW_HIDE);
+        ShowMasterVolumeOsd();
+    }
+    g_sysFlyout = nullptr;
+}
+
+static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd || !IsSystemIndicatorWindow(hwnd)) return;
+    g_sysFlyout = hwnd;
+    g_sysFlyoutTick = GetTickCount();
+    if (GetTickCount() - g_volumeChangeTick < kFlyoutMatchMs) ReplaceSystemFlyout();
+}
+
+// Called for every change of the default device's volume or mute.
+void OnMasterVolumeChanged() {
+    g_volumeChangeTick = GetTickCount();
+    if (g_sysFlyout && GetTickCount() - g_sysFlyoutTick < kFlyoutMatchMs) ReplaceSystemFlyout();
+}
+
+// Watches Explorer's windows being shown while the setting is on; follows
+// Explorer restarts (TaskbarCreated).
+void UpdateFlyoutHook() {
+    DWORD pid = 0;
+    HWND tray = g_cfg.replaceWindowsOsd ? FindWindowW(L"Shell_TrayWnd", nullptr) : nullptr;
+    if (tray) GetWindowThreadProcessId(tray, &pid);
+    if (pid == g_flyoutHookPid) return;
+    if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
+    g_flyoutHook = pid ? SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, FlyoutWinEventProc, pid, 0,
+                                         WINEVENT_OUTOFCONTEXT)
+                       : nullptr;
+    g_flyoutHookPid = g_flyoutHook ? pid : 0;
+    g_sysFlyout = nullptr;
+}
+
+void StopFlyoutHook() {
+    if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
+    g_flyoutHook = nullptr;
+    g_flyoutHookPid = 0;
+    g_sysFlyout = nullptr;
+}
+
 // Hotkeys go through the keyboard hook (works in fullscreen games, no repeats
 // of toggles). RegisterHotKey stays as a fallback for elevated foreground
 // windows, which a non-elevated hook cannot see.
@@ -6716,6 +6799,7 @@ void RegisterAllHotkeys() {
     // shows this mod's OSD for the media keys.
     g_hookReplaceOsd = g_cfg.replaceWindowsOsd;
     UpdateHooks();
+    UpdateFlyoutHook();
 }
 
 void UnregisterAllHotkeys() {
@@ -6881,6 +6965,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         Wh_Log(L"TaskbarCreated received, restoring tray icon");
         g_trayAdded = false;
         UpdateTrayIcon(true);
+        UpdateFlyoutHook();
         return 0;
     }
 
@@ -7016,6 +7101,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_APP_VOLUME_CHANGED:
             g_volumeMsgPending = false;
+            OnMasterVolumeChanged();
             UpdateTrayIcon();
             if (g_visible && !g_dragging && RefreshValues()) Render();
             return 0;
@@ -7361,6 +7447,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     }
     g_hwnd = nullptr;
 
+    StopFlyoutHook();
     StopHookThread();
     if (g_hwndOsd) DestroyWindow(g_hwndOsd);
     if (g_hwndMenu) DestroyWindow(g_hwndMenu);
