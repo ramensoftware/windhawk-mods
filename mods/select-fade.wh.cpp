@@ -31,7 +31,6 @@ Replaces the default desktop selection rectangle with a fully custom-drawn overl
 
 Based on the original [Desktop Marquee Fade](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-marquee-fade.wh.cpp) mod by Twilight0Sparkle (MIT License).
 
-![Preview](https://i.imgur.com/XXXXXXX.gif)
 */
 // ==/WindhawkModReadme==
 
