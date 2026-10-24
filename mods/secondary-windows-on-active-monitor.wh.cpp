@@ -23,7 +23,7 @@ again, even if you now work with the app on another monitor. For example,
 Telegram Desktop opens photos and videos on the monitor where the viewer was
 last time, not where the chat is.
 
-![Demo](https://github.com/user-attachments/assets/5000330f-0441-4c61-926e-526427c3e0c2)
+![Demo](https://raw.githubusercontent.com/limpompo/windhawk-mods-limpompo/main/mods/secondary-windows-on-active-monitor/demo.gif)
 
 The mod intercepts the showing of secondary windows of the apps from the
 *Applications* list and, if a window is about to appear on a different monitor
