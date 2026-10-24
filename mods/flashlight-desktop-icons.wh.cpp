@@ -29,6 +29,8 @@ opacity once the mouse stops moving.
   at all while the mouse is away from the desktop.
 * Labels fade together with their icons. Enable the "Hide Icon Labels" setting
   to remove the text under desktop icons entirely.
+* Dragging a file over the desktop reveals the icons around the drag cursor,
+  so you can see what you are dropping onto.
 * Double-clicking empty desktop space hides all icons; double-clicking again
   returns to flashlight mode (rather than making all icons fully visible).
 
@@ -47,10 +49,19 @@ opacity once the mouse stops moving.
   reveal icons in bulk (per section or on toggle). This mod's default
   experience is a continuous visibility gradient around the cursor.
 
+## Known limitations
+
+* Faded labels are drawn in the mod's own style (white text with a glow)
+  rather than Explorer's shadow style, so a label changes slightly when its
+  icon reaches full opacity and Explorer takes over drawing it.
+
 ## Credits
 
 * [desktop-icons-transparency](https://windhawk.net/mods/desktop-icons-transparency)
   by zed712969-crypto: desktop window discovery and subclassing patterns.
+* [Smooth Desktop Icons Auto-Hide](https://windhawk.net/mods/smooth-desktop-icons-auto-hide)
+  by HeyOkay: the drag-and-drop reveal approach (hooking the desktop's
+  IDropTarget vtable methods).
 */
 // ==/WindhawkModReadme==
 
@@ -83,6 +94,7 @@ opacity once the mouse stops moving.
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <ole2.h>
 #include <Uxtheme.h>
 #include <vssym32.h>
 
@@ -125,9 +137,24 @@ Settings GetSettings() {
 std::atomic<HWND> g_listViewWnd{nullptr};   // Desktop SysListView32 (subclassed)
 std::atomic<HWND> g_shellViewWnd{nullptr};  // Parent SHELLDLL_DefView (subclassed)
 
+// Set at the start of Wh_ModUninit so that the fade timer can't be re-armed
+// by a WM_MOUSEMOVE or a queued WM_TIMER processed before the subclass is
+// removed.
+std::atomic<bool> g_unloading{false};
+
+// The desktop's own IDropTarget object, found via the window property that
+// RegisterDragDrop sets. The hooked vtable methods may be shared with other
+// shell drop targets, so the hooks only react to this exact object.
+std::atomic<IDropTarget*> g_desktopDropTarget{nullptr};
+std::atomic<bool> g_dropTargetHooked{false};
+
 // Posted to the desktop list view on unload so that the fade timer is killed
 // on its owning thread, while the subclass that handles it is still installed.
 UINT g_msgKillFadeTimer = 0;
+
+// Posted to the desktop list view by the drop target hooks, carrying the
+// drag cursor position (screen coordinates) during an OLE drag.
+UINT g_msgDragPosition = 0;
 
 // All of the state below is only ever touched by the desktop's UI thread (the
 // subclass procs, the fade timer and the custom draw handler).
@@ -230,6 +257,10 @@ void UpdateIconVisibility(HWND hListView) {
 // end of the fade-out. Killed as soon as the fade completes.
 
 void ScheduleFadeTimer(HWND hListView) {
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
     if (g_fadeTicking) {
         // Already ticking; OnFadeTimer re-evaluates the state on every tick.
         return;
@@ -245,6 +276,14 @@ void ScheduleFadeTimer(HWND hListView) {
 }
 
 void OnFadeTimer(HWND hListView) {
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        // Unload in progress: don't touch the timer state, the fade timer has
+        // been (or is about to be) killed via the registered message.
+        KillTimer(hListView, kFadeTimerId);
+        g_fadeTicking = false;
+        return;
+    }
+
     Settings settings = GetSettings();
     ULONGLONG elapsed = GetTickCount64() - g_lastMouseMoveTime;
 
@@ -398,7 +437,10 @@ void DrawLabelWithAlpha(HWND hListView, HDC hdc, int iItem, BYTE alpha) {
     EndBufferedPaint(hbp, TRUE);
 }
 
-LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD) {
+// result is what DefView and any previously installed subclasses returned
+// for this notification; it must be passed through for everything the mod
+// doesn't draw or hide itself.
+LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD, LRESULT result) {
     HWND hListView = pLVCD->nmcd.hdr.hwndFrom;
 
     switch (pLVCD->nmcd.dwDrawStage) {
@@ -409,7 +451,7 @@ LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD) {
                     g_hTheme = OpenThemeData(hListView, L"ListView");
                 }
             }
-            return CDRF_NOTIFYITEMDRAW;
+            return result | CDRF_NOTIFYITEMDRAW;
 
         case CDDS_ITEMPREPAINT: {
             int iItem = (int)pLVCD->nmcd.dwItemSpec;
@@ -423,7 +465,7 @@ LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD) {
             // Selected and cut items are transient, highlighted states; let
             // Explorer draw them natively at full opacity.
             if (lvi.state & (LVIS_SELECTED | LVIS_CUT)) {
-                return CDRF_DODEFAULT;
+                return result;
             }
 
             Settings settings = GetSettings();
@@ -433,7 +475,7 @@ LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD) {
             // hand it back - unless labels are hidden, since Explorer would
             // draw the label too.
             if (alpha == 255 && !settings.hideLabels) {
-                return CDRF_DODEFAULT;
+                return result;
             }
             if (alpha == 0) {
                 return CDRF_SKIPDEFAULT;
@@ -447,16 +489,26 @@ LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD) {
         }
     }
 
-    return CDRF_DODEFAULT;
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Subclasses (both installed on the desktop's UI thread)
 
+void EnsureDropTargetHook();
+
 LRESULT CALLBACK ListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                       LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_MOUSEMOVE:
+            // The desktop may register its drop target after the list view is
+            // created, and a recreated desktop registers a new one; retry the
+            // (bounded) installation/lookup until the current target is known.
+            if (!g_dropTargetHooked.load(std::memory_order_relaxed) ||
+                !g_desktopDropTarget.load(std::memory_order_relaxed)) {
+                EnsureDropTargetHook();
+            }
+
             g_mousePos = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             g_lastMouseMoveTime = GetTickCount64();
 
@@ -500,7 +552,12 @@ LRESULT CALLBACK ListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             if (hWnd == g_listViewWnd.load()) {
                 g_listViewWnd = nullptr;
                 g_fadeTicking = false;
+                g_trackingMouseLeave = false;
                 g_lastItemAlphas.clear();
+                // The desktop's drop target is revoked together with the
+                // desktop; a recreated desktop registers a new object, which
+                // EnsureDropTargetHook re-discovers via the WM_MOUSEMOVE retry.
+                g_desktopDropTarget = nullptr;
             }
             break;
 
@@ -508,6 +565,17 @@ LRESULT CALLBACK ListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             if (g_msgKillFadeTimer && uMsg == g_msgKillFadeTimer) {
                 KillTimer(hWnd, kFadeTimerId);
                 g_fadeTicking = false;
+                return 0;
+            }
+            if (g_msgDragPosition && uMsg == g_msgDragPosition) {
+                // Screen coordinates of the drag cursor, posted by the
+                // desktop's IDropTarget hooks during an OLE drag.
+                POINT pt = {(int)(INT_PTR)wParam, (int)(INT_PTR)lParam};
+                ScreenToClient(hWnd, &pt);
+                g_mousePos = pt;
+                g_lastMouseMoveTime = GetTickCount64();
+                UpdateIconVisibility(hWnd);
+                ScheduleFadeTimer(hWnd);
                 return 0;
             }
             break;
@@ -522,7 +590,11 @@ LRESULT CALLBACK ShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         LPNMHDR pnmh = (LPNMHDR)lParam;
         if (pnmh && pnmh->hwndFrom && pnmh->hwndFrom == g_listViewWnd.load() &&
             pnmh->code == NM_CUSTOMDRAW) {
-            return HandleCustomDraw((LPNMLVCUSTOMDRAW)lParam);
+            // Let DefView (which e.g. colors compressed/encrypted file names)
+            // and any previously installed subclasses handle the notification
+            // first, and build on their result.
+            LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            return HandleCustomDraw((LPNMLVCUSTOMDRAW)lParam, result);
         }
     } else if (uMsg == WM_THEMECHANGED) {
         // Refresh the cached theme on theme or high-contrast switches.
@@ -677,6 +749,10 @@ void SubclassDesktop(HWND hListView) {
     Wh_Log(L"Subclassed the desktop list view");
 
     RedrawWindow(hListView, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+
+    // The drop target may be registered by now (if not, the list view
+    // subclass retries until it is).
+    EnsureDropTargetHook();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -702,6 +778,145 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
     }
 
     return hWnd;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Drag & drop reveal
+//
+// During an OLE drag the list view gets no WM_MOUSEMOVE, so the icons would
+// stay at idle opacity exactly while the user is aiming at them. The desktop
+// registers an IDropTarget with OLE, and every drag over the desktop, from
+// any process, ends up calling that object's DragEnter/DragOver/Drop on the
+// desktop thread. Hooking those vtable methods tracks the drag cursor with
+// no polling. Pattern follows smooth-desktop-icons-auto-hide.
+
+using DropTargetDragEnter_t = HRESULT(STDMETHODCALLTYPE*)(
+    IDropTarget*, IDataObject*, DWORD, POINTL, DWORD*);
+using DropTargetDragOver_t = HRESULT(STDMETHODCALLTYPE*)(
+    IDropTarget*, DWORD, POINTL, DWORD*);
+using DropTargetDrop_t = HRESULT(STDMETHODCALLTYPE*)(
+    IDropTarget*, IDataObject*, DWORD, POINTL, DWORD*);
+
+DropTargetDragEnter_t DropTargetDragEnter_Original = nullptr;
+DropTargetDragOver_t DropTargetDragOver_Original = nullptr;
+DropTargetDrop_t DropTargetDrop_Original = nullptr;
+
+void NotifyDragPosition(IDropTarget* self, const POINTL& pt) {
+    if (self != g_desktopDropTarget.load() || !g_msgDragPosition ||
+        g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    HWND hListView = g_listViewWnd.load();
+    if (hListView) {
+        PostMessageW(hListView, g_msgDragPosition,
+                     (WPARAM)(INT_PTR)pt.x, (LPARAM)(INT_PTR)pt.y);
+    }
+}
+
+HRESULT STDMETHODCALLTYPE DropTargetDragEnter_Hook(
+    IDropTarget* self, IDataObject* pDataObj, DWORD grfKeyState, POINTL pt,
+    DWORD* pdwEffect) {
+    NotifyDragPosition(self, pt);
+    return DropTargetDragEnter_Original(self, pDataObj, grfKeyState, pt,
+                                        pdwEffect);
+}
+
+HRESULT STDMETHODCALLTYPE DropTargetDragOver_Hook(
+    IDropTarget* self, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) {
+    NotifyDragPosition(self, pt);
+    return DropTargetDragOver_Original(self, grfKeyState, pt, pdwEffect);
+}
+
+HRESULT STDMETHODCALLTYPE DropTargetDrop_Hook(
+    IDropTarget* self, IDataObject* pDataObj, DWORD grfKeyState, POINTL pt,
+    DWORD* pdwEffect) {
+    NotifyDragPosition(self, pt);
+    return DropTargetDrop_Original(self, pDataObj, grfKeyState, pt, pdwEffect);
+}
+
+bool IsAddressInLoadedModule(void* p) {
+    HMODULE module = nullptr;
+    return p &&
+           GetModuleHandleExW(
+               GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+               (LPCWSTR)p, &module) &&
+           module;
+}
+
+IDropTarget* FindDesktopDropTarget() {
+    HWND hShellView = g_shellViewWnd.load();
+    HWND candidates[] = {
+        g_listViewWnd.load(),
+        hShellView,
+        hShellView ? GetParent(hShellView) : nullptr,
+    };
+
+    for (HWND hwnd : candidates) {
+        if (!hwnd) {
+            continue;
+        }
+
+        // RegisterDragDrop stores the in-process IDropTarget in this window
+        // property.
+        auto* target = static_cast<IDropTarget*>(
+            GetPropW(hwnd, L"OleDropTargetInterface"));
+        if (!target) {
+            continue;
+        }
+
+        // IDropTarget vtable: QueryInterface, AddRef, Release, DragEnter,
+        // DragOver, DragLeave, Drop.
+        void** vtbl = *reinterpret_cast<void***>(target);
+        if (IsAddressInLoadedModule(vtbl[3]) &&
+            IsAddressInLoadedModule(vtbl[4]) &&
+            IsAddressInLoadedModule(vtbl[6])) {
+            return target;
+        }
+    }
+
+    return nullptr;
+}
+
+// Runs on the desktop thread (subclass proc, CreateWindowExW hook) or on the
+// engine thread (Wh_ModAfterInit), always after Wh_ModInit.
+void EnsureDropTargetHook() {
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    // Always publish the lookup result, including nullptr: a stale pointer
+    // must not survive a desktop recreation (the hooks only react to this
+    // exact object, so nullptr simply means "no drag reveal for now").
+    IDropTarget* target = FindDesktopDropTarget();
+    g_desktopDropTarget = target;
+    if (!target || g_dropTargetHooked.load()) {
+        return;
+    }
+
+    void** vtbl = *reinterpret_cast<void***>(target);
+    bool ok =
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<DropTargetDragEnter_t>(vtbl[3]),
+            DropTargetDragEnter_Hook, &DropTargetDragEnter_Original) &&
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<DropTargetDragOver_t>(vtbl[4]),
+            DropTargetDragOver_Hook, &DropTargetDragOver_Original) &&
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<DropTargetDrop_t>(vtbl[6]),
+            DropTargetDrop_Hook, &DropTargetDrop_Original);
+    if (!ok) {
+        Wh_Log(L"Drop target hooks failed");
+        return;
+    }
+
+    g_dropTargetHooked = true;
+
+    // This runs after Wh_ModInit, so the hooks must be applied explicitly.
+    Wh_ApplyHookOperations();
+
+    Wh_Log(L"Drop target hooks set");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -735,6 +950,8 @@ BOOL Wh_ModInit() {
 
     g_msgKillFadeTimer =
         RegisterWindowMessageW(L"FlashlightDesktopIcons_KillFadeTimer");
+    g_msgDragPosition =
+        RegisterWindowMessageW(L"FlashlightDesktopIcons_DragPosition");
 
     LoadSettings();
 
@@ -753,8 +970,20 @@ void Wh_ModAfterInit() {
     }
 }
 
+void Wh_ModBeforeUninit() {
+    // Called before Windhawk removes the hooks: stop the drop target hooks
+    // from posting new messages, and make sure no new hooks are registered
+    // from now on.
+    g_unloading = true;
+}
+
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+
+    // Already set in Wh_ModBeforeUninit; kept here so that the fade timer
+    // can't be re-armed by a message processed before the subclass is
+    // removed, even if this ever runs without the BeforeUninit step.
+    g_unloading = true;
 
     HWND hListView = g_listViewWnd.load();
     HWND hShellView = g_shellViewWnd.load();
