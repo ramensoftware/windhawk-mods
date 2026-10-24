@@ -20027,7 +20027,7 @@
         "ratingUsers": 80,
         "reviews": 0,
         "trendingSorting": 1.9028938884507975,
-        "updated": 1792648958000,
+        "updated": 1792868539000,
         "users": 1344
       },
       "metadata": {
@@ -20043,7 +20043,7 @@
           "explorer.exe"
         ],
         "name": "TopBar for Windows",
-        "version": "1.4.0"
+        "version": "1.4.1"
       }
     },
     "window-border-customizer": {

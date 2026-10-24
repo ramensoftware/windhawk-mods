@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T18:00:22.000Z</updated>
+    <updated>2026-10-24T19:02:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.4.1]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#cc988a903bbf7aad82025e31a485561824478fa2</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-10-24T19:02:19.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Addition:</strong></p>
+<ul>
+<li>Added a Shortcuts panel in the Settings app to assign custom keyboard shortcuts for flyouts, Start, Search, and Restart Explorer, including support for overriding Windows default keys.</li>
+<li><strong>Added Titlebar Bleed:</strong> When a window is maximized, the TopBar now samples the maximized window's titlebar gradient and displays it behind the bar's content.</li>
+</ul>
+<p><strong>Updates:</strong></p>
+<ul>
+<li>Fixed the Top Bar not hiding in full screen window.</li>
+<li>Fixed the Auto-Hide animation causing the Top Bar to misalign to the top-left.</li>
+<li>Fixed TopBar popup is misaligned at top left, and is rendering small when secondary is set to Vertical Alignment.</li>
+<li>Fixed the DWM backdrop shadow appearing when Top Bar hides in auto hide mode.(made it less noticeable)</li>
+<li>Updated the Reload action to temporarily switch to Default mode before reloading and switching back to Auto-Hide, fixing a mouse input bug.</li>
+<li>Topbar now force-restarts on resolution, and display scale changes to avoid misalignment of topbar.</li>
+<li>Added popup misalignment detection. if the bar gets misaligned, the topbar restarts the thread fixing it.</li>
+<li>Updated the Notification flyout to hide the "Show full notification" button for short messages.</li>
+<li>Fixed activation pill not re-centering after resolution or scale changes.</li>
+<li>Now, setting Width=Auto for <code>Grid#TopBarRoot</code> makes combine removes space between Left, Right, and Center panel and topbar looks like a dynamic island instead of a Bar.</li>
+<li>Fixed GreenBar theme not applying custom colors to WinUI3 icons.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Minecraft launcher region detection spoof 0.1.0]]></title>
         <id>https://windhawk.net/mods/minecraft-launcher-region-spoof#59268a9c67ff2f2a6709162c426e1eacbf525832</id>
@@ -738,21 +767,6 @@ If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
         <author>
             <name>Himanshu</name>
             <uri>https://github.com/devcode90</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.5.7]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#b7f63d65fc05d4235f2404ba2d507504073a69c3</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-10-23T10:00:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added option to stop Windows notifications from covering the mixer</li>
-<li>Improved audio device selection</li>
-<li>Slight visual tweaks</li>
-</ul>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
         </author>
     </entry>
 </feed>

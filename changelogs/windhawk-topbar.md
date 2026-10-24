@@ -1,3 +1,22 @@
+## 1.4.1 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc988a903bbf7aad82025e31a485561824478fa2/mods/windhawk-topbar.wh.cpp))
+
+**Addition:**
+* Added a Shortcuts panel in the Settings app to assign custom keyboard shortcuts for flyouts, Start, Search, and Restart Explorer, including support for overriding Windows default keys.
+* **Added Titlebar Bleed:** When a window is maximized, the TopBar now samples the maximized window's titlebar gradient and displays it behind the bar's content.
+
+**Updates:**
+* Fixed the Top Bar not hiding in full screen window.
+* Fixed the Auto-Hide animation causing the Top Bar to misalign to the top-left.
+* Fixed TopBar popup is misaligned at top left, and is rendering small when secondary is set to Vertical Alignment.
+* Fixed the DWM backdrop shadow appearing when Top Bar hides in auto hide mode.(made it less noticeable)
+* Updated the Reload action to temporarily switch to Default mode before reloading and switching back to Auto-Hide, fixing a mouse input bug.
+* Topbar now force-restarts on resolution, and display scale changes to avoid misalignment of topbar.
+* Added popup misalignment detection. if the bar gets misaligned, the topbar restarts the thread fixing it.
+* Updated the Notification flyout to hide the "Show full notification" button for short messages.
+* Fixed activation pill not re-centering after resolution or scale changes.
+* Now, setting Width=Auto for `Grid#TopBarRoot` makes combine removes space between Left, Right, and Center panel and topbar looks like a dynamic island instead of a Bar.
+* Fixed GreenBar theme not applying custom colors to WinUI3 icons.
+
 ## 1.4.0 ([Oct 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fbb8e30010d661ed001161637cd38e8365b7f7c3/mods/windhawk-topbar.wh.cpp))
 
 **Addition:**
