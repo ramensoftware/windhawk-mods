@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         0.9.226
+// @version         0.9.237
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -24,26 +24,25 @@ A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations 
 - Animated interactions: grouping, sorting, selecting/cutting/copying files, and many more.
 - Smooth scrolling, touchpad gestures and inertia scrolling.
 - RTL language support.
-- Button to switch back to native explorer view (or use **Ctrl+Alt+F9** shortcut).
+- Optional button to switch back to native Explorer view; **Ctrl+Alt+F9** also works when the button is hidden.
 - Prioritizes responsiveness and animations over efficiency.
 - Less likely to break in future Windows updates since it does not modify the default views of explorer but recreates them
-
-## Use
-1. Install [Windhawk](https://windhawk.net/).
-2. Click the "Create a new mod" button.
-3. Paste the contents of [`latest.cpp`](https://raw.githubusercontent.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/refs/heads/main/latest.cpp).
-4. Compile and enable it.
-5. Customize options.
-
 
 ## Features
 - **Adjustable Item Height** — Smooth zooming with `Ctrl`+ mouse wheel or pinch gestures.
 - **Custom Fonts** — Personalize the appearance with your preferred fonts.
+- **Text Antialiasing** — Use Windows monitor tuning, smooth grayscale, or no antialiasing while preserving transparent backgrounds.
 - **Animated Selection & Hover States** — Smooth visual transitions, including a dedicated selection style for file names only.
 - **Dynamic Zebra Striping** — Animated alternating row colors for improved readability.
 - **Smooth Scrolling** — Fluid scrolling for a more responsive browsing experience.
 - **Seamless View Switching** — Overlays the default Explorer views, letting you switch between the modded and native views directly from the Explorer window.
 - **Faster Loading** — Improves load times through caching and by skipping file pre-sorting.
+- **Adaptive Image Quality** — Matches icon and thumbnail resolution to visible size and available memory.
+
+## Report bugs
+Report bugs in the mod's main repository [Here](https://github.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/issues).
+Enable **Enable logging** when reproducing a bug and include Windhawk's log in
+the report. Logs include file names and paths; disable the option afterward.
 */
 // ==/WindhawkModReadme==
 
@@ -62,6 +61,13 @@ A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations 
     - fontFamily: ""
       $name: Font family
       $description: Enter an installed font name. Leave blank to use Explorer's font.
+    - textAntialiasing: system
+      $name: Text antialiasing
+      $description: Preserves transparent backgrounds. Windows uses native monitor tuning. Font customization tools can override these choices.
+      $options:
+        - system: Windows default
+        - smooth: Smooth grayscale
+        - aliased: No antialiasing
     - secondaryTextOpacity: 45
       $name: Date, type and size text opacity (%)
       $description: Higher = brighter text; lower = fainter text.
@@ -124,6 +130,9 @@ A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations 
       $description: Higher = stronger highlight; lower = subtler highlight.
   $name: Mouse hover
 - Navigation:
+    - showNativeViewToggleButton: true
+      $name: Show native view toggle button
+      $description: Show the button that switches between GPU and native Explorer views. Ctrl+Alt+F9 always works.
     - smoothScrolling: true
       $name: Smooth scrolling
     - touchpadDirectManipulation: true
@@ -150,23 +159,9 @@ A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations 
       $name: Automatically fit columns
       $description: Fit when folder data and layout are ready, after window resizing, and after zooming. Folder changes preserve columns when text already fits.
   $name: Columns and sorting
-- Logging:
-    - perfLogging: false
-      $name: Performance logging
-      $description: Writes performance details to Windhawk's log.
-    - frameTimeLogging: false
-      $name: Frame time logging
-      $description: Logs per-tab frame cadence, CPU stage timings and stalls during activity. Independent of performance logging; disabled by default.
-    - pipelineTracing: false
-      $name: Detailed pipeline tracing (high volume)
-      $description: Traces input, scrolling, frames, rendering and workers. Buffered per tab and written off the UI thread. Enable only while reproducing a problem.
-    - uiTransitionLogging: false
-      $name: UI transition diagnostics
-      $description: Logs navigation, view changes, presentation handoffs, and sampled item opacity/icon/text drawing. Uses the existing per-tab background trace writer. Full pipeline tracing is optional.
-    - gpuMemoryLogging: false
-      $name: GPU memory profiling
-      $description: Logs measured process GPU usage and OS budgets, plus this tab's estimated buffers, animation surfaces, glyph caches, icons and pending cleanup. Samples during activity and resource creation/release; disabled by default.
-  $name: Logging
+- enableLogging: false
+  $name: Enable logging
+  $description: Enable all diagnostics for a bug report, including selection, input, rendering, timing and GPU memory. Logs include file names and paths. Disable after reproducing the problem.
 */
 // ==/WindhawkModSettings==
 
@@ -204,6 +199,7 @@ A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations 
 #include <dcomp.h>
 #include <directmanipulation.h>
 #include <dwrite.h>
+#include <dwrite_3.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <roapi.h>
@@ -249,7 +245,20 @@ namespace {
 // arrays must live on the heap, even when used only in a rare branch.
 struct ShellPathStorage { wchar_t value[32768]{}; };
 
-constexpr wchar_t kOverlayClass[] = L"WindhawkWindowsGpuOverlayTest";
+constexpr wchar_t kOverlayClass[] = L"" WH_MOD_ID L"-overlay";
+HINSTANCE OverlayModuleInstance() {
+    HMODULE module=nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(kOverlayClass),&module);
+    return module;
+}
+HRESULT CreatePixelAlignedVisual(IDCompositionDevice* device,IDCompositionVisual** visual) {
+    const HRESULT hr=device->CreateVisual(visual);
+    if(FAILED(hr)) return hr;
+    // Curves and input retain continuous geometry. Moving already-rasterized
+    // pixels must not bilinearly blur text/icons a second time in DWM.
+    return (*visual)->SetBitmapInterpolationMode(DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+}
 constexpr wchar_t kOverlayProperty[] = L"WindhawkExplorerGpuOverlayOwnsShellView";
 constexpr wchar_t kViewToggleOwnerProperty[] = L"WindhawkExplorerGpuViewToggleOwner";
 constexpr wchar_t kSuppressedHostProperty[] = L"WindhawkGpuSuppressedFolderHost";
@@ -389,6 +398,8 @@ constexpr UINT kMsgRetireGraphics = WM_APP + 69;
 constexpr UINT kMsgFilesystemChanged = WM_APP + 70;
 constexpr UINT kMsgFlushDirectoryChanges = WM_APP + 71;
 constexpr UINT kMsgPresentationReady = WM_APP + 72;
+constexpr UINT kMsgReleaseFrameHooks = WM_APP + 73;
+constexpr UINT kMsgNativeRenameEditor = WM_APP + 74;
 constexpr wchar_t kFrameSizingProperty[] = L"WindhawkGpuFrameSizing";
 constexpr wchar_t kColdAttachResolvedProperty[] = L"WindhawkGpuColdAttachResolved";
 constexpr size_t kMaxCoalescedShellItems = 32;
@@ -420,7 +431,8 @@ constexpr size_t kMaxIconJobs = 128;
 // Background WIC decoding is independent of Explorer's drawing apartment.
 // Only these small GPU transfers run on the UI thread, outside WM_PAINT,
 // once per composition-paced frame. No GPU work happens in the icon callback.
-constexpr UINT kMaxIconDimension = 512;
+constexpr UINT kPlatformImageDimension = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+constexpr size_t kInitialImageMemoryAllowance = 64ULL * 1024 * 1024;
 constexpr size_t kIconResultsPerDispatch = 16;
 constexpr double kIconDeliveryBudgetMs = .35;
 constexpr size_t kDetailResultsPerFrame = 32;
@@ -460,6 +472,9 @@ constexpr int kMaxNativeIndexFallbackItems = 2048;
 // Threshold for parsing on the UI STA, not a selection-size limit. Larger
 // groups prepare identities on their own tab lane before a native transaction.
 constexpr size_t kMaxDirectNativeSelectionItems = 64;
+// A corrupt provider count must not allocate gigabytes or run an unbounded
+// descriptor loop on Explorer's STA. This comfortably covers Shell catalogs.
+constexpr UINT kMaxShellColumns = 4096;
 constexpr size_t kColumnFitTextBudget = 192;
 constexpr size_t kColumnFitMaxVisibleRows = 24;
 constexpr UINT kColumnFitTextLimit = 384;
@@ -503,6 +518,7 @@ std::atomic<bool> g_zebra{true};
 std::atomic<bool> g_emptyRows{false};
 std::atomic<int> g_zebraOpacity{4};
 std::atomic<bool> g_smooth{true};
+std::atomic<bool> g_showNativeViewToggleButton{true};
 std::atomic<bool> g_touchpadDirectManipulation{true};
 std::atomic<bool> g_touchpadSwipeNavigation{false};
 std::atomic<UINT> g_wheelLines{3};
@@ -524,9 +540,13 @@ std::atomic<unsigned long long> g_shellAssociationEpoch{1};
 std::atomic<bool> g_scrollbar{true};
 std::atomic<bool> g_instantScrub{false};
 std::atomic<int> g_secondaryOpacity{45};
+enum class TextAntialiasing { System, Smooth, Aliased };
+std::atomic<TextAntialiasing> g_textAntialiasing{TextAntialiasing::System};
+std::atomic<unsigned long long> g_textRenderingRevision{1};
 std::atomic<bool> g_dimDotFiles{true};
 std::atomic<int> g_edgeMargin96{10};
 std::atomic<bool> g_perf{false};
+std::atomic<bool> g_selectionLogging{false};
 std::atomic<bool> g_frameTimeLogging{false};
 std::atomic<bool> g_pipelineTracing{false};
 std::atomic<bool> g_uiTransitionLogging{false};
@@ -661,6 +681,15 @@ struct TaskMemDeleter {
     void operator()(void* value) const { CoTaskMemFree(value); }
 };
 using OwnedPidl = std::unique_ptr<ITEMIDLIST, TaskMemDeleter>;
+bool ValidPidlBatch(HRESULT hr, ULONG requested, ULONG fetched, PITEMID_CHILD const* items) {
+    if ((hr != S_OK && hr != S_FALSE) || fetched > requested ||
+        (hr == S_OK && fetched != requested) || (hr == S_FALSE && fetched == requested)) return false;
+    // Only the reported prefix is valid/owned. Unused output slots are
+    // unspecified, even when the caller initially zeroed the array.
+    for (ULONG i=0; i<fetched; ++i)
+        if (!items[i]) return false;
+    return true;
+}
 using SharedPidl = std::shared_ptr<const ITEMIDLIST>;
 // Published by the names worker. Keep each complete relative child beside its
 // opaque cache key for canonical selection lookup, including cached revisits.
@@ -759,6 +788,7 @@ struct SelectionShape {
 struct TextLayoutCache {
     struct Raster {
         ComPtr<ID2D1Bitmap1> bitmap;
+        unsigned long long rendering = 0;
         float width = 0.f, height = 0.f;
         unsigned long long used = 0;
         size_t bytes = 0;
@@ -842,6 +872,9 @@ bool ShellItemVisible(DWORD attributes, const ShellVisibilityPolicy& policy,
 // maintaining 100k duplicated path strings, and lookup is O(log rows).
 // Hash collisions are resolved against the original full path before use.
 using EntryPathIndex = std::vector<std::pair<size_t, int>>;
+// Sparse local identity changes between worker-built directory snapshots.
+// Updating one row must not rebuild/shift the whole sorted index on the STA.
+using EntryPathUpdates = std::map<size_t, std::set<int>>;
 size_t SelectionPathHash(const std::wstring& path) noexcept {
     size_t hash = static_cast<size_t>(2166136261u);
     for (wchar_t ch : path) {
@@ -905,13 +938,14 @@ struct CachedFolderSnapshot {
     FolderViewMode viewMode;
     std::vector<Entry> entries;
     EntryPathIndex pathIndex;
+    EntryPathUpdates pathUpdates;
     std::shared_ptr<const NamespaceIdentities> namespaceIdentities;
     RowDetailsCache details;
     unsigned long long orderHash = 0;
     unsigned long long metadataHash = 0;
     size_t estimatedBytes = 0;
     ULONGLONG lastUse = 0;
-    std::shared_ptr<FolderChangeStamp> changeStamp;
+    std::weak_ptr<FolderChangeStamp> changeStamp; // History never owns a directory watch.
     unsigned long long changeRevision = 0;
 };
 
@@ -965,7 +999,10 @@ struct IconPixels {
     // The badge occupies a separate atlas band, never the provider's pixels.
     // Zero dimensions retain the ordinary icon path, including fallbacks.
     UINT thumbnailWidth = 0, thumbnailHeight = 0, badgeSize = 0;
-    bool Ready() const { return width && height && !data.empty(); }
+    bool Ready() const {
+        return width && height && width <= UINT_MAX/4 && stride >= width*4 &&
+            data.size()/stride >= height;
+    }
 };
 struct ThumbnailStyle {
     bool filmstrip = false;
@@ -988,6 +1025,7 @@ struct IconRecord {
     unsigned failures = 0;
     size_t cacheBytes = 0;
     UINT requestedSize = 32;
+    bool sourceLimited = false;
     bool presentationListed=false;
     std::list<std::wstring>::iterator presentationRecent;
     IconRecord() = default;
@@ -1005,6 +1043,8 @@ struct IconJob {
     DWORD attributes = FILE_ATTRIBUTE_NORMAL;
     ULONGLONG queuedAt = 0;
     UINT pixelSize = 32;
+    UINT textureLimit = kPlatformImageDimension;
+    std::shared_ptr<std::atomic<bool>> cancelled;
     bool allowThumbnail = false;
     SharedPidl shellIdentity;
     std::wstring extension;
@@ -1047,13 +1087,14 @@ std::atomic<unsigned long long> g_compositionStarted{0}, g_compositionCompleted{
 bool PresentationFramesActive();
 void SignalPresentationFrames();
 
-DWORD WINAPI CompositionFrameProc(LPVOID) {
+DWORD WINAPI CompositionFrameProc(LPVOID context) {
+    const HANDLE wake=static_cast<HANDLE>(context);
     LARGE_INTEGER frequency{}; QueryPerformanceFrequency(&frequency);
     unsigned long long sequence=0;
     // The inner cadence wait can consume shutdown's auto-reset signal. Test
     // the stop condition before returning to an infinite outer wait as well.
     for (;!g_frameStopping.load(std::memory_order_acquire);) {
-        if (WaitForSingleObject(g_frameEvent, INFINITE) != WAIT_OBJECT_0 ||
+        if (WaitForSingleObject(wake, INFINITE) != WAIT_OBJECT_0 ||
             g_frameStopping.load(std::memory_order_acquire)) break;
         while (!g_frameStopping.load(std::memory_order_acquire)) {
             AcquireSRWLockShared(&g_frameLock);
@@ -1087,7 +1128,7 @@ DWORD WINAPI CompositionFrameProc(LPVOID) {
             SignalPresentationFrames();
             // DwmFlush may return immediately if composition is suspended.
             // This short wait prevents an unbounded busy-spin in that case.
-            WaitForSingleObject(g_frameEvent, 1);
+            WaitForSingleObject(wake, 1);
         }
     }
     return 0;
@@ -1097,13 +1138,17 @@ void RegisterAnimationWindow(HWND hwnd) {
     if (!hwnd || IsIconic(GetAncestor(hwnd, GA_ROOT)) ||
         g_frameStopping.load(std::memory_order_relaxed)) return;
     AcquireSRWLockExclusive(&g_frameLock);
+    if (g_frameStopping.load(std::memory_order_acquire)) {
+        ReleaseSRWLockExclusive(&g_frameLock);
+        return;
+    }
     bool found = false;
     for (const auto& t : g_activeFrames) if (t.hwnd == hwnd) found = true;
     if (!found) g_activeFrames.push_back({hwnd, false});
     if (g_frameEvent && !g_frameThread)
-        g_frameThread = CreateThread(nullptr, 0, CompositionFrameProc, nullptr, 0, nullptr);
-    ReleaseSRWLockExclusive(&g_frameLock);
+        g_frameThread = CreateThread(nullptr, 0, CompositionFrameProc, g_frameEvent, 0, nullptr);
     if (g_frameEvent) SetEvent(g_frameEvent);
+    ReleaseSRWLockExclusive(&g_frameLock);
 }
 
 void UnregisterAnimationWindow(HWND hwnd) {
@@ -1120,14 +1165,16 @@ void AcknowledgeAnimationFrame(HWND hwnd) {
 }
 
 void ShutDownFrames() {
-    g_frameStopping.store(true, std::memory_order_release);
-    if (g_frameEvent) SetEvent(g_frameEvent);
-    if (g_frameThread) {
-        WaitForSingleObject(g_frameThread, INFINITE);
-        CloseHandle(g_frameThread);
-        g_frameThread = nullptr;
-    }
     AcquireSRWLockExclusive(&g_frameLock);
+    g_frameStopping.store(true, std::memory_order_release);
+    const HANDLE thread=g_frameThread;
+    if (g_frameEvent) SetEvent(g_frameEvent);
+    ReleaseSRWLockExclusive(&g_frameLock);
+    // Startup is now closed. Never hold the registry lock while joining its worker.
+    if (thread) WaitForSingleObject(thread, INFINITE);
+    AcquireSRWLockExclusive(&g_frameLock);
+    if (thread) CloseHandle(thread);
+    g_frameThread = nullptr;
     if (g_frameEvent) { CloseHandle(g_frameEvent); g_frameEvent = nullptr; }
     g_activeFrames.clear();
     ReleaseSRWLockExclusive(&g_frameLock);
@@ -1676,6 +1723,8 @@ struct TabBackground : std::enable_shared_from_this<TabBackground> {
     std::atomic<unsigned> pooledCallbacks{0};
     SRWLOCK poolSubmitLock = SRWLOCK_INIT;
     std::atomic<unsigned> iconProviderBusy{0};
+    std::atomic<size_t> imageMemoryAllowance{kInitialImageMemoryAllowance};
+    std::atomic<ULONGLONG> imageMemoryProbeAfter{0};
     Worker nativeRows{this, Lane::NativeRows};
     Worker selection{this, Lane::Selection};
     Worker columns{this, Lane::Columns};
@@ -1716,7 +1765,7 @@ struct TabBackground : std::enable_shared_from_this<TabBackground> {
     std::deque<DirectoryResult> directoryResults;
     using RetiredPayload=std::variant<std::vector<Entry>, RowDetailsCache,
         std::shared_ptr<const NamespaceIdentities>, std::shared_ptr<const std::vector<Entry>>,
-        std::shared_ptr<const PresentationModel>, std::vector<IconPixels>, ClipboardPaths>;
+        std::shared_ptr<const PresentationModel>, std::vector<IconPixels>, ClipboardPaths, EntryPathUpdates>;
     std::deque<RetiredPayload> retiredEntries;
     bool directoryNotificationQueued = false, detailNotificationQueued = false;
     SRWLOCK iconLock = SRWLOCK_INIT;
@@ -1852,9 +1901,13 @@ DWORD WINAPI PipelineWriterProc(LPVOID context) {
 // provider calls run under this lock. Closing a tab never joins its threads on
 // Explorer's STA; the regulator reclaims them after their last call returns.
 std::mutex g_backgroundLifetimeMutex;
-std::vector<std::shared_ptr<TabBackground>> g_backgroundLifetimes;
+// Explicit unload joins these workers. Process-exit destructors must not join
+// terminated threads or release provider resources under the loader lock.
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<TabBackground>>>
+    g_backgroundLifetimes{std::in_place};
 HANDLE g_backgroundReaperWake = nullptr, g_backgroundReaper = nullptr;
 bool g_backgroundShutdown = false; // Protected by g_backgroundLifetimeMutex.
+bool ReapDispatchThreadStates();
 
 DWORD WINAPI BackgroundReaperProc(LPVOID) {
     DWORD delay = INFINITE;
@@ -1865,18 +1918,19 @@ DWORD WINAPI BackgroundReaperProc(LPVOID) {
         {
             std::lock_guard<std::mutex> lock(g_backgroundLifetimeMutex);
             if (g_backgroundShutdown) break;
-            for (auto it = g_backgroundLifetimes.begin(); it != g_backgroundLifetimes.end();) {
+            for (auto it = g_backgroundLifetimes->begin(); it != g_backgroundLifetimes->end();) {
                 if (!(*it)->stopping.load(std::memory_order_acquire)) { ++it; continue; }
                 if ((*it)->Finished()) {
                     finished.push_back(std::move(*it));
-                    it = g_backgroundLifetimes.erase(it);
+                    it = g_backgroundLifetimes->erase(it);
                 } else { pending = true; ++it; }
             }
         }
         // Potentially enormous discarded snapshots are destroyed here, outside
         // the registry lock and outside every overlay's input/paint thread.
         finished.clear();
-        delay = pending ? 50 : INFINITE;
+        const bool dispatchPending=ReapDispatchThreadStates();
+        delay = pending ? 50 : dispatchPending ? 1000 : INFINITE;
     }
     return 0;
 }
@@ -1894,9 +1948,9 @@ DWORD WINAPI TabWorkerEntry(LPVOID context) {
     return 0;
 }
 
-bool RegisterTabBackgroundLocked(const std::shared_ptr<TabBackground>& work) {
-    if (g_backgroundShutdown || g_unloading.load(std::memory_order_acquire) ||
-        work->stopping.load(std::memory_order_acquire)) return false;
+bool EnsureBackgroundRegulatorLocked() {
+    if (g_backgroundShutdown || g_unloading.load(std::memory_order_acquire)) return false;
+    if (!g_backgroundLifetimes) g_backgroundLifetimes.emplace();
     if (!g_backgroundReaper) {
         g_backgroundReaperWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (g_backgroundReaperWake)
@@ -1907,8 +1961,13 @@ bool RegisterTabBackgroundLocked(const std::shared_ptr<TabBackground>& work) {
             return false;
         }
     }
+    return true;
+}
+
+bool RegisterTabBackgroundLocked(const std::shared_ptr<TabBackground>& work) {
+    if (work->stopping.load(std::memory_order_acquire) || !EnsureBackgroundRegulatorLocked()) return false;
     if (!work->registered) {
-        g_backgroundLifetimes.push_back(work);
+        g_backgroundLifetimes->push_back(work);
         work->registered = true;
     }
     return true;
@@ -2007,7 +2066,7 @@ void ShutDownBackgroundWorkers() {
     {
         std::lock_guard<std::mutex> lock(g_backgroundLifetimeMutex);
         g_backgroundShutdown = true;
-        remaining.swap(g_backgroundLifetimes);
+        if (g_backgroundLifetimes) remaining.swap(*g_backgroundLifetimes);
         for (const auto& work : remaining) work->Stop();
     }
     if (g_backgroundReaperWake) SetEvent(g_backgroundReaperWake);
@@ -2021,6 +2080,7 @@ void ShutDownBackgroundWorkers() {
     for (const auto& work : remaining)
         work->Join();
     remaining.clear();
+    { std::lock_guard lock(g_backgroundLifetimeMutex); g_backgroundLifetimes.reset(); }
     if (g_backgroundReaperWake) CloseHandle(g_backgroundReaperWake);
     g_backgroundReaperWake = nullptr;
 }
@@ -2471,12 +2531,17 @@ struct ViewState {
     // folder is revalidated by the worker.
     std::wstring lastFolderToReveal;
     std::wstring lastFolderNativePending;
+    std::wstring lastFolderNativePendingPath;
     unsigned int lastFolderNativeAttempts = 0;
     ULONGLONG lastFolderNativeNextAttempt = 0;
     bool lastFolderNativeAfterPaint = false;
     unsigned long long lastFolderNativePresentAfter = 0;
     std::vector<Entry> entries;
     EntryPathIndex entryPathIndex; // Worker-built; moves with the active snapshot.
+    EntryPathUpdates entryPathUpdates;
+    bool returningListFocus = false;
+    bool selectionTraceRunning = false;
+    unsigned long long selectionTraceSequence = 0;
     // Viewport-only structural layout animation. Not part of the folder cache.
     bool framePaintPending = false; // One paced wake held until normal WM_PAINT.
     bool frameInputDeferred = false;
@@ -2530,6 +2595,11 @@ struct ViewState {
     ULONGLONG attachedAt = 0;
     IconCache icons;
     size_t iconCacheBytes = 0;
+    size_t imageMemoryAllowance = kInitialImageMemoryAllowance;
+    size_t imageCacheFloor = kInitialImageMemoryAllowance;
+    UINT imageTextureLimit = kPlatformImageDimension;
+    struct PendingImage { unsigned long long request; bool association; std::shared_ptr<std::atomic<bool>> cancelled; };
+    std::unordered_map<std::wstring,PendingImage> pendingImages;
     // Icon generations are independent from Shell-view identity tokens. A
     // global image-list change must never invalidate selection/rename events.
     unsigned long long iconToken = 0;
@@ -2726,7 +2796,6 @@ struct ViewState {
     struct RenameSession {
         HWND editor = nullptr;
         HFONT font = nullptr;
-        WNDPROC originalProc = nullptr;
         int index = -1;
         std::wstring path, folder;
         HWND tab = nullptr, native = nullptr;
@@ -2742,6 +2811,10 @@ struct ViewState {
         ULONGLONG startedAt = 0;
         ULONGLONG lastRefocusAt = 0;
     } rename;
+    // A label handoff while the owner STA is inside SetNameOf. A reentrant
+    // directory delivery must not put the old name back above the closed EDIT.
+    std::wstring renamePreviewPath, renamePreviewName;
+    unsigned long long renamePreviewToken = 0;
     // CS_DBLCLKS is scoped to the persistent GPU HWND, not the Shell folder.
     // Track a completed first row-click explicitly so Windows cannot pair a
     // click in one folder with a double-click in the next folder.
@@ -2962,6 +3035,11 @@ struct ViewState {
     ComPtr<ID2D1DeviceContext> target;
     ComPtr<ID2D1DeviceContext> textRasterTarget;
     ComPtr<ID2D1SolidColorBrush> textRasterBrush;
+    ComPtr<IDWriteRenderingParams> textRenderingParams;
+    HMONITOR textRenderingMonitor = nullptr;
+    unsigned long long textRenderingRevision = 0, textRenderingSerial = 0;
+    TextAntialiasing textAntialiasing = TextAntialiasing::System;
+    D2D1_TEXT_ANTIALIAS_MODE textAntialiasMode = D2D1_TEXT_ANTIALIAS_MODE_DEFAULT;
     unsigned long long textRasterTick = 0;
     LONGLONG textRasterBuildTicks = 0;
     bool textRasterPainting = false, textRasterPending = false, textRasterUnavailable = false;
@@ -3001,6 +3079,7 @@ struct ViewState {
     X(hwnd) X(nativeHwnd) X(frameHwnd) X(activeTabHost) X(rtlLayout) X(inScope) X(thisPcGpu) \
     X(detailsViewActive) X(columnsView) X(gridView) X(nativeIconSize) X(layoutNativeMode) X(layoutIconSize) \
     X(itemsPerRow) X(itemWidth) X(columns) X(columnEpoch) X(propertyEpoch) X(columnContentWidth) \
+    X(imageMemoryAllowance) X(imageCacheFloor) \
     X(columnVerticalBarVisible) X(horizontalScroll) X(columnTransitionActive) X(columnTransitionSpring) \
     X(columnModeTransition) X(columnPresentationPending) X(columnHeaderFrom) X(columnHeaderTo) \
     X(columnTransitionStartedQpc) X(columnMotion) X(disappearingColumns) X(columnDragArmed) X(columnDragActive) \
@@ -3064,6 +3143,7 @@ struct PresentationReceipt {
     float rowHeight=0.f,headerHeight=0.f,fontSize=0.f,iconSize=0.f,itemWidth=0.f,zebraExtent=0.f,zebraFrom=0.f,zebraTo=0.f;
     float documentHeight=0.f;
     int itemsPerRow=1;
+    UINT imageTextureLimit=kPlatformImageDimension;
     unsigned long long clipboardSequence=0,observerAcknowledged=0,styleRevision=0;
     std::vector<ExplorerColumn> columnPoses;
     std::shared_ptr<const ViewState::GroupIntents> groupIntents;
@@ -3141,6 +3221,13 @@ void CancelNativeSelectionPreparation(ViewState& state);
 bool IsNativeSelectionKey(const MSG& msg);
 bool HandleNativeSelectionKey(const MSG& msg, ViewState* owner = nullptr);
 void QueueNativeSelectionHint(ViewState& state, bool revealUnchanged = false);
+void TrySyncLastFolderSelection(ViewState& state);
+void CancelNativeSelectionRestore(ViewState& state) {
+    state.lastFolderNativePending = {};
+    state.lastFolderNativePendingPath = {};
+}
+bool NativeSelectionRestorePending(const ViewState& state);
+void TraceSelectionIdentity(ViewState& state, const wchar_t* point);
 bool AttachShellSelectionEvents(ViewState& state, IDispatch* browser);
 void RetryShellSubscriptions(ViewState& state, ULONGLONG now);
 bool ShellRowsInteractive(const ViewState& state) {
@@ -4841,6 +4928,7 @@ void EnsureOverlayTop(ViewState& state) {
 }
 
 bool IsTargetPath(const std::wstring& path) {
+    if (path.size() >= ARRAYSIZE(ShellPathStorage::value) || path.find(L'\0') != std::wstring::npos) return false;
     // Only real filesystem paths pass here. Supported virtual roots have a
     // separate explicit scope gate; arbitrary shell: URLs remain excluded.
     const bool drive = path.size() >= 3 &&
@@ -4991,10 +5079,15 @@ void LoadSettings() {
     AcquireSRWLockExclusive(&g_fontFamilyLock);
     g_fontFamily.swap(fontFamily);
     ReleaseSRWLockExclusive(&g_fontFamilyLock);
+    const auto textSetting=WindhawkUtils::StringSetting::make(L"Appearance.textAntialiasing");
+    const auto textMode=_wcsicmp(textSetting.get(),L"smooth")==0 ? TextAntialiasing::Smooth :
+        _wcsicmp(textSetting.get(),L"aliased")==0 ? TextAntialiasing::Aliased : TextAntialiasing::System;
+    if(g_textAntialiasing.exchange(textMode)!=textMode) ++g_textRenderingRevision;
     g_zebra.store(Wh_GetIntSetting(L"Appearance.zebraStripes") != 0);
     g_emptyRows.store(Wh_GetIntSetting(L"Appearance.showEmptyRows") != 0);
     g_zebraOpacity.store(std::clamp(Wh_GetIntSetting(L"Appearance.zebraOpacity"), 0, 100));
     g_smooth.store(Wh_GetIntSetting(L"Navigation.smoothScrolling") != 0);
+    g_showNativeViewToggleButton.store(Wh_GetIntSetting(L"Navigation.showNativeViewToggleButton") != 0);
     g_touchpadDirectManipulation.store(
         Wh_GetIntSetting(L"Navigation.touchpadDirectManipulation") != 0);
     g_touchpadSwipeNavigation.store(
@@ -5057,11 +5150,13 @@ void LoadSettings() {
     g_secondaryOpacity.store(std::clamp(Wh_GetIntSetting(L"Appearance.secondaryTextOpacity"), 0, 100));
     g_dimDotFiles.store(Wh_GetIntSetting(L"Appearance.dimDotFiles") != 0);
     g_edgeMargin96.store(std::clamp(Wh_GetIntSetting(L"Appearance.edgeMargin"), 0, 400));
-    g_perf.store(Wh_GetIntSetting(L"Logging.perfLogging") != 0);
-    g_frameTimeLogging.store(Wh_GetIntSetting(L"Logging.frameTimeLogging") != 0);
-    g_pipelineTracing.store(Wh_GetIntSetting(L"Logging.pipelineTracing") != 0);
-    g_uiTransitionLogging.store(Wh_GetIntSetting(L"Logging.uiTransitionLogging") != 0);
-    g_gpuMemoryLogging.store(Wh_GetIntSetting(L"Logging.gpuMemoryLogging") != 0);
+    const bool logging = Wh_GetIntSetting(L"enableLogging") != 0;
+    g_perf.store(logging);
+    g_selectionLogging.store(logging);
+    g_frameTimeLogging.store(logging);
+    g_pipelineTracing.store(logging);
+    g_uiTransitionLogging.store(logging);
+    g_gpuMemoryLogging.store(logging);
     RefreshThemeColor();
 }
 
@@ -5069,6 +5164,7 @@ void LoadSettings() {
 // default folder association belongs to the entire overlay, not a generation.
 bool IconJobCurrent(const TabBackground& work, const IconJob& job) {
     return !work.stopping.load(std::memory_order_acquire) &&
+        (!job.cancelled || !job.cancelled->load(std::memory_order_relaxed)) &&
         (job.useAttributes ||
          work.iconGeneration.load(std::memory_order_acquire) == job.token);
 }
@@ -5077,18 +5173,24 @@ bool IconJobCurrent(const TabBackground& work, const IconJob& job) {
 // executable resources; neither operation is safe inside WM_PAINT or a window
 // message handler on Explorer's STA.
 IconPixels DecodeIconPixels(IWICImagingFactory* factory, IWICBitmapSource* source,
-                            HRESULT* status = nullptr, UINT maxDimension = kMaxIconDimension) {
+                            HRESULT* status = nullptr, UINT maxDimension = kPlatformImageDimension,
+                            size_t maxBytes = kInitialImageMemoryAllowance) {
     IconPixels result;
     const auto fail = [&](HRESULT hr) { if (status) *status = hr; return IconPixels{}; };
     if (!factory || !source) return fail(E_POINTER);
+    if (!maxDimension || maxBytes < 4) return fail(E_INVALIDARG);
+    maxDimension = std::min(maxDimension, kPlatformImageDimension);
+    maxBytes = std::min<size_t>(maxBytes, UINT_MAX);
     HRESULT hr = S_OK;
     UINT width = 0, height = 0;
     if (FAILED(hr = source->GetSize(&width, &height)) || !width || !height)
         return fail(FAILED(hr) ? hr : E_FAIL);
     ComPtr<IWICBitmapSource> pixels = source;
-    if (width > maxDimension || height > maxDimension) {
-        const double factor = std::min(static_cast<double>(maxDimension) / width,
-                                       static_cast<double>(maxDimension) / height);
+    if (width > maxDimension || height > maxDimension ||
+        static_cast<double>(width)*height > maxBytes/4) {
+        const double factor = std::min({static_cast<double>(maxDimension) / width,
+            static_cast<double>(maxDimension) / height,
+            std::sqrt(static_cast<double>(maxBytes/4) / (static_cast<double>(width)*height))});
         const UINT w = std::max(1u, static_cast<UINT>(width * factor));
         const UINT h = std::max(1u, static_cast<UINT>(height * factor));
         ComPtr<IWICBitmapScaler> scaler;
@@ -5107,19 +5209,24 @@ IconPixels DecodeIconPixels(IWICImagingFactory* factory, IWICBitmapSource* sourc
     result.width = width;
     result.height = height;
     result.stride = width * 4;
-    result.data.resize(static_cast<size_t>(result.stride) * height);
+    const size_t bytes = static_cast<size_t>(result.stride) * height;
+    if (bytes > maxBytes) return fail(E_OUTOFMEMORY);
+    try { result.data.resize(bytes); }
+    catch (const std::bad_alloc&) { return fail(E_OUTOFMEMORY); }
     if (FAILED(hr = converter->CopyPixels(nullptr, result.stride,
             static_cast<UINT>(result.data.size()), result.data.data())))
         return fail(hr);
+    if (status) *status = S_OK;
     return result;
 }
 
-IconPixels DecodeShellIcon(IWICImagingFactory* factory, HICON icon, HRESULT* status = nullptr) {
+IconPixels DecodeShellIcon(IWICImagingFactory* factory, HICON icon, HRESULT* status = nullptr,
+                          UINT maxDimension = kPlatformImageDimension) {
     if (!factory || !icon) { if (status) *status = E_POINTER; return {}; }
     ComPtr<IWICBitmap> source;
     const HRESULT hr = factory->CreateBitmapFromHICON(icon, source.GetAddressOf());
     if (FAILED(hr)) { if (status) *status = hr; return {}; }
-    return DecodeIconPixels(factory, source.Get(), status);
+    return DecodeIconPixels(factory, source.Get(), status, maxDimension);
 }
 
 // These are renderer adornments, not alterations to the Windows thumbnail
@@ -5213,28 +5320,35 @@ ThumbnailStyle LoadThumbnailStyle(IWICImagingFactory* factory,
     return style;
 }
 
-IconPixels DecorateThumbnail(IconPixels&& source, const ThumbnailStyle& style) {
+IconPixels DecorateThumbnail(IconPixels&& source, const ThumbnailStyle& style,
+                            UINT textureLimit = kPlatformImageDimension, size_t byteLimit = SIZE_MAX) {
     if (!source.Ready()) return {};
+    source.thumbnailWidth=source.width; source.thumbnailHeight=source.height; source.badgeSize=0;
     // Rasterize the film rails once on the worker. Both rails belong to the
     // thumbnail rectangle, so one rounded fill clips the complete frame.
     const UINT rail = style.filmstrip ? std::max(3u, std::max(source.width,source.height)/20) : 0;
     const UINT badge = style.badge.Ready() ? std::max(style.badge.width,style.badge.height) : 0;
+    const auto width=std::max<ULONGLONG>(ULONGLONG(source.width)+2*rail,badge);
+    const auto height=ULONGLONG(source.height)+(badge ? badge+2 : 0);
+    if(width>textureLimit || height>textureLimit || width*height>byteLimit/4) return std::move(source);
     IconPixels atlas;
     if (!rail && source.width >= badge && source.stride == source.width*4) {
         // Most images need no rails or wider atlas: retain WIC's decoded
         // allocation, appending only a small badge band when one exists.
+        try { source.data.resize(static_cast<size_t>(source.stride)*height); }
+        catch (const std::bad_alloc&) { return std::move(source); }
         atlas = std::move(source);
         atlas.thumbnailWidth = atlas.width;
         atlas.thumbnailHeight = atlas.height;
         atlas.height += badge ? badge+2 : 0;
-        atlas.data.resize(static_cast<size_t>(atlas.stride)*atlas.height);
     } else {
         atlas.thumbnailWidth = source.width + 2*rail;
         atlas.thumbnailHeight = source.height;
         atlas.width = std::max(atlas.thumbnailWidth,badge);
         atlas.height = source.height + (badge ? badge+2 : 0);
         atlas.stride = atlas.width*4;
-        atlas.data.resize(static_cast<size_t>(atlas.stride)*atlas.height);
+        try { atlas.data.resize(static_cast<size_t>(atlas.stride)*atlas.height); }
+        catch (const std::bad_alloc&) { return std::move(source); }
         for (UINT y=0; y<source.height; ++y) {
             memcpy(atlas.data.data()+y*atlas.stride+rail*4,
                 source.data.data()+y*source.stride,source.width*4);
@@ -5254,6 +5368,17 @@ IconPixels DecorateThumbnail(IconPixels&& source, const ThumbnailStyle& style) {
         memcpy(atlas.data.data()+(atlas.thumbnailHeight+2+(badge-style.badge.height)/2+y)*atlas.stride+
             (badge-style.badge.width)/2*4,style.badge.data.data()+y*style.badge.stride,style.badge.width*4);
     return atlas;
+}
+
+// Sample memory on an existing provider lane, never from paint/input. The
+// allowance follows available RAM; it is not a fixed image-resolution cap.
+void RefreshImageMemoryAllowance(TabBackground& work) {
+    const auto now=GetTickCount64();
+    auto after=work.imageMemoryProbeAfter.load(std::memory_order_relaxed);
+    if (now<after || !work.imageMemoryProbeAfter.compare_exchange_strong(after,now+2000)) return;
+    MEMORYSTATUSEX memory{sizeof(memory)};
+    if (GlobalMemoryStatusEx(&memory)) work.imageMemoryAllowance.store(
+        static_cast<size_t>(std::max<ULONGLONG>(4ULL*1024*1024,memory.ullAvailPhys/64)),std::memory_order_relaxed);
 }
 
 // A cold Shell image-list lookup can return no HICON while its per-instance
@@ -5279,12 +5404,14 @@ IconPixels LoadShellItemIcon(IWICImagingFactory* factory, const IconJob& job,
             static_cast<SIIGBF>(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK),&raw);
     }
     std::unique_ptr<std::remove_pointer_t<HBITMAP>, decltype(&DeleteObject)> bitmap(raw, DeleteObject);
+    if (!IconJobCurrent(*lane.owner,job)) { if (status) *status=E_ABORT; return {}; }
     ComPtr<IWICBitmap> source;
     if (SUCCEEDED(hr) && bitmap)
         hr = factory->CreateBitmapFromHBITMAP(bitmap.get(), nullptr,
             WICBitmapUsePremultipliedAlpha, source.GetAddressOf());
     if (FAILED(hr) || !source) { if (status) *status = FAILED(hr) ? hr : E_FAIL; return {}; }
-    auto pixels = DecodeIconPixels(factory, source.Get(), status);
+    auto pixels = DecodeIconPixels(factory, source.Get(), status, job.pixelSize,
+        4ULL*job.pixelSize*job.pixelSize);
     if (!thumbnail || !pixels.Ready() || !IconJobCurrent(*lane.owner,job)) return pixels;
     PipelineScope pipeline(*lane.owner,L"worker.thumbnail.decorate",job.requestId,job.token);
     const auto epoch = g_shellAssociationEpoch.load(std::memory_order_acquire);
@@ -5298,7 +5425,7 @@ IconPixels LoadShellItemIcon(IWICImagingFactory* factory, const IconJob& job,
         if (lane.thumbnailStyles.size() >= 32) lane.thumbnailStyles.clear();
         found = lane.thumbnailStyles.emplace(key,LoadThumbnailStyle(factory,job.extension,badge)).first;
     }
-    return DecorateThumbnail(std::move(pixels),found->second);
+    return DecorateThumbnail(std::move(pixels),found->second,job.textureLimit,8ULL*job.pixelSize*job.pixelSize);
 }
 
 DWORD WINAPI IconWorkerProc(LPVOID context) {
@@ -5341,31 +5468,37 @@ DWORD WINAPI IconWorkerProc(LPVOID context) {
             if (provider) work.iconProviderBusy.fetch_sub(1, std::memory_order_relaxed);
             continue;
         }
+        RefreshImageMemoryAllowance(work);
+        // A queued request can outlive a sudden memory-pressure change. Do
+        // not ask a provider for its old large bitmap; the owner will choose
+        // a smaller tier from the refreshed allowance on result delivery.
+        const bool memoryReady=8ULL*job.pixelSize*job.pixelSize<=
+            work.imageMemoryAllowance.load(std::memory_order_relaxed)/3;
         const ULONGLONG began = GetTickCount64();
         IconPixels pixels;
-        HRESULT decodeResult = S_OK;
-        if ((job.pixelSize > 32 || job.allowThumbnail) && !job.useAttributes && IconJobCurrent(work, job))
+        HRESULT decodeResult = memoryReady ? S_OK : HRESULT_FROM_WIN32(ERROR_RETRY);
+        if (memoryReady && (job.pixelSize > 32 || job.allowThumbnail) && !job.useAttributes && IconJobCurrent(work, job))
             pixels = LoadShellItemIcon(factory.Get(), job, lane, &decodeResult);
         SHFILEINFOW info{};
         bool haveIndex = false;
         UINT flags = SHGFI_ICON | (job.pixelSize > 32 ? SHGFI_SYSICONINDEX : 0);
         if (job.useAttributes) flags |= SHGFI_USEFILEATTRIBUTES;
-        if (!pixels.Ready() && IconJobCurrent(work, job))
+        if (memoryReady && !pixels.Ready() && IconJobCurrent(work, job))
             haveIndex = SHGetFileInfoW(job.shellIdentity && !job.useAttributes ?
                 reinterpret_cast<LPCWSTR>(job.shellIdentity.get()) : job.path.c_str(),
                 job.useAttributes ? job.attributes : 0, &info, sizeof(info),
                 flags | (job.shellIdentity && !job.useAttributes ? SHGFI_PIDL : 0)) != 0;
         std::unique_ptr<std::remove_pointer_t<HICON>, decltype(&DestroyIcon)> icon(info.hIcon, DestroyIcon);
-        if (!pixels.Ready() && haveIndex && job.pixelSize > 32 && IconJobCurrent(work, job)) {
+        if (memoryReady && !pixels.Ready() && haveIndex && job.pixelSize > 32 && IconJobCurrent(work, job)) {
             ComPtr<IImageList> images;
             HICON large = nullptr;
             if (SUCCEEDED(SHGetImageList(job.pixelSize > 48 ? SHIL_JUMBO : SHIL_EXTRALARGE,
                 IID_PPV_ARGS(&images))) && SUCCEEDED(images->GetIcon(info.iIcon, ILD_TRANSPARENT, &large)))
                 icon.reset(large);
         }
-        if (!pixels.Ready() && IconJobCurrent(work, job))
-            pixels = DecodeShellIcon(factory.Get(), icon.get(), &decodeResult);
-        if (!pixels.Ready() && !job.useAttributes && IconJobCurrent(work, job))
+        if (memoryReady && !pixels.Ready() && IconJobCurrent(work, job))
+            pixels = DecodeShellIcon(factory.Get(), icon.get(), &decodeResult, job.pixelSize);
+        if (memoryReady && !pixels.Ready() && !job.useAttributes && IconJobCurrent(work, job))
             pixels = LoadShellItemIcon(factory.Get(), job, lane, &decodeResult);
         IconResult result{job.hwnd, job.token, job.key, job.requestId, std::move(pixels), job.useAttributes,
             initializeResult, decodeResult, icon != nullptr};
@@ -5462,6 +5595,11 @@ void CancelDepartedIconJobs(ViewState& state, unsigned long long newToken, bool 
                             std::wstring_view key = {}) {
     auto& work = *state.background;
     key=BaseIconKey(key);
+    std::erase_if(state.pendingImages,[&](const auto& item) {
+        const bool cancel=key.empty() ? (all || !item.second.association) : BaseIconKey(item.first)==key;
+        if (cancel) item.second.cancelled->store(true,std::memory_order_relaxed);
+        return cancel;
+    });
     const auto cancelled = [&](const auto& item) {
         return key.empty() ? (all || !item.useAttributes) :
             item.hwnd == state.hwnd && BaseIconKey(item.key) == key;
@@ -5504,14 +5642,54 @@ std::wstring IconKey(const Entry& e, std::wstring& lookup, bool& useAttrs, bool 
     return e.path;
 }
 
+template<class Visit> void VisitImageTiers(Visit visit) {
+    for (UINT base=32;base<=kPlatformImageDimension;base*=2) {
+        if (!visit(base)) return;
+        if (base+base/2<=kPlatformImageDimension && !visit(base+base/2)) return;
+    }
+}
+UINT ImageKeySize(std::wstring_view key) {
+    if (!key.starts_with(L"@")) return 32;
+    UINT size=0;
+    for(size_t i=1;i<key.size();++i) {
+        if(key[i]==L'|') return size ? size : 32;
+        if(key[i]<L'0' || key[i]>L'9' || size>kPlatformImageDimension/10) return 32;
+        size=size*10+UINT(key[i]-L'0');
+        if(size>kPlatformImageDimension) return 32;
+    }
+    return 32;
+}
+std::wstring SizedImageKey(std::wstring_view base,UINT size) {
+    return size==32 ? std::wstring(base) : L"@"+std::to_wstring(size)+L"|"+std::wstring(base);
+}
+size_t ImageMemoryBudget(const ViewState& state) {
+    RECT rect{}; ViewClientRect(state,&rect);
+    const double pixels=double(std::max(0L,rect.right-rect.left))*std::max(0L,rect.bottom-rect.top);
+    const double screen=std::max(double(state.imageCacheFloor),pixels*12.);
+    return static_cast<size_t>(std::max(1.,std::min(double(state.imageMemoryAllowance),screen)));
+}
 UINT IconRequestSize(const ViewState& state) {
-    const float pixels = state.zoomAnimating ? state.zoomToIconPx : state.iconPx;
-    for (UINT size : {32u, 48u, 96u, 256u, 512u})
-        if (pixels <= size) return size;
-    return 512;
+    const float drawn=state.zoomAnimating ? state.zoomToIconPx : state.iconPx;
+    if (!std::isfinite(drawn) || drawn<=0.f) return 32;
+    RECT rect{}; ViewClientRect(state,&rect);
+    const double width=std::max(0L,rect.right-rect.left), height=std::max(0L,rect.bottom-rect.top);
+    // Zoom may place most of a giant cell outside the window. Never extract
+    // an image larger than the physical viewport can usefully display.
+    const double desired=std::min(double(drawn),std::max({32.,width,height}));
+    const double row=std::max(1.,double(state.zoomAnimating ? state.zoomToRowPx : state.rowPx));
+    const double slots=std::min(double(std::max(1,state.total)),
+        (std::ceil(std::max(0.,height-state.headerPx)/row)+1)*std::max(1,state.itemsPerRow));
+    const double memorySide=std::sqrt(double(ImageMemoryBudget(state))/(8.*(slots+2)));
+    const double limit=std::min({double(state.imageTextureLimit),memorySide,std::max({32.,width,height})});
+    UINT chosen=32;
+    VisitImageTiers([&](UINT size) {
+        if(size>std::max(32.,limit)) return false;
+        chosen=size; return size<desired;
+    });
+    return chosen;
 }
 std::wstring IconKey(const ViewState& state, const Entry& e, std::wstring& lookup,
-                     bool& useAttrs, bool associationOnly = false) {
+                     bool& useAttrs, bool associationOnly = false, UINT previewLimit = 0) {
     auto key = IconKey(e, lookup, useAttrs, associationOnly);
     if (!associationOnly && ((e.shellIdentity && e.path.starts_with(L"windhawk:pidl:")) ||
         UsesThumbnails(state,e))) {
@@ -5522,7 +5700,11 @@ std::wstring IconKey(const ViewState& state, const Entry& e, std::wstring& looku
         useAttrs = false;
     }
     const bool listThumbnail = !associationOnly && !state.gridView && UsesThumbnails(state,e);
-    const UINT size = state.gridView || listThumbnail ? IconRequestSize(state) : 32;
+    UINT size = IconRequestSize(state);
+    // The shared Shell image list contains at most a 256px jumbo icon. Larger
+    // requests cannot add detail there; per-item image factories stay adaptive.
+    if(useAttrs) size=std::min(size,256u);
+    if(previewLimit) size=std::min(size,previewLimit);
     // Separate small per-file thumbnails from existing 32px per-file icons.
     // Larger tiers can reuse the identical decorated grid image unchanged.
     if (size > 32 || listThumbnail) key = L"@" + std::to_wstring(size) + L"|" + key;
@@ -5673,22 +5855,59 @@ bool ExplorerFrameHasForeground(HWND frame) {
         IsWindowVisible(frame) && GetForegroundWindow() == frame;
 }
 
-bool OverlayHasInputFocus(const ViewState& state) {
-    if(state.presentationOnly) return state.inputFocusIndicators;
+bool NativeRenameEditor(const ViewState& state, HWND editor) {
+    wchar_t cls[32]{};
+    return editor && editor != state.rename.editor && state.nativeHwnd &&
+        IsChild(state.nativeHwnd, editor) &&
+        GetWindowThreadProcessId(editor, nullptr) == GetCurrentThreadId() &&
+        GetClassNameW(editor, cls, ARRAYSIZE(cls)) && !_wcsicmp(cls, L"Edit");
+}
+
+enum class ViewInputOwner { None, Frame, NativeList, GpuList, NativeEditor, RenameEditor, OtherControl };
+
+ViewInputOwner InputFocusOwner(const ViewState& state) {
     if (!state.visible || !state.inScope || !state.detailsViewActive ||
-        !ExplorerFrameHasForeground(state.frameHwnd)) return false;
+        !TabOwnsActiveView(state) || !ExplorerFrameHasForeground(state.frameHwnd)) return ViewInputOwner::None;
     const HWND focus = GetFocus();
-    if (!focus || state.rename.editor) return false;
-    if (focus == state.hwnd) return true;
-    // Explorer can return focus to the bare frame after a modal command.
-    // Its active-tab keyboard recovery owns navigation and file commands.
-    if (focus == state.frameHwnd)
-        return !state.optimisticStartedAt && TabOwnsActiveView(state);
-    if (!state.nativeHwnd || (focus != state.nativeHwnd && !IsChild(state.nativeHwnd,focus))) return false;
-    // The suppressed Shell list normally owns keyboard focus. Its inline
-    // editors own text input instead of list commands.
-    wchar_t name[32]{};
-    return !GetClassNameW(focus,name,ARRAYSIZE(name)) || _wcsicmp(name,L"Edit") != 0;
+    if (!focus) return ViewInputOwner::None;
+    if (focus == state.rename.editor) return ViewInputOwner::RenameEditor;
+    if (focus == state.hwnd) return ViewInputOwner::GpuList;
+    if (focus == state.frameHwnd) return ViewInputOwner::Frame;
+    if (NativeRenameEditor(state, focus)) return ViewInputOwner::NativeEditor;
+    if (focus == state.nativeHwnd || IsChild(state.nativeHwnd, focus)) return ViewInputOwner::NativeList;
+    return ViewInputOwner::OtherControl;
+}
+
+bool OverlayHasInputFocus(const ViewState& state) {
+    if (state.presentationOnly) return state.inputFocusIndicators;
+    if (state.rename.editor) return false; // The editor owns input until its session closes.
+    const auto owner = InputFocusOwner(state);
+    return owner == ViewInputOwner::GpuList || owner == ViewInputOwner::NativeList ||
+        (owner == ViewInputOwner::Frame && !state.optimisticStartedAt);
+}
+
+// All list-focus returns use the same ownership boundary. Native Shell focus
+// preserves preview/extension integration; a rejected hidden host falls back
+// to the GPU HWND. Never override another control, modal dialog or active tab.
+bool ReturnListInputFocus(ViewState& state, HWND previousOwner) {
+    if (!state.visible || !state.inScope || !state.detailsViewActive || state.rename.editor ||
+        state.optimisticStartedAt || !TabOwnsActiveView(state) ||
+        !ExplorerFrameHasForeground(state.frameHwnd) || !PresentationVisible(state)) return false;
+    const HWND focus = GetFocus(), owner = state.hwnd;
+    const auto input = InputFocusOwner(state);
+    if (focus && focus != previousOwner && input != ViewInputOwner::Frame &&
+        input != ViewInputOwner::NativeList && input != ViewInputOwner::GpuList) return false;
+    ScopedFlag returning(state.returningListFocus);
+    if (IsWindow(state.nativeHwnd) && IsWindowEnabled(state.nativeHwnd)) SetFocus(state.nativeHwnd);
+    if (State(owner) != &state) return false;
+    if ((!OverlayHasInputFocus(state) || GetFocus() == state.frameHwnd) &&
+        (!GetFocus() || GetFocus() == focus || GetFocus() == state.frameHwnd))
+        SetFocus(owner);
+    return State(owner) == &state && OverlayHasInputFocus(state);
+}
+
+bool CreationHasInputFocus(const ViewState& state) {
+    return OverlayHasInputFocus(state) || InputFocusOwner(state) == ViewInputOwner::NativeEditor;
 }
 
 void RefreshInputFocusIndicators(ViewState& state) {
@@ -5709,16 +5928,8 @@ void RefreshInputFocusIndicators(ViewState& state) {
             if (!waiting) {
                 state.viewControlFocusReturn = nullptr;
                 const HWND owner = state.hwnd;
-                SetFocus(IsWindow(state.nativeHwnd) && IsWindowEnabled(state.nativeHwnd) ? state.nativeHwnd : owner);
+                ReturnListInputFocus(state, focus);
                 if (!IsWindow(owner) || State(owner) != &state) return;
-                // Hidden/rebuilding Shell hosts can reject SetFocus. Keep the
-                // visible GPU list usable, without overriding a new editor/control.
-                const HWND after = GetFocus();
-                if ((!OverlayHasInputFocus(state) || after == state.frameHwnd) &&
-                    (!after || after == focus || after == state.frameHwnd)) {
-                    SetFocus(owner);
-                    if (!IsWindow(owner) || State(owner) != &state) return;
-                }
                 if (g_perf.load(std::memory_order_relaxed))
                     Wh_Log(L"[GPU focus] VIEW_RETURN control=%p before=%p after=%p native=%p mode=%u accepted=%d",
                         control,focus,GetFocus(),state.nativeHwnd,state.layoutNativeMode,OverlayHasInputFocus(state));
@@ -5732,7 +5943,8 @@ void RefreshInputFocusIndicators(ViewState& state) {
             state.activeTabHost,GetForegroundWindow());
     if (!waiting) state.viewControlFocusReturn = nullptr;
     const bool focused = OverlayHasInputFocus(state);
-    if (!focused && (state.creationCommandMask || !state.pendingCreatedItemPath.empty()))
+    if (!focused && !CreationHasInputFocus(state) &&
+        (state.creationCommandMask || !state.pendingCreatedItemPath.empty()))
         ClearInteractiveCreation(state);
     if (state.inputFocusIndicators == focused) return;
     state.inputFocusIndicators = focused;
@@ -5853,9 +6065,9 @@ void ReadExtraShellSortValue(Entry& e, const PROPERTYKEY& key) {
         case VT_I4: e.sortNumber = pv.lVal; e.sortValueKind = 2; break;
         case VT_UI2: e.sortNumber = pv.uiVal; e.sortValueKind = 2; break;
         case VT_I2: e.sortNumber = pv.iVal; e.sortValueKind = 2; break;
-        case VT_R8: e.sortNumber = pv.dblVal; e.sortValueKind = 2; break;
-        case VT_R4: e.sortNumber = pv.fltVal; e.sortValueKind = 2; break;
-        case VT_DATE: e.sortNumber = pv.date; e.sortValueKind = 2; break;
+        case VT_R8: e.sortNumber = pv.dblVal; e.sortValueKind = std::isnan(e.sortNumber) ? 0 : 2; break;
+        case VT_R4: e.sortNumber = pv.fltVal; e.sortValueKind = std::isnan(e.sortNumber) ? 0 : 2; break;
+        case VT_DATE: e.sortNumber = pv.date; e.sortValueKind = std::isnan(e.sortNumber) ? 0 : 2; break;
         case VT_BOOL: e.sortNumber = pv.boolVal != VARIANT_FALSE;
             e.sortValueKind = 2; break;
         case VT_FILETIME:
@@ -6545,9 +6757,9 @@ void EnumerateNativeRowsJob(TabBackground& work, NativeRowsJob& job) {
         PITEMID_CHILD raw = nullptr;
         ULONG fetched = 0;
         hr = enumeration->Next(1, &raw, &fetched);
-        OwnedPidl child(raw);
-        if (hr == S_FALSE || (SUCCEEDED(hr) && !fetched)) break;
-        if (FAILED(hr) || !child) { hr = E_FAIL; break; }
+        OwnedPidl child(SUCCEEDED(hr) && fetched ? raw : nullptr);
+        if (!ValidPidlBatch(hr, 1, fetched, &raw)) { hr = E_FAIL; break; }
+        if (hr == S_FALSE) break;
         NativeRowIdentity identity;
         identity.absolute.reset(ILCombine(job.folder.get(), child.get()));
         identity.child = std::move(child);
@@ -6831,8 +7043,8 @@ DWORD WINAPI DirectoryWorkerProc(LPVOID context) {
                 observedFolder->observedQpc.store(at.QuadPart, std::memory_order_release);
                 watchNotified = true;
                 PipelineEvent(work,{.operation=L"tree.filesystem.signal",.a=observedToken});
-                // Leave the kernel event latched until the owner has consumed it.
-                // Cached folders keep this same handle after this lane moves on.
+                // Leave the kernel event latched until the owner consumes it.
+                // History holds only a weak stamp once this lane moves on.
                 PostMessageW(work.hwnd, kMsgFilesystemChanged, observedToken, 0);
             } else observedFolder.reset(); // Navigation raced an old event.
             continue;
@@ -7383,7 +7595,7 @@ bool RequestColumnCatalog(ViewState& state) {
     // Only the view's available keys must be captured on its STA. Descriptor
     // names/schema loading and folder binding never run in the menu handler.
     if (FAILED(manager->GetColumnCount(CM_ENUM_ALL, &count)) ||
-        !count) return fail();
+        !count || count > kMaxShellColumns) return fail();
     job.keys.resize(count);
     if (FAILED(manager->GetColumns(CM_ENUM_ALL, job.keys.data(), count))) return fail();
     if (!IsWindow(hwnd) || State(hwnd) != &state || state.columnCatalogToken != token ||
@@ -7557,11 +7769,13 @@ void CacheRowDetails(ViewState& state, Entry& entry, bool remember) {
 
 size_t EstimateSnapshotBytes(const CachedFolderSnapshot& snapshot) {
     size_t bytes = sizeof(CachedFolderSnapshot) + snapshot.details.usedBytes +
-        (snapshot.changeStamp ? 4096 : 0) + // Budget retained kernel-watch resources too.
         sizeof(std::wstring) + 4*sizeof(void*) + snapshot.path.size()*sizeof(wchar_t) +
         snapshot.path.capacity() * sizeof(wchar_t) +
         snapshot.entries.capacity() * sizeof(Entry) +
         snapshot.pathIndex.capacity() * sizeof(EntryPathIndex::value_type);
+    // One node per locally changed identity in the usual collision-free case.
+    // Keep cache accounting independent of the number of pending local edits.
+    bytes += snapshot.pathUpdates.size() * (sizeof(EntryPathUpdates::value_type) + sizeof(int) + 8*sizeof(void*));
     const size_t samples = std::min<size_t>(snapshot.entries.size(), 24);
     size_t extra = 0;
     for (size_t i = 0; i < samples; ++i) {
@@ -7608,6 +7822,7 @@ void TrimFolderCache(ViewState& state) {
         RetireCachedEntries(state, victim->second.details);
         RetireCachedEntries(state, victim->second.namespaceIdentities);
         RetireCachedEntries(state, victim->second.presentationEntries);
+        RetireCachedEntries(state, victim->second.pathUpdates);
         cache.folders.erase(victim);
     }
 }
@@ -7620,6 +7835,7 @@ void ClearFolderSnapshots(ViewState& state) {
         RetireCachedEntries(state, folder.second.details);
         RetireCachedEntries(state, folder.second.namespaceIdentities);
         RetireCachedEntries(state, folder.second.presentationEntries);
+        RetireCachedEntries(state, folder.second.pathUpdates);
     }
     cache.folders.clear();
     cache.usedBytes = cache.snapshotCount = 0;
@@ -7663,11 +7879,13 @@ void CacheDepartingFolder(ViewState& state) {
     snapshot.entries = std::move(state.entries);
     snapshot.presentationEntries=std::move(state.presentationEntries);
     snapshot.pathIndex = std::move(state.entryPathIndex);
+    snapshot.pathUpdates = std::move(state.entryPathUpdates);
     snapshot.namespaceIdentities = std::move(state.namespaceIdentities);
     snapshot.details = std::exchange(state.rowDetails, {});
     snapshot.orderHash = state.displayedOrderHash;
     snapshot.metadataHash = state.displayedMetadataHash;
-    snapshot.changeStamp = std::move(state.validatedFolderStamp);
+    snapshot.changeStamp = state.validatedFolderStamp;
+    state.validatedFolderStamp.reset();
     snapshot.changeRevision = state.validatedFolderRevision;
     snapshot.lastUse = ++cache.accessSequence;
     snapshot.estimatedBytes = EstimateSnapshotBytes(snapshot);
@@ -7735,6 +7953,7 @@ bool ApplyReturnedChildSelection(ViewState& state, int index) {
     ClearPostDeletionCaret(state);
     CenterRow(state, index);
     state.lastFolderNativePending = entry.name;
+    state.lastFolderNativePendingPath = entry.path;
     state.lastFolderNativeAttempts = 0;
     state.lastFolderNativeNextAttempt = 0;
     state.lastFolderNativeAfterPaint = true;
@@ -7763,18 +7982,23 @@ bool RestoreCachedFolder(ViewState& state) {
         it->second.visibility != state.visibility)
         return false;
     CachedFolderSnapshot& snapshot = it->second;
+    auto changeStamp = snapshot.changeStamp.lock();
     // A zero-time kernel-event check performs no directory/provider I/O.
     // Never flash a saved filesystem list while async enumeration discovers
     // that its files moved/deleted while we were in another folder or tab.
     if (!IsRecycleBinLocation(snapshot.path) &&
-        (!snapshot.changeStamp || snapshot.changeStamp->change == INVALID_HANDLE_VALUE ||
-         snapshot.changeRevision != snapshot.changeStamp->revision ||
-         WaitForSingleObject(snapshot.changeStamp->change, 0) != WAIT_TIMEOUT)) {
+        (!changeStamp || changeStamp->change == INVALID_HANDLE_VALUE ||
+         snapshot.changeRevision != changeStamp->revision ||
+         WaitForSingleObject(changeStamp->change, 0) != WAIT_TIMEOUT)) {
+        // Reuse resolved cells only after fresh worker-enumerated names match
+        // their identities/metadata; never display unverified history rows.
+        RetireCachedEntries(state, state.rowDetails);
+        state.rowDetails = std::move(snapshot.details);
         PipelineEvent(*state.background,{.operation=L"tree.cache.rejected",.a=state.token,
             .v={static_cast<double>(snapshot.entries.size())}});
         return false;
     }
-    state.validatedFolderStamp = std::move(snapshot.changeStamp);
+    state.validatedFolderStamp = std::move(changeStamp);
     state.validatedFolderRevision = snapshot.changeRevision;
     state.zebraExtentAnimating = false;
     StopRowTransition(state);
@@ -7785,6 +8009,7 @@ bool RestoreCachedFolder(ViewState& state) {
     state.presentationModelGrouping=snapshot.grouping;
     state.presentationOrderHash=snapshot.orderHash;
     state.entryPathIndex = std::move(snapshot.pathIndex);
+    state.entryPathUpdates = std::move(snapshot.pathUpdates);
     RetireCachedEntries(state, state.namespaceIdentities);
     state.namespaceIdentities = std::move(snapshot.namespaceIdentities);
     RetireCachedEntries(state, state.rowDetails);
@@ -8716,6 +8941,7 @@ bool ApplyDirectoryNames(ViewState& state, std::vector<Entry>&& incoming,
                          int sortRevealIndex = -1, bool completesDirectoryRequest = true,
                          bool requestData = true) {
     TabTraceSlowScope trace(L"directory names/selection commit", state.hwnd);
+    if (complete) TraceSelectionIdentity(state, L"names.before");
     const bool allowSortReveal=!PointerDragActive(state) && !state.marqueeActive &&
         !state.manipulationFrameActive;
     if (!complete && (state.loaded || incoming.size() <= state.entries.size())) {
@@ -8759,6 +8985,7 @@ bool ApplyDirectoryNames(ViewState& state, std::vector<Entry>&& incoming,
         if (metadataChanged) Redraw(state);
         TraceUiState(state,metadataChanged ? L"ui.rows.metadata[layout,native,header,selected]" :
             L"ui.rows.unchanged[layout,native,header,selected]");
+        TraceSelectionIdentity(state, metadataChanged ? L"names.metadata" : L"names.unchanged");
         if (g_perf.load(std::memory_order_relaxed) && metadataChanged)
             Wh_Log(L"[GPU overlay] revalidation kept row order and viewport: %s",
                    state.folderPath.c_str());
@@ -8864,6 +9091,7 @@ bool ApplyDirectoryNames(ViewState& state, std::vector<Entry>&& incoming,
     // The lookup follows the full sorted row vector. A provisional viewport
     // preview remains noninteractive and never has a native-selection lookup.
     state.entryPathIndex = std::move(incomingIndex);
+    RetireCachedEntries(state, state.entryPathUpdates);
     RetireCachedEntries(state, incoming);
     state.total = static_cast<int>(state.entries.size());
     state.namesPreview = !complete;
@@ -8979,8 +9207,10 @@ bool ApplyDirectoryNames(ViewState& state, std::vector<Entry>&& incoming,
     }
     // Native selection from a stock view is authoritative when switching
     // back to Details. Do not try matching against an incomplete preview.
+    if (complete) TraceSelectionIdentity(state, L"names.mapped");
     if (complete && state.nativeSelectionImportPending)
         ApplyImportedNativeSelection(state);
+    if (complete) TraceSelectionIdentity(state, L"names.after-import");
     if (complete && state.nativeSelectionRecoveryPending)
         QueueNativeSelectionHint(state);
     if (complete && state.nativeSelectionDirty &&
@@ -10029,6 +10259,7 @@ void StartScrollAnimation(ViewState& state) {
 void RepositionRenameEdit(ViewState& state);
 
 void SetScrollImmediate(ViewState& state, float target) {
+    if (!std::isfinite(target)) return;
     if (g_pipelineTracing.load(std::memory_order_relaxed))
         PipelineEvent(*state.background,{.operation=L"scroll.immediate[requested,pos,target,limit]",.a=PipelineFlags(state),
             .v={target,state.scrollNow,state.scrollTarget,MaxScrollPx(state)}});
@@ -10054,6 +10285,7 @@ void SetScrollImmediate(ViewState& state, float target) {
 bool AdvanceScroll(ViewState& state);
 
 void MoveScroll(ViewState& state, float target) {
+    if (!std::isfinite(target)) return;
     PipelineEvent(*state.background,{.operation=L"scroll.retarget[requested,pos,target,start]",.a=PipelineFlags(state),
         .v={target,state.scrollNow,state.scrollTarget,state.smoothStart}});
     AdvanceRowHeight(state, true);
@@ -11460,7 +11692,7 @@ void RefreshExplorerColumns(ViewState& state, bool force = false) {
     state.columnManager=manager;
     UINT count = 0;
     const HRESULT counted=manager->GetColumnCount(CM_ENUM_VISIBLE, &count);
-    if (!current() || FAILED(counted) || !count) return;
+    if (!current() || FAILED(counted) || !count || count > kMaxShellColumns) return;
     std::vector<PROPERTYKEY> keys(count);
     if (FAILED(manager->GetColumns(CM_ENUM_VISIBLE, keys.data(), count)) || !current()) return;
     if (state.nativeColumnsDirty && g_perf.load(std::memory_order_relaxed))
@@ -11506,7 +11738,8 @@ void RefreshExplorerColumns(ViewState& state, bool force = false) {
             const HRESULT described=manager->GetColumnInfo(key, &info);
             if (!current()) return;
             if (SUCCEEDED(described)) {
-                if (needLabel && info.wszName[0]) c.title = info.wszName;
+                if (needLabel && info.wszName[0])
+                    c.title.assign(info.wszName, std::find(std::begin(info.wszName), std::end(info.wszName), L'\0'));
                 if (needNativeWidth) {
                     UINT width = info.uWidth;
                     if (!width || width > 8192) width = info.uDefaultWidth;
@@ -12383,6 +12616,7 @@ bool EnsureTarget(ViewState& state) {
     HRESULT hr = state.d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
                                                     state.target.GetAddressOf());
     if (FAILED(hr)) goto failed;
+    state.imageTextureLimit=std::min(kPlatformImageDimension,state.target->GetMaximumBitmapSize());
     {
         DXGI_SWAP_CHAIN_DESC1 desc{};
         desc.Width = width;
@@ -12404,7 +12638,7 @@ bool EnsureTarget(ViewState& state) {
                                             state.compTarget.GetAddressOf());
     if (FAILED(hr)) goto failed;
     state.graphicsFailureStage=5;
-    hr = state.composition->CreateVisual(state.visual.GetAddressOf());
+    hr = CreatePixelAlignedVisual(state.composition.Get(),state.visual.GetAddressOf());
     if (FAILED(hr)) goto failed;
     hr = state.visual->SetContent(state.swapChain.Get());
     if (FAILED(hr)) goto failed;
@@ -12446,18 +12680,112 @@ failed:
     return false;
 }
 
+bool VisibleOpacity(float opacity) { return std::isfinite(opacity) && opacity>0.f; }
+
+// All drawing coordinates are physical pixels at the contexts' 96-DPI default.
+// Account for the active source-plane translation (and any axis-aligned scale)
+// before rounding, then map back so the input/animation model stays continuous.
+D2D1_POINT_2F SnapDrawPoint(ID2D1RenderTarget* target,D2D1_POINT_2F point,float phase=0.f) {
+    D2D1_MATRIX_3X2_F m{}; target->GetTransform(&m);
+    float dx=96,dy=96; target->GetDpi(&dx,&dy);
+    if(fabsf(m._12)>.00001f || fabsf(m._21)>.00001f || fabsf(m._11)<.00001f || fabsf(m._22)<.00001f)
+        return point; // Intentional rotated icon animation is not an axis-aligned edge.
+    const float sx=m._11*dx/96.f,sy=m._22*dy/96.f,tx=m._31*dx/96.f,ty=m._32*dy/96.f;
+    return D2D1::Point2F((roundf(point.x*sx+tx-phase)+phase-tx)/sx,
+        (roundf(point.y*sy+ty-phase)+phase-ty)/sy);
+}
+D2D1_RECT_F SnapDrawRect(ID2D1RenderTarget* target,D2D1_RECT_F rect) {
+    const auto a=SnapDrawPoint(target,D2D1::Point2F(rect.left,rect.top));
+    const auto b=SnapDrawPoint(target,D2D1::Point2F(rect.right,rect.bottom));
+    return D2D1::RectF(a.x,a.y,b.x,b.y);
+}
+void StrokeLine(ViewState& state,D2D1_POINT_2F a,D2D1_POINT_2F b,ID2D1SolidColorBrush* brush,float width=1.f) {
+    if(!brush || !VisibleOpacity(brush->GetColor().a*brush->GetOpacity())) return;
+    width=std::max(1.f,roundf(width));
+    const float phase=(static_cast<int>(width)&1) ? .5f : 0.f;
+    static_cast<ID2D1RenderTarget*>(state.target.Get())->DrawLine(SnapDrawPoint(state.target.Get(),a,phase),
+        SnapDrawPoint(state.target.Get(),b,phase),brush,width);
+}
+void StrokeRoundedRect(ViewState& state,D2D1_ROUNDED_RECT rect,ID2D1SolidColorBrush* brush,float width=1.f) {
+    if(!brush || !VisibleOpacity(brush->GetColor().a*brush->GetOpacity())) return;
+    rect.rect=SnapDrawRect(state.target.Get(),rect.rect);
+    width=std::max(1.f,roundf(width));
+    const float inset=width*.5f;
+    rect.rect.left+=inset; rect.rect.top+=inset; rect.rect.right-=inset; rect.rect.bottom-=inset;
+    if(rect.rect.right<=rect.rect.left || rect.rect.bottom<=rect.rect.top) return;
+    static_cast<ID2D1RenderTarget*>(state.target.Get())->DrawRoundedRectangle(rect,brush,width);
+}
+D2D1_ELLIPSE SnapDrawEllipse(ID2D1RenderTarget* target,D2D1_ELLIPSE ellipse) {
+    const auto rect=SnapDrawRect(target,D2D1::RectF(ellipse.point.x-ellipse.radiusX,ellipse.point.y-ellipse.radiusY,
+        ellipse.point.x+ellipse.radiusX,ellipse.point.y+ellipse.radiusY));
+    return D2D1::Ellipse(D2D1::Point2F((rect.left+rect.right)*.5f,(rect.top+rect.bottom)*.5f),
+        (rect.right-rect.left)*.5f,(rect.bottom-rect.top)*.5f);
+}
+void FillEllipsePrimitive(ViewState& state,D2D1_ELLIPSE ellipse,ID2D1SolidColorBrush* brush) {
+    if(!brush || !VisibleOpacity(brush->GetColor().a*brush->GetOpacity())) return;
+    static_cast<ID2D1RenderTarget*>(state.target.Get())->FillEllipse(SnapDrawEllipse(state.target.Get(),ellipse),brush);
+}
+void StrokeEllipse(ViewState& state,D2D1_ELLIPSE ellipse,ID2D1SolidColorBrush* brush,float width=1.f) {
+    if(!brush || !VisibleOpacity(brush->GetColor().a*brush->GetOpacity())) return;
+    ellipse=SnapDrawEllipse(state.target.Get(),ellipse); width=std::max(1.f,roundf(width));
+    ellipse.radiusX=std::max(0.f,ellipse.radiusX-width*.5f); ellipse.radiusY=std::max(0.f,ellipse.radiusY-width*.5f);
+    static_cast<ID2D1RenderTarget*>(state.target.Get())->DrawEllipse(ellipse,brush,width);
+}
+
+void RefreshTextRendering(ViewState& state,bool checkMonitor=false) {
+    const auto revision=g_textRenderingRevision.load(std::memory_order_relaxed);
+    const auto mode=g_textAntialiasing.load(std::memory_order_relaxed);
+    const HMONITOR monitor=checkMonitor || !state.textRenderingSerial ?
+        MonitorFromWindow(state.hwnd,MONITOR_DEFAULTTONEAREST) : state.textRenderingMonitor;
+    if(state.textRenderingSerial && state.textRenderingRevision==revision &&
+        state.textAntialiasing==mode && state.textRenderingMonitor==monitor) return;
+    ComPtr<IDWriteRenderingParams> native;
+    if(g_writeFactory && FAILED(g_writeFactory->CreateMonitorRenderingParams(monitor,&native)))
+        g_writeFactory->CreateRenderingParams(&native);
+    state.textRenderingParams=native;
+    BOOL smoothing=TRUE;
+    SystemParametersInfoW(SPI_GETFONTSMOOTHING,0,&smoothing,0);
+    state.textAntialiasMode=mode==TextAntialiasing::Aliased || (mode==TextAntialiasing::System && !smoothing) ?
+        D2D1_TEXT_ANTIALIAS_MODE_ALIASED : mode==TextAntialiasing::System ?
+        D2D1_TEXT_ANTIALIAS_MODE_DEFAULT : D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE;
+    if(native && mode!=TextAntialiasing::System) {
+        const auto rendering=mode==TextAntialiasing::Smooth ? DWRITE_RENDERING_MODE1_NATURAL_SYMMETRIC_DOWNSAMPLED :
+            DWRITE_RENDERING_MODE1_ALIASED;
+        const auto fitting=mode==TextAntialiasing::Smooth ? DWRITE_GRID_FIT_MODE_DISABLED : DWRITE_GRID_FIT_MODE_ENABLED;
+        ComPtr<IDWriteFactory3> factory;
+        ComPtr<IDWriteRenderingParams1> params1;
+        ComPtr<IDWriteRenderingParams3> custom;
+        native.As(&params1);
+        if(SUCCEEDED(g_writeFactory.As(&factory)) && SUCCEEDED(factory->CreateCustomRenderingParams(
+                native->GetGamma(),native->GetEnhancedContrast(),
+                params1 ? params1->GetGrayscaleEnhancedContrast() : native->GetEnhancedContrast(),
+                native->GetClearTypeLevel(),native->GetPixelGeometry(),rendering,fitting,&custom)))
+            custom.As(&state.textRenderingParams);
+    }
+    state.textRenderingMonitor=monitor; state.textRenderingRevision=revision; state.textAntialiasing=mode;
+    state.textRasterUnavailable=false; // A user/monitor change licenses a fresh native rendering attempt.
+    ++state.textRenderingSerial; // Old raster variants retire lazily through the existing LRU.
+}
+void ConfigureTextTarget(ViewState& state,ID2D1RenderTarget* target) {
+    target->SetTextRenderingParams(state.textRenderingParams.Get());
+    target->SetTextAntialiasMode(state.textAntialiasMode);
+}
+
 void Fill(ViewState& state, float l, float t, float r, float b,
           unsigned hex, float a=1.f, float radius=0) {
+    if(!VisibleOpacity(a) || r<=l || b<=t) return;
     if (state.rtlLayout) {
         const float newLeft = state.paintWidth - r;
         r = state.paintWidth - l;
         l = newLeft;
     }
-    state.brush->SetColor(Packed(hex, a));
+    const auto rect=SnapDrawRect(state.target.Get(),D2D1::RectF(l,t,r,b));
+    if(rect.right<=rect.left || rect.bottom<=rect.top) return;
+    state.brush->SetColor(Packed(hex, std::min(1.f,a)));
     if (radius > 0.f)
         state.target->FillRoundedRectangle(D2D1::RoundedRect(
-            D2D1::RectF(l,t,r,b), radius, radius), state.brush.Get());
-    else state.target->FillRectangle(D2D1::RectF(l,t,r,b), state.brush.Get());
+            rect, radius, radius), state.brush.Get());
+    else state.target->FillRectangle(rect, state.brush.Get());
 }
 
 
@@ -12469,6 +12797,7 @@ bool DrawTextRaster(ViewState& state, const std::wstring& text, IDWriteTextLayou
                     float x, float y, float width, float height, unsigned color,
                     float opacity, bool header, bool sorted, bool wrapped, bool deferCold = false,
                     bool filename = false) {
+    if(!VisibleOpacity(opacity)) return true;
     auto& cache = state.textLayouts[wrapped ? 3 : !header ? 0 : sorted ? 2 : 1];
     auto& shaped = cache.layouts.at(text);
     // Deferral is for newly exposed values. A mask miss at different bounds
@@ -12501,7 +12830,8 @@ bool DrawTextRaster(ViewState& state, const std::wstring& text, IDWriteTextLayou
         const auto size=bitmap->GetPixelSize();
         // Like the ordinary DWrite pixel-snapped path, retain crisp glyphs
         // when scroll/row animation supplies fractional screen coordinates.
-        const float left=roundf(x), top=roundf(y);
+        const auto origin=SnapDrawPoint(state.target.Get(),D2D1::Point2F(x,y));
+        const float left=origin.x,top=origin.y;
         const auto destination=D2D1::RectF(left,top,left+size.width,top+size.height);
         const auto antialias=state.target->GetAntialiasMode();
         state.target->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
@@ -12518,7 +12848,7 @@ bool DrawTextRaster(ViewState& state, const std::wstring& text, IDWriteTextLayou
                 .v={left,top,double(size.width),double(size.height)}},true);
     };
     for (auto& raster : shaped.rasters) {
-        if (raster.width != width || raster.height != height) continue;
+        if (raster.width != width || raster.height != height || raster.rendering!=state.textRenderingSerial) continue;
         raster.used = ++state.textRasterTick;
         raster.painted = state.graphicsPaintSerial;
         draw(raster.bitmap.Get());
@@ -12555,8 +12885,8 @@ bool DrawTextRaster(ViewState& state, const std::wstring& text, IDWriteTextLayou
             state.textRasterUnavailable = true;
             return false;
         }
-        state.textRasterTarget->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     }
+    ConfigureTextTarget(state,state.textRasterTarget.Get());
     const auto size = D2D1::SizeU(static_cast<UINT32>(ceilf(width)), static_cast<UINT32>(ceilf(height)));
     const size_t bytes = GlyphAllocationEstimate(size.width,size.height);
     const size_t budget = kGlyphCacheBudget;
@@ -12584,6 +12914,7 @@ bool DrawTextRaster(ViewState& state, const std::wstring& text, IDWriteTextLayou
     }
     TextLayoutCache::Raster raster;
     raster.width=width; raster.height=height;
+    raster.rendering=state.textRenderingSerial;
     raster.used=++state.textRasterTick; raster.bytes=bytes;
     raster.painted=state.graphicsPaintSerial;
     const auto props = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET,
@@ -12624,7 +12955,9 @@ void Text(ViewState& state, const std::wstring& text, float l, float t,
           bool sortedHeader=false, bool wrapped=false, UINT32 highlight=0, bool deferCold=false,
           bool filename=false) {
     if (header && !sortedHeader) opacity *= kMutedHeaderOpacity;
-    if (text.empty() || r <= l || b <= t || opacity <= 0.f) return;
+    if (text.empty() || r <= l || b <= t || !VisibleOpacity(opacity)) return;
+    RefreshTextRendering(state);
+    ConfigureTextTarget(state,state.target.Get());
     if (state.rtlLayout) {
         const float newLeft = state.paintWidth - r;
         r = state.paintWidth - l;
@@ -12633,8 +12966,9 @@ void Text(ViewState& state, const std::wstring& text, float l, float t,
     // Use the same physical pixel origin for direct and cached glyphs. A
     // fractional animation position must not change coverage when a cold
     // layout becomes a ready bitmap, or interpolate sharp text into a blur.
-    const float textWidth=r-l, textHeight=b-t;
-    l=roundf(l); t=roundf(t); r=l+textWidth; b=t+textHeight;
+    const auto rect=SnapDrawRect(state.target.Get(),D2D1::RectF(l,t,r,b));
+    l=rect.left; t=rect.top; r=rect.right; b=rect.bottom;
+    if(r<=l || b<=t) return;
     state.brush->SetColor(Packed(hex, opacity));
     auto fmt = !header ? state.textFormat.Get() :
         (sortedHeader && state.sortedHeaderFormat ?
@@ -12670,7 +13004,7 @@ void Text(ViewState& state, const std::wstring& text, float l, float t,
                     state.brush->SetColor(Packed(0xE7C84E, .18f*opacity));
                     state.target->FillRoundedRectangle(rc, state.brush.Get());
                     state.brush->SetColor(Packed(0xFFD95A, .95f*opacity));
-                    state.target->DrawRoundedRectangle(rc, state.brush.Get(), 1.f);
+                    StrokeRoundedRect(state,rc, state.brush.Get(), 1.f);
                 }
                 state.target->PopAxisAlignedClip();
             }
@@ -12709,9 +13043,9 @@ void DrawHeaderSortChevron(ViewState& state, float logicalColumnEnd,
     const float tipY = cy + (descending ? halfHeight : -halfHeight);
     const float thickness = std::max(1.f, Scale96(1, dpi) * 1.5f);
     state.brush->SetColor(Packed(color, opacity));
-    state.target->DrawLine(D2D1::Point2F(cx-halfWidth, wingY),
+    StrokeLine(state,D2D1::Point2F(cx-halfWidth, wingY),
                            D2D1::Point2F(cx, tipY), state.brush.Get(), thickness);
-    state.target->DrawLine(D2D1::Point2F(cx, tipY),
+    StrokeLine(state,D2D1::Point2F(cx, tipY),
                            D2D1::Point2F(cx+halfWidth, wingY), state.brush.Get(), thickness);
 }
 
@@ -12722,6 +13056,8 @@ bool UploadIconBitmap(ViewState& state, IconRecord& rec) {
     if (!state.target || rec.bitmap || rec.bitmapAttempted || !rec.pixels.Ready())
         return false;
     rec.bitmapAttempted = true;
+    const auto maximum=state.target->GetMaximumBitmapSize();
+    if (rec.pixels.width>maximum || rec.pixels.height>maximum) return false;
     const D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
                           D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
@@ -12739,7 +13075,7 @@ void AccountIconCache(ViewState& state, const std::wstring& key, IconRecord& rec
     const UINT height=record.pixels.height ? record.pixels.height : record.requestedSize;
     const size_t gpu=((static_cast<size_t>(width)*height*4+65535)/65536)*65536;
     const size_t pixels = record.pending && record.pixels.data.empty() ?
-        (record.requestedSize > 32 ? 8ULL : 4ULL)*record.requestedSize*record.requestedSize + gpu :
+        4ULL*record.requestedSize*record.requestedSize + gpu :
         record.pixels.data.capacity()+gpu;
     const size_t bytes = sizeof(IconRecord) + 4*sizeof(void*) + 2*key.size()*sizeof(wchar_t) + pixels;
     state.iconCacheBytes = state.iconCacheBytes - record.cacheBytes + bytes;
@@ -12747,24 +13083,49 @@ void AccountIconCache(ViewState& state, const std::wstring& key, IconRecord& rec
 }
 
 IconRecord* FindIconRecord(ViewState& state, const std::wstring& key,
-                           bool sizeFallback = false, bool bitmapOnly = false) {
+                           bool sizeFallback = false, bool bitmapOnly = false,
+                           std::wstring* resolvedKey = nullptr, bool skipExact = false) {
     auto lookup = [&](const std::wstring& value) -> IconRecord* {
-        if (value == kDefaultFolderIconKey) return &state.defaultFolderIcon;
+        if (value == kDefaultFolderIconKey) {
+            if(resolvedKey) *resolvedKey=value;
+            return &state.defaultFolderIcon;
+        }
         const auto found = state.icons.find(value);
-        return found == state.icons.end() ? nullptr : &found->second;
+        if(found==state.icons.end()) return nullptr;
+        if(resolvedKey) *resolvedKey=value;
+        return &found->second;
     };
     auto usable = [bitmapOnly](const IconRecord* record) {
         return record && (record->bitmap || (!bitmapOnly &&
             record->pixels.Ready() && !record->bitmapAttempted));
     };
     auto* exact = lookup(key);
-    if (!sizeFallback || usable(exact)) return exact;
+    if(!sizeFallback) return exact;
+    const auto extent=[](const IconRecord& record) {
+        return std::max(record.pixels.thumbnailWidth ? record.pixels.thumbnailWidth : record.pixels.width,
+            record.pixels.thumbnailHeight ? record.pixels.thumbnailHeight : record.pixels.height);
+    };
+    const UINT requested=ImageKeySize(key);
+    if(!skipExact && usable(exact) && extent(*exact)>=requested) return exact;
     const std::wstring base(BaseIconKey(key));
-    for (UINT size : {512u,256u,96u,48u,32u}) {
-        const auto variant = size == 32 ? base : L"@" + std::to_wstring(size) + L"|" + base;
-        if (auto* fallback = lookup(variant); usable(fallback)) return fallback;
-    }
-    return exact;
+    IconRecord* best=!skipExact && usable(exact) ? exact : nullptr;
+    std::wstring bestKey=key;
+    VisitImageTiers([&](UINT size) {
+        const auto variant=SizedImageKey(base,size);
+        if(variant==key) return true;
+        auto* candidate=lookup(variant);
+        if(!usable(candidate)) return true;
+        const UINT pixels=extent(*candidate), previous=best ? extent(*best) : 0;
+        if(!best || (pixels>=requested ? previous<requested || pixels<previous :
+            previous<requested && pixels>previous) ||
+            (pixels==previous && candidate->sourceLimited && !best->sourceLimited)) {
+            best=candidate; bestKey=variant;
+        }
+        return true;
+    });
+    if(best) {if(resolvedKey) *resolvedKey=bestKey; return best;}
+    if(resolvedKey && exact) *resolvedKey=key;
+    return skipExact ? nullptr : exact;
 }
 
 std::vector<int> VisibleDemandRows(const ViewState& state, float overscanRows) {
@@ -12848,10 +13209,10 @@ bool UploadVisibleIcons(ViewState& state) {
 // All records are protected by request IDs, including requests surviving a visit.
 bool RequestEntryIcon(ViewState& state, const Entry& entry, bool associationOnly,
                       const std::unordered_map<std::wstring, unsigned>& wanted,
-                      std::vector<IconCache::value_type*>* evictions = nullptr) {
+                      std::vector<IconCache::value_type*>* evictions = nullptr, bool preview = false) {
     std::wstring path;
     bool attributes = false;
-    const std::wstring key = IconKey(state, entry, path, attributes, associationOnly);
+    const std::wstring key = IconKey(state, entry, path, attributes, associationOnly,preview ? 256 : 0);
     auto record = FindIconRecord(state, key);
     if (record && (record->resolved || record->pixels.Ready() || record->bitmap ||
         (record->pending && (attributes || record->pendingToken == state.iconToken)))) return true;
@@ -12859,10 +13220,20 @@ bool RequestEntryIcon(ViewState& state, const Entry& entry, bool associationOnly
     // through a 256-item cliff. A 790-item folder of small icons fits cheaply;
     // large thumbnails still respect this tab's existing adaptive RAM budget.
     const bool thumbnail = !associationOnly && UsesThumbnails(state,entry);
-    const size_t side = state.gridView || thumbnail ? IconRequestSize(state) : 32;
+    const size_t side = ImageKeySize(key);
+    auto* cached=FindIconRecord(state,key,true);
+    if(cached && cached->pixels.Ready() && cached->pixels.width<=state.imageTextureLimit &&
+        cached->pixels.height<=state.imageTextureLimit) {
+        const UINT native=std::max(cached->pixels.thumbnailWidth ? cached->pixels.thumbnailWidth : cached->pixels.width,
+            cached->pixels.thumbnailHeight ? cached->pixels.thumbnailHeight : cached->pixels.height);
+        // Reuse a nearby adequate source. A genuinely smaller provider result
+        // is its available artwork, not a reason to repeat ever-larger calls.
+        if((native>=side && native<=side*2) ||
+            (cached->resolved && cached->sourceLimited && side>cached->requestedSize)) return true;
+    }
     const size_t bytes = sizeof(IconRecord) + 4*sizeof(void*) +
-        2*key.size()*sizeof(wchar_t) + (side > 32 ? 12 : 8)*side*side;
-    const size_t budget = std::max(FolderCacheBudget(state.folderCache), wanted.size()*bytes);
+        2*key.size()*sizeof(wchar_t) + 8*side*side + 65536;
+    const size_t budget = ImageMemoryBudget(state);
     const size_t capacity = std::max(wanted.size()+64, std::min(
         std::max(kMaxIconCache, static_cast<size_t>(std::max(0,state.total)))+wanted.size()+64,
         budget/std::max<size_t>(1,bytes)));
@@ -12898,6 +13269,8 @@ bool RequestEntryIcon(ViewState& state, const Entry& entry, bool associationOnly
         static_cast<DWORD>(entry.folder && attributes ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL)};
     job.allowThumbnail = thumbnail;
     job.pixelSize = static_cast<UINT>(side);
+    job.textureLimit = state.imageTextureLimit;
+    job.cancelled = std::make_shared<std::atomic<bool>>(false);
     if (job.allowThumbnail) {
         job.extension = PathFindExtensionW(entry.name.c_str());
         std::transform(job.extension.begin(),job.extension.end(),job.extension.begin(),towlower);
@@ -12906,6 +13279,7 @@ bool RequestEntryIcon(ViewState& state, const Entry& entry, bool associationOnly
     if (!attributes) job.shellIdentity = entry.shellIdentity;
     job.requestId = g_nextToken.fetch_add(1, std::memory_order_relaxed);
     if (!QueueIcon(state, job, true)) { QueueVisibleDataFrame(state); return false; }
+    state.pendingImages[key]={job.requestId,attributes,job.cancelled};
     if (!record) record = &state.icons.try_emplace(key).first->second;
     record->pending = true;
     record->resolved = false;
@@ -12925,6 +13299,8 @@ void RequestVisibleIcons(ViewState& state) {
         state.visible && state.inScope && state.detailsViewActive)
         RegisterViewAnimation(state);
     if (!state.visible || !state.inScope || state.total == 0) return;
+    state.imageCacheFloor=FolderCacheBudget(state.folderCache);
+    state.imageMemoryAllowance=state.background->imageMemoryAllowance.load(std::memory_order_relaxed);
     if (state.iconDemandToken != state.iconToken) {
         state.iconDemandToken = state.iconToken;
         state.iconDemandStartedAt = GetTickCount64();
@@ -12940,19 +13316,27 @@ void RequestVisibleIcons(ViewState& state) {
         const unsigned priority = std::binary_search(visible.begin(), visible.end(), row) ? 0 : 1;
         std::wstring path;
         bool attributes = false;
-        const auto key = IconKey(state, entry, path, attributes);
+        const auto key = IconKey(state, entry, path, attributes,false,priority ? 256 : 0);
         wanted.try_emplace(key, priority);
         // Keep the displayed fallback alive until a GPU-ready replacement
         // exists, including directories larger than the normal cache limit.
         if (auto shown = FindIconRecord(state, key, true, true))
             shown->visibleGeneration = state.iconViewportGeneration;
         if (!entry.folder || !IsDriveRoot(entry.path)) {
-            const auto association = IconKey(state, entry, path, attributes, true);
+            const auto association = IconKey(state, entry, path, attributes, true,priority ? 256 : 0);
             wanted.try_emplace(association, priority);
             if (auto shown = FindIconRecord(state, association, true, true))
                 shown->visibleGeneration = state.iconViewportGeneration;
         }
     }
+    std::erase_if(state.pendingImages,[&](const auto& item) {
+        if(wanted.contains(item.first)) return false;
+        item.second.cancelled->store(true,std::memory_order_relaxed);
+        if(auto* record=FindIconRecord(state,item.first); record && record->pendingRequestId==item.second.request) {
+            record->pending=false; AccountIconCache(state,item.first,*record);
+        }
+        return true;
+    });
     {
         auto& work = *state.background;
         ExclusiveSrwLock lock(work.iconLock, true);
@@ -12972,10 +13356,11 @@ void RequestVisibleIcons(ViewState& state) {
     for (int row : rows) {
         const Entry& entry = state.entries[static_cast<size_t>(row)];
         if ((!entry.folder || !IsDriveRoot(entry.path)) &&
-            !RequestEntryIcon(state, entry, true, wanted, &evictions)) break;
+            !RequestEntryIcon(state, entry, true, wanted, &evictions,!std::binary_search(visible.begin(),visible.end(),row))) break;
     }
     for (int row : rows)
-        if (!RequestEntryIcon(state, state.entries[static_cast<size_t>(row)], false, wanted, &evictions)) break;
+        if (!RequestEntryIcon(state, state.entries[static_cast<size_t>(row)], false, wanted, &evictions,
+            !std::binary_search(visible.begin(),visible.end(),row))) break;
     if (state.firstContentSubmittedAt) QueueVisibleDetails(state);
     ScheduleVisibleIconUploads(state);
     state.lastIconFirst = static_cast<int>(state.scrollNow / std::max(1.f, state.rowPx));
@@ -12986,6 +13371,7 @@ void ReceiveIcons(ViewState& state, bool requestMore) {
     LARGE_INTEGER began{}, now{}, frequency{};
     QueryPerformanceFrequency(&frequency); QueryPerformanceCounter(&began);
     auto& retired = state.retiredIconPixels;
+    state.imageMemoryAllowance=state.background->imageMemoryAllowance.load(std::memory_order_relaxed);
     bool moreForView = true;
     for (size_t delivered = 0; delivered < kIconResultsPerDispatch; ++delivered) {
         QueryPerformanceCounter(&now);
@@ -13004,6 +13390,8 @@ void ReceiveIcons(ViewState& state, bool requestMore) {
             work.iconNotificationQueued = moreForView;
         }
         IconRecord* record = FindIconRecord(state, result.key);
+        if(const auto found=state.pendingImages.find(result.key);
+            found!=state.pendingImages.end() && found->second.request==result.requestId) state.pendingImages.erase(found);
         if (record && record->pending && record->pendingToken == result.token &&
             record->pendingRequestId == result.requestId) {
             record->bitmap.Reset();
@@ -13011,9 +13399,24 @@ void ReceiveIcons(ViewState& state, bool requestMore) {
             RetireIconPixels(state,record->pixels);
             record->pixels = std::move(result.pixels);
             record->pending = false;
+            record->sourceLimited=false;
+            if(record->pixels.Ready()) {
+                const auto side=[](const IconPixels& pixels) {
+                    return std::max(pixels.thumbnailWidth ? pixels.thumbnailWidth : pixels.width,
+                        pixels.thumbnailHeight ? pixels.thumbnailHeight : pixels.height);
+                };
+                // One small response can be a cold provider/cache result.
+                // Only infer a source ceiling after a larger request fails
+                // to add detail compared with another successful tier.
+                if(auto* previous=FindIconRecord(state,result.key,true,false,nullptr,true);
+                    previous && previous->pixels.Ready() && previous->requestedSize>=256 &&
+                    previous->requestedSize<record->requestedSize && side(record->pixels)<record->requestedSize &&
+                    side(record->pixels)==side(previous->pixels)) record->sourceLimited=true;
+            }
             // Retry a transient empty Shell response once without a timer.
             // A permanently broken handler cannot create an unbounded loop.
-            record->resolved = record->pixels.Ready() || ++record->failures >= 2;
+            record->resolved = result.decodeResult!=HRESULT_FROM_WIN32(ERROR_RETRY) &&
+                (record->pixels.Ready() || ++record->failures >= 2);
             AccountIconCache(state, result.key, *record);
             if (!record->pixels.Ready() && g_perf.load(std::memory_order_relaxed))
                 Wh_Log(L"[GPU icons] EMPTY init=0x%08X decode=0x%08X legacy-icon=%d attempt=%u path=%s",
@@ -13051,6 +13454,7 @@ float ClipboardIconWiggleAngle(float size96, double elapsedMs, size_t seed = 0) 
 
 bool DrawCachedIcon(ViewState& state, IconRecord& icon, float x, float y,
                     float opacity = 1.f, float angle = 0.f) {
+    if(!VisibleOpacity(opacity)) return true;
     if (!icon.bitmap) return false;
     if (state.iconDemandStartedAt && (!state.iconFirstDrawLogged ||
         (!icon.association && !state.iconFirstSpecificDrawLogged))) {
@@ -13071,16 +13475,18 @@ bool DrawCachedIcon(ViewState& state, IconRecord& icon, float x, float y,
     const float width = sourceWidth * scale, height = sourceHeight * scale;
     x += (side-width)*.5f; y += (side-height)*.5f;
     const float iconX = state.rtlLayout ? state.paintWidth - x - width : x;
+    const auto rect=SnapDrawRect(state.target.Get(),D2D1::RectF(iconX,y,iconX+width,y+height));
+    if(rect.right<=rect.left || rect.bottom<=rect.top) return true;
     D2D1_MATRIX_3X2_F previous{};
     if (angle != 0.f) {
         state.target->GetTransform(&previous);
         state.target->SetTransform(D2D1::Matrix3x2F::Rotation(angle,
-            D2D1::Point2F(iconX+width*.5f,y+height*.5f)) * previous);
+            D2D1::Point2F((rect.left+rect.right)*.5f,(rect.top+rect.bottom)*.5f)) * previous);
     }
-    const auto rect = D2D1::RectF(iconX,y,iconX+width,y+height);
     if (state.uiTraceDrawItem)
         PipelineEvent(*state.background,{.operation=L"ui.icon.actual[x,y,w,h]",.a=state.uiTraceItem,
-            .b=reinterpret_cast<ULONG_PTR>(icon.bitmap.Get()),.v={iconX,y,width,height}},true);
+            .b=reinterpret_cast<ULONG_PTR>(icon.bitmap.Get()),
+            .v={rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top}},true);
     if (thumbnail) {
         const float dpi = std::max(96,state.textFormatDpi)/96.f;
         const float radius = std::min(std::max(0.f,g_thumbnailCornerRadius96)*dpi,
@@ -13096,8 +13502,12 @@ bool DrawCachedIcon(ViewState& state, IconRecord& icon, float x, float y,
         }
         state.thumbnailBrush->SetBitmap(icon.bitmap.Get());
         state.thumbnailBrush->SetOpacity(opacity);
-        state.thumbnailBrush->SetTransform(D2D1::Matrix3x2F::Scale(scale,scale) *
-            D2D1::Matrix3x2F::Translation(iconX,y));
+        state.thumbnailBrush->SetInterpolationMode((rect.right-rect.left)==sourceWidth &&
+            (rect.bottom-rect.top)==sourceHeight && angle==0.f ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
+            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        state.thumbnailBrush->SetTransform(D2D1::Matrix3x2F::Scale(
+            (rect.right-rect.left)/sourceWidth,(rect.bottom-rect.top)/sourceHeight) *
+            D2D1::Matrix3x2F::Translation(rect.left,rect.top));
         state.target->FillRoundedRectangle(D2D1::RoundedRect(rect,radius,radius),
             state.thumbnailBrush.Get());
         // The reusable brush must not pin an evicted bitmap or obsolete device.
@@ -13108,18 +13518,24 @@ bool DrawCachedIcon(ViewState& state, IconRecord& icon, float x, float y,
             const float left = state.rtlLayout ? rect.left : rect.right-badge;
             const float top = static_cast<float>(icon.pixels.thumbnailHeight+2);
             const float size = static_cast<float>(icon.pixels.badgeSize);
-            state.target->DrawBitmap(icon.bitmap.Get(),D2D1::RectF(left,rect.bottom-badge,
-                left+badge,rect.bottom),opacity,D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                D2D1::RectF(0,top,size,top+size));
+            const auto badgeRect=SnapDrawRect(state.target.Get(),D2D1::RectF(left,rect.bottom-badge,left+badge,rect.bottom));
+            const auto source=D2D1::RectF(0,top,size,top+size);
+            state.target->DrawBitmap(icon.bitmap.Get(),&badgeRect,opacity,D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC,&source,nullptr);
         }
-    } else state.target->DrawBitmap(icon.bitmap.Get(),rect,opacity,
-        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,D2D1::RectF(0,0,sourceWidth,sourceHeight));
+    } else {
+        const auto source=D2D1::RectF(0,0,sourceWidth,sourceHeight);
+        const bool unscaled=fabsf((rect.right-rect.left)-sourceWidth)<.001f &&
+            fabsf((rect.bottom-rect.top)-sourceHeight)<.001f && angle==0.f;
+        state.target->DrawBitmap(icon.bitmap.Get(),&rect,opacity,unscaled ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
+            D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC,&source,nullptr);
+    }
     if (angle != 0.f) state.target->SetTransform(previous);
     return true;
 }
 
 void DrawActualIcon(ViewState& state, const Entry& e, float x, float y,
                     float opacity = 1.f) {
+    if(!VisibleOpacity(opacity)) return;
     const bool pending = state.clipboardPaths.contains(e.path);
     const float angle = pending ? ClipboardIconWiggleAngle(state.clipboardIconSize96,
         state.clipboardIconElapsedMs,SelectionPathHash(e.path)) : 0.f;
@@ -13175,8 +13591,13 @@ ScrollbarGeometry MakeScrollbarGeometry(ScrollAxis axis, float left, float right
                                        float minThumb, float minOverflow = 0.f) {
     ScrollbarGeometry bar{};
     bar.axis = axis;
+    if (!std::isfinite(left) || !std::isfinite(right) || !std::isfinite(top) || !std::isfinite(bottom) ||
+        !std::isfinite(content) || !std::isfinite(viewport) || !std::isfinite(offset) ||
+        !std::isfinite(minThumb) || !std::isfinite(minOverflow) ||
+        viewport <= 0.f || content < 0.f || minThumb < 0.f || minOverflow < 0.f) return bar;
     bar.left = left; bar.right = right; bar.top = top; bar.bottom = bottom;
     const float span = axis == ScrollAxis::Horizontal ? right - left : bottom - top;
+    if (!std::isfinite(span) || !std::isfinite(content-viewport)) return bar;
     bar.usable = span > 0.f && right > left &&
         (axis == ScrollAxis::Horizontal || left > 0.f) &&
         content > viewport + minOverflow;
@@ -13184,7 +13605,7 @@ ScrollbarGeometry MakeScrollbarGeometry(ScrollAxis axis, float left, float right
     bar.scrollRange = std::max(0.f, content - viewport);
     // A narrow viewport must not pass a lower bound larger than the track
     // length into std::clamp (which would be undefined behavior).
-    bar.thumbLength = std::clamp(span * viewport / std::max(content, 1.f),
+    bar.thumbLength = std::clamp(span * (viewport / std::max(content, 1.f)),
                                  0.f, span);
     bar.thumbLength = std::max(bar.thumbLength, std::min(minThumb, span));
     bar.travel = std::max(0.f, span - bar.thumbLength);
@@ -13246,7 +13667,8 @@ bool OnHorizontalBar(ViewState& state, int x, int y) {
 // Mouse position and the initially grabbed point are axis coordinates in
 // logical (RTL-normalized) space for horizontal bars.
 float ScrollFractionAt(const ScrollbarGeometry& bar, float pointer, float grab) {
-    if (!bar.usable || bar.travel <= 0.f) return 0.f;
+    if (!bar.usable || bar.travel <= 0.f || !std::isfinite(bar.travel) ||
+        !std::isfinite(pointer) || !std::isfinite(grab)) return 0.f;
     const float origin = bar.axis == ScrollAxis::Horizontal ? bar.left : bar.top;
     return std::clamp((pointer - grab - origin) / bar.travel, 0.f, 1.f);
 }
@@ -13291,6 +13713,7 @@ void DrawScrollbar(ViewState& state, const ScrollbarGeometry& bar,
 }
 
 void SetHorizontalScroll(ViewState& state, float next) {
+    if (!std::isfinite(next)) return;
     StopHoverAnimation(state);
     FinishColumnTransition(state);
     StopKeyboardSelectionAnimation(state);
@@ -13308,6 +13731,7 @@ bool AdvanceHorizontalTrack(ViewState& state);
 // Track clicks share the same DWM-paced frame worker as vertical scrolling.
 // Horizontal thumb drags and touchpad pans call SetHorizontalScroll directly.
 void AnimateHorizontalTrackTo(ViewState& state, float next) {
+    if (!std::isfinite(next)) return;
     StopHoverAnimation(state);
     StopKeyboardSelectionAnimation(state);
     const float maximum = std::max(0.f, state.columnContentWidth - ListViewportWidth(state));
@@ -13356,6 +13780,7 @@ void ScrubHorizontal(ViewState& state, int x) {
 }
 
 void ScrubScrollbar(ViewState& state, float mouseY) {
+    if (!std::isfinite(mouseY)) return;
     const ScrollbarGeometry bar = Scrollbar(state);
     if (!bar.usable || bar.travel <= 0.f) return;
     const float fraction = ScrollFractionAt(bar, mouseY, state.scrollbarGrabY);
@@ -13605,7 +14030,7 @@ void FillSelectionRect(ViewState& state, const D2D1_RECT_F& rc, float alpha,
                 part.left=state.paintWidth-part.right; part.right=state.paintWidth-left;
             }
             state.brush->SetColor(Packed(rgb,alpha));
-            state.target->DrawRoundedRectangle(D2D1::RoundedRect(part,radius,radius),
+            StrokeRoundedRect(state,D2D1::RoundedRect(part,radius,radius),
                 state.brush.Get(),static_cast<float>(Scale96(1,ViewDpi(state))));
         }
     }
@@ -13870,16 +14295,16 @@ void PaintGroupHeading(ViewState& state, const std::wstring& title,
     state.brush->SetColor(Packed(headerColor, .75f * opacity));
     const float thickness = std::max(1.f, static_cast<float>(Scale96(1, dpi)));
     if (collapsed) {
-        state.target->DrawLine(D2D1::Point2F(centerX-arrowDirection*unit*.5f,
+        StrokeLine(state,D2D1::Point2F(centerX-arrowDirection*unit*.5f,
             centerY-unit), D2D1::Point2F(centerX+arrowDirection*unit*.5f,
             centerY), state.brush.Get(), thickness);
-        state.target->DrawLine(D2D1::Point2F(centerX+arrowDirection*unit*.5f,
+        StrokeLine(state,D2D1::Point2F(centerX+arrowDirection*unit*.5f,
             centerY), D2D1::Point2F(centerX-arrowDirection*unit*.5f,
             centerY+unit), state.brush.Get(), thickness);
     } else {
-        state.target->DrawLine(D2D1::Point2F(centerX-unit, centerY-unit*.5f),
+        StrokeLine(state,D2D1::Point2F(centerX-unit, centerY-unit*.5f),
             D2D1::Point2F(centerX, centerY+unit*.5f), state.brush.Get(), thickness);
-        state.target->DrawLine(D2D1::Point2F(centerX, centerY+unit*.5f),
+        StrokeLine(state,D2D1::Point2F(centerX, centerY+unit*.5f),
             D2D1::Point2F(centerX+unit, centerY-unit*.5f), state.brush.Get(), thickness);
     }
     Text(state, title, ListStartX(state) + leading + Scale96(18, dpi), top,
@@ -13989,7 +14414,7 @@ bool AppendColumnLayer(ViewState& state, IDCompositionVisual* parent, IUnknown* 
     ComPtr<IDCompositionVisual> visual;
     ComPtr<IDCompositionRectangleClip> clip;
     ComPtr<IDCompositionEffectGroup> fade;
-    if (!parent || !content || FAILED(state.composition->CreateVisual(&visual)) ||
+    if (!parent || !content || FAILED(CreatePixelAlignedVisual(state.composition.Get(),&visual)) ||
         FAILED(state.composition->CreateRectangleClip(&clip)) ||
         FAILED(clip->SetLeft(l)) || FAILED(clip->SetTop(t)) ||
         FAILED(clip->SetRight(r)) || FAILED(clip->SetBottom(b)) ||
@@ -14023,8 +14448,8 @@ bool PrepareFitComposition(ViewState& state, float w, float h) {
     ComPtr<IDCompositionRectangleClip> bounds,contentBounds;
     if (!CreateColumnPlane(state,mode.background,size) || !CreateColumnPlane(state,mode.chrome,size) ||
         (!state.sections.empty() && !CreateColumnPlane(state,mode.groups,size)) ||
-        FAILED(state.composition->CreateVisual(&mode.root)) || FAILED(state.composition->CreateVisual(&items)) ||
-        FAILED(state.composition->CreateVisual(&headings)) ||
+        FAILED(CreatePixelAlignedVisual(state.composition.Get(),&mode.root)) || FAILED(CreatePixelAlignedVisual(state.composition.Get(),&items)) ||
+        FAILED(CreatePixelAlignedVisual(state.composition.Get(),&headings)) ||
         FAILED(state.composition->CreateRectangleClip(&bounds)) ||
         FAILED(bounds->SetRight(w)) || FAILED(bounds->SetBottom(static_cast<float>(mode.size.cy))) ||
         FAILED(mode.root->SetClip(bounds.Get())) ||
@@ -14260,7 +14685,7 @@ bool PrepareModeComposition(ViewState& state) {
     const auto opacity = UiCompositionCurve(state,state.columnHeaderFrom/mode.header,state.columnHeaderTo/mode.header);
     bool ok = bodyY && headerY && headerBottom && opacity && plane(mode.background) && plane(mode.names) && plane(mode.chrome) &&
         (state.sections.empty() || plane(mode.groups)) &&
-        (state.gridView || plane(mode.metadata)) && SUCCEEDED(state.composition->CreateVisual(&mode.root));
+        (state.gridView || plane(mode.metadata)) && SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&mode.root));
     // All planes use the same immutable document coordinates. Columns are
     // independently clipped/transformed; one foreground plane has no metadata
     // underneath a growing Name clip, and backgrounds never slide sideways.
@@ -14276,8 +14701,8 @@ bool PrepareModeComposition(ViewState& state) {
         SUCCEEDED(bounds->SetRight(w)) && SUCCEEDED(bounds->SetBottom(static_cast<float>(mode.size.cy))) &&
         SUCCEEDED(mode.root->SetClip(bounds.Get())) &&
         layer(mode.root.Get(),mode.background.surface.Get(),0.f,mode.header,w,h,nullptr,bodyY.Get(),nullptr) &&
-        SUCCEEDED(state.composition->CreateVisual(&items)) && SUCCEEDED(AppendCompositionVisual(mode.root.Get(),items.Get())) &&
-        SUCCEEDED(state.composition->CreateVisual(&header)) &&
+        SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&items)) && SUCCEEDED(AppendCompositionVisual(mode.root.Get(),items.Get())) &&
+        SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&header)) &&
         SUCCEEDED(state.composition->CreateRectangleClip(&headerClip)) &&
         SUCCEEDED(headerClip->SetRight(w)) && SUCCEEDED(headerClip->SetBottom(headerBottom.Get())) &&
         SUCCEEDED(header->SetClip(headerClip.Get())) &&
@@ -14338,7 +14763,7 @@ struct ModeCompositionFrame {
         if (Rows()) {
             auto& mode=s.modeComposition;
             mode.itemTarget->BeginDraw();
-            mode.itemTarget->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+            ConfigureTextTarget(s,mode.itemTarget.Get());
             for(auto* p:{&mode.feedback,&mode.names,&mode.metadata,&mode.groups}) if(p->bitmap) {
                 mode.itemTarget->SetTarget(p->bitmap.Get());
                 mode.itemTarget->Clear(D2D1::ColorF(0.f,0.f,0.f,0.f));
@@ -14487,12 +14912,12 @@ bool PublishRowScene(ViewState& state) {
     ComPtr<IDCompositionVisual> body,feedback,icons,text,groups;
     ComPtr<IDCompositionRectangleClip> bounds,bodyClip;
     const float w=float(mode.size.cx),h=float(mode.size.cy),bottom=float(ContentViewport(state).bottom);
-    bool ok=SUCCEEDED(state.composition->CreateVisual(&mode.root)) &&
+    bool ok=SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&mode.root)) &&
         SUCCEEDED(state.composition->CreateRectangleClip(&bounds)) &&
         SUCCEEDED(bounds->SetRight(w)) && SUCCEEDED(bounds->SetBottom(h)) &&
         SUCCEEDED(mode.root->SetClip(bounds.Get())) &&
         AppendColumnLayer(state,mode.root.Get(),mode.background.surface.Get(),0,0,w,h) &&
-        SUCCEEDED(state.composition->CreateVisual(&body)) &&
+        SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&body)) &&
         SUCCEEDED(state.composition->CreateRectangleClip(&bodyClip)) &&
         SUCCEEDED(bodyClip->SetTop(mode.header)) && SUCCEEDED(bodyClip->SetRight(w)) &&
         SUCCEEDED(bodyClip->SetBottom(bottom)) && SUCCEEDED(body->SetClip(bodyClip.Get())) &&
@@ -14505,7 +14930,7 @@ bool PublishRowScene(ViewState& state) {
         ok=top && SUCCEEDED(bodyClip->SetTop(top.Get()));
     }
     for(auto* p:{std::addressof(feedback),std::addressof(icons),std::addressof(text)}) if(ok)
-        ok=SUCCEEDED(state.composition->CreateVisual(&*p)) && SUCCEEDED(AppendCompositionVisual(body.Get(),p->Get()));
+        ok=SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&*p)) && SUCCEEDED(AppendCompositionVisual(body.Get(),p->Get()));
     const auto slice=[&](IDCompositionVisual* parent,IUnknown* content,const ViewState::ItemSlice& item) {
         ComPtr<IDCompositionVisual> v; ComPtr<IDCompositionRectangleClip> clip; ComPtr<IDCompositionEffectGroup> alpha;
         const auto y=curve(item.from.top-item.cell.top,item.to.top-item.cell.top);
@@ -14514,7 +14939,7 @@ bool PublishRowScene(ViewState& state) {
             item.sourceLeft-item.cell.left+direction*(item.to.left-item.source.left));
         const auto end=curve(item.cell.top+item.from.height,item.cell.top+item.to.height);
         const auto opacity=curve(item.from.opacity,item.to.opacity);
-        return y && x && end && opacity && SUCCEEDED(state.composition->CreateVisual(&v)) &&
+        return y && x && end && opacity && SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&v)) &&
             SUCCEEDED(state.composition->CreateRectangleClip(&clip)) &&
             SUCCEEDED(clip->SetLeft(item.cell.left)) && SUCCEEDED(clip->SetRight(item.cell.right)) &&
             SUCCEEDED(clip->SetTop(item.cell.top)) && SUCCEEDED(clip->SetBottom(end.Get())) &&
@@ -14528,7 +14953,7 @@ bool PublishRowScene(ViewState& state) {
         ok=slice(feedback.Get(),mode.feedback.surface.Get(),item) && slice(icons.Get(),mode.names.surface.Get(),item) &&
             slice(text.Get(),mode.metadata.surface.Get(),item);
     if(ok && !mode.headings.empty()) {
-        ok=SUCCEEDED(state.composition->CreateVisual(&groups)) && SUCCEEDED(AppendCompositionVisual(mode.root.Get(),groups.Get()));
+        ok=SUCCEEDED(CreatePixelAlignedVisual(state.composition.Get(),&groups)) && SUCCEEDED(AppendCompositionVisual(mode.root.Get(),groups.Get()));
         for(bool ghost:{true,false}) for(const auto& item:mode.headings) if(ok && (item.key<0)==ghost)
             ok=slice(groups.Get(),mode.groups.surface.Get(),item);
     }
@@ -14633,6 +15058,7 @@ void Paint(ViewState& state) {
         return;
     }
     ScopedFlag rasterPainting(state.textRasterPainting);
+    RefreshTextRendering(state,true);
     ++state.graphicsPaintSerial;
     state.presentationContentAccepted=false;
     if (state.itemOpacityToken != state.token) ResetItemContentOpacity(state);
@@ -14701,8 +15127,7 @@ void Paint(ViewState& state) {
     // configured opacity: never invent a second dark/light RGB value.
     state.target->BeginDraw();
     state.target->SetTransform(D2D1::Matrix3x2F::Identity());
-    // Grayscale antialiasing works correctly with premultiplied alpha surfaces.
-    state.target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    ConfigureTextTarget(state,state.target.Get());
     if (compositionFrame.active && !compositionFrame.Rows()) {
         for (auto* plane : {&state.modeComposition.names,&state.modeComposition.metadata,&state.modeComposition.groups,&state.modeComposition.chrome}) {
             if (!plane->bitmap) continue;
@@ -14978,7 +15403,7 @@ void Paint(ViewState& state) {
                  state.rtlLayout ? w - left : right, bottom,
                  rgb, opacity, 4.f);
             state.brush->SetColor(Packed(rgb, std::min(1.f, opacity * 2.3f)));
-            state.target->DrawRoundedRectangle(D2D1::RoundedRect(rc, 4.f, 4.f),
+            StrokeRoundedRect(state,D2D1::RoundedRect(rc, 4.f, 4.f),
                                                 state.brush.Get(), 1.f);
         }
     }
@@ -15392,10 +15817,10 @@ void Paint(ViewState& state) {
                 D2D1::Point2F(cx, cy), radius, radius);
             state.brush->SetColor(Packed(nameColor,
                 opacity * (.15f + .13f * p)));
-            state.target->FillEllipse(circle, state.brush.Get());
+            FillEllipsePrimitive(state,circle, state.brush.Get());
             state.brush->SetColor(Packed(nameColor,
                 opacity * (.35f + .5f * p)));
-            state.target->DrawEllipse(circle, state.brush.Get(),
+            StrokeEllipse(state,circle, state.brush.Get(),
                 static_cast<float>(Scale96(1, dpi)));
             // The ring grows with progress and fades in with the body. At
             // p=0 no part is visible; no minimum 1-segment stroke is drawn.
@@ -15405,7 +15830,7 @@ void Paint(ViewState& state) {
             for (int i = 0; i < segments; ++i) {
                 const float a = -1.5707963f + sweep * i / segments;
                 const float b = -1.5707963f + sweep * (i + 1) / segments;
-                state.target->DrawLine(
+                StrokeLine(state,
                     D2D1::Point2F(cx + ringRadius * cosf(a), cy + ringRadius * sinf(a)),
                     D2D1::Point2F(cx + ringRadius * cosf(b), cy + ringRadius * sinf(b)),
                     state.brush.Get(), static_cast<float>(Scale96(3, ViewDpi(state))));
@@ -15417,12 +15842,12 @@ void Paint(ViewState& state) {
             const float tail = cx - dir * stem;
             const float stroke = static_cast<float>(Scale96(2, ViewDpi(state)));
             state.brush->SetColor(Packed(nameColor, opacity));
-            state.target->DrawLine(D2D1::Point2F(tail, cy),
+            StrokeLine(state,D2D1::Point2F(tail, cy),
                 D2D1::Point2F(tip, cy), state.brush.Get(), stroke);
-            state.target->DrawLine(D2D1::Point2F(tip, cy),
+            StrokeLine(state,D2D1::Point2F(tip, cy),
                 D2D1::Point2F(tip - dir * radius * .28f, cy - radius * .28f),
                 state.brush.Get(), stroke);
-            state.target->DrawLine(D2D1::Point2F(tip, cy),
+            StrokeLine(state,D2D1::Point2F(tip, cy),
                 D2D1::Point2F(tip - dir * radius * .28f, cy + radius * .28f),
                 state.brush.Get(), stroke);
         }
@@ -15641,7 +16066,7 @@ void RecycleStandbyComposition(ViewState& state) {
     ComPtr<IDCompositionDevice> replacement;
     ComPtr<IDCompositionVisual> visual;
     if (FAILED(DCompositionCreateDevice(state.dxgiDevice.Get(),IID_PPV_ARGS(&replacement))) ||
-        FAILED(replacement->CreateVisual(&visual)) || FAILED(visual->SetContent(state.swapChain.Get())))
+        FAILED(CreatePixelAlignedVisual(replacement.Get(),&visual)) || FAILED(visual->SetContent(state.swapChain.Get())))
         return; // Keep the ready image if allocation fails; retry on a later hide.
     // Device creation can dispatch activation. Never detach a resumed tab's
     // ready composition target; its caller resumes presentation after setup.
@@ -15822,6 +16247,18 @@ void CancelNativeSelectionPreparation(ViewState& state) {
     if (work.selection.wake) SetEvent(work.selection.wake);
 }
 
+// Explicit GPU input supersedes observations captured under an older input
+// owner. Keep queued hints (they re-read the current Shell state), not stale
+// selected PIDLs or a queued clear/recovery from the previous owner.
+void InvalidateNativeSelectionObservation(ViewState& state) {
+    CancelNativeSelectionPreparation(state);
+    state.nativeSelectionImportPending = state.nativeSelectionAllPending = false;
+    state.nativeSelectionAllCount = -1;
+    state.nativeSelectionAwaitingRefresh = false;
+    state.nativeSelectionPaths.clear(); state.nativeFocusedPath.clear();
+    state.nativeSelectionRecoveryPending = false;
+}
+
 DWORD WINAPI SelectionWorkerProc(LPVOID context) {
     auto& lane = *static_cast<TabBackground::Worker*>(context);
     auto& work = *lane.owner;
@@ -15945,8 +16382,12 @@ bool CollectSelectedPidls(ViewState& state, PidlSelection& pidls) {
 // Relative index lookups are prepared by the directory worker; the UI only
 // resolves the at-most-64 identities reported by a native Shell selection.
 int GpuRowForNativePath(const ViewState& state, const std::wstring& path) {
+    const size_t hash = SelectionPathHash(path);
+    if (const auto changed = state.entryPathUpdates.find(hash); changed != state.entryPathUpdates.end())
+        for (int row : changed->second)
+            if (row >= 0 && size_t(row) < state.entries.size() &&
+                !_wcsicmp(state.entries[size_t(row)].path.c_str(), path.c_str())) return row;
     if (state.entryPathIndex.size() == state.entries.size()) {
-        const size_t hash = SelectionPathHash(path);
         auto it = std::lower_bound(state.entryPathIndex.begin(),
             state.entryPathIndex.end(), hash,
             [](const EntryPathIndex::value_type& entry, size_t key) {
@@ -15967,6 +16408,114 @@ int GpuRowForNativePath(const ViewState& state, const std::wstring& path) {
         if (_wcsicmp(state.entries[i].path.c_str(), path.c_str()) == 0)
             return static_cast<int>(i);
     return -1;
+}
+
+void SetIndexedEntryPath(ViewState& state, int row, const std::wstring& path) {
+    auto& entry = state.entries[size_t(row)];
+    if (entry.path == path) return;
+    const auto old = state.entryPathUpdates.find(SelectionPathHash(entry.path));
+    if (old != state.entryPathUpdates.end()) {
+        old->second.erase(row);
+        if (old->second.empty()) state.entryPathUpdates.erase(old);
+    }
+    entry.path = path;
+    state.entryPathUpdates[SelectionPathHash(path)].insert(row);
+}
+
+// A selected identity can be ready in the filesystem/GPU snapshot before
+// Explorer's live view accepts its PIDL. Preserve that explicit selection
+// intent until native verification or a different selection supersedes it.
+bool NativeSelectionRestorePending(const ViewState& state) {
+    return !state.lastFolderNativePending.empty() && state.selected >= 0 &&
+        size_t(state.selected) < state.entries.size() &&
+        size_t(state.selected) < state.selectedFlags.size() && state.selectedFlags[size_t(state.selected)] &&
+        (state.lastFolderNativePendingPath.empty() ?
+            !_wcsicmp(state.entries[size_t(state.selected)].name.c_str(), state.lastFolderNativePending.c_str()) :
+            !_wcsicmp(state.entries[size_t(state.selected)].path.c_str(), state.lastFolderNativePendingPath.c_str()));
+}
+
+struct SelectionIdentitySample {
+    ULONGLONG tick=0, done=0;
+    unsigned long long token=0, directory=0;
+    HWND focus=nullptr;
+    int gpuRow=-1, rows=0, nativeCount=-1, nativeFocusRow=-1;
+    bool gpuSelected=false, pending=false, recovery=false, unsafe=false, contextCurrent=false;
+    HRESULT countHr=E_NOINTERFACE, focusHr=E_NOINTERFACE, selectedHr=E_NOINTERFACE;
+    std::wstring gpuName, gpuPath, nativeFocusPath, nativeSelected, restore, restorePath;
+};
+
+// Optional diagnostics sample the live owner-STA view: one focused item and at
+// most four selected identities. Never enumerate the folder/entire selection,
+// and never treat a cached observation as the current native selection.
+SelectionIdentitySample CaptureSelectionIdentitySample(ViewState& state) {
+    SelectionIdentitySample sample;
+    sample.tick=GetTickCount64(); sample.token=state.token; sample.directory=state.directoryToken;
+    sample.focus=GetFocus(); sample.gpuRow=state.selected; sample.rows=state.total;
+    sample.pending=state.directoryPending; sample.recovery=state.nativeSelectionRecoveryPending;
+    sample.unsafe=state.nativeSelectionUnsafe; sample.restore=state.lastFolderNativePending;
+    sample.restorePath=state.lastFolderNativePendingPath;
+    if (state.selected>=0 && size_t(state.selected)<state.entries.size()) {
+        const auto& entry=state.entries[size_t(state.selected)];
+        sample.gpuName=entry.name; sample.gpuPath=entry.path;
+        sample.gpuSelected=size_t(state.selected)<state.selectedFlags.size() && state.selectedFlags[size_t(state.selected)];
+    }
+    const HWND owner=state.hwnd, native=state.nativeHwnd;
+    const auto lifetime=state.lifetimeToken;
+    const auto view=state.folderView; const auto folder=state.folder;
+    const auto current=[&] {
+        auto* live=State(owner);
+        return live==&state && live->lifetimeToken==lifetime && live->token==sample.token &&
+            live->nativeHwnd==native && live->folderView.Get()==view.Get() && live->folder.Get()==folder.Get();
+    };
+    const auto path=[&](int row,std::wstring& value) {
+        PITEMID_CHILD raw=nullptr;
+        const HRESULT itemHr=view->Item(row,&raw); OwnedPidl child(raw);
+        if (FAILED(itemHr) || !child || !current()) return;
+        STRRET display{}; PWSTR text=nullptr;
+        if (SUCCEEDED(folder->GetDisplayNameOf(child.get(),SHGDN_FORPARSING,&display)) &&
+            SUCCEEDED(StrRetToStrW(&display,child.get(),&text)) && text) value=text;
+        CoTaskMemFree(text);
+    };
+    if (view && folder && current()) {
+        // A provider can dispatch nested notifications during a read. Keep
+        // them queued instead of importing an intermediate diagnostic state.
+        ScopedFlag observing(state.nativeSelectionCommitting);
+        sample.countHr=view->ItemCount(SVGIO_SELECTION,&sample.nativeCount);
+        if (current()) sample.focusHr=view->GetFocusedItem(&sample.nativeFocusRow);
+        if (current() && SUCCEEDED(sample.focusHr) && sample.nativeFocusRow>=0)
+            path(sample.nativeFocusRow,sample.nativeFocusPath);
+        int start=0;
+        for (int i=0;i<4 && i<sample.nativeCount && current();++i) {
+            int row=-1;
+            sample.selectedHr=view->GetSelectedItem(start,&row);
+            if (sample.selectedHr!=S_OK || row<start || !current()) break;
+            std::wstring selected; path(row,selected);
+            if (!sample.nativeSelected.empty()) sample.nativeSelected+=L" | ";
+            sample.nativeSelected+=std::to_wstring(row)+L":"+selected;
+            if (row==INT_MAX) break;
+            start=row+1;
+        }
+    }
+    sample.contextCurrent=current(); sample.done=GetTickCount64();
+    return sample;
+}
+
+void TraceSelectionIdentity(ViewState& state, const wchar_t* point) {
+    if (!g_selectionLogging.load(std::memory_order_relaxed) || state.presentationOnly ||
+        state.selectionTraceRunning || g_unloading.load(std::memory_order_relaxed)) return;
+    ScopedFlag tracing(state.selectionTraceRunning);
+    const auto sequence=++state.selectionTraceSequence;
+    const auto sample=CaptureSelectionIdentitySample(state);
+    Wh_Log(L"[GPU selection trace] seq=%llu tick=%llu done=%llu tid=%lu point=%s token=%llu directory=%llu "
+        L"focus=%p gpu-row=%d gpu-selected=%d gpu-name=\"%s\" gpu-path=\"%s\" rows=%d "
+        L"native-count=%d native-focus-row=%d native-focus-path=\"%s\" native-selected=\"%s\" "
+        L"count-hr=0x%08X focus-hr=0x%08X selected-hr=0x%08X names-pending=%d restore=\"%s\" restore-path=\"%s\" "
+        L"recovery=%d unsafe=%d context-current=%d",
+        sequence,sample.tick,sample.done,GetCurrentThreadId(),point,sample.token,sample.directory,
+        sample.focus,sample.gpuRow,sample.gpuSelected,sample.gpuName.c_str(),sample.gpuPath.c_str(),sample.rows,
+        sample.nativeCount,sample.nativeFocusRow,sample.nativeFocusPath.c_str(),sample.nativeSelected.c_str(),
+        static_cast<unsigned>(sample.countHr),static_cast<unsigned>(sample.focusHr),static_cast<unsigned>(sample.selectedHr),
+        sample.pending,sample.restore.c_str(),sample.restorePath.c_str(),sample.recovery,sample.unsafe,sample.contextCurrent);
 }
 void MaybeRecoverNativeSelection(ViewState& state);
 
@@ -16008,11 +16557,23 @@ void RevealNativeSelection(ViewState& state, int index, bool animate = true) {
 
 void ApplyImportedNativeSelection(ViewState& state,
                                   bool revealUnchanged) {
-    if (state.nativeSelectionRecoveryPending || state.nativeFileCommandDepth) {
+    if (state.rename.editor || state.nativeSelectionCommitting || NativeSelectionRestorePending(state) ||
+        state.nativeSelectionRecoveryPending || state.nativeFileCommandDepth) {
         state.nativeSelectionDirty = true;
+        TraceSelectionIdentity(state, NativeSelectionRestorePending(state) ?
+            L"native.import.defer-identity" : L"native.import.defer-owner");
         return;
     }
     if (!state.nativeSelectionImportPending || !state.loaded) return;
+    TraceSelectionIdentity(state, L"native.import.before");
+    struct ImportTrace {
+        HWND owner; ViewState* expected; unsigned long long lifetime;
+        ~ImportTrace() {
+            auto* live=State(owner);
+            if (live==expected && live->lifetimeToken==lifetime)
+                TraceSelectionIdentity(*live,L"native.import.after");
+        }
+    } importTrace{state.hwnd,&state,state.lifetimeToken};
     const bool preserveViewport=state.nativeSelectionImportPreserveViewport;
     if (IsWindow(state.frameHwnd) && !IsWindowEnabled(state.frameHwnd)) {
         state.nativeSelectionDirty = true;
@@ -16186,6 +16747,20 @@ void ApplyImportedNativeSelection(ViewState& state,
 }
 
 bool CaptureNativeSelection(ViewState& state, bool eventDriven = true, bool commitFailure = false) {
+    if (NativeSelectionRestorePending(state) && !state.nativeSelectionCommitting && !state.nativeFileCommandDepth) {
+        TrySyncLastFolderSelection(state);
+        if (NativeSelectionRestorePending(state)) {
+            state.nativeSelectionDirty = true;
+            state.nativeSelectionSignalView = state.nativeHwnd;
+            TraceSelectionIdentity(state, L"native.capture.defer-identity");
+            return false;
+        }
+    }
+    if (state.rename.editor) {
+        state.nativeSelectionDirty = true;
+        state.nativeSelectionSignalView = state.nativeHwnd;
+        return false;
+    }
     if (state.nativeSelectionRecoveryPending) {
         MaybeRecoverNativeSelection(state);
         return !state.nativeSelectionRecoveryPending;
@@ -16385,10 +16960,10 @@ bool VerifyNativeSelection(ViewState& state, const PidlSelection& expected) {
         ULONG fetched = 0;
         const ULONG wanted = static_cast<ULONG>(std::min<size_t>(remaining, ARRAYSIZE(items)));
         const HRESULT hr = selected->Next(wanted, items, &fetched);
-        bool valid = SUCCEEDED(hr) && fetched == wanted;
-        for (ULONG i = 0; i < ARRAYSIZE(items); ++i) {
+        bool valid = ValidPidlBatch(hr, wanted, fetched, items) && fetched == wanted;
+        const ULONG owned = SUCCEEDED(hr) ? std::min(fetched, wanted) : 0;
+        for (ULONG i = 0; i < owned; ++i) {
             OwnedPidl item(items[i]);
-            if (i >= fetched) continue;
             if (!item) { valid = false; continue; }
             const size_t hash = hashPidl(item.get());
             auto match = std::lower_bound(identities.begin(), identities.end(),
@@ -16437,7 +17012,7 @@ void ReconcileFailedNativeSelection(ViewState& state) {
 bool ClearNativeSelection(ViewState& state) {
     WindowCallbackGuard callback;
     ScopedFlag committing(state.nativeSelectionCommitting);
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     state.lastFolderNativePresentAfter=0;
     if (!state.folderView || !state.loaded || state.optimisticStartedAt ||
         !IsWindow(state.nativeHwnd)) return false;
@@ -16522,7 +17097,11 @@ bool ClearNativeSelection(ViewState& state) {
 }
 
 void MaybeRecoverNativeSelection(ViewState& state) {
-    if (!state.nativeSelectionRecoveryPending || state.nativeSelectionCommitting ||
+    if (state.nativeSelectionRecoveryPending && NativeSelectionRestorePending(state)) {
+        TraceSelectionIdentity(state, L"recovery.defer-identity");
+        return;
+    }
+    if (!state.nativeSelectionRecoveryPending || NativeSelectionRestorePending(state) || state.nativeSelectionCommitting ||
         state.nativeFileCommandDepth || state.directoryPending || state.namesPreview ||
         state.watchedChangePending || state.refreshAgain || !state.loaded ||
         !state.visible || !state.inScope || !state.folderView || state.optimisticStartedAt ||
@@ -16531,6 +17110,7 @@ void MaybeRecoverNativeSelection(ViewState& state) {
         !IsWindowEnabled(state.frameHwnd) || !TabOwnsActiveView(state)) return;
     const HWND owner=state.hwnd, native=state.nativeHwnd;
     const auto lifetime=state.lifetimeToken, token=state.token;
+    TraceSelectionIdentity(state, L"recovery.before-clear");
     bool cleared=false;
     {
         ScopedFlag committing(state.nativeSelectionCommitting);
@@ -16546,6 +17126,7 @@ void MaybeRecoverNativeSelection(ViewState& state) {
     StopKeyboardSelectionAnimation(state); StopSelectionFade(state);
     state.selectedFlags.Fill(0);
     state.selected=state.anchor=-1;
+    TraceSelectionIdentity(state, L"recovery.after-clear");
     state.keyboardCaretVisible=false;
     state.nativeSelectionImportPending=state.nativeSelectionAllPending=false;
     state.nativeSelectionAllCount=-1;
@@ -16652,11 +17233,14 @@ void AdvanceNativeSelectionCapture(ViewState& state) {
         PITEMID_CHILD children[16]{}; ULONG fetched=0;
         const HRESULT hr=enumerator->Next(ARRAYSIZE(children),children,&fetched);
         const bool alive=current();
-        for (auto child:children) {
-            OwnedPidl owned(child);
-            if (alive && owned) job->children.push_back(std::move(owned));
+        const bool valid=ValidPidlBatch(hr, ARRAYSIZE(children), fetched, children);
+        const ULONG ownedCount=SUCCEEDED(hr) ? std::min<ULONG>(fetched, ARRAYSIZE(children)) : 0;
+        for (ULONG i=0; i<ownedCount; ++i) {
+            OwnedPidl owned(children[i]);
+            if (alive && valid && owned) job->children.push_back(std::move(owned));
         }
         if (!alive) return;
+        if (!valid) { retry(); return; }
         copied+=fetched;
         if (FAILED(hr) || job->children.size()>static_cast<size_t>(job->expectedCount)) { retry(); return; }
         complete=hr==S_FALSE || fetched<ARRAYSIZE(children) ||
@@ -16684,11 +17268,12 @@ void AdvanceNativeSelectionCapture(ViewState& state) {
 }
 
 bool SyncNativeSelection(ViewState& state, std::shared_ptr<PreparedNativeSelection> prepared) {
+    TraceSelectionIdentity(state, L"native.sync.before");
     // A fresh explicit selection supersedes an older queued recovery. Failed
     // commits still use the normal verified import/recovery path.
     state.nativeSelectionRecoveryPending = false;
     state.nativeSelectionImportPreserveViewport=false;
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     state.lastFolderNativePresentAfter=0;
     PipelineScope pipeline(state.background,L"native.selection",state.selected,state.token);
     if (!state.folderView || !state.loaded || state.optimisticStartedAt)
@@ -16727,6 +17312,10 @@ bool SyncNativeSelection(ViewState& state, std::shared_ptr<PreparedNativeSelecti
             selectedPaths.push_back(state.entries[i].path);
     }
     if (desired <= kMaxDirectNativeSelectionItems) CancelNativeSelectionPreparation(state);
+    state.nativeSelectionImportPending = state.nativeSelectionAllPending = false;
+    state.nativeSelectionAllCount = -1;
+    state.nativeSelectionAwaitingRefresh = false;
+    state.nativeSelectionPaths.clear(); state.nativeFocusedPath.clear();
     if (desired == 0) {
         if (ClearNativeSelection(state)) return true;
         ReconcileFailedNativeSelection(state);
@@ -16834,6 +17423,7 @@ bool SyncNativeSelection(ViewState& state, std::shared_ptr<PreparedNativeSelecti
     } else {
         ReconcileFailedNativeSelection(state);
     }
+    TraceSelectionIdentity(state, verified ? L"native.sync.verified" : L"native.sync.failed");
     return verified;
 }
 
@@ -16843,6 +17433,7 @@ bool SyncNativeSelection(ViewState& state, std::shared_ptr<PreparedNativeSelecti
 // request until native identity/focus is verified or a later action cancels it.
 void TrySyncLastFolderSelection(ViewState& state) {
     if (state.optimisticStartedAt || state.lastFolderNativePending.empty() ||
+        state.nativeSelectionCommitting || state.nativeFileCommandDepth ||
         !state.visible || !state.inScope || !state.folder || !state.folderView ||
         !IsWindow(state.nativeHwnd)) return;
     if (state.lastFolderNativeAfterPaint || state.lastFolderNativePresentAfter ||
@@ -16853,11 +17444,15 @@ void TrySyncLastFolderSelection(ViewState& state) {
     const auto folder=state.folder;
     const auto view=state.folderView;
     std::wstring name=state.lastFolderNativePending;
+    const std::wstring path=state.lastFolderNativePendingPath;
+    std::wstring parseName=path.empty() ? name : path.substr(path.find_last_of(L"\\/")+1);
     const auto current=[&] { return State(hwnd)==&state && state.token==token &&
         state.nativeHwnd==native && state.folderView.Get()==view.Get() &&
         state.folder.Get()==folder.Get() && state.lastFolderNativePending==name &&
+        state.lastFolderNativePendingPath==path &&
         !state.optimisticStartedAt && state.visible && state.inScope && TabOwnsActiveView(state); };
     if (!current()) return;
+    TraceSelectionIdentity(state, L"native.restore.try");
     ComPtr<IShellView> activeView;
     HWND activeHwnd = nullptr;
     if (!browser || FAILED(browser->QueryActiveShellView(activeView.GetAddressOf())) ||
@@ -16868,9 +17463,10 @@ void TrySyncLastFolderSelection(ViewState& state) {
         (state.lastFolderNativeAttempts <= 2 ? 100u : state.lastFolderNativeAttempts<=8 ? 240u : 1000u);
     ULONG eaten = 0;
     PITEMID_CHILD raw = nullptr;
-    const HRESULT parsed=folder->ParseDisplayName(native,nullptr,name.data(),&eaten,&raw,nullptr);
+    const HRESULT parsed=folder->ParseDisplayName(native,nullptr,parseName.data(),&eaten,&raw,nullptr);
     OwnedPidl child(raw);
     if (FAILED(parsed) || !child || !current()) return;
+    ScopedFlag committing(state.nativeSelectionCommitting);
     PCUITEMID_CHILD items[] = { child.get() };
     const HRESULT hr = view->SelectAndPositionItems(1, items,
         nullptr, SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_FOCUSED |
@@ -16881,10 +17477,28 @@ void TrySyncLastFolderSelection(ViewState& state) {
         PITEMID_CHILD actual = nullptr;
         if (SUCCEEDED(view->GetFocusedItem(&focused)) && current() && focused >= 0 &&
             SUCCEEDED(view->Item(focused, &actual)) && actual && current())
-            synced = ILIsEqual(actual, child.get()) != FALSE;
+        {
+            const HRESULT same=ILIsEqual(actual,child.get()) ? S_OK :
+                folder->CompareIDs(SHCIDS_CANONICALONLY,actual,child.get());
+            synced=current() && SUCCEEDED(same) && HRESULT_CODE(same)==0;
+        }
         if (actual) CoTaskMemFree(actual);
     }
-    if (synced && current()) state.lastFolderNativePending.clear();
+    if (synced && current()) {
+        PidlSelection expected; expected.children.push_back(child.get());
+        synced = VerifyNativeSelection(state, expected) && current();
+    }
+    if (synced && current()) {
+        InvalidateNativeSelectionObservation(state);
+        state.nativeSelectionUnsafe = false;
+        CancelNativeSelectionRestore(state);
+        state.nativeSelectionObservedCount = 1;
+        state.nativeSelectionObservedPaths.clear();
+        const int row = state.selected;
+        if (row >= 0 && size_t(row) < state.entries.size())
+            state.nativeSelectionObservedPaths.push_back(state.entries[size_t(row)].path);
+        TraceSelectionIdentity(state, L"native.restore.verified");
+    }
 }
 
 void Select(ViewState& state, int index, bool keyboardNavigation = false) {
@@ -16906,7 +17520,7 @@ void Select(ViewState& state, int index, bool keyboardNavigation = false) {
             // opacity/timeline. Avoid a native deselect/reselect echo as well.
             state.keyboardCaretVisible = false;
             state.anchor = index;
-            state.lastFolderNativePending.clear();
+            CancelNativeSelectionRestore(state);
             ClearPostDeletionCaret(state);
             if (!state.thisPcGpu && (state.nativeSelectionObservedCount != 1 ||
                 state.nativeSelectionObservedPaths.size() != 1 ||
@@ -16942,7 +17556,7 @@ void Select(ViewState& state, int index, bool keyboardNavigation = false) {
     if (moveHighlight) StopSelectionFade(state);
     StopKeyboardSelectionAnimation(state);
     state.keyboardCaretVisible = false;
-    state.lastFolderNativePending.clear(); // An explicit click supersedes restore.
+    CancelNativeSelectionRestore(state); // An explicit click supersedes restore.
     if (state.selectedFlags.size() != static_cast<size_t>(state.total))
         state.selectedFlags.resize(static_cast<size_t>(state.total), 0);
     state.selectedFlags.Fill(0);
@@ -16971,7 +17585,7 @@ void SelectWithModifiers(ViewState& state, int index, bool control, bool shift) 
     const auto beforeSelection = CaptureVisibleSelection(state);
     StopKeyboardSelectionAnimation(state);
     state.keyboardCaretVisible = false;
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     if (state.selectedFlags.size() != static_cast<size_t>(state.total))
         state.selectedFlags.resize(static_cast<size_t>(state.total), 0);
     if (shift && state.anchor >= 0) {
@@ -17110,6 +17724,7 @@ int KeyboardNavigationTarget(ViewState& state, UINT key, bool useSelectionEdge =
 
 void NavigateKeyboardSelection(ViewState& state, UINT key,
                                bool control, bool shift) {
+    TraceSelectionIdentity(state, L"key.before-target");
     if (state.optimisticStartedAt) return;
     if ((key == VK_UP || key == VK_DOWN) && state.selected < 0 &&
         state.restoredKeyboardRow < 0 && state.vacantKeyboardRow < 0)
@@ -17122,12 +17737,13 @@ void NavigateKeyboardSelection(ViewState& state, UINT key,
     if (target < 0) return;
     if (!control && !shift) {
         Select(state, target, true); // Keep the existing single-row animation.
+        TraceSelectionIdentity(state, L"key.after-select");
         return;
     }
     const auto beforeSelection = shift ? CaptureVisibleSelection(state) :
         VisibleSelectionSnapshot{};
     StopKeyboardSelectionAnimation(state);
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     if (state.selectedFlags.size() != static_cast<size_t>(state.total))
         state.selectedFlags.resize(static_cast<size_t>(state.total), 0);
     if (shift) {
@@ -17196,7 +17812,7 @@ void BeginNativeSelectAll(ViewState& state, bool nativeCommand = false) {
     // Native-focused file commands keep Explorer's own command ordering. A
     // GPU-focused fallback must not authorize its old painted selection.
     state.nativeSelectionUnsafe=!nativeCommand;
-    state.lastFolderNativePending.clear(); state.lastFolderNativePresentAfter=0;
+    CancelNativeSelectionRestore(state); state.lastFolderNativePresentAfter=0;
 }
 
 ViewState* NativeSelectAllOwner(const MSG& msg) {
@@ -17309,6 +17925,7 @@ HRESULT InvokeNativeSelectionKey(ViewState& state, IShellView* native,
     NativeFileCommandScope commandScope(&state);
     const HWND owner=state.hwnd, frame=state.frameHwnd, target=state.nativeHwnd;
     const auto lifetime=state.lifetimeToken, viewToken=state.token;
+    const std::wstring directory=state.folderPath;
     HWND window=nullptr;
     if (FAILED(native->GetWindow(&window)) || window!=target)
         return HRESULT_FROM_WIN32(ERROR_CANCELLED);
@@ -17330,6 +17947,25 @@ HRESULT InvokeNativeSelectionKey(ViewState& state, IShellView* native,
     invoke.lpVerb=key.key==VK_DELETE ? "delete" : key.key=='X' ? "cut" : "copy";
     invoke.lpVerbW=key.key==VK_DELETE ? L"delete" : key.key=='X' ? L"cut" : L"copy";
     invoke.nShow=SW_SHOWNORMAL;
+    if (key.key == VK_RETURN) {
+        // Ask the selected Shell group for its default command: it may be
+        // Edit, Play, or an extension command rather than the "open" verb.
+        struct Popup { HMENU value=CreatePopupMenu(); ~Popup() {if (value) DestroyMenu(value);} } popup;
+        if (!popup.value) return E_OUTOFMEMORY;
+        const HRESULT queried=command->QueryContextMenu(popup.value,0,1,0x7FFF,CMF_DEFAULTONLY);
+        if (FAILED(queried)) return queried;
+        const UINT selected=GetMenuDefaultItem(popup.value,FALSE,GMDI_GOINTOPOPUPS);
+        if (selected==UINT(-1) || selected<1 || selected>0x7FFF) return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+        live=State(owner);
+        if (!live || live->lifetimeToken!=lifetime || live->token!=viewToken ||
+            live->nativeHwnd!=target || !live->visible || live->optimisticStartedAt ||
+            !TabOwnsActiveView(*live) || g_unloading.load(std::memory_order_acquire))
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        invoke.lpVerb=MAKEINTRESOURCEA(selected-1);
+        invoke.lpVerbW=MAKEINTRESOURCEW(selected-1);
+        invoke.lpDirectoryW=IsTargetPath(directory) ? directory.c_str() : nullptr;
+        return command->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke));
+    }
     TabTraceSlowScope trace(L"Shell selected-file shortcut",owner);
     PipelineScope invocation(live->background,L"file.selection.invoke",key.key,viewToken);
     return command->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke));
@@ -17468,7 +18104,7 @@ void UpdateMarquee(ViewState& state, POINT point) {
         state.selected = -1;
     if (selectionChanged) {
         ClearPostDeletionCaret(state);
-        state.lastFolderNativePending.clear();
+        CancelNativeSelectionRestore(state);
         const float halfRow = std::min(state.rowPx * .5f, ViewHeight(state) * .5f);
         const float y = std::clamp(static_cast<float>(point.y - state.headerPx),
             halfRow, std::max(halfRow, ViewHeight(state) - halfRow));
@@ -17666,7 +18302,6 @@ void FinalizeDestroyedRenameEditor(ViewState& state, HWND editor) {
     r.notificationHost = nullptr;
     ++r.epoch; // Invalidate any queued Enter/Escape/focus messages.
     r.editor = nullptr;
-    r.originalProc = nullptr;
     if (r.font) { DeleteObject(r.font); r.font = nullptr; }
     r.index = -1;
     r.path.clear();
@@ -17731,7 +18366,7 @@ bool CloseRenameEditor(ViewState& state, bool restoreFocus = false) {
         state.detailsViewActive && TabOwnsActiveView(state) &&
         PresentationVisible(state) && IsWindow(state.nativeHwnd) &&
         ExplorerFrameHasForeground(state.frameHwnd))
-        SetFocus(state.nativeHwnd);
+        ReturnListInputFocus(state, edit);
     // WM_NCDESTROY already invalidated the vacated FRAME region and the
     // composited overlay using the editor's last known rectangle.
     if (g_perf.load(std::memory_order_relaxed))
@@ -17746,15 +18381,14 @@ void CancelRename(ViewState& state) {
     CloseRenameEditor(state);
 }
 
-LRESULT CALLBACK RenameEditProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+LRESULT CALLBACK RenameEditProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
+                                UINT_PTR id, DWORD_PTR data) {
     WindowCallbackGuard callback;
-    auto* state = reinterpret_cast<ViewState*>(
-        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    auto* state = reinterpret_cast<ViewState*>(data);
     // The frame-child EDIT can outlive its overlay HWND during retirement.
     // Its session stays alive until this procedure's final native NCDESTROY.
     const HWND overlay=state ? state->hwnd : nullptr;
     const bool current = state && state->rename.editor == hwnd;
-    WNDPROC original = current ? state->rename.originalProc : nullptr;
     // Notifications cover text mutations; paint also follows font/geometry
     // changes without enumerating each editor mutation message here.
     if (msg == WM_PAINT && current && !state->rename.finishing) {
@@ -17785,21 +18419,24 @@ LRESULT CALLBACK RenameEditProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     static_cast<LPARAM>(state->rename.epoch)) != FALSE;
             }
         } else {
-            PostMessageW(overlay, kMsgRenameDecision, 0,
+            PostMessageW(overlay, kMsgRenameDecision,
+                ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) |
+                  GetAsyncKeyState(VK_MBUTTON)) & 0x8000) ? 1 : 0,
                 static_cast<LPARAM>(state->rename.epoch));
         }
     }
     // Always call the genuine EDIT window procedure through WM_NCDESTROY.
     // The session (and its font) are released only AFTER it has completed.
-    const LRESULT result = original ? CallWindowProcW(original, hwnd, msg, wp, lp) :
-                                      DefWindowProcW(hwnd, msg, wp, lp);
+    if (msg == WM_NCDESTROY) RemoveWindowSubclass(hwnd, RenameEditProc, id);
+    const LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
     if (msg == WM_NCDESTROY && current)
         FinalizeDestroyedRenameEditor(*state, hwnd);
     return result;
 }
 
 void BeginRename(ViewState& state, int index, bool createdItem = false) {
-    if (state.thisPcGpu || IsRecycleBinLocation(state.folderPath) || state.rename.editor || !state.visible || !state.inScope ||
+    if (state.thisPcGpu || IsRecycleBinLocation(state.folderPath) || state.rename.editor ||
+        (!state.renamePreviewPath.empty() && state.renamePreviewToken == state.token) || !state.visible || !state.inScope ||
         !IsWindow(state.frameHwnd) || GetParent(state.hwnd) != state.frameHwnd ||
         state.optimisticStartedAt || !TabOwnsActiveView(state) ||
         !state.detailsViewActive || state.emptyNative ||
@@ -17809,6 +18446,20 @@ void BeginRename(ViewState& state, int index, bool createdItem = false) {
                    static_cast<unsigned char>(1)) != 1 ||
         index >= static_cast<int>(state.selectedFlags.size()) ||
         !state.selectedFlags[static_cast<size_t>(index)]) return;
+    const HWND owner = state.hwnd, native = state.nativeHwnd;
+    const auto lifetime = state.lifetimeToken, token = state.token;
+    const std::wstring path = state.entries[size_t(index)].path;
+    NativeFileCommandScope inputOwnership(&state);
+    InvalidateNativeSelectionObservation(state);
+    // Establish the file identity in both models before the editor takes HWND
+    // focus. Cancelling a native editor can clear Shell's selected/focused PIDL.
+    SyncNativeSelection(state);
+    // Shell calls can navigate/rebind the view while dispatching callbacks.
+    // The old input owner must never open an editor in the new context.
+    if (State(owner) != &state || state.lifetimeToken != lifetime || state.token != token ||
+        state.nativeHwnd != native || state.rename.editor || !state.visible || !state.inScope ||
+        !TabOwnsActiveView(state) || index >= state.total || size_t(index) >= state.entries.size() ||
+        state.entries[size_t(index)].path != path) return;
     StopKeyboardSelectionAnimation(state);
     EnsureVisible(state, index);
     RECT rc = RenameEditorRect(state, index);
@@ -17842,15 +18493,11 @@ void BeginRename(ViewState& state, int index, bool createdItem = false) {
     r.tab = state.activeTabHost;
     r.native = state.nativeHwnd;
     r.frameRect = rc;
-    SetWindowLongPtrW(edit, GWLP_USERDATA,
-        reinterpret_cast<LONG_PTR>(&state));
-    SetLastError(0);
-    r.originalProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(edit,
-        GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(RenameEditProc)));
-    if (!r.originalProc) {
-        const DWORD error = GetLastError();
+    // Creation, input and overlay retirement run on this EDIT's owner thread.
+    if (!SetWindowSubclass(edit, RenameEditProc,
+            reinterpret_cast<UINT_PTR>(RenameEditProc), reinterpret_cast<DWORD_PTR>(&state))) {
         CloseRenameEditor(state);
-        Wh_Log(L"[GPU rename] EDIT subclass failed error=%lu", error);
+        Wh_Log(L"[GPU rename] EDIT subclass failed");
         return;
     }
     LOGFONTW editFont = NativeHeaderFont(state);
@@ -17898,6 +18545,76 @@ void BeginRename(ViewState& state, int index, bool createdItem = false) {
     Redraw(state);
 }
 
+// Keyboard, ribbon and Shell extension commands may create the native inline
+// EDIT directly. Its file-view parent is suppressed, so hand its exact focused
+// PIDL and current text to the same visible editor used by F2/context menus.
+// Never infer a filename from a caption or adopt address/search controls.
+bool AdoptNativeRenameEditor(ViewState& state, HWND editor) {
+    if (g_unloading.load(std::memory_order_acquire) || !NativeRenameEditor(state, editor) ||
+        GetFocus() != editor || !state.visible || !state.inScope || !state.detailsViewActive ||
+        state.thisPcGpu || state.optimisticStartedAt || !state.folderView || !state.folder ||
+        !TabOwnsActiveView(state) || !ExplorerFrameHasForeground(state.frameHwnd)) return false;
+    const HWND owner = state.hwnd, native = state.nativeHwnd;
+    const auto lifetime = state.lifetimeToken, token = state.token;
+    const auto current = [&] {
+        auto* live = State(owner);
+        return live == &state && live->lifetimeToken == lifetime && live->token == token &&
+            live->nativeHwnd == native && !g_unloading.load(std::memory_order_acquire);
+    };
+    NativeFileCommandScope inputOwnership(&state);
+    // A context-menu creation may already have opened our field before Shell
+    // subsequently focuses its duplicate. Cancel only the duplicate session.
+    if (state.rename.editor) {
+        SendMessageW(editor, WM_KEYDOWN, VK_ESCAPE, 0);
+        if (current()) { RepositionRenameEdit(state); SetFocus(state.rename.editor); }
+        return current() && state.rename.editor;
+    }
+    const auto view = state.folderView;
+    const auto folder = state.folder;
+    int focused = -1;
+    PITEMID_CHILD raw = nullptr;
+    if (FAILED(view->GetFocusedItem(&focused)) || !current() || focused < 0 ||
+        FAILED(view->Item(focused, &raw))) { if (raw) CoTaskMemFree(raw); return false; }
+    OwnedPidl child(raw);
+    if (!child || !current()) return false;
+    STRRET display{};
+    PWSTR parsed = nullptr;
+    if (FAILED(folder->GetDisplayNameOf(child.get(), SHGDN_FORPARSING, &display)) ||
+        FAILED(StrRetToStrW(&display, child.get(), &parsed))) return false;
+    const std::wstring path = parsed ? parsed : L"";
+    CoTaskMemFree(parsed);
+    if (!current() || GetFocus() != editor) return false;
+    const int row = state.loaded && !state.namesPreview ? GpuRowForNativePath(state, path) : -1;
+    if (row < 0) {
+        // Keep native text/caret intact until the existing names lane catches
+        // up. Input dispatch retries the handoff before forwarding each key.
+        if (!state.directoryPending) QueueDirectoryRefresh(state, false, true);
+        SetTimer(owner, kTimerId, 50, nullptr);
+        return false;
+    }
+    const int length = GetWindowTextLengthW(editor);
+    if (length < 0 || length >= 32768) return false;
+    std::wstring text(size_t(length) + 1, L'\0');
+    text.resize(GetWindowTextW(editor, text.data(), length + 1));
+    DWORD first = 0, last = 0;
+    SendMessageW(editor, EM_GETSEL, reinterpret_cast<WPARAM>(&first), reinterpret_cast<LPARAM>(&last));
+    // Escape closes Shell's editing transaction before SetFocus can commit it.
+    SendMessageW(editor, WM_KEYDOWN, VK_ESCAPE, 0);
+    if (!current() || GpuRowForNativePath(state, path) != row) return false;
+    state.selectedFlags.assign(state.entries.size(), 0);
+    state.selectedFlags[size_t(row)] = 1;
+    state.selected = state.anchor = row;
+    BeginRename(state, row, true);
+    if (!state.rename.editor) return false;
+    SetWindowTextW(state.rename.editor, text.c_str());
+    SendMessageW(state.rename.editor, EM_SETSEL, first, last);
+    ClearInteractiveCreation(state);
+    if (g_perf.load(std::memory_order_relaxed))
+        Wh_Log(L"[GPU rename] NATIVE_EDIT_HANDOFF native-edit=%p gpu-edit=%p row=%d path=%s",
+            editor, state.rename.editor, row, path.c_str());
+    return true;
+}
+
 // A Shell create event identifies the item but does not imply rename intent.
 // The New command is recorded BEFORE Explorer executes it; once the worker
 // publishes that exact pathname, make the GPU selection and editor immediate.
@@ -17910,7 +18627,7 @@ void TryStartCreatedItemRename(ViewState& state) {
         !state.visible || !state.inScope || !state.detailsViewActive ||
         !state.folderView || state.thisPcGpu || state.optimisticStartedAt ||
         !TabOwnsActiveView(state) || state.rename.editor ||
-        !ExplorerFrameHasForeground(state.frameHwnd) || !OverlayHasInputFocus(state)) {
+        !ExplorerFrameHasForeground(state.frameHwnd) || !CreationHasInputFocus(state)) {
         ClearInteractiveCreation(state);
         return;
     }
@@ -17929,6 +18646,10 @@ void TryStartCreatedItemRename(ViewState& state) {
             state.pendingCreatedItemRefreshAttempts=std::min(state.pendingCreatedItemRefreshAttempts+1,8u);
             QueueDirectoryRefresh(state, false, true);
         }
+        return;
+    }
+    if (NativeRenameEditor(state, GetFocus())) {
+        AdoptNativeRenameEditor(state, GetFocus());
         return;
     }
     const auto before = CaptureVisibleSelection(state);
@@ -17972,19 +18693,36 @@ void RepositionRenameEdit(ViewState& state) {
         CancelRename(state);
         return;
     }
-    if (EqualRect(&local, &state.rename.frameRect)) return;
+    // A Shell layout can reorder siblings without moving the field. Repair
+    // visibility and Z order too, including the sticky New Folder refocus path.
+    if (EqualRect(&local, &state.rename.frameRect) && IsWindowVisible(state.rename.editor) &&
+        GetWindow(state.frameHwnd, GW_CHILD) == state.rename.editor) return;
     if (SetWindowPos(state.rename.editor, HWND_TOP, local.left, local.top,
-        local.right - local.left, local.bottom - local.top, SWP_NOACTIVATE))
+        local.right - local.left, local.bottom - local.top, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOCOPYBITS))
         state.rename.frameRect = local;
 }
 
 void FinishRename(ViewState& state, bool commit) {
     if (!state.rename.editor || state.rename.finishing) return;
+    TraceSelectionIdentity(state, L"rename.commit-request");
+    NativeFileCommandScope inputOwnership(&state);
+    const HWND editor = state.rename.editor;
+    const bool returnInput = GetFocus() == editor;
     // Check folder/tab/row ownership while the edit still exists. Once it is
     // closed, no stale posted decision may commit in a new directory.
     const bool valid = RenameSessionValid(state);
     const int index = state.rename.index;
     const std::wstring oldPath = state.rename.path;
+    const std::wstring oldName = index >= 0 && index < state.total ? state.entries[size_t(index)].name : L"";
+    const HWND owner = state.hwnd, native = state.nativeHwnd;
+    const auto lifetime = state.lifetimeToken, token = state.token;
+    const std::wstring parent = state.folderPath;
+    const auto current = [&]() -> ViewState* {
+        auto* live = State(owner);
+        return live == &state && live->lifetimeToken == lifetime && live->token == token &&
+            live->nativeHwnd == native && live->folderPath == parent &&
+            !g_unloading.load(std::memory_order_acquire) ? live : nullptr;
+    };
     std::wstring newName;
     if (valid && commit) {
         const int length = GetWindowTextLengthW(state.rename.editor);
@@ -17994,49 +18732,116 @@ void FinishRename(ViewState& state, bool commit) {
             newName = buffer.data();
         }
     }
-    if (!CloseRenameEditor(state, true)) return;
+    const bool changed = valid && commit && !newName.empty() && newName != oldName;
+    if (changed) {
+        state.renamePreviewPath = oldPath; state.renamePreviewName = newName;
+        state.renamePreviewToken = token;
+        state.entries[size_t(index)].name = newName;
+    }
+    if (!CloseRenameEditor(state)) {
+        if (changed) state.entries[size_t(index)].name = oldName;
+        state.renamePreviewPath.clear(); state.renamePreviewName.clear();
+        return;
+    }
+    if (!current()) return;
+    // Submit now, before any reentrant/slow Shell call. DestroyWindow removes
+    // the real field; this packet replaces its suppressed label immediately.
+    if (state.presenter) SubmitPresentation(state);
+    if (!changed) {
+        if (valid) SyncNativeSelection(state);
+        if (current() && returnInput) ReturnListInputFocus(state, editor);
+        return;
+    }
+    const auto complete = [&](bool success, const std::wstring& name, const std::wstring& path) {
+        auto* live = current();
+        if (!live) return;
+        int row = GpuRowForNativePath(*live, oldPath);
+        if (row < 0 && success) row = GpuRowForNativePath(*live, path);
+        if (row >= 0) {
+            live->entries[size_t(row)].name = success ? name : oldName;
+            if (success) SetIndexedEntryPath(*live, row, path);
+            live->selectedFlags.assign(live->entries.size(), 0);
+            live->selectedFlags[size_t(row)] = 1;
+            live->selected = live->anchor = row;
+            ClearPostDeletionCaret(*live);
+        }
+        live->renamePreviewPath.clear(); live->renamePreviewName.clear();
+        TraceSelectionIdentity(*live, success ? L"rename.identity-committed" : L"rename.rollback");
+        if (success) {
+            live->sortRevealPath = path; live->sortRevealOldIndex = row;
+        }
+        Redraw(*live);
+        if (live->presenter) SubmitPresentation(*live);
+        // Reconcile the canonical PIDL before giving HWND focus back to Shell.
+        // Its focus/selection callbacks can then only observe the new identity.
+        const bool synced = row >= 0 && SyncNativeSelection(*live);
+        if (!current()) return;
+        if (success && !synced) {
+            live->lastFolderNativePending = name; live->lastFolderNativeAttempts = 0;
+            live->lastFolderNativePendingPath = path;
+            live->lastFolderNativeAfterPaint = false; live->lastFolderNativePresentAfter = 0;
+            live->lastFolderNativeNextAttempt = 0;
+            PostMessageW(owner, kMsgLastFolderSelection, 0, 0);
+            TraceSelectionIdentity(*live, L"rename.wait-native");
+        }
+        if (returnInput) ReturnListInputFocus(*live, editor);
+        if (!current()) return;
+        QueueDirectoryRefresh(*live, true, true);
+    };
     if (!valid || !commit || newName.empty() || index < 0 ||
         index >= state.total ||
         state.entries[static_cast<size_t>(index)].path != oldPath ||
-        newName == state.entries[static_cast<size_t>(index)].name) return;
+        !current()) { complete(false, L"", L""); return; }
     if (!state.visible || !state.inScope || !state.detailsViewActive ||
         state.optimisticStartedAt || !TabOwnsActiveView(state) ||
-        !state.folder || !state.folderView || !IsWindow(state.nativeHwnd)) return;
+        !state.folder || !state.folderView || !IsWindow(state.nativeHwnd)) {
+        complete(false, L"", L""); return;
+    }
     std::wstring actual;
     ComPtr<IShellFolder> activeFolder;
-    if (!GetFolderPath(state.folderView.Get(), actual, activeFolder) ||
-        _wcsicmp(actual.c_str(), state.folderPath.c_str()) != 0 ||
-        !IsTargetPath(actual)) return;
+    const auto view = state.folderView;
+    if (!GetFolderPath(view.Get(), actual, activeFolder) || !current() ||
+        _wcsicmp(actual.c_str(), parent.c_str()) != 0 ||
+        !IsTargetPath(actual)) { complete(false, L"", L""); return; }
     // Shell handles extension rules and name validation. Only commit via
     // SetNameOf, never via a native hidden edit or fabricated keystrokes.
-    NativeFileCommandScope renameCommand(&state);
-    std::wstring originalName = state.entries[static_cast<size_t>(index)].name;
+    std::wstring originalName = oldName;
+    std::wstring committedName = newName, committedPath = JoinPath(parent, newName);
     ULONG eaten = 0;
     PITEMID_CHILD child = nullptr;
-    HRESULT hr = activeFolder->ParseDisplayName(state.nativeHwnd,
+    HRESULT hr = activeFolder->ParseDisplayName(native,
         nullptr, originalName.data(), &eaten, &child, nullptr);
+    if (!current()) { if (child) CoTaskMemFree(child); return; }
     if (SUCCEEDED(hr) && !child) hr = E_FAIL;
     if (SUCCEEDED(hr) && child) {
         PITEMID_CHILD renamed = nullptr;
-        hr = activeFolder->SetNameOf(state.nativeHwnd, child, newName.c_str(),
+        TraceSelectionIdentity(state, L"rename.shell.before");
+        hr = activeFolder->SetNameOf(native, child, newName.c_str(),
                                     SHGDN_INFOLDER, &renamed);
+        if (current()) TraceSelectionIdentity(state, L"rename.shell.after");
+        if (SUCCEEDED(hr) && renamed) {
+            // Shell may normalize the input or preserve a hidden extension.
+            // Use its returned identity rather than guessing the final path.
+            for (bool parsing : {false, true}) {
+                STRRET value{}; PWSTR text = nullptr;
+                if (SUCCEEDED(activeFolder->GetDisplayNameOf(renamed,
+                        parsing ? SHGDN_FORPARSING : SHGDN_INFOLDER, &value)) &&
+                    SUCCEEDED(StrRetToStrW(&value, renamed, &text)) && text) {
+                    (parsing ? committedPath : committedName) = text;
+                }
+                CoTaskMemFree(text);
+            }
+        }
         if (renamed) CoTaskMemFree(renamed);
         CoTaskMemFree(child);
     }
     if (SUCCEEDED(hr)) {
-        state.entries[static_cast<size_t>(index)].name = newName;
-        state.entries[static_cast<size_t>(index)].path =
-            JoinPath(state.folderPath, newName);
-        state.sortRevealPath=state.entries[static_cast<size_t>(index)].path;
-        state.sortRevealOldIndex=index;
-        state.lastFolderNativePending = newName;
-        state.lastFolderNativeAttempts = 0;
-        QueueDirectoryRefresh(state, true, true);
-        PostMessageW(state.hwnd, kMsgLastFolderSelection, 0, 0);
+        complete(true, committedName, committedPath);
     } else {
+        complete(false, L"", L"");
         Wh_Log(L"[GPU rename] Shell rename failed hr=0x%08X: %s -> %s",
                static_cast<unsigned>(hr), oldPath.c_str(), newName.c_str());
-        MessageBoxW(state.hwnd, L"Explorer could not rename this item.",
+        if (current()) MessageBoxW(owner, L"Explorer could not rename this item.",
                     L"Rename", MB_OK | MB_ICONWARNING);
     }
 }
@@ -18102,8 +18907,24 @@ void Open(ViewState& state, int index) {
         return;
     }
     if (!folder) {
-        // Launch files through their normal registered Shell verbs.
-        ShellExecuteW(state.hwnd, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        // Reuse native selection verification and its asynchronous PIDL lane.
+        // No path-based forced verb, wrong working directory, or per-file loop.
+        ViewState::DeferredSelectionKey key{VK_RETURN,0};
+        if (state.pendingNativeSelection) { state.deferredSelectionKeys.push_back(key); return; }
+        if (state.nativeSelectionUnsafe || state.nativeSelectionImportPending || state.nativeSelectionAwaitingRefresh) return;
+        if (!SyncNativeSelection(state)) {
+            if (state.pendingNativeSelection) state.deferredSelectionKeys.push_back(key);
+            return;
+        }
+        ComPtr<IShellView> native;
+        const HWND owner=state.hwnd;
+        const auto token=state.token,lifetime=state.lifetimeToken;
+        if (FAILED(state.folderView.As(&native)) && state.shellBrowser)
+            state.shellBrowser->QueryActiveShellView(&native);
+        auto* live=State(owner);
+        if (!live || live->token!=token || live->lifetimeToken!=lifetime) return;
+        const HRESULT hr=InvokeNativeSelectionKey(*live,native.Get(),key);
+        if (FAILED(hr)) Wh_Log(L"[GPU selection] default command failed hr=0x%08X",static_cast<unsigned>(hr));
         return;
     }
 
@@ -18254,7 +19075,7 @@ void ExplorerColumnMenu(ViewState& state, POINT screen) {
     if (!state.columnManager) return;
     UINT visibleCount = 0;
     if (FAILED(state.columnManager->GetColumnCount(CM_ENUM_VISIBLE, &visibleCount)) ||
-        !visibleCount) return;
+        !visibleCount || visibleCount > kMaxShellColumns) return;
     std::vector<PROPERTYKEY> visible(visibleCount);
     if (FAILED(state.columnManager->GetColumns(CM_ENUM_VISIBLE,
                                                visible.data(), visibleCount))) return;
@@ -18531,7 +19352,7 @@ void ClearSelectionForFolderMenu(ViewState& state) {
     state.nativeSelectionPaths.clear();
     state.nativeFocusedPath.clear();
     state.nativeSelectionImportPending = false;
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     AnimateVisibleSelection(state, beforeSelection);
     Redraw(state);
 }
@@ -18722,6 +19543,7 @@ void TypeToSelect(ViewState& state, wchar_t ch) {
             return;
         }
     } else if (ch >= L' ' && ch != 0x7F) {
+        if (state.typeSearch.size() >= 32767) return;
         state.typeSearch.push_back(ch);
     } else {
         return;
@@ -19429,6 +20251,7 @@ class ShellDropBridge final : public IDropTarget {
     ULONGLONG epochAtEnter_ = 0;
     int currentRow_ = -2;
     DWORD allowedEffects_ = DROPEFFECT_NONE;
+    unsigned long long session_ = 0;
     GpuDragOrigin dragOrigin_;
     bool hasDragOrigin_ = false;
 
@@ -19454,6 +20277,10 @@ class ShellDropBridge final : public IDropTarget {
         return s && s->visible && s->inScope && s->loaded &&
             s->detailsViewActive && !s->emptyNative &&
             !s->optimisticStartedAt && TabOwnsActiveView(*s) ? s : nullptr;
+    }
+    bool CurrentSession() const {
+        const auto* s = CurrentView();
+        return s && data_ && s->nativeHwnd == nativeAtEnter_ && s->mouseFolderEpoch == epochAtEnter_;
     }
     int HitItem(ViewState& s, POINTL pt) const {
         POINT p{pt.x, pt.y};
@@ -19493,11 +20320,12 @@ class ShellDropBridge final : public IDropTarget {
         return target;
     }
     void Clear(bool notifyShell) {
-        if (dragImageEntered_ && dragImageHelper_) dragImageHelper_->DragLeave();
-        dragImageEntered_ = false;
-        if (notifyShell && current_) current_->DragLeave();
-        current_.Reset();
-        data_.Reset();
+        ++session_;
+        // Detach before outgoing COM calls: a provider can pump messages and
+        // start a new drag from DragLeave. Never erase that newer session.
+        auto target = std::move(current_);
+        auto payload = std::move(data_);
+        const bool imageEntered = std::exchange(dragImageEntered_, false);
         currentRow_ = -2;
         nativeAtEnter_ = nullptr;
         epochAtEnter_ = 0;
@@ -19510,14 +20338,19 @@ class ShellDropBridge final : public IDropTarget {
                 Redraw(*s);
             }
         }
+        if (imageEntered && dragImageHelper_) dragImageHelper_->DragLeave();
+        if (notifyShell && target) target->DragLeave();
     }
     // Resolve a new Shell target only when the pointer crosses an item row;
     // never make a Shell provider call on every drag-over mouse sample.
     HRESULT ChangeTarget(ViewState& s, int row, DWORD keys, POINTL point,
                          DWORD* effect) {
         if (row == currentRow_) return S_OK;
-        if (current_) current_->DragLeave();
-        current_.Reset();
+        const auto session = session_;
+        auto previous = std::move(current_);
+        currentRow_ = -2;
+        if (previous) previous->DragLeave();
+        if (session != session_ || !CurrentSession()) { *effect = DROPEFFECT_NONE; return S_FALSE; }
         currentRow_ = row;
         // Do not even enter Explorer's native drop target when this is a
         // no-op release over the source folder or one of the dragged rows.
@@ -19531,7 +20364,9 @@ class ShellDropBridge final : public IDropTarget {
             }
             return S_FALSE;
         }
-        current_ = Resolve(s, row);
+        auto target = Resolve(s, row);
+        if (session != session_ || !CurrentSession()) { *effect = DROPEFFECT_NONE; return S_FALSE; }
+        current_ = target;
         const int hotRow = current_ ? row : -1;
         if (s.shellDropHotRow != hotRow) {
             s.shellDropHotRow = hotRow;
@@ -19542,7 +20377,15 @@ class ShellDropBridge final : public IDropTarget {
             return S_FALSE;
         }
         *effect = allowedEffects_;
-        return current_->DragEnter(data_.Get(), keys, point, effect);
+        auto payload = data_;
+        const HRESULT hr = target->DragEnter(payload.Get(), keys, point, effect);
+        if (session != session_ || !CurrentSession() || FAILED(hr)) {
+            if (session == session_) Clear(SUCCEEDED(hr));
+            *effect = DROPEFFECT_NONE;
+            return FAILED(hr) ? hr : S_FALSE;
+        }
+        *effect &= allowedEffects_ | DROPEFFECT_SCROLL;
+        return hr;
     }
 public:
     explicit ShellDropBridge(HWND hwnd) : hwnd_(hwnd) {
@@ -19589,10 +20432,10 @@ public:
         }
         nativeAtEnter_ = s->nativeHwnd;
         epochAtEnter_ = s->mouseFolderEpoch;
-        allowedEffects_ = *effect;
+        allowedEffects_ = *effect & (DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK);
         const int row = HitItem(*s, point);
         const HRESULT hr = ChangeTarget(*s, row, keys, point, effect);
-        if (dragImageHelper_) {
+        if (SUCCEEDED(hr) && CurrentSession() && dragImageHelper_) {
             POINT cursor{point.x, point.y};
             dragImageEntered_ = SUCCEEDED(dragImageHelper_->DragEnter(
                 hwnd_, data_.Get(), &cursor, *effect));
@@ -19611,6 +20454,7 @@ public:
             return S_OK;
         }
         const int row = HitItem(*s, point);
+        const auto session = session_;
         HRESULT hr = S_OK;
         if (row != currentRow_) {
             hr = ChangeTarget(*s, row, keys, point, effect);
@@ -19618,8 +20462,15 @@ public:
             *effect = DROPEFFECT_NONE;
         } else {
             *effect = allowedEffects_;
-            hr = current_->DragOver(keys, point, effect);
+            auto target = current_;
+            hr = target->DragOver(keys, point, effect);
         }
+        if (session != session_ || !CurrentSession() || FAILED(hr)) {
+            if (session == session_) Clear(true);
+            *effect = DROPEFFECT_NONE;
+            return FAILED(hr) ? hr : S_OK;
+        }
+        *effect &= allowedEffects_ | DROPEFFECT_SCROLL;
         if (dragImageEntered_ && dragImageHelper_) {
             POINT cursor{point.x, point.y};
             dragImageHelper_->DragOver(&cursor, *effect);
@@ -19650,7 +20501,7 @@ public:
                 return S_OK; // Standard OLE cancellation: no file operation.
             }
         }
-        if (FAILED(over) || !current_ || *effect == DROPEFFECT_NONE) {
+        if (FAILED(over) || !current_ || !(*effect & (DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK))) {
             Clear(true);
             *effect = DROPEFFECT_NONE;
             return S_OK;
@@ -20078,7 +20929,7 @@ void UnregisterTabOverlay(HWND frame, HWND host, HWND hwnd) {
 // tab, it POSTS the already-existing activation message to that tab's overlay.
 // No cross-thread ViewState, Shell COM, DComp, or ShowWindow calls are made.
 // The overlay's owning STA validates current tab identity before acting.
-// Optional diagnostics (including WM_NULL responsiveness) require perfLogging.
+// Optional diagnostics (including WM_NULL responsiveness) require logging.
 SRWLOCK g_tabWatchStartLock = SRWLOCK_INIT;
 HANDLE g_tabWatchThread = nullptr;
 HANDLE g_tabWatchWake = nullptr;
@@ -20119,7 +20970,8 @@ void TraceObserverActivity(DWORD ownerThread, const wchar_t*& stage,
     }
 }
 
-DWORD WINAPI TabVisibilityObserverProc(LPVOID) {
+DWORD WINAPI TabVisibilityObserverProc(LPVOID context) {
+    const HANDLE wake=static_cast<HANDLE>(context);
     HWND observedFrame = nullptr;
     HWND initialHost = nullptr;
     HWND lastHost = nullptr;
@@ -20129,7 +20981,7 @@ DWORD WINAPI TabVisibilityObserverProc(LPVOID) {
     DWORD lastInputTick = 0;
     DWORD delay = 50; // Avoid a slow first switch after the worker starts.
     while (!g_tabWatchStopping.load(std::memory_order_acquire)) {
-        if (WaitForSingleObject(g_tabWatchWake, delay) != WAIT_TIMEOUT ||
+        if (WaitForSingleObject(wake, delay) != WAIT_TIMEOUT ||
             g_tabWatchStopping.load(std::memory_order_acquire)) break;
         const bool trace = g_perf.load(std::memory_order_relaxed);
         HWND frame = GetAncestor(GetForegroundWindow(), GA_ROOT);
@@ -20264,7 +21116,7 @@ void StartTabVisibilityObserver() {
         g_tabWatchWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (g_tabWatchWake) {
             g_tabWatchThread = CreateThread(nullptr, 0,
-                TabVisibilityObserverProc, nullptr, 0, nullptr);
+                TabVisibilityObserverProc, g_tabWatchWake, 0, nullptr);
             if (g_tabWatchThread)
                 SetThreadPriority(g_tabWatchThread, THREAD_PRIORITY_BELOW_NORMAL);
             else {
@@ -20559,6 +21411,7 @@ struct FrameShellViewHook {
 };
 SRWLOCK g_shellHookLock = SRWLOCK_INIT;
 std::unordered_map<HWND, FrameShellViewHook> g_shellViewHooks;
+void ReleaseAllFrameShellViewHooks(HWND frame);
 
 // Observe sent minimize/restore messages as well as posted ones. Do no Shell,
 // presentation or focus work inside USER's activation transaction, especially
@@ -20566,6 +21419,10 @@ std::unordered_map<HWND, FrameShellViewHook> g_shellViewHooks;
 LRESULT CALLBACK ExplorerFrameSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
                                        UINT_PTR id, DWORD_PTR wasMinimized) {
     WindowCallbackGuard callback;
+    if (msg == kMsgReleaseFrameHooks && g_unloading.load(std::memory_order_acquire)) {
+        ReleaseAllFrameShellViewHooks(hwnd);
+        return 0;
+    }
     if (msg == WM_ENTERSIZEMOVE) SetPropW(hwnd,kFrameSizingProperty,reinterpret_cast<HANDLE>(1));
     if (msg == WM_EXITSIZEMOVE || msg == WM_NCDESTROY) RemovePropW(hwnd,kFrameSizingProperty);
     if (msg == WM_COMMAND && HIWORD(wp) == BN_CLICKED && lp) {
@@ -20583,7 +21440,7 @@ LRESULT CALLBACK ExplorerFrameSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         changed = minimized != (wasMinimized != 0);
         if (changed) SetWindowSubclass(hwnd, ExplorerFrameSubclass, id, minimized ? 1 : 0);
     }
-    if (msg == WM_NCDESTROY) RemoveWindowSubclass(hwnd, ExplorerFrameSubclass, id);
+    if (msg == WM_NCDESTROY) ReleaseAllFrameShellViewHooks(hwnd);
     MSG command{}; command.hwnd=hwnd; command.message=msg; command.wParam=wp; command.lParam=lp;
     NativeFileCommandScope fileCommand(msg==WM_COMMAND ? State(OverlayUnder(hwnd)) : nullptr);
     auto inputOwner=msg==WM_COMMAND ? NativeViewInput::Owner(&command) : NativeViewInput::InputOwner{};
@@ -20629,8 +21486,7 @@ void ReleaseFrameShellViewHook(ViewState& state) {
     bool removeSubclass = false;
     AcquireSRWLockExclusive(&g_shellHookLock);
     const auto it = g_shellViewHooks.find(state.frameHwnd);
-    if (it != g_shellViewHooks.end() &&
-        it->second.handle == state.viewEvents) {
+    if (it != g_shellViewHooks.end()) {
         if (it->second.owners > 0) --it->second.owners;
         if (!it->second.owners) {
             toUnhook = it->second.handle;
@@ -20657,20 +21513,32 @@ void ReleaseFrameShellViewHook(ViewState& state) {
     state.frameLifecycleSubscribed = false;
 }
 
-void ClearFrameShellViewHooks() {
-    std::vector<HWINEVENTHOOK> hooks;
+void ReleaseAllFrameShellViewHooks(HWND frame) {
+    FrameShellViewHook hooks;
     AcquireSRWLockExclusive(&g_shellHookLock);
-    for (const auto& entry : g_shellViewHooks) {
-        if (entry.second.handle) hooks.push_back(entry.second.handle);
-        if (entry.second.presentationHandle) hooks.push_back(entry.second.presentationHandle);
-        if (entry.second.selectionHandle) hooks.push_back(entry.second.selectionHandle);
-        if (entry.second.foregroundHandle) hooks.push_back(entry.second.foregroundHandle);
+    if (auto it = g_shellViewHooks.find(frame); it != g_shellViewHooks.end()) {
+        hooks = it->second;
+        g_shellViewHooks.erase(it);
     }
-    g_shellViewHooks.clear();
     ReleaseSRWLockExclusive(&g_shellHookLock);
-    // Emergency unhook if a tab's UI thread stalled during DLL teardown.
-    // Usually every hook was already released by WM_NCDESTROY.
-    for (HWINEVENTHOOK hook : hooks) UnhookWinEvent(hook);
+    for (HWINEVENTHOOK hook : {hooks.handle, hooks.presentationHandle, hooks.selectionHandle, hooks.foregroundHandle})
+        if (hook) UnhookWinEvent(hook);
+    RemovePropW(frame, kFrameSizingProperty);
+    RemoveWindowSubclass(frame, ExplorerFrameSubclass, reinterpret_cast<UINT_PTR>(ExplorerFrameSubclass));
+}
+
+void ClearFrameShellViewHooks() {
+    for (;;) {
+        AcquireSRWLockShared(&g_shellHookLock);
+        const HWND frame = g_shellViewHooks.empty() ? nullptr : g_shellViewHooks.begin()->first;
+        ReleaseSRWLockShared(&g_shellHookLock);
+        if (!frame) return;
+        // Never erase live hook bookkeeping on Windhawk's unload thread.
+        // WinEvent removal and subclass removal belong to their installer STA.
+        DWORD_PTR result = 0;
+        if (!SendMessageTimeoutW(frame, kMsgReleaseFrameHooks, 0, 0,
+                SMTO_ABORTIFHUNG | SMTO_BLOCK, 400, &result)) Sleep(25);
+    }
 }
 
 // Both native Shell lifecycle events and selection accessibility events use
@@ -20768,15 +21636,16 @@ void InvalidateShellIcons(ViewState& state) {
 void InvalidateShellIconKey(ViewState& state, const std::wstring& key) {
     CancelDepartedIconJobs(state,state.iconToken,false,key);
     const std::wstring base(BaseIconKey(key));
-    const std::wstring variants[] = {base, L"@48|"+base, L"@96|"+base, L"@256|"+base, L"@512|"+base};
-    for (const auto& variant : variants) {
+    VisitImageTiers([&](UINT size) {
+        const auto variant=SizedImageKey(base,size);
         const auto found = state.icons.find(variant);
         if (found != state.icons.end()) {
             state.iconCacheBytes -= found->second.cacheBytes;
             RetireIconPixels(state,found->second.pixels);
             state.icons.erase(found);
         }
-    }
+        return true;
+    });
 }
 
 // An UPDATEITEM is an item-specific hint. It is NOT license to enumerate the
@@ -21243,6 +22112,9 @@ std::shared_ptr<const PresentationModel> CapturePresentationModel(ViewState& sta
         const auto mapped=groups.find(group);
         model->items.emplace(i,PresentationItem{i,mapped==groups.end() ? -1 : mapped->second,
             ModelSelected(state,i),state.entries[size_t(i)]});
+        if (state.renamePreviewToken == state.token && !state.renamePreviewPath.empty() &&
+            model->items.at(i).entry.path == state.renamePreviewPath)
+            model->items.at(i).entry.name = state.renamePreviewName;
     }
     std::set<std::wstring> keys;
     const auto image=[&](const std::wstring& key) {
@@ -21256,9 +22128,10 @@ std::shared_ptr<const PresentationModel> CapturePresentationModel(ViewState& sta
         for(bool fallback:{false,true}) {
             std::wstring path; bool attrs=false;
             const auto key=IconKey(state,entry,path,attrs,fallback);
+            if(keys.contains(key)) continue;
             image(key);
-            const std::wstring base(BaseIconKey(key)); image(base);
-            for(UINT size:{512u,256u,96u,48u,32u}) image(size==32 ? base : L"@"+std::to_wstring(size)+L"|"+base);
+            std::wstring fallbackKey;
+            if(FindIconRecord(state,key,true,false,&fallbackKey,true)) image(fallbackKey);
         }
     };
     for(const auto& [index,item]:model->items) icons(item.entry);
@@ -21478,6 +22351,7 @@ void PublishPresentationReceipt(ViewState& state,const std::shared_ptr<Presentat
     receipt->horizontalOrigin=state.horizontalStartedQpc; receipt->horizontal=state.horizontalScroll;
     receipt->rowHeight=state.rowPx; receipt->headerHeight=state.headerPx; receipt->fontSize=state.fontPx;
     receipt->iconSize=state.iconPx; receipt->itemWidth=state.itemWidth; receipt->itemsPerRow=state.itemsPerRow;
+    receipt->imageTextureLimit=state.imageTextureLimit;
     receipt->documentHeight=DocumentHeight(state);
     receipt->zoom=state.zoomAnimating; receipt->zoomOrigin=state.zoomStartedQpc;
     receipt->scrolling=state.animationActive; receipt->horizontalMoving=state.horizontalAnimating;
@@ -21519,7 +22393,7 @@ void PublishPresentationReceipt(ViewState& state,const std::shared_ptr<Presentat
 }
 
 void TrimPresentationImages(ViewState& state) {
-    const size_t budget=std::max(FolderCacheBudget(state.folderCache),state.presentationImageWorkingBytes);
+    const size_t budget=std::max(ImageMemoryBudget(state),state.presentationImageWorkingBytes);
     state.presentationCachePending=state.iconCacheBytes>budget;
     if(!state.presentationCachePending) return;
     LARGE_INTEGER frequency{},started{},now{}; QueryPerformanceFrequency(&frequency); QueryPerformanceCounter(&started);
@@ -21623,7 +22497,8 @@ DWORD WINAPI PresentationWorkerProc(LPVOID context) {
 
 bool StartPresentation(ViewState& state) {
     if(state.presenter) return true;
-    if(state.presentationOnly || g_unloading.load(std::memory_order_acquire)) return false;
+    if(state.presentationOnly || g_unloading.load(std::memory_order_acquire) ||
+        g_frameStopping.load(std::memory_order_acquire)) return false;
     auto lane=std::make_shared<PresentationLane>(); lane->hwnd=state.hwnd; lane->lifetime=state.lifetimeToken;
     state.background->hwnd=state.hwnd; state.background->presenter=lane;
     state.background->presentationSnapshots.store(true,std::memory_order_release);
@@ -21638,10 +22513,13 @@ bool StartPresentation(ViewState& state) {
     lane->wake=state.background->presentation.wake; state.presenter=lane;
     state.graphicsReady=true; state.graphicsSuspended=false;
     AcquireSRWLockExclusive(&g_frameLock);
-    g_presentationFrames.push_back(lane);
-    if(!g_frameEvent && !g_frameStopping.load(std::memory_order_acquire)) g_frameEvent=CreateEventW(nullptr,FALSE,FALSE,nullptr);
-    if(g_frameEvent && !g_frameThread) g_frameThread=CreateThread(nullptr,0,CompositionFrameProc,nullptr,0,nullptr);
-    const bool paced=g_frameEvent && g_frameThread;
+    bool paced=false;
+    if(!g_frameStopping.load(std::memory_order_acquire)) {
+        g_presentationFrames.push_back(lane);
+        if(!g_frameEvent) g_frameEvent=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+        if(g_frameEvent && !g_frameThread) g_frameThread=CreateThread(nullptr,0,CompositionFrameProc,g_frameEvent,0,nullptr);
+        paced=g_frameEvent && g_frameThread;
+    }
     ReleaseSRWLockExclusive(&g_frameLock);
     if(!paced) {
         lane->stopping.store(true,std::memory_order_release); SetEvent(lane->wake);
@@ -21688,7 +22566,12 @@ void ConsumePresentation(ViewState& state) {
         if(!InactiveGraphics(state)) {RestoreNativeContent(state); SetPresentationVisibility(state.hwnd,false);}
         return;
     }
-    if(receipt->ready) {state.graphicsReady=true; state.graphicsSuspended=false;}
+    if(receipt->ready) {
+        state.graphicsReady=true; state.graphicsSuspended=false;
+        if(state.imageTextureLimit!=receipt->imageTextureLimit) {
+            state.imageTextureLimit=receipt->imageTextureLimit; QueueVisibleDataFrame(state);
+        }
+    }
     if(InactiveGraphics(state)) standby();
     if(!receipt->accepted) return;
     state.presentationAcceptedSequence=std::max(state.presentationAcceptedSequence,receipt->sequence);
@@ -21799,8 +22682,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     if (s && !s->lastFolderNativePending.empty() &&
         (msg==WM_LBUTTONDOWN || msg==WM_RBUTTONDOWN || msg==WM_MBUTTONDOWN ||
          msg==WM_MOUSEWHEEL || msg==WM_MOUSEHWHEEL ||
-         (msg==WM_KEYDOWN && wParam!=VK_CONTROL && wParam!=VK_SHIFT))) {
-        s->lastFolderNativePending.clear();
+         (msg==WM_KEYDOWN && wParam!=VK_CONTROL && wParam!=VK_SHIFT &&
+            !IsKeyboardMovementKey(static_cast<UINT>(wParam),s->gridView)))) {
+        CancelNativeSelectionRestore(*s);
         s->lastFolderNativePresentAfter=0;
         s->lastFolderNativeAfterPaint=false;
     }
@@ -21932,12 +22816,12 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         return TRUE;
     }
     case WM_SETFOCUS:
-        if (s && s->visible && !s->emptyNative &&
+        if (s && !s->returningListFocus && s->visible && !s->emptyNative &&
             ExplorerFrameHasForeground(s->frameHwnd) &&
             IsWindow(s->nativeHwnd) && GetFocus() == hwnd) {
             // Keep focus discoverable as an Explorer Shell view for third-
             // party preview tools which inspect HWND/selection at keypress.
-            SetFocus(s->nativeHwnd);
+            ReturnListInputFocus(*s, hwnd);
         }
         QueueInputFocusUpdate(hwnd);
         return 0;
@@ -22031,7 +22915,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 const ULONGLONG now = GetTickCount64();
                 if (_wcsicmp(parent.c_str(), s->folderPath.c_str()) == 0 &&
                     s->creationCommandMask && s->creationCommandNative==s->nativeHwnd &&
-                    s->creationCommandToken==s->token && OverlayHasInputFocus(*s) &&
+                    s->creationCommandToken==s->token && CreationHasInputFocus(*s) &&
                     (s->creationCommandMask & kind)) {
                     // Do not replace an accepted creation with a later,
                     // unrelated filesystem event in the same time window.
@@ -22087,6 +22971,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     case WM_SETTINGCHANGE:
     case WM_FONTCHANGE:
         if (s) {
+            ++g_textRenderingRevision;
             if (msg == WM_SETTINGCHANGE) ReconcileShellVisibility(*s);
             StopKeyboardSelectionAnimation(*s);
             RefreshNativePalette(*s);
@@ -22689,6 +23574,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             // New-item editors survive Shell's transient post-create focus
             // changes. Restore keyboard input without dismissing or recreating
             // the field. Never steal focus from another Explorer/application.
+            AdoptNativeRenameEditor(*s, GetFocus());
             if (s->rename.editor && s->rename.creationSticky &&
                 GetFocus() != s->rename.editor &&
                 ExplorerFrameHasForeground(s->frameHwnd) &&
@@ -22698,6 +23584,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 (!s->rename.lastRefocusAt ||
                  GetTickCount64() - s->rename.lastRefocusAt >= 60)) {
                 s->rename.lastRefocusAt = GetTickCount64();
+                RepositionRenameEdit(*s);
                 SetFocus(s->rename.editor);
             }
             if (s->clipboardRetryPending) RefreshClipboardItems(*s);
@@ -23220,7 +24107,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             // header. A click here always deselects; do not start marquee.
             if (!InsideListX(*s, x)) {
                 ClearSelectionForFolderMenu(*s);
-                s->lastFolderNativePending.clear();
+                CancelNativeSelectionRestore(*s);
                 // A click stays a deselection. Dragging from the safe-zone
                 // can still start a full-width marquee, like native Explorer.
                 if (y >= s->headerPx) {
@@ -23563,6 +24450,10 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             TabOwnsActiveView(*s))
             BeginRename(*s, static_cast<int>(wParam));
         return 0;
+    case kMsgNativeRenameEditor:
+        if (s && s->token == static_cast<unsigned long long>(lParam))
+            AdoptNativeRenameEditor(*s, reinterpret_cast<HWND>(wParam));
+        return 0;
     case kMsgCreationRefocus:
         if (s && s->rename.editor && s->rename.creationSticky &&
             s->rename.epoch == static_cast<UINT_PTR>(lParam)) {
@@ -23578,6 +24469,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 (!s->rename.lastRefocusAt ||
                  now - s->rename.lastRefocusAt >= 60)) {
                 s->rename.lastRefocusAt = now;
+                RepositionRenameEdit(*s);
                 SetFocus(s->rename.editor);
             } else if (s->rename.editor) {
                 // No posted-message feedback loop when Explorer's own
@@ -23831,6 +24723,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         break;
     case kMsgSettings:
         if (s) {
+            RefreshViewToggleForFrame(s->frameHwnd);
             s->columnFitPendingEpoch = 0;
             CancelRename(*s);
             if (!g_touchpadDirectManipulation.load(std::memory_order_relaxed))
@@ -23929,9 +24822,8 @@ void DisposeOverlayState(ViewState* s) {
         // this DLL before retiring the session. Its queued WM_CLOSE now runs
         // entirely in the genuine control procedure, using a stock font.
         const HWND edit=s->rename.editor;
-        if (s->rename.originalProc)
-            SetWindowLongPtrW(edit,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(s->rename.originalProc));
-        SetWindowLongPtrW(edit,GWLP_USERDATA,0);
+        // Disposal is deferred to the outermost owner-thread callback.
+        RemoveWindowSubclass(edit,RenameEditProc,reinterpret_cast<UINT_PTR>(RenameEditProc));
         SendMessageW(edit,WM_SETFONT,reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)),FALSE);
         SetPresentationVisibility(edit,false);
         FinalizeDestroyedRenameEditor(*s,edit);
@@ -24329,6 +25221,16 @@ void SuppressAppearingNativeSurface(HWND changed, DWORD event) {
                 static_cast<double>(owner->suppressedNativeViewports.size())}});
 }
 
+void QueueNativeRenameEditor(HWND editor) {
+    wchar_t cls[32]{};
+    if (!GetClassNameW(editor, cls, ARRAYSIZE(cls)) || _wcsicmp(cls, L"Edit")) return;
+    const HWND overlay = OverlayUnder(GetAncestor(editor, GA_ROOT));
+    auto* state = State(overlay);
+    if (state && state->visible && state->inScope && IsChild(state->nativeHwnd, editor))
+        PostMessageW(overlay, kMsgNativeRenameEditor, reinterpret_cast<WPARAM>(editor),
+            static_cast<LPARAM>(state->token));
+}
+
 // Queue-delivered accessibility events cannot prevent a first native paint.
 // This process/thread-scoped in-context subscription performs ONLY the shared
 // presentation barrier. Discovery, COM, tab lifecycle and selection stay on the
@@ -24356,6 +25258,8 @@ void CALLBACK NativeSurfaceEvent(HWINEVENTHOOK sourceHook, DWORD event, HWND cha
             if(known || statusWindow) {RefreshViewToggleForFrame(frame,true); break;}
         }
     }
+    if (objectId == OBJID_WINDOW && !childId &&
+        (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_CREATE)) QueueNativeRenameEditor(changed);
     if(objectId==OBJID_WINDOW && !childId &&
         (event==EVENT_OBJECT_CREATE || event==EVENT_OBJECT_SHOW || event==EVENT_OBJECT_PARENTCHANGE))
         SuppressAppearingNativeSurface(changed,event);
@@ -24388,6 +25292,7 @@ void CALLBACK ShellViewEvent(HWINEVENTHOOK sourceHook, DWORD event, HWND changed
         if (objectId != OBJID_CLIENT && objectId != OBJID_WINDOW) return;
         const HWND frame = GetAncestor(changed, GA_ROOT);
         if (!IsExplorerFrame(frame)) return;
+        if (event == EVENT_OBJECT_FOCUS) QueueNativeRenameEditor(changed);
         if (event == EVENT_OBJECT_FOCUS)
             for (HWND overlay : FrameOverlays(frame))
                 if (auto* state = State(overlay); state && state->nativeSelectionEvents == sourceHook)
@@ -24556,6 +25461,7 @@ void ResetForNewDirectory(ViewState& state, const std::wstring& path,
                           const std::wstring* navigationOrigin,
                           bool cachedPreviewOnly) {
     TraceUiState(state,L"ui.navigation.depart[layout,native,header,selected]");
+    state.renamePreviewPath.clear(); state.renamePreviewName.clear(); state.renamePreviewToken = 0;
     if (state.manipulationFrameActive) StopTouchpad(state, false);
     state.background->capacityGeneration.store(0, std::memory_order_release);
     state.capacityToken = 0;
@@ -24576,7 +25482,7 @@ void ResetForNewDirectory(ViewState& state, const std::wstring& path,
     state.lastFolderToReveal = allowLastFolderRestore
         ? ImmediateChildOnReturn(navigationOrigin ? *navigationOrigin :
                                  state.folderPath, path) : L"";
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     state.lastFolderNativeAttempts = 0;
     state.lastFolderNativeNextAttempt = 0;
     state.lastFolderNativeAfterPaint = false;
@@ -24615,6 +25521,7 @@ void ResetForNewDirectory(ViewState& state, const std::wstring& path,
     state.nativeSelectionObservedCount = -1;
     state.nativeSelectionObservedPaths.clear();
     state.entryPathIndex.clear();
+    RetireCachedEntries(state, state.entryPathUpdates);
     state.folderPath = path;
     state.deferColumnProviders = true;
     state.columnFitPendingEpoch = 0;
@@ -24748,7 +25655,9 @@ std::wstring AutomationNavigationUrlToPath(const VARIANT& supplied) {
     BSTR url = value->vt == VT_BSTR ? value->bstrVal :
         value->vt == (VT_BSTR | VT_BYREF) && value->pbstrVal
             ? *value->pbstrVal : nullptr;
-    if (!url || SysStringLen(url) < 3) return {};
+    const UINT length = url ? SysStringLen(url) : 0;
+    if (length < 3 || length >= ARRAYSIZE(ShellPathStorage::value) ||
+        std::find(url, url+length, L'\0') != url+length) return {};
     const wchar_t* raw = url;
     std::wstring path;
     if (_wcsnicmp(raw, L"file:", 5) == 0) {
@@ -25319,7 +26228,7 @@ void DeactivateOutsideScope(ViewState& state) {
     ClearNavigationProbe(state);
     CancelRename(state);
     state.lastFolderToReveal.clear();
-    state.lastFolderNativePending.clear();
+    CancelNativeSelectionRestore(state);
     state.emptyNative = false;
     if (g_perf.load(std::memory_order_relaxed))
         Wh_Log(L"[GPU overlay] native fallback: unsupported Shell view, restoring %zu clipped host(s)",
@@ -25758,7 +26667,7 @@ void PrepareInitialOverlay(ViewState& state) {
 void AttachView(HWND native, ComPtr<IFolderView2>& view,
                 ComPtr<IShellFolder>& folder, ComPtr<IShellBrowser>& shellBrowser,
                 const std::wstring& path) {
-    if (!native || !IsWindow(native) ||
+    if (g_unloading.load(std::memory_order_acquire) || !native || !IsWindow(native) ||
         !IsSupportedLocation(path) ||
         !BelongsToThisProcess(native)) return;
     if (GetWindowThreadProcessId(native, nullptr) != GetCurrentThreadId())
@@ -25766,6 +26675,7 @@ void AttachView(HWND native, ComPtr<IFolderView2>& view,
     HWND frame = GetAncestor(native, GA_ROOT);
     if (!IsExplorerFrame(frame)) return;
     const HWND tabHost = BrowserTabHost(shellBrowser.Get(), native, frame);
+    if (g_unloading.load(std::memory_order_acquire)) return;
     if (!tabHost || tabHost != ActiveExplorerTab(frame) ||
         !NativeViewAvailable(native)) return;
     HWND overlay = OverlayForTab(tabHost);
@@ -25868,6 +26778,7 @@ void AttachView(HWND native, ComPtr<IFolderView2>& view,
                 StopHoverAnimation(*s);
                 s->entries.clear();
                 s->entryPathIndex.clear();
+                RetireCachedEntries(*s, s->entryPathUpdates);
                 s->total = 0;
                 s->loaded = false;
                 s->selected = s->anchor = -1;
@@ -25973,13 +26884,15 @@ void AttachView(HWND native, ComPtr<IFolderView2>& view,
                     s->selectedFlags[static_cast<size_t>(selected)]) {
                     s->lastFolderNativePending =
                         s->entries[static_cast<size_t>(selected)].name;
+                    s->lastFolderNativePendingPath =
+                        s->entries[static_cast<size_t>(selected)].path;
                     s->lastFolderNativeAttempts = 0;
                     s->lastFolderNativeNextAttempt = 0;
                     s->lastFolderNativeAfterPaint = true;
                 }
             } else {
                 s->lastFolderToReveal.clear();
-                s->lastFolderNativePending.clear();
+                CancelNativeSelectionRestore(*s);
                 s->selected = -1;
                 ClearPostDeletionCaret(*s);
                 s->selectedFlags.assign(s->entries.size(), 0);
@@ -26024,6 +26937,7 @@ void AttachView(HWND native, ComPtr<IFolderView2>& view,
         return;
     }
 
+    if (g_unloading.load(std::memory_order_acquire)) return;
     auto* s = new ViewState();
     s->startupStartedAt = GetTickCount64();
     s->nativeHwnd = native;
@@ -26047,12 +26961,13 @@ void AttachView(HWND native, ComPtr<IFolderView2>& view,
     // retaining DirectComposition's premultiplied-alpha surface and normal
     // child-window hit testing. This prevents stale Explorer child pixels
     // from bleeding through the transparent GPU viewport during layout.
+    if (g_unloading.load(std::memory_order_acquire)) { delete s; return; }
     overlay = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP |
             WS_EX_TRANSPARENT,kOverlayClass,L"",
         WS_CHILD | WS_CLIPSIBLINGS | WS_TABSTOP,
         rc.left,rc.top,std::max<LONG>(1,rc.right-rc.left),
         std::max<LONG>(1,rc.bottom-rc.top),
-        frame,nullptr,GetModuleHandleW(nullptr),s);
+        frame,nullptr,OverlayModuleInstance(),s);
     if (!overlay) { delete s; return; }
     s->hwnd = overlay;
     g_instances.fetch_add(1);
@@ -26121,12 +27036,15 @@ void ScanShellWindow(HWND explorerFrame) {
             HWND native = nullptr;
             const bool matchingTab = BrowserTabHost(s->shellBrowser.Get(),
                 native, explorerFrame) == ActiveExplorerTab(explorerFrame);
+            if (g_unloading.load(std::memory_order_acquire)) return;
             stage.Mark(L"cached browser resolve tab host");
             const HRESULT activeResult = matchingTab ?
                 s->shellBrowser->QueryActiveShellView(active.GetAddressOf()) : E_FAIL;
+            if (g_unloading.load(std::memory_order_acquire)) return;
             stage.Mark(L"cached browser QueryActiveShellView");
             const HRESULT nativeResult = SUCCEEDED(activeResult) && active ?
                 active->GetWindow(&native) : E_FAIL;
+            if (g_unloading.load(std::memory_order_acquire)) return;
             stage.Mark(L"cached browser IShellView GetWindow");
             if (matchingTab && SUCCEEDED(activeResult) && active &&
                 SUCCEEDED(nativeResult) && native &&
@@ -26145,6 +27063,7 @@ void ScanShellWindow(HWND explorerFrame) {
                     std::wstring actualPath;
                     if (SUCCEEDED(active.As(&sameView)) && sameView &&
                         GetFolderPath(sameView.Get(), actualPath, actualFolder)) {
+                        if (g_unloading.load(std::memory_order_acquire)) return;
                         if (_wcsicmp(actualPath.c_str(),
                                      s->optimisticFromPath.c_str()) == 0)
                             return; // Still the departing filesystem folder.
@@ -26171,6 +27090,7 @@ void ScanShellWindow(HWND explorerFrame) {
                     std::wstring path;
                     const bool pathResolved = SUCCEEDED(active.As(&view)) &&
                         view && GetFolderPath(view.Get(), path, folder);
+                    if (g_unloading.load(std::memory_order_acquire)) return;
                     stage.Mark(L"cached browser GetFolderPath");
                     if (pathResolved) {
                         if (IsSupportedLocation(path)) {
@@ -26191,15 +27111,18 @@ void ScanShellWindow(HWND explorerFrame) {
     ComPtr<IShellWindows> wins;
     const HRESULT windowsResult = CoCreateInstance(CLSID_ShellWindows,nullptr,CLSCTX_ALL,
                                 IID_PPV_ARGS(&wins));
+    if (g_unloading.load(std::memory_order_acquire)) return;
     stage.Mark(L"CoCreate ShellWindows");
     if (FAILED(windowsResult) || !wins) return;
     long count=0;
     const HRESULT countResult = wins->get_Count(&count);
+    if (g_unloading.load(std::memory_order_acquire)) return;
     stage.Mark(L"ShellWindows get_Count");
     if (FAILED(countResult)) return;
     // Newly registered tabs are usually at the end. Prefer them, and never
     // impose a process-wide 64-tab discovery ceiling.
     for (long i = count; i-- > 0;) {
+        if (g_unloading.load(std::memory_order_acquire)) return;
         VARIANT index{}; index.vt=VT_I4; index.lVal=i;
         ComPtr<IDispatch> disp;
         if (FAILED(wins->Item(index,disp.GetAddressOf())) || !disp) {
@@ -26212,6 +27135,7 @@ void ScanShellWindow(HWND explorerFrame) {
         SHANDLE_PTR browserHwnd = 0;
         const HRESULT frameResult = browser->get_HWND(&browserHwnd);
         stage.Mark(L"IWebBrowser2 get_HWND");
+        if (g_unloading.load(std::memory_order_acquire)) return;
         if (FAILED(frameResult) ||
             reinterpret_cast<HWND>(browserHwnd)!=explorerFrame) continue;
         ComPtr<IServiceProvider> provider;
@@ -26264,6 +27188,7 @@ void ScanShellWindow(HWND explorerFrame) {
             if (auto state=State(overlay); state && state->pendingShellView &&
                 IsWindow(state->pendingShellView) && native!=state->pendingShellView) continue;
         const bool pathResolved = GetFolderPath(view.Get(),path,folder);
+        if (g_unloading.load(std::memory_order_acquire)) return;
         stage.Mark(L"GetFolderPath discovered tab");
         if (!pathResolved) {
             break;
@@ -26371,6 +27296,7 @@ HWND OverlayKeyboardTarget(const MSG& msg, bool frameOnly = false) {
     }
     ViewState* state = IsWindow(overlay) ? State(overlay) : nullptr;
     if (!state || msg.hwnd == overlay || !state->visible ||
+        !OverlayHasInputFocus(*state) ||
         !state->detailsViewActive || state->emptyNative ||
         !IsWindowVisible(overlay) || !IsOverlayKeyboardCommand(msg, state->gridView))
         return nullptr;
@@ -26404,7 +27330,7 @@ void NoteNativeNewFolderShortcut(const MSG& msg) {
     const HWND overlay = OverlayUnder(frame);
     ViewState* state = overlay ? State(overlay) : nullptr;
     if (!state || !state->visible || !IsWindow(state->nativeHwnd) ||
-        !(msg.hwnd == state->hwnd || msg.hwnd == state->nativeHwnd ||
+        !(msg.hwnd == state->hwnd || (msg.hwnd == frame && OverlayHasInputFocus(*state)) || msg.hwnd == state->nativeHwnd ||
           IsChild(state->nativeHwnd, msg.hwnd))) return;
     wchar_t focusedClass[32]{};
     HWND focused = GetFocus();
@@ -26511,9 +27437,23 @@ struct InputFrameCompletion {
     }
 };
 
+bool RouteNativeRenameMessage(const MSG& input, MSG& output) {
+    if (input.message < WM_KEYFIRST || input.message > WM_KEYLAST) return false;
+    auto* state = State(OverlayUnder(GetAncestor(input.hwnd, GA_ROOT)));
+    if (!state || !NativeRenameEditor(*state, input.hwnd) ||
+        !AdoptNativeRenameEditor(*state, input.hwnd)) return false;
+    output = input; output.hwnd = state->rename.editor;
+    return true;
+}
+
 int TranslateAcceleratorInput(HWND hwnd, HACCEL accelerator, LPMSG msg) {
     if (g_unloading.load(std::memory_order_acquire))
         return g_translateAcceleratorOriginal(hwnd,accelerator,msg);
+    MSG renamedInput{};
+    if (msg && RouteNativeRenameMessage(*msg, renamedInput)) {
+        *msg = renamedInput;
+        return FALSE; // The caller still translates text for the visible EDIT.
+    }
     if (msg && HandleNativeSelectionKey(*msg)) return TRUE;
     if (msg) NoteNativeNewFolderShortcut(*msg);
     // Frame-targeted list keys may be consumed before DispatchMessage. Use the
@@ -26539,13 +27479,11 @@ int TranslateAcceleratorInput(HWND hwnd, HACCEL accelerator, LPMSG msg) {
     // never let Explorer consume Escape/Enter/F2 before this textbox does.
     if (msg && msg->hwnd &&
         (msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN)) {
-        HWND ownerOverlay = reinterpret_cast<HWND>(
-            GetWindowLongPtrW(msg->hwnd, GWLP_USERDATA));
-        if (ownerOverlay && IsWindow(ownerOverlay)) {
-            ViewState* editOwner = State(ownerOverlay);
-            if (editOwner && editOwner->rename.editor == msg->hwnd)
-                return 0;
-        }
+        // Resolve only a registered active overlay, never an unrelated
+        // control's application-owned USERDATA as an HWND or ViewState.
+        const HWND ownerOverlay=OverlayUnder(GetAncestor(msg->hwnd,GA_ROOT));
+        if (auto* editOwner=State(ownerOverlay); editOwner && editOwner->rename.editor==msg->hwnd)
+            return 0;
     }
     const bool ctrlA = msg && msg->message == WM_KEYDOWN &&
         msg->wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) &&
@@ -26630,26 +27568,50 @@ struct FrameScanThrottle {
     HWND lastInputTarget=nullptr;
 };
 struct DispatchThreadState {
+    HANDLE thread=nullptr; // Real thread lifetime, never a reusable thread ID.
     std::unordered_map<HWND,FrameScanThrottle> frames;
 };
 std::mutex g_dispatchStateMutex;
 std::vector<std::unique_ptr<DispatchThreadState>> g_dispatchStates;
 thread_local DispatchThreadState* t_dispatchState=nullptr; // Trivial: no DLL-unload destructor.
 
-DispatchThreadState& CurrentDispatchThreadState() {
+bool ReapDispatchThreadStates() {
+    std::vector<std::unique_ptr<DispatchThreadState>> retired;
+    bool pending=false;
+    {
+        std::lock_guard lock(g_dispatchStateMutex);
+        for(auto it=g_dispatchStates.begin();it!=g_dispatchStates.end();) {
+            if(WaitForSingleObject((*it)->thread,0)==WAIT_OBJECT_0) {
+                retired.push_back(std::move(*it)); it=g_dispatchStates.erase(it);
+            } else {pending=true; ++it;}
+        }
+    }
+    // Only the regulator calls this: map destruction and handle cleanup stay off UI threads.
+    for(const auto& state:retired) CloseHandle(state->thread);
+    return pending;
+}
+
+DispatchThreadState* CurrentDispatchThreadState() {
     if (!t_dispatchState) {
         auto state=std::make_unique<DispatchThreadState>();
+        if(!DuplicateHandle(GetCurrentProcess(),GetCurrentThread(),GetCurrentProcess(),
+                &state->thread,SYNCHRONIZE,FALSE,0)) return nullptr;
         auto* owned=state.get();
+        std::lock_guard lifetime(g_backgroundLifetimeMutex);
+        if(!EnsureBackgroundRegulatorLocked()) {CloseHandle(state->thread); return nullptr;}
         std::lock_guard lock(g_dispatchStateMutex);
         g_dispatchStates.push_back(std::move(state));
         t_dispatchState=owned;
+        SetEvent(g_backgroundReaperWake);
     }
-    return *t_dispatchState;
+    return t_dispatchState;
 }
 
 LRESULT WINAPI DispatchHook(const MSG* msg) {
     ApiCallbackGuard callback(ApiHook::Dispatch);
     if (g_unloading.load(std::memory_order_acquire)) return g_dispatchOriginal(msg);
+    MSG renamedInput{};
+    if (msg && RouteNativeRenameMessage(*msg, renamedInput)) return g_dispatchOriginal(&renamedInput);
     InputFrameCompletion completion(msg,true);
     std::shared_ptr<TabBackground> pipelineOwner;
     if (msg && g_pipelineTracing.load(std::memory_order_relaxed)) {
@@ -26680,7 +27642,6 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
     }
     // Reuse the existing per-frame scan state for diagnostic input timestamps:
     // no second polling loop, input hook, or per-tab worker is introduced.
-    auto& frameThrottles=CurrentDispatchThreadState().frames;
     const bool traceTab = msg && g_perf.load(std::memory_order_relaxed);
     const ULONGLONG hookStart = traceTab ? GetTickCount64() : 0;
     if (traceTab && msg->hwnd && !g_unloading.load(std::memory_order_relaxed)) {
@@ -26702,16 +27663,19 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
                 if (IsExplorerFrame(owner)) frame = owner;
             }
             if (IsExplorerFrame(frame) && BelongsToThisProcess(frame)) {
-                const ULONGLONG tick = GetTickCount64();
-                FrameScanThrottle& throttle = frameThrottles[frame];
-                throttle.lastInputTick = tick;
-                throttle.lastInputMessage = msg->message;
-                throttle.lastInputTarget = msg->hwnd;
-                // Includes Explorer content clicks; only a matching later
-                // DISPATCH_SWITCH establishes that it was a tab activation.
-                Wh_Log(L"[GPU tabs] INPUT_CANDIDATE tick=%llu frame=%p target=%p message=0x%X selected-before=%p",
-                    static_cast<unsigned long long>(tick), frame, msg->hwnd,
-                    msg->message, ActiveExplorerTab(frame));
+                auto* dispatch=CurrentDispatchThreadState();
+                if(dispatch) {
+                    const ULONGLONG tick = GetTickCount64();
+                    FrameScanThrottle& throttle = dispatch->frames[frame];
+                    throttle.lastInputTick = tick;
+                    throttle.lastInputMessage = msg->message;
+                    throttle.lastInputTarget = msg->hwnd;
+                    // Includes Explorer content clicks; only a matching later
+                    // DISPATCH_SWITCH establishes that it was a tab activation.
+                    Wh_Log(L"[GPU tabs] INPUT_CANDIDATE tick=%llu frame=%p target=%p message=0x%X selected-before=%p",
+                        static_cast<unsigned long long>(tick), frame, msg->hwnd,
+                        msg->message, ActiveExplorerTab(frame));
+                }
             }
         }
     }
@@ -26878,9 +27842,11 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
                 }
             }
             if (nearTabStrip) {
-                auto previous = frameThrottles.find(frame);
-                const HWND lastObserved = previous == frameThrottles.end() ?
-                    nullptr : previous->second.lastSelectedTab;
+                HWND lastObserved=nullptr;
+                if(auto* dispatch=CurrentDispatchThreadState()) {
+                    const auto previous=dispatch->frames.find(frame);
+                    if(previous!=dispatch->frames.end()) lastObserved=previous->second.lastSelectedTab;
+                }
                 // If Explorer already changed the host during the input
                 // dispatch, the normal DISPATCH_SWITCH path will present it
                 // immediately. Do not run a 3.5s probe of the new tab.
@@ -26926,6 +27892,9 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
         !checkTabIdentity) return result;
     HWND frame = GetAncestor(msg->hwnd, GA_ROOT);
     if (!IsExplorerFrame(frame) || !BelongsToThisProcess(frame)) return result;
+    auto* dispatch=CurrentDispatchThreadState();
+    if(!dispatch) return result;
+    auto& frameThrottles=dispatch->frames;
     // Recovery deadlines are per Explorer frame. One window's tab switch must
     // never postpone or force discovery for a different Explorer window.
     if (frameThrottles.size() > 32) {
@@ -27001,7 +27970,7 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
                 // scope). A WM_SIZE storm must not repeatedly enumerate all
                 // IShellWindows just because this HWND is still unbound.
                 newShellView = msg->hwnd != lastUnboundView ||
-                    now - lastUnboundViewAt >= 250;
+                    (!GetPropW(frame,kColdAttachResolvedProperty) && now - lastUnboundViewAt >= 250);
                 if (newShellView) {
                     lastUnboundView = msg->hwnd;
                     lastUnboundViewAt = now;
@@ -27025,13 +27994,17 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
     const HWND activeOverlay = OverlayUnder(frame);
     const auto activeState = activeOverlay ? State(activeOverlay) : nullptr;
     const bool missingActiveTab = activeOverlay == nullptr;
+    // A resolved unsupported tab stays native without periodic cross-thread
+    // ShellWindows discovery. Navigation/CREATE/SHOW clears this property.
+    const bool resolvedUnsupported = missingActiveTab && !tabSwitched && !newShellView &&
+        GetPropW(frame, kColdAttachResolvedProperty);
     // The dispatch fallback used to bypass the timer's maintenance guard.
     // Keep actual navigation discovery immediate; a valid Recycle Bin binding
     // needs no periodic ShellWindows enumeration, including during a drag.
-    const bool recoveryScan = now >= nextScan && (!activeState ||
+    const bool recoveryScan = !resolvedUnsupported && now >= nextScan && (!activeState ||
         (!LayoutAnimationActive(*activeState, true) &&
          (!IsRecycleBinLocation(activeState->folderPath) || !NativeViewAvailable(activeState->nativeHwnd))));
-    if (!tabSwitched && missingActiveTab && (resizing || (showing && msg->wParam)) &&
+    if (!resolvedUnsupported && !tabSwitched && missingActiveTab && (resizing || (showing && msg->wParam)) &&
         NativeViewAvailable(msg->hwnd) && now >= throttle.nextUnbound) {
         throttle.nextUnbound = now + 250;
         nextScan = now + 400;
@@ -27106,9 +28079,9 @@ void DrawViewToggle(const ViewState& state, const DRAWITEMSTRUCT& destination) {
     DRAWITEMSTRUCT item = destination;
     BP_PAINTPARAMS params{sizeof(params)};
     params.dwFlags = BPPF_ERASE;
-    // Explorer's frame can use redirected/composited child surfaces. Plain
-    // GDI text can leave zero alpha there, which an RGB-only readback misses.
-    // Publish the whole control opaque, including the icon's antialiased pixels.
+    // Rebuild every pixel. Explorer's frame isn't the status chrome's painter:
+    // parent-background requests can leave stale hover/icon pixels untouched.
+    // WS_EX_TRANSPARENT only delays sibling painting; it doesn't blend alpha.
     HPAINTBUFFER buffer = state.viewToggleBufferedPaint ? BeginBufferedPaint(
         destination.hDC, &destination.rcItem, BPBF_TOPDOWNDIB, &params, &item.hDC) : nullptr;
     if (!buffer) item.hDC = destination.hDC;
@@ -27178,16 +28151,34 @@ LRESULT CALLBACK ViewToggleSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
             if (msg == WM_PAINT) EndPaint(hwnd, &paint);
             return 0;
         }
-        if (msg == WM_ERASEBKGND) return 1; // Our painter fills every pixel, without a light flash.
-        if (msg == WM_MOUSEMOVE && !state->viewToggleHot) {
-            state->viewToggleHot = true;
-            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0};
-            TrackMouseEvent(&track);
-            InvalidateRect(hwnd, nullptr, FALSE);
+        if (msg == WM_ERASEBKGND) return 1; // Paint covers the complete client area.
+        if (msg == WM_MOUSEMOVE) {
+            RECT client{}; GetClientRect(hwnd, &client);
+            const POINT point{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            const bool hot = IsWindowEnabled(hwnd) && PtInRect(&client, point);
+            if (hot && !state->viewToggleHot) {
+                TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0};
+                TrackMouseEvent(&track);
+            }
+            if (hot != state->viewToggleHot) {
+                state->viewToggleHot = hot;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
         }
-        if ((msg == WM_MOUSELEAVE || msg == WM_CANCELMODE || (msg == WM_SHOWWINDOW && !wp)) && state->viewToggleHot) {
+        if ((msg == WM_MOUSELEAVE || msg == WM_CANCELMODE || msg == WM_SHOWWINDOW ||
+                (msg == WM_ENABLE && !wp)) && state->viewToggleHot) {
             state->viewToggleHot = false;
             InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        if (msg == WM_CAPTURECHANGED || msg == WM_LBUTTONUP) {
+            // Leave notifications can be deferred during native button capture.
+            POINT point{}; RECT client{}; GetClientRect(hwnd, &client);
+            const bool hot = IsWindowEnabled(hwnd) && IsWindowVisible(hwnd) &&
+                GetCursorPos(&point) && ScreenToClient(hwnd, &point) && PtInRect(&client, point);
+            if (hot != state->viewToggleHot) {
+                state->viewToggleHot = hot;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
         }
         if (msg == WM_THEMECHANGED || msg == WM_SYSCOLORCHANGE || msg == WM_SETTINGCHANGE) {
             state->viewTogglePaletteDirty = true;
@@ -27274,17 +28265,23 @@ void RefreshViewToggleForFrame(HWND frame, bool deferred) {
     for (HWND overlay : FrameOverlays(frame)) {
         auto state = State(overlay);
         if (!state || GetWindowThreadProcessId(overlay, nullptr) != GetCurrentThreadId()) continue;
-        ConsumeStatusButtonGeometry(*state);
-        const bool show = state->activeTabHost == active && state->inScope &&
+        const bool show = g_showNativeViewToggleButton.load(std::memory_order_relaxed) &&
+            state->activeTabHost == active && state->inScope &&
             state->detailsViewActive && !IsIconic(frame) && IsWindowVisible(frame);
         if (!show) {
+            if (IsWindow(state->viewToggleTooltip)) SendMessageW(state->viewToggleTooltip, TTM_POP, 0, 0);
             if (IsWindow(state->viewToggle) && IsWindowVisible(state->viewToggle))
                 SetPresentationVisibility(state->viewToggle, false);
             continue;
         }
+        ConsumeStatusButtonGeometry(*state);
+        const bool gpu = state->visible;
+        const wchar_t* caption = gpu ? L"Switch to native Explorer view" : L"Switch to GPU overlay view";
+        const wchar_t* hint = gpu ? L"Switch to native Explorer view.\r\n(Ctrl+Alt+F9)" :
+            L"Switch to GPU overlay view.\r\n(Ctrl+Alt+F9)";
         if (!IsWindow(state->viewToggle)) {
             state->viewToggle = CreateWindowExW(WS_EX_NOPARENTNOTIFY, L"BUTTON", L"",
-                WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON | BS_ICON | BS_FLAT, 0, 0, 1, 1, frame,
+                WS_CHILD | WS_CLIPSIBLINGS | WS_TABSTOP | BS_PUSHBUTTON | BS_ICON | BS_FLAT, 0, 0, 1, 1, frame,
                 nullptr, GetModuleHandleW(nullptr), nullptr);
             if (!state->viewToggle) continue;
             UsePhysicalClientCoordinates(state->viewToggle);
@@ -27313,26 +28310,26 @@ void RefreshViewToggleForFrame(HWND frame, bool deferred) {
                 TOOLINFOW tool{static_cast<UINT>(TTTOOLINFOW_V2_SIZE)};
                 tool.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
                 tool.hwnd = frame; tool.uId = reinterpret_cast<UINT_PTR>(state->viewToggle);
-                tool.lpszText = const_cast<LPWSTR>(L"Switch to native Explorer view");
+                tool.lpszText = const_cast<LPWSTR>(hint);
                 if (!SendMessageW(state->viewToggleTooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool))) {
                     DestroyWindow(state->viewToggleTooltip); state->viewToggleTooltip = nullptr;
                 }
             }
         }
-        const bool gpu = state->visible;
-        const wchar_t* caption = gpu ? L"Switch to native Explorer view" : L"Switch to GPU overlay view";
         wchar_t current[64]{}; GetWindowTextW(state->viewToggle, current, ARRAYSIZE(current));
         if (wcscmp(current, caption) != 0) {
             SetWindowTextW(state->viewToggle, caption);
             TOOLINFOW tool{static_cast<UINT>(TTTOOLINFOW_V2_SIZE)};
             tool.hwnd = frame; tool.uId = reinterpret_cast<UINT_PTR>(state->viewToggle);
-            tool.lpszText = const_cast<LPWSTR>(caption);
+            tool.lpszText = const_cast<LPWSTR>(hint);
             if (IsWindow(state->viewToggleTooltip))
                 SendMessageW(state->viewToggleTooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&tool));
         }
         const int dpi = DpiOf(frame);
         if (state->viewToggleDpi != dpi || state->viewToggleIconColor != state->viewToggleForeground ||
             !state->viewToggleIcons[0]) {
+            if (IsWindow(state->viewToggleTooltip))
+                SendMessageW(state->viewToggleTooltip, TTM_SETMAXTIPWIDTH, 0, Scale96(360, dpi));
             // Rasterize the original Switch glyph once per DPI/palette. Native
             // paint consumes an HICON, never a private-use character in its DC.
             const int size = std::max(1, Scale96(16, dpi));
@@ -27449,6 +28446,7 @@ void RefreshViewToggleForFrame(HWND frame, bool deferred) {
         {
             SetWindowPos(state->viewToggle, HWND_TOP, x, y, width, height,
                 SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+            InvalidateRect(state->viewToggle, nullptr, FALSE);
             if(g_perf.load(std::memory_order_relaxed))
                 Wh_Log(L"[GPU status] layout source=%s root=%p neighbor=%p x=%d y=%d w=%d h=%d gap=%d pending=%d",
                     fromNative ? (state->viewToggleGeometry.accessible ? L"accessibility" : L"HWND") : L"fallback",
@@ -27461,32 +28459,21 @@ void RefreshViewToggleForFrame(HWND frame, bool deferred) {
 
 namespace {
 bool g_overlayClassRegistered=false;
+HINSTANCE g_overlayClassInstance=nullptr;
 bool RegisterOverlayClass() {
     WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc);
-    wc.lpfnWndProc=OverlayProc; wc.hInstance=GetModuleHandleW(nullptr);
+    wc.lpfnWndProc=OverlayProc; wc.hInstance=OverlayModuleInstance();
     wc.lpszClassName=kOverlayClass; wc.style=CS_DBLCLKS;
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
-    if (!RegisterClassExW(&wc)) {
-        if (GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return false;
-        WNDCLASSEXW previous{}; previous.cbSize=sizeof(previous);
-        if (!GetClassInfoExW(wc.hInstance,kOverlayClass,&previous)) return false;
-        if (previous.lpfnWndProc!=OverlayProc) {
-            // A failed older initialization can leave a process-owned class
-            // pointing into an unloaded DLL. Never accept that stale WndProc.
-            if (!UnregisterClassW(kOverlayClass,wc.hInstance) || !RegisterClassExW(&wc)) {
-                Wh_Log(L"[GPU lifetime] CLASS_CONFLICT error=%lu",GetLastError());
-                return false;
-            }
-            Wh_Log(L"[GPU lifetime] CLASS_REBOUND old-proc=%p",previous.lpfnWndProc);
-        }
-    }
+    if (!wc.hInstance || !RegisterClassExW(&wc)) return false;
+    g_overlayClassInstance=wc.hInstance;
     g_overlayClassRegistered=true;
     return true;
 }
 void ReleaseOverlayClass() {
     if (!g_overlayClassRegistered) return;
     bool reported=false;
-    while (!UnregisterClassW(kOverlayClass,GetModuleHandleW(nullptr))) {
+    while (!UnregisterClassW(kOverlayClass,g_overlayClassInstance)) {
         const DWORD error=GetLastError();
         if (error==ERROR_CLASS_DOES_NOT_EXIST) break;
         if (!reported) {
@@ -27498,6 +28485,7 @@ void ReleaseOverlayClass() {
         RemoveAllOverlays(); DrainApiCallbacks(); Sleep(25);
     }
     g_overlayClassRegistered=false;
+    g_overlayClassInstance=nullptr;
 }
 }
 
@@ -27523,9 +28511,12 @@ BOOL Wh_ModInit() {
         return failedInitialization();
     }
     g_tabWatchStopping.store(false, std::memory_order_release);
+    AcquireSRWLockExclusive(&g_frameLock);
     g_frameStopping.store(false, std::memory_order_release);
     g_frameEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_frameEvent || !RegisterOverlayClass()) return failedInitialization();
+    const bool frameReady=g_frameEvent!=nullptr;
+    ReleaseSRWLockExclusive(&g_frameLock);
+    if (!frameReady || !RegisterOverlayClass()) return failedInitialization();
     // Required pre-layout barriers. The subclass also covers native internal
     // layout messages; these hooks cover NOSENDCHANGING and deferred batches.
     if (!WindhawkUtils::SetFunctionHook(ShowWindow, NativeShowWindowHook, &g_showWindowOriginal) ||
@@ -27578,12 +28569,14 @@ void Wh_ModUninit() {
     // Wh_ModUninit runs after Windhawk has removed the API detours. Only now
     // is admission closed, so callbacks already inside USER/Shell can drain.
     DrainApiCallbacks();
+    RemoveAllOverlays(); // Recheck after callbacks admitted before quiescing have drained.
     ClearFrameShellViewHooks();
     DrainApiCallbacks(); // Also settle a WinEvent already running at Unhook.
     {
         std::lock_guard lock(g_dispatchStateMutex);
         if (g_perf.load(std::memory_order_relaxed))
             Wh_Log(L"[GPU lifetime] DISPATCH_STATES retired=%zu",g_dispatchStates.size());
+        for(const auto& state:g_dispatchStates) CloseHandle(state->thread);
         g_dispatchStates.clear();
         t_dispatchState=nullptr;
     }
