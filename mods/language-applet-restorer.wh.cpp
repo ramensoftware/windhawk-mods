@@ -49,7 +49,7 @@ The size and SHA-256 of every file are checked against values pinned in the mod,
 
 - Only **x64** is supported (no ARM64).
 - The 2017 components run inside `explorer.exe`. A crash in them restarts Explorer.
-- The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside `explorer.exe` (`control.exe` only gets the part needed to find the applet by name), and the applet's COM classes are created from inside `explorer.exe`. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (`vreg-<pid>.hiv` in the mod's storage folder, loaded with `RegLoadAppKeyW`), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start).
+- The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside `explorer.exe` (`control.exe` only gets the part needed to find the applet by name), and the applet's COM classes are created from inside `explorer.exe`. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (`vreg-<pid>.hiv` in the mod's storage folder, loaded with `RegLoadAppKeyW`), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start). If the hive cannot be loaded, the applet is simply not shown.
 - **Compatibility:** `intl.cpl` redirection overlaps with the `win7-intl-control-panel-restorer` mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which `intl.cpl` is opened.
 - While the mod is enabled, one string in `shell32.dll`'s memory (the applet's entry in Windows' built-in hide list) is blanked so that Control Panel lists the applet. It is restored when the mod is disabled; nothing on disk is changed.
 - Links in the applet that open the Settings app are not changed by this mod. The `settings-to-control-panel` mod can redirect them.
@@ -2443,7 +2443,8 @@ static bool LoadPrivateModules(const std::wstring& binDir, const std::vector<Out
 // misbehave or crash. So each virtual key is a real, read-only handle to the root of a private, empty registry hive
 // (RegLoadAppKeyW on a file in the mod's storage folder, one per process). That hive is never part of the user's
 // registry, holds no data and is deleted when the mod is unloaded (leftovers are removed at the next start).
-// Only if the hive can't be loaded, an empty volatile key under HKCU is used as a fallback.
+// If the hive can't be loaded, the virtual keys are simply unavailable (the applet isn't shown): nothing is ever
+// written to the user's registry.
 namespace vreg {
 
 struct Val { std::wstring name; DWORD type; std::wstring str; DWORD dw; };
@@ -2547,18 +2548,9 @@ static RegQueryInfoKeyW_t RegQueryInfoKeyW_Orig;
 // ---- the private hive that backs every virtual handle ----
 static void* RegFunc(const char* name);   // defined below
 
-static const wchar_t kScratchParent[] = L"Software\\WindhawkLanguageAppletRestorer";   // fallback only
-
-static std::wstring ScratchLeaf() {
-    wchar_t leaf[64];
-    swprintf_s(leaf, ARRAYSIZE(leaf), L"VirtualKeys-%lu", GetCurrentProcessId());
-    return leaf;
-}
-static std::wstring ScratchPath() { return std::wstring(kScratchParent) + L"\\" + ScratchLeaf(); }
-
 static std::mutex g_scratchMutex;
-static HKEY g_scratchRoot = nullptr;       // root of the private hive (or of the HKCU fallback key)
-static bool g_scratchIsHive = false;
+static HKEY g_scratchRoot = nullptr;       // root of the private hive
+static bool g_scratchFailed = false;       // loading the hive failed once: don't retry on every open
 static std::wstring g_hiveFile;            // <storage>\vreg-<pid>.hiv
 
 static void DeleteHiveFiles(const std::wstring& file) {
@@ -2581,69 +2573,46 @@ static void CleanupStaleHives() {
     FindClose(h);
 }
 
+// A real, empty registry root that is not part of the user's registry. There is no fallback: if it can't be
+// loaded, the virtual keys are unavailable.
 static bool EnsureScratchRoot() {
     std::lock_guard<std::mutex> l(g_scratchMutex);
     if (g_scratchRoot) return true;
+    if (g_scratchFailed) return false;
 
-    // 1) private hive: a real, empty registry root that is not part of the user's registry
     using RegLoadAppKeyW_t = LSTATUS(WINAPI*)(LPCWSTR, PHKEY, REGSAM, DWORD, DWORD);
     const std::wstring dir = StorageDir();
     auto loadAppKey = reinterpret_cast<RegLoadAppKeyW_t>(RegFunc("RegLoadAppKeyW"));
-    if (loadAppKey && !dir.empty()) {
-        wchar_t name[64];
-        swprintf_s(name, ARRAYSIZE(name), L"\\vreg-%lu.hiv", GetCurrentProcessId());
-        g_hiveFile = dir + name;
-        DeleteHiveFiles(g_hiveFile);
-        HKEY k = nullptr;
-        const LSTATUS st = loadAppKey(g_hiveFile.c_str(), &k, KEY_READ | KEY_WRITE, REG_PROCESS_APPKEY, 0);
-        if (st == ERROR_SUCCESS && k) {
-            g_scratchRoot = k;
-            g_scratchIsHive = true;
-            return true;
-        }
-        Wh_Log(L"Private hive could not be loaded (error %ld); using the HKCU fallback", st);
+    if (!loadAppKey || dir.empty()) {
+        g_scratchFailed = true;
+        Wh_Log(L"Private registry hive is not available; the applet will not be shown");
+        return false;
     }
-
-    // 2) fallback: one empty volatile key in HKCU
+    wchar_t name[64];
+    swprintf_s(name, ARRAYSIZE(name), L"\\vreg-%lu.hiv", GetCurrentProcessId());
+    g_hiveFile = dir + name;
+    DeleteHiveFiles(g_hiveFile);
     HKEY k = nullptr;
-    DWORD disp = 0;
-    const LONG st = RegCreateKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, nullptr, REG_OPTION_VOLATILE,
-                                         KEY_READ | KEY_WRITE, nullptr, &k, &disp);
-    if (st != ERROR_SUCCESS) {
-        Wh_Log(L"Could not create the volatile fallback key (error %ld)", st);
+    const LSTATUS st = loadAppKey(g_hiveFile.c_str(), &k, KEY_READ | KEY_WRITE, REG_PROCESS_APPKEY, 0);
+    if (st != ERROR_SUCCESS || !k) {
+        g_scratchFailed = true;
+        Wh_Log(L"Private registry hive could not be loaded (error %ld); the applet will not be shown", st);
         return false;
     }
     g_scratchRoot = k;
-    g_scratchIsHive = false;
     return true;
 }
 
 static void ReleaseScratchRoot() {
     HKEY root;
-    bool isHive;
     {
         std::lock_guard<std::mutex> l(g_scratchMutex);
         root = g_scratchRoot;
-        isHive = g_scratchIsHive;
         g_scratchRoot = nullptr;
-        g_scratchIsHive = false;
+        g_scratchFailed = false;
     }
     if (root && RegCloseKey_Orig) RegCloseKey_Orig(root);
-    if (isHive) {
-        DeleteHiveFiles(g_hiveFile);   // fails while a caller still holds a virtual handle; removed at the next start
-        return;
-    }
-    if (!RegOpenKeyExW_Orig || !RegCloseKey_Orig) return;
-    HKEY parent = nullptr;
-    if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, kScratchParent, 0, KEY_WRITE | DELETE, &parent) == ERROR_SUCCESS) {
-        RegDeleteKeyW(parent, ScratchLeaf().c_str());
-        RegCloseKey_Orig(parent);
-    }
-    HKEY software = nullptr;
-    if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, L"Software", 0, DELETE, &software) == ERROR_SUCCESS) {
-        RegDeleteKeyW(software, L"WindhawkLanguageAppletRestorer");
-        RegCloseKey_Orig(software);
-    }
+    if (!g_hiveFile.empty()) DeleteHiveFiles(g_hiveFile);   // fails while a caller still holds a virtual handle; removed at the next start
 }
 
 // ---- handle bookkeeping ----
@@ -2688,16 +2657,12 @@ static void Untrack(HKEY h) {
 static HKEY NewFake(const std::wstring& path) {
     if (!EnsureScratchRoot()) return nullptr;
     HKEY root;
-    bool isHive;
     {
         std::lock_guard<std::mutex> l(g_scratchMutex);
         root = g_scratchRoot;
-        isHive = g_scratchIsHive;
     }
     HKEY h = nullptr;
-    const LSTATUS st = isHive ? RegOpenKeyExW_Orig(root, L"", 0, KEY_READ, &h)   // a new handle to the hive root
-                              : RegOpenKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, KEY_READ, &h);
-    if (st != ERROR_SUCCESS) return nullptr;
+    if (!root || RegOpenKeyExW_Orig(root, L"", 0, KEY_READ, &h) != ERROR_SUCCESS) return nullptr;   // a new handle to the hive root
     std::lock_guard<std::mutex> l(g_handleMutex);
     g_paths[h] = path;
     g_fake.insert(h);
