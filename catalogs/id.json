@@ -9892,7 +9892,7 @@
         "ratingUsers": 17,
         "reviews": 0,
         "trendingSorting": 38,
-        "updated": 1792577087000,
+        "updated": 1792814415000,
         "users": 380
       },
       "metadata": {
@@ -9900,14 +9900,14 @@
           "x86-64"
         ],
         "author": "caotu2k5",
-        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -lgdiplus -limm32",
-        "description": "Transforms the classic Run dialog into a modern Fluent UI with Acrylic blur, history, timestamps, and Taskbar toggle.",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32",
+        "description": "Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution.",
         "github": "https://github.com/caotu2k5",
         "include": [
           "explorer.exe"
         ],
-        "name": "Modern Run Dialog UI For Windows 11",
-        "version": "2.0.15"
+        "name": "Modern Run Dialog UI For Windows 10 & 11",
+        "version": "3.0.4"
       }
     },
     "modernize-folder-picker-dialog": {
@@ -13928,7 +13928,7 @@
         "ratingUsers": 54,
         "reviews": 0,
         "trendingSorting": 5.122679324373117,
-        "updated": 1791554650000,
+        "updated": 1792814409000,
         "users": 623
       },
       "metadata": {
@@ -13936,8 +13936,8 @@
           "x86-64"
         ],
         "author": "bardelyne",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32",
-        "description": "Search files, apps and settings from the Start menu with voidtools Everything, in place of Windows Search.",
+        "compilerOptions": "-ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32 -ld3d11 -lwindowscodecs -lxmllite",
+        "description": "Replace Windows 11 search with Everything-powered files, apps and settings in a separate search window.",
         "github": "https://github.com/bardelyne",
         "include": [
           "StartMenuExperienceHost.exe",
@@ -13946,7 +13946,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Everything & Power Tools in the Start Menu",
-        "version": "1.1"
+        "version": "2.0"
       }
     },
     "start-menu-all-apps": {
