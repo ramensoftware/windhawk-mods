@@ -32,7 +32,9 @@ taking the keyboard focus, so games are never minimized.
   UWP apps and protected/elevated games are recognized too.
 - **Deafen background (BETA)** – one hotkey mutes or ducks everything except the focused app and your whitelist;
   pressing it again restores every app individually.
-- **Custom volume OSD (BETA)** – 9 styles, can replace the Windows volume flyout for the media keys, draggable.
+- **Custom volume OSD (BETA)** – 9 styles, can replace the Windows volume flyout for the media keys and the volume
+  tooltip of the taskbar, draggable. Like the Windows flyout, it stays while the pointer rests on it, and the mouse
+  wheel over it changes the volume.
 - **System tray icon (BETA)** – 9 icon styles that follow the volume and the light/dark taskbar, 7 popup styles,
   mouse wheel over the icon changes the volume, middle click mutes.
 - **17 mixer layouts and 22 color themes.**
@@ -61,6 +63,13 @@ Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Gr
 ## 📺 OSD styles (BETA)
 Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
 frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
+
+- The OSD stays on screen while the pointer rests on it; the mouse wheel over it changes the volume it shows
+  (the master volume or the app). With a hidden pointer (games) it stays click-through.
+- **Replace the Windows volume flyout**: the media volume keys and the mouse wheel over the taskbar notification
+  area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
+  tooltip. Volume indicators of manufacturer utilities (laptop or keyboard software) are separate programs and
+  aren't affected.
 
 ## ⌨️ Hotkeys
 | Action | Default |
@@ -983,13 +992,13 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     $name:fr-FR: "Remplacer l'indicateur de Windows"
     $name:es-ES: "Reemplazar el indicador de Windows"
     $name:ru-RU: "Заменить системный индикатор Windows"
-    $description: "Media volume keys change the volume through this mod and show its OSD instead of the Windows flyout, even when the volume OSD above is off. Laptop keys handled by the manufacturer's software are not affected."
-    $description:uk-UA: "Медіаклавіші гучності змінюють гучність через цей мод і показують його OSD замість системного, навіть якщо OSD вище вимкнено. Не діє на клавіші ноутбука, які обробляє програма виробника."
-    $description:pl-PL: "Klawisze głośności zmieniają głośność przez ten mod i pokazują jego OSD zamiast systemowego, nawet gdy OSD powyżej jest wyłączone. Nie dotyczy klawiszy laptopa obsługiwanych przez oprogramowanie producenta."
-    $description:de-DE: "Medien-Lautstärketasten ändern die Lautstärke über diesen Mod und zeigen sein OSD statt des Windows-OSD, auch wenn das OSD oben aus ist. Gilt nicht für Laptop-Tasten, die von Herstellersoftware verarbeitet werden."
-    $description:fr-FR: "Les touches de volume règlent le volume via ce mod et affichent son OSD au lieu de celui de Windows, même si l'OSD ci-dessus est désactivé. Sans effet sur les touches d'ordinateur portable gérées par le logiciel du fabricant."
-    $description:es-ES: "Las teclas de volumen cambian el volumen mediante este mod y muestran su OSD en lugar del de Windows, aunque el OSD de arriba esté desactivado. No afecta a las teclas de portátil gestionadas por el software del fabricante."
-    $description:ru-RU: "Медиаклавиши громкости меняют громкость через этот мод и показывают его OSD вместо системного, даже если OSD выше выключен. Не действует на клавиши ноутбука, которые обрабатывает программа производителя."
+    $description: "Media volume keys and the mouse wheel over the taskbar notification area change the volume through this mod and show its OSD instead of the Windows flyout or volume tooltip, even when the volume OSD above is off. Indicators of the manufacturer's own software (laptop or keyboard utilities) are not affected."
+    $description:uk-UA: "Медіаклавіші гучності та колесо миші над областю сповіщень панелі завдань змінюють гучність через цей мод і показують його OSD замість системного індикатора чи підказки гучності, навіть якщо OSD вище вимкнено. Не діє на індикатори програм виробника (утиліт ноутбука чи клавіатури)."
+    $description:pl-PL: "Klawisze głośności i kółko myszy nad obszarem powiadomień paska zadań zmieniają głośność przez ten mod i pokazują jego OSD zamiast wskaźnika lub podpowiedzi głośności Windows, nawet gdy OSD powyżej jest wyłączone. Nie dotyczy wskaźników oprogramowania producenta (narzędzi laptopa lub klawiatury)."
+    $description:de-DE: "Medien-Lautstärketasten und das Mausrad über dem Infobereich der Taskleiste ändern die Lautstärke über diesen Mod und zeigen sein OSD statt der Windows-Anzeige oder -Lautstärke-QuickInfo, auch wenn das OSD oben aus ist. Anzeigen von Herstellersoftware (Laptop- oder Tastatur-Tools) sind nicht betroffen."
+    $description:fr-FR: "Les touches de volume et la molette au-dessus de la zone de notification de la barre des tâches règlent le volume via ce mod et affichent son OSD au lieu de l'indicateur ou de l'info-bulle de volume de Windows, même si l'OSD ci-dessus est désactivé. Sans effet sur les indicateurs des logiciels du fabricant (outils du portable ou du clavier)."
+    $description:es-ES: "Las teclas de volumen y la rueda del ratón sobre el área de notificación de la barra de tareas cambian el volumen mediante este mod y muestran su OSD en lugar del indicador o la información de volumen de Windows, aunque el OSD de arriba esté desactivado. No afecta a los indicadores del software del fabricante (utilidades del portátil o del teclado)."
+    $description:ru-RU: "Медиаклавиши громкости и колесо мыши над областью уведомлений панели задач меняют громкость через этот мод и показывают его OSD вместо системного индикатора или подсказки громкости, даже если OSD выше выключен. Не действует на индикаторы программ производителя (утилит ноутбука или клавиатуры)."
   - osdStyle: "capsule"
     $name: "OSD style"
     $name:uk-UA: "Стиль OSD"
@@ -1604,6 +1613,7 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
 #include <hstring.h>
 #include <tlhelp32.h>
 #include <shlobj.h>
+#include <sddl.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -2235,6 +2245,10 @@ POINT g_osdWinStart{0, 0};
 bool g_hasCustomOsdPos = false;
 int g_customOsdX = 0;
 int g_customOsdY = 0;
+// What the OSD shows, so that the mouse wheel over it changes the same thing.
+enum class OsdTarget { None, Master, App };
+OsdTarget g_osdTarget = OsdTarget::None;
+std::wstring g_osdTargetKey;
 
 // Popup state (UI thread only)
 bool g_visible = false;
@@ -2257,10 +2271,11 @@ ULONG_PTR g_gdiplusToken = 0;
 struct DeafenSavedState {
     float originalVol = 1.0f;
     bool originalMute = false;
+    bool ducked = false;  // the volume was lowered (otherwise only muted)
 };
 bool g_deafenActive = false;
-bool g_deafenDucked = false;
-std::map<std::wstring, DeafenSavedState> g_deafenSavedStates;  // "key|deviceId" -> state
+std::map<std::wstring, DeafenSavedState> g_deafenSavedStates;  // "key|deviceId" -> state while Deafen is on
+std::map<std::wstring, DeafenSavedState> g_deafenPending;      // to restore when the app plays again
 
 // Hotkeys. Index + 1 is the id used with WM_HOTKEY and RegisterHotKey.
 enum HotkeyIndex {
@@ -2283,9 +2298,11 @@ struct HotkeyDef {
 // State shared with the low-level hook thread. The hooks live on their own
 // thread so slow audio calls on the UI thread never stall system-wide input
 // (Windows silently removes low-level hooks that time out).
-SRWLOCK g_hookLock = SRWLOCK_INIT;  // guards g_hookHotkeys and g_hookTrayRect
+SRWLOCK g_hookLock = SRWLOCK_INIT;  // guards g_hookHotkeys, g_hookTrayRect and g_hookOsdRect
 HotkeyDef g_hookHotkeys[HK_COUNT];
 RECT g_hookTrayRect{};
+RECT g_hookOsdRect{};
+std::atomic<bool> g_hookOsdHover{false};  // a visible pointer is over the OSD
 std::atomic<bool> g_hookPopupOpen{false};
 std::atomic<DWORD> g_hookShowTick{0};
 std::atomic<DWORD> g_hookOutsideClickTick{0};
@@ -2304,6 +2321,7 @@ constexpr UINT_PTR ID_TIMER_FAST = 1;
 constexpr UINT_PTR ID_TIMER_ANIM = 2;
 constexpr UINT_PTR ID_TIMER_OSD = 3;
 constexpr UINT_PTR ID_TIMER_REFRESH_ONCE = 5;
+constexpr UINT_PTR ID_TIMER_SAVE_LOCKS = 6;
 
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_QUIT = WM_APP + 2;
@@ -2313,6 +2331,8 @@ constexpr UINT WM_APP_VOLUME_CHANGED = WM_APP + 5;
 constexpr UINT WM_APP_DEVICES_CHANGED = WM_APP + 6;
 constexpr UINT WM_APP_MEDIA_KEY = WM_APP + 7;
 constexpr UINT WM_APP_TRAY_WHEEL = WM_APP + 8;
+constexpr UINT WM_APP_TASKBAR_WHEEL = WM_APP + 9;  // wheel over the notification area, wParam = delta
+constexpr UINT WM_APP_OSD_WHEEL = WM_APP + 11;     // wheel over the OSD, wParam = delta
 constexpr UINT WM_APP_LOCK_CHECK = WM_APP + 12;
 constexpr UINT WM_APP_LOCK_REBUILD = WM_APP + 13;
 constexpr UINT WM_APP_HOOK_MOUSE = WM_APP + 20;  // hook thread messages, wParam = install
@@ -3309,13 +3329,20 @@ void SetItemVolumeRaw(Item& it, float v) {
     for (ISimpleAudioVolume* s : it.sav) s->SetMasterVolume(v, nullptr);
 }
 
+// Lock changes are saved once the user stops changing them (a drag or a held
+// hotkey changes them many times per second).
+void ScheduleLockSave() {
+    g_locksDirty = true;
+    if (g_hwnd) SetTimer(g_hwnd, ID_TIMER_SAVE_LOCKS, 1000, nullptr);
+}
+
 // A user change of a locked item moves its lock to the new level.
 void SetItemVolume(Item& it, float v) {
     v = std::clamp(v, 0.0f, 1.0f);
     if (it.locked) {
         it.lockedVol = v;
         g_lockedVolumes[it.key] = v;
-        g_locksDirty = true;
+        ScheduleLockSave();
     }
     SetItemVolumeRaw(it, v);
 }
@@ -3519,13 +3546,49 @@ void AdjustMasterVolume(float delta, bool toggleMute, bool alwaysOsd = false) {
         auto lock = g_lockedVolumes.find(L"devmaster:" + devId);
         if (lock != g_lockedVolumes.end()) {
             lock->second = v;
-            g_locksDirty = true;
+            ScheduleLockSave();
         }
     }
     ep->Release();
+    g_osdTarget = OsdTarget::Master;
     ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, alwaysOsd ? OsdKind::Always : OsdKind::Volume, devName);
     if (g_visible && RefreshValues()) Render();
     UpdateTrayIcon();
+}
+
+// Changes every session of one app; the loudest session is the reference for
+// the new level. The OSD then shows that app.
+static void ChangeAppSessions(std::vector<Item*>& matches, float delta, bool toggleMute) {
+    Item* ref = matches[0];
+    float bestPeak = -1.0f;
+    for (Item* m : matches) {
+        float p = 0.0f;
+        for (IAudioMeterInformation* meter : m->meters) {
+            float v = 0.0f;
+            if (SUCCEEDED(meter->GetPeakValue(&v)) && v > p) p = v;
+        }
+        if (p > bestPeak) {
+            bestPeak = p;
+            ref = m;
+        }
+    }
+
+    if (toggleMute) {
+        bool anyUnmuted = false;
+        for (Item* m : matches) {
+            if (!m->mute) anyUnmuted = true;
+        }
+        for (Item* m : matches) SetItemMute(*m, anyUnmuted);
+    } else {
+        const float nv = std::clamp(ref->vol + delta, 0.0f, 1.0f);
+        for (Item* m : matches) {
+            SetItemVolume(*m, nv);
+            if (m->mute && delta > 0.0f) SetItemMute(*m, false);
+        }
+    }
+    g_osdTarget = OsdTarget::App;
+    g_osdTargetKey = ref->key;
+    ShowOsd(ref->name, ref->vol, ref->mute, ref->icon, OsdKind::Volume, DeviceNameOf(ref->deviceId));
 }
 
 // Applies the change to every session of the focused app on every output
@@ -3555,37 +3618,42 @@ void AdjustForegroundAppVolume(float delta, bool toggleMute) {
         return;
     }
 
-    // The loudest session is the reference for the new level.
-    Item* ref = matches[0];
-    float bestPeak = -1.0f;
-    for (Item* m : matches) {
-        float p = 0.0f;
-        for (IAudioMeterInformation* meter : m->meters) {
-            float v = 0.0f;
-            if (SUCCEEDED(meter->GetPeakValue(&v)) && v > p) p = v;
-        }
-        if (p > bestPeak) {
-            bestPeak = p;
-            ref = m;
-        }
-    }
-
-    if (toggleMute) {
-        bool anyUnmuted = false;
-        for (Item* m : matches) {
-            if (!m->mute) anyUnmuted = true;
-        }
-        for (Item* m : matches) SetItemMute(*m, anyUnmuted);
-    } else {
-        const float nv = std::clamp(ref->vol + delta, 0.0f, 1.0f);
-        for (Item* m : matches) {
-            SetItemVolume(*m, nv);
-            if (m->mute && delta > 0.0f) SetItemMute(*m, false);
-        }
-    }
-    ShowOsd(ref->name, ref->vol, ref->mute, ref->icon, OsdKind::Volume, DeviceNameOf(ref->deviceId));
+    ChangeAppSessions(matches, delta, toggleMute);
     ReleaseItems(items);
     if (g_visible && RefreshValues()) Render();
+}
+
+// Mouse wheel over the OSD of an app: changes that app on every device.
+void AdjustAppVolumeByKey(const std::wstring& key, float delta) {
+    std::vector<Item> items;
+    BuildItems(items, true, true);
+    std::vector<Item*> matches;
+    for (Item& it : items) {
+        if (it.kind == 2 && it.key == key) matches.push_back(&it);
+    }
+    if (!matches.empty()) ChangeAppSessions(matches, delta, false);
+    ReleaseItems(items);
+    if (g_visible && RefreshValues()) Render();
+}
+
+// Whole wheel notches: high-resolution wheels and touchpads send fractions of
+// WHEEL_DELTA.
+int TakeWheelNotches(int delta) {
+    static int accum = 0;
+    if ((accum > 0 && delta < 0) || (accum < 0 && delta > 0)) accum = 0;
+    accum += delta;
+    const int notches = accum / WHEEL_DELTA;
+    accum -= notches * WHEEL_DELTA;
+    return notches;
+}
+
+// Mouse wheel over the OSD changes what it shows, like the Windows flyout.
+void OnOsdWheel(int delta) {
+    const int notches = TakeWheelNotches(delta);
+    if (!notches) return;
+    const float step = notches * g_cfg.wheelStep / 100.0f;
+    if (g_osdTarget == OsdTarget::Master) AdjustMasterVolume(step, false, true);
+    else if (g_osdTarget == OsdTarget::App && !g_osdTargetKey.empty()) AdjustAppVolumeByKey(g_osdTargetKey, step);
 }
 
 void ToggleForegroundAppMute() {
@@ -3597,7 +3665,30 @@ void ToggleForegroundAppMute() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Volume locks (persisted; the watchdog timer runs only while a lock exists)
+// Volume locks (persisted per user, enforced from audio events)
+
+// Windhawk storage is shared by every user of the PC; locks and the Deafen
+// state belong to the user whose apps they affect.
+std::wstring UserValueName(const wchar_t* base) {
+    static std::wstring s_sid;
+    if (s_sid.empty()) {
+        HANDLE token = nullptr;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            DWORD size = 0;
+            GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+            std::vector<BYTE> buf(size ? size : 1);
+            LPWSTR sidStr = nullptr;
+            if (size && GetTokenInformation(token, TokenUser, buf.data(), size, &size) &&
+                ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &sidStr) && sidStr) {
+                s_sid = sidStr;
+                LocalFree(sidStr);
+            }
+            CloseHandle(token);
+        }
+        if (s_sid.empty()) s_sid = L"user";
+    }
+    return std::wstring(base) + L"_" + s_sid;
+}
 
 void PersistLockedVolumes() {
     std::wstring s;
@@ -3607,14 +3698,18 @@ void PersistLockedVolumes() {
         s += std::to_wstring((int)std::lround(p.second * 1000.0f));
         s += L'\n';
     }
-    Wh_SetStringValue(L"lockedVolumes", s.c_str());
+    Wh_SetStringValue(UserValueName(L"lockedVolumes").c_str(), s.c_str());
     g_locksDirty = false;
 }
 
 void LoadLockedVolumes() {
     g_lockedVolumes.clear();
     std::vector<WCHAR> buf(32768, 0);
-    if (Wh_GetStringValue(L"lockedVolumes", buf.data(), buf.size()) == 0) return;
+    // Earlier versions stored the locks for all users under one name.
+    if (Wh_GetStringValue(UserValueName(L"lockedVolumes").c_str(), buf.data(), buf.size()) == 0 &&
+        Wh_GetStringValue(L"lockedVolumes", buf.data(), buf.size()) == 0) {
+        return;
+    }
     const std::wstring s = buf.data();
     size_t pos = 0;
     while (pos < s.size()) {
@@ -3759,8 +3854,9 @@ void EnforceLockedVolumes() {
             e.ep->SetMasterVolumeLevelScalar(level, nullptr);
         }
     }
-    if (g_locksDirty) PersistLockedVolumes();
 }
+
+void RestorePendingDeafen();
 
 static void WatchLockedDevice(IMMDevice* dev, const std::wstring& devId) {
     const std::wstring masterKey = L"devmaster:" + devId;
@@ -3807,11 +3903,13 @@ static void WatchLockedDevice(IMMDevice* dev, const std::wstring& devId) {
     if (!watchesNewSessions) mgr->Release();
 }
 
-// Called when the locks, the sessions or the devices change.
+// Called when the locks, the sessions or the devices change. New sessions are
+// also watched while apps wait to get their levels back from a Deafen.
 void RebuildLockWatch() {
     g_lockRebuildPending = false;
     StopLockWatch();
-    if (g_lockedVolumes.empty()) return;
+    RestorePendingDeafen();
+    if (g_lockedVolumes.empty() && g_deafenPending.empty()) return;
     if (!g_lockNotifier) g_lockNotifier = new LockNotifier();
 
     IMMDeviceEnumerator* enm = nullptr;
@@ -3886,64 +3984,100 @@ static bool IsWhitelisted(const Item& it, const std::vector<std::wstring>& white
     return false;
 }
 
-// The original levels are kept in the mod storage while Deafen is on, so a
-// crash or a power loss can't leave the other apps muted for good.
-void PersistDeafenState() {
-    std::wstring s = g_deafenDucked ? L"duck\n" : L"mute\n";
-    for (const auto& p : g_deafenSavedStates) {
+// One line per app: "key|deviceId<TAB>volume x1000<TAB>mute<TAB>ducked".
+static std::wstring SerializeDeafen(const std::map<std::wstring, DeafenSavedState>& states) {
+    std::wstring s;
+    for (const auto& p : states) {
         s += p.first;
         s += L'\t';
         s += std::to_wstring((int)std::lround(p.second.originalVol * 1000.0f));
-        s += p.second.originalMute ? L"\t1\n" : L"\t0\n";
+        s += p.second.originalMute ? L"\t1" : L"\t0";
+        s += p.second.ducked ? L"\t1\n" : L"\t0\n";
     }
-    Wh_SetStringValue(L"deafenState", s.c_str());
+    return s;
+}
+
+// Entries already in `out` are kept (they hold the older, original levels).
+static void LoadDeafenStates(const wchar_t* name, std::map<std::wstring, DeafenSavedState>& out) {
+    std::vector<WCHAR> buf(65536, 0);
+    if (Wh_GetStringValue(UserValueName(name).c_str(), buf.data(), buf.size()) == 0) return;
+    const std::wstring s = buf.data();
+    size_t start = 0;
+    while (start < s.size()) {
+        size_t nl = s.find(L'\n', start);
+        if (nl == std::wstring::npos) nl = s.size();
+        const std::wstring line = s.substr(start, nl - start);
+        start = nl + 1;
+        const size_t t1 = line.find(L'\t');
+        const size_t t2 = t1 == std::wstring::npos ? std::wstring::npos : line.find(L'\t', t1 + 1);
+        const size_t t3 = t2 == std::wstring::npos ? std::wstring::npos : line.find(L'\t', t2 + 1);
+        if (t3 == std::wstring::npos) continue;
+        DeafenSavedState ds;
+        ds.originalVol = std::clamp(_wtoi(line.c_str() + t1 + 1) / 1000.0f, 0.0f, 1.0f);
+        ds.originalMute = line.compare(t2 + 1, 1, L"1") == 0;
+        ds.ducked = line.compare(t3 + 1, 1, L"1") == 0;
+        out.emplace(line.substr(0, t1), ds);
+    }
+}
+
+// The original levels are kept in the mod storage: while Deafen is on, and
+// afterwards for apps that weren't running when it ended. A crash, a sign-out
+// or a power loss can't leave the other apps muted or ducked for good.
+void PersistDeafenState() {
+    Wh_SetStringValue(UserValueName(L"deafenState").c_str(), SerializeDeafen(g_deafenSavedStates).c_str());
+    Wh_SetStringValue(UserValueName(L"deafenPending").c_str(), SerializeDeafen(g_deafenPending).c_str());
+}
+
+// Restores the entries whose app has an audio session now and removes them.
+static size_t RestoreDeafenEntries(std::map<std::wstring, DeafenSavedState>& states) {
+    if (states.empty()) return 0;
+    std::vector<Item> items;
+    // Inactive sessions too: an app that went quiet still has to be restored.
+    BuildItems(items, true, true);
+    std::vector<std::wstring> restored;
+    for (Item& it : items) {
+        if (it.kind != 2) continue;
+        const std::wstring id = it.key + L"|" + it.deviceId;
+        auto found = states.find(id);
+        if (found == states.end()) continue;
+        if (found->second.ducked) SetItemVolumeRaw(it, found->second.originalVol);
+        SetItemMute(it, found->second.originalMute);
+        restored.push_back(id);
+    }
+    ReleaseItems(items);
+    for (const auto& id : restored) states.erase(id);
+    return restored.size();
+}
+
+// Apps that weren't running get their levels back as soon as they play again
+// (called on every new audio session while any are waiting).
+void RestorePendingDeafen() {
+    if (!g_deafenPending.empty() && RestoreDeafenEntries(g_deafenPending) > 0) PersistDeafenState();
 }
 
 void RestoreDeafen(bool showBanner) {
     if (!g_deafenActive) return;
-    std::vector<Item> items;
-    // Sessions that went quiet in the meantime must be restored too.
-    BuildItems(items, true, true);
-    for (Item& it : items) {
-        if (it.kind != 2) continue;
-        auto found = g_deafenSavedStates.find(it.key + L"|" + it.deviceId);
-        if (found == g_deafenSavedStates.end()) continue;
-        if (g_deafenDucked) SetItemVolumeRaw(it, found->second.originalVol);
-        SetItemMute(it, found->second.originalMute);
-    }
-    ReleaseItems(items);
+    RestoreDeafenEntries(g_deafenSavedStates);
+    for (const auto& p : g_deafenSavedStates) g_deafenPending.emplace(p.first, p.second);
     g_deafenSavedStates.clear();
     g_deafenActive = false;
-    Wh_SetStringValue(L"deafenState", L"");
-    EnforceLockedVolumes();
+    PersistDeafenState();
+    RebuildLockWatch();  // locks again, and watches new sessions for pending apps
     if (showBanner) ShowOsd(L10n(StrId::DeafenOff), 1.0f, false, nullptr, OsdKind::Banner);
 }
 
-// Restores what a Deafen interrupted by a crash or a shutdown left muted or ducked.
+// At start: restores what a Deafen interrupted by a crash, a sign-out or a
+// power loss left muted or ducked, now or when those apps play again.
 void RecoverDeafenState() {
-    std::vector<WCHAR> buf(65536, 0);
-    if (Wh_GetStringValue(L"deafenState", buf.data(), buf.size()) == 0 || !buf[0]) return;
-    const std::wstring s = buf.data();
-    g_deafenSavedStates.clear();
-    size_t pos = s.find(L'\n');
-    g_deafenDucked = (s.compare(0, pos, L"duck") == 0);
-    while (pos != std::wstring::npos && pos + 1 < s.size()) {
-        const size_t start = pos + 1;
-        pos = s.find(L'\n', start);
-        const std::wstring line = s.substr(start, pos == std::wstring::npos ? std::wstring::npos : pos - start);
-        const size_t t1 = line.find(L'\t');
-        const size_t t2 = t1 == std::wstring::npos ? std::wstring::npos : line.find(L'\t', t1 + 1);
-        if (t2 == std::wstring::npos) continue;
-        DeafenSavedState ds;
-        ds.originalVol = std::clamp(_wtoi(line.c_str() + t1 + 1) / 1000.0f, 0.0f, 1.0f);
-        ds.originalMute = line.compare(t2 + 1, 1, L"1") == 0;
-        g_deafenSavedStates[line.substr(0, t1)] = ds;
-    }
-    if (g_deafenSavedStates.empty()) {
-        Wh_SetStringValue(L"deafenState", L"");
+    LoadDeafenStates(L"deafenPending", g_deafenPending);
+    std::map<std::wstring, DeafenSavedState> interrupted;
+    LoadDeafenStates(L"deafenState", interrupted);
+    if (interrupted.empty()) {
+        RestorePendingDeafen();
         return;
     }
-    Wh_Log(L"Restoring %d apps from an interrupted Deafen", (int)g_deafenSavedStates.size());
+    Wh_Log(L"Restoring %d apps from an interrupted Deafen", (int)interrupted.size());
+    g_deafenSavedStates = std::move(interrupted);
     g_deafenActive = true;
     RestoreDeafen(false);
 }
@@ -3977,6 +4111,7 @@ void ToggleDeafenBackground() {
             DeafenSavedState ds;
             ds.originalVol = it.vol;
             ds.originalMute = it.mute;
+            ds.ducked = duck;
             g_deafenSavedStates[it.key + L"|" + it.deviceId] = ds;
             if (duck) {
                 if (it.vol > duckVol) SetItemVolumeRaw(it, duckVol);
@@ -3986,7 +4121,6 @@ void ToggleDeafenBackground() {
         }
         ReleaseItems(items);
         g_deafenActive = true;
-        g_deafenDucked = duck;
         PersistDeafenState();
         if (activeName.empty()) activeName = L10n(StrId::ActiveApp);
         ShowOsd(std::wstring(L10n(StrId::DeafenOn)) + L": " + activeName, 1.0f, false, activeIcon, OsdKind::Banner);
@@ -5142,18 +5276,49 @@ static HMONITOR OsdTargetMonitor() {
     return MonitorFromPoint(c, MONITOR_DEFAULTTOPRIMARY);
 }
 
-// Click-through unless the user wants to drag the OSD.
+// Click-through unless the user wants to drag the OSD or a visible pointer is
+// over it, so it never takes the mouse from a game.
 void ApplyOsdWindowStyle() {
     if (!g_hwndOsd) return;
+    const bool interactive = g_cfg.osdAllowDrag || g_hookOsdHover;
     const LONG_PTR ex = GetWindowLongPtrW(g_hwndOsd, GWL_EXSTYLE);
-    const LONG_PTR want = g_cfg.osdAllowDrag ? (ex & ~(LONG_PTR)WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
+    const LONG_PTR want = interactive ? (ex & ~(LONG_PTR)WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
     if (want != ex) SetWindowLongPtrW(g_hwndOsd, GWL_EXSTYLE, want);
+}
+
+// Like the Windows flyout, the OSD stays while the pointer rests on it and the
+// mouse wheel over it changes the volume. A hidden pointer (games) never counts.
+void UpdateOsdHover() {
+    CURSORINFO ci{sizeof(ci)};
+    RECT r{};
+    const bool hover = IsWindowVisible(g_hwndOsd) && GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) &&
+                       GetWindowRect(g_hwndOsd, &r) && PtInRect(&r, ci.ptScreenPos);
+    if (hover) {
+        AcquireSRWLockExclusive(&g_hookLock);
+        g_hookOsdRect = r;
+        ReleaseSRWLockExclusive(&g_hookLock);
+    }
+    if (hover == g_hookOsdHover) return;
+    g_hookOsdHover = hover;
+    ApplyOsdWindowStyle();
+    if (!hover) {
+        const DWORD linger = GetTickCount() + 1000;
+        if ((LONG)(linger - g_osdHideTick) > 0) g_osdHideTick = linger;
+    }
+}
+
+void HideOsd() {
+    KillTimer(g_hwndOsd, ID_TIMER_OSD);
+    ShowWindow(g_hwndOsd, SW_HIDE);
+    g_hookOsdHover = false;
+    ApplyOsdWindowStyle();
 }
 
 void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKind kind,
              const std::wstring& detail, DWORD durationMs) {
     if (!g_hwndOsd || g_osdDragging) return;
     if (kind == OsdKind::Volume && !g_cfg.enableVolumeOsd) return;
+    if (kind == OsdKind::Banner) g_osdTarget = OsdTarget::None;
     vol = std::clamp(vol, 0.0f, 1.0f);
 
     HMONITOR mon = nullptr;
@@ -5429,9 +5594,11 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
     if (kind == OsdKind::Banner) timeout = std::max<DWORD>(timeout, 1800);
     g_osdHideTick = GetTickCount() + timeout;
     SetTimer(g_hwndOsd, ID_TIMER_OSD, 50, nullptr);
+    UpdateOsdHover();
 }
 
 void ShowOsdDragPreview() {
+    g_osdTarget = OsdTarget::None;
     ShowOsd(L10n(StrId::OsdDragHint), 0.5f, false, nullptr, OsdKind::Always, L"", 10000);
 }
 
@@ -5441,7 +5608,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return MA_NOACTIVATE;
 
     case WM_NCHITTEST:
-        return g_cfg.osdAllowDrag ? HTCLIENT : HTTRANSPARENT;
+        return (g_cfg.osdAllowDrag || g_hookOsdHover) ? HTCLIENT : HTTRANSPARENT;
 
     case WM_SETCURSOR:
         if (g_cfg.osdAllowDrag) {
@@ -5450,10 +5617,14 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         break;
 
+    case WM_MOUSEWHEEL:
+        OnOsdWheel(GET_WHEEL_DELTA_WPARAM(wParam));
+        return 0;
+
     case WM_TIMER:
-        if (wParam == ID_TIMER_OSD && !g_osdDragging && (LONG)(GetTickCount() - g_osdHideTick) >= 0) {
-            KillTimer(hwnd, ID_TIMER_OSD);
-            ShowWindow(hwnd, SW_HIDE);
+        if (wParam == ID_TIMER_OSD && !g_osdDragging) {
+            UpdateOsdHover();
+            if (!g_hookOsdHover && (LONG)(GetTickCount() - g_osdHideTick) >= 0) HideOsd();
         }
         return 0;
 
@@ -6223,20 +6394,47 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+// The notification area of the visible primary taskbar, where Windows 11 shows
+// its own volume tooltip when the wheel turns over the speaker icon.
+static bool PtInNotifyArea(POINT pt) {
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND notify = tray ? FindWindowExW(tray, nullptr, L"TrayNotifyWnd", nullptr) : nullptr;
+    RECT rc{};
+    if (!notify || !GetWindowRect(notify, &rc) || !PtInRect(&rc, pt)) return false;
+    // A full-screen window can cover the taskbar.
+    return GetAncestor(WindowFromPoint(pt), GA_ROOT) == tray;
+}
+
 // Clicks are never swallowed: a click outside closes the popup and still
-// reaches the window under the cursor.
+// reaches the window under the cursor. The wheel is swallowed only over the OSD
+// and, when the Windows flyout is replaced, over the notification area.
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         const MSLLHOOKSTRUCT* ms = (const MSLLHOOKSTRUCT*)lParam;
         if (wParam == WM_MOUSEWHEEL) {
+            const WPARAM delta = (WPARAM)(SHORT)HIWORD(ms->mouseData);
+            if (g_hookOsdHover) {
+                AcquireSRWLockShared(&g_hookLock);
+                const RECT rc = g_hookOsdRect;
+                ReleaseSRWLockShared(&g_hookLock);
+                if (PtInRect(&rc, ms->pt)) {
+                    PostMessageW(g_hwnd, WM_APP_OSD_WHEEL, delta, 0);
+                    return 1;
+                }
+            }
+            bool onTrayIcon = false;
             if (g_hookTrayWheel) {
                 AcquireSRWLockShared(&g_hookLock);
                 const RECT rc = g_hookTrayRect;
                 ReleaseSRWLockShared(&g_hookLock);
                 if (PtInRect(&rc, ms->pt)) {
-                    PostMessageW(g_hwnd, WM_APP_TRAY_WHEEL, (WPARAM)(SHORT)HIWORD(ms->mouseData),
-                                 MAKELPARAM(ms->pt.x, ms->pt.y));
+                    onTrayIcon = true;
+                    PostMessageW(g_hwnd, WM_APP_TRAY_WHEEL, delta, MAKELPARAM(ms->pt.x, ms->pt.y));
                 }
+            }
+            if (g_hookReplaceOsd && PtInNotifyArea(ms->pt)) {
+                if (!onTrayIcon) PostMessageW(g_hwnd, WM_APP_TASKBAR_WHEEL, delta, 0);
+                return 1;
             }
         } else if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
                    wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN) {
@@ -6257,17 +6455,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// The windows and hooks of the mod work in physical pixels (per-monitor v2),
-// whatever DPI awareness the host process declares.
-void SetPerMonitorDpiAwareness() {
-    using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    auto fn = user32 ? (SetThreadDpiAwarenessContext_t)GetProcAddress(user32, "SetThreadDpiAwarenessContext") : nullptr;
-    if (fn) fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-}
-
 DWORD WINAPI HookThreadProc(LPVOID param) {
-    SetPerMonitorDpiAwareness();
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the message queue
     HHOOK kbdHook = nullptr;
@@ -6325,7 +6513,8 @@ void StopHookThread() {
 
 // Each hook is installed only while a feature needs it: the keyboard hook for
 // configured hotkeys, the media key replacement and the open popup (any key
-// closes it); the mouse hook for the open popup and the tray wheel.
+// closes it); the mouse hook for the open popup, the tray wheel and the
+// replacement of the Windows volume tooltip in the notification area.
 void UpdateHooks() {
     const bool trayWheel = g_cfg.showTrayIcon && g_cfg.trayScrollVolume && g_trayAdded;
     g_hookTrayWheel = trayWheel;
@@ -6342,7 +6531,7 @@ void UpdateHooks() {
         PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_KBD, wantKbd ? 1 : 0, 0)) {
         g_kbdHookWanted = wantKbd;
     }
-    const bool wantMouse = g_visible || trayWheel;
+    const bool wantMouse = g_visible || trayWheel || g_hookReplaceOsd;
     if (wantMouse != g_mouseHookWanted &&
         PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_MOUSE, wantMouse ? 1 : 0, 0)) {
         g_mouseHookWanted = wantMouse;
@@ -6592,6 +6781,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             break;
 
+        case WM_QUERYENDSESSION:
+            return TRUE;
+
+        // Sign-out or shutdown: the process is then ended without the normal
+        // cleanup, so Deafen is undone now, while the other apps still run.
+        case WM_ENDSESSION:
+            if (wParam) {
+                RestoreDeafen(false);
+                if (g_locksDirty) PersistLockedVolumes();
+            }
+            return 0;
+
         case WM_DISPLAYCHANGE:
             if (g_visible) HidePopup();
             RefreshTrayRect();
@@ -6626,13 +6827,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RECT rc{};
             const POINT pt{(short)LOWORD(lParam), (short)HIWORD(lParam)};
             if (g_cfg.trayScrollVolume && GetTrayIconRect(&rc) && PtInRect(&rc, pt)) {
-                const float step = g_cfg.wheelStep / 100.0f;
-                AdjustMasterVolume((short)wParam > 0 ? step : -step, false);
+                const int notches = TakeWheelNotches((short)wParam);
+                if (notches) AdjustMasterVolume(notches * g_cfg.wheelStep / 100.0f, false);
             } else {
                 RefreshTrayRect();
             }
             return 0;
         }
+
+        case WM_APP_TASKBAR_WHEEL: {
+            const int notches = TakeWheelNotches((short)wParam);
+            if (notches) AdjustMasterVolume(notches * g_cfg.wheelStep / 100.0f, false, true);
+            return 0;
+        }
+
+        case WM_APP_OSD_WHEEL:
+            OnOsdWheel((short)wParam);
+            return 0;
 
         case WM_HOTKEY: {
             const float step = g_cfg.wheelStep / 100.0f;
@@ -6736,6 +6947,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (wParam == ID_TIMER_REFRESH_ONCE) {
                 KillTimer(hwnd, ID_TIMER_REFRESH_ONCE);
                 if (g_visible && !g_hiding && !g_dragging) RefreshModel(false);
+            } else if (wParam == ID_TIMER_SAVE_LOCKS) {
+                KillTimer(hwnd, ID_TIMER_SAVE_LOCKS);
+                if (g_locksDirty) PersistLockedVolumes();
             }
             return 0;
 
@@ -6895,7 +7109,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 Item& it = g_items[i];
                 SetItemVolume(it, it.vol + (delta > 0 ? step : -step));
                 if (it.mute && it.vol > 0.0f && delta > 0) SetItemMute(it, false);
-                if (g_locksDirty) PersistLockedVolumes();
                 Render();
                 UpdateTrayIcon();
             }
@@ -6910,13 +7123,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 DWORD WINAPI UiThreadProc(LPVOID) {
-    SetPerMonitorDpiAwareness();
     const HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // The audio service delivers new-session notifications (used by the volume
+    // locks and the Deafen restore) only to processes that have an MTA.
+    // Resolved at run time: the 32-bit MinGW import library lacks these.
+    using CoMtaIncFn = HRESULT(WINAPI*)(CO_MTA_USAGE_COOKIE*);
+    using CoMtaDecFn = HRESULT(WINAPI*)(CO_MTA_USAGE_COOKIE);
+    HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
+    auto coMtaInc = ole32 ? (CoMtaIncFn)GetProcAddress(ole32, "CoIncrementMTAUsage") : nullptr;
+    auto coMtaDec = ole32 ? (CoMtaDecFn)GetProcAddress(ole32, "CoDecrementMTAUsage") : nullptr;
+    CO_MTA_USAGE_COOKIE mtaCookie = nullptr;
+    const bool mtaOk = coMtaInc && coMtaDec && SUCCEEDED(coMtaInc(&mtaCookie));
     GdiplusStartupInput gsi;
     const bool gdiOk = (GdiplusStartup(&g_gdiplusToken, &gsi, nullptr) == Ok);
 
-    // Window classes belong to this mod's DLL, not to explorer.exe, so a
-    // reloaded mod never reuses a class whose window procedure was unloaded.
+    // Window classes belong to this mod's DLL, not to the host executable, so
+    // a reloaded mod never reuses a class whose window procedure was unloaded.
     static const int s_moduleAnchor = 0;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCWSTR)&s_moduleAnchor, &g_hInst)) {
@@ -7025,6 +7247,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 
     FreeGdiCache();
     if (gdiOk) GdiplusShutdown(g_gdiplusToken);
+    if (mtaOk) coMtaDec(mtaCookie);
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
@@ -7061,9 +7284,10 @@ void WhTool_ModUninit() {
     Wh_Log(L"Uninitializing");
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP_QUIT, 0, 0);
     if (g_thread) {
-        // The process exits right after this returns; the UI thread finishes
-        // its cleanup (Deafen, locks, tray icon, hooks) first.
-        WaitForSingleObject(g_thread, INFINITE);
+        // The process exits right after this returns. The UI thread finishes
+        // its cleanup (Deafen, locks, tray icon, hooks) first; if it hangs, the
+        // process exits anyway, so the mutex can't keep a restarted mod off.
+        if (WaitForSingleObject(g_thread, 10000) != WAIT_OBJECT_0) Wh_Log(L"UI thread didn't stop in time");
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
