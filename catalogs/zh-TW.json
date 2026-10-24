@@ -9878,6 +9878,40 @@
         "version": "1.0.0"
       }
     },
+    "minecraft-launcher-region-spoof": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792864822000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792864822000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Creeam",
+        "compilerOptions": "-lshell32",
+        "description": "伪装PCL CE和HMCL读取到的设备信息",
+        "github": "https://github.com/HaHaWTH",
+        "include": [
+          "PCL2_CE*.exe",
+          "HMCL*.exe",
+          "java.exe",
+          "javaw.exe"
+        ],
+        "name": "启动器设备区域伪装",
+        "version": "0.1.0"
+      },
+      "metadataEnglish": {
+        "description": "Spoof process region signals for PCL CE and HMCL.",
+        "name": "Minecraft launcher region detection spoof"
+      }
+    },
     "minimize-to-tray": {
       "details": {
         "defaultSorting": 7570,
@@ -10067,7 +10101,7 @@
         "ratingUsers": 30,
         "reviews": 0,
         "trendingSorting": 41.857215009815924,
-        "updated": 1791885825000,
+        "updated": 1792864818000,
         "users": 1010
       },
       "metadata": {
@@ -10079,7 +10113,7 @@
           "windhawk.exe"
         ],
         "name": "Mond Desktop Clock",
-        "version": "3.5"
+        "version": "5.1"
       }
     },
     "monitor-rounded-edges": {

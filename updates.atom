@@ -2,12 +2,79 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T17:03:49.000Z</updated>
+    <updated>2026-10-24T18:00:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Minecraft launcher region detection spoof 0.1.0]]></title>
+        <id>https://windhawk.net/mods/minecraft-launcher-region-spoof#59268a9c67ff2f2a6709162c426e1eacbf525832</id>
+        <link href="https://windhawk.net/mods/minecraft-launcher-region-spoof"/>
+        <updated>2026-10-24T18:00:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="minecraftlauncherregiondetectionspoof">Minecraft launcher region detection spoof</h1>
+<p>Presents Singapore region information to PCL CE and HMCL to bypass their
+mainland China restrictions on downloading, installing and repairing Minecraft.
+The purpose is to give users the same choice of launcher features across regions.</p>
+<h2 id="regionandtimezone">Region and time zone</h2>
+<ul>
+<li>PCL CE: user region <code>SG</code>, Windows device region GeoID <code>215</code>, and
+<code>Singapore Standard Time</code>.</li>
+<li>HMCL: Windows user GeoID <code>215</code>, JVM country <code>SG</code>, and JVM time zone
+<code>Asia/Singapore</code>. Existing <code>user.country</code> and <code>user.timezone</code> JVM options are
+replaced, and legacy <code>user.region</code> options are removed.</li>
+<li>The affected launcher's time zone is fixed to UTC+8, without daylight saving
+time. Local times shown by the launcher use UTC+8 even when Windows is set to
+another time zone.</li>
+<li>Language settings are preserved. Locale-dependent formats can reflect the
+Singapore region. The overrides apply within the target processes.</li>
+</ul>
+<h2 id="targetprocesses">Target processes</h2>
+<p>Supports 64-bit x64 and ARM64 processes with these executable names:</p>
+<ul>
+<li><code>PCL2_CE*.exe</code> for PCL CE.</li>
+<li><code>HMCL*.exe</code> for HMCL executables.</li>
+<li><code>java.exe</code> and <code>javaw.exe</code> when the command line launches <code>HMCL*.jar</code>,
+a JAR embedded in <code>HMCL*.exe</code>, or the main class <code>org.jackhuang.hmcl.Main</code>.</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<p>Enable the mod before starting HMCL so that its region options are set before
+JVM creation. Restart PCL CE after enabling the mod to refresh its cached region
+and local time zone. To restore the original region behavior, disable the mod and
+fully restart the affected launcher.</p>
+<h2 id="upstreamchanges">Upstream changes</h2>
+<ul>
+<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3673">PCL CE #3673</a> introduces
+mainland China restrictions for Minecraft and modpack downloads, installation
+and repair, using Windows region, locale, language and time zone signals.</li>
+<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3676">PCL CE #3676</a> adds the Windows
+device region as an additional detection signal.</li>
+<li><a href="https://github.com/HMCL-dev/HMCL/pull/7017">HMCL #7017</a> introduces mainland China
+restrictions for game downloads.</li>
+</ul>]]></content>
+        <author>
+            <name>Creeam</name>
+            <uri>https://github.com/HaHaWTH</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mond Desktop Clock 5.1]]></title>
+        <id>https://windhawk.net/mods/mond-desktop-clock#f8cc42031b51bfcdb218a3a9a8b1a153168a32f2</id>
+        <link href="https://windhawk.net/mods/mond-desktop-clock"/>
+        <updated>2026-10-24T18:00:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Seconds: new “Show seconds” toggle. Digits use fixed-width cells so the time doesn’t jitter as it ticks.</li>
+<li>Monitors: show the clock on all monitors, the primary only, or a specific monitor number. You can also turn off “Same position on every monitor” to drag and save each monitor’s clock independently.</li>
+<li>Alignment: a global Left / Centre / Right setting, plus a per-row override. The aligned edge stays fixed when weekday or month names change length.</li>
+<li>Settings tidy-up: grouped as Layout → Placement → Weekday → Date → Time → Per-letter, with labelled prefixes and the same order for every row.</li>
+<li>Upgrade note: shadow offsets reset to 2 DIPs, and old weekday letter colours should be re-entered in the new per-letter group. Everything else carries over.</li>
+</ul>]]></content>
+        <author>
+            <name>Elmidin Mahmud</name>
+            <uri>https://github.com/elmidin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CoverTabby 1.1]]></title>
         <id>https://windhawk.net/mods/covertabby#06ce71bdeee78673eae1739196e0779619abe5de</id>
@@ -686,47 +753,6 @@ If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Caption Buttons Customizer 1.1]]></title>
-        <id>https://windhawk.net/mods/caption-buttons-customizer#1a95de3f8c479a7032dbdaf5ee43df7f1fda1d71</id>
-        <link href="https://windhawk.net/mods/caption-buttons-customizer"/>
-        <updated>2026-10-23T09:04:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <em>Tighten button spacing</em> to bring the caption buttons closer together.</li>
-<li>The maximize/restore hover symbol is now two triangles, macOS style, and hover symbols are more saturated.</li>
-<li>Fixed wrong maximize/restore colors and sizes at 125%, 150% and 175% scaling, and distorted custom images.</li>
-<li>Fixed DWM freezing when an app hangs.</li>
-<li>Fixed the old icon area still opening the system menu or closing the window after the icon was moved.</li>
-</ul>]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spotlight Launcher 0.7.0]]></title>
-        <id>https://windhawk.net/mods/spotlight-launcher#6fcd3d85b84e3caf6c8ff1add265132f272a0735</id>
-        <link href="https://windhawk.net/mods/spotlight-launcher"/>
-        <updated>2026-10-23T09:04:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a <strong>Files</strong> mode: browse drives and folders in the launcher with location chips, a path bar, folder history, an actions menu (rename, copy, new folder, terminal, properties, Recycle Bin), filters and image thumbnails.</li>
-<li>Added <strong>deep search</strong> in the current folder and all its subfolders, with results appearing while the background scan runs.</li>
-<li>Added <strong>web search</strong> results with a configurable engine (Google, Bing, DuckDuckGo, YouTube, Wikipedia) and <code>?</code>, <code>g:</code>, <code>b:</code>, <code>d:</code>, <code>y:</code>, <code>w:</code> prefixes.</li>
-<li>Added <strong>Windows Settings</strong> results for common settings pages.</li>
-<li>Added an <strong>F1 help sheet</strong> with all shortcuts, prefixes and file filters, plus a second page documenting the calculator syntax.</li>
-<li>Added the <strong>Open on monitor</strong> setting (monitor with the mouse, active window or primary).</li>
-<li>Added the <strong>File browser</strong> setting to turn Files mode off; the folder button is hidden and Tab goes back to the app list.</li>
-<li>Grouped the settings into <strong>Appearance</strong>, <strong>Behavior</strong>, <strong>Shortcuts</strong>, <strong>Apps</strong>, <strong>Features</strong> and <strong>Sounds</strong>.</li>
-<li>Improved Files performance: metadata is built lazily, very large folders are capped at 5,000 folders and 5,000 files, and image previews decode in the background (network and cloud placeholders are skipped).</li>
-<li><strong>Live acrylic</strong> now also drives Glass in real time; <strong>Blur strength</strong> applies to Mica and, while Live acrylic is off, to the other effects.</li>
-<li>Removed <strong>Open with</strong> from the Files actions menu.</li>
-<li>Fixed the bar closing after deleting a file or folder, and the acrylic backdrop lingering briefly after the bar is hidden.</li>
-</ul>]]></content>
-        <author>
-            <name>David Ravelo</name>
-            <uri>https://github.com/DavidRaveloU</uri>
         </author>
     </entry>
 </feed>

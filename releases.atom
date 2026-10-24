@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-24T16:33:13.000Z</updated>
+    <updated>2026-10-24T18:00:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Minecraft launcher region detection spoof 0.1.0]]></title>
+        <id>https://windhawk.net/mods/minecraft-launcher-region-spoof#59268a9c67ff2f2a6709162c426e1eacbf525832</id>
+        <link href="https://windhawk.net/mods/minecraft-launcher-region-spoof"/>
+        <updated>2026-10-24T18:00:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="minecraftlauncherregiondetectionspoof">Minecraft launcher region detection spoof</h1>
+<p>Presents Singapore region information to PCL CE and HMCL to bypass their
+mainland China restrictions on downloading, installing and repairing Minecraft.
+The purpose is to give users the same choice of launcher features across regions.</p>
+<h2 id="regionandtimezone">Region and time zone</h2>
+<ul>
+<li>PCL CE: user region <code>SG</code>, Windows device region GeoID <code>215</code>, and
+<code>Singapore Standard Time</code>.</li>
+<li>HMCL: Windows user GeoID <code>215</code>, JVM country <code>SG</code>, and JVM time zone
+<code>Asia/Singapore</code>. Existing <code>user.country</code> and <code>user.timezone</code> JVM options are
+replaced, and legacy <code>user.region</code> options are removed.</li>
+<li>The affected launcher's time zone is fixed to UTC+8, without daylight saving
+time. Local times shown by the launcher use UTC+8 even when Windows is set to
+another time zone.</li>
+<li>Language settings are preserved. Locale-dependent formats can reflect the
+Singapore region. The overrides apply within the target processes.</li>
+</ul>
+<h2 id="targetprocesses">Target processes</h2>
+<p>Supports 64-bit x64 and ARM64 processes with these executable names:</p>
+<ul>
+<li><code>PCL2_CE*.exe</code> for PCL CE.</li>
+<li><code>HMCL*.exe</code> for HMCL executables.</li>
+<li><code>java.exe</code> and <code>javaw.exe</code> when the command line launches <code>HMCL*.jar</code>,
+a JAR embedded in <code>HMCL*.exe</code>, or the main class <code>org.jackhuang.hmcl.Main</code>.</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<p>Enable the mod before starting HMCL so that its region options are set before
+JVM creation. Restart PCL CE after enabling the mod to refresh its cached region
+and local time zone. To restore the original region behavior, disable the mod and
+fully restart the affected launcher.</p>
+<h2 id="upstreamchanges">Upstream changes</h2>
+<ul>
+<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3673">PCL CE #3673</a> introduces
+mainland China restrictions for Minecraft and modpack downloads, installation
+and repair, using Windows region, locale, language and time zone signals.</li>
+<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3676">PCL CE #3676</a> adds the Windows
+device region as an additional detection signal.</li>
+<li><a href="https://github.com/HMCL-dev/HMCL/pull/7017">HMCL #7017</a> introduces mainland China
+restrictions for game downloads.</li>
+</ul>]]></content>
+        <author>
+            <name>Creeam</name>
+            <uri>https://github.com/HaHaWTH</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 8 Network Flyout Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win8-network-flyout-restorer#35d6cd4fc00a4f4967d447e43526abc262498e88</id>
@@ -1076,80 +1126,6 @@ Ctrl+V may occasionally land before the pasted image.</p>]]></content>
         <author>
             <name>caotu2k5</name>
             <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8/8.1 Charms Bar Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win8-charms-bar-recreation#328bb6c97e345a873450e686596eae2c9dd4a6c6</id>
-        <link href="https://windhawk.net/mods/win8-charms-bar-recreation"/>
-        <updated>2026-10-21T10:04:43.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows881charmsbarrecreation">Windows 8/8.1 Charms Bar Recreation</h1>
-<p>This mod recreates the classic Windows 8/8.1 Charms Bar on Windows 10 and 11.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="windows881styledcharmsbar">Windows 8/8.1-styled Charms Bar</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8charmsnormal.PNG" alt="win8charmsnormal" /></p>
-<h3 id="windows8betastyledcharmsbar">Windows 8 beta-styled Charms Bar</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betacharms.PNG" alt="win8betacharms" /></p>
-<h2 id="aboutthemod">About the mod</h2>
-<p>It recreates the five charms (Search, Share, Start, Devices, Settings) with Win+C and edge activation, keyboard and touch input, multi-monitor placement, and a clock/status flyout. Suggestions are welcome. Tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
-Note: This is a best effort modification. Layout, colors, icons and animations are heavily inspired by Windows 8/8.1. Share, Devices and the Second screen panel are recreations on Windows 10/11, not the original code.</p>
-<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
-<p>| Shortcut | Action |
-| --- | --- |
-| Win+C | Opens the Charms Bar |
-| Right-edge mouse gesture | Opens the Charms Bar |
-| Esc | Closes the rail or an open pane |
-| Click outside | Closes the rail or an open pane |</p>
-<p>While a charm pane is open:</p>
-<p>| Shortcut | Action |
-| --- | --- |
-| Win+C | Closes the current pane first |
-| Esc | Closes the current pane |
-| Click outside | Closes the current pane |</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Charms Bar enabled</strong>: turns the Charms Bar on or off. Share is always included.</li>
-<li><strong>In-mod language</strong>: English, Italian, German, French, Spanish, Japanese, Portuguese, Russian, Chinese
-(Simplified) or Korean. The choice applies to the rail, the charm panes and the Project panel alike.</li>
-<li><strong>Activation mode</strong>: full right edge, top-right corner, Win+C, or combinations.</li>
-<li><strong>Hide after choosing a charm</strong>: closes the Charms Bar after a charm is activated. Turn off to leave it open.</li>
-<li><strong>Close on outside click or focus change</strong>: light-dismiss behavior.</li>
-<li><strong>Animate show and hide</strong>: enables pane motion. Windows' own <em>Settings > Accessibility > Visual effects >
-Animation effects</em> switch is always honoured: when it is off, the rail and the panes appear and disappear
-instantly even if this setting is on.</li>
-<li><strong>Start logo style</strong>: Windows 8/8.1 logo (system accent) or the Windows 8 Build 8102 beta logo.</li>
-<li><strong>Charms Bar icons</strong>: Windows 8/8.1 icons, or the Windows 8 Build 8102 beta set for Search, Share, Devices and Settings. The Start logo is set separately.</li>
-<li><strong>Enable rail transparency</strong>: optional subtle rail transparency.</li>
-<li><strong>Show clock and system status flyout</strong>: shows or hides the clock and status flyout.</li>
-<li><strong>Settings pane color</strong>: system accent or dark background for the Settings, Devices and Share panes.</li>
-<li><strong>Settings charm</strong>: recreated Windows 8-style pane or native Win+I.</li>
-<li><strong>Search charm target</strong>: automatic or Windows search. Automatic opens the companion
-<em>Windows 8/8.1 Search Charm Recreation</em> panel when that mod is installed, otherwise it sends the
-Windows shortcut.</li>
-<li><strong>Search hand-off shortcut</strong>: automatic, Win+S, or Win+Q. Used only when the target is Windows search.</li>
-<li><strong>Share fallback behavior</strong>: automatic, Windows Share UI, Win+H, or mail/clipboard.</li>
-<li><strong>Display Switch panel title, color and custom color</strong>: see the project flyout settings at the end of the settings page.</li>
-</ul>
-<h2 id="performance">Performance</h2>
-<p>Live system data (volume, brightness, network, battery) is read only while a pane or flyout is open. Rendering falls back to native GDI if GDI+ startup fails.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 version 1809 or later (64-bit), with DWM enabled (default on Windows)</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The Charms Bar appears on the main monitor, where all five charms are displayed.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Icepenguins101 - Technical Inspiration </li>
-<li>AdministratoX - Testing on Windows 11 25H2 and providing feedback</li>
-<li>Kiyaku - Providing feedback</li>
-<li>CharmsBarReloaded project - Wi-Fi PNGs and battery silhouettes (GPL-3.0, license-compatible)</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
