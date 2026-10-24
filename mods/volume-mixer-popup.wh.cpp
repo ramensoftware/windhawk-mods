@@ -72,9 +72,10 @@ frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
   tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
   Windows itself; when Windows shows its flyout for one of them, the mod keeps that flyout invisible (it clips
   Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step.
-  Brightness and other Windows indicators stay as they are. While the option is on, other tray apps and mods that react to the wheel in the notification area
-  (for example Taskbar Volume Control with the tray area as its scroll area) don't get it. Volume indicators of
-  manufacturer utilities (laptop or keyboard software) are separate programs and aren't affected.
+  Brightness and other Windows indicators stay as they are. While the option is on, other tray apps and mods
+  that react to the wheel in the notification area (for example Taskbar Volume Control with the tray area as its
+  scroll area) don't get it. Volume indicators of manufacturer utilities (laptop or keyboard software) are
+  separate programs and aren't affected.
 
 ## ⌨️ Hotkeys
 | Action | Default |
@@ -3116,7 +3117,14 @@ constexpr float kHeardPeak = 0.0001f;
 constexpr DWORD kQuietGraceMs = 8000;
 
 static void NoteHeard(const Item& app) {
-    g_lastHeard[app.key + L"|" + app.deviceId] = GetTickCount();
+    const DWORD now = GetTickCount();
+    if (g_lastHeard.size() > 256) {  // apps that closed long ago
+        for (auto it = g_lastHeard.begin(); it != g_lastHeard.end();) {
+            if (now - it->second >= kQuietGraceMs) it = g_lastHeard.erase(it);
+            else ++it;
+        }
+    }
+    g_lastHeard[app.key + L"|" + app.deviceId] = now;
 }
 
 // A muted or zeroed app stays listed, so that it can be turned back up.
@@ -6829,6 +6837,13 @@ static bool ReadMasterChange(float* vol, bool* mute) {
     return changed;
 }
 
+// After the default device changes, its own level is the one to compare with.
+void ResyncMasterLevel() {
+    float v = 0.0f;
+    bool m = false;
+    ReadMasterChange(&v, &m);
+}
+
 static void ReplaceSystemFlyout(HWND hwnd) {
     ClipSystemFlyout(hwnd, true);
     ShowWindow(hwnd, SW_HIDE);
@@ -6882,9 +6897,7 @@ void UpdateFlyoutHook() {
                                          WINEVENT_OUTOFCONTEXT)
                        : nullptr;
     g_flyoutHookPid = g_flyoutHook ? pid : 0;
-    float v = 0.0f;
-    bool m = false;
-    if (g_flyoutHook) ReadMasterChange(&v, &m);
+    if (g_flyoutHook) ResyncMasterLevel();
 }
 
 // Leaves Windows' indicator as it was.
@@ -7236,6 +7249,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_DEVICES_CHANGED:
             g_deviceMsgPending = false;
             RebindDefaultEndpoint();
+            ResyncMasterLevel();
             UpdateTrayIcon(true);
             RebuildLockWatch();
             if (g_visible && !g_dragging) RefreshModel(false);
