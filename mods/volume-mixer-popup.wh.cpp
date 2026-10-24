@@ -971,13 +971,13 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
     $name:fr-FR: "Remplacer l'indicateur de Windows"
     $name:es-ES: "Reemplazar el indicador de Windows"
     $name:ru-RU: "Заменить системный индикатор Windows"
-    $description: "Media volume keys show this OSD instead of the Windows one. Needs the OSD to be enabled."
-    $description:uk-UA: "Медіаклавіші гучності показують цей OSD замість системного. Потрібен увімкнений OSD."
-    $description:pl-PL: "Klawisze głośności pokazują ten OSD zamiast systemowego. Wymaga włączonego OSD."
-    $description:de-DE: "Medien-Lautstärketasten zeigen dieses OSD statt des Windows-OSD. Das OSD muss aktiv sein."
-    $description:fr-FR: "Les touches de volume affichent cet OSD au lieu de celui de Windows. L'OSD doit être activé."
-    $description:es-ES: "Las teclas de volumen muestran este OSD en lugar del de Windows. Requiere el OSD activado."
-    $description:ru-RU: "Медиаклавиши громкости показывают этот OSD вместо системного. Нужен включённый OSD."
+    $description: "Media volume keys change the volume through this mod and show its OSD instead of the Windows flyout, even when the volume OSD above is off. Laptop keys handled by the manufacturer's software are not affected."
+    $description:uk-UA: "Медіаклавіші гучності змінюють гучність через цей мод і показують його OSD замість системного, навіть якщо OSD вище вимкнено. Не діє на клавіші ноутбука, які обробляє програма виробника."
+    $description:pl-PL: "Klawisze głośności zmieniają głośność przez ten mod i pokazują jego OSD zamiast systemowego, nawet gdy OSD powyżej jest wyłączone. Nie dotyczy klawiszy laptopa obsługiwanych przez oprogramowanie producenta."
+    $description:de-DE: "Medien-Lautstärketasten ändern die Lautstärke über diesen Mod und zeigen sein OSD statt des Windows-OSD, auch wenn das OSD oben aus ist. Gilt nicht für Laptop-Tasten, die von Herstellersoftware verarbeitet werden."
+    $description:fr-FR: "Les touches de volume règlent le volume via ce mod et affichent son OSD au lieu de celui de Windows, même si l'OSD ci-dessus est désactivé. Sans effet sur les touches d'ordinateur portable gérées par le logiciel du fabricant."
+    $description:es-ES: "Las teclas de volumen cambian el volumen mediante este mod y muestran su OSD en lugar del de Windows, aunque el OSD de arriba esté desactivado. No afecta a las teclas de portátil gestionadas por el software del fabricante."
+    $description:ru-RU: "Медиаклавиши громкости меняют громкость через этот мод и показывают его OSD вместо системного, даже если OSD выше выключен. Не действует на клавиши ноутбука, которые обрабатывает программа производителя."
   - osdStyle: "capsule"
     $name: "OSD style"
     $name:uk-UA: "Стиль OSD"
@@ -2984,8 +2984,9 @@ bool SetAppAudioEndpoint(DWORD processId, const std::wstring& shortDeviceId) {
 // 09_builditems.cpp - Audio Session Enumeration, Device Aggregation, and Volume Control
 
 // Volume: only when the OSD is enabled. Banner: text message (Deafen), always.
-// Preview: the configured OSD style, shown while it can be dragged.
-enum class OsdKind { Volume, Banner, Preview };
+// Always: the configured OSD style even when the OSD is off (drag preview,
+// media keys that replace the Windows volume flyout).
+enum class OsdKind { Volume, Banner, Always };
 
 void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon,
              OsdKind kind = OsdKind::Volume, const std::wstring& detail = L"", DWORD durationMs = 0);
@@ -3428,7 +3429,9 @@ static bool ItemMatchesTarget(const Item& it, const ForegroundTarget& t) {
     return false;
 }
 
-void AdjustMasterVolume(float delta, bool toggleMute) {
+// alwaysOsd: shows the OSD even when it is turned off (media keys replacing the
+// Windows flyout must always give feedback).
+void AdjustMasterVolume(float delta, bool toggleMute, bool alwaysOsd = false) {
     static DWORD s_lastMasterMute = 0;
     if (toggleMute) {
         DWORD now = GetTickCount();
@@ -3460,7 +3463,7 @@ void AdjustMasterVolume(float delta, bool toggleMute) {
         }
     }
     ep->Release();
-    ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, OsdKind::Volume, devName);
+    ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, alwaysOsd ? OsdKind::Always : OsdKind::Volume, devName);
     if (g_visible && RefreshValues()) Render();
     UpdateTrayIcon();
 }
@@ -5135,7 +5138,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
 }
 
 void ShowOsdDragPreview() {
-    ShowOsd(L10n(StrId::OsdDragHint), 0.5f, false, nullptr, OsdKind::Preview, L"", 10000);
+    ShowOsd(L10n(StrId::OsdDragHint), 0.5f, false, nullptr, OsdKind::Always, L"", 10000);
 }
 
 LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -5860,8 +5863,12 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     const DWORD vk = kbd->vkCode;
     static DWORD s_heldVk = 0;
 
+    const bool volumeKey = (vk == VK_VOLUME_UP || vk == VK_VOLUME_DOWN || vk == VK_VOLUME_MUTE);
+
     if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
         if (vk == s_heldVk) s_heldVk = 0;
+        // The release of a replaced media key must not reach Windows either.
+        if (volumeKey && g_hookReplaceOsd) return 1;
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
     if ((wParam != WM_KEYDOWN && wParam != WM_SYSKEYDOWN) || vk == kMenuMaskVk) {
@@ -5894,8 +5901,9 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         return 1;
     }
 
-    if (g_hookReplaceOsd && (vk == VK_VOLUME_UP || vk == VK_VOLUME_DOWN || vk == VK_VOLUME_MUTE)) {
-        // Handled here so the Windows volume flyout never appears.
+    if (g_hookReplaceOsd && volumeKey) {
+        // Swallowed so Windows never sees the key: it neither changes the
+        // volume nor shows its flyout; the mod does both instead.
         if (vk != VK_VOLUME_MUTE || !repeat) PostMessageW(g_hwnd, WM_APP_MEDIA_KEY, vk, 0);
         return 1;
     }
@@ -6026,7 +6034,9 @@ void RegisterAllHotkeys() {
     for (int i = 0; i < HK_COUNT; i++) {
         if (defs[i].vk) RegisterHotKey(g_hwnd, i + 1, defs[i].mods | MOD_NOREPEAT, defs[i].vk);
     }
-    g_hookReplaceOsd = g_cfg.enableVolumeOsd && g_cfg.replaceWindowsOsd;
+    // Independent of "Enable volume OSD": replacing the Windows flyout always
+    // shows this mod's OSD for the media keys.
+    g_hookReplaceOsd = g_cfg.replaceWindowsOsd;
 }
 
 void UnregisterAllHotkeys() {
@@ -6299,9 +6309,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_APP_MEDIA_KEY: {
             const float step = g_cfg.wheelStep / 100.0f;
-            if (wParam == VK_VOLUME_UP) AdjustMasterVolume(step, false);
-            else if (wParam == VK_VOLUME_DOWN) AdjustMasterVolume(-step, false);
-            else if (wParam == VK_VOLUME_MUTE) AdjustMasterVolume(0.0f, true);
+            if (wParam == VK_VOLUME_UP) AdjustMasterVolume(step, false, true);
+            else if (wParam == VK_VOLUME_DOWN) AdjustMasterVolume(-step, false, true);
+            else if (wParam == VK_VOLUME_MUTE) AdjustMasterVolume(0.0f, true, true);
             return 0;
         }
 
