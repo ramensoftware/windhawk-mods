@@ -42,7 +42,8 @@ process and does not modify `explorer.exe`.
 
 ## Requirements
 
-- Windows 10 or Windows 11, 64-bit.
+- Windows 10 or Windows 11, 64-bit. The mod was tested on Windows 11 24H2 and
+  on Windows 11 25H2.
 - Windhawk installed, with `windhawk.exe` not excluded.
 
 ## How to use
@@ -73,8 +74,8 @@ process and does not modify `explorer.exe`.
   application icon in the corner, and a thin double frame around the selected
   preview. A minimized window shows its application icon.
 - **Windows 8.1**: a solid colored band with square corners, a white title above
-  the row, and the previews in a row with the application icon half outside
-  their corner. The selected preview has a white frame.
+  the row, and the previews in a row with the application icon inside their
+  bottom right corner. The selected preview has a white frame.
 
 ## Comparison with other Alt+Tab mods
 
@@ -120,12 +121,20 @@ Switcher, but it works in a different way and its purpose is a narrower one.
 - Windows 11 tabbed File Explorer windows appear as one item per window.
 - True fullscreen exclusive games may not show the switcher, like other overlay
   mods.
+- Windows of applications started as administrator can't be listed or
+  activated: the mod runs at the normal permission level, so the system doesn't
+  let it watch the keyboard of those windows and doesn't let it read their
+  icons or close them with Ctrl+Alt+F4. Such a window keeps the system
+  switcher when it has the focus.
+- The mod can't be turned off from inside an elevated window for the same
+  reason: use a normal window.
 - The mod is released under the GPL-2.0 license.
 
 ## Credits
 
 - The look of both styles follows the measurements of the two original
   switchers.
+- AdministratoX for testing the mod on Windows 11 25H2.
 */
 // ==/WindhawkModReadme==
 
@@ -190,41 +199,41 @@ Switcher, but it works in a different way and its purpose is a narrower one.
 */
 // ==/WindhawkModSettings==
 // -----------------------------------------------------------------------------
-// Note di progetto
+// Design notes
 //
-// Questa mod non ripristina lo switcher di Windows 7 e 8.1: lo ridisegna. Non
-// ricarica componenti interne del sistema e non aggancia niente dentro
-// explorer.exe; gira nel processo che Windhawk avvia per le mod di questo tipo
-// e disegna il pannello con API documentate. Da qui vengono le proprietà che
-// contano per chi la usa:
+// This mod doesn't restore the Windows 7 and 8.1 switcher: it redraws it. It
+// doesn't reload internal system components and it doesn't hook anything inside
+// explorer.exe; it runs in the process Windhawk starts for mods of this kind and
+// it draws the panel with documented APIs. The properties that matter to
+// whoever uses it come from that:
 //
-//  1. Niente viene iniettato nella shell e niente al suo interno viene
-//     agganciato: un errore nella mod non può portarsi via explorer.exe, e
-//     attivare o disattivare la mod non lascia il sistema in uno stato che
-//     richiede un riavvio della shell.
-//  2. Il pannello è una normale finestra topmost del processo della mod, e le
-//     anteprime sono miniature DWM registrate fra quella finestra e le finestre
-//     di origine: API documentate, presenti da Windows 7 a Windows 11.
-//  3. Alt+Tab viene preso con un hook di tastiera di basso livello che vive nel
-//     processo della mod. L'hook classifica soltanto i tasti; il lavoro vero
-//     avviene sul thread dell'interfaccia, così la callback resta breve e non
-//     viene scartata dal sistema per lentezza.
-//  4. La geometria non è inventata: altezze, distanze, spessori dei fili e
-//     colori sono misurati fotogramma per fotogramma sugli switcher originali,
-//     e ogni valore viene poi scalato con il DPI del monitor.
-//  5. Tutto è difensivo: se il pannello non riesce a comparire la mod rimanda
-//     Alt+Tab al sistema, se l'hook smette di essere chiamato un watchdog lo
-//     reinstalla, e una sessione rimasta aperta senza Alt premuto (un tasto
-//     perso) si chiude da sola.
+//  1. Nothing is injected into the shell and nothing inside it is hooked: a
+//     mistake in the mod can't take explorer.exe down, and turning the mod on
+//     or off doesn't leave the system in a state that needs the shell
+//     restarted.
+//  2. The panel is an ordinary topmost window of the mod's process, and the
+//     previews are DWM thumbnails registered between that window and the source
+//     windows: documented APIs, present from Windows 7 to Windows 11.
+//  3. Alt+Tab is taken with a low-level keyboard hook that lives in the mod's
+//     process. The hook only classifies keys; the real work happens on the UI
+//     thread, so the callback stays short and isn't dropped by the system for
+//     being slow.
+//  4. The geometry isn't invented: heights, distances, border thicknesses and
+//     colors are measured frame by frame on the original switchers, and every
+//     value is then scaled with the DPI of the monitor.
+//  5. Everything is defensive: if the panel can't appear the mod hands Alt+Tab
+//     back to the system, if the hook stops being called a watchdog reinstalls
+//     it, and a session left open without Alt held down (a lost key) closes by
+//     itself.
 //
-// Perché ridisegnarlo invece di ripristinare l'originale
+// Why redraw it instead of restoring the original
 //
-// Ripristinare lo switcher originale vuol dire riusare i componenti interni di
-// explorer.exe, una strada già tentata e abbandonata: dipende da una lunga
-// lista di simboli non documentati che cambiano da build a build, quindi si
-// rompe a ogni aggiornamento e non si può verificare su ogni build.
-// Ridisegnarlo con API documentate (miniature DWM, GDI, un hook di tastiera)
-// funziona attraverso le build e non tocca la shell.
+// Restoring the original switcher means reusing the internals of explorer.exe, a
+// path already tried and abandoned: it depends on a long list of undocumented
+// symbols that change from build to build, so it breaks with every update and
+// can't be verified on every build. Redrawing it with documented APIs (DWM
+// thumbnails, GDI, a keyboard hook) works across builds and doesn't touch the
+// shell.
 // -----------------------------------------------------------------------------
 
 #include <windhawk_api.h>
@@ -237,12 +246,12 @@ Switcher, but it works in a different way and its purpose is a narrower one.
 
 #include <algorithm>
 #include <atomic>
-#include <gdiplus.h>   // solo per leggere lo sfondo del desktop
+#include <gdiplus.h>   // only to read the desktop wallpaper
 #include <shldisp.h>   // IShellDispatch4::ToggleDesktop
 #include <shlobj.h>    // FOLDERID_Desktop, SHGetNameFromIDList
 #include <shobjidl.h>  // SHCreateItemFromParsingName
-#include <shlwapi.h>   // SHCreateMemStream, per leggere il PNG incorporato
-#include <cmath>     // pow(), per la correzione di gamma del testo
+#include <shlwapi.h>   // SHCreateMemStream, to read the embedded PNG
+#include <cmath>     // pow(), for the gamma correction of the text
 #include <cstdint>
 #include <cwchar>
 #include <mutex>
@@ -337,15 +346,15 @@ struct SwitcherSettings {
     bool pointerSelect = true;
     bool onlyThisAppHotkey = false;
     bool manualHotkey = true;
-    // auto: prima l'attributo di composizione, poi la chiamata documentata;
-    // dwm: solo DwmEnableBlurBehindWindow; off: nessuna sfocatura.
+    // auto: the composition attribute first, then the documented call; dwm:
+    // only DwmEnableBlurBehindWindow; off: no blur at all.
     std::wstring systemBlur = L"auto";
-    // system: il pannello segue il colore di Windows; custom: usa quello qui
-    // sotto. Il predefinito è il comportamento degli originali.
+    // system: the panel follows the Windows color; custom: it uses the one
+    // below. The default is what the originals did.
     std::wstring accentSource = L"system";
     std::wstring customAccentColor = L"#4F7FB8";
     bool openFade = false;  // dissolvenza in entrata e in uscita
-    // La scheda del desktop in fondo alla fila, come nei due originali.
+    // The Desktop card at the end of the row, as in both originals.
     bool desktopTile = true;
 };
 
@@ -376,11 +385,10 @@ static std::wstring PickOneOf(const std::wstring& value,
 static void LoadSettings() {
     SwitcherSettings settings;
 
-    // I valori vengono limitati qui, perché lo schema delle impostazioni non
-    // dichiara limiti numerici di proposito: un limite che Windhawk non
-    // riconosce fa fallire la lettura di tutto il blocco, e un valore
-    // predefinito che l'utente non può correggere è peggio di un valore
-    // riportato nei limiti.
+    // The values are clamped here, because the settings schema deliberately
+    // doesn't declare numeric limits: a limit Windhawk doesn't recognize makes
+    // the whole block unreadable, and a default value the user can't correct is
+    // worse than a value brought back within limits.
     const std::wstring styleName =
         GetStringSettingOr(L"paneStyle", L"windows-7");
     settings.style =
@@ -460,10 +468,13 @@ static void UpdateHookFlags(const SwitcherSettings& settings);
 
 static std::atomic<unsigned> g_exceptionCount{0};
 
+// The name doesn't start with WH_: the windhawk-mods PR check forbids
+// redefining the symbols that start that way, because those are the ones
+// Windhawk makes available to mods.
 #if defined(_MSC_VER) && !defined(__clang__)
-#define WH_HAS_SEH 1
+#define MOD_HAS_SEH 1
 #else
-#define WH_HAS_SEH 0
+#define MOD_HAS_SEH 0
 #endif
 
 template <typename Function>
@@ -914,8 +925,8 @@ struct SwitcherItem {
     bool minimized = false;
     HTHUMBNAIL thumbnail = nullptr;
     bool hasThumbnail = false;
-    // La voce "Desktop", che Windows 7 e 8.1 mettevano in fondo alla
-    // fila: non è una finestra da attivare, è una scheda a sé.
+    // The "Desktop" entry, which Windows 7 and 8.1 put at the end of the row: it
+    // isn't a window to activate, it's a card of its own.
     bool isDesktop = false;
     RECT card{};   // the whole card, in client coordinates
     RECT thumb{};  // where the live preview goes, in client coordinates
@@ -1231,8 +1242,8 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         return FALSE;
     }
 
-    // La finestra della shell non è una finestra come le altre: la scheda
-    // del desktop si costruisce a parte e non deve comparire due volte.
+    // The shell window isn't a window like the others: the desktop card is
+    // built separately and must not show up twice.
     if (hwnd == GetShellWindow()) {
         return TRUE;
     }
@@ -1284,9 +1295,9 @@ static void BuildWindowList(const SwitcherSettings& settings,
 
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
 
-    // La scheda del desktop, in fondo alla fila come nei due originali.
-    // Nel modo "stessa applicazione" la fila contiene solo le finestre
-    // di quell'applicazione, quindi il desktop non ci va.
+    // The desktop card, at the end of the row as in both originals. In "same
+    // application" mode the row only holds the windows of that application, so
+    // the desktop doesn't belong in it.
     if (settings.desktopTile && appPathFilter.empty()) {
         SwitcherItem desktop;
         if (BuildDesktopItem(&desktop)) {
@@ -1302,168 +1313,175 @@ static void BuildWindowList(const SwitcherSettings& settings,
 // Item geometry
 // -----------------------------------------------------------------------------
 
-// La scala per DPI serve già qui, ma la definizione sta più sotto, insieme al
-// calcolo del layout.
+// The DPI scale is needed already here, but it is defined further down,
+// together with the layout computation.
 static int ScaleForDpi(int value, int dpi);
 
 // -----------------------------------------------------------------------------
-// Le misure dello switcher di Windows 7 e di quello di Windows 8.1
+// The measurements of the Windows 7 and the Windows 8.1 switcher
 //
-// Le due versioni non differiscono solo per i colori: cambiano la geometria del
-// pannello, l'altezza delle anteprime e il modo in cui la selezione viene
-// disegnata. I valori qui sotto sono in pixel a 100% DPI e vengono scalati con
-// ScaleForDpi quando vengono usati.
+// The two versions don't differ only in their colors: they change the panel
+// geometry, the preview height and the way the selection is drawn. The values
+// below are in pixels at 100% DPI and are scaled with ScaleForDpi when they are
+// used.
 //
-// Windows 7: misurato fotogramma per fotogramma su una registrazione 1280x720
-// dello switcher originale. Con cinque finestre il pannello era largo 1074 px e
-// alto 199 px, le anteprime erano alte 100 px, la riga cominciava 77 px sotto il
-// bordo superiore del pannello, il titolo era una sola riga scura centrata e i
-// bordi del pannello erano un contorno scuro con una riga chiara appena dentro.
+// Windows 7: measured frame by frame on a 1280x720 recording of the original
+// switcher. With five windows the panel was 1074 px wide and 199 px high, the
+// previews were 100 px high, the row started 77 px below the top edge of the
+// panel, the title was a single dark centered line and the edges of the panel
+// were a dark outline with a light line just inside it.
 //
-// Windows 8.1: la banda è larga quanto lo schermo meno un piccolo margine,
-// completamente opaca, con il titolo bianco centrato sopra la riga; le anteprime
-// sono più alte di quelle di Windows 7 e la selezione è un riquadro chiaro
-// distanziato dall'anteprima. Non c'è nessun bordo sulle anteprime non
-// selezionate e nessuna etichetta sotto le anteprime.
+// Windows 8.1: the band is as wide as the screen minus a small margin, fully
+// opaque, with the white title centered above the row; the previews are higher
+// than the Windows 7 ones and the selection is a light frame spaced away from
+// the preview. There is no border on unselected previews and no label under the
+// previews.
 // -----------------------------------------------------------------------------
 
-// Windows 7, stile "vetro Aero".
-constexpr int kWin7ThumbHeight      = 100;  // altezza dell'anteprima
-constexpr int kWin7CellGapX         = 26;   // spazio orizzontale tra le celle
-constexpr int kWin7CellGapY         = 24;   // spazio verticale tra le celle
+// Windows 7, "Aero glass" style.
+constexpr int kWin7ThumbHeight      = 100;  // height of the preview
+constexpr int kWin7CellGapX         = 26;   // horizontal space between the cells
+constexpr int kWin7CellGapY         = 24;   // vertical space between the cells
 constexpr int kWin7PadLeft          = 25;   // margine interno sinistro
 constexpr int kWin7PadRight         = 15;   // margine interno destro
 constexpr int kWin7PadTop           = 15;   // margine interno superiore
 constexpr int kWin7PadBottom        = 18;   // margine interno inferiore
-constexpr int kWin7TitleBand        = 59;   // fascia del titolo sopra la griglia
-constexpr int kWin7TitleOffset      = 6;    // dal bordo interno al testo
-constexpr int kWin7TitleFontSize    = 27;   // altezza della riga di titolo
-constexpr int kWin7TitleInkTop      = 26;   // sommità dell'inchiostro, dal bordo alto
-constexpr int kWin7CornerRadius     = 8;    // raggio degli angoli del pannello
-constexpr int kWin7SelectionWidth   = 1;    // filo del riquadro di selezione
-constexpr int kWin7SelectionGap     = 6;    // distanza del riquadro dall'anteprima
-constexpr int kWin7SelectionRadius  = 3;    // angoli del riquadro
-// Il riquadro di selezione dell'originale non è un filo solo: sono due
-// adiacenti, uno scuro fuori e uno chiaro subito dentro. Misurati sul
-// fotogramma: scuro RGB(123,158,190) sopra un vetro RGB(178,218,254), cioè
-// nero al 30 %; chiaro RGB(223,241,255), cioè bianco al 60 %. È questa
-// coppia a dare il bordo definito che con un filo solo non si vedeva.
+constexpr int kWin7TitleBand        = 59;   // title band above the grid
+constexpr int kWin7TitleOffset      = 6;    // from the inner edge to the text
+constexpr int kWin7TitleFontSize    = 27;   // height of the title line
+constexpr int kWin7TitleInkTop      = 26;   // top of the ink, from the upper edge
+constexpr int kWin7CornerRadius     = 8;    // corner radius of the panel
+constexpr int kWin7SelectionWidth   = 1;    // line of the selection frame
+constexpr int kWin7SelectionGap     = 6;    // distance of the frame from the preview
+constexpr int kWin7SelectionRadius  = 3;    // corners of the frame
+// The selection frame of the original isn't a single line: it's two adjacent
+// ones, a dark one outside and a light one just inside. Measured on the
+// reference frame, across the left edge of the selected preview: glass 142,
+// dark line 186 against a glass of 200 on the other side (black at 14 %), light
+// line 225 (white at 70 %). The dark line is much fainter than the light one:
+// what defines the frame is the bright line, the dark one only keeps it from
+// bleeding into the glass.
 constexpr COLORREF kWin7SelectDarkColor  = RGB(0, 0, 0);
-constexpr int      kWin7SelectDarkAlpha  = 100;
+constexpr int      kWin7SelectDarkAlpha  = 35;
 constexpr COLORREF kWin7SelectLightColor = RGB(255, 255, 255);
-constexpr int      kWin7SelectLightAlpha = 150;
-// I due fili però non bastano: sul fotogramma il riquadro si legge perché è un
-// incavo, non perché è una linea. Dentro il riquadro il vetro è più chiaro che
-// fuori (luminanza 215 contro 203) e l'anteprima getta la propria ombra, che
-// scende a luminanza 80 subito sotto il suo bordo e risale fino al filo in sei
-// pixel. Senza queste due cose i fili restano due righe appoggiate sul vetro.
-constexpr int kWin7WellAlpha         = 22;   // schiarita del vetro dentro il riquadro
-constexpr int kWin7ThumbShadowAlpha  = 135;  // ombra dell'anteprima sul suo bordo
-constexpr int kWin7ThumbShadowRadius = 2;    // angoli dell'ombra dell'anteprima
-constexpr int kWin7ThumbShadowTopPercent = 30;  // quanto vale l'ombra sopra
-constexpr int kWin7GlowWidth        = 0;    // nessun alone: il riquadro è netto
+constexpr int      kWin7SelectLightAlpha = 175;
+// The two lines aren't enough on their own: on the frame the frame reads as a
+// recess, not as a line. Inside the frame the glass is lighter than outside of
+// it (174 against 142 on the reference, that is white at 28 %), and on the side
+// the shadow of the preview falls, which drops to 110 right at its edge and
+// climbs back to the line within six pixels. Without these two things the lines
+// stay two lines laid on the glass.
+constexpr int kWin7WellAlpha         = 70;   // lightening of the glass inside the frame
+constexpr int kWin7ThumbShadowAlpha  = 135;  // shadow of the preview on its edge
+constexpr int kWin7ThumbShadowRadius = 2;    // corners of the preview shadow
+constexpr int kWin7ThumbShadowTopPercent = 30;  // how much of it counts above
+constexpr int kWin7GlowWidth        = 0;    // no glow: the frame is sharp
 constexpr int kWin7IconSize         = 32;   // icona dell'applicazione
-constexpr int kWin7IconInset        = 4;    // quanto rientra nell'angolo
+constexpr int kWin7IconInset        = 4;    // how far it sits inside the corner
 constexpr int kWin7MinThumbPercent  = 10;   // MinThumbSizePcent dell'originale
 constexpr int kWin7MinWidth         = 360;  // MinWidthPx dell'originale
-constexpr int kWin7MaxPercent       = 92;   // quota massima dello schermo
-constexpr int kWin7MaxColumns       = 7;    // Win7 non superava le sette colonne
-constexpr int kWin7ShadowSpread     = 9;    // ombra morbida attorno al pannello
-constexpr int kWin7ShadowAlpha      = 170;  // opacità dell'ombra sul bordo
+constexpr int kWin7MaxPercent       = 92;   // maximum share of the screen
+constexpr int kWin7MaxColumns       = 7;    // Win7 never went past seven columns
+constexpr int kWin7ShadowSpread     = 9;    // soft shadow around the panel
+constexpr int kWin7ShadowAlpha      = 170;  // opacity of the shadow at the edge
 
-// Windows 8.1, banda indaco opaca.
+// Windows 8.1, opaque indigo band.
 constexpr int kW81ThumbHeight       = 108;
-constexpr int kW81CellGap           = 32;   // spazio tra una cella e l'altra
+constexpr int kW81CellGap           = 32;   // space between one cell and the next
 constexpr int kW81PadLeft           = 30;
 constexpr int kW81PadRight          = 30;
 constexpr int kW81PadTop            = 30;
-constexpr int kW81PadBottom         = 56;   // spazio sotto la riga
-constexpr int kW81TitleBand         = 57;   // fascia del titolo sopra la riga
+constexpr int kW81PadBottom         = 56;   // space below the row
+constexpr int kW81TitleBand         = 57;   // title band above the row
 constexpr int kW81TitleOffset       = 12;
-constexpr int kW81TitleInkTop       = 42;   // sommità dell'inchiostro, dal bordo alto
+constexpr int kW81TitleInkTop       = 42;   // top of the ink, from the upper edge
 constexpr int kW81TitleFontSize     = 21;
-constexpr int kW81CornerRadius      = 0;    // la banda dell'originale è squadrata
-constexpr int kW81FramePad          = 9;    // distanza del riquadro dall'anteprima
+constexpr int kW81CornerRadius      = 0;    // the band of the original is square
+constexpr int kW81FramePad          = 9;    // distance of the frame from the preview
 constexpr int kW81FrameWidth        = 2;
-constexpr int kW81IconSize          = 32;   // centrata sull'angolo: metà fuori
-constexpr int kW81IconInset         = -16;  // negativo: sporge dall'angolo
+constexpr int kW81IconSize          = 32;   // icon of the application
+constexpr int kW81IconInset         = 4;    // how far it sits inside the corner
 constexpr int kW81MinThumbPercent   = 10;
 constexpr int kW81MinWidth          = 0;
 constexpr int kW81MinRowHeight      = 48;
-constexpr int kW81MaxPercent        = 96;   // la banda arriva quasi ai bordi
-constexpr int kW81MaxColumns        = 0;    // nessun limite: si va a capo
+constexpr int kW81MaxPercent        = 96;   // the band nearly reaches the edges
+constexpr int kW81MaxColumns        = 0;    // no limit: it wraps
+// Absolute floor of the preview height, below the minimum measured on the
+// originals. It is only needed when a single row doesn't fit even at the
+// minimum size: without it the panel became wider than the screen and was
+// pinned to the edge, with the last previews off screen.
+constexpr int kThumbHeightFloor     = 8;
 
-// Colori dello stile Windows 7. Il pannello è vetro: il colore viene dalla
-// colorizzazione di Windows (DwmGetColorizationColor), quindi non è mai un
-// valore fisso, e l'alfa resta basso perché sotto c'è il desktop sfocato.
-constexpr COLORREF kWin7GlassTint   = RGB(226, 240, 250);  // ripiego senza Aero
-// Quanto bianco si mescola nel colore di sistema per ottenere il vetro di
-// Windows 7: il vetro era colorato ma chiaro, non una tinta piena.
-// Il vetro di Windows 7 era *colorato*, non slavato: il colore di sistema si
-// vedeva bene, alleggerito appena. Con troppo bianco dentro il pannello diventa
-// una tinta pastello e non sembra più vetro.
-constexpr int      kFrostWhitePercent  = 8;    // 0 = colore pieno, 100 = bianco
-// Nel fotogramma il pannello è quasi tutto colore di sistema: il fondale si
-    // vede, ma come modulazione, non come immagine. Con una quota più bassa il
-    // pannello prende il colore di quello che c'è dietro e sembra sporco.
-constexpr int      kFrostColorMix      = 84;   // quanta tinta sopra il fondale
+// Windows 7 style colors. The panel is glass: the color comes from the Windows
+// colorization (DwmGetColorizationColor), so it is never a fixed value, and the
+// alpha stays low because the blurred desktop is behind it.
+constexpr COLORREF kWin7GlassTint   = RGB(226, 240, 250);  // fallback without Aero
+// How much white is mixed into the system color to get Windows 7 glass: the
+// glass was colored but light, not a flat tint.
+// Windows 7 glass was *colored*, not washed out: the system color was clearly
+// visible, lightened just a little. With too much white inside, the panel turns
+// into a pastel tint and no longer looks like glass.
+constexpr int      kFrostWhitePercent  = 8;    // 0 = full color, 100 = white
+// On the frame the panel is almost entirely system color: the background shows
+// through, but as modulation, not as a picture. With a lower share the panel
+// takes the color of what is behind it and looks dirty.
+constexpr int      kFrostColorMix      = 84;   // how much tint over the background
 constexpr int      kFrostLift         = 2;    // schiarita dovuta alla sfocatura
-// La texture generata: grana finissima e due riflessi orizzontali. Serve a far
-// leggere il pannello come vetro smerigliato anche quando il fondale non è
-// disponibile, senza dipendere da nessuna API di sfocatura.
-constexpr int      kGlassGrainAlpha    = 7;    // ampiezza della grana, in livelli
-constexpr int      kGlassGlossTopAlpha = 46;   // riflesso forte sotto il bordo alto
-constexpr int      kGlassGlossMidAlpha = 16;   // riflesso debole a un quinto
-constexpr int      kWin7FrostAlpha  = 184;  // 72% del pieno: vetro, non una lastra
-// Il bordo del pannello, misurato sul fotogramma dell'originale: due pixel
-// scuri all'esterno e due pixel quasi bianchi subito dentro. L'ordine è questo,
-// non il contrario: è quello che fa leggere il pannello come vetro spesso.
+// The generated texture: very fine grain and two horizontal reflections. It is
+// there to make the panel read as frosted glass even when the background isn't
+// available, without depending on any blur API.
+constexpr int      kGlassGrainAlpha    = 7;    // amplitude of the grain, in levels
+constexpr int      kGlassGlossTopAlpha = 46;   // strong reflection below the upper edge
+constexpr int      kGlassGlossMidAlpha = 16;   // faint reflection at a fifth
+constexpr int      kWin7FrostAlpha  = 184;  // 72% of full: glass, not a slab
+// The panel border, measured on the frame of the original: two dark pixels
+// outside and two nearly white pixels just inside. This is the order, not the
+// opposite: it is what makes the panel read as thick glass.
 constexpr int      kWin7BorderDark  = 2;    // filo scuro esterno
-constexpr int      kWin7BorderLight = 2;    // riga chiara interna
-constexpr int      kWin7BorderAlpha = 190;  // opacità del filo scuro
-constexpr int      kWin7InnerAlpha  = 210;  // opacità della riga chiara
-constexpr int      kWin7SheenAlpha  = 34;   // riflesso: tenue, non latteo
-constexpr int      kWin7SheenPercent = 35;  // quanto scende il riflesso
-constexpr int      kWin7BottomShade = 26;   // ombra interna in basso
+constexpr int      kWin7BorderLight = 2;    // inner light line
+constexpr int      kWin7BorderAlpha = 190;  // opacity of the dark line
+constexpr int      kWin7InnerAlpha  = 210;  // opacity of the light line
+constexpr int      kWin7SheenAlpha  = 34;   // reflection: faint, not milky
+constexpr int      kWin7SheenPercent = 35;  // how far down the reflection goes
+constexpr int      kWin7BottomShade = 26;   // inner shadow at the bottom
 constexpr COLORREF kWin7TitleColor  = RGB(16, 20, 26);
 
-// Colori dello stile Windows 8.1, letti dai pixel dell'immagine di riferimento:
-// la banda è RGB(36, 4, 110) e non è traslucida.
-// Ripiego per la banda 8.1 quando il sistema non risponde: è il colore
-// misurato sul fotogramma di riferimento (indaco, l'accento predefinito di
-// Windows 8). Non è più un colore fisso: la banda segue il colore di sistema.
+// Windows 8.1 style colors, read from the pixels of the reference image: the
+// band is RGB(36, 4, 110) and isn't translucent.
+// Fallback for the 8.1 band when the system doesn't answer: it is the color
+// measured on the reference frame (indigo, the default Windows 8 accent). It is
+// no longer a fixed color: the band follows the system color.
 constexpr COLORREF kW81PanelColor   = RGB(36, 4, 110);
-// Il canale più alto della banda: il colore di sistema viene portato a questa
-// profondità, che è quella misurata sul fotogramma, conservando tinta e
-// saturazione scelte dall'utente.
+// The highest channel of the band: the system color is brought to this depth,
+// which is the one measured on the frame, keeping the hue and the saturation
+// chosen by the user.
 constexpr int      kW81BandValue       = 115;
 constexpr COLORREF kW81TitleColor   = RGB(236, 232, 246);
 constexpr COLORREF kW81FrameColor   = RGB(240, 245, 255);
 constexpr int      kW81FrameAlpha   = 235;
-constexpr int      kW81FrameFillAlpha = 20;  // velo bianco dentro il riquadro
+constexpr int      kW81FrameFillAlpha = 20;  // white veil inside the frame
 
-// Tutto quello che il layout deve sapere di uno stile, risolto una volta sola
-// per ogni fotogramma.
+// Everything the layout needs to know about a style, resolved once per frame.
 struct StyleMetrics {
     int padTop = 0;
     int padBottom = 0;
     int padLeft = 0;
     int padRight = 0;
-    int titleBand = 0;          // dalla sommità interna alla prima riga
-    int titleOffset = 0;        // dall'interno del pannello al testo
+    int titleBand = 0;          // from the inner top to the first row
+    int titleOffset = 0;        // from the inside of the panel to the text
     int titleFontSize = 0;
-    int titleInkTop = -1;       // sommità dell'inchiostro, dal bordo del pannello
+    int titleInkTop = -1;       // top of the ink, from the edge of the panel
     int cellGapX = 0;
     int cellGapY = 0;
-    int contour = 0;            // spessore del riquadro di selezione
-    int framePad = 0;           // distanza del riquadro dall'anteprima
+    int contour = 0;            // thickness of the selection frame
+    int framePad = 0;           // distance of the frame from the preview
     int glow = 0;               // alone esterno
     int iconSize = 0;
-    int iconInset = 0;          // pixel di rientro dell'icona nell'angolo
-    int selectionGap = 0;       // distanza del riquadro dall'anteprima
+    int iconInset = 0;          // pixels the icon sits inside the corner
+    int selectionGap = 0;       // distance of the frame from the preview
     int selectionRadius = 0;
     int cornerRadius = 0;
-    int startRowHeight = 0;     // altezza dell'anteprima alla prima iterazione
+    int startRowHeight = 0;     // preview height at the first iteration
     int minRowHeight = 0;
     int minRowHeightPercent = 0;
     int minPanelWidth = 0;
@@ -1472,8 +1490,8 @@ struct StyleMetrics {
     int columns = 0;            // 0: nessun limite di colonne
     int maxTileAspectPercent = 250;
     int minPreviewWidth = 48;
-    int minPanelPercent = 0;    // larghezza minima del pannello, in % dello schermo
-    bool opaque = false;        // la banda dell'8.1 è opaca, il vetro del 7 no
+    int minPanelPercent = 0;    // minimum panel width, in % of the screen
+    bool opaque = false;        // the 8.1 band is opaque, Windows 7 glass isn't
 };
 
 static StyleMetrics MetricsFor(SwitcherStyle style, const SwitcherSettings& settings,
@@ -1509,10 +1527,10 @@ static StyleMetrics MetricsFor(SwitcherStyle style, const SwitcherSettings& sett
         metrics.columns = kW81MaxColumns;
         metrics.maxTileAspectPercent = 250;
         metrics.minPreviewWidth = ScaleForDpi(48, dpi);
-        // La banda dell'8.1 si stringe sul contenuto, come quella del 7: nel
-        // fotogramma di riferimento era larga 1089 px con cinque anteprime che
-        // ne occupavano 1088, cioè esattamente il contenuto più i margini. Con
-        // poche finestre deve restare piccola, non attraversare lo schermo.
+        // The 8.1 band shrinks onto its content, like the 7 one: on the
+        // reference frame it was 1089 px wide with five previews taking up
+        // 1088 of them, that is exactly the content plus the margins. With few
+        // windows it has to stay small, not cross the screen.
         metrics.minPanelPercent = 0;
         metrics.opaque = true;
         return metrics;
@@ -1537,8 +1555,8 @@ static StyleMetrics MetricsFor(SwitcherStyle style, const SwitcherSettings& sett
     metrics.selectionRadius = ScaleForDpi(kWin7SelectionRadius, dpi);
     metrics.cornerRadius = ScaleForDpi(kWin7CornerRadius, dpi);
     metrics.startRowHeight = ScaleForDpi(kWin7ThumbHeight, dpi);
-    // Il vero minimo viene da MinThumbSizePcent, una percentuale dell'area di
-    // lavoro: questo è solo un ripiego per i monitor molto piccoli.
+    // The real minimum comes from MinThumbSizePcent, a percentage of the work
+    // area: this is only a fallback for very small monitors.
     metrics.minRowHeight = ScaleForDpi(40, dpi);
     metrics.minRowHeightPercent = kWin7MinThumbPercent;
     metrics.minPanelWidth = ScaleForDpi(kWin7MinWidth, dpi);
@@ -1551,20 +1569,20 @@ static StyleMetrics MetricsFor(SwitcherStyle style, const SwitcherSettings& sett
     return metrics;
 }
 
-// La geometria di una voce: la cella (che è anche l'area sensibile al mouse),
-// il riquadro dell'anteprima e l'angolo in cui va l'icona.
+// The geometry of an item: the cell (which is also the mouse hit area), the
+// preview rectangle and the corner the icon goes in.
 struct ItemGeometry {
-    RECT cell{};   // la voce, riquadro di selezione escluso
-    RECT thumb{};  // l'anteprima
-    RECT icon{};   // dove va l'icona dell'applicazione
+    RECT cell{};   // the item, selection frame excluded
+    RECT thumb{};  // the preview
+    RECT icon{};   // where the application icon goes
 };
 
 struct SwitcherLayout {
-    int firstIndex = 0;  // indice, nell'elenco, della prima voce disegnata
+    int firstIndex = 0;  // index, in the list, of the first drawn item
     int pageSize = 1;
     int pageCount = 1;
-    int rowHeight = 0;   // altezza della cella
-    int thumbH = 0;      // altezza dell'anteprima
+    int rowHeight = 0;   // height of the cell
+    int thumbH = 0;      // height of the preview
     int cellH = 0;
     int cellPad = 0;
     int titleBand = 0;
@@ -1595,8 +1613,8 @@ static int ScaleForDpi(int value, int dpi) {
     return MulDiv(value, dpi, 96);
 }
 
-// Il rapporto d'aspetto del client della finestra: la larghezza dell'anteprima
-// lo segue, come nelle due versioni originali.
+// The aspect ratio of the client area of the window: the preview width follows
+// it, as in the two original versions.
 static double WindowAspect(HWND hwnd) {
     double aspect = 16.0 / 9.0;
 
@@ -1612,11 +1630,11 @@ static double WindowAspect(HWND hwnd) {
     return std::clamp(aspect, 0.5, 3.0);
 }
 
-// Dispone le voci e restituisce la geometria dell'intero switcher.
+// Lays out the items and returns the geometry of the whole switcher.
 //
-// Né Windows 7 né Windows 8.1 sfogliavano: le celle venivano rimpicciolite
-// finché tutto entrava nello schermo. Il ciclo qui sotto fa lo stesso, partendo
-// dall'altezza misurata dello stile e scendendo di un decimo per volta.
+// Neither Windows 7 nor Windows 8.1 paged: the cells were shrunk until
+// everything fit on the screen. The loop below does the same, starting from the
+// measured height of the style and going down by a tenth at a time.
 static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
                             const std::vector<SwitcherItem>& items,
                             int pageIndex,
@@ -1644,7 +1662,7 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
     layout.cellGap = metrics.cellGapX;
     layout.cellGapX = metrics.cellGapX;
     layout.cellGapY = metrics.cellGapY;
-    // Distanze dal bordo superiore del pannello, che è come le usa il disegno.
+    // Distances from the top edge of the panel, the way the drawing uses them.
     layout.panelTitleBand = metrics.padTop + metrics.titleBand;
     layout.panelLabelBand = 0;
     layout.titleOffset = metrics.padTop + metrics.titleOffset;
@@ -1670,21 +1688,37 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
         areaW * metrics.maxWidthPercent / 100 - metrics.padLeft - metrics.padRight;
     const int heightLimit = areaH * metrics.maxHeightPercent / 100 -
         metrics.padTop - metrics.padBottom - metrics.titleBand;
-    // L'originale non scendeva mai sotto MinThumbSizePcent dell'area di lavoro,
-    // qualunque fosse il numero di finestre.
+    // The original never went below MinThumbSizePcent of the work area, however
+    // many windows there were.
     const int minRowHeight = std::max(
         metrics.minRowHeight,
         static_cast<int>(areaH) * metrics.minRowHeightPercent / 100);
     const int minPreviewWidth = metrics.minPreviewWidth;
+    // Absolute floor of the shrinking, below the minimum of the original: it is
+    // only needed when a single row doesn't fit even at the minimum size, and
+    // without it the panel went off the screen.
+    const int rowHeightFloor = std::max(4, ScaleForDpi(kThumbHeightFloor, dpi));
+
+    // The originals laid the previews out on a grid, with the number of rows
+    // coming from their own settings (Windows 7 and 8.1 both read Columns and
+    // Rows), so a row that can no longer hold the items is split instead of
+    // being shrunk below the minimum. How many rows can be added follows from
+    // the space available: the limit below is the number of rows of the minimum
+    // height that still fit inside the height limit.
+    const int maxRowsByHeight = std::max(
+        1, (heightLimit + layout.cellGapY) /
+               (std::max(minRowHeight, 1) + layout.cellGapY));
+    int layoutColumns = columns;
+    int rowsWanted = 1;
 
     int rowHeight = std::max(1, metrics.startRowHeight);
 
     for (int attempt = 0; attempt < 64; ++attempt) {
         const int thumbH = std::max(1, rowHeight);
 
-        // Ogni anteprima ha l'altezza comune e la larghezza che le dà il
-        // rapporto d'aspetto della sua finestra, senza superare due volte e
-        // mezzo l'altezza e senza ingrandire finestre più strette.
+        // Every preview has the common height and the width its window aspect
+        // ratio gives it, without going past two and a half times the height and
+        // without enlarging narrower windows.
         std::vector<int> widths;
         widths.reserve(onPage);
         for (int i = 0; i < onPage; ++i) {
@@ -1705,16 +1739,16 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
             widths.push_back(std::max(width, 1));
         }
 
-        // Le righe si riempiono rispettando il numero massimo di colonne: con
-        // sette finestre l'originale teneva una riga sola e rimpiccioliva le
-        // anteprime, non ne aggiungeva una seconda.
+        // The rows fill up while respecting the maximum number of columns: with
+        // seven windows the original kept a single row and shrank the previews,
+        // it didn't add a second one.
         std::vector<std::vector<int>> rows;
         std::vector<int> rowWidths;
         std::vector<int> row{};
         int rowWidth = 0;
         for (int i = 0; i < onPage; ++i) {
             const int cellW = widths[i];
-            if (static_cast<int>(row.size()) >= columns) {
+            if (static_cast<int>(row.size()) >= layoutColumns) {
                 rows.push_back(row);
                 rowWidths.push_back(rowWidth);
                 row.clear();
@@ -1733,9 +1767,25 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
         const int contentH = static_cast<int>(rows.size()) * thumbH +
             (static_cast<int>(rows.size()) - 1) * layout.cellGapY;
 
-        if ((contentW <= contentLimit && contentH <= heightLimit) ||
-            rowHeight <= minRowHeight) {
-            // Tutto entra, oppure non si può più rimpicciolire.
+        const bool fits = contentW <= contentLimit && contentH <= heightLimit;
+
+        // A layout that no longer fits at the minimum height is split instead of
+        // shrunk: one more row, and the previews keep the height measured on the
+        // original instead of becoming unreadable. The rows that can be added
+        // are bounded by the space available, and once that is used up the
+        // shrinking carries on below the minimum.
+        if (!fits && rowHeight <= minRowHeight && rowsWanted < maxRowsByHeight) {
+            ++rowsWanted;
+            layoutColumns = std::max(1, (onPage + rowsWanted - 1) / rowsWanted);
+            continue;
+        }
+
+        // The minimum of the original only stops the shrinking as long as the
+        // content fits. If a row stays wider than the available space the panel
+        // would be pinned to the edge of the monitor and the last previews would
+        // end up off screen, so it keeps shrinking down to an absolute floor.
+        if (fits || rowHeight <= rowHeightFloor) {
+            // Everything fits, or the floor has been reached.
 
             const int panelW = std::max(
                 std::max(contentW + metrics.padLeft + metrics.padRight,
@@ -1744,12 +1794,12 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
             const int panelH = contentH + metrics.padTop +
                 metrics.titleBand + metrics.padBottom;
 
-            // La posizione è quella della specifica: metà dello spazio libero
-            // in orizzontale e il 35% in verticale.
+            // The position is the one of the spec: half of the free space
+            // horizontally and 35% vertically.
             int panelX = static_cast<int>(area.left) + (areaW - panelW) / 2;
             int panelY = static_cast<int>(area.top) + (areaH - panelH) * 35 / 100;
-            // I membri di RECT sono LONG: vanno riportati a int prima di
-            // std::clamp, che vuole un solo tipo dedotto.
+            // The members of RECT are LONG: they have to be narrowed to int
+            // before std::clamp, which wants a single deduced type.
             const int minX = static_cast<int>(area.left);
             const int minY = static_cast<int>(area.top);
             panelX = std::clamp(panelX, minX,
@@ -1759,6 +1809,11 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
             layout.panel = RECT{panelX, panelY, panelX + panelW,
                                 panelY + panelH};
 
+            if (rowHeight < minRowHeight) {
+                Wh_Log(L"The previews were shrunk to %d px, below the %d px of the original, so that the row stays on the monitor",
+                       rowHeight, minRowHeight);
+            }
+
             layout.firstIndex = firstIndex;
             layout.rowHeight = rowHeight;
             layout.thumbH = thumbH;
@@ -1767,8 +1822,8 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
 
             int y = layout.panel.top + metrics.padTop + metrics.titleBand;
             for (size_t r = 0; r < rows.size(); ++r) {
-                // La riga è centrata nel pannello, non nel contenuto: con la
-                // banda a tutta larghezza le due cose non coincidono.
+                // The row is centered in the panel, not in the content: with a
+                // full width band the two don't coincide.
                 int x = layout.panel.left + (panelW - rowWidths[r]) / 2;
                 for (int index : rows[r]) {
                     ItemGeometry& geometry = layout.items[index];
@@ -1776,8 +1831,8 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
 
                     geometry.cell = RECT{x, y, x + cellW, y + thumbH};
                     geometry.thumb = geometry.cell;
-                    // L'icona sta nell'angolo in basso a destra; con un inset
-                    // negativo (stile 8.1) sporge di metà oltre l'angolo.
+                    // The icon sits inside the bottom right corner, as in both
+                    // originals; the inset is how far it stays from the edges.
                     geometry.icon = RECT{
                         geometry.thumb.right - metrics.iconSize -
                             metrics.iconInset,
@@ -1793,23 +1848,23 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
             break;
         }
 
-        rowHeight = std::max(minRowHeight, rowHeight * 9 / 10);
+        rowHeight = std::max(rowHeightFloor, rowHeight * 9 / 10);
     }
 
     return layout;
 }
 
 // -----------------------------------------------------------------------------
-// Superficie premoltiplicata
+// Premultiplied surface
 //
-// Il pannello non è più una finestra normale su cui si fa BitBlt dello schermo:
-// è una finestra a livelli il cui contenuto viene composto pixel per pixel in un
-// DIB a 32 bpp e poi consegnato a DWM con UpdateLayeredWindow(ULW_ALPHA).
-// In quel formato ogni pixel è 0xAARRGGBB *premoltiplicato*, cioè con i canali
-// di colore già moltiplicati per l'alfa: è l'unica rappresentazione con cui
-// DWM sa comporre un livello con angoli arrotondati e trasparenze morbide.
+// The panel is no longer an ordinary window the screen is BitBlt'ed onto: it is
+// a layered window whose content is composed pixel by pixel into a 32 bpp DIB
+// and then handed to DWM with UpdateLayeredWindow(ULW_ALPHA). In that format
+// every pixel is 0xAARRGGBB *premultiplied*, that is with the color channels
+// already multiplied by the alpha: it is the only representation DWM can use to
+// compose a layer with rounded corners and soft transparency.
 //
-// Le regole di compositing qui sotto sono quelle documentate da Microsoft per
+// The compositing rules below are the ones documented by Microsoft for
 // AlphaBlend/AC_SRC_OVER:  out = src + dst * (1 - srcA).
 // -----------------------------------------------------------------------------
 
@@ -1825,8 +1880,8 @@ static inline uint32_t PackPremultiplied(int r, int g, int b, int alpha) {
            static_cast<uint32_t>(MulDiv255(std::clamp(b, 0, 255), a));
 }
 
-// Scala un pixel premoltiplicato, alfa compresa: serve per la copertura dei
-// bordi arrotondati, dove un pixel è coperto solo in parte.
+// Scales a premultiplied pixel, alpha included: it is needed for the coverage of
+// the rounded edges, where a pixel is only partly covered.
 static inline uint32_t ScalePremultiplied(uint32_t pixel, int coverage) {
     if (coverage >= 16) {
         return pixel;
@@ -1841,7 +1896,7 @@ static inline uint32_t ScalePremultiplied(uint32_t pixel, int coverage) {
     return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
-// Source-over di un pixel premoltiplicato su un altro.
+// Source-over of a premultiplied pixel on another one.
 static inline uint32_t BlendPremultipliedPixel(uint32_t destination,
                                                uint32_t source) {
     const int sourceAlpha = static_cast<int>((source >> 24) & 0xFF);
@@ -1899,8 +1954,8 @@ static inline void BlendPixel(BitmapSurface& surface, int x, int y,
             premultiplied);
 }
 
-// Un punto è dentro il rettangolo arrotondato? La verifica è esatta, quindi la
-// copertura dei bordi si può ricavare da quattro campioni per lato.
+// Is a point inside the rounded rectangle? The test is exact, so the edge
+// coverage can be derived from four samples per side.
 static bool PointInRoundedRect(double x, double y, const RECT& rect,
                                double radius) {
     if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
@@ -1928,7 +1983,7 @@ static bool PointInRoundedRect(double x, double y, const RECT& rect,
     return dx * dx + dy * dy <= radius * radius;
 }
 
-// Copertura in sedicesimi di un pixel: 16 significa pieno, 0 vuoto.
+// Coverage in sixteenths of a pixel: 16 means full, 0 empty.
 static int RoundedRectCoverage(int x, int y, const RECT& rect, int radius) {
     if (radius <= 0) {
         return (x >= rect.left && x < rect.right && y >= rect.top &&
@@ -1937,7 +1992,7 @@ static int RoundedRectCoverage(int x, int y, const RECT& rect, int radius) {
             : 0;
     }
 
-    // I pixel lontani dagli angoli sono pieni o vuoti senza dover campionare.
+    // Pixels away from the corners are full or empty without any sampling.
     const bool cornerColumn =
         x < rect.left + radius || x >= rect.right - radius;
     const bool cornerRow = y < rect.top + radius || y >= rect.bottom - radius;
@@ -1969,7 +2024,7 @@ static void ClearSurface(BitmapSurface& surface) {
     }
 }
 
-// Un rettangolo pieno, con angoli arrotondati, in colore premoltiplicato.
+// A filled rectangle with rounded corners, in premultiplied color.
 static void FillRoundedRect(BitmapSurface& surface, const RECT& rect,
                             int radius, COLORREF color, int alpha) {
     if (alpha <= 0 || rect.right <= rect.left || rect.bottom <= rect.top) {
@@ -1995,8 +2050,8 @@ static void FillRoundedRect(BitmapSurface& surface, const RECT& rect,
     }
 }
 
-// Un rettangolo arrotondato con una sfumatura verticale fra due alfa: è il
-// riflesso chiaro che il vetro Aero ha nella metà superiore.
+// A rounded rectangle with a vertical gradient between two alphas: it is the
+// light reflection Aero glass has in its upper half.
 static void FillRoundedRectGradient(BitmapSurface& surface, const RECT& rect,
                                     int radius, COLORREF topColor,
                                     int topAlpha, COLORREF bottomColor,
@@ -2036,8 +2091,8 @@ static void FillRoundedRectGradient(BitmapSurface& surface, const RECT& rect,
     }
 }
 
-// Il contorno di un rettangolo arrotondato: la differenza fra la copertura del
-// rettangolo esterno e quella del rettangolo rientrato di "thickness".
+// The outline of a rounded rectangle: the difference between the coverage of the
+// outer rectangle and the one of the rectangle inset by "thickness".
 static void StrokeRoundedRect(BitmapSurface& surface, const RECT& rect,
                               int radius, int thickness, COLORREF color,
                               int alpha) {
@@ -2079,12 +2134,12 @@ static void StrokeRoundedRect(BitmapSurface& surface, const RECT& rect,
 }
 
 // -----------------------------------------------------------------------------
-// Testo
+// Text
 //
-// GDI riempie il DIB con il colore del testo, non con l'alfa, quindi il testo
-// viene prima reso su una superficie nera con inchiostro bianco e antialiasing
-// in scala di grigi: il valore dei canali è esattamente la copertura del glifo.
-// Da lì ombra, contorno e testo si compongono con l'alfa che serve.
+// GDI fills the DIB with the text color, not with alpha, so the text is first
+// rendered on a black surface with white ink and grayscale antialiasing: the
+// value of the channels is exactly the coverage of the glyph. From there shadow,
+// outline and text are composed with the alpha they need.
 // -----------------------------------------------------------------------------
 
 struct TextMask {
@@ -2102,9 +2157,9 @@ struct TextMask {
 static ScopedFont g_uiFont;
 static int g_uiFontHeight = 0;
 
-// Il font del titolo. Niente ClearType: il pannello può stare sopra qualunque
-// cosa, e il ClearType presuppone un colore di sfondo noto, quindi qui si usa
-// l'antialiasing in scala di grigi, come chiede la specifica.
+// The title font. No ClearType: the panel can be over anything, and ClearType
+// assumes a known background color, so grayscale antialiasing is used here, as
+// the spec asks.
 static HFONT GetUiFont(int heightPx) {
     const int height = std::max(8, heightPx);
     if (g_uiFont.value && g_uiFontHeight == height) {
@@ -2126,12 +2181,12 @@ static HFONT GetUiFont(int heightPx) {
     return g_uiFont.value;
 }
 
-// Il testo viene disegnato a due volte la dimensione e poi ridotto: GDI
-// antialiasa il glifo su una griglia di pixel, e a 20 px la scala di grigi che
-// ne esce è più magra del testo vero. Disegnando a 2x e mediando i quattro
-// campioni si ottiene la copertura che avrebbe un rendering a 2x ridotto, cioè
-// un titolo della stessa consistenza dell'originale. La correzione di gamma
-// compensa il fatto che la media avviene in sRGB e non in luce lineare.
+// The text is drawn at twice the size and then reduced: GDI antialiases the
+// glyph on a pixel grid, and at 20 px the grayscale that comes out is thinner
+// than the real text. Drawing at 2x and averaging the four samples gives the
+// coverage a downscaled 2x rendering would have, that is a title with the same
+// weight as the original. The gamma correction compensates for the fact that the
+// average happens in sRGB and not in linear light.
 constexpr int kTextMaskSupersample = 2;
 constexpr double kTextMaskGamma = 0.80;
 
@@ -2142,8 +2197,9 @@ static unsigned char TextCoverage(double value) {
     if (value >= 1.0) {
         return 255;
     }
-    // La riduzione avviene in sRGB, la copertura va riportata verso la luce
-    // lineare: senza la correzione i glifi risultano più magri del vero.
+    // The reduction happens in sRGB, the coverage has to be brought back towards
+    // linear light: without the correction the glyphs come out thinner than they
+    // should be.
     const double corrected = std::pow(value, kTextMaskGamma);
     return static_cast<unsigned char>(std::clamp(corrected, 0.0, 1.0) * 255.0 +
                                       0.5);
@@ -2156,8 +2212,8 @@ static bool BuildTextMask(TextMask& mask, const std::wstring& text,
         return false;
     }
 
-    // Il font è quello del pannello, ma a due volte l'altezza: GDI non scala i
-    // glifi, quindi il "2x" è un secondo font, non un ingrandimento.
+    // The font is the panel one, but at twice the height: GDI doesn't scale
+    // glyphs, so the "2x" is a second font, not an enlargement.
     HFONT largeFont = GetUiFont(fontHeight * kTextMaskSupersample);
     if (!largeFont) {
         return false;
@@ -2239,8 +2295,8 @@ static bool BuildTextMask(TextMask& mask, const std::wstring& text,
     return true;
 }
 
-// Compone la maschera nel colore e nell'alfa richiesti, con uno scostamento,
-// che è come nascono l'ombra e il contorno del titolo.
+// Composes the mask in the requested color and alpha, with an offset, which is
+// how the shadow and the outline of the title are made.
 static void BlendTextMask(BitmapSurface& target, const TextMask& mask, int x,
                           int y, COLORREF color, int alpha) {
     if (!mask.surface.bits || alpha <= 0) {
@@ -2250,8 +2306,8 @@ static void BlendTextMask(BitmapSurface& target, const TextMask& mask, int x,
     const int baseR = GetRValue(color);
     const int baseG = GetGValue(color);
     const int baseB = GetBValue(color);
-    // La copertura sta nel canale blu: l'inchiostro è bianco, quindi i tre
-    // canali hanno lo stesso valore.
+    // The coverage is in the blue channel: the ink is white, so the three
+    // channels have the same value.
     const auto* source = static_cast<const uint8_t*>(mask.surface.bits);
 
     for (int row = 0; row < mask.height; ++row) {
@@ -2273,18 +2329,17 @@ static void BlendTextMask(BitmapSurface& target, const TextMask& mask, int x,
 }
 
 // -----------------------------------------------------------------------------
-// Stato della sessione
+// Session state
 //
-// Tutto quello che sta qui appartiene al thread dell'interfaccia della mod. Il
-// thread del gancio della tastiera e il watchdog non toccano mai la sessione:
-// mandano messaggi alla finestra del pannello, così lo stato resta a un solo
-// thread e non ci sono gare.
+// Everything here belongs to the UI thread of the mod. The keyboard hook thread
+// and the watchdog never touch the session: they post messages to the window of
+// the panel, so the state stays on a single thread and there are no races.
 // -----------------------------------------------------------------------------
 
 constexpr wchar_t kOverlayClassName[] = L"WindhawkAltTabRecreationOverlay";
 
-// Quanta parte del titolo viene disegnata come ombra e come contorno: sono i
-// valori della specifica, 0x64 e 0x32.
+// How much of the title is drawn as shadow and as outline: they are the values
+// of the spec, 0x64 and 0x32.
 constexpr int kTitleShadowAlpha = 0x64;
 constexpr int kTitleOutlineAlpha = 0x32;
 constexpr int kTitleShadowOffset = 2;
@@ -2292,9 +2347,9 @@ constexpr int kTitleShadowOffset = 2;
 struct Session {
     bool active = false;
     bool visible = false;
-    HWND hwnd = nullptr;          // la finestra del pannello, a livelli
-    HWND previewLayer = nullptr;  // la finestra dei preview DWM, sopra il pannello
-    HWND dimWindow = nullptr;     // lo strato che scurisce il desktop, se richiesto
+    HWND hwnd = nullptr;          // the window of the panel, layered
+    HWND previewLayer = nullptr;  // the window of the DWM previews, above the panel
+    HWND dimWindow = nullptr;     // the layer that darkens the desktop, if requested
     SwitcherSettings settings;
     std::wstring appPathFilter;
     std::vector<SwitcherItem> items;
@@ -2303,33 +2358,33 @@ struct Session {
     int hoverIndex = -1;
     int page = 0;
     int dpi = 96;
-    RECT monitorRect{};   // il monitor su cui è mostrato, in coordinate schermo
-    RECT workArea{};      // la sua area di lavoro, in coordinate monitor
-    RECT panelScreen{};   // il pannello, in coordinate schermo
-    BitmapSurface surface;  // il pannello composto, premoltiplicato
-    COLORREF panelTint = RGB(226, 240, 250);  // il vetro del 7, dal colore di sistema
-    COLORREF bandColor = RGB(36, 4, 110);     // la banda dell'8.1, dallo stesso colore
+    RECT monitorRect{};   // the monitor it is shown on, in screen coordinates
+    RECT workArea{};      // its work area, in monitor coordinates
+    RECT panelScreen{};   // the panel, in screen coordinates
+    BitmapSurface surface;  // the composed panel, premultiplied
+    COLORREF panelTint = RGB(226, 240, 250);  // the Windows 7 glass, from the system color
+    COLORREF bandColor = RGB(36, 4, 110);     // the 8.1 band, from the same color
     int panelAlpha = kWin7FrostAlpha;
     int fadeState = 0;    // 0 nascosto, 1 in entrata, 2 visibile, 3 in uscita
     int fadeLevel = 0;    // alfa in virgola fissa 8.8: 0x0000 - 0xFF00
-    bool pendingClose = false;  // la dissolvenza in uscita deve chiudere la sessione
+    bool pendingClose = false;  // the fade out has to close the session
     unsigned long long startedTick = 0;
 };
 
 static Session g_switcher;
 
 // -----------------------------------------------------------------------------
-// Vetro e sfocatura
+// Glass and blur
 //
-// Il pannello di Windows 7 non è un rettangolo semitrasparente: è vetro, cioè
-// il desktop sotto viene sfocato e poi colorato. La catena di ripiego è quella
-// della specifica:
-//   1. DwmEnableBlurBehindWindow con una regione arrotondata (API documentata);
-//   2. SetWindowCompositionAttribute con ACCENT_ENABLE_BLURBEHIND (API non
-//      documentata, ma è quella che funziona su Windows 10 e 11, dove la 1 non
-//      produce più sfocatura);
-//   3. solo trasparenza, senza sfocatura.
-// Il livello raggiunto viene riportato nel log una volta per sessione.
+// The Windows 7 panel isn't a semitransparent rectangle: it is glass, that is
+// the desktop below is blurred and then colored. The fallback chain is the one
+// of the spec:
+//   1. DwmEnableBlurBehindWindow with a rounded region (documented API);
+//   2. SetWindowCompositionAttribute with ACCENT_ENABLE_BLURBEHIND (undocumented
+//      API, but the one that works on Windows 10 and 11, where 1 no longer
+//      produces any blur);
+//   3. transparency only, with no blur.
+// The level that was reached is reported in the log once per session.
 // -----------------------------------------------------------------------------
 
 enum class BlurLevel {
@@ -2360,17 +2415,18 @@ constexpr int kAccentEnableBlurBehind = 3;
 constexpr int kAccentFlagDrawAllBorders = 2;
 
 static BlurLevel g_blurLevel = BlurLevel::None;
-static HRGN g_blurRegion = nullptr;  // posseduta dalla finestra, cancellata a fine sessione
+static HRGN g_blurRegion = nullptr;  // owned by the window, deleted at the end of the session
 
-// Chiede la sfocatura dietro la finestra del pannello. La regione è in
-// coordinate della finestra: la finestra è grande quanto il pannello, quindi la
-// regione è semplicemente tutto il suo client, con gli angoli arrotondati.
+// Asks for the blur behind the window of the panel. The region is in window
+// coordinates: the window is as big as the panel, so the region is simply its
+// whole client area, with the rounded corners.
 //
-// L'ordine della catena è quello della specifica, con una inversione motivata:
-// da Windows 8 in poi DwmEnableBlurBehindWindow riesce ma non sfoca più niente,
-// perché la sfocatura è passata all'attributo di composizione. Su Windows 10 e
-// 11 la prova che conta è quindi SetWindowCompositionAttribute; la chiamata
-// documentata resta come ripiego per i sistemi in cui l'attributo non esiste.
+// The order of the chain is the one of the spec, with a motivated inversion:
+// from Windows 8 on DwmEnableBlurBehindWindow succeeds but no longer blurs
+// anything, because blur moved to the composition attribute. On Windows 10 and
+// 11 the test that counts is therefore SetWindowCompositionAttribute; the
+// documented call stays as a fallback for the systems where the attribute
+// doesn't exist.
 static SetWindowCompositionAttributeFn ResolveCompositionAttribute() {
     static HMODULE user32 = GetModuleHandleW(L"user32.dll");
     static SetWindowCompositionAttributeFn resolved =
@@ -2399,8 +2455,8 @@ static bool SetAccentPolicy(HWND hwnd, int state) {
     return setCompositionAttribute(hwnd, &data) != FALSE;
 }
 
-// mode: "auto" prova prima l'attributo di composizione e poi la chiamata
-// documentata; "dwm" usa solo quella documentata; "off" non sfoca affatto.
+// mode: "auto" tries the composition attribute first and then the documented
+// call; "dwm" uses only the documented one; "off" doesn't blur at all.
 static BlurLevel ApplyPanelBlur(HWND hwnd, int width, int height, int radius,
                                 const std::wstring& mode) {
     if (!hwnd || !IsWindow(hwnd) || mode == L"off") {
@@ -2442,8 +2498,9 @@ static void ClearPanelBlur(HWND hwnd) {
         blur.fEnable = FALSE;
         DwmEnableBlurBehindWindow(hwnd, &blur);
 
-        // L'attributo di composizione va spento esplicitamente, altrimenti la
-        // regione dietro la finestra resta sfocata anche a pannello nascosto.
+        // The composition attribute has to be turned off explicitly, otherwise
+        // the region behind the window stays blurred even with the panel
+        // hidden.
         SetAccentPolicy(hwnd, kAccentDisabled);
     }
 
@@ -2455,12 +2512,12 @@ static void ClearPanelBlur(HWND hwnd) {
 }
 
 // -----------------------------------------------------------------------------
-// Lo strato che scurisce il desktop
+// The layer that darkens the desktop
 //
-// Con una finestra a livelli il pannello può essere semitrasparente davvero, e
-// dietro di lui si vede il desktop vero, non uno screenshot: lo scurimento è
-// quindi un secondo livello, grande quanto lo schermo, dipinto una volta sola
-// con un nero uniforme. Con lo scurimento a 0 la finestra non esiste nemmeno.
+// With a layered window the panel can really be semitransparent, and behind it
+// the real desktop shows, not a screenshot: the darkening is therefore a second
+// layer, as big as the screen, painted once with a uniform black. With the
+// darkening at 0 the window doesn't even exist.
 // -----------------------------------------------------------------------------
 
 constexpr wchar_t kDimClassName[] = L"WindhawkAltTabRecreationDim";
@@ -2516,19 +2573,19 @@ static void DestroyDimWindow() {
 }
 
 // -----------------------------------------------------------------------------
-// L'ombra del pannello
+// The shadow of the panel
 //
-// Il vetro Aero non finisce sul bordo: attorno c'è un'ombra morbida, ed è una
-// buona parte di quello che lo fa sembrare vetro e non un rettangolo grigio. Una
-// finestra a livelli non riceve l'ombra di DWM, quindi l'ombra si disegna, in una
-// finestra a parte sotto il pannello e più grande di lui: così non entra nella
-// regione della sfocatura e non viene ritagliata.
+// Aero glass doesn't end at its edge: there is a soft shadow around it, and it
+// is a good part of what makes it look like glass and not like a gray rectangle.
+// A layered window doesn't get the DWM shadow, so the shadow is drawn, in a
+// separate window below the panel and bigger than it: that way it doesn't enter
+// the blur region and isn't clipped.
 // -----------------------------------------------------------------------------
 
 constexpr wchar_t kShadowClassName[] = L"WindhawkAltTabRecreationShadow";
 
-// Distanza con segno dal bordo di un rettangolo arrotondato: negativa dentro,
-// positiva fuori. È la formula standard della "rounded box".
+// Signed distance from the edge of a rounded rectangle: negative inside,
+// positive outside. It is the standard formula of the "rounded box".
 static double RoundedRectDistance(double x, double y, const RECT& rect,
                                   double radius) {
     const double halfWidth = (rect.right - rect.left) / 2.0;
@@ -2544,11 +2601,11 @@ static double RoundedRectDistance(double x, double y, const RECT& rect,
     return outside + inside - radius;
 }
 
-// topPercent vale 100 quando l'ombra gira tutta attorno. L'ombra di una
-// miniatura viva invece cade soprattutto in basso: sul fotogramma il vetro
-// subito sopra l'anteprima resta chiaro (luminanza 214 contro i 215 del resto),
-// mentre sotto scende a 80. Un anello scuro uguale sui quattro lati non
-// assomiglia a un incavo, assomiglia a una macchia.
+// topPercent is 100 when the shadow goes all the way around. The shadow of a live
+// thumbnail, on the other hand, falls mostly downwards: on the frame the glass
+// right above the preview stays light (luminance 214 against the 215 of the rest)
+// while below it drops to 80. An even dark ring on all four sides doesn't look
+// like a recess, it looks like a stain.
 static void DrawSoftShadow(BitmapSurface& surface, const RECT& rect,
                            int radius, int spread, int maxAlpha,
                            int topPercent = 100) {
@@ -2566,14 +2623,15 @@ static void DrawSoftShadow(BitmapSurface& surface, const RECT& rect,
         for (int x = left; x < right; ++x) {
             const double distance = RoundedRectDistance(
                 x + 0.5, y + 0.5, rect, static_cast<double>(radius));
-            // Solo fuori dal rettangolo: dentro la distanza \u00e8 negativa e senza
-            // questo controllo l'ombra riempirebbe di nero tutto l'interno, cosa
-            // che per l'ombra del pannello non si vedeva (il pannello la copre)
-            // ma per quella dell'anteprima si vedrebbe eccome.
+            // Only outside the rectangle: inside, the distance is negative and
+            // without this check the shadow would fill the whole interior with
+            // black, which wasn't visible for the shadow of the panel (the panel
+            // covers it) but would be very visible for the one of the preview.
             if (distance <= 0.0 || distance >= spread) {
                 continue;
             }
-            // Caduta quadratica: piena sul bordo, nulla alla fine della spread.
+            // Quadratic falloff: full at the edge, nothing at the end of the
+            // spread.
             double falloff = 1.0 - std::max(distance, 0.0) / spread;
             falloff *= falloff;
             int alpha = static_cast<int>(maxAlpha * falloff + 0.5);
@@ -2583,7 +2641,7 @@ static void DrawSoftShadow(BitmapSurface& surface, const RECT& rect,
             if (alpha <= 0) {
                 continue;
             }
-            // L'ombra è nera, quindi il pixel premoltiplicato è solo alfa.
+            // The shadow is black, so the premultiplied pixel is alpha only.
             BlendPixel(surface, x, y,
                        static_cast<uint32_t>(alpha) << 24);
         }
@@ -2606,8 +2664,8 @@ static void DestroyShadowWindow() {
     g_shadowWindow.surface.reset();
 }
 
-// Costruisce l'ombra attorno al pannello. Il rettangolo passato è quello del
-// pannello in coordinate schermo; la finestra è più grande di "spread" per lato.
+// Builds the shadow around the panel. The rectangle passed in is the one of the
+// panel in screen coordinates; the window is bigger by "spread" on each side.
 static bool EnsureShadowWindow(const RECT& panel, int spread, int radius,
                                int maxAlpha) {
     HINSTANCE instance = GetModuleHandleW(nullptr);
@@ -2650,8 +2708,8 @@ static bool EnsureShadowWindow(const RECT& panel, int spread, int radius,
         }
     }
 
-    // HWND_TOPMOST, ma prima del pannello: la sessione posiziona il pannello
-    // subito dopo, quindi l'ombra resta sotto.
+    // HWND_TOPMOST, but before the panel: the session places the panel right
+    // after, so the shadow stays below it.
     SetWindowPos(g_shadowWindow.hwnd, HWND_TOPMOST, windowRect.left,
                  windowRect.top, width, height,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
@@ -2674,18 +2732,18 @@ static bool EnsureShadowWindow(const RECT& panel, int spread, int radius,
 }
 
 // -----------------------------------------------------------------------------
-// Lo strato dei preview
+// The preview layer
 //
-// DWM compone le anteprime sopra il contenuto della finestra di destinazione,
-// quindi non possono stare nella finestra del pannello: se ci stessero,
-// coprirebbero il vetro, i bordi e la selezione. Vivono perciò in una seconda
-// finestra, sopra il pannello, ritagliata con una regione esattamente grande
-// quanto i rettangoli delle anteprime: quello che sta fuori dalla regione non
-// esiste, e sotto si vede il pannello.
+// DWM composes the thumbnails above the content of the destination window, so
+// they can't live in the window of the panel: if they did, they would cover the
+// glass, the borders and the selection. They live in a second window instead,
+// above the panel, clipped with a region exactly as big as the rectangles of the
+// previews: what is outside the region doesn't exist, and the panel shows
+// through under it.
 //
-// La finestra non è a livelli: una finestra a livelli con UpdateLayeredWindow
-// non mostra le anteprime di DWM, mentre una finestra ritagliata da una regione
-// le mostra e resta invisibile in tutto il resto.
+// The window is not layered: a layered window with UpdateLayeredWindow doesn't
+// show DWM thumbnails, while a window clipped by a region shows them and stays
+// invisible in everything else.
 // -----------------------------------------------------------------------------
 
 constexpr wchar_t kPreviewLayerClassName[] =
@@ -2724,8 +2782,8 @@ static bool EnsurePreviewLayer() {
         classRegistered = true;
     }
 
-    // Senza attivazione, fuori dall'elenco delle finestre, trasparente al mouse
-    // e sempre sopra il pannello.
+    // No activation, out of the window list, transparent to the mouse and always
+    // above the panel.
     HWND hwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
             WS_EX_TRANSPARENT,
@@ -2747,8 +2805,8 @@ static bool EnsurePreviewLayer() {
     return true;
 }
 
-// Ritaglia la finestra dei preview sull'unione dei rettangoli delle anteprime
-// registrate: quello che resta fuori non viene né disegnato né composto.
+// Clips the preview window onto the union of the rectangles of the registered
+// thumbnails: what is left outside is neither drawn nor composed.
 static void UpdatePreviewLayerRegion() {
     if (!g_switcher.previewLayer || !IsWindow(g_switcher.previewLayer)) {
         return;
@@ -2774,9 +2832,9 @@ static void UpdatePreviewLayerRegion() {
         }
     }
 
-    // La finestra va riportata sulla posizione del pannello a ogni sessione:
-    // può essere stata riusata dopo che il pannello si è spostato, e va
-    // mostrata, altrimenti il sistema non compone le anteprime.
+    // The window has to be brought back onto the position of the panel on every
+    // session: it may have been reused after the panel moved, and it has to be
+    // shown, otherwise the system doesn't compose the thumbnails.
     SetWindowPos(g_switcher.previewLayer, HWND_TOPMOST,
                  g_switcher.panelScreen.left, g_switcher.panelScreen.top,
                  g_switcher.panelScreen.right - g_switcher.panelScreen.left,
@@ -2784,15 +2842,15 @@ static void UpdatePreviewLayerRegion() {
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
     SetWindowRgn(g_switcher.previewLayer, region, TRUE);
-    // SetWindowRgn possiede la regione da questo momento: non va cancellata.
+    // SetWindowRgn owns the region from now on: it must not be deleted.
 }
 
 // -----------------------------------------------------------------------------
-// L'animazione di comparsa
+// The opening animation
 //
-// Alfa in virgola fissa 8.8, da 0x4000 a 0xFF00 in 250 ms con un passo di 40 ms,
-// come nella specifica. L'alfa viene applicato da UpdateLayeredWindow con
-// SourceConstantAlpha, quindi non serve ricomporre il pannello a ogni passo.
+// Alpha in 8.8 fixed point, from 0x4000 to 0xFF00 in 250 ms with a 40 ms step,
+// as in the spec. The alpha is applied by UpdateLayeredWindow with
+// SourceConstantAlpha, so the panel doesn't have to be recomposed at every step.
 // -----------------------------------------------------------------------------
 
 constexpr int kFadeStartLevel = 0x4000;
@@ -2801,7 +2859,7 @@ constexpr UINT kFadeTickMs = 40;
 constexpr int kFadeStep = (kFadeEndLevel - kFadeStartLevel) / 6;  // 250 ms / 40 ms
 
 static void PresentFrame();
-// Le icone vivono in un altro blocco: la presentazione le rinfresca.
+// The icons live in another block: the presentation refreshes them.
 static void UpdateIconOverlay();
 
 static int CurrentFadeAlpha() {
@@ -2834,8 +2892,8 @@ static void StartFade(bool entering) {
     PresentFrame();
 }
 
-// Un passo dell'animazione. Restituisce true quando la dissolvenza in uscita è
-// finita e la sessione può essere chiusa davvero.
+// One step of the animation. Returns true when the fade out is over and the
+// session can really be closed.
 static bool StepFade() {
     if (g_switcher.fadeState == 1) {
         g_switcher.fadeLevel = std::min(kFadeEndLevel,
@@ -2862,36 +2920,36 @@ static bool StepFade() {
 }
 
 // -----------------------------------------------------------------------------
-// Composizione del pannello
+// Panel composition
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
-// Il colore di sistema
+// The system color
 //
-// Il vetro di Windows 7 e la banda di Windows 8.1 non avevano un colore loro:
-// prendevano il colore di personalizzazione di Windows. Era il motivo per cui
-// due PC con due colori diversi avevano due switcher diversi, e per cui lo
-// switcher cambiava subito dopo aver toccato "Colore" nelle impostazioni.
+// Windows 7 glass and the Windows 8.1 band didn't have a color of their own:
+// they took the personalization color of Windows. That is why two PCs with two
+// different colors had two different switchers, and why the switcher changed
+// right after touching "Color" in the settings.
 //
-// Qui il colore si legge da due fonti, in quest'ordine:
-//   1. HKCU\Software\Microsoft\Windows\DWM\AccentColor, il colore scelto
-//      dall'utente in Impostazioni > Personalizzazione > Colori. Su Windows 10 e
-//      11 è l'unico posto in cui il colore c'è sempre, anche quando la
-//      colorizzazione delle finestre è spenta;
-//   2. DwmGetColorizationColor, l'API documentata che restituisce il colore
-//      usato da DWM per comporre il vetro (0xAARRGGBB, con l'alfa che ne indica
-//      l'intensità). È la fonte che usava Windows 7.
-// Se nessuna delle due risponde restano i due colori misurati sui fotogrammi.
+// Here the color is read from two sources, in this order:
+//   1. HKCU\Software\Microsoft\Windows\DWM\AccentColor, the color the user
+//      chose in Settings > Personalization > Colors. On Windows 10 and 11 it is
+//      the only place where the color is always there, even when the coloring
+//      of the windows is off;
+//   2. DwmGetColorizationColor, the documented API that returns the color DWM
+//      uses to compose the glass (0xAARRGGBB, with the alpha telling its
+//      intensity). It is the source Windows 7 used.
+// If neither answers, the two colors measured on the frames remain.
 // -----------------------------------------------------------------------------
 
 struct SystemAccent {
-    COLORREF color = RGB(66, 156, 230);  // "Sky", il colore predefinito di Windows 7
-    int intensity = 0xC4;                // canale alfa della colorizzazione
+    COLORREF color = RGB(66, 156, 230);  // "Sky", the default color of Windows 7
+    int intensity = 0xC4;                // alpha channel of the colorization
     bool valid = false;
 };
 
-// Legge un DWORD dal registro senza toccare percorsi di uscita: RegGetValue
-// riporta l'esito e non lascia handle aperti.
+// Reads a DWORD from the registry without any exit path: RegGetValue reports the
+// outcome and doesn't leave handles open.
 static bool ReadAccentFromRegistry(DWORD* value) {
     if (!value) {
         return false;
@@ -2911,8 +2969,8 @@ static bool ReadAccentFromRegistry(DWORD* value) {
 static SystemAccent ResolveSystemAccent() {
     SystemAccent accent;
 
-    // AccentColor è in formato 0xAABBGGRR, cioè lo stesso ordine di COLORREF:
-    // i tre canali si leggono al contrario rispetto ad ARGB.
+    // AccentColor is in 0xAABBGGRR format, that is the same order as COLORREF:
+    // the three channels are read the other way round compared to ARGB.
     DWORD accentValue = 0;
     if (ReadAccentFromRegistry(&accentValue)) {
         accent.color = RGB(static_cast<int>(accentValue & 0xFF),
@@ -2939,12 +2997,12 @@ static SystemAccent ResolveSystemAccent() {
     return accent;
 }
 
-// Il vetro del 7: il colore di sistema alleggerito verso il bianco. Non è una
-// tinta fissa, quindi un accento rosso dà un vetro rosato e uno blu un vetro
-// azzurro, come faceva Aero.
-// "#RRGGBB", "RRGGBB", "#RGB" o "RGB": il formato che si scrive a mano nelle
-// impostazioni. Restituisce false se il testo non è un colore, così un refuso
-// non spegne il pannello ma fa tornare al colore di sistema.
+// The glass of 7: the system color lightened towards white. It isn't a fixed
+// tint, so a red accent gives a reddish glass and a blue one a light blue glass,
+// the way Aero did.
+// "#RRGGBB", "RRGGBB", "#RGB" or "RGB": the format that is typed by hand in the
+// settings. Returns false if the text isn't a color, so a typo doesn't turn the
+// panel off but goes back to the system color.
 static bool ParseHexColor(PCWSTR text, COLORREF* color) {
     if (!text || !color) {
         return false;
@@ -2996,9 +3054,9 @@ static bool ParseHexColor(PCWSTR text, COLORREF* color) {
     return true;
 }
 
-// Il colore da usare, secondo l'impostazione: quello scelto a mano oppure quello
-// di Windows. Una funzione sola perché la stessa scelta serve quando la sessione
-// comincia e quando il sistema cambia colore a switcher aperto.
+// The color to use, according to the setting: the one chosen by hand or the one
+// of Windows. A single function because the same choice is needed when the
+// session starts and when the system changes color with the switcher open.
 static SystemAccent ResolvePanelAccent(const SwitcherSettings& settings,
                                       bool* usedCustom) {
     SystemAccent accent;
@@ -3032,16 +3090,17 @@ static COLORREF FrostColorFromAccent(COLORREF accent) {
                mix(GetBValue(accent)));
 }
 
-// La banda dell'8.1: lo stesso colore di sistema, portato alla profondità
-// misurata sul fotogramma. Si conservano tinta e saturazione e si fissa il
-// canale più alto, così un giallo resta giallo e un indaco resta indaco.
+// The 8.1 band: the same system color, brought to the depth measured on the
+// frame. Hue and saturation are kept and the highest channel is fixed, so a
+// yellow stays yellow and an indigo stays indigo.
 static COLORREF BandColorFromAccent(COLORREF accent) {
     const int r = GetRValue(accent);
     const int g = GetGValue(accent);
     const int b = GetBValue(accent);
     const int highest = std::max(r, std::max(g, b));
     if (highest <= 8) {
-        // Un accento nero o quasi non è un colore: resta il valore misurato.
+        // A black or nearly black accent isn't a color: the measured value
+        // stays.
         return kW81PanelColor;
     }
     auto scale = [highest](int channel) {
@@ -3051,20 +3110,20 @@ static COLORREF BandColorFromAccent(COLORREF accent) {
 }
 
 // -----------------------------------------------------------------------------
-// La texture del vetro, generata
+// The glass texture, generated
 //
-// Un pannello traslucido senza texture si legge come un rettangolo di colore
-// piatto, ed è esattamente il difetto che si vedeva. Il vetro di Aero aveva due
-// cose che qui vengono ricostruite senza leggere niente dal sistema:
+// A translucent panel with no texture reads as a flat rectangle of color, and
+// that is exactly the defect that was visible. Aero glass had two things that
+// are rebuilt here without reading anything from the system:
 //
-//  * la grana dello smerigliato, un rumore finissimo di pochi livelli che toglie
-//    al colore l'aspetto di tinta unita;
-//  * i riflessi orizzontali, uno forte subito sotto il bordo alto e uno più
-//    debole a un quinto dell'altezza.
+//  * the grain of the frosted glass, a very fine noise of a few levels that
+//    takes away the look of a solid tint;
+//  * the horizontal reflections, a strong one right below the top edge and a
+//    weaker one at a fifth of the height.
 //
-// Il rumore non è casuale: è una funzione deterministica delle coordinate, quindi
-// è identico a ogni fotogramma e il pannello non "sfarfalla" quando viene
-// ridisegnato (per esempio quando cambia la selezione).
+// The noise isn't random: it is a deterministic function of the coordinates, so
+// it is the same on every frame and the panel doesn't "flicker" when it is
+// redrawn (for example when the selection changes).
 // -----------------------------------------------------------------------------
 
 static unsigned int GlassNoise(int x, int y) {
@@ -3074,9 +3133,9 @@ static unsigned int GlassNoise(int x, int y) {
     return value ^ (value >> 16);
 }
 
-// Il colore premoltiplicato cambia insieme all'alfa: aggiungere livelli al
-// colore di un pixel mezzo trasparente, senza riscalarli, lo renderebbe più
-// chiaro dell'alfa che dichiara.
+// A premultiplied color changes together with the alpha: adding levels to the
+// color of a half transparent pixel without rescaling them would make it lighter
+// than the alpha it declares.
 static void ApplyFrostGrain(BitmapSurface& surface, const RECT& rect,
                             int radius, int amplitude) {
     if (amplitude <= 0) {
@@ -3116,34 +3175,33 @@ static void ApplyFrostGrain(BitmapSurface& surface, const RECT& rect,
 }
 
 // -----------------------------------------------------------------------------
-// Il vetro vero
+// The real glass
 //
-// Il pannello non può contare sulla sfocatura di DWM: su Windows 10 e 11
-// DwmEnableBlurBehindWindow su una finestra a livelli il più delle volte non fa
-// nulla, e quello che resta è una tinta piatta sopra il desktop, che è
-// esattamente il difetto da correggere.
+// The panel can't count on the DWM blur: on Windows 10 and 11
+// DwmEnableBlurBehindWindow on a layered window most of the time does nothing,
+// and what is left is a flat tint over the desktop, which is exactly the defect
+// to fix.
 //
-// Qui il vetro viene costruito come lo costruiva Aero: si prende il desktop che
-// sta dietro al pannello, lo si sfoca, lo si colora con il colore della
-// colorizzazione e ci si compone sopra la tinta. Il risultato non dipende da
-// quello che DWM decide di fare, e resta identico su ogni macchina.
+// Here the glass is built the way Aero built it: the desktop behind the panel is
+// taken, blurred, colored with the colorization color and the tint is composed
+// over it. The result doesn't depend on what DWM decides to do, and it stays the
+// same on every machine.
 //
-// La cattura avviene una volta per sessione, mentre il pannello è ancora
-// nascosto: così non si fotografa mai se stesso. Il campionamento è a metà
-// risoluzione, perché dopo la sfocatura i dettagli fini non esistono più e la
-// cattura costa un quarto.
+// The capture happens once per session, while the panel is still hidden: that
+// way it never photographs itself. Sampling is at half resolution, because after
+// the blur the fine details no longer exist and the capture costs a quarter.
 // -----------------------------------------------------------------------------
 
-// Raggio del box blur sul fondale a metà risoluzione: due passate da 3 valgono
-// una gaussiana di sigma ~5, cioè circa 10 px pieni di sfocatura.
+// Radius of the box blur on the half resolution background: two passes of 3 are
+// worth a gaussian of sigma ~5, that is about 10 full pixels of blur.
 constexpr int kGlassBlurRadius = 3;
 
 struct GlassBackdrop {
-    std::vector<uint32_t> pixels;  // 0x00BBGGRR, a metà risoluzione
+    std::vector<uint32_t> pixels;  // 0x00BBGGRR, at half resolution
     int width = 0;
     int height = 0;
-    RECT screen{};                 // zona di schermo copiata
-    int panelWidth = 0;            // dimensioni per cui è stata preparata
+    RECT screen{};                 // screen area that was copied
+    int panelWidth = 0;            // size it was prepared for
     int panelHeight = 0;
     int style = -1;
 
@@ -3169,8 +3227,8 @@ static void ReleaseGlassBackdrop() {
     g_glass = GlassBackdrop();
 }
 
-// Sfocatura a scatola separabile, applicata due volte: due passate di raggio r
-// danno una gaussiana di sigma ~ r * sqrt(2/3), più che sufficiente per il vetro.
+// Separable box blur, applied twice: two passes of radius r give a gaussian of
+// sigma ~ r * sqrt(2/3), more than enough for glass.
 static void BoxBlurPixels(std::vector<uint32_t>& pixels, int width, int height,
                           int radius) {
     if (radius <= 0 || width <= 0 || height <= 0) {
@@ -3180,7 +3238,7 @@ static void BoxBlurPixels(std::vector<uint32_t>& pixels, int width, int height,
     std::vector<uint32_t> temporary(pixels.size(), 0);
     const int window = radius * 2 + 1;
 
-    // Passata orizzontale.
+    // Horizontal pass.
     for (int y = 0; y < height; ++y) {
         const uint32_t* row = pixels.data() + static_cast<size_t>(y) * width;
         uint32_t* out = temporary.data() + static_cast<size_t>(y) * width;
@@ -3208,7 +3266,7 @@ static void BoxBlurPixels(std::vector<uint32_t>& pixels, int width, int height,
         }
     }
 
-    // Passata verticale.
+    // Vertical pass.
     for (int x = 0; x < width; ++x) {
         int sumB = 0;
         int sumG = 0;
@@ -3240,8 +3298,8 @@ static void BoxBlurPixels(std::vector<uint32_t>& pixels, int width, int height,
     }
 }
 
-// Copia la zona di schermo del pannello a metà risoluzione e la sfoca. Un
-// fallimento non è un errore: senza vetro si ripiega sulla tinta, come prima.
+// Copies the screen area of the panel at half resolution and blurs it. A failure
+// isn't an error: without glass it falls back to the tint, as before.
 static bool CaptureGlassBackdrop(const RECT& panelScreen, int panelWidth,
                                  int panelHeight, int styleId) {
     if (g_glass.Matches(panelScreen, panelWidth, panelHeight, styleId)) {
@@ -3264,7 +3322,7 @@ static bool CaptureGlassBackdrop(const RECT& panelScreen, int panelWidth,
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     info.bmiHeader.biWidth = width;
-    info.bmiHeader.biHeight = -height;  // righe dall'alto
+    info.bmiHeader.biHeight = -height;  // rows from the top
     info.bmiHeader.biPlanes = 1;
     info.bmiHeader.biBitCount = 32;
     info.bmiHeader.biCompression = BI_RGB;
@@ -3280,8 +3338,8 @@ static bool CaptureGlassBackdrop(const RECT& panelScreen, int panelWidth,
     }
     HGDIOBJ previous = SelectObject(memory.value, bitmap);
 
-    // HALFTONE rende la riduzione una media dei pixel, non un campione: è
-    // quello che serve prima della sfocatura.
+    // HALFTONE makes the reduction an average of the pixels, not a sample: that
+    // is what is needed before the blur.
     const int previousMode = SetStretchBltMode(memory.value, HALFTONE);
     SetBrushOrgEx(memory.value, 0, 0, nullptr);
     const BOOL copied = StretchBlt(
@@ -3293,8 +3351,8 @@ static bool CaptureGlassBackdrop(const RECT& panelScreen, int panelWidth,
         std::vector<uint32_t> pixels(static_cast<size_t>(width) * height, 0);
         const auto* source = static_cast<const uint32_t*>(bits);
         for (size_t i = 0; i < pixels.size(); ++i) {
-            // Il DIB è 0x00RRGGBB; qui interessa tenere i canali separati e
-            // nell'ordine in cui li legge il resto del disegno.
+            // The DIB is 0x00RRGGBB; what matters here is keeping the channels
+            // separate and in the order the rest of the drawing reads them.
             pixels[i] = source[i] & 0x00FFFFFFu;
         }
         BoxBlurPixels(pixels, width, height, kGlassBlurRadius);
@@ -3314,14 +3372,14 @@ static bool CaptureGlassBackdrop(const RECT& panelScreen, int panelWidth,
     SelectObject(memory.value, previous);
     DeleteObject(bitmap);
     if (g_glass.pixels.empty()) {
-        // Il fondale non è disponibile: resta la texture generata, che è il
-        // motivo per cui il pannello non si legge comunque come tinta unita.
+        // The background isn't available: the generated texture remains, which
+        // is the reason the panel doesn't read as a solid tint anyway.
         Wh_Log(L"Glass backdrop: the capture failed, the generated frost texture is used");
     }
     return !g_glass.pixels.empty();
 }
 
-// Campione bilineare del fondale sfocato, in coordinate del pannello.
+// Bilinear sample of the blurred background, in panel coordinates.
 static uint32_t SampleGlass(int x, int y, int panelWidth, int panelHeight) {
     if (g_glass.pixels.empty() || g_glass.width < 2 || g_glass.height < 2) {
         return 0;
@@ -3361,9 +3419,9 @@ static uint32_t SampleGlass(int x, int y, int panelWidth, int panelHeight) {
     return result;
 }
 
-// La scheda del desktop disegna lo sfondo quando DWM non concede la miniatura.
-// L'implementazione sta nel blocco delle icone, più sotto: qui basta la
-// dichiarazione.
+// The desktop card draws the wallpaper when DWM doesn't grant the thumbnail. The
+// implementation is in the icons block, further down: the declaration is enough
+// here.
 static void DrawDesktopCardBackground(BitmapSurface& surface, const RECT& rect);
 
 static void DrawPanelBackground(BitmapSurface& surface, const SwitcherLayout& layout) {
@@ -3371,33 +3429,32 @@ static void DrawPanelBackground(BitmapSurface& surface, const SwitcherLayout& la
     const int radius = layout.radius;
 
     if (layout.style == SwitcherStyle::Windows81) {
-        // La banda dell'8.1 è opaca: nessuna sfocatura, nessuna trasparenza.
+        // The 8.1 band is opaque: no blur, no transparency.
         FillRoundedRect(surface, panel, radius, g_switcher.bandColor, 255);
         return;
     }
 
-    // Vetro Aero, nell'ordine in cui l'occhio lo legge sul fotogramma
-    // dell'originale:
-    //  1. la tinta della colorizzazione, quasi uniforme (la trasparenza vera la
-    //     dà la sfocatura dietro, non un alfa alto);
-    //  2. un riflesso chiaro molto tenue nella parte alta;
-    //  3. una leggera ombra interna in basso;
-    //  4. due pixel scuri sul bordo esterno;
-    //  5. due pixel quasi bianchi subito dentro i precedenti.
+    // Aero glass, in the order the eye reads it on the frame of the original:
+    //  1. the tint of the colorization, almost uniform (the real transparency
+    //     comes from the blur behind, not from a high alpha);
+    //  2. a very faint light reflection in the upper part;
+    //  3. a slight inner shadow at the bottom;
+    //  4. two dark pixels on the outer edge;
+    //  5. two nearly white pixels just inside the previous ones.
     const int alphaTop = std::clamp(g_switcher.panelAlpha + 6, 0, 255);
     const int alphaBottom = std::clamp(g_switcher.panelAlpha - 8, 0, 255);
     const int baseR = GetRValue(g_switcher.panelTint);
     const int baseG = GetGValue(g_switcher.panelTint);
     const int baseB = GetBValue(g_switcher.panelTint);
 
-    // Il fondale sfocato viene colorato con la tinta della colorizzazione: Aero
-    // non metteva un velo sopra il desktop, ne cambiava il colore. Se la
-    // cattura non c'è, resta la tinta piena.
+    // The blurred background is colored with the tint of the colorization: Aero
+    // didn't put a veil over the desktop, it changed its color. If there is no
+    // capture, the flat tint remains.
     const int panelWidth = panel.right - panel.left;
     const int panelHeight = panel.bottom - panel.top;
-    // Il fondale vale solo se è stato preso per questo pannello, nella stessa
-    // posizione: dopo un cambio di layout o di monitor sarebbe sfalsato, e
-    // sfalsato si vedrebbe subito (il vetro mostrerebbe il desktop sbagliato).
+    // The background only counts if it was taken for this panel, in the same
+    // position: after a change of layout or of monitor it would be off, and an
+    // offset would be visible at once (the glass would show the wrong desktop).
     const bool useGlass =
         !g_glass.pixels.empty() && g_glass.panelWidth == panelWidth &&
         g_glass.panelHeight == panelHeight &&
@@ -3425,24 +3482,24 @@ static void DrawPanelBackground(BitmapSurface& surface, const SwitcherLayout& la
                 const int glassB = static_cast<int>(sample & 0xFF);
                 const int glassG = static_cast<int>((sample >> 8) & 0xFF);
                 const int glassR = static_cast<int>((sample >> 16) & 0xFF);
-                // kFrostColorMix: quanto la tinta copre il fondale. Troppo
-                // alta e il vetro torna piatto, troppo bassa e si legge il
-                // desktop attraverso le anteprime.
+                // kFrostColorMix: how much the tint covers the background. Too
+                // high and the glass goes flat again, too low and the desktop
+                // shows through the previews.
                 const int tintMix = kFrostColorMix;
                 const int blurMix = 100 - tintMix;
                 r = (glassR * blurMix + baseR * tintMix) / 100;
                 g = (glassG * blurMix + baseG * tintMix) / 100;
                 b = (glassB * blurMix + baseB * tintMix) / 100;
-                // La sfocatura di Windows schiarisce leggermente il vetro:
-                // senza questa riga il pannello risulta più cupo dell'originale.
+                // The Windows blur lightens the glass slightly: without this
+                // line the panel comes out darker than the original.
                 r = std::clamp(r + kFrostLift, 0, 255);
                 g = std::clamp(g + kFrostLift, 0, 255);
                 b = std::clamp(b + kFrostLift, 0, 255);
             }
 
-            // RoundedRectCoverage conta i campioni coperti su sedici, non su
-            // 255: la divisione è per 16, altrimenti il pannello uscirebbe
-            // quasi trasparente.
+            // RoundedRectCoverage counts covered samples out of sixteen, not out
+            // of 255: the division is by 16, otherwise the panel would come out
+            // almost transparent.
             const int pixelAlpha = std::clamp(alpha * coverage / 16, 0, 255);
             if (pixelAlpha <= 0) {
                 continue;
@@ -3467,10 +3524,10 @@ static void DrawPanelBackground(BitmapSurface& surface, const SwitcherLayout& la
                                 RGB(0, 0, 0), kWin7BottomShade);
     }
 
-    // I due riflessi orizzontali del vetro: quello forte occupa il primo ottavo
-    // dell'altezza, quello debole il resto fino a un quinto. Sono generati qui,
-    // non letti da nessuna parte, quindi il pannello resta identico su ogni
-    // macchina.
+    // The two horizontal reflections of the glass: the strong one takes the
+    // first eighth of the height, the weak one the rest up to a fifth. They are
+    // generated here, not read from anywhere, so the panel stays the same on
+    // every machine.
     const int panelHeightForGloss = panel.bottom - panel.top;
     RECT glossTop = panel;
     glossTop.bottom = panel.top + std::max(2, panelHeightForGloss / 8);
@@ -3485,8 +3542,8 @@ static void DrawPanelBackground(BitmapSurface& surface, const SwitcherLayout& la
     FillRoundedRectGradient(surface, glossMid, radius, RGB(255, 255, 255),
                             kGlassGlossMidAlpha, RGB(255, 255, 255), 0);
 
-    // La grana va per ultima, sopra tutto: è quella che toglie al pannello
-    // l'aspetto di tinta piatta.
+    // The grain goes last, over everything: it is what takes away from the panel
+    // the look of a flat tint.
     ApplyFrostGrain(surface, panel, radius, kGlassGrainAlpha);
 
     const int borderDark = std::max(1, ScaleForDpi(kWin7BorderDark,
@@ -3503,12 +3560,12 @@ static void DrawPanelBackground(BitmapSurface& surface, const SwitcherLayout& la
                       borderLight, RGB(255, 255, 255), kWin7InnerAlpha);
 }
 
-// I fili e i riquadri attorno alle anteprime. L'anteprima vera è disegnata da
-// DWM nella finestra dei preview, che sta sopra: qui si disegna solo quello che
-// deve restare visibile attorno ad essa.
-// Il riquadro dell'anteprima di una voce che DWM non sa mostrare, quando la
-// voce è il desktop: al posto del rettangolo vuoto ci va lo sfondo, ritagliato
-// come lo ritaglierebbe la miniatura.
+// The lines and the frames around the previews. The real preview is drawn by DWM
+// in the preview window, which is above: only what has to stay visible around it
+// is drawn here.
+// The preview frame of an item DWM can't show, when the item is the desktop: the
+// wallpaper goes in place of the empty rectangle, cropped the way the thumbnail
+// would crop it.
 static void DrawDesktopCards(BitmapSurface& surface, const SwitcherLayout& layout) {
     const POINT origin{layout.panel.left, layout.panel.top};
 
@@ -3546,8 +3603,7 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
 
         if (layout.style == SwitcherStyle::Windows81) {
             if (!selected) {
-                // Nessun bordo sulle anteprime non selezionate, come
-                // nell'originale.
+                // No border on unselected previews, as in the original.
                 continue;
             }
             RECT frame = thumb;
@@ -3559,13 +3615,13 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
             continue;
         }
 
-        // Windows 7: nessun bordo attorno alle anteprime. Attorno a ognuna però
-        // resta l'ombra della miniatura viva, che il fotogramma mostra anche
-        // attorno alle anteprime non selezionate: uscendo da una di quelle la
-        // luminanza scende da 171 a 112.
-        // L'ordine conta: prima la schiarita del vetro dentro il riquadro, poi
-        // l'ombra dell'anteprima (che si ferma un pixel prima del filo, se no lo
-        // sporca), infine i due fili.
+        // Windows 7: no border around the previews. Around each one, though, the
+        // shadow of the live thumbnail remains, which the frame shows even
+        // around unselected previews: going out of one of those the luminance
+        // drops from 171 to 112.
+        // The order counts: first the lightening of the glass inside the frame,
+        // then the shadow of the preview (which stops one pixel before the line,
+        // or it dirties it), and finally the two lines.
         RECT frame = thumb;
         InflateRect(&frame, layout.selectionGap, layout.selectionGap);
         if (selected) {
@@ -3573,7 +3629,10 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
                             RGB(255, 255, 255), kWin7WellAlpha);
         }
 
-        const int shadowSpread = std::max(1, layout.selectionGap - 1);
+        // The shadow stops short of the frame: on the original the band between
+        // the light line and the shadow is clearly light, and with the shadow
+        // covering the whole gap only the line itself stayed bright.
+        const int shadowSpread = std::max(1, layout.selectionGap - 3);
         if (g_switcher.items[itemIndex].hasThumbnail) {
             DrawSoftShadow(surface, thumb, kWin7ThumbShadowRadius, shadowSpread,
                            kWin7ThumbShadowAlpha, kWin7ThumbShadowTopPercent);
@@ -3595,9 +3654,9 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
     }
 }
 
-// Una sola riga di titolo, centrata, con il nome della finestra selezionata:
-// scura sul vetro di Windows 7, chiara sulla banda di Windows 8.1. Prima
-// l'ombra, poi il contorno di un pixel sui quattro lati, poi il testo.
+// A single centered title line, with the name of the selected window: dark on
+// Windows 7 glass, light on the Windows 8.1 band. First the shadow, then the one
+// pixel outline on the four sides, then the text.
 static void DrawPanelTitle(BitmapSurface& surface, const SwitcherLayout& layout) {
     const std::wstring* title = nullptr;
     if (g_switcher.selectedIndex >= 0 &&
@@ -3618,11 +3677,11 @@ static void DrawPanelTitle(BitmapSurface& surface, const SwitcherLayout& layout)
         return;
     }
 
-    // Il carattere è posizionato sull'inchiostro, non sulla cella del font: la
-    // cella di Segoe UI lascia sopra il maiuscolo uno spazio che cambia con la
-    // dimensione, e allineando la cella il titolo finiva sempre troppo in alto
-    // o troppo in basso. Qui si misura il primo pixel scritto e lo si porta
-    // esattamente dove sta nell'originale.
+    // The character is positioned on the ink, not on the cell of the font: the
+    // Segoe UI cell leaves a space above the capitals that changes with the size,
+    // and aligning the cell put the title always too high or too low. Here the
+    // first written pixel is measured and brought exactly where it is in the
+    // original.
     const auto* maskBits = static_cast<const uint8_t*>(mask.surface.bits);
     int inkLeft = mask.width;
     int inkRight = -1;
@@ -3645,14 +3704,14 @@ static void DrawPanelTitle(BitmapSurface& surface, const SwitcherLayout& layout)
     int x = (surface.width - mask.width) / 2;
     int y = std::max(0, layout.titleOffset);
     if (inkRight >= inkLeft && inkBottom >= inkTop) {
-        // Il centro ottico dell'inchiostro, non quello della cella.
+        // The optical center of the ink, not the one of the cell.
         x -= (inkLeft + inkRight + 1) / 2 - mask.width / 2;
     }
     if (inkBottom >= inkTop && layout.titleInkTop >= 0) {
-        // La posizione verticale è quella dell'inchiostro, misurata dal bordo
-        // alto del pannello: y è un valore assoluto, non uno scostamento da
-        // titleOffset. Sommare le due cose (come faceva la prima versione)
-        // spostava il titolo di venti pixel verso il basso.
+        // The vertical position is the one of the ink, measured from the top edge
+        // of the panel: y is an absolute value, not an offset from titleOffset.
+        // Adding the two things (as the first version did) moved the title twenty
+        // pixels down.
         y = std::max(0, layout.titleInkTop - inkTop);
     }
 
@@ -3673,8 +3732,8 @@ static void DrawPanelTitle(BitmapSurface& surface, const SwitcherLayout& layout)
         return;
     }
 
-    // Sul vetro il testo è scuro: un'ombra nera lo renderebbe illeggibile,
-    // quindi l'ombra è chiara e debole e il contorno è bianco.
+    // The text is dark on the glass: a black shadow would make it unreadable, so
+    // the shadow is light and faint and the outline is white.
     BlendTextMask(surface, mask, x + 1, y + 1, RGB(255, 255, 255), 90);
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
@@ -3697,8 +3756,8 @@ static void PaintFrameBody() {
     ClearSurface(g_switcher.surface);
     DrawPanelBackground(g_switcher.surface, g_switcher.layout);
 
-    // Le schede senza miniatura: il desktop mostra lo sfondo, le finestre
-    // mostrano l'icona grande (che disegna lo strato delle icone, sopra).
+    // The cards without a thumbnail: the desktop shows the wallpaper, the windows
+    // show the large icon (which the icon layer draws, above).
     DrawDesktopCards(g_switcher.surface, g_switcher.layout);
     DrawItemDecorations(g_switcher.surface, g_switcher.layout);
     DrawPanelTitle(g_switcher.surface, g_switcher.layout);
@@ -3708,9 +3767,9 @@ static void PaintFrame() {
     RunGuarded(L"painting the switcher frame", [] { PaintFrameBody(); });
 }
 
-// Consegna il pannello a DWM. L'alfa dell'animazione viaggia in
-// SourceConstantAlpha: il livello è già premoltiplicato, quindi il risultato è
-// esattamente l'alfa in virgola fissa dell'animazione.
+// Hands the panel to DWM. The alpha of the animation travels in
+// SourceConstantAlpha: the layer is already premultiplied, so the result is
+// exactly the fixed point alpha of the animation.
 static void PresentFrame() {
     if (!g_switcher.hwnd || !IsWindow(g_switcher.hwnd) || !g_switcher.surface) {
         return;
@@ -3726,8 +3785,8 @@ static void PresentFrame() {
     blend.SourceConstantAlpha = static_cast<BYTE>(CurrentFadeAlpha());
     blend.AlphaFormat = AC_SRC_ALPHA;
 
-    // UpdateLayeredWindow vuole puntatori non costanti, quindi questi sono
-    // semplici variabili locali.
+    // UpdateLayeredWindow wants non const pointers, so these are plain local
+    // variables.
     POINT destination{g_switcher.panelScreen.left, g_switcher.panelScreen.top};
     SIZE size{g_switcher.surface.width, g_switcher.surface.height};
     POINT source{0, 0};
@@ -3735,8 +3794,8 @@ static void PresentFrame() {
                         g_switcher.surface.dc.value, &source, 0, &blend,
                         ULW_ALPHA);
 
-    // Le icone stanno in una finestra a parte, sopra i preview, e vanno
-    // rinfrescate a ogni presentazione.
+    // The icons are in a separate window, above the previews, and have to be
+    // refreshed at every presentation.
     UpdateIconOverlay();
 }
 
@@ -3746,24 +3805,24 @@ static void PaintAndPresent() {
 }
 
 // -----------------------------------------------------------------------------
-// Le icone delle applicazioni
+// The icons of the applications
 //
-// DWM compone un'anteprima sopra il contenuto della finestra di destinazione,
-// quindi un'icona disegnata nel pannello finirebbe sotto il preview. Le icone
-// vivono perciò in un terzo livello, sopra quello dei preview: è una finestra a
-// livelli, così solo i pixel dell'icona sono opachi.
+// DWM composes a thumbnail above the content of the destination window, so an
+// icon drawn in the panel would end up under the preview. The icons therefore
+// live in a third layer, above the preview one: it is a layered window, so only
+// the pixels of the icon are opaque.
 //
-// I pixel dell'icona non vengono presi da DrawIconEx, che in un DIB 32 bpp lascia
-// l'alfa a zero (e quindi un rettangolo nero), né da un'immagine casuale: si
-// leggono i bitmap documentati da GetIconInfo, e quando il piano dell'alfa è
-// vuoto la trasparenza si ricostruisce dalla maschera AND. È la stessa logica
-// della mod "Windows 10 1507 Start menu recreation", che è quella che disegna
-// bene le icone, riportata qui senza GDI+ per poter comporre l'alfa a mano.
+// The pixels of the icon are not taken from DrawIconEx, which in a 32 bpp DIB
+// leaves the alpha at zero (and therefore a black rectangle), nor from a random
+// image: the bitmaps documented by GetIconInfo are read, and when the alpha plane
+// is empty the transparency is rebuilt from the AND mask. It is the same logic as
+// the "Windows 10 1507 Start menu recreation" mod, the one that draws icons well,
+// brought here without GDI+ so that the alpha can be composed by hand.
 // -----------------------------------------------------------------------------
 
 constexpr wchar_t kIconOverlayClassName[] = L"WindhawkAltTabIconOverlay";
 
-// Un'icona decodificata: BGRA non premoltiplicato, righe dall'alto.
+// A decoded icon: BGRA, not premultiplied, rows from the top.
 struct IconPixels {
     int width = 0;
     int height = 0;
@@ -3774,8 +3833,8 @@ struct IconPixels {
     }
 };
 
-// Le icone delle applicazioni si ripetono: ogni finestra di Explorer ha la
-// stessa icona. La cache evita di rileggere i bitmap a ogni fotogramma.
+// The icons of the applications repeat: every Explorer window has the same one.
+// The cache avoids reading the bitmaps at every frame.
 struct IconCacheEntry {
     HICON icon = nullptr;
     IconPixels pixels;
@@ -3788,13 +3847,13 @@ static void ClearIconCache() {
     g_iconCache.clear();
 }
 
-// Decodifica un HICON in pixel BGRA con alfa vero.
+// Decodes an HICON into BGRA pixels with a real alpha.
 //
-// Il percorso è quello documentato: GetIconInfo restituisce i due bitmap
-// (colore e maschera AND), GetDIBits li legge in un DIB a 32 bpp. Se il piano
-// dell'alfa è tutto a zero l'icona è vecchio stile e la trasparenza sta nella
-// maschera: un bit a 1 nella maschera significa "trasparente". Se il piano
-// dell'alfa è tutto a 255 ma la maschera ha dei buchi, vale la maschera.
+// The path is the documented one: GetIconInfo returns the two bitmaps (color and
+// AND mask), GetDIBits reads them into a 32 bpp DIB. If the alpha plane is all
+// zero the icon is old style and the transparency is in the mask: a bit set in
+// the mask means "transparent". If the alpha plane is all 255 but the mask has
+// holes, the mask wins.
 static bool LoadIconPixels(HICON icon, IconPixels* out) {
     if (!icon || !out) {
         return false;
@@ -3806,7 +3865,7 @@ static bool LoadIconPixels(HICON icon, IconPixels* out) {
         return false;
     }
 
-    // I bitmap restituiti da GetIconInfo sono copie e vanno cancellate.
+    // The bitmaps returned by GetIconInfo are copies and have to be deleted.
     ScopedBitmap colorBitmap(info.hbmColor);
     ScopedBitmap maskBitmap(info.hbmMask);
     if (!colorBitmap) {
@@ -3830,7 +3889,7 @@ static bool LoadIconPixels(HICON icon, IconPixels* out) {
     BITMAPINFO colorInfo{};
     colorInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     colorInfo.bmiHeader.biWidth = width;
-    colorInfo.bmiHeader.biHeight = -height;  // righe dall'alto
+    colorInfo.bmiHeader.biHeight = -height;  // rows from the top
     colorInfo.bmiHeader.biPlanes = 1;
     colorInfo.bmiHeader.biBitCount = 32;
     colorInfo.bmiHeader.biCompression = BI_RGB;
@@ -3854,7 +3913,7 @@ static bool LoadIconPixels(HICON icon, IconPixels* out) {
         alphaAllOpaque = alphaAllOpaque && alpha == 255;
     }
 
-    // La maschera AND, se c'è.
+    // The AND mask, if there is one.
     std::vector<unsigned char> maskBits;
     const size_t maskStride =
         ((static_cast<size_t>(width) + 31u) / 32u) * 4u;
@@ -3894,8 +3953,8 @@ static bool LoadIconPixels(HICON icon, IconPixels* out) {
         }
     }
 
-    // Nessun piano d'alfa utile e nessuna maschera: l'icona non si può
-    // decodificare senza inventare i pixel, quindi non viene disegnata.
+    // No usable alpha plane and no mask: the icon can't be decoded without
+    // inventing the pixels, so it isn't drawn.
     if (!hasAlpha && maskBits.empty()) {
         return false;
     }
@@ -3956,9 +4015,9 @@ static const IconPixels* GetIconPixels(HICON icon) {
     return &g_iconCache.back().pixels;
 }
 
-// Disegna un'icona nella superficie, scalata con un'interpolazione bilineare e
-// composta con l'alfa che l'icona ha davvero: è quello che toglie di mezzo i
-// bordi quadrati e i riquadri neri attorno alle icone.
+// Draws an icon into the surface, scaled with a bilinear interpolation and
+// composed with the alpha the icon really has: it is what gets rid of the square
+// edges and the black boxes around the icons.
 static void DrawIconIntoSurface(BitmapSurface& surface, const IconPixels& icon,
                                 int left, int top, int size, int alpha) {
     if (!icon.Valid() || size <= 0 || alpha <= 0) {
@@ -4018,7 +4077,7 @@ static void DrawIconIntoSurface(BitmapSurface& surface, const IconPixels& icon,
 }
 
 // -----------------------------------------------------------------------------
-// La finestra delle icone
+// The icon window
 // -----------------------------------------------------------------------------
 
 struct IconOverlayWindow {
@@ -4031,8 +4090,8 @@ static IconOverlayWindow g_iconOverlay;
 
 static LRESULT CALLBACK IconOverlayWndProc(HWND hwnd, UINT message,
                                            WPARAM wParam, LPARAM lParam) {
-    // Tutto quello che questa finestra mostra arriva da UpdateLayeredWindow,
-    // quindi non ha niente da dipingere.
+    // Everything this window shows comes from UpdateLayeredWindow, so it has
+    // nothing to paint.
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
@@ -4076,8 +4135,8 @@ static bool EnsureIconOverlayWindow() {
         g_iconOverlay.classRegistered = true;
     }
 
-    // A livelli perché solo le icone sono opache, trasparente al mouse, mai
-    // attivata: è una decorazione del pannello, non una finestra sua.
+    // Layered because only the icons are opaque, transparent to the mouse, never
+    // activated: it is a decoration of the panel, not a window of its own.
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
             WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
@@ -4137,8 +4196,8 @@ static void UpdateIconOverlayBody() {
 
         const ItemGeometry& geometry = g_switcher.layout.items[index];
         if (item.hasThumbnail) {
-            // L'icona dell'applicazione nell'angolo in basso a destra
-            // dell'anteprima, sopra il riquadro di selezione.
+            // The icon of the application in the bottom right corner of the
+            // preview, above the selection frame.
             RECT icon = geometry.icon;
             OffsetRect(&icon, -origin.x, -origin.y);
             DrawIconIntoSurface(g_iconOverlay.surface, *pixels, icon.left,
@@ -4147,14 +4206,15 @@ static void UpdateIconOverlayBody() {
             continue;
         }
 
-        // Il desktop senza anteprima mostra lo sfondo, che disegna il pannello:
-        // qui non ci va niente, altrimenti l'icona coprirebbe lo sfondo.
+        // The desktop without a thumbnail shows the wallpaper, which the panel
+        // draws: nothing goes here, otherwise the icon would cover the
+        // wallpaper.
         if (item.isDesktop) {
             continue;
         }
 
-        // Una finestra senza anteprima mostra l'icona grande al centro, come
-        // faceva Windows 7 con le finestre ridotte a icona.
+        // A window without a thumbnail shows the large icon in the middle, as
+        // Windows 7 did with minimized windows.
         const int thumbH = geometry.thumb.bottom - geometry.thumb.top;
         const int thumbW = geometry.thumb.right - geometry.thumb.left;
         const int size = std::max(16, std::min(thumbH * 2 / 5, thumbW));
@@ -4191,52 +4251,51 @@ static void UpdateIconOverlay() {
 }
 
 // -----------------------------------------------------------------------------
-// La scheda del desktop
+// The desktop card
 //
-// Windows 7 e Windows 8.1 mettevano in fondo alla fila delle anteprime anche il
-// desktop, con il nome del desktop e un'anteprima viva dello sfondo: era la via
-// più rapida per arrivare alle icone del desktop senza minimizzare a mano ogni
-// finestra. È la voce che si vede selezionata nel fotogramma di riferimento,
-// con il titolo "Desktop".
+// Windows 7 and Windows 8.1 also put the desktop at the end of the row of
+// previews, with the desktop name and a live preview of the wallpaper: it was the
+// quickest way to reach the desktop icons without minimizing every window by
+// hand. It is the item shown selected on the reference frame, with the title
+// "Desktop".
 //
-// Qui la si ricostruisce con API pubbliche:
+// Here it is rebuilt with public APIs:
 //
-//  * la finestra sorgente dell'anteprima è quella del desktop, GetShellWindow(),
-//    che è la finestra di Explorer che disegna sfondo e icone; DWM ne sa fare
-//    la miniatura come per qualunque altra finestra di primo livello
-//    (DwmRegisterThumbnail documenta che la sorgente deve essere una finestra di
-//    primo livello, e questa lo è);
-//  * se DWM rifiuta la miniatura, si disegna lo sfondo letto da
-//    SystemParametersInfo(SPI_GETDESKWALLPAPER) con GDI+, ritagliato come farebbe
-//    la miniatura;
-//  * l'icona è quella che la shell usa per la propria finestra: WM_GETICON su
-//    GetShellWindow(), poi l'icona della classe, poi quella della cartella
-//    Desktop dal namespace della shell (SHGetFileInfo con SHGFI_USEFILEATTRIBUTES,
-//    che non dipende dal fatto che la cartella esista davvero);
-//  * l'attivazione è IShellDispatch4::ToggleDesktop, la stessa chiamata del
-//    pulsante "Mostra desktop" della barra delle applicazioni, con
-//    IShellDispatch::MinimizeAll come ripiego.
+//  * the source window of the preview is the desktop one, GetShellWindow(), which
+//    is the Explorer window that draws wallpaper and icons; DWM can make a
+//    thumbnail of it like of any other top-level window (DwmRegisterThumbnail
+//    documents that the source has to be a top-level window, and this one is);
+//  * if DWM refuses the thumbnail, the wallpaper read with
+//    SystemParametersInfo(SPI_GETDESKWALLPAPER) is drawn with GDI+, cropped the
+//    way the thumbnail would crop it;
+//  * the icon is the one the shell uses for its own window: WM_GETICON on
+//    GetShellWindow(), then the class icon, then the one of the Desktop folder
+//    from the shell namespace (SHGetFileInfo with SHGFI_USEFILEATTRIBUTES, which
+//    doesn't depend on the folder really existing);
+//  * the activation is IShellDispatch4::ToggleDesktop, the same call the "Show
+//    desktop" button of the taskbar makes, with IShellDispatch::MinimizeAll as a
+//    fallback.
 //
-// Nessuna di queste chiamate tocca explorer.exe: sono tutte API documentate.
+// None of these calls touches explorer.exe: they are all documented APIs.
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
 // RAII
 //
-// Le risorse che questa parte della mod prende in prestito dal sistema (un
-// oggetto COM, un apartments COM, il runtime di GDI+) vengono chiuse da un
-// distruttore e non da un percorso di uscita scritto a mano: così una `return`
-// anticipata, un errore di HRESULT o un'eccezione non lasciano niente aperto.
+// The resources this part of the mod borrows from the system (a COM object, a COM
+// apartment, the GDI+ runtime) are released by a destructor and not by a hand
+// written exit path: that way an early `return`, a failing HRESULT or an exception
+// doesn't leave anything open.
 //
-// Nota sulle eccezioni, perché è il punto su cui si sbaglia facilmente: le API
-// COM e Win32 non lanciano, riportano il fallimento nel valore di ritorno, e con
-// clang `catch (...)` non intercetta le eccezioni strutturate di Windows (SEH).
-// L'unica cosa che può uscire da qui è un'eccezione C++ di allocazione, per
-// esempio std::bad_alloc da una std::wstring; i try/catch di questo file
-// esistono per quella, non per le chiamate Win32.
+// A note on exceptions, because this is easy to get wrong: the COM and Win32 APIs
+// don't throw, they report the failure in the return value, and with clang
+// `catch (...)` doesn't catch the structured exceptions of Windows (SEH). The only
+// thing that can come out of here is a C++ allocation exception, for example
+// std::bad_alloc from a std::wstring; the try/catch blocks of this file exist for
+// that, not for the Win32 calls.
 // -----------------------------------------------------------------------------
 
-// Un puntatore a interfaccia COM che rilascia da solo.
+// A COM interface pointer that releases itself.
 template <typename T>
 class ScopedComPtr {
   public:
@@ -4276,13 +4335,13 @@ class ScopedComPtr {
     T* value = nullptr;
 };
 
-// L'apartment COM del thread. Il tipo ScopedComApartment esiste già nel file:
-// qui c'è solo il modo di aprirlo, perché la chiamata a CoInitializeEx deve
-// restare bilanciata con una CoUninitialize su ogni percorso di uscita.
-//   S_OK / S_FALSE  -> la chiamata è nostra e va chiusa (S_FALSE vuol dire che
-//                      l'apartment era già aperto, ma il riferimento è nostro);
-//   RPC_E_CHANGED_MODE -> il thread è già in un altro apartment: non si chiude
-//                      niente, e le chiamate restano possibili.
+// The COM apartment of the thread. The ScopedComApartment type already exists in
+// the file: only the way to open it is here, because the call to CoInitializeEx
+// has to stay balanced with a CoUninitialize on every exit path.
+//   S_OK / S_FALSE  -> the call is ours and has to be closed (S_FALSE means the
+//                      apartment was already open, but the reference is ours);
+//   RPC_E_CHANGED_MODE -> the thread is already in another apartment: nothing is
+//                      closed, and the calls stay possible.
 static bool OpenComApartment(ScopedComApartment* apartment) {
     const HRESULT result = CoInitializeEx(
         nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -4296,8 +4355,8 @@ static bool OpenComApartment(ScopedComApartment* apartment) {
     return true;
 }
 
-// Il runtime di GDI+ serve solo al ripiego dello sfondo: si avvia alla prima
-// richiesta e si chiude quando la mod viene scaricata.
+// The GDI+ runtime is only needed by the wallpaper fallback: it starts at the
+// first request and is closed when the mod is unloaded.
 class ScopedGdiplus {
   public:
     ScopedGdiplus() {
@@ -4331,17 +4390,17 @@ static bool EnsureGdiplus() {
 }
 
 // -----------------------------------------------------------------------------
-// Nome, percorso e icona del desktop
+// Name, path and icon of the desktop
 // -----------------------------------------------------------------------------
 
-// Le tre costanti che la mod non può prendere dai file di intestazione.
+// The three constants the mod can't take from the header files.
 //
-// FOLDERID_Desktop, IID_IShellDispatch e IID_IShellDispatch4 sono dichiarate
-// dagli header ma *definite* in uuid.lib, e il link della mod non ha quella
-// libreria: erano gli unici simboli che il linker non trovava. Qui sono scritte
-// per esteso, con lo stesso criterio già usato in questo file per
-// kCLSID_VirtualDesktopManager, così la mod si collega senza aggiungere
-// librerie di sistema.
+// FOLDERID_Desktop, IID_IShellDispatch and IID_IShellDispatch4 are declared by the
+// headers but *defined* in uuid.lib, and the link of the mod doesn't have that
+// library: they were the only symbols the linker couldn't find. They are written
+// out here, with the same criterion already used in this file for
+// kCLSID_VirtualDesktopManager, so the mod links without adding system
+// libraries.
 constexpr GUID kFOLDERID_Desktop = {
     0xB4BFCC3A, 0xDB2C, 0x424C, {0xB0, 0x29, 0x7F, 0xE9, 0x9A, 0x87, 0xC6, 0x41}};
 constexpr GUID kIID_IShellDispatch = {
@@ -4349,9 +4408,9 @@ constexpr GUID kIID_IShellDispatch = {
 constexpr GUID kIID_IShellDispatch4 = {
     0xEFD84B2D, 0x4BCF, 0x4298, {0xBE, 0x25, 0xEB, 0x54, 0x2A, 0x59, 0xFB, 0xDA}};
 
-// Il nome che la shell dà al desktop nella lingua di Windows: "Desktop" in
-// inglese, "Scrivania" in italiano. SHGetNameFromIDList su FOLDERID_Desktop è
-// l'unico modo documentato per ottenerlo senza scriverlo a mano.
+// The name the shell gives the desktop in the language of Windows: "Desktop" in
+// English, "Scrivania" in Italian. SHGetNameFromIDList on FOLDERID_Desktop is the
+// only documented way to get it without writing it by hand.
 static std::wstring GetDesktopDisplayName() {
     std::wstring name = L"Desktop";
 
@@ -4398,17 +4457,16 @@ static std::wstring GetDesktopFolderPath() {
 }
 
 // -----------------------------------------------------------------------------
-// L'icona della scheda del desktop
+// The icon of the desktop card
 //
-// È il ritratto del desktop di Windows 7 — lo sfondo azzurro con la barra delle
-// applicazioni in basso e il pulsante Start a sinistra — disegnato a 64×64 e
-// incorporato qui dentro come PNG in base 64. Non si legge nessun file, non si
-// chiede niente all'utente e non si tocca il registro: i byte stanno nel codice.
+// It is the portrait of the Windows 7 desktop — the light blue wallpaper with the
+// taskbar at the bottom and the Start button on the left — drawn at 64x64 and
+// embedded here as a base 64 PNG. No file is read, the user isn't asked anything
+// and the registry isn't touched: the bytes are in the code.
 //
-// Se per qualunque motivo la decodifica non riuscisse, la mod ripiega
-// sull'icona che la shell dà al desktop (WM_GETICON sulla finestra della shell,
-// poi SHGetFileInfoW sulla cartella Desktop), quindi la scheda non resta mai
-// senza icona.
+// If for any reason the decoding failed, the mod falls back to the icon the shell
+// gives the desktop (WM_GETICON on the shell window, then SHGetFileInfoW on the
+// Desktop folder), so the card never stays without an icon.
 // -----------------------------------------------------------------------------
 
 static const char kDesktopIconPngBase64[] =
@@ -4481,8 +4539,8 @@ static const char kDesktopIconPngBase64[] =
     "8/Go5Phg1DknJ0P/6hf/7E9efl+/NKWqZP7S1IsvvmgvXbrE9/Rq26/wWtt7eY3t//tzeHioJP3D"
     "tyYffh5+Hn7+F+XYHCDPB7InAAAAAElFTkSuQmCC";
 
-// Decodifica in base 64. Restituisce i byte del PNG, o un vettore vuoto se la
-// stringa non è valida.
+// Base 64 decoding. Returns the bytes of the PNG, or an empty vector if the string
+// isn't valid.
 static std::vector<unsigned char> DecodeBase64(const char* text) {
     auto valueOf = [](char character) -> int {
         if (character >= 'A' && character <= 'Z') {
@@ -4529,8 +4587,8 @@ static std::vector<unsigned char> DecodeBase64(const char* text) {
     return result;
 }
 
-// Il flusso PNG vive il tempo di una chiamata: viene letto tutto e chiuso
-// subito, così non resta nessun handle aperto se più avanti qualcosa fallisce.
+// The PNG stream lives for the length of one call: it is read whole and closed at
+// once, so that no handle stays open if something fails further on.
 class ScopedPngStream {
   public:
     explicit ScopedPngStream(const std::vector<unsigned char>& bytes)
@@ -4560,9 +4618,8 @@ class ScopedPngStream {
     IStream* stream_;
 };
 
-// L'icona incorporata, creata una volta sola. Il distruttore la distrugge
-// quando la mod viene scaricata, e anche questa volta senza percorsi di uscita
-// scritti a mano.
+// The embedded icon, created once. The destructor destroys it when the mod is
+// unloaded, and this time too without hand written exit paths.
 struct EmbeddedDesktopIcon {
     HICON icon = nullptr;
     bool attempted = false;
@@ -4582,7 +4639,8 @@ static HICON GetEmbeddedDesktopIcon() {
     }
     embedded.attempted = true;
 
-    // GDI+ è già usato per lo sfondo: qui serve solo per leggere il PNG.
+    // GDI+ is already used for the wallpaper: here it is only needed to read the
+    // PNG.
     if (!EnsureGdiplus()) {
         return nullptr;
     }
@@ -4616,16 +4674,15 @@ static HICON GetEmbeddedDesktopIcon() {
     return embedded.icon;
 }
 
-// L'icona del desktop, con la stessa catena con cui si legge quella delle
-// applicazioni: prima quella che la finestra dichiara, poi quella della classe,
-// poi quella che la shell usa per la cartella Desktop.
+// The desktop icon, with the same chain that reads the application one: first the
+// one the window declares, then the one of the class, then the one the shell uses
+// for the Desktop folder.
 static HICON LoadDesktopIcon(bool* owned) {
     *owned = false;
 
-    // Prima di tutto l'icona incorporata: è quella che si vede nello switcher
-    // originale, e non dipende da quello che il tema di turno decide di dare
-    // alla cartella "Desktop" (che è la ragione per cui prima si vedeva una
-    // comune icona di cartella).
+    // The embedded icon comes first: it is the one seen in the original switcher,
+    // and it doesn't depend on what the current theme decides to give the
+    // "Desktop" folder (which is the reason a plain folder icon showed before).
     if (HICON embedded = GetEmbeddedDesktopIcon()) {
         return embedded;
     }
@@ -4652,8 +4709,8 @@ static HICON LoadDesktopIcon(bool* owned) {
         }
     }
 
-    // SHGFI_USEFILEATTRIBUTES: l'icona della cartella senza toccare il disco.
-    // FILE_ATTRIBUTE_DIRECTORY è quello che rende la richiesta "una cartella".
+    // SHGFI_USEFILEATTRIBUTES: the icon of the folder without touching the disk.
+    // FILE_ATTRIBUTE_DIRECTORY is what makes the request "a folder".
     std::wstring folder = GetDesktopFolderPath();
     if (folder.empty()) {
         folder = L"Desktop";
@@ -4672,11 +4729,11 @@ static HICON LoadDesktopIcon(bool* owned) {
 }
 
 // -----------------------------------------------------------------------------
-// La voce del desktop nella lista delle finestre
+// The desktop item in the window list
 // -----------------------------------------------------------------------------
 
-// Aggiunge il desktop in fondo alla lista, come facevano i due originali. La
-// finestra sorgente è quella della shell: è lei che disegna sfondo e icone.
+// Adds the desktop at the end of the list, as the two originals did. The source
+// window is the shell one: it is the one that draws wallpaper and icons.
 static bool BuildDesktopItem(SwitcherItem* item) {
     const HWND shellWindow = GetShellWindow();
     if (!shellWindow || !IsWindow(shellWindow)) {
@@ -4689,8 +4746,8 @@ static bool BuildDesktopItem(SwitcherItem* item) {
     item->thumbnail = nullptr;
     item->hasThumbnail = false;
 
-    // Le due sole cose che possono lanciare sono le stringhe; le chiamate di
-    // shell riportano il loro esito e basta.
+    // The only things that can throw are the strings; the shell calls report their
+    // outcome and nothing more.
     try {
         item->title = GetDesktopDisplayName();
         item->appPath = GetDesktopFolderPath();
@@ -4704,16 +4761,16 @@ static bool BuildDesktopItem(SwitcherItem* item) {
 }
 
 // -----------------------------------------------------------------------------
-// Mostrare il desktop
+// Showing the desktop
 //
-// ToggleDesktop è la chiamata che sta dietro al pulsante "Mostra desktop": se il
-// desktop è già in primo piano lo rimette via, esattamente come fa il pulsante.
-// Se la coclasse Shell.Application non risponde si ripiega su MinimizeAll, che
-// è la stessa cosa vista dalla parte delle finestre.
+// ToggleDesktop is the call behind the "Show desktop" button: if the desktop is
+// already in front it puts it back, exactly as the button does. If the
+// Shell.Application coclass doesn't answer it falls back to MinimizeAll, which is
+// the same thing seen from the side of the windows.
 // -----------------------------------------------------------------------------
 
-// CLSID della coclasse "Shell.Application" (shldisp.idl): la definisce il file
-// di intestazione dell'SDK, non quello di mingw, quindi la si dichiara qui.
+// CLSID of the "Shell.Application" coclass (shldisp.idl): the SDK header defines
+// it, the mingw one doesn't, so it is declared here.
 static const CLSID kShellApplicationClsid = {
     0x13709620, 0xC279, 0x11CE, {0xA4, 0x9E, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
 
@@ -4749,15 +4806,15 @@ static bool ShowDesktopWithShell() {
 }
 
 // -----------------------------------------------------------------------------
-// Lo sfondo, quando DWM non concede la miniatura
+// The wallpaper, when DWM doesn't grant the thumbnail
 //
-// SPI_GETDESKWALLPAPER restituisce il percorso del file dello sfondo. GDI+ lo
-// legge e lo ritaglia come farebbe DWM ("cover": tutto il riquadro riempito,
-// proporzioni conservate, il resto tagliato ai lati).
+// SPI_GETDESKWALLPAPER returns the path of the wallpaper file. GDI+ reads it and
+// crops it the way DWM would ("cover": the whole rectangle filled, proportions
+// kept, the rest cut at the sides).
 //
-// Il disegno avviene in una superficie GDI+ premoltiplicata e poi si copia a
-// mano: disegnare GDI+ direttamente nel DIB della mod passando per un HDC
-// azzererebbe il canale alfa, che è il difetto classico di questo passaggio.
+// The drawing happens on a premultiplied GDI+ surface and is then copied by hand:
+// drawing GDI+ straight into the DIB of the mod through an HDC would zero the
+// alpha channel, which is the classic defect of this step.
 // -----------------------------------------------------------------------------
 
 static bool DrawWallpaperInto(BitmapSurface& surface, const RECT& rect) {
@@ -4778,8 +4835,8 @@ static bool DrawWallpaperInto(BitmapSurface& surface, const RECT& rect) {
         return false;
     }
 
-    // Le classi di GDI+ sono in un namespace: qui si entra solo per questa
-    // funzione, così il resto del file resta scritto come prima.
+    // The GDI+ classes are in a namespace: it is entered only for this function,
+    // so the rest of the file stays written as before.
     using namespace Gdiplus;
 
     Bitmap source(wallpaperPath, FALSE);
@@ -4798,8 +4855,8 @@ static bool DrawWallpaperInto(BitmapSurface& surface, const RECT& rect) {
         return false;
     }
 
-    // Ritaglio "cover": si prendono dal centro dell'immagine le proporzioni
-    // del riquadro.
+    // "Cover" crop: the proportions of the rectangle are taken from the middle of
+    // the image.
     double scale = static_cast<double>(width) / sourceWidth;
     const double verticalScale = static_cast<double>(height) / sourceHeight;
     if (verticalScale > scale) {
@@ -4843,8 +4900,8 @@ static bool DrawWallpaperInto(BitmapSurface& surface, const RECT& rect) {
                 static_cast<const BYTE*>(data.Scan0) +
                 static_cast<size_t>(row) * static_cast<size_t>(data.Stride));
             for (int column = 0; column < width; ++column) {
-                // I pixel di GDI+ sono già premoltiplicati: si sommano al
-                // contenuto della superficie con la regola AC_SRC_OVER.
+                // The GDI+ pixels are already premultiplied: they are added to
+                // the content of the surface with the AC_SRC_OVER rule.
                 BlendPixel(surface, rect.left + column, rect.top + row,
                            sourceRow[column] | 0xFF000000u);
             }
@@ -4856,8 +4913,8 @@ static bool DrawWallpaperInto(BitmapSurface& surface, const RECT& rect) {
     return drawn;
 }
 
-// Il riquadro dell'anteprima quando la miniatura non c'è: prima lo sfondo, poi
-// una tinta unita, così la scheda non resta mai vuota.
+// The rectangle of the preview when the thumbnail isn't there: first the
+// wallpaper, then a flat tint, so that the card never stays empty.
 static void DrawDesktopCardBackground(BitmapSurface& surface, const RECT& rect) {
     if (DrawWallpaperInto(surface, rect)) {
         return;
@@ -4999,14 +5056,14 @@ static void RefreshThumbnails() {
         }
 
         DWM_THUMBNAIL_PROPERTIES properties{};
-        // 25 = RECTDESTINATION | VISIBLE | SOURCECLIENTAREAONLY, i flag con cui
-        // gli originali registravano le anteprime. fSourceClientAreaOnly resta
-        // FALSE: la cornice della finestra fa parte dell'anteprima.
+        // 25 = RECTDESTINATION | VISIBLE | SOURCECLIENTAREAONLY, the flags the
+        // originals registered the previews with. fSourceClientAreaOnly stays
+        // FALSE: the frame of the window is part of the preview.
         properties.dwFlags = 25;
         properties.fVisible = TRUE;
         properties.opacity = 255;
-        // La finestra dei preview è grande quanto il pannello, quindi il
-        // rettangolo di destinazione va riportato nelle sue coordinate.
+        // The preview window is as big as the panel, so the destination rectangle
+        // has to be brought into its coordinates.
         properties.rcDestination = item.thumb;
         OffsetRect(&properties.rcDestination, -g_switcher.layout.panel.left,
                    -g_switcher.layout.panel.top);
@@ -5027,9 +5084,9 @@ static void RefreshThumbnails() {
         }
     }
 
-    // La regione dello strato dei preview è l'unione dei rettangoli
-    // registrati: le finestre senza anteprima restano fuori e sotto si vede il
-    // pannello, con l'icona grande al centro.
+    // The region of the preview layer is the union of the registered rectangles:
+    // the windows without a preview stay out and the panel shows through under
+    // them, with the large icon in the middle.
     UpdatePreviewLayerRegion();
 
     if (registered || failures) {
@@ -5120,7 +5177,18 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
     g_switcher.monitorRect = info.rcMonitor;
     g_switcher.workArea = info.rcWork;
     OffsetRect(&g_switcher.workArea, -info.rcMonitor.left, -info.rcMonitor.top);
-    g_switcher.dpi = GetMonitorDpi(monitor, info);
+    // The originals sized the switcher in absolute pixels for the screen, not
+    // with the DPI setting: on a 1920x1080 screen the panel was about 200 px
+    // high and the previews about 100 px, at 100% and at 125% alike. Scaling
+    // everything with the DPI setting made the switcher a quarter larger than
+    // the original on a 1080p screen at 125%. The DPI scale is therefore capped
+    // to the one the screen can host, and never goes below 96, so a smaller
+    // screen keeps the measured sizes.
+    const int monitorDpi = GetMonitorDpi(monitor, info);
+    const int workHeight = info.rcWork.bottom - info.rcWork.top;
+    const int screenDpi =
+        std::max(96, static_cast<int>(96.0 * workHeight / 1080.0));
+    g_switcher.dpi = std::min(monitorDpi, screenDpi);
     g_switcher.page = 0;
     g_switcher.hoverIndex = -1;
     g_switcher.selectedIndex = -1;
@@ -5143,8 +5211,8 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
         return SessionResult::Failed;
     }
 
-    // Il layout è calcolato in coordinate del monitor: quelle dello schermo
-    // servono alla finestra a livelli e a quelle dei preview e delle icone.
+    // The layout is computed in monitor coordinates: the screen ones are needed by
+    // the layered window and by the preview and icon ones.
     g_switcher.panelScreen = RECT{info.rcMonitor.left + panel.left,
                                  info.rcMonitor.top + panel.top,
                                  info.rcMonitor.left + panel.right,
@@ -5157,9 +5225,9 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
         return SessionResult::Failed;
     }
 
-    // Il colore arriva dal sistema, una volta per sessione: il vetro del 7 ne è
-    // la versione chiara, la banda dell'8.1 la versione profonda. Se il sistema
-    // non risponde restano i due colori misurati sui fotogrammi.
+    // The color comes from the system, once per session: Windows 7 glass is its
+    // light version, the 8.1 band its deep version. If the system doesn't answer,
+    // the two colors measured on the frames remain.
     bool usedCustomColor = false;
     const SystemAccent accent =
         ResolvePanelAccent(settings, &usedCustomColor);
@@ -5177,14 +5245,14 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
                static_cast<unsigned>(g_switcher.bandColor),
                accent.valid ? L"" : L" (fallback, the system didn't answer)");
     }
-    // L'opacità del vetro sta sulla scala piena 0-255: il pannello è un livello
-    // premoltiplicato, quindi è l'alfa stessa a decidere quanto desktop resta
-    // visibile, non una tinta chiara a bassa opacità.
+    // The opacity of the glass is on the full 0-255 scale: the panel is a
+    // premultiplied layer, so it is the alpha itself that decides how much desktop
+    // stays visible, not a light tint at low opacity.
     g_switcher.panelAlpha = std::clamp(settings.frostDensity, 0, 100) *
                            255 / 100;
 
-    // Il fondale sfocato si cattura adesso, prima che lo scurimento e il
-    // pannello compaiano: così la cattura contiene il desktop e non lo switcher.
+    // The blurred background is captured now, before the darkening and the panel
+    // appear: that way the capture holds the desktop and not the switcher.
     if (g_switcherStyle == SwitcherStyle::Windows7) {
         if (!CaptureGlassBackdrop(g_switcher.panelScreen, panelWidth, panelHeight,
                                   static_cast<int>(g_switcherStyle))) {
@@ -5196,9 +5264,9 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
         }
     }
 
-    // Scurimento del desktop: uno strato sotto il pannello. Il livello è già
-    // semitrasparente, quindi il valore richiesto viene diviso per due per
-    // restare nella stessa scala dell'opacità del pannello.
+    // Darkening of the desktop: a layer below the panel. The layer is already
+    // semitransparent, so the requested value is halved to stay on the same scale
+    // as the opacity of the panel.
     if (settings.desktopShade > 0) {
         const int dimAlpha = std::clamp(settings.desktopShade, 0, 100) *
                              255 / 100 / 2;
@@ -5212,8 +5280,8 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
         DestroyDimWindow();
     }
 
-    // L'ombra del vetro: una finestra a livelli sotto il pannello, più grande di
-    // lui, perché una finestra a livelli non riceve l'ombra di DWM.
+    // The shadow of the glass: a layered window below the panel, bigger than it,
+    // because a layered window doesn't get the DWM shadow.
     if (g_switcherStyle == SwitcherStyle::Windows7) {
         const int spread = ScaleForDpi(kWin7ShadowSpread, g_switcher.dpi);
         if (!EnsureShadowWindow(g_switcher.panelScreen, spread,
@@ -5223,8 +5291,9 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
                 Wh_Log(L"The shadow of the panel couldn't be drawn");
             }
         } else {
-            // Una riga sola, la prima volta: serve a capire dal log se l'ombra
-            // esiste davvero quando il vetro sembra incollato al desktop.
+            // A single line, the first time: it is there to tell from the log
+            // whether the shadow really exists when the glass looks glued to the
+            // desktop.
             static bool logged = false;
             if (!logged) {
                 logged = true;
@@ -5236,8 +5305,8 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
         DestroyShadowWindow();
     }
 
-    // Il pannello è grande esattamente quanto il rettangolo calcolato dal
-    // layout: così la sfocatura riguarda solo il vetro e non tutto lo schermo.
+    // The panel is exactly as big as the rectangle computed by the layout: that way
+    // the blur only concerns the glass and not the whole screen.
     SetWindowPos(g_switcher.hwnd, HWND_TOPMOST, g_switcher.panelScreen.left,
                  g_switcher.panelScreen.top, panelWidth, panelHeight,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER);
@@ -5246,12 +5315,12 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
                                     std::max(0, g_switcher.layout.radius) * 2,
                                     std::max(0, g_switcher.layout.radius) * 2);
     if (shape) {
-        // SetWindowRgn possiede la regione: non va cancellata.
+        // SetWindowRgn owns the region: it must not be deleted.
         SetWindowRgn(g_switcher.hwnd, shape, TRUE);
     }
 
-    // Si compone il pannello mentre la finestra è ancora nascosta, così non
-    // può comparire un fotogramma vuoto o vecchio.
+    // The panel is composed while the window is still hidden, so that an empty or
+    // stale frame can't appear.
     PaintFrame();
 
     g_switcher.active = true;
@@ -5261,9 +5330,9 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
 
     ShowWindow(g_switcher.hwnd, SW_SHOWNOACTIVATE);
 
-    // La sfocatura si chiede a finestra già visibile: alla prima sessione dopo
-    // l'avvio della mod l'attributo di composizione non viene accettato su una
-    // finestra che non è ancora stata mostrata nemmeno una volta.
+    // The blur is asked for with the window already visible: on the first session
+    // after the mod starts the composition attribute isn't accepted on a window
+    // that hasn't been shown even once.
     g_blurLevel = g_switcherStyle == SwitcherStyle::Windows7
         ? ApplyPanelBlur(g_switcher.hwnd, panelWidth, panelHeight,
                          g_switcher.layout.radius, settings.systemBlur)
@@ -5287,8 +5356,8 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
     }
 
     RefreshThumbnails();
-    // I preview di DWM arrivano dopo il primo disegno, quindi il pannello e le
-    // icone vengono presentati di nuovo quando le anteprime sono registrate.
+    // The DWM previews arrive after the first drawing, so the panel and the icons
+    // are presented again once the thumbnails are registered.
     PaintAndPresent();
     StartFade(true);
     ApplySessionTimers();
@@ -5327,16 +5396,16 @@ static void ApplySessionTimers() {
 static void EndSession() {
     StopFadeTimer();
     HideIconOverlay();
-    // La cattura vale per la sessione che l'ha presa: alla successiva il
-    // desktop sarà diverso.
+    // The capture is valid for the session that took it: on the next one the
+    // desktop will be different.
     ReleaseGlassBackdrop();
 
     if (g_switcher.hwnd && IsWindow(g_switcher.hwnd)) {
         KillTimer(g_switcher.hwnd, kAutoCycleTimerId);
         KillTimer(g_switcher.hwnd, kSessionAgeTimerId);
         KillTimer(g_switcher.hwnd, kRebuildTimerId);
-        // La sfocatura va tolta prima di nascondere la finestra, altrimenti
-        // DWM continuerebbe a comporre la regione dietro un pannello sparito.
+        // The blur has to be removed before hiding the window, otherwise DWM would
+        // keep composing the region behind a panel that is gone.
         ClearPanelBlur(g_switcher.hwnd);
         ShowWindow(g_switcher.hwnd, SW_HIDE);
     }
@@ -5346,8 +5415,8 @@ static void EndSession() {
     }
     g_switcher.items.clear();
 
-    // La superficie del pannello è grande quanto il pannello e le icone
-    // decodificate si ripetono: vengono liberate fra due pressioni di Alt+Tab.
+    // The surface of the panel is as big as the panel and the decoded icons repeat:
+    // they are freed between two presses of Alt+Tab.
     g_switcher.surface.reset();
     ClearIconCache();
     DestroyPreviewLayer();
@@ -5364,67 +5433,29 @@ static void EndSession() {
     g_switcherVisible.store(false, std::memory_order_release);
 }
 
-// La chiusura annullata (Esc) può essere ammorbidita dalla dissolvenza: la
-// sessione resta viva finché l'alfa non arriva a zero, e il timer la chiude.
-// L'attivazione di una finestra invece chiude subito, perché il pannello non
-// deve restare sopra la finestra che ha appena preso il fuoco.
+// The cancelled close (Esc) can be softened by the fade: the session stays alive
+// until the alpha reaches zero, and the timer closes it.
+// The activation of a window, on the other hand, closes at once, because the panel
+// must not stay above the window that has just taken the focus.
 static void CloseWithFade() {
     if (!g_switcher.active || !g_switcher.settings.openFade) {
         EndSession();
         return;
     }
+    // The fade out is only an animation: the session is no longer open. The panel
+    // stops counting as visible right away, so that the release of Alt no longer
+    // reaches a commit and the periodic check closes nothing; CommitSession stops
+    // on pendingClose anyway.
     g_switcher.pendingClose = true;
+    g_switcher.visible = false;
+    g_switcherVisible.store(false, std::memory_order_release);
     StartFade(false);
 }
 
 
-static bool TrySetForeground(HWND hwnd) {
-    SetForegroundWindow(hwnd);
-    if (GetForegroundWindow() == hwnd) {
-        return true;
-    }
-
-    BringWindowToTop(hwnd);
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    return GetForegroundWindow() == hwnd;
-}
-
-static bool AttachAndSetForeground(HWND hwnd) {
-    const HWND foreground = GetForegroundWindow();
-    const DWORD foregroundThread =
-        foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    const DWORD currentThread = GetCurrentThreadId();
-
-    bool attached = false;
-    if (foregroundThread && foregroundThread != currentThread) {
-        attached = AttachThreadInput(currentThread, foregroundThread, TRUE) !=
-            FALSE;
-    }
-
-    const bool activated = TrySetForeground(hwnd);
-
-    if (attached) {
-        AttachThreadInput(currentThread, foregroundThread, FALSE);
-    }
-    return activated;
-}
-
-constexpr WORD kMenuMaskVk = 0xE8;  // unassigned virtual key
-
-static void InjectNeutralKey() {
-    INPUT inputs[4] = {};
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_MENU;
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = kMenuMaskVk;
-    inputs[2] = inputs[1];
-    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-    inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = VK_MENU;
-    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
-}
+// An unassigned virtual key, used only as a filler to close the menu mask (see
+// SendMenuMaskKey below).
+constexpr WORD kMenuMaskVk = 0xE8;
 
 static void SendMenuMaskKey() {
     INPUT inputs[2] = {};
@@ -5438,34 +5469,29 @@ static void SendMenuMaskKey() {
     }
 }
 
+// The activation must never be able to block the UI thread.
+// No AttachThreadInput: tying your own input queue to the one of another
+// application means that a busy application blocks the mod, and a busy mod blocks
+// that application, and detaching right after doesn't make the operation safe. No
+// synchronous call on the window of another process either (ShowWindow,
+// BringWindowToTop, SetWindowPos without SWP_ASYNCWINDOWPOS): they all wait for the
+// thread of that application.
+// An empty SendInput before SetForegroundWindow is enough instead: the mod is
+// reacting to a key it received itself, and that is enough for the system to let it
+// change the foreground window.
 static bool ActivateWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) {
         return false;
     }
 
     if (IsIconic(hwnd)) {
-        ShowWindow(hwnd, SW_RESTORE);
+        // ShowWindowAsync doesn't wait for the thread of the window to restore.
+        ShowWindowAsync(hwnd, SW_RESTORE);
     }
 
-    if (GetForegroundWindow() == hwnd) {
-        return true;
-    }
-
-    if (TrySetForeground(hwnd)) {
-        return true;
-    }
-
-    if (AttachAndSetForeground(hwnd)) {
-        return true;
-    }
-
-    InjectNeutralKey();
-    if (TrySetForeground(hwnd)) {
-        return true;
-    }
-
-    SwitchToThisWindow(hwnd, TRUE);
-    if (GetForegroundWindow() == hwnd) {
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
+    if (SetForegroundWindow(hwnd)) {
         return true;
     }
 
@@ -5478,7 +5504,9 @@ static bool ActivateWindow(HWND hwnd) {
 // -----------------------------------------------------------------------------
 
 static void CommitSession() {
-    if (!g_switcher.active) {
+    // A session that is fading out has already been cancelled: nothing is activated
+    // here, otherwise Esc would change window.
+    if (!g_switcher.active || g_switcher.pendingClose) {
         return;
     }
 
@@ -5489,8 +5517,8 @@ static void CommitSession() {
         target = g_switcher.items[g_switcher.selectedIndex].hwnd;
     }
 
-    // La scheda del desktop non è una finestra da attivare: si mostra il
-    // desktop con la stessa chiamata del pulsante "Mostra desktop".
+    // The desktop card isn't a window to activate: the desktop is shown with the
+    // same call as the "Show desktop" button.
     const bool desktopSelected =
         g_switcher.selectedIndex >= 0 &&
         g_switcher.selectedIndex < static_cast<int>(g_switcher.items.size()) &&
@@ -5519,7 +5547,7 @@ static void CloseSelectedWindow() {
         return;
     }
 
-    // Il desktop non è una finestra da chiudere.
+    // The desktop isn't a window to close.
     if (g_switcher.items[g_switcher.selectedIndex].isDesktop) {
         return;
     }
@@ -5676,8 +5704,8 @@ static void OnMouseMove(int x, int y) {
         return;
     }
 
-    // Le coordinate del messaggio sono relative alla finestra del
-    // pannello, il layout è in coordinate del monitor.
+    // The coordinates of the message are relative to the window of the panel, the
+    // layout is in monitor coordinates.
     const int hovered = IndexAtPoint(x + g_switcher.layout.panel.left,
                                      y + g_switcher.layout.panel.top);
     if (hovered == g_switcher.hoverIndex) {
@@ -5721,9 +5749,9 @@ static bool HandleOverlayMessage(HWND hwnd, UINT message, WPARAM wParam,
             return true;
 
         case WM_PAINT: {
-            // La finestra è a livelli: tutto quello che mostra è già stato
-            // consegnato a DWM da UpdateLayeredWindow, quindi qui non c'è
-            // niente da dipingere, ma il messaggio va comunque validato.
+            // The window is layered: everything it shows has already been handed
+            // to DWM by UpdateLayeredWindow, so there is nothing to paint here, but
+            // the message still has to be validated.
             PAINTSTRUCT paint{};
             BeginPaint(hwnd, &paint);
             EndPaint(hwnd, &paint);
@@ -5813,9 +5841,9 @@ static bool HandleOverlayMessage(HWND hwnd, UINT message, WPARAM wParam,
             return true;
 
         case WM_DWMCOLORIZATIONCOLORCHANGED: {
-            // Il colore di personalizzazione è cambiato mentre lo switcher è
-            // aperto: il vetro e la banda lo seguono subito, come facevano i due
-            // originali. Il messaggio è documentato da Microsoft insieme a
+            // The personalization color changed while the switcher is open: the
+            // glass and the band follow it at once, as the two originals did. The
+            // message is documented by Microsoft together with
             // DwmGetColorizationColor.
             const SystemAccent accent =
                 ResolvePanelAccent(g_switcher.settings, nullptr);
@@ -5850,7 +5878,7 @@ static bool HandleOverlayMessage(HWND hwnd, UINT message, WPARAM wParam,
 static bool HandleOverlayMessageGuarded(HWND hwnd, UINT message, WPARAM wParam,
                                         LPARAM lParam, bool* handled,
                                         LRESULT* result) {
-#if WH_HAS_SEH
+#if MOD_HAS_SEH
     __try {
         *handled = HandleOverlayMessage(hwnd, message, wParam, lParam, result);
         return true;
@@ -5894,8 +5922,8 @@ static bool CreateOverlayWindow() {
 
     WNDCLASSEXW windowClass{};
     windowClass.cbSize = sizeof(windowClass);
-    // CS_DBLCLKS: i doppi clic arrivano alla finestra invece di essere
-    // trasformati in due clic singoli dal sistema.
+    // CS_DBLCLKS: double clicks reach the window instead of being turned into two
+    // single clicks by the system.
     windowClass.style = CS_DBLCLKS;
     windowClass.lpfnWndProc = OverlayWndProc;
     windowClass.hInstance = instance;
@@ -5911,8 +5939,8 @@ static bool CreateOverlayWindow() {
         }
     }
 
-    // WS_EX_LAYERED: il contenuto del pannello arriva da
-    // UpdateLayeredWindow, quindi il livello ha un alfa per pixel.
+    // WS_EX_LAYERED: the content of the panel comes from UpdateLayeredWindow, so
+    // the layer has a per pixel alpha.
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
             WS_EX_NOACTIVATE,
@@ -6103,7 +6131,7 @@ static bool HandleKeyEvent(DWORD vk, bool isDown, bool isUp) {
 }
 
 static bool HandleKeyEventGuarded(DWORD vk, bool isDown, bool isUp) {
-#if WH_HAS_SEH
+#if MOD_HAS_SEH
     __try {
         return HandleKeyEvent(vk, isDown, isUp);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -6357,9 +6385,8 @@ static DWORD WINAPI UiThreadProc(void* /*parameter*/) {
         g_watchdogThread = nullptr;
     }
 
-    // I font e le icone decodificate appartengono al thread
-    // dell'interfaccia: si liberano qui, che è l'ultimo punto in cui il
-    // thread è ancora vivo.
+    // The fonts and the decoded icons belong to the UI thread: they are freed here,
+    // which is the last point where the thread is still alive.
     g_uiFont.reset();
     ClearIconCache();
 
@@ -6382,7 +6409,7 @@ static void SignalStop() {
 // -----------------------------------------------------------------------------
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Windows 10 Alt+Tab Recreation is starting");
+    Wh_Log(L"Windows 7/8.1 Alt+Tab Recreation is starting");
 
     if (!RunGuarded(L"loading the settings", [] {
             LoadSettings();
@@ -6414,7 +6441,7 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Ready: Alt+Tab is handled by the Windows 10 switcher recreation");
+    Wh_Log(L"Ready: Alt+Tab is handled by the Windows 7/8.1 switcher recreation");
     return TRUE;
 }
 
