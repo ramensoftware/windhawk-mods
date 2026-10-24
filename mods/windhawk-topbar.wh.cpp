@@ -1495,6 +1495,7 @@ struct {
     bool showTrayIconButton = true;
     bool showNotificationsButton = true;
     bool showAppTitleButton = true;
+    bool disableTitleBarBleed = false;
 
     std::wstring leftItems = L"StartButton,SearchButton";
     std::wstring centerItems = L"MediaButton,ResourceButton,WeatherButton,SettingsButton";
@@ -7671,10 +7672,9 @@ void RefreshApplicationButtons() {
         return;
     }
 
-    // While the button is hidden (TaskList or None mode), skip the whole
-    // function on every foreground change. Clearing the cached state
-    // ensures the next visible call refreshes from scratch.
-    if (g_appTitleButton.Visibility() != Visibility::Visible) {
+    bool appTitleAllowed = g_settings.showAppTitleButton &&
+                           g_settings.centerContent == L"applicationButtons";
+    if (!appTitleAllowed) {
         g_lastAppTitleTarget = nullptr;
         g_lastAppTitleText.clear();
         return;
@@ -24497,6 +24497,10 @@ void BuildLayoutPage(wuxc::StackPanel& p) {
         { L"topbar",  L"TopBar Search" },
         { L"windows", L"Windows Search" },
     }, L"What the TopBar's own Search button opens.");
+
+    p.Children().Append(MakeHeading(L"TitleBar Bleed"));
+    AddBoolRow(p, L"Disable TitleBar Bleed", L"disableTitleBarBleed",
+               L"When on, the TopBar will not sample the maximized window's title bar color.");
 }
 
 void BuildButtonsPage(wuxc::StackPanel& p) {
@@ -24597,6 +24601,7 @@ static std::wstring BuildSettingsJson() {
     addInt(L"topBarScale");
     addInt(L"globalBlurAmount");
     addInt(L"showSettingsButton");
+    addInt(L"disableTitleBarBleed");
     addStr(L"weatherLocationName");
     addStr(L"weatherLatitude");
     addStr(L"weatherLongitude");
@@ -24808,6 +24813,7 @@ static void ApplySettingsPairs(
         L"showControlCenterButton",
         L"showSettingsButton", L"showWeatherButton", L"showRecycleBinButton",
         L"showTrayIconButton", L"showNotificationsButton",
+        L"disableTitleBarBleed",
         L"leftItems", L"centerItems", L"rightItems",
         L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
         L"labelCpu", L"labelRam", L"labelGpu",
@@ -24847,6 +24853,7 @@ static void ApplySettingsPairs(
         { L"showRecycleBinButton",      {   0,   1 } },
         { L"showTrayIconButton",        {   0,   1 } },
         { L"showNotificationsButton",   {   0,   1 } },
+        { L"disableTitleBarBleed",      {   0,   1 } },
         { L"showCpuUsage",              {   0,   1 } },
         { L"showRamUsage",              {   0,   1 } },
         { L"showGpuUsage",              {   0,   1 } },
@@ -25340,6 +25347,11 @@ void BuildShortcutsPage(wuxc::StackPanel& p) {
             g_shortcutCaptureCommit = [i, keysBox](std::wstring result) {
                 if (i >= g_customShortcuts.size()) return;
                 if (ShortcutNameToVk(result.substr(result.rfind(L'+') + 1)) == 0) return;
+                if (result.find(L"Win+") == std::wstring::npos &&
+                    result.find(L"Ctrl+") == std::wstring::npos &&
+                    result.find(L"Alt+") == std::wstring::npos) {
+                    return;
+                }
                 g_customShortcuts[i].keys = result;
                 SaveShortcutSettings();
                 try { keysBox.Text(winrt::hstring(result)); } catch (...) {}
@@ -28588,8 +28600,8 @@ void BleedApply(bool active, wuxm::Brush brush) {
 HMONITOR GetBarMonitor();
 
 void BleedTick() {
-    if (g_settings.topBarBehaviour != L"default" || g_topBarAutoHidden.load() ||
-        g_fullScreenAppActive) {
+    if (g_settings.disableTitleBarBleed || g_settings.topBarBehaviour != L"default" ||
+        g_topBarAutoHidden.load() || g_fullScreenAppActive) {
         if (g_bleedActive.exchange(false)) BleedApply(false, nullptr);
         return;
     }
@@ -32500,10 +32512,10 @@ void PinTopBarFlyoutHwnd() {
                         if (currentScale <= 0.0) currentScale = 1.0;
                         static std::atomic<int> s_mismatchTicks{0};
                         static std::atomic<ULONGLONG> s_lastRebuild{0};
-                        if (!userAuto && popupW > 0 && tbW > 0 && (tbW * currentScale) < popupW * 0.85) {
+                        if (!userAuto && popupW > 0 && contentW > 0 && (contentW * currentScale) < popupW * 0.85) {
                         int ticks = s_mismatchTicks.fetch_add(1) + 1;
-                        Wh_Log(L"Self-heal: mismatch tick=%d popup=%d tbW=%.0f",
-                               ticks, popupW, tbW);
+                        Wh_Log(L"Self-heal: mismatch tick=%d popup=%d contentW=%.0f",
+                               ticks, popupW, contentW);
                         auto tbFE = tbIt->second;
                         tbFE.HorizontalAlignment(HorizontalAlignment::Stretch);
                         if (auto grid = tbFE.try_as<wuxc::Grid>()) {
@@ -37382,6 +37394,7 @@ void LoadSettings() {
     g_settings.showRecycleBinButton = ReadIntSetting(L"showRecycleBinButton", 1) != 0;
     g_settings.showTrayIconButton = ReadIntSetting(L"showTrayIconButton", 1) != 0;
     g_settings.showNotificationsButton = ReadIntSetting(L"showNotificationsButton", 1) != 0;
+    g_settings.disableTitleBarBleed = ReadIntSetting(L"disableTitleBarBleed", 0) != 0;
 
     g_settings.leftItems = GetStringSettingCopy(L"leftItems");
     g_settings.centerItems = GetStringSettingCopy(L"centerItems");
@@ -38468,30 +38481,8 @@ static void InstallProcessTransparencyBlock() {
     }
 }
 
-static LONG WINAPI TopBarUnhandledExceptionFilter(EXCEPTION_POINTERS* info) {
-    const DWORD code = info && info->ExceptionRecord
-                           ? info->ExceptionRecord->ExceptionCode
-                           : 0;
-    const void* addr = info && info->ExceptionRecord
-                           ? info->ExceptionRecord->ExceptionAddress
-                           : nullptr;
-    HMODULE mod = nullptr;
-    wchar_t modName[MAX_PATH] = L"(unknown)";
-    if (addr && GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(addr), &mod) && mod) {
-        GetModuleFileNameW(mod, modName, ARRAYSIZE(modName));
-    }
-    Wh_Log(L"TopBar CRASH: code=0x%08X addr=%p module=%s",
-           code, addr, modName);
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
 BOOL WhTool_ModInit() {
     Wh_Log(L"TopBar: WhTool_ModInit called.");
-
-    SetUnhandledExceptionFilter(TopBarUnhandledExceptionFilter);
 
     InstallProcessTransparencyBlock();
     LoadSettings();
