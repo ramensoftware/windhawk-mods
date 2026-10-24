@@ -836,18 +836,17 @@ RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar) {
 
 // Capture target, kept between polls (tracker thread only, one per taskbar so
 // monitors of different widths don't evict each other): the memory DC and DIB
-// are recreated only when the strip size changes.
+// are recreated only when the strip size changes. Deliberately no destructor:
+// the caches live in a global map, and at process exit (no Wh_ModUninit) its
+// destructor would make GDI calls under the loader lock. Release() is called
+// explicitly on the tracker thread; a trivially destructible value leaves the
+// map's destructor freeing memory only, and the OS reclaims the handles.
 struct CaptureCache {
     HDC mem = nullptr;
     HBITMAP bmp = nullptr;
     HGDIOBJ old = nullptr;
     void* bits = nullptr;
     int w = 0, h = 0;
-
-    CaptureCache() = default;
-    CaptureCache(const CaptureCache&) = delete;
-    CaptureCache& operator=(const CaptureCache&) = delete;
-    ~CaptureCache() { Release(); }
 
     bool Prepare(HDC screen, int width, int height) {
         if (bmp && w == width && h == height) return true;
@@ -1333,7 +1332,12 @@ void Tick() {
     for (auto it = g_track.begin(); it != g_track.end();) {
         bool alive = std::find(taskbars.begin(), taskbars.end(), it->first) != taskbars.end();
         if (alive && (it->second.changedThisTick || it->second.holdSince)) anyChanging = true;
-        if (!alive) g_captures.erase(it->first);
+        if (!alive) {
+            if (auto c = g_captures.find(it->first); c != g_captures.end()) {
+                c->second.Release();
+                g_captures.erase(c);
+            }
+        }
         it = alive ? std::next(it) : g_track.erase(it);
     }
 
@@ -1453,6 +1457,7 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
     g_track.clear();
     g_maximizedNow.clear();
     g_maximizedPrev.clear();
+    for (auto& [hwnd, cache] : g_captures) cache.Release();
     g_captures.clear();
     return 0;
 }
