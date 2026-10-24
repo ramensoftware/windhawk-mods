@@ -4,13 +4,13 @@
 // @name:ko         Alt+Tab 디스플레이 전환
 // @description     Start Alt+Tab on the focused app's monitor, then hold Alt and press D to cycle monitor-specific window lists.
 // @description:ko  현재 활성 앱의 화면에서 Alt+Tab을 시작하고, Alt를 누른 채 D로 디스플레이별 창 목록을 전환합니다.
-// @version         1.0.2
+// @version         1.0.3
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lversion
+// @compilerOptions -lole32 -loleaut32 -lversion -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,6 +59,11 @@ rebuilds its window list. Releasing Alt during that transition cancels the reope
 **Disable Alt+Tab per monitor before enabling this mod**, as both hook the same
 Windows functions. Other Alt+Tab replacements are not supported.
 
+Alt+Tab still initializes from the focused monitor if Windows bypasses the
+keyboard hook, for example when an elevated application has focus. D cycling
+is disabled when Windows would prevent Explorer from sending input back to that
+application. The switcher stays open, and ordinary window selection still works.
+
 Both Alt+Tab and Win+Alt+Tab can be independently configured with:
 
 - **Display location**: Primary monitor or the session's selected monitor.
@@ -81,6 +86,8 @@ Both Alt+Tab and Win+Alt+Tab can be independently configured with:
   - 앱 창과 마우스 커서의 실제 위치는 바뀌지 않습니다.
   - 전환 가능한 창이 없는 화면은 건너뜁니다.
   - 화면 전환 중에는 목록이 잠깐 닫혔다 다시 열립니다.
+  - 관리자 권한 앱처럼 Windows가 입력 전달을 제한하는 창에서는 D 전환을
+    생략하고 기존 목록을 유지합니다. 일반 창 선택은 계속 사용할 수 있습니다.
 - **Ctrl+Alt+Tab** 고정 모드에서도 **D / Shift+D**로 화면을 바꿀 수 있습니다.
   - **Enter**로 창을 선택합니다.
 
@@ -197,6 +204,7 @@ std::atomic<HMONITOR> g_monitorOverride;
 std::atomic<HMONITOR> g_sessionMonitor;
 std::atomic<bool> g_filterByMonitor;
 std::atomic<bool> g_sessionActive;
+std::atomic<bool> g_sessionStartedByHook;
 std::atomic<bool> g_stickySession;
 std::atomic<bool> g_switchPending;
 std::atomic<HWND> g_switcherWindow;
@@ -207,6 +215,8 @@ HANDLE g_keyboardThread;
 DWORD g_keyboardThreadId;
 HANDLE g_keyboardReady;
 bool g_keyboardReadyOk;
+DWORD g_inputIntegrityLevel;
+bool g_inputHasUIAccess;
 constexpr UINT kSwitchMonitorMessage = WM_APP + 1;
 constexpr ULONG_PTR kOwnInputTag = 0x41544D53;
 
@@ -219,7 +229,8 @@ HMONITOR GetTargetMonitor() {
     }
     if (HMONITOR monitor = g_sessionMonitor.load()) {
         MONITORINFO info{sizeof(info)};
-        if (GetMonitorInfo(monitor, &info)) return monitor;
+        if (GetMonitorInfo(monitor, &info))
+            return monitor;
     }
     return MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY);
 }
@@ -234,28 +245,91 @@ HMONITOR CaptureInitialMonitor(HWND foreground) {
     return MonitorFromWindow(foreground, MONITOR_DEFAULTTOPRIMARY);
 }
 
-bool IsSwitcherForeground() {
-    if (!g_sessionActive) {
-        return false;
-    }
-    HWND window = GetForegroundWindow();
+bool IsSwitcherWindow(HWND window) {
     DWORD processId = 0;
     GetWindowThreadProcessId(window, &processId);
     if (processId != GetCurrentProcessId()) {
         return false;
     }
-    if (HWND knownWindow = g_switcherWindow.load()) {
-        return window == knownWindow;
-    }
-    WCHAR className[128];
-    GetClassName(window, className, ARRAYSIZE(className));
+    WCHAR className[128]{};
+    if (!GetClassName(window, className, ARRAYSIZE(className)))
+        return false;
     if (wcscmp(className, L"XamlExplorerHostIslandWindow") != 0 &&
         wcscmp(className, L"MultitaskingViewFrame") != 0 &&
         wcscmp(className, L"TaskSwitcherWnd") != 0) {
         return false;
     }
+    return true;
+}
+
+bool BeginSession(HWND foreground) {
+    // Reset even if Windows has already activated a host. Such a host must
+    // never become the application's return window for a D transition.
+    g_monitorOverride = nullptr;
+    g_sessionMonitor = nullptr;
+    g_switcherWindow = nullptr;
+    g_returnWindow = nullptr;
+    g_sessionActive = false;
+    g_stickySession = false;
+    if (!foreground || IsSwitcherWindow(foreground))
+        return false;
+    g_returnWindow = foreground;
+    g_sessionMonitor = CaptureInitialMonitor(foreground);
+    g_stickySession = GetAsyncKeyState(VK_CONTROL) < 0;
+    g_sessionActive = true;
+    return true;
+}
+
+bool IsSwitcherForeground() {
+    if (!g_sessionActive)
+        return false;
+    HWND window = GetForegroundWindow();
+    if (HWND knownWindow = g_switcherWindow.load()) {
+        return window == knownWindow && IsSwitcherWindow(window);
+    }
+    if (!IsSwitcherWindow(window))
+        return false;
     g_switcherWindow = window;
     return true;
+}
+
+bool ReadIntegrityLevel(HANDLE token, DWORD* level) {
+    DWORD size = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
+    if (!size)
+        return false;
+    std::vector<BYTE> buffer(size);
+    if (!GetTokenInformation(token, TokenIntegrityLevel, buffer.data(), size,
+                             &size))
+        return false;
+    PSID sid =
+        reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buffer.data())->Label.Sid;
+    if (!IsValidSid(sid) || !*GetSidSubAuthorityCount(sid))
+        return false;
+    *level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    return true;
+}
+
+bool CanSendInputToWindow(HWND window) {
+    if (g_inputHasUIAccess)
+        return true;
+    DWORD processId = 0;
+    if (!GetWindowThreadProcessId(window, &processId) || !processId)
+        return false;
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process)
+        return false;
+    HANDLE token = nullptr;
+    bool allowed = false;
+    if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        DWORD level = 0;
+        allowed =
+            ReadIntegrityLevel(token, &level) && level <= g_inputIntegrityLevel;
+        CloseHandle(token);
+    }
+    CloseHandle(process);
+    return allowed;
 }
 
 HMONITOR GetNextMonitor(HMONITOR current, bool reverse) {
@@ -282,20 +356,23 @@ HMONITOR GetNextMonitor(HMONITOR current, bool reverse) {
     AcquireSRWLockShared(&g_seenMonitorsLock);
     auto seen = g_seenMonitors;
     ReleaseSRWLockShared(&g_seenMonitorsLock);
-    if (monitors.size() < 2) {
+    if (monitors.empty()) {
         return nullptr;
     }
-    size_t index = 0;
+    size_t index = monitors.size();
     for (size_t i = 0; i < monitors.size(); i++) {
         if (monitors[i].handle == current) {
             index = i;
             break;
         }
     }
-    for (size_t step = 1; step < monitors.size(); step++) {
-        size_t next = reverse
-                          ? (index + monitors.size() - step) % monitors.size()
-                          : (index + step) % monitors.size();
+    bool currentFound = index != monitors.size();
+    size_t steps = monitors.size() - (currentFound ? 1 : 0);
+    for (size_t step = 0; step < steps; step++) {
+        size_t next =
+            !currentFound ? (reverse ? monitors.size() - 1 - step : step)
+            : reverse ? (index + monitors.size() - step - 1) % monitors.size()
+                      : (index + step + 1) % monitors.size();
         HMONITOR candidate = monitors[next].handle;
         if (std::find(seen.begin(), seen.end(), candidate) != seen.end()) {
             return candidate;
@@ -320,7 +397,6 @@ bool SendKeys(const std::vector<std::pair<WORD, bool>>& keys) {
 
 void ReportSwitchState(PCWSTR state) {
     Wh_Log(L"Monitor switch: %s", state);
-    Wh_SetStringValue(L"lastMonitorSwitchState", state);
 }
 
 LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
@@ -347,13 +423,8 @@ LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
         return 1;
     }
     if (!up && key->vkCode == VK_TAB && alt && !g_switchPending &&
-        !IsSwitcherForeground()) {
-        g_monitorOverride = nullptr;
-        g_switcherWindow = nullptr;
-        g_returnWindow = GetForegroundWindow();
-        g_sessionMonitor = CaptureInitialMonitor(g_returnWindow);
-        g_stickySession = GetAsyncKeyState(VK_CONTROL) < 0;
-        g_sessionActive = true;
+        !IsSwitcherWindow(GetForegroundWindow())) {
+        g_sessionStartedByHook = BeginSession(GetForegroundWindow());
     }
     if (!up && key->vkCode == 'D' && g_enableMonitorCycling &&
         (g_switchPending || IsSwitcherForeground())) {
@@ -367,6 +438,7 @@ LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
         (up && (key->vkCode == VK_LMENU || key->vkCode == VK_RMENU) &&
          !g_stickySession)) {
         g_sessionActive = false;
+        g_sessionStartedByHook = false;
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
@@ -402,6 +474,12 @@ DWORD WINAPI KeyboardThread(void*) {
                 continue;
             }
             if (!IsSwitcherForeground()) {
+                continue;
+            }
+            // UIPI can silently drop the reopening input after Escape returns
+            // focus to an elevated app. Keep the current switcher instead.
+            if (!CanSendInputToWindow(g_returnWindow)) {
+                ReportSwitchState(L"input-to-return-window-restricted");
                 continue;
             }
             nextMonitor = GetNextMonitor(g_sessionMonitor, message.wParam != 0);
@@ -803,6 +881,12 @@ HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
 }
 
 HRESULT CreateInstanceHook(std::function<HRESULT()> original) {
+    bool startedByHook = g_sessionStartedByHook.exchange(false);
+    if (!g_switchPending && !startedByHook) {
+        // Creation is reached even if UIPI bypassed the low-level hook. Never
+        // reuse the previous session's selected monitor or return window.
+        BeginSession(GetForegroundWindow());
+    }
     auto windows = IsWinKeyPressed() ? g_settings.winAltTabWindows
                                      : g_settings.altTabWindows;
 
@@ -963,7 +1047,18 @@ BOOL Wh_ModInit() {
 
     g_winVersion = GetWindowsVersion();
 
-    HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
+    HANDLE inputToken = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &inputToken)) {
+        ReadIntegrityLevel(inputToken, &g_inputIntegrityLevel);
+        DWORD uiAccess = 0, size = 0;
+        if (GetTokenInformation(inputToken, TokenUIAccess, &uiAccess,
+                                sizeof(uiAccess), &size)) {
+            g_inputHasUIAccess = uiAccess != 0;
+        }
+        CloseHandle(inputToken);
+    }
+    HMODULE twinuiPcshellModule = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
+                                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!twinuiPcshellModule) {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return FALSE;
@@ -1095,6 +1190,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     g_sessionActive = false;
+    g_sessionStartedByHook = false;
     if (g_keyboardThread) {
         PostThreadMessage(g_keyboardThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_keyboardThread, INFINITE);
