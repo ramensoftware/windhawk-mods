@@ -2,12 +2,12 @@
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
 // @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional delayed hover display.
-// @version         1.3.0
+// @version         1.3.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lruntimeobject
 // @donateUrl       https://buymeacoffee.com/gilnett
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -93,6 +93,7 @@ If you find this mod useful, you can support its development and maintenance:
 #include <windows.h>
 #include <winstring.h>
 #include <wrl/client.h>
+#include <wrl/wrappers/corewrappers.h>
 
 #include <algorithm>
 #include <atomic>
@@ -102,9 +103,9 @@ If you find this mod useful, you can support its development and maintenance:
 #include <string_view>
 #include <unordered_set>
 
-#undef GetCurrentTime
-
 using Microsoft::WRL::ComPtr;
+using Microsoft::WRL::Wrappers::HString;
+using Microsoft::WRL::Wrappers::HStringReference;
 
 struct WinrtSize {
     float Width;
@@ -234,46 +235,62 @@ struct IVisualTreeHelperStaticsAbi : public IInspectable {
                                                 IInspectable** parent) = 0;
 };
 
-struct HStringGuard {
-    HSTRING hstr = nullptr;
-    HStringGuard() = default;
-    ~HStringGuard() {
-        if (hstr) {
-            WindowsDeleteString(hstr);
-        }
-    }
-    HStringGuard(const HStringGuard&) = delete;
-    HStringGuard& operator=(const HStringGuard&) = delete;
-    HStringGuard(HStringGuard&& other) noexcept : hstr(other.hstr) {
-        other.hstr = nullptr;
-    }
-    std::wstring_view view() const noexcept {
-        if (!hstr) {
-            return {};
-        }
-        UINT32 len = 0;
-        const wchar_t* buf = WindowsGetStringRawBuffer(hstr, &len);
-        return buf ? std::wstring_view(buf, len) : std::wstring_view{};
-    }
+// {B618FD7B-32D0-4970-9C42-7C039AC7BE78}
+static constexpr GUID kIID_IAutomationPropertiesStatics = {
+    0xB618FD7B,
+    0x32D0,
+    0x4970,
+    {0x9C, 0x42, 0x7C, 0x03, 0x9A, 0xC7, 0xBE, 0x78}};
+
+struct IAutomationPropertiesStaticsAbi : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE
+    get_AcceleratorKeyProperty(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetAcceleratorKey(void* element,
+                                                        HSTRING* result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetAcceleratorKey(void* element,
+                                                        HSTRING value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_AccessKeyProperty(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetAccessKey(void* element,
+                                                   HSTRING* result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetAccessKey(void* element,
+                                                   HSTRING value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE
+    get_AutomationIdProperty(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetAutomationId(void* element,
+                                                      HSTRING* result) = 0;
 };
 
-static HStringGuard GetRuntimeClassNameGuard(IUnknown* pUnk) {
-    HStringGuard guard;
+static HString GetRuntimeClassName(IUnknown* pUnk) {
+    HString str;
     if (!pUnk) {
-        return guard;
+        return str;
     }
     ComPtr<IInspectable> spInsp;
-    if (SUCCEEDED(
-            pUnk->QueryInterface(__uuidof(IInspectable), &spInsp)) &&
+    if (SUCCEEDED(pUnk->QueryInterface(__uuidof(IInspectable), &spInsp)) &&
         spInsp) {
-        spInsp->GetRuntimeClassName(&guard.hstr);
+        spInsp->GetRuntimeClassName(str.GetAddressOf());
     }
-    return guard;
+    return str;
 }
 
-static ComPtr<IInspectable> GetVisualTreeParent(IUnknown* pElement) {
+static std::wstring_view GetStringView(const HString& str) {
+    unsigned int len = 0;
+    const wchar_t* raw = str.GetRawBuffer(&len);
+    return raw ? std::wstring_view(raw, len) : std::wstring_view{};
+}
+
+static ComPtr<IVisualTreeHelperStaticsAbi> GetVisualTreeHelperStatics() {
+    ComPtr<IVisualTreeHelperStaticsAbi> spStatics;
+    RoGetActivationFactory(
+        HStringReference(L"Windows.UI.Xaml.Media.VisualTreeHelper").Get(),
+        kIID_IVisualTreeHelperStatics, &spStatics);
+    return spStatics;
+}
+
+static ComPtr<IInspectable> GetVisualTreeParent(
+    IVisualTreeHelperStaticsAbi* pHelper, IUnknown* pElement) {
     ComPtr<IInspectable> spParent;
-    if (!pElement) {
+    if (!pHelper || !pElement) {
         return spParent;
     }
     ComPtr<IInspectable> spDepObj;
@@ -281,23 +298,38 @@ static ComPtr<IInspectable> GetVisualTreeParent(IUnknown* pElement) {
         !spDepObj) {
         return spParent;
     }
-
-    HSTRING_HEADER header{};
-    HSTRING hClassId = nullptr;
-    static constexpr wchar_t kClassName[] =
-        L"Windows.UI.Xaml.Media.VisualTreeHelper";
-    if (FAILED(WindowsCreateStringReference(
-            kClassName, ARRAYSIZE(kClassName) - 1, &header, &hClassId))) {
-        return spParent;
-    }
-
-    ComPtr<IVisualTreeHelperStaticsAbi> spStatics;
-    if (SUCCEEDED(RoGetActivationFactory(hClassId, kIID_IVisualTreeHelperStatics,
-                                         &spStatics)) &&
-        spStatics) {
-        spStatics->GetParent(spDepObj.Get(), &spParent);
-    }
+    pHelper->GetParent(spDepObj.Get(), &spParent);
     return spParent;
+}
+
+static bool IsElementStartButton(IUnknown* pElement) {
+    if (!pElement) {
+        return false;
+    }
+    ComPtr<IInspectable> spDepObj;
+    if (FAILED(pElement->QueryInterface(kIID_IDependencyObject, &spDepObj)) ||
+        !spDepObj) {
+        return false;
+    }
+    ComPtr<IAutomationPropertiesStaticsAbi> spAutomationStatics;
+    if (FAILED(RoGetActivationFactory(
+            HStringReference(
+                L"Windows.UI.Xaml.Automation.AutomationProperties")
+                .Get(),
+            kIID_IAutomationPropertiesStatics, &spAutomationStatics)) ||
+        !spAutomationStatics) {
+        return false;
+    }
+    HString autoId;
+    if (SUCCEEDED(spAutomationStatics->GetAutomationId(spDepObj.Get(),
+                                                       autoId.GetAddressOf()))) {
+        unsigned int len = 0;
+        const wchar_t* raw = autoId.GetRawBuffer(&len);
+        if (raw && std::wstring_view(raw, len) == L"StartButton") {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool IsWindows11OrGreater() {
@@ -456,8 +488,9 @@ static ToolTipArea LookupRegisteredToolTip(void* pToolTip) {
     return ToolTipArea::Unknown;
 }
 
-static bool IsInNotificationAreaOverflow(IUnknown* pElement) {
-    if (!pElement) {
+static bool IsInNotificationAreaOverflow(IVisualTreeHelperStaticsAbi* pHelper,
+                                         IUnknown* pElement) {
+    if (!pHelper || !pElement) {
         return false;
     }
     ComPtr<IInspectable> current;
@@ -465,13 +498,19 @@ static bool IsInNotificationAreaOverflow(IUnknown* pElement) {
         return false;
     }
     for (int depth = 0; current && depth < 24;
-         depth++, current = GetVisualTreeParent(current.Get())) {
-        if (GetRuntimeClassNameGuard(current.Get()).view() ==
+         depth++, current = GetVisualTreeParent(pHelper, current.Get())) {
+        if (GetStringView(GetRuntimeClassName(current.Get())) ==
             L"SystemTray.NotificationAreaOverflow") {
             return true;
         }
     }
     return false;
+}
+
+static bool IsInNotificationAreaOverflow(IUnknown* pElement) {
+    ComPtr<IVisualTreeHelperStaticsAbi> spVisualHelper =
+        GetVisualTreeHelperStatics();
+    return IsInNotificationAreaOverflow(spVisualHelper.Get(), pElement);
 }
 
 static ToolTipArea IdentifyCallerArea() {
@@ -512,18 +551,23 @@ static ToolTipArea InspectPlacementTargetArea(void* pIToolTip) {
 
         ComPtr<IInspectable> target;
         if (SUCCEEDED(spToolTip->get_PlacementTarget(&target)) && target) {
-            if (IsInNotificationAreaOverflow(target.Get())) {
+            ComPtr<IVisualTreeHelperStaticsAbi> spVisualHelper =
+                GetVisualTreeHelperStatics();
+            if (IsInNotificationAreaOverflow(spVisualHelper.Get(),
+                                             target.Get())) {
                 return ToolTipArea::TrayOverflow;
             }
 
             ComPtr<IInspectable> current = target;
             for (int depth = 0; current && depth < 16; depth++) {
-                HStringGuard nameGuard = GetRuntimeClassNameGuard(current.Get());
-                std::wstring_view sv = nameGuard.view();
+                HString name = GetRuntimeClassName(current.Get());
+                std::wstring_view sv = GetStringView(name);
                 if (!sv.empty()) {
                     if (sv.find(L"ExperienceToggleButton") !=
                         std::wstring_view::npos) {
-                        return ToolTipArea::StartButton;
+                        return IsElementStartButton(current.Get())
+                                   ? ToolTipArea::StartButton
+                                   : ToolTipArea::TaskbarApp;
                     }
                     if (sv.find(L"TaskListButton") != std::wstring_view::npos ||
                         sv.find(L"OverflowToggleButton") !=
@@ -540,28 +584,24 @@ static ToolTipArea InspectPlacementTargetArea(void* pIToolTip) {
                         return ToolTipArea::TaskbarApp;
                     }
                 }
-                current = GetVisualTreeParent(current.Get());
+                current =
+                    GetVisualTreeParent(spVisualHelper.Get(), current.Get());
             }
         }
 
         // In Taskbar.View.dll, PlacementTarget() is null when CToolTipService
         // invokes ToolTip::put_IsOpen on a timer. TaskListButton sets Content()
-        // to a StackPanel, whereas ExperienceToggleButton (Start) binds
-        // Content() to a plain string (IReference<String>).
+        // to a StackPanel.
         ComPtr<IContentControlAbi> spContentCtrl;
         if (SUCCEEDED(
                 pUnk->QueryInterface(kIID_IContentControl, &spContentCtrl)) &&
             spContentCtrl) {
             ComPtr<IInspectable> content;
             if (SUCCEEDED(spContentCtrl->get_Content(&content)) && content) {
-                HStringGuard contentClass =
-                    GetRuntimeClassNameGuard(content.Get());
-                std::wstring_view csv = contentClass.view();
+                HString contentClass = GetRuntimeClassName(content.Get());
+                std::wstring_view csv = GetStringView(contentClass);
                 if (csv == L"Windows.UI.Xaml.Controls.StackPanel") {
                     return ToolTipArea::TaskbarApp;
-                }
-                if (csv.find(L"String") != std::wstring_view::npos) {
-                    return ToolTipArea::StartButton;
                 }
             }
         }
@@ -871,29 +911,28 @@ static void CALLBACK DelayedTooltipTimerProc(HWND hWnd,
     }
 }
 
-static void ScheduleDelayedToolTipOpen(void* pThis, int delayMs) {
+static bool ScheduleDelayedToolTipOpen(void* pThis, int delayMs) {
     if (!pThis || g_uninitializing.load(std::memory_order_relaxed)) {
-        return;
+        return false;
     }
-    DWORD taskbarThreadId = g_taskbarThreadId.load(std::memory_order_relaxed);
-    if (taskbarThreadId && GetCurrentThreadId() != taskbarThreadId) {
-        return;
+    HWND hWnd = GetTaskbarWndForTimer();
+    if (!hWnd) {
+        return false;
+    }
+    if (GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId()) {
+        return false;
     }
     try {
-        HWND hWnd = GetTaskbarWndForTimer();
-        if (!hWnd) {
-            return;
-        }
         auto* pUnk = static_cast<IUnknown*>(pThis);
         ComPtr<IToolTipAbi> spToolTip;
         if (FAILED(pUnk->QueryInterface(kIID_IToolTip, &spToolTip)) ||
             !spToolTip) {
-            return;
+            return false;
         }
 
         POINT pt{};
         if (!GetCursorPos(&pt)) {
-            return;
+            return false;
         }
 
         if (g_delayedState.openTimerArmed &&
@@ -902,7 +941,7 @@ static void ScheduleDelayedToolTipOpen(void* pThis, int delayMs) {
                 kCursorDriftTolerancePx &&
             std::abs(pt.y - g_delayedState.initialPt.y) <=
                 kCursorDriftTolerancePx) {
-            return;
+            return true;
         }
 
         if (g_delayedState.activeRawPtr &&
@@ -917,10 +956,12 @@ static void ScheduleDelayedToolTipOpen(void* pThis, int delayMs) {
                      static_cast<UINT>(delayMs),
                      DelayedTooltipTimerProc) != 0) {
             g_delayedState.openTimerArmed = true;
+            return true;
         }
     } catch (...) {
         Wh_Log(L"[TOOLTIP] Exception in ScheduleDelayedToolTipOpen");
     }
+    return false;
 }
 
 static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
@@ -934,7 +975,7 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
     if (!value) {
         DWORD taskbarThreadId =
             g_taskbarThreadId.load(std::memory_order_relaxed);
-        if (!taskbarThreadId || GetCurrentThreadId() == taskbarThreadId) {
+        if (taskbarThreadId != 0 && GetCurrentThreadId() == taskbarThreadId) {
             if (pThis && pThis == g_delayedState.pendingRawPtr) {
                 CancelDelayedOpenTimer();
             }
@@ -978,8 +1019,7 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
         return S_OK;
     }
 
-    if (delayMs > 0) {
-        ScheduleDelayedToolTipOpen(pThis, delayMs);
+    if (delayMs > 0 && ScheduleDelayedToolTipOpen(pThis, delayMs)) {
         return S_OK;
     }
 
@@ -1085,10 +1125,8 @@ static bool RunFromWindowThread(HWND hWnd,
     }
 
     RunFromWindowThreadParam param{proc, procParam};
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
-                        reinterpret_cast<LPARAM>(&param), SMTO_ABORTIFHUNG,
-                        2000, &result);
+    SendMessageW(hWnd, GetRunFromWindowThreadMessage(), 0,
+                 reinterpret_cast<LPARAM>(&param));
 
     UnhookWindowsHookEx(hook);
     return true;
@@ -1096,18 +1134,10 @@ static bool RunFromWindowThread(HWND hWnd,
 
 static void WINAPI EagerHookToolTipOnTaskbarThread(void* /*procParam*/) {
     try {
-        HSTRING_HEADER header{};
-        HSTRING hClassId = nullptr;
-        static constexpr wchar_t kClassName[] =
-            L"Windows.UI.Xaml.Controls.ToolTip";
-        if (FAILED(WindowsCreateStringReference(
-                kClassName, ARRAYSIZE(kClassName) - 1, &header, &hClassId))) {
-            return;
-        }
-
         ComPtr<IToolTipFactoryAbi> spFactory;
-        if (FAILED(RoGetActivationFactory(hClassId, kIID_IToolTipFactory,
-                                          &spFactory)) ||
+        if (FAILED(RoGetActivationFactory(
+                HStringReference(L"Windows.UI.Xaml.Controls.ToolTip").Get(),
+                kIID_IToolTipFactory, &spFactory)) ||
             !spFactory) {
             return;
         }
@@ -1421,7 +1451,7 @@ static void RegisterStartButtonToolTipFromInstance(void* pThis) {
         // ToggleButtonT), offset +sizeof(void*) holds m_inner (the base
         // ToggleButton IInspectable*).
         auto* pInner = *(reinterpret_cast<IUnknown* const*>(pThis) + 1);
-        if (!pInner) {
+        if (!pInner || !IsElementStartButton(pInner)) {
             return;
         }
         ComPtr<IInspectable> spDepObj;
@@ -1430,19 +1460,11 @@ static void RegisterStartButtonToolTipFromInstance(void* pThis) {
             return;
         }
 
-        HSTRING_HEADER header{};
-        HSTRING hClassId = nullptr;
-        static constexpr wchar_t kServiceClass[] =
-            L"Windows.UI.Xaml.Controls.ToolTipService";
-        if (FAILED(WindowsCreateStringReference(kServiceClass,
-                                                ARRAYSIZE(kServiceClass) - 1,
-                                                &header, &hClassId))) {
-            return;
-        }
-
         ComPtr<IToolTipServiceStaticsAbi> spService;
         if (FAILED(RoGetActivationFactory(
-                hClassId, kIID_IToolTipServiceStatics, &spService)) ||
+                HStringReference(L"Windows.UI.Xaml.Controls.ToolTipService")
+                    .Get(),
+                kIID_IToolTipServiceStatics, &spService)) ||
             !spService) {
             return;
         }
@@ -1469,10 +1491,18 @@ static void RegisterStartButtonToolTipFromInstance(void* pThis) {
 static void __cdecl ExperienceToggleButton_UpdateHover_Hook(void* pThis,
                                                             bool isHover) {
     EnsurePutIsOpenHooked();
-    RegisterStartButtonToolTipFromInstance(pThis);
-    StartButtonHoverScope scope;
-    if (ExperienceToggleButton_UpdateHover_Original) {
-        ExperienceToggleButton_UpdateHover_Original(pThis, isHover);
+    auto* pInner = pThis ? *(reinterpret_cast<IUnknown* const*>(pThis) + 1)
+                         : nullptr;
+    if (pInner && IsElementStartButton(pInner)) {
+        RegisterStartButtonToolTipFromInstance(pThis);
+        StartButtonHoverScope scope;
+        if (ExperienceToggleButton_UpdateHover_Original) {
+            ExperienceToggleButton_UpdateHover_Original(pThis, isHover);
+        }
+    } else {
+        if (ExperienceToggleButton_UpdateHover_Original) {
+            ExperienceToggleButton_UpdateHover_Original(pThis, isHover);
+        }
     }
 }
 
