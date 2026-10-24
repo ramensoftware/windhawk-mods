@@ -1648,7 +1648,7 @@ static bool g_diagnosticsLog = false;
 // Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
 // numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
 // of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r13-2026-10-21";
+static constexpr PCWSTR kJournalBuild = L"r14-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
@@ -3664,15 +3664,15 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
     windowClass.lpszClassName = kMessageWindowClassName;
 
     if (!RegisterClassExW(&windowClass)) {
-        // A class left behind by an earlier instance that died without
-        // unregistering it is not a reason to do nothing for the session: the
-        // name belongs to this mod, and the window can be created from it.
-        const DWORD error = GetLastError();
-        if (error != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"RegisterClassExW failed (last error %lu)", error);
-            return 1;
-        }
-        Wh_Log(L"the message window class already existed; reusing it");
+        // Fatal, including ERROR_CLASS_ALREADY_EXISTS. This class lives in the
+        // tool process this mod owns, is unregistered when the event thread ends
+        // and the process exits with the mod, so its existence can only mean the
+        // name belongs to somebody else -- and the procedure a foreign class
+        // carries is not MessageWndProc. A window created over it would never
+        // receive this mod's messages, so there is nothing to salvage by
+        // continuing: the mod reports why and does not start.
+        Wh_Log(L"RegisterClassExW failed (last error %lu)", GetLastError());
+        return 1;
     }
 
     HWND hwnd = CreateWindowExW(0, kMessageWindowClassName, L"", WS_POPUP, 0, 0,
