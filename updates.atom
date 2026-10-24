@@ -2,12 +2,85 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T14:05:13.000Z</updated>
+    <updated>2026-10-24T16:33:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 8 Network Flyout Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-network-flyout-restorer#35d6cd4fc00a4f4967d447e43526abc262498e88</id>
+        <link href="https://windhawk.net/mods/win8-network-flyout-restorer"/>
+        <updated>2026-10-24T16:33:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows8networkflyoutrestorer">Windows 8 Network Flyout Restorer</h1>
+<p>This mod restores the Windows 8-style network panel from the taskbar network icon.
+The panel provides access to Wi-Fi networks, wired connections, VPN connections
+and Airplane mode, where supported by Windows and the installed hardware.</p>
+<p>This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<p>On builds that still contain the legacy network components, the mod uses them
+directly and downloads nothing; the result is usually closer to the original
+Windows 8 panel, since the system's own providers are used. On newer builds,
+the required Microsoft components are downloaded from Microsoft's Symbol Server
+and verified with SHA-256 before use.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/winserverpicture.png" alt="winserverpicture" /></p>
+<p>Note: This is a best-effort modification. The Windows 8 network flyout and its dependencies had been removed in Windows 11 24H2+ and the restoration is done within modern Windows' limitations.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>64-bit Windows 10 (build 17763 or later) or Windows 11.</li>
+<li>Windhawk 1.4 or later.</li>
+<li>An internet connection for the first download, if additional components are needed.</li>
+<li>Native ARM64 Windows is not supported: fallback artifacts are AMD64-only and
+the native component route is unavailable on ARM64 builds.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>Compatible Windows components already on the computer are used when available.
+Otherwise, the required Microsoft components are downloaded from Microsoft's
+Symbol Server and kept in Windhawk's private storage. System files are not replaced.
+Compatibility depends on the Windows build; the panel may not work on every system.</p>
+<p>Downloaded files are checked with SHA-256 before use. Damaged cached downloads are
+replaced automatically when possible. If verification still fails, the downloaded
+panel remains inactive rather than loading an unverified file.</p>
+<h2 id="options">Options</h2>
+<p>The classic network icon is optional and disabled by default. If enabling it
+causes Explorer to restart, leave it disabled and use the alternative network icon.
+The settings control the classic network icon, the optional Win+Shift+N shortcut
+and the panel language. The downloaded panel supports English, Italian, Spanish,
+French and Brazilian Portuguese. When built-in Windows components are used, their
+original Windows language is retained. Restart Explorer after changing the panel language.</p>
+<h2 id="privacyandsystemchanges">Privacy and system changes</h2>
+<p>The mod does not create or modify entries in the live HKCU/HKLM registry and
+does not create system-wide COM registrations. In fallback mode, registry access
+needed by the legacy components is redirected to a private application hive
+loaded with <code>RegLoadAppKeyW</code> from a unique file in this mod's Windhawk storage.
+Each <code>explorer.exe</code> instance gets its own hive file, so concurrent Explorer
+processes do not contend for one backing file. The hive is not mounted under
+HKCU/HKLM and is not visible to other processes. On normal unload the mod closes
+the hive and attempts to remove its file; a crash can leave an orphaned hive
+file in mod storage. Downloaded components are also kept in Windhawk storage to
+avoid downloading them at every start.</p>
+<p>If you used an earlier release, its <code>HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry</code>
+subtree (or the older <code>windows-8-network-flyout-restorer</code> name) may still be
+present. This release does not delete old registry data automatically; after
+all older mod/Explorer instances have stopped, remove those legacy entries
+manually if you want to clean them up.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If a handled C++ error occurs, the mod stops accepting requests for that session
+and attempts to shut down its features. Restart Explorer before trying again.
+This does not protect Explorer from every possible error in legacy Windows components.</p>
+<p>If the panel does not open, check the internet connection and Windhawk's mod log.
+An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
+restores the normal Windows behavior. If shutdown gets stuck, some resources may
+be kept until Explorer exits to avoid unloading code that is still running.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdministratoX - Testing on Windows 11 25H2</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DeepSeek Balance in Taskbar 1.0.0]]></title>
         <id>https://windhawk.net/mods/deepseek-balance-tray#0ab510bd7f577ef5e7ea4b1f5d2f528d580c24d3</id>
@@ -693,20 +766,6 @@ in this source file.</p>]]></content>
         <author>
             <name>HeyOkay</name>
             <uri>https://github.com/HeyOkay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Snipper 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-snipper#063bc430d57a0fe909326b5f36f5b7f562b2314f</id>
-        <link href="https://windhawk.net/mods/taskbar-snipper"/>
-        <updated>2026-10-22T17:02:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The widget is inside the taskbar now: the mod is loaded into Explorer instead of running in a windhawk.exe process of its own. It moves and auto-hides with the taskbar, and full-screen apps and the Start menu cover it as they do the rest of the taskbar.</li>
-<li>Update linked widgets together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.2, Taskbar Snipper 1.1): older versions don't look for widgets inside the taskbar, so they overlap them and don't follow them.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>

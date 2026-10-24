@@ -2,12 +2,85 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-24T14:05:13.000Z</updated>
+    <updated>2026-10-24T16:33:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 8 Network Flyout Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-network-flyout-restorer#35d6cd4fc00a4f4967d447e43526abc262498e88</id>
+        <link href="https://windhawk.net/mods/win8-network-flyout-restorer"/>
+        <updated>2026-10-24T16:33:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows8networkflyoutrestorer">Windows 8 Network Flyout Restorer</h1>
+<p>This mod restores the Windows 8-style network panel from the taskbar network icon.
+The panel provides access to Wi-Fi networks, wired connections, VPN connections
+and Airplane mode, where supported by Windows and the installed hardware.</p>
+<p>This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<p>On builds that still contain the legacy network components, the mod uses them
+directly and downloads nothing; the result is usually closer to the original
+Windows 8 panel, since the system's own providers are used. On newer builds,
+the required Microsoft components are downloaded from Microsoft's Symbol Server
+and verified with SHA-256 before use.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/winserverpicture.png" alt="winserverpicture" /></p>
+<p>Note: This is a best-effort modification. The Windows 8 network flyout and its dependencies had been removed in Windows 11 24H2+ and the restoration is done within modern Windows' limitations.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>64-bit Windows 10 (build 17763 or later) or Windows 11.</li>
+<li>Windhawk 1.4 or later.</li>
+<li>An internet connection for the first download, if additional components are needed.</li>
+<li>Native ARM64 Windows is not supported: fallback artifacts are AMD64-only and
+the native component route is unavailable on ARM64 builds.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>Compatible Windows components already on the computer are used when available.
+Otherwise, the required Microsoft components are downloaded from Microsoft's
+Symbol Server and kept in Windhawk's private storage. System files are not replaced.
+Compatibility depends on the Windows build; the panel may not work on every system.</p>
+<p>Downloaded files are checked with SHA-256 before use. Damaged cached downloads are
+replaced automatically when possible. If verification still fails, the downloaded
+panel remains inactive rather than loading an unverified file.</p>
+<h2 id="options">Options</h2>
+<p>The classic network icon is optional and disabled by default. If enabling it
+causes Explorer to restart, leave it disabled and use the alternative network icon.
+The settings control the classic network icon, the optional Win+Shift+N shortcut
+and the panel language. The downloaded panel supports English, Italian, Spanish,
+French and Brazilian Portuguese. When built-in Windows components are used, their
+original Windows language is retained. Restart Explorer after changing the panel language.</p>
+<h2 id="privacyandsystemchanges">Privacy and system changes</h2>
+<p>The mod does not create or modify entries in the live HKCU/HKLM registry and
+does not create system-wide COM registrations. In fallback mode, registry access
+needed by the legacy components is redirected to a private application hive
+loaded with <code>RegLoadAppKeyW</code> from a unique file in this mod's Windhawk storage.
+Each <code>explorer.exe</code> instance gets its own hive file, so concurrent Explorer
+processes do not contend for one backing file. The hive is not mounted under
+HKCU/HKLM and is not visible to other processes. On normal unload the mod closes
+the hive and attempts to remove its file; a crash can leave an orphaned hive
+file in mod storage. Downloaded components are also kept in Windhawk storage to
+avoid downloading them at every start.</p>
+<p>If you used an earlier release, its <code>HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry</code>
+subtree (or the older <code>windows-8-network-flyout-restorer</code> name) may still be
+present. This release does not delete old registry data automatically; after
+all older mod/Explorer instances have stopped, remove those legacy entries
+manually if you want to clean them up.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If a handled C++ error occurs, the mod stops accepting requests for that session
+and attempts to shut down its features. Restart Explorer before trying again.
+This does not protect Explorer from every possible error in legacy Windows components.</p>
+<p>If the panel does not open, check the internet connection and Windhawk's mod log.
+An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
+restores the normal Windows behavior. If shutdown gets stuck, some resources may
+be kept until Explorer exits to avoid unloading code that is still running.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdministratoX - Testing on Windows 11 25H2</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DeepSeek Balance in Taskbar 1.0.0]]></title>
         <id>https://windhawk.net/mods/deepseek-balance-tray#0ab510bd7f577ef5e7ea4b1f5d2f528d580c24d3</id>
@@ -1077,120 +1150,6 @@ Windows shortcut.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Where I Left It 1.2]]></title>
-        <id>https://windhawk.net/mods/window-geometry-memory#9a8f03ad75e595cf6725ae5fe616dc28cefcaaac</id>
-        <link href="https://windhawk.net/mods/window-geometry-memory"/>
-        <updated>2026-10-20T17:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="whereileftit">Where I Left It</h1>
-<p>Remembers where you left each app's window -- its position, its size, and which
-monitor it was on -- and puts it back when the app opens again. It also keeps
-windows that are already open reachable when your display setup changes: a
-monitor going away, a different resolution, docking or undocking, or a
-rotation.</p>
-<h2 id="gettingstarted">Getting started</h2>
-<p>The mod does nothing until you tell it which apps to manage. Open the mod's
-settings, add an executable name (for example <code>notepad.exe</code>) or a full path to
-<strong>Apps to manage</strong>, and save. Only windows belonging to the executables in that
-list are remembered or moved.</p>
-<h2 id="howitbehaves">How it behaves</h2>
-<ul>
-<li>Geometry is captured when you move or resize a window, and when a window
-closes. Move a window where you want it, close it, and it opens there next
-time -- in the same session or after a reboot.</li>
-<li>Maximized and minimized windows are handled as you would expect: a window that
-was maximized comes back maximized, and one that was minimized comes back where
-it was, at its normal size, or maximized if it was maximized before it was
-minimized.</li>
-<li>Saving is per monitor arrangement. A window is restored to the same monitor it
-was on, and after docking or undocking it is mapped to the closest equivalent
-monitor instead of being left off-screen.</li>
-<li><strong>Windows that are already open are moved too.</strong> When the display arrangement
-changes -- a different resolution, docking, a monitor waking up or going away
--- open tracked windows are mapped from the monitor they were on to the closest
-equivalent monitor that still exists, keeping the same fraction of that
-monitor. Nothing is left stranded on a monitor that is no longer there.</li>
-<li>Moving or resizing a window always wins over anything the mod was doing. If an
-application insists on its own placement, the mod tries once more and then
-stops fighting it.</li>
-<li>Each app's saved geometry can remember its position and its size separately,
-per app, in the settings. With <strong>Restore size</strong> off, a window is placed but not
-resized, so an app that sizes itself to its content keeps that size; with
-<strong>Restore position</strong> off, it is sized where it opened. Both are still recorded
-while off, so switching a box back on brings back the last position or size
-that window had rather than a value frozen at the moment it was switched off.</li>
-</ul>
-<h2 id="outofscopeinv1">Out of scope in v1</h2>
-<ul>
-<li>Moving windows between virtual desktops</li>
-<li>Z-order (stacking order) restore</li>
-<li>Re-scaling what is <em>inside</em> a window when the scale percentage changes. The
-frame is moved and sized; how an app redraws its contents is up to the app.</li>
-<li>A periodic check for monitor changes. The mod reacts to Windows' display-change
-notification and is silent the rest of the time.</li>
-<li>UWP / Store apps that restore their own window placement</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>Elevated windows are not moved.</strong> Windows cannot be repositioned across
-integrity levels: the move is refused with access denied, the mod detects the
-refusal, leaves that window alone for the rest of the session, and records why.
-The window is still tracked, so it is not ignored -- the mod tries. While a
-refusal stands, that window's position is not saved either: your chosen
-position for it is not overwritten by wherever it happened to be sitting.</li>
-<li><strong>Titles are part of how a window is matched.</strong> A window whose title changed
-between sessions falls back to matching by executable, class and ordinal, and
-is only restored when that match is unambiguous. Windows with identical titles
-may be restored to each other's positions.</li>
-<li><strong>A save at close can lose its turn.</strong> The rectangle is read from the window as
-the window is closing, and Windows sometimes has the window out of the way first.
-When that happens nothing is recorded for that close, the diagnostics journal says
-so with a reason, and the window keeps whatever position it was last remembered
-at. Moving the window once by hand records it there and then, and that save is not
-a last-moment read, so this is about windows that are moved by something other than
-you and closed immediately after.</li>
-<li><strong>A window that was minimized when it closed comes back where it was</strong>, at its
-normal size, or maximized if it was maximized before it was minimized. It does
-not come back minimized.</li>
-<li><strong>Stored resolution is not rescaled when DPI changes.</strong> Nothing multiplies a
-stored rectangle by a DPI ratio. After a display change a window is mapped by
-the rules above, which already express it as a fraction of its monitor -- so a
-change of scale percentage on its own leaves windows where they are, because no
-monitor has moved.</li>
-<li><strong>A window is measured against the screen, not against the taskbar.</strong> The
-taskbar is taller in pixels at a larger scale, so a window restored after a
-change of scale percentage can sit partly behind it. Move the window once and
-the new position is what is remembered.</li>
-<li><strong>A maximized window is left where Windows puts it.</strong> While its monitor still
-exists, its maximized state and placement stay Windows' own business -- the mod
-does not move it, and it is not resized by a resolution change. If the monitor
-it was maximized on disappears, it is rescued onto a remaining monitor like any
-other window.</li>
-<li><strong>UWP and Store apps</strong> often restore their own placement and may ignore the
-mod.</li>
-<li>If an application moves its window right after showing, the mod re-applies the
-stored geometry once. Applications that keep overriding it are left alone.</li>
-</ul>
-<h2 id="diagnostics">Diagnostics</h2>
-<p>Turn on <strong>Write a diagnostics journal</strong> in the settings and the mod appends a
-line to <code>window-geometry-journal.txt</code> for every save, restore and decision, with
-the exact rectangle and monitor involved. It is the fastest way to see why a
-particular window was or was not restored, and it is worth attaching to a bug
-report. It is off by default.</p>
-<p>Both files live in a folder named after the signed-in user's SID, inside the mod's
-storage folder. That storage folder is shared by the whole machine and a tool mod
-runs one process per signed-in session, so the folder is created with a protected
-access control list that gives full access to that user, SYSTEM and
-administrators, and to nobody else: two users signed in at once neither overwrite
-each other's saved geometry nor can read each other's window titles. If the mod
-cannot read the user's SID it saves nothing at all -- sharing the data would be
-worse than forgetting it. The journal is a diagnostics aid rather than a history,
-so it is capped: once it passes a megabyte it starts over from empty.</p>]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
         </author>
     </entry>
 </feed>
