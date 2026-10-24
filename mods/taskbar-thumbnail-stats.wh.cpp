@@ -136,6 +136,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <windhawk_utils.h>
 
 #include <psapi.h>
+#include <shellapi.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
 #include <winver.h>
@@ -237,10 +238,8 @@ struct ThumbnailMapping {
 };
 
 std::mutex g_mappingMutex;
-// Holds WinRT weak references: not destroyed at process exit (see
-// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown),
-// cleared in Wh_ModUninit instead.
-[[clang::no_destroy]] std::vector<ThumbnailMapping> g_thumbnailMapping;
+// Only weak references and raw pointers: safe to destroy at process exit.
+std::vector<ThumbnailMapping> g_thumbnailMapping;
 
 void* GetIdentity(IUnknown* object) {
     if (!object) {
@@ -452,11 +451,7 @@ struct CpuSample {
 // the last measurement instead of measuring over a near-zero interval.
 constexpr ULONGLONG kMinCpuIntervalWallTime = 200ULL * 10000ULL;  // 200 ms
 
-// Returns the CPU usage of the process in percent, if known yet.
-std::optional<double> SampleCpuUsage(DWORD pid,
-                                     ULONGLONG creationTime,
-                                     ULONGLONG cpuTime,
-                                     ULONGLONG now);
+
 
 // Only accessed by the worker thread.
 std::unordered_map<DWORD, CpuSample> g_cpuSamples;
@@ -682,6 +677,7 @@ std::wstring FormatPercent(double value) {
     return result + L"%";
 }
 
+// Returns the CPU usage of the process in percent, if known yet.
 std::optional<double> SampleCpuUsage(DWORD pid,
                                      ULONGLONG creationTime,
                                      ULONGLONG cpuTime,
@@ -956,8 +952,20 @@ bool LaunchProgram(const std::wstring& file, const std::wstring& parameters) {
     info.lpFile = file.c_str();
     info.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
     info.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&info)) {
-        Wh_Log(L"Couldn't start %s: %u", file.c_str(), GetLastError());
+
+    // ShellExecuteEx needs COM, only initialized around the call.
+    HRESULT hrCoInit = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    bool succeeded = ShellExecuteExW(&info);
+    DWORD error = succeeded ? 0 : GetLastError();
+
+    if (SUCCEEDED(hrCoInit)) {
+        CoUninitialize();
+    }
+
+    if (!succeeded) {
+        Wh_Log(L"Couldn't start %s: %u", file.c_str(), error);
         return false;
     }
     return true;
@@ -986,9 +994,6 @@ void OpenProcessManager(HWND hWnd, const Settings& settings) {
 }
 
 void StatsThreadProc() {
-    // ShellExecuteEx (click on the line) needs COM.
-    HRESULT hrCoInit = CoInitializeEx(
-        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     ULONGLONG lastDiagnosticsTick = 0;
 
@@ -1059,11 +1064,6 @@ void StatsThreadProc() {
                                   [] { return g_statsStop || g_statsNewRequest; });
     }
 
-    lock.unlock();
-
-    if (SUCCEEDED(hrCoInit)) {
-        CoUninitialize();
-    }
 }
 
 // Called from the UI thread.
@@ -1964,77 +1964,68 @@ void LoadSettings() {
 
     settings->showRam = Wh_GetIntSetting(L"showRam");
 
-    PCWSTR memoryType = Wh_GetStringSetting(L"memoryType");
-    settings->privateBytes = wcscmp(memoryType, L"privateBytes") == 0;
-    Wh_FreeStringSetting(memoryType);
+    auto memoryType = WindhawkUtils::StringSetting::make(L"memoryType");
+    settings->privateBytes = wcscmp(memoryType.get(), L"privateBytes") == 0;
 
-    PCWSTR order = Wh_GetStringSetting(L"order");
-    settings->ramFirst = wcscmp(order, L"ramFirst") == 0;
-    Wh_FreeStringSetting(order);
+    auto order = WindhawkUtils::StringSetting::make(L"order");
+    settings->ramFirst = wcscmp(order.get(), L"ramFirst") == 0;
     settings->showCpu = Wh_GetIntSetting(L"showCpu");
     settings->showVersion = Wh_GetIntSetting(L"showVersion");
     settings->showProcessCount = Wh_GetIntSetting(L"showProcessCount");
     settings->includeChildren = Wh_GetIntSetting(L"includeChildren");
 
-    PCWSTR position = Wh_GetStringSetting(L"position");
-    settings->position = wcscmp(position, L"below") == 0 ? Position::below
+    auto position = WindhawkUtils::StringSetting::make(L"position");
+    settings->position = wcscmp(position.get(), L"below") == 0 ? Position::below
                                                          : Position::overlay;
-    Wh_FreeStringSetting(position);
 
     int fontSize = Wh_GetIntSetting(L"fontSize");
     settings->fontSize = (fontSize >= 6 && fontSize <= 40) ? fontSize : 10;
 
-    PCWSTR background = Wh_GetStringSetting(L"background");
-    settings->background = wcscmp(background, L"none") == 0
+    auto background = WindhawkUtils::StringSetting::make(L"background");
+    settings->background = wcscmp(background.get(), L"none") == 0
                                ? BackgroundMode::none
-                           : wcscmp(background, L"custom") == 0
+                           : wcscmp(background.get(), L"custom") == 0
                                ? BackgroundMode::custom
                                : BackgroundMode::accent;
-    Wh_FreeStringSetting(background);
 
-    PCWSTR backgroundColor = Wh_GetStringSetting(L"backgroundColor");
-    if (auto color = ParseColor(backgroundColor)) {
+    auto backgroundColor = WindhawkUtils::StringSetting::make(L"backgroundColor");
+    if (auto color = ParseColor(backgroundColor.get())) {
         settings->backgroundColor = *color;
     } else if (settings->background == BackgroundMode::custom) {
         Wh_Log(L"Invalid background color \"%s\", using the default",
-               backgroundColor);
+               backgroundColor.get());
     }
-    Wh_FreeStringSetting(backgroundColor);
 
     int opacity = Wh_GetIntSetting(L"backgroundOpacity");
     settings->backgroundOpacity = (opacity >= 0 && opacity <= 100) ? opacity
                                                                   : 100;
 
-    PCWSTR textColor = Wh_GetStringSetting(L"textColor");
-    settings->textColor = wcscmp(textColor, L"white") == 0
+    auto textColor = WindhawkUtils::StringSetting::make(L"textColor");
+    settings->textColor = wcscmp(textColor.get(), L"white") == 0
                               ? TextColorMode::white
-                          : wcscmp(textColor, L"black") == 0
+                          : wcscmp(textColor.get(), L"black") == 0
                               ? TextColorMode::black
-                          : wcscmp(textColor, L"custom") == 0
+                          : wcscmp(textColor.get(), L"custom") == 0
                               ? TextColorMode::custom
                               : TextColorMode::automatic;
-    Wh_FreeStringSetting(textColor);
 
-    PCWSTR textCustomColor = Wh_GetStringSetting(L"textCustomColor");
-    if (auto color = ParseColor(textCustomColor)) {
+    auto textCustomColor = WindhawkUtils::StringSetting::make(L"textCustomColor");
+    if (auto color = ParseColor(textCustomColor.get())) {
         settings->textCustomColor = *color;
     } else if (settings->textColor == TextColorMode::custom) {
         Wh_Log(L"Invalid text color \"%s\", using the default",
-               textCustomColor);
+               textCustomColor.get());
     }
-    Wh_FreeStringSetting(textCustomColor);
 
-    PCWSTR clickAction = Wh_GetStringSetting(L"clickAction");
+    auto clickAction = WindhawkUtils::StringSetting::make(L"clickAction");
     settings->clickAction =
-        wcscmp(clickAction, L"auto") == 0              ? ClickAction::automatic
-        : wcscmp(clickAction, L"processExplorer") == 0 ? ClickAction::processExplorer
-        : wcscmp(clickAction, L"taskManager") == 0     ? ClickAction::taskManager
+        wcscmp(clickAction.get(), L"auto") == 0              ? ClickAction::automatic
+        : wcscmp(clickAction.get(), L"processExplorer") == 0 ? ClickAction::processExplorer
+        : wcscmp(clickAction.get(), L"taskManager") == 0     ? ClickAction::taskManager
                                                        : ClickAction::none;
-    Wh_FreeStringSetting(clickAction);
 
-    PCWSTR processExplorerPath = Wh_GetStringSetting(L"processExplorerPath");
-    settings->processExplorerPath = processExplorerPath;
-    Wh_FreeStringSetting(processExplorerPath);
+    auto processExplorerPath = WindhawkUtils::StringSetting::make(L"processExplorerPath");
+    settings->processExplorerPath = processExplorerPath.get();
 
     int interval = Wh_GetIntSetting(L"updateInterval");
     settings->updateInterval = std::max(interval > 0 ? interval : 1000, 250);
@@ -2165,13 +2156,10 @@ void Wh_ModUninit() {
     Wh_Log(L"Cleaned up the views of %d UI threads", cleaned);
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     // Apply the new settings in place, without unloading the mod: the views
     // pick up the new style and interval on their next update.
     LoadSettings();
-    *bReload = FALSE;
-
-    return TRUE;
 }
