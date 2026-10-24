@@ -21,9 +21,9 @@ edge, so the window's title bar appears to continue up into the bar.
 
 ![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif)
 
-**Requires a taskbar docked at the top of the screen.** Windows 11 doesn't
-offer that natively; use a mod such as *Taskbar on top for Windows 11*. On
-other dock positions this mod stays idle.
+**Requires a taskbar docked at the top of the screen** (via the taskbar
+position setting on builds that have it, or a mod such as *Taskbar on top for
+Windows 11*). On other dock positions this mod stays idle.
 
 How it works:
 
