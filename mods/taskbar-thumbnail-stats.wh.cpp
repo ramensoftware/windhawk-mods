@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.4
+// @version         1.5
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
@@ -28,11 +28,12 @@ Adds a line with live process information to the Windows 11 taskbar
 thumbnails (the previews shown when hovering an open app), inside the
 thumbnail, over the bottom of the preview image or below it:
 
-- **RAM** in use (private working set, like Task Manager)
 - **CPU** usage in percent, updated every second
+- **RAM** in use: private working set, like Task Manager, or private bytes,
+  like System Informer
 - **version** of the executable
 
-Example: `RAM 412 MB · CPU 3.4% · v131.0.2`
+Example: `CPU: 3.4% · RAM: 412 MB · v131.0.2`
 
 ![Screenshot](https://i.imgur.com/qxWa9bC.png)
 
@@ -57,10 +58,20 @@ slowed down, and only while a thumbnail is actually visible.
 
 // ==WindhawkModSettings==
 /*
-- showRam: true
-  $name: Show RAM
 - showCpu: true
   $name: Show CPU
+- showRam: true
+  $name: Show RAM
+- memoryType: privateWorkingSet
+  $name: RAM measurement
+  $options:
+  - privateWorkingSet: Private working set (like Task Manager)
+  - privateBytes: Private bytes (like System Informer)
+- order: cpuFirst
+  $name: Order
+  $options:
+  - cpuFirst: "CPU, then RAM (like Task Manager → Performance)"
+  - ramFirst: RAM, then CPU
 - showVersion: true
   $name: Show version
 - includeChildren: true
@@ -170,6 +181,8 @@ enum class TextColorMode { automatic, white, black, custom };
 
 struct Settings {
     bool showRam = true;
+    bool privateBytes = false;  // Else private working set.
+    bool ramFirst = false;
     bool showCpu = true;
     bool showVersion = true;
     bool showProcessCount = true;
@@ -736,10 +749,20 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
         if (settings.showRam) {
             ProcessMemoryCountersEx2 counters{};
             counters.cb = sizeof(counters);
-            if (GetProcessMemoryInfo(process,
-                                     (PROCESS_MEMORY_COUNTERS*)&counters,
-                                     sizeof(counters)) &&
-                counters.PrivateWorkingSetSize) {
+            PROCESS_MEMORY_COUNTERS_EX countersEx{};
+            countersEx.cb = sizeof(countersEx);
+            if (settings.privateBytes) {
+                // Private bytes (commit charge), like System Informer.
+                if (GetProcessMemoryInfo(process,
+                                         (PROCESS_MEMORY_COUNTERS*)&countersEx,
+                                         sizeof(countersEx))) {
+                    memory += countersEx.PrivateUsage;
+                }
+            } else if (GetProcessMemoryInfo(
+                           process, (PROCESS_MEMORY_COUNTERS*)&counters,
+                           sizeof(counters)) &&
+                       counters.PrivateWorkingSetSize) {
+                // Private working set, like Task Manager.
                 memory += counters.PrivateWorkingSetSize;
             } else {
                 PROCESS_MEMORY_COUNTERS basic{};
@@ -787,17 +810,29 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
     // Processes that can't be opened (e.g. protected ones): show nothing
     // rather than misleading values.
     if (openedCount > 0) {
+        std::wstring ramPart;
         if (settings.showRam && memory) {
             WCHAR sizeText[64];
             if (StrFormatByteSizeW((LONGLONG)memory, sizeText,
                                    ARRAYSIZE(sizeText))) {
-                append(std::wstring(L"RAM ") + sizeText);
+                ramPart = std::wstring(L"RAM: ") + sizeText;
             }
         }
 
+        std::wstring cpuPart;
         if (settings.showCpu) {
-            append(L"CPU " + (cpuReady ? FormatPercent(cpuPercent)
-                                       : std::wstring(L"…")));
+            // "N/A" until two samples are available: wider than an ellipsis,
+            // so the line moves less when the value appears.
+            cpuPart = L"CPU: " + (cpuReady ? FormatPercent(cpuPercent)
+                                           : std::wstring(L"N/A"));
+        }
+
+        if (settings.ramFirst) {
+            append(ramPart);
+            append(cpuPart);
+        } else {
+            append(cpuPart);
+            append(ramPart);
         }
     }
 
@@ -1928,6 +1963,14 @@ void LoadSettings() {
     auto settings = std::make_shared<Settings>();
 
     settings->showRam = Wh_GetIntSetting(L"showRam");
+
+    PCWSTR memoryType = Wh_GetStringSetting(L"memoryType");
+    settings->privateBytes = wcscmp(memoryType, L"privateBytes") == 0;
+    Wh_FreeStringSetting(memoryType);
+
+    PCWSTR order = Wh_GetStringSetting(L"order");
+    settings->ramFirst = wcscmp(order, L"ramFirst") == 0;
+    Wh_FreeStringSetting(order);
     settings->showCpu = Wh_GetIntSetting(L"showCpu");
     settings->showVersion = Wh_GetIntSetting(L"showVersion");
     settings->showProcessCount = Wh_GetIntSetting(L"showProcessCount");
