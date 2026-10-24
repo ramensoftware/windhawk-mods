@@ -1,3 +1,12 @@
+## 1.8 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4197cf6f0971248a458b2cf23c1279e44200b907/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added the Command Center theme.
+* Updated the Borderless theme.
+* Fixed misaligned switch controls, e.g. the Bluetooth toggle switch.
+* Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.
+* Added `skip()` which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. `{{width > 0 ? width : skip()}}` applies only once `width` is positive.
+* Improved handling for `NaN` and `Infinity` values in expressions.
+
 ## 1.7 ([Sep 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/41266af195ef78e4379a9a7a54e28e8a63ef802f/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added the OS26 Tahoe Glass theme.

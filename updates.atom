@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T21:56:21.000Z</updated>
+    <updated>2026-10-24T23:21:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.8]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#4197cf6f0971248a458b2cf23c1279e44200b907</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2026-10-24T23:21:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the Command Center theme.</li>
+<li>Updated the Borderless theme.</li>
+<li>Fixed misaligned switch controls, e.g. the Bluetooth toggle switch.</li>
+<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
+<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
+<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Settings Styler 1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-settings-styler#7986323bd6b7c28686248b4347550ea9df58d723</id>
@@ -726,46 +744,6 @@ reproduce it, and share the lines from the mod's log. You should see logs being 
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Clock Styler 0.4.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-clock-styler#f09550cbeffb51073c224969a2ba706a481d69b6</id>
-        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
-        <updated>2026-10-23T17:03:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lockscreenclockstyler">Lock Screen Clock Styler</h1>
-<p>Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.</p>
-<h2 id="features">Features:</h2>
-<ul>
-<li><strong>Minimalist Sonoma (Clean Typography):</strong> Apple-inspired lock screen typography with date positioned above the time, slender display numerals, dual-layer atmospheric shadow, and bottom-left or center placement.</li>
-<li><strong>Modern Flip Clock:</strong> Split glass cards for hour and minute with an elegant horizontal flip seam.</li>
-<li><strong>Classic Flip Clock:</strong> Classic mechanical Solari-inspired flip clock with matte charcoal flap cards, aged ivory cream typography, mechanical split seam, and hinge axle clips.</li>
-<li><strong>Cyberpunk Sci-Fi HUD Terminal:</strong> Bespoke tactical Netrunner HUD terminal with dark obsidian glass chassis, tactical corner brackets in acid yellow and hot magenta, top telemetry diagnostic bar, electric cyan digits with rhythmic tactical pulse, and bottom telemetry date logger.</li>
-<li><strong>Retro Pixel / LED Dot Matrix Clock:</strong> Authentic dot matrix display inspired by classic digital boards with active and ambient inactive LED dots.</li>
-<li><strong>Minimalist Aura / Floating Clock:</strong> Frameless floating typography with ambient soft drop-shadow depth and an elegant frosted date pill.</li>
-<li><strong>Battery & Charging Capsule:</strong> Live battery percentage and power indicator (⚡ %85) for laptop users, automatically hidden on desktop PCs.</li>
-<li><strong>12-Hour / 24-Hour Format:</strong> Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.</li>
-<li><strong>Show Seconds Toggle:</strong> Optional live seconds display. Supported by every style except the two flip clocks.</li>
-<li><strong>Frosted Glass / Acrylic Styling:</strong> Translucent glass panels with subtle border highlights and rounded corners.</li>
-<li><strong>Dynamic Date Display:</strong> Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.</li>
-<li><strong>Hide Default Widgets:</strong> Clean up the lock screen by hiding MSN weather, sports, and news widgets.</li>
-<li><strong>Hide / Replace Default Clock:</strong> Seamlessly replace the stock Windows 11 clock with custom styles or adjust vertical offsets.</li>
-<li><strong>Extensive Customization:</strong> Card opacity, font size, vertical offsets, and alignments are fully customizable via settings.</li>
-<li><strong>No XAML Diagnostics:</strong> The mod walks the lock screen visual tree from its own UI thread instead of registering a XAML Diagnostics TAP. It can therefore run alongside other XAML-based Windhawk mods such as Windows 11 Start Menu Styler.</li>
-</ul>
-<h2 id="screenshots">Screenshots:</h2>
-<p>| Style | Preview |
-| :---: | :---: |
-| Minimalist Sonoma | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png" alt="Minimalist Sonoma" /> |
-| Retro Pixel / LED Matrix | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/Retro%20Pixel.png" alt="Retro Pixel" /> |
-| Modern Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/modern%20flip%20clock.png" alt="Modern Flip Clock" /> |
-| Classic Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/classical%20flip%20clock.png" alt="Classic Flip Clock" /> |
-| Cyberpunk Sci-Fi HUD | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20style.png" alt="Cyberpunk Sci-Fi HUD" /> |</p>
-<h2 id="securitynote">Security Note:</h2>
-<p>This mod exclusively targets <code>LockApp.exe</code>. It does not inject into or interfere with <code>LogonUI.exe</code> or <code>winlogon.exe</code> in the Secure Desktop, preventing any system lockup or logon security risks.</p>]]></content>
-        <author>
-            <name>ali0zdas</name>
-            <uri>https://github.com/ali0zdas</uri>
         </author>
     </entry>
 </feed>
