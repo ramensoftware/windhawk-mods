@@ -553,7 +553,8 @@ window, its process-exit watch, and `IsShellExplorer`, used by Always on top.
   $name: Trail offset
 - alwaysOnTop: true
   $name: Always on top
-  $description: Draw the trail above the taskbar, Start menu and other shell surfaces. Enabled by default. Explorer hosts a small transparent window in a higher Z-order band, and the trail is drawn into it. Turn off if it causes issues: turning it off unloads the Explorer side.
+  $description: >-
+    Draw the trail above the taskbar, Start menu and other shell surfaces. Enabled by default. Explorer hosts a small transparent window in a higher Z-order band, and the trail is drawn into it. Turn off if it causes issues: turning it off unloads the Explorer side.
 */
 // ==/WindhawkModSettings==
 
