@@ -16,7 +16,7 @@
 // @name:uk-UA      Стилізатор годинника екрана блокування
 // @description     Customize the Windows 11 lock screen clock with modern styles, date display, and widget controls.
 // @description:tr-TR Windows 11 kilit ekranı saatini modern stiller, tarih göstergesi ve widget denetimleriyle özelleştirin.
-// @description:zh-CN 使用现代样式、日期显示和微件控制来自定义 Windows 11 锁屏时钟。
+// @description:zh-CN 使用现代样式、日期显示和小组件控制来自定义 Windows 11 锁屏时钟。
 // @description:zh-TW 使用現代樣式、日期顯示與小工具控制來自訂 Windows 11 鎖定畫面時鐘。
 // @description:ja-JP モダンなスタイル、日付表示、ウィジェット制御で Windows 11 のロック画面の時計をカスタマイズします。
 // @description:ko-KR 모던한 스타일, 날짜 표시 및 위젯 제어로 Windows 11 잠금 화면 시계를 맞춤 설정합니다.
@@ -45,7 +45,7 @@ Customize and enhance the Windows 11 lock screen clock with modern designs, fros
 
 ## Features:
 - **Multiple Distinct Clock Styles:** Choose from a curated collection of clock designs including Retro Pixel / LED Dot Matrix, Modern Flip Clock, Classic Solari Flip Clock, Minimalist Sonoma, Cyberpunk Sci-Fi HUD, and Minimalist Aura.
-- **Lightweight & Thread-Safe:** Ultra-lightweight native XAML injection via the LockApp UI thread with zero background CPU overhead. Direct visual tree navigation without XAML Diagnostics TAP, ensuring seamless compatibility with mods like Windows 11 Start Menu Styler.
+- **Lightweight & Thread-Safe:** Ultra-lightweight native XAML injection via the LockApp UI thread with ultra-low background CPU overhead. Direct visual tree navigation without XAML Diagnostics TAP, ensuring seamless compatibility with mods like Windows 11 Start Menu Styler.
 - **🎨 More Themes Coming Soon:** Have an idea for an aesthetic clock design or want your favorite style added? Reach out or open an issue on GitHub to suggest new themes!
 - **12-Hour / 24-Hour Format:** Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.
 - **Show Seconds Toggle:** Optional live seconds display (supported across all non-flip styles).
@@ -141,6 +141,45 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $options:
     - 24h: "24-Hour (14:30)"
     - 12h: "12-Hour AM/PM (02:30 PM)"
+  $options:tr-TR:
+    - 24h: "24 Saat (14:30)"
+    - 12h: "12 Saat AM/PM (02:30 PM)"
+  $options:zh-CN:
+    - 24h: "24 小时制 (14:30)"
+    - 12h: "12 小时制 AM/PM (02:30 PM)"
+  $options:zh-TW:
+    - 24h: "24 小時制 (14:30)"
+    - 12h: "12 小時制 AM/PM (02:30 PM)"
+  $options:ru-RU:
+    - 24h: "24-часовой (14:30)"
+    - 12h: "12-часовой AM/PM (02:30 PM)"
+  $options:de-DE:
+    - 24h: "24-Stunden (14:30)"
+    - 12h: "12-Stunden AM/PM (02:30 PM)"
+  $options:es-ES:
+    - 24h: "24 horas (14:30)"
+    - 12h: "12 horas AM/PM (02:30 PM)"
+  $options:pt-BR:
+    - 24h: "24 horas (14:30)"
+    - 12h: "12 horas AM/PM (02:30 PM)"
+  $options:fr-FR:
+    - 24h: "24 heures (14:30)"
+    - 12h: "12 heures AM/PM (02:30 PM)"
+  $options:it-IT:
+    - 24h: "24 ore (14:30)"
+    - 12h: "12 ore AM/PM (02:30 PM)"
+  $options:pl-PL:
+    - 24h: "24-godzinny (14:30)"
+    - 12h: "12-godzinny AM/PM (02:30 PM)"
+  $options:ja-JP:
+    - 24h: "24時間表示 (14:30)"
+    - 12h: "12時間表示 AM/PM (02:30 PM)"
+  $options:ko-KR:
+    - 24h: "24시간 형식 (14:30)"
+    - 12h: "12시간 형식 AM/PM (02:30 PM)"
+  $options:uk-UA:
+    - 24h: "24-годинний (14:30)"
+    - 12h: "12-годинний AM/PM (02:30 PM)"
 - showSeconds: true
   $name: "Show Seconds"
   $name:tr-TR: "Saniyeyi Göster"
@@ -181,7 +220,7 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:pt-BR: "Opacidade do vidro (Cartões Modern Flip)"
   $name:fr-FR: "Opacité du verre (Cartes Modern Flip)"
   $name:it-IT: "Opacità vetro (schede Modern Flip)"
-  $name:pl-PL: "Przezroczystość szkła (karty Modern Flip)"
+  $name:pl-PL: "Nieprzezroczystość szkła (karty Modern Flip)"
   $name:ja-JP: "ガラスの不透明度（モダンフリップカード）"
   $name:ko-KR: "유리 불투명도(모던 플립 카드)"
   $name:uk-UA: "Непрозорість скла (картки Modern Flip)"
@@ -292,6 +331,84 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - bottomLeft: "Bottom-Left (Sonoma Style)"
     - left: "Left Side"
     - right: "Right Side"
+  $options:tr-TR:
+    - auto: "Otomatik (Tema Varsayılanı)"
+    - center: "Ekranın Ortası"
+    - bottomLeft: "Sol Alt (Sonoma Stili)"
+    - left: "Sol Taraf"
+    - right: "Sağ Taraf"
+  $options:zh-CN:
+    - auto: "自动（主题默认）"
+    - center: "屏幕居中"
+    - bottomLeft: "左下角（Sonoma 样式）"
+    - left: "靠左"
+    - right: "靠右"
+  $options:zh-TW:
+    - auto: "自動（佈景主題預設）"
+    - center: "螢幕置中"
+    - bottomLeft: "左下角（Sonoma 樣式）"
+    - left: "靠左"
+    - right: "靠右"
+  $options:ru-RU:
+    - auto: "Автоматически (по умолчанию темы)"
+    - center: "По центру экрана"
+    - bottomLeft: "Слева внизу (стиль Sonoma)"
+    - left: "Слева"
+    - right: "Справа"
+  $options:de-DE:
+    - auto: "Automatisch (Design-Standard)"
+    - center: "Bildschirmmitte"
+    - bottomLeft: "Unten links (Sonoma-Stil)"
+    - left: "Links"
+    - right: "Rechts"
+  $options:es-ES:
+    - auto: "Automático (predeterminado del tema)"
+    - center: "Centro de la pantalla"
+    - bottomLeft: "Abajo a la izquierda (estilo Sonoma)"
+    - left: "Lado izquierdo"
+    - right: "Lado derecho"
+  $options:pt-BR:
+    - auto: "Automático (padrão do tema)"
+    - center: "Centro da tela"
+    - bottomLeft: "Canto inferior esquerdo (estilo Sonoma)"
+    - left: "Lado esquerdo"
+    - right: "Lado direito"
+  $options:fr-FR:
+    - auto: "Automatique (par défaut)"
+    - center: "Centre de l'écran"
+    - bottomLeft: "En bas à gauche (style Sonoma)"
+    - left: "Côté gauche"
+    - right: "Côté droit"
+  $options:it-IT:
+    - auto: "Automatico (predefinito del tema)"
+    - center: "Centro dello schermo"
+    - bottomLeft: "In basso a sinistra (stile Sonoma)"
+    - left: "Lato sinistro"
+    - right: "Lato destro"
+  $options:pl-PL:
+    - auto: "Automatycznie (domyślne motywu)"
+    - center: "Środek ekranu"
+    - bottomLeft: "Lewy dolny róg (styl Sonoma)"
+    - left: "Po lewej stronie"
+    - right: "Po prawej stronie"
+  $options:ja-JP:
+    - auto: "自動（テーマの既定値）"
+    - center: "画面中央"
+    - bottomLeft: "左下（Sonoma スタイル）"
+    - left: "左寄せ"
+    - right: "右寄せ"
+  $options:ko-KR:
+    - auto: "자동 (테마 기본값)"
+    - center: "화면 중앙"
+    - bottomLeft: "왼쪽 하단 (Sonoma 스타일)"
+    - left: "왼쪽"
+    - right: "오른쪽"
+  $options:uk-UA:
+    - auto: "Автоматично (за замовчуванням теми)"
+    - center: "По центру екрана"
+    - bottomLeft: "Внизу ліворуч (стиль Sonoma)"
+    - left: "Ліворуч"
+    - right: "Праворуч"
 - hideDefaultWidgets: false
   $name: "Hide Default Widgets"
   $name:tr-TR: "Varsayılan Widget'ları Gizle"
@@ -481,7 +598,7 @@ void LoadSettings() {
     if (g_settings.glassOpacity > 255) g_settings.glassOpacity = 255;
 
     int fontSetting = Wh_GetIntSetting(L"clockFontSize");
-    if (fontSetting <= 0) fontSetting = 140;
+    if (fontSetting == 0) fontSetting = 140;
     if (fontSetting < 20) fontSetting = 20;
     if (fontSetting > 300) fontSetting = 300;
     g_settings.clockFontSize = fontSetting;
@@ -2246,6 +2363,7 @@ void RestoreTrackedElements(std::vector<TrackedElement>& tracked) {
         }
     }
     tracked.clear();
+    tracked.shrink_to_fit();
 }
 
 // Keeps the tracking list in sync with the current tree and hides only the
@@ -2359,6 +2477,7 @@ void ResetClockElementReferences() {
 
     for (int i = 0; i < 6; i++) {
         g_pixelDigits[i].dots.clear();
+        g_pixelDigits[i].dots.shrink_to_fit();
         g_pixelDigits[i].lastVal = -1;
     }
     g_brushActiveDot = nullptr;
