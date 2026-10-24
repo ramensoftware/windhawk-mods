@@ -1,34 +1,42 @@
 // ==WindhawkMod==
-// @id              telegram-viewer-monitor
-// @name            Telegram: media viewer on the chat monitor
-// @name:ru-RU      Telegram: просмотрщик на мониторе чата
-// @description     Telegram Desktop secondary windows (photo/video viewer, etc.) open on the monitor of the main window instead of the remembered one
-// @description:ru-RU Окна Telegram Desktop (просмотр фото/видео и др.) открываются на том мониторе, где находится главное окно, а не на запомненном
-// @version         1.2
+// @id              secondary-windows-on-active-monitor
+// @name            Secondary windows on the active monitor
+// @name:ru-RU      Дочерние окна на активном мониторе
+// @description     Multi-monitor: secondary windows of the selected apps (Telegram media viewer, etc.) open on the monitor of the app's active window instead of the remembered one
+// @description:ru-RU Для нескольких мониторов: дочерние окна выбранных приложений (просмотрщик Telegram и др.) открываются на мониторе активного окна приложения, а не на запомненном
+// @version         2.0
 // @author          limpompo
 // @github          https://github.com/limpompo
-// @homepage        https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/telegram-viewer-monitor
+// @homepage        https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/secondary-windows-on-active-monitor
 // @license         MIT
-// @include         Telegram.exe
+// @include         *
 // @compilerOptions -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Telegram: media viewer on the chat monitor
+# Secondary windows on the active monitor
 
-Telegram Desktop remembers which monitor the media viewer was opened on and
-opens it there again, even if the main window has moved to another monitor.
-The mod intercepts the showing of Telegram's secondary windows and, if a window
-is about to appear on a different monitor than the main window (which is active
-at the moment it opens), moves it to the main window's monitor before it is
-shown.
+Useful if you have **several monitors**. Many apps remember which monitor a
+secondary window (media viewer, player, dialog) was opened on and open it there
+again, even if you now work with the app on another monitor. For example,
+Telegram Desktop opens photos and videos on the monitor where the viewer was
+last time, not where the chat is.
 
-Which windows are moved: by default **all** secondary Telegram windows, not
-only the media viewer - also picture-in-picture video, call windows and chats
-opened in a separate window. If you keep some of them on another monitor on
-purpose, use the *Window title filter* setting to limit the mod to windows
-with a given title.
+![Demo](https://github.com/user-attachments/assets/5000330f-0441-4c61-926e-526427c3e0c2)
+
+The mod intercepts the showing of secondary windows of the apps from the
+*Applications* list and, if a window is about to appear on a different monitor
+than the app's active window, moves it to the active window's monitor before
+it is shown. By default the list contains Telegram Desktop (`Telegram.exe`);
+add any other app by its executable name in the mod settings.
+
+Which windows are moved: **all** secondary windows of the app that get their
+own window - for Telegram also picture-in-picture video, call windows and
+chats opened in a separate window. Menus, tooltips, notifications and tool
+windows are not moved. If you keep some windows on another monitor on purpose,
+set a *Window title filter* for the app to limit the mod to windows with a
+given title.
 
 How a window is placed:
 - it keeps its relative position on the screen (a window in the top right
@@ -42,12 +50,30 @@ How a window is placed:
 Keeping the position and accounting for scaling can each be turned off in the
 settings.
 
-System files and Telegram data are not modified.
+The mod is loaded into every process, but hooks only the processes from the
+*Applications* list; changes to the list apply without restarting the app.
+
+System files and app data are not modified.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- applications:
+  - - process: Telegram.exe
+      $name: Process
+      $name:ru-RU: Процесс
+      $description: Executable name (with or without .exe), for example Telegram.exe, or its full path.
+      $description:ru-RU: Имя исполняемого файла (с .exe или без), например Telegram.exe, или полный путь к нему.
+    - titleFilter: ""
+      $name: Window title filter
+      $name:ru-RU: Фильтр по заголовку окна
+      $description: Move only windows whose title contains this text. Empty - move all secondary windows of the app. Titles often depend on the app's interface language.
+      $description:ru-RU: Переносить только окна, в заголовке которых есть этот текст. Пусто — все дочерние окна приложения. Заголовки часто зависят от языка интерфейса приложения.
+  $name: Applications
+  $name:ru-RU: Приложения
+  $description: Apps whose secondary windows open on the monitor of the app's active window.
+  $description:ru-RU: Приложения, дочерние окна которых открываются на мониторе активного окна приложения.
 - keepPosition: true
   $name: Keep window position
   $name:ru-RU: Сохранять положение окна
@@ -56,13 +82,8 @@ System files and Telegram data are not modified.
 - scaleForDpi: true
   $name: Account for monitor scaling
   $name:ru-RU: Учитывать масштаб мониторов
-  $description: On - when monitors have different scaling (for example 100% and 150%), the window is placed so that it fits after Telegram resizes it for the new scale. Turn off if windows are placed wrongly on such a setup.
-  $description:ru-RU: Вкл — при разном масштабе мониторов (например, 100% и 150%) окно ставится так, чтобы поместиться после того, как Telegram изменит его размер под новый масштаб. Выключите, если на такой конфигурации окна встают неправильно.
-- titleFilter: ""
-  $name: Window title filter
-  $name:ru-RU: Фильтр по заголовку окна
-  $description: Move only windows whose title contains this text. Empty - move all secondary Telegram windows. Window titles follow Telegram's interface language, so the filter works only for that language.
-  $description:ru-RU: Переносить только окна, в заголовке которых есть этот текст. Пусто — переносить все второстепенные окна Telegram. Заголовки окон зависят от языка интерфейса Telegram, поэтому фильтр работает только для этого языка.
+  $description: On - when monitors have different scaling (for example 100% and 150%), the window is placed so that it fits after the app resizes it for the new scale. Turn off if windows are placed wrongly on such a setup.
+  $description:ru-RU: Вкл — при разном масштабе мониторов (например, 100% и 150%) окно ставится так, чтобы поместиться после того, как приложение изменит его размер под новый масштаб. Выключите, если на такой конфигурации окна встают неправильно.
 */
 // ==/WindhawkModSettings==
 
@@ -71,26 +92,80 @@ System files and Telegram data are not modified.
 #include <windows.h>
 #include <shellscalingapi.h>
 #include <wchar.h>
+#include <wctype.h>
 
 #include <mutex>
 #include <string>
 
 struct Settings {
+    bool matched = false;  // the current process is in the Applications list
     bool keepPosition = true;
     bool scaleForDpi = true;
     std::wstring titleFilter;
 };
 
-// Settings are written on the Windhawk engine thread and read on Telegram's
+// Settings are written on the Windhawk engine thread and read on the app's
 // UI thread.
 static std::mutex g_settingsMutex;
 static Settings g_settings;
+static bool g_hooked = false;
+
+static std::wstring ToLower(std::wstring s) {
+    for (auto& c : s) {
+        c = towlower(c);
+    }
+    return s;
+}
+
+static std::wstring StripExe(std::wstring s) {
+    if (s.size() >= 4 && s.compare(s.size() - 4, 4, L".exe") == 0) {
+        s.resize(s.size() - 4);
+    }
+    return s;
+}
+
+// Matches a process from the settings (a file name with or without .exe, or a
+// full path) against the current process path.
+static bool ProcessMatches(std::wstring entry, const std::wstring& path) {
+    entry = ToLower(entry);
+    while (!entry.empty() && iswspace(entry.back())) entry.pop_back();
+    while (!entry.empty() && iswspace(entry.front())) entry.erase(0, 1);
+    if (entry.empty()) {
+        return false;
+    }
+    if (entry.find_first_of(L"\\/") != std::wstring::npos) {
+        return StripExe(entry) == StripExe(path);
+    }
+    size_t slash = path.find_last_of(L"\\/");
+    std::wstring name = slash == std::wstring::npos ? path : path.substr(slash + 1);
+    return StripExe(entry) == StripExe(name);
+}
 
 static void LoadSettings() {
     Settings s;
     s.keepPosition = Wh_GetIntSetting(L"keepPosition") != 0;
     s.scaleForDpi = Wh_GetIntSetting(L"scaleForDpi") != 0;
-    s.titleFilter = WindhawkUtils::StringSetting::make(L"titleFilter").get();
+
+    WCHAR path[MAX_PATH] = L"";
+    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    std::wstring processPath =
+        len && len < ARRAYSIZE(path) ? ToLower(path) : std::wstring();
+
+    for (int i = 0; !processPath.empty(); i++) {
+        auto process =
+            WindhawkUtils::StringSetting::make(L"applications[%d].process", i);
+        if (!*process.get()) {
+            break;
+        }
+        if (ProcessMatches(process.get(), processPath)) {
+            s.matched = true;
+            s.titleFilter = WindhawkUtils::StringSetting::make(
+                                L"applications[%d].titleFilter", i)
+                                .get();
+            break;
+        }
+    }
+
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(s);
 }
@@ -150,7 +225,7 @@ static int MapAxis(int pos, int origSize, int fromStart, int fromLen,
 
 // Maps a non-maximized, non-fullscreen window rect from one work area to
 // another. The window gets the size it has now scaled to the target DPI and
-// clamped to the target work area. If `rescaled` is true, Telegram will
+// clamped to the target work area. If `rescaled` is true, the app will
 // rescale the window on the DPI change, so the returned size is the one to
 // set now (before that rescale); otherwise it's the final size.
 static RECT MapRect(const RECT& r, const RECT& from, const RECT& to,
@@ -190,9 +265,40 @@ static POINT GetWorkspaceOffset(HWND hwnd) {
             pm.rcWork.top - pm.rcMonitor.top};
 }
 
-// Decides whether a Telegram window that is about to be shown with the given
-// rect must move to the monitor of the main (foreground) Telegram window, and
-// where to.
+// Whether a top-level window is a regular app window, not a menu, tooltip,
+// notification, drop-down list or tool window.
+static bool IsRegularWindow(HWND hwnd, PCWSTR cls) {
+    // Qt: regular windows have the QWindowIcon class; menus, tooltips and
+    // tool windows (Telegram notifications) have other QWindow* classes.
+    if (wcsstr(cls, L"QWindow")) {
+        return wcsstr(cls, L"QWindowIcon") != nullptr;
+    }
+
+    static const PCWSTR kSkipClasses[] = {
+        L"#32768",           // menu
+        L"#32769",           // desktop
+        L"#32771",           // Alt+Tab
+        L"tooltips_class32",
+        L"ComboLBox",
+        L"SysShadow",
+        L"IME",
+        L"MSCTFIME UI",
+    };
+    for (PCWSTR skip : kSkipClasses) {
+        if (_wcsicmp(cls, skip) == 0) {
+            return false;
+        }
+    }
+
+    LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) {
+        return false;
+    }
+    return true;
+}
+
+// Decides whether a window that is about to be shown with the given rect must
+// move to the monitor of the app's active (foreground) window, and where to.
 static bool GetMoveTarget(HWND hwnd, const RECT& rect, MoveTarget* target) {
     if (!hwnd || (GetWindowLongW(hwnd, GWL_STYLE) & WS_CHILD)) {
         return false;
@@ -206,8 +312,7 @@ static bool GetMoveTarget(HWND hwnd, const RECT& rect, MoveTarget* target) {
 
     WCHAR cls[128] = L"";
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    // Regular Qt windows; menus, tooltips, etc. have other classes.
-    if (!wcsstr(cls, L"QWindowIcon")) {
+    if (!IsRegularWindow(hwnd, cls)) {
         return false;
     }
 
@@ -222,7 +327,8 @@ static bool GetMoveTarget(HWND hwnd, const RECT& rect, MoveTarget* target) {
     }
 
     Settings settings = GetSettings();
-    if (!TitleMatchesFilter(hwnd, settings.titleFilter)) {
+    if (!settings.matched ||
+        !TitleMatchesFilter(hwnd, settings.titleFilter)) {
         return false;
     }
 
@@ -239,8 +345,9 @@ static bool GetMoveTarget(HWND hwnd, const RECT& rect, MoveTarget* target) {
         return false;
     }
 
-    // Telegram is per-monitor DPI aware and rescales its windows when they
-    // move to a monitor with a different scale. Other windows aren't rescaled.
+    // Per-monitor DPI aware apps (such as Telegram) rescale their windows when
+    // they move to a monitor with a different scale. Other windows aren't
+    // rescaled by the app.
     UINT fromDpi = 96, toDpi = 96;
     if (settings.scaleForDpi &&
         GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(
@@ -367,13 +474,26 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    // The mod is loaded into every process; only the processes from the
+    // Applications list are hooked. The mod stays loaded in the others, so
+    // that adding a running app to the list takes effect (see
+    // Wh_ModSettingsChanged).
+    if (!GetSettings().matched) {
+        return TRUE;
+    }
     WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
                                    &ShowWindow_Original);
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
+    g_hooked = true;
+    Wh_Log(L"Hooked");
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     LoadSettings();
+    // Reload to set or remove the hooks when the process was added to or
+    // removed from the Applications list.
+    *bReload = GetSettings().matched != g_hooked;
+    return TRUE;
 }
