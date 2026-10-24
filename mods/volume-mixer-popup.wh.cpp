@@ -64,12 +64,14 @@ Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Gr
 Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
 frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
 
-- The OSD stays on screen while the pointer rests on it; the mouse wheel over it changes the volume it shows
-  (the master volume or the app). With a hidden pointer (games) it stays click-through.
+- Once the pointer moves onto the OSD, it stays on screen until the pointer leaves; the mouse wheel over it
+  changes the volume it shows (the master volume or the app). Clicks always pass through it (unless dragging is
+  enabled), and a hidden pointer (games) is ignored.
 - **Replace the Windows volume flyout**: the media volume keys and the mouse wheel over the taskbar notification
   area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
-  tooltip. Volume indicators of manufacturer utilities (laptop or keyboard software) are separate programs and
-  aren't affected.
+  tooltip. While it's on, other tray apps and mods that react to the wheel there (for example Taskbar Volume
+  Control with the tray area as its scroll area) don't get it. Volume indicators of manufacturer utilities
+  (laptop or keyboard software) are separate programs and aren't affected.
 
 ## ⌨️ Hotkeys
 | Action | Default |
@@ -2249,6 +2251,8 @@ int g_customOsdY = 0;
 enum class OsdTarget { None, Master, App };
 OsdTarget g_osdTarget = OsdTarget::None;
 std::wstring g_osdTargetKey;
+POINT g_osdShowPointer{0, 0};  // pointer position when the OSD appeared
+bool g_osdPointerMoved = false;
 
 // Popup state (UI thread only)
 bool g_visible = false;
@@ -2272,6 +2276,7 @@ struct DeafenSavedState {
     float originalVol = 1.0f;
     bool originalMute = false;
     bool ducked = false;  // the volume was lowered (otherwise only muted)
+    DWORD day = 0;        // when the entry started waiting for its app (days since 1601)
 };
 bool g_deafenActive = false;
 std::map<std::wstring, DeafenSavedState> g_deafenSavedStates;  // "key|deviceId" -> state while Deafen is on
@@ -2335,6 +2340,7 @@ constexpr UINT WM_APP_TASKBAR_WHEEL = WM_APP + 9;  // wheel over the notificatio
 constexpr UINT WM_APP_OSD_WHEEL = WM_APP + 11;     // wheel over the OSD, wParam = delta
 constexpr UINT WM_APP_LOCK_CHECK = WM_APP + 12;
 constexpr UINT WM_APP_LOCK_REBUILD = WM_APP + 13;
+constexpr UINT WM_APP_NEW_SESSION = WM_APP + 14;  // wParam = PID, lParam = device index, watch generation
 constexpr UINT WM_APP_HOOK_MOUSE = WM_APP + 20;  // hook thread messages, wParam = install
 constexpr UINT WM_APP_HOOK_KBD = WM_APP + 21;
 
@@ -3705,11 +3711,7 @@ void PersistLockedVolumes() {
 void LoadLockedVolumes() {
     g_lockedVolumes.clear();
     std::vector<WCHAR> buf(32768, 0);
-    // Earlier versions stored the locks for all users under one name.
-    if (Wh_GetStringValue(UserValueName(L"lockedVolumes").c_str(), buf.data(), buf.size()) == 0 &&
-        Wh_GetStringValue(L"lockedVolumes", buf.data(), buf.size()) == 0) {
-        return;
-    }
+    if (Wh_GetStringValue(UserValueName(L"lockedVolumes").c_str(), buf.data(), buf.size()) == 0) return;
     const std::wstring s = buf.data();
     size_t pos = 0;
     while (pos < s.size()) {
@@ -3735,11 +3737,8 @@ void PostCoalesced(std::atomic<bool>& pending, UINT msg) {
 }
 
 // Volume locks are enforced from audio events instead of polling: the sessions
-// of locked apps and the locked endpoints report volume changes, and the
-// session managers report new sessions.
-class LockNotifier final : public IAudioSessionNotification,
-                           public IAudioSessionEvents,
-                           public IAudioEndpointVolumeCallback {
+// of locked apps and the locked endpoints report volume changes.
+class LockNotifier final : public IAudioSessionEvents, public IAudioEndpointVolumeCallback {
 public:
     ULONG STDMETHODCALLTYPE AddRef() override { return (ULONG)InterlockedIncrement(&m_ref); }
     ULONG STDMETHODCALLTYPE Release() override {
@@ -3749,9 +3748,7 @@ public:
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (!ppv) return E_POINTER;
-        if (riid == IID_IUnknown || riid == __uuidof(IAudioSessionNotification)) {
-            *ppv = static_cast<IAudioSessionNotification*>(this);
-        } else if (riid == __uuidof(IAudioSessionEvents)) {
+        if (riid == IID_IUnknown || riid == __uuidof(IAudioSessionEvents)) {
             *ppv = static_cast<IAudioSessionEvents*>(this);
         } else if (riid == __uuidof(IAudioEndpointVolumeCallback)) {
             *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
@@ -3760,12 +3757,6 @@ public:
             return E_NOINTERFACE;
         }
         AddRef();
-        return S_OK;
-    }
-
-    // IAudioSessionNotification
-    HRESULT STDMETHODCALLTYPE OnSessionCreated(IAudioSessionControl*) override {
-        PostCoalesced(g_lockRebuildPending, WM_APP_LOCK_REBUILD);
         return S_OK;
     }
 
@@ -3797,11 +3788,59 @@ private:
     LONG m_ref = 1;
 };
 
+// PID of an app session; 0 for the system sounds session.
+static DWORD SessionPid(IAudioSessionControl* ctl) {
+    DWORD pid = 0;
+    IAudioSessionControl2* ctl2 = nullptr;
+    if (SUCCEEDED(ctl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&ctl2)) && ctl2) {
+        if (ctl2->IsSystemSoundsSession() != S_OK) ctl2->GetProcessId(&pid);
+        ctl2->Release();
+    }
+    return pid;
+}
+
+// Reports the new sessions of one device to the UI thread, which looks at a
+// session only when its app is locked or waits for its levels after a Deafen.
+class NewSessionNotifier final : public IAudioSessionNotification {
+public:
+    NewSessionNotifier(WORD index, WORD generation) : m_index(index), m_generation(generation) {}
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return (ULONG)InterlockedIncrement(&m_ref); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const LONG r = InterlockedDecrement(&m_ref);
+        if (r == 0) delete this;
+        return (ULONG)r;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        if (riid != IID_IUnknown && riid != __uuidof(IAudioSessionNotification)) {
+            *ppv = nullptr;
+            return E_NOINTERFACE;
+        }
+        *ppv = static_cast<IAudioSessionNotification*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnSessionCreated(IAudioSessionControl* ctl) override {
+        const DWORD pid = ctl ? SessionPid(ctl) : 0;
+        HWND hwnd = g_hwnd;
+        if (pid && hwnd) PostMessageW(hwnd, WM_APP_NEW_SESSION, pid, MAKELPARAM(m_index, m_generation));
+        return S_OK;
+    }
+
+private:
+    LONG m_ref = 1;
+    const WORD m_index;
+    const WORD m_generation;
+};
+
 struct LockedSession {
     IAudioSessionControl* ctl = nullptr;
     ISimpleAudioVolume* sav = nullptr;
     std::wstring key;
     std::wstring deviceId;
+    DWORD pid = 0;
 };
 
 struct LockedEndpoint {
@@ -3809,22 +3848,33 @@ struct LockedEndpoint {
     std::wstring key;
 };
 
+struct WatchedManager {
+    IAudioSessionManager2* mgr = nullptr;
+    NewSessionNotifier* notifier = nullptr;
+    std::wstring deviceId;
+};
+
 LockNotifier* g_lockNotifier = nullptr;
-std::vector<IAudioSessionManager2*> g_lockManagers;
+std::vector<WatchedManager> g_lockManagers;
 std::vector<LockedSession> g_lockSessions;
 std::vector<LockedEndpoint> g_lockEndpoints;
+WORD g_lockWatchGeneration = 0;  // new-session reports from an older watch are stale
+
+static void ReleaseLockedSession(LockedSession& s) {
+    s.ctl->UnregisterAudioSessionNotification(g_lockNotifier);
+    s.ctl->Release();
+    if (s.sav) s.sav->Release();
+}
 
 void StopLockWatch() {
-    for (IAudioSessionManager2* m : g_lockManagers) {
-        m->UnregisterSessionNotification(g_lockNotifier);
-        m->Release();
+    g_lockWatchGeneration++;
+    for (WatchedManager& w : g_lockManagers) {
+        w.mgr->UnregisterSessionNotification(w.notifier);
+        w.notifier->Release();
+        w.mgr->Release();
     }
     g_lockManagers.clear();
-    for (LockedSession& s : g_lockSessions) {
-        s.ctl->UnregisterAudioSessionNotification(g_lockNotifier);
-        s.ctl->Release();
-        if (s.sav) s.sav->Release();
-    }
+    for (LockedSession& s : g_lockSessions) ReleaseLockedSession(s);
     g_lockSessions.clear();
     for (LockedEndpoint& e : g_lockEndpoints) {
         e.ep->UnregisterControlChangeNotify(g_lockNotifier);
@@ -3858,6 +3908,41 @@ void EnforceLockedVolumes() {
 
 void RestorePendingDeafen();
 
+// Watches the sessions of locked apps on one device. With onlyPid, just the
+// sessions of that process, replacing the ones already watched.
+static void WatchLockedSessions(IAudioSessionManager2* mgr, const std::wstring& devId, DWORD onlyPid) {
+    if (onlyPid) {
+        for (auto it = g_lockSessions.begin(); it != g_lockSessions.end();) {
+            if (it->pid == onlyPid && it->deviceId == devId) {
+                ReleaseLockedSession(*it);
+                it = g_lockSessions.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    IAudioSessionEnumerator* sessions = nullptr;
+    if (FAILED(mgr->GetSessionEnumerator(&sessions)) || !sessions) return;
+    int count = 0;
+    sessions->GetCount(&count);
+    for (int i = 0; i < count; i++) {
+        IAudioSessionControl* ctl = nullptr;
+        if (FAILED(sessions->GetSession(i, &ctl)) || !ctl) continue;
+        const DWORD pid = SessionPid(ctl);
+        const std::wstring key = pid && (!onlyPid || pid == onlyPid) ? SessionKeyForPid(pid, nullptr) : std::wstring();
+        ISimpleAudioVolume* sav = nullptr;
+        if (!key.empty() && LockedLevel(key, nullptr) &&
+            SUCCEEDED(ctl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&sav)) && sav &&
+            SUCCEEDED(ctl->RegisterAudioSessionNotification(g_lockNotifier))) {
+            g_lockSessions.push_back({ctl, sav, key, devId, pid});  // keeps both references
+            continue;
+        }
+        if (sav) sav->Release();
+        ctl->Release();
+    }
+    sessions->Release();
+}
+
 static void WatchLockedDevice(IMMDevice* dev, const std::wstring& devId) {
     const std::wstring masterKey = L"devmaster:" + devId;
     if (LockedLevel(masterKey, nullptr)) {
@@ -3870,41 +3955,21 @@ static void WatchLockedDevice(IMMDevice* dev, const std::wstring& devId) {
 
     IAudioSessionManager2* mgr = nullptr;
     if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr)) || !mgr) return;
-    const bool watchesNewSessions = SUCCEEDED(mgr->RegisterSessionNotification(g_lockNotifier));
-    if (watchesNewSessions) g_lockManagers.push_back(mgr);  // keeps the reference
-
-    // The session enumerator has to be obtained for new-session notifications to arrive.
-    IAudioSessionEnumerator* sessions = nullptr;
-    if (SUCCEEDED(mgr->GetSessionEnumerator(&sessions)) && sessions) {
-        int count = 0;
-        sessions->GetCount(&count);
-        for (int i = 0; i < count; i++) {
-            IAudioSessionControl* ctl = nullptr;
-            if (FAILED(sessions->GetSession(i, &ctl)) || !ctl) continue;
-            DWORD pid = 0;
-            IAudioSessionControl2* ctl2 = nullptr;
-            if (SUCCEEDED(ctl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&ctl2)) && ctl2) {
-                if (ctl2->IsSystemSoundsSession() != S_OK) ctl2->GetProcessId(&pid);
-                ctl2->Release();
-            }
-            const std::wstring key = pid ? SessionKeyForPid(pid, nullptr) : std::wstring();
-            ISimpleAudioVolume* sav = nullptr;
-            if (!key.empty() && LockedLevel(key, nullptr) &&
-                SUCCEEDED(ctl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&sav)) && sav &&
-                SUCCEEDED(ctl->RegisterAudioSessionNotification(g_lockNotifier))) {
-                g_lockSessions.push_back({ctl, sav, key, devId});  // keeps both references
-                continue;
-            }
-            if (sav) sav->Release();
-            ctl->Release();
-        }
-        sessions->Release();
+    NewSessionNotifier* notifier = new NewSessionNotifier((WORD)g_lockManagers.size(), g_lockWatchGeneration);
+    if (SUCCEEDED(mgr->RegisterSessionNotification(notifier))) {
+        g_lockManagers.push_back({mgr, notifier, devId});  // keeps both references
+    } else {
+        notifier->Release();
+        notifier = nullptr;
     }
-    if (!watchesNewSessions) mgr->Release();
+    // The session enumerator has to be obtained for new-session notifications to arrive.
+    WatchLockedSessions(mgr, devId, 0);
+    if (!notifier) mgr->Release();
 }
 
-// Called when the locks, the sessions or the devices change. New sessions are
-// also watched while apps wait to get their levels back from a Deafen.
+// Called when the locks or the devices change and when a watched session ends.
+// New sessions are reported while any lock exists or apps wait to get their
+// levels back from a Deafen.
 void RebuildLockWatch() {
     g_lockRebuildPending = false;
     StopLockWatch();
@@ -3948,6 +4013,23 @@ void SetVolumeLock(const std::wstring& key, bool locked, float level) {
     RebuildLockWatch();
 }
 
+// A new session costs one process lookup. Only a session of a locked app, or of
+// an app waiting for its levels after a Deafen, is looked at further.
+void OnNewAudioSession(DWORD pid, WORD index, WORD generation) {
+    if (generation != g_lockWatchGeneration || index >= g_lockManagers.size()) return;  // rebuilt since
+    IAudioSessionManager2* mgr = g_lockManagers[index].mgr;
+    const std::wstring devId = g_lockManagers[index].deviceId;
+    const std::wstring key = SessionKeyForPid(pid, nullptr);
+    if (LockedLevel(key, nullptr)) {
+        WatchLockedSessions(mgr, devId, pid);
+        EnforceLockedVolumes();
+    }
+    if (g_deafenPending.count(key + L"|" + devId)) {
+        RestorePendingDeafen();
+        if (g_lockedVolumes.empty() && g_deafenPending.empty()) StopLockWatch();
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Deafen background
 
@@ -3984,7 +4066,14 @@ static bool IsWhitelisted(const Item& it, const std::vector<std::wstring>& white
     return false;
 }
 
-// One line per app: "key|deviceId<TAB>volume x1000<TAB>mute<TAB>ducked".
+static DWORD DayNumber() {
+    FILETIME ft{};
+    GetSystemTimeAsFileTime(&ft);
+    const ULONGLONG t = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    return (DWORD)(t / (10000000ULL * 60 * 60 * 24));
+}
+
+// One line per app: "key|deviceId<TAB>volume x1000<TAB>mute<TAB>ducked<TAB>day".
 static std::wstring SerializeDeafen(const std::map<std::wstring, DeafenSavedState>& states) {
     std::wstring s;
     for (const auto& p : states) {
@@ -3992,7 +4081,9 @@ static std::wstring SerializeDeafen(const std::map<std::wstring, DeafenSavedStat
         s += L'\t';
         s += std::to_wstring((int)std::lround(p.second.originalVol * 1000.0f));
         s += p.second.originalMute ? L"\t1" : L"\t0";
-        s += p.second.ducked ? L"\t1\n" : L"\t0\n";
+        s += p.second.ducked ? L"\t1\t" : L"\t0\t";
+        s += std::to_wstring(p.second.day);
+        s += L'\n';
     }
     return s;
 }
@@ -4016,6 +4107,8 @@ static void LoadDeafenStates(const wchar_t* name, std::map<std::wstring, DeafenS
         ds.originalVol = std::clamp(_wtoi(line.c_str() + t1 + 1) / 1000.0f, 0.0f, 1.0f);
         ds.originalMute = line.compare(t2 + 1, 1, L"1") == 0;
         ds.ducked = line.compare(t3 + 1, 1, L"1") == 0;
+        const size_t t4 = line.find(L'\t', t3 + 1);
+        ds.day = t4 == std::wstring::npos ? DayNumber() : (DWORD)wcstoul(line.c_str() + t4 + 1, nullptr, 10);
         out.emplace(line.substr(0, t1), ds);
     }
 }
@@ -4058,7 +4151,11 @@ void RestorePendingDeafen() {
 void RestoreDeafen(bool showBanner) {
     if (!g_deafenActive) return;
     RestoreDeafenEntries(g_deafenSavedStates);
-    for (const auto& p : g_deafenSavedStates) g_deafenPending.emplace(p.first, p.second);
+    const DWORD today = DayNumber();
+    for (auto& p : g_deafenSavedStates) {
+        p.second.day = today;
+        g_deafenPending.emplace(p.first, p.second);
+    }
     g_deafenSavedStates.clear();
     g_deafenActive = false;
     PersistDeafenState();
@@ -4066,10 +4163,44 @@ void RestoreDeafen(bool showBanner) {
     if (showBanner) ShowOsd(L10n(StrId::DeafenOff), 1.0f, false, nullptr, OsdKind::Banner);
 }
 
+// Drops waiting entries whose app can't play again: a PID key from an earlier
+// run, an app that was uninstalled, a device that Windows no longer knows, or
+// an entry older than 30 days.
+static void PrunePendingDeafen() {
+    if (g_deafenPending.empty()) return;
+    const DWORD today = DayNumber();
+    IMMDeviceEnumerator* enm = nullptr;
+    CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&enm);
+    size_t dropped = 0;
+    for (auto it = g_deafenPending.begin(); it != g_deafenPending.end();) {
+        const size_t bar = it->first.rfind(L'|');
+        const std::wstring key = it->first.substr(0, bar);
+        const std::wstring devId = bar == std::wstring::npos ? std::wstring() : it->first.substr(bar + 1);
+        bool gone = key.rfind(L"pid:", 0) == 0 || (LONG)(today - it->second.day) > 30;
+        if (!gone && key.size() > 2 && key[1] == L':' &&
+            GetFileAttributesW(FileAccessPath(key).c_str()) == INVALID_FILE_ATTRIBUTES) {
+            const DWORD err = GetLastError();
+            gone = err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        }
+        IMMDevice* dev = nullptr;
+        if (!gone && enm && enm->GetDevice(devId.c_str(), &dev) == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) gone = true;
+        if (dev) dev->Release();
+        if (gone) {
+            it = g_deafenPending.erase(it);
+            dropped++;
+        } else {
+            ++it;
+        }
+    }
+    if (enm) enm->Release();
+    if (dropped) PersistDeafenState();
+}
+
 // At start: restores what a Deafen interrupted by a crash, a sign-out or a
 // power loss left muted or ducked, now or when those apps play again.
 void RecoverDeafenState() {
     LoadDeafenStates(L"deafenPending", g_deafenPending);
+    PrunePendingDeafen();
     std::map<std::wstring, DeafenSavedState> interrupted;
     LoadDeafenStates(L"deafenState", interrupted);
     if (interrupted.empty()) {
@@ -5276,23 +5407,29 @@ static HMONITOR OsdTargetMonitor() {
     return MonitorFromPoint(c, MONITOR_DEFAULTTOPRIMARY);
 }
 
-// Click-through unless the user wants to drag the OSD or a visible pointer is
-// over it, so it never takes the mouse from a game.
+void UpdateHooks();
+
+// Click-through unless the user wants to drag the OSD. The wheel over it is
+// taken by the mouse hook, so it never swallows clicks.
 void ApplyOsdWindowStyle() {
     if (!g_hwndOsd) return;
-    const bool interactive = g_cfg.osdAllowDrag || g_hookOsdHover;
     const LONG_PTR ex = GetWindowLongPtrW(g_hwndOsd, GWL_EXSTYLE);
-    const LONG_PTR want = interactive ? (ex & ~(LONG_PTR)WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
+    const LONG_PTR want = g_cfg.osdAllowDrag ? (ex & ~(LONG_PTR)WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
     if (want != ex) SetWindowLongPtrW(g_hwndOsd, GWL_EXSTYLE, want);
 }
 
 // Like the Windows flyout, the OSD stays while the pointer rests on it and the
-// mouse wheel over it changes the volume. A hidden pointer (games) never counts.
+// mouse wheel over it changes the volume. The pointer has to move after the OSD
+// appears, so one that already rested there doesn't hold it, and a hidden
+// pointer (games) never counts.
 void UpdateOsdHover() {
     CURSORINFO ci{sizeof(ci)};
     RECT r{};
-    const bool hover = IsWindowVisible(g_hwndOsd) && GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) &&
-                       GetWindowRect(g_hwndOsd, &r) && PtInRect(&r, ci.ptScreenPos);
+    const bool visible = IsWindowVisible(g_hwndOsd) && GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING);
+    if (visible && !g_osdPointerMoved) {
+        g_osdPointerMoved = ci.ptScreenPos.x != g_osdShowPointer.x || ci.ptScreenPos.y != g_osdShowPointer.y;
+    }
+    const bool hover = visible && g_osdPointerMoved && GetWindowRect(g_hwndOsd, &r) && PtInRect(&r, ci.ptScreenPos);
     if (hover) {
         AcquireSRWLockExclusive(&g_hookLock);
         g_hookOsdRect = r;
@@ -5300,7 +5437,7 @@ void UpdateOsdHover() {
     }
     if (hover == g_hookOsdHover) return;
     g_hookOsdHover = hover;
-    ApplyOsdWindowStyle();
+    UpdateHooks();
     if (!hover) {
         const DWORD linger = GetTickCount() + 1000;
         if ((LONG)(linger - g_osdHideTick) > 0) g_osdHideTick = linger;
@@ -5310,8 +5447,10 @@ void UpdateOsdHover() {
 void HideOsd() {
     KillTimer(g_hwndOsd, ID_TIMER_OSD);
     ShowWindow(g_hwndOsd, SW_HIDE);
-    g_hookOsdHover = false;
-    ApplyOsdWindowStyle();
+    if (g_hookOsdHover) {
+        g_hookOsdHover = false;
+        UpdateHooks();
+    }
 }
 
 void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKind kind,
@@ -5319,6 +5458,10 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
     if (!g_hwndOsd || g_osdDragging) return;
     if (kind == OsdKind::Volume && !g_cfg.enableVolumeOsd) return;
     if (kind == OsdKind::Banner) g_osdTarget = OsdTarget::None;
+    if (!IsWindowVisible(g_hwndOsd)) {
+        GetCursorPos(&g_osdShowPointer);
+        g_osdPointerMoved = false;
+    }
     vol = std::clamp(vol, 0.0f, 1.0f);
 
     HMONITOR mon = nullptr;
@@ -5608,7 +5751,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return MA_NOACTIVATE;
 
     case WM_NCHITTEST:
-        return (g_cfg.osdAllowDrag || g_hookOsdHover) ? HTCLIENT : HTTRANSPARENT;
+        return g_cfg.osdAllowDrag ? HTCLIENT : HTTRANSPARENT;
 
     case WM_SETCURSOR:
         if (g_cfg.osdAllowDrag) {
@@ -5920,8 +6063,6 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 }
 
 // Audio Notifications, System Tray Icon, and Low-Level Hooks
-
-void UpdateHooks();
 
 ////////////////////////////////////////////////////////////////////////////////
 // Endpoint notifications: media keys, other apps and Windows itself change the
@@ -6513,8 +6654,9 @@ void StopHookThread() {
 
 // Each hook is installed only while a feature needs it: the keyboard hook for
 // configured hotkeys, the media key replacement and the open popup (any key
-// closes it); the mouse hook for the open popup, the tray wheel and the
-// replacement of the Windows volume tooltip in the notification area.
+// closes it); the mouse hook for the open popup, the tray wheel, the wheel
+// over a hovered OSD and the replacement of the Windows volume tooltip in the
+// notification area.
 void UpdateHooks() {
     const bool trayWheel = g_cfg.showTrayIcon && g_cfg.trayScrollVolume && g_trayAdded;
     g_hookTrayWheel = trayWheel;
@@ -6531,7 +6673,7 @@ void UpdateHooks() {
         PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_KBD, wantKbd ? 1 : 0, 0)) {
         g_kbdHookWanted = wantKbd;
     }
-    const bool wantMouse = g_visible || trayWheel || g_hookReplaceOsd;
+    const bool wantMouse = g_visible || trayWheel || g_hookReplaceOsd || g_hookOsdHover;
     if (wantMouse != g_mouseHookWanted &&
         PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_MOUSE, wantMouse ? 1 : 0, 0)) {
         g_mouseHookWanted = wantMouse;
@@ -6892,6 +7034,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_APP_LOCK_REBUILD:
             RebuildLockWatch();
+            return 0;
+
+        case WM_APP_NEW_SESSION:
+            OnNewAudioSession((DWORD)wParam, LOWORD(lParam), HIWORD(lParam));
             return 0;
 
         case WM_APP_RELOAD: {
