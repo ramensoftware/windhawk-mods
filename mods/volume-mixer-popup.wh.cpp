@@ -70,8 +70,9 @@ frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
 - **Replace the Windows volume flyout**: the media volume keys and the mouse wheel over the taskbar notification
   area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
   tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
-  Windows itself; when Windows shows its flyout for one of them, the mod hides that flyout right away and shows
-  its own OSD. While the option is on, other tray apps and mods that react to the wheel in the notification area
+  Windows itself; when Windows shows its flyout for one of them, the mod keeps that flyout invisible (it clips
+  Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step.
+  Brightness and other Windows indicators stay as they are. While the option is on, other tray apps and mods that react to the wheel in the notification area
   (for example Taskbar Volume Control with the tray area as its scroll area) don't get it. Volume indicators of
   manufacturer utilities (laptop or keyboard software) are separate programs and aren't affected.
 
@@ -118,6 +119,9 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
 - **Deafen background**: if the mod stops while Deafen is on (crash, shutdown, power loss), it restores the
   muted and ducked apps the next time it starts.
 - Volume locks are stored by the mod and are no longer enforced while it's disabled.
+- **Windows volume flyout** (with "Replace the Windows volume flyout"): the mod gives Explorer's indicator window
+  back its normal shape when it's disabled. If its process is killed instead, the Windows flyout stays invisible
+  until Explorer restarts (for example after signing out).
 */
 // ==/WindhawkModReadme==
 
@@ -2253,6 +2257,8 @@ int g_customOsdY = 0;
 enum class OsdTarget { None, Master, App };
 OsdTarget g_osdTarget = OsdTarget::None;
 std::wstring g_osdTargetKey;
+float g_osdMasterVol = -1.0f;  // the master level and mute the OSD shows
+bool g_osdMasterMute = false;
 POINT g_osdShowPointer{0, 0};  // pointer position when the OSD appeared
 bool g_osdPointerMoved = false;
 
@@ -3559,6 +3565,8 @@ void AdjustMasterVolume(float delta, bool toggleMute, bool alwaysOsd = false) {
     }
     ep->Release();
     g_osdTarget = OsdTarget::Master;
+    g_osdMasterVol = v;
+    g_osdMasterMute = m != FALSE;
     ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, alwaysOsd ? OsdKind::Always : OsdKind::Volume, devName);
     if (g_visible && RefreshValues()) Render();
     UpdateTrayIcon();
@@ -6690,13 +6698,18 @@ void SyncPopupHookState() {
 
 // Touchpad gestures, headset buttons and laptop hotkey drivers change the volume
 // without going through the keyboard hook, and Windows then shows its own
-// flyout. With "Replace the Windows volume flyout", that flyout is hidden as
-// soon as it appears and this mod's OSD is shown instead.
+// flyout. With "Replace the Windows volume flyout", that flyout is clipped to an
+// empty region and hidden as soon as it appears, and this mod's OSD is shown
+// instead and follows every further step.
 HWINEVENTHOOK g_flyoutHook = nullptr;
 DWORD g_flyoutHookPid = 0;
-HWND g_sysFlyout = nullptr;
+HWND g_sysFlyout = nullptr;         // Windows' indicator window, once clipped or unclipped
+bool g_sysFlyoutClipped = false;
+HWND g_sysFlyoutPending = nullptr;  // shown before its volume change was seen
 DWORD g_sysFlyoutTick = 0;
 DWORD g_volumeChangeTick = 0;
+float g_seenMasterVol = -1.0f;      // the master level and mute as the mod last read them
+bool g_seenMasterMute = false;
 constexpr DWORD kFlyoutMatchMs = 500;  // the flyout and the volume event arrive in either order
 
 // Windows' indicator window in Explorer: an untitled, non-activating XAML
@@ -6723,28 +6736,77 @@ static void ShowMasterVolumeOsd() {
     ep->GetMute(&m);
     ep->Release();
     g_osdTarget = OsdTarget::Master;
+    g_osdMasterVol = v;
+    g_osdMasterMute = m != FALSE;
     ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, OsdKind::Always, devName);
 }
 
-static void ReplaceSystemFlyout() {
-    if (g_sysFlyout && IsWindowVisible(g_sysFlyout)) {
-        ShowWindow(g_sysFlyout, SW_HIDE);
-        ShowMasterVolumeOsd();
+// An empty window region keeps Windows' indicator invisible even while Explorer
+// shows it again for every step of a gesture, so it never flashes. Brightness
+// and other indicators in the same window get it back unclipped.
+static void ClipSystemFlyout(HWND hwnd, bool clip) {
+    if (hwnd == g_sysFlyout && clip == g_sysFlyoutClipped) return;
+    HRGN rgn = clip ? CreateRectRgn(0, 0, 0, 0) : nullptr;
+    if (SetWindowRgn(hwnd, rgn, TRUE)) {  // the window owns the region from here on
+        g_sysFlyout = hwnd;
+        g_sysFlyoutClipped = clip;
+    } else if (rgn) {
+        DeleteObject(rgn);
     }
-    g_sysFlyout = nullptr;
 }
 
+static void UnclipSystemFlyout() {
+    if (g_sysFlyout && g_sysFlyoutClipped && IsWindow(g_sysFlyout)) SetWindowRgn(g_sysFlyout, nullptr, TRUE);
+    g_sysFlyout = nullptr;
+    g_sysFlyoutClipped = false;
+}
+
+// Reads the master level and mute; true when they differ from the last read.
+static bool ReadMasterChange(float* vol, bool* mute) {
+    if (!ReadDefaultMaster(vol, mute)) return false;
+    const bool changed = std::abs(*vol - g_seenMasterVol) > 0.0005f || *mute != g_seenMasterMute;
+    g_seenMasterVol = *vol;
+    g_seenMasterMute = *mute;
+    return changed;
+}
+
+static void ReplaceSystemFlyout(HWND hwnd) {
+    ClipSystemFlyout(hwnd, true);
+    ShowWindow(hwnd, SW_HIDE);
+    g_sysFlyoutPending = nullptr;
+    ShowMasterVolumeOsd();
+}
+
+// Explorer changes the volume before it shows its flyout, so a level that
+// differs from the last read tells a volume flyout from a brightness one at
+// once, without waiting for the volume event.
 static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd || !IsSystemIndicatorWindow(hwnd)) return;
-    g_sysFlyout = hwnd;
+    float v = 0.0f;
+    bool m = false;
+    if (ReadMasterChange(&v, &m) || GetTickCount() - g_volumeChangeTick < kFlyoutMatchMs) {
+        ReplaceSystemFlyout(hwnd);
+        return;
+    }
+    ClipSystemFlyout(hwnd, false);
+    g_sysFlyoutPending = hwnd;
     g_sysFlyoutTick = GetTickCount();
-    if (GetTickCount() - g_volumeChangeTick < kFlyoutMatchMs) ReplaceSystemFlyout();
 }
 
 // Called for every change of the default device's volume or mute.
 void OnMasterVolumeChanged() {
     g_volumeChangeTick = GetTickCount();
-    if (g_sysFlyout && GetTickCount() - g_sysFlyoutTick < kFlyoutMatchMs) ReplaceSystemFlyout();
+    float v = 0.0f;
+    bool m = false;
+    ReadMasterChange(&v, &m);
+    if (!g_flyoutHook) return;
+    if (g_sysFlyoutPending && GetTickCount() - g_sysFlyoutTick < kFlyoutMatchMs &&
+        IsWindowVisible(g_sysFlyoutPending)) {
+        ReplaceSystemFlyout(g_sysFlyoutPending);
+    } else if (IsWindowVisible(g_hwndOsd) && g_osdTarget == OsdTarget::Master &&
+               (std::abs(v - g_osdMasterVol) > 0.0005f || m != g_osdMasterMute)) {
+        ShowMasterVolumeOsd();  // follows a gesture step by step
+    }
 }
 
 // Watches Explorer's windows being shown while the setting is on; follows
@@ -6755,18 +6817,24 @@ void UpdateFlyoutHook() {
     if (tray) GetWindowThreadProcessId(tray, &pid);
     if (pid == g_flyoutHookPid) return;
     if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
+    UnclipSystemFlyout();
+    g_sysFlyoutPending = nullptr;
     g_flyoutHook = pid ? SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, FlyoutWinEventProc, pid, 0,
                                          WINEVENT_OUTOFCONTEXT)
                        : nullptr;
     g_flyoutHookPid = g_flyoutHook ? pid : 0;
-    g_sysFlyout = nullptr;
+    float v = 0.0f;
+    bool m = false;
+    if (g_flyoutHook) ReadMasterChange(&v, &m);
 }
 
+// Leaves Windows' indicator as it was.
 void StopFlyoutHook() {
     if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
     g_flyoutHook = nullptr;
     g_flyoutHookPid = 0;
-    g_sysFlyout = nullptr;
+    g_sysFlyoutPending = nullptr;
+    UnclipSystemFlyout();
 }
 
 // Hotkeys go through the keyboard hook (works in fullscreen games, no repeats
