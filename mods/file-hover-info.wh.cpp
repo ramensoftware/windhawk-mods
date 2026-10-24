@@ -2,7 +2,7 @@
 // @id              file-hover-info
 // @name            File Hover Info
 // @description     A themeable info card with size, dates and more when you hover files on the desktop or in File Explorer
-// @version         1.1.1
+// @version         1.1.2
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         explorer.exe
@@ -22,8 +22,8 @@ folder contents and location.
 ![File Hover Info card](https://i.imgur.com/Gk2ZcFl.png)
 
 The card follows the Windows display language (English, Italian, Spanish,
-French, German and Portuguese are included; other languages fall back to
-English), or you can pick one.
+French, German, Portuguese and Simplified Chinese are included; other
+languages fall back to English), or you can pick one.
 
 Everything is configurable: which fields to show, date style (absolute,
 relative or both), theme (follow Windows, dark, light or fully custom colors),
@@ -77,6 +77,7 @@ free space instead of being scanned.
   - fr: Français
   - de: Deutsch
   - pt: Português
+  - zh: 简体中文 (Simplified Chinese)
 - folderSizeLimit: 10
   $name: Folder size - maximum calculation time (seconds)
   $description: Large folders are summed in the background. When the limit is hit the card shows a partial total.
@@ -405,9 +406,25 @@ static const Strings kPt = {
     L"Espa\u00E7o", L"%ls livres de %ls",
     L"Pastas", L"Arquivos"};
 
+// Simplified Chinese by nekOStorm
+static const Strings kChS = {
+    L"大小", L"创建时间", L"修改时间", L"访问时间", L"属性",
+    L"尺寸", L"时长", L"版本", L"目标", L"内容",
+    L"位置",
+    L"刚刚", L"1 分钟前", L"%d 分钟前", L"1 小时前",
+    L"%d 小时前", L"昨天", L"%d 天前", L"1 个月前",
+    L"%d 个月前", L"1 年前", L"%d 年前",
+    L"1 个文件", L"%ls 个文件", L"1 个文件夹", L"%ls 个文件夹", L"空",
+    L"%ls+ 个项目", L"字节",
+    L"只读", L"隐藏", L"系统", L"已压缩", L"已加密",
+    L"链接", L"仅联机", L"始终可用",
+    L"正在计算\u2026", L"部分结果",
+    L"磁盘空间", L"%ls 可用，共 %ls",
+    L"文件夹", L"文件"};
+
 static const Strings& S() {
-    static const Strings* tables[] = {&kEn, &kIt, &kEs, &kFr, &kDe, &kPt};
-    return *tables[std::clamp(g_set.lang, 0, 5)];
+    static const Strings* tables[] = {&kEn, &kIt, &kEs, &kFr, &kDe, &kPt, &kChS};
+    return *tables[std::clamp(g_set.lang, 0, 6)];
 }
 
 static std::wstring GetStr(PCWSTR name) {
@@ -421,10 +438,10 @@ static void LoadSettings() {
     g_set.onDesktop = GetBool(L"showOnDesktop");
     g_set.inExplorer = GetBool(L"showInExplorer");
     {
-        static const wchar_t* codes[] = {L"en", L"it", L"es", L"fr", L"de", L"pt"};
+        static const wchar_t* codes[] = {L"en", L"it", L"es", L"fr", L"de", L"pt", L"zh"};
         std::wstring lang = GetStr(L"language");
         g_set.lang = -1;
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
             if (lang == codes[i]) g_set.lang = i;
         if (g_set.lang < 0) {  // auto: follow the Windows display language
             switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
@@ -433,6 +450,17 @@ static void LoadSettings() {
                 case LANG_FRENCH: g_set.lang = 3; break;
                 case LANG_GERMAN: g_set.lang = 4; break;
                 case LANG_PORTUGUESE: g_set.lang = 5; break;
+                case LANG_CHINESE: {
+                    // LANG_CHINESE covers both scripts: use Simplified only
+                    // for mainland China and Singapore. Traditional Chinese
+                    // (Taiwan, Hong Kong, Macau) falls back to English.
+                    WORD sub = SUBLANGID(GetUserDefaultUILanguage());
+                    g_set.lang = (sub == SUBLANG_CHINESE_SIMPLIFIED ||
+                                  sub == SUBLANG_CHINESE_SINGAPORE)
+                                     ? 6
+                                     : 0;
+                    break;
+                }
                 default: g_set.lang = 0;
             }
         }
