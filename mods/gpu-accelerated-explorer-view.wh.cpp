@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         0.9.237
+// @version         0.9.238
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -398,7 +398,11 @@ constexpr UINT kMsgRetireGraphics = WM_APP + 69;
 constexpr UINT kMsgFilesystemChanged = WM_APP + 70;
 constexpr UINT kMsgFlushDirectoryChanges = WM_APP + 71;
 constexpr UINT kMsgPresentationReady = WM_APP + 72;
-constexpr UINT kMsgReleaseFrameHooks = WM_APP + 73;
+UINT g_releaseFrameHooksMessage = 0;
+bool RegisterFrameHookReleaseMessage() {
+    g_releaseFrameHooksMessage=RegisterWindowMessageW(L"" WH_MOD_ID L"-release-frame-hooks");
+    return g_releaseFrameHooksMessage!=0;
+}
 constexpr UINT kMsgNativeRenameEditor = WM_APP + 74;
 constexpr wchar_t kFrameSizingProperty[] = L"WindhawkGpuFrameSizing";
 constexpr wchar_t kColdAttachResolvedProperty[] = L"WindhawkGpuColdAttachResolved";
@@ -1907,7 +1911,7 @@ std::mutex g_backgroundLifetimeMutex;
     g_backgroundLifetimes{std::in_place};
 HANDLE g_backgroundReaperWake = nullptr, g_backgroundReaper = nullptr;
 bool g_backgroundShutdown = false; // Protected by g_backgroundLifetimeMutex.
-bool ReapDispatchThreadStates();
+void ReapDispatchThreadStates();
 
 DWORD WINAPI BackgroundReaperProc(LPVOID) {
     DWORD delay = INFINITE;
@@ -1929,8 +1933,8 @@ DWORD WINAPI BackgroundReaperProc(LPVOID) {
         // Potentially enormous discarded snapshots are destroyed here, outside
         // the registry lock and outside every overlay's input/paint thread.
         finished.clear();
-        const bool dispatchPending=ReapDispatchThreadStates();
-        delay = pending ? 50 : dispatchPending ? 1000 : INFINITE;
+        ReapDispatchThreadStates();
+        delay = pending ? 50 : INFINITE;
     }
     return 0;
 }
@@ -21406,12 +21410,44 @@ struct FrameShellViewHook {
     HWINEVENTHOOK presentationHandle = nullptr;
     HWINEVENTHOOK selectionHandle = nullptr;
     HWINEVENTHOOK foregroundHandle = nullptr;
+    HWND cleanupWindow = nullptr;
+    HANDLE ownerThread = nullptr;
     bool subclassInstalled = false;
     unsigned owners = 0;
 };
 SRWLOCK g_shellHookLock = SRWLOCK_INIT;
 std::unordered_map<HWND, FrameShellViewHook> g_shellViewHooks;
-void ReleaseAllFrameShellViewHooks(HWND frame);
+void ReleaseAllFrameShellViewHooks(HWND frame, HWND destroyingOwner = nullptr);
+LRESULT CALLBACK ExplorerFrameSubclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
+
+// A private message-only window survives loss of the Explorer frame/subclass.
+// Every WinEvent hook can therefore be removed on its installer STA at unload.
+LRESULT CALLBACK FrameHookCleanupSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
+                                        UINT_PTR id, DWORD_PTR frame) {
+    WindowCallbackGuard callback;
+    if (g_releaseFrameHooksMessage && msg==g_releaseFrameHooksMessage &&
+        g_unloading.load(std::memory_order_acquire)) {
+        ReleaseAllFrameShellViewHooks(reinterpret_cast<HWND>(frame));
+        return 0;
+    }
+    if (msg==WM_NCDESTROY) {
+        ReleaseAllFrameShellViewHooks(reinterpret_cast<HWND>(frame),hwnd);
+        RemoveWindowSubclass(hwnd,FrameHookCleanupSubclass,id);
+    }
+    return DefSubclassProc(hwnd,msg,wp,lp);
+}
+
+void ReleaseFrameHookResources(HWND frame, const FrameShellViewHook& hooks,
+                               HWND destroyingOwner = nullptr) {
+    for (HWINEVENTHOOK hook : {hooks.handle,hooks.presentationHandle,hooks.selectionHandle,hooks.foregroundHandle})
+        if (hook) UnhookWinEvent(hook);
+    if (hooks.subclassInstalled) {
+        RemovePropW(frame,kFrameSizingProperty);
+        RemoveWindowSubclass(frame,ExplorerFrameSubclass,reinterpret_cast<UINT_PTR>(ExplorerFrameSubclass));
+    }
+    if (hooks.cleanupWindow && hooks.cleanupWindow!=destroyingOwner) DestroyWindow(hooks.cleanupWindow);
+    if (hooks.ownerThread) CloseHandle(hooks.ownerThread);
+}
 
 // Observe sent minimize/restore messages as well as posted ones. Do no Shell,
 // presentation or focus work inside USER's activation transaction, especially
@@ -21419,7 +21455,7 @@ void ReleaseAllFrameShellViewHooks(HWND frame);
 LRESULT CALLBACK ExplorerFrameSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
                                        UINT_PTR id, DWORD_PTR wasMinimized) {
     WindowCallbackGuard callback;
-    if (msg == kMsgReleaseFrameHooks && g_unloading.load(std::memory_order_acquire)) {
+    if (g_releaseFrameHooksMessage && msg == g_releaseFrameHooksMessage && g_unloading.load(std::memory_order_acquire)) {
         ReleaseAllFrameShellViewHooks(hwnd);
         return 0;
     }
@@ -21479,41 +21515,25 @@ LRESULT CALLBACK ExplorerFrameSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 
 void ReleaseFrameShellViewHook(ViewState& state) {
     if (!state.frameLifecycleSubscribed) return;
-    HWINEVENTHOOK toUnhook = nullptr;
-    HWINEVENTHOOK presentationToUnhook = nullptr;
-    HWINEVENTHOOK selectionToUnhook = nullptr;
-    HWINEVENTHOOK foregroundToUnhook = nullptr;
-    bool removeSubclass = false;
+    FrameShellViewHook released;
     AcquireSRWLockExclusive(&g_shellHookLock);
     const auto it = g_shellViewHooks.find(state.frameHwnd);
     if (it != g_shellViewHooks.end()) {
         if (it->second.owners > 0) --it->second.owners;
         if (!it->second.owners) {
-            toUnhook = it->second.handle;
-            presentationToUnhook = it->second.presentationHandle;
-            selectionToUnhook = it->second.selectionHandle;
-            foregroundToUnhook = it->second.foregroundHandle;
-            removeSubclass = it->second.subclassInstalled;
+            released=it->second;
             g_shellViewHooks.erase(it);
         }
     }
     ReleaseSRWLockExclusive(&g_shellHookLock);
-    if (toUnhook) UnhookWinEvent(toUnhook);
-    if (presentationToUnhook) UnhookWinEvent(presentationToUnhook);
-    if (selectionToUnhook) UnhookWinEvent(selectionToUnhook);
-    if (foregroundToUnhook) UnhookWinEvent(foregroundToUnhook);
-    if (removeSubclass) {
-        RemovePropW(state.frameHwnd,kFrameSizingProperty);
-        RemoveWindowSubclass(state.frameHwnd, ExplorerFrameSubclass,
-            reinterpret_cast<UINT_PTR>(ExplorerFrameSubclass));
-    }
+    ReleaseFrameHookResources(state.frameHwnd,released);
     state.viewEvents = nullptr;
     state.nativeSelectionEvents = nullptr;
     state.nativeForegroundEvents = nullptr;
     state.frameLifecycleSubscribed = false;
 }
 
-void ReleaseAllFrameShellViewHooks(HWND frame) {
+void ReleaseAllFrameShellViewHooks(HWND frame, HWND destroyingOwner) {
     FrameShellViewHook hooks;
     AcquireSRWLockExclusive(&g_shellHookLock);
     if (auto it = g_shellViewHooks.find(frame); it != g_shellViewHooks.end()) {
@@ -21521,23 +21541,54 @@ void ReleaseAllFrameShellViewHooks(HWND frame) {
         g_shellViewHooks.erase(it);
     }
     ReleaseSRWLockExclusive(&g_shellHookLock);
-    for (HWINEVENTHOOK hook : {hooks.handle, hooks.presentationHandle, hooks.selectionHandle, hooks.foregroundHandle})
-        if (hook) UnhookWinEvent(hook);
-    RemovePropW(frame, kFrameSizingProperty);
-    RemoveWindowSubclass(frame, ExplorerFrameSubclass, reinterpret_cast<UINT_PTR>(ExplorerFrameSubclass));
+    ReleaseFrameHookResources(frame,hooks,destroyingOwner);
 }
 
 void ClearFrameShellViewHooks() {
+    bool reported=false;
     for (;;) {
-        AcquireSRWLockShared(&g_shellHookLock);
-        const HWND frame = g_shellViewHooks.empty() ? nullptr : g_shellViewHooks.begin()->first;
-        ReleaseSRWLockShared(&g_shellHookLock);
-        if (!frame) return;
+        HWND frame=nullptr, receiver=nullptr;
+        HANDLE exited=nullptr;
+        AcquireSRWLockExclusive(&g_shellHookLock);
+        if (!g_shellViewHooks.empty()) {
+            auto it=g_shellViewHooks.begin(); frame=it->first;
+            const auto& hooks=it->second;
+            if (hooks.ownerThread && WaitForSingleObject(hooks.ownerThread,0)==WAIT_OBJECT_0) {
+                // USER removes thread-owned WinEvent hooks/windows at exit.
+                exited=hooks.ownerThread; g_shellViewHooks.erase(it);
+            } else {
+                if (IsWindow(hooks.cleanupWindow)) receiver=hooks.cleanupWindow;
+                if (!receiver && hooks.subclassInstalled && IsWindow(frame)) receiver=frame;
+                if (!receiver && !hooks.subclassInstalled && !hooks.handle &&
+                    !hooks.presentationHandle && !hooks.selectionHandle && !hooks.foregroundHandle) {
+                    if (hooks.ownerThread) CloseHandle(hooks.ownerThread);
+                    g_shellViewHooks.erase(it); frame=nullptr;
+                }
+            }
+        }
+        const bool empty=g_shellViewHooks.empty();
+        ReleaseSRWLockExclusive(&g_shellHookLock);
+        if (exited) {CloseHandle(exited); continue;}
+        if (empty) return;
+        if (!frame) continue;
         // Never erase live hook bookkeeping on Windhawk's unload thread.
         // WinEvent removal and subclass removal belong to their installer STA.
         DWORD_PTR result = 0;
-        if (!SendMessageTimeoutW(frame, kMsgReleaseFrameHooks, 0, 0,
-                SMTO_ABORTIFHUNG | SMTO_BLOCK, 400, &result)) Sleep(25);
+        if (receiver && g_releaseFrameHooksMessage)
+            SendMessageTimeoutW(receiver,g_releaseFrameHooksMessage,0,0,
+                SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT,400,&result);
+        AcquireSRWLockShared(&g_shellHookLock);
+        const bool remaining=g_shellViewHooks.contains(frame);
+        ReleaseSRWLockShared(&g_shellHookLock);
+        if (remaining) {
+            if (!reported) {
+                Wh_Log(L"[GPU lifetime] FRAME_RELEASE_WAIT frame=%p receiver=%p",frame,receiver);
+                reported=true;
+            }
+            // A genuinely unresponsive live installer still owns executable
+            // callbacks. Keep the DLL mapped until it services cleanup/exits.
+            Sleep(25);
+        }
     }
 }
 
@@ -26515,14 +26566,28 @@ void RefreshThisPcRows(ViewState& state, bool requestData) {
 }
 
 void InitializeFrameShellEvents(ViewState& state) {
-    if (state.frameLifecycleSubscribed) return;
+    if (state.frameLifecycleSubscribed || !g_releaseFrameHooksMessage) return;
     AcquireSRWLockShared(&g_shellHookLock);
     const auto previousHook = g_shellViewHooks.find(state.frameHwnd);
     HWINEVENTHOOK sharedHook = previousHook == g_shellViewHooks.end() ?
         nullptr : previousHook->second.handle;
     HWINEVENTHOOK sharedPresentationHook = previousHook == g_shellViewHooks.end() ?
         nullptr : previousHook->second.presentationHandle;
+    HWND cleanupWindow=previousHook==g_shellViewHooks.end() ? nullptr : previousHook->second.cleanupWindow;
     ReleaseSRWLockShared(&g_shellHookLock);
+    HANDLE ownerThread=nullptr;
+    const bool newOwner=!cleanupWindow;
+    if (newOwner) {
+        if (!DuplicateHandle(GetCurrentProcess(),GetCurrentThread(),GetCurrentProcess(),
+                &ownerThread,SYNCHRONIZE,FALSE,0)) return;
+        cleanupWindow=CreateWindowExW(0,L"STATIC",L"",0,0,0,0,0,HWND_MESSAGE,
+            nullptr,OverlayModuleInstance(),nullptr);
+        if (!cleanupWindow || !SetWindowSubclass(cleanupWindow,FrameHookCleanupSubclass,
+                reinterpret_cast<UINT_PTR>(FrameHookCleanupSubclass),reinterpret_cast<DWORD_PTR>(state.frameHwnd))) {
+            if (cleanupWindow) DestroyWindow(cleanupWindow);
+            CloseHandle(ownerThread); return;
+        }
+    }
     HWINEVENTHOOK candidateHook = nullptr;
     HWINEVENTHOOK candidatePresentationHook = nullptr;
     HWINEVENTHOOK candidateSelectionHook = nullptr;
@@ -26556,6 +26621,7 @@ void InitializeFrameShellEvents(ViewState& state) {
     }
     AcquireSRWLockExclusive(&g_shellHookLock);
     auto& viewHook = g_shellViewHooks[state.frameHwnd];
+    if (newOwner) {viewHook.cleanupWindow=cleanupWindow; viewHook.ownerThread=ownerThread;}
     if (!viewHook.handle) viewHook.handle = candidateHook;
     if (!viewHook.presentationHandle) viewHook.presentationHandle = candidatePresentationHook;
     if (!viewHook.selectionHandle) viewHook.selectionHandle = candidateSelectionHook;
@@ -26572,6 +26638,9 @@ void InitializeFrameShellEvents(ViewState& state) {
         g_shellViewHooks.erase(state.frameHwnd);
     }
     ReleaseSRWLockExclusive(&g_shellHookLock);
+    if (!state.frameLifecycleSubscribed && newOwner) {
+        DestroyWindow(cleanupWindow); CloseHandle(ownerThread);
+    }
     if (candidateHook && candidateHook != state.viewEvents)
         UnhookWinEvent(candidateHook);
     if (candidatePresentationHook && candidatePresentationHook != sharedPresentationHook)
@@ -27451,8 +27520,9 @@ int TranslateAcceleratorInput(HWND hwnd, HACCEL accelerator, LPMSG msg) {
         return g_translateAcceleratorOriginal(hwnd,accelerator,msg);
     MSG renamedInput{};
     if (msg && RouteNativeRenameMessage(*msg, renamedInput)) {
-        *msg = renamedInput;
-        return FALSE; // The caller still translates text for the visible EDIT.
+        TranslateMessage(&renamedInput);
+        DispatchMessageW(&renamedInput);
+        return TRUE; // Consumed exactly once; Explorer's MSG stays untouched.
     }
     if (msg && HandleNativeSelectionKey(*msg)) return TRUE;
     if (msg) NoteNativeNewFolderShortcut(*msg);
@@ -27569,26 +27639,34 @@ struct FrameScanThrottle {
 };
 struct DispatchThreadState {
     HANDLE thread=nullptr; // Real thread lifetime, never a reusable thread ID.
+    HANDLE exitWait=nullptr;
     std::unordered_map<HWND,FrameScanThrottle> frames;
 };
 std::mutex g_dispatchStateMutex;
 std::vector<std::unique_ptr<DispatchThreadState>> g_dispatchStates;
 thread_local DispatchThreadState* t_dispatchState=nullptr; // Trivial: no DLL-unload destructor.
 
-bool ReapDispatchThreadStates() {
+void ReleaseDispatchThreadState(DispatchThreadState& state) {
+    // Unregister/drain before closing the watched handle or unloading the DLL.
+    // The callback only signals an event and never acquires registry locks.
+    if (state.exitWait) UnregisterWaitEx(state.exitWait,INVALID_HANDLE_VALUE);
+    CloseHandle(state.thread);
+}
+
+void CALLBACK DispatchThreadExited(void* wake, BOOLEAN) {SetEvent(static_cast<HANDLE>(wake));}
+
+void ReapDispatchThreadStates() {
     std::vector<std::unique_ptr<DispatchThreadState>> retired;
-    bool pending=false;
     {
         std::lock_guard lock(g_dispatchStateMutex);
         for(auto it=g_dispatchStates.begin();it!=g_dispatchStates.end();) {
             if(WaitForSingleObject((*it)->thread,0)==WAIT_OBJECT_0) {
                 retired.push_back(std::move(*it)); it=g_dispatchStates.erase(it);
-            } else {pending=true; ++it;}
+            } else ++it;
         }
     }
     // Only the regulator calls this: map destruction and handle cleanup stay off UI threads.
-    for(const auto& state:retired) CloseHandle(state->thread);
-    return pending;
+    for(const auto& state:retired) ReleaseDispatchThreadState(*state);
 }
 
 DispatchThreadState* CurrentDispatchThreadState() {
@@ -27600,7 +27678,12 @@ DispatchThreadState* CurrentDispatchThreadState() {
         std::lock_guard lifetime(g_backgroundLifetimeMutex);
         if(!EnsureBackgroundRegulatorLocked()) {CloseHandle(state->thread); return nullptr;}
         std::lock_guard lock(g_dispatchStateMutex);
-        g_dispatchStates.push_back(std::move(state));
+        try {g_dispatchStates.push_back(std::move(state));}
+        catch (const std::bad_alloc&) {CloseHandle(owned->thread); return nullptr;}
+        if(!RegisterWaitForSingleObject(&owned->exitWait,owned->thread,DispatchThreadExited,
+                g_backgroundReaperWake,INFINITE,WT_EXECUTEONLYONCE | WT_EXECUTEINWAITTHREAD)) {
+            CloseHandle(owned->thread); g_dispatchStates.pop_back(); return nullptr;
+        }
         t_dispatchState=owned;
         SetEvent(g_backgroundReaperWake);
     }
@@ -28502,6 +28585,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[GPU lifetime] INIT_FAILED core registrations released");
         return FALSE;
     };
+    if (!RegisterFrameHookReleaseMessage()) return failedInitialization();
     HRESULT graphicsHr = S_OK;
     if (SUCCEEDED(graphicsHr)) graphicsHr = DWriteCreateFactory(
         DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
@@ -28576,7 +28660,7 @@ void Wh_ModUninit() {
         std::lock_guard lock(g_dispatchStateMutex);
         if (g_perf.load(std::memory_order_relaxed))
             Wh_Log(L"[GPU lifetime] DISPATCH_STATES retired=%zu",g_dispatchStates.size());
-        for(const auto& state:g_dispatchStates) CloseHandle(state->thread);
+        for(const auto& state:g_dispatchStates) ReleaseDispatchThreadState(*state);
         g_dispatchStates.clear();
         t_dispatchState=nullptr;
     }
