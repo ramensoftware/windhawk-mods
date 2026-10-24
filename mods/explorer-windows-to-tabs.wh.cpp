@@ -4,13 +4,14 @@
 // @name:ru-RU      Проводник: новые окна — во вкладки
 // @description     A new File Explorer window opens as a tab in an already open window; a folder that is already open just becomes the active tab
 // @description:ru-RU Новое окно Проводника открывается вкладкой в уже открытом окне; уже открытая папка просто становится активной вкладкой
-// @version         1.5
+// @version         1.6
 // @author          limpompo
 // @github          https://github.com/limpompo
 // @homepage        https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/explorer-windows-to-tabs
 // @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lshell32 -ldwmapi -luser32
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lshell32 -ldwmapi -luser32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -37,12 +38,30 @@ when Explorer gets it wrong, finds the tab that contains the file.
 New tabs are opened with the "Open in new tab" command, like the context menu does.
 
 Not merged:
-- a window created while the left mouse button is held (a tab dragged out into its own window);
+- a folder opened while **Shift** is held (to get a separate window on purpose);
+- a tab dragged out into its own window, however fast the drag is (a tab
+  leaves another window at the moment the new window appears);
+- Control Panel (it also never gets other folders added as tabs);
 - windows on another virtual desktop.
 
-Works only on Windows 11 with tabs in File Explorer (22H2 and later). The "new tab"
-command (WM_COMMAND 0xA21B) is undocumented and may change in future builds.
-System files are not modified.
+## Compared to Explorer Single Window Tabs
+
+[Explorer Single Window Tabs](https://windhawk.net/mods/explorer-single-window-tabs)
+also opens new Explorer windows as tabs. This mod additionally:
+- switches to a tab that already shows the folder instead of opening it again;
+- carries over the "Show in folder" selection to the new tab;
+- fixes "Show in folder" into an already open folder (switches to the right tab);
+- opens tabs with the "Open in new tab" verb, so they are registered correctly;
+- protects a tab dragged out into its own window by the held mouse button
+  (besides the Shift bypass that both mods have);
+- restores the new window if the tab couldn't be opened.
+
+**Don't enable both mods at the same time** - they would both handle every new
+window.
+
+Works only on Windows 11 with tabs in File Explorer (22H2 and later); on older
+builds the mod doesn't load. The "new tab" command (WM_COMMAND 0xA21B) is
+undocumented and may change in future builds. System files are not modified.
 */
 // ==/WindhawkModReadme==
 
@@ -63,50 +82,43 @@ System files are not modified.
   $name:ru-RU: Выводить окно со вкладками на передний план
   $description: After adding or selecting a tab, activate the Explorer window (and restore it if minimized).
   $description:ru-RU: После добавления или выбора вкладки активировать окно Проводника (и разворачивать, если оно свёрнуто).
+- shiftBypass: true
+  $name: Hold Shift to open a separate window
+  $name:ru-RU: Shift — открыть отдельным окном
+  $description: If Shift is held while a folder is being opened, the new window is left as a separate window.
+  $description:ru-RU: Если при открытии папки зажат Shift, новое окно остаётся отдельным окном.
 - ignoreMouseDown: true
-  $name: Leave windows created with a mouse button held
-  $name:ru-RU: Не трогать окна, созданные при зажатой кнопке мыши
-  $description: Protects against merging back a tab that was dragged out into its own window.
-  $description:ru-RU: Защита от «сливания» обратно вкладки, которую вытащили в отдельное окно.
+  $name: Leave tabs dragged out into their own window
+  $name:ru-RU: Не трогать вкладки, вытащенные в отдельное окно
+  $description: A tab dragged out of a window becomes a separate window and is not merged back, however fast the drag is. A folder opened by double-click is still merged.
+  $description:ru-RU: Вкладка, вытащенная из окна, становится отдельным окном и не сливается обратно, как бы быстро её ни вытащили. Папка, открытая двойным щелчком, по-прежнему сливается.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
-#include <shlobj.h>
+#include <dwmapi.h>
 #include <exdisp.h>
 #include <servprov.h>
-#include <dwmapi.h>
+#include <shlguid.h>
+#include <shlobj.h>
 #include <uiautomation.h>
+#include <wrl/client.h>
+
+using Microsoft::WRL::ComPtr;
 
 static const UINT kCmdNewTab = 0xA21B;                 // WM_COMMAND of the CabinetWClass window: "new tab"
 static const UINT kCwmGetIShellBrowser = WM_USER + 7;  // the Explorer browser window returns its IShellBrowser
-static const WCHAR kTabDoneEvent[] = L"Local\\ExplorerWindowsToTabs_TabDone";
 
-// Commands to a tab via WM_COPYDATA (executed by a hook on the tab thread).
-enum : ULONG_PTR {
-    kTabNavigate = 0x4E545745,  // data: folder PIDL; navigate to it
-    kTabMatch = 0x4D545745,     // data: folder PIDL; "yes" if the tab is open on it
-    kTabSelect = 0x53545745,    // data: folder + child PIDLs; select the items
-    kTabOpenNewTab = 0x4F545745,  // data: folder PIDL; "Open in new tab" from this tab
+// Messages posted to the worker thread.
+enum : UINT {
+    kWorkerMerge = WM_APP + 1,  // wParam: new window; lParam: TabSnapshot* (owned by the worker)
+    kWorkerSwitchTab,           // wParam: tab to switch to
 };
 
-static const GUID kClsidShellWindows = {0x9BA05972, 0xF6A8, 0x11CF, {0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39}};
-static const GUID kIidShellWindows = {0x85CB6900, 0x4D95, 0x11CF, {0x96, 0x0C, 0x00, 0x80, 0xC7, 0xF4, 0xEE, 0x85}};
-static const GUID kIidWebBrowser2 = {0xD30C1661, 0xCDAF, 0x11D0, {0x8A, 0x3E, 0x00, 0xC0, 0x4F, 0xC9, 0xE2, 0x6E}};
-static const GUID kIidServiceProvider = {0x6D5140C1, 0x7436, 0x11CE, {0x80, 0x34, 0x00, 0xAA, 0x00, 0x60, 0x09, 0xFA}};
-static const GUID kSidTopLevelBrowser = {0x4C96BE40, 0x915C, 0x11CF, {0x99, 0xD3, 0x00, 0xAA, 0x00, 0x4A, 0xE8, 0x37}};
-static const GUID kIidShellBrowser = {0x000214E2, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-static const GUID kIidFolderView = {0xCDE725B0, 0xCCC9, 0x4519, {0x91, 0x7E, 0x32, 0x5D, 0x72, 0xFA, 0xB4, 0xCE}};
-static const GUID kIidShellFolder = {0x000214E6, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-static const GUID kIidContextMenu = {0x000214E4, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-static const GUID kIidObjectWithSite = {0xFC4801A3, 0x2BA9, 0x11CF, {0xA2, 0x29, 0x00, 0xAA, 0x00, 0x3D, 0x73, 0x52}};
-static const GUID kIidFolderView2 ={0x1AF3A467, 0x214F, 0x4298, {0x90, 0x8E, 0x06, 0xB0, 0x3E, 0x0B, 0x39, 0xF9}};
-static const GUID kIidPersistFolder2 ={0x1AC3D9F0, 0x175C, 0x11D1, {0x95, 0xBE, 0x00, 0x60, 0x97, 0x97, 0xEA, 0x4F}};
-static const GUID kClsidCUIAutomation = {0xFF48DBA4, 0x60EF, 0x4201, {0xAA, 0x87, 0x54, 0x10, 0x3E, 0xEF, 0x59, 0x4E}};
-static const GUID kIidUIAutomation = {0x30CBE57D, 0xD9D0, 0x452A, {0xAB, 0x13, 0x7A, 0xC5, 0xAC, 0x48, 0x25, 0xEE}};
-static const GUID kIidUIASelectionItem = {0xA8EFA66A, 0x0FDA, 0x421A, {0x91, 0x94, 0x38, 0x02, 0x1F, 0x35, 0x78, 0xEA}};
-
 static const int kMaxWindows = 64;
+static const int kMaxSnapshotTabs = 512;     // tabs of all Explorer windows, for dragged-out tab detection
 static const int kMaxSelection = 64;
 static const DWORD kSelectionGraceMs = 300;  // how long to wait for a late selection after a tab is opened
 static const DWORD kPollMs = 15;             // polling step for a new window
@@ -115,16 +127,22 @@ static bool g_reuseOpenTab = true;
 static bool g_activateSelectedTab = true;
 static bool g_activateTarget = true;
 static bool g_ignoreMouseDown = true;
+static bool g_shiftBypass = true;
 
+// One long-lived worker thread does all merges and tab switches, so
+// Wh_ModUninit can wait for it to exit.
 static volatile LONG g_stop = 0;
-static volatile LONG g_activeMerges = 0;
-static HANDLE g_hookThread = nullptr;
-static DWORD g_hookThreadId = 0;
-static HMODULE g_module = nullptr;
+static HANDLE g_stopEvent = nullptr;
+static HANDLE g_workerReady = nullptr;
+static HANDLE g_worker = nullptr;
+static DWORD g_workerId = 0;
 
-static CRITICAL_SECTION g_cs;         // serializes merges (held for seconds)
-static CRITICAL_SECTION g_claimLock;  // protects g_claimed (also taken from the window-creating thread)
-static HWND g_claimed[kMaxWindows];  // windows the mod already handled (in progress or left as is)
+static UINT g_tabCommandMsg = 0;          // registered message for commands to a tab
+static volatile LONG g_hookCalls = 0;     // TabHookProc calls in progress
+static IUIAutomation* g_uia = nullptr;    // created and released on the worker thread
+
+static SRWLOCK g_claimLock = SRWLOCK_INIT;  // protects g_claimed (taken on Explorer threads and the worker)
+static HWND g_claimed[kMaxWindows];          // windows the mod already handled (in progress or left as is)
 static int g_claimedCount = 0;
 
 static void LoadSettings() {
@@ -132,6 +150,12 @@ static void LoadSettings() {
     g_activateSelectedTab = Wh_GetIntSetting(L"activateSelectedTab") != 0;
     g_activateTarget = Wh_GetIntSetting(L"activateTarget") != 0;
     g_ignoreMouseDown = Wh_GetIntSetting(L"ignoreMouseDown") != 0;
+    g_shiftBypass = Wh_GetIntSetting(L"shiftBypass") != 0;
+}
+
+// Waits for ms milliseconds; true if the mod is being unloaded.
+static bool Wait(DWORD ms) {
+    return WaitForSingleObject(g_stopEvent, ms) != WAIT_TIMEOUT;
 }
 
 static bool IsClass(HWND hwnd, PCWSTR cls) {
@@ -139,15 +163,26 @@ static bool IsClass(HWND hwnd, PCWSTR cls) {
     return GetClassNameW(hwnd, buf, ARRAYSIZE(buf)) > 0 && wcscmp(buf, cls) == 0;
 }
 
+static bool IsOwnProcessWindow(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return pid == GetCurrentProcessId();
+}
+
 static bool IsCloaked(HWND hwnd) {
     DWORD cloaked = 0;
     return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked;
 }
 
+static bool IsPrimaryButtonDown() {
+    int vk = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
 // Returns true if the window was just added (not claimed before).
 static bool Claim(HWND hwnd) {
     bool added = true;
-    EnterCriticalSection(&g_claimLock);
+    AcquireSRWLockExclusive(&g_claimLock);
     int n = 0;
     for (int i = 0; i < g_claimedCount; i++) {
         if (g_claimed[i] == hwnd) {
@@ -161,19 +196,19 @@ static bool Claim(HWND hwnd) {
     if (added && g_claimedCount < kMaxWindows) {
         g_claimed[g_claimedCount++] = hwnd;
     }
-    LeaveCriticalSection(&g_claimLock);
+    ReleaseSRWLockExclusive(&g_claimLock);
     return added;
 }
 
 static void Unclaim(HWND hwnd) {
-    EnterCriticalSection(&g_claimLock);
+    AcquireSRWLockExclusive(&g_claimLock);
     for (int i = 0; i < g_claimedCount; i++) {
         if (g_claimed[i] == hwnd) {
             g_claimed[i] = g_claimed[--g_claimedCount];
             break;
         }
     }
-    LeaveCriticalSection(&g_claimLock);
+    ReleaseSRWLockExclusive(&g_claimLock);
 }
 
 static void HideWindowAsync(HWND hwnd) {
@@ -202,14 +237,11 @@ static void ShowWindowBack(HWND hwnd) {
                  SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS);
 }
 
-// An Explorer window that can be merged into: visible, on the current desktop, not self.
+// An Explorer window of this process that can be merged into: visible, on the current
+// desktop, not self.
 static bool IsCandidateWindow(HWND hwnd, HWND self) {
-#ifdef WH_TEST_ALL_PROCESSES
-    if (TestIgnoresWindow(hwnd)) {
-        return false;
-    }
-#endif
-    return hwnd != self && IsWindowVisible(hwnd) && IsClass(hwnd, L"CabinetWClass") && !IsCloaked(hwnd);
+    return hwnd != self && IsWindowVisible(hwnd) && IsClass(hwnd, L"CabinetWClass") && IsOwnProcessWindow(hwnd) &&
+           !IsCloaked(hwnd);
 }
 
 struct WindowList {
@@ -291,55 +323,45 @@ struct FolderState {
 
 static PIDLIST_ABSOLUTE GetViewFolder(IFolderView* fv) {
     PIDLIST_ABSOLUTE pidl = nullptr;
-    IPersistFolder2* pf = nullptr;
-    if (SUCCEEDED(fv->GetFolder(kIidPersistFolder2, reinterpret_cast<void**>(&pf))) && pf) {
+    ComPtr<IPersistFolder2> pf;
+    if (SUCCEEDED(fv->GetFolder(IID_PPV_ARGS(&pf))) && pf) {
         pf->GetCurFolder(&pidl);
-        pf->Release();
     }
     return pidl;
 }
 
 // Current folder of the browser (absolute PIDL, free with ILFree). Optionally IFolderView.
-static PIDLIST_ABSOLUTE GetBrowserFolder(IShellBrowser* sb, IFolderView** folderView) {
-    PIDLIST_ABSOLUTE pidl = nullptr;
-    IShellView* sv = nullptr;
-    if (SUCCEEDED(sb->QueryActiveShellView(&sv)) && sv) {
-        IFolderView* fv = nullptr;
-        if (SUCCEEDED(sv->QueryInterface(kIidFolderView, reinterpret_cast<void**>(&fv))) && fv) {
-            pidl = GetViewFolder(fv);
-            if (folderView && pidl) {
-                *folderView = fv;
-                fv = nullptr;
-            }
-            if (fv) {
-                fv->Release();
-            }
-        }
-        sv->Release();
+static PIDLIST_ABSOLUTE GetBrowserFolder(IShellBrowser* sb, ComPtr<IFolderView>* folderView) {
+    ComPtr<IShellView> sv;
+    ComPtr<IFolderView> fv;
+    if (FAILED(sb->QueryActiveShellView(&sv)) || !sv || FAILED(sv.As(&fv))) {
+        return nullptr;
+    }
+    PIDLIST_ABSOLUTE pidl = GetViewFolder(fv.Get());
+    if (folderView && pidl) {
+        *folderView = fv;
     }
     return pidl;
 }
 
-static IShellBrowser* GetShellBrowser(IWebBrowser2* wb) {
-    IServiceProvider* sp = nullptr;
-    IShellBrowser* sb = nullptr;
-    if (SUCCEEDED(wb->QueryInterface(kIidServiceProvider, reinterpret_cast<void**>(&sp))) && sp) {
-        sp->QueryService(kSidTopLevelBrowser, kIidShellBrowser, reinterpret_cast<void**>(&sb));
-        sp->Release();
+static ComPtr<IShellBrowser> GetShellBrowser(IWebBrowser2* wb) {
+    ComPtr<IServiceProvider> sp;
+    ComPtr<IShellBrowser> sb;
+    if (SUCCEEDED(wb->QueryInterface(IID_PPV_ARGS(&sp)))) {
+        sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&sb));
     }
     return sb;
 }
 
-// Reads the new window's folder and selection via ShellWindows (the window is its own, one tab).
-static IShellWindows* CreateShellWindows() {
-    IShellWindows* sw = nullptr;
-    if (FAILED(CoCreateInstance(kClsidShellWindows, nullptr, CLSCTX_ALL, kIidShellWindows,
-                                reinterpret_cast<void**>(&sw)))) {
-        sw = nullptr;
+static ComPtr<IShellWindows> CreateShellWindows() {
+    ComPtr<IShellWindows> sw;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&sw)))) {
+        sw.Reset();
     }
     return sw;
 }
 
+// Reads the new window's folder and selection via ShellWindows (the window is its own, one tab).
 static bool ReadWindowState(IShellWindows* sw, HWND top, FolderState* state) {
     long count = 0;
     sw->get_Count(&count);
@@ -349,68 +371,161 @@ static bool ReadWindowState(IShellWindows* sw, HWND top, FolderState* state) {
         index.vt = VT_I4;
         index.lVal = i;
 
-        IDispatch* disp = nullptr;
-        if (FAILED(sw->Item(index, &disp)) || !disp) {
+        ComPtr<IDispatch> disp;
+        ComPtr<IWebBrowser2> wb;
+        SHANDLE_PTR h = 0;
+        if (FAILED(sw->Item(index, &disp)) || !disp || FAILED(disp.As(&wb)) || FAILED(wb->get_HWND(&h)) ||
+            reinterpret_cast<HWND>(h) != top) {
             continue;
         }
-        IWebBrowser2* wb = nullptr;
-        SHANDLE_PTR h = 0;
-        if (SUCCEEDED(disp->QueryInterface(kIidWebBrowser2, reinterpret_cast<void**>(&wb))) && wb &&
-            SUCCEEDED(wb->get_HWND(&h)) && reinterpret_cast<HWND>(h) == top) {
-            if (IShellBrowser* sb = GetShellBrowser(wb)) {
-                IFolderView* fv = nullptr;
-                state->folder = GetBrowserFolder(sb, &fv);
-                IFolderView2* fv2 = nullptr;
-                if (fv && SUCCEEDED(fv->QueryInterface(kIidFolderView2, reinterpret_cast<void**>(&fv2))) && fv2) {
-                    IShellItemArray* items = nullptr;
-                    if (fv2->GetSelection(FALSE, &items) == S_OK && items) {
-                        DWORD n = 0;
-                        items->GetCount(&n);
-                        for (DWORD i = 0; i < n && state->selectionCount < kMaxSelection; i++) {
-                            IShellItem* item = nullptr;
-                            PIDLIST_ABSOLUTE abs = nullptr;
-                            if (SUCCEEDED(items->GetItemAt(i, &item)) && item &&
-                                SUCCEEDED(SHGetIDListFromObject(item, &abs)) && abs) {
-                                state->selection[state->selectionCount++] =
-                                    reinterpret_cast<PITEMID_CHILD>(ILClone(ILFindLastID(abs)));
-                                ILFree(abs);
-                            }
-                            if (item) {
-                                item->Release();
-                            }
-                        }
-                        items->Release();
-                    }
-                    fv2->Release();
-                }
-                if (fv) {
-                    fv->Release();
-                }
-                sb->Release();
+        ComPtr<IShellBrowser> sb = GetShellBrowser(wb.Get());
+        if (!sb) {
+            continue;
+        }
+        ComPtr<IFolderView> fv;
+        state->folder = GetBrowserFolder(sb.Get(), &fv);
+        ComPtr<IFolderView2> fv2;
+        ComPtr<IShellItemArray> items;
+        if (!fv || FAILED(fv.As(&fv2)) || fv2->GetSelection(FALSE, &items) != S_OK || !items) {
+            continue;
+        }
+        DWORD n = 0;
+        items->GetCount(&n);
+        for (DWORD j = 0; j < n && state->selectionCount < kMaxSelection; j++) {
+            ComPtr<IShellItem> item;
+            PIDLIST_ABSOLUTE abs = nullptr;
+            if (SUCCEEDED(items->GetItemAt(j, &item)) && item && SUCCEEDED(SHGetIDListFromObject(item.Get(), &abs)) &&
+                abs) {
+                state->selection[state->selectionCount++] = reinterpret_cast<PITEMID_CHILD>(ILClone(ILFindLastID(abs)));
+                ILFree(abs);
             }
         }
-        if (wb) {
-            wb->Release();
-        }
-        disp->Release();
     }
     return state->folder != nullptr;
 }
 
+// Tabs of the other Explorer windows at the moment a new window was created. A tab dragged out
+// into its own window leaves its old window right then. Taken only if ignoreMouseDown is on.
+struct TabSnapshot {
+    bool mouseDown = false;
+    int count = 0;
+    HWND tabs[kMaxSnapshotTabs] = {};
+    HWND owners[kMaxSnapshotTabs] = {};
+};
+
+static TabSnapshot* TakeTabSnapshot(HWND self, bool mouseDown) {
+    auto* snapshot = new TabSnapshot;
+    snapshot->mouseDown = mouseDown;
+    if (!g_ignoreMouseDown) {
+        return snapshot;
+    }
+    WindowList windows;
+    GetCandidateWindows(self, &windows);
+    for (int w = 0; w < windows.count; w++) {
+        WindowList tabs;
+        GetTabWindows(windows.items[w], &tabs);
+        for (int t = 0; t < tabs.count && snapshot->count < kMaxSnapshotTabs; t++) {
+            snapshot->tabs[snapshot->count] = tabs.items[t];
+            snapshot->owners[snapshot->count] = windows.items[w];
+            snapshot->count++;
+        }
+    }
+    return snapshot;
+}
+
+// Whether self is a tab dragged out of another window. Observed on Windows 11 build 26300:
+// Explorer creates the new window ~100 ms after the mouse button is released, with a new tab, and
+// ~60 ms later destroys the dragged tab in the old window, which stays open. So: a tab that existed
+// when self was created has moved into self, or has left a window that is still open. A closed
+// window doesn't count (its tabs leave with it), and windows being merged are cloaked and not in
+// the snapshot.
+static bool IsDraggedOutTab(HWND self, const TabSnapshot& snapshot) {
+    for (int i = 0; i < snapshot.count; i++) {
+        HWND root = IsWindow(snapshot.tabs[i]) ? GetAncestor(snapshot.tabs[i], GA_ROOT) : nullptr;
+        if (root == self || (root != snapshot.owners[i] && IsWindow(snapshot.owners[i]))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Control Panel opens in an Explorer window too, but it doesn't work well as a tab: such a
+// window is never merged and never used as the window to add a tab to.
+static bool IsControlPanelFolder(PCIDLIST_ABSOLUTE pidl) {
+    PWSTR name = nullptr;
+    if (!pidl || FAILED(SHGetNameFromIDList(pidl, SIGDN_DESKTOPABSOLUTEPARSING, &name)) || !name) {
+        return false;
+    }
+    CharUpperW(name);
+    bool controlPanel = wcsstr(name, L"::{26EE0668-A00A-44D7-9371-BEB064C98683}") ||  // Control Panel
+                        wcsstr(name, L"::{21EC2020-3AEA-1069-A2DD-08002B30309D}");     // All Control Panel Items
+    CoTaskMemFree(name);
+    return controlPanel;
+}
+
+// Whether any tab of Explorer window top shows Control Panel.
+static bool WindowShowsControlPanel(IShellWindows* sw, HWND top) {
+    long count = 0;
+    sw->get_Count(&count);
+    for (long i = 0; i < count; i++) {
+        VARIANT index;
+        VariantInit(&index);
+        index.vt = VT_I4;
+        index.lVal = i;
+
+        ComPtr<IDispatch> disp;
+        ComPtr<IWebBrowser2> wb;
+        SHANDLE_PTR h = 0;
+        if (FAILED(sw->Item(index, &disp)) || !disp || FAILED(disp.As(&wb)) || FAILED(wb->get_HWND(&h)) ||
+            reinterpret_cast<HWND>(h) != top) {
+            continue;
+        }
+        ComPtr<IShellBrowser> sb = GetShellBrowser(wb.Get());
+        PIDLIST_ABSOLUTE folder = sb ? GetBrowserFolder(sb.Get(), nullptr) : nullptr;
+        bool controlPanel = IsControlPanelFolder(folder);
+        if (folder) {
+            ILFree(folder);
+        }
+        if (controlPanel) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The topmost Explorer window to add a tab to (not Control Panel).
+static HWND FindMergeTarget(HWND self, IShellWindows* sw) {
+    WindowList list;
+    GetCandidateWindows(self, &list);
+    for (int i = 0; i < list.count; i++) {
+        if (!WindowShowsControlPanel(sw, list.items[i])) {
+            return list.items[i];
+        }
+    }
+    return nullptr;
+}
+
 // Waits until the folder is set in the new window (two identical checks in a row). The selection
 // ("Show in folder") may arrive a bit later - CatchLateSelection picks it up after the tab is
-// opened, so that it does not delay every merge.
-static bool WaitForFolder(HWND self, IShellWindows* sw, FolderState* result, DWORD timeoutMs) {
+// opened, so that it does not delay every merge. Stops early (*draggedOut) if self turns out to be a
+// tab dragged out of another window.
+static bool WaitForFolder(HWND self, IShellWindows* sw, const TabSnapshot& snapshot, FolderState* result,
+                          DWORD timeoutMs, bool* draggedOut) {
     FolderState prev;
     DWORD start = GetTickCount();
     // A window caught at creation (cloaked) is merged only if Explorer showed it:
-    // service invisible windows are left alone. A window caught on show was already visible.
+    // service invisible windows are left alone. A hidden window was already visible.
     bool seenVisible = !IsCloaked(self);
+    *draggedOut = false;
     while (GetTickCount() - start < timeoutMs && !g_stop && IsWindow(self)) {
+        if (g_ignoreMouseDown && IsDraggedOutTab(self, snapshot)) {
+            *draggedOut = true;
+            break;
+        }
         if (IsWindowVisible(self)) {
             seenVisible = true;
             if (!IsCloaked(self)) {
-                HideWindowAsync(self);  // caught on show, and Explorer showed it again
+                HideWindowAsync(self);  // Explorer showed the hidden window again
             }
         }
         FolderState cur;
@@ -424,7 +539,9 @@ static bool WaitForFolder(HWND self, IShellWindows* sw, FolderState* result, DWO
             prev.Clear();
             prev = cur;
         }
-        Sleep(kPollMs);
+        if (Wait(kPollMs)) {
+            break;
+        }
     }
     prev.Clear();
     return false;
@@ -433,49 +550,61 @@ static bool WaitForFolder(HWND self, IShellWindows* sw, FolderState* result, DWO
 // ---------------------------------------------------------------------------
 // Commands to a tab. An empty new tab is not visible via ShellWindows, and inactive
 // tabs are not always listed there, so everything is done inside the tab thread:
-// a WH_CALLWNDPROC hook catches WM_COPYDATA and works with the tab's IShellBrowser.
-// The hook reports success via the kTabDoneEvent event.
+// a WH_CALLWNDPROC hook catches the registered message and works with the tab's
+// IShellBrowser. Sender and receiver are in the same process, so the message carries
+// a pointer to the command.
 
-struct Buffer {
-    BYTE* data = nullptr;
-    UINT size = 0;
-
-    void Append(const void* p, UINT n) {
-        BYTE* d = static_cast<BYTE*>(data ? HeapReAlloc(GetProcessHeap(), 0, data, size + n)
-                                          : HeapAlloc(GetProcessHeap(), 0, n));
-        if (!d) {
-            return;
-        }
-        memcpy(d + size, p, n);
-        data = d;
-        size += n;
-    }
-    void AppendIdList(LPCITEMIDLIST pidl) {
-        UINT n = ILGetSize(pidl);
-        Append(&n, sizeof(n));
-        Append(pidl, n);
-    }
-    ~Buffer() {
-        if (data) {
-            HeapFree(GetProcessHeap(), 0, data);
-        }
-    }
+enum TabCommandType {
+    kTabNavigate,    // navigate to the folder
+    kTabMatch,       // succeed if the tab is open on the folder
+    kTabSelect,      // the tab is open on the folder: select the items
+    kTabOpenNewTab,  // "Open in new tab" for the folder from this tab
 };
 
-// Reads a PIDL written by AppendIdList; nullptr when the data ends.
-static LPCITEMIDLIST ReadIdList(const BYTE*& p, const BYTE* end) {
-    UINT n = 0;
-    if (end - p < static_cast<ptrdiff_t>(sizeof(n))) {
-        return nullptr;
+// Reference-counted: the sender and the hook each hold a reference, so the sender can stop
+// waiting (timeout, unload) while the hook is still working on the command.
+struct TabCommand {
+    volatile LONG refs = 2;
+    TabCommandType type = kTabMatch;
+    PIDLIST_ABSOLUTE folder = nullptr;
+    PITEMID_CHILD selection[kMaxSelection] = {};
+    int selectionCount = 0;
+    HANDLE done = nullptr;  // set by the hook when the command is finished
+    volatile LONG result = 0;
+};
+
+static TabCommand* NewTabCommand(TabCommandType type, PCIDLIST_ABSOLUTE folder, const FolderState* state) {
+    auto* cmd = new TabCommand;
+    cmd->type = type;
+    cmd->folder = ILCloneFull(folder);
+    cmd->done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (state) {
+        for (int i = 0; i < state->selectionCount; i++) {
+            if (PITEMID_CHILD child = reinterpret_cast<PITEMID_CHILD>(ILClone(state->selection[i]))) {
+                cmd->selection[cmd->selectionCount++] = child;
+            }
+        }
     }
-    memcpy(&n, p, sizeof(n));
-    p += sizeof(n);
-    if (n < sizeof(USHORT) || end - p < static_cast<ptrdiff_t>(n)) {
-        return nullptr;
+    if (!cmd->folder || !cmd->done) {
+        cmd->refs = 1;
     }
-    auto pidl = reinterpret_cast<LPCITEMIDLIST>(p);
-    p += n;
-    return pidl;
+    return cmd;
+}
+
+static void ReleaseTabCommand(TabCommand* cmd) {
+    if (InterlockedDecrement(&cmd->refs) != 0) {
+        return;
+    }
+    if (cmd->folder) {
+        ILFree(cmd->folder);
+    }
+    for (int i = 0; i < cmd->selectionCount; i++) {
+        ILFree(cmd->selection[i]);
+    }
+    if (cmd->done) {
+        CloseHandle(cmd->done);
+    }
+    delete cmd;
 }
 
 // The folder command "Open in new tab" (opennewtab) with tab sb as the site - the same
@@ -483,152 +612,127 @@ static LPCITEMIDLIST ReadIdList(const BYTE*& p, const BYTE* end) {
 // after BrowseObject in an empty tab the registration gets confused, and "Show in folder"
 // then lands in the wrong tab.
 static bool InvokeOpenNewTab(IShellBrowser* sb, HWND hwnd, PCIDLIST_ABSOLUTE folder) {
-    IShellFolder* parent = nullptr;
+    ComPtr<IShellFolder> parent;
     PCUITEMID_CHILD child = nullptr;
-    if (FAILED(SHBindToParent(folder, kIidShellFolder, reinterpret_cast<void**>(&parent), &child)) || !parent) {
+    if (FAILED(SHBindToParent(folder, IID_PPV_ARGS(&parent), &child)) || !parent) {
         return false;
     }
-    bool ok = false;
-    IContextMenu* menu = nullptr;
-    if (SUCCEEDED(parent->GetUIObjectOf(hwnd, 1, &child, kIidContextMenu, nullptr, reinterpret_cast<void**>(&menu))) &&
-        menu) {
-        IObjectWithSite* site = nullptr;
-        if (SUCCEEDED(menu->QueryInterface(kIidObjectWithSite, reinterpret_cast<void**>(&site))) && site) {
-            site->SetSite(sb);
-        }
-        HMENU popup = CreatePopupMenu();
-        if (popup && SUCCEEDED(menu->QueryContextMenu(popup, 0, 1, 0x7FFF, CMF_NORMAL))) {
-            CMINVOKECOMMANDINFOEX ici = {};
-            ici.cbSize = sizeof(ici);
-            ici.fMask = CMIC_MASK_UNICODE | CMIC_MASK_FLAG_NO_UI;
-            ici.hwnd = hwnd;
-            ici.lpVerb = "opennewtab";
-            ici.lpVerbW = L"opennewtab";
-            ici.nShow = SW_SHOWNORMAL;
-            HRESULT hr = menu->InvokeCommand(reinterpret_cast<CMINVOKECOMMANDINFO*>(&ici));
-            Wh_Log(L"opennewtab: 0x%08X", static_cast<unsigned>(hr));
-            ok = SUCCEEDED(hr);
-        }
-        if (popup) {
-            DestroyMenu(popup);
-        }
-        if (site) {
-            site->SetSite(nullptr);
-            site->Release();
-        }
-        menu->Release();
+    ComPtr<IContextMenu> menu;
+    if (FAILED(parent->GetUIObjectOf(hwnd, 1, &child, __uuidof(IContextMenu), nullptr,
+                                     reinterpret_cast<void**>(menu.GetAddressOf()))) ||
+        !menu) {
+        return false;
     }
-    parent->Release();
+    ComPtr<IObjectWithSite> site;
+    if (SUCCEEDED(menu.As(&site))) {
+        site->SetSite(sb);
+    }
+    bool ok = false;
+    HMENU popup = CreatePopupMenu();
+    if (popup && SUCCEEDED(menu->QueryContextMenu(popup, 0, 1, 0x7FFF, CMF_NORMAL))) {
+        CMINVOKECOMMANDINFOEX ici = {};
+        ici.cbSize = sizeof(ici);
+        ici.fMask = CMIC_MASK_UNICODE | CMIC_MASK_FLAG_NO_UI;
+        ici.hwnd = hwnd;
+        ici.lpVerb = "opennewtab";
+        ici.lpVerbW = L"opennewtab";
+        ici.nShow = SW_SHOWNORMAL;
+        HRESULT hr = menu->InvokeCommand(reinterpret_cast<CMINVOKECOMMANDINFO*>(&ici));
+        Wh_Log(L"opennewtab: 0x%08X", static_cast<unsigned>(hr));
+        ok = SUCCEEDED(hr);
+    }
+    if (popup) {
+        DestroyMenu(popup);
+    }
+    if (site) {
+        site->SetSite(nullptr);
+    }
     return ok;
 }
 
-static bool RunTabCommand(IShellBrowser* sb, HWND hwnd, ULONG_PTR command, const BYTE* data, UINT size) {
-    const BYTE* p = data;
-    const BYTE* end = data + size;
-    auto folder = reinterpret_cast<PCIDLIST_ABSOLUTE>(ReadIdList(p, end));
-    if (!folder) {
-        return false;
+static bool RunTabCommand(IShellBrowser* sb, HWND hwnd, const TabCommand* cmd) {
+    if (cmd->type == kTabNavigate) {
+        return SUCCEEDED(sb->BrowseObject(cmd->folder, SBSP_SAMEBROWSER | SBSP_ABSOLUTE));
+    }
+    if (cmd->type == kTabOpenNewTab) {
+        return InvokeOpenNewTab(sb, hwnd, cmd->folder);
     }
 
-    if (command == kTabNavigate) {
-        return SUCCEEDED(sb->BrowseObject(folder, SBSP_SAMEBROWSER | SBSP_ABSOLUTE));
-    }
-    if (command == kTabOpenNewTab) {
-        return InvokeOpenNewTab(sb, hwnd, folder);
-    }
-
-    IFolderView* fv = nullptr;
-    PIDLIST_ABSOLUTE cur = GetBrowserFolder(sb, command == kTabSelect ? &fv : nullptr);
-    bool same = cur && ILIsEqual(cur, folder);
+    ComPtr<IFolderView> fv;
+    PIDLIST_ABSOLUTE cur = GetBrowserFolder(sb, cmd->type == kTabSelect ? &fv : nullptr);
+    bool same = cur && ILIsEqual(cur, cmd->folder);
     if (cur) {
         ILFree(cur);
     }
-    if (command == kTabMatch || !same) {
-        if (fv) {
-            fv->Release();
-        }
+    if (cmd->type == kTabMatch || !same) {
         return same;
     }
 
     // kTabSelect: the folder matches, select the items.
-    IShellView* sv = nullptr;
-    bool done = false;
-    if (SUCCEEDED(sb->QueryActiveShellView(&sv)) && sv) {
-        int requested = 0;
-        while (auto child = reinterpret_cast<PCUITEMID_CHILD>(ReadIdList(p, end))) {
-            UINT flags = SVSI_SELECT;
-            if (!requested) {
-                flags |= SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE | SVSI_FOCUSED;
-            }
-            sv->SelectItem(child, flags);
-            requested++;
+    ComPtr<IShellView> sv;
+    if (FAILED(sb->QueryActiveShellView(&sv)) || !sv) {
+        return false;
+    }
+    for (int i = 0; i < cmd->selectionCount; i++) {
+        UINT flags = SVSI_SELECT;
+        if (i == 0) {
+            flags |= SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE | SVSI_FOCUSED;
         }
-        // Until the folder is enumerated, SelectItem selects nothing - retry then.
-        int selected = 0;
-        done = fv && SUCCEEDED(fv->ItemCount(SVGIO_SELECTION, &selected)) && selected == requested;
-        sv->Release();
+        sv->SelectItem(cmd->selection[i], flags);
     }
-    if (fv) {
-        fv->Release();
-    }
-    return done;
+    // Until the folder is enumerated, SelectItem selects nothing - retry then.
+    int selected = 0;
+    return fv && SUCCEEDED(fv->ItemCount(SVGIO_SELECTION, &selected)) && selected == cmd->selectionCount;
 }
 
 static LRESULT CALLBACK TabHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    InterlockedIncrement(&g_hookCalls);
     if (code == HC_ACTION) {
         auto* cwp = reinterpret_cast<CWPSTRUCT*>(lParam);
-        auto* cds = cwp->message == WM_COPYDATA ? reinterpret_cast<COPYDATASTRUCT*>(cwp->lParam) : nullptr;
-        if (cds &&
-            (cds->dwData == kTabNavigate || cds->dwData == kTabMatch || cds->dwData == kTabSelect ||
-             cds->dwData == kTabOpenNewTab) &&
-            cds->lpData) {
+        if (cwp->message == g_tabCommandMsg && g_tabCommandMsg && cwp->lParam) {
+            auto* cmd = reinterpret_cast<TabCommand*>(cwp->lParam);
             auto* sb = reinterpret_cast<IShellBrowser*>(SendMessageW(cwp->hwnd, kCwmGetIShellBrowser, 0, 0));
-            const BYTE* data = static_cast<const BYTE*>(cds->lpData);
-            BYTE* copy = nullptr;
-            if (sb && cds->dwData == kTabOpenNewTab) {
+            if (sb && cmd->type == kTabOpenNewTab) {
                 // The command makes outgoing COM calls, which are not allowed inside SendMessage
-                // (RPC_E_CANTCALLOUT_ININPUTSYNCCALL): copy the data and release the sender.
-                copy = static_cast<BYTE*>(HeapAlloc(GetProcessHeap(), 0, cds->cbData));
-                if (copy) {
-                    memcpy(copy, data, cds->cbData);
-                    data = copy;
-                    ReplyMessage(TRUE);
-                } else {
-                    sb = nullptr;
-                }
+                // (RPC_E_CANTCALLOUT_ININPUTSYNCCALL): release the sender first.
+                ReplyMessage(TRUE);
             }
-            if (sb && RunTabCommand(sb, cwp->hwnd, cds->dwData, data, cds->cbData)) {
-                if (HANDLE ev = OpenEventW(EVENT_MODIFY_STATE, FALSE, kTabDoneEvent)) {
-                    SetEvent(ev);
-                    CloseHandle(ev);
-                }
-            }
-            if (copy) {
-                HeapFree(GetProcessHeap(), 0, copy);
-            }
+            cmd->result = sb && RunTabCommand(sb, cwp->hwnd, cmd);
+            SetEvent(cmd->done);
+            ReleaseTabCommand(cmd);
         }
     }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
+    LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+    InterlockedDecrement(&g_hookCalls);
+    return result;
 }
 
 // Command hooks installed during one merge: one per tab-window thread, removed at the end of
 // the merge (ReleaseTabHooks). Installing a hook per command is expensive - when searching for
-// an open folder the command goes to every tab. Only under g_cs.
+// an open folder the command goes to every tab. Worker thread only.
 static struct {
     DWORD thread;
     HHOOK hook;
 } g_tabHooks[16];
 static int g_tabHookCount = 0;
-static HANDLE g_tabDone = nullptr;  // the kTabDoneEvent event, created in Wh_ModInit
+
+// Waits until no TabHookProc call is running (UnhookWindowsHookEx doesn't wait for them).
+static void WaitForHookCalls() {
+    while (g_hookCalls > 0) {
+        Sleep(5);
+    }
+}
 
 static void ReleaseTabHooks() {
     for (int i = 0; i < g_tabHookCount; i++) {
         UnhookWindowsHookEx(g_tabHooks[i].hook);
     }
     g_tabHookCount = 0;
+    WaitForHookCalls();
 }
 
-// Hook for a thread; *temporary - remove right after the command (cache overflow).
+// Hook for a thread of this process; *temporary - remove right after the command (cache overflow).
+// hMod is null, so a thread of another process can't be hooked at all.
 static HHOOK GetTabHook(DWORD thread, bool* temporary) {
     *temporary = false;
     for (int i = 0; i < g_tabHookCount; i++) {
@@ -636,10 +740,10 @@ static HHOOK GetTabHook(DWORD thread, bool* temporary) {
             return g_tabHooks[i].hook;
         }
     }
-    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, TabHookProc, g_module, thread);
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, TabHookProc, nullptr, thread);
     if (!hook) {
         Wh_Log(L"SetWindowsHookEx failed: %lu", GetLastError());
-    } else if (g_tabHookCount < ARRAYSIZE(g_tabHooks)) {
+    } else if (g_tabHookCount < static_cast<int>(ARRAYSIZE(g_tabHooks))) {
         g_tabHooks[g_tabHookCount++] = {thread, hook};
     } else {
         *temporary = true;
@@ -648,25 +752,37 @@ static HHOOK GetTabHook(DWORD thread, bool* temporary) {
 }
 
 // Executes a command in tab "tab". true - the hook reported success (wait up to waitMs after the reply).
-static bool SendTabCommand(HWND tab, ULONG_PTR command, const Buffer& payload, DWORD waitMs = 0) {
-    if (!g_tabDone) {
+static bool SendTabCommand(HWND tab, TabCommandType type, PCIDLIST_ABSOLUTE folder, const FolderState* state = nullptr,
+                           DWORD waitMs = 0) {
+    DWORD pid = 0;
+    DWORD thread = GetWindowThreadProcessId(tab, &pid);
+    if (!thread || pid != GetCurrentProcessId() || g_stop) {
         return false;
     }
-    ResetEvent(g_tabDone);
-
-    bool ok = false;
     bool temporary;
-    HHOOK hook = GetTabHook(GetWindowThreadProcessId(tab, nullptr), &temporary);
-    if (hook) {
-        COPYDATASTRUCT cds = {command, payload.size, payload.data};
-        DWORD_PTR res = 0;
-        if (SendMessageTimeoutW(tab, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 3000, &res)) {
-            ok = WaitForSingleObject(g_tabDone, waitMs) == WAIT_OBJECT_0;
-        }
-        if (temporary) {
-            UnhookWindowsHookEx(hook);
-        }
+    HHOOK hook = GetTabHook(thread, &temporary);
+    if (!hook) {
+        return false;
     }
+    TabCommand* cmd = NewTabCommand(type, folder, state);
+    bool ok = false;
+    if (cmd->refs == 2) {
+        DWORD_PTR res = 0;
+        if (SendMessageTimeoutW(tab, g_tabCommandMsg, 0, reinterpret_cast<LPARAM>(cmd), SMTO_ABORTIFHUNG, 3000,
+                                &res)) {
+            HANDLE handles[] = {cmd->done, g_stopEvent};
+            ok = WaitForMultipleObjects(2, handles, FALSE, waitMs) == WAIT_OBJECT_0 && cmd->result;
+        } else if (!IsWindow(tab)) {
+            ReleaseTabCommand(cmd);  // the tab is gone: the hook will never see the command
+        }
+        // If the message timed out, the hook may still get it later, so its reference is kept; if
+        // it never does, the command leaks (rare: the tab's thread was hung for 3 seconds).
+    }
+    if (temporary) {
+        UnhookWindowsHookEx(hook);
+        WaitForHookCalls();
+    }
+    ReleaseTabCommand(cmd);
     return ok;
 }
 
@@ -675,18 +791,15 @@ static bool ApplySelection(HWND tab, const FolderState& state) {
     if (!state.selectionCount) {
         return true;
     }
-    Buffer payload;
-    payload.AppendIdList(state.folder);
-    for (int i = 0; i < state.selectionCount; i++) {
-        payload.AppendIdList(state.selection[i]);
-    }
     DWORD start = GetTickCount();
     while (GetTickCount() - start < 3000 && !g_stop) {
-        if (SendTabCommand(tab, kTabSelect, payload)) {
+        if (SendTabCommand(tab, kTabSelect, state.folder, &state)) {
             Wh_Log(L"selection applied: %d items", state.selectionCount);
             return true;
         }
-        Sleep(30);
+        if (Wait(30)) {
+            break;
+        }
     }
     Wh_Log(L"selection not applied");
     return false;
@@ -695,32 +808,57 @@ static bool ApplySelection(HWND tab, const FolderState& state) {
 // ---------------------------------------------------------------------------
 // Switching a tab via UI Automation: the tab strip has no window command.
 
-// anyTitle = false: try only items with the same title (identical ones are told apart by checking the result);
-// true: try the others too (the title may not match) - switches other tabs, a last resort.
-// The UI Automation object is created once (it is thread-safe); released in Wh_ModUninit.
-static IUIAutomation* volatile g_uia = nullptr;
-
 static IUIAutomation* GetUia() {
     if (!g_uia) {
         IUIAutomation* uia = nullptr;
-        if (SUCCEEDED(CoCreateInstance(kClsidCUIAutomation, nullptr, CLSCTX_INPROC_SERVER, kIidUIAutomation,
-                                       reinterpret_cast<void**>(&uia))) &&
-            uia && InterlockedCompareExchangePointer(reinterpret_cast<void* volatile*>(&g_uia), uia, nullptr)) {
-            uia->Release();  // another thread was first
+        if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia)))) {
+            g_uia = uia;
         }
     }
     return g_uia;
 }
 
-static IUIAutomationCondition* ControlTypeCondition(IUIAutomation* uia, long type) {
+static ComPtr<IUIAutomationCondition> ControlTypeCondition(IUIAutomation* uia, long type) {
     VARIANT v;
     VariantInit(&v);
     v.vt = VT_I4;
     v.lVal = type;
-    IUIAutomationCondition* cond = nullptr;
-    return SUCCEEDED(uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond)) ? cond : nullptr;
+    ComPtr<IUIAutomationCondition> cond;
+    if (FAILED(uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond))) {
+        cond.Reset();
+    }
+    return cond;
 }
 
+static ComPtr<IUIAutomationElementArray> FindTabItems(IUIAutomation* uia, HWND top) {
+    ComPtr<IUIAutomationElement> root;
+    ComPtr<IUIAutomationCondition> cond = ControlTypeCondition(uia, UIA_TabItemControlTypeId);
+    if (!cond || FAILED(uia->ElementFromHandle(top, &root)) || !root) {
+        return nullptr;
+    }
+    // Tab strip in the window title bar: look for tabs only there, not in the whole window tree.
+    ComPtr<IUIAutomationElement> strip;
+    ComPtr<IUIAutomationCondition> stripCond = ControlTypeCondition(uia, UIA_TabControlTypeId);
+    if (!stripCond || FAILED(root->FindFirst(TreeScope_Descendants, stripCond.Get(), &strip))) {
+        strip.Reset();
+    }
+    ComPtr<IUIAutomationElementArray> items;
+    int found = 0;
+    if (strip && SUCCEEDED(strip->FindAll(TreeScope_Descendants, cond.Get(), &items)) && items &&
+        SUCCEEDED(items->get_Length(&found)) && found > 0) {
+        return items;
+    }
+    // No strip, or the wrong one - search the whole window.
+    items.Reset();
+    if (FAILED(root->FindAll(TreeScope_Descendants, cond.Get(), &items))) {
+        items.Reset();
+    }
+    return items;
+}
+
+// anyTitle = false: try only items with the same title as the tab window (identical titles are told
+// apart by checking the result); true: try the others too (the title may not match) - this switches
+// other tabs one after another, so it is a last resort.
 static bool SelectTabOnce(HWND top, HWND tab, bool anyTitle) {
     if (GetActiveTab(top) == tab) {
         return true;
@@ -732,94 +870,70 @@ static bool SelectTabOnce(HWND top, HWND tab, bool anyTitle) {
     if (!uia) {
         return false;
     }
-
-    bool ok = false;
-    IUIAutomationElement* root = nullptr;
-    IUIAutomationElement* strip = nullptr;
-    IUIAutomationCondition* stripCond = ControlTypeCondition(uia, UIA_TabControlTypeId);
-    IUIAutomationCondition* cond = ControlTypeCondition(uia, UIA_TabItemControlTypeId);
-    IUIAutomationElementArray* items = nullptr;
-    if (SUCCEEDED(uia->ElementFromHandle(top, &root)) && root && cond) {
-        // Tab strip in the window title bar: look for tabs only there, not in the whole window tree.
-        if (stripCond && FAILED(root->FindFirst(TreeScope_Descendants, stripCond, &strip))) {
-            strip = nullptr;
-        }
-        if (FAILED((strip ? strip : root)->FindAll(TreeScope_Descendants, cond, &items))) {
-            items = nullptr;
-        }
-        int found = 0;
-        if (strip && (!items || FAILED(items->get_Length(&found)) || found == 0)) {
-            // Found the wrong strip - search the whole window.
-            if (items) {
-                items->Release();
-            }
-            if (FAILED(root->FindAll(TreeScope_Descendants, cond, &items))) {
-                items = nullptr;
-            }
-        }
+    ComPtr<IUIAutomationElementArray> items = FindTabItems(uia, top);
+    if (!items) {
+        return false;
     }
-    if (items) {
-        int count = 0;
-        items->get_Length(&count);
-        // First tabs with the same title; identical titles are told apart by checking the result.
-        for (int pass = 0; pass < (anyTitle ? 2 : 1) && !ok; pass++) {
-            for (int i = 0; i < count && !ok; i++) {
-                IUIAutomationElement* item = nullptr;
-                if (FAILED(items->GetElement(i, &item)) || !item) {
-                    continue;
+    int count = 0;
+    items->get_Length(&count);
+    for (int pass = 0; pass < (anyTitle ? 2 : 1); pass++) {
+        for (int i = 0; i < count; i++) {
+            ComPtr<IUIAutomationElement> item;
+            if (FAILED(items->GetElement(i, &item)) || !item) {
+                continue;
+            }
+            BSTR name = nullptr;
+            item->get_CurrentName(&name);
+            bool sameTitle = name && wcscmp(name, title) == 0;
+            SysFreeString(name);
+            if (sameTitle != (pass == 0)) {
+                continue;
+            }
+            ComPtr<IUIAutomationSelectionItemPattern> sel;
+            if (FAILED(item->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&sel))) || !sel) {
+                continue;
+            }
+            sel->Select();
+            for (int t = 0; t < 30; t++) {
+                if (GetActiveTab(top) == tab) {
+                    return true;
                 }
-                BSTR name = nullptr;
-                item->get_CurrentName(&name);
-                bool sameTitle = name && wcscmp(name, title) == 0;
-                SysFreeString(name);
-                if (sameTitle == (pass == 0)) {
-                    IUIAutomationSelectionItemPattern* sel = nullptr;
-                    if (SUCCEEDED(item->GetCurrentPatternAs(UIA_SelectionItemPatternId, kIidUIASelectionItem,
-                                                            reinterpret_cast<void**>(&sel))) &&
-                        sel) {
-                        sel->Select();
-                        sel->Release();
-                        for (int t = 0; t < 30 && !ok; t++) {
-                            ok = GetActiveTab(top) == tab;
-                            if (!ok) {
-                                Sleep(10);
-                            }
-                        }
-                    }
+                if (Wait(10)) {
+                    return false;
                 }
-                item->Release();
             }
         }
     }
-    if (items) {
-        items->Release();
-    }
-    if (cond) {
-        cond->Release();
-    }
-    if (stripCond) {
-        stripCond->Release();
-    }
-    if (strip) {
-        strip->Release();
-    }
-    if (root) {
-        root->Release();
-    }
-    return ok;
+    return false;
 }
 
 // A new tab gets its title and its tab-strip item not immediately - retry.
 static bool SelectTab(HWND top, HWND tab) {
-    for (DWORD start = GetTickCount(); GetTickCount() - start < 2000 && !g_stop; Sleep(50)) {
+    // The first pass may select other tabs with the same title, so remember the original one now.
+    HWND before = GetActiveTab(top);
+    for (DWORD start = GetTickCount(); GetTickCount() - start < 2000 && !g_stop;) {
         if (!IsWindow(tab)) {
             return false;
         }
         if (SelectTabOnce(top, tab, false)) {
             return true;
         }
+        if (Wait(50)) {
+            return false;
+        }
     }
-    return SelectTabOnce(top, tab, true);
+    // Last resort: try tabs with other titles. If that fails too, switch back to the tab that
+    // was active before, so the user doesn't end up on a random tab.
+    if (g_stop) {
+        return false;
+    }
+    if (SelectTabOnce(top, tab, true)) {
+        return true;
+    }
+    if (before && IsWindow(before) && GetActiveTab(top) != before) {
+        SelectTabOnce(top, before, false);
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -833,15 +947,13 @@ static void ActivateWindow(HWND hwnd) {
 
 // Looks for a tab already open on the folder; *top is its window.
 static HWND FindOpenTab(HWND self, PCIDLIST_ABSOLUTE folder, HWND* top) {
-    Buffer payload;
-    payload.AppendIdList(folder);
     WindowList windows;
     GetCandidateWindows(self, &windows);
-    for (int w = 0; w < windows.count; w++) {
+    for (int w = 0; w < windows.count && !g_stop; w++) {
         WindowList tabs;
         GetTabWindows(windows.items[w], &tabs);
-        for (int t = 0; t < tabs.count; t++) {
-            if (SendTabCommand(tabs.items[t], kTabMatch, payload)) {
+        for (int t = 0; t < tabs.count && !g_stop; t++) {
+            if (SendTabCommand(tabs.items[t], kTabMatch, folder)) {
                 *top = windows.items[w];
                 return tabs.items[t];
             }
@@ -867,17 +979,34 @@ static HWND OpenInNewTab(HWND target, PCIDLIST_ABSOLUTE folder) {
     GetTabWindows(target, &before);
 
     // Main way - "Open in new tab", as from the context menu.
-    Buffer payload;
-    payload.AppendIdList(folder);
     HWND active = GetActiveTab(target);
-    if (active && SendTabCommand(active, kTabOpenNewTab, payload, 3000)) {
-        for (DWORD start = GetTickCount(); GetTickCount() - start < 3000 && !g_stop; Sleep(kPollMs)) {
+    if (active && SendTabCommand(active, kTabOpenNewTab, folder, nullptr, 3000)) {
+        for (DWORD start = GetTickCount(); GetTickCount() - start < 3000;) {
             if (HWND newTab = FindNewTab(target, before)) {
                 if (!SelectTab(target, newTab)) {
                     Wh_Log(L"new tab %p opened but not activated", newTab);
                 }
                 return newTab;
             }
+            if (Wait(kPollMs)) {
+                return nullptr;
+            }
+        }
+    }
+    if (g_stop) {
+        return nullptr;
+    }
+    // The command may have succeeded after the wait above ran out: don't open a second tab then.
+    for (DWORD start = GetTickCount(); GetTickCount() - start < 1000;) {
+        if (HWND newTab = FindNewTab(target, before)) {
+            Wh_Log(L"opennewtab finished late, new tab %p", newTab);
+            if (!SelectTab(target, newTab)) {
+                Wh_Log(L"new tab %p opened but not activated", newTab);
+            }
+            return newTab;
+        }
+        if (Wait(kPollMs)) {
+            return nullptr;
         }
     }
     Wh_Log(L"opennewtab failed, falling back to new-tab command");
@@ -891,15 +1020,16 @@ static HWND OpenInNewTab(HWND target, PCIDLIST_ABSOLUTE folder) {
     }
 
     HWND newTab = nullptr;
-    DWORD start = GetTickCount();
-    while (GetTickCount() - start < 4000 && !g_stop) {
+    for (DWORD start = GetTickCount(); GetTickCount() - start < 4000;) {
         if (!newTab) {
             newTab = FindNewTab(target, before);
         }
-        if (newTab && SendTabCommand(newTab, kTabNavigate, payload)) {
+        if (newTab && SendTabCommand(newTab, kTabNavigate, folder)) {
             return newTab;
         }
-        Sleep(100);  // the tab is not ready to hand out its IShellBrowser yet
+        if (Wait(100)) {  // the tab is not ready to hand out its IShellBrowser yet
+            break;
+        }
     }
     return nullptr;
 }
@@ -907,8 +1037,7 @@ static HWND OpenInNewTab(HWND target, PCIDLIST_ABSOLUTE folder) {
 // "Show in folder" sometimes selects the file in the new window a bit later than the folder is set.
 // The tab is already open and active by then; wait for the selection for another kSelectionGraceMs.
 static void CatchLateSelection(HWND self, IShellWindows* sw, HWND tab) {
-    for (DWORD start = GetTickCount(); GetTickCount() - start < kSelectionGraceMs && !g_stop && IsWindow(self);
-         Sleep(kPollMs)) {
+    for (DWORD start = GetTickCount(); GetTickCount() - start < kSelectionGraceMs && IsWindow(self);) {
         FolderState late;
         bool got = ReadWindowState(sw, self, &late) && late.selectionCount > 0;
         if (got) {
@@ -916,17 +1045,34 @@ static void CatchLateSelection(HWND self, IShellWindows* sw, HWND tab) {
             ApplySelection(tab, late);
         }
         late.Clear();
-        if (got) {
+        if (got || Wait(kPollMs)) {
             return;
         }
     }
 }
 
 // Moves the new window self into a tab. *target is the window where the tab ended up.
-static bool MergeWindowWith(HWND self, IShellWindows* sw, HWND* target) {
+static bool MergeWindowWith(HWND self, IShellWindows* sw, const TabSnapshot& snapshot, HWND* target) {
     FolderState state;
-    if (!WaitForFolder(self, sw, &state, 4000)) {
-        Wh_Log(L"merge: folder of new window unknown");
+    bool draggedOut = false;
+    if (!WaitForFolder(self, sw, snapshot, &state, 4000, &draggedOut)) {
+        if (draggedOut) {
+            Wh_Log(L"merge: the window is a tab dragged out of another window, leaving it");
+        } else {
+            Wh_Log(L"merge: folder of new window unknown");
+        }
+        return false;
+    }
+    // Explorer destroys the dragged tab ~60 ms after creating the window, well before the folder
+    // is ready (~250 ms); check once more right before merging.
+    if (g_ignoreMouseDown && IsDraggedOutTab(self, snapshot)) {
+        Wh_Log(L"merge: the window is a tab dragged out of another window, leaving it");
+        state.Clear();
+        return false;
+    }
+    if (IsControlPanelFolder(state.folder)) {
+        Wh_Log(L"merge: Control Panel, leaving it as a window");
+        state.Clear();
         return false;
     }
 
@@ -936,8 +1082,8 @@ static bool MergeWindowWith(HWND self, IShellWindows* sw, HWND* target) {
         ok = SelectTab(*target, tab);
         Wh_Log(L"merge: folder already open in tab %p, switched %d", tab, ok);
     }
-    if (!ok) {
-        *target = FindTarget(self);
+    if (!ok && !g_stop) {
+        *target = FindMergeTarget(self, sw);
         tab = *target ? OpenInNewTab(*target, state.folder) : nullptr;
         ok = tab != nullptr;
         Wh_Log(L"merge: new tab %p", tab);
@@ -956,26 +1102,50 @@ static bool MergeWindowWith(HWND self, IShellWindows* sw, HWND* target) {
     return ok;
 }
 
-static bool MergeWindow(HWND self, HWND* target) {
-    IShellWindows* sw = CreateShellWindows();
-    if (!sw) {
+// A window created while the mouse button was held (a folder opened by double-click, or a tab being
+// dragged out on Explorer builds that create the window during the drag). It is left visible while
+// the button is held; a button still held after the double-click time means a drag. After the
+// release the window is hidden and merged, and WaitForFolder still recognizes a dragged-out tab.
+// Returns true to merge.
+static bool CheckMouseDownWindow(HWND self, const TabSnapshot& snapshot) {
+    DWORD limit = GetDoubleClickTime();
+    for (DWORD start = GetTickCount(); IsPrimaryButtonDown();) {
+        if (IsDraggedOutTab(self, snapshot)) {
+            Wh_Log(L"window %p is a tab dragged out of another window, leaving it", self);
+            return false;
+        }
+        if (GetTickCount() - start >= limit) {
+            Wh_Log(L"mouse button still held: window %p is a dragged-out tab, leaving it", self);
+            return false;
+        }
+        if (Wait(kPollMs)) {
+            return false;
+        }
+    }
+    if (!IsWindow(self)) {
         return false;
     }
-    bool ok = MergeWindowWith(self, sw, target);
-    sw->Release();
-    ReleaseTabHooks();
-    return ok;
+    if (IsWindowVisible(self) && !IsCloaked(self)) {
+        HideWindowAsync(self);
+    } else {
+        CloakWindow(self, true);
+    }
+    return true;
 }
 
-static DWORD WINAPI MergeThread(LPVOID param) {
-    HWND self = static_cast<HWND>(param);
-    bool coInit = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+static void MergeNewWindow(HWND self, const TabSnapshot& snapshot) {
+    if (snapshot.mouseDown && !CheckMouseDownWindow(self, snapshot)) {
+        return;  // stays claimed: a regular window, leave it alone
+    }
     DWORD start = GetTickCount();
-
-    EnterCriticalSection(&g_cs);
     HWND target = nullptr;
-    bool ok = IsWindow(self) && MergeWindow(self, &target);
-    LeaveCriticalSection(&g_cs);
+    bool ok = false;
+    if (IsWindow(self)) {
+        if (ComPtr<IShellWindows> sw = CreateShellWindows()) {
+            ok = MergeWindowWith(self, sw.Get(), snapshot, &target);
+        }
+        ReleaseTabHooks();
+    }
     Wh_Log(L"merge %s in %lu ms", ok ? L"done" : L"failed", GetTickCount() - start);
 
     if (ok) {
@@ -984,12 +1154,6 @@ static DWORD WINAPI MergeThread(LPVOID param) {
     } else {
         ShowWindowBack(self);  // stays in g_claimed so that we do not try again
     }
-
-    if (coInit) {
-        CoUninitialize();
-    }
-    InterlockedDecrement(&g_activeMerges);
-    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1000,16 +1164,16 @@ static DWORD WINAPI MergeThread(LPVOID param) {
 // - the file was selected in an inactive tab - switch to it;
 // - the file is not in this tab - find the window tab that has it, select it there and switch.
 
-static const GUID kIidServerSecurity = {0x0000013E, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
 static const int kSelectItemSlot = 14;      // IShellView::SelectItem in the vtable
 static const DWORD kRedirectKeepMs = 2000;  // the following items of the same call go to the same tab
 
-using SelectItem_t = HRESULT(STDMETHODCALLTYPE*)(IShellView*, PCUITEMID_CHILD, SVSIF);
-static SelectItem_t SelectItem_Original;
+using SelectItem_t = HRESULT STDMETHODCALLTYPE(IShellView*, PCUITEMID_CHILD, SVSIF);
+static SelectItem_t* SelectItem_Original;
 
 static volatile LONG g_switching = 0;
 
 // Last redirect: from tab "from" to "to" (several items arrive as separate calls).
+// Used only on Explorer's UI thread.
 static struct {
     HWND from;
     HWND to;
@@ -1031,250 +1195,317 @@ static HWND GetViewTab(IShellView* sv) {
 }
 
 static bool IsIncomingComCall() {
-    IUnknown* security = nullptr;
-    if (FAILED(CoGetCallContext(kIidServerSecurity, reinterpret_cast<void**>(&security))) || !security) {
-        return false;
-    }
-    security->Release();
-    return true;
+    ComPtr<IServerSecurity> security;
+    return SUCCEEDED(CoGetCallContext(IID_PPV_ARGS(&security))) && security;
 }
 
-// Whether the view focus is on the item child (SelectItem with SVSI_FOCUSED puts it there).
-static bool IsFocusedItem(IShellView* sv, PCUITEMID_CHILD child) {
-    IFolderView* fv = nullptr;
-    if (FAILED(sv->QueryInterface(kIidFolderView, reinterpret_cast<void**>(&fv))) || !fv) {
+// Whether the view shows a file system folder. The item IDs that programs pass to SelectItem are
+// file system IDs; handing them to another kind of folder (This PC, Control Panel, network, archives)
+// makes that folder parse an ID of a foreign format, which some implementations don't survive.
+static bool IsFileSystemView(IShellView* sv) {
+    ComPtr<IFolderView> fv;
+    if (FAILED(sv->QueryInterface(IID_PPV_ARGS(&fv)))) {
         return false;
     }
-    bool equal = false;
-    int index = -1;
+    PIDLIST_ABSOLUTE pidl = GetViewFolder(fv.Get());
+    if (!pidl) {
+        return false;
+    }
+    ComPtr<IShellItem> item;
+    SFGAOF attrs = 0;
+    bool fileSystem = SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) &&
+                      SUCCEEDED(item->GetAttributes(SFGAO_FILESYSTEM, &attrs)) && (attrs & SFGAO_FILESYSTEM);
+    ILFree(pidl);
+    return fileSystem;
+}
+
+// Whether item child is selected in the view. Only for file system views (see IsFileSystemView).
+static bool IsItemSelected(IShellView* sv, PCUITEMID_CHILD child) {
+    ComPtr<IFolderView> fv;
+    ComPtr<IShellFolder> folder;
+    ComPtr<IEnumIDList> items;
+    if (FAILED(sv->QueryInterface(IID_PPV_ARGS(&fv))) || FAILED(fv->GetFolder(IID_PPV_ARGS(&folder))) ||
+        FAILED(fv->Items(SVGIO_SELECTION, IID_PPV_ARGS(&items))) || !items) {
+        return false;
+    }
     PITEMID_CHILD item = nullptr;
-    IShellFolder* folder = nullptr;
-    if (fv->GetFocusedItem(&index) == S_OK && index >= 0 && SUCCEEDED(fv->Item(index, &item)) && item &&
-        SUCCEEDED(fv->GetFolder(kIidShellFolder, reinterpret_cast<void**>(&folder))) && folder) {
+    ULONG fetched = 0;
+    while (items->Next(1, &item, &fetched) == S_OK && item) {
         HRESULT hr = folder->CompareIDs(0, item, child);
-        equal = SUCCEEDED(hr) && HRESULT_CODE(hr) == 0;
-    }
-    if (folder) {
-        folder->Release();
-    }
-    if (item) {
         ILFree(item);
+        item = nullptr;
+        if (SUCCEEDED(hr) && HRESULT_CODE(hr) == 0) {
+            return true;
+        }
     }
-    fv->Release();
-    return equal;
+    return false;
 }
 
 // Active view of the tab; the tab is in the same thread as the caller - a direct call.
-static IShellView* GetTabView(HWND tab) {
+static ComPtr<IShellView> GetTabView(HWND tab) {
     auto* sb = reinterpret_cast<IShellBrowser*>(SendMessageW(tab, kCwmGetIShellBrowser, 0, 0));
-    IShellView* sv = nullptr;
+    ComPtr<IShellView> sv;
     if (sb && FAILED(sb->QueryActiveShellView(&sv))) {
-        sv = nullptr;
+        sv.Reset();
     }
     return sv;
 }
 
-static DWORD WINAPI SwitchTabThread(LPVOID param) {
-    HWND tab = static_cast<HWND>(param);
-    HWND top = GetAncestor(tab, GA_ROOT);
-    bool coInit = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
-
-    Sleep(50);  // let the SelectItem call finish
-    if (IsWindow(tab) && GetActiveTab(top) != tab) {
-        bool ok = SelectTab(top, tab);
-        Wh_Log(L"show-in-folder: switched to tab %p: %d", tab, ok);
-        if (ok && g_activateTarget) {
-            ActivateWindow(top);
-        }
-    }
-
-    if (coInit) {
-        CoUninitialize();
-    }
-    InterlockedExchange(&g_switching, 0);
-    InterlockedDecrement(&g_activeMerges);
-    return 0;
-}
-
-// UI Automation must not be called from the window thread in the middle of a COM call - switch from our own thread.
-static void SwitchToTabLater(HWND tab) {
-    HWND top = GetAncestor(tab, GA_ROOT);
-    if (GetActiveTab(top) == tab || InterlockedCompareExchange(&g_switching, 1, 0) != 0) {
+// Switches to the tab where a program selected a file, and brings its window to the front: when the
+// tab is already active but the window is behind the program, "Show in folder" would otherwise seem
+// to do nothing.
+static void SwitchTab(HWND tab) {
+    if (Wait(50)) {  // let the SelectItem call finish
         return;
     }
-    InterlockedIncrement(&g_activeMerges);
-    HANDLE t = CreateThread(nullptr, 0, SwitchTabThread, tab, 0, nullptr);
-    if (t) {
-        CloseHandle(t);
-    } else {
-        InterlockedDecrement(&g_activeMerges);
+    HWND top = GetAncestor(tab, GA_ROOT);
+    if (!IsWindow(tab)) {
+        return;
+    }
+    bool ok = true;
+    if (GetActiveTab(top) != tab) {
+        ok = SelectTab(top, tab);
+        Wh_Log(L"show-in-folder: switched to tab %p: %d", tab, ok);
+    }
+    if (ok && g_activateTarget && (GetForegroundWindow() != top || IsIconic(top))) {
+        ActivateWindow(top);
+        Wh_Log(L"show-in-folder: window %p brought to the front", top);
+    }
+}
+
+// UI Automation must not be called from the window thread in the middle of a COM call - switch
+// from the worker thread.
+static void SwitchToTabLater(HWND tab) {
+    if (InterlockedCompareExchange(&g_switching, 1, 0) != 0) {
+        return;
+    }
+    if (!PostThreadMessageW(g_workerId, kWorkerSwitchTab, reinterpret_cast<WPARAM>(tab), 0)) {
         InterlockedExchange(&g_switching, 0);
     }
 }
 
 static HRESULT STDMETHODCALLTYPE SelectItem_Hook(IShellView* self, PCUITEMID_CHILD child, SVSIF flags) {
-    if (!SelectItem_Original) {
-        return E_UNEXPECTED;
-    }
     if (!g_activateSelectedTab || g_stop || !child || !(flags & SVSI_SELECT) || !IsIncomingComCall()) {
         return SelectItem_Original(self, child, flags);
     }
     HWND tab = GetViewTab(self);
     HWND top = tab ? GetAncestor(tab, GA_ROOT) : nullptr;
-    if (!top || !IsClass(top, L"CabinetWClass")) {
+    // A cloaked window is a new window being merged: "Show in folder" selects the file there, and
+    // the merge carries the selection over.
+    if (!top || !IsClass(top, L"CabinetWClass") || IsCloaked(top)) {
         return SelectItem_Original(self, child, flags);
     }
 
     // Continuation of an already redirected call (several items being selected).
     if (!(flags & SVSI_DESELECTOTHERS) && g_redirect.from == tab && GetTickCount() - g_redirect.at < kRedirectKeepMs &&
         IsWindow(g_redirect.to)) {
-        if (IShellView* sv = GetTabView(g_redirect.to)) {
-            HRESULT hr = SelectItem_Original(sv, child, flags);
-            sv->Release();
-            return hr;
+        if (ComPtr<IShellView> sv = GetTabView(g_redirect.to)) {
+            return SelectItem_Original(sv.Get(), child, flags);
         }
     }
 
-    HRESULT hr = SelectItem_Original(self, child, flags | SVSI_FOCUSED);
-    if (IsFocusedItem(self, child)) {
+    HRESULT hr = SelectItem_Original(self, child, flags);
+    if (!IsFileSystemView(self)) {
+        return hr;
+    }
+    if (IsItemSelected(self, child)) {
         Wh_Log(L"show-in-folder: item selected in tab %p", tab);
         SwitchToTabLater(tab);
         return hr;
     }
 
-    // Wrong tab: look for a tab of this window that has the item.
+    // Wrong tab: look for the tab of this window that has the item. Only file system tabs are
+    // probed. Probing selects the item without touching the rest of the selection, and is undone
+    // in the tabs that aren't used. An item with the same name can exist in several folders; then
+    // the target is ambiguous and nothing is redirected.
     WindowList tabs;
     GetTabWindows(top, &tabs);
+    HWND match = nullptr;
+    int matches = 0;
     for (int i = 0; i < tabs.count; i++) {
         if (tabs.items[i] == tab) {
             continue;
         }
-        IShellView* sv = GetTabView(tabs.items[i]);
-        if (!sv) {
+        ComPtr<IShellView> sv = GetTabView(tabs.items[i]);
+        if (!sv || !IsFileSystemView(sv.Get())) {
             continue;
         }
-        HRESULT hr2 = SelectItem_Original(sv, child, flags | SVSI_FOCUSED);
-        bool found = IsFocusedItem(sv, child);
-        sv->Release();
+        bool found = IsItemSelected(sv.Get(), child);
+        if (!found) {
+            SelectItem_Original(sv.Get(), child, SVSI_SELECT);
+            found = IsItemSelected(sv.Get(), child);
+            if (found) {
+                SelectItem_Original(sv.Get(), child, SVSI_DESELECT);
+            }
+        }
         if (found) {
-            Wh_Log(L"show-in-folder: wrong tab %p, item found in tab %p", tab, tabs.items[i]);
-            g_redirect = {tab, tabs.items[i], GetTickCount()};
-            SwitchToTabLater(tabs.items[i]);
-            return hr2;
+            matches++;
+            match = tabs.items[i];
         }
     }
+    if (matches != 1) {
+        if (matches > 1) {
+            Wh_Log(L"show-in-folder: item found in %d tabs, not redirecting", matches);
+        }
+        return hr;
+    }
+    ComPtr<IShellView> sv = GetTabView(match);
+    if (!sv) {
+        return hr;
+    }
+    Wh_Log(L"show-in-folder: wrong tab %p, item found in tab %p", tab, match);
+    hr = SelectItem_Original(sv.Get(), child, flags);
+    g_redirect = {tab, match, GetTickCount()};
+    SwitchToTabLater(match);
     return hr;
 }
 
 static bool HookSelectItem() {
-    IShellFolder* desktop = nullptr;
+    ComPtr<IShellFolder> desktop;
     if (FAILED(SHGetDesktopFolder(&desktop)) || !desktop) {
         return false;
     }
-    SFV_CREATE create = {sizeof(create), desktop, nullptr, nullptr};
-    IShellView* view = nullptr;
+    SFV_CREATE create = {sizeof(create), desktop.Get(), nullptr, nullptr};
+    ComPtr<IShellView> view;
     HRESULT hr = SHCreateShellFolderView(&create, &view);
-    desktop->Release();
     if (FAILED(hr) || !view) {
         Wh_Log(L"SHCreateShellFolderView failed: 0x%08X", static_cast<unsigned>(hr));
         return false;
     }
-    void** vtable = *reinterpret_cast<void***>(view);
-    bool ok;
-#ifdef WH_TEST_ALL_PROCESSES
-    // Test bench without Windhawk: swap the vtable slot (shared by all Explorer views), removed in Uninit.
-    ok = TestPatchSlot(&vtable[kSelectItemSlot], reinterpret_cast<void*>(SelectItem_Hook),
-                       reinterpret_cast<void**>(&SelectItem_Original));
-#else
-    ok = Wh_SetFunctionHook(vtable[kSelectItemSlot], reinterpret_cast<void*>(SelectItem_Hook),
-                            reinterpret_cast<void**>(&SelectItem_Original));
-#endif
-    view->Release();
-    return ok;
+    // The vtable is shared by all Explorer views.
+    void** vtable = *reinterpret_cast<void***>(view.Get());
+    return WindhawkUtils::SetFunctionHook(reinterpret_cast<SelectItem_t*>(vtable[kSelectItemSlot]), SelectItem_Hook,
+                                          &SelectItem_Original);
 }
 
 // ---------------------------------------------------------------------------
+// New Explorer windows.
 
-// New Explorer window: decide whether to merge it, and hide it. atCreate - caught at creation
-// (before the first paint, cloaked); otherwise on show (hidden, the window managed to flash).
-static void HandleNewWindow(HWND hwnd, bool atCreate) {
-    if (GetAncestor(hwnd, GA_ROOT) != hwnd || !IsClass(hwnd, L"CabinetWClass")) {
+// Called on the thread that created the window, right after creation - before the first paint.
+static void HandleNewWindow(HWND hwnd) {
+    if (g_stop || GetAncestor(hwnd, GA_ROOT) != hwnd || !Claim(hwnd)) {
         return;
     }
-    if (!Claim(hwnd)) {
-        return;
-    }
-    if ((g_ignoreMouseDown && (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) || !FindTarget(hwnd)) {
+    if (g_shiftBypass && (GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
+        Wh_Log(L"new Explorer window %p: Shift held, leaving it as a window", hwnd);
         return;  // stays claimed: a regular window, leave it alone
     }
-
-    Wh_Log(L"new Explorer window %p, merging (caught at %s)", hwnd, atCreate ? L"create" : L"show");
-    if (atCreate) {
+    if (!FindTarget(hwnd)) {
+        return;  // stays claimed: a regular window, leave it alone
+    }
+    bool mouseDown = g_ignoreMouseDown && IsPrimaryButtonDown();
+    Wh_Log(L"new Explorer window %p, merging%s", hwnd, mouseDown ? L" (mouse button held)" : L"");
+    TabSnapshot* snapshot = TakeTabSnapshot(hwnd, mouseDown);
+    if (!mouseDown) {
         CloakWindow(hwnd, true);
-    } else {
-        HideWindowAsync(hwnd);
     }
-    InterlockedIncrement(&g_activeMerges);
-    HANDLE t = CreateThread(nullptr, 0, MergeThread, hwnd, 0, nullptr);
-    if (t) {
-        CloseHandle(t);
-    } else {
-        InterlockedDecrement(&g_activeMerges);
-        ShowWindowBack(hwnd);
+    if (!PostThreadMessageW(g_workerId, kWorkerMerge, reinterpret_cast<WPARAM>(hwnd),
+                            reinterpret_cast<LPARAM>(snapshot))) {
+        delete snapshot;
+        if (!mouseDown) {
+            CloakWindow(hwnd, false);
+        }
     }
 }
 
-// Window creation: synchronous, on the thread that creates it - before the first paint.
-static void CALLBACK CreateEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
-    if (hwnd && idObject == OBJID_WINDOW && idChild == CHILDID_SELF && !g_stop) {
-        HandleNewWindow(hwnd, true);
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+static CreateWindowExW_t CreateWindowExW_Original;
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+                                        int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+                                        HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (hwnd && !(dwStyle & WS_CHILD) &&
+        (IS_INTRESOURCE(lpClassName) || (lpClassName && wcscmp(lpClassName, L"CabinetWClass") == 0)) &&
+        IsClass(hwnd, L"CabinetWClass")) {
+        HandleNewWindow(hwnd);
     }
+    return hwnd;
 }
 
-// Window show: a fallback if creation was not caught.
-static void CALLBACK ShowEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
-    if (hwnd && idObject == OBJID_WINDOW && idChild == CHILDID_SELF && !g_stop) {
-        HandleNewWindow(hwnd, false);
-    }
-}
+// ---------------------------------------------------------------------------
+// Worker thread: merges and tab switches, one at a time.
 
-static DWORD WINAPI HookThread(LPVOID) {
+static DWORD WINAPI WorkerThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the message queue
+    SetEvent(g_workerReady);
+    bool coInit = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
 
-    HWINEVENTHOOK createHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_CREATE, g_module, CreateEventProc,
-                                               GetCurrentProcessId(), 0, WINEVENT_INCONTEXT);
-    HWINEVENTHOOK showHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, ShowEventProc,
-                                             GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNTHREAD);
-    if (!createHook || !showHook) {
-        Wh_Log(L"SetWinEventHook failed: create %p show %p, error %lu", createHook, showHook, GetLastError());
-    }
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        if (msg.message == kWorkerMerge) {
+            HWND hwnd = reinterpret_cast<HWND>(msg.wParam);
+            auto* snapshot = reinterpret_cast<TabSnapshot*>(msg.lParam);
+            if (g_stop) {
+                ShowWindowBack(hwnd);
+            } else {
+                MergeNewWindow(hwnd, *snapshot);
+            }
+            delete snapshot;
+        } else if (msg.message == kWorkerSwitchTab) {
+            if (!g_stop) {
+                SwitchTab(reinterpret_cast<HWND>(msg.wParam));
+            }
+            InterlockedExchange(&g_switching, 0);
+        }
     }
-    if (createHook) {
-        UnhookWinEvent(createHook);
+    // Windows still waiting for a merge are restored.
+    while (PeekMessageW(&msg, nullptr, kWorkerMerge, kWorkerMerge, PM_REMOVE)) {
+        ShowWindowBack(reinterpret_cast<HWND>(msg.wParam));
+        delete reinterpret_cast<TabSnapshot*>(msg.lParam);
     }
-    if (showHook) {
-        UnhookWinEvent(showHook);
+
+    ReleaseTabHooks();
+    if (g_uia) {
+        g_uia->Release();
+        g_uia = nullptr;
+    }
+    if (coInit) {
+        CoUninitialize();
     }
     return 0;
 }
 
+// Explorer tabs exist on Windows 11 22H2 (build 22621) and later.
+static bool IsSupportedBuild() {
+    using RtlGetVersion_t = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion")));
+    RTL_OSVERSIONINFOW vi = {};
+    vi.dwOSVersionInfoSize = sizeof(vi);
+    if (!rtlGetVersion || rtlGetVersion(&vi) != 0) {
+        return true;  // unknown - don't block
+    }
+    return vi.dwBuildNumber >= 22621;
+}
+
 BOOL Wh_ModInit() {
+    if (!IsSupportedBuild()) {
+        Wh_Log(L"Windows build without Explorer tabs, the mod is not loaded");
+        return FALSE;
+    }
     LoadSettings();
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&TabHookProc), &g_module);
+
+    g_tabCommandMsg = RegisterWindowMessageW(L"Windhawk_" WH_MOD_ID L"_TabCommand");
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_workerReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_tabCommandMsg || !g_stopEvent || !g_workerReady) {
+        return FALSE;
+    }
+    g_stop = 0;
+    g_worker = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, &g_workerId);
+    if (!g_worker) {
+        return FALSE;
+    }
+    // After this PostThreadMessage to the worker can't fail for lack of a message queue.
+    WaitForSingleObject(g_workerReady, INFINITE);
+
     if (!HookSelectItem()) {
         Wh_Log(L"IShellView::SelectItem not hooked; show-in-folder tab switching disabled");
     }
-    InitializeCriticalSection(&g_cs);
-    InitializeCriticalSection(&g_claimLock);
-    g_tabDone = CreateEventW(nullptr, TRUE, FALSE, kTabDoneEvent);
-    g_stop = 0;
-    g_hookThread = CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_hookThreadId);
-    return g_hookThread != nullptr;
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
+    return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
@@ -1282,27 +1513,23 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    g_stop = 1;
-    if (g_hookThread) {
-        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 3000);
-        CloseHandle(g_hookThread);
-        g_hookThread = nullptr;
+    // Windhawk has already removed the function hooks, so no new work can arrive.
+    InterlockedExchange(&g_stop, 1);
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
     }
-    for (int i = 0; i < 100 && g_activeMerges > 0; i++) {
-        Sleep(50);
+    if (g_worker) {
+        PostThreadMessageW(g_workerId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_worker, INFINITE);  // releases its tab hooks and IUIAutomation before exiting
+        CloseHandle(g_worker);
+        g_worker = nullptr;
     }
-    DeleteCriticalSection(&g_cs);
-    DeleteCriticalSection(&g_claimLock);
-    if (g_tabDone) {
-        CloseHandle(g_tabDone);
-        g_tabDone = nullptr;
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
     }
-    if (g_uia) {
-        g_uia->Release();
-        g_uia = nullptr;
+    if (g_workerReady) {
+        CloseHandle(g_workerReady);
+        g_workerReady = nullptr;
     }
-#ifdef WH_TEST_ALL_PROCESSES
-    TestUnpatchSlot();
-#endif
 }
