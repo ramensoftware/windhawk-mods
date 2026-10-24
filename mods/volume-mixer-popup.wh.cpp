@@ -9,7 +9,7 @@
 // @name:ru-RU       Всплывающий микшер громкости Pro
 // @description     High-performance, ultra-lightweight per-app volume mixer and audio management suite for games, streamers, and audiophiles.
 // @version         2.6.1
-// @author          Mik
+// @author          neMik
 // @github          https://github.com/mykolazozul
 // @include         explorer.exe
 // @architecture    x86-64
@@ -83,8 +83,8 @@ Leave a hotkey empty to disable it.
 - Press any key or click outside to close the mixer.
 
 ## 🌐 Language
-The mixer, menus and OSD use **Language → Mod interface language** (automatic, English, Українська, Polski,
-Deutsch, Français, Español, Русский). The settings page is translated into the same languages and follows
+The mixer, menus and OSD use **Language → Mod interface language** (automatic, English, Ukrainian, Polish,
+German, French, Spanish, Russian). The settings page is translated into the same languages and follows
 the language of Windhawk itself (**Windhawk → Settings → Language**); other languages show English.
 
 ## ⚠️ Notes
@@ -3269,24 +3269,41 @@ void ToggleMute(Item& it) {
     SetItemMute(it, !it.mute);
 }
 
+// VU level with analog meter ballistics: the shown level follows the raw peak
+// exponentially, rising over ~50 ms and falling over ~300 ms. The step depends
+// on the real time between frames, not on the timer rate, so it stays smooth
+// when frames arrive late.
 bool UpdatePeakValues() {
+    static LARGE_INTEGER s_freq{};
+    static LARGE_INTEGER s_last{};
+    if (!s_freq.QuadPart) QueryPerformanceFrequency(&s_freq);
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    float dt = 0.016f;
+    if (s_last.QuadPart && s_freq.QuadPart) {
+        dt = (float)(now.QuadPart - s_last.QuadPart) / (float)s_freq.QuadPart;
+    }
+    s_last = now;
+    dt = std::clamp(dt, 0.001f, 0.1f);
+    const float attack = 1.0f - std::exp(-dt / 0.050f);
+    const float release = 1.0f - std::exp(-dt / 0.300f);
+
     bool changed = false;
     for (Item& it : g_items) {
         if (it.kind == 0) continue;
-        float peak = 0.0f;
+        float target = 0.0f;
         for (IAudioMeterInformation* m : it.meters) {
             float p = 0.0f;
-            if (SUCCEEDED(m->GetPeakValue(&p))) {
-                if (p > peak) peak = p;
-            }
+            if (SUCCEEDED(m->GetPeakValue(&p)) && p > target) target = p;
         }
-        // Fast attack, slow decay
-        float next = peak > it.peak ? it.peak * 0.4f + peak * 0.6f : std::max(peak, it.peak - 0.035f);
-        if (next < 0.002f) next = 0.0f;
-        if (std::abs(next - it.peak) > 0.003f) {
-            it.peak = next;
-            changed = true;
-        }
+        const float k = target > it.peak ? attack : release;
+        const float prev = it.peak;
+        float next = prev + (target - prev) * k;
+        if (next < 0.002f && target < 0.002f) next = 0.0f;
+        // Always advance, so tiny levels keep decaying to zero; repaint only
+        // for a visible change or when the meter goes silent.
+        it.peak = next;
+        if (std::abs(next - prev) > 0.0005f || (next == 0.0f && prev != 0.0f)) changed = true;
     }
     return changed;
 }
