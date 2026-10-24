@@ -1641,6 +1641,10 @@ static void LoadRules() {
 // mod.
 static bool g_diagnosticsLog = false;
 
+// How many times the private folder has been tried this session. Owned here rather
+// than inside UserDataFolder so that turning the journal back on can reset it.
+static int g_folderAttempts = 0;
+
 // Journalled at startup so a stale build is visible immediately: a journal that
 // looks complete but was written by the previous copy of the mod is the easiest
 // way to waste an hour.
@@ -1648,10 +1652,18 @@ static bool g_diagnosticsLog = false;
 // Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
 // numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
 // of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r14-2026-10-21";
+static constexpr PCWSTR kJournalBuild = L"r15-2026-10-21";
 
 static void RefreshDiagnosticsSetting() {
+    const bool was = g_diagnosticsLog;
     g_diagnosticsLog = Wh_GetIntSetting(L"diagnosticsLog") != 0;
+    // Turning the journal on is a fresh instruction, and it gets fresh attempts.
+    // Without this the three tries were spent by the first three journal lines,
+    // milliseconds apart, so a folder that was briefly refused was gone for the
+    // session no matter what the user did afterwards.
+    if (!was && g_diagnosticsLog) {
+        g_folderAttempts = 0;
+    }
 }
 
 static std::string WideToUtf8(const std::wstring& text) {
@@ -1923,12 +1935,11 @@ static constexpr int kMaxFolderAttempts = 3;
 
 static const std::wstring& UserDataFolder() {
     static std::wstring cached;
-    static int attempts = 0;
 
-    if (!cached.empty() || attempts >= kMaxFolderAttempts) {
+    if (!cached.empty() || g_folderAttempts >= kMaxFolderAttempts) {
         return cached;
     }
-    attempts++;
+    g_folderAttempts++;
 
     const UserTokenSid& sid = CurrentUserTokenSid();
     if (sid.text.empty()) {
@@ -3543,6 +3554,12 @@ static void ApplySettingsOnEventThread(bool initial) {
     // without them.
     RefreshMonitorViews();
 
+    // A pending retry belongs to the rule as it was before this save. It is
+    // cleared here, before any branch below can return: a save that deletes the
+    // last rule returns early, and a retry left over from that rule would still
+    // put the window back at its old target up to 800 ms later.
+    g_pendingApplies.clear();
+
     LoadRules();
     JournalRulesLoaded();
     InstallHooks();
@@ -3574,12 +3591,6 @@ static void ApplySettingsOnEventThread(bool initial) {
         AppendDiagnosticsJournal(L"REAPPLY-PASS windows=0 applied=0 skipped=initial");
         return;
     }
-
-    // A pending retry belongs to the rule as it was before this save. Left in
-    // place, the settle poll would put the window back at the old target up to
-    // 800 ms after the save moved it, and then call that target reached: the
-    // window ends up where the previous rule wanted it, with no line saying why.
-    g_pendingApplies.clear();
 
     RunReapplyPass();
 }
@@ -3642,10 +3653,12 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             return 0;
 
         case WM_CLOSE:
-            // Destroying the window alone leaves the loop with nothing to
-            // dispatch and nothing to end it; the quit is what ends the thread.
-            DestroyWindow(hwnd);
-            PostQuitMessage(0);
+            // Ignored on purpose. The message window is internal, but it is a
+            // top-level window, so a "close all windows" tool can send this. Letting
+            // it through would end the event thread, and with it the hooks, the
+            // reloads and the release of everything this mod did to other windows;
+            // the mod would be off for the rest of the session with no way back.
+            // Only kMsgShutdown tears this window down.
             return 0;
     }
 
