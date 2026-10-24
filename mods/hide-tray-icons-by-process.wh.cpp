@@ -24,7 +24,7 @@ This mod hides icons of processes from a list given in settings. The icon gets h
 /*
 - processes:
   - example.exe
-  $name: Processes whose tray icons are hidden
+  $name: Processes whose tray icons to be hidden
   $name:ru-RU: Процессы, чьи значки в трее нужно скрыть
   $description: One entry per process - file name (app.exe, case-insensitive) or full path.
   $description:ru-RU: По одной записи на процесс — имя файла (app.exe, без учёта регистра) или полный путь.
@@ -32,10 +32,8 @@ This mod hides icons of processes from a list given in settings. The icon gets h
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
- 
 #include <windows.h>
 #include <commctrl.h>
- 
 #include <algorithm>
 #include <atomic>
 #include <string>
@@ -71,10 +69,9 @@ static void LoadSettings() {
     std::vector<ProcessEntry> entries;
  
     for (int i = 0; i < 1000; i++) {
-        PCWSTR raw = Wh_GetStringSetting(L"processes[%d]", i);
-        if (!raw) break;
-        std::wstring value = Trim(raw);
-        Wh_FreeStringSetting(raw);
+        WindhawkUtils::StringSetting raw =
+            WindhawkUtils::StringSetting::make(L"processes[%d]", i);
+        std::wstring value = Trim(raw.get());
  
         if (value.empty()) break;  // конец списка
  
