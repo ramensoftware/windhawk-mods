@@ -8,7 +8,7 @@
 // @author          cheliks1123
 // @github          https://github.com/cheliks1123
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -loleaut32 -ldwmapi -lcomctl32 -lwininet
+// @compilerOptions -lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -loleaut32 -ldwmapi -lcomctl32 -ladvapi32 -lwininet
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,44 +24,49 @@ one-click access to your favourite programs, files and folders. Think of it as a
 tiny launcher bar with "+" slots: drop a shortcut onto it, or click "+" and pick a
 program, and it stays there until you remove it.
 
-## Features
+> ⚠️ **Website icons, please note:** not every website provides an icon, and the ones that do are not always in good quality. Many sites only offer a tiny 16×16 or 32×32 icon that can look blurry on a big dock, and some offer none at all. In that case a gray globe 🌐 stays in its place. You can always pick your own image with "Change icon" 🖼️.
 
-- **Add programs your way**
+## ✨ Features
+
+- ➕ **Add programs your way**
   - Drag and drop shortcuts, executables, files or folders onto the dock.
   - Click the **+** slot to choose a program in a file dialog (shortcuts are kept as shortcuts, so their icons stay correct).
   - Right-click the **+** slot to choose a program, add a website, or paste a path or link from the clipboard (quotes and `%ENVIRONMENT%` variables are handled).
-- **Websites as slots** — right-click **+** and pick "Add a website..." (or paste a link with "Paste a path or link"). A click opens the address in your default browser. The site icon is downloaded in the background and cached; until it arrives, or if it cannot be downloaded, the icon of your default browser is shown. You can always pick your own image with "Change icon".
-- **One-click launch** — click an icon to start it. The working directory is set automatically.
-- **Right-click menu** on any icon: Open, Run as administrator, Show in folder, Change icon / Reset icon, Move up / Move down, Remove. For websites: Open, Change icon / Reset icon, Refresh site icon, Move up / Move down, Remove.
-- **Dock size** — thickness of the dock, the space around every icon and the inner padding of the dock are set separately from the icon size.
-- **Custom icons** — pick any image (PNG, JPG, BMP, GIF or ICO) for an item from the right-click menu. The choice is remembered, and "Reset icon" brings back the original.
-- **Persistent list** — your slots are saved by Windhawk and restored after a restart.
-- **Auto-hide** — the dock collapses into a thin strip and smoothly slides out when you move the mouse to the screen edge.
-- **Smooth animations** — slide-in/out, hover highlight fade, icon zoom on hover, appear/disappear and re-ordering animations. Frames are synchronized with your monitor's refresh rate, so it stays smooth on 60/144/240 Hz displays.
-- **High-quality rendering** — anti-aliased rounded corners and high-quality icon scaling (GDI+), per-pixel transparent window, DPI-aware sizes.
-- **Fullscreen aware** — optionally hides itself while a fullscreen app or game is active.
-- **Fully themeable** — background, hover, accent (plus sign and handle) and border colors are configurable (`#RRGGBB`).
-- **Panel opacity and glass style** — make the panel background translucent (icons stay fully opaque) and switch on a frosted-glass look with a soft highlight and a light border.
-- **Appear animation** — the dock slides in and fades in when it starts, and the icons pop in one after another when the dock slides out.
-- **Seven animation styles** — Slide and pop (default), Jelly (the dock overshoots and wobbles like jelly while the icons lag behind and squash), Ripple (a wave runs along the dock and lifts the icons as it passes), Fade (calm, no movement), Genie (the dock flows out of a point at the screen edge through a smooth funnel, like the macOS window effect), Oval (a small oval pops out of the edge, then unfolds into the dock) and Droplet (a drop leaves the edge on a thin neck, the neck snaps and the drop opens into the dock). Choose one in the settings.
-- **Icon magnification** — an optional macOS-style effect, independent of the animation style: icons grow smoothly around the cursor and the effect glides along the dock as you move the mouse.
-- **Up to four panels** — turn on any combination of the right, left, top and bottom screen edges. Every panel keeps its own list of programs (for example one for apps and one for games), while appearance and animation settings are shared. Adjustable icon size, tooltips with the item name.
-- Does not use the taskbar, does not hook any functions and does not modify system files. Disabling the mod removes the dock completely.
+- 🌐 **Websites as slots** — right-click any icon and pick "Add to the dock", then "Add a website..." (or paste a link with "Paste a path or link"). A click opens the address in your default browser. Every site gets a gray globe icon. The optional "Download site icons" setting (off by default) lets the mod request the site's own /favicon.ico in the background and use it instead. A spinner is shown while the icon is downloading, and the globe stays if it cannot be downloaded. You can also pick your own image with "Change icon".
+- 🚀 **One-click launch** — click an icon to start it. The working directory is set automatically.
+- 🖱️ **Right-click menu** on any icon: Open, Run as administrator, Show in folder, Change icon / Reset icon, Move up / Move down, Add to the dock (choose a program, add a website, paste a path or link), Remove. For websites: Open, Change icon / Reset icon, Refresh site icon, Move up / Move down, Add to the dock, Remove.
+- ↕️ **Reorder by dragging** — press and hold an icon, drag it along the dock and drop it where you want. The other icons move aside smoothly. You can also drop it onto another panel: while you drag, all panels slide out, so you can move an icon between panels. "Move up / Move down" in the menu still works too.
+- 📐 **Dock size** — thickness of the dock, the space around every icon and the inner padding of the dock are set separately from the icon size.
+- 🎨 **Custom icons** — pick any image (PNG, JPG, BMP, GIF or ICO) for an item from the right-click menu. The choice is remembered, and "Reset icon" brings back the original.
+- 💾 **Persistent list** — your slots are saved by Windhawk and restored after a restart.
+- 🙈 **Auto-hide** — the dock collapses into a thin strip and smoothly slides out when you move the mouse to the screen edge.
+- 🎬 **Smooth animations** — slide-in/out, hover highlight fade, icon zoom on hover, a small press effect when you click an icon, appear/disappear and re-ordering animations. Frames are synchronized with your monitor's refresh rate, so it stays smooth on 60/144/240 Hz displays. You can also pick a fixed rate (120 to 360 Hz) in the settings.
+- 💎 **High-quality rendering** — anti-aliased rounded corners and high-quality icon scaling (GDI+), per-pixel transparent window, DPI-aware sizes.
+- 🎮 **Fullscreen aware** — optionally hides itself while a fullscreen app or game is active.
+- 🌈 **Fully themeable** — background, hover, accent (plus sign and handle) and border colors are configurable (`#RRGGBB`).
+- 🔮 **Panel opacity and glass style** — make the panel background translucent (icons stay fully opaque) and switch on a frosted-glass look with a soft highlight and a light border.
+- 🌗 **Follows the Windows theme** — optionally takes the light or dark colors and the accent color from Windows, and updates when you switch the theme.
+- 🔵 **Running indicator** — a small dot on the screen-edge side of an icon shows that its program is running.
+- ✨ **Appear animation** — the dock slides in and fades in when it starts, and the icons pop in one after another when the dock slides out.
+- 🎭 **Seven animation styles** — Slide and pop (default), Jelly (the dock overshoots and wobbles like jelly while the icons lag behind and squash), Ripple (a wave runs along the dock and lifts the icons as it passes), Fade (calm, no movement), Genie (the dock flows out of a point at the screen edge through a smooth funnel, like the macOS window effect), Oval (a small oval pops out of the edge, then unfolds into the dock) and Droplet (a drop leaves the edge on a thin neck, the neck snaps and the drop opens into the dock). Choose one in the settings.
+- 🔎 **Icon magnification** — an optional macOS-style effect, independent of the animation style: icons grow smoothly around the cursor and the effect glides along the dock as you move the mouse.
+- 🗂️ **Up to four panels** — turn on any combination of the right, left, top and bottom screen edges. Every panel keeps its own list of programs (for example one for apps and one for games), while appearance and animation settings are shared. Adjustable icon size, tooltips with the item name.
+- 🛡️ Does not use the taskbar, does not hook any functions and does not modify system files. Disabling the mod removes the dock completely.
 
-## How it differs from existing mods
+## 🆚 How it differs from existing mods
 
 - **Quick Launch & Media Panel** is a collapsible panel at the top of the screen with shortcut pages and media controls. This mod is a minimal dock on any screen edge (left, right, top or bottom, in any combination): a row or column of icons and a "+" slot, with no pages and no media controls.
 - **Left Taskbar Quick Pin Dock** is attached to the taskbar next to the Start button. This mod floats on the screen edge independently of the taskbar.
 - What is specific to this mod: auto-hide into a thin strip that smoothly slides out on hover, hide-in-fullscreen, per-item "Run as administrator" and "Show in folder", and configurable colors.
 
-## How to use
+## 📖 How to use
 
 1. Enable the mod. A dock appears at the right edge of the primary monitor (vertically centered). Turn on more edges in the settings to get more panels.
 2. Drag a shortcut/program/folder onto it, or click **+**.
-3. Click an icon to launch. Right-click an icon for more actions.
+3. Click an icon to launch. Right-click an icon for more actions. Hold an icon and drag it to change the order.
 4. With auto-hide enabled, move the cursor to the screen edge to reveal the dock.
 
-## Settings
+## ⚙️ Settings
 
 | Setting | Description |
 | --- | --- |
@@ -70,27 +75,31 @@ program, and it stays there until you remove it.
 | Panel thickness | Thickness of the dock in pixels at 100% DPI (0–300). 0 means automatic: just enough for the icon plus the paddings. A larger value makes the dock thicker and keeps the icons centered. A value that is too small is raised to the automatic size. |
 | Space around each icon | Padding around every icon in pixels at 100% DPI (0–40). Sets the distance between icons and the size of the hover highlight. Default 8. |
 | Panel inner padding | Padding between the dock border and its icons in pixels at 100% DPI (0–40). Default 4. |
-| Download site icons | Downloads the icon of a website slot in the background. The site address is requested from the Google favicon service (public domains only) and then directly from the site itself (`/favicon.ico`). Icons are cached in `%LOCALAPPDATA%\QuickLaunchDock\favicons`. When off, only icons that are already cached are used and the default browser icon is shown otherwise. |
+| Corner radius | Roundness of the panel corners in pixels at 100% DPI (0-40). 0 makes the panel square. Default 12. |
+| Download site icons | Off by default. When on, the mod requests /favicon.ico from the website of every website slot, in the background, and caches the file in the mod's storage folder. Only the sites you added are contacted and nothing is sent to third parties. If a site has no usable icon, it is not asked again for a week. If it just does not answer, the mod tries once more right away and again on the next start. |
 | Auto-hide | Collapse to a thin strip until the cursor touches the edge. |
 | Hide when a fullscreen app is active | Hides the dock above fullscreen windows/games. |
 | Animations | Turns all animations on or off. |
 | Animation style | How the dock appears and slides out of its strip: Slide and pop (default), Jelly, Ripple, Fade, Genie, Oval or Droplet. Jelly and Ripple play when the dock expands; it folds back with the plain slide. |
 | Animation speed | Speed of all animations in percent. 100 is the original speed; the default is 25, which makes the differences between styles easy to see. |
-| Show the "+" slot | Turn off to hide the "+" slot. Programs can still be added by dragging them onto the dock or by right-clicking an empty part of the dock. |
+| Animation refresh rate | Auto (default) draws one frame per monitor refresh. Pick 120, 144, 180, 240 or 360 Hz to draw at a fixed rate, for example on a laptop whose refresh rate changes or when animations look choppy. Higher values use more CPU and battery. |
+| Show the "+" slot | Turn off to hide the "+" slot. Programs can still be added by dragging them onto the dock or from the "Add to the dock" item of the right-click menu of any icon. |
+| Show a dot on running programs | Shows a small dot on the screen edge side of an icon whose program is running. Programs are matched by the file path of the program, so programs started through a launcher or an updater may not be detected. The process list is checked every few seconds while the dock is open. On by default. |
 | Take the icon from the shortcut's target | Shows the icon of the program a shortcut points to instead of the icon stored in the shortcut. An icon chosen with "Change icon" always takes priority. |
 | Icon magnification | macOS-style magnification of the icons around the cursor. Works with any animation style. Off by default. |
 | Panel opacity | Opacity of the panel background, 10-100 percent. Icons always stay fully opaque. |
 | Glass style | Frosted-glass look: tinted translucent panel, soft highlight and a light border. Works best with a lower panel opacity. This is a visual style, it does not blur what is behind the dock. |
 | Background / Hover / Accent / Border color | Colors in `#RRGGBB` format. Invalid values fall back to the defaults. |
 
-## Notes and limitations
+## 📝 Notes and limitations
 
 - The mod runs as a standalone tool in its own dedicated process (it is not injected into Explorer and hooks nothing), so a problem in the mod can never affect the Windows shell, and only one instance is ever running.
 - Drag and drop from windows running **as administrator** is blocked by Windows (UIPI). Use the **+** button in that case.
 - The dock is placed on the **primary** monitor. With auto-hide and another monitor attached on the same side, the cursor may pass the edge too quickly to reveal the dock — disable auto-hide there.
 - The number of slots is limited by the length of the screen edge, and room is left at the corners so that panels on neighbouring edges do not overlap.
 - Slots are stored as file paths or web addresses (`http://` and `https://`). If a file is moved or deleted, its icon becomes generic until you remove it.
-- Site icons are always downloaded from the network, and only when "Download site icons" is on. Only the host name of the site is sent to the Google favicon service, and host names that look private (no dot, IP addresses, `.local`, `.lan`, `.internal` and similar) are never sent to it.
+- The lists are stored separately for every Windows account. The first account that starts this version takes over the list saved by earlier versions.
+- The mod makes no network requests unless "Download site icons" is on. In that case only the sites you added are contacted, one request each, and the icons are kept in the mod's storage folder, which Windhawk removes together with the mod.
 - The list saved by earlier versions stays on the right-edge panel. Turning a panel off keeps its list, so it comes back when you turn the panel on again.
 
 ---
@@ -101,44 +110,49 @@ program, and it stays there until you remove it.
 программ, файлов и папок. По сути — мини-лаунчер с «плюсиками»: перетащи на него
 ярлык или нажми «+» и выбери программу — она останется на панели, пока ты сам её не уберёшь.
 
-## Возможности
+> ⚠️ **Про иконки сайтов:** не все сайты отдают иконку, а те, что отдают, не всегда в хорошем качестве. У многих сайтов есть только крошечная иконка 16×16 или 32×32, которая на большой панели выглядит размыто, а у некоторых её нет совсем. Тогда на месте иконки остаётся серый глобус 🌐. Свою картинку всегда можно выбрать через «Сменить иконку» 🖼️.
 
-- **Добавление как удобно**
+## ✨ Возможности
+
+- ➕ **Добавление как удобно**
   - Перетаскивание ярлыков, exe-файлов, файлов и папок прямо на панель.
   - Клик по **+** — выбор программы через диалог (ярлыки сохраняются как ярлыки, поэтому иконки остаются правильными).
   - ПКМ по **+** — выбрать программу, добавить сайт или вставить путь или ссылку из буфера обмена (кавычки и переменные вида `%APPDATA%` обрабатываются).
-- **Сайты в слотах** — ПКМ по **+** → «Добавить сайт…» (или вставь ссылку через «Вставить путь или ссылку»). Клик открывает адрес в браузере по умолчанию. Иконка сайта скачивается в фоне и кэшируется; пока её нет или если скачать не удалось, показывается иконка браузера по умолчанию. Свою картинку всегда можно выбрать через «Сменить иконку».
-- **Запуск в один клик** — рабочая папка выставляется автоматически.
-- **Контекстное меню** на любой иконке: Открыть, Запуск от имени администратора, Показать в папке, Сменить иконку / Сбросить иконку, Переместить выше / ниже, Удалить. Для сайтов: Открыть, Сменить иконку / Сбросить иконку, Обновить иконку сайта, Переместить выше / ниже, Удалить.
-- **Размер панели** — толщина панели, отступ вокруг каждой иконки и внутренний отступ панели настраиваются отдельно от размера иконок.
-- **Свои иконки** — для любого элемента через меню можно выбрать картинку (PNG, JPG, BMP, GIF или ICO). Выбор запоминается, а «Сбросить иконку» возвращает исходную.
-- **Список сохраняется** — слоты хранятся в Windhawk и восстанавливаются после перезагрузки.
-- **Автоскрытие** — в покое панель сворачивается в тонкую полоску и плавно выезжает, когда подводишь курсор к краю экрана.
-- **Плавные анимации** — выезд и сворачивание, плавная подсветка, увеличение иконки при наведении, анимации появления, удаления и перестановки. Кадры синхронизированы с частотой монитора, поэтому всё плавно на 60/144/240 Гц.
-- **Качественная отрисовка** — сглаженные скруглённые углы и качественное масштабирование иконок (GDI+), окно с попиксельной прозрачностью, учёт DPI.
-- **Полноэкранные приложения** — при желании панель сама прячется, пока открыта полноэкранная программа или игра.
-- **Настраиваемые цвета** — фон, подсветка, акцент (плюс и полоска) и рамка задаются в формате `#RRGGBB`.
-- **Прозрачность панели и стеклянный стиль** — фон панели можно сделать полупрозрачным (иконки остаются полностью непрозрачными) и включить вид матового стекла с мягким бликом и светлой рамкой.
-- **Анимация появления** — при запуске панель выезжает с плавным проявлением, а при выезде из полоски иконки по очереди «выпрыгивают».
-- **Семь стилей анимации** — Slide and pop (по умолчанию), Jelly (панель «перелетает» и дрожит как желе, а иконки запаздывают и сплющиваются), Ripple (по панели пробегает волна и приподнимает иконки), Fade (спокойное проявление без движения), Genie (панель вытекает из точки у края экрана плавной воронкой, как эффект окон в macOS), Oval (у края выскакивает небольшой овал, который затем раскрывается в панель) и Droplet (капля отрывается от края на тонкой «ножке», ножка рвётся, и капля раскрывается в панель). Выбирается в настройках.
-- **Увеличение иконок при наведении** — необязательный эффект как в macOS, не зависящий от стиля анимации: иконки плавно увеличиваются вокруг курсора, и эффект скользит вдоль панели за мышью.
-- **До четырёх панелей** — включай любое сочетание правого, левого, верхнего и нижнего краёв экрана. У каждой панели свой список программ (например, одна для приложений, другая для игр), а внешний вид и анимации общие. Настраиваемый размер иконок, подсказки с названием элемента.
-- Не использует панель задач, не перехватывает функции и не меняет системные файлы. При отключении мода панель полностью исчезает.
+- 🌐 **Сайты в слотах** — ПКМ по любой иконке → «Добавить на панель» → «Добавить сайт…» (или вставь ссылку через «Вставить путь или ссылку»). Клик открывает адрес в браузере по умолчанию. Каждый сайт получает иконку в виде серого глобуса. Необязательная настройка «Скачивать иконки сайтов» (по умолчанию выключена) позволяет моду в фоне запросить /favicon.ico самого сайта и использовать его вместо глобуса. Пока иконка скачивается, показывается крутящийся кружок, а если скачать не удалось, остаётся глобус. Свою картинку можно выбрать через «Сменить иконку».
+- 🚀 **Запуск в один клик** — рабочая папка выставляется автоматически.
+- 🖱️ **Контекстное меню** на любой иконке: Открыть, Запуск от имени администратора, Показать в папке, Сменить иконку / Сбросить иконку, Переместить выше / ниже, Добавить на панель (выбрать программу, добавить сайт, вставить путь или ссылку), Удалить. Для сайтов: Открыть, Сменить иконку / Сбросить иконку, Обновить иконку сайта, Переместить выше / ниже, Добавить на панель, Удалить.
+- ↕️ **Перестановка перетаскиванием** — зажми иконку, перетащи вдоль панели и отпусти там, где нужно. Остальные иконки плавно раздвигаются. Можно отпустить и на другой панели: пока тащишь, все панели выезжают, так что иконку можно переносить между панелями. «Переместить выше / ниже» в меню тоже остаются.
+- 📐 **Размер панели** — толщина панели, отступ вокруг каждой иконки и внутренний отступ панели настраиваются отдельно от размера иконок.
+- 🎨 **Свои иконки** — для любого элемента через меню можно выбрать картинку (PNG, JPG, BMP, GIF или ICO). Выбор запоминается, а «Сбросить иконку» возвращает исходную.
+- 💾 **Список сохраняется** — слоты хранятся в Windhawk и восстанавливаются после перезагрузки.
+- 🙈 **Автоскрытие** — в покое панель сворачивается в тонкую полоску и плавно выезжает, когда подводишь курсор к краю экрана.
+- 🎬 **Плавные анимации** — выезд и сворачивание, плавная подсветка, увеличение иконки при наведении, лёгкий эффект нажатия на иконку, анимации появления, удаления и перестановки. Кадры синхронизированы с частотой монитора, поэтому всё плавно на 60/144/240 Гц. В настройках можно выбрать и фиксированную частоту (от 120 до 360 Гц).
+- 💎 **Качественная отрисовка** — сглаженные скруглённые углы и качественное масштабирование иконок (GDI+), окно с попиксельной прозрачностью, учёт DPI.
+- 🎮 **Полноэкранные приложения** — при желании панель сама прячется, пока открыта полноэкранная программа или игра.
+- 🌈 **Настраиваемые цвета** — фон, подсветка, акцент (плюс и полоска) и рамка задаются в формате `#RRGGBB`.
+- 🔮 **Прозрачность панели и стеклянный стиль** — фон панели можно сделать полупрозрачным (иконки остаются полностью непрозрачными) и включить вид матового стекла с мягким бликом и светлой рамкой.
+- 🌗 **Тема Windows** — по желанию берёт светлые или тёмные цвета и цвет акцента из Windows и обновляется при смене темы.
+- 🔵 **Индикатор запуска** — маленькая точка со стороны края экрана показывает, что программа запущена.
+- ✨ **Анимация появления** — при запуске панель выезжает с плавным проявлением, а при выезде из полоски иконки по очереди «выпрыгивают».
+- 🎭 **Семь стилей анимации** — Slide and pop (по умолчанию), Jelly (панель «перелетает» и дрожит как желе, а иконки запаздывают и сплющиваются), Ripple (по панели пробегает волна и приподнимает иконки), Fade (спокойное проявление без движения), Genie (панель вытекает из точки у края экрана плавной воронкой, как эффект окон в macOS), Oval (у края выскакивает небольшой овал, который затем раскрывается в панель) и Droplet (капля отрывается от края на тонкой «ножке», ножка рвётся, и капля раскрывается в панель). Выбирается в настройках.
+- 🔎 **Увеличение иконок при наведении** — необязательный эффект как в macOS, не зависящий от стиля анимации: иконки плавно увеличиваются вокруг курсора, и эффект скользит вдоль панели за мышью.
+- 🗂️ **До четырёх панелей** — включай любое сочетание правого, левого, верхнего и нижнего краёв экрана. У каждой панели свой список программ (например, одна для приложений, другая для игр), а внешний вид и анимации общие. Настраиваемый размер иконок, подсказки с названием элемента.
+- 🛡️ Не использует панель задач, не перехватывает функции и не меняет системные файлы. При отключении мода панель полностью исчезает.
 
-## Чем отличается от существующих модов
+## 🆚 Чем отличается от существующих модов
 
 - **Quick Launch & Media Panel** — сворачиваемая панель у верхнего края экрана со страницами ярлыков и управлением медиа. Этот мод — минимальная панель у любого края экрана (левого, правого, верхнего или нижнего, в любом сочетании): ряд или колонка иконок и слот «+», без страниц и без медиа-кнопок.
 - **Left Taskbar Quick Pin Dock** — панель, прикреплённая к панели задач рядом с кнопкой «Пуск». Этот мод свободно располагается у края экрана и от панели задач не зависит.
 - Особенности этого мода: автоскрытие в тонкую полоску с плавным выездом при наведении, скрытие в полноэкранных приложениях, «Запуск от имени администратора» и «Показать в папке» для каждого элемента, настраиваемые цвета.
 
-## Как пользоваться
+## 📖 Как пользоваться
 
 1. Включи мод. У правого края основного монитора по центру по вертикали появится панель. Чтобы получить больше панелей, включи другие края в настройках.
 2. Перетащи на неё ярлык, программу или папку либо нажми **+**.
-3. Клик по иконке — запуск. ПКМ по иконке — дополнительные действия.
+3. Клик по иконке — запуск. ПКМ по иконке — дополнительные действия. Зажми иконку и перетащи, чтобы поменять порядок.
 4. При включённом автоскрытии подведи курсор к краю экрана, чтобы показать панель.
 
-## Настройки
+## ⚙️ Настройки
 
 | Настройка | Описание |
 | --- | --- |
@@ -147,13 +161,16 @@ program, and it stays there until you remove it.
 | Толщина панели | Толщина панели в пикселях при 100% DPI (0–300). 0 — автоматически: ровно под иконку и отступы. Большее значение делает панель толще, иконки остаются по центру. Слишком маленькое значение повышается до автоматического. |
 | Отступ вокруг иконки | Отступ вокруг каждой иконки в пикселях при 100% DPI (0–40). Задаёт расстояние между иконками и размер подсветки при наведении. По умолчанию 8. |
 | Внутренний отступ панели | Отступ между рамкой панели и иконками в пикселях при 100% DPI (0–40). По умолчанию 4. |
-| Скачивать иконки сайтов | Скачивает иконку для слота-сайта в фоне. Адрес сайта запрашивается у сервиса значков Google (только публичные домены), затем напрямую у самого сайта (`/favicon.ico`). Иконки кэшируются в `%LOCALAPPDATA%\QuickLaunchDock\favicons`. Если выключить, используются только уже сохранённые иконки, иначе показывается иконка браузера по умолчанию. |
+| Скругление углов | Скругление углов панели в пикселях при 100% DPI (0–40). 0 — квадратные углы. По умолчанию 12. |
+| Скачивать иконки сайтов | По умолчанию выключено. Если включить, мод в фоне запрашивает /favicon.ico у сайта каждого слота-сайта и кэширует файл в папке хранилища мода. Обращения идут только к добавленным вами сайтам, третьим лицам ничего не отправляется. Если у сайта нет подходящей иконки, повторный запрос будет не раньше чем через неделю. Если сайт просто не ответил, мод сразу пробует ещё раз и снова при следующем запуске. |
 | Автоскрытие | Сворачивать в тонкую полоску, пока курсор не коснётся края. |
 | Прятать в полноэкранных приложениях | Скрывает панель поверх полноэкранных окон и игр. |
 | Анимации | Включает и выключает все анимации. |
 | Стиль анимации | Как панель появляется и выезжает из полоски: Slide and pop (по умолчанию), Jelly, Ripple, Fade, Genie, Oval или Droplet. Jelly и Ripple проигрываются при выезде панели, сворачивается она обычным скольжением. |
 | Скорость анимации | Скорость всех анимаций в процентах. 100 — исходная скорость; по умолчанию 25, так разницу между стилями хорошо видно. |
-| Показывать слот «+» | Выключи, чтобы скрыть слот «+». Программы по-прежнему можно добавлять перетаскиванием на панель или правым кликом по свободному месту панели. |
+| Частота обновления анимации | Авто (по умолчанию) рисует один кадр на каждое обновление монитора. Выбери 120, 144, 180, 240 или 360 Гц, чтобы рисовать с фиксированной частотой, например на ноутбуке с меняющейся частотой обновления или если анимации дёргаются. Чем выше значение, тем больше нагрузка на процессор и батарею. |
+| Показывать слот «+» | Выключи, чтобы скрыть слот «+». Программы по-прежнему можно добавлять перетаскиванием на панель или через пункт «Добавить на панель» в меню правого клика на любой иконке. |
+| Точка у запущенных программ | Показывает маленькую точку со стороны края экрана у иконки запущенной программы. Программы определяются по пути к файлу, поэтому запущенные через лаунчер или апдейтер могут не определиться. Пока панель открыта, список процессов проверяется раз в несколько секунд. По умолчанию включено. |
 | Брать иконку из цели ярлыка | Показывает иконку программы, на которую указывает ярлык, а не иконку, сохранённую в самом ярлыке. Иконка, выбранная через «Сменить иконку», всегда в приоритете. |
 | Увеличение иконок | Увеличение иконок вокруг курсора как в macOS. Работает с любым стилем анимации. По умолчанию выключено. |
 | Прозрачность панели | Прозрачность фона панели, от 10 до 100 процентов. Иконки всегда остаются полностью непрозрачными. |
@@ -167,7 +184,8 @@ program, and it stays there until you remove it.
 - Панель располагается на **основном** мониторе. При автоскрытии и втором мониторе с той же стороны курсор может проскакивать край слишком быстро — в таком случае отключи автоскрытие.
 - Количество слотов ограничено длиной края экрана, а у углов оставлено место, чтобы панели на соседних краях не перекрывались.
 - Слоты хранятся как пути к файлам или веб-адреса (`http://` и `https://`). Если файл перенесён или удалён, иконка станет стандартной, пока ты не уберёшь слот.
-- Иконки сайтов скачиваются из сети и только при включённой настройке «Скачивать иконки сайтов». Сервису значков Google отправляется только имя хоста, а имена, похожие на внутренние (без точки, IP-адреса, `.local`, `.lan`, `.internal` и подобные), ему не отправляются никогда.
+- Списки хранятся отдельно для каждой учётной записи Windows. Список, сохранённый прошлыми версиями, забирает первая учётная запись, которая запустит эту версию.
+- Мод не делает сетевых запросов, пока не включена настройка «Скачивать иконки сайтов». Если она включена, обращения идут только к добавленным вами сайтам, по одному запросу на сайт, а иконки хранятся в папке хранилища мода, которую Windhawk удаляет вместе с модом.
 - Список, сохранённый прежними версиями, остаётся на панели у правого края. При выключении панели её список сохраняется и возвращается при повторном включении.
 */
 // ==/WindhawkModReadme==
@@ -206,11 +224,16 @@ program, and it stays there until you remove it.
   $name:ru-RU: Внутренний отступ панели (px при 100% DPI)
   $description: Padding between the dock border and its icons
   $description:ru-RU: Отступ между рамкой панели и иконками
-- fetchFavicons: true
+- cornerRadius: 12
+  $name: Corner radius (px at 100% DPI)
+  $name:ru-RU: Скругление углов (px при 100% DPI)
+  $description: 0 makes the panel square, larger values make it rounder
+  $description:ru-RU: 0 - квадратные углы, чем больше значение, тем круглее
+- fetchFavicons: false
   $name: Download site icons
   $name:ru-RU: Скачивать иконки сайтов
-  $description: Downloads the icon of a website slot in the background and caches it. The host name of public sites is requested from the Google favicon service, then the site itself is tried. When off, the default browser icon is shown
-  $description:ru-RU: Скачивает иконку слота-сайта в фоне и кэширует её. Имя хоста публичных сайтов запрашивается у сервиса значков Google, затем пробуется сам сайт. Если выключить, показывается иконка браузера по умолчанию
+  $description: Off by default. When enabled, the mod requests /favicon.ico from the website of each website slot in the background and caches it in the mod storage folder. Only the sites you added are contacted. Without it, a gray globe is used
+  $description:ru-RU: По умолчанию выключено. Если включить, мод в фоне запрашивает /favicon.ico у сайта каждого слота-сайта и кэширует его в папке хранилища мода. Обращения идут только к добавленным вами сайтам. Без этого используется серый глобус
 - autoHide: true
   $name: Auto-hide (thin strip until hovered)
   $name:ru-RU: Автоскрытие (тонкая полоска до наведения)
@@ -220,6 +243,11 @@ program, and it stays there until you remove it.
 - animations: true
   $name: Animations
   $name:ru-RU: Анимации
+- followTheme: false
+  $name: Follow the Windows theme
+  $name:ru-RU: Следовать теме Windows
+  $description: Takes the light or dark colors and the accent color from Windows and updates when you switch the theme. The color settings below are ignored while this is on
+  $description:ru-RU: Берёт светлые или тёмные цвета и цвет акцента из Windows и обновляется при смене темы. Пока включено, настройки цветов ниже не действуют
 - bgColor: "#202020"
   $name: Background color (#RRGGBB)
   $name:ru-RU: Цвет фона (#RRGGBB)
@@ -260,11 +288,28 @@ program, and it stays there until you remove it.
   $name:ru-RU: Скорость анимации (в процентах)
   $description: 100 is the original speed, lower is slower. Applies to every animation style
   $description:ru-RU: 100 - исходная скорость, меньше - медленнее. Действует на все стили анимации
+- refreshRate: auto
+  $name: Animation refresh rate
+  $name:ru-RU: Частота обновления анимации
+  $description: Auto draws one frame per monitor refresh. Pick a fixed rate if animations look choppy, for example on a laptop whose refresh rate changes. Higher values use more CPU and battery
+  $description:ru-RU: Авто рисует один кадр на каждое обновление монитора. Выбери фиксированную частоту, если анимации дёргаются, например на ноутбуке с меняющейся частотой обновления. Чем выше значение, тем больше нагрузка на процессор и батарею
+  $options:
+  - auto: Auto
+  - hz120: 120 Hz
+  - hz144: 144 Hz
+  - hz180: 180 Hz
+  - hz240: 240 Hz
+  - hz360: 360 Hz
 - showPlus: true
   $name: Show the "+" slot
   $name:ru-RU: Показывать слот «+»
-  $description: Turn off to hide it. Programs can still be added by dragging them onto the dock or by right-clicking an empty part of the dock. With an empty list the slot is always shown
-  $description:ru-RU: Выключи, чтобы скрыть. Программы по-прежнему можно добавлять перетаскиванием на панель или правым кликом по свободному месту панели. При пустом списке слот показывается всегда
+  $description: Turn off to hide it. Programs can still be added by dragging them onto the dock or from the Add to the dock item of the right-click menu of any icon. With an empty list the slot is always shown
+  $description:ru-RU: Выключи, чтобы скрыть. Программы по-прежнему можно добавлять перетаскиванием на панель или через пункт «Добавить на панель» в меню правого клика на любой иконке. При пустом списке слот показывается всегда
+- showRunning: true
+  $name: Show a dot on running programs
+  $name:ru-RU: Точка у запущенных программ
+  $description: Shows a small dot on the screen edge side of an icon whose program is running. The process list is checked every few seconds while the dock is open
+  $description:ru-RU: Показывает маленькую точку со стороны края экрана у иконки запущенной программы. Пока панель открыта, список процессов проверяется раз в несколько секунд
 - useTargetIcon: true
   $name: Take the icon from the shortcut's target
   $name:ru-RU: Брать иконку из цели ярлыка
@@ -288,13 +333,15 @@ program, and it stays there until you remove it.
 #include <commdlg.h>
 #include <commctrl.h>
 #include <dwmapi.h>
+#include <sddl.h>
+#include <tlhelp32.h>
 #include <wininet.h>
 #include <math.h>
 #include <stddef.h>
 
 #include <algorithm>
 #include <atomic>
-#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -355,6 +402,7 @@ static struct {
     int(WINAPI* SetImageAttrColorMatrix)(void*, int, BOOL, const void*, const void*, int);
     int(WINAPI* SetImageAttrWrapMode)(void*, int, UINT32, BOOL);
     int(WINAPI* BitmapFromFile)(PCWSTR, void**);
+    int(WINAPI* BitmapGetPixel)(void*, int, int, UINT32*);
     int(WINAPI* CreateLineBrush)(const void*, const void*, UINT32, UINT32, int, void**);
 } Gp;
 
@@ -405,6 +453,7 @@ static bool GpInit() {
     GP_LOAD(SetImageAttrColorMatrix, "GdipSetImageAttributesColorMatrix");
     GP_LOAD(SetImageAttrWrapMode, "GdipSetImageAttributesWrapMode");
     GP_LOAD(BitmapFromFile, "GdipCreateBitmapFromFile");
+    GP_LOAD(BitmapGetPixel, "GdipBitmapGetPixel");
     GP_LOAD(CreateLineBrush, "GdipCreateLineBrush");
 
     GpStartupInput in{1, nullptr, FALSE, FALSE};
@@ -451,6 +500,12 @@ struct Item {
     float pos = 0;
     float hover = 0;
     float appear = 1;
+    bool loading = false;
+    std::wstring exeKey;
+    std::wstring exeName;
+    bool running = false;
+    float runA = 0;
+    float pressA = 0;
 };
 
 struct PlusAnim {
@@ -484,6 +539,8 @@ struct Panel {
     bool expanded = true;
     bool tracking = false;
     int hover = -1;
+    int pressIdx = -1;
+    POINT pressPt{0, 0};
     int outsideTicks = 0;
     int toolCount = 0;
 
@@ -508,8 +565,19 @@ static int g_dpi = 96;
 static std::atomic<HWND> g_ctrl{nullptr};
 static std::vector<Panel*> g_panels;
 static Panel* P = nullptr;
-static std::vector<std::wstring> g_favBusy;
+static bool g_dragActive = false;
+static Panel* g_dragOwner = nullptr;
+static int g_dragIdx = -1;
+static std::wstring g_userSuffix;
 static std::vector<std::wstring> g_favFailed;
+static std::vector<std::wstring> g_favBusy;
+static std::vector<std::pair<std::wstring, std::wstring>> g_favQueue;
+static std::mutex g_favMutex;
+static HANDLE g_favThread = nullptr;
+static HANDLE g_favWake = nullptr;
+static std::atomic<bool> g_favStop{false};
+static HINTERNET g_favNet = nullptr;
+static HINTERNET g_favUrl = nullptr;
 
 struct PanelScope {
     Panel* saved;
@@ -528,9 +596,13 @@ static struct {
     int style = 0;
     bool magnify = false;
     float speed = 0.25f;
+    int fps = 0;
+    int radius = 12;
+    bool followTheme = false;
+    bool showRunning = true;
     bool showPlus = true;
     bool useTargetIcon = true;
-    bool fetchFavicons = true;
+    bool fetchFavicons = false;
     int thickness = 0;
     int iconPad = 8;
     int panelPad = 4;
@@ -646,6 +718,37 @@ static COLORREF ColorSetting(PCWSTR name, COLORREF def) {
     return c;
 }
 
+static void ApplySystemTheme() {
+    DWORD light = 0, sz = sizeof(light);
+    bool dark = true;
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &sz) == ERROR_SUCCESS) {
+        dark = light == 0;
+    }
+    COLORREF neutral;
+    if (dark) {
+        g_cfg.bg = RGB(0x20, 0x20, 0x20);
+        g_cfg.hover = RGB(0x42, 0x42, 0x42);
+        g_cfg.border = RGB(0x46, 0x46, 0x46);
+        neutral = RGB(0xBE, 0xBE, 0xBE);
+    } else {
+        g_cfg.bg = RGB(0xF3, 0xF3, 0xF3);
+        g_cfg.hover = RGB(0xDA, 0xDA, 0xDA);
+        g_cfg.border = RGB(0xC8, 0xC8, 0xC8);
+        neutral = RGB(0x5F, 0x5F, 0x5F);
+    }
+    g_cfg.accent = neutral;
+    DWORD col = 0;
+    BOOL opaque = FALSE;
+    if (SUCCEEDED(DwmGetColorizationColor(&col, &opaque))) {
+        COLORREF c = RGB((col >> 16) & 255, (col >> 8) & 255, col & 255);
+        auto lum = [](COLORREF x) {
+            return (0.2126 * GetRValue(x) + 0.7152 * GetGValue(x) + 0.0722 * GetBValue(x)) / 255.0;
+        };
+        if (fabs(lum(c) - lum(g_cfg.bg)) >= 0.25) g_cfg.accent = c;
+    }
+}
+
 static void LoadSettings() {
     g_cfg.panels[0] = Wh_GetIntSetting(L"panelRight") != 0;
     g_cfg.panels[1] = Wh_GetIntSetting(L"panelLeft") != 0;
@@ -665,10 +768,10 @@ static void LoadSettings() {
     g_cfg.showPlus = Wh_GetIntSetting(L"showPlus") != 0;
     g_cfg.useTargetIcon = Wh_GetIntSetting(L"useTargetIcon") != 0;
     g_cfg.fetchFavicons = Wh_GetIntSetting(L"fetchFavicons") != 0;
+    g_favFailed.clear();
     g_cfg.thickness = std::clamp((int)Wh_GetIntSetting(L"panelThickness"), 0, 300);
     g_cfg.iconPad = std::clamp((int)Wh_GetIntSetting(L"iconPadding"), 0, 40);
     g_cfg.panelPad = std::clamp((int)Wh_GetIntSetting(L"panelPadding"), 0, 40);
-    g_favFailed.clear();
     g_cfg.style = 0;
     PCWSTR st = Wh_GetStringSetting(L"animationStyle");
     if (st) {
@@ -680,10 +783,24 @@ static void LoadSettings() {
         else if (wcscmp(st, L"drop") == 0) g_cfg.style = 6;
         Wh_FreeStringSetting(st);
     }
+    g_cfg.radius = std::clamp((int)Wh_GetIntSetting(L"cornerRadius"), 0, 40);
+    g_cfg.followTheme = Wh_GetIntSetting(L"followTheme") != 0;
+    g_cfg.showRunning = Wh_GetIntSetting(L"showRunning") != 0;
+    g_cfg.fps = 0;
+    PCWSTR fr = Wh_GetStringSetting(L"refreshRate");
+    if (fr) {
+        if (wcscmp(fr, L"hz120") == 0) g_cfg.fps = 120;
+        else if (wcscmp(fr, L"hz144") == 0) g_cfg.fps = 144;
+        else if (wcscmp(fr, L"hz180") == 0) g_cfg.fps = 180;
+        else if (wcscmp(fr, L"hz240") == 0) g_cfg.fps = 240;
+        else if (wcscmp(fr, L"hz360") == 0) g_cfg.fps = 360;
+        Wh_FreeStringSetting(fr);
+    }
     g_cfg.bg = ColorSetting(L"bgColor", RGB(0x20, 0x20, 0x20));
     g_cfg.hover = ColorSetting(L"hoverColor", RGB(0x42, 0x42, 0x42));
     g_cfg.accent = ColorSetting(L"accentColor", RGB(0xBE, 0xBE, 0xBE));
     g_cfg.border = ColorSetting(L"borderColor", RGB(0x46, 0x46, 0x46));
+    if (g_cfg.followTheme) ApplySystemTheme();
 }
 
 typedef HRESULT(WINAPI* SHGetImageList_t)(int, REFIID, void**);
@@ -946,8 +1063,54 @@ static HICON LoadLinkIcon(const std::wstring& lnk) {
     return result;
 }
 
+static std::wstring LinkTarget(const std::wstring& lnk) {
+    std::wstring out;
+    IShellLinkW* psl = nullptr;
+    if (FAILED(CoCreateInstance(kCLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, kIID_IShellLinkW,
+                                (void**)&psl)) ||
+        !psl) {
+        return out;
+    }
+    IPersistFile* ppf = nullptr;
+    if (SUCCEEDED(psl->QueryInterface(kIID_IPersistFile, (void**)&ppf)) && ppf) {
+        if (SUCCEEDED(ppf->Load(lnk.c_str(), STGM_READ))) {
+            wchar_t raw[MAX_PATH * 2] = L"";
+            if (SUCCEEDED(psl->GetPath(raw, ARRAYSIZE(raw), nullptr, SLGP_RAWPATH)) && raw[0]) {
+                wchar_t exp[MAX_PATH * 2];
+                DWORD n = ExpandEnvironmentStringsW(raw, exp, ARRAYSIZE(exp));
+                out = (n && n <= ARRAYSIZE(exp)) ? exp : raw;
+            }
+        }
+        ppf->Release();
+    }
+    psl->Release();
+    return out;
+}
+
+static std::wstring LowerStr(std::wstring s) {
+    for (auto& c : s) c = (wchar_t)towlower(c);
+    return s;
+}
+
 static bool IsUrl(const std::wstring& s) {
     return _wcsnicmp(s.c_str(), L"http://", 7) == 0 || _wcsnicmp(s.c_str(), L"https://", 8) == 0;
+}
+
+static void ComputeExeKey(Item& it) {
+    it.exeKey.clear();
+    it.exeName.clear();
+    if (IsUrl(it.path)) return;
+    std::wstring target = it.path;
+    size_t n = target.size();
+    if (n >= 4 && _wcsicmp(target.c_str() + n - 4, L".lnk") == 0) target = LinkTarget(target);
+    n = target.size();
+    if (n < 4 || _wcsicmp(target.c_str() + n - 4, L".exe") != 0) return;
+    std::wstring low = LowerStr(target);
+    size_t sl = low.find_last_of(L"\\/");
+    std::wstring name = sl == std::wstring::npos ? low : low.substr(sl + 1);
+    if (name == L"explorer.exe") return;
+    it.exeKey = low;
+    it.exeName = name;
 }
 
 static std::wstring HostOf(const std::wstring& url) {
@@ -1011,37 +1174,109 @@ static std::wstring NormalizeUrl(const std::wstring& raw) {
     return s;
 }
 
-static bool IsPublicHost(const std::wstring& h) {
-    if (h.size() < 4 || h.find(L'.') == std::wstring::npos) return false;
-    bool digitsOnly = true;
-    for (wchar_t c : h) {
-        bool digit = c >= L'0' && c <= L'9';
-        bool ok = digit || (c >= L'a' && c <= L'z') || c == L'-' || c == L'.';
-        if (!ok) return false;
-        if (!digit && c != L'.') digitsOnly = false;
+static void* RoundPath(float x, float y, float w, float h, float r);
+
+static const unsigned char kGlobeRuns[] = {
+    117,22,225,40,211,50,201,60,192,68,185,74,179,80,173,86,167,92,161,98,156,102,152,106,148,110,144,114,140,118,136,122,132,54,1,16,1,54,128,54,
+    4,14,4,54,125,53,5,16,5,53,122,53,7,15,8,53,119,52,9,15,10,52,116,53,10,15,11,53,113,52,12,15,13,52,110,31,1,21,13,15,
+    14,21,1,31,107,30,3,20,14,15,15,20,3,30,104,29,5,20,15,15,16,20,5,29,101,28,6,20,16,15,17,20,6,28,99,27,7,20,17,15,
+    18,20,7,27,96,27,9,19,18,15,19,19,9,27,93,27,9,19,19,15,20,19,9,27,91,26,10,19,20,15,21,19,10,26,89,25,12,18,21,15,
+    22,18,12,25,87,25,12,18,22,15,23,18,12,25,85,24,14,18,22,15,23,18,14,24,83,24,14,18,23,15,24,18,14,24,81,23,15,18,24,15,
+    25,18,15,23,79,23,16,17,25,15,26,17,16,23,76,23,17,18,25,15,26,18,17,23,74,22,18,17,26,15,27,17,18,22,73,22,18,17,27,15,
+    28,17,18,22,71,22,19,17,27,15,28,17,19,22,69,21,20,17,28,15,29,17,20,21,67,21,21,17,28,15,29,17,21,21,65,21,21,17,29,15,
+    30,17,21,21,63,21,22,16,30,15,31,16,22,21,61,21,22,17,30,15,31,17,22,21,59,21,23,16,31,15,32,16,23,21,57,21,23,17,31,15,
+    32,17,23,21,56,20,24,16,32,15,33,16,24,20,55,20,24,17,32,15,33,17,24,20,53,20,25,16,33,15,34,16,25,20,51,20,26,16,33,15,
+    34,16,26,20,50,19,26,17,33,15,34,17,26,19,49,19,27,16,34,15,35,16,27,19,47,19,27,17,34,15,35,17,27,19,46,18,28,16,35,15,
+    36,16,28,18,45,19,28,16,35,15,36,16,28,19,43,22,25,16,36,15,37,16,28,19,42,26,21,16,36,15,37,16,24,23,41,31,17,16,36,15,
+    37,17,19,28,39,36,12,16,37,15,38,16,15,33,38,41,7,16,37,15,38,16,10,38,37,47,1,16,38,15,39,16,3,45,35,65,38,15,39,65,
+    34,65,38,15,39,65,33,73,31,16,34,70,32,84,21,14,23,82,31,226,30,226,29,228,28,17,2,209,27,17,7,185,4,17,26,17,11,178,7,17,
+    25,17,15,170,13,17,24,16,21,161,18,16,23,17,25,152,23,17,22,16,32,141,29,16,21,17,35,133,34,17,20,16,36,132,36,16,19,17,36,132,
+    36,17,18,16,37,15,10,84,8,15,37,16,18,16,36,16,22,60,20,16,36,16,17,17,36,16,43,16,43,16,36,17,16,16,37,15,45,14,45,15,
+    37,16,16,16,37,15,44,16,44,15,37,16,15,16,38,15,44,16,44,15,38,16,14,16,37,16,44,16,44,16,37,16,14,15,38,16,44,16,44,16,
+    38,15,13,16,38,15,45,16,45,15,38,16,12,16,38,15,45,16,45,15,38,16,12,15,39,15,45,16,45,15,39,15,11,16,39,15,45,16,45,15,
+    39,16,10,16,38,16,45,16,45,16,38,16,10,15,39,15,46,16,46,15,39,15,9,16,39,15,46,16,46,15,39,16,8,16,39,15,46,16,46,15,
+    39,16,8,15,40,15,46,16,46,15,40,15,8,15,40,15,46,16,46,15,40,15,7,16,40,15,46,16,46,15,40,16,6,16,39,16,46,16,46,16,
+    39,16,6,15,40,15,47,16,47,15,40,15,6,15,40,15,47,16,47,15,40,15,6,15,40,15,47,16,47,15,40,15,5,16,40,15,47,16,47,15,
+    40,16,4,16,40,15,47,16,47,15,40,16,4,15,41,15,47,16,47,15,41,15,4,15,41,15,47,16,47,15,41,15,4,15,41,15,47,16,47,15,
+    41,15,3,16,40,16,47,16,47,16,40,16,2,16,40,15,48,16,48,15,40,16,2,15,41,15,48,16,48,15,41,15,2,15,41,15,48,16,48,15,
+    41,15,2,15,41,15,48,16,48,15,41,15,2,15,41,15,48,16,48,15,41,15,2,15,41,15,48,16,48,15,41,15,2,15,41,15,48,16,48,15,
+    41,15,2,15,41,15,48,16,48,15,41,15,1,16,41,15,48,16,48,15,41,31,42,15,48,16,48,15,42,30,42,15,49,14,49,15,42,31,1,1,
+    36,1,1,63,1,16,1,63,1,38,1,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,255,0,46,
+    1,1,36,1,1,63,1,16,1,63,1,38,1,31,42,15,49,14,49,15,42,30,42,15,48,16,48,15,42,31,41,15,49,15,48,15,41,16,1,15,
+    41,15,49,15,48,15,41,15,2,15,41,15,49,15,48,15,41,15,2,15,41,15,49,15,48,15,41,15,2,15,41,15,49,15,48,15,41,15,2,15,
+    41,15,49,15,48,15,41,15,2,15,41,15,49,15,48,15,41,15,2,15,41,15,49,15,48,15,41,15,2,16,40,16,48,15,47,16,40,16,2,16,
+    41,15,48,15,47,15,41,16,3,15,41,15,48,15,47,15,41,15,4,15,41,15,48,15,47,15,41,15,4,15,41,15,48,15,47,15,41,15,4,16,
+    40,15,48,15,47,15,40,16,4,16,40,15,48,15,47,15,40,16,5,15,40,15,48,15,47,15,40,15,6,15,40,15,48,15,47,15,40,15,6,15,
+    40,16,47,15,46,16,40,15,6,16,40,15,47,15,46,15,40,16,6,16,40,15,47,15,46,15,40,16,7,15,40,15,47,15,46,15,40,15,8,15,
+    40,15,47,15,46,15,40,15,8,16,39,15,47,15,46,15,39,16,8,16,39,15,47,15,46,15,39,16,9,15,39,16,46,15,45,16,39,15,10,16,
+    39,15,46,15,45,15,39,16,10,16,39,15,46,15,45,15,39,16,11,15,39,15,46,15,45,15,39,15,12,16,38,15,46,15,45,15,38,16,12,16,
+    38,15,46,15,45,15,38,16,13,16,37,16,45,15,44,16,38,15,14,16,38,15,45,15,44,15,38,16,14,16,38,15,44,16,44,15,38,16,15,16,
+    37,15,45,14,45,15,37,16,16,16,37,16,43,16,43,16,37,16,16,17,36,16,24,52,26,16,36,17,17,16,37,15,10,79,13,15,37,16,18,16,
+    37,114,3,15,37,16,18,17,36,132,36,17,19,16,36,132,36,16,20,17,30,139,33,17,21,16,25,150,27,16,22,17,19,159,22,17,23,16,15,168,
+    17,16,24,17,10,176,12,17,25,17,5,184,7,17,26,17,1,191,4,17,27,228,28,228,29,226,30,86,19,16,15,90,31,73,31,16,29,75,32,66,
+    38,16,38,66,33,65,38,16,38,65,34,47,2,16,38,16,38,65,35,41,8,16,37,16,37,16,6,43,37,34,14,16,37,16,37,16,11,37,38,30,
+    18,17,36,16,36,17,16,32,39,25,23,16,36,16,36,16,21,27,41,20,27,16,36,16,36,16,25,22,42,19,29,16,35,16,35,17,28,19,43,19,
+    28,16,35,16,35,16,28,19,45,18,28,16,35,16,35,16,28,18,46,19,28,16,34,16,34,16,28,19,47,19,27,16,34,16,34,16,27,19,49,19,
+    26,17,33,16,33,17,26,19,50,20,26,16,33,16,33,16,26,20,51,20,25,17,32,16,32,17,25,20,53,20,25,16,32,16,32,16,25,20,55,20,
+    24,17,31,16,31,17,24,20,56,21,24,16,31,16,31,16,24,21,57,21,23,17,30,16,30,17,23,21,59,21,23,16,30,16,30,16,23,21,61,21,
+    22,17,29,16,29,17,22,21,63,21,22,17,28,16,28,17,22,21,65,21,21,17,28,16,28,17,21,21,67,21,21,17,27,16,27,17,21,21,69,22,
+    19,17,27,16,27,17,19,22,71,22,19,17,26,16,26,17,19,22,73,22,18,18,25,16,25,18,18,22,74,23,18,17,25,16,25,17,18,23,76,23,
+    16,18,24,16,24,18,16,23,79,23,16,18,23,16,23,18,16,23,81,24,14,19,22,16,22,19,14,24,83,24,14,18,22,16,22,18,14,24,85,25,
+    13,18,21,16,21,18,13,25,87,25,12,19,20,16,20,19,12,25,89,26,11,19,19,16,19,19,11,26,91,27,10,19,18,16,18,19,10,27,93,27,
+    9,20,17,16,17,20,9,27,96,27,8,20,16,16,16,20,8,27,99,28,7,20,15,16,15,20,7,28,101,29,5,21,14,16,14,21,5,29,104,30,
+    3,21,13,16,13,21,3,30,107,31,2,21,12,16,12,21,2,31,110,53,11,16,11,53,113,54,9,16,9,54,116,53,8,16,8,53,119,54,6,16,
+    6,54,122,54,4,16,4,54,125,56,1,16,1,56,128,126,132,122,136,118,140,114,144,110,148,106,152,102,156,98,161,92,167,86,173,80,179,74,185,68,
+    192,60,201,50,211,40,225,22,117,
+};
+
+static void* MakeGlobeIcon(std::vector<UINT32>& pix) {
+    const int S = 256;
+    const size_t total = (size_t)S * S;
+    pix.assign(total, 0);
+    size_t pos = 0;
+    bool on = false;
+    for (unsigned char run : kGlobeRuns) {
+        size_t n = std::min((size_t)run, total - pos);
+        if (on) {
+            for (size_t i = 0; i < n; i++) pix[pos + i] = 0xFF9A9A9A;
+        }
+        pos += n;
+        on = !on;
+        if (pos >= total) break;
     }
-    if (digitsOnly) return false;
-    static const wchar_t* const priv[] = {L".local", L".lan", L".internal", L".corp", L".home",
-                                          L".localdomain", L".intranet", L".private", L".test",
-                                          L".example", L".invalid", L".localhost"};
-    for (auto sfx : priv) {
-        size_t n = wcslen(sfx);
-        if (h.size() > n && h.compare(h.size() - n, n, sfx) == 0) return false;
+    void* bmp = nullptr;
+    if (Gp.CreateBitmapFromScan0(S, S, S * 4, 0x000E200B, (BYTE*)pix.data(), &bmp) != 0 || !bmp) {
+        pix.clear();
+        return nullptr;
     }
-    return true;
+    return bmp;
 }
 
-static std::wstring FaviconFile(const std::wstring& bare) {
-    if (bare.empty()) return L"";
+static std::wstring OriginOf(const std::wstring& url) {
+    size_t p = url.find(L"://");
+    if (p == std::wstring::npos) return L"";
+    size_t b = p + 3;
+    size_t e = url.find_first_of(L"/?#", b);
+    std::wstring a = url.substr(b, e == std::wstring::npos ? std::wstring::npos : e - b);
+    size_t at = a.rfind(L'@');
+    if (at != std::wstring::npos) a = a.substr(at + 1);
+    if (a.empty()) return L"";
+    return url.substr(0, b) + a;
+}
+
+static std::wstring FaviconDir() {
     wchar_t base[MAX_PATH] = L"";
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, base)) ||
-        !base[0]) {
-        return L"";
-    }
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base)) || !base[0]) return L"";
+    return std::wstring(base) + L"\\favicons";
+}
+
+static std::wstring FaviconFile(const std::wstring& bare, const wchar_t* ext) {
+    std::wstring d = FaviconDir();
+    if (d.empty() || bare.empty()) return L"";
     std::wstring n;
     for (wchar_t c : bare) n += (iswalnum(c) || c == L'.' || c == L'-') ? c : L'_';
     if (n.size() > 100) n.resize(100);
-    return std::wstring(base) + L"\\QuickLaunchDock\\favicons\\" + n + L".img";
+    return d + L"\\" + n + ext;
 }
 
 static bool InList(const std::vector<std::wstring>& v, const std::wstring& s) {
@@ -1057,113 +1292,221 @@ static void EraseFromList(std::vector<std::wstring>& v, const std::wstring& s) {
             v.end());
 }
 
-static bool IsImageData(const std::vector<BYTE>& d) {
+static bool RecentlyFailed(const std::wstring& marker) {
+    WIN32_FILE_ATTRIBUTE_DATA fa{};
+    if (!GetFileAttributesExW(marker.c_str(), GetFileExInfoStandard, &fa)) return false;
+    FILETIME now;
+    GetSystemTimeAsFileTime(&now);
+    ULARGE_INTEGER a, b;
+    a.LowPart = now.dwLowDateTime;
+    a.HighPart = now.dwHighDateTime;
+    b.LowPart = fa.ftLastWriteTime.dwLowDateTime;
+    b.HighPart = fa.ftLastWriteTime.dwHighDateTime;
+    const ULONGLONG week = 7ULL * 24ULL * 3600ULL * 10000000ULL;
+    return a.QuadPart >= b.QuadPart && a.QuadPart - b.QuadPart < week;
+}
+
+static void WriteMarker(const std::wstring& path) {
+    if (path.empty()) return;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+}
+
+static bool IsIconOrPng(const std::vector<BYTE>& d) {
     if (d.size() < 16) return false;
     if (d[0] == 0x89 && d[1] == 0x50 && d[2] == 0x4E && d[3] == 0x47) return true;
     if (d[0] == 0x00 && d[1] == 0x00 && d[2] == 0x01 && d[3] == 0x00) return true;
-    if (d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF) return true;
-    if (d[0] == 'G' && d[1] == 'I' && d[2] == 'F') return true;
-    if (d[0] == 'B' && d[1] == 'M') return true;
     return false;
 }
 
-static bool HttpFetchImage(const std::wstring& url, const std::wstring& outFile) {
-    HINTERNET hi = InternetOpenW(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) QuickLaunchDock/1.1",
-                                 INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hi) return false;
+static void FavCloseHandles() {
+    if (g_favUrl) {
+        InternetCloseHandle(g_favUrl);
+        g_favUrl = nullptr;
+    }
+    if (g_favNet) {
+        InternetCloseHandle(g_favNet);
+        g_favNet = nullptr;
+    }
+}
+
+enum { FAV_OK = 0, FAV_RETRY = 1, FAV_NONE = 2 };
+
+static int FetchFavicon(const std::wstring& origin, const std::wstring& outFile) {
+    HINTERNET hi = InternetOpenW(
+        L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) QuickLaunchDock/1.1",
+        INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hi) return FAV_RETRY;
     DWORD to = 8000;
     InternetSetOptionW(hi, INTERNET_OPTION_CONNECT_TIMEOUT, &to, sizeof(to));
     InternetSetOptionW(hi, INTERNET_OPTION_RECEIVE_TIMEOUT, &to, sizeof(to));
     InternetSetOptionW(hi, INTERNET_OPTION_SEND_TIMEOUT, &to, sizeof(to));
-    HINTERNET hu = InternetOpenUrlW(hi, url.c_str(), L"Accept: image/*,*/*;q=0.5\r\n", (DWORD)-1,
-                                    INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_UI |
-                                        INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_CACHE_WRITE,
+    {
+        std::lock_guard<std::mutex> lk(g_favMutex);
+        if (g_favStop) {
+            InternetCloseHandle(hi);
+            return FAV_RETRY;
+        }
+        g_favNet = hi;
+    }
+    std::wstring url = origin + L"/favicon.ico";
+    HINTERNET hu = InternetOpenUrlW(hi, url.c_str(), L"Accept: image/png,image/x-icon,image/*;q=0.8\r\n",
+                                    (DWORD)-1,
+                                    INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
+                                        INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
+                                        INTERNET_FLAG_RELOAD,
                                     0);
-    bool ok = false;
+    {
+        std::lock_guard<std::mutex> lk(g_favMutex);
+        if (hu) {
+            if (g_favNet) {
+                g_favUrl = hu;
+            } else {
+                hu = nullptr;
+            }
+        }
+    }
+    int result = FAV_RETRY;
     if (hu) {
         DWORD status = 0, sl = sizeof(status);
-        if (HttpQueryInfoW(hu, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &sl,
-                           nullptr) &&
-            status == 200) {
-            std::vector<BYTE> data;
-            BYTE buf[8192];
-            DWORD got = 0;
-            bool tooBig = false;
-            while (InternetReadFile(hu, buf, sizeof(buf), &got) && got) {
-                data.insert(data.end(), buf, buf + got);
-                if (data.size() > 1024 * 1024) {
-                    tooBig = true;
-                    break;
-                }
-            }
-            if (!tooBig && IsImageData(data)) {
-                size_t sep = outFile.find_last_of(L'\\');
-                if (sep != std::wstring::npos) {
-                    SHCreateDirectoryExW(nullptr, outFile.substr(0, sep).c_str(), nullptr);
-                }
-                std::wstring tmp = outFile + L".tmp";
-                HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                       FILE_ATTRIBUTE_NORMAL, nullptr);
-                if (f != INVALID_HANDLE_VALUE) {
-                    DWORD wr = 0;
-                    bool w = WriteFile(f, data.data(), (DWORD)data.size(), &wr, nullptr) &&
-                             wr == data.size();
-                    CloseHandle(f);
-                    if (w && MoveFileExW(tmp.c_str(), outFile.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-                        ok = true;
-                    } else {
-                        DeleteFileW(tmp.c_str());
+        if (HttpQueryInfoW(hu, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &sl, nullptr)) {
+            if (status == 200) {
+                std::vector<BYTE> data;
+                BYTE buf[4096];
+                DWORD got = 0;
+                bool tooBig = false, readOk = true;
+                for (;;) {
+                    if (g_favStop || !InternetReadFile(hu, buf, sizeof(buf), &got)) {
+                        readOk = false;
+                        break;
+                    }
+                    if (!got) break;
+                    data.insert(data.end(), buf, buf + got);
+                    if (data.size() > 256 * 1024) {
+                        tooBig = true;
+                        break;
                     }
                 }
+                if (tooBig) {
+                    result = FAV_NONE;
+                } else if (readOk) {
+                    if (!IsIconOrPng(data)) {
+                        result = FAV_NONE;
+                    } else {
+                        std::wstring tmp = outFile + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+                        HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                                               FILE_ATTRIBUTE_NORMAL, nullptr);
+                        if (f != INVALID_HANDLE_VALUE) {
+                            DWORD wr = 0;
+                            bool w = WriteFile(f, data.data(), (DWORD)data.size(), &wr, nullptr) &&
+                                     wr == data.size();
+                            CloseHandle(f);
+                            if (w && MoveFileExW(tmp.c_str(), outFile.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                                result = FAV_OK;
+                            } else {
+                                DeleteFileW(tmp.c_str());
+                            }
+                        }
+                    }
+                }
+            } else if (status == 404 || status == 410) {
+                result = FAV_NONE;
             }
         }
-        InternetCloseHandle(hu);
     }
-    InternetCloseHandle(hi);
-    return ok;
+    {
+        std::lock_guard<std::mutex> lk(g_favMutex);
+        FavCloseHandles();
+    }
+    return result;
 }
 
-static DWORD WINAPI FavThread(LPVOID p) {
-    std::wstring* host = (std::wstring*)p;
-    std::wstring bare = BareHost(*host);
-    std::wstring file = FaviconFile(bare);
-    bool ok = false;
-    if (!file.empty()) {
-        if (IsPublicHost(bare)) {
-            ok = HttpFetchImage(L"https://www.google.com/s2/favicons?sz=128&domain=" + bare, file);
+static DWORD WINAPI FavThread(LPVOID) {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    for (;;) {
+        std::pair<std::wstring, std::wstring> job;
+        bool have = false;
+        {
+            std::lock_guard<std::mutex> lk(g_favMutex);
+            if (g_favStop) break;
+            if (!g_favQueue.empty()) {
+                job = g_favQueue.front();
+                g_favQueue.erase(g_favQueue.begin());
+                have = true;
+            }
         }
-        if (!ok) ok = HttpFetchImage(L"https://" + *host + L"/favicon.ico", file);
+        if (!have) {
+            WaitForSingleObject(g_favWake, INFINITE);
+            continue;
+        }
+        std::wstring file = FaviconFile(job.second, L".img");
+        bool ok = false;
+        if (!file.empty()) {
+            SHCreateDirectoryExW(nullptr, FaviconDir().c_str(), nullptr);
+            int r = FAV_RETRY;
+            for (int attempt = 0; attempt < 2 && r == FAV_RETRY && !g_favStop; attempt++) {
+                if (attempt) {
+                    for (int i = 0; i < 15 && !g_favStop; i++) Sleep(100);
+                    if (g_favStop) break;
+                }
+                r = FetchFavicon(job.first, file);
+            }
+            ok = r == FAV_OK;
+            if (r == FAV_NONE && !g_favStop) WriteMarker(FaviconFile(job.second, L".none"));
+        }
+        HWND ctrl = g_ctrl.load();
+        auto* host = new std::wstring(job.second);
+        if (!ctrl || !PostMessageW(ctrl, WM_FAVICON, ok ? 1 : 0, (LPARAM)host)) delete host;
     }
-    HWND ctrl = g_ctrl.load();
-    if (!ctrl || !PostMessageW(ctrl, WM_FAVICON, ok ? 1 : 0, (LPARAM)host)) delete host;
     return 0;
 }
 
-static void RequestFavicon(const std::wstring& typedHost) {
-    if (!g_cfg.fetchFavicons) return;
-    std::wstring bare = BareHost(typedHost);
-    if (bare.empty() || FaviconFile(bare).empty()) return;
-    if (InList(g_favBusy, bare) || InList(g_favFailed, bare)) return;
-    g_favBusy.push_back(bare);
-    auto* h = new std::wstring(typedHost);
-    HANDLE t = CreateThread(nullptr, 0, FavThread, h, 0, nullptr);
-    if (!t) {
-        delete h;
-        EraseFromList(g_favBusy, bare);
-        return;
+static bool RequestFavicon(const std::wstring& url) {
+    if (!g_cfg.fetchFavicons || g_favStop) return false;
+    std::wstring origin = OriginOf(url);
+    std::wstring bare = BareHost(HostOf(url));
+    if (origin.empty() || bare.empty()) return false;
+    std::wstring none = FaviconFile(bare, L".none");
+    if (none.empty() || InList(g_favFailed, bare) || RecentlyFailed(none)) return false;
+    if (!g_favWake) g_favWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_favWake) return false;
+    {
+        std::lock_guard<std::mutex> lk(g_favMutex);
+        if (InList(g_favBusy, bare)) return true;
+        g_favBusy.push_back(bare);
+        g_favQueue.emplace_back(origin, bare);
+        if (!g_favThread) {
+            g_favThread = CreateThread(nullptr, 0, FavThread, nullptr, 0, nullptr);
+            if (!g_favThread) {
+                g_favQueue.pop_back();
+                EraseFromList(g_favBusy, bare);
+                return false;
+            }
+        }
     }
-    CloseHandle(t);
+    SetEvent(g_favWake);
+    return true;
 }
 
-static std::wstring DefaultBrowserExe() {
-    using Fn = HRESULT(WINAPI*)(DWORD, int, LPCWSTR, LPCWSTR, LPWSTR, DWORD*);
-    static Fn fn = reinterpret_cast<Fn>(
-        (void*)GetProcAddress(LoadLibraryW(L"shlwapi.dll"), "AssocQueryStringW"));
-    if (!fn) return L"";
-    wchar_t buf[MAX_PATH * 2] = L"";
-    DWORD n = ARRAYSIZE(buf);
-    if (FAILED(fn(0x00001000, 2, L"https", L"open", buf, &n)) || !buf[0]) return L"";
-    return buf;
+static void MarkFavFailed(const std::wstring& bare) {
+    if (!InList(g_favFailed, bare)) g_favFailed.push_back(bare);
+    WriteMarker(FaviconFile(bare, L".none"));
+}
+
+static void StopFavicons() {
+    g_favStop = true;
+    {
+        std::lock_guard<std::mutex> lk(g_favMutex);
+        FavCloseHandles();
+        g_favQueue.clear();
+    }
+    if (g_favWake) SetEvent(g_favWake);
+    if (g_favThread) {
+        WaitForSingleObject(g_favThread, 3000);
+        CloseHandle(g_favThread);
+        g_favThread = nullptr;
+    }
 }
 
 static void* LoadImageFileSquare(const std::wstring& file) {
@@ -1178,8 +1521,73 @@ static void* LoadImageFileSquare(const std::wstring& file) {
     return src;
 }
 
+static bool NeedsBacking(void* src, bool& darkGlyph) {
+    void* small = Resample(src, 16);
+    if (!small) return false;
+    double sumA = 0.0, sumL = 0.0, sumS = 0.0;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            UINT32 c = 0;
+            if (Gp.BitmapGetPixel(small, x, y, &c) != 0) continue;
+            double a = (double)(c >> 24) / 255.0;
+            if (a <= 0.0) continue;
+            double r = (double)((c >> 16) & 255) / 255.0;
+            double g = (double)((c >> 8) & 255) / 255.0;
+            double b = (double)(c & 255) / 255.0;
+            double mx = std::max(r, std::max(g, b)), mn = std::min(r, std::min(g, b));
+            sumA += a;
+            sumL += a * (0.2126 * r + 0.7152 * g + 0.0722 * b);
+            sumS += a * (mx <= 0.0 ? 0.0 : (mx - mn) / mx);
+        }
+    }
+    Gp.DisposeImage(small);
+    if (sumA < 256.0 * 0.04) return false;
+    double lg = sumL / sumA;
+    double sg = sumS / sumA;
+    double lb = (0.2126 * GetRValue(g_cfg.bg) + 0.7152 * GetGValue(g_cfg.bg) +
+                 0.0722 * GetBValue(g_cfg.bg)) / 255.0;
+    darkGlyph = lg < 0.5;
+    return fabs(lg - lb) < 0.30 && sg < 0.35;
+}
+
+static void* BackedIcon(void* src, bool darkGlyph, std::vector<UINT32>& pix) {
+    const int S = 128;
+    pix.assign((size_t)S * S, 0);
+    void* bmp = nullptr;
+    if (Gp.CreateBitmapFromScan0(S, S, S * 4, 0x000E200B, (BYTE*)pix.data(), &bmp) != 0 || !bmp) {
+        pix.clear();
+        return nullptr;
+    }
+    void* g = nullptr;
+    if (Gp.GetImageGraphicsContext(bmp, &g) != 0 || !g) {
+        Gp.DisposeImage(bmp);
+        pix.clear();
+        return nullptr;
+    }
+    Gp.SetSmoothing(g, 4);
+    Gp.SetInterp(g, 7);
+    Gp.SetPixOff(g, 2);
+    const float bw = 6.0f;
+    void* path = RoundPath(bw / 2.0f, bw / 2.0f, (float)S - bw, (float)S - bw, 28.0f);
+    void* br = nullptr;
+    void* pen = nullptr;
+    Gp.CreateFill(darkGlyph ? 0xFFF2F2F2 : 0xFF000000, &br);
+    if (!darkGlyph) Gp.CreatePen(0xFFFFFFFF, bw, 2, &pen);
+    if (path && br) Gp.FillPath(g, br, path);
+    if (path && pen) Gp.DrawPath(g, pen, path);
+    if (pen) Gp.DelPen(pen);
+    if (br) Gp.DelBrush(br);
+    if (path) Gp.DeletePath(path);
+    const float inset = 22.0f;
+    Gp.DrawImageRect(g, src, inset, inset, (float)S - inset * 2.0f, (float)S - inset * 2.0f);
+    Gp.DeleteGraphics(g);
+    return bmp;
+}
+
 static void LoadImages(Item& it) {
     FreeImg(it);
+    it.loading = false;
+    ComputeExeKey(it);
     void* src = nullptr;
     HICON h = nullptr;
     std::vector<UINT32> pix;
@@ -1188,32 +1596,39 @@ static void LoadImages(Item& it) {
     if (!it.iconPath.empty()) src = LoadImageFileSquare(it.iconPath);
 
     if (!src && isUrl) {
-        std::wstring typed = HostOf(it.path);
-        std::wstring bare = BareHost(typed);
-        std::wstring fav = FaviconFile(bare);
+        std::wstring bare = BareHost(HostOf(it.path));
+        std::wstring fav = FaviconFile(bare, L".img");
+        bool failed = false;
         if (!fav.empty() && GetFileAttributesW(fav.c_str()) != INVALID_FILE_ATTRIBUTES) {
             src = LoadImageFileSquare(fav);
             if (!src) {
                 DeleteFileW(fav.c_str());
-                if (!InList(g_favFailed, bare)) g_favFailed.push_back(bare);
+                MarkFavFailed(bare);
+                failed = true;
+            } else {
+                bool darkGlyph = false;
+                if (NeedsBacking(src, darkGlyph)) {
+                    void* backed = BackedIcon(src, darkGlyph, pix);
+                    if (backed) {
+                        Gp.DisposeImage(src);
+                        src = backed;
+                    }
+                }
             }
-        } else {
-            RequestFavicon(typed);
+        } else if (g_cfg.fetchFavicons) {
+            std::wstring none = FaviconFile(bare, L".none");
+            failed = InList(g_favFailed, bare) || (!none.empty() && RecentlyFailed(none));
+            if (!failed) it.loading = RequestFavicon(it.path);
         }
+        if (!src) src = MakeGlobeIcon(pix);
     }
 
     if (!src) {
-        if (isUrl) {
-            std::wstring exe = DefaultBrowserExe();
-            if (!exe.empty()) h = ExtractIconFromFile(exe, 0);
-            if (!h) h = LoadIconFor(exe);
-        } else {
-            if (g_cfg.useTargetIcon && it.path.size() >= 4 &&
-                _wcsicmp(it.path.c_str() + it.path.size() - 4, L".lnk") == 0) {
-                h = LoadLinkIcon(it.path);
-            }
-            if (!h) h = LoadIconFor(IconSourceFor(it.path));
+        if (g_cfg.useTargetIcon && it.path.size() >= 4 &&
+            _wcsicmp(it.path.c_str() + it.path.size() - 4, L".lnk") == 0) {
+            h = LoadLinkIcon(it.path);
         }
+        if (!h) h = LoadIconFor(IconSourceFor(it.path));
         if (!h) return;
         src = BitmapFromHicon(h, pix);
         if (!src) {
@@ -1257,8 +1672,55 @@ static std::wstring EdgeSuffix() {
     static const wchar_t* sfx[4] = {L"", L"_left", L"_top", L"_bottom"};
     return sfx[P->edge];
 }
-static std::wstring ItemsKey() { return L"items" + EdgeSuffix(); }
-static std::wstring IconsKey() { return L"customIcons" + EdgeSuffix(); }
+static std::wstring ItemsKey() { return L"items" + EdgeSuffix() + g_userSuffix; }
+static std::wstring IconsKey() { return L"customIcons" + EdgeSuffix() + g_userSuffix; }
+
+static std::wstring CurrentUserSid() {
+    std::wstring sid;
+    HANDLE tok = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) {
+        DWORD n = 0;
+        GetTokenInformation(tok, TokenUser, nullptr, 0, &n);
+        if (n) {
+            std::vector<BYTE> buf(n);
+            if (GetTokenInformation(tok, TokenUser, buf.data(), n, &n)) {
+                LPWSTR str = nullptr;
+                if (ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &str) && str) {
+                    sid = str;
+                    LocalFree(str);
+                }
+            }
+        }
+        CloseHandle(tok);
+    }
+    return sid;
+}
+
+static std::wstring ReadValue(const std::wstring& key) {
+    std::vector<wchar_t> buf(32768, 0);
+    Wh_GetStringValue(key.c_str(), buf.data(), buf.size());
+    return buf.data();
+}
+
+static void ClaimSharedValue(const std::wstring& base) {
+    if (g_userSuffix.empty()) return;
+    std::wstring mine = base + g_userSuffix;
+    if (!ReadValue(mine).empty()) return;
+    std::wstring shared = ReadValue(base);
+    if (shared.empty()) return;
+    Wh_SetStringValue(mine.c_str(), shared.c_str());
+    Wh_DeleteValue(base.c_str());
+}
+
+static void InitUserStorage() {
+    std::wstring sid = CurrentUserSid();
+    g_userSuffix = sid.empty() ? L"" : L"_" + sid;
+    static const wchar_t* const sfx[4] = {L"", L"_left", L"_top", L"_bottom"};
+    for (auto e : sfx) {
+        ClaimSharedValue(std::wstring(L"items") + e);
+        ClaimSharedValue(std::wstring(L"customIcons") + e);
+    }
+}
 
 static void SaveItems() {
     std::wstring s;
@@ -1517,6 +1979,27 @@ static void* RoundPath(float x, float y, float w, float h, float r) {
     return p;
 }
 
+static void DrawSpinner(void* g, float cx, float cy, float size) {
+    if (size < 6.0f) return;
+    float r = size * 0.28f;
+    float w = std::max(2.0f, size * 0.09f);
+    float angle = (float)fmod(NowSec() * 420.0, 360.0);
+    for (int pass = 0; pass < 2; pass++) {
+        void* path = nullptr;
+        if (Gp.CreatePath(0, &path) != 0 || !path) continue;
+        Gp.AddArc(path, cx - r, cy - r, r * 2.0f, r * 2.0f, pass == 0 ? 0.0f : angle,
+                  pass == 0 ? 359.9f : 100.0f);
+        void* pen = nullptr;
+        if (Gp.CreatePen(Argb(g_cfg.accent, pass == 0 ? 70 : 255), w, 2, &pen) == 0 && pen) {
+            Gp.SetPenStartCap(pen, 2);
+            Gp.SetPenEndCap(pen, 2);
+            Gp.DrawPath(g, pen, path);
+            Gp.DelPen(pen);
+        }
+        Gp.DeletePath(path);
+    }
+}
+
 static void FillRound(void* g, float x, float y, float w, float h, float r, COLORREF c, int a) {
     void* path = RoundPath(x, y, w, h, r);
     if (!path) return;
@@ -1641,7 +2124,7 @@ static void Render() {
         sh += ((float)hFull - sh) * u2;
         w = std::max(2, (int)(sw + 0.5f));
         h = std::max(2, (int)(sh + 0.5f));
-        ovalR = (std::min(sw, sh) / 2.0f) * (1.0f - u2) + (float)Sc(12) * u2;
+        ovalR = (std::min(sw, sh) / 2.0f) * (1.0f - u2) + (float)Sc(g_cfg.radius) * u2;
     } else if (drop) {
         float q1 = SmoothStep(p / 0.5f);
         float q2 = SmoothStep((p - 0.45f) / 0.55f);
@@ -1661,7 +2144,7 @@ static void Render() {
         dropCy = h / 2.0f;
         shapeY = dropCy - hh;
         shapeH = hh * 2.0f;
-        ovalR = rB + ((float)Sc(12) - rB) * q2;
+        ovalR = rB + ((float)Sc(g_cfg.radius) - rB) * q2;
         dropNeck = q2 < 0.25f && q1 < 0.98f;
         dropXa = X(-1.0f);
         dropXb = X(dB);
@@ -1693,10 +2176,11 @@ static void Render() {
     int bgA = std::clamp(g_cfg.opacity, 10, 100) * 255 / 100;
     int borderA = std::max(bgA, 90);
 
-    float R = std::min((float)Sc(12), std::min(w, h) / 2.0f);
+    const float baseR = (float)Sc(g_cfg.radius);
+    float R = std::min(baseR, std::min(w, h) / 2.0f);
     if (oval || drop) R = ovalR;
     if (jelly) {
-        R = std::min(std::clamp((float)Sc(12) + (jSp - 1.0f) * (float)Sc(22), (float)Sc(4), (float)Sc(40)),
+        R = std::min(std::clamp(baseR + (jSp - 1.0f) * (float)Sc(22), std::min((float)Sc(4), baseR), std::max((float)Sc(40), baseR)),
                      std::min(w, h) / 2.0f);
     }
 
@@ -1844,10 +2328,10 @@ static void Render() {
 
             if (hov > 0.01f) {
                 if (horiz) {
-                    FillRound(g, top + 1, left + 1, sA - 2, s - 2, (float)Sc(10), g_cfg.hover,
+                    FillRound(g, top + 1, left + 1, sA - 2, s - 2, std::min((float)Sc(10), (float)Sc(g_cfg.radius)), g_cfg.hover,
                               (int)(hov * 255));
                 } else {
-                    FillRound(g, left + 1, top + 1, s - 2, sA - 2, (float)Sc(10), g_cfg.hover,
+                    FillRound(g, left + 1, top + 1, s - 2, sA - 2, std::min((float)Sc(10), (float)Sc(g_cfg.radius)), g_cfg.hover,
                               (int)(hov * 255));
                 }
             }
@@ -1888,6 +2372,15 @@ static void Render() {
                 scale = zoom * app * (1.0f - (1.0f - pop) * (1.0f - pop));
             }
 
+            if (!isPlus && i < nItems) {
+                float pa = P->items[i].pressA;
+                if (pa > 0.001f) {
+                    bool down = P->pressIdx == i && !g_dragActive;
+                    float bounce = (!down && pa < 0.999f) ? 0.10f * sinf(3.14159265f * (1.0f - pa)) : 0.0f;
+                    scale *= 1.0f - 0.12f * pa + bounce;
+                }
+            }
+
             float pcx = horiz ? cy : cx;
             float pcy = horiz ? cx : cy;
 
@@ -1909,8 +2402,26 @@ static void Render() {
                 if (!im) im = P->items[i].imgBig;
                 float szA = sz * aspX, szB = sz * aspY;
                 float dw = horiz ? szB : szA, dh = horiz ? szA : szB;
-                if (std::min(dw, dh) >= 2.0f && im) {
+                if (P->items[i].loading) {
+                    DrawSpinner(g, pcx, pcy, sz);
+                } else if (std::min(dw, dh) >= 2.0f && im) {
                     Gp.DrawImageRect(g, im, pcx - dw / 2, pcy - dh / 2, dw, dh);
+                }
+                float ra = P->items[i].runA * std::clamp(scale, 0.0f, 1.0f);
+                if (g_cfg.showRunning && ra > 0.02f) {
+                    float dr = std::max(1.5f, (float)Sc(2));
+                    float edgeCross = atMax ? left + s - (float)Sc(4) : left + (float)Sc(4);
+                    float dcx = horiz ? cy : edgeCross;
+                    float dcy = horiz ? edgeCross : cy;
+                    void* dpath = nullptr;
+                    void* dbr = nullptr;
+                    if (Gp.CreatePath(0, &dpath) == 0 && dpath &&
+                        Gp.CreateFill(Argb(g_cfg.accent, (int)(230.0f * ra)), &dbr) == 0 && dbr) {
+                        Gp.AddArc(dpath, dcx - dr, dcy - dr, dr * 2.0f, dr * 2.0f, 0.0f, 359.9f);
+                        Gp.FillPath(g, dbr, dpath);
+                    }
+                    if (dbr) Gp.DelBrush(dbr);
+                    if (dpath) Gp.DeletePath(dpath);
                 }
             }
         }
@@ -2001,11 +2512,19 @@ static void AnimStep() {
 
     int n = (int)P->items.size();
     for (int i = 0; i < n; i++) {
-        stepF(P->items[i].pos, (float)i);
+        if (!(g_dragActive && P == g_dragOwner && i == g_dragIdx)) stepF(P->items[i].pos, (float)i);
         stepF(P->items[i].hover, P->hover == i ? 1.0f : 0.0f);
         stepF(P->items[i].appear, 1.0f);
+        stepF(P->items[i].runA, (g_cfg.showRunning && P->items[i].running) ? 1.0f : 0.0f);
+        {
+            float target = (P->pressIdx == i && !g_dragActive) ? 1.0f : 0.0f;
+            float kp = g_cfg.anim ? 1.0f - expf(-dt * 12.0f) : 1.0f;
+            P->items[i].pressA = Approach(P->items[i].pressA, target, kp);
+            if (P->items[i].pressA != target) busy = true;
+        }
     }
     stepF(P->plus.pos, (float)n);
+    if (g_dragActive) busy = true;
     stepF(P->plus.hover, P->hover == n ? 1.0f : 0.0f);
     P->intro = Approach(P->intro, 1.0f, kE);
     if (P->intro != 1.0f) busy = true;
@@ -2014,7 +2533,19 @@ static void AnimStep() {
         if (P->mouseY >= 0.0f) stepF(P->magY, P->mouseY);
     }
 
-    Render();
+    bool spinOnly = false;
+    if (P->curW > StripW() + 1) {
+        for (auto& it : P->items) {
+            if (it.loading) {
+                spinOnly = !busy;
+                busy = true;
+                break;
+            }
+        }
+    }
+
+    static unsigned spinTick = 0;
+    if (!spinOnly || (spinTick++ & 1) == 0) Render();
 
     if (!busy) P->animRunning = false;
 }
@@ -2102,6 +2633,131 @@ static bool AddUrl(const std::wstring& raw) {
 static void Commit() {
     SaveItems();
     Relayout();
+}
+
+static void DragStart() {
+    g_dragActive = true;
+    g_dragOwner = P;
+    g_dragIdx = P->pressIdx;
+    for (Panel* pn : std::vector<Panel*>(g_panels)) {
+        PanelScope sc(pn);
+        pn->outsideTicks = 0;
+        if (!pn->expanded) {
+            pn->expanded = true;
+            Relayout();
+        }
+    }
+}
+
+static bool PanelHasPath(Panel* pn, const std::wstring& path) {
+    for (auto& it : pn->items) {
+        if (_wcsicmp(it.path.c_str(), path.c_str()) == 0) return true;
+    }
+    return false;
+}
+
+static bool PanelAlive(Panel* pn) {
+    return pn && std::find(g_panels.begin(), g_panels.end(), pn) != g_panels.end();
+}
+
+static void DragUpdate(POINT sp) {
+    Panel* owner = g_dragOwner;
+    if (!PanelAlive(owner) || g_dragIdx < 0 || g_dragIdx >= (int)owner->items.size()) return;
+
+    Panel* target = owner;
+    RECT r{};
+    bool inOwner = owner->hwnd && GetWindowRect(owner->hwnd, &r) && PtInRect(&r, sp);
+    if (!inOwner) {
+        for (Panel* pn : g_panels) {
+            if (pn == owner || !pn->hwnd || !IsWindowVisible(pn->hwnd)) continue;
+            RECT wr{};
+            if (GetWindowRect(pn->hwnd, &wr) && PtInRect(&wr, sp)) {
+                target = pn;
+                break;
+            }
+        }
+    }
+
+    if (target != owner) {
+        bool blocked = false;
+        Item moved = owner->items[g_dragIdx];
+        {
+            PanelScope st(target);
+            blocked = PanelHasPath(target, moved.path) || (int)target->items.size() >= MaxItems();
+        }
+        if (!blocked) {
+            owner->items.erase(owner->items.begin() + g_dragIdx);
+            {
+                PanelScope so(owner);
+                owner->hover = -1;
+                owner->mouseY = -1.0f;
+                Commit();
+            }
+            PanelScope st(target);
+            POINT cp = sp;
+            ScreenToClient(target->hwnd, &cp);
+            float along = target->horiz ? (float)cp.x : (float)cp.y;
+            float s = (float)SlotSize(), m = (float)Margin();
+            int idx = std::clamp((int)floorf((along - m) / s), 0, (int)target->items.size());
+            moved.appear = 1.0f;
+            moved.hover = 0.0f;
+            target->items.insert(target->items.begin() + idx, moved);
+            Commit();
+            g_dragOwner = target;
+            g_dragIdx = idx;
+            owner = target;
+        }
+    }
+
+    {
+        PanelScope sc(owner);
+        POINT cp = sp;
+        ScreenToClient(owner->hwnd, &cp);
+        float along = owner->horiz ? (float)cp.x : (float)cp.y;
+        int n = (int)owner->items.size();
+        float s = (float)SlotSize(), m = (float)Margin();
+        int idx = std::clamp((int)floorf((along - m) / s), 0, n - 1);
+        if (idx != g_dragIdx) {
+            Item moved = owner->items[g_dragIdx];
+            owner->items.erase(owner->items.begin() + g_dragIdx);
+            owner->items.insert(owner->items.begin() + idx, moved);
+            g_dragIdx = idx;
+        }
+        owner->items[g_dragIdx].pos = std::clamp((along - m) / s - 0.5f, 0.0f, (float)(n - 1));
+        owner->hover = g_dragIdx;
+        if (g_cfg.magnify) {
+            if (owner->magAmt < 0.05f) owner->magY = along;
+            owner->mouseY = along;
+        }
+        StartAnim();
+    }
+    for (Panel* pn : std::vector<Panel*>(g_panels)) {
+        if (pn == owner) continue;
+        if (pn->hover != -1 || pn->mouseY >= 0.0f) {
+            PanelScope so(pn);
+            pn->hover = -1;
+            pn->mouseY = -1.0f;
+            StartAnim();
+        }
+    }
+}
+
+static void DragEnd() {
+    Panel* owner = g_dragOwner;
+    g_dragActive = false;
+    g_dragOwner = nullptr;
+    g_dragIdx = -1;
+    for (Panel* pn : std::vector<Panel*>(g_panels)) {
+        PanelScope sc(pn);
+        pn->hover = -1;
+        pn->mouseY = -1.0f;
+        pn->outsideTicks = 0;
+        StartAnim();
+    }
+    if (PanelAlive(owner)) {
+        PanelScope so(owner);
+        Commit();
+    }
 }
 
 constexpr int IDC_URL_LABEL = 1101;
@@ -2410,6 +3066,12 @@ static void ShowMenu(POINT sp, int idx) {
         AppendMenuW(m, MF_STRING | (idx + 1 >= (int)P->items.size() ? MF_GRAYED : 0), ID_DOWN,
                     Tr(L"Move down", L"Переместить ниже"));
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        HMENU add = CreatePopupMenu();
+        AppendMenuW(add, MF_STRING, ID_PICK, Tr(L"Choose a program...", L"Выбрать программу…"));
+        AppendMenuW(add, MF_STRING, ID_URL, Tr(L"Add a website...", L"Добавить сайт…"));
+        AppendMenuW(add, MF_STRING, ID_PASTE, Tr(L"Paste a path or link from the clipboard", L"Вставить путь или ссылку из буфера обмена"));
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)add, Tr(L"Add to the dock", L"Добавить на панель"));
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING, ID_REMOVE, Tr(L"Remove from the dock", L"Удалить с панели"));
     } else {
         AppendMenuW(m, MF_STRING, ID_PICK, Tr(L"Choose a program...", L"Выбрать программу…"));
@@ -2463,11 +3125,12 @@ static void ShowMenu(POINT sp, int idx) {
             break;
         case ID_FAV_REFRESH: {
             Item& it = P->items[idx];
-            std::wstring typed = HostOf(it.path);
-            std::wstring bare = BareHost(typed);
-            std::wstring f = FaviconFile(bare);
+            std::wstring bare = BareHost(HostOf(it.path));
             FreeImg(it);
-            if (!f.empty()) DeleteFileW(f.c_str());
+            for (const wchar_t* e : {L".img", L".none"}) {
+                std::wstring f = FaviconFile(bare, e);
+                if (!f.empty()) DeleteFileW(f.c_str());
+            }
             EraseFromList(g_favFailed, bare);
             LoadImages(it);
             Commit();
@@ -2482,6 +3145,61 @@ static void ShowMenu(POINT sp, int idx) {
         case ID_PASTE:
             PastePath();
             break;
+    }
+}
+
+static DWORD g_lastRunScan = 0;
+
+static void RefreshRunning() {
+    if (!g_cfg.showRunning) return;
+    bool anyOpen = false;
+    for (Panel* pn : g_panels) {
+        if (pn->hwnd && pn->curW > StripW() + 1) anyOpen = true;
+    }
+    if (!anyOpen) return;
+    DWORD now = GetTickCount();
+    if (g_lastRunScan && now - g_lastRunScan < 1000) return;
+    g_lastRunScan = now;
+
+    std::vector<std::wstring> paths, names;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            wchar_t buf[MAX_PATH * 2];
+            DWORD n = ARRAYSIZE(buf);
+            bool got = false;
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+            if (h) {
+                got = QueryFullProcessImageNameW(h, 0, buf, &n) != 0;
+                CloseHandle(h);
+            }
+            if (got) {
+                paths.push_back(LowerStr(buf));
+            } else {
+                names.push_back(LowerStr(pe.szExeFile));
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    std::sort(paths.begin(), paths.end());
+    std::sort(names.begin(), names.end());
+
+    for (Panel* pn : std::vector<Panel*>(g_panels)) {
+        PanelScope sc(pn);
+        bool changed = false;
+        for (auto& it : P->items) {
+            bool r = !it.exeKey.empty() &&
+                     (std::binary_search(paths.begin(), paths.end(), it.exeKey) ||
+                      std::binary_search(names.begin(), names.end(), it.exeName));
+            if (r != it.running) {
+                it.running = r;
+                changed = true;
+            }
+        }
+        if (changed) StartAnim();
     }
 }
 
@@ -2541,11 +3259,12 @@ static void OnTick() {
         }
         UnionRect(&wr, &wr, &edge);
     }
-    if (PtInRect(&wr, pt)) {
+    if (PtInRect(&wr, pt) || P->pressIdx >= 0 || g_dragActive) {
         P->outsideTicks = 0;
         if (!P->expanded) {
             P->expanded = true;
             Relayout();
+            RefreshRunning();
         }
     } else if (P->expanded && ++P->outsideTicks >= 6) {
         P->expanded = false;
@@ -2575,8 +3294,40 @@ static LRESULT PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
+        case WM_LBUTTONDOWN: {
+            POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            int hit = HitTest(pt);
+            if (hit >= 0 && hit < (int)P->items.size()) {
+                P->pressIdx = hit;
+                P->pressPt = pt;
+                SetCapture(hwnd);
+                StartAnim();
+            }
+            return 0;
+        }
+        case WM_CAPTURECHANGED: {
+            if ((HWND)lp != hwnd) {
+                if (g_dragActive) DragEnd();
+                P->pressIdx = -1;
+                StartAnim();
+            }
+            return 0;
+        }
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            if (P->pressIdx >= 0 && (wp & MK_LBUTTON)) {
+                if (!g_dragActive && P->pressIdx < (int)P->items.size()) {
+                    int dx = pt.x - P->pressPt.x, dy = pt.y - P->pressPt.y;
+                    int th = Sc(6);
+                    if (dx * dx + dy * dy >= th * th) DragStart();
+                }
+                if (g_dragActive) {
+                    POINT sp = pt;
+                    ClientToScreen(hwnd, &sp);
+                    DragUpdate(sp);
+                    return 0;
+                }
+            }
             int hit = HitTest(pt);
             if (g_cfg.magnify) {
                 float along = P->horiz ? (float)pt.x : (float)pt.y;
@@ -2597,12 +3348,25 @@ static LRESULT PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_MOUSELEAVE:
             P->tracking = false;
+            if (g_dragActive) return 0;
             P->hover = -1;
             P->mouseY = -1.0f;
             StartAnim();
             return 0;
         case WM_LBUTTONUP: {
             POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            if (P->pressIdx >= 0) {
+                bool wasDrag = g_dragActive;
+                int idx = P->pressIdx;
+                P->pressIdx = -1;
+                StartAnim();
+                if (wasDrag) DragEnd();
+                if (GetCapture() == hwnd) ReleaseCapture();
+                if (!wasDrag && idx < (int)P->items.size() && HitTest(pt) == idx) {
+                    Launch(P->items[idx].path, false);
+                }
+                return 0;
+            }
             int hit = HitTest(pt);
             if (hit >= 0) {
                 if (hit < (int)P->items.size())
@@ -2637,8 +3401,19 @@ static LRESULT PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             if (wp == kTickId) OnTick();
             return 0;
+        case 0x0320:
+            if (g_cfg.followTheme) {
+                HWND c = g_ctrl.load();
+                if (c) PostMessageW(c, WM_RELOAD, 0, 0);
+            }
+            return 0;
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
+            if (msg == WM_SETTINGCHANGE && g_cfg.followTheme && lp &&
+                wcscmp((LPCWSTR)lp, L"ImmersiveColorSet") == 0) {
+                HWND c = g_ctrl.load();
+                if (c) PostMessageW(c, WM_RELOAD, 0, 0);
+            }
             Relayout();
             return 0;
         case WM_DESTROY:
@@ -2685,6 +3460,11 @@ static Panel* CreatePanel(int edge) {
 }
 
 static void DestroyPanel(Panel* pn) {
+    if (g_dragOwner == pn) {
+        g_dragActive = false;
+        g_dragOwner = nullptr;
+        g_dragIdx = -1;
+    }
     {
         PanelScope scope(pn);
         if (pn->hwnd) DestroyWindow(pn->hwnd);
@@ -2722,13 +3502,12 @@ static void ReloadPanels() {
     }
 }
 
-static void FavDone(const std::wstring& typedHost, bool ok) {
-    std::wstring bare = BareHost(typedHost);
-    EraseFromList(g_favBusy, bare);
-    if (!ok) {
-        if (!InList(g_favFailed, bare)) g_favFailed.push_back(bare);
-        return;
+static void FavDone(const std::wstring& bare, bool ok) {
+    {
+        std::lock_guard<std::mutex> lk(g_favMutex);
+        EraseFromList(g_favBusy, bare);
     }
+    if (!ok && !InList(g_favFailed, bare)) g_favFailed.push_back(bare);
     for (Panel* pn : std::vector<Panel*>(g_panels)) {
         PanelScope scope(pn);
         bool changed = false;
@@ -2744,11 +3523,15 @@ static void FavDone(const std::wstring& typedHost, bool ok) {
 
 constexpr wchar_t kCtlClass[] = L"WhQuickLaunchDockCtl";
 constexpr UINT_PTR kCtlRetryTimer = 1;
+constexpr UINT_PTR kCtlRunTimer = 2;
 
 static LRESULT CALLBACK CtrlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_FAVICON) {
-        std::unique_ptr<std::wstring> host((std::wstring*)lp);
-        if (host) FavDone(*host, wp != 0);
+        auto* host = (std::wstring*)lp;
+        if (host) {
+            FavDone(*host, wp != 0);
+            delete host;
+        }
         return 0;
     }
     if (msg == WM_RELOAD) {
@@ -2761,12 +3544,47 @@ static LRESULT CALLBACK CtrlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         ReloadPanels();
         return 0;
     }
+    if (msg == WM_TIMER && wp == kCtlRunTimer) {
+        RefreshRunning();
+        return 0;
+    }
     if (msg == WM_TIMER && wp == kCtlRetryTimer) {
         KillTimer(hwnd, kCtlRetryTimer);
         PostMessageW(hwnd, WM_RELOAD, 0, 0);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static HANDLE g_frameTimer = nullptr;
+static LONGLONG g_qpcFreq = 0;
+static LONGLONG g_nextFrame = 0;
+
+static void PaceFrame(int fps) {
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    LONGLONG period = g_qpcFreq / fps;
+    if (g_nextFrame == 0 || t.QuadPart - g_nextFrame > period * 4) g_nextFrame = t.QuadPart;
+    g_nextFrame += period;
+    for (;;) {
+        QueryPerformanceCounter(&t);
+        LONGLONG left = g_nextFrame - t.QuadPart;
+        if (left <= 0) break;
+        double ms = (double)left * 1000.0 / (double)g_qpcFreq;
+        if (g_frameTimer && ms > 0.5) {
+            LARGE_INTEGER due;
+            due.QuadPart = -(LONGLONG)(ms * 10000.0);
+            if (SetWaitableTimer(g_frameTimer, &due, 0, nullptr, nullptr, FALSE)) {
+                WaitForSingleObject(g_frameTimer, 50);
+                continue;
+            }
+        }
+        if (ms > 3.0) {
+            Sleep(1);
+        } else {
+            YieldProcessor();
+        }
+    }
 }
 
 static DWORD WINAPI UiThread(LPVOID) {
@@ -2808,8 +3626,16 @@ static DWORD WINAPI UiThread(LPVOID) {
     RegisterClassW(&cc);
 
     LoadSettings();
+    InitUserStorage();
     g_ctrl = CreateWindowExW(0, kCtlClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, hInst, nullptr);
     SyncPanels();
+    SetTimer(g_ctrl, kCtlRunTimer, 3000, nullptr);
+    RefreshRunning();
+
+    LARGE_INTEGER qf;
+    QueryPerformanceFrequency(&qf);
+    g_qpcFreq = qf.QuadPart;
+    g_frameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0x00000002, TIMER_ALL_ACCESS);
 
     MSG msg;
     bool quit = false;
@@ -2829,15 +3655,24 @@ static DWORD WINAPI UiThread(LPVOID) {
             if (pn->animRunning) any = true;
         }
         if (any) {
-            if (FAILED(DwmFlush())) Sleep(8);
+            if (g_cfg.fps > 0) {
+                PaceFrame(g_cfg.fps);
+            } else if (FAILED(DwmFlush())) {
+                Sleep(8);
+            }
             for (Panel* pn : std::vector<Panel*>(g_panels)) {
                 if (!pn->animRunning) continue;
                 PanelScope scope(pn);
                 AnimStep();
             }
         } else {
+            g_nextFrame = 0;
             WaitMessage();
         }
+    }
+    if (g_frameTimer) {
+        CloseHandle(g_frameTimer);
+        g_frameTimer = nullptr;
     }
 
     for (Panel* pn : std::vector<Panel*>(g_panels)) DestroyPanel(pn);
@@ -2853,6 +3688,7 @@ static DWORD WINAPI UiThread(LPVOID) {
 
 BOOL WhTool_ModInit() {
     g_stop = false;
+    g_favStop = false;
     g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_threadId);
     return g_thread != nullptr;
 }
@@ -2863,6 +3699,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
+    StopFavicons();
     g_stop = true;
     if (g_thread) {
         PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
