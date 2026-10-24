@@ -137,16 +137,20 @@ Settings GetSettings() {
 std::atomic<HWND> g_listViewWnd{nullptr};   // Desktop SysListView32 (subclassed)
 std::atomic<HWND> g_shellViewWnd{nullptr};  // Parent SHELLDLL_DefView (subclassed)
 
-// Set at the start of Wh_ModUninit so that the fade timer can't be re-armed
-// by a WM_MOUSEMOVE or a queued WM_TIMER processed before the subclass is
-// removed.
+// Set at the start of Wh_ModBeforeUninit (and again in Wh_ModUninit) so that
+// the fade timer can't be re-armed by a WM_MOUSEMOVE or a queued WM_TIMER
+// processed before the subclass is removed.
 std::atomic<bool> g_unloading{false};
 
 // The desktop's own IDropTarget object, found via the window property that
 // RegisterDragDrop sets. The hooked vtable methods may be shared with other
 // shell drop targets, so the hooks only react to this exact object.
 std::atomic<IDropTarget*> g_desktopDropTarget{nullptr};
-std::atomic<bool> g_dropTargetHooked{false};
+
+// The hooks are installed at most once: the attempt is claimed atomically,
+// so EnsureDropTargetHook can't race itself when called from two threads,
+// and a failed SetFunctionHook isn't retried on every mouse move.
+std::atomic<bool> g_dropTargetHookAttempted{false};
 
 // Posted to the desktop list view on unload so that the fade timer is killed
 // on its owning thread, while the subclass that handles it is still installed.
@@ -502,10 +506,9 @@ LRESULT CALLBACK ListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     switch (uMsg) {
         case WM_MOUSEMOVE:
             // The desktop may register its drop target after the list view is
-            // created, and a recreated desktop registers a new one; retry the
-            // (bounded) installation/lookup until the current target is known.
-            if (!g_dropTargetHooked.load(std::memory_order_relaxed) ||
-                !g_desktopDropTarget.load(std::memory_order_relaxed)) {
+            // created, and a recreated desktop registers a new one; rerun the
+            // (bounded) lookup until the current target is known.
+            if (!g_desktopDropTarget.load(std::memory_order_relaxed)) {
                 EnsureDropTargetHook();
             }
 
@@ -801,7 +804,7 @@ DropTargetDragEnter_t DropTargetDragEnter_Original = nullptr;
 DropTargetDragOver_t DropTargetDragOver_Original = nullptr;
 DropTargetDrop_t DropTargetDrop_Original = nullptr;
 
-void NotifyDragPosition(IDropTarget* self, const POINTL& pt) {
+void NotifyDragPosition(const IDropTarget* self, const POINTL& pt) {
     if (self != g_desktopDropTarget.load() || !g_msgDragPosition ||
         g_unloading.load(std::memory_order_relaxed)) {
         return;
@@ -891,7 +894,11 @@ void EnsureDropTargetHook() {
     // exact object, so nullptr simply means "no drag reveal for now").
     IDropTarget* target = FindDesktopDropTarget();
     g_desktopDropTarget = target;
-    if (!target || g_dropTargetHooked.load()) {
+
+    // Claim the installation attempt atomically: only one thread (desktop
+    // or engine) may install the hooks, and a failure is not retried.
+    if (!target ||
+        g_dropTargetHookAttempted.exchange(true, std::memory_order_relaxed)) {
         return;
     }
 
@@ -910,8 +917,6 @@ void EnsureDropTargetHook() {
         Wh_Log(L"Drop target hooks failed");
         return;
     }
-
-    g_dropTargetHooked = true;
 
     // This runs after Wh_ModInit, so the hooks must be applied explicitly.
     Wh_ApplyHookOperations();
