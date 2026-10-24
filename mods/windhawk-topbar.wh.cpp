@@ -32496,14 +32496,15 @@ void PinTopBarFlyoutHwnd() {
                     Wh_Log(L"TopBar sizes: popup=%d content=%.0f TopBarRoot=%.0f Viewbox=%.0fx%.0f Presenter=%.0fx%.0f auto=%d",
                            popupW, contentW, tbW, viewboxW, viewboxH, presenterW, presenterH, userAuto ? 1 : 0);
                 }
-                if (!userAuto && popupW > 0 && tbW > 0 && tbW < popupW * 0.85) {
+                        double currentScale = g_settings.topBarScale / 100.0;
+                        if (currentScale <= 0.0) currentScale = 1.0;
                         static std::atomic<int> s_mismatchTicks{0};
                         static std::atomic<ULONGLONG> s_lastRebuild{0};
+                        if (!userAuto && popupW > 0 && tbW > 0 && (tbW * currentScale) < popupW * 0.85) {
                         int ticks = s_mismatchTicks.fetch_add(1) + 1;
                         Wh_Log(L"Self-heal: mismatch tick=%d popup=%d tbW=%.0f",
                                ticks, popupW, tbW);
                         auto tbFE = tbIt->second;
-                        try { tbFE.ClearValue(FrameworkElement::WidthProperty()); } catch (...) {}
                         tbFE.HorizontalAlignment(HorizontalAlignment::Stretch);
                         if (auto grid = tbFE.try_as<wuxc::Grid>()) {
                             auto cols = grid.ColumnDefinitions();
@@ -32527,16 +32528,19 @@ void PinTopBarFlyoutHwnd() {
                             Wh_Log(L"Self-heal: rebuilding content after 4 persistent mismatch ticks");
                             RunOnUiThread([] {
                                 try {
+                                    CloseAnyOpenChildFlyout();
                                     LoadSettings();
                                     SetTopBarContent(BuildTopBarContent());
+                                    RefreshTaskList(true);
+                                    BuildStartContextMenu();
+                                    BuildTaskContextMenu();
                                     ApplyAllControlStyles();
                                     ApplyVisibilitySettings();
                                 } catch (...) {}
                             });
                         }
                     } else {
-                        static std::atomic<int> s_zero{0};
-                        s_zero = 0;
+                        s_mismatchTicks = 0;
                     }
                 }
             }
