@@ -7,12 +7,11 @@
 // @name:fr-FR       Mixeur de volume contextuel Pro
 // @name:es-ES       Mezclador de volumen emergente Pro
 // @name:ru-RU       Всплывающий микшер громкости Pro
-// @description     High-performance, ultra-lightweight per-app volume mixer and audio management suite for games, streamers, and audiophiles.
+// @description     Per-app volume mixer popup with live VU meters, per-app output device routing, volume locks, focused-app hotkeys, an optional tray icon and a volume OSD.
 // @version         2.6.1
 // @author          neMik
 // @github          https://github.com/mykolazozul
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -lole32 -luuid -lgdi32 -lgdiplus -luser32 -lshell32 -lversion -ldwmapi
 // ==/WindhawkMod==
 
@@ -20,8 +19,8 @@
 /*
 # 🔊 Volume Mixer Popup Pro
 
-A fast, lightweight per-app volume mixer for Windows 11 and 10 that runs inside Explorer.
-It opens on top of any window — including borderless and fullscreen games — without
+A fast, lightweight per-app volume mixer for Windows 11 and 10. It runs in its own small Windhawk
+process, not inside Explorer, and opens on top of any window — including borderless and fullscreen games — without
 taking the keyboard focus, so games are never minimized.
 
 ## ✨ Highlights
@@ -39,7 +38,8 @@ taking the keyboard focus, so games are never minimized.
 - **17 mixer layouts and 22 color themes.**
 - **Correct scaling** – interface scale 30–300 % multiplied by the Windows display scaling of each monitor;
   the popup shrinks automatically when it would not fit on the screen.
-- **Zero idle cost** – nothing is polled while the popup is closed; the mouse hook runs only while it is needed.
+- **Light on resources** – nothing is polled while the popup is closed: the tray icon and the volume locks react to
+  Windows audio events, and the keyboard and mouse hooks are installed only while a feature needs them.
 
 ## 🎛️ Mixer layouts
 Modern Cards · Compact Strip · Hi-Fi Studio Meters · Fluent Flyout · Cyber Radial HUD · Studio Mixing Desk ·
@@ -62,18 +62,20 @@ Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Gr
 Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
 frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
 
-## ⌨️ Default hotkeys
+## ⌨️ Hotkeys
 | Action | Default |
 |---|---|
-| Open / close mixer | `Ctrl+Alt+V` |
-| Active app volume up / down | `Alt+Up` / `Alt+Down` |
-| Active app mute / unmute | `Ctrl+Alt+M` |
-| Deafen background (when enabled) | `Ctrl+Alt+D` |
+| Open / close mixer | `Win+Alt+V` |
+| Active app volume up / down | not assigned |
+| Active app mute / unmute | not assigned |
+| Deafen background (when enabled) | not assigned |
 | Master volume up / down / mute | not assigned |
+
+Only the mixer hotkey is set by default, so the mod doesn't take shortcuts that other apps use.
 
 Format: `Ctrl`, `Alt`, `Shift`, `Win` + one key (`A`–`Z`, `0`–`9`, `F1`–`F24`, `Up`, `Down`, `Left`, `Right`,
 `Space`, `PageUp`, `PageDown`, `Num0`–`Num9`, `VolumeUp`, `VolumeDown`, `Mute`…), joined with `+`.
-Leave a hotkey empty to disable it.
+Leave a hotkey empty to disable it. On keyboard layouts with AltGr, Right Alt doesn't count as `Ctrl+Alt`.
 
 ## 🖱️ Using the mixer
 - Drag a slider or scroll over it to change the volume.
@@ -91,8 +93,18 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
 - Features marked BETA (tray icon, OSD, Deafen background) are off by default.
 - "Route audio to" uses the same undocumented Windows API as the "App volume and device preferences"
   page of Windows and EarTrumpet; some apps only switch the device after their audio stream restarts.
-- While a game or app running as administrator is focused, the hotkeys work through standard Windows
-  hotkeys, so holding volume up/down doesn't repeat there.
+- While a game or app running as administrator is focused, hotkeys work through standard Windows hotkeys:
+  holding volume up/down doesn't repeat there, and `Ctrl+Alt` combinations don't work there.
+
+## 🧹 What stays after the mod is disabled
+Like the Windows volume mixer, the mod changes Windows' own audio preferences, and Windows keeps them:
+- **Output device of an app** chosen with "Route audio to": stays until you pick "Windows default device" in
+  the same menu, or use Settings → System → Sound → Volume mixer → Reset.
+- **Default output device** chosen in the mixer: stays, like a change made in the Windows sound settings.
+- **Volume and mute levels** of devices and apps: Windows remembers them, as with any mixer.
+- **Deafen background**: if the mod stops while Deafen is on (crash, shutdown, power loss), it restores the
+  muted and ducked apps the next time it starts.
+- Volume locks are stored by the mod and are no longer enforced while it's disabled.
 */
 // ==/WindhawkModReadme==
 
@@ -185,7 +197,7 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
   $name:es-ES: "🌐 Idioma"
   $name:ru-RU: "🌐 Язык"
 - hotkeys:
-  - hotkey: "Ctrl+Alt+V"
+  - hotkey: "Win+Alt+V"
     $name: "Open / close mixer"
     $name:uk-UA: "Відкрити / закрити мікшер"
     $name:pl-PL: "Otwórz / zamknij mikser"
@@ -193,14 +205,14 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
     $name:fr-FR: "Ouvrir / fermer le mixeur"
     $name:es-ES: "Abrir / cerrar el mezclador"
     $name:ru-RU: "Открыть / закрыть микшер"
-    $description: "Examples: Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Leave empty to disable."
-    $description:uk-UA: "Приклади: Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Залиште порожнім, щоб вимкнути."
-    $description:pl-PL: "Przykłady: Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Pozostaw puste, aby wyłączyć."
-    $description:de-DE: "Beispiele: Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Leer lassen zum Deaktivieren."
-    $description:fr-FR: "Exemples : Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Laisser vide pour désactiver."
-    $description:es-ES: "Ejemplos: Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Déjalo vacío para desactivar."
-    $description:ru-RU: "Примеры: Ctrl+Alt+V, Alt+Q, Win+Shift+F9. Оставьте пустым, чтобы отключить."
-  - hotkeyAppVolUp: "Alt+Up"
+    $description: "Examples: Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Leave empty to disable. On layouts with AltGr, Right Alt doesn't count as Ctrl+Alt."
+    $description:uk-UA: "Приклади: Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Залиште порожнім, щоб вимкнути. На розкладках з AltGr правий Alt не вважається Ctrl+Alt."
+    $description:pl-PL: "Przykłady: Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Pozostaw puste, aby wyłączyć. W układach z AltGr prawy Alt nie liczy się jako Ctrl+Alt."
+    $description:de-DE: "Beispiele: Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Leer lassen zum Deaktivieren. Bei Layouts mit AltGr zählt die rechte Alt-Taste nicht als Ctrl+Alt."
+    $description:fr-FR: "Exemples : Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Laisser vide pour désactiver. Sur les dispositions avec AltGr, Alt droite ne compte pas comme Ctrl+Alt."
+    $description:es-ES: "Ejemplos: Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Déjalo vacío para desactivar. En distribuciones con AltGr, Alt derecha no cuenta como Ctrl+Alt."
+    $description:ru-RU: "Примеры: Win+Alt+V, Ctrl+Shift+F9, Alt+F10. Оставьте пустым, чтобы отключить. На раскладках с AltGr правый Alt не считается Ctrl+Alt."
+  - hotkeyAppVolUp: ""
     $name: "Active app: volume up"
     $name:uk-UA: "Активна програма: гучніше"
     $name:pl-PL: "Aktywna aplikacja: głośniej"
@@ -208,7 +220,7 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
     $name:fr-FR: "App active : volume +"
     $name:es-ES: "App activa: subir volumen"
     $name:ru-RU: "Активное приложение: громче"
-  - hotkeyAppVolDown: "Alt+Down"
+  - hotkeyAppVolDown: ""
     $name: "Active app: volume down"
     $name:uk-UA: "Активна програма: тихіше"
     $name:pl-PL: "Aktywna aplikacja: ciszej"
@@ -216,7 +228,7 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
     $name:fr-FR: "App active : volume −"
     $name:es-ES: "App activa: bajar volumen"
     $name:ru-RU: "Активное приложение: тише"
-  - hotkeyAppMute: "Ctrl+Alt+M"
+  - hotkeyAppMute: ""
     $name: "Active app: mute / unmute"
     $name:uk-UA: "Активна програма: вимкнути / увімкнути звук"
     $name:pl-PL: "Aktywna aplikacja: wycisz / przywróć"
@@ -1440,7 +1452,7 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
     $description:fr-FR: "Le raccourci coupe ou atténue toutes les applications sauf celle au premier plan et la liste blanche. Appuyez à nouveau pour rétablir."
     $description:es-ES: "El atajo silencia o atenúa todas las apps excepto la activa y la lista blanca. Púlsalo de nuevo para restaurar."
     $description:ru-RU: "Горячая клавиша выключает или приглушает все приложения, кроме активного и белого списка. Повторное нажатие восстанавливает звук."
-  - hotkeyDeafen: "Ctrl+Alt+D"
+  - hotkeyDeafen: ""
     $name: "Deafen hotkey"
     $name:uk-UA: "Гаряча клавіша Deafen"
     $name:pl-PL: "Skrót Deafen"
@@ -1493,6 +1505,13 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
     $name:fr-FR: "Ne jamais couper ces applications (séparées par des virgules)"
     $name:es-ES: "Nunca silenciar estas apps (separadas por comas)"
     $name:ru-RU: "Никогда не глушить эти приложения (через запятую)"
+    $description: "File names such as discord.exe, or a folder path to spare every app inside it."
+    $description:uk-UA: "Імена файлів, наприклад discord.exe, або шлях до папки, щоб не глушити всі програми в ній."
+    $description:pl-PL: "Nazwy plików, np. discord.exe, lub ścieżka folderu, aby pominąć wszystkie aplikacje w nim."
+    $description:de-DE: "Dateinamen wie discord.exe oder ein Ordnerpfad, um alle Apps darin auszunehmen."
+    $description:fr-FR: "Noms de fichiers comme discord.exe, ou un chemin de dossier pour épargner toutes les applications qu'il contient."
+    $description:es-ES: "Nombres de archivo como discord.exe, o la ruta de una carpeta para excluir todas sus apps."
+    $description:ru-RU: "Имена файлов, например discord.exe, или путь к папке, чтобы не глушить все приложения в ней."
   $name: "🔇 Deafen background (BETA)"
   $name:uk-UA: "🔇 Глушіння фону Deafen (БЕТА)"
   $name:pl-PL: "🔇 Wyciszanie tła Deafen (BETA)"
@@ -1574,20 +1593,18 @@ the language of Windhawk itself (**Windhawk → Settings → Language**); other 
 */
 // ==/WindhawkModSettings==
 
-// 01b_includes.cpp - Windows Headers, COM Interfaces, GUIDs, and Policy Config Definitions
+// Windows Headers, COM Interfaces, GUIDs, and Policy Config Definitions
 
-#include <windows.h>
-#include <windhawk_api.h>
 #include <shellapi.h>
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <endpointvolume.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
-#include <roapi.h>
-#include <winstring.h>
+#include <hstring.h>
 #include <tlhelp32.h>
 #include <shlobj.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -1655,21 +1672,21 @@ const PROPERTYKEY kPkeyFriendlyName = {
     {0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}},
     14};
 
-// 02_config.cpp - Runtime Configuration Struct Definition
+// Runtime Configuration Struct Definition
 
 struct Config {
     // Hotkeys (an empty string disables the hotkey)
-    std::wstring hotkey = L"Ctrl+Alt+V";
-    std::wstring hotkeyVolUp = L"Alt+Up";
-    std::wstring hotkeyVolDown = L"Alt+Down";
-    std::wstring hotkeyMute = L"Ctrl+Alt+M";
+    std::wstring hotkey = L"Win+Alt+V";
+    std::wstring hotkeyVolUp;
+    std::wstring hotkeyVolDown;
+    std::wstring hotkeyMute;
     std::wstring hotkeyMasterVolUp;
     std::wstring hotkeyMasterVolDown;
     std::wstring hotkeyMasterMute;
 
     // Deafen Background (BETA)
     bool enableDeafenBackground = false;
-    std::wstring hotkeyDeafen = L"Ctrl+Alt+D";
+    std::wstring hotkeyDeafen;
     std::wstring deafenMode = L"mute";
     int deafenDuckPercent = 20;
     std::wstring deafenWhitelist = L"discord.exe, ts3client_win64.exe, obs64.exe, spotify.exe";
@@ -1727,7 +1744,7 @@ struct Config {
 constexpr DWORD kAnimMs = 160;
 constexpr int kMenuOpacity = 97;
 
-// 03_l10n.cpp - Multilingual Localization Strings (7 Languages)
+// Multilingual Localization Strings (7 Languages)
 
 enum class Lang { Uk, Pl, De, Fr, Es, Ru, En };
 
@@ -1767,6 +1784,7 @@ enum class StrId {
     OsdDragHint,
     DefaultDeviceHeader,
     ActiveApp,
+    NoAppAudio,
     Count
 };
 
@@ -1786,6 +1804,7 @@ const WCHAR* L10n(StrId id) {
         {L"Перетягніть OSD мишкою", L"Przeciągnij OSD myszą", L"OSD mit der Maus ziehen", L"Faites glisser l'OSD", L"Arrastra el OSD con el ratón", L"Перетащите OSD мышью", L"Drag the OSD with the mouse"},
         {L"ПРИСТРІЙ ЗА ЗАМОВЧУВАННЯМ", L"URZĄDZENIE DOMYŚLNE", L"STANDARDGERÄT", L"PÉRIPHÉRIQUE PAR DÉFAUT", L"DISPOSITIVO PREDETERMINADO", L"УСТРОЙСТВО ПО УМОЛЧАНИЮ", L"DEFAULT OUTPUT DEVICE"},
         {L"Активна програма", L"Aktywna aplikacja", L"Aktive App", L"Application active", L"App activa", L"Активное приложение", L"Active app"},
+        {L"Активна програма не відтворює звук", L"Aktywna aplikacja nie odtwarza dźwięku", L"Die aktive App gibt keinen Ton aus", L"L'application active ne joue aucun son", L"La app activa no reproduce sonido", L"Активное приложение не воспроизводит звук", L"No sound from the active app"},
     };
     const int row = (int)id;
     const int col = (int)GetCurrentLanguage();
@@ -1793,7 +1812,7 @@ const WCHAR* L10n(StrId id) {
     return kStrings[row][col];
 }
 
-// 04_structs.cpp - Core Data Structures, Geometry Scaling, Vector Paths, and Device Classifiers
+// Core Data Structures, Geometry Scaling, Vector Paths, and Device Classifiers
 
 extern float g_scale;
 
@@ -2084,11 +2103,12 @@ struct CustomMenuItem {
     bool isHeader = false;
     bool isChecked = false;
     int devType = -1;
+    std::wstring deviceId;  // device rows; the device list can change while the menu is open
     int top = 0;
     int bottom = 0;
 };
 
-// 05_globals.cpp - Global State, Handles, Timers, and Constants
+// Global State, Handles, Timers, and Constants
 
 struct DeviceEntry {
     std::wstring id;
@@ -2273,14 +2293,16 @@ std::atomic<bool> g_hookReplaceOsd{false};
 std::atomic<bool> g_hookTrayWheel{false};
 std::atomic<bool> g_volumeMsgPending{false};
 std::atomic<bool> g_deviceMsgPending{false};
+std::atomic<bool> g_lockCheckPending{false};
+std::atomic<bool> g_lockRebuildPending{false};
 HANDLE g_hookThread = nullptr;
 DWORD g_hookThreadId = 0;
 bool g_mouseHookWanted = false;
+bool g_kbdHookWanted = false;
 
 constexpr UINT_PTR ID_TIMER_FAST = 1;
 constexpr UINT_PTR ID_TIMER_ANIM = 2;
 constexpr UINT_PTR ID_TIMER_OSD = 3;
-constexpr UINT_PTR ID_TIMER_LOCK = 4;
 constexpr UINT_PTR ID_TIMER_REFRESH_ONCE = 5;
 
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
@@ -2291,7 +2313,10 @@ constexpr UINT WM_APP_VOLUME_CHANGED = WM_APP + 5;
 constexpr UINT WM_APP_DEVICES_CHANGED = WM_APP + 6;
 constexpr UINT WM_APP_MEDIA_KEY = WM_APP + 7;
 constexpr UINT WM_APP_TRAY_WHEEL = WM_APP + 8;
-constexpr UINT WM_APP_HOOK_MOUSE = WM_APP + 20;  // hook thread message, wParam = install
+constexpr UINT WM_APP_LOCK_CHECK = WM_APP + 12;
+constexpr UINT WM_APP_LOCK_REBUILD = WM_APP + 13;
+constexpr UINT WM_APP_HOOK_MOUSE = WM_APP + 20;  // hook thread messages, wParam = install
+constexpr UINT WM_APP_HOOK_KBD = WM_APP + 21;
 
 const wchar_t kClass[] = L"VolumeMixerFlyoutPro";
 const wchar_t kOsdClass[] = L"VolumeMixerOsdPro";
@@ -2367,7 +2392,7 @@ void UpdateGdiCache(float s) {
     UpdateGdiCache(g_gc, s);
 }
 
-// 07_themes.cpp - Color Palettes, Theme Presets, Windows Accent Integration, and Hotkey Parsing
+// Color Palettes, Theme Presets, Windows Accent Integration, and Hotkey Parsing
 
 Color Dim(Color c, float factor) {
     return Color(c.GetA(),
@@ -2751,7 +2776,7 @@ bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
     return *vk != 0;
 }
 
-// 08_appinfo.cpp - Process Inspection, Icon Extraction, Device Management, and Routing
+// Process Inspection, Icon Extraction, Device Management, and Routing
 
 std::wstring GetProcessPath(DWORD pid) {
     std::wstring res;
@@ -2765,12 +2790,37 @@ std::wstring GetProcessPath(DWORD pid) {
     return res;
 }
 
+// The tool process is 32-bit in Windhawk 1.7.3: there, System32 is redirected
+// to SysWOW64, so files of 64-bit system executables are read through the
+// Sysnative alias instead.
+std::wstring FileAccessPath(const std::wstring& path) {
+#ifndef _WIN64
+    static int s_wow64 = -1;
+    if (s_wow64 < 0) {
+        BOOL wow = FALSE;
+        s_wow64 = (IsWow64Process(GetCurrentProcess(), &wow) && wow) ? 1 : 0;
+    }
+    if (s_wow64) {
+        WCHAR winDir[MAX_PATH];
+        const UINT n = GetWindowsDirectoryW(winDir, MAX_PATH);
+        if (n && n < MAX_PATH) {
+            const std::wstring prefix = std::wstring(winDir) + L"\\System32\\";
+            if (path.size() > prefix.size() && ToLower(path.substr(0, prefix.size())) == ToLower(prefix)) {
+                return std::wstring(winDir) + L"\\Sysnative\\" + path.substr(prefix.size());
+            }
+        }
+    }
+#endif
+    return path;
+}
+
 std::wstring GetFileDescription(const std::wstring& path) {
+    const std::wstring file = FileAccessPath(path);
     DWORD dummy = 0;
-    DWORD sz = GetFileVersionInfoSizeW(path.c_str(), &dummy);
+    DWORD sz = GetFileVersionInfoSizeW(file.c_str(), &dummy);
     if (!sz) return L"";
     std::vector<BYTE> buf(sz);
-    if (!GetFileVersionInfoW(path.c_str(), 0, sz, buf.data())) return L"";
+    if (!GetFileVersionInfoW(file.c_str(), 0, sz, buf.data())) return L"";
 
     struct LANGANDCODEPAGE { WORD wLanguage; WORD wCodePage; } *lpTranslate = nullptr;
     UINT cbTranslate = 0;
@@ -2884,7 +2934,7 @@ const AppInfo& GetCachedAppInfo(const std::wstring& path, DWORD pid = 0) {
             info.name = dot == std::wstring::npos ? info.exeName : info.exeName.substr(0, dot);
         }
         SHFILEINFOW sfi{};
-        if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+        if (SHGetFileInfoW(FileAccessPath(path).c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
             info.icon = IconToBitmap(sfi.hIcon);
             DestroyIcon(sfi.hIcon);
         }
@@ -2981,7 +3031,7 @@ bool SetAppAudioEndpoint(DWORD processId, const std::wstring& shortDeviceId) {
     return ok;
 }
 
-// 09_builditems.cpp - Audio Session Enumeration, Device Aggregation, and Volume Control
+// Audio Session Enumeration, Device Aggregation, and Volume Control
 
 // Volume: only when the OSD is enabled. Banner: text message (Deafen), always.
 // Always: the configured OSD style even when the OSD is off (drag preview,
@@ -3014,6 +3064,19 @@ static bool LockedLevel(const std::wstring& key, float* level) {
     if (it == g_lockedVolumes.end()) return false;
     if (level) *level = it->second;
     return true;
+}
+
+// Identity of an app across its processes and sessions: the lower-case image
+// path, or the file name / PID for processes whose path can't be read.
+std::wstring SessionKeyForPid(DWORD pid, std::wstring* pathOut) {
+    std::wstring path = GetProcessPath(pid);
+    std::wstring key = ToLower(path);
+    if (key.empty()) {
+        const std::wstring exe = ToLower(GetProcessExeNameSnapshot(pid));
+        key = exe.empty() ? L"pid:" + std::to_wstring(pid) : L"exe:" + exe;
+    }
+    if (pathOut) *pathOut = std::move(path);
+    return key;
 }
 
 void AddDevice(IMMDevice* dev, std::vector<Item>& out, bool forceIncludeInactive) {
@@ -3098,18 +3161,8 @@ void AddDevice(IMMDevice* dev, std::vector<Item>& out, bool forceIncludeInactive
             IAudioMeterInformation* meter = nullptr;
             ctl2->QueryInterface(IID_IAudioMeterInformation, (void**)&meter);
 
-            std::wstring path = GetProcessPath(pid);
-            std::wstring key = ToLower(path);
-            if (key.empty()) {
-                std::wstring exe = ToLower(GetProcessExeNameSnapshot(pid));
-                if (!exe.empty()) {
-                    key = L"exe:" + exe;
-                } else {
-                    WCHAR tmp[64];
-                    swprintf_s(tmp, L"pid:%lu", pid);
-                    key = tmp;
-                }
-            }
+            std::wstring path;
+            const std::wstring key = SessionKeyForPid(pid, &path);
 
             if (g_cfg.mergeApps) {
                 auto it = keyToItem.find(key);
@@ -3248,16 +3301,23 @@ std::wstring DeviceNameOf(const std::wstring& id) {
     return L"";
 }
 
-void SetItemVolume(Item& it, float v) {
+// Sets the level without touching a volume lock (Deafen's temporary ducking).
+void SetItemVolumeRaw(Item& it, float v) {
     v = std::clamp(v, 0.0f, 1.0f);
     it.vol = v;
+    if (it.ep) it.ep->SetMasterVolumeLevelScalar(v, nullptr);
+    for (ISimpleAudioVolume* s : it.sav) s->SetMasterVolume(v, nullptr);
+}
+
+// A user change of a locked item moves its lock to the new level.
+void SetItemVolume(Item& it, float v) {
+    v = std::clamp(v, 0.0f, 1.0f);
     if (it.locked) {
         it.lockedVol = v;
         g_lockedVolumes[it.key] = v;
         g_locksDirty = true;
     }
-    if (it.ep) it.ep->SetMasterVolumeLevelScalar(v, nullptr);
-    for (ISimpleAudioVolume* s : it.sav) s->SetMasterVolume(v, nullptr);
+    SetItemVolumeRaw(it, v);
 }
 
 void SetItemMute(Item& it, bool mute) {
@@ -3488,8 +3548,10 @@ void AdjustForegroundAppVolume(float delta, bool toggleMute) {
         }
     }
     if (matches.empty()) {
+        // The focused app has no audio session. Changing the master volume
+        // instead would be a surprise on the desktop or in File Explorer.
         ReleaseItems(items);
-        AdjustMasterVolume(delta, toggleMute);
+        if (g_cfg.enableVolumeOsd) ShowOsd(L10n(StrId::NoAppAudio), 0.0f, false, nullptr, OsdKind::Banner);
         return;
     }
 
@@ -3568,10 +3630,211 @@ void LoadLockedVolumes() {
     }
 }
 
-void UpdateLockTimer() {
-    if (!g_hwnd) return;
-    if (g_lockedVolumes.empty()) KillTimer(g_hwnd, ID_TIMER_LOCK);
-    else SetTimer(g_hwnd, ID_TIMER_LOCK, 1500, nullptr);
+// Posts msg to the UI thread unless one is already queued. Used by the audio
+// callbacks, which run on audio service threads.
+void PostCoalesced(std::atomic<bool>& pending, UINT msg) {
+    HWND hwnd = g_hwnd;
+    if (hwnd && !pending.exchange(true)) {
+        if (!PostMessageW(hwnd, msg, 0, 0)) pending = false;
+    }
+}
+
+// Volume locks are enforced from audio events instead of polling: the sessions
+// of locked apps and the locked endpoints report volume changes, and the
+// session managers report new sessions.
+class LockNotifier final : public IAudioSessionNotification,
+                           public IAudioSessionEvents,
+                           public IAudioEndpointVolumeCallback {
+public:
+    ULONG STDMETHODCALLTYPE AddRef() override { return (ULONG)InterlockedIncrement(&m_ref); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const LONG r = InterlockedDecrement(&m_ref);
+        if (r == 0) delete this;
+        return (ULONG)r;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        if (riid == IID_IUnknown || riid == __uuidof(IAudioSessionNotification)) {
+            *ppv = static_cast<IAudioSessionNotification*>(this);
+        } else if (riid == __uuidof(IAudioSessionEvents)) {
+            *ppv = static_cast<IAudioSessionEvents*>(this);
+        } else if (riid == __uuidof(IAudioEndpointVolumeCallback)) {
+            *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
+        } else {
+            *ppv = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+
+    // IAudioSessionNotification
+    HRESULT STDMETHODCALLTYPE OnSessionCreated(IAudioSessionControl*) override {
+        PostCoalesced(g_lockRebuildPending, WM_APP_LOCK_REBUILD);
+        return S_OK;
+    }
+
+    // IAudioSessionEvents
+    HRESULT STDMETHODCALLTYPE OnDisplayNameChanged(LPCWSTR, LPCGUID) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnIconPathChanged(LPCWSTR, LPCGUID) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnSimpleVolumeChanged(float, BOOL, LPCGUID) override {
+        PostCoalesced(g_lockCheckPending, WM_APP_LOCK_CHECK);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnChannelVolumeChanged(DWORD, float*, DWORD, LPCGUID) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnGroupingParamChanged(LPCGUID, LPCGUID) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnStateChanged(AudioSessionState state) override {
+        if (state == AudioSessionStateExpired) PostCoalesced(g_lockRebuildPending, WM_APP_LOCK_REBUILD);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnSessionDisconnected(AudioSessionDisconnectReason) override {
+        PostCoalesced(g_lockRebuildPending, WM_APP_LOCK_REBUILD);
+        return S_OK;
+    }
+
+    // IAudioEndpointVolumeCallback
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
+        PostCoalesced(g_lockCheckPending, WM_APP_LOCK_CHECK);
+        return S_OK;
+    }
+
+private:
+    LONG m_ref = 1;
+};
+
+struct LockedSession {
+    IAudioSessionControl* ctl = nullptr;
+    ISimpleAudioVolume* sav = nullptr;
+    std::wstring key;
+    std::wstring deviceId;
+};
+
+struct LockedEndpoint {
+    IAudioEndpointVolume* ep = nullptr;
+    std::wstring key;
+};
+
+LockNotifier* g_lockNotifier = nullptr;
+std::vector<IAudioSessionManager2*> g_lockManagers;
+std::vector<LockedSession> g_lockSessions;
+std::vector<LockedEndpoint> g_lockEndpoints;
+
+void StopLockWatch() {
+    for (IAudioSessionManager2* m : g_lockManagers) {
+        m->UnregisterSessionNotification(g_lockNotifier);
+        m->Release();
+    }
+    g_lockManagers.clear();
+    for (LockedSession& s : g_lockSessions) {
+        s.ctl->UnregisterAudioSessionNotification(g_lockNotifier);
+        s.ctl->Release();
+        if (s.sav) s.sav->Release();
+    }
+    g_lockSessions.clear();
+    for (LockedEndpoint& e : g_lockEndpoints) {
+        e.ep->UnregisterControlChangeNotify(g_lockNotifier);
+        e.ep->Release();
+    }
+    g_lockEndpoints.clear();
+}
+
+// Puts back every locked level that a game, a browser or Windows changed.
+// Apps ducked by Deafen are left alone until Deafen is turned off.
+void EnforceLockedVolumes() {
+    g_lockCheckPending = false;
+    for (LockedSession& s : g_lockSessions) {
+        float level = 0.0f;
+        float v = 0.0f;
+        if (!s.sav || !LockedLevel(s.key, &level)) continue;
+        if (g_deafenActive && g_deafenSavedStates.count(s.key + L"|" + s.deviceId)) continue;
+        if (SUCCEEDED(s.sav->GetMasterVolume(&v)) && std::abs(v - level) > 0.004f) {
+            s.sav->SetMasterVolume(level, nullptr);
+        }
+    }
+    for (LockedEndpoint& e : g_lockEndpoints) {
+        float level = 0.0f;
+        float v = 0.0f;
+        if (!LockedLevel(e.key, &level)) continue;
+        if (SUCCEEDED(e.ep->GetMasterVolumeLevelScalar(&v)) && std::abs(v - level) > 0.004f) {
+            e.ep->SetMasterVolumeLevelScalar(level, nullptr);
+        }
+    }
+    if (g_locksDirty) PersistLockedVolumes();
+}
+
+static void WatchLockedDevice(IMMDevice* dev, const std::wstring& devId) {
+    const std::wstring masterKey = L"devmaster:" + devId;
+    if (LockedLevel(masterKey, nullptr)) {
+        IAudioEndpointVolume* ep = nullptr;
+        if (SUCCEEDED(dev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&ep)) && ep) {
+            if (SUCCEEDED(ep->RegisterControlChangeNotify(g_lockNotifier))) g_lockEndpoints.push_back({ep, masterKey});
+            else ep->Release();
+        }
+    }
+
+    IAudioSessionManager2* mgr = nullptr;
+    if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr)) || !mgr) return;
+    const bool watchesNewSessions = SUCCEEDED(mgr->RegisterSessionNotification(g_lockNotifier));
+    if (watchesNewSessions) g_lockManagers.push_back(mgr);  // keeps the reference
+
+    // The session enumerator has to be obtained for new-session notifications to arrive.
+    IAudioSessionEnumerator* sessions = nullptr;
+    if (SUCCEEDED(mgr->GetSessionEnumerator(&sessions)) && sessions) {
+        int count = 0;
+        sessions->GetCount(&count);
+        for (int i = 0; i < count; i++) {
+            IAudioSessionControl* ctl = nullptr;
+            if (FAILED(sessions->GetSession(i, &ctl)) || !ctl) continue;
+            DWORD pid = 0;
+            IAudioSessionControl2* ctl2 = nullptr;
+            if (SUCCEEDED(ctl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&ctl2)) && ctl2) {
+                if (ctl2->IsSystemSoundsSession() != S_OK) ctl2->GetProcessId(&pid);
+                ctl2->Release();
+            }
+            const std::wstring key = pid ? SessionKeyForPid(pid, nullptr) : std::wstring();
+            ISimpleAudioVolume* sav = nullptr;
+            if (!key.empty() && LockedLevel(key, nullptr) &&
+                SUCCEEDED(ctl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&sav)) && sav &&
+                SUCCEEDED(ctl->RegisterAudioSessionNotification(g_lockNotifier))) {
+                g_lockSessions.push_back({ctl, sav, key, devId});  // keeps both references
+                continue;
+            }
+            if (sav) sav->Release();
+            ctl->Release();
+        }
+        sessions->Release();
+    }
+    if (!watchesNewSessions) mgr->Release();
+}
+
+// Called when the locks, the sessions or the devices change.
+void RebuildLockWatch() {
+    g_lockRebuildPending = false;
+    StopLockWatch();
+    if (g_lockedVolumes.empty()) return;
+    if (!g_lockNotifier) g_lockNotifier = new LockNotifier();
+
+    IMMDeviceEnumerator* enm = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                __uuidof(IMMDeviceEnumerator), (void**)&enm)) || !enm) return;
+    IMMDeviceCollection* col = nullptr;
+    if (SUCCEEDED(enm->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &col)) && col) {
+        UINT n = 0;
+        col->GetCount(&n);
+        for (UINT i = 0; i < n; i++) {
+            IMMDevice* dev = nullptr;
+            if (FAILED(col->Item(i, &dev)) || !dev) continue;
+            LPWSTR idStr = nullptr;
+            if (SUCCEEDED(dev->GetId(&idStr)) && idStr) {
+                WatchLockedDevice(dev, idStr);
+                CoTaskMemFree(idStr);
+            }
+            dev->Release();
+        }
+        col->Release();
+    }
+    enm->Release();
+    EnforceLockedVolumes();
 }
 
 void SetVolumeLock(const std::wstring& key, bool locked, float level) {
@@ -3584,32 +3847,7 @@ void SetVolumeLock(const std::wstring& key, bool locked, float level) {
         }
     }
     PersistLockedVolumes();
-    UpdateLockTimer();
-}
-
-// Puts back every locked level that a game, a browser or Windows changed.
-void EnforceLockedVolumes() {
-    if (g_lockedVolumes.empty()) return;
-    std::vector<Item> items;
-    BuildItems(items, true, true);
-    for (Item& it : items) {
-        float level = 0.0f;
-        if (it.kind == 0 || !LockedLevel(it.key, &level)) continue;
-        if (it.ep) {
-            float v = 0.0f;
-            if (SUCCEEDED(it.ep->GetMasterVolumeLevelScalar(&v)) && std::abs(v - level) > 0.004f) {
-                it.ep->SetMasterVolumeLevelScalar(level, nullptr);
-            }
-        }
-        for (ISimpleAudioVolume* s : it.sav) {
-            float v = 0.0f;
-            if (SUCCEEDED(s->GetMasterVolume(&v)) && std::abs(v - level) > 0.004f) {
-                s->SetMasterVolume(level, nullptr);
-            }
-        }
-    }
-    ReleaseItems(items);
-    if (g_locksDirty) PersistLockedVolumes();
+    RebuildLockWatch();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3629,12 +3867,36 @@ static std::vector<std::wstring> ParseWhitelist() {
     return whitelist;
 }
 
+// An entry is a file name (discord.exe or discord), or a folder path that
+// spares every app inside it.
 static bool IsWhitelisted(const Item& it, const std::vector<std::wstring>& whitelist) {
     const std::wstring exe = FileNameOf(it.key);
+    const size_t dot = exe.find_last_of(L'.');
+    const std::wstring stem = dot == std::wstring::npos ? exe : exe.substr(0, dot);
     for (const auto& w : whitelist) {
-        if (exe == w || it.key == w || it.key.find(w) != std::wstring::npos) return true;
+        if (w.find_first_of(L"\\/") != std::wstring::npos) {
+            std::wstring folder = w;
+            std::replace(folder.begin(), folder.end(), L'/', L'\\');
+            if (folder.back() != L'\\') folder += L'\\';
+            if (it.key.rfind(folder, 0) == 0) return true;
+        } else if (exe == w || stem == w) {
+            return true;
+        }
     }
     return false;
+}
+
+// The original levels are kept in the mod storage while Deafen is on, so a
+// crash or a power loss can't leave the other apps muted for good.
+void PersistDeafenState() {
+    std::wstring s = g_deafenDucked ? L"duck\n" : L"mute\n";
+    for (const auto& p : g_deafenSavedStates) {
+        s += p.first;
+        s += L'\t';
+        s += std::to_wstring((int)std::lround(p.second.originalVol * 1000.0f));
+        s += p.second.originalMute ? L"\t1\n" : L"\t0\n";
+    }
+    Wh_SetStringValue(L"deafenState", s.c_str());
 }
 
 void RestoreDeafen(bool showBanner) {
@@ -3646,13 +3908,44 @@ void RestoreDeafen(bool showBanner) {
         if (it.kind != 2) continue;
         auto found = g_deafenSavedStates.find(it.key + L"|" + it.deviceId);
         if (found == g_deafenSavedStates.end()) continue;
-        if (g_deafenDucked) SetItemVolume(it, found->second.originalVol);
+        if (g_deafenDucked) SetItemVolumeRaw(it, found->second.originalVol);
         SetItemMute(it, found->second.originalMute);
     }
     ReleaseItems(items);
     g_deafenSavedStates.clear();
     g_deafenActive = false;
+    Wh_SetStringValue(L"deafenState", L"");
+    EnforceLockedVolumes();
     if (showBanner) ShowOsd(L10n(StrId::DeafenOff), 1.0f, false, nullptr, OsdKind::Banner);
+}
+
+// Restores what a Deafen interrupted by a crash or a shutdown left muted or ducked.
+void RecoverDeafenState() {
+    std::vector<WCHAR> buf(65536, 0);
+    if (Wh_GetStringValue(L"deafenState", buf.data(), buf.size()) == 0 || !buf[0]) return;
+    const std::wstring s = buf.data();
+    g_deafenSavedStates.clear();
+    size_t pos = s.find(L'\n');
+    g_deafenDucked = (s.compare(0, pos, L"duck") == 0);
+    while (pos != std::wstring::npos && pos + 1 < s.size()) {
+        const size_t start = pos + 1;
+        pos = s.find(L'\n', start);
+        const std::wstring line = s.substr(start, pos == std::wstring::npos ? std::wstring::npos : pos - start);
+        const size_t t1 = line.find(L'\t');
+        const size_t t2 = t1 == std::wstring::npos ? std::wstring::npos : line.find(L'\t', t1 + 1);
+        if (t2 == std::wstring::npos) continue;
+        DeafenSavedState ds;
+        ds.originalVol = std::clamp(_wtoi(line.c_str() + t1 + 1) / 1000.0f, 0.0f, 1.0f);
+        ds.originalMute = line.compare(t2 + 1, 1, L"1") == 0;
+        g_deafenSavedStates[line.substr(0, t1)] = ds;
+    }
+    if (g_deafenSavedStates.empty()) {
+        Wh_SetStringValue(L"deafenState", L"");
+        return;
+    }
+    Wh_Log(L"Restoring %d apps from an interrupted Deafen", (int)g_deafenSavedStates.size());
+    g_deafenActive = true;
+    RestoreDeafen(false);
 }
 
 void ToggleDeafenBackground() {
@@ -3686,7 +3979,7 @@ void ToggleDeafenBackground() {
             ds.originalMute = it.mute;
             g_deafenSavedStates[it.key + L"|" + it.deviceId] = ds;
             if (duck) {
-                if (it.vol > duckVol) SetItemVolume(it, duckVol);
+                if (it.vol > duckVol) SetItemVolumeRaw(it, duckVol);
             } else {
                 SetItemMute(it, true);
             }
@@ -3694,6 +3987,7 @@ void ToggleDeafenBackground() {
         ReleaseItems(items);
         g_deafenActive = true;
         g_deafenDucked = duck;
+        PersistDeafenState();
         if (activeName.empty()) activeName = L10n(StrId::ActiveApp);
         ShowOsd(std::wstring(L10n(StrId::DeafenOn)) + L": " + activeName, 1.0f, false, activeIcon, OsdKind::Banner);
     }
@@ -3966,7 +4260,7 @@ void Layout() {
     g_winH = y + S(10);
 }
 
-// 12_render_slider.cpp - Specialized Slider Renderers for all Layouts
+// Specialized Slider Renderers for all Layouts
 
 void DrawSlider(Graphics& g, const Item& it) {
     const Theme& th = g_theme;
@@ -4200,7 +4494,7 @@ void DrawSlider(Graphics& g, const Item& it) {
     }
 }
 
-// 13_render_content.cpp - UI Drawing, Layered Window Blit, Positioning, and Animation
+// UI Drawing, Layered Window Blit, Positioning, and Animation
 
 void DrawLockBadge(Graphics& g, float cx, float cy, float sz, const Color& bg) {
     SolidBrush back(WithAlpha(bg, 235));
@@ -4835,7 +5129,7 @@ void DragTo(int x, int y) {
     Render();
 }
 
-// 14_osd_menu.cpp - In-Game OSD and Custom Routing Context Menu
+// In-Game OSD and Custom Routing Context Menu
 
 static HMONITOR OsdTargetMonitor() {
     if (g_cfg.osdMonitor == L"primary") return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -5220,7 +5514,8 @@ static Item* FindMenuTarget() {
     return nullptr;
 }
 
-void ExecuteMenuCommand(int id) {
+void ExecuteMenuCommand(const CustomMenuItem& item) {
+    const int id = item.id;
     const MenuTarget t = g_menuTarget;
     if (id == 999) {
         Item* it = FindMenuTarget();
@@ -5232,8 +5527,8 @@ void ExecuteMenuCommand(int id) {
     }
     if (id == 998) {
         for (DWORD pid : t.pids) SetAppAudioEndpoint(pid, L"");
-    } else if (id >= 1000 && id < 1000 + (int)g_deviceList.size()) {
-        const std::wstring devId = g_deviceList[id - 1000].id;
+    } else if (id >= 1000 && !item.deviceId.empty()) {
+        const std::wstring& devId = item.deviceId;
         if (t.kind == 2) {
             for (DWORD pid : t.pids) SetAppAudioEndpoint(pid, devId);
         } else {
@@ -5354,6 +5649,7 @@ void ShowCustomRouteMenu(int itemIdx, POINT pt) {
         CustomMenuItem dev;
         dev.id = 1000 + (int)i;
         dev.text = g_deviceList[i].name;
+        dev.deviceId = g_deviceList[i].id;
         dev.devType = (int)ClassifyDevice(g_deviceList[i].name);
         dev.isChecked = (g_deviceList[i].id == (it.kind == 2 ? it.deviceId : g_defaultDeviceId));
         g_menuItems.push_back(dev);
@@ -5442,9 +5738,9 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     case WM_RBUTTONDOWN: {
         const int i = MenuItemAt((short)LOWORD(lParam), (short)HIWORD(lParam));
         if (i >= 0) {
-            const int id = g_menuItems[i].id;
+            const CustomMenuItem item = g_menuItems[i];
             HideCustomMenu();
-            ExecuteMenuCommand(id);
+            ExecuteMenuCommand(item);
         }
         return 0;
     }
@@ -5452,9 +5748,9 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 15_tray_hooks.cpp - Audio Notifications, System Tray Icon, and Low-Level Hooks
+// Audio Notifications, System Tray Icon, and Low-Level Hooks
 
-void UpdateMouseHook();
+void UpdateHooks();
 
 ////////////////////////////////////////////////////////////////////////////////
 // Endpoint notifications: media keys, other apps and Windows itself change the
@@ -5484,34 +5780,28 @@ public:
 
     // Called on audio service threads: only post to the UI thread.
     HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
-        PostOnce(g_volumeMsgPending, WM_APP_VOLUME_CHANGED);
+        PostCoalesced(g_volumeMsgPending, WM_APP_VOLUME_CHANGED);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
-        PostOnce(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
+        PostCoalesced(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
-        PostOnce(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
+        PostCoalesced(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
-        PostOnce(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
+        PostCoalesced(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
-        if (flow == eRender && role == eMultimedia) PostOnce(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
+        if (flow == eRender && role == eMultimedia) PostCoalesced(g_deviceMsgPending, WM_APP_DEVICES_CHANGED);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
 
 private:
-    static void PostOnce(std::atomic<bool>& pending, UINT msg) {
-        HWND hwnd = g_hwnd;
-        if (hwnd && !pending.exchange(true)) {
-            if (!PostMessageW(hwnd, msg, 0, 0)) pending = false;
-        }
-    }
     LONG m_ref = 1;
 };
 
@@ -5583,14 +5873,17 @@ static bool ReadDefaultMaster(float* vol, bool* mute) {
 ////////////////////////////////////////////////////////////////////////////////
 // System Tray Icon
 
+// Cached; reset by the "ImmersiveColorSet" WM_SETTINGCHANGE broadcast.
+int g_lightTaskbar = -1;
+
 bool IsLightTaskbar() {
-    DWORD v = 0;
-    DWORD sz = sizeof(v);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS) {
-        return v != 0;
+    if (g_lightTaskbar < 0) {
+        DWORD v = 0;
+        DWORD sz = sizeof(v);
+        g_lightTaskbar = (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                                       L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS && v) ? 1 : 0;
     }
-    return false;
+    return g_lightTaskbar == 1;
 }
 
 HICON CreateTrayIcon(const std::wstring& style, float vol, bool mute, bool light) {
@@ -5603,10 +5896,10 @@ HICON CreateTrayIcon(const std::wstring& style, float vol, bool mute, bool light
         const int idx = mute ? 1 : vol <= 0.001f ? 2 : vol < 0.34f ? 3 : vol < 0.67f ? 4 : 5;
         WCHAR sysPath[MAX_PATH] = {0};
         GetSystemDirectoryW(sysPath, MAX_PATH);
-        wcscat_s(sysPath, L"\\SndVolSSO.dll");
+        const std::wstring dll = FileAccessPath(std::wstring(sysPath) + L"\\SndVolSSO.dll");
         HICON hIcon = nullptr;
-        if (SUCCEEDED(SHDefExtractIconW(sysPath, idx, 0, &hIcon, nullptr, MAKELONG(sz, sz))) && hIcon) return hIcon;
-        if (ExtractIconExW(sysPath, idx, nullptr, &hIcon, 1) > 0 && hIcon) return hIcon;
+        if (SUCCEEDED(SHDefExtractIconW(dll.c_str(), idx, 0, &hIcon, nullptr, MAKELONG(sz, sz))) && hIcon) return hIcon;
+        if (ExtractIconExW(dll.c_str(), idx, nullptr, &hIcon, 1) > 0 && hIcon) return hIcon;
     }
 
     Bitmap bmp(sz, sz, PixelFormat32bppARGB);
@@ -5752,7 +6045,7 @@ void RemoveTrayIcon() {
         g_hTrayIcon = nullptr;
     }
     RefreshTrayRect();
-    UpdateMouseHook();
+    UpdateHooks();
 }
 
 void UpdateTrayIcon(bool force) {
@@ -5805,7 +6098,7 @@ void UpdateTrayIcon(bool force) {
         if (added) {
             Wh_Log(L"Tray icon added");
             RefreshTrayRect();
-            UpdateMouseHook();
+            UpdateHooks();
         }
     } else {
         // Usually the taskbar is not up yet; TaskbarCreated will retry.
@@ -5862,11 +6155,14 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     const KBDLLHOOKSTRUCT* kbd = (const KBDLLHOOKSTRUCT*)lParam;
     const DWORD vk = kbd->vkCode;
     static DWORD s_heldVk = 0;
+    static DWORD s_lctrlDownTime = 0;
+    static bool s_altGr = false;
 
     const bool volumeKey = (vk == VK_VOLUME_UP || vk == VK_VOLUME_DOWN || vk == VK_VOLUME_MUTE);
 
     if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
         if (vk == s_heldVk) s_heldVk = 0;
+        if (vk == VK_LCONTROL || vk == VK_RMENU) s_altGr = false;
         // The release of a replaced media key must not reach Windows either.
         if (volumeKey && g_hookReplaceOsd) return 1;
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -5876,10 +6172,21 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     }
     const bool repeat = (vk == s_heldVk);
     s_heldVk = vk;
+    // AltGr arrives as a fake Left Ctrl (scan code 0x21D, same timestamp)
+    // followed by Right Alt. On layouts with AltGr it types characters, so it
+    // never counts as Ctrl+Alt.
+    if (vk == VK_LCONTROL) {
+        s_lctrlDownTime = kbd->time;
+        if (kbd->scanCode == 0x21D) s_altGr = true;
+    } else if (vk == VK_RMENU && kbd->time == s_lctrlDownTime) {
+        s_altGr = true;
+    }
     if (IsModifierVk(vk)) return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
-    const bool ctrl = GetAsyncKeyState(VK_CONTROL) < 0;
-    const bool alt = (kbd->flags & LLKHF_ALTDOWN) != 0 || GetAsyncKeyState(VK_MENU) < 0;
+    const bool altGr = s_altGr && GetAsyncKeyState(VK_RMENU) < 0;
+    const bool ctrl = altGr ? GetAsyncKeyState(VK_RCONTROL) < 0 : GetAsyncKeyState(VK_CONTROL) < 0;
+    const bool alt = altGr ? GetAsyncKeyState(VK_LMENU) < 0
+                           : ((kbd->flags & LLKHF_ALTDOWN) != 0 || GetAsyncKeyState(VK_MENU) < 0);
     const bool shift = GetAsyncKeyState(VK_SHIFT) < 0;
     const bool win = GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0;
     const UINT mods = (ctrl ? MOD_CONTROL : 0) | (alt ? MOD_ALT : 0) | (shift ? MOD_SHIFT : 0) | (win ? MOD_WIN : 0);
@@ -5950,16 +6257,34 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+// The windows and hooks of the mod work in physical pixels (per-monitor v2),
+// whatever DPI awareness the host process declares.
+void SetPerMonitorDpiAwareness() {
+    using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    auto fn = user32 ? (SetThreadDpiAwarenessContext_t)GetProcAddress(user32, "SetThreadDpiAwarenessContext") : nullptr;
+    if (fn) fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+}
+
 DWORD WINAPI HookThreadProc(LPVOID param) {
+    SetPerMonitorDpiAwareness();
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the message queue
-    HHOOK kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, g_hInst, 0);
-    if (!kbdHook) Wh_Log(L"Keyboard hook failed, err=%lu", GetLastError());
+    HHOOK kbdHook = nullptr;
     HHOOK mouseHook = nullptr;
     SetEvent((HANDLE)param);
 
+    // Each hook is installed and removed on request from the UI thread.
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_APP_HOOK_MOUSE) {
+        if (msg.message == WM_APP_HOOK_KBD) {
+            if (msg.wParam && !kbdHook) {
+                kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, g_hInst, 0);
+                if (!kbdHook) Wh_Log(L"Keyboard hook failed, err=%lu", GetLastError());
+            } else if (!msg.wParam && kbdHook) {
+                UnhookWindowsHookEx(kbdHook);
+                kbdHook = nullptr;
+            }
+        } else if (msg.message == WM_APP_HOOK_MOUSE) {
             if (msg.wParam && !mouseHook) {
                 mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_hInst, 0);
             } else if (!msg.wParam && mouseHook) {
@@ -5977,6 +6302,7 @@ DWORD WINAPI HookThreadProc(LPVOID param) {
 void StartHookThread() {
     HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_mouseHookWanted = false;
+    g_kbdHookWanted = false;
     g_hookThread = CreateThread(nullptr, 0, HookThreadProc, ready, 0, &g_hookThreadId);
     if (g_hookThread && ready) WaitForSingleObject(ready, 5000);
     if (ready) CloseHandle(ready);
@@ -5994,22 +6320,39 @@ void StopHookThread() {
     g_hookThread = nullptr;
     g_hookThreadId = 0;
     g_mouseHookWanted = false;
+    g_kbdHookWanted = false;
 }
 
-// The mouse hook only runs while the popup is open or the tray wheel is used.
-void UpdateMouseHook() {
+// Each hook is installed only while a feature needs it: the keyboard hook for
+// configured hotkeys, the media key replacement and the open popup (any key
+// closes it); the mouse hook for the open popup and the tray wheel.
+void UpdateHooks() {
     const bool trayWheel = g_cfg.showTrayIcon && g_cfg.trayScrollVolume && g_trayAdded;
     g_hookTrayWheel = trayWheel;
-    const bool want = g_visible || trayWheel;
-    if (want != g_mouseHookWanted && g_hookThreadId) {
-        if (PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_MOUSE, want ? 1 : 0, 0)) g_mouseHookWanted = want;
+    bool anyHotkey = false;
+    AcquireSRWLockShared(&g_hookLock);
+    for (const HotkeyDef& h : g_hookHotkeys) {
+        if (h.vk) anyHotkey = true;
+    }
+    ReleaseSRWLockShared(&g_hookLock);
+    if (!g_hookThreadId) return;
+
+    const bool wantKbd = anyHotkey || g_hookReplaceOsd || g_visible;
+    if (wantKbd != g_kbdHookWanted &&
+        PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_KBD, wantKbd ? 1 : 0, 0)) {
+        g_kbdHookWanted = wantKbd;
+    }
+    const bool wantMouse = g_visible || trayWheel;
+    if (wantMouse != g_mouseHookWanted &&
+        PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_MOUSE, wantMouse ? 1 : 0, 0)) {
+        g_mouseHookWanted = wantMouse;
     }
 }
 
 void SyncPopupHookState() {
     g_hookPopupOpen = g_visible && !g_hiding;
     g_hookShowTick = g_showTick;
-    UpdateMouseHook();
+    UpdateHooks();
 }
 
 // Hotkeys go through the keyboard hook (works in fullscreen games, no repeats
@@ -6032,11 +6375,16 @@ void RegisterAllHotkeys() {
     ReleaseSRWLockExclusive(&g_hookLock);
 
     for (int i = 0; i < HK_COUNT; i++) {
-        if (defs[i].vk) RegisterHotKey(g_hwnd, i + 1, defs[i].mods | MOD_NOREPEAT, defs[i].vk);
+        // Not for Ctrl+Alt combinations: RegisterHotKey can't tell them from
+        // AltGr and would take characters such as AltGr+V away from typing.
+        const bool ctrlAlt = (defs[i].mods & (MOD_CONTROL | MOD_ALT)) == (MOD_CONTROL | MOD_ALT) &&
+                             !(defs[i].mods & MOD_WIN);
+        if (defs[i].vk && !ctrlAlt) RegisterHotKey(g_hwnd, i + 1, defs[i].mods | MOD_NOREPEAT, defs[i].vk);
     }
     // Independent of "Enable volume OSD": replacing the Windows flyout always
     // shows this mod's OSD for the media keys.
     g_hookReplaceOsd = g_cfg.replaceWindowsOsd;
+    UpdateHooks();
 }
 
 void UnregisterAllHotkeys() {
@@ -6047,13 +6395,10 @@ void UnregisterAllHotkeys() {
     g_hookReplaceOsd = false;
 }
 
-// 16_wndproc_main.cpp - Configuration Loader, Main Window Procedure, UI Thread, and Windhawk Lifecycle
+// Configuration Loader, Main Window Procedure, UI Thread, and Windhawk Lifecycle
 
 static std::wstring SettingStr(PCWSTR name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring s = v ? v : L"";
-    if (v) Wh_FreeStringSetting(v);
-    return Trim(s);
+    return Trim(WindhawkUtils::StringSetting::make(name).get());
 }
 
 // Unknown values (e.g. ids of older mod versions) fall back to the default.
@@ -6238,6 +6583,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_SETTINGCHANGE:
             if (lParam && wcscmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0) {
+                g_lightTaskbar = -1;
                 UpdateTrayIcon(true);
                 if (g_visible) {
                     g_theme = MakeTheme(g_cfg.theme);
@@ -6325,7 +6671,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_deviceMsgPending = false;
             RebindDefaultEndpoint();
             UpdateTrayIcon(true);
+            RebuildLockWatch();
             if (g_visible && !g_dragging) RefreshModel(false);
+            return 0;
+
+        case WM_APP_LOCK_CHECK:
+            EnforceLockedVolumes();
+            return 0;
+
+        case WM_APP_LOCK_REBUILD:
+            RebuildLockWatch();
             return 0;
 
         case WM_APP_RELOAD: {
@@ -6334,7 +6689,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RegisterAllHotkeys();
             ApplyOsdWindowStyle();
             UpdateTrayIcon(true);
-            UpdateMouseHook();
+            UpdateHooks();
             g_theme = MakeTheme(g_cfg.theme);
             if (g_visible) ShowPopup(g_openedFromTray);
             if (g_cfg.osdAllowDrag) ShowOsdDragPreview();
@@ -6345,7 +6700,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             UnregisterAllHotkeys();
             FinishHide();
             RemoveTrayIcon();
-            KillTimer(hwnd, ID_TIMER_LOCK);
             KillTimer(hwnd, ID_TIMER_REFRESH_ONCE);
             if (g_hwndOsd) {
                 DestroyWindow(g_hwndOsd);
@@ -6379,9 +6733,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             } else if (wParam == ID_TIMER_FAST) {
                 OnFastTimer();
-            } else if (wParam == ID_TIMER_LOCK) {
-                if (!g_dragging) EnforceLockedVolumes();
-                if (g_lockedVolumes.empty()) KillTimer(hwnd, ID_TIMER_LOCK);
             } else if (wParam == ID_TIMER_REFRESH_ONCE) {
                 KillTimer(hwnd, ID_TIMER_REFRESH_ONCE);
                 if (g_visible && !g_hiding && !g_dragging) RefreshModel(false);
@@ -6559,6 +6910,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 DWORD WINAPI UiThreadProc(LPVOID) {
+    SetPerMonitorDpiAwareness();
     const HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     GdiplusStartupInput gsi;
     const bool gdiOk = (GdiplusStartup(&g_gdiplusToken, &gsi, nullptr) == Ok);
@@ -6625,8 +6977,9 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         StartHookThread();
         RegisterAllHotkeys();
         UpdateTrayIcon(true);
-        UpdateMouseHook();
-        UpdateLockTimer();
+        UpdateHooks();
+        RecoverDeafenState();
+        RebuildLockWatch();
     }
 
     SetEvent(g_readyEvent);
@@ -6648,6 +7001,11 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 
     RestoreDeafen(false);
     if (g_locksDirty) PersistLockedVolumes();
+    StopLockWatch();
+    if (g_lockNotifier) {
+        g_lockNotifier->Release();
+        g_lockNotifier = nullptr;
+    }
     StopAudioNotifications();
 
     ReleaseItems(g_items);
@@ -6671,66 +7029,222 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     return 0;
 }
 
-static HANDLE g_singleInstanceMutex = nullptr;
-
-BOOL Wh_ModInit() {
-    Wh_Log(L"Volume Mixer Mod initializing in explorer.exe (PID %lu)", GetCurrentProcessId());
-
-    // Only the explorer process that hosts the taskbar runs the mixer.
-    HWND hTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (hTrayWnd) {
-        DWORD trayPid = 0;
-        GetWindowThreadProcessId(hTrayWnd, &trayPid);
-        if (trayPid != 0 && GetCurrentProcessId() != trayPid) {
-            Wh_Log(L"Skipping secondary explorer process (PID %lu != shell PID %lu)", GetCurrentProcessId(), trayPid);
-            return TRUE;
-        }
-    }
-
-    g_singleInstanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\WindhawkVolumeMixerPopupPro_SingleInstance");
-    if (!g_singleInstanceMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"Already running in another explorer instance, skipping");
-        if (g_singleInstanceMutex) {
-            CloseHandle(g_singleInstanceMutex);
-            g_singleInstanceMutex = nullptr;
-        }
-        return TRUE;
-    }
-
+// The mod runs in its own windhawk.exe process (see the tool mod code below).
+// The UI thread keeps that process alive until WhTool_ModUninit.
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Starting (PID %lu)", GetCurrentProcessId());
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
     if (!g_thread) {
         Wh_Log(L"Failed to create UI thread");
-        CloseHandle(g_readyEvent);
+        if (g_readyEvent) CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
         return FALSE;
     }
 
-    WaitForSingleObject(g_readyEvent, 10000);
-    CloseHandle(g_readyEvent);
-    g_readyEvent = nullptr;
-
-    Wh_Log(L"Volume Mixer Mod initialized, window=%p", g_hwnd);
+    // Lets the other callbacks rely on g_hwnd. After a timeout the event stays
+    // open, since the UI thread may still signal it.
+    if (g_readyEvent && WaitForSingleObject(g_readyEvent, 10000) == WAIT_OBJECT_0) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+    }
+    Wh_Log(L"Initialized, window=%p", g_hwnd);
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP_RELOAD, 0, 0);
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Volume Mixer Mod");
+void WhTool_ModUninit() {
+    Wh_Log(L"Uninitializing");
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP_QUIT, 0, 0);
     if (g_thread) {
-        // The DLL is unloaded after this returns, so the thread must be gone.
+        // The process exits right after this returns; the UI thread finishes
+        // its cleanup (Deafen, locks, tray icon, hooks) first.
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    if (g_singleInstanceMutex) {
-        CloseHandle(g_singleInstanceMutex);
-        g_singleInstanceMutex = nullptr;
-    }
     Wh_Log(L"Uninitialized");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
