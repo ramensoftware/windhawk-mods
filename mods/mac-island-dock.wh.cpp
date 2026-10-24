@@ -2883,7 +2883,9 @@ std::wstring UserValueName(PCWSTR name) {
     return name + suffix;
 }
 
-int GetUserIntValue(PCWSTR name, int defaultValue) {
+// (`shared`: a value every account used before 2.1, like the timer's
+// lengths: copied, not moved, so each account starts from it once.)
+int GetUserIntValue(PCWSTR name, int defaultValue, bool shared = false) {
     const std::wstring userName = UserValueName(name);
     constexpr int kMissing = INT_MIN;
     const int value = Wh_GetIntValue(userName.c_str(), kMissing);
@@ -2895,7 +2897,9 @@ int GetUserIntValue(PCWSTR name, int defaultValue) {
         return defaultValue;
     }
     Wh_SetIntValue(userName.c_str(), legacy);
-    Wh_DeleteValue(name);
+    if (!shared) {
+        Wh_DeleteValue(name);
+    }
     return legacy;
 }
 
@@ -2945,18 +2949,31 @@ void SetUserStringValue(PCWSTR name, PCWSTR value) {
     Wh_SetStringValue(UserValueName(name).c_str(), value);
 }
 
-// The account's own text, whole (see GetWholeStringValue), one kept under
-// the plain name before moved to it.
+// The mark that the account has its own copy of a text every account used
+// before 2.1 (see GetWholeUserStringValue), even an empty one.
+std::wstring UserSeededName(PCWSTR name) {
+    return UserValueName((std::wstring(name) + L"Seeded").c_str());
+}
+
+// The account's own text, whole (see GetWholeStringValue). The alarms and
+// the folders' pins and looks were every account's before 2.1: the text kept
+// under the plain name is copied, not moved, so each account starts from
+// it, once (its mark then: an account that emptied its own doesn't get the
+// old one back).
 std::wstring GetWholeUserStringValue(PCWSTR name, size_t room) {
     const std::wstring userName = UserValueName(name);
     std::wstring value = GetWholeStringValue(userName.c_str(), room);
     if (!value.empty() || userName == name) {
         return value;
     }
+    const std::wstring seeded = UserSeededName(name);
+    if (Wh_GetIntValue(seeded.c_str(), 0)) {
+        return value;
+    }
+    Wh_SetIntValue(seeded.c_str(), 1);
     value = GetWholeStringValue(name, room);
     if (!value.empty()) {
         Wh_SetStringValue(userName.c_str(), value.c_str());
-        Wh_DeleteValue(name);
     }
     return value;
 }
@@ -42204,13 +42221,13 @@ void LoadTimerLengths() {
     }
     g_timer.lengthsLoaded = true;
     // (The account's own, see UserValueName: another account's island keeps
-    // its own.)
-    g_timer.seconds = std::clamp(GetUserIntValue(L"timerLength", 5 * 60), 1,
-                                 kTimerLongest);
+    // its own; each starts from the lengths all used before.)
+    g_timer.seconds = std::clamp(
+        GetUserIntValue(L"timerLength", 5 * 60, true), 1, kTimerLongest);
     g_timer.focusSeconds = std::clamp(
-        GetUserIntValue(L"pomodoroFocus", 25 * 60), 1, kTimerLongest);
+        GetUserIntValue(L"pomodoroFocus", 25 * 60, true), 1, kTimerLongest);
     g_timer.breakSeconds = std::clamp(
-        GetUserIntValue(L"pomodoroBreak", 5 * 60), 1, kTimerLongest);
+        GetUserIntValue(L"pomodoroBreak", 5 * 60, true), 1, kTimerLongest);
 }
 
 void SaveTimerLengths() {
@@ -46563,13 +46580,18 @@ struct FolderWatch {
 
 // A name added, removed or changed in one of the folders (a file or a
 // folder, by anything) is posted to the panel; the set changed, they're
-// watched again. Only waits (FindFirstChangeNotification), nothing polled.
+// watched again. Only waits (FindFirstChangeNotification), no disk polled;
+// the list of drive letters is asked every kDrivesLookMs, and a drive come
+// or gone (a USB drive) posted with lParam -1 (the favorite files on it).
+constexpr DWORD kDrivesLookMs = 2000;
+
 DWORD WINAPI FolderWatchThreadProc(LPVOID parameter) {
     auto* watch = (FolderWatch*)parameter;
     // (The 32-bit Windhawk process would watch SysWOW64 for System32.)
     PVOID redirection = nullptr;
     const bool unredirected =
         Wow64DisableWow64FsRedirection(&redirection) != FALSE;
+    DWORD drives = GetLogicalDrives();
     bool stop = false;
     while (!stop) {
         AcquireSRWLockShared(&watch->lock);
@@ -46590,7 +46612,15 @@ DWORD WINAPI FolderWatchThreadProc(LPVOID parameter) {
         }
         for (;;) {
             const DWORD woken = WaitForMultipleObjects(
-                (DWORD)waits.size(), waits.data(), FALSE, INFINITE);
+                (DWORD)waits.size(), waits.data(), FALSE, kDrivesLookMs);
+            if (woken == WAIT_TIMEOUT) {
+                if (const DWORD now = GetLogicalDrives(); now != drives) {
+                    drives = now;
+                    PostMessage(watch->panel, WM_APP_FOLDER_CHANGED, set,
+                                (LPARAM)-1);
+                }
+                continue;
+            }
             const size_t k = woken - WAIT_OBJECT_0;
             if (woken == WAIT_FAILED || k == 0) {
                 stop = true;
@@ -47261,7 +47291,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
 
     void OnOpen() override {
         m_icons.clear();
-        m_order = FolderOrderOf(GetUserIntValue(L"folderOrder", 0));
+        m_order = FolderOrderOf(GetUserIntValue(L"folderOrder", 0, true));
         LoadPins();
         m_hover = {-1, -1};
         m_buttonHover = RowButton::None;
@@ -47279,7 +47309,6 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         m_dropSpot = {-1, -1};
         m_drop.Register(m_hwnd, this);
         m_shown = true;
-        SetTimer(m_hwnd, kFavoritesTimerId, kFavoritesMs, nullptr);
         Layout();
     }
 
@@ -47293,7 +47322,6 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         StopWatching();
         KillTimer(m_hwnd, kFolderOpenTimerId);
         KillTimer(m_hwnd, kFolderChangeTimerId);
-        KillTimer(m_hwnd, kFavoritesTimerId);
         m_changePending = false;
     }
 
@@ -47789,13 +47817,40 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
                 paths.push_back(path);
             }
         }
-        if (paths == m_watchedPaths) {
+        // And the folders of the favorite files on this computer's drives:
+        // one deleted, moved or renamed leaves the list (see CheckFavorites),
+        // nothing looked at meanwhile (a disk that's stopped stays so). With
+        // favorites, the thread also notices a drive coming or going.
+        bool favorites = m_shown && !m_hiddenPins.empty();
+        for (const auto& pin : m_pins) {
+            if (!m_shown || !pin.starts_with(kFilePinPrefix)) {
+                continue;
+            }
+            favorites = true;
+            const std::wstring path = pin.substr(wcslen(kFilePinPrefix));
+            const size_t slash = path.find_last_of(L'\\');
+            if (slash == std::wstring::npos || !IsLocalDrivePath(path)) {
+                continue;
+            }
+            const std::wstring folder = path.substr(0, slash + 1);
+            if (std::none_of(paths.begin(), paths.end(),
+                             [&](const std::wstring& each) {
+                                 return _wcsicmp(FolderKey(each).c_str(),
+                                                 FolderKey(folder).c_str()) ==
+                                        0;
+                             })) {
+                paths.push_back(folder);
+            }
+        }
+        const bool wanted = !paths.empty() || favorites;
+        if (paths == m_watchedPaths && wanted == m_watchWanted) {
             return;
         }
-        if (paths.empty()) {
+        if (!wanted) {
             StopWatching();
             return;
         }
+        m_watchWanted = true;
         m_watchedPaths = paths;
         if (m_watchThread) {
             AcquireSRWLockExclusive(&m_watch->lock);
@@ -47820,6 +47875,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             StopWatching();
             // (Not tried again for the same folders.)
             m_watchedPaths = wanted;
+            m_watchWanted = true;
         }
     }
     void StopWatching() {
@@ -47839,6 +47895,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             m_watch.reset();
         }
         m_watchedPaths.clear();
+        m_watchWanted = false;
     }
 
     // The column's opened row found again by the folder shown beside it (its
@@ -48369,21 +48426,29 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         m_buttonHover = RowButton::None;
     }
 
-    // While it's open, now and then (see kFavoritesTimerId): a favorite file
-    // deleted, moved or on a drive taken out meanwhile goes from the list.
-    // True if one went (drawn again).
-    bool CheckFavorites() {
+    // While it's open (see WatchColumns): a favorite file of `folder`, a
+    // folder watched that changed, deleted, moved or renamed goes from the
+    // list (only that folder's are looked at: no other disk woken). No
+    // `folder`: a drive came or went, the favorites shown again (the ones on
+    // it come or go). True if the list changed (drawn again).
+    bool CheckFavorites(const std::wstring& folder) {
         if (m_dragging || m_dragRow >= 0 || m_fileDrag.column >= 0 ||
             m_asking) {
             return false;
         }
-        bool changed = false;
+        bool changed = folder.empty() && !m_hiddenPins.empty();
         for (const auto& pin : m_pins) {
-            if (pin.starts_with(kFilePinPrefix) &&
-                FavoriteFilePlace(pin.substr(wcslen(kFilePinPrefix)), false) !=
-                    FavoritePlace::Here) {
-                changed = true;
+            if (changed || !pin.starts_with(kFilePinPrefix)) {
+                continue;
             }
+            const std::wstring path = pin.substr(wcslen(kFilePinPrefix));
+            const size_t slash = path.find_last_of(L'\\');
+            changed =
+                folder.empty() ||
+                (slash != std::wstring::npos &&
+                 _wcsicmp(FolderKey(path.substr(0, slash)).c_str(),
+                          folder.c_str()) == 0 &&
+                 FavoriteFilePlace(path, false) != FavoritePlace::Here);
         }
         if (changed) {
             ReloadPinsKeepingColumns();
@@ -48907,10 +48972,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     RowButton m_copiedButton = RowButton::None;
     static constexpr UINT_PTR kCopiedTimerId = 43;
     static constexpr UINT kCopiedMs = 1500;
-    // The favorite files looked at this often while it's open (see
-    // CheckFavorites), and the ones on a drive not there now (see LoadPins).
-    static constexpr UINT_PTR kFavoritesTimerId = 44;
-    static constexpr UINT kFavoritesMs = 3000;
+    // The favorite files on a drive not there now (see LoadPins).
     std::vector<std::wstring> m_hiddenPins;
     D2D1_RECT_F m_back{};
     // The search in the folder shown last (see ApplySearch).
@@ -48940,6 +49002,8 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     HANDLE m_watchThread = nullptr;
     std::vector<std::wstring> m_watchedPaths;
     UINT m_watchSet = 0;
+    // Watched (or tried) for the favorite files too, even without folders.
+    bool m_watchWanted = false;
     // A change seen: the columns read again in a moment (once for many).
     static constexpr UINT_PTR kFolderChangeTimerId = 42;
     static constexpr UINT kFolderChangeMs = 300;
@@ -49101,12 +49165,20 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     if (msg == WM_APP_FOLDER_CHANGED) {
         // (From the folders watched now: their columns read again.)
-        if (!m_watch || (UINT)wParam != m_watchSet ||
-            (size_t)lParam >= m_watchedPaths.size()) {
+        if (!m_watch || (UINT)wParam != m_watchSet) {
+            return false;
+        }
+        // A drive came or went: the favorite files on it.
+        if (lParam == -1) {
+            return m_shown && CheckFavorites(L"");
+        }
+        if ((size_t)lParam >= m_watchedPaths.size()) {
             return false;
         }
         const std::wstring changed =
             FolderKey(m_watchedPaths[(size_t)lParam]);
+        // A favorite file in it gone (and its column, if shown, read again).
+        const bool favorites = m_shown && CheckFavorites(changed);
         bool marked = false;
         for (size_t i = 1; i < m_columns.size(); i++) {
             if (_wcsicmp(FolderKey(m_columns[i].path).c_str(),
@@ -49119,7 +49191,7 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             m_changePending = true;
             SetTimer(m_hwnd, kFolderChangeTimerId, kFolderChangeMs, nullptr);
         }
-        return false;
+        return favorites;
     }
     if (msg == WM_APP_COLOR_DONE) {
         return OnLookColorDone(lParam);
@@ -49141,14 +49213,6 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 bool FoldersPanel::OnTimer(UINT_PTR id) {
-    if (id == kFavoritesTimerId) {
-        const bool changed = CheckFavorites();
-        // (A panel's timers go off once: again, while it's open.)
-        if (m_shown) {
-            SetTimer(m_hwnd, kFavoritesTimerId, kFavoritesMs, nullptr);
-        }
-        return changed;
-    }
     // The check on a copy button goes.
     if (id == kCopiedTimerId) {
         m_copiedPath.clear();
@@ -70715,7 +70779,8 @@ std::wstring CaptureBackup() {
     for (const auto& value : kBackupValues) {
         if (!value.room) {
             const int number = value.user
-                                   ? GetUserIntValue(value.name, value.number)
+                                   ? GetUserIntValue(value.name, value.number,
+                                                     true)
                                    : Wh_GetIntValue(value.name, value.number);
             data += L"i" + std::wstring(value.name) + L"=" +
                     std::to_wstring(number) + L"\n";
@@ -70762,6 +70827,8 @@ bool RestoreBackup(const std::wstring& text) {
         } else if (const auto it = texts.find(value.name); it != texts.end()) {
             if (value.user) {
                 SetUserStringValue(value.name, it->second.c_str());
+                // (Its own now, even empty: not seeded again.)
+                Wh_SetIntValue(UserSeededName(value.name).c_str(), 1);
             } else {
                 Wh_SetStringValue(value.name, it->second.c_str());
             }
@@ -73563,6 +73630,11 @@ void Island::Destroy() {
         g_trayIsland = nullptr;
     }
     StopUrgentSound();
+    // (An alarm's sound repeats on its own: it'd go on after the island,
+    // with nothing left to stop it.)
+    if (m_main) {
+        StopAlarmSound();
+    }
     FreeSoundPlayer();
     WaitForToastActivations();
     if (m_hwnd) {
@@ -77448,6 +77520,15 @@ void Island::StopUrgentSound() {
     }
 }
 
+// An alarm's own notice (see CheckAlarms: its Stop button).
+bool IsAlarmNotice(const IslandToast& toast) {
+    return toast.appId.empty() &&
+           std::any_of(toast.reply.actions.begin(), toast.reply.actions.end(),
+                       [](const ToastReply::Action& action) {
+                           return action.arguments == L"alarm-stop";
+                       });
+}
+
 void Island::HideBanner() {
     KillTimer(m_hwnd, kBannerTimerId);
     // A call, an alarm or a reminder stops ringing as it goes, and Windows'
@@ -77459,6 +77540,13 @@ void Island::HideBanner() {
             EndTakeover();
         }
         m_takeoverPressed = false;
+    }
+    // An alarm's notice closed any way (its x, a click away), not only by
+    // its Stop: its sound stops too.
+    if (m_bannerWanted && IsAlarmNotice(m_banner)) {
+        if (Island* main = MainIsland()) {
+            main->StopAlarmSound();
+        }
     }
     if (m_bannerWanted) {
         m_bannerWanted = false;
