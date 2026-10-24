@@ -4,21 +4,29 @@
 // @name:tr-TR      Kilit Ekranı Saat Özelleştirici
 // @name:zh-CN      锁屏时钟样式定制
 // @name:zh-TW      鎖定畫面時鐘樣式自訂
-// @name:ru-RU      Стилизатор часов экрана блокировки
+// @name:ja-JP      ロック画面の時計スタイラー
+// @name:ko-KR      잠금 화면 시계 스타일러
 // @name:de-DE      Sperrbildschirm-Uhr-Styler
 // @name:es-ES      Personalizador del reloj de la pantalla de bloqueo
 // @name:pt-BR      Personalizador de Relógio da Tela de Bloqueio
-// @name:ja-JP      ロック画面の時計スタイラー
+// @name:fr-FR      Personnaliseur d'horloge d'écran de verrouillage
+// @name:it-IT      Personalizzatore orologio schermata di blocco
+// @name:pl-PL      Stylizator zegara ekranu blokady
+// @name:ru-RU      Стилизатор часов экрана блокировки
 // @name:uk-UA      Стилізатор годинника екрана блокування
 // @description     Customize the Windows 11 lock screen clock with modern styles, date display, and widget controls.
 // @description:tr-TR Windows 11 kilit ekranı saatini modern stiller, tarih göstergesi ve widget denetimleriyle özelleştirin.
 // @description:zh-CN 使用现代样式、日期显示和微件控制来自定义 Windows 11 锁屏时钟。
 // @description:zh-TW 使用現代樣式、日期顯示與小工具控制來自訂 Windows 11 鎖定畫面時鐘。
-// @description:ru-RU Настройте часы экрана блокировки Windows 11 с современными стилями, отображением даты и управлением виджетами.
+// @description:ja-JP モダンなスタイル、日付表示、ウィジェット制御で Windows 11 のロック画面の時計をカスタマイズします。
+// @description:ko-KR 모던한 스타일, 날짜 표시 및 위젯 제어로 Windows 11 잠금 화면 시계를 맞춤 설정합니다.
 // @description:de-DE Passen Sie die Windows 11-Sperrbildschirmuhr mit modernen Stilen, Datumsanzeige und Widget-Steuerung an.
 // @description:es-ES Personaliza el reloj de la pantalla de bloqueo de Windows 11 con estilos modernos, visualización de fecha y control de widgets.
 // @description:pt-BR Personalize o relógio da tela de bloqueio do Windows 11 com estilos modernos, exibição de data e controle de widgets.
-// @description:ja-JP モダンなスタイル、日付表示、ウィジェット制御で Windows 11 のロック画面の時計をカスタマイズします。
+// @description:fr-FR Personnalisez l'horloge de l'écran de verrouillage de Windows 11 avec des styles modernes, l'affichage de la date et le contrôle des widgets.
+// @description:it-IT Personalizza l'orologio della schermata di blocco di Windows 11 con stili moderni, visualizzazione della data e controllo dei widget.
+// @description:pl-PL Dostosuj zegar ekranu blokady systemu Windows 11 za pomocą nowoczesnych stylów, wyświetlania daty i kontroli widżetów.
+// @description:ru-RU Настройте часы экрана блокировки Windows 11 с современными стилями, отображением даты и управлением виджетами.
 // @description:uk-UA Налаштуйте годинник екрана блокування Windows 11 за допомогою сучасних стилів, відображення дати та керування віджетами.
 // @version         0.5.0
 // @author          ali0zdas
@@ -73,7 +81,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Uhrstil"
   $name:es-ES: "Estilo de reloj"
   $name:pt-BR: "Estilo do relógio"
+  $name:fr-FR: "Style d'horloge"
+  $name:it-IT: "Stile orologio"
+  $name:pl-PL: "Styl zegara"
   $name:ja-JP: "時計スタイル"
+  $name:ko-KR: "시계 스타일"
   $name:uk-UA: "Стиль годинника"
   $description: "The clock style to display on the lock screen."
   $description:tr-TR: "Kilit ekranında görüntülenecek saat stili."
@@ -83,7 +95,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Der auf dem Sperrbildschirm anzuzeigende Uhrstil."
   $description:es-ES: "El estilo de reloj que se mostrará en la pantalla de bloqueo."
   $description:pt-BR: "O estilo de relógio a ser exibido na tela de bloqueio."
+  $description:fr-FR: "Le style d'horloge à afficher sur l'écran de verrouillage."
+  $description:it-IT: "Lo stile dell'orologio da visualizzare nella schermata di blocco."
+  $description:pl-PL: "Styl zegara do wyświetlenia na ekranie blokady."
   $description:ja-JP: "ロック画面に表示する時計のスタイル。"
+  $description:ko-KR: "잠금 화면에 표시할 시계 스타일입니다."
   $description:uk-UA: "Стиль годинника для відображення на екрані блокування."
   $options:
     - pixel: "Retro Pixel / LED Dot Matrix"
@@ -102,7 +118,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Zeitformat"
   $name:es-ES: "Formato de hora"
   $name:pt-BR: "Formato de hora"
+  $name:fr-FR: "Format de l'heure"
+  $name:it-IT: "Formato ora"
+  $name:pl-PL: "Format czasu"
   $name:ja-JP: "時刻の形式"
+  $name:ko-KR: "시간 형식"
   $name:uk-UA: "Формат часу"
   $description: "Select 24-hour format or 12-hour format with AM/PM indicator."
   $description:tr-TR: "24 saat formatı veya AM/PM göstergeli 12 saat formatı seçimi."
@@ -112,7 +132,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Wählen Sie das 24-Stunden-Format oder das 12-Stunden-Format mit AM/PM-Anzeige."
   $description:es-ES: "Selecciona el formato de 24 horas o el formato de 12 horas con indicador AM/PM."
   $description:pt-BR: "Selecione o formato de 24 horas ou o formato de 12 horas com indicador AM/PM."
+  $description:fr-FR: "Sélectionnez le format 24 heures ou 12 heures avec indicateur AM/PM."
+  $description:it-IT: "Seleziona il formato a 24 ore o a 12 ore con indicatore AM/PM."
+  $description:pl-PL: "Wybierz format 24-godzinny lub 12-godzinny ze wskaźnikiem AM/PM."
   $description:ja-JP: "24時間表示または午前/午後（AM/PM）表示の12時間表示を選択します。"
+  $description:ko-KR: "24시간 형식 또는 오전/오후(AM/PM) 표시가 있는 12시간 형식을 선택합니다."
   $description:uk-UA: "Виберіть 24-годинний формат або 12-годинний формат з індикатором AM/PM."
   $options:
     - 24h: "24-Hour (14:30)"
@@ -126,7 +150,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Sekunden anzeigen"
   $name:es-ES: "Mostrar segundos"
   $name:pt-BR: "Mostrar segundos"
+  $name:fr-FR: "Afficher les secondes"
+  $name:it-IT: "Mostra secondi"
+  $name:pl-PL: "Pokaż sekundy"
   $name:ja-JP: "秒を表示"
+  $name:ko-KR: "초 표시"
   $name:uk-UA: "Показувати секунди"
   $description: "Adds live seconds to the clock. Supported by every style except the Modern and Classic flip clocks."
   $description:tr-TR: "Saate canlı saniye ekler. Modern ve Klasik flip saatler dışındaki tüm stillerde desteklenir."
@@ -136,7 +164,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Fügt der Uhr Live-Sekunden hinzu. Wird von jedem Stil außer den modernen und klassischen Klappuhren unterstützt."
   $description:es-ES: "Añade segundos en vivo al reloj. Compatible con todos los estilos excepto los relojes flip modernos y clásicos."
   $description:pt-BR: "Adiciona segundos ao vivo ao relógio. Suportado por todos os estilos, exceto os relógios flip modernos e clássicos."
+  $description:fr-FR: "Ajoute les secondes en direct à l'horloge. Pris en charge par tous les styles sauf les horloges à volets Modern et Classic."
+  $description:it-IT: "Aggiunge i secondi in tempo reale all'orologio. Supportato da tutti gli stili tranne gli orologi flip Modern e Classic."
+  $description:pl-PL: "Dodaje sekundy w czasie rzeczywistym do zegara. Obsługiwane przez wszystkie style z wyjątkiem zegarów klapkowych Modern i Classic."
   $description:ja-JP: "時計にリアルタイムの秒表示を追加します。モダンおよびクラシックフリップ時計を除くすべてのスタイルでサポートされています。"
+  $description:ko-KR: "시계에 실시간 초 단위를 추가합니다. 모던 및 클래식 플립 시계를 제외한 모든 스타일에서 지원됩니다."
   $description:uk-UA: "Додає відображення секунд у реальному часі. Підтримується всіма стилями, крім перекидних годинників."
 - glassOpacity: 45
   $name: "Glass Opacity (Modern Flip Cards)"
@@ -147,7 +179,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Glas-Deckkraft (Modern Flip-Karten)"
   $name:es-ES: "Opacidad del cristal (Tarjetas Modern Flip)"
   $name:pt-BR: "Opacidade do vidro (Cartões Modern Flip)"
+  $name:fr-FR: "Opacité du verre (Cartes Modern Flip)"
+  $name:it-IT: "Opacità vetro (schede Modern Flip)"
+  $name:pl-PL: "Przezroczystość szkła (karty Modern Flip)"
   $name:ja-JP: "ガラスの不透明度（モダンフリップカード）"
+  $name:ko-KR: "유리 불투명도(모던 플립 카드)"
   $name:uk-UA: "Непрозорість скла (картки Modern Flip)"
   $description: "Translucency of the Modern Flip clock cards (0 to 255; 0 is completely transparent, 255 is fully opaque). Other styles are not affected."
   $description:tr-TR: "Modern Flip saat kartlarının yarı saydamlığı (0 ile 255 arası; 0 tamamen saydam, 255 tam opak). Diğer stiller etkilenmez."
@@ -157,7 +193,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Lichtdurchlässigkeit der Modern Flip-Uhrenkarten (0 bis 255; 0 ist vollständig transparent, 255 vollständig deckend). Andere Stile sind nicht betroffen."
   $description:es-ES: "Translucidez de las tarjetas de reloj Modern Flip (0 a 255; 0 es completamente transparente, 255 es totalmente opaco). Otros estilos no se ven afectados."
   $description:pt-BR: "Translucidez dos cartões do relógio Modern Flip (0 a 255; 0 é totalmente transparente, 255 é totalmente opaco). Outros estilos não são afetados."
+  $description:fr-FR: "Translucidité des cartes d'horloge Modern Flip (0 à 255 ; 0 est totalement transparent, 255 est totalement opaque). Les autres styles ne sont pas affectés."
+  $description:it-IT: "Trasparenza delle schede dell'orologio Modern Flip (da 0 a 255; 0 è completamente trasparente, 255 è completamente opaco). Gli altri stili non sono interessati."
+  $description:pl-PL: "Półprzezroczystość kart zegara Modern Flip (od 0 do 255; 0 to całkowita przezroczystość, 255 to pełne krycie). Inne style nie ulegają zmianie."
   $description:ja-JP: "モダンフリップ時計カードの半透明度（0〜255。0は完全に透明、255は完全に不透明）。他のスタイルには影響しません。"
+  $description:ko-KR: "모던 플립 시계 카드의 반투명도입니다(0~255, 0은 완전 투명, 255는 완전 불투명). 다른 스타일에는 영향을 주지 않습니다."
   $description:uk-UA: "Напівпрозорість карток годинника Modern Flip (від 0 до 255; 0 — повністю прозорі, 255 — повністю непрозорі). Інші стилі не змінюються."
 - clockFontSize: 140
   $name: "Digit Font Size"
@@ -168,7 +208,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Ziffernschriftgröße"
   $name:es-ES: "Tamaño de fuente de dígitos"
   $name:pt-BR: "Tamanho da fonte dos dígitos"
+  $name:fr-FR: "Taille de police des chiffres"
+  $name:it-IT: "Dimensione carattere cifre"
+  $name:pl-PL: "Rozmiar czcionki cyfr"
   $name:ja-JP: "数字のフォントサイズ"
+  $name:ko-KR: "숫자 글꼴 크기"
   $name:uk-UA: "Розмір шрифту цифр"
   $description: "Base font size for the clock digits (20 to 300). Each style scales this value for its own layout."
   $description:tr-TR: "Saat rakamları için temel punto büyüklüğü (20 ile 300 arası). Her stil bu değeri kendi yerleşimine göre ölçekler."
@@ -178,7 +222,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Basis-Schriftgröße für die Ziffern (20 bis 300). Jeder Stil skaliert diesen Wert für sein eigenes Layout."
   $description:es-ES: "Tamaño de fuente base para los dígitos del reloj (20 a 300). Cada estilo escala este valor para su propio diseño."
   $description:pt-BR: "Tamanho base da fonte para os dígitos do relógio (20 a 300). Cada estilo dimensiona esse valor para seu próprio layout."
+  $description:fr-FR: "Taille de police de base pour les chiffres de l'horloge (20 à 300). Chaque style ajuste cette valeur à sa propre disposition."
+  $description:it-IT: "Dimensione di base del carattere per le cifre dell'orologio (da 20 a 300). Ogni stile ridimensiona questo valore in base al proprio layout."
+  $description:pl-PL: "Podstawowy rozmiar czcionki cyfr zegara (od 20 do 300). Każdy styl skaluje tę wartość do własnego układu."
   $description:ja-JP: "時計の数字の基本フォントサイズ（20〜300）。各スタイルは独自のレイアウトに合わせてこの値を調整します。"
+  $description:ko-KR: "시계 숫자의 기본 글꼴 크기입니다(20~300). 각 스타일마다 고유한 레이아웃에 맞춰 이 값을 조정합니다."
   $description:uk-UA: "Базовий розмір шрифту для цифр годинника (від 20 до 300). Кожен стиль масштабує це значення для свого макета."
 - verticalOffset: 0
   $name: "Vertical Offset (px)"
@@ -189,7 +237,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Vertikaler Versatz (px)"
   $name:es-ES: "Desplazamiento vertical (px)"
   $name:pt-BR: "Deslocamento vertical (px)"
+  $name:fr-FR: "Décalage vertical (px)"
+  $name:it-IT: "Offset verticale (px)"
+  $name:pl-PL: "Przesunięcie pionowe (px)"
   $name:ja-JP: "垂直オフセット (px)"
+  $name:ko-KR: "세로 오프셋 (px)"
   $name:uk-UA: "Вертикальний зсув (пікс.)"
   $description: "Shifts the clock vertically (-200 to +400). Out-of-range values are clamped."
   $description:tr-TR: "Saati dikey olarak kaydırır (-200 ile +400 arası). Aralık dışı değerler sınırlandırılır."
@@ -199,7 +251,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Verschiebt die Uhr vertikal (-200 bis +400). Werte außerhalb des Bereichs werden begrenzt."
   $description:es-ES: "Desplaza el reloj verticalmente (-200 a +400). Los valores fuera de rango se limitan."
   $description:pt-BR: "Desloca o relógio verticalmente (-200 a +400). Valores fora do intervalo são ajustados."
+  $description:fr-FR: "Décale l'horloge verticalement (-200 à +400). Les valeurs hors limites sont ajustées."
+  $description:it-IT: "Sposta l'orologio verticalmente (da -200 a +400). I valori fuori intervallo vengono limitati."
+  $description:pl-PL: "Przesuwa zegar w pionie (od -200 do +400). Wartości spoza zakresu są ograniczane."
   $description:ja-JP: "時計を垂直方向に移動します（-200〜+400）。範囲外の値は制限されます。"
+  $description:ko-KR: "시계를 세로 방향으로 이동합니다(-200~+400). 범위를 벗어난 값은 제한됩니다."
   $description:uk-UA: "Зсуває годинник по вертикалі (від -200 до +400). Значення за межами діапазону обмежуються."
 - clockAlignment: auto
   $name: "Clock Horizontal Alignment"
@@ -210,7 +266,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Horizontale Ausrichtung der Uhr"
   $name:es-ES: "Alineación horizontal del reloj"
   $name:pt-BR: "Alinhamento horizontal do relógio"
+  $name:fr-FR: "Alignement horizontal de l'horloge"
+  $name:it-IT: "Allineamento orizzontale orologio"
+  $name:pl-PL: "Wyrównanie poziome zegara"
   $name:ja-JP: "時計の水平方向の配置"
+  $name:ko-KR: "시계 가로 정렬"
   $name:uk-UA: "Горизонтальне вирівнювання годинника"
   $description: "Horizontal alignment and layout of the clock on screen. Automatic uses the theme default (bottom-left for Minimalist Sonoma, center for other styles)."
   $description:tr-TR: "Saatin ekrandaki yerleşim ve hizalaması. Otomatik seçeneği tema varsayılanını kullanır (Minimalist Sonoma için sol alt, diğer stiller için merkez)."
@@ -220,7 +280,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Horizontale Ausrichtung und Anordnung der Uhr auf dem Bildschirm. „Automatisch“ verwendet den Design-Standard (unten links für Minimalist Sonoma, mittig für andere Stile)."
   $description:es-ES: "Alineación horizontal y diseño del reloj en pantalla. Automático utiliza el valor predeterminado del tema (abajo a la izquierda para Sonoma Minimalista, centrado para otros estilos)."
   $description:pt-BR: "Alinhamento horizontal e layout do relógio na tela. Automático usa o padrão do tema (canto inferior esquerdo para Sonoma Minimalista, centro para outros estilos)."
+  $description:fr-FR: "Alignement horizontal et disposition de l'horloge à l'écran. Automatique utilise le style par défaut (en bas à gauche pour Minimalist Sonoma, centré pour les autres)."
+  $description:it-IT: "Allineamento orizzontale e layout dell'orologio sullo schermo. Automatico usa il valore predefinito del tema (in basso a sinistra per Minimalist Sonoma, centrato per gli altri)."
+  $description:pl-PL: "Wyrównanie poziome i układ zegara na ekranie. Opcja „Automatycznie” używa domyślnego motywu (w lewym dolnym rogu dla Minimalist Sonoma, na środku dla pozostałych)."
   $description:ja-JP: "画面上の時計の水平方向の配置とレイアウト。「自動」はテーマのデフォルトを使用します（ミニマリスト Sonoma は左下、その他のスタイルは中央）。"
+  $description:ko-KR: "화면에서 시계의 가로 정렬 및 레이아웃입니다. '자동'은 테마 기본값을 사용합니다(미니멀리스트 Sonoma는 왼쪽 하단, 기타 스타일은 중앙)."
   $description:uk-UA: "Горизонтальне вирівнювання та макет годинника на екрані. «Автоматично» використовує значення теми за замовчуванням (внизу ліворуч для Minimalist Sonoma, по центру для інших стилів)."
   $options:
     - auto: "Automatic (Theme Default)"
@@ -237,7 +301,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Standard-Widgets ausblenden"
   $name:es-ES: "Ocultar widgets predeterminados"
   $name:pt-BR: "Ocultar widgets padrão"
+  $name:fr-FR: "Masquer les widgets par défaut"
+  $name:it-IT: "Nascondi widget predefiniti"
+  $name:pl-PL: "Ukryj domyślne widżety"
   $name:ja-JP: "デフォルトのウィジェットを非表示にする"
+  $name:ko-KR: "기본 위젯 숨기기"
   $name:uk-UA: "Приховати стандартні віджети"
   $description: "Hides MSN weather, sports, and news widget areas on the lock screen. Disabled by default so the mod only restyles the clock unless asked otherwise."
   $description:tr-TR: "Kilit ekranındaki MSN hava durumu, spor ve haber widget alanını gizler. Mod varsayılan olarak yalnızca saati yeniden stillendirir; widget'ları gizlemek için bu seçeneği açın."
@@ -247,7 +315,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Blendet MSN-Wetter-, Sport- und Nachrichten-Widgets auf dem Sperrbildschirm aus. Standardmäßig deaktiviert, damit der Mod nur die Uhr anpasst, sofern nicht anders gewünscht."
   $description:es-ES: "Oculta las áreas de widgets de MSN el tiempo, deportes y noticias en la pantalla de bloqueo. Desactivado de forma predeterminada para que el mod solo rediseñe el reloj a menos que se indique lo contrario."
   $description:pt-BR: "Oculta as áreas de widgets de clima, esportes e notícias do MSN na tela de bloqueio. Desativado por padrão para que o mod apenas estilize o relógio, a menos que solicitado o contrário."
+  $description:fr-FR: "Masque les zones de widgets météo, sports et actualités MSN sur l'écran de verrouillage. Désactivé par défaut."
+  $description:it-IT: "Nasconde le aree dei widget meteo, sport e notizie MSN nella schermata di blocco. Disabilitato per impostazione predefinita."
+  $description:pl-PL: "Ukrywa obszary widżetów pogody MSN, wiadomości i sportu na ekranie blokady. Domyślnie wyłączone."
   $description:ja-JP: "ロック画面上の MSN 天気、スポーツ、ニュースのウィジェット領域を非表示にします。指定がない限り時計のスタイル変更のみを行うよう、デフォルトでは無効になっています。"
+  $description:ko-KR: "잠금 화면의 MSN 날씨, 스포츠, 뉴스 위젯 영역을 숨깁니다. 별도로 설정하지 않는 한 시계 스타일만 변경되도록 기본적으로 비활성화되어 있습니다."
   $description:uk-UA: "Приховує області віджетів погоди MSN, спорту та новин на екрані блокування. За замовчуванням вимкнено, щоб мод змінював лише стиль годинника, якщо не вказано інше."
 - hideDefaultClock: true
   $name: "Hide Default Lock Screen Clock"
@@ -258,7 +330,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Standard-Sperrbildschirmuhr ausblenden"
   $name:es-ES: "Ocultar reloj predeterminado de la pantalla de bloqueo"
   $name:pt-BR: "Ocultar relógio padrão da tela de bloqueio"
+  $name:fr-FR: "Masquer l'horloge par défaut de l'écran de verrouillage"
+  $name:it-IT: "Nascondi orologio predefinito schermata di blocco"
+  $name:pl-PL: "Ukryj domyślny zegar ekranu blokady"
   $name:ja-JP: "デフォルトのロック画面の時計を非表示にする"
+  $name:ko-KR: "기본 잠금 화면 시계 숨기기"
   $name:uk-UA: "Приховати стандартний годинник екрана блокування"
   $description: "Hides the default Windows 11 clock and date text to make way for the new clock."
   $description:tr-TR: "Windows 11'in standart saat ve tarih metnini gizleyerek yeni saatin görünmesini sağlar."
@@ -268,7 +344,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Blendet den standardmäßigen Windows 11-Uhr- und Datumstext aus, um Platz für die neue Uhr zu machen."
   $description:es-ES: "Oculta el texto predeterminado de hora y fecha de Windows 11 para dar paso al nuevo reloj."
   $description:pt-BR: "Oculta o texto padrão de relógio e data do Windows 11 para dar espaço ao novo relógio."
+  $description:fr-FR: "Masque le texte par défaut de l'horloge et de la date de Windows 11 pour afficher la nouvelle horloge."
+  $description:it-IT: "Nasconde il testo predefinito di data e ora di Windows 11 per fare spazio al nuovo orologio."
+  $description:pl-PL: "Ukrywa domyślny tekst zegara i daty systemu Windows 11, aby zrobić miejsce na nowy zegar."
   $description:ja-JP: "新しい時計を表示するために、デフォルトの Windows 11 の時計と日付のテキストを非表示にします。"
+  $description:ko-KR: "새 시계를 표시하기 위해 기본 Windows 11 시계와 날짜 텍스트를 숨깁니다."
   $description:uk-UA: "Приховує стандартний текст годинника та дати Windows 11, щоб звільнити місце для нового годинника."
 - showDateCapsule: true
   $name: "Show Date Display"
@@ -279,7 +359,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Datumsanzeige anzeigen"
   $name:es-ES: "Mostrar fecha"
   $name:pt-BR: "Mostrar exibição de data"
+  $name:fr-FR: "Afficher la date"
+  $name:it-IT: "Mostra data"
+  $name:pl-PL: "Pokaż datę"
   $name:ja-JP: "日付を表示"
+  $name:ko-KR: "날짜 표시"
   $name:uk-UA: "Показувати дату"
   $description: "Displays a date and weekday display (above or below clock cards)."
   $description:tr-TR: "Tarih ve gün göstergesini görüntüler."
@@ -289,7 +373,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Zeigt das Datum und den Wochentag an (über oder unter den Uhrenkarten)."
   $description:es-ES: "Muestra la fecha y el día de la semana (encima o debajo de las tarjetas del reloj)."
   $description:pt-BR: "Exibe a data e o dia da semana (acima ou abaixo dos cartões do relógio)."
+  $description:fr-FR: "Affiche la date et le jour de la semaine (au-dessus ou en dessous des cartes de l'horloge)."
+  $description:it-IT: "Visualizza la data e il giorno della settimana (sopra o sotto le schede dell'orologio)."
+  $description:pl-PL: "Wyświetla datę i dzień tygodnia (nad lub pod kartami zegara)."
   $description:ja-JP: "日付と曜日を表示します（時計カードの上または下）。"
+  $description:ko-KR: "날짜와 요일을 표시합니다(시계 카드 위 또는 아래)."
   $description:uk-UA: "Відображає дату та день тижня (над або під картками годинника)."
 - showBatteryStatus: false
   $name: "Show Battery & Charging Capsule"
@@ -300,7 +388,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:de-DE: "Akku- und Ladekapsel anzeigen"
   $name:es-ES: "Mostrar cápsula de batería y carga"
   $name:pt-BR: "Mostrar cápsula de bateria e carregamento"
+  $name:fr-FR: "Afficher la capsule de batterie et de charge"
+  $name:it-IT: "Mostra capsula batteria e ricarica"
+  $name:pl-PL: "Pokaż kapsułę baterii i ładowania"
   $name:ja-JP: "バッテリーと充電のカプセルを表示"
+  $name:ko-KR: "배터리 및 충전 캡슐 표시"
   $name:uk-UA: "Показувати капсулу батареї та заряджання"
   $description: "Displays battery percentage and charging status on laptops (automatically hidden on desktop PCs)."
   $description:tr-TR: "Dizüstü bilgisayarlarda pil yüzdesi ve şarj durumu kapsülünü görüntüler (Masaüstü bilgisayarlarda otomatik gizlenir)."
@@ -310,7 +402,11 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $description:de-DE: "Zeigt den Akkustand und Ladestatus auf Laptops an (auf Desktop-PCs automatisch ausgeblendet)."
   $description:es-ES: "Muestra el porcentaje de batería y el estado de carga en portátiles (se oculta automáticamente en PC de escritorio)."
   $description:pt-BR: "Exibe a porcentagem da bateria e o status de carregamento em notebooks (oculto automaticamente em PCs desktop)."
+  $description:fr-FR: "Affiche le pourcentage de batterie et l'état de charge sur les ordinateurs portables (automatiquement masqué sur les PC fixes)."
+  $description:it-IT: "Visualizza la percentuale della batteria e lo stato di ricarica sui laptop (nascosto automaticamente sui PC desktop)."
+  $description:pl-PL: "Wyświetla procent baterii i stan ładowania na laptopach (automatycznie ukrywane na komputerach stacjonarnych)."
   $description:ja-JP: "ノートパソコンでバッテリー残量と充電状態を表示します（デスクトップ PC では自動的に非表示になります）。"
+  $description:ko-KR: "노트북에서 배터리 백분율과 충전 상태를 표시합니다(데스크톱 PC에서는 자동으로 숨겨집니다)."
   $description:uk-UA: "Відображає відсоток заряду батареї та статус заряджання на ноутбуках (на настільних ПК автоматично приховується)."
 */
 // ==/WindhawkModSettings==
