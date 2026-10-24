@@ -5,7 +5,6 @@
 // @version         1.0
 // @author          shubho
 // @github          https://github.com/shubho193
-// @include         windhawk.exe
 // @compilerOptions -lole32
 // ==/WindhawkMod==
 
@@ -15,13 +14,15 @@
 Changes the loudness of the audio an app sends to Windows, so it can go past the
 100% limit of the volume mixer.
 
+This mod doesn't target any process by default.
+
 **Which apps:** open this mod's *Advanced* tab -> *Custom process inclusion list* and
 list the exe names you want affected (one per line). Only those processes get the mod.
 Restart an app after adding it to the list.
 
 *Note for games:* Games are excluded by default in Windhawk. To work with games, they need
-to be specifically added to the inclusion list from Windhawk's Advanced settings.
-Settings > Advanced settings > More advanced settings > Process Inclusion List
+to be specifically added to the inclusion list from Windhawk's Advanced settings:
+*Settings > Advanced settings > More advanced settings > Process Inclusion List*.
 
 **How loud:** every included app uses the default settings. To give one app its own
 settings, click **+** under *Per-app overrides*, type its exe name and choose its volume
@@ -36,7 +37,8 @@ Overrides with an empty process name are ignored.
   ratio, attack and release (these settings are shared by all apps).
 
 Changes apply live. Lower your system volume before starting, boosted audio can be very loud.
-Exclusive-mode streams and apps that bypass WASAPI entirely may not be affected.
+Exclusive-mode streams, spatial audio streams (e.g. Windows Sonic / Dolby Atmos, which bypass
+IAudioRenderClient), and apps that bypass WASAPI entirely may not be affected.
 
 **Troubleshooting:** start the app *after* enabling the mod (streams created earlier are not seen), then check Windhawk's log for this mod. It reports each stream's format and whether audio is being processed.
 */
@@ -46,7 +48,7 @@ Exclusive-mode streams and apps that bypass WASAPI entirely may not be affected.
 /*
 - defaultGain: 200
   $name: Default volume (%)
-  $description: Applies to every included app without an override. 100 = unchanged, 200 = twice as loud. In compressor mode this is the makeup gain.
+  $description: Applies to every included app without an override (range 10 to 1000). 100 = unchanged, 200 = twice as loud. In compressor mode this is the makeup gain.
 - defaultCompressor: false
   $name: Compressor mode (default)
   $description: Compress loud peaks before applying the volume %.
@@ -68,6 +70,7 @@ Exclusive-mode streams and apps that bypass WASAPI entirely may not be affected.
       $description: Exe name of the app, e.g. app.exe. Empty entries are ignored.
     - gain: 200
       $name: Volume (%)
+      $description: Range 10 to 1000.
     - compressor: false
       $name: Compressor mode
   $name: Per-app overrides
@@ -79,6 +82,8 @@ Exclusive-mode streams and apps that bypass WASAPI entirely may not be affected.
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <mmreg.h>
+#include <ksmedia.h>
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <cmath>
@@ -86,17 +91,18 @@ Exclusive-mode streams and apps that bypass WASAPI entirely may not be affected.
 #include <mutex>
 #include <unordered_map>
 
+// MinGW's ksmedia.h declares these subformats as extern without defining them,
+// which would otherwise require linking libksguid.a. Defining them here with
+// DECLSPEC_SELECTANY allows clean linking with just -lole32.
+const CDECL GUID DECLSPEC_SELECTANY KSDATAFORMAT_SUBTYPE_PCM = {
+    0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}
+};
+const CDECL GUID DECLSPEC_SELECTANY KSDATAFORMAT_SUBTYPE_IEEE_FLOAT = {
+    0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}
+};
+
 static const int kMaxSlots = 64;
 static const UINT32 kMaxChannels = 32;
-
-
-// GUIDs (defined by hand so no extra import libraries are needed)
-
-static const GUID kClsidEnumerator   = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-static const GUID kIidEnumerator     = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
-static const GUID kIidAudioClient    = {0x1CB9AD4C, 0xDBFA, 0x4C32, {0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2}};
-static const GUID kIidRenderClient   = {0xF294ACFC, 0x3146, 0x4483, {0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2}};
-static const GUID kIidAudioClient3   = {0x7ED4EE07, 0x8E67, 0x4CD4, {0x8C, 0x1A, 0x2B, 0x7A, 0x59, 0x87, 0xAD, 0x42}};
 
 
 // State
@@ -114,6 +120,7 @@ struct FmtInfo {
 struct RenderInfo {
     FmtInfo fmt;
     BYTE* lastBuffer = nullptr;
+    UINT32 lastBufferFrames = 0;
     float env = 0.0f;  // compressor envelope, persists between buffers
     bool loggedFirst = false;
 };
@@ -158,10 +165,9 @@ static void LoadSettings() {
     WCHAR exe[MAX_PATH];
     if (GetOwnExeName(exe, MAX_PATH)) {
         for (int i = 0; i < kMaxSlots; i++) {
-            PCWSTR name = Wh_GetStringSetting(L"slots[%d].process", i);
-            bool match = name && name[0] && _wcsicmp(name, exe) == 0;
-            Wh_FreeStringSetting(name);
-            if (!match) continue;
+            auto name = WindhawkUtils::StringSetting::make(L"slots[%d].process", i);
+            PCWSTR psz = name.get();
+            if (!psz || !psz[0] || _wcsicmp(psz, exe) != 0) continue;
 
             pct = Clamp(Wh_GetIntSetting(L"slots[%d].gain", i), 10, 1000);
             comp = Wh_GetIntSetting(L"slots[%d].compressor", i) != 0;
@@ -279,31 +285,44 @@ static FmtInfo ParseFormat(const WAVEFORMATEX* wf) {
     FmtInfo f;
     if (!wf) return f;
 
-    WORD tag = wf->wFormatTag;
-    if (tag == WAVE_FORMAT_EXTENSIBLE && wf->cbSize >= 22) {
-        tag = (WORD)((const WAVEFORMATEXTENSIBLE*)wf)->SubFormat.Data1;
-    }
-
     f.blockAlign = wf->nBlockAlign;
     f.channels = wf->nChannels;
     f.sampleRate = wf->nSamplesPerSec ? wf->nSamplesPerSec : 48000;
 
-    if (tag == WAVE_FORMAT_IEEE_FLOAT && wf->wBitsPerSample == 32) {
+    bool isPcm = false;
+    bool isFloat = false;
+
+    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE && wf->cbSize >= 22) {
+        const auto* ext = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(wf);
+        if (IsEqualGUID(ext->SubFormat, KSDATAFORMAT_SUBTYPE_PCM)) {
+            isPcm = true;
+        } else if (IsEqualGUID(ext->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
+            isFloat = true;
+        }
+    } else if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+        isFloat = true;
+    } else if (wf->wFormatTag == WAVE_FORMAT_PCM) {
+        isPcm = true;
+    }
+
+    if (isFloat && wf->wBitsPerSample == 32) {
         f.kind = SampleKind::Float32;
         f.bytesPerSample = 4;
-    } else if (tag == WAVE_FORMAT_PCM) {
+    } else if (isPcm) {
         switch (wf->wBitsPerSample) {
         case 16: f.kind = SampleKind::Int16; f.bytesPerSample = 2; break;
         case 24: f.kind = SampleKind::Int24; f.bytesPerSample = 3; break;
         case 32: f.kind = SampleKind::Int32; f.bytesPerSample = 4; break;
         }
     }
+
     return f;
 }
 
 
 // Hooks
 
+using Release_t = ULONG(STDMETHODCALLTYPE*)(IUnknown*);
 using Initialize_t = HRESULT(STDMETHODCALLTYPE*)(IAudioClient*, AUDCLNT_SHAREMODE, DWORD,
                                                  REFERENCE_TIME, REFERENCE_TIME,
                                                  const WAVEFORMATEX*, LPCGUID);
@@ -314,11 +333,33 @@ using ReleaseBuffer_t = HRESULT(STDMETHODCALLTYPE*)(IAudioRenderClient*, UINT32,
 // IAudioClient3::InitializeSharedAudioStream (low-latency path, used by many games/engines)
 using InitShared_t = HRESULT(STDMETHODCALLTYPE*)(IAudioClient*, DWORD, UINT32, const WAVEFORMATEX*, LPCGUID);
 
+static Release_t Orig_ClientRelease;
+static Release_t Orig_RenderRelease;
 static Initialize_t Orig_Initialize;
 static InitShared_t Orig_InitShared;
 static GetService_t Orig_GetService;
 static GetBuffer_t Orig_GetBuffer;
 static ReleaseBuffer_t Orig_ReleaseBuffer;
+
+static ULONG STDMETHODCALLTYPE Hook_ClientRelease(IUnknown* self) {
+    ULONG ref = Orig_ClientRelease(self);
+    if (ref == 0) {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_clientFormats.erase(self);
+        g_renderClients.erase(self);
+    }
+    return ref;
+}
+
+static ULONG STDMETHODCALLTYPE Hook_RenderRelease(IUnknown* self) {
+    ULONG ref = Orig_RenderRelease(self);
+    if (ref == 0) {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_clientFormats.erase(self);
+        g_renderClients.erase(self);
+    }
+    return ref;
+}
 
 static void RememberClientFormat(const wchar_t* via, IAudioClient* self, const WAVEFORMATEX* fmt) {
     if (!fmt) return;
@@ -334,20 +375,30 @@ static HRESULT STDMETHODCALLTYPE Hook_Initialize(IAudioClient* self, AUDCLNT_SHA
                                                  REFERENCE_TIME duration, REFERENCE_TIME period,
                                                  const WAVEFORMATEX* fmt, LPCGUID session) {
     HRESULT hr = Orig_Initialize(self, mode, flags, duration, period, fmt, session);
-    if (SUCCEEDED(hr)) RememberClientFormat(L"IAudioClient::Initialize", self, fmt);
+    if (SUCCEEDED(hr)) {
+        RememberClientFormat(L"IAudioClient::Initialize", self, fmt);
+    } else {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_clientFormats.erase(self);
+    }
     return hr;
 }
 
 static HRESULT STDMETHODCALLTYPE Hook_InitShared(IAudioClient* self, DWORD flags, UINT32 periodFrames,
                                                  const WAVEFORMATEX* fmt, LPCGUID session) {
     HRESULT hr = Orig_InitShared(self, flags, periodFrames, fmt, session);
-    if (SUCCEEDED(hr)) RememberClientFormat(L"IAudioClient3::InitializeSharedAudioStream", self, fmt);
+    if (SUCCEEDED(hr)) {
+        RememberClientFormat(L"IAudioClient3::InitializeSharedAudioStream", self, fmt);
+    } else {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_clientFormats.erase(self);
+    }
     return hr;
 }
 
 static HRESULT STDMETHODCALLTYPE Hook_GetService(IAudioClient* self, REFIID riid, void** ppv) {
     HRESULT hr = Orig_GetService(self, riid, ppv);
-    if (SUCCEEDED(hr) && ppv && *ppv && IsEqualIID(riid, kIidRenderClient)) {
+    if (SUCCEEDED(hr) && ppv && *ppv && IsEqualIID(riid, __uuidof(IAudioRenderClient))) {
         std::lock_guard<std::mutex> lock(g_mutex);
         auto it = g_clientFormats.find(self);
         if (it != g_clientFormats.end()) {
@@ -356,6 +407,7 @@ static HRESULT STDMETHODCALLTYPE Hook_GetService(IAudioClient* self, REFIID riid
             g_renderClients[*ppv] = ri;
             Wh_Log(L"Render client attached");
         } else {
+            g_renderClients.erase(*ppv);
             Wh_Log(L"Render client created but its format is unknown (stream was initialized before the mod loaded?)");
         }
     }
@@ -367,7 +419,10 @@ static HRESULT STDMETHODCALLTYPE Hook_GetBuffer(IAudioRenderClient* self, UINT32
     if (SUCCEEDED(hr) && ppData) {
         std::lock_guard<std::mutex> lock(g_mutex);
         auto it = g_renderClients.find(self);
-        if (it != g_renderClients.end()) it->second->lastBuffer = *ppData;
+        if (it != g_renderClients.end()) {
+            it->second->lastBuffer = *ppData;
+            it->second->lastBufferFrames = frames;
+        }
     }
     return hr;
 }
@@ -387,12 +442,17 @@ static HRESULT STDMETHODCALLTYPE Hook_ReleaseBuffer(IAudioRenderClient* self, UI
             }
         } else if (ri->lastBuffer && ri->fmt.kind != SampleKind::Unsupported) {
             BYTE* buf = ri->lastBuffer;
+            UINT32 maxFrames = ri->lastBufferFrames;
             ri->lastBuffer = nullptr;
-            if (!ri->loggedFirst) {
-                ri->loggedFirst = true;
-                Wh_Log(L"Processing audio: gain %.2fx, compressor %d", g_gain.load(), (int)g_compressor.load());
+            ri->lastBufferFrames = 0;
+            UINT32 framesToProcess = framesWritten < maxFrames ? framesWritten : maxFrames;
+            if (framesToProcess > 0) {
+                if (!ri->loggedFirst) {
+                    ri->loggedFirst = true;
+                    Wh_Log(L"Processing audio: gain %.2fx, compressor %d", g_gain.load(), (int)g_compressor.load());
+                }
+                ProcessBuffer(buf, framesToProcess, *ri);
             }
-            ProcessBuffer(buf, framesWritten, *ri);
         }
     }
     return Orig_ReleaseBuffer(self, framesWritten, flags);
@@ -413,30 +473,39 @@ static bool InstallHooks() {
     bool ok = false;
 
     do {
-        if (FAILED(CoCreateInstance(kClsidEnumerator, nullptr, CLSCTX_ALL, kIidEnumerator, (void**)&en))) break;
+        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                    __uuidof(IMMDeviceEnumerator), (void**)&en))) break;
         if (FAILED(en->GetDefaultAudioEndpoint(eRender, eConsole, &dev))) break;
-        if (FAILED(dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, (void**)&ac))) break;
+        if (FAILED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&ac))) break;
         if (FAILED(ac->GetMixFormat(&mix))) break;
         if (FAILED(ac->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, mix, nullptr))) break;
-        if (FAILED(ac->GetService(kIidRenderClient, (void**)&rc))) break;
+        if (FAILED(ac->GetService(__uuidof(IAudioRenderClient), (void**)&rc))) break;
 
         void** acVtbl = *(void***)ac;
         void** rcVtbl = *(void***)rc;
 
-        // IAudioClient:       3 = Initialize, 14 = GetService
-        // IAudioRenderClient: 3 = GetBuffer,   4 = ReleaseBuffer
-        ok = Wh_SetFunctionHook(acVtbl[3], (void*)Hook_Initialize, (void**)&Orig_Initialize) &&
-             Wh_SetFunctionHook(acVtbl[14], (void*)Hook_GetService, (void**)&Orig_GetService) &&
-             Wh_SetFunctionHook(rcVtbl[3], (void*)Hook_GetBuffer, (void**)&Orig_GetBuffer) &&
-             Wh_SetFunctionHook(rcVtbl[4], (void*)Hook_ReleaseBuffer, (void**)&Orig_ReleaseBuffer);
+        // IAudioClient:       2 = Release, 3 = Initialize, 14 = GetService
+        // IAudioRenderClient: 2 = Release, 3 = GetBuffer,   4 = ReleaseBuffer
+        ok = WindhawkUtils::SetFunctionHook((Release_t)acVtbl[2], Hook_ClientRelease, &Orig_ClientRelease) &&
+             WindhawkUtils::SetFunctionHook((Initialize_t)acVtbl[3], Hook_Initialize, &Orig_Initialize) &&
+             WindhawkUtils::SetFunctionHook((GetService_t)acVtbl[14], Hook_GetService, &Orig_GetService) &&
+             WindhawkUtils::SetFunctionHook((GetBuffer_t)rcVtbl[3], Hook_GetBuffer, &Orig_GetBuffer) &&
+             WindhawkUtils::SetFunctionHook((ReleaseBuffer_t)rcVtbl[4], Hook_ReleaseBuffer, &Orig_ReleaseBuffer);
         if (!ok) break;
 
-        // Optional: IAudioClient3 (Windows 10+). Slot 19 = InitializeSharedAudioStream.
-        // Streams created through it never call IAudioClient::Initialize.
+        if (rcVtbl[2] != acVtbl[2]) {
+            if (!WindhawkUtils::SetFunctionHook((Release_t)rcVtbl[2], Hook_RenderRelease, &Orig_RenderRelease)) {
+                Wh_Log(L"Could not hook IAudioRenderClient::Release");
+            }
+        }
+
+        // IAudioClient2: 15-17
+        // IAudioClient3: 18 GetSharedModeEnginePeriod, 19 GetCurrentSharedModeEnginePeriod, 20 InitializeSharedAudioStream.
+        // Streams created through InitializeSharedAudioStream never call IAudioClient::Initialize.
         void* ac3 = nullptr;
-        if (SUCCEEDED(ac->QueryInterface(kIidAudioClient3, &ac3)) && ac3) {
+        if (SUCCEEDED(ac->QueryInterface(__uuidof(IAudioClient3), &ac3)) && ac3) {
             void** ac3Vtbl = *(void***)ac3;
-            if (!Wh_SetFunctionHook(ac3Vtbl[19], (void*)Hook_InitShared, (void**)&Orig_InitShared)) {
+            if (!WindhawkUtils::SetFunctionHook((InitShared_t)ac3Vtbl[20], Hook_InitShared, &Orig_InitShared)) {
                 Wh_Log(L"Could not hook InitializeSharedAudioStream");
             }
             ((IUnknown*)ac3)->Release();
@@ -471,8 +540,4 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-}
-
-void Wh_ModUninit() {
-    // Hooks are removed by Windhawk automatically.
 }
