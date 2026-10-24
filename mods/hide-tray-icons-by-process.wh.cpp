@@ -8,7 +8,7 @@
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
-// @compilerOptions -luser32 -lkernel32 -lcomctl32
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
