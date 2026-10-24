@@ -49,8 +49,9 @@ The size and SHA-256 of every file are checked against values pinned in the mod,
 
 - Only **x64** is supported (no ARM64).
 - The 2017 components run inside `explorer.exe`. A crash in them restarts Explorer.
-- The applet's registry entries are not written; they are provided virtually by registry hooks inside `explorer.exe` and `control.exe`, and the applet's COM classes are created from inside those processes. Every virtual key is handed out as a real, read-only handle to one empty, volatile scratch key (`HKCU\Software\WindhawkLanguageAppletRestorer\VirtualKeys-<pid>`) so that registry APIs that are not hooked cannot crash on it. The scratch key holds no data, lives only in memory and is deleted when the mod is unloaded.
+- The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside `explorer.exe` (`control.exe` only gets the part needed to find the applet by name), and the applet's COM classes are created from inside `explorer.exe`. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (`vreg-<pid>.hiv` in the mod's storage folder, loaded with `RegLoadAppKeyW`), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start).
 - **Compatibility:** `intl.cpl` redirection overlaps with the `win7-intl-control-panel-restorer` mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which `intl.cpl` is opened.
+- While the mod is enabled, one string in `shell32.dll`'s memory (the applet's entry in Windows' built-in hide list) is blanked so that Control Panel lists the applet. It is restored when the mod is disabled; nothing on disk is changed.
 - Links in the applet that open the Settings app are not changed by this mod. The `settings-to-control-panel` mod can redirect them.
 
 ## Special Thanks to:
@@ -1549,7 +1550,7 @@ static bool BuildOutputs(const std::map<std::wstring, Bytes>& in, const Win11Exp
 // =============================================================================
 // PLATFORM PART: files, download, loading, virtual registration.
 // =============================================================================
-static const wchar_t* kAppletClsid = L"{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}";   // Microsoft.Language
+static const wchar_t* const kAppletClsid = L"{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}";   // Microsoft.Language
 static const wchar_t* kLayoutFolderClsid = L"{328B0346-7EAF-4BBE-A479-7CB88A095F5B}";
 // COM classes implemented by UserLanguagesCpl.dll itself.
 static const wchar_t* kDllComClsids[] = {L"{7F75058C-9A21-4F22-A7CA-110205479EF9}",
@@ -2439,10 +2440,10 @@ static bool LoadPrivateModules(const std::wstring& binDir, const std::vector<Out
 //
 // A virtual key must still be a handle that every registry API accepts, hooked or not (RegEnumValueW,
 // RegQueryValueExA, RegNotifyChangeKeyValue, ...). A made-up pointer is not: it makes explorer / Control Panel
-// misbehave or crash. So each virtual key is a real, read-only handle to one empty volatile scratch key
-// (HKCU\Software\WindhawkLanguageAppletRestorer\VirtualKeys-<pid>), which only lives in memory and is deleted when the
-// mod is unloaded. It never holds any data. Same technique as performance-info-tools-restorer and
-// Startup App Delay Fix.
+// misbehave or crash. So each virtual key is a real, read-only handle to the root of a private, empty registry hive
+// (RegLoadAppKeyW on a file in the mod's storage folder, one per process). That hive is never part of the user's
+// registry, holds no data and is deleted when the mod is unloaded (leftovers are removed at the next start).
+// Only if the hive can't be loaded, an empty volatile key under HKCU is used as a fallback.
 namespace vreg {
 
 struct Val { std::wstring name; DWORD type; std::wstring str; DWORD dw; };
@@ -2543,8 +2544,10 @@ static RegEnumKeyExW_t RegEnumKeyExW_Orig;
 static RegEnumKeyW_t RegEnumKeyW_Orig;
 static RegQueryInfoKeyW_t RegQueryInfoKeyW_Orig;
 
-// ---- the scratch key that backs every virtual handle ----
-static const wchar_t kScratchParent[] = L"Software\\WindhawkLanguageAppletRestorer";
+// ---- the private hive that backs every virtual handle ----
+static void* RegFunc(const char* name);   // defined below
+
+static const wchar_t kScratchParent[] = L"Software\\WindhawkLanguageAppletRestorer";   // fallback only
 
 static std::wstring ScratchLeaf() {
     wchar_t leaf[64];
@@ -2554,38 +2557,89 @@ static std::wstring ScratchLeaf() {
 static std::wstring ScratchPath() { return std::wstring(kScratchParent) + L"\\" + ScratchLeaf(); }
 
 static std::mutex g_scratchMutex;
-static HKEY g_scratchRoot = nullptr;
+static HKEY g_scratchRoot = nullptr;       // root of the private hive (or of the HKCU fallback key)
+static bool g_scratchIsHive = false;
+static std::wstring g_hiveFile;            // <storage>\vreg-<pid>.hiv
+
+static void DeleteHiveFiles(const std::wstring& file) {
+    DeleteFileW(file.c_str());
+    DeleteFileW((file + L".LOG1").c_str());
+    DeleteFileW((file + L".LOG2").c_str());
+}
+
+// Leftovers of earlier runs that crashed. Files of a hive that is still loaded can't be deleted, so another
+// running process is not affected.
+static void CleanupStaleHives() {
+    const std::wstring dir = StorageDir();
+    if (dir.empty()) return;
+    WIN32_FIND_DATAW fd{};
+    HANDLE h = FindFirstFileW((dir + L"\\vreg-*.hiv*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileW((dir + L"\\" + fd.cFileName).c_str());
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
 
 static bool EnsureScratchRoot() {
     std::lock_guard<std::mutex> l(g_scratchMutex);
     if (g_scratchRoot) return true;
+
+    // 1) private hive: a real, empty registry root that is not part of the user's registry
+    using RegLoadAppKeyW_t = LSTATUS(WINAPI*)(LPCWSTR, PHKEY, REGSAM, DWORD, DWORD);
+    const std::wstring dir = StorageDir();
+    auto loadAppKey = reinterpret_cast<RegLoadAppKeyW_t>(RegFunc("RegLoadAppKeyW"));
+    if (loadAppKey && !dir.empty()) {
+        wchar_t name[64];
+        swprintf_s(name, ARRAYSIZE(name), L"\\vreg-%lu.hiv", GetCurrentProcessId());
+        g_hiveFile = dir + name;
+        DeleteHiveFiles(g_hiveFile);
+        HKEY k = nullptr;
+        const LSTATUS st = loadAppKey(g_hiveFile.c_str(), &k, KEY_READ | KEY_WRITE, REG_PROCESS_APPKEY, 0);
+        if (st == ERROR_SUCCESS && k) {
+            g_scratchRoot = k;
+            g_scratchIsHive = true;
+            return true;
+        }
+        Wh_Log(L"Private hive could not be loaded (error %ld); using the HKCU fallback", st);
+    }
+
+    // 2) fallback: one empty volatile key in HKCU
     HKEY k = nullptr;
     DWORD disp = 0;
     const LONG st = RegCreateKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, nullptr, REG_OPTION_VOLATILE,
                                          KEY_READ | KEY_WRITE, nullptr, &k, &disp);
     if (st != ERROR_SUCCESS) {
-        Wh_Log(L"Could not create the volatile scratch key (error %ld)", st);
+        Wh_Log(L"Could not create the volatile fallback key (error %ld)", st);
         return false;
     }
     g_scratchRoot = k;
+    g_scratchIsHive = false;
     return true;
 }
 
 static void ReleaseScratchRoot() {
     HKEY root;
+    bool isHive;
     {
         std::lock_guard<std::mutex> l(g_scratchMutex);
         root = g_scratchRoot;
+        isHive = g_scratchIsHive;
         g_scratchRoot = nullptr;
+        g_scratchIsHive = false;
     }
     if (root && RegCloseKey_Orig) RegCloseKey_Orig(root);
+    if (isHive) {
+        DeleteHiveFiles(g_hiveFile);   // fails while a caller still holds a virtual handle; removed at the next start
+        return;
+    }
     if (!RegOpenKeyExW_Orig || !RegCloseKey_Orig) return;
     HKEY parent = nullptr;
     if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, kScratchParent, 0, KEY_WRITE | DELETE, &parent) == ERROR_SUCCESS) {
         RegDeleteKeyW(parent, ScratchLeaf().c_str());
         RegCloseKey_Orig(parent);
     }
-    HKEY software = nullptr;   // remove the (now empty) parent; fails harmlessly while another process still uses it
+    HKEY software = nullptr;
     if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, L"Software", 0, DELETE, &software) == ERROR_SUCCESS) {
         RegDeleteKeyW(software, L"WindhawkLanguageAppletRestorer");
         RegCloseKey_Orig(software);
@@ -2633,8 +2687,17 @@ static void Untrack(HKEY h) {
 
 static HKEY NewFake(const std::wstring& path) {
     if (!EnsureScratchRoot()) return nullptr;
+    HKEY root;
+    bool isHive;
+    {
+        std::lock_guard<std::mutex> l(g_scratchMutex);
+        root = g_scratchRoot;
+        isHive = g_scratchIsHive;
+    }
     HKEY h = nullptr;
-    if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, KEY_READ, &h) != ERROR_SUCCESS) return nullptr;
+    const LSTATUS st = isHive ? RegOpenKeyExW_Orig(root, L"", 0, KEY_READ, &h)   // a new handle to the hive root
+                              : RegOpenKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, KEY_READ, &h);
+    if (st != ERROR_SUCCESS) return nullptr;
     std::lock_guard<std::mutex> l(g_handleMutex);
     g_paths[h] = path;
     g_fake.insert(h);
@@ -2711,7 +2774,9 @@ static LSTATUS DeliverName(const std::wstring& name, LPWSTR lpName, LPDWORD cch)
 }
 
 // ---- the virtual keys ----
-static std::shared_ptr<const Table> BuildTable(const std::wstring& binDir) {
+// nameOnly (control.exe): just enough for "Microsoft.Language" to be found by name. No server or instance keys, no
+// DLL classes and no Approved entries, so nothing can be activated and the applet's DLL is never loaded there.
+static std::shared_ptr<const Table> BuildTable(const std::wstring& binDir, bool nameOnly = false) {
     const std::wstring dll = binDir + L"\\UserLanguagesCpl.dll";
     const std::wstring displayName = g_forceTranslations.load() ? std::wstring(GetLocalizedDisplayName())
                                                                 : (L"@" + dll + L",-1#immutable1");
@@ -2735,7 +2800,12 @@ static std::shared_ptr<const Table> BuildTable(const std::wstring& binDir) {
          S(L"LocalizedString", REG_EXPAND_SZ, displayName),
          D(L"System.ControlPanel.EnableInSafeMode", 3),
          S(L"System.ApplicationName", REG_SZ, L"Microsoft.Language")},
-        {L"DefaultIcon", L"InProcServer32", L"Instance", L"ShellFolder"});
+        nameOnly ? std::vector<std::wstring>{}
+                 : std::vector<std::wstring>{L"DefaultIcon", L"InProcServer32", L"Instance", L"ShellFolder"});
+    if (nameOnly) {
+        add(L"controlpanel\\namespace\\" + Lower(kAppletClsid), {S(L"", REG_SZ, L"Language Settings")}, {});
+        return t;
+    }
     add(root + L"\\defaulticon", {S(L"", REG_EXPAND_SZ, dll + L",-1")}, {});
     add(root + L"\\inprocserver32",
         {S(L"", REG_EXPAND_SZ, L"%SystemRoot%\\System32\\shdocvw.dll"), S(L"ThreadingModel", REG_SZ, L"Apartment")},
@@ -3074,7 +3144,7 @@ static void* RegFunc(const char* name) {
     return adv ? reinterpret_cast<void*>(GetProcAddress(adv, name)) : nullptr;
 }
 
-static bool InstallHooks() {
+static bool InstallHooks(bool withCom = true) {
     struct H { const char* name; void* hook; void** orig; bool required; };
     const H hooks[] = {
         {"RegOpenKeyExW", (void*)RegOpenKeyExW_Hook, (void**)&RegOpenKeyExW_Orig, true},
@@ -3095,6 +3165,7 @@ static bool InstallHooks() {
             return false;
         }
     }
+    if (!withCom) return true;
     HMODULE combase = GetModuleHandleW(L"combase.dll");
     if (!combase) combase = LoadLibraryExW(L"combase.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
@@ -3109,8 +3180,8 @@ static bool InstallHooks() {
 
 }  // namespace vreg
 
-static void PublishVirtualRegistration(const std::wstring& binDir) {
-    vreg::SetTable(vreg::BuildTable(binDir));
+static void PublishVirtualRegistration(const std::wstring& binDir, bool nameOnly = false) {
+    vreg::SetTable(vreg::BuildTable(binDir, nameOnly));
     Wh_Log(L"Language applet registered virtually (applet keys are not written to the registry)");
 }
 
@@ -3178,6 +3249,7 @@ static void RunSetup() {
 // ---- intl.cpl redirect ----------------------------------------------------------------------
 static std::atomic<bool> g_redirectIntl{false};
 static std::atomic<bool> g_isExplorer{true};
+static std::atomic<bool> g_isControl{false};
 static std::wstring g_systemIntlPath;   // <System32>\intl.cpl
 static std::wstring g_modIntlPath;      // <storage>\bin\intl.cpl
 static std::wstring g_modBinDir;        // <storage>\bin
@@ -3275,62 +3347,12 @@ static void InitRedirect() {
     }
 }
 
-// ---- unhide hook ----------------------------------------------------------------------------
-// shell32 / windows.storage decide to hide the applet by comparing its name/GUID with a built-in
-// list. Instead of patching strings in memory (needs an explorer restart to undo), we let
-// CompareStringOrdinal run normally and only turn "equal" into "not equal" when ALL of these hold:
-//   - one of the two strings is exactly the Language GUID or its canonical name,
-//   - the caller is inside shell32.dll or windows.storage.dll.
-// Windhawk removes the hook on unload, so disabling the mod needs no restart.
-using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
-static CompareStringOrdinal_t CompareStringOrdinal_Original = nullptr;
-
-static bool IsLanguageName(LPCWCH s, int cch) {
-    static const wchar_t* names[] = {L"::{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}",
-                                     L"{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}",
-                                     L"Microsoft.Language"};
-    if (!s) return false;
-    for (const wchar_t* n : names) {
-        const int len = (int)wcslen(n);
-        if (cch == len || cch == -1) {
-            if (cch == -1 && wcsnlen(s, len + 1) != (size_t)len) continue;
-            if (_wcsnicmp(s, n, len) == 0) return true;
-        }
-    }
-    return false;
-}
-
-static bool CallerIsShellModule(void* addr) {
-    HMODULE m = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            (LPCWSTR)addr, &m) || !m)
-        return false;
-    return m == GetModuleHandleW(L"shell32.dll") || m == GetModuleHandleW(L"windows.storage.dll");
-}
-
-static int WINAPI CompareStringOrdinal_Hook(LPCWCH s1, int c1, LPCWCH s2, int c2, BOOL ignoreCase) {
-    const int r = CompareStringOrdinal_Original(s1, c1, s2, c2, ignoreCase);
-    if (IsLanguageName(s1, c1) || IsLanguageName(s2, c2)) {
-        void* ra = __builtin_return_address(0);
-        const bool shell = CallerIsShellModule(ra);
-        static std::atomic<int> logged{0};
-        if (logged.fetch_add(1) < 40) {
-            HMODULE m = nullptr;
-            wchar_t mn[MAX_PATH] = L"?";
-            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)ra, &m) && m)
-                GetModuleFileNameW(m, mn, MAX_PATH);
-            Wh_Log(L"[unhide] compare involving Language name: result=%d shellCaller=%d caller=%s rva=0x%llx",
-                   r, shell ? 1 : 0, mn, (unsigned long long)((char*)ra - (char*)m));
-        }
-        if (r == CSTR_EQUAL && shell) return CSTR_LESS_THAN;
-    }
-    return r;
-}
-
-// ---- memory unhide (same technique that worked in cp-revival-legacy, limited to ONE string) ----
-// Windows 11 keeps the Language GUID string ("::{GUID}") in shell32.dll / windows.storage.dll and uses it to
-// hide the applet. We blank that one string in memory, remember the original bytes, and put them back in
-// Wh_ModUninit, so disabling the mod needs no explorer restart.
+// ---- unhide the applet (in-memory patch of ONE string in shell32.dll) ----
+// Newer Windows builds hide this applet from Control Panel through a built-in list inside shell32.dll that is keyed
+// by the applet's GUID string ("::{GUID}"). While the mod is enabled, that one string is blanked in memory; the
+// original bytes are remembered and put back in Wh_ModUninit, so disabling the mod needs no explorer restart.
+// Tested: patching shell32.dll alone is enough (a CompareStringOrdinal hook alone is not, and windows.storage.dll
+// doesn't need to be touched), so only shell32.dll is patched.
 static const wchar_t kHideGuidStr[] = L"::{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}";
 struct StringPatch { BYTE* addr; std::vector<BYTE> orig; };
 static std::vector<StringPatch> g_patches;
@@ -3408,24 +3430,34 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
     const wchar_t* exeName = wcsrchr(exe, L'\\');
     exeName = exeName ? exeName + 1 : exe;
-    // explorer.exe and control.exe both host the applet (Control Panel items are opened in either); rundll32.exe
-    // only needs the intl.cpl redirect. g_isExplorer means "full host" from here on.
-    g_isExplorer.store(_wcsicmp(exeName, L"explorer.exe") == 0 || _wcsicmp(exeName, L"control.exe") == 0);
+    g_isExplorer.store(_wcsicmp(exeName, L"explorer.exe") == 0);
+    const bool isControl = _wcsicmp(exeName, L"control.exe") == 0;
+    g_isControl.store(isControl);
 
-    if (!g_isExplorer.load() && !g_redirectIntl.load()) return FALSE;
+    // rundll32.exe only needs the intl.cpl redirect; control.exe also finds the applet by name.
+    if (!g_isExplorer.load() && !isControl && !g_redirectIntl.load()) return FALSE;
 
     InitRedirect();
 
-    if (!g_isExplorer.load()) return TRUE;   // rundll32.exe: redirect only, nothing else
+    if (!g_isExplorer.load()) {
+        if (isControl) {
+            // control.exe usually hands the item over to explorer.exe, so it only has to find it: registry hooks and
+            // the name part of the table, published right away and only if the applet's files exist. No setup, no
+            // COM hook, no DLL.
+            const std::wstring dir = StorageDir();
+            if (!dir.empty() &&
+                GetFileAttributesW((dir + L"\\bin\\UserLanguagesCpl.dll").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                vreg::CleanupStaleHives();
+                if (vreg::InstallHooks(false)) PublishVirtualRegistration(dir + L"\\bin", true);
+            }
+        }
+        return TRUE;   // control.exe / rundll32.exe: nothing else (no download, no patching, no file cleanup)
+    }
+    vreg::CleanupStaleHives();
 
     g_shuttingDown.store(false);
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     BlankHideString(GetModuleHandleW(L"shell32.dll"), L"shell32.dll");
-    HMODULE hStorage = GetModuleHandleW(L"windows.storage.dll");
-    if (!hStorage) hStorage = LoadLibraryW(L"windows.storage.dll");
-    BlankHideString(hStorage, L"windows.storage.dll");
-    Wh_SetFunctionHook((void*)CompareStringOrdinal, (void*)CompareStringOrdinal_Hook,
-                       (void**)&CompareStringOrdinal_Original);
     InstallTranslationHook();
     if (!vreg::InstallHooks()) return FALSE;
     try {
@@ -3484,7 +3516,10 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    if (!g_isExplorer.load()) return;   // helper processes must not touch files or the registry
+    if (!g_isExplorer.load()) {   // helper processes must not touch files
+        if (g_isControl.load()) UnpublishVirtualRegistration();
+        return;
+    }
     RestoreHideStrings();
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
 
