@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-23T19:01:21.000Z</updated>
+    <updated>2026-10-24T09:04:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Calendar Week Numbers 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-calendar-week-numbers#401da104b37b14c0c9c2dbae2336c30c63bac29f</id>
+        <link href="https://windhawk.net/mods/taskbar-calendar-week-numbers"/>
+        <updated>2026-10-24T09:04:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarcalendarweeknumbers">Taskbar Calendar Week Numbers</h1>
+<p>Adds a week number column to the calendar flyout that opens when you click the
+clock in the Windows 11 taskbar, like the week numbers in Outlook.</p>
+<p><img src="https://raw.githubusercontent.com/Maveric2005/windhawk-calendar-week-numbers/main/images/screenshot.png" alt="Calendar flyout with week numbers" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Week numbering</strong>: ISO 8601 (default; used in Germany and most of Europe)
+or the first-week-of-year rule from the Windows regional settings.</li>
+<li><strong>Column header</strong>: text above the column. Empty means automatic ("KW" for a
+German Windows display language, "Wk" otherwise). A single space hides it.</li>
+<li><strong>Week number color</strong>: the Windows accent color (default, the same color as
+today's date) or the normal text color.</li>
+<li><strong>Column width</strong>, <strong>font size</strong> and <strong>opacity</strong> of the week numbers.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Only the calendar flyout is changed. The mod writes nothing to disk and makes
+no network requests.</li>
+<li>The calendar's day cells get slightly narrower to make room for the column.</li>
+<li>The calendar flyout is hosted in <code>ShellExperienceHost.exe</code>. Tested on
+Windows 11 build 26220.</li>
+</ul>]]></content>
+        <author>
+            <name>Maveric2005</name>
+            <uri>https://github.com/Maveric2005</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DynamicDock 1.0]]></title>
         <id>https://windhawk.net/mods/dynamicdock#85728c31fb7c3783cd5a2dc6a597f1e10da9e340</id>
@@ -1184,53 +1216,6 @@ safe-removal function before unplugging.</li>
         <author>
             <name>Raku Inkyetta</name>
             <uri>https://github.com/AomiRaku</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Discrete Touchpad Wheel 0.1.0]]></title>
-        <id>https://windhawk.net/mods/discrete-touchpad-wheel#b5c44d4feb241ab6c18b6d01d76c67ad7bebb65d</id>
-        <link href="https://windhawk.net/mods/discrete-touchpad-wheel"/>
-        <updated>2026-10-20T06:04:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="discretetouchpadwheel">Discrete Touchpad Wheel</h1>
-<blockquote>
-  <p><strong>IMPORTANT</strong></p>
-  <p>This mod does NOTHING by default. You need to add the apps you intend to
-  affect to the <strong>Custom process inclusion list</strong> in the mod's Advanced
-  settings.</p>
-</blockquote>
-<p>Windows precision touchpads (as well as certain mice with high-resolution
-wheels) report scrolling as a continuous stream of wheel
-messages, each carrying a signed delta (a magnitude). Modern apps scroll the
-page accurately according to the delta, which produces smooth
-scrolling. Some legacy apps ignore the magnitude and treat every message as one
-full wheel notch, which makes scrolling uncontrollably fast.</p>
-<p>This mod swallows those continuous wheel messages and accumulates their deltas
-per scroll target, then emits a real discrete <code>WM_MOUSEWHEEL</code> / <code>WM_MOUSEHWHEEL</code>
-event only once the accumulated magnitude reaches the configured threshold. The
-result is normal, predictable scrolling in the affected apps.</p>
-<h2 id="enablingthemodforanapp">Enabling the mod for an app</h2>
-<p>This mod does not target any process by default. To apply it to an app, open the
-mod's <strong>Advanced</strong> tab in Windhawk and add the process name (for example
-<code>notepad.exe</code>) to the <strong>Custom process inclusion list</strong>. The change takes effect
-after saving.</p>
-<p>Because the mod runs inside each targeted process, the accumulator state is
-naturally scoped per app, and apps that are not on the list are never touched.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Vertical threshold</strong> — accumulated vertical magnitude required before one
-discrete wheel event is emitted. <code>120</code> is one standard wheel notch.</li>
-<li><strong>Horizontal threshold</strong> — same, for horizontal scrolling.</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Only apps that receive scrolling through the Win32 message queue can be
-handled. Apps using Direct Manipulation bypass the queue entirely.</li>
-<li>Apps that already handle continuous deltas correctly should not be added to
-the inclusion list, or their scrolling will be coarsened.</li>
-</ul>]]></content>
-        <author>
-            <name>yezhiyi9670</name>
-            <uri>https://github.com/yezhiyi9670</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T04:00:15.000Z</updated>
+    <updated>2026-10-24T09:04:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Calendar Week Numbers 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-calendar-week-numbers#401da104b37b14c0c9c2dbae2336c30c63bac29f</id>
+        <link href="https://windhawk.net/mods/taskbar-calendar-week-numbers"/>
+        <updated>2026-10-24T09:04:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarcalendarweeknumbers">Taskbar Calendar Week Numbers</h1>
+<p>Adds a week number column to the calendar flyout that opens when you click the
+clock in the Windows 11 taskbar, like the week numbers in Outlook.</p>
+<p><img src="https://raw.githubusercontent.com/Maveric2005/windhawk-calendar-week-numbers/main/images/screenshot.png" alt="Calendar flyout with week numbers" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Week numbering</strong>: ISO 8601 (default; used in Germany and most of Europe)
+or the first-week-of-year rule from the Windows regional settings.</li>
+<li><strong>Column header</strong>: text above the column. Empty means automatic ("KW" for a
+German Windows display language, "Wk" otherwise). A single space hides it.</li>
+<li><strong>Week number color</strong>: the Windows accent color (default, the same color as
+today's date) or the normal text color.</li>
+<li><strong>Column width</strong>, <strong>font size</strong> and <strong>opacity</strong> of the week numbers.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Only the calendar flyout is changed. The mod writes nothing to disk and makes
+no network requests.</li>
+<li>The calendar's day cells get slightly narrower to make room for the column.</li>
+<li>The calendar flyout is hosted in <code>ShellExperienceHost.exe</code>. Tested on
+Windows 11 build 26220.</li>
+</ul>]]></content>
+        <author>
+            <name>Maveric2005</name>
+            <uri>https://github.com/Maveric2005</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 3.0.4]]></title>
         <id>https://windhawk.net/mods/modern-run-dialog-ui#75402edd191fb26b9987dc4b0d60bf49288224ee</id>
@@ -654,44 +686,6 @@ strength of that blur, so the strength setting doesn't apply to them.</li>
         <author>
             <name>Rafael Mendes</name>
             <uri>https://github.com/RafaelMendes1407</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TopBar for Windows 1.4.0]]></title>
-        <id>https://windhawk.net/mods/windhawk-topbar#fbb8e30010d661ed001161637cd38e8365b7f7c3</id>
-        <link href="https://windhawk.net/mods/windhawk-topbar"/>
-        <updated>2026-10-22T06:02:38.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Addition:</strong></p>
-<ul>
-<li>Added a New Auto Hide mode that hides the Top bar when moving cursor out of the grid. It can be shown by either Activation pill, OR by hovering on edge of the screen.</li>
-<li>Added a Tray Button &amp; Flyout to show tray icons.</li>
-<li>Added New Flyouts Animations Setting to customize Flyouts opening and closing animation.</li>
-<li>Added a Notification Button &amp; Flyout to show Notifications.</li>
-<li>Added a Calendar flyout date and time button.</li>
-<li>Added a Thumbnail Preview for TaskList buttons, featuring a set of app control buttons (Pin, Minimize, Maximize, Close).</li>
-<li>Added more controls in Control Centre flyout.</li>
-<li>Added new Win UI Icon Pack to Top bar.</li>
-</ul>
-<p><strong>Updates:</strong></p>
-<ul>
-<li>Updated Weather Flyout to show weekly weather.</li>
-<li>Made the background in Settings app, have hand-built Mica effect.</li>
-<li>Progress bar in Media player flyout can now rewind the playing music.</li>
-<li>Made graph animations in Resource flyout smoother.</li>
-<li>Updated the thumbnail icon in Media player button to show squared rounded album art instead of small thumbnail maintaining ascpect ratio of the image.</li>
-<li>Improved Styling support for Top Bar.</li>
-<li>Other Minor UI updates.</li>
-<li>Updated All the themes.</li>
-</ul>
-<p><strong>Fixes:</strong></p>
-<ul>
-<li>Fix the UWP apps such as Calculator, and some other apps like Windows Settings were not showing icons in tasklist.</li>
-<li>Fixed Top Bar Flickering in secondary monitor.</li>
-<li>Fixed Top Bar wrong display scalings when switching between monitors.</li>
-</ul>]]></content>
-        <author>
-            <name>WasiXGamer</name>
-            <uri>https://github.com/wasixgamer</uri>
         </author>
     </entry>
 </feed>

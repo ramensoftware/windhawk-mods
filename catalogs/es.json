@@ -14866,6 +14866,35 @@
         "version": "1.1.4"
       }
     },
+    "taskbar-calendar-week-numbers": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792832676000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792832676000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Maveric2005",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Shows calendar week numbers (ISO 8601 or regional) in the Windows 11 taskbar calendar flyout",
+        "github": "https://github.com/Maveric2005",
+        "homepage": "https://github.com/Maveric2005/windhawk-calendar-week-numbers",
+        "include": [
+          "ShellExperienceHost.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Calendar Week Numbers",
+        "version": "1.0"
+      }
+    },
     "taskbar-cat": {
       "details": {
         "defaultSorting": 1140,
