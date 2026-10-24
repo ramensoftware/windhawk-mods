@@ -19,18 +19,10 @@
 // auto-hide (show on hover)" by m417z, published under the GNU General Public
 // License v3.0, so this mod uses the same license.
 //
-// Additional attribution term under GPL-3.0 section 7(b), for this mod's
-// original code: works redistributing that code, modified or not, must
-// preserve "Mac Island & Dock by caliberda" and the following link in their
-// README's credits:
-// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mac-island-dock.wh.cpp
-// If reusing the taskbar XAML code derived from m417z's mod, also preserve
-// "Taskbar tray auto-hide (show on hover) by m417z" and its source link:
-// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-show-on-hover.wh.cpp
-// This preserves the upstream author's attribution; it does not relicense
-// their code. See the README's Credits for the same notice.
-// If only inspired by this mod, without reusing code, credit and a link
-// would be appreciated. This is a request, not a license condition.
+// If you reuse this mod's code, or it inspired your work, credit to "Mac
+// Island & Dock by caliberda" with a link to it would be appreciated (and to
+// m417z's mod for the taskbar XAML code). This is a request, not a license
+// condition.
 
 // ==WindhawkModReadme==
 /*
@@ -68,6 +60,9 @@ space around their labels.
 
 Lyrics now default to **Follows the line**, resizing for each line (up to
 360 DIPs). Short, Medium and Long hold the widest line until a pause or gap.
+They're looked for only for songs (with an artist, 45 s to 20 min, not
+videos or voice messages), and each app seen playing can have them turned
+off in the settings; each song's title and artist are sent to lrclib.net.
 
 | Lyrics on the pill | The visualizer | The lyrics panel |
 | :---: | :---: | :---: |
@@ -95,6 +90,10 @@ after the island starts, a notice from the pill opens it (an option).
 
 The apps with notifications can fold into an arrow, like the tray: they come
 out for a moment when a notification arrives, and under the mouse (an option).
+
+Files can be starred as favorites in the folders panel: they show with the
+pinned folders, open with a click, have buttons to copy the file or its
+path, and leave the list once the file is moved or deleted.
 
 | The What's new page | Apps folded into an arrow |
 | :---: | :---: |
@@ -176,13 +175,15 @@ Everything the mod does, in detail, is below.
     own sound, or any sound, like VLC's, only while something plays, with
     its sensitivity and color: the icons', Windows' accent, a rainbow or
     your own);
-  * song lyrics (an option, off by default, goes online: lrclib.net): the
-    line sung now on the pill, in time with the song (placed anywhere in the
-    order, its size, color and longest line chosen, the next line coming up
-    as the one before goes; or in the song title's place while a line is
-    sung, the title back between lines), and all of them in its panel (the
-    line now lit and kept in the middle, a line clicked goes there in the
-    song);
+  * song lyrics (an option, off by default, goes online: each song's title
+    and artist are sent to lrclib.net): the line sung now on the pill, in
+    time with the song (placed anywhere in the order, its size, color and
+    longest line chosen, the next line coming up as the one before goes; or
+    in the song title's place while a line is sung, the title back between
+    lines), and all of them in its panel (the line now lit and kept in the
+    middle, a line clicked goes there in the song); only for songs (with an
+    artist, 45 s to 20 min, not videos or voice messages), and not for the
+    apps turned off under "Apps that look for lyrics";
   * the network's speed (up and down), Windows' additional clocks (other
     cities' times, shown as soon as they're added in Windows; a click opens
     Windows' list of them) and the time until the next event, alarm, timer
@@ -292,7 +293,9 @@ little bounce.
   files, "Open in Explorer"; files dragged out (copied or moved, asked once)
   or onto a folder, a file or its path copied from its row; Windows' places
   opened with a click (their pin pins them); each pin with its own icon and
-  color (on the island only).
+  color (on the island only); files starred as favorites, with the pins
+  (copy the file or its path from there; one moved or deleted leaves the
+  list, one on a drive taken out comes back with it).
 * **Wallpapers** from a folder you pick: thumbnails, a transition (fade,
   circle, slide or zoom), on that monitor; the wheel on the item goes to the
   next one.
@@ -511,13 +514,15 @@ or only its apps).
   in notifications (over https, only for apps allowed online), the weather
   ([Open-Meteo](https://open-meteo.com), every 30 minutes while shown), the
   holidays ([Nager.Date](https://date.nager.at), once a year), song lyrics
-  ([LRCLIB](https://lrclib.net), once a song), the agendas'
+  ([LRCLIB](https://lrclib.net), once a song: its title and artist, only
+  for songs), the agendas'
   links (at most every 15 minutes) and updates (winget, every few hours;
   Windows updates are read offline). Updates run only when asked, in a
   terminal, accepting nothing for you.
 * **Storage**: Windhawk keeps the settings, notes and the rest for the whole
-  computer (every Windows account sees the same ones); export a backup
-  before formatting.
+  computer (every Windows account sees the same ones; the alarms, the
+  timer's lengths, the folders' pins, favorites and order and the lyrics'
+  apps are each account's own); export a backup before formatting.
 * **Two processes**: the island runs in a `windhawk.exe` process of its own,
   so a problem in it can't take the taskbar down; the dock runs in
   `explorer.exe`. If the graphics driver resets, the island starts again by
@@ -543,8 +548,10 @@ or only its apps).
     session's peak meter (or the output's, IAudioMeterInformation), 30 times
     a second only while something plays (the output's peak once a second
     while it's on, to know some sound plays);
-  * song lyrics: LRCLIB's API (lrclib.net/api/get, then /api/search) by the
-    title, artist and length Windows' media controls give, on a thread, the
+  * song lyrics: LRCLIB's API (lrclib.net/api/get, then /api/search, whose
+    results are taken only when their title, artist and length match) by
+    the title, artist and length Windows' media controls give, only for a
+    song (not a video, as the app says: its playback type), on a thread, the
     last few songs kept in memory;
   * world clocks: Windows' additional clocks (read from the registry,
     watched for changes);
@@ -597,16 +604,10 @@ Portuguese or your own language.
 * The code that reaches the taskbar's XAML is based on
   [**Taskbar tray auto-hide (show on hover)** by m417z](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-show-on-hover.wh.cpp)
   (GPL-3.0).
-* **Additional attribution term under GPL-3.0, section 7(b):** if you
-  redistribute this mod's original code, modified or not, preserve
+* If you reuse this mod's code, or it inspired your work, please credit
   [**Mac Island & Dock by caliberda**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mac-island-dock.wh.cpp)
-  in your work's README credits. When reusing the taskbar XAML code derived
-  from m417z's mod, also preserve **Taskbar tray auto-hide (show on hover)
-  by m417z** and its source link above. This preserves that author's
-  attribution without relicensing their code.
-* If this mod only inspired your work, without code reuse, please consider
-  crediting **Mac Island & Dock by caliberda** with the link above.
-  This is a request, not a legal obligation or license condition.
+  with that link (and m417z's mod above, for the taskbar XAML code). This is
+  a request, not a license condition.
 * Inspired by the **macOS** menu bar, Control Center and Dock, and the
   iPhone's **Dynamic Island** (Apple).
 
@@ -645,7 +646,10 @@ Listas longas rolam dentro da tela.
 
 As letras agora usam **Segue a linha** por padrão, ajustando a largura a
 cada linha (até 360 DIPs). Curta, Média e Longa mantêm a maior largura até
-uma pausa ou intervalo.
+uma pausa ou intervalo. Elas só são buscadas para músicas (com artista, de
+45 s a 20 min, sem vídeos nem áudios de voz), e cada app visto tocando pode
+ter as letras desligadas nas configurações; o título e o artista de cada
+música são enviados ao lrclib.net.
 
 | Letras na pílula | O visualizador | O painel das letras |
 | :---: | :---: | :---: |
@@ -674,6 +678,10 @@ opção).
 
 Os apps com notificações podem se recolher numa seta, como a bandeja: saem por
 um instante quando chega uma notificação, e com o mouse em cima (uma opção).
+
+Arquivos podem virar favoritos com a estrela no painel de pastas: aparecem
+junto das pastas fixadas, abrem com um clique, têm botões para copiar o
+arquivo ou o caminho, e saem da lista quando o arquivo é movido ou excluído.
 
 | A página Novidades | Apps recolhidos numa seta |
 | :---: | :---: |
@@ -757,12 +765,15 @@ Tudo o que o mod faz, em detalhes, está abaixo.
     a sensibilidade e a cor dele: a dos ícones, o destaque do Windows, um
     arco-íris ou a sua);
   * letras das músicas (uma opção, desligada por padrão, acessa a internet:
-    lrclib.net): a linha cantada agora na pílula, no tempo da música (em
-    qualquer lugar da ordem, tamanho, cor e comprimento escolhidos, a
-    próxima linha subindo enquanto a anterior sai; ou no lugar do nome da música enquanto
-    uma linha é cantada, com o nome de volta entre as linhas), e todas no
-    painel dela (a linha atual acesa e no meio, uma linha clicada leva a
-    música até ela);
+    o título e o artista de cada música são enviados ao lrclib.net): a
+    linha cantada agora na pílula, no tempo da música (em qualquer lugar da
+    ordem, tamanho, cor e comprimento escolhidos, a próxima linha subindo
+    enquanto a anterior sai; ou no lugar do nome da música enquanto uma
+    linha é cantada, com o nome de volta entre as linhas), e todas no painel
+    dela (a linha atual acesa e no meio, uma linha clicada leva a música até
+    ela); só para músicas (com artista, de 45 s a 20 min, sem vídeos nem
+    áudios de voz), e não para os apps desligados em "Apps que buscam
+    letras";
   * a velocidade da rede (envio e recebimento), os relógios adicionais do
     Windows (a hora de outras cidades, que aparecem assim que são
     adicionados no Windows; um clique abre a lista do Windows) e o tempo até
@@ -877,7 +888,10 @@ quique.
   Explorador"; arquivos arrastados para fora (copiados ou movidos,
   perguntado uma vez) ou para uma pasta, um arquivo ou o caminho dele copiado
   da sua linha; os locais do Windows abertos com um clique (o alfinete os
-  fixa); cada favorito com o seu ícone e a sua cor (só na ilha).
+  fixa); cada favorito com o seu ícone e a sua cor (só na ilha); arquivos
+  marcados como favoritos com a estrela, junto das pastas fixadas (copie o
+  arquivo ou o caminho dali; um movido ou excluído sai da lista, um num
+  pendrive tirado volta com ele).
 * **Papéis de parede** de uma pasta que você escolhe: miniaturas, uma
   transição (esmaecer, círculo, deslizar ou zoom), naquele monitor; a roda no
   item passa para o próximo.
@@ -1105,13 +1119,15 @@ ampliação e os pulos; ela só pega os cliques em volta dos apps), ou como ela
   o clima ([Open-Meteo](https://open-meteo.com), a cada 30 minutos enquanto
   aparece), os feriados ([Nager.Date](https://date.nager.at), uma vez por
   ano), as letras das músicas ([LRCLIB](https://lrclib.net), uma vez por
-  música), os links das agendas (no máximo a cada 15 minutos) e as atualizações
+  música: o título e o artista, só de músicas), os links das agendas (no máximo a cada 15 minutos) e as atualizações
   (winget, a cada algumas horas; as do Windows são lidas sem internet). As
   atualizações só rodam quando pedidas, num terminal, sem aceitar nada por
   você.
 * **Armazenamento**: o Windhawk guarda as configurações, anotações e o resto
-  para o computador todo (todas as contas do Windows veem os mesmos);
-  exporte um backup antes de formatar.
+  para o computador todo (todas as contas do Windows veem os mesmos; os
+  alarmes, os tempos do timer, as pastas fixadas, os favoritos e a ordem
+  das pastas e os apps das letras são de cada conta); exporte um backup
+  antes de formatar.
 * **Dois processos**: a ilha roda num processo `windhawk.exe` próprio, então
   um problema nela não derruba a barra; a dock roda no `explorer.exe`. Se o
   driver de vídeo reiniciar, a ilha recomeça sozinha.
@@ -1139,8 +1155,10 @@ ampliação e os pulos; ela só pega os cliques em volta dos apps), ou como ela
     pico da saída uma vez por segundo enquanto ele está ligado, para saber
     se algum som toca);
   * letras das músicas: a API do LRCLIB (lrclib.net/api/get, depois
-    /api/search) pelo título, artista e duração que os controles de mídia do
-    Windows dão, numa thread, as últimas músicas guardadas na memória;
+    /api/search, cujos resultados só valem quando título, artista e duração
+    batem) pelo título, artista e duração que os controles de mídia do
+    Windows dão, só para uma música (não um vídeo, como o app diz: o tipo de
+    reprodução), numa thread, as últimas músicas guardadas na memória;
   * relógios mundiais: os relógios adicionais do Windows (lidos do registro,
     vigiado por mudanças);
   * a pílula enchendo com downloads: o progresso que os apps dão ao botão
@@ -1195,16 +1213,11 @@ escrever em português.
 * O código que chega no XAML da barra de tarefas é baseado no
   [**Taskbar tray auto-hide (show on hover)**, do m417z](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-show-on-hover.wh.cpp)
   (GPL-3.0).
-* **Termo adicional de atribuição sob a GPL-3.0, seção 7(b):** ao
-  redistribuir código original deste mod, modificado ou não, mantenha
+* Se você reutilizar código deste mod, ou ele inspirou o seu trabalho, dê
+  crédito a
   [**Mac Island & Dock by caliberda**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mac-island-dock.wh.cpp)
-  nos créditos do README do seu trabalho. Ao reutilizar o código de acesso
-  ao XAML derivado do mod do m417z, mantenha também **Taskbar tray auto-hide
-  (show on hover) by m417z** e o link da fonte acima. Isso preserva a
-  atribuição desse autor sem alterar a licença do código dele.
-* Se este mod só inspirou seu trabalho, sem reutilizar código, considere
-  dar crédito a **Mac Island & Dock by caliberda** com o link acima.
-  É um pedido, não uma obrigação legal nem condição da licença.
+  com esse link (e ao mod do m417z acima, pelo código do XAML da barra). É um
+  pedido, não uma condição da licença.
 * Inspirado na barra de menus, na central de controle e na Dock do
   **macOS**, e na **Dynamic Island** do iPhone (Apple).
 */
@@ -1339,13 +1352,13 @@ escrever em português.
     $description:ru-RU: Как долго мышь должна находиться у нижнего края (0-2000, по умолчанию 0)
     $description:ja-JP: マウスが下端にとどまる必要がある時間（0-2000、既定値 0）
   - revealHeight: 0
-    $name: Height over the bottom edge that brings it up (px)
-    $name:pt-BR: Altura acima da borda de baixo que faz ela aparecer (px)
-    $name:zh-CN: 底部边缘上方触发显示的高度（像素）
-    $name:de-DE: Höhe über dem unteren Rand, die sie einblendet (px)
-    $name:es: Altura sobre el borde inferior que la muestra (px)
-    $name:ru-RU: Высота над нижним краем, при которой она появляется (px)
-    $name:ja-JP: 表示のきっかけになる下端からの高さ (px)
+    $name: Height over the bottom edge that brings it up (px at 100% scale)
+    $name:pt-BR: Altura acima da borda de baixo que faz ela aparecer (px na escala de 100%)
+    $name:zh-CN: 底部边缘上方触发显示的高度（像素，按 100% 缩放）
+    $name:de-DE: Höhe über dem unteren Rand, die sie einblendet (px bei 100 % Skalierung)
+    $name:es: Altura sobre el borde inferior que la muestra (px con escala al 100 %)
+    $name:ru-RU: Высота над нижним краем, при которой она появляется (пикс. при масштабе 100%)
+    $name:ja-JP: 表示のきっかけになる下端からの高さ (px、100% スケール時)
     $description: The same on every monitor. 0 is automatic (the default), only the edge itself, and the icons' height on a monitor with another one below it (where the mouse easily goes past the edge). Only for "Dock" and "Windows taskbar, transparent" (0-120, default 0)
     $description:pt-BR: A mesma em todos os monitores. 0 é automático (o padrão), só a própria borda, e a altura dos ícones num monitor com outro embaixo dele (onde o mouse passa fácil da borda). Só para "Dock" e "Barra do Windows transparente" (0-120, padrão 0)
     $description:zh-CN: 所有显示器相同。0 为自动（默认）：只有边缘本身；下方还有另一台显示器时为图标的高度（鼠标很容易越过边缘）。仅适用于"程序坞"和"Windows 任务栏，透明"（0-120，默认 0）
@@ -2932,6 +2945,22 @@ void SetUserStringValue(PCWSTR name, PCWSTR value) {
     Wh_SetStringValue(UserValueName(name).c_str(), value);
 }
 
+// The account's own text, whole (see GetWholeStringValue), one kept under
+// the plain name before moved to it.
+std::wstring GetWholeUserStringValue(PCWSTR name, size_t room) {
+    const std::wstring userName = UserValueName(name);
+    std::wstring value = GetWholeStringValue(userName.c_str(), room);
+    if (!value.empty() || userName == name) {
+        return value;
+    }
+    value = GetWholeStringValue(name, room);
+    if (!value.empty()) {
+        Wh_SetStringValue(userName.c_str(), value.c_str());
+        Wh_DeleteValue(name);
+    }
+    return value;
+}
+
 // The mod's own module (set in Wh_ModInit), for its window classes.
 HMODULE g_module;
 
@@ -3097,17 +3126,29 @@ constexpr WCHAR kWidgetsBadgeId[] = L"WidgetsButton";
 // In explorer (the taskbar's thread), messages sent to it from other threads
 // wait meanwhile (SMTO_BLOCK): the mod's own unloading sends it some (see
 // ExplorerModBeforeUninit), and they must not run while this code is still
-// on its stack.
-bool SendIpc(HWND to, HWND from, IpcKind kind, const void* data, DWORD size) {
+// on its stack. True once delivered; what the other side answered in
+// `answer` (TRUE when the mod's part there took it: the taskbar not yet
+// subclassed, after Explorer started again, answers something else).
+bool SendIpc(HWND to,
+             HWND from,
+             IpcKind kind,
+             const void* data,
+             DWORD size,
+             DWORD_PTR* answer = nullptr) {
     if (!to) {
         return false;
     }
     COPYDATASTRUCT copyData{kind, size, (PVOID)data};
     DWORD_PTR result = 0;
-    return SendMessageTimeout(to, WM_COPYDATA, (WPARAM)from, (LPARAM)&copyData,
-                              SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT |
-                                  (g_isExplorer ? SMTO_BLOCK : 0),
-                              kIpcTimeoutMs, &result) != 0;
+    const bool sent =
+        SendMessageTimeout(to, WM_COPYDATA, (WPARAM)from, (LPARAM)&copyData,
+                           SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT |
+                               (g_isExplorer ? SMTO_BLOCK : 0),
+                           kIpcTimeoutMs, &result) != 0;
+    if (answer) {
+        *answer = sent ? result : 0;
+    }
+    return sent;
 }
 
 // The island's tray icon places, to explorer from a thread of their own: the
@@ -3880,6 +3921,8 @@ struct DockIcon {
     Media::ScaleTransform overlayKeep{nullptr};
     bool overlayCounted = false;
     bool overlayLooked = false;
+    // Looked for in vain this many times (see kOverlayMostLooks).
+    int overlayLooks = 0;
     // An app opened: its button grows in (0 to 1, a bit more while
     // bouncing).
     double appear = 1;
@@ -4072,21 +4115,27 @@ void ResumeRepeaterAnimations() {
     if (!g_animatorPaused) {
         return;
     }
+    // (Each on its own: a retired element failing mustn't keep the rest, or
+    // the kept animations, after the unload.)
     auto repeater = g_dockRepeater.get();
     if (repeater && g_animatorProperty && g_animatorKept) {
-        if (g_animatorKept == DependencyProperty::UnsetValue()) {
-            repeater.ClearValue(g_animatorProperty);
-        } else {
-            repeater.SetValue(g_animatorProperty, g_animatorKept);
-        }
+        Safely(L"Restoring the dock's animator", [&] {
+            if (g_animatorKept == DependencyProperty::UnsetValue()) {
+                repeater.ClearValue(g_animatorProperty);
+            } else {
+                repeater.SetValue(g_animatorProperty, g_animatorKept);
+            }
+        });
     }
     for (const auto& kept : g_implicitKept) {
         if (auto element = kept.element.get()) {
-            Hosting::ElementCompositionPreview::GetElementVisual(element)
-                .ImplicitAnimations(kept.animations);
+            Safely(L"Restoring an icon's animations", [&] {
+                Hosting::ElementCompositionPreview::GetElementVisual(element)
+                    .ImplicitAnimations(kept.animations);
+            });
         }
     }
-    g_implicitKept.clear();
+    std::vector<KeptImplicitAnimations>().swap(g_implicitKept);
     g_animatorPaused = false;
     g_animatorKept = nullptr;
 }
@@ -4300,11 +4349,29 @@ struct KeptAppIcon {
     std::wstring appId;
     winrt::com_ptr<ID2D1Bitmap> bitmap;
     double retryAt = 0;
+    // Looked up in vain this many times in a row.
+    int misses = 0;
 };
 constexpr double kAppIconRetrySeconds = 30;
 // (None found, like just after the island or explorer started again: asked
-// again soon, not after a gray square for half a minute.)
+// again soon, not after a gray square for half a minute; then later each
+// time, up to kMissingIconLongestSeconds: an app whose icon never comes
+// isn't asked of explorer every few seconds forever.)
 constexpr double kMissingIconRetrySeconds = 3;
+constexpr double kMissingIconLongestSeconds = 120;
+
+// When an icon kept is looked up again (see KeptAppIcon): never explorer's,
+// after a while the island's own, a missing one sooner (`misses` before).
+double AppIconRetryAt(bool fromExplorer, bool found, int misses, double now) {
+    if (fromExplorer) {
+        return 0;
+    }
+    if (found) {
+        return now + kAppIconRetrySeconds;
+    }
+    return now + std::min(kMissingIconRetrySeconds * (1 << std::min(misses, 6)),
+                          kMissingIconLongestSeconds);
+}
 
 // A picture drawn smaller than it is (app icons, covers, photos): smoothly,
 // with every pixel counted (Direct2D's usual way skips some, and small icons
@@ -6460,12 +6527,17 @@ void UseBigOverlay(DockIcon& icon,
         SetStyled(found, UIElement::RenderTransformOriginProperty(),
                   winrt::box_value(winrt::Windows::Foundation::Point{0.5f, 0.5f}));
     };
-    // (Its image found once it has one: the taskbar makes it then.)
-    if (listed && !icon.overlayLooked) {
-        icon.overlayLooked = true;
+    // (Its image found once it has one: the taskbar makes it then, maybe a
+    // moment later, so it's looked for again a few times.)
+    constexpr int kOverlayMostLooks = 10;
+    if (listed && !icon.overlayLooked &&
+        icon.overlayLooks < kOverlayMostLooks) {
         if (auto found =
                 FindByName(button, L"OverlayIcon").try_as<Controls::Image>()) {
+            icon.overlayLooked = true;
             keepSize(found);
+        } else {
+            icon.overlayLooks++;
         }
     }
     auto image = icon.overlayImage.get();
@@ -6894,6 +6966,15 @@ void SetupDockBehavior(HWND hWnd,
 void ResetDockOfTaskbar();
 
 void ResetDockBehavior() {
+    // The timer and the handlers that run on their own go first: a step
+    // below failing mustn't leave them ticking after the unload.
+    if (g_badgeTimer) {
+        Safely(L"Stopping the badge timer", [&] { g_badgeTimer.Stop(); });
+        g_badgeTimer = nullptr;
+    }
+    Safely(L"Removing the rendering handler",
+           [&] { g_renderingRevoker.revoke(); });
+    StopWatchingProgressBars();
     UnwatchThumbnails();
     for (auto& state : g_otherDocks) {
         DockScope scope(state->wnd);
@@ -6906,15 +6987,10 @@ void ResetDockBehavior() {
         }
     }
     g_ownClips.clear();
-    if (g_badgeTimer) {
-        g_badgeTimer.Stop();
-        g_badgeTimer = nullptr;
-    }
 
     AcquireSRWLockExclusive(&g_badgeAppsLock);
     g_badgeApps.clear();
     ReleaseSRWLockExclusive(&g_badgeAppsLock);
-    g_renderingRevoker.revoke();
     g_stateRevokers.clear();
     g_dotRevokers.clear();
     for (const auto& watch : g_badgeWatches) {
@@ -6927,7 +7003,6 @@ void ResetDockBehavior() {
     }
     g_badgeWatches.clear();
     g_watchedButtons.clear();
-    StopWatchingProgressBars();
     ResetDockOfTaskbar();
 }
 
@@ -6977,9 +7052,10 @@ void ResetDockOfTaskbar() {
     if (g_dockWnd) {
         KillTimer(g_dockWnd, kAnimatorTimerId);
     }
-    ResumeRepeaterAnimations();
+    Safely(L"Resuming the dock's animations", [] { ResumeRepeaterAnimations(); });
     if (auto frame = g_dockFrame.get(); frame && g_dockContentHidden) {
-        RestoreDockOpacity(frame);
+        Safely(L"Restoring the dock's opacity",
+               [&] { RestoreDockOpacity(frame); });
     }
     g_dockContentHidden = false;
     g_dockScaleSettled = true;
@@ -7314,9 +7390,11 @@ void ApplySettingsFromTaskbarThread() {
     // back first: the styles going would otherwise move a window still
     // grown for a dock that isn't there.
     if (!IsDock() || g_unloading) {
-        RefreshDockRoomProc(nullptr);
+        Safely(L"Giving the taskbars their height back",
+               [] { RefreshDockRoomProc(nullptr); });
     }
-    ClearStyles();
+    // (Whatever fails in there, the globals below are still freed.)
+    Safely(L"Removing the taskbar styles", [] { ClearStyles(); });
     g_mainTaskbarStyled = false;
     if (g_unloading) {
         // (Its timer is this thread's: stopped here, not by the unloading
@@ -11092,8 +11170,15 @@ void LookAtProgressBars() {
     PublishProgress(false);
 }
 
-// A window's progress changed as the taskbar was told: its state kept, the
-// buttons' bars looked for (a new one) and read.
+// A window's progress changed as the taskbar was told: its state kept; for
+// a new window or another state, the buttons' bars looked for (a new one)
+// and read. A value alone comes through its bar's own handler once one is
+// shown: looked for then at most every kProgressLookSeconds; before (a new
+// window's bar comes a moment after its first values), each time.
+// RecheckProgress also looks each second.
+constexpr double kProgressLookSeconds = 0.5;
+double g_progressLookedAt = 0;
+
 void OnWindowProgress(HWND hWnd, int state) {
     if (g_unloading) {
         return;
@@ -11103,23 +11188,31 @@ void OnWindowProgress(HWND hWnd, int state) {
     std::erase_if(g_windowProgress, [](const auto& window) {
         return !IsWindow(window.first) || window.second == 0;
     });
+    bool changed = false;
     if (state >= 0) {
         auto it = std::find_if(
             g_windowProgress.begin(), g_windowProgress.end(),
             [&](const auto& window) { return window.first == hWnd; });
         if (it != g_windowProgress.end()) {
+            changed = it->second != state;
             it->second = state;
         } else if (state != 0) {
             g_windowProgress.push_back({hWnd, state});
+            changed = true;
         }
     } else if (std::none_of(
                    g_windowProgress.begin(), g_windowProgress.end(),
                    [&](const auto& window) { return window.first == hWnd; })) {
         // (A value set alone means it's going normally.)
         g_windowProgress.push_back({hWnd, kProgressNormal});
+        changed = true;
     }
     // (Kept either way: an island turning its fill on sees what's going.)
-    if (g_progressWanted) {
+    const double now = NowSeconds();
+    if (g_progressWanted &&
+        (changed || g_progressSentState <= 0 ||
+         now - g_progressLookedAt >= kProgressLookSeconds)) {
+        g_progressLookedAt = now;
         LookAtProgressBars();
     }
 }
@@ -11609,6 +11702,21 @@ HBITMAP WindowRelaunchIconBitmap(const std::wstring& appId, int size) {
     return bitmap;
 }
 
+DWORD SessionProcessId(PCWSTR exe);
+std::wstring ProcessImagePath(DWORD processId);
+
+// An app known only by its program's file name (a media app without an ID of
+// its own, like "Spotify.exe" or "vlc.exe"): that program's path while it
+// runs in this session, or empty.
+std::wstring RunningProgramPath(const std::wstring& appId) {
+    if (appId.size() < 5 || appId.find(L'\\') != std::wstring::npos ||
+        _wcsicmp(appId.c_str() + appId.size() - 4, L".exe") != 0) {
+        return {};
+    }
+    const DWORD processId = SessionProcessId(appId.c_str());
+    return processId ? ProcessImagePath(processId) : std::wstring();
+}
+
 // The app's icon as a 32-bit bitmap with premultiplied alpha, from the shell:
 // by the app's AppUserModelID if it has one, by its program file otherwise.
 HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size) {
@@ -11639,6 +11747,14 @@ HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size) {
     if (!factory && IsLocalDrivePath(appId)) {
         SHCreateItemFromParsingName(appId.c_str(), nullptr,
                                     IID_PPV_ARGS(factory.put()));
+    }
+    // (Or only by its file's name: the one running.)
+    if (!factory) {
+        if (const std::wstring path = RunningProgramPath(appId);
+            IsLocalDrivePath(path)) {
+            SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                        IID_PPV_ARGS(factory.put()));
+        }
     }
     if (!factory && hWnd) {
         DWORD processId = 0;
@@ -12793,6 +12909,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Already added", L"已添加"},
     {L"Always", L"始终"},
     {L"Always, or only once what's in it weighs this much (it comes and goes by itself)", L"始终显示，或仅当其中内容达到此大小时显示（会自动出现和消失）"},
+    {L"An app appears here once it plays something", L"应用播放内容后会显示在这里"},
     {L"Animations", L"动画"},
     {L"App", L"应用"},
     {L"App in focus", L"焦点应用"},
@@ -12800,6 +12917,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Apply", L"应用"},
     {L"Apps (winget, in a terminal)", L"应用（winget，在终端中）"},
     {L"Apps and tools", L"应用和工具"},
+    {L"Apps that look for lyrics", L"查找歌词的应用"},
     {L"Apps with notifications", L"有通知的应用"},
     {L"Apps with unsaved work can stop it.", L"有未保存工作的应用可能会阻止它。"},
     {L"Area that brings it back", L"唤回区域"},
@@ -12980,6 +13098,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Extend", L"扩展"},
     {L"Fade", L"淡入"},
     {L"Fan", L"风扇"},
+    {L"Favorite moved or deleted", L"收藏的文件已被移动或删除"},
+    {L"Favorites are full", L"收藏已满"},
     {L"Feels like", L"体感温度"},
     {L"Fetches pictures for banners from the web, it needs an internet connection", L"从网络获取横幅所用的图片，需要联网"},
     {L"File Explorer", L"文件资源管理器"},
@@ -13106,7 +13226,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Looking for networks...", L"正在查找网络..."},
     {L"Looking for the lyrics…", L"正在查找歌词…"},
     {L"Looking…", L"正在查找…"},
+    {L"Looks for lyrics", L"查找歌词"},
     {L"Low battery", L"电量不足"},
+    {L"Lyrics are looked for only for songs (with an artist, 45 s to 20 min, not videos)", L"仅为歌曲查找歌词（有歌手、45 秒至 20 分钟、非视频）"},
+    {L"Lyrics are off for this app (in the settings, What's playing)", L"此应用的歌词已关闭（在设置的“正在播放”中）"},
     {L"Lyrics color", L"歌词颜色"},
     {L"Lyrics color (own)", L"歌词颜色（自定义）"},
     {L"Lyrics from lrclib.net", L"歌词来自 lrclib.net"},
@@ -13214,6 +13337,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Off with no animations (“None”)", L"无动画时关闭（“无”）"},
     {L"Off with the bar style", L"条形样式下关闭"},
     {L"Off with the notches (Fixed style)", L"刘海开启时关闭（固定样式）"},
+    {L"Off: nothing is sent", L"已关闭：不发送任何内容"},
     {L"Off: only the app's icon peeks out of the line", L"关闭时：只有应用图标从线条中探出"},
     {L"Oldest first", L"最旧的在前"},
     {L"On", L"开"},
@@ -13457,12 +13581,14 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Temperature", L"温度"},
     {L"Text", L"文字"},
     {L"The app in focus on this monitor (its icon and name)", L"此显示器上的焦点应用（图标和名称）"},
+    {L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net", L"已检测到播放内容的应用；点击可关闭某个应用的歌词，其歌曲信息将不会发送到 lrclib.net"},
     {L"The bar doesn't minimize", L"栏不会最小化"},
     {L"The bars' color; the rainbow gives each bar its own, going around slowly", L"条形的颜色；彩虹会让每个条形有自己的颜色，并缓慢变换"},
     {L"The battery's charge while a laptop charges", L"笔记本充电时的电池电量"},
     {L"The cover's", L"封面颜色"},
     {L"The dock is set up in Windhawk", L"程序坞在 Windhawk 中设置"},
     {L"The effect shown when the wallpaper changes", L"更换壁纸时显示的过渡效果"},
+    {L"The favorite's drive isn't connected", L"收藏文件所在的驱动器未连接"},
     {L"The folder with your wallpapers", L"存放壁纸的文件夹"},
     {L"The icons'", L"图标的颜色"},
     {L"The island follows the mouse between screens.", L"灵动岛跟随鼠标在屏幕之间移动。"},
@@ -13474,7 +13600,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"The keys below send the island to its line, and again bring it back", L"按下方的按键将灵动岛收为细线，再按一次恢复"},
     {L"The komorebi buttons also start and stop masir, so focus follows the mouse", L"komorebi 按钮同时启动和停止 masir，使焦点跟随鼠标"},
     {L"The komorebi buttons also start and stop whkd, its shortcut helper", L"komorebi 按钮同时启动和停止其快捷键工具 whkd"},
-    {L"The line sung now on the pill (place it in the order above), all of them in its panel; from lrclib.net", L"胶囊上显示正在唱的歌词（在上方顺序中调整位置），面板中显示全部歌词；来自 lrclib.net"},
+    {L"The line sung now on the pill (place it in the order above), all of them in its panel. Each song's title and artist are sent to lrclib.net (songs only: not videos, voice messages or the apps turned off below)", L"胶囊上显示正在唱的歌词（在上方顺序中调整位置），面板中显示全部歌词。每首歌的歌名和歌手会发送到 lrclib.net（仅限歌曲：不包括视频、语音消息或下方已关闭的应用）"},
     {L"The line's color, on the pill and lit in the panel", L"歌词行的颜色，用于胶囊和面板中的高亮"},
     {L"The list stays open after you click an icon (In the pill style)", L"点击图标后列表保持打开（仅限胶囊内样式）"},
     {L"The next alarm that's on", L"下一个已开启的闹钟"},
@@ -13526,6 +13652,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"UV index", L"紫外线指数"},
     {L"Ultrawide vertical stack", L"超宽垂直堆叠"},
     {L"Unavailable", L"不可用"},
+    {L"Up to 40 favorite files", L"最多 40 个收藏文件"},
     {L"Upcoming events", L"即将到来的事件"},
     {L"Upcoming holidays", L"即将到来的节假日"},
     {L"Update", L"更新"},
@@ -13715,6 +13842,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Already added", L"Bereits hinzugefügt"},
     {L"Always", L"Immer"},
     {L"Always, or only once what's in it weighs this much (it comes and goes by itself)", L"Immer, oder erst wenn der Inhalt so viel wiegt (er erscheint und verschwindet von selbst)"},
+    {L"An app appears here once it plays something", L"Eine App erscheint hier, sobald sie etwas abspielt"},
     {L"Animations", L"Animationen"},
     {L"App", L"App"},
     {L"App in focus", L"App im Fokus"},
@@ -13722,6 +13850,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Apply", L"Übernehmen"},
     {L"Apps (winget, in a terminal)", L"Apps (winget, im Terminal)"},
     {L"Apps and tools", L"Apps und Tools"},
+    {L"Apps that look for lyrics", L"Apps, die Songtexte suchen"},
     {L"Apps with notifications", L"Apps mit Benachrichtigungen"},
     {L"Apps with unsaved work can stop it.", L"Apps mit nicht gespeicherter Arbeit können es verhindern."},
     {L"Area that brings it back", L"Bereich zum Zurückholen"},
@@ -13902,6 +14031,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Extend", L"Verlängern"},
     {L"Fade", L"Überblenden"},
     {L"Fan", L"Lüfter"},
+    {L"Favorite moved or deleted", L"Favorit verschoben oder gelöscht"},
+    {L"Favorites are full", L"Favoriten sind voll"},
     {L"Feels like", L"Gefühlt"},
     {L"Fetches pictures for banners from the web, it needs an internet connection", L"Lädt Bilder für Banner aus dem Web, Internetverbindung nötig"},
     {L"File Explorer", L"Datei-Explorer"},
@@ -14028,7 +14159,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Looking for networks...", L"Netzwerke werden gesucht..."},
     {L"Looking for the lyrics…", L"Songtext wird gesucht…"},
     {L"Looking…", L"Suche läuft…"},
+    {L"Looks for lyrics", L"Sucht Liedtexte"},
     {L"Low battery", L"Akku schwach"},
+    {L"Lyrics are looked for only for songs (with an artist, 45 s to 20 min, not videos)", L"Songtexte werden nur für Songs gesucht (mit Interpret, 45 s bis 20 min, keine Videos)"},
+    {L"Lyrics are off for this app (in the settings, What's playing)", L"Songtexte sind für diese App ausgeschaltet (in den Einstellungen, Was gerade läuft)"},
     {L"Lyrics color", L"Songtextfarbe"},
     {L"Lyrics color (own)", L"Songtextfarbe (eigene)"},
     {L"Lyrics from lrclib.net", L"Songtext von lrclib.net"},
@@ -14136,6 +14270,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Off with no animations (“None”)", L"Aus ohne Animationen („Keine“)"},
     {L"Off with the bar style", L"Aus im Leistenstil"},
     {L"Off with the notches (Fixed style)", L"Aus mit Notches (fester Stil)"},
+    {L"Off: nothing is sent", L"Aus: nichts wird gesendet"},
     {L"Off: only the app's icon peeks out of the line", L"Aus: nur das App-Symbol schaut aus der Linie"},
     {L"Oldest first", L"Älteste zuerst"},
     {L"On", L"Ein"},
@@ -14379,12 +14514,14 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Temperature", L"Temperatur"},
     {L"Text", L"Text"},
     {L"The app in focus on this monitor (its icon and name)", L"Die App im Fokus auf diesem Monitor (Symbol und Name)"},
+    {L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net", L"Die Apps, die schon etwas abgespielt haben; ein Klick schaltet die Songtexte einer App aus, und von ihren Songs wird nichts an lrclib.net gesendet"},
     {L"The bar doesn't minimize", L"Die Leiste lässt sich nicht minimieren"},
     {L"The bars' color; the rainbow gives each bar its own, going around slowly", L"Die Farbe der Balken; der Regenbogen gibt jedem Balken seine eigene, die sich langsam dreht"},
     {L"The battery's charge while a laptop charges", L"Akkuladung, während ein Laptop lädt"},
     {L"The cover's", L"Vom Cover"},
     {L"The dock is set up in Windhawk", L"Das Dock wird in Windhawk eingerichtet"},
     {L"The effect shown when the wallpaper changes", L"Der Effekt beim Wechsel des Hintergrunds"},
+    {L"The favorite's drive isn't connected", L"Das Laufwerk des Favoriten ist nicht verbunden"},
     {L"The folder with your wallpapers", L"Der Ordner mit Ihren Hintergrundbildern"},
     {L"The icons'", L"Die der Symbole"},
     {L"The island follows the mouse between screens.", L"Die Insel folgt der Maus zwischen den Bildschirmen."},
@@ -14396,7 +14533,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"The keys below send the island to its line, and again bring it back", L"Die Tasten unten schicken die Insel auf ihre Linie und holen sie wieder zurück"},
     {L"The komorebi buttons also start and stop masir, so focus follows the mouse", L"Die komorebi-Schaltflächen starten und stoppen auch masir, damit der Fokus der Maus folgt"},
     {L"The komorebi buttons also start and stop whkd, its shortcut helper", L"Die komorebi-Schaltflächen starten und stoppen auch whkd, den Helfer für Tastenkombinationen"},
-    {L"The line sung now on the pill (place it in the order above), all of them in its panel; from lrclib.net", L"Die gerade gesungene Zeile in der Kapsel (in der Reihenfolge oben platzieren), alle im Panel; von lrclib.net"},
+    {L"The line sung now on the pill (place it in the order above), all of them in its panel. Each song's title and artist are sent to lrclib.net (songs only: not videos, voice messages or the apps turned off below)", L"Die gerade gesungene Zeile in der Kapsel (in der Reihenfolge oben platzieren), alle im Panel. Titel und Interpret jedes Songs werden an lrclib.net gesendet (nur Songs: keine Videos, Sprachnachrichten oder unten ausgeschalteten Apps)"},
     {L"The line's color, on the pill and lit in the panel", L"Farbe der Zeile, in der Kapsel und hervorgehoben im Panel"},
     {L"The list stays open after you click an icon (In the pill style)", L"Die Liste bleibt nach einem Klick auf ein Symbol offen (Stil In der Kapsel)"},
     {L"The next alarm that's on", L"Der nächste aktive Wecker"},
@@ -14448,6 +14585,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"UV index", L"UV-Index"},
     {L"Ultrawide vertical stack", L"Ultrabreit, vertikal gestapelt"},
     {L"Unavailable", L"Nicht verfügbar"},
+    {L"Up to 40 favorite files", L"Bis zu 40 Lieblingsdateien"},
     {L"Upcoming events", L"Anstehende Termine"},
     {L"Upcoming holidays", L"Anstehende Feiertage"},
     {L"Update", L"Aktualisieren"},
@@ -14637,6 +14775,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Already added", L"Ya añadida"},
     {L"Always", L"Siempre"},
     {L"Always, or only once what's in it weighs this much (it comes and goes by itself)", L"Siempre, o solo cuando lo que contiene pese esto (aparece y desaparece sola)"},
+    {L"An app appears here once it plays something", L"Una app aparece aquí cuando reproduce algo"},
     {L"Animations", L"Animaciones"},
     {L"App", L"App"},
     {L"App in focus", L"App en primer plano"},
@@ -14644,6 +14783,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Apply", L"Aplicar"},
     {L"Apps (winget, in a terminal)", L"Apps (winget, en el terminal)"},
     {L"Apps and tools", L"Apps y herramientas"},
+    {L"Apps that look for lyrics", L"Apps que buscan letras"},
     {L"Apps with notifications", L"Apps con notificaciones"},
     {L"Apps with unsaved work can stop it.", L"Las apps con trabajo sin guardar pueden impedirlo."},
     {L"Area that brings it back", L"Zona que la recupera"},
@@ -14824,6 +14964,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Extend", L"Ampliar"},
     {L"Fade", L"Fundido"},
     {L"Fan", L"Ventilador"},
+    {L"Favorite moved or deleted", L"Favorito movido o eliminado"},
+    {L"Favorites are full", L"Los favoritos están llenos"},
     {L"Feels like", L"Sensación"},
     {L"Fetches pictures for banners from the web, it needs an internet connection", L"Obtiene de la web las imágenes de los banners; necesita conexión a internet"},
     {L"File Explorer", L"Explorador de archivos"},
@@ -14950,7 +15092,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Looking for networks...", L"Buscando redes..."},
     {L"Looking for the lyrics…", L"Buscando la letra…"},
     {L"Looking…", L"Buscando…"},
+    {L"Looks for lyrics", L"Busca letras"},
     {L"Low battery", L"Batería baja"},
+    {L"Lyrics are looked for only for songs (with an artist, 45 s to 20 min, not videos)", L"Las letras solo se buscan para canciones (con artista, de 45 s a 20 min, sin videos)"},
+    {L"Lyrics are off for this app (in the settings, What's playing)", L"Las letras están desactivadas para esta app (en la configuración, Lo que suena)"},
     {L"Lyrics color", L"Color de la letra"},
     {L"Lyrics color (own)", L"Color de la letra (propio)"},
     {L"Lyrics from lrclib.net", L"Letra de lrclib.net"},
@@ -15058,6 +15203,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Off with no animations (“None”)", L"Desactivado sin animaciones (“Ninguna”)"},
     {L"Off with the bar style", L"Desactivado en el estilo Barra"},
     {L"Off with the notches (Fixed style)", L"Desactivado con muescas (estilo Fija)"},
+    {L"Off: nothing is sent", L"Desactivado: no se envía nada"},
     {L"Off: only the app's icon peeks out of the line", L"Desactivado: solo asoma el icono de la app en la línea"},
     {L"Oldest first", L"Más antiguos primero"},
     {L"On", L"Activado"},
@@ -15301,12 +15447,14 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Temperature", L"Temperatura"},
     {L"Text", L"Texto"},
     {L"The app in focus on this monitor (its icon and name)", L"La app en primer plano en este monitor (icono y nombre)"},
+    {L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net", L"Las apps que se vieron reproduciendo; un clic desactiva las letras de una, y nada de sus canciones se envía a lrclib.net"},
     {L"The bar doesn't minimize", L"La barra no se minimiza"},
     {L"The bars' color; the rainbow gives each bar its own, going around slowly", L"El color de las barras; el arcoíris da a cada barra el suyo, girando despacio"},
     {L"The battery's charge while a laptop charges", L"La carga de la batería mientras un portátil carga"},
     {L"The cover's", L"La de la portada"},
     {L"The dock is set up in Windhawk", L"El dock se configura en Windhawk"},
     {L"The effect shown when the wallpaper changes", L"El efecto al cambiar el fondo de pantalla"},
+    {L"The favorite's drive isn't connected", L"La unidad del favorito no está conectada"},
     {L"The folder with your wallpapers", L"La carpeta con tus fondos de pantalla"},
     {L"The icons'", L"El de los iconos"},
     {L"The island follows the mouse between screens.", L"La isla sigue al ratón entre pantallas."},
@@ -15318,7 +15466,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"The keys below send the island to its line, and again bring it back", L"Las teclas de abajo envían la isla a su línea y la traen de vuelta"},
     {L"The komorebi buttons also start and stop masir, so focus follows the mouse", L"Los botones de komorebi también inician y detienen masir, para que el foco siga al ratón"},
     {L"The komorebi buttons also start and stop whkd, its shortcut helper", L"Los botones de komorebi también inician y detienen whkd, su ayudante de atajos"},
-    {L"The line sung now on the pill (place it in the order above), all of them in its panel; from lrclib.net", L"La línea que suena ahora en la píldora (colócala en el orden de arriba), todas en su panel; de lrclib.net"},
+    {L"The line sung now on the pill (place it in the order above), all of them in its panel. Each song's title and artist are sent to lrclib.net (songs only: not videos, voice messages or the apps turned off below)", L"La línea que suena ahora en la píldora (colócala en el orden de arriba), todas en su panel. El título y el artista de cada canción se envían a lrclib.net (solo canciones: no videos, mensajes de voz ni las apps desactivadas abajo)"},
     {L"The line's color, on the pill and lit in the panel", L"Color de la línea, en la píldora y resaltada en el panel"},
     {L"The list stays open after you click an icon (In the pill style)", L"La lista sigue abierta tras hacer clic en un icono (estilo En la píldora)"},
     {L"The next alarm that's on", L"La próxima alarma activada"},
@@ -15370,6 +15518,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"UV index", L"Índice UV"},
     {L"Ultrawide vertical stack", L"Pila vertical ultraancha"},
     {L"Unavailable", L"No disponible"},
+    {L"Up to 40 favorite files", L"Hasta 40 archivos favoritos"},
     {L"Upcoming events", L"Próximos eventos"},
     {L"Upcoming holidays", L"Próximos festivos"},
     {L"Update", L"Actualizar"},
@@ -15559,6 +15708,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Already added", L"Уже добавлено"},
     {L"Always", L"Всегда"},
     {L"Always, or only once what's in it weighs this much (it comes and goes by itself)", L"Всегда или только когда её содержимое весит столько (появляется и исчезает сама)"},
+    {L"An app appears here once it plays something", L"Приложение появится здесь, когда что-нибудь воспроизведёт"},
     {L"Animations", L"Анимации"},
     {L"App", L"Приложение"},
     {L"App in focus", L"Активное приложение"},
@@ -15566,6 +15716,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Apply", L"Применить"},
     {L"Apps (winget, in a terminal)", L"Приложения (winget, в терминале)"},
     {L"Apps and tools", L"Приложения и инструменты"},
+    {L"Apps that look for lyrics", L"Приложения, для которых ищется текст"},
     {L"Apps with notifications", L"Приложения с уведомлениями"},
     {L"Apps with unsaved work can stop it.", L"Приложения с несохранёнными данными могут помешать."},
     {L"Area that brings it back", L"Область возврата"},
@@ -15746,6 +15897,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Extend", L"Расширить"},
     {L"Fade", L"Затухание"},
     {L"Fan", L"Вентилятор"},
+    {L"Favorite moved or deleted", L"Избранный файл перемещён или удалён"},
+    {L"Favorites are full", L"Избранное заполнено"},
     {L"Feels like", L"Ощущается как"},
     {L"Fetches pictures for banners from the web, it needs an internet connection", L"Загружает изображения для баннеров из интернета, нужно подключение"},
     {L"File Explorer", L"Проводник"},
@@ -15872,7 +16025,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Looking for networks...", L"Поиск сетей..."},
     {L"Looking for the lyrics…", L"Поиск текста песни…"},
     {L"Looking…", L"Поиск…"},
+    {L"Looks for lyrics", L"Ищет тексты песен"},
     {L"Low battery", L"Низкий заряд"},
+    {L"Lyrics are looked for only for songs (with an artist, 45 s to 20 min, not videos)", L"Тексты ищутся только для песен (с исполнителем, от 45 с до 20 мин, не видео)"},
+    {L"Lyrics are off for this app (in the settings, What's playing)", L"Тексты для этого приложения выключены (в настройках, «Сейчас играет»)"},
     {L"Lyrics color", L"Цвет текста песни"},
     {L"Lyrics color (own)", L"Цвет текста песни (свой)"},
     {L"Lyrics from lrclib.net", L"Текст песен с lrclib.net"},
@@ -15980,6 +16136,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Off with no animations (“None”)", L"Выключено без анимаций («Нет»)"},
     {L"Off with the bar style", L"Выключено в стиле панели"},
     {L"Off with the notches (Fixed style)", L"Выключено с вырезами (стиль «Фиксированный»)"},
+    {L"Off: nothing is sent", L"Выключено: ничего не отправляется"},
     {L"Off: only the app's icon peeks out of the line", L"Выкл.: из линии выглядывает только значок приложения"},
     {L"Oldest first", L"Сначала старые"},
     {L"On", L"Вкл."},
@@ -16223,12 +16380,14 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Temperature", L"Температура"},
     {L"Text", L"Текст"},
     {L"The app in focus on this monitor (its icon and name)", L"Активное приложение на этом мониторе (значок и имя)"},
+    {L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net", L"Приложения, которые что-то воспроизводили; щелчок выключает тексты для приложения, и ничего о его песнях не отправляется на lrclib.net"},
     {L"The bar doesn't minimize", L"Панель не сворачивается"},
     {L"The bars' color; the rainbow gives each bar its own, going around slowly", L"Цвет полос; радуга даёт каждой полосе свой цвет, который медленно меняется"},
     {L"The battery's charge while a laptop charges", L"Заряд батареи, пока ноутбук заряжается"},
     {L"The cover's", L"Цвет обложки"},
     {L"The dock is set up in Windhawk", L"Док настраивается в Windhawk"},
     {L"The effect shown when the wallpaper changes", L"Эффект при смене обоев"},
+    {L"The favorite's drive isn't connected", L"Диск с избранным файлом не подключён"},
     {L"The folder with your wallpapers", L"Папка с вашими обоями"},
     {L"The icons'", L"Как у значков"},
     {L"The island follows the mouse between screens.", L"Остров следует за мышью между экранами."},
@@ -16240,7 +16399,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"The keys below send the island to its line, and again bring it back", L"Клавиши ниже сворачивают остров в линию и снова возвращают его"},
     {L"The komorebi buttons also start and stop masir, so focus follows the mouse", L"Кнопки komorebi также запускают и останавливают masir: фокус следует за мышью"},
     {L"The komorebi buttons also start and stop whkd, its shortcut helper", L"Кнопки komorebi также запускают и останавливают whkd, помощник сочетаний клавиш"},
-    {L"The line sung now on the pill (place it in the order above), all of them in its panel; from lrclib.net", L"Строка, которую поют сейчас, на капсуле (расположите в порядке выше), весь текст — в панели; с lrclib.net"},
+    {L"The line sung now on the pill (place it in the order above), all of them in its panel. Each song's title and artist are sent to lrclib.net (songs only: not videos, voice messages or the apps turned off below)", L"Строка, которую поют сейчас, на капсуле (расположите в порядке выше), весь текст — в панели. Название и исполнитель каждой песни отправляются на lrclib.net (только песни: не видео, голосовые сообщения и не выключенные ниже приложения)"},
     {L"The line's color, on the pill and lit in the panel", L"Цвет строки на капсуле и подсветка в панели"},
     {L"The list stays open after you click an icon (In the pill style)", L"Список остаётся открытым после нажатия на значок (стиль «В капсуле»)"},
     {L"The next alarm that's on", L"Следующий включённый будильник"},
@@ -16292,6 +16451,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"UV index", L"УФ-индекс"},
     {L"Ultrawide vertical stack", L"Сверхширокая вертикальная стопка"},
     {L"Unavailable", L"Недоступно"},
+    {L"Up to 40 favorite files", L"Не более 40 избранных файлов"},
     {L"Upcoming events", L"Ближайшие события"},
     {L"Upcoming holidays", L"Ближайшие праздники"},
     {L"Update", L"Обновить"},
@@ -16481,6 +16641,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Already added", L"追加済み"},
     {L"Always", L"常に"},
     {L"Always, or only once what's in it weighs this much (it comes and goes by itself)", L"常に、または中身がこのサイズに達したときだけ（自動で表示・非表示）"},
+    {L"An app appears here once it plays something", L"アプリは何かを再生するとここに表示されます"},
     {L"Animations", L"アニメーション"},
     {L"App", L"アプリ"},
     {L"App in focus", L"フォーカス中のアプリ"},
@@ -16488,6 +16649,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Apply", L"適用"},
     {L"Apps (winget, in a terminal)", L"アプリ（winget、ターミナル内）"},
     {L"Apps and tools", L"アプリとツール"},
+    {L"Apps that look for lyrics", L"歌詞を検索するアプリ"},
     {L"Apps with notifications", L"通知のあるアプリ"},
     {L"Apps with unsaved work can stop it.", L"未保存の作業があるアプリは中断する場合があります。"},
     {L"Area that brings it back", L"元に戻す領域"},
@@ -16668,6 +16830,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Extend", L"拡張"},
     {L"Fade", L"フェード"},
     {L"Fan", L"ファン"},
+    {L"Favorite moved or deleted", L"お気に入りが移動または削除されました"},
+    {L"Favorites are full", L"お気に入りがいっぱいです"},
     {L"Feels like", L"体感温度"},
     {L"Fetches pictures for banners from the web, it needs an internet connection", L"バナー用の画像を Web から取得します。インターネット接続が必要です"},
     {L"File Explorer", L"エクスプローラー"},
@@ -16794,7 +16958,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Looking for networks...", L"ネットワークを検索中..."},
     {L"Looking for the lyrics…", L"歌詞を検索中…"},
     {L"Looking…", L"検索中…"},
+    {L"Looks for lyrics", L"歌詞を探す"},
     {L"Low battery", L"バッテリー残量低下"},
+    {L"Lyrics are looked for only for songs (with an artist, 45 s to 20 min, not videos)", L"歌詞は曲の場合のみ検索されます（アーティストあり、45 秒〜20 分、動画以外）"},
+    {L"Lyrics are off for this app (in the settings, What's playing)", L"このアプリの歌詞はオフです（設定の「再生中」）"},
     {L"Lyrics color", L"歌詞の色"},
     {L"Lyrics color (own)", L"歌詞の色（専用）"},
     {L"Lyrics from lrclib.net", L"歌詞は lrclib.net から"},
@@ -16902,6 +17069,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Off with no animations (“None”)", L"アニメーションなし（「なし」）のときはオフ"},
     {L"Off with the bar style", L"バースタイルではオフ"},
     {L"Off with the notches (Fixed style)", L"ノッチ使用時はオフ（固定スタイル）"},
+    {L"Off: nothing is sent", L"オフ: 何も送信されません"},
     {L"Off: only the app's icon peeks out of the line", L"オフ: 線からアプリのアイコンだけがのぞきます"},
     {L"Oldest first", L"古い順"},
     {L"On", L"オン"},
@@ -17145,12 +17313,14 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Temperature", L"温度"},
     {L"Text", L"文字"},
     {L"The app in focus on this monitor (its icon and name)", L"このモニターでフォーカス中のアプリ（アイコンと名前）"},
+    {L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net", L"再生していたアプリ。クリックするとそのアプリの歌詞がオフになり、その曲の情報は lrclib.net に送信されません"},
     {L"The bar doesn't minimize", L"バーは最小化されません"},
     {L"The bars' color; the rainbow gives each bar its own, going around slowly", L"バーの色。レインボーでは各バーが自分の色になり、ゆっくり移り変わります"},
     {L"The battery's charge while a laptop charges", L"ノート PC の充電中のバッテリー残量"},
     {L"The cover's", L"ジャケットの色"},
     {L"The dock is set up in Windhawk", L"Dock は Windhawk で設定します"},
     {L"The effect shown when the wallpaper changes", L"壁紙の変更時に表示するエフェクト"},
+    {L"The favorite's drive isn't connected", L"お気に入りのドライブが接続されていません"},
     {L"The folder with your wallpapers", L"壁紙のフォルダー"},
     {L"The icons'", L"アイコンの色"},
     {L"The island follows the mouse between screens.", L"アイランドは画面間でマウスに追従します。"},
@@ -17162,7 +17332,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"The keys below send the island to its line, and again bring it back", L"下のキーでアイランドを線に最小化し、もう一度押すと元に戻します"},
     {L"The komorebi buttons also start and stop masir, so focus follows the mouse", L"komorebi のボタンで masir も開始/停止します（フォーカスがマウスに追従）"},
     {L"The komorebi buttons also start and stop whkd, its shortcut helper", L"komorebi のボタンで、ショートカット ヘルパーの whkd も開始/停止します"},
-    {L"The line sung now on the pill (place it in the order above), all of them in its panel; from lrclib.net", L"今歌われている行をカプセルに表示（上の順序で配置）、全文はパネルに表示。lrclib.net から取得"},
+    {L"The line sung now on the pill (place it in the order above), all of them in its panel. Each song's title and artist are sent to lrclib.net (songs only: not videos, voice messages or the apps turned off below)", L"今歌われている行をカプセルに表示（上の順序で配置）、全文はパネルに表示。各曲の曲名とアーティスト名が lrclib.net に送信されます（曲のみ：動画、ボイスメッセージ、下でオフにしたアプリは除く）"},
     {L"The line's color, on the pill and lit in the panel", L"歌詞の行の色（カプセルと、パネルでのハイライト）"},
     {L"The list stays open after you click an icon (In the pill style)", L"アイコンをクリックした後もリストを開いたままにします（「カプセル内」スタイル）"},
     {L"The next alarm that's on", L"次にオンのアラーム"},
@@ -17214,6 +17384,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"UV index", L"紫外線指数"},
     {L"Ultrawide vertical stack", L"ウルトラワイド縦積み"},
     {L"Unavailable", L"利用不可"},
+    {L"Up to 40 favorite files", L"お気に入りのファイルは 40 個まで"},
     {L"Upcoming events", L"今後のイベント"},
     {L"Upcoming holidays", L"今後の祝日"},
     {L"Update", L"更新"},
@@ -17378,6 +17549,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Smoother animations: while a panel is open the pill keeps its "
          L"size, and panels close without cutting their sides.\n"
          L"Folders can be sorted by name, date, size or type.\n"
+         L"Favorite files: a star on a file keeps it with the pinned "
+         L"folders, to open it or copy it or its path.\n"
          L"The dock: profile pictures on icons stay sharp, and apps with "
          L"more windows no longer show an extra plate.\n"
          L"#Fixes\n"
@@ -17409,6 +17582,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Animações mais suaves: com um painel aberto a pílula mantém o "
          L"tamanho, e os painéis fecham sem cortar as laterais.\n"
          L"Pastas podem ser ordenadas por nome, data, tamanho ou tipo.\n"
+         L"Arquivos favoritos: a estrela num arquivo o deixa junto das "
+         L"pastas fixadas, para abrir, copiar ou copiar o caminho.\n"
          L"Dock: a foto do perfil nos ícones fica nítida, e apps com várias "
          L"janelas não mostram mais uma placa extra.\n"
          L"#Correções\n"
@@ -17430,6 +17605,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#改进\n"
          L"动画更流畅：面板打开时胶囊保持大小，面板关闭时不再裁切两侧。\n"
          L"文件夹可按名称、日期、大小或类型排序。\n"
+         L"收藏文件：给文件加星标后会和固定的文件夹放在一起，可打开、复制文件或复制路径。\n"
          L"程序坞：图标上的个人资料照片保持清晰，多窗口应用不再显示多余的底板。\n"
          L"#修复\n"
          L"关闭模组时会正确恢复任务栏的自动隐藏和图标。\n"
@@ -17460,6 +17636,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Flüssigere Animationen: Bei offenem Bereich behält die Kapsel "
          L"ihre Größe, und Bereiche schließen ohne abgeschnittene Seiten.\n"
          L"Ordner lassen sich nach Name, Datum, Größe oder Typ sortieren.\n"
+         L"Lieblingsdateien: Ein Stern hält eine Datei bei den angehefteten "
+         L"Ordnern, zum Öffnen, Kopieren oder Pfad kopieren.\n"
          L"Dock: Profilbilder auf Symbolen bleiben scharf, und Apps mit "
          L"mehreren Fenstern zeigen keine zusätzliche Platte mehr.\n"
          L"#Korrekturen\n"
@@ -17492,6 +17670,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Animaciones más suaves: con un panel abierto la píldora mantiene "
          L"su tamaño, y los paneles se cierran sin cortar los lados.\n"
          L"Las carpetas se pueden ordenar por nombre, fecha, tamaño o tipo.\n"
+         L"Archivos favoritos: una estrella deja el archivo junto a las "
+         L"carpetas fijadas, para abrirlo, copiarlo o copiar su ruta.\n"
          L"Dock: las fotos de perfil en los iconos se ven nítidas, y las "
          L"apps con varias ventanas ya no muestran una placa extra.\n"
          L"#Correcciones\n"
@@ -17524,6 +17704,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Более плавные анимации: при открытой панели капсула сохраняет "
          L"размер, а панели закрываются, не обрезая края.\n"
          L"Папки можно сортировать по имени, дате, размеру или типу.\n"
+         L"Избранные файлы: звёздочка держит файл рядом с закреплёнными "
+         L"папками, чтобы открыть, скопировать его или его путь.\n"
          L"Док: фото профиля на значках остаются чёткими, а у приложений с "
          L"несколькими окнами больше нет лишней подложки.\n"
          L"#Исправления\n"
@@ -17547,6 +17729,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#改善\n"
          L"アニメーションがよりなめらかに：パネルを開いている間はカプセルのサイズが変わらず、パネルは端を切らずに閉じます。\n"
          L"フォルダーを名前、日付、サイズ、種類で並べ替えられます。\n"
+         L"お気に入りファイル: ファイルに星を付けると固定したフォルダーと一緒に表示され、開く・コピー・パスのコピーができます。\n"
          L"Dock：アイコン上のプロフィール写真がくっきり表示され、複数のウィンドウを持つアプリに余分な台が表示されなくなりました。\n"
          L"#修正\n"
          L"Mod をオフにすると、タスク バーの自動非表示とアイコンが正しく元に戻ります。\n"
@@ -18500,15 +18683,16 @@ std::vector<BrightnessMonitor> ReadBrightnessMonitors() {
     return list;
 }
 
-// From 0 to 100 (the screen's monitor's, or the first one's), -1 if no
-// monitor answers.
+// From 0 to 100 (the screen's monitor's, or without a screen the first
+// one's), -1 if none answers. A screen that doesn't answer (no DDC/CI) has
+// none: not another monitor's, which WriteBrightness wouldn't change there.
 // Only the monitors asked about are asked over DDC/CI (slow, and some
 // flicker).
 int ReadBrightness(HMONITOR screen) {
     int level = -1;
     HMONITOR builtIn = BuiltInScreen();
     for (const bool any : {false, true}) {
-        if (!any && !screen) {
+        if (any != !screen) {
             continue;
         }
         ForEachPhysicalMonitor(
@@ -19092,6 +19276,13 @@ constexpr UINT_PTR kLyricsTimerId = 54;
 // Island::StartWhatsNewNotice).
 constexpr UINT_PTR kWhatsNewTimerId = 55;
 constexpr UINT kWhatsNewDelayMs = 10000;
+// The battery charge's fill moving (see Island::UpdateFillTimer): a frame
+// this often, not every one (it changes over minutes).
+constexpr UINT_PTR kChargeFillTimerId = 56;
+constexpr UINT kChargeFillMs = 66;
+// An alarm's sound, over and over until its Stop, at most this long (like a
+// call's, see kUrgentSoundMaxMs).
+constexpr UINT_PTR kAlarmSoundStopTimerId = 57;
 constexpr UINT kGlassRenewMs[] = {15000, 30000, 75000};
 constexpr UINT kUrgentSoundMaxMs = 60000;
 constexpr UINT kPinDelayMs = 2000;
@@ -20979,6 +21170,15 @@ class Panel {
     // (`size`: the panels' chosen size, islandPanelSize / 100; its scale is
     // that times its own monitor's.)
     void OpenWindowed(float size, PCWSTR title);
+    // What it draws on: its window's own target once made (see
+    // RenderWindowed), or the layered canvas'. Pictures are made on it.
+    ID2D1RenderTarget* DrawingTarget() const {
+        return m_windowed ? (ID2D1RenderTarget*)m_windowTarget.get()
+                          : m_canvas.target.get();
+    }
+    // Its window's target just made (pictures made before it can't be drawn
+    // on it).
+    virtual void OnWindowTargetMade() {}
 
    protected:
     // (A window of its own:) its size changed, or it's in front again
@@ -20996,10 +21196,9 @@ class Panel {
     // Its icons (Windows' settings one, big and small), freed with it.
     HICON m_windowIcons[2]{};
     // Drawn on the GPU straight onto it (its see-through parts show the
-    // Mica), made with its first frame; how long the last frame took.
+    // Mica), made with its first frame.
     ID2D1Factory* m_factory = nullptr;
     winrt::com_ptr<ID2D1HwndRenderTarget> m_windowTarget;
-    double m_frameMs = 0;
     void RenderWindowed();
     // Where its contents are drawn in it (a view smaller than the window, in
     // its middle).
@@ -21270,10 +21469,15 @@ void Panel::OpenWindowed(float size, PCWSTR title) {
                                    (int)((work.right - work.left) * 0.9f));
         const int height = std::min((int)std::round(840 * scale),
                                     (int)((work.bottom - work.top) * 0.9f));
-        SetWindowPos(m_hwnd, nullptr,
-                     work.left + (work.right - work.left - width) / 2,
-                     work.top + (work.bottom - work.top - height) / 2, width,
-                     height, SWP_NOZORDER | SWP_NOACTIVATE);
+        const int left = work.left + (work.right - work.left - width) / 2;
+        const int top = work.top + (work.bottom - work.top - height) / 2;
+        // Onto that monitor first (made on the default one, it gets that
+        // monitor's scale there, WM_DPICHANGED resizing it), then its size,
+        // already in that scale: not scaled twice.
+        SetWindowPos(m_hwnd, nullptr, left, top, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(m_hwnd, nullptr, left, top, width, height,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
         m_windowDpi = GetDpiForWindow(m_hwnd);
     }
     // Its own monitor's scale (where it was put back after a restart too),
@@ -21796,8 +22000,6 @@ void Panel::RenderWindowed() {
     if (client.right <= 0 || client.bottom <= 0 || IsIconic(m_hwnd)) {
         return;
     }
-    LARGE_INTEGER start, end, frequency;
-    QueryPerformanceCounter(&start);
     const D2D1_SIZE_U size{(UINT32)client.right, (UINT32)client.bottom};
     if (!m_windowTarget) {
         // (Pixels, like the panels: 96 DPI. Not waiting for the screen: the
@@ -21817,6 +22019,7 @@ void Panel::RenderWindowed() {
         // (ClearType needs an opaque background.)
         m_windowTarget->SetTextAntialiasMode(
             D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        OnWindowTargetMade();
     } else if (const D2D1_SIZE_U now = m_windowTarget->GetPixelSize();
                now.width != size.width || now.height != size.height) {
         m_windowTarget->Resize(size);
@@ -21852,12 +22055,7 @@ void Panel::RenderWindowed() {
         // as when its own drawing device is lost.)
         m_windowTarget = nullptr;
         OnDrawingDeviceLost();
-        return;
     }
-    QueryPerformanceCounter(&end);
-    QueryPerformanceFrequency(&frequency);
-    m_frameMs =
-        (end.QuadPart - start.QuadPart) * 1000.0 / (double)frequency.QuadPart;
 }
 
 LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
@@ -22449,11 +22647,30 @@ std::vector<Holiday> ParseHolidays(const std::wstring& json) {
     return holidays;
 }
 
+// A request under way that another thread can end at once (see
+// CancelHttps): its handle, closed there, makes WinHTTP's waiting call give
+// up; and once canceled, no other one starts.
+struct HttpsCancel {
+    SRWLOCK lock = SRWLOCK_INIT;
+    HINTERNET request = nullptr;
+    bool canceled = false;
+};
+
+void CancelHttps(HttpsCancel* cancel) {
+    AcquireSRWLockExclusive(&cancel->lock);
+    cancel->canceled = true;
+    if (cancel->request) {
+        WinHttpCloseHandle(std::exchange(cancel->request, nullptr));
+    }
+    ReleaseSRWLockExclusive(&cancel->lock);
+}
+
 bool HttpsGet(const std::wstring& url,
               std::vector<BYTE>* data,
               size_t maxSize,
               DWORD waitMs = 3000,
-              const std::atomic<bool>* stop = nullptr);
+              const std::atomic<bool>* stop = nullptr,
+              HttpsCancel* cancel = nullptr);
 bool ReadTextFile(PCWSTR path, size_t limit, std::wstring* text);
 
 struct HolidayRequest {
@@ -26782,8 +26999,9 @@ void LookForKomorebi() {
     g_whkdFound = !FindKomorebiTool(L"whkd.exe", L"whkd").empty();
 }
 
-// komorebi's process in this session, or 0 if it doesn't run.
-DWORD KomorebiProcessId() {
+// A program's process in this session (its file's name), or 0 if it doesn't
+// run.
+DWORD SessionProcessId(PCWSTR exe) {
     DWORD session = 0;
     ProcessIdToSessionId(GetCurrentProcessId(), &session);
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -26796,7 +27014,7 @@ DWORD KomorebiProcessId() {
     for (BOOL more = Process32First(snapshot, &entry); more && !found;
          more = Process32Next(snapshot, &entry)) {
         DWORD its = 0;
-        if (_wcsicmp(entry.szExeFile, L"komorebi.exe") == 0 &&
+        if (_wcsicmp(entry.szExeFile, exe) == 0 &&
             ProcessIdToSessionId(entry.th32ProcessID, &its) &&
             its == session) {
             found = entry.th32ProcessID;
@@ -26804,6 +27022,11 @@ DWORD KomorebiProcessId() {
     }
     CloseHandle(snapshot);
     return found;
+}
+
+// komorebi's process in this session, or 0 if it doesn't run.
+DWORD KomorebiProcessId() {
+    return SessionProcessId(L"komorebi.exe");
 }
 
 bool KomorebiRunning() {
@@ -27075,11 +27298,12 @@ void EndKomorebiJob(HANDLE* thread, HANDLE* stop) {
 // own windows is (defined further down).
 void FrontLastApp();
 
-// One of Windows' accessibility apps that run with UI access (the
-// magnifier, the on-screen keyboard) started through Explorer: the 32-bit
-// Windhawk process sees SysWOW64 as System32, which doesn't have them, and
-// Windows can't start them from the Sysnative path (a 64-bit service starts
-// them). False if it couldn't.
+// One of Windows' 64-bit tools (the magnifier and the on-screen keyboard,
+// which run with UI access; Task Manager) started through Explorer: the
+// 32-bit Windhawk process sees SysWOW64 as System32, which doesn't have
+// them, and Windows can't start them from the Sysnative path (a 64-bit
+// service starts them). False if Explorer couldn't be started (whether the
+// tool then started isn't known here, see StartMagnifier).
 bool StartWithUiAccess(PCWSTR program) {
     WCHAR windows[MAX_PATH];
     if (!GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
@@ -27091,6 +27315,15 @@ bool StartWithUiAccess(PCWSTR program) {
         L"\"" + std::wstring(windows) + L"\\System32\\" + program + L"\"";
     return (INT_PTR)ShellExecute(nullptr, L"open", explorer.c_str(),
                                  path.c_str(), nullptr, SW_SHOWNORMAL) > 32;
+}
+
+// Task Manager, started itself (Ctrl+Shift+Esc pressed for it is dropped
+// with an elevated window in front, and mixes with keys held), or with
+// those keys.
+void OpenTaskManager() {
+    if (!StartWithUiAccess(L"Taskmgr.exe")) {
+        PressKeys({VK_CONTROL, VK_SHIFT, VK_ESCAPE});
+    }
 }
 
 // The controls that are a shortcut (from the control center or the pill).
@@ -27119,7 +27352,7 @@ void RunControlShortcut(ControlId id) {
             PressKeys({VK_LWIN, 'V'});
             break;
         case ControlId::TaskManager:
-            PressKeys({VK_CONTROL, VK_SHIFT, VK_ESCAPE});
+            OpenTaskManager();
             break;
         case ControlId::Calculator:
             ShellExecute(nullptr, L"open", L"calc.exe", nullptr, nullptr,
@@ -30214,6 +30447,15 @@ class ControlPanel : public Panel {
             Render();
         }
     }
+    // The settings shown: laid out again, a list in them changed elsewhere
+    // (an app seen playing, see SettingKind::LyricsApps).
+    void RefreshSettings() {
+        if (IsOpen() && m_view == View::Settings && !m_dragging &&
+            m_dragId < 0) {
+            Layout();
+            Render();
+        }
+    }
     // Only the sound (opened from the volume, like on macOS), only the
     // battery and the power mode (from the battery), only the screen's
     // brightness (from its item), or all of it. Returns whether that changed;
@@ -30385,6 +30627,11 @@ class ControlPanel : public Panel {
     bool OnChar(WCHAR c) override;
     bool OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
     void OnDestroy() override;
+    // (The settings' window: the apps' icons made on its target.)
+    void OnWindowTargetMade() override {
+        m_lyricsAppIcons.clear();
+        PrepareLyricsAppIcons();
+    }
     // (Keys being recorded: no more.)
     void OnClose() override { StartShortcutRecording(false); }
 
@@ -30462,6 +30709,7 @@ class ControlPanel : public Panel {
         AppPlaceRemove,  // An app's "x" (entry).
         AppPlaceAdd,     // An open app to give a place (its index).
         AppItemChip,     // An app's icon to show or hide (see m_appItemChips).
+        LyricsAppChip,   // An app's lyrics on or off (its LyricsApps index).
         // The profiles (index: the profile's position; on another island
         // than the main one, its count for the main one's settings), the
         // "+" beside their title, and the one being edited.
@@ -31053,6 +31301,9 @@ class ControlPanel : public Panel {
         // The profiles (see m_profileChips).
         Profiles,
         Monitors,
+        // The apps that look for song lyrics, each on or off (see
+        // m_lyricsAppChips).
+        LyricsApps,
         // The minimize shortcut's keys (see m_shortcutChip).
         Shortcut,
         // The pages about the mod: the dock's options (in Windhawk), about
@@ -31293,6 +31544,12 @@ class ControlPanel : public Panel {
     }
     std::vector<std::wstring> m_openApps;
     std::vector<D2D1_RECT_F> m_openAppChips;
+    // The apps' cards under "Apps that look for lyrics" (see LyricsApps),
+    // and their icons (made in PrepareLyricsAppIcons, outside Draw).
+    std::vector<D2D1_RECT_F> m_lyricsAppChips;
+    std::vector<KeptAppIcon> m_lyricsAppIcons;
+    void PrepareLyricsAppIcons();
+    ID2D1Bitmap* LyricsAppBitmap(const std::wstring& appId) const;
     void ListOpenApps();
     // The ready place under a point of a grid (0-8), or -1.
     static int PlaceDotAt(const D2D1_RECT_F& grid, POINT pt);
@@ -31764,6 +32021,8 @@ struct MediaState {
     std::wstring appId;
     std::wstring title;
     std::wstring artist;
+    // A video (or a picture), as the app says: no lyrics for it.
+    bool video = false;
     bool playing = false;
     bool canPrevious = false;
     bool canNext = false;
@@ -32071,6 +32330,15 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                         if (properties) {
                             state.title = properties.Title();
                             state.artist = properties.Artist();
+                            // (Browsers say "music" for anything: only a
+                            // video said so counts.)
+                            if (auto type = properties.PlaybackType()) {
+                                using winrt::Windows::Media::MediaPlaybackType;
+                                const MediaPlaybackType kind = type.Value();
+                                state.video =
+                                    kind == MediaPlaybackType::Video ||
+                                    kind == MediaPlaybackType::Image;
+                            }
                         }
                         if (auto playback = session.GetPlaybackInfo()) {
                             state.playing =
@@ -32657,6 +32925,18 @@ class MediaPanel : public Panel {
     double m_mixerReveal = 0, m_mixerRevealVelocity = 0;
     bool m_decorating = false;
     D2D1_RECT_F m_playingVolume{}, m_playingVolumeIcon{};
+    // The app whose volume is under the player: the one playing, or the one
+    // dragged until it's let go.
+    int PlayingVolumeApp() const {
+        return m_dragging == Part::PlayingVolume ? m_dragApp : m_playingApp;
+    }
+    // Where the mouse is on its slider (0 to 1; none laid out: 0).
+    float PlayingVolumeAt(POINT pt) const {
+        const float width = m_playingVolume.right - m_playingVolume.left;
+        return width > 0
+                   ? std::clamp((pt.x - m_playingVolume.left) / width, 0.0f, 1.0f)
+                   : 0.0f;
+    }
     int m_playingApp = -1;
     double m_playingHover = 0, m_playingHoverVelocity = 0;
     double m_deviceMute = -1, m_deviceMuteVelocity = 0;
@@ -37348,9 +37628,10 @@ class JsonReader {
 // An https address's JSON (UTF-8).
 bool HttpsGetJson(const std::wstring& url,
                   Json* json,
-                  const std::atomic<bool>* stop = nullptr) {
+                  const std::atomic<bool>* stop = nullptr,
+                  HttpsCancel* cancel = nullptr) {
     std::vector<BYTE> data;
-    if (!HttpsGet(url, &data, 512 * 1024, 3000, stop)) {
+    if (!HttpsGet(url, &data, 512 * 1024, 3000, stop, cancel)) {
         return false;
     }
     std::wstring text;
@@ -37733,6 +38014,8 @@ struct SongLyrics {
     // looked for again after a while (kLyricsRetrySeconds), from when.
     bool failed = false;
     double failedAt = 0;
+    // Not looked for (see LyricsSkipFor): why, or kLyricsSkipNone.
+    int skip = 0;
 };
 constexpr double kLyricsRetrySeconds = 60;
 // The most lines a song's lyrics keep, and the longest line (an answer
@@ -37748,6 +38031,195 @@ constexpr UINT WM_APP_LYRICS = WM_APP + 99;
 
 std::wstring LyricsKey(const MediaState& media) {
     return media.title + L"\n" + media.artist;
+}
+
+// Lyrics are looked for only for a song, so only a song's title and artist
+// ever go to lrclib.net: with an artist, neither of them the app's own name
+// (a WhatsApp voice message is "WhatsApp" without an artist; a browser tab,
+// its page), as long as a song (kLyricsMinSeconds to kLyricsMaxSeconds), not
+// a video (as the app says); and not from an app whose lyrics are turned off
+// in the settings (see LyricsApps). Otherwise why, shown in their panel.
+enum LyricsSkip { kLyricsSkipNone, kLyricsSkipNotSong, kLyricsSkipApp };
+constexpr double kLyricsMinSeconds = 45;
+constexpr double kLyricsMaxSeconds = 20 * 60;
+
+// Only the letters and digits, in lowercase: names compared as they're read
+// ("AC/DC" and "ac dc" alike; any script, see IsCharAlphaNumeric).
+std::wstring LyricsFolded(std::wstring_view text) {
+    std::wstring folded;
+    for (WCHAR c : text) {
+        if (IsCharAlphaNumeric(c)) {
+            folded += c;
+        }
+    }
+    if (!folded.empty()) {
+        CharLowerBuff(folded.data(), (DWORD)folded.size());
+    }
+    return folded;
+}
+
+int LyricsSkipFor(const MediaState& media,
+                  const std::wstring& appName,
+                  bool appOff) {
+    if (appOff) {
+        return kLyricsSkipApp;
+    }
+    const std::wstring title = LyricsFolded(media.title);
+    const std::wstring artist = LyricsFolded(media.artist);
+    const std::wstring app = LyricsFolded(appName);
+    if (media.video || title.empty() || artist.empty() || title == artist ||
+        (!app.empty() && (title == app || artist == app)) ||
+        media.duration < kLyricsMinSeconds ||
+        media.duration > kLyricsMaxSeconds) {
+        return kLyricsSkipNotSong;
+    }
+    return kLyricsSkipNone;
+}
+
+// A title without its extras ("Song (Remastered)", "Song - Live"), folded.
+std::wstring LyricsBareTitle(std::wstring_view title) {
+    size_t cut = title.size();
+    for (PCWSTR mark : {L" - ", L" (", L" [", L" feat."}) {
+        const size_t at = title.find(mark);
+        if (at != std::wstring_view::npos && at > 0) {
+            cut = std::min(cut, at);
+        }
+    }
+    return LyricsFolded(title.substr(0, cut));
+}
+
+// Whether a song lrclib.net's search found is the one asked for (it answers
+// with whatever is close: a voice message once got a song's lyrics): the
+// same title (with or without its extras), one of the artists ("A, B",
+// "A & B", "A feat. B"), and the same length within 10 s when both are
+// known.
+bool LyricsResultMatches(const Json& song,
+                         const std::wstring& title,
+                         const std::wstring& artist,
+                         double duration) {
+    const std::wstring& foundTitle = song[L"trackName"].string;
+    const std::wstring bare = LyricsBareTitle(title);
+    const bool sameTitle =
+        !LyricsFolded(title).empty() &&
+        (LyricsFolded(foundTitle) == LyricsFolded(title) ||
+         (!bare.empty() && LyricsBareTitle(foundTitle) == bare));
+    const std::wstring found = LyricsFolded(song[L"artistName"].string);
+    bool sameArtist = !found.empty() && found == LyricsFolded(artist);
+    std::wstring parts = artist;
+    if (!parts.empty()) {
+        CharLowerBuff(parts.data(), (DWORD)parts.size());
+    }
+    for (PCWSTR mark : {L" feat. ", L" feat ", L" ft. ", L" & ", L" x ",
+                        L" and ", L",", L";", L"/"}) {
+        for (size_t at = parts.find(mark); at != std::wstring::npos;
+             at = parts.find(mark, at + 1)) {
+            parts.replace(at, wcslen(mark), L"\n");
+        }
+    }
+    size_t start = 0;
+    while (!sameArtist && !found.empty() && start <= parts.size()) {
+        size_t end = parts.find(L'\n', start);
+        if (end == std::wstring::npos) {
+            end = parts.size();
+        }
+        const std::wstring part =
+            LyricsFolded(std::wstring_view(parts).substr(start, end - start));
+        // (A short name only whole: "a" is in every name.)
+        sameArtist = !part.empty() &&
+                     (part == found ||
+                      (std::min(part.size(), found.size()) >= 3 &&
+                       (found.find(part) != std::wstring::npos ||
+                        part.find(found) != std::wstring::npos)));
+        start = end + 1;
+    }
+    const double foundDuration = song[L"duration"].Number();
+    const bool sameLength = duration <= 0 || foundDuration <= 0 ||
+                            std::fabs(foundDuration - duration) <= 10;
+    return sameTitle && sameArtist && sameLength;
+}
+
+// The apps seen playing, each with its lyrics on or off (off: never looked
+// for, so nothing of its media is sent; see SettingKind::LyricsApps). This
+// account's (see UserValueName); read once, and again after a backup is
+// restored (g_lyricsAppsRead). On the island's thread.
+struct LyricsApp {
+    std::wstring appId;
+    bool off = false;
+};
+std::vector<LyricsApp> g_lyricsApps;
+bool g_lyricsAppsRead = false;
+constexpr size_t kLyricsAppsKept = 12;
+// The room to read them (12 app IDs, a path at most each).
+constexpr size_t kLyricsAppsRoom = 8192;
+// Their cards in the settings: how tall (DIPs), and how many side by side
+// (two once each has room for its icon, name and switch).
+constexpr float kLyricsAppCard = 46;
+size_t LyricsAppsColumns(float width, float scale) {
+    return width >= std::round(400 * scale) ? 2 : 1;
+}
+
+std::vector<LyricsApp>& LyricsApps() {
+    if (!g_lyricsAppsRead) {
+        g_lyricsAppsRead = true;
+        g_lyricsApps.clear();
+        // A line each: "1|<app ID>" (1: off, 0: on).
+        const std::wstring text =
+            GetUserStringValue(L"lyricsApps", kLyricsAppsRoom);
+        size_t start = 0;
+        while (start < text.size() && g_lyricsApps.size() < kLyricsAppsKept) {
+            size_t end = text.find(L'\n', start);
+            if (end == std::wstring::npos) {
+                end = text.size();
+            }
+            const std::wstring_view line(text.data() + start, end - start);
+            if (line.size() > 2 && line[1] == L'|') {
+                g_lyricsApps.push_back(
+                    {std::wstring(line.substr(2)), line[0] == L'1'});
+            }
+            start = end + 1;
+        }
+    }
+    return g_lyricsApps;
+}
+
+void SaveLyricsApps() {
+    std::wstring text;
+    for (const auto& app : LyricsApps()) {
+        text += (app.off ? L"1|" : L"0|") + app.appId + L"\n";
+    }
+    SetUserStringValue(L"lyricsApps", text.c_str());
+}
+
+bool LyricsAppOff(const std::wstring& appId) {
+    for (const auto& app : LyricsApps()) {
+        if (app.appId == appId) {
+            return app.off;
+        }
+    }
+    return false;
+}
+
+// An app seen playing: listed, with its lyrics on. A full list lets the
+// oldest one that's on go (the ones turned off stay: they matter). True if
+// it's new there.
+bool NoteLyricsApp(const std::wstring& appId) {
+    auto& apps = LyricsApps();
+    if (appId.empty() || appId.size() > MAX_PATH ||
+        std::any_of(apps.begin(), apps.end(),
+                    [&](const LyricsApp& app) { return app.appId == appId; })) {
+        return false;
+    }
+    if (apps.size() >= kLyricsAppsKept) {
+        const auto on = std::find_if(apps.begin(), apps.end(),
+                                     [](const LyricsApp& app) { return !app.off; });
+        if (on == apps.end()) {
+            return false;
+        }
+        apps.erase(on);
+    }
+    apps.push_back({appId, false});
+    SaveLyricsApps();
+    return true;
 }
 
 // An LRC text's lines ("[mm:ss.xx] words"; a line may have several times),
@@ -37784,9 +38256,10 @@ std::vector<LyricLine> ParseLrc(const std::wstring& text) {
                (words.back() == L'\r' || iswspace(words.back()))) {
             words.pop_back();
         }
-        while (!words.empty() && iswspace(words.front())) {
-            words.erase(words.begin());
-        }
+        words.erase(words.begin(),
+                    std::find_if_not(words.begin(), words.end(), [](WCHAR c) {
+                        return iswspace(c) != 0;
+                    }));
         words.resize(std::min(words.size(), kLyricsMaxLineLength));
         for (double at : times) {
             if (lines.size() < kLyricsMaxLines) {
@@ -37838,8 +38311,10 @@ bool CopyLyrics(const std::wstring& key, SongLyrics* lyrics) {
     return found;
 }
 
-// Set as the island goes: a search under way gives up (see HttpsGet).
+// Set as the island goes: a search under way gives up (see HttpsGet), its
+// request closed at once (g_lyricsCancel).
 std::atomic<bool> g_lyricsStop{false};
+HttpsCancel g_lyricsCancel;
 
 struct LyricsRequest {
     HWND notify;
@@ -37892,7 +38367,7 @@ DWORD WINAPI LyricsThreadProc(LPVOID parameter) {
     if (request->duration > 0 &&
         HttpsGetJson(L"https://lrclib.net/api/get?" + query + L"&duration=" +
                          std::to_wstring(std::lround(request->duration)),
-                     &song, &g_lyricsStop)) {
+                     &song, &g_lyricsStop, &g_lyricsCancel)) {
         take(song);
     }
     // Not found that way (another length, a live version): the closest
@@ -37901,11 +38376,17 @@ DWORD WINAPI LyricsThreadProc(LPVOID parameter) {
     Json results;
     if (!lyrics.found && !g_lyricsStop) {
         if (HttpsGetJson(L"https://lrclib.net/api/search?" + query, &results,
-                         &g_lyricsStop)) {
+                         &g_lyricsStop, &g_lyricsCancel)) {
             for (int pass = 0; pass < 2 && !lyrics.found; pass++) {
                 for (size_t i = 0; i < results.Size() && !lyrics.found; i++) {
                     if (pass == 0 &&
                         results[i][L"syncedLyrics"].string.empty()) {
+                        continue;
+                    }
+                    // (Another song's never: none rather than wrong ones.)
+                    if (!LyricsResultMatches(results[i], request->title,
+                                             request->artist,
+                                             request->duration)) {
                         continue;
                     }
                     take(results[i]);
@@ -38035,6 +38516,16 @@ class LyricsPanel : public Panel {
         // (Nothing to list: why.)
         PCWSTR empty = m_searching ? Tr(L"Looking for the lyrics…",
                                         L"Procurando a letra…")
+                       : m_lyrics.skip == kLyricsSkipApp
+                           ? Tr(L"Lyrics are off for this app (in the "
+                                L"settings, What's playing)",
+                                L"As letras estão desligadas para este app "
+                                L"(nas configurações, O que está tocando)")
+                       : m_lyrics.skip == kLyricsSkipNotSong
+                           ? Tr(L"Lyrics are looked for only for songs (with "
+                                L"an artist, 45 s to 20 min, not videos)",
+                                L"As letras só são buscadas para músicas (com "
+                                L"artista, de 45 s a 20 min, sem vídeos)")
                        : m_lyrics.failed
                            ? Tr(L"Couldn't reach lrclib.net",
                                 L"Não deu para acessar o lrclib.net")
@@ -41712,18 +42203,20 @@ void LoadTimerLengths() {
         return;
     }
     g_timer.lengthsLoaded = true;
-    g_timer.seconds =
-        std::clamp(Wh_GetIntValue(L"timerLength", 5 * 60), 1, kTimerLongest);
-    g_timer.focusSeconds =
-        std::clamp(Wh_GetIntValue(L"pomodoroFocus", 25 * 60), 1, kTimerLongest);
-    g_timer.breakSeconds =
-        std::clamp(Wh_GetIntValue(L"pomodoroBreak", 5 * 60), 1, kTimerLongest);
+    // (The account's own, see UserValueName: another account's island keeps
+    // its own.)
+    g_timer.seconds = std::clamp(GetUserIntValue(L"timerLength", 5 * 60), 1,
+                                 kTimerLongest);
+    g_timer.focusSeconds = std::clamp(
+        GetUserIntValue(L"pomodoroFocus", 25 * 60), 1, kTimerLongest);
+    g_timer.breakSeconds = std::clamp(
+        GetUserIntValue(L"pomodoroBreak", 5 * 60), 1, kTimerLongest);
 }
 
 void SaveTimerLengths() {
-    Wh_SetIntValue(L"timerLength", g_timer.seconds);
-    Wh_SetIntValue(L"pomodoroFocus", g_timer.focusSeconds);
-    Wh_SetIntValue(L"pomodoroBreak", g_timer.breakSeconds);
+    SetUserIntValue(L"timerLength", g_timer.seconds);
+    SetUserIntValue(L"pomodoroFocus", g_timer.focusSeconds);
+    SetUserIntValue(L"pomodoroBreak", g_timer.breakSeconds);
 }
 
 TimerClock& TimerClockOf(TimerMode mode) {
@@ -41834,12 +42327,17 @@ struct Alarm {
 };
 constexpr size_t kMaxAlarms = 8;
 
+// (The account's own, see UserValueName: another account's island doesn't
+// ring them. Read once, and again after a backup is restored.)
+std::vector<Alarm> g_alarms;
+bool g_alarmsRead = false;
+
 std::vector<Alarm>& Alarms() {
-    static std::vector<Alarm> alarms;
-    static bool loaded = false;
-    if (!loaded) {
-        loaded = true;
-        const std::wstring text = GetWholeStringValue(L"alarms", 256);
+    auto& alarms = g_alarms;
+    if (!g_alarmsRead) {
+        g_alarmsRead = true;
+        alarms.clear();
+        const std::wstring text = GetWholeUserStringValue(L"alarms", 256);
         size_t start = 0;
         while (start < text.size() && alarms.size() < kMaxAlarms) {
             size_t end = text.find(L'\n', start);
@@ -41867,7 +42365,7 @@ void SaveAlarms() {
                 (alarm.on ? L"1" : L"0") + L"," + (alarm.sound ? L"1" : L"0") +
                 L"\n";
     }
-    Wh_SetStringValue(L"alarms", text.c_str());
+    SetUserStringValue(L"alarms", text.c_str());
 }
 
 // An alarm's time as the clock shows times (24 or 12 hours); with 12, its AM
@@ -41988,7 +42486,11 @@ class TimerPanel : public Panel {
         m_pageInVelocity = 0;
     }
 
-    void OnClose() override { EndTyping(true); }
+    void OnClose() override {
+        EndTyping(true);
+        SaveWheelsTurned();
+    }
+    void OnDestroy() override { SaveWheelsTurned(); }
 
     bool AnimateContents(double dt) override {
         bool moving = SpringTowards(m_tabKnob, m_tabKnobVelocity, m_tab, 0.3,
@@ -42453,8 +42955,9 @@ class TimerPanel : public Panel {
         SetWheelValue(wheel, WrapWheel(wheel, WheelValue(wheel) + steps));
         m_wheelOffset[wheel] = std::clamp(m_wheelOffset[wheel] + steps, -2.0,
                                           2.0);
+        // (Kept as the panel closes: not a storage write per notch.)
         if (save) {
-            SaveWheels();
+            m_wheelsTurned = true;
         }
         Changed();
         StartIslandAnimation();
@@ -42462,7 +42965,16 @@ class TimerPanel : public Panel {
 
     void SaveWheels() {
         SaveTimerLengths();
+        m_wheelsTurned = false;
     }
+
+    // Turned with the wheel or the arrows (see StepWheel): kept now.
+    void SaveWheelsTurned() {
+        if (m_wheelsTurned) {
+            SaveWheels();
+        }
+    }
+    bool m_wheelsTurned = false;
 
     // The wheel after this one on its page (for typing), or -1.
     int NextWheel(int wheel) const {
@@ -45772,6 +46284,10 @@ constexpr FolderPlace kFolderPlaces[] = {
      L"Conexões de rede"},
 };
 constexpr WCHAR kPlacePrefix[] = L"place:";
+// A favorite file among the pins ("file:<its path>"), starred on its row:
+// shown with them, a click opens it, its buttons copy it or its path.
+constexpr WCHAR kFilePinPrefix[] = L"file:";
+constexpr size_t kMostFavoriteFiles = 40;
 
 const FolderPlace* FindFolderPlace(std::wstring_view token) {
     for (const auto& place : kFolderPlaces) {
@@ -46024,6 +46540,9 @@ struct FolderListJob {
     // The filter the items were cut with (a folder with too many for the
     // column; All: they weren't filtered).
     FolderFilter filtered = FolderFilter::All;
+    // Set as its panel goes (see FoldersPanel::OnDestroy): a long read
+    // gives up.
+    std::shared_ptr<std::atomic<bool>> stop;
 };
 // Tells the list a folder shown changed (wParam: the watched set's number,
 // lParam: the folder's place in it; see FolderWatchThreadProc).
@@ -46414,8 +46933,8 @@ DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
                     more = true;
                     break;
                 }
-                // (A long read stops once the panel is gone.)
-                if (count % 4096 == 4095 && !IsWindow(job->panel)) {
+                // (A long read stops once the panel goes.)
+                if (count % 256 == 255 && job->stop && *job->stop) {
                     break;
                 }
                 const bool isFolder =
@@ -46435,6 +46954,12 @@ DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
         }
         if (unredirected) {
             Wow64RevertWow64FsRedirection(redirection);
+        }
+        // (Nothing more to do for a panel gone.)
+        if (job->stop && *job->stop) {
+            folders.clear();
+            files.clear();
+            more = false;
         }
         job->items = std::move(folders);
         job->items.insert(job->items.end(),
@@ -46520,7 +47045,7 @@ DWORD WINAPI FolderPickThreadProc(LPVOID parameter) {
 // time, a few of Windows' places.
 std::vector<std::wstring> LoadFolderPins() {
     std::vector<std::wstring> pins;
-    const std::wstring text = GetWholeStringValue(L"folderPins", 16 * 1024);
+    const std::wstring text = GetWholeUserStringValue(L"folderPins", 16 * 1024);
     if (text.empty()) {
         return {std::wstring(kPlacePrefix) + L"desktop",
                 std::wstring(kPlacePrefix) + L"documents",
@@ -46548,8 +47073,74 @@ void SaveFolderPins(const std::vector<std::wstring>& pins) {
     for (const auto& pin : pins) {
         text += L"\n" + pin;
     }
-    Wh_SetStringValue(L"folderPins", text.c_str());
+    SetUserStringValue(L"folderPins", text.c_str());
 }
+
+// Where a favorite file is (see kFilePinPrefix): there; gone from its place
+// (deleted, moved or renamed: it's let go); or on a drive that isn't there
+// now (a USB drive out, a network one unreachable: kept, not shown, until
+// it's back). A network one is looked at only when `network` (a click on
+// it): an offline server takes long to answer, and the panel opens at once.
+enum class FavoritePlace { Here, Gone, Away };
+
+FavoritePlace FavoriteFilePlace(const std::wstring& path, bool network) {
+    if (path.size() < 3) {
+        return FavoritePlace::Gone;
+    }
+    const bool unc = path.starts_with(L"\\\\");
+    const std::wstring root = unc ? std::wstring() : path.substr(0, 3);
+    const bool remote =
+        unc || GetDriveType(root.c_str()) == DRIVE_REMOTE;
+    if (remote && !network) {
+        return FavoritePlace::Here;
+    }
+    // (The 32-bit Windhawk process would look in SysWOW64 for System32.)
+    PVOID redirection = nullptr;
+    const bool unredirected =
+        Wow64DisableWow64FsRedirection(&redirection) != FALSE;
+    FavoritePlace place = FavoritePlace::Here;
+    if (!remote && GetFileAttributes(root.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        place = FavoritePlace::Away;
+    } else if (const DWORD attributes = GetFileAttributes(path.c_str());
+               attributes == INVALID_FILE_ATTRIBUTES) {
+        const DWORD error = GetLastError();
+        // (Not there, or its folder isn't: gone. A server not answering:
+        // away. Not allowed to look: left as it is.)
+        place = error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND
+                    ? FavoritePlace::Gone
+                : remote ? FavoritePlace::Away
+                         : FavoritePlace::Here;
+    } else if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+        place = FavoritePlace::Gone;
+    }
+    if (unredirected) {
+        Wow64RevertWow64FsRedirection(redirection);
+    }
+    return place;
+}
+
+// A network favorite looked at on its thread (see
+// FoldersPanel::FavoritePlaceNow): what it found, away until then. The
+// thread holds a reference of its own, so it can end after the panel.
+struct FavoriteLook {
+    std::wstring path;
+    std::atomic<int> place{(int)FavoritePlace::Away};
+};
+constexpr DWORD kFavoriteLookMs = 1500;
+
+DWORD WINAPI FavoriteLookProc(LPVOID param) {
+    auto* look = (std::shared_ptr<FavoriteLook>*)param;
+    (*look)->place = (int)FavoriteFilePlace((*look)->path, true);
+    delete look;
+    return 0;
+}
+
+// A short notice on the main island (see Island::ShowStatusNotice), from a
+// panel; defined with the island.
+void ShowIslandNotice(WCHAR glyph,
+                      int color,
+                      const std::wstring& title,
+                      const std::wstring& text);
 
 // A pin's own icon and color (chosen with its pencil; the island's only, the
 // folder in Windows stays as it is).
@@ -46577,7 +47168,8 @@ constexpr int kFolderLookColors[] = {0xFF453A, 0xFF9F0A, 0xFFD60A, 0x30D158,
 // taken.
 std::vector<FolderLook> LoadFolderLooks() {
     std::vector<FolderLook> looks;
-    const std::wstring text = GetWholeStringValue(L"folderLooks", 16 * 1024);
+    const std::wstring text =
+        GetWholeUserStringValue(L"folderLooks", 16 * 1024);
     size_t at = 0;
     while (at < text.size() && looks.size() < 1000) {
         size_t end = text.find(L'\n', at);
@@ -46623,7 +47215,7 @@ void SaveFolderLooks(const std::vector<FolderLook>& looks) {
         }
         text += (text.empty() ? L"" : L"\n") + look.pin + parts;
     }
-    Wh_SetStringValue(L"folderLooks", text.c_str());
+    SetUserStringValue(L"folderLooks", text.c_str());
 }
 
 class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
@@ -46669,7 +47261,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
 
     void OnOpen() override {
         m_icons.clear();
-        m_order = FolderOrderOf(Wh_GetIntValue(L"folderOrder", 0));
+        m_order = FolderOrderOf(GetUserIntValue(L"folderOrder", 0));
         LoadPins();
         m_hover = {-1, -1};
         m_buttonHover = RowButton::None;
@@ -46687,6 +47279,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         m_dropSpot = {-1, -1};
         m_drop.Register(m_hwnd, this);
         m_shown = true;
+        SetTimer(m_hwnd, kFavoritesTimerId, kFavoritesMs, nullptr);
         Layout();
     }
 
@@ -46700,6 +47293,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         StopWatching();
         KillTimer(m_hwnd, kFolderOpenTimerId);
         KillTimer(m_hwnd, kFolderChangeTimerId);
+        KillTimer(m_hwnd, kFavoritesTimerId);
         m_changePending = false;
     }
 
@@ -47005,6 +47599,10 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     bool OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
     void OnDestroy() override {
+        // The folders being read give up first, so the waits below are
+        // short (another panel later gets a flag of its own).
+        *m_readStop = true;
+        m_readStop = std::make_shared<std::atomic<bool>>(false);
         m_drop.Revoke();
         m_dropTarget = nullptr;
         StopWatching();
@@ -47015,6 +47613,14 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             EndFileDialogThread(&thread);
         }
         m_threads.clear();
+        // (A network favorite still being looked at: canceled; it holds its
+        // own copy of what it needs.)
+        for (HANDLE thread : m_lookThreads) {
+            CancelSynchronousIo(thread);
+            WaitForSingleObject(thread, 5000);
+            CloseHandle(thread);
+        }
+        m_lookThreads.clear();
         MSG msg;
         while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_FOLDER_LIST,
                                      WM_APP_FOLDER_PICKED, PM_REMOVE)) {
@@ -47027,6 +47633,46 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     }
 
    private:
+    // Where a favorite file is, on a click (see FavoriteFilePlace): one on a
+    // network share looked at on a thread, a moment at most (a server that's
+    // off takes up to a minute to say so, and the island would stand still
+    // meanwhile); no answer by then: away, its look canceled.
+    FavoritePlace FavoritePlaceNow(const std::wstring& path) {
+        const bool remote =
+            path.starts_with(L"\\\\") ||
+            (path.size() >= 3 &&
+             GetDriveType(path.substr(0, 3).c_str()) == DRIVE_REMOTE);
+        if (!remote) {
+            return FavoriteFilePlace(path, true);
+        }
+        auto look = std::make_shared<FavoriteLook>();
+        look->path = path;
+        auto* own = new std::shared_ptr<FavoriteLook>(look);
+        HANDLE thread =
+            CreateThread(nullptr, 0, FavoriteLookProc, own, 0, nullptr);
+        if (!thread) {
+            delete own;
+            return FavoritePlace::Away;
+        }
+        if (WaitForSingleObject(thread, kFavoriteLookMs) == WAIT_OBJECT_0) {
+            CloseHandle(thread);
+            return (FavoritePlace)look->place.load();
+        }
+        CancelSynchronousIo(thread);
+        // (Still going: waited for when the panel goes; the ones done by
+        // now let go.)
+        std::erase_if(m_lookThreads, [](HANDLE each) {
+            if (WaitForSingleObject(each, 0) == WAIT_OBJECT_0) {
+                CloseHandle(each);
+                return true;
+            }
+            return false;
+        });
+        m_lookThreads.push_back(thread);
+        return FavoritePlace::Away;
+    }
+    std::vector<HANDLE> m_lookThreads;
+
     // Files dragged out: the question's parts (see AskHit).
     static constexpr int kAskCopy = 1;
     static constexpr int kAskMove = 2;
@@ -47109,17 +47755,23 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     // A folder's column read again (its rows as they are now; shown as they
     // were until then, the new ones coming in).
     void ReloadColumn(int index) {
-        const Column& column = m_columns[index];
+        Column& column = m_columns[index];
         if (column.path.empty() || column.loading) {
+            return;
+        }
+        if (column.reading) {
+            column.readAgain = true;
             return;
         }
         auto* job = new FolderListJob{m_hwnd,        column.path,  index,
                                       m_generation,  {},           column.order,
                                       column.filter, true};
+        job->stop = m_readStop;
         ForgetEndedThreads();
         if (HANDLE thread =
                 CreateThread(nullptr, 0, FolderListThreadProc, job, 0, nullptr)) {
             m_threads.push_back(thread);
+            column.reading = true;
         } else {
             delete job;
         }
@@ -47357,6 +48009,11 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         double shownAt = 0;
         // Changed meanwhile: read again (see MarkChanged).
         bool changed = false;
+        // Read again quietly now (one at a time: a folder busy with changes,
+        // like Downloads, isn't read many times at once, an older read
+        // finishing last), and once more after it.
+        bool reading = false;
+        bool readAgain = false;
         // The row opened beside it, and the first row shown.
         int opened = -1;
         int top = 0;
@@ -47614,12 +48271,36 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     }
 
     void LoadPins() {
-        // (Only the ones still known, so a row is its pin.)
+        // (Only the ones still known, so a row is its pin; a favorite file on
+        // a drive not there now kept apart, see m_hiddenPins.)
         m_pins.clear();
+        m_hiddenPins.clear();
         m_looks = LoadFolderLooks();
         Column pins;
+        bool gone = false;
         for (const auto& pin : LoadFolderPins()) {
-            if (pin.starts_with(kPlacePrefix)) {
+            if (pin.starts_with(kFilePinPrefix)) {
+                const std::wstring path = pin.substr(wcslen(kFilePinPrefix));
+                switch (FavoriteFilePlace(path, false)) {
+                    case FavoritePlace::Here: {
+                        m_pins.push_back(pin);
+                        const size_t slash = path.find_last_of(L'\\');
+                        FolderEntry entry{
+                            FolderKind::File,
+                            slash == std::wstring::npos ? path
+                                                        : path.substr(slash + 1),
+                            path, true};
+                        pins.items.push_back(std::move(entry));
+                        break;
+                    }
+                    case FavoritePlace::Away:
+                        m_hiddenPins.push_back(pin);
+                        break;
+                    case FavoritePlace::Gone:
+                        gone = true;
+                        break;
+                }
+            } else if (pin.starts_with(kPlacePrefix)) {
                 const std::wstring token = pin.substr(wcslen(kPlacePrefix));
                 if (const FolderPlace* place = FindFolderPlace(token)) {
                     m_pins.push_back(pin);
@@ -47639,6 +48320,8 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
                 pins.items.push_back({FolderKind::Folder, name, pin, true});
             }
         }
+        // (The favorite files' types, for their icons.)
+        NameFolderTypes(pins.items);
         ApplyLooks(pins);
         pins.items.push_back({FolderKind::AddFolder,
                               Tr(L"Add a folder", L"Adicionar pasta"), L""});
@@ -47649,6 +48332,99 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         m_columns.push_back(std::move(pins));
         m_first = 0;
         m_generation++;
+        if (gone) {
+            SavePins();
+        }
+    }
+
+    // The pins kept: the ones shown, and the favorite files on a drive not
+    // there now (see LoadPins).
+    void SavePins() const {
+        std::vector<std::wstring> pins = m_pins;
+        pins.insert(pins.end(), m_hiddenPins.begin(), m_hiddenPins.end());
+        SaveFolderPins(pins);
+    }
+
+    // The first column made again (a pin added or gone), the others as they
+    // were, the row they came from still lit.
+    void ReloadPinsKeepingColumns() {
+        const std::wstring opened =
+            m_columns.size() > 1 ? m_columns[1].path : std::wstring();
+        std::vector<Column> rest(m_columns.begin() + (m_columns.empty() ? 0 : 1),
+                                 m_columns.end());
+        LoadPins();
+        m_columns.insert(m_columns.end(), rest.begin(), rest.end());
+        if (!opened.empty()) {
+            const auto& items = m_columns[0].items;
+            for (size_t i = 0; i < items.size(); i++) {
+                if (items[i].pinned && ItemPath(items[i]) == opened) {
+                    m_columns[0].opened = (int)i;
+                }
+            }
+        }
+        m_first = m_columns.size() > kShownColumns
+                      ? m_columns.size() - kShownColumns
+                      : 0;
+        m_hover = {-1, -1};
+        m_buttonHover = RowButton::None;
+    }
+
+    // While it's open, now and then (see kFavoritesTimerId): a favorite file
+    // deleted, moved or on a drive taken out meanwhile goes from the list.
+    // True if one went (drawn again).
+    bool CheckFavorites() {
+        if (m_dragging || m_dragRow >= 0 || m_fileDrag.column >= 0 ||
+            m_asking) {
+            return false;
+        }
+        bool changed = false;
+        for (const auto& pin : m_pins) {
+            if (pin.starts_with(kFilePinPrefix) &&
+                FavoriteFilePlace(pin.substr(wcslen(kFilePinPrefix)), false) !=
+                    FavoritePlace::Here) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            ReloadPinsKeepingColumns();
+            StartIslandAnimation();
+            Layout();
+        }
+        return changed;
+    }
+
+    // A file's star (in a folder): a favorite now, or not anymore.
+    void ToggleFavorite(const std::wstring& path) {
+        const std::wstring pin = kFilePinPrefix + path;
+        if (const auto it = std::find(m_pins.begin(), m_pins.end(), pin);
+            it != m_pins.end()) {
+            m_pins.erase(it);
+        } else {
+            const size_t files =
+                std::count_if(m_pins.begin(), m_pins.end(),
+                              [](const std::wstring& each) {
+                                  return each.starts_with(kFilePinPrefix);
+                              }) +
+                m_hiddenPins.size();
+            if (files >= kMostFavoriteFiles) {
+                ShowIslandNotice(0xE734, 0xFF9F0A,
+                                 Tr(L"Favorites are full",
+                                    L"Os favoritos estão cheios"),
+                                 Tr(L"Up to 40 favorite files",
+                                    L"Até 40 arquivos favoritos"));
+                return;
+            }
+            m_pins.push_back(pin);
+        }
+        SavePins();
+        ReloadPinsKeepingColumns();
+        StartIslandAnimation();
+        Layout();
+    }
+
+    bool IsFavorite(const std::wstring& path) const {
+        return std::find(m_pins.begin(), m_pins.end(),
+                         kFilePinPrefix + path) != m_pins.end();
     }
 
     // The pins' own icons and colors on their rows (see m_looks).
@@ -47808,7 +48584,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         column.filter = filter;
         if (m_order != order) {
             m_order = order;
-            Wh_SetIntValue(L"folderOrder", FolderOrderValue(order));
+            SetUserIntValue(L"folderOrder", FolderOrderValue(order));
         }
         SortFolderItems(column.all, column.order);
         column.top = 0;
@@ -47870,6 +48646,7 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             auto* job = new FolderListJob{m_hwnd, column.path,
                                           spot.column + 1, m_generation, {},
                                           column.order};
+            job->stop = m_readStop;
             ForgetEndedThreads();
             if (HANDLE thread = CreateThread(nullptr, 0, FolderListThreadProc,
                                              job, 0, nullptr)) {
@@ -48008,9 +48785,16 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             const FolderEntry& item = column.items[row];
             const bool atEnd =
                 pt.x >= column.rect.right - std::round(28 * m_scale);
+            const bool file = item.kind == FolderKind::File;
             if (item.pinned && atEnd) {
                 *button = RowButton::Remove;
-            } else if (item.pinned &&
+            } else if (item.pinned && file &&
+                       pt.x >= column.rect.right - std::round(52 * m_scale)) {
+                *button = RowButton::CopyPath;
+            } else if (item.pinned && file &&
+                       pt.x >= column.rect.right - std::round(76 * m_scale)) {
+                *button = RowButton::CopyFile;
+            } else if (item.pinned && !file &&
                        pt.x >= column.rect.right - std::round(52 * m_scale)) {
                 *button = RowButton::Edit;
             } else if ((item.kind == FolderKind::Folder ||
@@ -48024,6 +48808,9 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             } else if (item.kind == FolderKind::File &&
                        pt.x >= column.rect.right - std::round(52 * m_scale)) {
                 *button = RowButton::CopyFile;
+            } else if (item.kind == FolderKind::File && !item.pinned &&
+                       pt.x >= column.rect.right - std::round(76 * m_scale)) {
+                *button = RowButton::Pin;
             }
             return {(int)i, row};
         }
@@ -48120,6 +48907,11 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     RowButton m_copiedButton = RowButton::None;
     static constexpr UINT_PTR kCopiedTimerId = 43;
     static constexpr UINT kCopiedMs = 1500;
+    // The favorite files looked at this often while it's open (see
+    // CheckFavorites), and the ones on a drive not there now (see LoadPins).
+    static constexpr UINT_PTR kFavoritesTimerId = 44;
+    static constexpr UINT kFavoritesMs = 3000;
+    std::vector<std::wstring> m_hiddenPins;
     D2D1_RECT_F m_back{};
     // The search in the folder shown last (see ApplySearch).
     std::wstring m_search;
@@ -48183,6 +48975,9 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
     Column m_leaving;
     double m_leavingAt = 0;
     std::vector<HANDLE> m_threads;
+    // The folders' reads give up once it's set (see OnDestroy).
+    std::shared_ptr<std::atomic<bool>> m_readStop =
+        std::make_shared<std::atomic<bool>>(false);
     // Icons by type (an extension, or "\\" for folders).
     std::vector<std::pair<std::wstring, winrt::com_ptr<ID2D1Bitmap>>> m_icons;
 };
@@ -48240,6 +49035,12 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return false;
         }
         Column& column = m_columns[job->column];
+        // (Its quiet read done: another one wanted meanwhile goes now, below.)
+        bool again = false;
+        if (job->quiet) {
+            column.reading = false;
+            again = std::exchange(column.readAgain, false);
+        }
         // (The order or the kind shown switched while it was read: a folder
         // cut is read again, for the first ones in the new order or kind.)
         const bool reorder = job->order != column.order;
@@ -48290,7 +49091,7 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         if ((size_t)job->column < m_columns.size()) {
             RevealDropped(job->column);
-            if (readAgain) {
+            if (readAgain || again) {
                 ReloadColumn(job->column);
             }
         }
@@ -48330,7 +49131,7 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             std::find(m_pins.begin(), m_pins.end(), job->path) ==
                 m_pins.end()) {
             m_pins.push_back(job->path);
-            SaveFolderPins(m_pins);
+            SavePins();
             LoadPins();
             Layout();
         }
@@ -48340,6 +49141,14 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 bool FoldersPanel::OnTimer(UINT_PTR id) {
+    if (id == kFavoritesTimerId) {
+        const bool changed = CheckFavorites();
+        // (A panel's timers go off once: again, while it's open.)
+        if (m_shown) {
+            SetTimer(m_hwnd, kFavoritesTimerId, kFavoritesMs, nullptr);
+        }
+        return changed;
+    }
     // The check on a copy button goes.
     if (id == kCopiedTimerId) {
         m_copiedPath.clear();
@@ -48406,7 +49215,7 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
                 std::wstring pin = std::move(m_pins[from]);
                 m_pins.erase(m_pins.begin() + from);
                 m_pins.insert(m_pins.begin() + to, std::move(pin));
-                SaveFolderPins(m_pins);
+                SavePins();
                 // The first column again, the rest as it was (an open
                 // pin's column follows it).
                 const int opened = m_columns[0].opened;
@@ -48584,12 +49393,43 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
                 break;
             }
             m_pins.push_back(std::wstring(kPlacePrefix) + item->path);
-            SaveFolderPins(m_pins);
+            SavePins();
             LoadPins();
             Layout();
             return true;
         default:
             break;
+    }
+    // A favorite file, used (opened, copied): still there? Gone from its
+    // place, it's let go; on a drive not there now, said so. (Its "x" takes
+    // it out either way.)
+    if (item->pinned && item->kind == FolderKind::File &&
+        button != RowButton::Remove) {
+        const FavoritePlace place = FavoritePlaceNow(item->path);
+        if (place != FavoritePlace::Here) {
+            const std::wstring name = item->name;
+            if (place == FavoritePlace::Gone) {
+                m_pins.erase(m_pins.begin() + spot.row);
+                SavePins();
+                ReloadPinsKeepingColumns();
+                StartIslandAnimation();
+                Layout();
+            }
+            ShowIslandNotice(
+                0xE734, 0xFF9F0A,
+                place == FavoritePlace::Gone
+                    ? Tr(L"Favorite moved or deleted",
+                         L"Favorito movido ou excluído")
+                    : Tr(L"The favorite's drive isn't connected",
+                         L"A unidade do favorito não está conectada"),
+                name);
+            return true;
+        }
+    }
+    // A file's star: a favorite (with the pins), or not anymore.
+    if (button == RowButton::Pin && item->kind == FolderKind::File) {
+        ToggleFavorite(item->path);
+        return true;
     }
     // A pin's pencil: its icons and colors beside it (again: they go).
     if (button == RowButton::Edit && item->pinned) {
@@ -48605,7 +49445,7 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
         // Unpinned (one row of the first column), its icon and color gone.
         const std::wstring pin = m_pins[spot.row];
         m_pins.erase(m_pins.begin() + spot.row);
-        SaveFolderPins(m_pins);
+        SavePins();
         SetLook(pin, 0, -1);
         LoadPins();
         Layout();
@@ -48615,7 +49455,7 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
         if (std::find(m_pins.begin(), m_pins.end(), item->path) ==
             m_pins.end()) {
             m_pins.push_back(item->path);
-            SaveFolderPins(m_pins);
+            SavePins();
             // The first column again, the rest as it was.
             std::vector<Column> rest(m_columns.begin() + 1, m_columns.end());
             LoadPins();
@@ -49087,11 +49927,11 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
             const bool dated = info && !info->empty();
             const bool arrow = navigable && !(buttons && item.pinned) &&
                                (!dated || lit);
-            // (A file's copy buttons under the mouse, see below.)
+            // (A file's star and copy buttons under the mouse, see below.)
             const bool copyButtons =
                 buttons && item.kind == FolderKind::File && !m_dragging;
             const float dateRight =
-                rect.right - std::round(arrow ? 50 : copyButtons ? 56 : 8) * s;
+                rect.right - std::round(arrow ? 50 : copyButtons ? 80 : 8) * s;
             const float dateLeft =
                 dateRight -
                 std::round(
@@ -49099,11 +49939,11 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
             // (A pin's buttons under the mouse: its name cut before them.)
             const float endRoom =
                 dated ? rect.right - dateLeft + std::round(4 * s)
+                : copyButtons ? std::round(80 * s)
                 : buttons && item.pinned && !m_dragging ? std::round(56 * s)
                 : buttons && item.kind == FolderKind::PlaceToPin
                     ? std::round(50 * s)
-                : copyButtons ? std::round(56 * s)
-                              : 0;
+                    : 0;
             drawRow(rect, lit, column.opened == source, bitmap ? 0 : glyph,
                     bitmap, item.name, arrow, in, endRoom,
                     item.pinned ? item.color : -1);
@@ -49114,8 +49954,31 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                  {dateLeft, rect.top, dateRight, rect.bottom},
                                  brush);
             }
+            // A file: copy it (pasted in a folder, it goes there), and copy
+            // its path (the one just used shows a check a moment), ending
+            // `right` (its path's button there).
+            auto drawCopyButtons = [&](float right) {
+                const RowButton kinds[2] = {RowButton::CopyFile,
+                                            RowButton::CopyPath};
+                const WCHAR glyphs[2] = {0xE8C8, 0xE71B};
+                for (int k = 0; k < 2; k++) {
+                    const bool done = m_copiedButton == kinds[k] &&
+                                      m_copiedPath == item.path;
+                    const WCHAR shown = done ? (WCHAR)0xE73E : glyphs[k];
+                    brush->SetColor(done ? Accent(0.95f)
+                                    : m_buttonHover == kinds[k] ? Fg(0.95f)
+                                                                : Fg(0.5f));
+                    const float end = right - std::round(24 * (1 - k) * s);
+                    target->DrawText(&shown, 1, m_rowSmallIconFormat.get(),
+                                     {end - std::round(24 * s), rect.top, end,
+                                      rect.bottom},
+                                     brush);
+                }
+            };
             // A pinned row under the mouse: its "x" and its pencil (its icon
-            // and color); a folder or a Windows place: its pin.
+            // and color), a favorite file's copy buttons instead; a folder or
+            // a Windows place: its pin; a file: its star, then its copy
+            // buttons.
             if (buttons && item.pinned && !m_dragging) {
                 const WCHAR close = 0xE711;
                 brush->SetColor(m_buttonHover == RowButton::Remove
@@ -49125,6 +49988,11 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                  {rect.right - std::round(28 * s), rect.top,
                                   rect.right - std::round(4 * s), rect.bottom},
                                  brush);
+                if (item.kind == FolderKind::File) {
+                    drawCopyButtons(rect.right - std::round(28 * s));
+                    y += m_rowHeight;
+                    continue;
+                }
                 const WCHAR edit = 0xE70F;
                 brush->SetColor(m_buttonHover == RowButton::Edit ? Fg(0.95f)
                                                                  : Fg(0.55f));
@@ -49147,25 +50015,17 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                   rect.right - std::round(26 * s), rect.bottom},
                                  brush);
             } else if (copyButtons) {
-                // A file: copy it (pasted in a folder, it goes there), and
-                // copy its path; the one just used shows a check a moment.
-                const RowButton kinds[2] = {RowButton::CopyFile,
-                                            RowButton::CopyPath};
-                const WCHAR glyphs[2] = {0xE8C8, 0xE71B};
-                for (int k = 0; k < 2; k++) {
-                    const bool done = m_copiedButton == kinds[k] &&
-                                      m_copiedPath == item.path;
-                    const WCHAR shown = done ? (WCHAR)0xE73E : glyphs[k];
-                    brush->SetColor(done ? Accent(0.95f)
-                                    : m_buttonHover == kinds[k] ? Fg(0.95f)
-                                                                : Fg(0.5f));
-                    const float right =
-                        rect.right - std::round((4 + 24 * (1 - k)) * s);
-                    target->DrawText(&shown, 1, m_rowSmallIconFormat.get(),
-                                     {right - std::round(24 * s), rect.top,
-                                      right, rect.bottom},
-                                     brush);
-                }
+                // (Its star lit in the accent color while it's a favorite.)
+                const bool favorite = IsFavorite(item.path);
+                const WCHAR star = favorite ? (WCHAR)0xE735 : (WCHAR)0xE734;
+                brush->SetColor(favorite ? Accent(0.95f)
+                                : m_buttonHover == RowButton::Pin ? Fg(0.95f)
+                                                                  : Fg(0.5f));
+                target->DrawText(&star, 1, m_rowSmallIconFormat.get(),
+                                 {rect.right - std::round(76 * s), rect.top,
+                                  rect.right - std::round(52 * s), rect.bottom},
+                                 brush);
+                drawCopyButtons(rect.right - std::round(4 * s));
             }
             y += m_rowHeight;
         }
@@ -50361,6 +51221,9 @@ class Island final : public DropTarget::Receiver {
     void ReleaseWindowsBanner();
     void Tick();
     void CheckShown();
+    // An app's lyrics turned on or off (see LyricsApps): every island's
+    // lyrics again, and their settings shown.
+    void LyricsAppsChanged();
     bool Animating() const { return m_animating; }
     void AnimationFrame();
     LRESULT HandleMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -51113,6 +51976,9 @@ class Island final : public DropTarget::Receiver {
     float m_titleLyricsWidth = 0;
     void UpdateLyrics();
     bool StartLyricsSearch(const MediaState& media, const std::wstring& key);
+    // An app listed for the lyrics (see LyricsApps): the settings shown
+    // laid out again.
+    void RefreshLyricsAppsSetting();
     void StepLyrics();
     IDWriteTextFormat* LyricsFormat();
     TimerPanel m_timerPanel;
@@ -51122,7 +51988,9 @@ class Island final : public DropTarget::Receiver {
     // An alarm due this minute: a notice that stays, with the alarm sound
     // when it has one (the main island's; each once a minute).
     void CheckAlarms();
-    long long m_alarmsMinute = -1;
+    // An alarm's sound playing (see CheckAlarms, StopAlarmSound).
+    bool m_alarmRinging = false;
+    void StopAlarmSound();
     TrayListPanel m_trayListPanel;
     KeyboardPanel m_keyboardPanel;
     DesktopsPanel m_desktopsPanel;
@@ -51509,6 +52377,9 @@ class Island final : public DropTarget::Receiver {
     std::wstring m_clockMeasuredKey;
     float m_clockMeasured = 0;
     std::wstring m_weatherMeasuredKey;
+    // The lyrics' line on the pill measured (see PillGroup::Lyrics), for.
+    std::wstring m_lyricsMeasuredKey;
+    float m_lyricsMeasured = 0;
     float m_weatherMeasured = 0;
     // The app in front whose place is used (empty: the one for all apps).
     std::wstring m_placeApp;
@@ -51632,6 +52503,14 @@ class Island final : public DropTarget::Receiver {
     double m_fillAmountVelocity = 0;
     D2D1_COLOR_F m_fillColor{};
     bool m_fillMoving = false;
+    // DrawFill's pill shape and glow brush, kept (made again when they
+    // change).
+    winrt::com_ptr<ID2D1RoundedRectangleGeometry> m_fillShape;
+    D2D1_ROUNDED_RECT m_fillShapeRect{};
+    winrt::com_ptr<ID2D1RadialGradientBrush> m_fillGlow;
+    D2D1_COLOR_F m_fillGlowColor{};
+    // The charge's fill moving on its timer (see UpdateFillTimer).
+    bool m_chargeFillRunning = false;
     // (How far isn't known: the line under it only where the band is.)
     bool m_fillUnknown = false;
     // A download's state shown, and since when (an error shakes as it
@@ -51687,6 +52566,7 @@ class Island final : public DropTarget::Receiver {
     double m_vizClock = 0;
     double m_vizSinceShown = 0;
     void UpdateVisualizerTimer();
+    void UpdateFillTimer();
     void StepVisualizer(double dt);
     void ReadVisualizerSound();
     std::vector<winrt::com_ptr<IAudioMeterInformation>> FindSessionMeters(
@@ -52361,6 +53241,8 @@ void ControlPanel::Prepare(float scale) {
 void ControlPanel::PrepareFormats(float scale) {
     m_preparedScale = scale;
     m_wrappedHeights.clear();
+    // (Their size goes with the scale.)
+    m_lyricsAppIcons.clear();
     m_iconFormat = MakeFormat(IconFont(), DWRITE_FONT_WEIGHT_NORMAL,
                               15 * scale);
     m_titleFormat = MakeFormat(L"Segoe UI Variable Text",
@@ -52684,6 +53566,7 @@ void ControlPanel::OnShortcutRecorded(int combo) {
 // (posted to this window, about to go) freed here.
 void ControlPanel::OnDestroy() {
     StartShortcutRecording(false);
+    m_lyricsAppIcons.clear();
     StopWifi();
     const bool backup = m_backupThread != nullptr;
     const bool color = m_colorThread != nullptr;
@@ -53540,9 +54423,27 @@ void ControlPanel::UpdateDisplayMode() {
 // filters (only when their shortcut is on, which is how they're switched)
 // and sticky keys (switches).
 // Windows' Magnifier started itself (its Win+Plus shortcut can be turned off
-// in Windows' settings; see StartWithUiAccess), or with that shortcut.
+// in Windows' settings; see StartWithUiAccess), or with that shortcut: also
+// when it isn't running a moment later (Explorer started, the magnifier not;
+// see CheckMagnifierStarted).
+double g_magnifierCheckAt = 0;
+constexpr double kMagnifierCheckSeconds = 3;
+
 void StartMagnifier() {
     if (!StartWithUiAccess(L"Magnify.exe")) {
+        PressKeys({VK_LWIN, VK_ADD});
+        return;
+    }
+    g_magnifierCheckAt = NowSeconds() + kMagnifierCheckSeconds;
+}
+
+// (Each second, see Island::Tick.)
+void CheckMagnifierStarted() {
+    if (!g_magnifierCheckAt || NowSeconds() < g_magnifierCheckAt) {
+        return;
+    }
+    g_magnifierCheckAt = 0;
+    if (!SessionProcessId(L"Magnify.exe")) {
         PressKeys({VK_LWIN, VK_ADD});
     }
 }
@@ -54717,6 +55618,15 @@ float ControlPanel::SettingHeight(const SettingEntry& entry,
             return beside(std::round(60 * s), 44);
         case SettingKind::AppPlaces:
             return beside(std::round(28 * s), 34);
+        case SettingKind::LyricsApps: {
+            // Its name over its cards, one or two on a line (one line saying
+            // there's none yet).
+            const size_t columns = LyricsAppsColumns(width, s);
+            const size_t rows = std::max<size_t>(
+                1, (LyricsApps().size() + columns - 1) / columns);
+            return SettingNameHeight(entry, width) +
+                   std::round((4 + (float)rows * (kLyricsAppCard + 6)) * s);
+        }
         case SettingKind::Order:
             return std::round(66 * s);
         case SettingKind::Pref:
@@ -54783,6 +55693,8 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
                        ? Tr(L"Place (or drag the pill)",
                             L"Posição (ou arraste a pílula)")
                        : Tr(L"Place", L"Posição");
+        case SettingKind::LyricsApps:
+            return Tr(L"Apps that look for lyrics", L"Apps que buscam letras");
         case SettingKind::AppPlaces:
             return std::wstring(Tr(L"Place and icons per app",
                                    L"Posição e ícones por app")) +
@@ -55032,6 +55944,11 @@ std::wstring ControlPanel::SettingDescription(const SettingEntry& entry) const {
         {SettingKind::Place, 0,
          L"Picks the screen spot for the pill, on a grid",
          L"Escolhe o ponto da tela para a pílula, em uma grade"},
+        {SettingKind::LyricsApps, 0,
+         L"The apps seen playing; a click turns one's lyrics off, and "
+         L"nothing of its songs is sent to lrclib.net",
+         L"Os apps vistos tocando; um clique desliga as letras de um, e nada "
+         L"das músicas dele é enviado ao lrclib.net"},
         {SettingKind::AppPlaces, 0,
          L"Gives chosen apps their own spot and icons (Island style only)",
          L"Dá a apps escolhidos um lugar e ícones próprios (só no estilo "
@@ -55463,9 +56380,13 @@ std::wstring ControlPanel::SettingDescription(const SettingEntry& entry) const {
          L"A carga da bateria enquanto o notebook carrega"},
         {SettingKind::Pref, (int)IslandPref::Lyrics,
          L"The line sung now on the pill (place it in the order above), all "
-         L"of them in its panel; from lrclib.net",
+         L"of them in its panel. Each song's title and artist are sent to "
+         L"lrclib.net (songs only: not videos, voice messages or the apps "
+         L"turned off below)",
          L"A linha cantada agora na pílula (posicione na ordem acima), todas "
-         L"no painel dela; do lrclib.net"},
+         L"no painel dela. O título e o artista de cada música são enviados "
+         L"ao lrclib.net (só músicas: não vídeos, áudios de voz nem os apps "
+         L"desligados abaixo)"},
         {SettingKind::Choice, kChoiceLyricsSize,
          L"How big the line is on the pill",
          L"O tamanho da linha na pílula"},
@@ -55860,6 +56781,12 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
             break;
         case SettingKind::AppPlaces:
             text += L" Place and icons per app Posição e ícones por app";
+            break;
+        case SettingKind::LyricsApps:
+            text += L" Lyrics apps songs lrclib Letras apps músicas";
+            for (const auto& app : LyricsApps()) {
+                text += L" " + AppDisplayName(app.appId);
+            }
             break;
         case SettingKind::Monitors:
             text +=
@@ -56291,6 +57218,7 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Choice, kChoiceLyricsColor, kSectionMedia, 1},
             {(int)SettingKind::Pref, (int)IslandPref::LyricsInTitle,
              kSectionMedia, 1},
+            {(int)SettingKind::LyricsApps, 0, kSectionMedia, 1},
             {(int)SettingKind::Label, 0, kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::Clock, kSectionClock},
             {(int)SettingKind::Choice, kChoiceClockFormat, kSectionClock},
@@ -56385,7 +57313,8 @@ void ControlPanel::PlaceSettingParts(SettingEntry& entry,
     const bool under = entry.kind == SettingKind::Style ||
                        entry.kind == SettingKind::Theme ||
                        entry.kind == SettingKind::Size ||
-                       entry.kind == SettingKind::Choice;
+                       entry.kind == SettingKind::Choice ||
+                       entry.kind == SettingKind::LyricsApps;
     entry.head = under ? SettingNameHeight(entry, column) : 0;
     // A selector's or a slider's row, under its name.
     const float controlTop = top + entry.head;
@@ -56462,6 +57391,27 @@ void ControlPanel::PlaceSettingParts(SettingEntry& entry,
         case SettingKind::AppPlaces:
             m_appPlacesRow = rect;
             break;
+        case SettingKind::LyricsApps: {
+            const float card = std::round(kLyricsAppCard * s);
+            const float gap = std::round(6 * s);
+            const size_t columns = LyricsAppsColumns(column, s);
+            const float left = rect.left + std::round(4 * s);
+            const float cardWidth = std::floor(
+                (rect.right - std::round(4 * s) - left -
+                 gap * (float)(columns - 1)) /
+                (float)columns);
+            m_lyricsAppChips.clear();
+            for (size_t i = 0; i < LyricsApps().size(); i++) {
+                const float cardLeft =
+                    left + (cardWidth + gap) * (float)(i % columns);
+                const float cardTop =
+                    controlTop + (card + gap) * (float)(i / columns);
+                m_lyricsAppChips.push_back(
+                    {cardLeft, cardTop, cardLeft + cardWidth, cardTop + card});
+            }
+            PrepareLyricsAppIcons();
+            break;
+        }
         case SettingKind::Monitors:
             LayoutMonitors(rect);
             break;
@@ -57014,6 +57964,17 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                         return {Part::AppPlacesRow};
                     }
                     return {Part::DisabledSetting, kDisabledAppPlaces};
+                case SettingKind::LyricsApps:
+                    if (const int disabled = DisabledIndex(entry);
+                        disabled >= 0) {
+                        return {Part::DisabledSetting, disabled};
+                    }
+                    for (size_t i = 0; i < m_lyricsAppChips.size(); i++) {
+                        if (PointInRect(list, m_lyricsAppChips[i])) {
+                            return {Part::LyricsAppChip, (int)i};
+                        }
+                    }
+                    break;
                 case SettingKind::Monitors:
                     for (size_t i = 0; i < m_monitorParts.size(); i++) {
                         const auto& part = m_monitorParts[i];
@@ -59495,6 +60456,11 @@ int ControlPanel::DisabledIndex(const SettingEntry& entry) {
                                                : -1;
         case SettingKind::AppPlaces:
             return PerAppPlacesOn() ? -1 : kDisabledAppPlaces;
+        case SettingKind::LyricsApps:
+            // (Waits for the lyrics, as their size does.)
+            return ChoiceDisabled(kChoiceLyricsSize)
+                       ? kDisabledChoice + kChoiceLyricsSize
+                       : -1;
         case SettingKind::Shortcut:
             return ShortcutDisabled() ? kDisabledShortcut : -1;
         default:
@@ -60098,6 +61064,127 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                                  brush);
             }
             break;
+        case SettingKind::LyricsApps: {
+            const bool disabled = DisabledIndex(entry) >= 0;
+            const float opacity = disabled ? 0.4f : 1.0f;
+            label(entry.rect, 0xEC4F, entry.rect.right, Fg(0.95f * opacity));
+            const auto& apps = LyricsApps();
+            if (apps.empty()) {
+                PCWSTR none = Tr(L"An app appears here once it plays something",
+                                 L"Um app aparece aqui quando tocar algo");
+                brush->SetColor(Fg(0.5f * opacity));
+                DrawMarquee(target, brush, none, m_smallFormat.get(),
+                            {entry.rect.left + std::round(10 * s),
+                             entry.rect.top + entry.head,
+                             entry.rect.right - std::round(8 * s),
+                             entry.rect.top + entry.head + std::round(32 * s)},
+                            true);
+                break;
+            }
+            // A card each: the app's icon, its name, what happens to its
+            // songs, and a switch. Turned on or off, the switch slides, the
+            // card's tint and ring and the icon fade, and the line under the
+            // name changes over; a new app's card rises in. (Keyed by the
+            // app, not its place: one let go moves the others up.)
+            for (size_t i = 0; i < m_lyricsAppChips.size() && i < apps.size();
+                 i++) {
+                const D2D1_RECT_F& card = m_lyricsAppChips[i];
+                const long long id =
+                    (long long)(std::hash<std::wstring>{}(apps[i].appId) &
+                                0xFFFFFFFFFFull);
+                const bool hover = !disabled &&
+                                   m_hover.part == Part::LyricsAppChip &&
+                                   m_hover.index == (int)i;
+                const float lit = Hover(HoverKey(4140, id), hover);
+                const float on = Hover(HoverKey(4141, id), !apps[i].off,
+                                       apps[i].off ? 0.0f : 1.0f);
+                const float in = Hover(HoverKey(4142, id), true);
+                const float rise = std::round((1 - in) * 8 * s);
+                const D2D1_RECT_F shown{card.left, card.top + rise, card.right,
+                                        card.bottom + rise};
+                winrt::com_ptr<ID2D1Layer> layer;
+                if (opacity * in < 0.999f) {
+                    target->CreateLayer(nullptr, layer.put());
+                    target->PushLayer(
+                        D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr,
+                                              D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                              D2D1::IdentityMatrix(),
+                                              opacity * in),
+                        layer.get());
+                }
+                const float radius = std::round(12 * s);
+                brush->SetColor(Fg(0.06f + 0.05f * lit));
+                target->FillRoundedRectangle({shown, radius, radius}, brush);
+                if (on > 0.01f) {
+                    brush->SetColor(Accent(0.12f * on));
+                    target->FillRoundedRectangle({shown, radius, radius},
+                                                 brush);
+                    brush->SetColor(Accent(0.45f * on));
+                    target->DrawRoundedRectangle(
+                        {{shown.left + 0.5f, shown.top + 0.5f,
+                          shown.right - 0.5f, shown.bottom - 0.5f},
+                         radius - 0.5f,
+                         radius - 0.5f},
+                        brush, 1);
+                }
+                const float inset = std::round(10 * s);
+                const float middle = std::round((shown.top + shown.bottom) / 2);
+                const float iconSize = std::round(24 * s);
+                const D2D1_RECT_F icon{shown.left + inset,
+                                       middle - iconSize / 2,
+                                       shown.left + inset + iconSize,
+                                       middle + iconSize / 2};
+                if (ID2D1Bitmap* bitmap = LyricsAppBitmap(apps[i].appId)) {
+                    DrawBitmapSmooth(target, bitmap, icon, 0.45f + 0.55f * on);
+                } else {
+                    brush->SetColor(Fg(0.12f));
+                    target->FillRoundedRectangle(
+                        {icon, std::round(6 * s), std::round(6 * s)}, brush);
+                    const WCHAR note = 0xEC4F;
+                    brush->SetColor(Fg(0.4f + 0.4f * on));
+                    target->DrawText(&note, 1, m_smallIconFormat.get(), icon,
+                                     brush);
+                }
+                const float switchWidth = std::round(36 * s);
+                const float switchHeight = std::round(20 * s);
+                const D2D1_RECT_F toggle{
+                    shown.right - inset - switchWidth,
+                    std::round(middle - switchHeight / 2),
+                    shown.right - inset,
+                    std::round(middle - switchHeight / 2) + switchHeight};
+                const float textLeft = icon.right + inset;
+                const float textRight = toggle.left - inset;
+                brush->SetColor(Fg(0.6f + 0.35f * on));
+                DrawMarquee(target, brush, AppDisplayName(apps[i].appId),
+                            m_subtitleFormat.get(),
+                            {textLeft, shown.top + std::round(4 * s), textRight,
+                             middle + std::round(1 * s)},
+                            false);
+                // (What it does now, the old line sliding out as the new
+                // one comes in.)
+                const float lineHeight = middle - shown.top - std::round(4 * s);
+                const auto line = [&](PCWSTR text, float amount, float from) {
+                    if (amount < 0.01f) {
+                        return;
+                    }
+                    const float shift = std::round((1 - amount) * from * s);
+                    brush->SetColor(Fg(0.55f * amount));
+                    DrawMarquee(target, brush, text, m_smallFormat.get(),
+                                {textLeft, middle + shift, textRight,
+                                 middle + lineHeight + shift},
+                                false);
+                };
+                line(Tr(L"Looks for lyrics", L"Busca letras"), on, -6);
+                line(Tr(L"Off: nothing is sent",
+                        L"Desligado: nada \u00e9 enviado"),
+                     1 - on, 6);
+                DrawToggle(target, brush, toggle, on);
+                if (layer) {
+                    target->PopLayer();
+                }
+            }
+            break;
+        }
         case SettingKind::Size:
             // The size (or the room from the edges): its value, a slider
             // (the knob in steps), and a button to restore it, dimmed while
@@ -62437,6 +63524,16 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                 Layout();
             }
             return true;
+        case Part::LyricsAppChip:
+            if (hit.index >= 0 && hit.index < (int)LyricsApps().size()) {
+                LyricsApps()[hit.index].off = !LyricsApps()[hit.index].off;
+                SaveLyricsApps();
+                if (Island* main = MainIsland()) {
+                    main->LyricsAppsChanged();
+                }
+                Render();
+            }
+            return true;
         case Part::AppPlaceAdd:
             if (hit.index >= 0 && hit.index < (int)m_openApps.size() &&
                 g_appPlaces.size() < kMaxAppPlaces) {
@@ -63347,12 +64444,14 @@ bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
 }
 
 // An https address's contents (up to `maxSize`), not waiting long (for
-// each answer, `waitMs`); given up once `stop` is set.
+// each answer, `waitMs`); given up once `stop` is set, and at once when
+// `cancel` is canceled.
 bool HttpsGet(const std::wstring& url,
               std::vector<BYTE>* data,
               size_t maxSize,
               DWORD waitMs,
-              const std::atomic<bool>* stop) {
+              const std::atomic<bool>* stop,
+              HttpsCancel* cancel) {
     if (stop && *stop) {
         return false;
     }
@@ -63385,6 +64484,15 @@ bool HttpsGet(const std::wstring& url,
                                  WINHTTP_DEFAULT_ACCEPT_TYPES,
                                  WINHTTP_FLAG_SECURE)
             : nullptr;
+    if (request && cancel) {
+        AcquireSRWLockExclusive(&cancel->lock);
+        if (cancel->canceled) {
+            WinHttpCloseHandle(std::exchange(request, nullptr));
+        } else {
+            cancel->request = request;
+        }
+        ReleaseSRWLockExclusive(&cancel->lock);
+    }
     if (request) {
         WinHttpSetTimeouts(request, 2000, 2000, 2000, (int)waitMs);
         DWORD status = 0;
@@ -63416,7 +64524,19 @@ bool HttpsGet(const std::wstring& url,
                 data->insert(data->end(), buffer, buffer + read);
             }
         }
-        WinHttpCloseHandle(request);
+        // (Unless canceled meanwhile: closed there already.)
+        bool mine = true;
+        if (cancel) {
+            AcquireSRWLockExclusive(&cancel->lock);
+            mine = cancel->request == request;
+            if (mine) {
+                cancel->request = nullptr;
+            }
+            ReleaseSRWLockExclusive(&cancel->lock);
+        }
+        if (mine) {
+            WinHttpCloseHandle(request);
+        }
     }
     if (connection) {
         WinHttpCloseHandle(connection);
@@ -64940,6 +66060,20 @@ std::wstring AppDisplayName(const std::wstring& appId) {
             name.clear();
         }
     }
+    // Only a program's file name ("Spotify.exe"): its own name while it
+    // runs ("Windows PowerShell"), else the file's name without ".exe".
+    if (name.empty() && appId.find(L'\\') == std::wstring::npos &&
+        appId.size() > 4 &&
+        _wcsicmp(appId.c_str() + appId.size() - 4, L".exe") == 0) {
+        if (const std::wstring path = RunningProgramPath(appId);
+            !path.empty()) {
+            name = GetProgramName(path.c_str());
+        }
+        if (name.empty()) {
+            name = appId.substr(0, appId.size() - 4);
+            name[0] = towupper(name[0]);
+        }
+    }
     if (name.empty()) {
         // "Company.App_hash!App" or a program's path: the readable part.
         name = appId;
@@ -65051,14 +66185,62 @@ winrt::com_ptr<ID2D1Bitmap> LoadAppIcon(ID2D1RenderTarget* target,
     return bitmap;
 }
 
+// The icons of the apps under "Apps that look for lyrics", made as the
+// settings are laid out (drawing only reads them); one not found asked again
+// later and later (see AppIconRetryAt), the ones no longer listed let go.
+void ControlPanel::PrepareLyricsAppIcons() {
+    ID2D1RenderTarget* target = DrawingTarget();
+    if (!target || !m_wic) {
+        return;
+    }
+    const auto& apps = LyricsApps();
+    std::erase_if(m_lyricsAppIcons, [&](const KeptAppIcon& icon) {
+        return std::none_of(apps.begin(), apps.end(), [&](const LyricsApp& app) {
+            return app.appId == icon.appId;
+        });
+    });
+    const double now = NowSeconds();
+    for (const auto& app : apps) {
+        int misses = 0;
+        const auto kept = std::find_if(
+            m_lyricsAppIcons.begin(), m_lyricsAppIcons.end(),
+            [&](const KeptAppIcon& icon) { return icon.appId == app.appId; });
+        if (kept != m_lyricsAppIcons.end()) {
+            if (!kept->retryAt || now < kept->retryAt) {
+                continue;
+            }
+            misses = kept->bitmap ? 0 : kept->misses + 1;
+            m_lyricsAppIcons.erase(kept);
+        }
+        bool fromExplorer = false;
+        auto bitmap = LoadAppIcon(target, m_wic.get(), m_hwnd, app.appId,
+                                  (int)std::round(24 * m_scale), &fromExplorer);
+        m_lyricsAppIcons.push_back(
+            {app.appId, bitmap,
+             AppIconRetryAt(fromExplorer, !!bitmap, misses, now),
+             bitmap ? 0 : misses});
+    }
+}
+
+ID2D1Bitmap* ControlPanel::LyricsAppBitmap(const std::wstring& appId) const {
+    for (const auto& icon : m_lyricsAppIcons) {
+        if (icon.appId == appId) {
+            return icon.bitmap.get();
+        }
+    }
+    return nullptr;
+}
+
 ID2D1Bitmap* NotificationPanel::AppBitmap(ID2D1RenderTarget* target,
                                           const std::wstring& appId) {
     const double now = NowSeconds();
+    int misses = 0;
     for (auto it = m_bitmaps.begin(); it != m_bitmaps.end(); ++it) {
         if (it->appId == appId) {
             if (!it->retryAt || now < it->retryAt) {
                 return it->bitmap.get();
             }
+            misses = it->bitmap ? 0 : it->misses + 1;
             m_bitmaps.erase(it);
             break;
         }
@@ -65068,10 +66250,8 @@ ID2D1Bitmap* NotificationPanel::AppBitmap(ID2D1RenderTarget* target,
         LoadAppIcon(target, m_wic.get(), m_hwnd, appId,
                     (int)std::round(32 * m_scale), &fromExplorer);
     m_bitmaps.push_back(
-        {appId, bitmap,
-         fromExplorer ? 0
-         : bitmap     ? now + kAppIconRetrySeconds
-                      : now + kMissingIconRetrySeconds});
+        {appId, bitmap, AppIconRetryAt(fromExplorer, !!bitmap, misses, now),
+         bitmap ? 0 : misses});
     return bitmap.get();
 }
 
@@ -66752,7 +67932,10 @@ void MediaPanel::Layout() {
     y += big + std::round(12 * s);
     m_playerBottom = y;
     m_playingVolume = m_playingVolumeIcon = {};
-    if (m_playingApp >= 0 && m_playingApp < (int)m_apps.size()) {
+    // (While its slider is dragged, the app dragged: the app playing may
+    // change meanwhile, see PlayingVolumeApp.)
+    if (const int app = PlayingVolumeApp();
+        app >= 0 && app < (int)m_apps.size()) {
         const float icon = std::round(28 * s);
         m_playingVolumeIcon = {padding, y, padding + icon, y + icon};
         m_playingVolume = {m_playingVolumeIcon.right + std::round(10 * s),
@@ -66968,11 +68151,13 @@ ID2D1Bitmap* MediaPanel::LoadAppBitmap(ID2D1RenderTarget* target,
         return nullptr;
     }
     const double now = NowSeconds();
+    int misses = 0;
     for (auto it = m_appIcons.begin(); it != m_appIcons.end(); ++it) {
         if (it->appId == appId) {
             if (!it->retryAt || now < it->retryAt) {
                 return it->bitmap.get();
             }
+            misses = it->bitmap ? 0 : it->misses + 1;
             m_appIcons.erase(it);
             break;
         }
@@ -66981,9 +68166,8 @@ ID2D1Bitmap* MediaPanel::LoadAppBitmap(ID2D1RenderTarget* target,
     auto bitmap = LoadAppIcon(target, m_wic.get(), m_hwnd, appId,
                                (int)std::round(24 * m_scale), &fromExplorer);
     m_appIcons.push_back(
-        {appId, bitmap, fromExplorer ? 0
-                       : bitmap ? now + kAppIconRetrySeconds
-                                : now + kMissingIconRetrySeconds});
+        {appId, bitmap, AppIconRetryAt(fromExplorer, !!bitmap, misses, now),
+         bitmap ? 0 : misses});
     return bitmap.get();
 }
 
@@ -67425,15 +68609,16 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         brush->SetColor(Accent(selected));
         target->FillRoundedRectangle({chip, chipRadius, chipRadius}, brush);
         const std::wstring name = SourceName(source);
-        const bool playing = !automatic && source < (int)m_state.sources.size() &&
-                             m_state.sources[source].playing;
+        // (The chips are the last Layout's: a source may be gone since.)
+        const bool known = !automatic && source < (int)m_state.sources.size();
+        const bool playing = known && m_state.sources[source].playing;
         const float iconSize = std::round(16 * s);
         const float iconLeft = chip.left + std::round(8 * s);
         const float iconTop = (chip.top + chip.bottom - iconSize) / 2;
         const D2D1_RECT_F iconRect{
             iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize};
-        ID2D1Bitmap* icon = automatic ? nullptr
-            : AppBitmap(m_state.sources[source].appId);
+        ID2D1Bitmap* icon =
+            known ? AppBitmap(m_state.sources[source].appId) : nullptr;
         if (icon) {
             DrawBitmapSmooth(target, icon, iconRect, playing ? 1.0f : 0.38f);
         } else {
@@ -67484,13 +68669,14 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
 
     // The playing app's own volume stays in the player, even with the
     // mixer collapsed. It uses the same sessions and mute animation.
-    if (m_playingApp >= 0 && m_playingApp < (int)m_apps.size()) {
-        DrawVolumeIcon(target, brush, m_playingVolumeIcon, m_playingApp,
+    if (const int app = PlayingVolumeApp();
+        app >= 0 && app < (int)m_apps.size()) {
+        DrawVolumeIcon(target, brush, m_playingVolumeIcon, app,
                         Part::PlayingMute);
-        DrawVolumeBar(target, brush, m_playingVolume,
-                       AppLevelShown(m_playingApp), m_playingHover, true);
+        DrawVolumeBar(target, brush, m_playingVolume, AppLevelShown(app),
+                      m_playingHover, true);
         const auto percent = std::to_wstring(
-            (int)std::round(AppLevelShown(m_playingApp) * 100)) + L"%";
+            (int)std::round(AppLevelShown(app) * 100)) + L"%";
         brush->SetColor(Fg(0.55f));
         target->DrawText(percent.c_str(), (UINT32)percent.size(),
                          m_timeRightFormat.get(),
@@ -67656,8 +68842,7 @@ bool MediaPanel::OnMouseMove(POINT pt) {
         return true;
     }
     if (m_dragging == Part::PlayingVolume) {
-        SetAppVolume(m_dragApp, (pt.x - m_playingVolume.left) /
-                                 (m_playingVolume.right - m_playingVolume.left));
+        SetAppVolume(m_dragApp, PlayingVolumeAt(pt));
         return true;
     }
     if (m_dragging == Part::AppVolume) {
@@ -67728,8 +68913,7 @@ bool MediaPanel::OnMouseDown(POINT pt) {
         m_dragging = Part::PlayingVolume;
         m_dragApp = m_playingApp;
         SetCapture(m_hwnd);
-        SetAppVolume(m_dragApp, (pt.x - m_playingVolume.left) /
-                                 (m_playingVolume.right - m_playingVolume.left));
+        SetAppVolume(m_dragApp, PlayingVolumeAt(pt));
         return true;
     }
     if (hit == Part::AppVolume) {
@@ -67759,8 +68943,7 @@ bool MediaPanel::OnMouseUp(POINT pt) {
         if (m_dragging == Part::Volume) {
             SetVolume((pt.x - m_volume.left) / (m_volume.right - m_volume.left));
         } else if (m_dragging == Part::PlayingVolume) {
-            SetAppVolume(m_dragApp, (pt.x - m_playingVolume.left) /
-                (m_playingVolume.right - m_playingVolume.left));
+            SetAppVolume(m_dragApp, PlayingVolumeAt(pt));
         } else if (m_dragging == Part::AppVolume &&
                    m_dragApp >= 0 && m_dragApp < (int)m_appSliders.size()) {
             const auto& slider = m_appSliders[m_dragApp];
@@ -69452,13 +70635,16 @@ struct BackupValue {
     // The room to read it, or 0 for a number (with its default).
     size_t room;
     int number;
+    // Kept for each account (see UserValueName); in the file by its plain
+    // name, so a backup goes to another account or computer.
+    bool user = false;
 };
 constexpr BackupValue kBackupValues[] = {
     {L"notes", 512 * 1024},     {L"tasks", 256 * 1024},
     {L"shortcuts", 256 * 1024}, {L"events", 64 * 1024},
     {L"weatherPlace", 1024},    {L"trayPinned", 8192},
     {L"updatesIgnored", 4096},  {L"profiles", 1024},
-    {L"monitorProfiles", 2048}, {L"folderPins", 16 * 1024},
+    {L"monitorProfiles", 2048}, {L"folderPins", 16 * 1024, 0, true},
     {L"wallpaperFolder", 1024}, {L"agendas", 32 * 1024},
     {L"trayOrder", 8192},       {L"trayAnchors", 8192},
     {L"profileActive", 0, -1},  {L"islandMinimized", 0, 0},
@@ -69467,11 +70653,13 @@ constexpr BackupValue kBackupValues[] = {
     {L"islandQuiet", 0, 0},     {L"notificationContent", 0, 1},
     {L"calendarToday", 0, 0},   {L"calendarTodayColor", 0, kTodayRed},
     {L"notifyScreens", 2048},   {L"notifyMainIsland", 0, 1},
-    {L"folderLooks", 16 * 1024}, {L"folderOrder", 0, 0},
+    {L"folderLooks", 16 * 1024, 0, true}, {L"folderOrder", 0, 0, true},
     {L"islandMinimizeShortcut", 0, kDefaultMinimizeShortcut},
-    {L"timerLength", 0, 5 * 60},
-    {L"pomodoroFocus", 0, 25 * 60},
-    {L"pomodoroBreak", 0, 5 * 60},
+    {L"timerLength", 0, 5 * 60, true},
+    {L"pomodoroFocus", 0, 25 * 60, true},
+    {L"pomodoroBreak", 0, 5 * 60, true},
+    {L"alarms", 4096, 0, true},
+    {L"lyricsApps", kLyricsAppsRoom, 0, true},
 };
 constexpr WCHAR kBackupHeader[] = L"Mac Island & Dock backup";
 
@@ -69526,13 +70714,17 @@ std::wstring CaptureBackup() {
     std::wstring data = std::wstring(kBackupHeader) + L"\n" + CaptureProfile();
     for (const auto& value : kBackupValues) {
         if (!value.room) {
+            const int number = value.user
+                                   ? GetUserIntValue(value.name, value.number)
+                                   : Wh_GetIntValue(value.name, value.number);
             data += L"i" + std::wstring(value.name) + L"=" +
-                    std::to_wstring(Wh_GetIntValue(value.name, value.number)) +
-                    L"\n";
+                    std::to_wstring(number) + L"\n";
             continue;
         }
         data += L"s" + std::wstring(value.name) + L"=" +
-                EscapeProfileText(GetWholeStringValue(value.name, value.room)) +
+                EscapeProfileText(
+                    value.user ? GetWholeUserStringValue(value.name, value.room)
+                               : GetWholeStringValue(value.name, value.room)) +
                 L"\n";
     }
     for (const auto& profile : g_profiles) {
@@ -69561,10 +70753,18 @@ bool RestoreBackup(const std::wstring& text) {
     for (const auto& value : kBackupValues) {
         if (!value.room) {
             if (const auto it = numbers.find(value.name); it != numbers.end()) {
-                Wh_SetIntValue(value.name, it->second);
+                if (value.user) {
+                    SetUserIntValue(value.name, it->second);
+                } else {
+                    Wh_SetIntValue(value.name, it->second);
+                }
             }
         } else if (const auto it = texts.find(value.name); it != texts.end()) {
-            Wh_SetStringValue(value.name, it->second.c_str());
+            if (value.user) {
+                SetUserStringValue(value.name, it->second.c_str());
+            } else {
+                Wh_SetStringValue(value.name, it->second.c_str());
+            }
         }
     }
     // The profiles here go; the backup's come (a backup without its list
@@ -69581,9 +70781,12 @@ bool RestoreBackup(const std::wstring& text) {
             }
         }
     }
-    // Notes, tasks, the calendar's events: read again as the island starts
-    // again.
+    // Notes, tasks, the calendar's events, the alarms, the timer's lengths,
+    // the lyrics' apps: read again as the island starts again.
     g_eventsLoaded = false;
+    g_alarmsRead = false;
+    g_timer.lengthsLoaded = false;
+    g_lyricsAppsRead = false;
     LoadIgnoredUpdates();
     RestartIslandSoon();
     return true;
@@ -71704,9 +72907,13 @@ void Island::TellExplorerProgress() {
                        })
                            ? 1
                            : 0;
+    // (Told only when the taskbar's part took it: not yet there, after
+    // Explorer started again, it's told again on a later tick.)
+    DWORD_PTR answer = 0;
     if (wanted != m_progressTold &&
         SendIpc(FindTaskbarWnd(), m_hwnd, kIpcProgressWanted, &wanted,
-                sizeof(wanted))) {
+                sizeof(wanted), &answer) &&
+        answer == TRUE) {
         m_progressTold = wanted;
     }
 }
@@ -72315,6 +73522,7 @@ void Island::ScheduleTick() {
 
 // (See UpdateShortcutKeys.)
 void StopShortcutKeys();
+extern std::atomic<int> g_shortcutKeys;
 
 void Island::ReleaseWindowsBanner() {
     m_stackTakeover = false;
@@ -72364,9 +73572,9 @@ void Island::Destroy() {
     StopStatusWatch();
     if (m_main) {
         g_lyricsStop = true;
+        CancelHttps(&g_lyricsCancel);
         StopMediaWatch();
         StopUsageWatch();
-        StopShortcutKeys();
     }
     // Everything waited for below is told to stop first, so the waits run
     // together.
@@ -72385,7 +73593,8 @@ void Island::Destroy() {
     // (They hold the brightness job too.)
     m_brightnessJob->notify = nullptr;
     JoinOwningThreads(m_brightnessThreads, 5000);
-    // The lyrics worker shares its cache and stop flag: finish before restart.
+    // The lyrics worker shares its cache and stop flag: finish before restart
+    // (at once: its request was closed above).
     if (m_lyricsThread) {
         g_lyricsStop = true;
         WaitForSingleObject(m_lyricsThread, INFINITE);
@@ -72417,6 +73626,14 @@ void Island::Destroy() {
             g_settingsWindowStates.push_back(std::move(state));
         }
         m_settingsWindow.Destroy();
+    }
+    // (After the panels and the settings: closing them ends a shortcut
+    // recording, which would start the keyboard hook again. Nothing wanted
+    // anymore, so another island going after this one doesn't either.)
+    if (m_main) {
+        g_shortcutKeys = 0;
+        g_shortcutRecording = false;
+        StopShortcutKeys();
     }
     // (The reads of Windows banners only read them.)
     for (HANDLE thread : m_bannerReadThreads) {
@@ -74862,17 +76079,30 @@ void Island::Layout() {
                     const std::wstring& line =
                         m_lyricsLine.empty() ? m_lyricsBefore : m_lyricsLine;
                     float width = 0;
-                    winrt::com_ptr<IDWriteTextLayout> layout;
-                    DWRITE_TEXT_METRICS metrics{};
-                    if (!line.empty() &&
-                        SUCCEEDED(m_dwrite->CreateTextLayout(
-                            line.c_str(), (UINT32)line.size(), format, 2000,
-                            100, layout.put())) &&
-                        SUCCEEDED(layout->GetMetrics(&metrics))) {
+                    // (Measured again only when the line or its size
+                    // changes, not each frame the pill is laid out.)
+                    const std::wstring measureKey =
+                        line + L"|" +
+                        std::to_wstring(g_settings.islandLyricsSize) + L"|" +
+                        std::to_wstring(scale);
+                    if (measureKey != m_lyricsMeasuredKey) {
+                        m_lyricsMeasuredKey = measureKey;
+                        m_lyricsMeasured = 0;
+                        winrt::com_ptr<IDWriteTextLayout> layout;
+                        DWRITE_TEXT_METRICS metrics{};
+                        if (!line.empty() &&
+                            SUCCEEDED(m_dwrite->CreateTextLayout(
+                                line.c_str(), (UINT32)line.size(), format,
+                                2000, 100, layout.put())) &&
+                            SUCCEEDED(layout->GetMetrics(&metrics))) {
+                            m_lyricsMeasured = std::ceil(metrics.width);
+                        }
+                    }
+                    if (m_lyricsMeasured > 0) {
                         const int longest = kLyricsMaxWidths[std::clamp(
                             g_settings.islandLyricsWidth, 0,
                             (int)std::size(kLyricsMaxWidths) - 1)];
-                        width = std::min(std::ceil(metrics.width) +
+                        width = std::min(m_lyricsMeasured +
                                              std::round(8 * scale),
                                          std::round(longest * scale));
                     }
@@ -75989,14 +77219,16 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
     }
     // Another monitor's island shows the apps' notifications; the main one,
     // with its own turned off, still the calls, alarms and reminders and the
-    // island's own notices (see g_notifyScreens).
+    // island's own notices (its timers' and alarms' ends, and its status
+    // ones with a glyph: charger, battery, Bluetooth, Do not disturb; see
+    // g_notifyScreens).
     if (!m_main) {
         std::erase_if(toasts, [](const IslandToast& toast) {
-            return toast.urgent || toast.sticky;
+            return toast.urgent || toast.sticky || toast.glyph;
         });
     } else if (!g_notifyMain) {
         std::erase_if(toasts, [](const IslandToast& toast) {
-            return !toast.urgent && !toast.sticky;
+            return !toast.urgent && !toast.sticky && !toast.glyph;
         });
     }
     if (toasts.empty() && m_waitingToasts.empty()) {
@@ -76074,7 +77306,18 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
                 KeepWindowsBannersShown();
             }
             m_notifications.Refresh();
-            if (m_visible && !m_notifications.IsOpen()) {
+            if (!m_visible) {
+                // (Hidden for a full-screen app: the island's own notices
+                // that wait for a button, like an alarm's Stop while its
+                // sound repeats, show once it's back; see CheckShown.)
+                std::vector<IslandToast> sticky;
+                for (auto& toast : toasts) {
+                    if (toast.sticky) {
+                        sticky.push_back(std::move(toast));
+                    }
+                }
+                QueueToasts({}, std::move(sticky));
+            } else if (!m_notifications.IsOpen()) {
                 QueueToasts(std::move(urgent), std::move(toasts));
                 // Only the latest few (all of them are in the list).
                 while (m_waitingToasts.size() > kMaxWaitingToasts) {
@@ -76233,6 +77476,7 @@ void Island::Render(bool force) {
     }
     Layout();
     UpdateVisualizerTimer();
+    UpdateFillTimer();
     UpdateGlass();
     RenderTrayTip();
     // Gliding to another monitor: from where the dot was.
@@ -76365,7 +77609,8 @@ void Island::Render(bool force) {
                (m_fillUnknown ? L"u," : L",") +
                std::to_wstring(g_settings.islandFillStyle) +
                std::to_wstring(m_fillEnd) + L"," +
-               (m_fillMoving ? std::to_wstring((int)(std::fmod(NowSeconds() /
+               (m_fillMoving && !m_minimized && !m_away
+                    ? std::to_wstring((int)(std::fmod(NowSeconds() /
                                                               1.6,
                                                           1.0) *
                                                  400))
@@ -78891,9 +80136,17 @@ void Island::UpdateDesktopsWatch() {
 }
 
 // The main island watches Windows' additional clocks while an island shows
-// them.
+// them (a monitor with a profile of its own too: its change is passed on to
+// the main one, like UpdateNetSpeedWatch).
 void Island::UpdateWorldClocksWatch() {
-    if (!m_hwnd || !m_main) {
+    if (!m_hwnd) {
+        return;
+    }
+    if (Island* main = MainIsland(); main != this) {
+        if (main) {
+            IslandScope scope(main);
+            main->UpdateWorldClocksWatch();
+        }
         return;
     }
     if (!AnyIslandLook([](Island&) { return g_settings.islandWorldClocks; })) {
@@ -79877,11 +81130,13 @@ void Island::DrawAppIcon(ID2D1RenderTarget* target,
 
 ID2D1Bitmap* Island::GetAppBitmap(const std::wstring& appId) {
     const double now = NowSeconds();
+    int misses = 0;
     for (auto it = m_appBitmaps.begin(); it != m_appBitmaps.end(); ++it) {
         if (it->appId == appId) {
             if (!it->retryAt || now < it->retryAt) {
                 return it->bitmap.get();
             }
+            misses = it->bitmap ? 0 : it->misses + 1;
             m_appBitmaps.erase(it);
             break;
         }
@@ -79900,10 +81155,8 @@ ID2D1Bitmap* Island::GetAppBitmap(const std::wstring& appId) {
                            m_appBitmaps.begin() + kMostAppBitmaps / 2);
     }
     m_appBitmaps.push_back(
-        {appId, bitmap,
-         fromExplorer ? 0
-         : bitmap     ? now + kAppIconRetrySeconds
-                      : now + kMissingIconRetrySeconds});
+        {appId, bitmap, AppIconRetryAt(fromExplorer, !!bitmap, misses, now),
+         bitmap ? 0 : misses});
     return bitmap.get();
 }
 
@@ -80095,7 +81348,10 @@ void Island::AnimationFrame() {
     if (m_fillEnd != kFillEndNone) {
         UpdateFill();
     }
-    if (m_fillMoving && m_fillAmount > 0.01) {
+    // (Not minimized or hidden; the charge's on its own slower timer, see
+    // UpdateFillTimer.)
+    if (m_fillMoving && m_fillDownload && m_fillAmount > 0.01 &&
+        !m_minimized && !m_away) {
         apps = true;
     }
     // The room for what's playing and its buttons, without bouncing.
@@ -80396,12 +81652,33 @@ void Island::UpdateLyrics() {
         StepLyrics();
         return;
     }
+    // (Listed in the settings, to turn its lyrics off there.)
+    if (NoteLyricsApp(m_mediaShown.appId)) {
+        RefreshLyricsAppsSetting();
+    }
     const std::wstring key = LyricsKey(m_mediaShown);
+    // Not a song, or its app's lyrics off: nothing looked for (or sent).
+    const int skip =
+        LyricsSkipFor(m_mediaShown, AppDisplayName(m_mediaShown.appId),
+                      LyricsAppOff(m_mediaShown.appId));
+    if (skip != kLyricsSkipNone) {
+        if (key != m_lyricsKey || m_lyrics.skip != skip) {
+            m_lyricsKey = key;
+            m_lyrics = {};
+            m_lyrics.key = key;
+            m_lyrics.skip = skip;
+        }
+        m_lyricsSearching = false;
+        m_lyricsPanel.SetSong(m_mediaShown, m_lyrics, false);
+        StepLyrics();
+        return;
+    }
     // (Not reached last time: again, a while later.)
     const bool retry = key == m_lyricsKey && m_lyrics.failed &&
                        !m_lyricsSearching &&
                        NowSeconds() - m_lyrics.failedAt > kLyricsRetrySeconds;
-    if (key != m_lyricsKey || retry) {
+    // (Or its app's lyrics turned on again.)
+    if (key != m_lyricsKey || retry || m_lyrics.skip != kLyricsSkipNone) {
         m_lyricsKey = key;
         m_lyrics = {};
         m_lyrics.key = key;
@@ -80418,6 +81695,21 @@ void Island::UpdateLyrics() {
     StepLyrics();
 }
 
+void Island::RefreshLyricsAppsSetting() {
+    ForEachIsland([](Island& island) {
+        island.m_control.RefreshSettings();
+        island.m_settingsWindow.RefreshSettings();
+    });
+}
+
+void Island::LyricsAppsChanged() {
+    ForEachIsland([](Island& island) {
+        island.UpdateLyrics();
+        island.m_control.RefreshSettings();
+        island.m_settingsWindow.RefreshSettings();
+    });
+}
+
 // On the main island: a song's lyrics looked for on a thread, one at a time
 // (another one asked meanwhile: looked for after it, see WM_APP_LYRICS).
 // False if it can't be.
@@ -80427,6 +81719,9 @@ bool Island::StartLyricsSearch(const MediaState& media,
         return true;
     }
     g_lyricsStop = false;
+    AcquireSRWLockExclusive(&g_lyricsCancel.lock);
+    g_lyricsCancel.canceled = false;
+    ReleaseSRWLockExclusive(&g_lyricsCancel.lock);
     auto* request = new LyricsRequest{m_hwnd, key, media.title, media.artist,
                                       media.duration};
     m_lyricsThread =
@@ -80633,6 +81928,10 @@ void Island::CheckShown() {
                 m_shownOnce = true;
                 ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
             }
+            // The notices that waited for it (see ShowToasts).
+            if (!m_bannerWanted && !m_waitingToasts.empty()) {
+                SetTimer(m_hwnd, kBannerNextTimerId, kBannerNextMs, nullptr);
+            }
         } else {
             CloseAllPanels();
             EndTakeover();
@@ -80686,6 +81985,13 @@ void Island::Tick() {
     CheckMonitor();
     CheckShown();
     CheckFocusedApp();
+    // (Also hidden over a full-screen app: an alarm rings, a timer ends.)
+    CheckTimer();
+    if (m_main) {
+        CheckMagnifierStarted();
+        // (Not taken yet: Explorer starting again.)
+        TellExplorerProgress();
+    }
     if (!m_visible) {
         return;
     }
@@ -80736,7 +82042,6 @@ void Island::Tick() {
     }
     UpdateClock();
     UpdateExtraItems();
-    CheckTimer();
     if (g_settings.islandOwnsNotifications) {
         NoteQuiet(g_islandQuiet);
     }
@@ -80781,9 +82086,10 @@ void Island::UpdateFill() {
         }
     } else if (g_settings.islandChargeFill) {
         SYSTEM_POWER_STATUS power{};
+        // Charging, not only plugged in (a charge limit, like 80%, keeps it
+        // plugged in under 100% without charging).
         if (GetSystemPowerStatus(&power) && !(power.BatteryFlag & 128) &&
-            power.BatteryLifePercent <= 100 && power.ACLineStatus == 1 &&
-            power.BatteryLifePercent < 100) {
+            (power.BatteryFlag & 8) && power.BatteryLifePercent < 100) {
             wanted = true;
             target = power.BatteryLifePercent / 100.0;
             color = RgbColor(FillColorRgb(kFillCharge), 1);
@@ -80795,7 +82101,7 @@ void Island::UpdateFill() {
         m_fillStateAt = now;
     }
     // A download gone: done when it got to its end, canceled otherwise;
-    // shown a moment more (see DrawFill).
+    // shown a moment more (see DrawFill), the charge's fill after it.
     if (download) {
         m_fillEnd = kFillEndNone;
     } else if (m_fillWanted && m_fillDownload && m_fillEnd == kFillEndNone) {
@@ -80803,7 +82109,7 @@ void Island::UpdateFill() {
                                                           : kFillEndCanceled;
         m_fillEndAt = now;
     }
-    if (m_fillEnd != kFillEndNone && !wanted) {
+    if (m_fillEnd != kFillEndNone) {
         const bool done = m_fillEnd == kFillEndDone;
         if (now - m_fillEndAt <
             AnimationSeconds(done ? kFillDoneSeconds : kFillCanceledSeconds)) {
@@ -80867,20 +82173,24 @@ void Island::DrawFill(ID2D1RenderTarget* target,
                       float radius,
                       ID2D1Geometry* notch,
                       float opacity) {
-    // (In the pill's own shape, a notch's too.)
-    winrt::com_ptr<ID2D1RoundedRectangleGeometry> rounded;
+    // (In the pill's own shape, a notch's too; the pill's made again only
+    // when it changes, the layer Direct2D's own.)
     ID2D1Geometry* shape = notch;
     if (!shape) {
-        if (FAILED(m_d2d->CreateRoundedRectangleGeometry({rect, radius, radius},
-                                                         rounded.put()))) {
-            return;
+        const D2D1_ROUNDED_RECT rounded{rect, radius, radius};
+        if (!m_fillShape ||
+            memcmp(&rounded, &m_fillShapeRect, sizeof(rounded)) != 0) {
+            m_fillShape = nullptr;
+            if (FAILED(m_d2d->CreateRoundedRectangleGeometry(
+                    rounded, m_fillShape.put()))) {
+                return;
+            }
+            m_fillShapeRect = rounded;
         }
-        shape = rounded.get();
+        shape = m_fillShape.get();
     }
-    winrt::com_ptr<ID2D1Layer> layer;
-    target->CreateLayer(nullptr, layer.put());
     target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), shape),
-                      layer.get());
+                      nullptr);
     // Its length as drawn; the notches are one bar from the leftmost one's
     // start to the rightmost one's end: their lengths together, and how far
     // along them this one starts (in their expanded sizes).
@@ -81022,20 +82332,37 @@ void Island::DrawFill(ID2D1RenderTarget* target,
     }
     // Glow: a light at its front, particles left behind it.
     if (style == kFillStyleGlow && frontHere) {
-        const D2D1_GRADIENT_STOP stops[] = {
-            {0, {light.r, light.g, light.b, 0.6f * opacity * breath}},
-            {1, {light.r, light.g, light.b, 0}}};
-        winrt::com_ptr<ID2D1GradientStopCollection> collection;
-        winrt::com_ptr<ID2D1RadialGradientBrush> glow;
-        if (SUCCEEDED(target->CreateGradientStopCollection(stops, 2,
-                                                           collection.put())) &&
-            SUCCEEDED(target->CreateRadialGradientBrush(
-                D2D1::RadialGradientBrushProperties({part.right, middle},
-                                                    {0, 0}, tall * 0.9f,
-                                                    tall * 0.7f),
-                collection.get(), glow.put()))) {
+        // (Its brush made again only for another color; moved, sized and
+        // dimmed each frame. Kept for the island's own drawing target.)
+        const bool own = target == m_canvas.target.get();
+        winrt::com_ptr<ID2D1RadialGradientBrush> made;
+        ID2D1RadialGradientBrush* glow = own ? m_fillGlow.get() : nullptr;
+        if (!glow || memcmp(&light, &m_fillGlowColor, sizeof(light)) != 0) {
+            const D2D1_GRADIENT_STOP stops[] = {
+                {0, {light.r, light.g, light.b, 0.6f}},
+                {1, {light.r, light.g, light.b, 0}}};
+            winrt::com_ptr<ID2D1GradientStopCollection> collection;
+            if (SUCCEEDED(target->CreateGradientStopCollection(
+                    stops, 2, collection.put())) &&
+                SUCCEEDED(target->CreateRadialGradientBrush(
+                    D2D1::RadialGradientBrushProperties({0, 0}, {0, 0}, 1, 1),
+                    collection.get(), made.put()))) {
+                glow = made.get();
+                if (own) {
+                    m_fillGlow = made;
+                    m_fillGlowColor = light;
+                }
+            } else {
+                glow = nullptr;
+            }
+        }
+        if (glow) {
+            glow->SetCenter({part.right, middle});
+            glow->SetRadiusX(tall * 0.9f);
+            glow->SetRadiusY(tall * 0.7f);
+            glow->SetOpacity(opacity * breath);
             target->FillEllipse({{part.right, middle}, tall * 0.9f, tall * 0.7f},
-                                glow.get());
+                                glow);
         }
         for (int k = 0; k < 7; k++) {
             const double phase = std::fmod(now / 1.1 + k * 0.143, 1.0);
@@ -81146,6 +82473,23 @@ void Island::CheckAudioPlaying() {
         m_vizApp = m_mediaShown.appId;
         m_vizLookAt = now + 3;
         m_vizSessionMeters = FindSessionMeters(m_vizApp);
+    }
+}
+
+// The battery charge's fill moves (its wave, its glow) a frame every
+// kChargeFillMs, while shown (not minimized or hidden); a download's every
+// frame (see AnimationFrame).
+void Island::UpdateFillTimer() {
+    const bool running = m_fillMoving && !m_fillDownload &&
+                         m_fillAmount > 0.01 && !m_minimized && !m_away;
+    if (running == m_chargeFillRunning) {
+        return;
+    }
+    m_chargeFillRunning = running;
+    if (running) {
+        SetTimer(m_hwnd, kChargeFillTimerId, kChargeFillMs, nullptr);
+    } else {
+        KillTimer(m_hwnd, kChargeFillTimerId);
     }
 }
 
@@ -81347,6 +82691,28 @@ std::vector<winrt::com_ptr<IAudioMeterInformation>> Island::FindSessionMeters(
     return meters;
 }
 
+// The last minute the alarms were looked at (days * 24 * 60 + the minute,
+// local time), kept while the island restarts: every minute since then is
+// looked at, so one skipped (the island starting again across it, a busy
+// moment, the clock going forward) still rings; a minute again (the clock
+// going back) doesn't ring twice. -1 before the first look, which only
+// notes the minute (an island starting at 7:00 doesn't ring 7:00 again).
+long long g_alarmsMinute = -1;
+// The most minutes looked at once (after a sleep: not every alarm of the
+// night; an hour, so the clock going forward still rings its own).
+constexpr long long kAlarmsMostMinutes = 90;
+
+// Whether an alarm at `minute` (of the day) falls in the minutes `from` to
+// `to` (keys like g_alarmsMinute's).
+bool AlarmDue(int minute, long long from, long long to) {
+    for (long long key = from; key <= to; key++) {
+        if (minute == (int)(key % (24 * 60))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Island::CheckAlarms() {
     if (!m_main || m_notchBase) {
         return;
@@ -81356,19 +82722,16 @@ void Island::CheckAlarms() {
     const long long minuteKey =
         (long long)DayNumber(now.wYear, now.wMonth, now.wDay) * 24 * 60 +
         now.wHour * 60 + now.wMinute;
-    if (minuteKey == m_alarmsMinute) {
+    if (minuteKey <= g_alarmsMinute) {
         return;
     }
-    // (The first look only notes the minute: an island starting at 7:00
-    // doesn't ring the 7:00 alarm a second time.)
-    const bool first = m_alarmsMinute < 0;
-    m_alarmsMinute = minuteKey;
-    if (first) {
-        return;
-    }
-    const int minute = now.wHour * 60 + now.wMinute;
+    const long long from =
+        g_alarmsMinute < 0
+            ? minuteKey + 1
+            : std::max(g_alarmsMinute + 1, minuteKey - kAlarmsMostMinutes + 1);
+    g_alarmsMinute = minuteKey;
     for (const auto& alarm : Alarms()) {
-        if (!alarm.on || alarm.minute != minute) {
+        if (!alarm.on || !AlarmDue(alarm.minute, from, minuteKey)) {
             continue;
         }
         IslandToast toast;
@@ -81379,9 +82742,13 @@ void Island::CheckAlarms() {
         toast.text = AlarmTimeText(alarm.minute);
         toast.reply.actions.push_back(
             {Tr(L"Stop", L"Parar"), L"alarm-stop", L"island"});
-        if (alarm.sound) {
+        // (Over and over until its Stop, a minute at most.)
+        if (alarm.sound &&
             PlaySound(L"Notification.Looping.Alarm", nullptr,
-                      SND_ALIAS | SND_ASYNC | SND_NODEFAULT);
+                      SND_ALIAS | SND_ASYNC | SND_NODEFAULT | SND_LOOP)) {
+            m_alarmRinging = true;
+            SetTimer(m_hwnd, kAlarmSoundStopTimerId, kUrgentSoundMaxMs,
+                     nullptr);
         }
         AcquireSRWLockExclusive(&g_islandToastsLock);
         g_islandToasts.push_back(std::move(toast));
@@ -81390,9 +82757,21 @@ void Island::CheckAlarms() {
     }
 }
 
+// The alarm's sound, not a call's ringing that came after it (one sound at
+// a time: that one took its place).
+void Island::StopAlarmSound() {
+    KillTimer(m_hwnd, kAlarmSoundStopTimerId);
+    if (m_alarmRinging) {
+        m_alarmRinging = false;
+        if (!m_urgentRinging) {
+            PlaySound(nullptr, nullptr, 0);
+        }
+    }
+}
+
 void Island::CheckTimer() {
     CheckAlarms();
-    if (g_settings.islandTimer && AnyTimerActive()) {
+    if (g_settings.islandTimer && AnyTimerActive() && m_visible) {
         // Their time on the pill, and in their panel.
         Relayout();
         m_timerPanel.Refresh();
@@ -81419,13 +82798,16 @@ void Island::CheckTimer() {
         if (mode == TimerMode::Pomodoro) {
             button(Tr(L"Stop", L"Parar"), L"pomodoro-stop");
             button(Tr(L"OK", L"OK"), L"");
-            // On to the next part.
+            // On to the next part, from when this one ended (noticed a
+            // moment later; not after a long sleep of the computer).
+            const double over = clock.Counted() - length;
             if (!g_timer.onBreak) {
                 g_timer.rounds++;
             }
             g_timer.onBreak = !g_timer.onBreak;
             clock.counted = 0;
-            clock.startedAt = NowSeconds();
+            clock.startedAt =
+                NowSeconds() - (over > 0 && over < 60 ? over : 0);
             toast.title = g_timer.onBreak
                               ? Tr(L"Time for a break", L"Hora da pausa")
                               : Tr(L"Back to focus", L"De volta ao foco");
@@ -81458,7 +82840,9 @@ void Island::CheckTimer() {
 // new opened; the notice is gone either way.
 void Island::OnOwnNoticeAction(const std::wstring& arguments) {
     if (arguments == L"alarm-stop") {
-        PlaySound(nullptr, nullptr, 0);
+        if (Island* main = MainIsland()) {
+            main->StopAlarmSound();
+        }
         return;
     }
     if (arguments == L"whats-new") {
@@ -81528,6 +82912,16 @@ void Island::ShowStatusNotice(WCHAR glyph,
     g_islandToasts.push_back(std::move(toast));
     ReleaseSRWLockExclusive(&g_islandToastsLock);
     ShowBanner();
+}
+
+void ShowIslandNotice(WCHAR glyph,
+                      int color,
+                      const std::wstring& title,
+                      const std::wstring& text) {
+    if (Island* main = MainIsland()) {
+        IslandScope scope(main);
+        main->ShowStatusNotice(glyph, color, title, text);
+    }
 }
 
 // The charger plugged in, and the battery going under 20% and 10% (each
@@ -84804,7 +86198,7 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
             break;
         case IslandItem::NetSpeed:
             // Windows' own view of the network (Task Manager).
-            PressKeys({VK_CONTROL, VK_SHIFT, VK_ESCAPE});
+            OpenTaskManager();
             break;
         case IslandItem::WorldClock:
             // Windows' own list of them, to add or change one.
@@ -85323,6 +86717,14 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             if (wParam == kLyricsTimerId) {
                 StepLyrics();
+                return 0;
+            }
+            if (wParam == kChargeFillTimerId) {
+                StartAnimating();
+                return 0;
+            }
+            if (wParam == kAlarmSoundStopTimerId) {
+                StopAlarmSound();
                 return 0;
             }
             if (wParam == kWhatsNewTimerId) {
