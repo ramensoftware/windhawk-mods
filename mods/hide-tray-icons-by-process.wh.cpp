@@ -171,19 +171,6 @@ static bool ShouldHideIconOfWindow(HWND ownerWindow, const wchar_t* operation) {
 // ---------------------------------------------------------------------------
 // Сабклассинг Shell_TrayWnd и перехват WM_COPYDATA
 // ---------------------------------------------------------------------------
-//
-// Shell_NotifyIcon отправляет в Shell_TrayWnd сообщение WM_COPYDATA:
-//   COPYDATASTRUCT::dwData == 1
-//   COPYDATASTRUCT::lpData -> {
-//       DWORD dwSignature;   // 0x34753423
-//       DWORD dwMessage;     // NIM_ADD / NIM_MODIFY / NIM_DELETE / ...
-//       struct {             // NOTIFYICONDATA с 32-битными значениями дескрипторов
-//           DWORD cbSize;
-//           DWORD hWnd;
-//           DWORD uID;
-//           ...
-//       } nid;
-//   }
  
 constexpr ULONG_PTR kTrayCopyDataId = 1;
 constexpr DWORD kTraySignature = 0x34753423;
@@ -235,7 +222,7 @@ static LRESULT CALLBACK TrayWndSubclassProc(HWND hWnd,
             }
         }
     }
- 
+    if (uMsg == WM_NCDESTROY) g_trayWnd = nullptr;
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
  
