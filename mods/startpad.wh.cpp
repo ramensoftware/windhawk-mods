@@ -11,29 +11,11 @@
 // @license         MIT
 // ==/WindhawkMod==
 
-// ==WindhawkModSettings==
-/*
-[
-  { "triggerWinKey": true, "$name": "Open with the Windows key & Ctrl+Esc", "$description": "When off, the Windows key and Ctrl+Esc open the original Start menu." },
-  { "triggerStartButton": true, "$name": "Open with the taskbar Start button", "$description": "Left-clicks on the Start button open the launcher. When off, it opens the original Start menu." },
-  { "visualStyle": "macos", "$name": "Visual style", "$options": [ { "macos": "MacOS Style" }, { "windows": "Windows 11 Fluent" } ] },
-  { "gridColumns": 8, "$name": "Columns per page", "$description": "4 to 12 (Suggested: 8)." },
-  { "gridRows": 5, "$name": "Rows per page", "$description": "3 to 8 (Suggested: 5)." },
-  { "iconSize": 100, "$name": "Icon size (%)", "$description": "50 to 150. Relative to the default size for the chosen grid." },
-  { "backgroundDarkness": 35, "$name": "Background tint intensity (%)", "$description": "0 shows the blurred desktop as it is, 100 is a solid theme colour." },
-  { "blur": "medium", "$name": "Background blur", "$options": [ { "off": "Off (sharp desktop)" }, { "light": "Light" }, { "medium": "Medium" }, { "strong": "Strong" } ] },
-  { "animations": true, "$name": "Open/close animation", "$description": "Also skipped when Windows animations are turned off." },
-  { "hideUninstallers": true, "$name": "Automatically hide uninstallers", "$description": "Hides shortcuts like Uninstall, Desinstalar, unins000.exe, etc." },
-  { "showPowerButton": true, "$name": "Show power button (bottom right)" }
-]
-*/
-// ==/WindhawkModSettings==
-
 // ==WindhawkModReadme==
 /*
 # StartPad
 
-![StartPad Preview](https://raw.githubusercontent.com/frankh93/StartPad/main/startpad-preview.png)
+![StartPad Preview](https://raw.githubusercontent.com/frankh93/StartPad/main/preview.png)
 
 A macOS Launchpad-style fullscreen app launcher that replaces the Windows 11 Start menu, featuring horizontal paginated grids, interactive app folders, drag-and-drop reordering, and customizable visual themes.
 
@@ -72,16 +54,54 @@ Click the **`...`** button inside the right side of the search bar to access:
 - **Legacy Icon Cleanup**: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.
 - **Localized UI**: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.
 
-## How StartPad differs from "fullscreen-start" mod
-Both mods replace the Start menu with a fullscreen app launcher, and **they cannot be enabled at the same time** because both intercept `XamlLauncher::ShowStartView`.
-- **StartPad** focuses on a **paginated macOS Launchpad workflow**: horizontal pages with spring physics, **folders** (creation, renaming, ungrouping), **drag-and-drop icon reordering** with persistent layout storage, **hiding apps**, a **right-click context menu** (Run as administrator, Open file location), an integrated **Power menu**, a **Windows 11 Fluent visual style**, and **multilingual UI strings**.
-- **Fullscreen Start (`fullscreen-start`)** by Rafael Mendes focuses on a single **vertically scrolled grid** with Direct2D rendering, live DWM Acrylic/Blur backdrops, `Ctrl+V` clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.
-
 ## Credits & License
 - Hooking `XamlLauncher::ShowStartView` in `twinui.pcshell.dll` (`kShowMethodKeyboard` / `kShowFlagKeyboard`), secondary folder-process detection (`IsFolderWindowsProcess`), and thread initialization/uninitialization structure are adapted from [**Fullscreen Start (Launchpad style)** (`fullscreen-start`)](https://github.com/RafaelMendes1407) by **Rafael Mendes**, licensed under the MIT License (Copyright (c) Rafael Mendes).
 - Licensed under the **MIT License**.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- triggerWinKey: true
+  $name: Open with the Windows key & Ctrl+Esc
+  $description: When off, the Windows key and Ctrl+Esc open the original Start menu.
+- triggerStartButton: true
+  $name: Open with the taskbar Start button
+  $description: Left-clicks on the Start button open the launcher. When off, it opens the original Start menu.
+- visualStyle: macos
+  $name: Visual style
+  $options:
+  - macos: MacOS Style
+  - windows: Windows 11 Fluent
+- gridColumns: 8
+  $name: Columns per page
+  $description: "4 to 12 (Suggested: 8)."
+- gridRows: 5
+  $name: Rows per page
+  $description: "3 to 8 (Suggested: 5)."
+- iconSize: 100
+  $name: Icon size (%)
+  $description: 50 to 150. Relative to the default size for the chosen grid.
+- backgroundDarkness: 35
+  $name: Background tint intensity (%)
+  $description: 0 shows the blurred desktop as it is, 100 is a solid theme colour.
+- blur: medium
+  $name: Background blur
+  $options:
+  - "off": Off (sharp desktop)
+  - light: Light
+  - medium: Medium
+  - strong: Strong
+- animations: true
+  $name: Open/close animation
+  $description: Also skipped when Windows animations are turned off.
+- hideUninstallers: true
+  $name: Automatically hide uninstallers
+  $description: Hides shortcuts like Uninstall, Desinstalar, unins000.exe, etc.
+- showPowerButton: true
+  $name: Show power button (bottom right)
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
@@ -870,8 +890,6 @@ std::wstring GetCurrentUserSidString() {
     return result;
 }
 
-// Stores layout inside Windhawk's mod storage path so it is removed when the
-// mod is uninstalled, scoped by user SID so each user keeps their own layout.
 std::wstring LayoutPath(bool makeDir) {
     WCHAR dir[MAX_PATH];
     if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir))) return std::wstring();
@@ -3835,6 +3853,7 @@ bool HookShowStartView() {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return false;
     }
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
