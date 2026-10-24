@@ -1535,6 +1535,14 @@
     "githubId": null,
     "homepages": []
   },
+  "https://github.com/rbnd": {
+    "author": "RobotsNeverDie",
+    "github": "https://github.com/RBND",
+    "githubId": 26013355,
+    "homepages": [
+      "https://github.com/RBND/CMD-Admin"
+    ]
+  },
   "https://github.com/reabstraction": {
     "author": "Reabstraction",
     "github": "https://github.com/Reabstraction",

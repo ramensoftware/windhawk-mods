@@ -6498,6 +6498,35 @@
         "version": "1.0"
       }
     },
+    "explorer-terminal-admin-alias": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792839712000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792839712000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "RobotsNeverDie",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -lshlwapi -luuid",
+        "description": "Launch elevated or custom terminals (cmd, Windows Terminal, PowerShell) directly from the File Explorer address bar with configurable aliases.",
+        "github": "https://github.com/RBND",
+        "homepage": "https://github.com/RBND/CMD-Admin",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "File Explorer Terminal Admin Aliases",
+        "version": "1.0.4"
+      }
+    },
     "explorer-title-bar-label": {
       "details": {
         "defaultSorting": 7490,

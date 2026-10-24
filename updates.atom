@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T09:04:36.000Z</updated>
+    <updated>2026-10-24T11:01:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Terminal Admin Aliases 1.0.4]]></title>
+        <id>https://windhawk.net/mods/explorer-terminal-admin-alias#640e843644d6bef023896312768387eb5b7065c4</id>
+        <link href="https://windhawk.net/mods/explorer-terminal-admin-alias"/>
+        <updated>2026-10-24T11:01:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorerterminaladminaliases">🛠️ File Explorer Terminal Admin Aliases</h1>
+<p>Launch elevated (Administrator) command prompts, Windows Terminal, PowerShell, or custom shells directly from any Windows File Explorer address bar, opened to your active directory.</p>
+<p>Just like typing <code>cmd</code>, <code>wt</code>, or <code>powershell</code> into File Explorer—but with administrator privileges and completely customizable aliases!</p>
+<hr />
+<h2 id="features">⚡ Features</h2>
+<ul>
+<li><strong>Configurable Aliases</strong>: Choose any alias trigger you want (<code>cmda</code>, <code>wta</code>, <code>psa</code>, <code>pwsha</code>, <code>basha</code>, or your own custom commands).</li>
+<li><strong>Native & Silent Elevation</strong>: Intercepts shell execution directly inside File Explorer and launches with native <code>runas</code> elevation—no background PowerShell spawns, no <code>.bat</code> files, and zero flickering.</li>
+<li><strong>Zero PATH Pollution</strong>: Works without needing to edit your system/user <code>Path</code> environment variable.</li>
+<li><strong>Directory Preservation</strong>: Accurately preserves the active directory in elevated sessions, handling spaces, special characters, drive roots, and network UNC paths.</li>
+<li><strong>Virtual Folder Fallback</strong>: Automatically defaults to <code>%USERPROFILE%</code> when launched from virtual folders (e.g., "This PC", "Quick Access", or "Home").</li>
+<li><strong>Clean UAC Cancellation</strong>: If you cancel or dismiss the UAC prompt, the mod cleanly suppresses the annoying "Windows cannot find…" error dialog.</li>
+<li><strong>Inline Arguments Supported</strong>: Type extra arguments directly in the address bar (e.g. <code>cmda dir</code> or <code>wta -p PowerShell</code>).</li>
+</ul>
+<hr />
+<h2 id="configuration">⚙️ Configuration</h2>
+<p>Open the mod's <strong>Settings</strong> tab in Windhawk to:</p>
+<ol>
+<li>Customize aliases for <strong>Command Prompt</strong>, <strong>Windows Terminal</strong>, <strong>PowerShell 5.1</strong>, <strong>PowerShell 7+</strong>, and <strong>Git Bash</strong>.</li>
+<li>Toggle elevation (<code>runas</code>) on or off per shell.</li>
+<li>Configure custom aliases for any tool (e.g. <code>code</code>, <code>wsl</code>, <code>nvim</code>).</li>
+<li>Set an optional profile name for Windows Terminal.</li>
+</ol>]]></content>
+        <author>
+            <name>RobotsNeverDie</name>
+            <uri>https://github.com/RBND</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Calendar Week Numbers 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-calendar-week-numbers#401da104b37b14c0c9c2dbae2336c30c63bac29f</id>
@@ -627,65 +660,6 @@ Custom Shortcuts mod.</p>]]></content>
         <author>
             <name>dcsmf</name>
             <uri>https://github.com/dcsmf</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fullscreen Start (Launchpad style) 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fullscreen-start#6cea3b683d857f0cc4cf22360c2c07cdeff7b8f1</id>
-        <link href="https://windhawk.net/mods/fullscreen-start"/>
-        <updated>2026-10-22T10:02:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fullscreenstartlaunchpadstyle">Fullscreen Start (Launchpad style)</h1>
-<p><img src="https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/fullscreen-start.png" alt="Fullscreen Start" /></p>
-<p>Replaces the Windows Start menu with a screen in the style of the macOS
-Launchpad: all installed apps in a grid, with search at the top and a blurred
-background.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Fullscreen</strong>: takes the whole work area of the monitor where the mouse
-is, without covering the taskbar, other side bars or the Dock of the
-<strong>Standalone Dock (macOS-like)</strong> mod.</li>
-<li><strong>All apps</strong>: the same ones as the "All apps" list of Start (programs and
-Store apps), in alphabetical order, with icon and name.</li>
-<li><strong>Search</strong>: just type. The list is filtered instantly, ignoring case and
-accents; names that start with the text come first.</li>
-<li><strong>Adjustable blurred background</strong>: configurable strength, opacity and
-color.</li>
-</ul>
-<h2 id="howtoopen">How to open</h2>
-<p>Everything that would open the Windows Start menu opens this one instead:</p>
-<ul>
-<li>the <strong>Windows</strong> key and <strong>Ctrl+Esc</strong>;</li>
-<li>the <strong>Start button</strong> of the taskbar, or of the Dock of the Standalone Dock
-mod.</li>
-</ul>
-<p>The mod hooks the function Explorer uses to show Start
-(<code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code>), so the original
-Start doesn't open at all. Windhawk downloads the symbols of that file the
-first time the mod loads.</p>
-<h2 id="keyboardandmouse">Keyboard and mouse</h2>
-<ul>
-<li>Type to search; <strong>Backspace</strong> deletes, <strong>Ctrl+Backspace</strong> deletes the last
-word, <strong>Ctrl+V</strong> pastes.</li>
-<li><strong>Arrows</strong> select an app, <strong>Enter</strong> opens the selected one (while
-searching, the first result is already selected).</li>
-<li><strong>Esc</strong> clears the search; with an empty search, it closes.</li>
-<li>The mouse wheel or <strong>Page Up/Page Down</strong> scroll the list.</li>
-<li>Clicking outside the icons or switching windows closes it.</li>
-</ul>
-<h2 id="blur">Blur</h2>
-<ul>
-<li><strong>Adjustable</strong> (default): the mod takes a screenshot the moment it opens
-and blurs it with the chosen strength. The background stays still while
-Start is open.</li>
-<li><strong>Acrylic</strong> and <strong>Windows blur</strong>: the effect is applied by DWM composition
-and follows what changes behind it. Windows doesn't allow changing the
-strength of that blur, so the strength setting doesn't apply to them.</li>
-<li><strong>No blur</strong>: only the color on top.</li>
-</ul>
-<p>Changes to the settings apply the next time Start opens.</p>]]></content>
-        <author>
-            <name>Rafael Mendes</name>
-            <uri>https://github.com/RafaelMendes1407</uri>
         </author>
     </entry>
 </feed>
