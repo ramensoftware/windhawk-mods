@@ -3848,6 +3848,34 @@
         "version": "1.0"
       }
     },
+    "deepseek-balance-tray": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792850713000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792850713000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "MrAlexFreeman",
+        "compilerOptions": "-lwinhttp -lversion",
+        "description": "Shows the current DeepSeek API account balance next to the taskbar clock",
+        "github": "https://github.com/MrAlexFreeman",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "DeepSeek Balance in Taskbar",
+        "version": "1.0.0"
+      }
+    },
     "dense-tray-icons-padding-old-taskbar": {
       "details": {
         "defaultSorting": 480,
@@ -15568,6 +15596,30 @@
         ],
         "name": "Hide running indicator for Windows 10",
         "version": "1.0.2"
+      }
+    },
+    "taskbar-hover-animations": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792850708000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792850708000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DahaSakinOlamazdim",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lgdi32 -luser32 -lshell32",
+        "description": "Heartbeat, flash, ripple, neon glow, sparkle, bounce, wobble, confetti and more animations when hovering taskbar icons",
+        "github": "https://github.com/DahaSakinOlamazdim",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Taskbar Icon Animation",
+        "version": "1.0"
       }
     },
     "taskbar-hung-rearrangement-fix": {
