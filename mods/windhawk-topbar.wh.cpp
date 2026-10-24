@@ -28418,6 +28418,327 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
     ApplyAllControlStyles();
 }
 
+struct BleedRgb {
+    int r = 0, g = 0, b = 0;
+    bool operator==(const BleedRgb& o) const { return r == o.r && g == o.g && b == o.b; }
+    bool operator!=(const BleedRgb& o) const { return !(*this == o); }
+};
+
+[[clang::no_destroy]] DispatcherTimer g_bleedTimer{nullptr};
+std::atomic<bool> g_bleedActive{false};
+HWND g_bleedTarget = nullptr;
+wf::IInspectable g_bleedSavedRootBackground = nullptr;
+bool g_bleedBackgroundSaved = false;
+[[clang::no_destroy]] wuxm::Brush g_bleedCachedBrush{nullptr};
+uint64_t g_bleedCachedHash = 0;
+bool g_bleedHasCachedBrush = false;
+
+uint64_t BleedHashPixels(const std::vector<uint32_t>& px) {
+    uint64_t h = 1469598103934665603ULL;
+    for (uint32_t v : px) {
+        h ^= v & 0x00FFFFFFu;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+BleedRgb BleedDominantColor(const std::vector<uint32_t>& px) {
+    struct Bin {
+        uint32_t count = 0;
+        uint64_t r = 0, g = 0, b = 0;
+    };
+    static std::vector<Bin> bins(32768);
+    static std::vector<uint32_t> touched;
+    touched.clear();
+    for (uint32_t v : px) {
+        uint32_t b = v & 0xFF, g = (v >> 8) & 0xFF, r = (v >> 16) & 0xFF;
+        uint32_t key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+        Bin& bin = bins[key];
+        if (bin.count == 0) touched.push_back(key);
+        bin.count++;
+        bin.r += r;
+        bin.g += g;
+        bin.b += b;
+    }
+    if (touched.empty()) return BleedRgb{};
+    std::sort(touched.begin(), touched.end(),
+              [](uint32_t a, uint32_t b) { return bins[a].count > bins[b].count; });
+    BleedRgb result;
+    const Bin& top = bins[touched[0]];
+    if ((double)top.count / (double)px.size() >= 0.15 || touched.size() == 1) {
+        result = BleedRgb{(int)(top.r / top.count), (int)(top.g / top.count), (int)(top.b / top.count)};
+    } else {
+        uint64_t cnt = 0, r = 0, g = 0, b = 0;
+        size_t k = std::min<size_t>(3, touched.size());
+        for (size_t i = 0; i < k; i++) {
+            const Bin& bin = bins[touched[i]];
+            cnt += bin.count;
+            r += bin.r;
+            g += bin.g;
+            b += bin.b;
+        }
+        result = BleedRgb{(int)(r / cnt), (int)(g / cnt), (int)(b / cnt)};
+    }
+    for (uint32_t key : touched) bins[key] = Bin{};
+    for (int pass = 0; pass < 2; pass++) {
+        uint64_t cnt = 0, r = 0, g = 0, b = 0;
+        for (uint32_t v : px) {
+            int pb = v & 0xFF, pg = (v >> 8) & 0xFF, pr = (v >> 16) & 0xFF;
+            if (std::abs(pr - result.r) <= 12 && std::abs(pg - result.g) <= 12 && std::abs(pb - result.b) <= 12) {
+                cnt++;
+                r += pr;
+                g += pg;
+                b += pb;
+            }
+        }
+        if (cnt == 0) break;
+        BleedRgb refined{(int)std::lround((double)r / cnt), (int)std::lround((double)g / cnt),
+                         (int)std::lround((double)b / cnt)};
+        if (refined == result) break;
+        result = refined;
+    }
+    return result;
+}
+
+bool BleedCaptureStrip(const RECT& strip, std::vector<uint32_t>& out, int& outW, int& outH) {
+    int w = strip.right - strip.left, h = strip.bottom - strip.top;
+    if (w <= 0 || h <= 0 || (long long)w * h > 8192LL * 64) return false;
+    HDC screen = GetDC(nullptr);
+    if (!screen) return false;
+    HDC mem = CreateCompatibleDC(screen);
+    if (!mem) {
+        ReleaseDC(nullptr, screen);
+        return false;
+    }
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    bool ok = false;
+    if (bmp && bits) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        ok = BitBlt(mem, 0, 0, w, h, screen, strip.left, strip.top, SRCCOPY) != FALSE;
+        GdiFlush();
+        if (ok) {
+            outW = w;
+            outH = h;
+            out.assign(static_cast<uint32_t*>(bits),
+                       static_cast<uint32_t*>(bits) + (size_t)w * h);
+        }
+        SelectObject(mem, old);
+    }
+    if (bmp) DeleteObject(bmp);
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+    return ok;
+}
+
+bool BleedFindForemostMaximizedOnMonitor(HMONITOR targetMon, HWND& out, RECT& outFrame) {
+    struct Ctx {
+        HMONITOR mon;
+        HWND found;
+    } ctx{targetMon, nullptr};
+    EnumWindows(
+        [](HWND hwnd, LPARAM lp) -> BOOL {
+            auto* c = reinterpret_cast<Ctx*>(lp);
+            if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || !IsZoomed(hwnd)) return TRUE;
+            if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
+            DWORD cloaked = 0;
+            if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) return TRUE;
+            if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != c->mon) return TRUE;
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (!pid || pid == GetCurrentProcessId()) return TRUE;
+            c->found = hwnd;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&ctx));
+    if (!ctx.found) return false;
+    if (FAILED(DwmGetWindowAttribute(ctx.found, DWMWA_EXTENDED_FRAME_BOUNDS, &outFrame, sizeof(outFrame)))) {
+        if (!GetWindowRect(ctx.found, &outFrame)) return false;
+    }
+    out = ctx.found;
+    return true;
+}
+
+void BleedApply(bool active, wuxm::Brush brush) {
+    auto bleedIt = g_namedElements.find(L"BleedLayer");
+    auto bleedBorder = bleedIt != g_namedElements.end() ? bleedIt->second.try_as<wuxc::Border>() : nullptr;
+    if (active) {
+        if (bleedBorder) {
+            if (bleedBorder.Background() != brush && brush) {
+                bleedBorder.Background(brush);
+            }
+            if (bleedBorder.Visibility() != Visibility::Visible) {
+                bleedBorder.Visibility(Visibility::Visible);
+            }
+        }
+    } else {
+        if (bleedBorder && bleedBorder.Visibility() != Visibility::Collapsed) {
+            bleedBorder.Visibility(Visibility::Collapsed);
+        }
+    }
+}
+
+HMONITOR GetBarMonitor();
+
+void BleedTick() {
+    if (g_settings.topBarBehaviour != L"default" || g_topBarAutoHidden.load() ||
+        g_fullScreenAppActive) {
+        if (g_bleedActive.exchange(false)) BleedApply(false, nullptr);
+        return;
+    }
+    HMONITOR barMon = GetBarMonitor();
+    if (!barMon) {
+        if (g_bleedActive.exchange(false)) BleedApply(false, nullptr);
+        return;
+    }
+    HWND target = nullptr;
+    RECT frame{};
+    if (!BleedFindForemostMaximizedOnMonitor(barMon, target, frame)) {
+        if (g_bleedActive.exchange(false)) BleedApply(false, nullptr);
+        return;
+    }
+
+    bool targetChanged = target != g_bleedTarget;
+    static RECT s_lastFrame = {0};
+    bool frameChanged = (frame.left != s_lastFrame.left || frame.top != s_lastFrame.top ||
+                         frame.right != s_lastFrame.right || frame.bottom != s_lastFrame.bottom);
+    if (frameChanged) {
+        s_lastFrame = frame;
+        if (targetChanged) {
+            g_bleedTarget = target;
+            g_bleedCachedBrush = nullptr;
+            g_bleedHasCachedBrush = false;
+            if (g_bleedActive.exchange(false)) {
+                BleedApply(false, nullptr);
+            }
+        } else if (g_bleedActive.load() && g_bleedCachedBrush) {
+            BleedApply(true, g_bleedCachedBrush);
+        }
+        return;
+    }
+    if (targetChanged) {
+        g_bleedTarget = target;
+        g_bleedCachedBrush = nullptr;
+        g_bleedHasCachedBrush = false;
+    }
+
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(barMon, &mi)) return;
+    
+    RECT barRect = GetBarMonitorRect();
+    LONG width = frame.right - frame.left;
+    LONG insetX = std::min<LONG>(width / 4, 150);
+    LONG left = std::max<LONG>(frame.left + insetX, mi.rcMonitor.left);
+    LONG right = std::min<LONG>(frame.right - insetX, mi.rcMonitor.right);
+    
+    LONG top = std::max<LONG>(frame.top + 4, barRect.top + g_barHeightPx + 2);
+    if (top < mi.rcWork.top + 1) top = mi.rcWork.top + 1;
+    LONG bottom = top + 4;
+    if (bottom > mi.rcWork.bottom) bottom = mi.rcWork.bottom;
+    if (bottom <= top || right <= left) {
+        if (g_bleedActive.exchange(false)) BleedApply(false, nullptr);
+        return;
+    }
+    RECT strip{left, top, right, bottom};
+    std::vector<uint32_t> px;
+    int w = 0, h = 0;
+    if (!BleedCaptureStrip(strip, px, w, h) || px.empty()) {
+        if (g_bleedActive.load() && g_bleedCachedBrush) {
+            BleedApply(true, g_bleedCachedBrush);
+        }
+        return;
+    }
+    uint64_t hash = BleedHashPixels(px);
+    wuxm::Brush brush{nullptr};
+    if (g_bleedHasCachedBrush && hash == g_bleedCachedHash) {
+        brush = g_bleedCachedBrush;
+    } else {
+        wuxm::LinearGradientBrush lgb;
+        lgb.StartPoint({0, 0.5});
+        lgb.EndPoint({1, 0.5});
+        auto stops = lgb.GradientStops();
+        int step = std::max(1, w / 256);
+        for (int x = 0; x < w; x += step) {
+            uint32_t ckeys[8];
+            int ccounts[8];
+            int distinct = 0;
+            for (int y = 0; y < h && distinct < 8; y++) {
+                uint32_t v = px[(size_t)y * w + x] & 0x00FFFFFFu;
+                bool found = false;
+                for (int k = 0; k < distinct; k++) {
+                    if (ckeys[k] == v) { ccounts[k]++; found = true; break; }
+                }
+                if (!found) {
+                    ckeys[distinct] = v;
+                    ccounts[distinct] = 1;
+                    distinct++;
+                }
+            }
+            uint32_t best = 0;
+            int bestCount = 0;
+            for (int k = 0; k < distinct; k++) {
+                if (ccounts[k] > bestCount) { bestCount = ccounts[k]; best = ckeys[k]; }
+            }
+            wuxm::GradientStop stop;
+            stop.Offset((double)x / std::max(1, w - 1));
+            stop.Color(wui::ColorHelper::FromArgb(255, (best >> 16) & 0xFF, (best >> 8) & 0xFF, best & 0xFF));
+            stops.Append(stop);
+        }
+        if (w > 0 && (w - 1) % step != 0) {
+            int x = w - 1;
+            uint32_t ckeys[8];
+            int ccounts[8];
+            int distinct = 0;
+            for (int y = 0; y < h && distinct < 8; y++) {
+                uint32_t v = px[(size_t)y * w + x] & 0x00FFFFFFu;
+                bool found = false;
+                for (int k = 0; k < distinct; k++) {
+                    if (ckeys[k] == v) { ccounts[k]++; found = true; break; }
+                }
+                if (!found) {
+                    ckeys[distinct] = v;
+                    ccounts[distinct] = 1;
+                    distinct++;
+                }
+            }
+            uint32_t best = 0;
+            int bestCount = 0;
+            for (int k = 0; k < distinct; k++) {
+                if (ccounts[k] > bestCount) { bestCount = ccounts[k]; best = ckeys[k]; }
+            }
+            wuxm::GradientStop stop;
+            stop.Offset(1.0);
+            stop.Color(wui::ColorHelper::FromArgb(255, (best >> 16) & 0xFF, (best >> 8) & 0xFF, best & 0xFF));
+            stops.Append(stop);
+        }
+        brush = lgb;
+        g_bleedCachedBrush = brush;
+        g_bleedCachedHash = hash;
+        g_bleedHasCachedBrush = true;
+    }
+    g_bleedActive = true;
+    BleedApply(true, brush);
+}
+
+void EnsureBleedTimer() {
+    if (!g_bleedTimer) {
+        g_bleedTimer = DispatcherTimer();
+        g_bleedTimer.Interval(std::chrono::milliseconds(300));
+        g_bleedTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try { BleedTick(); } catch (...) {}
+        });
+    }
+    g_bleedTimer.Stop();
+    g_bleedTimer.Start();
+}
+
 FrameworkElement BuildTopBarContent() {
     
     g_namedElements.clear();
@@ -28515,6 +28836,19 @@ FrameworkElement BuildTopBarContent() {
                                 i == 1 ? GridUnitType::Star : GridUnitType::Auto});
         root.ColumnDefinitions().Append(column);
     }
+
+    g_bleedSavedRootBackground = nullptr;
+    g_bleedBackgroundSaved = false;
+
+    wuxc::Border bleedLayer;
+    bleedLayer.Name(L"BleedLayer");
+    bleedLayer.HorizontalAlignment(HorizontalAlignment::Stretch);
+    bleedLayer.VerticalAlignment(VerticalAlignment::Stretch);
+    bleedLayer.IsHitTestVisible(false);
+    bleedLayer.Visibility(Visibility::Collapsed);
+    bleedLayer.Background(MakeBrush(0, 0, 0, 0));
+    barRoot.Children().InsertAt(0, bleedLayer);
+    RegisterNamed(L"BleedLayer", bleedLayer);
 
     // Add the interactive root on top of the wallpaper layer
     barRoot.Children().Append(root);
@@ -36175,6 +36509,8 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try { RefreshMediaButtonState(); } catch (...) {}
         });
 
+        EnsureBleedTimer();
+
 
 
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
@@ -36796,6 +37132,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_autoHideBootDelayTimer) g_autoHideBootDelayTimer.Stop();
         if (g_topBarPopupRetryTimer) g_topBarPopupRetryTimer.Stop();
         if (g_forceShowTimer) g_forceShowTimer.Stop();
+        if (g_bleedTimer) g_bleedTimer.Stop();
         if (g_slideAnimTimer) g_slideAnimTimer.Stop();
         if (g_cloakTimer) g_cloakTimer.Stop();
         if (g_pillAnimTimer) g_pillAnimTimer.Stop();
@@ -36831,6 +37168,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_autoHideBootDelayTimer = nullptr;
         g_topBarPopupRetryTimer = nullptr;
         g_forceShowTimer = nullptr;
+        g_bleedTimer = nullptr;
         g_slideAnimTimer = nullptr;
         g_cloakTimer = nullptr;
         g_pillAnimTimer = nullptr;
@@ -38143,7 +38481,7 @@ static LONG WINAPI TopBarUnhandledExceptionFilter(EXCEPTION_POINTERS* info) {
     }
     Wh_Log(L"TopBar CRASH: code=0x%08X addr=%p module=%s",
            code, addr, modName);
-    return EXCEPTION_EXECUTE_HANDLER;
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 BOOL WhTool_ModInit() {
