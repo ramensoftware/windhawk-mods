@@ -49,7 +49,7 @@ The size and SHA-256 of every file are checked against values pinned in the mod,
 
 - Only **x64** is supported (no ARM64).
 - The 2017 components run inside `explorer.exe`. A crash in them restarts Explorer.
-- The registration of the applet is per user and volatile; it is removed when the mod is disabled and at sign-out.
+- The applet's registry entries are not written; they are provided virtually by registry hooks inside `explorer.exe` and `control.exe`, and the applet's COM classes are created from inside those processes. Every virtual key is handed out as a real, read-only handle to one empty, volatile scratch key (`HKCU\Software\WindhawkLanguageAppletRestorer\VirtualKeys-<pid>`) so that registry APIs that are not hooked cannot crash on it. The scratch key holds no data, lives only in memory and is deleted when the mod is unloaded.
 - **Compatibility:** `intl.cpl` redirection overlaps with the `win7-intl-control-panel-restorer` mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which `intl.cpl` is opened.
 - Links in the applet that open the Settings app are not changed by this mod. The `settings-to-control-panel` mod can redirect them.
 
@@ -91,6 +91,7 @@ babamohammed2022 for adding various languages.
 #include <windows.h>
 #include <wininet.h>
 #include <wincrypt.h>
+#include <objbase.h>
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -98,11 +99,14 @@ babamohammed2022 for adding various languages.
 #include <cwchar>
 #include <cwctype>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace pepatch {
@@ -1543,16 +1547,13 @@ static bool BuildOutputs(const std::map<std::wstring, Bytes>& in, const Win11Exp
 }
 // ---- PURE-END ----
 // =============================================================================
-// PLATFORM PART: files, download, loading, per-user registration.
+// PLATFORM PART: files, download, loading, virtual registration.
 // =============================================================================
 static const wchar_t* kAppletClsid = L"{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}";   // Microsoft.Language
 static const wchar_t* kLayoutFolderClsid = L"{328B0346-7EAF-4BBE-A479-7CB88A095F5B}";
 // COM classes implemented by UserLanguagesCpl.dll itself.
 static const wchar_t* kDllComClsids[] = {L"{7F75058C-9A21-4F22-A7CA-110205479EF9}",
                                          L"{802E19CB-06A0-445D-8297-7DFEEA406DDD}"};
-static const wchar_t kClassesClsid[] = L"Software\\Classes\\CLSID\\";
-static const wchar_t kNamespaceKey[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\";
 
 static const DWORD kDownloadTimeoutMs = 20000;
 static const int kMaxDownloadAttempts = 3;
@@ -1565,7 +1566,6 @@ static HANDLE g_stopEvent = nullptr;
 static std::mutex g_netMutex;
 static HINTERNET g_hNet = nullptr;
 static HINTERNET g_hUrl = nullptr;
-static std::atomic<bool> g_registered{false};
 
 static std::wstring W(const std::string& s) { return std::wstring(s.begin(), s.end()); }   // ASCII only
 
@@ -2429,137 +2429,695 @@ static bool LoadPrivateModules(const std::wstring& binDir, const std::vector<Out
     }
     return true;
 }
-// ---- per-user, volatile registration -------------------------------------------------------
-static bool RegSetStr(HKEY k, const wchar_t* name, const std::wstring& v, DWORD type = REG_SZ) {
-    return RegSetValueExW(k, name, 0, type, reinterpret_cast<const BYTE*>(v.c_str()),
-                          (DWORD)((v.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS;
+// ---- virtual registration ---------------------------------------------------------------------
+// The applet's registry entries are answered by registry hooks inside explorer.exe and control.exe; the mod writes
+// none of them. To the shell and COM these keys behave as if they existed:
+//   CLSID\{BF782CC9-...}  (+ DefaultIcon, InProcServer32, Instance\InitPropertyBag, ShellFolder)
+//   CLSID\{7F75058C-...}\InProcServer32 and CLSID\{802E19CB-...}\InProcServer32  (classes of UserLanguagesCpl.dll)
+//   ...\Explorer\ControlPanel\NameSpace\{BF782CC9-...}, plus that GUID appended to the NameSpace enumeration,
+//   and the three GUIDs as values of ...\Shell Extensions\Approved.
+//
+// A virtual key must still be a handle that every registry API accepts, hooked or not (RegEnumValueW,
+// RegQueryValueExA, RegNotifyChangeKeyValue, ...). A made-up pointer is not: it makes explorer / Control Panel
+// misbehave or crash. So each virtual key is a real, read-only handle to one empty volatile scratch key
+// (HKCU\Software\WindhawkLanguageAppletRestorer\VirtualKeys-<pid>), which only lives in memory and is deleted when the
+// mod is unloaded. It never holds any data. Same technique as performance-info-tools-restorer and
+// Startup App Delay Fix.
+namespace vreg {
+
+struct Val { std::wstring name; DWORD type; std::wstring str; DWORD dw; };
+struct Key { std::wstring rel; std::vector<Val> values; std::vector<std::wstring> subkeys; };   // rel: lower case
+struct Table { std::vector<Key> keys; };
+
+static std::mutex g_tableMutex;
+static std::shared_ptr<const Table> g_table;             // null until the applet is published
+
+static std::shared_ptr<const Table> GetTable() {
+    std::lock_guard<std::mutex> l(g_tableMutex);
+    return g_table;
 }
-static bool RegSetDword(HKEY k, const wchar_t* name, DWORD v) {
-    return RegSetValueExW(k, name, 0, REG_DWORD, reinterpret_cast<const BYTE*>(&v), sizeof(v)) == ERROR_SUCCESS;
+static void SetTable(std::shared_ptr<const Table> t) {
+    std::lock_guard<std::mutex> l(g_tableMutex);
+    g_table = std::move(t);
 }
-// Creates a volatile key under HKCU; `existed` reports whether it was already there.
-static HKEY CreateVolatileKey(const std::wstring& subkey, bool* existed = nullptr) {
+
+static std::wstring Lower(std::wstring s) {
+    for (auto& c : s) c = towlower(c);
+    return s;
+}
+
+static bool ContainsKeywordI(LPCWSTR s) {   // "clsid", "controlpanel" or "shell extensions", no allocation
+    if (!s) return false;
+    for (; *s; ++s) {
+        if (*s != L'c' && *s != L'C' && *s != L's' && *s != L'S') continue;
+        if (_wcsnicmp(s, L"clsid", 5) == 0 || _wcsnicmp(s, L"controlpanel", 12) == 0 ||
+            _wcsnicmp(s, L"shell extensions", 16) == 0)
+            return true;
+    }
+    return false;
+}
+
+static const wchar_t* PredefinedName(HKEY h) {
+    if (h == HKEY_CLASSES_ROOT) return L"hkey_classes_root";
+    if (h == HKEY_CURRENT_USER) return L"hkey_current_user";
+    if (h == HKEY_LOCAL_MACHINE) return L"hkey_local_machine";
+    if (h == HKEY_USERS) return L"hkey_users";
+    if (h == HKEY_CURRENT_CONFIG) return L"hkey_current_config";
+    return L"";
+}
+
+static std::wstring JoinPath(const std::wstring& base, LPCWSTR sub) {
+    std::wstring p = base;
+    if (sub && *sub) {
+        if (!p.empty()) p += L'\\';
+        p += Lower(sub);
+    }
+    return p;
+}
+
+static bool EndsWithKey(const std::wstring& path, const std::wstring& rel) {   // whole-component suffix match
+    if (path.size() < rel.size()) return false;
+    if (path.compare(path.size() - rel.size(), rel.size(), rel) != 0) return false;
+    return path.size() == rel.size() || path[path.size() - rel.size() - 1] == L'\\';
+}
+
+// The applet is 64-bit only: the 32-bit registry view (WOW6432Node) must not show it, otherwise the shell
+// treats it as a 32-bit item.
+static const Key* FindKey(const Table& t, const std::wstring& lowerPath) {
+    if (lowerPath.find(L"wow6432node") != std::wstring::npos) return nullptr;
+    for (const Key& k : t.keys)
+        if (EndsWithKey(lowerPath, k.rel)) return &k;
+    return nullptr;
+}
+
+static const Val* FindValue(const Key& k, LPCWSTR name) {
+    const wchar_t* n = name ? name : L"";
+    for (const Val& v : k.values)
+        if (_wcsicmp(v.name.c_str(), n) == 0) return &v;
+    return nullptr;
+}
+
+// The NameSpace key whose enumeration gets the applet appended: the machine-wide one, not the per-user one.
+static bool IsNamespaceParent(const std::wstring& lowerPath) {
+    return EndsWithKey(lowerPath, L"controlpanel\\namespace") &&
+           lowerPath.compare(0, 17, L"hkey_current_user") != 0;
+}
+
+// ---- original functions ----
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegOpenKeyW_t = decltype(&RegOpenKeyW);
+using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
+using RegCloseKey_t = decltype(&RegCloseKey);
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+using RegEnumKeyW_t = decltype(&RegEnumKeyW);
+using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
+static RegOpenKeyExW_t RegOpenKeyExW_Orig;
+static RegOpenKeyW_t RegOpenKeyW_Orig;
+static RegCreateKeyExW_t RegCreateKeyExW_Orig;
+static RegCloseKey_t RegCloseKey_Orig;
+static RegQueryValueExW_t RegQueryValueExW_Orig;
+static RegGetValueW_t RegGetValueW_Orig;
+static RegEnumKeyExW_t RegEnumKeyExW_Orig;
+static RegEnumKeyW_t RegEnumKeyW_Orig;
+static RegQueryInfoKeyW_t RegQueryInfoKeyW_Orig;
+
+// ---- the scratch key that backs every virtual handle ----
+static const wchar_t kScratchParent[] = L"Software\\WindhawkLanguageAppletRestorer";
+
+static std::wstring ScratchLeaf() {
+    wchar_t leaf[64];
+    swprintf_s(leaf, ARRAYSIZE(leaf), L"VirtualKeys-%lu", GetCurrentProcessId());
+    return leaf;
+}
+static std::wstring ScratchPath() { return std::wstring(kScratchParent) + L"\\" + ScratchLeaf(); }
+
+static std::mutex g_scratchMutex;
+static HKEY g_scratchRoot = nullptr;
+
+static bool EnsureScratchRoot() {
+    std::lock_guard<std::mutex> l(g_scratchMutex);
+    if (g_scratchRoot) return true;
     HKEY k = nullptr;
     DWORD disp = 0;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, subkey.c_str(), 0, nullptr, REG_OPTION_VOLATILE, KEY_WRITE, nullptr, &k, &disp) != ERROR_SUCCESS)
-        return nullptr;
-    if (existed) *existed = disp == REG_OPENED_EXISTING_KEY;
-    return k;
+    const LONG st = RegCreateKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, nullptr, REG_OPTION_VOLATILE,
+                                         KEY_READ | KEY_WRITE, nullptr, &k, &disp);
+    if (st != ERROR_SUCCESS) {
+        Wh_Log(L"Could not create the volatile scratch key (error %ld)", st);
+        return false;
+    }
+    g_scratchRoot = k;
+    return true;
 }
 
-// Parent keys must be stable: a stable key cannot be created under a volatile one, so letting our
-// volatile call create a missing "CLSID" or "NameSpace" parent would make other software's later
-// writes under it fail until sign-out. (An empty stable parent left behind is harmless.)
-static void EnsureStableKey(const wchar_t* subkey) {
-    HKEY k = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, subkey, 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &k, nullptr) == ERROR_SUCCESS)
-        RegCloseKey(k);
+static void ReleaseScratchRoot() {
+    HKEY root;
+    {
+        std::lock_guard<std::mutex> l(g_scratchMutex);
+        root = g_scratchRoot;
+        g_scratchRoot = nullptr;
+    }
+    if (root && RegCloseKey_Orig) RegCloseKey_Orig(root);
+    if (!RegOpenKeyExW_Orig || !RegCloseKey_Orig) return;
+    HKEY parent = nullptr;
+    if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, kScratchParent, 0, KEY_WRITE | DELETE, &parent) == ERROR_SUCCESS) {
+        RegDeleteKeyW(parent, ScratchLeaf().c_str());
+        RegCloseKey_Orig(parent);
+    }
+    HKEY software = nullptr;   // remove the (now empty) parent; fails harmlessly while another process still uses it
+    if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, L"Software", 0, DELETE, &software) == ERROR_SUCCESS) {
+        RegDeleteKeyW(software, L"WindhawkLanguageAppletRestorer");
+        RegCloseKey_Orig(software);
+    }
 }
 
-static void UnregisterApplet() {
-    if (!g_registered.exchange(false)) return;
-    RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClassesClsid) + kAppletClsid).c_str());
-    for (const wchar_t* c : kDllComClsids)
-        RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClassesClsid) + c).c_str());
-    RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kNamespaceKey) + kAppletClsid).c_str());
+// ---- handle bookkeeping ----
+static std::mutex g_handleMutex;
+static std::unordered_map<HKEY, std::wstring> g_paths;   // tracked real handles and virtual handles -> lower-case path
+static std::unordered_set<HKEY> g_fake;                  // virtual handles (real handles to the scratch key)
+
+static void LogVirtual(const wchar_t* what, const std::wstring& path) {
+    static std::atomic<int> count{0};
+    if (count.fetch_add(1) < 80) Wh_Log(L"[vreg] %s: %s", what, path.c_str());
 }
 
-// A volatile key survives an explorer.exe restart (it only vanishes at sign-out), so after a restart the
-// previous run's registration is still there. It is "ours" if its DefaultIcon points into this mod's bin dir.
-static bool IsOurStaleRegistration(const std::wstring& root, const std::wstring& binDir) {
-    HKEY s = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, (root + L"\\DefaultIcon").c_str(), 0, KEY_READ, &s) != ERROR_SUCCESS) return false;
-    wchar_t buf[1024] = {};
-    DWORD sz = sizeof(buf) - sizeof(wchar_t), type = 0;
-    const LONG r = RegQueryValueExW(s, nullptr, nullptr, &type, reinterpret_cast<BYTE*>(buf), &sz);
-    RegCloseKey(s);
-    if (r != ERROR_SUCCESS) return false;
-    std::wstring a(buf), b(binDir);
-    for (auto& c : a) c = towlower(c);
-    for (auto& c : b) c = towlower(c);
-    return !b.empty() && a.find(b) != std::wstring::npos;
+static bool Lookup(HKEY h, std::wstring& path, bool& fake) {
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    auto it = g_paths.find(h);
+    if (it == g_paths.end()) return false;
+    path = it->second;
+    fake = g_fake.count(h) > 0;
+    return true;
 }
 
-static bool RegisterApplet(const std::wstring& binDir) {
+static bool IsFake(HKEY h) {
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    return g_fake.count(h) > 0;
+}
+
+static bool IsTrackedOrFake(HKEY h) {
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    return g_paths.count(h) > 0;
+}
+
+static void Track(HKEY h, const std::wstring& path) {
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    g_paths[h] = path;
+}
+
+static void Untrack(HKEY h) {
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    g_paths.erase(h);
+}
+
+static HKEY NewFake(const std::wstring& path) {
+    if (!EnsureScratchRoot()) return nullptr;
+    HKEY h = nullptr;
+    if (RegOpenKeyExW_Orig(HKEY_CURRENT_USER, ScratchPath().c_str(), 0, KEY_READ, &h) != ERROR_SUCCESS) return nullptr;
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    g_paths[h] = path;
+    g_fake.insert(h);
+    return h;
+}
+
+static void FreeFake(HKEY h) {
+    {
+        std::lock_guard<std::mutex> l(g_handleMutex);
+        g_fake.erase(h);
+        g_paths.erase(h);
+    }
+    RegCloseKey_Orig(h);
+}
+
+// Forget everything without closing anything: the handles belong to their callers. They stay valid handles to the
+// scratch key, which is deleted right after, so a later use just fails instead of touching anything else.
+static void ForgetAllHandles() {
+    std::lock_guard<std::mutex> l(g_handleMutex);
+    g_fake.clear();
+    g_paths.clear();
+}
+
+static bool IsWriteAccess(REGSAM sam) {
+    return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
+}
+
+// ---- value delivery (RegQueryValueEx / RegGetValue semantics) ----
+static void ValueBytes(const Val& v, std::vector<BYTE>& out) {
+    if (v.type == REG_DWORD) {
+        out.resize(sizeof(DWORD));
+        memcpy(out.data(), &v.dw, sizeof(DWORD));
+    } else {
+        const size_t n = (v.str.size() + 1) * sizeof(wchar_t);
+        out.resize(n);
+        memcpy(out.data(), v.str.c_str(), n);
+    }
+}
+
+static LSTATUS Deliver(DWORD type, const std::vector<BYTE>& bytes, LPDWORD pType, void* data, LPDWORD cb) {
+    if (pType) *pType = type;
+    if (!cb) return data ? ERROR_INVALID_PARAMETER : ERROR_SUCCESS;
+    const DWORD need = static_cast<DWORD>(bytes.size());
+    if (!data) { *cb = need; return ERROR_SUCCESS; }
+    if (*cb < need) { *cb = need; return ERROR_MORE_DATA; }
+    memcpy(data, bytes.data(), need);
+    *cb = need;
+    return ERROR_SUCCESS;
+}
+
+static LSTATUS DeliverGetValue(const Val& v, DWORD flags, LPDWORD pType, void* data, LPDWORD cb) {
+    if ((flags & 0xffff) == 0) flags |= RRF_RT_ANY;
+    Val cur = v;
+    if (cur.type == REG_EXPAND_SZ && (flags & RRF_RT_REG_SZ) && !(flags & RRF_NOEXPAND)) {
+        wchar_t buf[2048];
+        const DWORD n = ExpandEnvironmentStringsW(v.str.c_str(), buf, ARRAYSIZE(buf));
+        if (n > 0 && n <= ARRAYSIZE(buf)) cur.str = buf;
+        cur.type = REG_SZ;
+    }
+    const DWORD mask = cur.type == REG_SZ ? RRF_RT_REG_SZ
+                       : cur.type == REG_EXPAND_SZ ? RRF_RT_REG_EXPAND_SZ : RRF_RT_REG_DWORD;
+    if (!(flags & mask)) return ERROR_UNSUPPORTED_TYPE;
+    std::vector<BYTE> bytes;
+    ValueBytes(cur, bytes);
+    return Deliver(cur.type, bytes, pType, data, cb);
+}
+
+static LSTATUS DeliverName(const std::wstring& name, LPWSTR lpName, LPDWORD cch) {
+    if (!cch || !lpName) return ERROR_INVALID_PARAMETER;
+    if (*cch < name.size() + 1) { *cch = static_cast<DWORD>(name.size() + 1); return ERROR_MORE_DATA; }
+    wcscpy_s(lpName, *cch, name.c_str());
+    *cch = static_cast<DWORD>(name.size());
+    return ERROR_SUCCESS;
+}
+
+// ---- the virtual keys ----
+static std::shared_ptr<const Table> BuildTable(const std::wstring& binDir) {
     const std::wstring dll = binDir + L"\\UserLanguagesCpl.dll";
-    const std::wstring root = std::wstring(kClassesClsid) + kAppletClsid;
-    EnsureStableKey(L"Software\\Classes\\CLSID");
-    EnsureStableKey(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace");
-    bool existed = false;
-    HKEY k = CreateVolatileKey(root, &existed);
-    if (!k) { Wh_Log(L"Could not create the applet key"); return false; }
-    if (existed) {
-        RegCloseKey(k);
-        if (IsOurStaleRegistration(root, binDir)) {
-            Wh_Log(L"Leftover registration from a previous run found; refreshing it");
-            g_registered.store(true);
-            UnregisterApplet();
-            k = CreateVolatileKey(root, &existed);
-            if (!k) { Wh_Log(L"Could not recreate the applet key"); return false; }
-        } else {
-            Wh_Log(L"HKCU already has %s and it is NOT from this mod (manual registration?); not touching it. Delete it and restart explorer.exe", root.c_str());
+    const std::wstring displayName = g_forceTranslations.load() ? std::wstring(GetLocalizedDisplayName())
+                                                                : (L"@" + dll + L",-1#immutable1");
+    const std::wstring infoTip = g_forceTranslations.load() ? std::wstring(GetLocalizedInfoTip())
+                                                            : (L"@" + dll + L",-2#immutable1");
+    auto S = [](const wchar_t* n, DWORD type, const std::wstring& s) { return Val{n, type, s, 0}; };
+    auto D = [](const wchar_t* n, DWORD d) { return Val{n, REG_DWORD, L"", d}; };
+
+    auto t = std::make_shared<Table>();
+    auto add = [&](const std::wstring& rel, std::vector<Val> vals, std::vector<std::wstring> subs) {
+        t->keys.push_back(Key{rel, std::move(vals), std::move(subs)});
+    };
+
+    const std::wstring root = L"clsid\\" + Lower(kAppletClsid);
+    add(root,
+        {S(L"", REG_SZ, displayName),
+         S(L"System.ControlPanel.Category", REG_SZ, L"6"),
+         S(L"{305CA226-D286-468e-B848-2B2E8E697B74} 2", REG_EXPAND_SZ, L"6"),
+         S(L"System.Software.TasksFileUrl", REG_SZ, L"Internal"),
+         S(L"InfoTip", REG_EXPAND_SZ, infoTip),
+         S(L"LocalizedString", REG_EXPAND_SZ, displayName),
+         D(L"System.ControlPanel.EnableInSafeMode", 3),
+         S(L"System.ApplicationName", REG_SZ, L"Microsoft.Language")},
+        {L"DefaultIcon", L"InProcServer32", L"Instance", L"ShellFolder"});
+    add(root + L"\\defaulticon", {S(L"", REG_EXPAND_SZ, dll + L",-1")}, {});
+    add(root + L"\\inprocserver32",
+        {S(L"", REG_EXPAND_SZ, L"%SystemRoot%\\System32\\shdocvw.dll"), S(L"ThreadingModel", REG_SZ, L"Apartment")},
+        {});
+    add(root + L"\\instance", {S(L"CLSID", REG_SZ, kLayoutFolderClsid)}, {L"InitPropertyBag"});
+    add(root + L"\\instance\\initpropertybag", {D(L"ResourceID", 100), S(L"ResourceDLL", REG_EXPAND_SZ, dll)}, {});
+    // SFGAO_BROWSABLE is needed for Control Panel to open the item in place
+    add(root + L"\\shellfolder", {D(L"Attributes", 0xa80001a0), S(L"WantsParseDisplayName", REG_SZ, L"")}, {});
+
+    std::vector<Val> approved = {S(kAppletClsid, REG_SZ, L"")};
+    for (const wchar_t* c : kDllComClsids) {
+        const std::wstring r = L"clsid\\" + Lower(c);
+        add(r, {}, {L"InProcServer32"});
+        add(r + L"\\inprocserver32", {S(L"", REG_SZ, dll), S(L"ThreadingModel", REG_SZ, L"Apartment")}, {});
+        approved.push_back(S(c, REG_SZ, L""));
+    }
+    add(L"controlpanel\\namespace\\" + Lower(kAppletClsid), {S(L"", REG_SZ, L"Language Settings")}, {});
+    add(L"shell extensions\\approved", std::move(approved), {});
+    return t;
+}
+
+// ---- hooks ----
+static bool ChildExists(HKEY k) {   // does the NameSpace key already contain the applet?
+    HKEY h = nullptr;
+    if (RegOpenKeyExW_Orig(k, kAppletClsid, 0, KEY_READ, &h) != ERROR_SUCCESS) return false;
+    RegCloseKey_Orig(h);
+    return true;
+}
+
+static DWORD RealSubKeyCount(HKEY hKey) {
+    DWORD n = 0;
+    if (RegQueryInfoKeyW_Orig(hKey, nullptr, nullptr, nullptr, &n, nullptr, nullptr, nullptr, nullptr, nullptr,
+                              nullptr, nullptr) != ERROR_SUCCESS)
+        return 0xFFFFFFFF;
+    return n;
+}
+
+static LSTATUS OpenKeyImpl(HKEY hKey, LPCWSTR sub, DWORD opt, REGSAM sam, PHKEY phk, bool oldApi) {
+    auto realOpen = [&]() -> LSTATUS {
+        return oldApi ? RegOpenKeyW_Orig(hKey, sub, phk) : RegOpenKeyExW_Orig(hKey, sub, opt, sam, phk);
+    };
+    std::wstring parentPath;
+    bool fake = false;
+    const bool tracked = Lookup(hKey, parentPath, fake);
+    if (!tracked && !ContainsKeywordI(sub)) return realOpen();
+
+    const auto table = (sam & KEY_WOW64_32KEY) ? nullptr : GetTable();
+    if (!tracked) parentPath = PredefinedName(hKey);
+    const std::wstring full = JoinPath(parentPath, sub);
+    const bool virt = table && FindKey(*table, full);
+
+    if (fake) {   // the parent is virtual: answer from the table only
+        if (!virt) return ERROR_FILE_NOT_FOUND;
+        if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
+        HKEY f = NewFake(full);
+        if (!f) return ERROR_OUTOFMEMORY;
+        LogVirtual(L"open (child of virtual key)", full);
+        if (phk) *phk = f;
+        return ERROR_SUCCESS;
+    }
+    const LSTATUS st = realOpen();
+    if (st == ERROR_SUCCESS && phk && *phk) {
+        if (ContainsKeywordI(full.c_str())) Track(*phk, full);
+    } else if (st == ERROR_FILE_NOT_FOUND && phk && virt) {
+        if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
+        HKEY f = NewFake(full);
+        if (!f) return ERROR_OUTOFMEMORY;
+        LogVirtual(L"open (virtual)", full);
+        *phk = f;
+        return ERROR_SUCCESS;
+    }
+    return st;
+}
+
+static LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD opt, REGSAM sam, PHKEY phk) {
+    try {
+        return OpenKeyImpl(hKey, sub, opt, sam, phk, false);
+    } catch (...) {
+        Wh_Log(L"exception in RegOpenKeyExW hook");
+        return RegOpenKeyExW_Orig(hKey, sub, opt, sam, phk);
+    }
+}
+
+static LSTATUS WINAPI RegOpenKeyW_Hook(HKEY hKey, LPCWSTR sub, PHKEY phk) {
+    try {
+        return OpenKeyImpl(hKey, sub, 0, MAXIMUM_ALLOWED, phk, true);
+    } catch (...) {
+        Wh_Log(L"exception in RegOpenKeyW hook");
+        return RegOpenKeyW_Orig(hKey, sub, phk);
+    }
+}
+
+// Writes into the virtual tree are refused; everything else goes through.
+static LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD reserved, LPWSTR cls, DWORD opt, REGSAM sam,
+                                           LPSECURITY_ATTRIBUTES sa, PHKEY phk, LPDWORD disp) {
+    try {
+        std::wstring parentPath;
+        bool fake = false;
+        const bool tracked = Lookup(hKey, parentPath, fake);
+        if (tracked || ContainsKeywordI(sub)) {
+            if (!tracked) parentPath = PredefinedName(hKey);
+            const auto table = GetTable();
+            const std::wstring full = JoinPath(parentPath, sub);
+            if (table && FindKey(*table, full)) {
+                if (phk) *phk = nullptr;
+                return ERROR_ACCESS_DENIED;
+            }
+            if (fake) return ERROR_FILE_NOT_FOUND;
+        }
+    } catch (...) {
+    }
+    return RegCreateKeyExW_Orig(hKey, sub, reserved, cls, opt, sam, sa, phk, disp);
+}
+
+static LSTATUS WINAPI RegCloseKey_Hook(HKEY hKey) {
+    if (IsFake(hKey)) {
+        FreeFake(hKey);
+        return ERROR_SUCCESS;
+    }
+    if (IsTrackedOrFake(hKey)) Untrack(hKey);   // before closing, so a reused handle value can't be erased by mistake
+    return RegCloseKey_Orig(hKey);
+}
+
+static LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey, LPCWSTR name, LPDWORD reserved, LPDWORD type, LPBYTE data,
+                                            LPDWORD cb) {
+    try {
+        std::wstring path;
+        bool fake = false;
+        if (Lookup(hKey, path, fake)) {
+            if (const auto table = GetTable()) {
+                if (const Key* k = FindKey(*table, path)) {
+                    if (const Val* v = FindValue(*k, name)) {
+                        std::vector<BYTE> bytes;
+                        ValueBytes(*v, bytes);
+                        return Deliver(v->type, bytes, type, data, cb);
+                    }
+                }
+            }
+            if (fake) return ERROR_FILE_NOT_FOUND;
+        }
+    } catch (...) {
+        Wh_Log(L"exception in RegQueryValueExW hook");
+    }
+    return RegQueryValueExW_Orig(hKey, name, reserved, type, data, cb);
+}
+
+static LSTATUS WINAPI RegGetValueW_Hook(HKEY hkey, LPCWSTR subKey, LPCWSTR value, DWORD flags, LPDWORD pType,
+                                        PVOID data, LPDWORD cb) {
+    try {
+        std::wstring path;
+        bool fake = false;
+        const bool tracked = Lookup(hkey, path, fake);
+        if (tracked || ContainsKeywordI(subKey)) {
+            if (!tracked) path = PredefinedName(hkey);
+            path = JoinPath(path, subKey);
+            if (const auto table = (flags & RRF_SUBKEY_WOW6432KEY) ? nullptr : GetTable()) {
+                if (const Key* k = FindKey(*table, path)) {
+                    if (const Val* v = FindValue(*k, value)) return DeliverGetValue(*v, flags, pType, data, cb);
+                }
+            }
+            if (fake) return ERROR_FILE_NOT_FOUND;
+        }
+    } catch (...) {
+        Wh_Log(L"exception in RegGetValueW hook");
+    }
+    return RegGetValueW_Orig(hkey, subKey, value, flags, pType, data, cb);
+}
+
+static LSTATUS WINAPI RegEnumKeyExW_Hook(HKEY hKey, DWORD idx, LPWSTR name, LPDWORD cchName, LPDWORD reserved,
+                                         LPWSTR cls, LPDWORD cchCls, PFILETIME ft) {
+    try {
+        std::wstring path;
+        bool fake = false;
+        if (Lookup(hKey, path, fake)) {
+            const auto table = GetTable();
+            if (fake) {
+                const Key* k = table ? FindKey(*table, path) : nullptr;
+                if (!k || idx >= k->subkeys.size()) return ERROR_NO_MORE_ITEMS;
+                const LSTATUS st = DeliverName(k->subkeys[idx], name, cchName);
+                if (st == ERROR_SUCCESS) {
+                    if (cchCls) { if (cls && *cchCls) cls[0] = 0; *cchCls = 0; }
+                    if (ft) GetSystemTimeAsFileTime(ft);
+                }
+                return st;
+            }
+            if (table && IsNamespaceParent(path)) {
+                const LSTATUS st = RegEnumKeyExW_Orig(hKey, idx, name, cchName, reserved, cls, cchCls, ft);
+                if (st != ERROR_NO_MORE_ITEMS) return st;
+                if (ChildExists(hKey) || idx != RealSubKeyCount(hKey)) return ERROR_NO_MORE_ITEMS;
+                const LSTATUS inj = DeliverName(kAppletClsid, name, cchName);   // the applet goes after the real entries
+                if (inj == ERROR_SUCCESS) {
+                    if (cchCls) { if (cls && *cchCls) cls[0] = 0; *cchCls = 0; }
+                    if (ft) GetSystemTimeAsFileTime(ft);
+                }
+                return inj;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"exception in RegEnumKeyExW hook");
+    }
+    return RegEnumKeyExW_Orig(hKey, idx, name, cchName, reserved, cls, cchCls, ft);
+}
+
+static LSTATUS WINAPI RegEnumKeyW_Hook(HKEY hKey, DWORD idx, LPWSTR name, DWORD cchName) {
+    try {
+        std::wstring path;
+        bool fake = false;
+        if (Lookup(hKey, path, fake)) {
+            const auto table = GetTable();
+            if (fake) {
+                const Key* k = table ? FindKey(*table, path) : nullptr;
+                if (!k || idx >= k->subkeys.size()) return ERROR_NO_MORE_ITEMS;
+                DWORD cch = cchName;
+                return DeliverName(k->subkeys[idx], name, &cch);
+            }
+            if (table && IsNamespaceParent(path)) {
+                const LSTATUS st = RegEnumKeyW_Orig(hKey, idx, name, cchName);
+                if (st != ERROR_NO_MORE_ITEMS) return st;
+                if (ChildExists(hKey) || idx != RealSubKeyCount(hKey)) return ERROR_NO_MORE_ITEMS;
+                DWORD cch = cchName;
+                return DeliverName(kAppletClsid, name, &cch);
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"exception in RegEnumKeyW hook");
+    }
+    return RegEnumKeyW_Orig(hKey, idx, name, cchName);
+}
+
+static LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey, LPWSTR cls, LPDWORD cchCls, LPDWORD reserved,
+                                            LPDWORD cSubKeys, LPDWORD maxSubKeyLen, LPDWORD maxClassLen,
+                                            LPDWORD cValues, LPDWORD maxValueNameLen, LPDWORD maxValueLen,
+                                            LPDWORD secDescLen, PFILETIME ft) {
+    try {
+        std::wstring path;
+        bool fake = false;
+        if (Lookup(hKey, path, fake)) {
+            const auto table = GetTable();
+            if (fake) {
+                const Key* k = table ? FindKey(*table, path) : nullptr;
+                if (cSubKeys) *cSubKeys = k ? static_cast<DWORD>(k->subkeys.size()) : 0;
+                if (cValues) *cValues = k ? static_cast<DWORD>(k->values.size()) : 0;
+                if (maxSubKeyLen) *maxSubKeyLen = 32;
+                if (maxClassLen) *maxClassLen = 0;
+                if (maxValueNameLen) *maxValueNameLen = 64;
+                if (maxValueLen) *maxValueLen = 512;
+                if (secDescLen) *secDescLen = 0;
+                if (cls && cchCls) { if (*cchCls > 0) cls[0] = 0; *cchCls = 0; }
+                if (ft) GetSystemTimeAsFileTime(ft);
+                return ERROR_SUCCESS;
+            }
+            if (table && IsNamespaceParent(path)) {
+                const LSTATUS st = RegQueryInfoKeyW_Orig(hKey, cls, cchCls, reserved, cSubKeys, maxSubKeyLen,
+                                                         maxClassLen, cValues, maxValueNameLen, maxValueLen,
+                                                         secDescLen, ft);
+                if (st == ERROR_SUCCESS && cSubKeys && !ChildExists(hKey)) {
+                    ++*cSubKeys;
+                    const DWORD need = static_cast<DWORD>(wcslen(kAppletClsid) + 1);
+                    if (maxSubKeyLen && *maxSubKeyLen < need) *maxSubKeyLen = need;
+                }
+                return st;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"exception in RegQueryInfoKeyW hook");
+    }
+    return RegQueryInfoKeyW_Orig(hKey, cls, cchCls, reserved, cSubKeys, maxSubKeyLen, maxClassLen, cValues,
+                                 maxValueNameLen, maxValueLen, secDescLen, ft);
+}
+
+// ---- COM activation of the applet's classes ----
+// The applet is answered from the class factory of the module that implements it: shdocvw.dll for the applet
+// (which then reads the virtual "Instance" keys), UserLanguagesCpl.dll for its own two classes.
+static const GUID kClsidApplet = {0xBF782CC9, 0x5A52, 0x4A17, {0x80, 0x6C, 0x2A, 0x89, 0x4F, 0xFE, 0xEA, 0xC5}};
+static const GUID kClsidDll1 = {0x7F75058C, 0x9A21, 0x4F22, {0xA7, 0xCA, 0x11, 0x02, 0x05, 0x47, 0x9E, 0xF9}};
+static const GUID kClsidDll2 = {0x802E19CB, 0x06A0, 0x445D, {0x82, 0x97, 0x7D, 0xFE, 0xEA, 0x40, 0x6D, 0xDD}};
+static const GUID kIidClassFactory = {0x00000001, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+
+static bool IsOurClsid(REFCLSID c) {
+    return IsEqualGUID(c, kClsidApplet) || IsEqualGUID(c, kClsidDll1) || IsEqualGUID(c, kClsidDll2);
+}
+
+static HRESULT GetOurFactory(REFCLSID clsid, REFIID riid, void** ppv) {
+    HMODULE mod = nullptr;
+    if (IsEqualGUID(clsid, kClsidApplet)) {
+        mod = GetModuleHandleW(L"shdocvw.dll");
+        if (!mod) mod = LoadLibraryExW(L"shdocvw.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    } else {
+        mod = g_hUserLanguagesCpl.load();
+    }
+    if (!mod) return REGDB_E_CLASSNOTREG;
+    using DllGetClassObject_t = HRESULT(STDAPICALLTYPE*)(REFCLSID, REFIID, LPVOID*);
+    auto fn = reinterpret_cast<DllGetClassObject_t>(reinterpret_cast<void*>(GetProcAddress(mod, "DllGetClassObject")));
+    if (!fn) return REGDB_E_CLASSNOTREG;
+    return fn(clsid, riid, ppv);
+}
+
+using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
+static CoCreateInstance_t CoCreateInstanceCombase_Orig;
+static CoCreateInstance_t CoCreateInstanceOle32_Orig;
+
+static HRESULT HandleCoCreateInstance(REFCLSID rclsid, LPUNKNOWN outer, DWORD ctx, REFIID riid, LPVOID* ppv,
+                                      CoCreateInstance_t original) {
+    try {
+        if (ppv && (ctx & CLSCTX_INPROC_SERVER) && IsOurClsid(rclsid) && GetTable()) {
+            IClassFactory* factory = nullptr;
+            HRESULT hr = GetOurFactory(rclsid, kIidClassFactory, reinterpret_cast<void**>(&factory));
+            if (SUCCEEDED(hr) && factory) {
+                *ppv = nullptr;
+                hr = factory->CreateInstance(outer, riid, ppv);
+                factory->Release();
+                Wh_Log(L"[com] CoCreateInstance for the applet's class -> 0x%08lX", static_cast<unsigned long>(hr));
+                return hr;
+            }
+            Wh_Log(L"[com] no class factory (0x%08lX), using the normal path", static_cast<unsigned long>(hr));
+        }
+    } catch (...) {
+        Wh_Log(L"exception in CoCreateInstance hook");
+    }
+    return original(rclsid, outer, ctx, riid, ppv);
+}
+
+static HRESULT WINAPI CoCreateInstanceCombase_Hook(REFCLSID c, LPUNKNOWN o, DWORD ctx, REFIID r, LPVOID* p) {
+    return HandleCoCreateInstance(c, o, ctx, r, p, CoCreateInstanceCombase_Orig);
+}
+static HRESULT WINAPI CoCreateInstanceOle32_Hook(REFCLSID c, LPUNKNOWN o, DWORD ctx, REFIID r, LPVOID* p) {
+    return HandleCoCreateInstance(c, o, ctx, r, p, CoCreateInstanceOle32_Orig);
+}
+
+static void* RegFunc(const char* name) {
+    if (HMODULE kb = GetModuleHandleW(L"kernelbase.dll")) {
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(kb, name))) return p;
+    }
+    HMODULE adv = GetModuleHandleW(L"advapi32.dll");
+    if (!adv) adv = LoadLibraryW(L"advapi32.dll");
+    return adv ? reinterpret_cast<void*>(GetProcAddress(adv, name)) : nullptr;
+}
+
+static bool InstallHooks() {
+    struct H { const char* name; void* hook; void** orig; bool required; };
+    const H hooks[] = {
+        {"RegOpenKeyExW", (void*)RegOpenKeyExW_Hook, (void**)&RegOpenKeyExW_Orig, true},
+        {"RegOpenKeyW", (void*)RegOpenKeyW_Hook, (void**)&RegOpenKeyW_Orig, false},
+        {"RegCreateKeyExW", (void*)RegCreateKeyExW_Hook, (void**)&RegCreateKeyExW_Orig, true},
+        {"RegCloseKey", (void*)RegCloseKey_Hook, (void**)&RegCloseKey_Orig, true},
+        {"RegQueryValueExW", (void*)RegQueryValueExW_Hook, (void**)&RegQueryValueExW_Orig, true},
+        {"RegGetValueW", (void*)RegGetValueW_Hook, (void**)&RegGetValueW_Orig, true},
+        {"RegEnumKeyExW", (void*)RegEnumKeyExW_Hook, (void**)&RegEnumKeyExW_Orig, true},
+        {"RegEnumKeyW", (void*)RegEnumKeyW_Hook, (void**)&RegEnumKeyW_Orig, true},
+        {"RegQueryInfoKeyW", (void*)RegQueryInfoKeyW_Hook, (void**)&RegQueryInfoKeyW_Orig, true},
+    };
+    for (const H& h : hooks) {
+        void* target = RegFunc(h.name);
+        if (!target || !Wh_SetFunctionHook(target, h.hook, h.orig)) {
+            if (!h.required) continue;
+            Wh_Log(L"Could not hook %S", h.name);
             return false;
         }
     }
-    g_registered.store(true);   // from here on, UnregisterApplet() cleans up whatever was written
-    const std::wstring displayName = g_forceTranslations.load()
-                                         ? std::wstring(GetLocalizedDisplayName())
-                                         : (L"@" + dll + L",-1#immutable1");
-    const std::wstring infoTip = g_forceTranslations.load()
-                                     ? std::wstring(GetLocalizedInfoTip())
-                                     : (L"@" + dll + L",-2#immutable1");
-    bool ok = RegSetStr(k, nullptr, displayName) &&
-              RegSetStr(k, L"System.ControlPanel.Category", L"6") &&
-              RegSetStr(k, L"System.Software.TasksFileUrl", L"Internal") &&
-              RegSetStr(k, L"InfoTip", infoTip, REG_EXPAND_SZ) &&
-              RegSetStr(k, L"LocalizedString", displayName, REG_EXPAND_SZ) &&
-              RegSetDword(k, L"System.ControlPanel.EnableInSafeMode", 3) &&
-              RegSetStr(k, L"System.ApplicationName", L"Microsoft.Language");
-    RegCloseKey(k);
-
-    auto sub = [&](const wchar_t* name, auto&& fill) {
-        HKEY s = CreateVolatileKey(root + L"\\" + name);
-        if (!s) return false;
-        const bool r = fill(s);
-        RegCloseKey(s);
-        return r;
-    };
-    ok = ok && sub(L"DefaultIcon", [&](HKEY s) { return RegSetStr(s, nullptr, dll + L",-1", REG_EXPAND_SZ); });
-    ok = ok && sub(L"InProcServer32", [&](HKEY s) {
-        return RegSetStr(s, nullptr, L"%SystemRoot%\\System32\\shdocvw.dll", REG_EXPAND_SZ) &&
-               RegSetStr(s, L"ThreadingModel", L"Apartment");
-    });
-    ok = ok && sub(L"Instance", [&](HKEY s) { return RegSetStr(s, L"CLSID", kLayoutFolderClsid); });
-    ok = ok && sub(L"Instance\\InitPropertyBag", [&](HKEY s) {
-        return RegSetDword(s, L"ResourceID", 100) && RegSetStr(s, L"ResourceDLL", dll, REG_EXPAND_SZ);
-    });
-    ok = ok && sub(L"ShellFolder", [&](HKEY s) {
-        return RegSetDword(s, L"Attributes", 0xa0000000) && RegSetStr(s, L"WantsParseDisplayName", L"");
-    });
-    for (const wchar_t* c : kDllComClsids) {
-        HKEY ck = CreateVolatileKey(std::wstring(kClassesClsid) + c + L"\\InProcServer32");
-        if (!ck) { ok = false; break; }
-        ok = RegSetStr(ck, nullptr, dll) && RegSetStr(ck, L"ThreadingModel", L"Apartment") && ok;
-        RegCloseKey(ck);
-    }
-    // Control Panel namespace entry (this is what makes the item appear).
-    HKEY ns = CreateVolatileKey(std::wstring(kNamespaceKey) + kAppletClsid);
-    ok = ns && RegSetStr(ns, nullptr, L"Language Settings") && ok;
-    if (ns) RegCloseKey(ns);
-
-    if (!ok) {
-        Wh_Log(L"Registering the applet failed part-way; removing what was written");
-        UnregisterApplet();
-        return false;
-    }
-    {
-        HKEY t = nullptr;
-        const LONG q = RegOpenKeyExW(HKEY_CURRENT_USER, (std::wstring(kNamespaceKey) + kAppletClsid).c_str(), 0, KEY_READ, &t);
-        Wh_Log(L"[check] HKCU NameSpace entry readable: %s (err=%ld)", q == ERROR_SUCCESS ? L"yes" : L"NO", q);
-        if (t) RegCloseKey(t);
-    }
-    Wh_Log(L"Language applet registered for this user (volatile HKCU keys)");
+    HMODULE combase = GetModuleHandleW(L"combase.dll");
+    if (!combase) combase = LoadLibraryExW(L"combase.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
+    if (!ole32) ole32 = LoadLibraryExW(L"ole32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* pCombase = combase ? reinterpret_cast<void*>(GetProcAddress(combase, "CoCreateInstance")) : nullptr;
+    void* pOle32 = ole32 ? reinterpret_cast<void*>(GetProcAddress(ole32, "CoCreateInstance")) : nullptr;
+    if (pCombase) Wh_SetFunctionHook(pCombase, (void*)CoCreateInstanceCombase_Hook, (void**)&CoCreateInstanceCombase_Orig);
+    if (pOle32 && pOle32 != pCombase)
+        Wh_SetFunctionHook(pOle32, (void*)CoCreateInstanceOle32_Hook, (void**)&CoCreateInstanceOle32_Orig);
     return true;
+}
+
+}  // namespace vreg
+
+static void PublishVirtualRegistration(const std::wstring& binDir) {
+    vreg::SetTable(vreg::BuildTable(binDir));
+    Wh_Log(L"Language applet registered virtually (applet keys are not written to the registry)");
+}
+
+static void UnpublishVirtualRegistration() {
+    vreg::SetTable(nullptr);
+    vreg::ForgetAllHandles();
+    vreg::ReleaseScratchRoot();
 }
 
 // ---- setup thread ---------------------------------------------------------------------------
@@ -2615,7 +3173,7 @@ static void RunSetup() {
     if (g_shuttingDown.load()) return;
 
     if (!LoadPrivateModules(binDir, outs)) return;
-    RegisterApplet(binDir);
+    PublishVirtualRegistration(binDir);
 }
 // ---- intl.cpl redirect ----------------------------------------------------------------------
 static std::atomic<bool> g_redirectIntl{false};
@@ -2850,17 +3408,15 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
     const wchar_t* exeName = wcsrchr(exe, L'\\');
     exeName = exeName ? exeName + 1 : exe;
-    g_isExplorer.store(_wcsicmp(exeName, L"explorer.exe") == 0);
+    // explorer.exe and control.exe both host the applet (Control Panel items are opened in either); rundll32.exe
+    // only needs the intl.cpl redirect. g_isExplorer means "full host" from here on.
+    g_isExplorer.store(_wcsicmp(exeName, L"explorer.exe") == 0 || _wcsicmp(exeName, L"control.exe") == 0);
 
-    // rundll32.exe / control.exe only need the intl.cpl redirect: nothing to do there when it is off.
     if (!g_isExplorer.load() && !g_redirectIntl.load()) return FALSE;
 
     InitRedirect();
 
-    if (!g_isExplorer.load()) {
-        // Redirect only: no download, no registration, no resource hooks, no file cleanup.
-        return TRUE;
-    }
+    if (!g_isExplorer.load()) return TRUE;   // rundll32.exe: redirect only, nothing else
 
     g_shuttingDown.store(false);
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -2871,6 +3427,7 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)CompareStringOrdinal, (void*)CompareStringOrdinal_Hook,
                        (void**)&CompareStringOrdinal_Original);
     InstallTranslationHook();
+    if (!vreg::InstallHooks()) return FALSE;
     try {
         g_setupThread.emplace([] { try { RunSetup(); } catch (...) { Wh_Log(L"Setup threw an exception"); } });
     } catch (...) {
@@ -2902,8 +3459,8 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
                     }
                 }
                 RefreshGeneratedMuiFiles(dlDir, binDir);
-                if (g_registered.load()) {
-                    RegisterApplet(binDir);
+                if (vreg::GetTable()) {
+                    PublishVirtualRegistration(binDir);   // refresh the display name for the new language
                 }
             }
         }
@@ -2936,7 +3493,7 @@ void Wh_ModUninit() {
         std::lock_guard<std::mutex> l(g_resModuleCacheMutex);
         g_resModuleCache.clear();
     }
-    UnregisterApplet();   // the loaded DLLs stay mapped until explorer.exe exits: shell objects may still use them
+    UnpublishVirtualRegistration();   // the loaded DLLs stay mapped until explorer.exe exits: shell objects may still use them
 
     const std::wstring dir = StorageDir();
     if (!dir.empty()) {
