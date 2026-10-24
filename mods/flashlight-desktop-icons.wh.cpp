@@ -2,25 +2,55 @@
 // @id              flashlight-desktop-icons
 // @name            Flashlight Desktop Icons
 // @description     Make desktop icons semi-transparent or invisible when idle, and reveal ONLY the icons near the mouse cursor within a customizable radius. Works flawlessly with Wallpaper Engine.
-// @version         5.0.0
+// @version         1.0.0
 // @author          dantepicachu
 // @github          https://github.com/dantepicachu11-coder
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -luser32 -lmsimg32 -luxtheme
+// @compilerOptions -lcomctl32 -lgdi32 -luser32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Transparent Desktop Icons (v5 - Ultra Optimized)
+# Flashlight Desktop Icons
 
-Makes desktop icons semi-transparent (or completely invisible) when idle.
-When your mouse cursor approaches an individual desktop icon, ONLY icons within your configured pixel radius smoothly reveal themselves, leaving the rest of the desktop idle.
+Makes desktop icons semi-transparent (or completely invisible) when idle. When
+the mouse cursor moves over the desktop, only the icons within the configured
+pixel radius smoothly reveal themselves, and they fade back to their idle
+opacity once the mouse stops moving.
 
-* Fully compatible with Wallpaper Engine and Live Wallpapers.
-* Zero CPU overhead when the mouse is idle.
-* No overlay windows (does not block clicks or cause black screens).
-* Double-clicking on an empty area toggles icon visibility on and off.
+![Flashlight Desktop Icons demo](https://i.imgur.com/UvM4nxK.gif)
+
+* No overlay windows: each icon's alpha is applied at draw time with GDI custom
+  draw, so nothing blocks clicks and no wallpaper layers are duplicated.
+  Compatible with Wallpaper Engine and other live wallpapers.
+* No background threads and no polling: repainting is driven by mouse events
+  and a fade timer running on the desktop's own thread, so the mod does no work
+  at all while the mouse is away from the desktop.
+* Labels fade together with their icons. Enable the "Hide Icon Labels" setting
+  to remove the text under desktop icons entirely.
+* Double-clicking empty desktop space hides all icons; double-clicking again
+  returns to flashlight mode (rather than making all icons fully visible).
+
+## How this differs from similar mods
+
+* [Transparent Desktop Icons with Spotlight](https://windhawk.net/mods/transparent-desktop-icons-spotlight)
+  reveals icons around the cursor using a DirectComposition overlay mask. This
+  mod instead computes each icon's alpha from its distance to the cursor and
+  applies it per icon at draw time (GDI custom draw), with no overlay or
+  wallpaper layers.
+* [Desktop Icons Transparency](https://windhawk.net/mods/desktop-icons-transparency)
+  applies one fixed opacity to all desktop icons. This mod's opacity is
+  per-icon and follows the cursor.
+* [Desktop Icon Section Auto-Hide & Fluent Hover Reveal](https://windhawk.net/mods/desktop-icon-section-autohide)
+  and [ZenDesktop](https://windhawk.net/mods/zen-desktop-toggle-icons) hide and
+  reveal icons in bulk (per section or on toggle). This mod's default
+  experience is a continuous visibility gradient around the cursor.
+
+## Credits
+
+* [desktop-icons-transparency](https://windhawk.net/mods/desktop-icons-transparency)
+  by zed712969-crypto: desktop window discovery and subclassing patterns.
 */
 // ==/WindhawkModReadme==
 
@@ -41,23 +71,31 @@ When your mouse cursor approaches an individual desktop icon, ONLY icons within 
 - spotlightFadeOutDuration: 800
   $name: Fade Out Duration (ms)
   $description: How long it takes for icons to fade out after the idle delay
+- hideLabels: false
+  $name: Hide Icon Labels
+  $description: Never draw the text labels under desktop icons. Selected icons still show their name, since Explorer draws them.
 - toggleOnDoubleClick: true
   $name: Toggle Icons on Double-Click
-  $description: Double-click on empty desktop background to hide or show icons completely.
+  $description: Double-click on empty desktop background to hide all icons; double-click again to return to flashlight mode.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windowsx.h>
 #include <commctrl.h>
 #include <Uxtheme.h>
 #include <vssym32.h>
+
 #include <algorithm>
 #include <atomic>
-#include <thread>
 #include <cmath>
-#include <windhawk_api.h>
+#include <mutex>
+#include <vector>
 
-////////////////////////////////////////////////////////////////////////////////// Settings
+#include <windhawk_utils.h>
+
+////////////////////////////////////////////////////////////////////////////////
+// Settings
 
 struct Settings {
     int idleOpacity;
@@ -65,383 +103,679 @@ struct Settings {
     int spotlightRadius;
     int idleDelay;
     int spotlightFadeOutDuration;
+    bool hideLabels;
     bool toggleOnDoubleClick;
-} g_settings;
+};
 
-////////////////////////////////////////////////////////////////////////////////// Global State
+// Written by the Windhawk engine thread (LoadSettings), read by the desktop
+// thread, so all access is guarded by a mutex.
+Settings g_settings;
+std::mutex g_settingsMutex;
 
-HWND g_listViewWnd = nullptr;
-HWND g_shellViewWnd = nullptr;
-HTHEME g_hTheme = nullptr; // Cached theme handle for maximum performance
-
-std::atomic<bool> g_unloading{false};
-std::atomic<bool> g_subclassed{false};
-
-std::thread* g_initThread = nullptr;
-std::thread* g_repaintThread = nullptr;
-HHOOK g_hHook = nullptr;
-
-// Thread-safe mouse tracking
-std::atomic<int> g_mouseX{-9999};
-std::atomic<int> g_mouseY{-9999};
-std::atomic<ULONGLONG> g_lastMouseTime{0};
-
-std::atomic<bool> g_overlayBypassed{false};
-
-#define SUBCLASS_ID_SV 2
-#define SUBCLASS_ID_LV 3
-
-////////////////////////////////////////////////////////////////////////////////// Helper Math
-
-float GetDistanceToRect(POINT pt, const RECT& rc) {
-    int dx = (std::max)({ (int)(rc.left - pt.x), 0, (int)(pt.x - rc.right) });
-    int dy = (std::max)({ (int)(rc.top - pt.y), 0, (int)(pt.y - rc.bottom) });
-    return std::sqrt((float)(dx * dx + dy * dy));
+Settings GetSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings;
 }
 
-BYTE CalculateIconAlpha(int iItem) {
-    if (g_overlayBypassed.load(std::memory_order_relaxed)) {
-        return 0; 
+////////////////////////////////////////////////////////////////////////////////
+// Global state
+
+// Set from the engine thread (Wh_ModAfterInit / Wh_ModUninit) or from the
+// desktop thread (CreateWindowExW hook), read by the desktop thread.
+std::atomic<HWND> g_listViewWnd{nullptr};   // Desktop SysListView32 (subclassed)
+std::atomic<HWND> g_shellViewWnd{nullptr};  // Parent SHELLDLL_DefView (subclassed)
+
+// Posted to the desktop list view on unload so that the fade timer is killed
+// on its owning thread, while the subclass that handles it is still installed.
+UINT g_msgKillFadeTimer = 0;
+
+// All of the state below is only ever touched by the desktop's UI thread (the
+// subclass procs, the fade timer and the custom draw handler).
+HTHEME g_hTheme = nullptr;                  // Cached theme handle
+POINT g_mousePos = {-32000, -32000};        // Last cursor pos, list view client coordinates
+ULONGLONG g_lastMouseMoveTime = 0;          // GetTickCount64() of the last WM_MOUSEMOVE
+bool g_trackingMouseLeave = false;          // TrackMouseEvent(TME_LEAVE) is pending
+bool g_fadeTicking = false;                 // Fade timer is in its ~60 FPS tick phase
+bool g_iconsHidden = false;                 // Set by the double-click toggle
+std::vector<BYTE> g_lastItemAlphas;         // Per-item alpha, for targeted invalidation
+
+constexpr UINT_PTR kFadeTimerId = 0xF1A5;  // Unlikely to collide with comctl32 internal timers
+constexpr UINT kFadeTickIntervalMs = 16;   // ~60 FPS while a fade is running
+
+////////////////////////////////////////////////////////////////////////////////
+// Alpha math
+
+float GetDistanceToRect(const POINT& pt, const RECT& rc) {
+    // Squaring in float: with the off-screen sentinel position, dx*dx + dy*dy
+    // would overflow a 32-bit int.
+    float dx = (float)(std::max)({(int)(rc.left - pt.x), 0, (int)(pt.x - rc.right + 1)});
+    float dy = (float)(std::max)({(int)(rc.top - pt.y), 0, (int)(pt.y - rc.bottom + 1)});
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+BYTE CalculateIconAlpha(HWND hListView, int iItem) {
+    if (g_iconsHidden) {
+        return 0;
     }
 
-    // Use cached mouse coordinates to prevent thousands of API calls per second
-    POINT ptMouse = { g_mouseX.load(std::memory_order_relaxed), g_mouseY.load(std::memory_order_relaxed) };
-    ScreenToClient(g_listViewWnd, &ptMouse);
+    Settings settings = GetSettings();
 
-    RECT rcBounds;
-    rcBounds.left = LVIR_BOUNDS;
-    if (!SendMessageW(g_listViewWnd, LVM_GETITEMRECT, iItem, (LPARAM)&rcBounds)) {
-        return (BYTE)g_settings.idleOpacity;
+    RECT rcBounds = {LVIR_BOUNDS};
+    if (!SendMessageW(hListView, LVM_GETITEMRECT, iItem, (LPARAM)&rcBounds)) {
+        return (BYTE)settings.idleOpacity;
     }
 
-    float dist = GetDistanceToRect(ptMouse, rcBounds);
-    float radius = (float)(std::max)(g_settings.spotlightRadius, 1);
-    
-    float targetSpotFade = 0.0f;
+    float dist = GetDistanceToRect(g_mousePos, rcBounds);
+    float radius = (float)(std::max)(settings.spotlightRadius, 1);
+
+    float spotlightFade = 0.0f;
     if (dist <= radius) {
-        targetSpotFade = 1.0f - (dist / radius); 
+        spotlightFade = 1.0f - dist / radius;
     }
 
-    ULONGLONG elapsed = GetTickCount64() - g_lastMouseTime.load(std::memory_order_relaxed);
+    ULONGLONG elapsed = GetTickCount64() - g_lastMouseMoveTime;
     float timeFade = 1.0f;
-    if (elapsed > (ULONGLONG)g_settings.idleDelay) {
-        float fadeTime = (float)(elapsed - g_settings.idleDelay);
-        if (g_settings.spotlightFadeOutDuration > 0) {
-            timeFade = 1.0f - (fadeTime / g_settings.spotlightFadeOutDuration);
+    if (elapsed > (ULONGLONG)settings.idleDelay) {
+        float fadeTime = (float)(elapsed - settings.idleDelay);
+        if (settings.spotlightFadeOutDuration > 0) {
+            timeFade = 1.0f - fadeTime / settings.spotlightFadeOutDuration;
             timeFade = std::clamp(timeFade, 0.0f, 1.0f);
         } else {
             timeFade = 0.0f;
         }
     }
 
-    float finalFade = targetSpotFade * timeFade;
-    int alpha = g_settings.idleOpacity + (int)((g_settings.activeOpacity - g_settings.idleOpacity) * finalFade);
+    float finalFade = spotlightFade * timeFade;
+    int alpha = settings.idleOpacity +
+                (int)((settings.activeOpacity - settings.idleOpacity) * finalFade);
     return (BYTE)std::clamp(alpha, 0, 255);
 }
 
-////////////////////////////////////////////////////////////////////////////////// Window Search
+////////////////////////////////////////////////////////////////////////////////
+// Repainting: invalidate only the icons whose alpha actually changed
 
-HWND GetDesktopListView() {
-    HWND hShellView = nullptr;
-    HWND hProgman = FindWindowW(L"Progman", nullptr);
-    if (hProgman) {
-        hShellView = FindWindowExW(hProgman, nullptr, L"SHELLDLL_DefView", nullptr);
+void UpdateIconVisibility(HWND hListView) {
+    int count = (int)SendMessageW(hListView, LVM_GETITEMCOUNT, 0, 0);
+    if (count < 0) {
+        return;
     }
-    if (!hShellView) {
-        HWND hWorkerW = nullptr;
-        while ((hWorkerW = FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) != nullptr) {
-            hShellView = FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-            if (hShellView) break;
+
+    bool refreshAll = ((int)g_lastItemAlphas.size() != count);
+    if (refreshAll) {
+        g_lastItemAlphas.assign(count, 0);
+        InvalidateRect(hListView, nullptr, FALSE);
+    }
+
+    for (int iItem = 0; iItem < count; iItem++) {
+        BYTE alpha = CalculateIconAlpha(hListView, iItem);
+        if (g_lastItemAlphas[iItem] == alpha) {
+            continue;
+        }
+        g_lastItemAlphas[iItem] = alpha;
+        if (refreshAll) {
+            continue;  // Already invalidated the whole client area above.
+        }
+
+        RECT rc = {LVIR_BOUNDS};
+        if (SendMessageW(hListView, LVM_GETITEMRECT, iItem, (LPARAM)&rc)) {
+            // Small margin for the label glow and selection outline.
+            InflateRect(&rc, 4, 4);
+            InvalidateRect(hListView, &rc, FALSE);
         }
     }
-    if (hShellView) {
-        return FindWindowExW(hShellView, nullptr, L"SysListView32", nullptr);
-    }
-    return nullptr;
 }
 
-////////////////////////////////////////////////////////////////////////////////// Subclasses
+////////////////////////////////////////////////////////////////////////////////
+// Fade timer: runs on the desktop thread, only between a mouse move and the
+// end of the fade-out. Killed as soon as the fade completes.
 
-LRESULT CALLBACK ListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uId, DWORD_PTR dwRef) {
-    if (!g_unloading) {
-        if (uMsg == WM_ERASEBKGND) {
-            return TRUE;
-        }
+void ScheduleFadeTimer(HWND hListView) {
+    if (g_fadeTicking) {
+        // Already ticking; OnFadeTimer re-evaluates the state on every tick.
+        return;
+    }
 
-        if (uMsg == WM_LBUTTONDBLCLK && g_settings.toggleOnDoubleClick) {
-            LVHITTESTINFO hti = {};
-            hti.pt.x = (short)LOWORD(lParam);
-            hti.pt.y = (short)HIWORD(lParam);
-            ListView_HitTest(hWnd, &hti);
-            if (hti.flags & LVHT_NOWHERE) {
-                bool nowBypassed = !g_overlayBypassed.load(std::memory_order_relaxed);
-                g_overlayBypassed.store(nowBypassed, std::memory_order_relaxed);
-                InvalidateRect(hWnd, NULL, FALSE);
+    Settings settings = GetSettings();
+    ULONGLONG elapsed = GetTickCount64() - g_lastMouseMoveTime;
+    ULONGLONG remaining =
+        elapsed >= (ULONGLONG)settings.idleDelay
+            ? 1
+            : (ULONGLONG)settings.idleDelay - elapsed + 1;
+    SetTimer(hListView, kFadeTimerId, (UINT)remaining, nullptr);
+}
+
+void OnFadeTimer(HWND hListView) {
+    Settings settings = GetSettings();
+    ULONGLONG elapsed = GetTickCount64() - g_lastMouseMoveTime;
+
+    if (elapsed < (ULONGLONG)settings.idleDelay) {
+        // The mouse moved (or the settings changed) since the timer was set;
+        // wait for the remaining delay.
+        g_fadeTicking = false;
+        SetTimer(hListView, kFadeTimerId,
+                 (UINT)((ULONGLONG)settings.idleDelay - elapsed + 1), nullptr);
+        return;
+    }
+
+    UpdateIconVisibility(hListView);
+
+    ULONGLONG fadeEnd = (ULONGLONG)settings.idleDelay +
+                        (ULONGLONG)settings.spotlightFadeOutDuration;
+    if (elapsed >= fadeEnd) {
+        // Fade complete, everything is at idle opacity now. Stop the timer.
+        KillTimer(hListView, kFadeTimerId);
+        g_fadeTicking = false;
+    } else if (!g_fadeTicking) {
+        g_fadeTicking = true;
+        SetTimer(hListView, kFadeTimerId, kFadeTickIntervalMs, nullptr);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Custom draw: draws one item (icon + label) with the given alpha
+
+void DrawIconWithAlpha(HWND hListView, HDC hdc, int iItem,
+                       const LVITEMW& lvi, BYTE alpha) {
+    HIMAGELIST himl =
+        (HIMAGELIST)SendMessageW(hListView, LVM_GETIMAGELIST, LVSIL_NORMAL, 0);
+    if (!himl) {
+        return;
+    }
+
+    RECT rcIcon = {LVIR_ICON};
+    SendMessageW(hListView, LVM_GETITEMRECT, iItem, (LPARAM)&rcIcon);
+
+    // Query the live icon size so that custom sizes (Ctrl+mouse wheel on the
+    // desktop) are respected.
+    int iconWidth = 32, iconHeight = 32;
+    ImageList_GetIconSize(himl, &iconWidth, &iconHeight);
+
+    int drawX = rcIcon.left + ((rcIcon.right - rcIcon.left) - iconWidth) / 2;
+    int drawY = rcIcon.top + ((rcIcon.bottom - rcIcon.top) - iconHeight) / 2;
+
+    IMAGELISTDRAWPARAMS imldp = {};
+    imldp.cbSize = sizeof(imldp);
+    imldp.himl = himl;
+    imldp.i = lvi.iImage;
+    imldp.hdcDst = hdc;
+    imldp.x = drawX;
+    imldp.y = drawY;
+    imldp.cx = iconWidth;
+    imldp.cy = iconHeight;
+    // The LVIS_OVERLAYMASK state bits use the same bit positions as the
+    // overlay index in fStyle, so shortcut arrows, cloud/sync badges etc.
+    // keep being drawn at partial alpha.
+    imldp.fStyle = ILD_TRANSPARENT | (lvi.state & LVIS_OVERLAYMASK);
+    imldp.fState = ILS_ALPHA;
+    imldp.Frame = alpha;
+
+    ImageList_DrawIndirect(&imldp);
+}
+
+void DrawLabelWithAlpha(HWND hListView, HDC hdc, int iItem, BYTE alpha) {
+    RECT rcLabel = {LVIR_LABEL};
+    if (!SendMessageW(hListView, LVM_GETITEMRECT, iItem, (LPARAM)&rcLabel)) {
+        return;
+    }
+    if (rcLabel.right <= rcLabel.left || rcLabel.bottom <= rcLabel.top) {
+        return;
+    }
+
+    WCHAR szText[256] = {};
+    LVITEMW lvi = {};
+    lvi.mask = LVIF_TEXT;
+    lvi.iItem = iItem;
+    lvi.pszText = szText;
+    lvi.cchTextMax = ARRAYSIZE(szText);
+    SendMessageW(hListView, LVM_GETITEMW, 0, (LPARAM)&lvi);
+    if (!szText[0]) {
+        return;
+    }
+
+    HDC hdcBuffer = nullptr;
+    BP_PAINTPARAMS bpParams = {sizeof(bpParams)};
+    bpParams.dwFlags = BPPF_ERASE;
+    // EndBufferedPaint(TRUE) must alpha-blend the (premultiplied) buffer onto
+    // the wallpaper. Without a blend function the buffer, which is erased to
+    // transparent black, would be copied as-is and paint an opaque black box.
+    BLENDFUNCTION blendFunction = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    bpParams.pBlendFunction = &blendFunction;
+
+    HPAINTBUFFER hbp =
+        BeginBufferedPaint(hdc, &rcLabel, BPBF_TOPDOWNDIB, &bpParams, &hdcBuffer);
+    if (!hbp) {
+        return;
+    }
+
+    // Note: the buffer DC uses the same coordinate space as the target DC
+    // (its window origin is set to the target rect), so drawing uses rcLabel.
+    HFONT hFont = (HFONT)SendMessageW(hListView, WM_GETFONT, 0, 0);
+    HFONT hOldFont = (HFONT)SelectObject(hdcBuffer, hFont);
+
+    if (g_hTheme) {
+        DTTOPTS dttOpts = {sizeof(dttOpts)};
+        dttOpts.dwFlags = DTT_TEXTCOLOR | DTT_COMPOSITED | DTT_GLOWSIZE;
+        dttOpts.crText = RGB(255, 255, 255);
+        dttOpts.iGlowSize = 5;
+        DrawThemeTextEx(g_hTheme, hdcBuffer, LVP_LISTITEM, 0, szText, -1,
+                        DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX,
+                        &rcLabel, &dttOpts);
+    } else {
+        SetBkMode(hdcBuffer, TRANSPARENT);
+        SetTextColor(hdcBuffer, RGB(255, 255, 255));
+        DrawTextW(hdcBuffer, szText, -1, &rcLabel,
+                  DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+    }
+
+    SelectObject(hdcBuffer, hOldFont);
+
+    // Scale the per-pixel alpha (and premultiply the colors accordingly) so
+    // that the label fades together with the icon.
+    RGBQUAD* pBits = nullptr;
+    int cxRow = 0;
+    if (SUCCEEDED(GetBufferedPaintBits(hbp, &pBits, &cxRow)) && pBits) {
+        int width = rcLabel.right - rcLabel.left;
+        int height = rcLabel.bottom - rcLabel.top;
+        for (int y = 0; y < height; y++) {
+            RGBQUAD* pRow = pBits + (y * cxRow);
+            for (int x = 0; x < width; x++) {
+                if (!g_hTheme && pRow[x].rgbReserved == 0) {
+                    // Plain GDI text doesn't set the alpha channel. Estimate
+                    // the coverage of the white text from its color so that
+                    // anti-aliased edge pixels don't get a dark fringe.
+                    BYTE coverage = (std::max)({pRow[x].rgbRed, pRow[x].rgbGreen,
+                                                pRow[x].rgbBlue});
+                    pRow[x].rgbReserved = coverage;
+                }
+                pRow[x].rgbReserved = (BYTE)(pRow[x].rgbReserved * alpha / 255);
+                pRow[x].rgbRed = (BYTE)(pRow[x].rgbRed * alpha / 255);
+                pRow[x].rgbGreen = (BYTE)(pRow[x].rgbGreen * alpha / 255);
+                pRow[x].rgbBlue = (BYTE)(pRow[x].rgbBlue * alpha / 255);
             }
         }
     }
+
+    EndBufferedPaint(hbp, TRUE);
+}
+
+LRESULT HandleCustomDraw(LPNMLVCUSTOMDRAW pLVCD) {
+    HWND hListView = pLVCD->nmcd.hdr.hwndFrom;
+
+    switch (pLVCD->nmcd.dwDrawStage) {
+        case CDDS_PREPAINT:
+            if (!g_hTheme) {
+                g_hTheme = OpenThemeData(hListView, L"Explorer::ListView");
+                if (!g_hTheme) {
+                    g_hTheme = OpenThemeData(hListView, L"ListView");
+                }
+            }
+            return CDRF_NOTIFYITEMDRAW;
+
+        case CDDS_ITEMPREPAINT: {
+            int iItem = (int)pLVCD->nmcd.dwItemSpec;
+
+            LVITEMW lvi = {};
+            lvi.mask = LVIF_STATE | LVIF_IMAGE;
+            lvi.iItem = iItem;
+            lvi.stateMask = LVIS_SELECTED | LVIS_CUT | LVIS_OVERLAYMASK;
+            SendMessageW(hListView, LVM_GETITEMW, 0, (LPARAM)&lvi);
+
+            // Selected and cut items are transient, highlighted states; let
+            // Explorer draw them natively at full opacity.
+            if (lvi.state & (LVIS_SELECTED | LVIS_CUT)) {
+                return CDRF_DODEFAULT;
+            }
+
+            Settings settings = GetSettings();
+            BYTE alpha = CalculateIconAlpha(hListView, iItem);
+
+            // At full opacity Explorer draws the item better than we do, so
+            // hand it back - unless labels are hidden, since Explorer would
+            // draw the label too.
+            if (alpha == 255 && !settings.hideLabels) {
+                return CDRF_DODEFAULT;
+            }
+            if (alpha == 0) {
+                return CDRF_SKIPDEFAULT;
+            }
+
+            DrawIconWithAlpha(hListView, pLVCD->nmcd.hdc, iItem, lvi, alpha);
+            if (!settings.hideLabels) {
+                DrawLabelWithAlpha(hListView, pLVCD->nmcd.hdc, iItem, alpha);
+            }
+            return CDRF_SKIPDEFAULT;
+        }
+    }
+
+    return CDRF_DODEFAULT;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Subclasses (both installed on the desktop's UI thread)
+
+LRESULT CALLBACK ListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
+                                      LPARAM lParam, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+        case WM_MOUSEMOVE:
+            g_mousePos = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            g_lastMouseMoveTime = GetTickCount64();
+
+            if (!g_trackingMouseLeave) {
+                TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hWnd, 0};
+                if (TrackMouseEvent(&tme)) {
+                    g_trackingMouseLeave = true;
+                }
+            }
+
+            UpdateIconVisibility(hWnd);
+            ScheduleFadeTimer(hWnd);
+            break;
+
+        case WM_MOUSELEAVE:
+            g_trackingMouseLeave = false;
+            break;
+
+        case WM_TIMER:
+            if (wParam == kFadeTimerId) {
+                OnFadeTimer(hWnd);
+                return 0;
+            }
+            break;
+
+        case WM_LBUTTONDBLCLK: {
+            Settings settings = GetSettings();
+            if (settings.toggleOnDoubleClick) {
+                LVHITTESTINFO hti = {};
+                hti.pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                SendMessageW(hWnd, LVM_HITTEST, 0, (LPARAM)&hti);
+                if (hti.flags & LVHT_NOWHERE) {
+                    g_iconsHidden = !g_iconsHidden;
+                    UpdateIconVisibility(hWnd);
+                }
+            }
+            break;
+        }
+
+        case WM_NCDESTROY:
+            if (hWnd == g_listViewWnd.load()) {
+                g_listViewWnd = nullptr;
+                g_fadeTicking = false;
+                g_lastItemAlphas.clear();
+            }
+            break;
+
+        default:
+            if (g_msgKillFadeTimer && uMsg == g_msgKillFadeTimer) {
+                KillTimer(hWnd, kFadeTimerId);
+                g_fadeTicking = false;
+                return 0;
+            }
+            break;
+    }
+
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK ShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uId, DWORD_PTR dwRef) {
-    if (!g_unloading && uMsg == WM_NOTIFY) {
+LRESULT CALLBACK ShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
+                                       LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg == WM_NOTIFY) {
         LPNMHDR pnmh = (LPNMHDR)lParam;
-        if (pnmh && pnmh->hwndFrom == g_listViewWnd) {
-
-            if (pnmh->code == NM_CUSTOMDRAW) {
-                LPNMLVCUSTOMDRAW pLVCD = (LPNMLVCUSTOMDRAW)lParam;
-
-                switch (pLVCD->nmcd.dwDrawStage) {
-                    case CDDS_PREPAINT:
-                        // Cache theme once globally for all icons instead of repeatedly opening/closing
-                        if (!g_hTheme) {
-                            g_hTheme = OpenThemeData(g_listViewWnd, L"Explorer::ListView");
-                            if (!g_hTheme) g_hTheme = OpenThemeData(g_listViewWnd, L"ListView");
-                        }
-                        return CDRF_NOTIFYITEMDRAW;
-
-                    case CDDS_ITEMPREPAINT:
-                    {
-                        int iItem = (int)pLVCD->nmcd.dwItemSpec;
-                        
-                        LVITEMW lvi = {0};
-                        lvi.mask = LVIF_STATE;
-                        lvi.iItem = iItem;
-                        lvi.stateMask = LVIS_SELECTED;
-                        SendMessageW(g_listViewWnd, LVM_GETITEMW, 0, (LPARAM)&lvi);
-                        if (lvi.state & LVIS_SELECTED) {
-                            return CDRF_DODEFAULT;
-                        }
-
-                        BYTE alpha = CalculateIconAlpha(iItem);
-
-                        if (alpha == 255) return CDRF_DODEFAULT;
-                        if (alpha == 0) return CDRF_SKIPDEFAULT;
-
-                        HDC hdc = pLVCD->nmcd.hdc;
-
-                        // 1. Draw Icon
-                        HIMAGELIST himl = (HIMAGELIST)SendMessageW(g_listViewWnd, LVM_GETIMAGELIST, LVSIL_NORMAL, 0);
-                        if (himl) {
-                            lvi.mask = LVIF_IMAGE;
-                            SendMessageW(g_listViewWnd, LVM_GETITEMW, 0, (LPARAM)&lvi);
-
-                            RECT rcIcon; rcIcon.left = LVIR_ICON;
-                            SendMessageW(g_listViewWnd, LVM_GETITEMRECT, iItem, (LPARAM)&rcIcon);
-
-                            int iconWidth = 32, iconHeight = 32;
-                            ImageList_GetIconSize(himl, &iconWidth, &iconHeight);
-
-                            int drawX = rcIcon.left + ((rcIcon.right - rcIcon.left) - iconWidth) / 2;
-                            int drawY = rcIcon.top + ((rcIcon.bottom - rcIcon.top) - iconHeight) / 2;
-
-                            IMAGELISTDRAWPARAMS imldp = {0};
-                            imldp.cbSize = sizeof(IMAGELISTDRAWPARAMS);
-                            imldp.himl = himl;
-                            imldp.i = lvi.iImage;
-                            imldp.hdcDst = hdc;
-                            imldp.x = drawX;
-                            imldp.y = drawY;
-                            imldp.cx = iconWidth;
-                            imldp.cy = iconHeight;
-                            imldp.fStyle = ILD_TRANSPARENT;
-                            imldp.fState = ILS_ALPHA;
-                            imldp.Frame = alpha;
-
-                            ImageList_DrawIndirect(&imldp);
-                        }
-
-                        // 2. Draw Text (Using cached g_hTheme)
-                        RECT rcLabel; rcLabel.left = LVIR_LABEL;
-                        if (SendMessageW(g_listViewWnd, LVM_GETITEMRECT, iItem, (LPARAM)&rcLabel)) {
-                            WCHAR szText[256] = {0};
-                            lvi.mask = LVIF_TEXT;
-                            lvi.pszText = szText;
-                            lvi.cchTextMax = 256;
-                            SendMessageW(g_listViewWnd, LVM_GETITEMW, 0, (LPARAM)&lvi);
-
-                            if (szText[0] != L'\0') {
-                                HDC hdcBuffer = NULL;
-                                BP_PAINTPARAMS bpParams = { sizeof(BP_PAINTPARAMS) };
-                                bpParams.dwFlags = BPPF_ERASE;
-
-                                HPAINTBUFFER hbp = BeginBufferedPaint(hdc, &rcLabel, BPBF_TOPDOWNDIB, &bpParams, &hdcBuffer);
-                                if (hbp) {
-                                    HFONT hFont = (HFONT)SendMessageW(g_listViewWnd, WM_GETFONT, 0, 0);
-                                    HFONT hOldFont = (HFONT)SelectObject(hdcBuffer, hFont);
-
-                                    if (g_hTheme) {
-                                        DTTOPTS dttOpts = { sizeof(DTTOPTS) };
-                                        dttOpts.dwFlags = DTT_TEXTCOLOR | DTT_COMPOSITED | DTT_GLOWSIZE;
-                                        dttOpts.crText = RGB(255, 255, 255);
-                                        dttOpts.iGlowSize = 5;
-                                        DrawThemeTextEx(g_hTheme, hdcBuffer, LVP_LISTITEM, 0, szText, -1, DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX, &rcLabel, &dttOpts);
-                                    } else {
-                                        SetBkMode(hdcBuffer, TRANSPARENT);
-                                        SetTextColor(hdcBuffer, RGB(255, 255, 255));
-                                        DrawTextW(hdcBuffer, szText, -1, &rcLabel, DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
-                                    }
-
-                                    SelectObject(hdcBuffer, hOldFont);
-
-                                    // Per-pixel alpha scaling
-                                    RGBQUAD* pBits = nullptr;
-                                    int cxRow = 0;
-                                    if (SUCCEEDED(GetBufferedPaintBits(hbp, &pBits, &cxRow)) && pBits) {
-                                        int width = rcLabel.right - rcLabel.left;
-                                        int height = rcLabel.bottom - rcLabel.top;
-
-                                        for (int y = 0; y < height; ++y) {
-                                            RGBQUAD* pRow = pBits + (y * cxRow);
-                                            for (int x = 0; x < width; ++x) {
-                                                if (!g_hTheme && pRow[x].rgbReserved == 0 && (pRow[x].rgbRed | pRow[x].rgbGreen | pRow[x].rgbBlue) > 0) {
-                                                    pRow[x].rgbReserved = 255;
-                                                }
-                                                pRow[x].rgbReserved = (BYTE)((pRow[x].rgbReserved * alpha) / 255);
-                                                pRow[x].rgbRed      = (BYTE)((pRow[x].rgbRed      * alpha) / 255);
-                                                pRow[x].rgbGreen    = (BYTE)((pRow[x].rgbGreen    * alpha) / 255);
-                                                pRow[x].rgbBlue     = (BYTE)((pRow[x].rgbBlue     * alpha) / 255);
-                                            }
-                                        }
-                                    }
-
-                                    EndBufferedPaint(hbp, TRUE);
-                                }
-                            }
-                        }
-                        
-                        return CDRF_SKIPDEFAULT;
-                    }
-                }
-            }
+        if (pnmh && pnmh->hwndFrom && pnmh->hwndFrom == g_listViewWnd.load() &&
+            pnmh->code == NM_CUSTOMDRAW) {
+            return HandleCustomDraw((LPNMLVCUSTOMDRAW)lParam);
+        }
+    } else if (uMsg == WM_THEMECHANGED) {
+        // Refresh the cached theme on theme or high-contrast switches.
+        if (g_hTheme) {
+            CloseThemeData(g_hTheme);
+            g_hTheme = nullptr;
+        }
+    } else if (uMsg == WM_NCDESTROY) {
+        if (hWnd == g_shellViewWnd.load()) {
+            g_shellViewWnd = nullptr;
         }
     }
+
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-////////////////////////////////////////////////////////////////////////////////// Threading & Hooks
+////////////////////////////////////////////////////////////////////////////////
+// Desktop window discovery
 
-LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && !g_subclassed && g_listViewWnd && g_shellViewWnd) {
-        g_subclassed = true;
-        SetWindowSubclass(g_listViewWnd, ListViewSubclassProc, SUBCLASS_ID_LV, 0);
-        SetWindowSubclass(g_shellViewWnd, ShellViewSubclassProc, SUBCLASS_ID_SV, 0);
+bool IsDesktopParent(HWND hWnd) {
+    if (!hWnd) {
+        return false;
     }
-    return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+    if (hWnd == GetShellWindow()) {
+        return true;
+    }
+
+    WCHAR className[64] = {};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        if (_wcsicmp(className, L"Progman") == 0 ||
+            _wcsicmp(className, L"WorkerW") == 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
-void InitThreadProc() {
-    while (!g_unloading) {
-        if (g_listViewWnd && !IsWindow(g_listViewWnd)) {
-            g_listViewWnd = nullptr;
-            g_shellViewWnd = nullptr;
-            g_subclassed = false;
+// Checks that hWnd is a desktop SysListView32 belonging to this
+// explorer.exe process (e.g. not the shell's desktop seen from a
+// "separate process" folder window).
+bool IsDesktopListView(HWND hWnd) {
+    if (!hWnd) {
+        return false;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) {
+        return false;
+    }
+
+    WCHAR className[64] = {};
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className)) ||
+        _wcsicmp(className, L"SysListView32") != 0) {
+        return false;
+    }
+
+    HWND hDefView = GetParent(hWnd);
+    if (!hDefView ||
+        !GetClassNameW(hDefView, className, ARRAYSIZE(className)) ||
+        _wcsicmp(className, L"SHELLDLL_DefView") != 0) {
+        return false;
+    }
+
+    return IsDesktopParent(GetAncestor(hDefView, GA_PARENT));
+}
+
+// Finds an already-existing desktop list view of the current process, if any.
+HWND FindDesktopListView() {
+    HWND hDefView = nullptr;
+
+    HWND hShell = GetShellWindow();
+    if (hShell) {
+        hDefView = FindWindowExW(hShell, nullptr, L"SHELLDLL_DefView", nullptr);
+    }
+
+    if (!hDefView) {
+        HWND hProgman = FindWindowW(L"Progman", L"Program Manager");
+        if (hProgman && hProgman != hShell) {
+            hDefView = FindWindowExW(hProgman, nullptr, L"SHELLDLL_DefView", nullptr);
         }
-        
-        if (!g_listViewWnd) {
-            g_listViewWnd = GetDesktopListView();
-            if (g_listViewWnd) {
-                g_shellViewWnd = GetParent(g_listViewWnd);
-                DWORD tid = GetWindowThreadProcessId(g_listViewWnd, nullptr);
-                if (tid) {
-                    g_hHook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook, nullptr, tid);
-                    PostMessageW(g_listViewWnd, WM_NULL, 0, 0);
-                }
+    }
+
+    if (!hDefView) {
+        HWND hWorkerW = nullptr;
+        while ((hWorkerW =
+                    FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) !=
+               nullptr) {
+            hDefView = FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
+            if (hDefView) {
+                break;
             }
         }
-        Sleep(1000);
     }
+
+    if (!hDefView) {
+        return nullptr;
+    }
+
+    HWND hListView = FindWindowExW(hDefView, nullptr, L"SysListView32", nullptr);
+    return IsDesktopListView(hListView) ? hListView : nullptr;
 }
 
-// Optimized non-blocking update loop
-void RepaintThreadProc() {
-    while (!g_unloading) {
-        int sleepTime = 100; // Default idle throttle
+void SubclassDesktop(HWND hListView) {
+    if (!hListView || hListView == g_listViewWnd.load()) {
+        return;
+    }
 
-        if (g_subclassed && g_listViewWnd && IsWindow(g_listViewWnd)) {
-            POINT pt;
-            GetCursorPos(&pt);
+    HWND hShellView = GetParent(hListView);
+    if (!hShellView) {
+        return;
+    }
 
-            int lastX = g_mouseX.load(std::memory_order_relaxed);
-            int lastY = g_mouseY.load(std::memory_order_relaxed);
-            ULONGLONG lastTime = g_lastMouseTime.load(std::memory_order_relaxed);
-
-            bool mouseMoved = (pt.x != lastX || pt.y != lastY);
-            ULONGLONG timeSinceMove = GetTickCount64() - lastTime;
-            
-            // Check if we are inside the animation window (idle delay + fade out duration)
-            bool isAnimating = timeSinceMove < (ULONGLONG)(g_settings.idleDelay + g_settings.spotlightFadeOutDuration + 100);
-
-            if (mouseMoved) {
-                g_mouseX.store(pt.x, std::memory_order_relaxed);
-                g_mouseY.store(pt.y, std::memory_order_relaxed);
-                g_lastMouseTime.store(GetTickCount64(), std::memory_order_relaxed);
-                InvalidateRect(g_listViewWnd, NULL, FALSE);
-                sleepTime = 16; // Ramp up to ~60 FPS
-            } else if (isAnimating) {
-                InvalidateRect(g_listViewWnd, NULL, FALSE);
-                sleepTime = 16; // Maintain 60 FPS while fading out
-            }
-            // If neither is true, we skip InvalidateRect completely and sleep at 100ms
+    // Defensive: if we still track different windows that are alive (normally
+    // they are destroyed first and cleared in WM_NCDESTROY), remove our
+    // subclasses from them so that no subclassed window can outlive the mod.
+    HWND hOldListView = g_listViewWnd.load();
+    if (hOldListView && IsWindow(hOldListView)) {
+        if (g_msgKillFadeTimer) {
+            SendMessageW(hOldListView, g_msgKillFadeTimer, 0, 0);
         }
-        Sleep(sleepTime); 
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hOldListView,
+                                                         ListViewSubclassProc);
     }
+    HWND hOldShellView = g_shellViewWnd.load();
+    if (hOldShellView && hOldShellView != hShellView &&
+        IsWindow(hOldShellView)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hOldShellView,
+                                                         ShellViewSubclassProc);
+        g_shellViewWnd = nullptr;
+    }
+
+    g_lastItemAlphas.clear();
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hListView,
+                                                       ListViewSubclassProc, 0)) {
+        return;
+    }
+
+    if (hShellView != g_shellViewWnd.load()) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hShellView, ShellViewSubclassProc, 0)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hListView,
+                                                             ListViewSubclassProc);
+            return;
+        }
+        g_shellViewWnd = hShellView;
+    }
+
+    g_listViewWnd = hListView;
+    Wh_Log(L"Subclassed the desktop list view");
+
+    RedrawWindow(hListView, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
-////////////////////////////////////////////////////////////////////////////////// Mod Lifecycle
+////////////////////////////////////////////////////////////////////////////////
+// CreateWindowExW hook: catches the desktop list view when it's created
+// (desktop recreation, Explorer restart of the view, etc.)
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName, DWORD dwStyle, int X,
+                                 int Y, int nWidth, int nHeight,
+                                 HWND hWndParent, HMENU hMenu,
+                                 HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+
+    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
+        _wcsicmp(lpClassName, L"SysListView32") == 0 &&
+        IsDesktopListView(hWnd)) {
+        SubclassDesktop(hWnd);
+    }
+
+    return hWnd;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Mod lifecycle
 
 void LoadSettings() {
     Settings s;
-    s.idleOpacity              = std::clamp(Wh_GetIntSetting(L"idleOpacity"), 0, 255);
-    s.activeOpacity            = std::clamp(Wh_GetIntSetting(L"activeOpacity"), 0, 255);
-    s.spotlightRadius          = (std::max)(Wh_GetIntSetting(L"spotlightRadius"), 0);
-    s.idleDelay                = (std::max)(Wh_GetIntSetting(L"idleDelay"), 0);
-    s.spotlightFadeOutDuration = (std::max)(Wh_GetIntSetting(L"spotlightFadeOutDuration"), 0);
-    s.toggleOnDoubleClick      = Wh_GetIntSetting(L"toggleOnDoubleClick") != 0;
-    g_settings = s;
+    s.idleOpacity = std::clamp(Wh_GetIntSetting(L"idleOpacity"), 0, 255);
+    s.activeOpacity = std::clamp(Wh_GetIntSetting(L"activeOpacity"), 0, 255);
+    s.spotlightRadius = (std::max)(Wh_GetIntSetting(L"spotlightRadius"), 0);
+    s.idleDelay = (std::max)(Wh_GetIntSetting(L"idleDelay"), 0);
+    s.spotlightFadeOutDuration =
+        (std::max)(Wh_GetIntSetting(L"spotlightFadeOutDuration"), 0);
+    s.hideLabels = Wh_GetIntSetting(L"hideLabels") != 0;
+    s.toggleOnDoubleClick = Wh_GetIntSetting(L"toggleOnDoubleClick") != 0;
 
-    if (g_subclassed && g_listViewWnd && IsWindow(g_listViewWnd)) {
-        InvalidateRect(g_listViewWnd, NULL, FALSE);
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        g_settings = s;
+    }
+
+    HWND hListView = g_listViewWnd.load();
+    if (hListView && IsWindow(hListView)) {
+        RedrawWindow(hListView, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ALLCHILDREN);
     }
 }
 
 BOOL Wh_ModInit() {
-    BufferedPaintInit();
+    Wh_Log(L"Init");
+
+    g_msgKillFadeTimer =
+        RegisterWindowMessageW(L"FlashlightDesktopIcons_KillFadeTimer");
+
     LoadSettings();
 
-    g_initThread = new std::thread(InitThreadProc);
-    g_repaintThread = new std::thread(RepaintThreadProc);
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
+        Wh_Log(L"Failed to hook CreateWindowExW");
+    }
 
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    HWND hListView = FindDesktopListView();
+    if (hListView) {
+        SubclassDesktop(hListView);
+    }
+}
+
 void Wh_ModUninit() {
-    g_unloading = true;
+    Wh_Log(L"Uninit");
 
-    if (g_initThread) {
-        if (g_initThread->joinable()) g_initThread->join();
-        delete g_initThread;
-        g_initThread = nullptr;
-    }
+    HWND hListView = g_listViewWnd.load();
+    HWND hShellView = g_shellViewWnd.load();
+    g_listViewWnd = nullptr;
+    g_shellViewWnd = nullptr;
 
-    if (g_repaintThread) {
-        if (g_repaintThread->joinable()) g_repaintThread->join();
-        delete g_repaintThread;
-        g_repaintThread = nullptr;
-    }
-
-    if (g_hHook) {
-        UnhookWindowsHookEx(g_hHook);
-        g_hHook = nullptr;
-    }
-
-    if (g_subclassed) {
-        if (g_shellViewWnd) RemoveWindowSubclass(g_shellViewWnd, ShellViewSubclassProc, SUBCLASS_ID_SV);
-        if (g_listViewWnd) RemoveWindowSubclass(g_listViewWnd, ListViewSubclassProc, SUBCLASS_ID_LV);
-        
-        if (g_listViewWnd && IsWindow(g_listViewWnd)) {
-            InvalidateRect(g_listViewWnd, NULL, TRUE);
+    if (hListView && IsWindow(hListView)) {
+        // Kill the fade timer on the thread that owns it, while the subclass
+        // that handles the message is still installed.
+        if (g_msgKillFadeTimer) {
+            SendMessageW(hListView, g_msgKillFadeTimer, 0, 0);
         }
+        // Removal is synchronous to the window's owning thread, so the
+        // subclass proc is guaranteed not to be running once this returns.
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hListView,
+                                                         ListViewSubclassProc);
+    }
+
+    if (hShellView && IsWindow(hShellView)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hShellView,
+                                                         ShellViewSubclassProc);
     }
 
     if (g_hTheme) {
@@ -449,9 +783,16 @@ void Wh_ModUninit() {
         g_hTheme = nullptr;
     }
 
-    BufferedPaintUnInit();
+    g_lastItemAlphas.clear();
+
+    // Repaint so that the icons return to Explorer's default drawing.
+    if (hListView && IsWindow(hListView)) {
+        RedrawWindow(hListView, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
 }
 
 void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed");
     LoadSettings();
 }
