@@ -2,11 +2,12 @@
 // @id              cursor-trail
 // @name            Simple Cursor Trail
 // @description     A fully customizable cursor trail overlay for the Windows desktop.
-// @version         1.2
+// @version         1.5
 // @author          Ulrizza
 // @github          https://github.com/Ulrizza
 // @license         MIT
 // @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -ld2d1 -lole32 -lgdi32 -lshell32 -lwindowscodecs -lwinmm -lshcore
 // ==/WindhawkMod==
 
@@ -57,6 +58,8 @@ the cursor at high speed.
 - **Color**: head-to-tail gradients, blend width, and ghost
   recoloring.
 - **Hotkey**: toggle the trail on/off with a customizable global hotkey.
+- **Always on top**: draw the trail above the taskbar and Start menu (on by
+  default).
 
 ## Settings
 
@@ -356,13 +359,34 @@ Show a circle animation when the hotkey toggles the trail.
 The animation is a circle outline (2px, in the cursor's color, centered on the trail start and following the cursor): it grows and fades out when disabling, and shrinks and fades in when enabling.  
 
 ### Trail offset
+
+#### X
+
 Fine-tune the trail origin horizontally in pixels (auto-centered by default, 0 = no adjustment)
+
+#### Y
+
+Fine-tune the trail origin vertically in pixels (auto-centered by default, 0 = no adjustment)
 
 `0 0`  
 ![tail_offset.x = -10](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/tail_offset.0.0.gif)
 
 `15 15`  
 ![tail_offset.y = +10](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/tail_offset.15.15.gif)
+
+### Always on top
+
+Draw the trail above the taskbar, Start menu and other shell surfaces by moving the overlay into a higher Z-order band. Enabled by default. If the trail still appears behind the taskbar, press the Win key once. Turn off if it causes issues.
+
+Without **Always on top**, the trail is drawn behind the taskbar and Start menu:
+
+![Simple Cursor Trail drawn behind the taskbar and Start menu](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/AlwaysOnTopBefore.gif)
+
+With **Always on top**:
+
+![Simple Cursor Trail drawn above the taskbar and Start menu](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/AlwaysOnTopAfter.gif)
+
+Windows gives every window a fixed Z-order band, and a window in a lower band can never be drawn above a window in a higher one. The overlay is moved from the desktop band into `ZBID_SYSTEM_TOOLS`, the band Task Manager uses for "Always on top", using the undocumented `SetWindowBand` API.
 
 ## Licence
 
@@ -522,6 +546,9 @@ parts of the render loop.
     $name: Y
     $description: Fine-tune the trail origin vertically in pixels (auto-centered by default, 0 = no adjustment)
   $name: Trail offset
+- alwaysOnTop: true
+  $name: Always on top
+  $description: Draw the trail above the taskbar, Start menu and other shell surfaces by moving the overlay into a higher Z-order band. Enabled by default. If the trail still appears behind the taskbar, press the Win key once. Turn off if it causes issues.
 */
 // ==/WindhawkModSettings==
 
@@ -534,6 +561,7 @@ parts of the render loop.
 #include <mmsystem.h>
 #include <algorithm>
 #include <atomic>
+#include <cwchar>
 #include <cwctype>
 #include <deque>
 #include <mutex>
@@ -541,6 +569,10 @@ parts of the render loop.
 #include <unordered_map>
 #include <vector>
 #include <windhawk_utils.h>
+
+// Window class shared by the trail overlay and the explorer-side always-on-top
+// worker (which must find the overlay from another process).
+constexpr wchar_t kOverlayWindowClass[] = L"CursorTrailOverlayClass";
 
 // Position sample used by the polling thread and spatial decimation in the render loop.
 struct Sample {
@@ -3197,13 +3229,11 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &render.pD2DFactory);
 
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    // Unique overlay window class name (must not collide with other mods).
-    const wchar_t CLASS_NAME[] = L"CursorTrailOverlayClass";
 
     WNDCLASS wc = { };
     wc.lpfnWndProc = OverlayWndProc; 
     wc.hInstance = hInstance;
-    wc.lpszClassName = CLASS_NAME;
+    wc.lpszClassName = kOverlayWindowClass;
 
     RegisterClass(&wc);
 
@@ -3214,7 +3244,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 
     runtime.overlayHwnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        CLASS_NAME,
+        kOverlayWindowClass,
         L"CursorTrailOverlay",
         WS_POPUP,
         screenX, screenY, screenW, screenH,
@@ -3296,7 +3326,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 
     UnregisterHotKey(runtime.overlayHwnd, kHotkeyId);
     DestroyWindow(runtime.overlayHwnd);
-    UnregisterClass(CLASS_NAME, hInstance);
+    UnregisterClass(kOverlayWindowClass, hInstance);
 
     if (g_pWicFactory) { g_pWicFactory->Release(); g_pWicFactory = nullptr; }
     CoUninitialize();
@@ -3359,6 +3389,321 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
+// --- Always on top (explorer.exe) ------------------------------------------
+// Windows gives every window a fixed Z-order band, and a window in a lower band
+// can never be drawn above a window in a higher one. Only the shell process can
+// move a window into a band above the taskbar and Start menu, so the mod is
+// also injected into explorer.exe. That side only finds the trail overlay
+// (owned by the dedicated tool process) and moves it into ZBID_SYSTEM_TOOLS
+// with the undocumented SetWindowBand API. The direct call is often denied; the
+// shell's IAM access key is captured by hooking NtUserEnableIAMAccess and used
+// to wrap the call.
+
+enum ZBID : DWORD {
+    ZBID_DESKTOP = 1,
+    ZBID_SYSTEM_TOOLS = 16,
+};
+
+typedef BOOL(WINAPI* SetWindowBand_t)(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand);
+typedef BOOL(WINAPI* GetWindowBand_t)(HWND hWnd, PDWORD pdwBand);
+typedef BOOL(WINAPI* NtUserEnableIAMAccess_t)(ULONG64 key, BOOL enable);
+
+static SetWindowBand_t pSetWindowBand;
+static GetWindowBand_t pGetWindowBand;
+static NtUserEnableIAMAccess_t pNtUserEnableIAMAccess;
+static NtUserEnableIAMAccess_t pNtUserEnableIAMAccessOriginal;
+
+struct AlwaysOnTopState {
+    std::atomic<ULONG64> iamKey{0};
+    std::atomic<bool> enabled{true};
+    HANDLE stopEvent = nullptr;
+    HANDLE wakeEvent = nullptr;
+    HANDLE workerThread = nullptr;
+    HWND lastBanded = nullptr;
+};
+
+static AlwaysOnTopState alwaysOnTop;
+
+// Poll quickly while looking for the overlay or applying the band, then back
+// off to a slow interval once the band is confirmed, to keep wakeups low.
+static const DWORD kAlwaysOnTopActivePollMs = 1000;
+static const DWORD kAlwaysOnTopStablePollMs = 5000;
+
+static void LoadAlwaysOnTopSetting() {
+    alwaysOnTop.enabled.store(Wh_GetIntSetting(L"alwaysOnTop") != 0);
+}
+
+// Records the latest IAM access key the shell used. The hook stays installed
+// for the whole lifetime of the mod: the shell only calls this when it opens
+// one of its surfaces, so the cost is negligible, and a fresh key overwrites a
+// stale one by itself. Removing/re-adding hooks at runtime would need
+// Wh_ApplyHookOperations, which must not run after Wh_ModBeforeUninit returns.
+static BOOL WINAPI NtUserEnableIAMAccessHook(ULONG64 key, BOOL enable) {
+    BOOL result = pNtUserEnableIAMAccessOriginal(key, enable);
+    if (result && key) {
+        alwaysOnTop.iamKey.store(key);
+    }
+    return result;
+}
+
+static bool ApplyWindowBand(HWND hwnd, DWORD band) {
+    if (!pSetWindowBand || !hwnd) {
+        return false;
+    }
+
+    ULONG64 iamKey = alwaysOnTop.iamKey.load();
+    if (iamKey && pNtUserEnableIAMAccess) {
+        pNtUserEnableIAMAccess(iamKey, TRUE);
+        BOOL ok = pSetWindowBand(hwnd, nullptr, band);
+        DWORD err = ok ? ERROR_SUCCESS : GetLastError();
+        pNtUserEnableIAMAccess(iamKey, FALSE);
+        if (!ok) {
+            Wh_Log(L"SetWindowBand (key) failed: %u", err);
+        }
+        return ok != FALSE;
+    }
+
+    // The shell may already have IAM access enabled; try without a key first.
+    SetLastError(ERROR_SUCCESS);
+    BOOL ok = pSetWindowBand(hwnd, nullptr, band);
+    if (!ok) {
+        DWORD err = GetLastError();
+        if (err != ERROR_ACCESS_DENIED) {
+            Wh_Log(L"SetWindowBand (direct) failed: %u", err);
+        }
+        return false;
+    }
+    return true;
+}
+
+// Only the shell's explorer.exe moves the overlay: not folder windows in
+// processes of their own, and not the brief ones that hand a path to the shell
+// ("Show in folder", explorer.exe C:\...). Once the desktop exists, its owner
+// is the shell; while explorer is starting there is none yet, and the command
+// line tells.
+static bool IsShellExplorer() {
+    if (HWND shell = GetShellWindow()) {
+        DWORD owner = 0;
+        GetWindowThreadProcessId(shell, &owner);
+        return owner == GetCurrentProcessId();
+    }
+
+    WCHAR cmd[1024];
+    wcsncpy_s(cmd, GetCommandLineW(), _TRUNCATE);
+    CharLowerBuffW(cmd, (DWORD)wcslen(cmd));
+    return !wcsstr(cmd, L"/factory") && !wcsstr(cmd, L"/separate") &&
+           !wcsstr(cmd, L"-embedding");
+}
+
+// Only raise the actual trail overlay: a click-through window owned by the
+// Windhawk process. This keeps an unrelated top-level window that happens to
+// use the same class name, or a sandboxed window, from being lifted above the
+// shell UI.
+static bool IsTrailOverlay(HWND hwnd) {
+    if (!(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TRANSPARENT)) {
+        return false;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        return false;
+    }
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return false;
+    }
+
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    BOOL ok = QueryFullProcessImageNameW(process, 0, path, &size);
+    CloseHandle(process);
+    if (!ok) {
+        return false;
+    }
+
+    const wchar_t* name = path;
+    for (const wchar_t* p = path; *p; ++p) {
+        if (*p == L'\\') {
+            name = p + 1;
+        }
+    }
+
+    return lstrcmpiW(name, L"windhawk.exe") == 0 ||
+           lstrcmpiW(name, L"windhawk-mod.exe") == 0;
+}
+
+// Finds the actual trail overlay, skipping any other top-level window that
+// happens to use the same class name.
+static HWND FindTrailOverlay() {
+    HWND hwnd = nullptr;
+    while ((hwnd = FindWindowExW(nullptr, hwnd, kOverlayWindowClass, nullptr)) !=
+           nullptr) {
+        if (IsTrailOverlay(hwnd)) {
+            return hwnd;
+        }
+    }
+    return nullptr;
+}
+
+static void StopAlwaysOnTopWorker() {
+    if (alwaysOnTop.stopEvent) {
+        SetEvent(alwaysOnTop.stopEvent);
+    }
+    if (alwaysOnTop.workerThread) {
+        WaitForSingleObject(alwaysOnTop.workerThread, INFINITE);
+        CloseHandle(alwaysOnTop.workerThread);
+        alwaysOnTop.workerThread = nullptr;
+    }
+    if (alwaysOnTop.stopEvent) {
+        CloseHandle(alwaysOnTop.stopEvent);
+        alwaysOnTop.stopEvent = nullptr;
+    }
+    if (alwaysOnTop.wakeEvent) {
+        CloseHandle(alwaysOnTop.wakeEvent);
+        alwaysOnTop.wakeEvent = nullptr;
+    }
+}
+
+static DWORD WINAPI AlwaysOnTopWorkerThread(LPVOID) {
+    DWORD waitMs = kAlwaysOnTopActivePollMs;
+    for (;;) {
+        HANDLE events[2] = {alwaysOnTop.stopEvent, alwaysOnTop.wakeEvent};
+        if (WaitForMultipleObjects(2, events, FALSE, waitMs) == WAIT_OBJECT_0) {
+            return 0;
+        }
+
+        if (!alwaysOnTop.enabled.load()) {
+            // Turned off: put a window we banded back on the desktop band, then
+            // idle until the setting is enabled again.
+            if (alwaysOnTop.lastBanded) {
+                if (!IsWindow(alwaysOnTop.lastBanded) ||
+                    ApplyWindowBand(alwaysOnTop.lastBanded, ZBID_DESKTOP)) {
+                    alwaysOnTop.lastBanded = nullptr;
+                }
+            }
+            waitMs = kAlwaysOnTopStablePollMs;
+            continue;
+        }
+
+        HWND hwnd = FindTrailOverlay();
+        if (!hwnd) {
+            alwaysOnTop.lastBanded = nullptr;
+            waitMs = kAlwaysOnTopActivePollMs;
+            continue;
+        }
+
+        DWORD band = 0;
+        if (pGetWindowBand && pGetWindowBand(hwnd, &band)) {
+            if (band == ZBID_SYSTEM_TOOLS) {
+                alwaysOnTop.lastBanded = hwnd;
+                waitMs = kAlwaysOnTopStablePollMs;
+                continue;
+            }
+        } else if (hwnd == alwaysOnTop.lastBanded) {
+            waitMs = kAlwaysOnTopStablePollMs;
+            continue;
+        }
+
+        if (ApplyWindowBand(hwnd, ZBID_SYSTEM_TOOLS)) {
+            alwaysOnTop.lastBanded = hwnd;
+            waitMs = kAlwaysOnTopStablePollMs;
+            Wh_Log(L"Overlay moved to band %u", (DWORD)ZBID_SYSTEM_TOOLS);
+        } else {
+            waitMs = kAlwaysOnTopActivePollMs;
+        }
+    }
+}
+
+static bool ResolveAlwaysOnTopApis() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        Wh_Log(L"user32.dll not loaded");
+        return false;
+    }
+
+    pSetWindowBand = (SetWindowBand_t)GetProcAddress(user32, "SetWindowBand");
+    pGetWindowBand = (GetWindowBand_t)GetProcAddress(user32, "GetWindowBand");
+
+    // Hook win32u's named export directly. user32 only exposes it by ordinal
+    // and forwards there, so this works on every architecture and also catches
+    // callers that import it from win32u directly.
+    HMODULE win32u = GetModuleHandleW(L"win32u.dll");
+    pNtUserEnableIAMAccess = win32u
+        ? (NtUserEnableIAMAccess_t)GetProcAddress(win32u,
+                                                  "NtUserEnableIAMAccess")
+        : nullptr;
+    if (!pNtUserEnableIAMAccess) {
+        Wh_Log(L"win32u!NtUserEnableIAMAccess not found, IAM hook disabled");
+    }
+
+    if (!pSetWindowBand) {
+        Wh_Log(L"SetWindowBand not found");
+        return false;
+    }
+    return true;
+}
+
+static bool AlwaysOnTopInit() {
+    if (!ResolveAlwaysOnTopApis()) {
+        return false;
+    }
+
+    LoadAlwaysOnTopSetting();
+
+    alwaysOnTop.stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    alwaysOnTop.wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!alwaysOnTop.stopEvent || !alwaysOnTop.wakeEvent) {
+        Wh_Log(L"CreateEvent failed");
+        StopAlwaysOnTopWorker();
+        return false;
+    }
+
+    alwaysOnTop.workerThread =
+        CreateThread(nullptr, 0, AlwaysOnTopWorkerThread, nullptr, 0, nullptr);
+    if (!alwaysOnTop.workerThread) {
+        Wh_Log(L"CreateThread failed");
+        StopAlwaysOnTopWorker();
+        return false;
+    }
+
+    // Queued until Wh_ModInit returns. Kept for the process lifetime; a fresh
+    // key replaces a stale one by itself.
+    if (pNtUserEnableIAMAccess) {
+        if (WindhawkUtils::SetFunctionHook(pNtUserEnableIAMAccess,
+                                           NtUserEnableIAMAccessHook,
+                                           &pNtUserEnableIAMAccessOriginal)) {
+            Wh_Log(L"NtUserEnableIAMAccess hook installed");
+        } else {
+            Wh_Log(L"Failed to hook NtUserEnableIAMAccess");
+        }
+    }
+
+    return true;
+}
+
+static void AlwaysOnTopSettingsChanged() {
+    LoadAlwaysOnTopSetting();
+    if (alwaysOnTop.wakeEvent) {
+        SetEvent(alwaysOnTop.wakeEvent);
+    }
+}
+
+static void AlwaysOnTopUninit() {
+    StopAlwaysOnTopWorker();
+
+    // Best effort: return the overlay to the desktop band while it still exists.
+    HWND hwnd = FindTrailOverlay();
+    if (!hwnd && alwaysOnTop.lastBanded && IsWindow(alwaysOnTop.lastBanded)) {
+        hwnd = alwaysOnTop.lastBanded;
+    }
+    if (hwnd) {
+        ApplyWindowBand(hwnd, ZBID_DESKTOP);
+    }
+    alwaysOnTop.lastBanded = nullptr;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -3375,6 +3720,8 @@ void WhTool_ModSettingsChanged() {
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
+bool g_isExplorer;
+bool g_isToolMod;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -3382,6 +3729,24 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    // The same source is also injected into the shell explorer.exe, where it
+    // only hosts the always-on-top worker (Explorer is the process that can
+    // move the overlay into a higher Z-order band).
+    WCHAR exePath[MAX_PATH];
+    if (GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
+        const WCHAR* name = wcsrchr(exePath, L'\\');
+        if (name && lstrcmpiW(name + 1, L"explorer.exe") == 0) {
+            if (!IsShellExplorer()) {
+                return FALSE;
+            }
+            g_isExplorer = true;
+            if (!AlwaysOnTopInit()) {
+                return FALSE;
+            }
+            return TRUE;
+        }
+    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -3424,6 +3789,7 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
+        g_isToolMod = true;
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
@@ -3522,7 +3888,12 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
+    if (g_isExplorer) {
+        AlwaysOnTopSettingsChanged();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher || !g_isToolMod) {
         return;
     }
 
@@ -3530,7 +3901,12 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
+    if (g_isExplorer) {
+        AlwaysOnTopUninit();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher || !g_isToolMod) {
         return;
     }
 
