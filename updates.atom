@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T16:33:13.000Z</updated>
+    <updated>2026-10-24T17:03:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CoverTabby 1.1]]></title>
+        <id>https://windhawk.net/mods/covertabby#06ce71bdeee78673eae1739196e0779619abe5de</id>
+        <link href="https://windhawk.net/mods/covertabby"/>
+        <updated>2026-10-24T17:03:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add Aero 3D, with parallel tilted Alt+Tab previews and cyclic navigation.</li>
+<li>Add a bottom selection indicator and localized window count that follow search results.</li>
+<li>Expand Win+Tab with desktop gallery layouts, an animated full-screen desktop view, and accent hover feedback.</li>
+<li>Add a minimized-window strip, desktop rename/delete controls, and window actions in the expanded overview.</li>
+<li>Stop navigation wrapping in stacks of five or more desktops and animate desktop-to-desktop transitions.</li>
+<li>Add optional Alt+Tab navigation across virtual desktops and refine quick-tap/hold Win+Tab behavior.</li>
+<li>Add live wallpaper-host previews while the switcher is open, with a static fallback.</li>
+</ul>]]></content>
+        <author>
+            <name>LTHC</name>
+            <uri>https://github.com/LoreTheHolyChip</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.0.2]]></title>
+        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#25462332c30b60131ce2d02809ed23eecb17fe46</id>
+        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
+        <updated>2026-10-24T17:03:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Decouple immune family processes from handled PID set in memory trim arbiter</li>
+<li>Protect descendants of visible non-minimized windows during working set trim</li>
+<li>Report working set reduction as trimmed bytes rather than ambient memory noise</li>
+<li>Separate hard memory reclamation from soft priority demotion accounting</li>
+<li>Remove residual standby accounting and sort top entries by trimmed bytes</li>
+<li>Prevent side-effecting map mutation in const EvaluatePreOpen arbiter method</li>
+<li>Guard power scheme state persistence against failed PowerSetActiveScheme invocations</li>
+<li>Eliminate hardcoded kNonGames blacklist in favor of native GameConfigStore</li>
+<li>Evaluate D3D exclusive fullscreen and game folders before the packaged app filter</li>
+<li>Avoid game launcher false positives by dropping ambiguous launcher folders</li>
+<li>Add configurable game Alt-Tab grace period setting (default 30 seconds)</li>
+<li>Remove generic -m CLI marker and add jittered TTL to AI inference cache</li>
+<li>Calibrate automatic memory thresholds for systems with 32 GB or more RAM</li>
+<li>Count only actually boosted processes in ProBalance logs</li>
+<li>Fix access-denied count in the unload session report</li>
+<li>Streamline ProBalance process tree logging and normalize log statements</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 8 Network Flyout Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win8-network-flyout-restorer#35d6cd4fc00a4f4967d447e43526abc262498e88</id>
@@ -680,92 +727,6 @@ If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
         <author>
             <name>David Ravelo</name>
             <uri>https://github.com/DavidRaveloU</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Info 1.9.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-info#7bceda88d81084e19f4eaced0cac413d2b41df30</id>
-        <link href="https://windhawk.net/mods/taskbar-system-info"/>
-        <updated>2026-10-22T23:04:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a preferred layout setting: Full, Without graphs, Compact two rows, or Compact one row. Automatically fit smaller layouts and restore the selected view when space returns.</li>
-<li>Add independent CPU and GPU graph switches while keeping usage percentages visible.</li>
-<li>Hide temperature fields and reclaim their space when Temperature source is Disabled.</li>
-<li>Keep placement, reserved space, secondary copies and move previews consistent with the selected layout and visible fields.</li>
-</ul>]]></content>
-        <author>
-            <name>Yevhenii Starychenko</name>
-            <uri>https://github.com/starychenko</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Refined Quick Settings and Sound 0.1.154]]></title>
-        <id>https://windhawk.net/mods/refined-quick-settings-and-sound#9c7175f4a37662b14e99df140efbb33936871863</id>
-        <link href="https://windhawk.net/mods/refined-quick-settings-and-sound"/>
-        <updated>2026-10-22T23:04:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="refinedquicksettingsandsound">Refined Quick Settings and Sound</h1>
-<p><img src="https://raw.githubusercontent.com/HeyOkay/Refined-Quick-Settings-and-Sound/main/docs/assets/preview-lossless.webp" alt="Quick Settings and Sound preview" /></p>
-<p>This "vanilla+" Windhawk mod reworks the Windows 11 "Quick Settings" and
-"Volume mixer" panels and makes them fit for daily use. It follows the
-Windows 11 design language, refining existing features and adding new ones:
-thin sliders, even row spacing at every display scale and a smooth frame
-transition to the Sound page.</p>
-<p>Everything runs inside the shell's own panels (ShellHost): no extra windows,
-the system Acrylic, fonts, themes, lists, bindings and animations are kept, and
-customizations are restored when the mod is unloaded.</p>
-<h2 id="features">Features</h2>
-<p><strong>Quick Settings</strong></p>
-<ul>
-<li>Brightness control for DDC/CI-compatible displays, with animated glyphs.</li>
-<li>Press the brightness glyph to toggle night light on and off.</li>
-<li>Open display settings directly from the glyph on the right side of the slider.</li>
-</ul>
-<p><strong>Sound</strong></p>
-<ul>
-<li>The "Sound output" page is now simply "Sound".</li>
-<li>Change the output and input devices and the spatial sound provider from
-dropdown lists.</li>
-<li>Below them, a reworked Volume mixer for the apps. It is collapsible and
-remembers its last state.</li>
-<li>Mouse wheel on every slider; press an app's icon to mute and restore it, or
-its volume number to set it to 100.</li>
-<li>Hide apps from the mixer by name (setting below).</li>
-</ul>
-<p><strong>Taskbar</strong></p>
-<ul>
-<li>Click the volume icon to open Sound directly.</li>
-<li>The system's animated volume glyph and an Ethernet glyph for wired networks.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11 24H2 or later (Quick Settings hosted by ShellHost), x86-64
-(ARM64 is untested).
-Development testing: build 26300, primarily at 125% scale.</li>
-<li>Other Windows builds and display scales need validation. The mod depends on
-internal shell XAML elements and symbols which can change with Windows updates.</li>
-<li>DDC/CI brightness requires a compatible monitor with DDC/CI enabled.</li>
-<li>Added labels such as "Sound" and "Input device" are in English.</li>
-<li>The first Sound opening in each ShellHost process starts with the mixer
-collapsed; subsequent openings remember its state.</li>
-</ul>
-<p>Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling the mod, close and reopen it; restart ShellHost if it is not picked up.</p>
-<h2 id="notes">Notes</h2>
-<p>Disable other mods that change the Quick Settings, the Sound page or the
-taskbar volume icon before enabling this one. Errors are written to the
-Windhawk log.</p>
-<h2 id="creditsandlicense">Credits and license</h2>
-<p>GPL-3.0-only. The UI-thread dispatch technique follows
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-notification-center-styler.wh.cpp">m417z's Notification Center Styler</a>
-(GPL-3.0). ControlCenter.dll discovery uses the COM produce-interface pattern
-documented by <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/per-monitor-brightness.wh.cpp">Per-monitor brightness</a>.
-The hidden-applications parser is adapted from the local
-Sound Output Direct and Taller mod (GPL-3.0-only).
-The sliders-horizontal and ethernet-port icons are from
-<a href="https://lucide.dev/">Lucide</a> (ISC); the license notice is included below
-in this source file.</p>]]></content>
-        <author>
-            <name>HeyOkay</name>
-            <uri>https://github.com/HeyOkay</uri>
         </author>
     </entry>
 </feed>

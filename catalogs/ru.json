@@ -3388,7 +3388,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": 22.4,
-        "updated": 1792249412000,
+        "updated": 1792861429000,
         "users": 224
       },
       "metadata": {
@@ -3403,7 +3403,7 @@
         ],
         "license": "GPL-2.0-only",
         "name": "CoverTabby",
-        "version": "0.22.14"
+        "version": "1.1"
       }
     },
     "cpl-classic-view-lite": {
@@ -13656,7 +13656,7 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 34.6,
-        "updated": 1792580488000,
+        "updated": 1792861425000,
         "users": 346
       },
       "metadata": {
@@ -13670,7 +13670,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Smart Process Priority & RAM Optimizer",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "smooth-desktop-icons-auto-hide": {
