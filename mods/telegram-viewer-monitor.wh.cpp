@@ -4,7 +4,7 @@
 // @name:ru-RU      Telegram: просмотрщик на мониторе чата
 // @description     Telegram Desktop secondary windows (photo/video viewer, etc.) open on the monitor of the main window instead of the remembered one
 // @description:ru-RU Окна Telegram Desktop (просмотр фото/видео и др.) открываются на том мониторе, где находится главное окно, а не на запомненном
-// @version         1.1
+// @version         1.2
 // @author          limpompo
 // @github          https://github.com/limpompo
 // @homepage        https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/telegram-viewer-monitor
@@ -39,8 +39,8 @@ How a window is placed:
   monitor;
 - monitors with different scaling are taken into account.
 
-Keeping the position, accounting for scaling and keeping maximized windows
-maximized can each be turned off in the settings.
+Keeping the position and accounting for scaling can each be turned off in the
+settings.
 
 System files and Telegram data are not modified.
 */
@@ -58,11 +58,6 @@ System files and Telegram data are not modified.
   $name:ru-RU: Учитывать масштаб мониторов
   $description: On - when monitors have different scaling (for example 100% and 150%), the window is placed so that it fits after Telegram resizes it for the new scale. Turn off if windows are placed wrongly on such a setup.
   $description:ru-RU: Вкл — при разном масштабе мониторов (например, 100% и 150%) окно ставится так, чтобы поместиться после того, как Telegram изменит его размер под новый масштаб. Выключите, если на такой конфигурации окна встают неправильно.
-- keepMaximized: true
-  $name: Keep maximized windows maximized
-  $name:ru-RU: Развёрнутые окна — развёрнутыми
-  $description: On - a maximized window opens maximized on the new monitor and, when restored, stays there. Off - a maximized window is moved like a regular window (as in version 1.0).
-  $description:ru-RU: Вкл — развёрнутое окно открывается развёрнутым на новом мониторе и при восстановлении остаётся там же. Выкл — развёрнутое окно переносится как обычное (как в версии 1.0).
 - titleFilter: ""
   $name: Window title filter
   $name:ru-RU: Фильтр по заголовку окна
@@ -83,7 +78,6 @@ System files and Telegram data are not modified.
 struct Settings {
     bool keepPosition = true;
     bool scaleForDpi = true;
-    bool keepMaximized = true;
     std::wstring titleFilter;
 };
 
@@ -96,7 +90,6 @@ static void LoadSettings() {
     Settings s;
     s.keepPosition = Wh_GetIntSetting(L"keepPosition") != 0;
     s.scaleForDpi = Wh_GetIntSetting(L"scaleForDpi") != 0;
-    s.keepMaximized = Wh_GetIntSetting(L"keepMaximized") != 0;
     s.titleFilter = WindhawkUtils::StringSetting::make(L"titleFilter").get();
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -139,12 +132,10 @@ static UINT GetMonitorDpi(HMONITOR monitor) {
 
 // Maps one axis of a window from the source work area to the target one,
 // keeping the window's relative position (or centering it). `expected` is the
-// size the window will have on the target monitor (Telegram rescales it on a
-// DPI change), `size` is the size it has now. Both are already clamped to the
+// size the window will have on the target monitor, already clamped to the
 // target.
 static int MapAxis(int pos, int origSize, int fromStart, int fromLen,
-                   int toStart, int toLen, int size, int expected,
-                   bool keepPosition) {
+                   int toStart, int toLen, int expected, bool keepPosition) {
     double frac = 0.5;
     if (keepPosition && fromLen > origSize) {
         frac = double(pos - fromStart) / double(fromLen - origSize);
@@ -152,17 +143,19 @@ static int MapAxis(int pos, int origSize, int fromStart, int fromLen,
         if (frac > 1) frac = 1;
     }
     int p = toStart + int(frac * (toLen - expected) + 0.5);
-    int maxSize = size > expected ? size : expected;
-    if (p + maxSize > toStart + toLen) p = toStart + toLen - maxSize;
+    if (p + expected > toStart + toLen) p = toStart + toLen - expected;
     if (p < toStart) p = toStart;
     return p;
 }
 
 // Maps a non-maximized, non-fullscreen window rect from one work area to
-// another. The returned rect keeps the window's current size (clamped to the
-// target), positioned so that the window also fits after DPI rescaling.
+// another. The window gets the size it has now scaled to the target DPI and
+// clamped to the target work area. If `rescaled` is true, Telegram will
+// rescale the window on the DPI change, so the returned size is the one to
+// set now (before that rescale); otherwise it's the final size.
 static RECT MapRect(const RECT& r, const RECT& from, const RECT& to,
-                    UINT fromDpi, UINT toDpi, bool keepPosition) {
+                    UINT fromDpi, UINT toDpi, bool keepPosition,
+                    bool rescaled) {
     int w = r.right - r.left;
     int h = r.bottom - r.top;
     int toW = to.right - to.left;
@@ -172,13 +165,13 @@ static RECT MapRect(const RECT& r, const RECT& from, const RECT& to,
     int eh = MulDiv(h, toDpi, fromDpi);
     if (ew > toW) ew = toW;
     if (eh > toH) eh = toH;
-    int nw = w > toW ? toW : w;
-    int nh = h > toH ? toH : h;
+    int nw = rescaled ? MulDiv(ew, fromDpi, toDpi) : ew;
+    int nh = rescaled ? MulDiv(eh, fromDpi, toDpi) : eh;
 
     int x = MapAxis(r.left, w, from.left, from.right - from.left, to.left,
-                    toW, nw, ew, keepPosition);
+                    toW, ew, keepPosition);
     int y = MapAxis(r.top, h, from.top, from.bottom - from.top, to.top, toH,
-                    nh, eh, keepPosition);
+                    eh, keepPosition);
     return {x, y, x + nw, y + nh};
 }
 
@@ -256,7 +249,7 @@ static bool GetMoveTarget(HWND hwnd, const RECT& rect, MoveTarget* target) {
         toDpi = GetMonitorDpi(targetMonitor);
     }
 
-    target->zoomed = settings.keepMaximized && IsZoomed(hwnd);
+    target->zoomed = IsZoomed(hwnd);
     int w = rect.right - rect.left;
     int h = rect.bottom - rect.top;
 
@@ -276,15 +269,17 @@ static bool GetMoveTarget(HWND hwnd, const RECT& rect, MoveTarget* target) {
         POINT off = GetWorkspaceOffset(hwnd);
         RECT normal = wp.rcNormalPosition;
         OffsetRect(&normal, off.x, off.y);
+        // Nothing rescales the restore rect when the window is restored on
+        // the target monitor, so it gets the final size right away.
         target->normalRect = MapRect(normal, cm.rcWork, tm.rcWork, fromDpi,
-                                     toDpi, settings.keepPosition);
+                                     toDpi, settings.keepPosition, false);
     } else if (w >= (cm.rcMonitor.right - cm.rcMonitor.left) - 2 &&
                h >= (cm.rcMonitor.bottom - cm.rcMonitor.top) - 2) {
         // Fullscreen.
         target->rect = tm.rcMonitor;
     } else {
         target->rect = MapRect(rect, cm.rcWork, tm.rcWork, fromDpi, toDpi,
-                               settings.keepPosition);
+                               settings.keepPosition, true);
     }
 
     Wh_Log(L"Moving window %p class=%s: (%d,%d)-(%d,%d) -> (%d,%d)-(%d,%d)"
