@@ -1,10 +1,11 @@
 // ==WindhawkMod==
-// @github https://github.com/434e5b58
 // @id              select-fade
 // @name            SelectFade
 // @description     Replaces the system marquee with a custom-drawn rectangle that fades out smoothly on release.
-// @version         0.1
+// @version         2.0
 // @author          434e5b58
+// @github          https://github.com/434e5b58
+// @license         MIT
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32 -lcomctl32 -ladvapi32 -lversion
 // ==/WindhawkMod==
@@ -17,7 +18,7 @@ Replaces the default desktop selection rectangle with a fully custom-drawn overl
 
 ## How it works
 
-* **Custom Drawing:** The mod disables the standard system marquee and draws its own selection box using a layered window.
+* **Custom Drawing:** The mod disables the standard system marquee on the desktop and draws its own selection box using a layered window.
 * **Live Preview:** While you drag, the rectangle updates in real time. The border always uses your system's accent color, and the fill (optional) can be customized.
 * **Smooth Fade-Out:** When you release the mouse button, the rectangle doesn't just disappear. It smoothly fades out in place, creating a polished, modern feel.
 * **Settings:** Toggle the fill on/off, set a custom fill color, enable or disable the fade animation, and adjust its speed and duration.
@@ -25,26 +26,42 @@ Replaces the default desktop selection rectangle with a fully custom-drawn overl
 ## Limitations
 
 * **Desktop Only:** This mod is designed for the desktop. It **does not work in File Explorer windows** because modern Explorer uses DirectUI, which bypasses the standard drawing methods used here.
+
+## Credits
+
+Based on the original [Desktop Marquee Fade](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-marquee-fade.wh.cpp) mod by Twilight0Sparkle (MIT License).
+
+![Preview](https://i.imgur.com/XXXXXXX.gif)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - LiveEnableFill: false
-  $name: Живая заливка
-  $description: Включить заливку во время перетаскивания.
+  $name: Fill while dragging
+  $name:ru-RU: Живая заливка
+  $description: Fill the selection rectangle while dragging.
+  $description:ru-RU: Включить заливку во время перетаскивания.
 - LiveFillColor: ''
-  $name: Цвет живой заливки
-  $description: HEX-код цвета заливки. Пусто = системный акцент.
+  $name: Fill color
+  $name:ru-RU: Цвет живой заливки
+  $description: HEX color for the fill. Empty = system accent.
+  $description:ru-RU: HEX-код цвета заливки. Пусто = системный акцент.
 - AnimEnabled: true
-  $name: Включить анимацию
-  $description: Если выключить, рамка просто исчезнет после отпускания.
+  $name: Enable fade animation
+  $name:ru-RU: Включить анимацию
+  $description: If disabled, the rectangle disappears instantly on release.
+  $description:ru-RU: Если выключить, рамка просто исчезнет после отпускания.
 - AnimSpeed: 100
-  $name: Скорость анимации (%)
-  $description: Скорость исчезновения (50-500).
+  $name: Animation speed (%)
+  $name:ru-RU: Скорость анимации (%)
+  $description: Fade speed (50-500).
+  $description:ru-RU: Скорость исчезновения (50-500).
 - AnimDuration: 300
-  $name: Длительность анимации (мс)
-  $description: Время исчезновения (100-2000).
+  $name: Animation duration (ms)
+  $name:ru-RU: Длительность анимации (мс)
+  $description: Fade duration (100-2000).
+  $description:ru-RU: Время исчезновения (100-2000).
 */
 // ==/WindhawkModSettings==
 
@@ -79,24 +96,29 @@ HWND   g_hManagerWnd = NULL;
 HHOOK  g_hMouseHook  = NULL;
 HANDLE g_hThread     = NULL;
 DWORD  g_dwThreadId  = 0;
+HINSTANCE g_hModInstance = NULL;
 
 POINT g_dragStart = {0};
 POINT g_dragCurrent = {0};
-std::atomic<bool> g_isDragging{false};
-std::atomic<bool> g_isStartPointValid{false};
+bool  g_isDragging = false;
+bool  g_isStartPointValid = false;
+bool  g_updatePending = false;
 
 HWND g_hCachedDesktopTopLevel  = NULL;
 HWND g_hCachedSysListView32    = NULL;
 HWND g_hLiveOverlay = NULL;
+std::atomic<HWND> g_hDesktopListViewAtomic{NULL};
 
 #define TIMER_ID_FADE        1
-#define WM_START_LIVE        (WM_USER + 1)
-#define WM_UPDATE_LIVE       (WM_USER + 2)
-#define WM_STOP_LIVE         (WM_USER + 3)
-#define WM_PRECHECK_START    (WM_USER + 4)
+#define WM_START_ANIMATION   (WM_USER + 1)
+#define WM_PRECHECK_START    (WM_USER + 2)
+#define WM_UPDATE_LIVE       (WM_USER + 3)
+#define WM_STOP_LIVE         (WM_USER + 4)
 
-struct AnimState { float alpha; float decrement; RECT rect; };
+struct AnimState { float alpha; float decrement; };
 std::map<HWND, AnimState> g_animations;
+
+thread_local HWND g_tlsCurrentListView = NULL;
 
 COLORREF GetSystemAccentColor() {
     HKEY hKey;
@@ -222,13 +244,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_animations.erase(it);
                 DestroyWindow(hwnd);
             } else {
-                // Перерисовываем DIB с новой альфой
-                int w = st.rect.right - st.rect.left;
-                int h = st.rect.bottom - st.rect.top;
-                UINT dpi = GetDpiForWindow(hwnd);
-                if (dpi == 0) dpi = 96;
-                int borderThickness = std::max(1, (int)lround((double)dpi / 96.0));
-                PaintMarqueeDIB(hwnd, w, h, (int)st.alpha, (int)st.alpha, borderThickness);
+                BLENDFUNCTION blend = {AC_SRC_OVER, 0, (BYTE)st.alpha, AC_SRC_ALPHA};
+                UpdateLayeredWindow(hwnd, NULL, NULL, NULL, NULL, NULL, 0, &blend, ULW_ALPHA);
             }
         }
         return 0;
@@ -260,6 +277,7 @@ LRESULT CALLBACK ManagerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     if (msg == WM_PRECHECK_START) {
         POINT* ppt = (POINT*)lParam;
         g_hCachedSysListView32 = GetRealDesktopListView(&g_hCachedDesktopTopLevel);
+        g_hDesktopListViewAtomic.store(g_hCachedSysListView32);
         bool isValid = false;
 
         if (g_hCachedSysListView32 && g_hCachedDesktopTopLevel) {
@@ -286,46 +304,43 @@ LRESULT CALLBACK ManagerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
             }
         }
-        g_isStartPointValid.store(isValid);
+        g_isStartPointValid = isValid;
         delete ppt;
         return 0;
     }
 
-    if (msg == WM_START_LIVE) {
-        if (!g_isStartPointValid.load()) return 0;
-
-        if (g_hLiveOverlay) {
-            DestroyWindow(g_hLiveOverlay);
-            g_hLiveOverlay = NULL;
-        }
-
-        g_hLiveOverlay = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-            L"FadeMarqueeOverlayClass", NULL, WS_POPUP, 0, 0, 0, 0,
-            NULL, NULL, GetModuleHandle(NULL), NULL);
-
-        if (g_hLiveOverlay) {
-            HWND hAbove = GetWindow(g_hCachedDesktopTopLevel, GW_HWNDPREV);
-            SetWindowPos(g_hLiveOverlay, hAbove ? hAbove : HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        }
-        return 0;
-    }
-
     if (msg == WM_UPDATE_LIVE) {
-        if (!g_hLiveOverlay) return 0;
+        g_updatePending = false;
+        if (!g_isStartPointValid) return 0;
 
-        RECT* prc = (RECT*)lParam;
-        int w = prc->right - prc->left;
-        int h = prc->bottom - prc->top;
-        if (w <= 0 || h <= 0) { delete prc; return 0; }
+        RECT rc{
+            std::min(g_dragStart.x, g_dragCurrent.x),
+            std::min(g_dragStart.y, g_dragCurrent.y),
+            std::max(g_dragStart.x, g_dragCurrent.x),
+            std::max(g_dragStart.y, g_dragCurrent.y)
+        };
+        int w = rc.right - rc.left;
+        int h = rc.bottom - rc.top;
+        if (w <= 0 || h <= 0) return 0;
 
-        UINT dpi = GetDpiForWindow(g_hLiveOverlay);
-        if (dpi == 0) dpi = 96;
-        int borderThickness = std::max(1, (int)lround((double)dpi / 96.0));
+        if (!g_hLiveOverlay) {
+            g_hLiveOverlay = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                L"FadeMarqueeOverlayClass", NULL, WS_POPUP, 0, 0, 0, 0,
+                NULL, NULL, g_hModInstance, NULL);
+            if (g_hLiveOverlay) {
+                HWND hAbove = GetWindow(g_hCachedDesktopTopLevel, GW_HWNDPREV);
+                SetWindowPos(g_hLiveOverlay, hAbove ? hAbove : HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
+        }
 
-        SetWindowPos(g_hLiveOverlay, NULL, prc->left, prc->top, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
-        PaintMarqueeDIB(g_hLiveOverlay, w, h, 255, 90, borderThickness);
+        if (g_hLiveOverlay) {
+            UINT dpi = GetDpiForWindow(g_hLiveOverlay);
+            if (dpi == 0) dpi = 96;
+            int borderThickness = std::max(1, (int)lround((double)dpi / 96.0));
 
-        delete prc;
+            SetWindowPos(g_hLiveOverlay, NULL, rc.left, rc.top, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+            PaintMarqueeDIB(g_hLiveOverlay, w, h, 255, 90, borderThickness);
+        }
         return 0;
     }
 
@@ -337,13 +352,9 @@ LRESULT CALLBACK ManagerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 int actualDuration = (duration * 100) / speed;
                 if (actualDuration < 16) actualDuration = 16;
 
-                RECT rc;
-                GetWindowRect(g_hLiveOverlay, &rc);
-
                 AnimState st;
                 st.alpha = 255.0f;
                 st.decrement = 255.0f / ((float)actualDuration / 16.0f);
-                st.rect = rc;
                 g_animations[g_hLiveOverlay] = st;
                 SetTimer(g_hLiveOverlay, TIMER_ID_FADE, 16, NULL);
                 g_hLiveOverlay = NULL;
@@ -364,49 +375,83 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
         if (wParam == WM_LBUTTONDOWN) {
             g_dragStart = pMouse->pt;
             g_dragCurrent = pMouse->pt;
-            g_isDragging.store(true);
-            g_isStartPointValid.store(false);
+            g_isDragging = true;
+            g_isStartPointValid = false;
             POINT* ppt = new POINT{pMouse->pt.x, pMouse->pt.y};
             PostMessageW(g_hManagerWnd, WM_PRECHECK_START, 0, (LPARAM)ppt);
-        } else if (wParam == WM_MOUSEMOVE && g_isDragging.load()) {
+        } else if (wParam == WM_MOUSEMOVE && g_isDragging) {
             g_dragCurrent = pMouse->pt;
-            RECT* prc = new RECT{
-                std::min(g_dragStart.x, g_dragCurrent.x),
-                std::min(g_dragStart.y, g_dragCurrent.y),
-                std::max(g_dragStart.x, g_dragCurrent.x),
-                std::max(g_dragStart.y, g_dragCurrent.y)
-            };
-            PostMessageW(g_hManagerWnd, WM_UPDATE_LIVE, 0, (LPARAM)prc);
-            if (!g_hLiveOverlay) {
-                PostMessageW(g_hManagerWnd, WM_START_LIVE, 0, 0);
+            if (!g_updatePending) {
+                g_updatePending = true;
+                PostMessageW(g_hManagerWnd, WM_UPDATE_LIVE, 0, 0);
             }
-        } else if (wParam == WM_LBUTTONUP && g_isDragging.load()) {
-            g_isDragging.store(false);
+        } else if (wParam == WM_LBUTTONUP && g_isDragging) {
+            g_isDragging = false;
             PostMessageW(g_hManagerWnd, WM_STOP_LIVE, 0, 0);
         }
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
 
+LRESULT (THISCALL *CListView_WndProc_orig)(void *, HWND, UINT, WPARAM, LPARAM);
+LRESULT THISCALL CListView_WndProc_hook(void *pThis, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    HWND prev = g_tlsCurrentListView;
+    g_tlsCurrentListView = hwnd;
+    LRESULT result = CListView_WndProc_orig(pThis, hwnd, msg, wParam, lParam);
+    g_tlsCurrentListView = prev;
+    return result;
+}
+
 void (THISCALL *CLVDrawManager__PaintMarquee_orig)(void *, HDC, void *, RECT *);
 void THISCALL CLVDrawManager__PaintMarquee_hook(void *pThis, HDC hdc, void *pv, RECT *prc) {
-    // Отключаем системную отрисовку — оригинал не вызываем
+    HWND hDesktop = g_hDesktopListViewAtomic.load();
+    if (hDesktop != NULL && g_tlsCurrentListView == hDesktop) {
+        return;
+    }
+    CLVDrawManager__PaintMarquee_orig(pThis, hdc, pv, prc);
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
-    WNDCLASSW wcm = {0, ManagerWndProc, 0, 0, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, L"FadeMarqueeManagerClass"};
-    RegisterClassW(&wcm);
-    WNDCLASSW wco = {0, OverlayWndProc, 0, 0, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, L"FadeMarqueeOverlayClass"};
-    RegisterClassW(&wco);
+    HINSTANCE hInst = g_hModInstance;
 
-    g_hManagerWnd = CreateWindowExW(0, L"FadeMarqueeManagerClass", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
-    g_hMouseHook  = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(NULL), 0);
+    WNDCLASSW wcm = {0};
+    wcm.lpfnWndProc = ManagerWndProc;
+    wcm.hInstance = hInst;
+    wcm.lpszClassName = L"FadeMarqueeManagerClass";
+    if (!RegisterClassW(&wcm)) return 0;
+
+    WNDCLASSW wco = {0};
+    wco.lpfnWndProc = OverlayWndProc;
+    wco.hInstance = hInst;
+    wco.lpszClassName = L"FadeMarqueeOverlayClass";
+    if (!RegisterClassW(&wco)) {
+        UnregisterClassW(L"FadeMarqueeManagerClass", hInst);
+        return 0;
+    }
+
+    g_hManagerWnd = CreateWindowExW(0, L"FadeMarqueeManagerClass", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInst, NULL);
+    g_hMouseHook  = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, hInst, 0);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) DispatchMessage(&msg);
 
     if (g_hMouseHook) UnhookWindowsHookEx(g_hMouseHook);
     if (g_hManagerWnd) DestroyWindow(g_hManagerWnd);
+
+    if (g_hLiveOverlay) {
+        DestroyWindow(g_hLiveOverlay);
+        g_hLiveOverlay = NULL;
+    }
+
+    for (auto const& pair : g_animations) {
+        KillTimer(pair.first, TIMER_ID_FADE);
+        DestroyWindow(pair.first);
+    }
+    g_animations.clear();
+
+    UnregisterClassW(L"FadeMarqueeManagerClass", hInst);
+    UnregisterClassW(L"FadeMarqueeOverlayClass", hInst);
+
     return 0;
 }
 
@@ -420,13 +465,25 @@ BOOL Wh_ModInit() {
         if (shellPid != 0 && shellPid != GetCurrentProcessId()) return FALSE;
     }
 
+    // Get the mod's own module instance safely
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&Wh_ModInit, &g_hModInstance);
+
     LoadSettings();
 
     HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hComCtl) {
         const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
             { { L"private: void " STHISCALL " CLVDrawManager::_PaintMarquee(struct HDC__ *,void *,struct tagRECT const *)" },
-              &CLVDrawManager__PaintMarquee_orig, CLVDrawManager__PaintMarquee_hook, false }
+              &CLVDrawManager__PaintMarquee_orig, CLVDrawManager__PaintMarquee_hook, false },
+            { { 
+                #ifdef _WIN64
+                L"public: __int64 __cdecl CListView::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+                #else
+                L"public: long __thiscall CListView::WndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+                #endif
+              },
+              &CListView_WndProc_orig, CListView_WndProc_hook, false }
         };
         WindhawkUtils::HookSymbols(hComCtl, comctl32DllHooks, ARRAYSIZE(comctl32DllHooks));
     }
