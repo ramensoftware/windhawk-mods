@@ -2,12 +2,134 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T11:01:52.000Z</updated>
+    <updated>2026-10-24T12:03:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Hover Info 1.1.2]]></title>
+        <id>https://windhawk.net/mods/file-hover-info#270fb9181c02b6e02af4604f0a11d6ae777f99cf</id>
+        <link href="https://windhawk.net/mods/file-hover-info"/>
+        <updated>2026-10-24T12:03:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add Simplified Chinese localization for the info card (thanks @nekOStorm).</li>
+<li>Auto-detect Simplified Chinese only for mainland China and Singapore;
+Traditional Chinese falls back to English (can be chosen manually).</li>
+<li>Update the README to document Simplified Chinese support.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.2.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#f6935fd18ae8941fe2ad6da3803b1329433aee0f</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-10-24T12:03:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New: close animation. When a window closes it flows to the top, bottom, left or right edge of its screen. Contributed by MrCrustyToast.</li>
+<li>New: optional close animation for apps that hide to the tray instead of closing.</li>
+<li>Close and app-launch animations are now on by default, and the classic genie is the default style.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Column View 0.43]]></title>
+        <id>https://windhawk.net/mods/explorer-column-view#705ab89383dce727aaa7f8906d045de634c5581c</id>
+        <link href="https://windhawk.net/mods/explorer-column-view"/>
+        <updated>2026-10-24T12:03:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorercolumnview">Explorer Column View</h1>
+<p>Bring Finder-style column browsing to Windows 11 File Explorer. Follow a folder
+path across resizable columns, revisit earlier selections, and inspect files
+beside your folders.</p>
+<h2 id="inaction">In action</h2>
+<p>Native Windows styling, with folder columns and the audio Inspector:</p>
+<p><img src="https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-light.png" alt="Folder columns and audio waveform in Windows 11 light mode" /></p>
+<p>Columns also follow your existing Explorer styling. See the
+<a href="https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-styled.png">customized Explorer screenshot</a>;
+its glass appearance comes from the user's other customization tools.</p>
+<h2 id="browsewithacleartrail">Browse with a clear trail</h2>
+<ul>
+<li>Select a folder to reveal its contents in the next column. Choose a different
+folder earlier in the trail to replace the columns that follow it.</li>
+<li>Start with one column and add only the columns you use. Drag a thin divider to
+resize a column live; the layout scrolls horizontally as your path grows.</li>
+<li>Press <strong>Right Arrow</strong> to enter the selected folder's column and <strong>Left Arrow</strong>
+to focus the previous column. Folder double-click and Enter extend the trail.</li>
+<li>Each Explorer tab keeps its own folders, selections, column widths and Inspector.</li>
+<li>On supported Shell versions, <strong>Open in new tab</strong> targets the owning Explorer window; ordinary folder opening
+continues along the column trail. <strong>Open in new window</strong> keeps its native behavior.</li>
+<li>Browse <strong>Home</strong> and <strong>This PC</strong>, local and network folders, and archives exposed
+by your Windows Shell providers, including supported ZIP, RAR and 7z folders.</li>
+</ul>
+<h2 id="lookcloserwiththeinspector">Look closer with the Inspector</h2>
+<p>Selecting a file opens its Inspector after the folder columns, filling the
+remaining space. Prefer a sidebar? Enable <strong>Use fixed-width Inspector</strong> to dock
+it on the right and show folder details too.</p>
+<ul>
+<li>File information, icons and registered <strong>Open with</strong> applications.</li>
+<li>Image previews and installed Windows preview handlers for supported documents.</li>
+<li>Inline audio and video playback for supported formats and installed codecs.</li>
+<li>Scrubbable audio waveforms, with duration, sample rate, bit depth and channel
+information when available.</li>
+<li>Playback starts when you press Play and pauses when its tab is hidden.</li>
+</ul>
+<h2 id="turncolumnsonoroff">Turn columns on or off</h2>
+<p>With Explorer focused, press <strong>Ctrl+Alt+Shift+V</strong> (the default) to switch column
+browsing across open and new Explorer windows and tabs. Change <strong>Toggle shortcut</strong>
+in the mod settings, for example to <code>Ctrl+Shift+C</code> or <code>F8</code>. Use <code>Ctrl</code>, <code>Alt</code>,
+<code>Shift</code> and/or <code>Win</code> separated by <code>+</code>, followed by a letter, digit, <code>F1</code>–<code>F24</code>,
+or a named key: <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>, <code>Backspace</code>, <code>Delete</code>, <code>Insert</code>,
+<code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Left</code>, <code>Right</code>, <code>Up</code>, or <code>Down</code>.
+Other keyboard virtual-key codes can be written in hexadecimal, e.g. <code>Ctrl+0xBA</code>.
+Names are case-insensitive; leave the setting empty to disable the shortcut.
+Invalid shortcuts fall back to <strong>Ctrl+Alt+Shift+V</strong> and are logged.</p>
+<p>The shortcut only runs in Explorer, not while typing in an address/search/rename
+field or using Right Alt (AltGr). Extra modifiers prevent a match. Choose a
+combination that does not conflict with another Explorer command: the configured
+shortcut takes precedence there, but cannot override Windows-reserved shortcuts.
+It remains available to other apps. <strong>Enable columns by default</strong> controls the
+initial mode.
+Use Explorer's main sidebar or address bar to change the first column's location.
+Click <strong>Save settings</strong> in Windhawk to apply configuration changes.</p>
+<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
+<ul>
+<li>Designed for Windows 11. The mod hosts native Shell views and follows existing
+Explorer styling; it does not include a glass theme.</li>
+<li>Windows 11 context menus are available on supported x64 builds in the 26100
+and 26200 families. Other builds and architectures use classic menus.
+<strong>Use classic context menus</strong> forces that fallback inside the columns.</li>
+<li>Use a column's context menu or keyboard shortcuts for file operations. The
+hidden native view's selection is cleared before columns cover it. The outer
+command bar's <strong>New</strong> and <strong>Paste</strong> still target the original tab folder;
+its status bar can reflect that folder rather than the focused column.
+Selecting or renaming a new item there temporarily reveals native Explorer.
+Deselect it to return to the existing column trail and Inspector.</li>
+<li>Home contents depend on Windows' Shell provider. Unavailable recent entries
+cannot be previewed. Unsupported virtual roots return to the regular native view.</li>
+<li>Previews depend on installed handlers/codecs. Some archive providers expose
+folders but no file streams. Encrypted archives and playback inside archives
+require an external application.</li>
+<li>Some metadata and document-preview calls run on Explorer's UI thread. A slow
+handler or unavailable network file can pause the window. Installed media
+codecs run inside Explorer; <strong>Enable inline audio and video</strong> can be turned
+off for setups with incompatible codecs. Slow providers can delay unload.</li>
+<li>Other mods that rearrange Explorer's file area may need compatibility testing.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>Refresh views after navigation and resizing</strong> keeps additional redraw recovery
+enabled. If another styling mod causes excessive flashing, compare with it off.</p>]]></content>
+        <author>
+            <name>ItsMikesch</name>
+            <uri>https://github.com/ItsMikesch</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Terminal Admin Aliases 1.0.4]]></title>
         <id>https://windhawk.net/mods/explorer-terminal-admin-alias#640e843644d6bef023896312768387eb5b7065c4</id>
@@ -480,186 +602,6 @@ in this source file.</p>]]></content>
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mute Focused Window 1.0]]></title>
-        <id>https://windhawk.net/mods/mute-focused-window#b947ebaf2f1b237297b90ed9fe480958f701f311</id>
-        <link href="https://windhawk.net/mods/mute-focused-window"/>
-        <updated>2026-10-22T15:04:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mutefocusedwindow">Mute Focused Window</h1>
-<p>Press <strong>Ctrl+Alt+M</strong> to mute the app whose window has focus. Press it again to
-unmute it. Other apps keep playing.</p>
-<p>This changes the same per-app mute as the Windows Volume Mixer, so the mixer
-shows the result and can undo it.</p>
-<h2 id="whatgetsmuted">What gets muted</h2>
-<p>The mod mutes every audio session that belongs to the focused window's app, on
-every active output device. If some of those sessions are muted and others are
-not, the first press mutes them all.</p>
-<p>Browsers and Electron apps such as Discord play sound from a helper process
-instead of the process that owns the window. The mod therefore includes the
-app's background child processes too. A child process with its own visible
-window is treated as a separate app and left alone. For example, a media player
-launched from a terminal keeps playing when you mute the terminal.</p>
-<h2 id="hotkey">Hotkey</h2>
-<p>Change the hotkey in the mod's settings. Write any modifiers and exactly one
-key, joined by <code>+</code>, for example <code>Ctrl+Alt+M</code>, <code>Win+Shift+F9</code> or <code>Pause</code>.</p>
-<ul>
-<li>Modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.</li>
-<li>Keys: <code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F24</code>, <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>,
-<code>Backspace</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>,
-<code>Down</code>, <code>Left</code>, <code>Right</code>, <code>Pause</code>, <code>ScrollLock</code>, <code>PrintScreen</code>, <code>Numpad0</code>–
-<code>Numpad9</code>, <code>VolumeMute</code>, <code>VolumeDown</code>, <code>VolumeUp</code>, <code>MediaPlayPause</code>,
-<code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code>.</li>
-<li>Any other key: its virtual-key code in hexadecimal, such as <code>0x4D</code>.</li>
-</ul>
-<p>Windows gives a hotkey to only one program at a time, and other apps stop
-receiving that key combination. If the hotkey does nothing, another program may
-already own it. Turn on logging in the mod's Advanced tab to see why.</p>
-<p>The default, Ctrl+Alt+M, also takes Word's Insert Comment shortcut. On keyboard
-layouts with an AltGr key, Windows treats AltGr as Ctrl+Alt, so AltGr+M (<code>µ</code> on
-German layouts) stops typing its character. Choose another hotkey if you need
-either.</p>
-<h2 id="usingthekeyboardsmutekey">Using the keyboard's Mute key</h2>
-<p>Most keyboards with a dedicated Mute key, and laptops with a mute function key,
-send <code>VolumeMute</code>.</p>
-<ul>
-<li>Set the hotkey to <code>VolumeMute</code> to make the Mute key mute the focused app
-instead of everything. Also turn on <strong>Mute the system when there's no app to
-mute</strong>, so the key still mutes everything when you press it on the desktop,
-the taskbar, a File Explorer window or an app without audio.</li>
-<li>Set the hotkey to <code>Ctrl+VolumeMute</code> to keep the Mute key as it is and use
-Ctrl+Mute for the focused app.</li>
-</ul>
-<p>Keyboard software that reassigns the Mute key can stop it from sending
-<code>VolumeMute</code>.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>A browser is muted as a whole, not tab by tab. The Volume Mixer shows it the
-same way.</li>
-<li>An app started from the focused app and hidden in the tray, with no visible
-window, counts as part of the focused app. For example, a music player
-started from a launcher and minimized to the tray is muted along with the
-launcher. Windows gives no reliable way to tell such an app from the hidden
-helper processes that browsers and Electron apps play their sound through.</li>
-<li>Windows remembers an app's mute setting. An app you muted is still muted the
-next time it starts; press the hotkey or use the Volume Mixer to unmute it.</li>
-<li>Pressing the hotkey on the desktop, the taskbar or a File Explorer window does
-nothing, unless <strong>Mute the system when there's no app to mute</strong> is on.</li>
-<li>That system mute doesn't show Windows' volume indicator.</li>
-</ul>]]></content>
-        <author>
-            <name>Benevolent Anarchy</name>
-            <uri>https://github.com/cicely-f</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bulk Copy File and Folder Names 0.3.0]]></title>
-        <id>https://windhawk.net/mods/bulk-copy-file-and-folder-names#5faa114e2d64c77e02d79f4a54a79f92c89137dd</id>
-        <link href="https://windhawk.net/mods/bulk-copy-file-and-folder-names"/>
-        <updated>2026-10-22T15:04:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bulkcopyfileandfoldernames">Bulk Copy File and Folder Names</h1>
-<p>Windows has Copy as path (Ctrl+Shift+C), but it gives you full paths in quotes,
-and often you only want the names. This mod copies the names of the files and
-folders you select in File Explorer as plain text, one per line. It works on one
-item or on many at once. A selection can mix files and folders.</p>
-<h2 id="rightclickmenu">Right-click menu</h2>
-<p>Right-click a file, a folder, or a selection of many files and folders in a File
-Explorer window. The classic menu gets two entries, Copy name and Copy name
-without extension. On Windows 11 they're in the menu you get from Show more
-options or Shift+right-click. The entries are on by default, and you can turn
-them off in the settings.</p>
-<p>Copy name without extension keeps folder names whole, so <code>sub.folder</code> stays
-<code>sub.folder</code>, and <code>a.tar.gz</code> becomes <code>a.tar</code>. A name that starts with a dot, like
-<code>.gitignore</code>, stays whole.</p>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>The hotkeys are off until you turn them on, so a fresh install takes no key away
-from File Explorer. To turn them on, open the mod's Settings tab in Windhawk,
-tick Hotkeys, and save. The defaults are Ctrl+Shift+Y for names with extensions
-and Ctrl+Shift+U for names without. You can change both keys there too.</p>
-<p>A key is handled inside the File Explorer window that has the focus, so it never
-reaches other programs. It does nothing while you type in a rename box, the
-address bar or the search box, and it does nothing when no file or folder is
-selected. In both cases the key goes to File Explorer as usual.</p>
-<p>If you pick a key that File Explorer already uses, like Ctrl+Shift+N for New
-folder, the mod wins while the hotkeys are on and something is selected.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li>Hotkeys: turn the two key combinations on. Off by default.</li>
-<li>Modifiers and key for each copy action. Ctrl+Alt and Ctrl+Alt+Shift also
-match AltGr, so skip them if your keyboard layout types letters with AltGr.</li>
-<li>Separator: a new line, a comma, or a space between names.</li>
-<li>Quote names: put each name in double quotes.</li>
-<li>Right-click menu: show the two menu entries. On by default.</li>
-</ul>
-<h2 id="limits">Limits</h2>
-<ul>
-<li>The keys and menu entries don't work on the desktop or in file dialogs. Only
-File Explorer windows count.</li>
-<li>The Windows 11 compact menu can't take new entries from a mod. Use Show more
-options.</li>
-<li>The menu entries don't show on the column header menu, the menu you get from
-empty space in a folder, or the menu you get after a drag with the right
-mouse button.</li>
-<li>Items that aren't files or folders, like drives in This PC, give their
-internal name.</li>
-<li>If nothing is selected, nothing happens.</li>
-</ul>
-<h2 id="tutorial">Tutorial</h2>
-<ol>
-<li>Select the files and folders in a File Explorer window. A mix of both is
-fine.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-1-select.png" alt="A File Explorer window with two folders and five files selected in the demo-names folder" /></li>
-<li>Hold Shift and right-click the selection. Pick Copy name or Copy name
-without extension.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-4-right-click-menu.png" alt="The lower part of the classic right-click menu, with Copy name and Copy name without extension in their own group above Properties" /></li>
-<li>Paste. Copy name gives you every name with its extension, one per line.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-2-names-with-extensions.png" alt="The selected names pasted into a text window, one per line, with their extensions" /></li>
-<li>Copy name without extension drops the extension from files and keeps the
-full name of folders.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-3-names-without-extensions.png" alt="The same names pasted again without extensions, while the folder Backup.2025 keeps its full name" /></li>
-<li>If you'd rather use the keyboard, tick Hotkeys in the settings. Ctrl+Shift+Y
-then does what Copy name does, and Ctrl+Shift+U does what Copy name without
-extension does.</li>
-</ol>
-<h3 id="gotchas">Gotchas</h3>
-<ul>
-<li>In step 2, the compact Windows 11 menu can't show the entries. Use
-Shift+right-click or Show more options.</li>
-<li>In step 4, only the last extension goes, so <code>archive.tar.gz</code> becomes
-<code>archive.tar</code>.</li>
-<li>In step 5, a key does nothing while you type in a rename box, the address bar
-or the search box, and nothing while no item is selected. File Explorer gets
-the key instead.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The way the hotkeys are caught, a hook on TranslateAcceleratorW that steps
-aside while a text box has the focus, follows the approach of the Explorer
-Custom Shortcuts mod.</p>]]></content>
-        <author>
-            <name>Shaerif</name>
-            <uri>https://github.com/Shaerif</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lunar & Holiday Calendar 1.0]]></title>
-        <id>https://windhawk.net/mods/chinese-holiday-calendar#52517936a7ca67146a155b080dbca63004efed0b</id>
-        <link href="https://windhawk.net/mods/chinese-holiday-calendar"/>
-        <updated>2026-10-22T10:02:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>⚠️ BREAKING CHANGE: Holiday markers are now user-defined rules instead of built-in matching. Existing holiday text and colour settings are not migrated; existing feed URLs still work, but after upgrading please review “Highlight rules” and add any unwanted feed markers to “Text to remove”.</li>
-<li>⚠️ BREAKING CHANGE: The global “Replace the lunar text” switch is gone. To change colour only, leave the rule’s “Text” empty.</li>
-<li>Added date rules: mark a lunar or solar date directly, without a feed.</li>
-<li>Added an optional Vietnamese lunar calendar, contributed by <a href="https://github.com/vantruong-dev">@vantruong-dev</a> and <a href="https://github.com/phatMT97">@phatMT97</a>:</li>
-<li>Day cells show Vietnamese lunar dates, and the header shows the Can Chi year; everything is calculated offline.</li>
-<li>Added a hover tooltip (on by default) for full holiday names that do not fit in a cell.</li>
-<li>Added support for more ICS feeds: recurring events, extra dates, excluded dates, durations, and compressed responses.</li>
-<li>Improved text matching and restoration: feeds that use different Unicode forms now match correctly, and holiday text no longer stays behind after the mod or the system lunar calendar is turned off.</li>
-<li>Renamed the mod to Lunar &amp; Holiday Calendar (ID unchanged); the README and settings are available in Chinese, English, and Vietnamese.</li>
-</ul>]]></content>
-        <author>
-            <name>dcsmf</name>
-            <uri>https://github.com/dcsmf</uri>
         </author>
     </entry>
 </feed>

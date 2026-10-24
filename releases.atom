@@ -2,12 +2,103 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-24T11:01:52.000Z</updated>
+    <updated>2026-10-24T12:03:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Column View 0.43]]></title>
+        <id>https://windhawk.net/mods/explorer-column-view#705ab89383dce727aaa7f8906d045de634c5581c</id>
+        <link href="https://windhawk.net/mods/explorer-column-view"/>
+        <updated>2026-10-24T12:03:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorercolumnview">Explorer Column View</h1>
+<p>Bring Finder-style column browsing to Windows 11 File Explorer. Follow a folder
+path across resizable columns, revisit earlier selections, and inspect files
+beside your folders.</p>
+<h2 id="inaction">In action</h2>
+<p>Native Windows styling, with folder columns and the audio Inspector:</p>
+<p><img src="https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-light.png" alt="Folder columns and audio waveform in Windows 11 light mode" /></p>
+<p>Columns also follow your existing Explorer styling. See the
+<a href="https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-styled.png">customized Explorer screenshot</a>;
+its glass appearance comes from the user's other customization tools.</p>
+<h2 id="browsewithacleartrail">Browse with a clear trail</h2>
+<ul>
+<li>Select a folder to reveal its contents in the next column. Choose a different
+folder earlier in the trail to replace the columns that follow it.</li>
+<li>Start with one column and add only the columns you use. Drag a thin divider to
+resize a column live; the layout scrolls horizontally as your path grows.</li>
+<li>Press <strong>Right Arrow</strong> to enter the selected folder's column and <strong>Left Arrow</strong>
+to focus the previous column. Folder double-click and Enter extend the trail.</li>
+<li>Each Explorer tab keeps its own folders, selections, column widths and Inspector.</li>
+<li>On supported Shell versions, <strong>Open in new tab</strong> targets the owning Explorer window; ordinary folder opening
+continues along the column trail. <strong>Open in new window</strong> keeps its native behavior.</li>
+<li>Browse <strong>Home</strong> and <strong>This PC</strong>, local and network folders, and archives exposed
+by your Windows Shell providers, including supported ZIP, RAR and 7z folders.</li>
+</ul>
+<h2 id="lookcloserwiththeinspector">Look closer with the Inspector</h2>
+<p>Selecting a file opens its Inspector after the folder columns, filling the
+remaining space. Prefer a sidebar? Enable <strong>Use fixed-width Inspector</strong> to dock
+it on the right and show folder details too.</p>
+<ul>
+<li>File information, icons and registered <strong>Open with</strong> applications.</li>
+<li>Image previews and installed Windows preview handlers for supported documents.</li>
+<li>Inline audio and video playback for supported formats and installed codecs.</li>
+<li>Scrubbable audio waveforms, with duration, sample rate, bit depth and channel
+information when available.</li>
+<li>Playback starts when you press Play and pauses when its tab is hidden.</li>
+</ul>
+<h2 id="turncolumnsonoroff">Turn columns on or off</h2>
+<p>With Explorer focused, press <strong>Ctrl+Alt+Shift+V</strong> (the default) to switch column
+browsing across open and new Explorer windows and tabs. Change <strong>Toggle shortcut</strong>
+in the mod settings, for example to <code>Ctrl+Shift+C</code> or <code>F8</code>. Use <code>Ctrl</code>, <code>Alt</code>,
+<code>Shift</code> and/or <code>Win</code> separated by <code>+</code>, followed by a letter, digit, <code>F1</code>–<code>F24</code>,
+or a named key: <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>, <code>Backspace</code>, <code>Delete</code>, <code>Insert</code>,
+<code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Left</code>, <code>Right</code>, <code>Up</code>, or <code>Down</code>.
+Other keyboard virtual-key codes can be written in hexadecimal, e.g. <code>Ctrl+0xBA</code>.
+Names are case-insensitive; leave the setting empty to disable the shortcut.
+Invalid shortcuts fall back to <strong>Ctrl+Alt+Shift+V</strong> and are logged.</p>
+<p>The shortcut only runs in Explorer, not while typing in an address/search/rename
+field or using Right Alt (AltGr). Extra modifiers prevent a match. Choose a
+combination that does not conflict with another Explorer command: the configured
+shortcut takes precedence there, but cannot override Windows-reserved shortcuts.
+It remains available to other apps. <strong>Enable columns by default</strong> controls the
+initial mode.
+Use Explorer's main sidebar or address bar to change the first column's location.
+Click <strong>Save settings</strong> in Windhawk to apply configuration changes.</p>
+<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
+<ul>
+<li>Designed for Windows 11. The mod hosts native Shell views and follows existing
+Explorer styling; it does not include a glass theme.</li>
+<li>Windows 11 context menus are available on supported x64 builds in the 26100
+and 26200 families. Other builds and architectures use classic menus.
+<strong>Use classic context menus</strong> forces that fallback inside the columns.</li>
+<li>Use a column's context menu or keyboard shortcuts for file operations. The
+hidden native view's selection is cleared before columns cover it. The outer
+command bar's <strong>New</strong> and <strong>Paste</strong> still target the original tab folder;
+its status bar can reflect that folder rather than the focused column.
+Selecting or renaming a new item there temporarily reveals native Explorer.
+Deselect it to return to the existing column trail and Inspector.</li>
+<li>Home contents depend on Windows' Shell provider. Unavailable recent entries
+cannot be previewed. Unsupported virtual roots return to the regular native view.</li>
+<li>Previews depend on installed handlers/codecs. Some archive providers expose
+folders but no file streams. Encrypted archives and playback inside archives
+require an external application.</li>
+<li>Some metadata and document-preview calls run on Explorer's UI thread. A slow
+handler or unavailable network file can pause the window. Installed media
+codecs run inside Explorer; <strong>Enable inline audio and video</strong> can be turned
+off for setups with incompatible codecs. Slow providers can delay unload.</li>
+<li>Other mods that rearrange Explorer's file area may need compatibility testing.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>Refresh views after navigation and resizing</strong> keeps additional redraw recovery
+enabled. If another styling mod causes excessive flashing, compare with it off.</p>]]></content>
+        <author>
+            <name>ItsMikesch</name>
+            <uri>https://github.com/ItsMikesch</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Terminal Admin Aliases 1.0.4]]></title>
         <id>https://windhawk.net/mods/explorer-terminal-admin-alias#640e843644d6bef023896312768387eb5b7065c4</id>
@@ -1080,63 +1171,6 @@ ones are discarded once there are too many of them.</p>]]></content>
         <author>
             <name>Issuch</name>
             <uri>https://github.com/Issuch</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Backspace Navigation 0.1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-backspace-navigation#41e578e0715b0be3571f6ff0ffade2555da6c83b</id>
-        <link href="https://windhawk.net/mods/explorer-backspace-navigation"/>
-        <updated>2026-10-20T10:45:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerbackspacenavigation">Explorer Backspace Navigation</h1>
-<p>Explorer normally uses Backspace to revisit the previous location. If that
-folder has been deleted or moved, it can show a "Location is not available"
-error instead of taking you to the parent folder.</p>
-<p><img src="https://raw.githubusercontent.com/nerdworldDE/windhawk-mods/f212e7dc239e5de9377ef68ffe9b3aab8e7d39fb/explorer-backspace-navigation.png" alt="Explorer's &quot;Location is not available&quot; error for a missing folder in navigation history" /></p>
-<p>The screenshot shows the standard Explorer error this mod's missing-folder
-fallback is designed to avoid.</p>
-<p>Choose how unmodified <strong>Backspace</strong> navigates in File Explorer:</p>
-<ul>
-<li><strong>Always go to the parent folder</strong> (enabled by default): Backspace behaves
-like Alt+Up, regardless of navigation history. For example, from
-<code>C:\test\foo</code> it opens <code>C:\test</code>, even after visiting <code>C:\test\foo\bar</code>.</li>
-<li><strong>Switch disabled</strong>: Keep Explorer's normal history navigation. Before
-opening the previous location, check whether its filesystem folder still
-exists. If it was deleted, renamed, or moved, open the
-parent of the <strong>current</strong> folder instead. Other history entries are not
-searched or removed.</li>
-</ul>
-<p>If several ancestors have been deleted, the mod chooses the nearest existing
-ancestor. At the Shell Desktop root there is no parent, so Backspace does
-nothing in the first mode.</p>
-<p>Renaming, typing in the address/search bars, and dialogs keep their normal
-Backspace behavior. Shortcuts using Ctrl, Alt, Shift, or the Windows key,
-as well as the Back/Forward buttons, are unaffected. Settings apply immediately.</p>
-<h2 id="scopeandcompatibility">Scope and compatibility</h2>
-<p>Intended for 64-bit Windows 10 and Windows 11 Explorer, including tabbed
-windows. The browser is obtained through IShellWindows and matched to the
-focused tab or folder view. If it cannot be matched, native processing is kept.
-The mod does not maintain a separate history.</p>
-<p>Initial user testing of version 0.1.1 reported working behavior after enabling
-the mod. Broader Windows-build and scenario coverage remains to be validated.
-The mod requires ExplorerFrame's
-<code>CShellBrowser::_MayTranslateAccelerator</code> symbol. If it is unavailable,
-initialization fails with a log message. Internal C++ object addresses are
-never used as COM interface pointers.</p>
-<p>History checks cover absolute filesystem paths and file URLs, including
-Unicode and UNC paths. Virtual locations such as Home, This PC, searches,
-and archive views keep normal history navigation. If history cannot be read,
-the URL is not understood, or the existence check is inconclusive (for example,
-access denied), Explorer keeps its normal behavior. Such failures are not
-treated as proof that the folder was deleted.</p>
-<p>Checks use normal filesystem I/O, so an unresponsive network location can
-delay the key press. A folder can also disappear between the check and
-Explorer opening it; this mod does not suppress unrelated error dialogs.</p>
-<p>Enable this mod's debug logging in Windhawk to diagnose missing symbols,
-history-service failures, and navigation results. No files, history entries,
-or Explorer registry preferences are changed by the mod.</p>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
         </author>
     </entry>
 </feed>

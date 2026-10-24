@@ -1,3 +1,9 @@
+## 3.2.0 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f6935fd18ae8941fe2ad6da3803b1329433aee0f/mods/macos-minimize-animation.wh.cpp))
+
+* New: close animation. When a window closes it flows to the top, bottom, left or right edge of its screen. Contributed by MrCrustyToast.
+* New: optional close animation for apps that hide to the tray instead of closing.
+* Close and app-launch animations are now on by default, and the classic genie is the default style.
+
 ## 3.1.7 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a395f6d754b9e2a54ef68b12ecc2308d56f3d7eb/mods/macos-minimize-animation.wh.cpp))
 
 * App launch animation: Tauri and Slint (and other winit / GPU-rendered) apps no longer flash on screen before the genie. Launching windows are now hidden with a DWM cloak instead of layered transparency.

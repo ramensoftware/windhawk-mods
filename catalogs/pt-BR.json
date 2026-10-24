@@ -5537,6 +5537,34 @@
         "version": "1.2.0"
       }
     },
+    "explorer-column-view": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792843381000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792843381000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ItsMikesch",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32 -lstrmiids -lmfplat -lmfreadwrite -lmfuuid -lcomctl32 -ladvapi32 -luxtheme",
+        "description": "Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.",
+        "github": "https://github.com/ItsMikesch",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Column View",
+        "version": "0.43"
+      }
+    },
     "explorer-command-bar": {
       "details": {
         "defaultSorting": 10130,
@@ -7168,7 +7196,7 @@
         "ratingUsers": 44,
         "reviews": 0,
         "trendingSorting": 58.9,
-        "updated": 1792433102000,
+        "updated": 1792843392000,
         "users": 589
       },
       "metadata": {
@@ -7180,7 +7208,7 @@
           "explorer.exe"
         ],
         "name": "File Hover Info",
-        "version": "1.1.1"
+        "version": "1.1.2"
       }
     },
     "file-operation-styler": {
@@ -9445,20 +9473,20 @@
         "ratingUsers": 1224,
         "reviews": 0,
         "trendingSorting": 1.1715060959256958,
-        "updated": 1792328541000,
+        "updated": 1792843387000,
         "users": 86602
       },
       "metadata": {
         "author": "Abdullah Masood",
         "compilerOptions": "-ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32",
-        "description": "Smooth macOS-style genie minimize and restore (open) animations for every window.",
+        "description": "Smooth macOS-style genie minimize, restore (open) and optional close animations for every window.",
         "github": "https://github.com/Abdullah-Masood-05",
         "include": [
           "*"
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.7"
+        "version": "3.2.0"
       }
     },
     "macos-style-dock": {
