@@ -4,7 +4,7 @@
 // @name:ru-RU      Проводник: новые окна — во вкладки
 // @description     A new File Explorer window opens as a tab in an already open window; a folder that is already open just becomes the active tab
 // @description:ru-RU Новое окно Проводника открывается вкладкой в уже открытом окне; уже открытая папка просто становится активной вкладкой
-// @version         1.6
+// @version         1.7
 // @author          limpompo
 // @github          https://github.com/limpompo
 // @homepage        https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/explorer-windows-to-tabs
@@ -75,13 +75,13 @@ undocumented and may change in future builds. System files are not modified.
 - activateSelectedTab: true
   $name: Switch to the tab where the program selected a file
   $name:ru-RU: Переключаться на вкладку, где программа выделила файл
-  $description: When "Show in folder" targets an already open folder, Explorer selects the file in its tab but does not switch to it (and sometimes picks the wrong tab). The mod switches to the right one.
-  $description:ru-RU: «Показать в папке» при уже открытой папке Проводник выделяет файл в её вкладке, но не переключается на неё (а иногда выбирает не ту вкладку). Мод переключает на нужную.
+  $description: When "Show in folder" targets an already open folder, Explorer selects the file in its tab but does not switch to it (and sometimes picks the wrong tab). The mod switches to the right one. It can't tell "Show in folder" from other programs that select files in an Explorer window (scripts, sync tools), so for them the tab is switched too, and the window is brought to the front if that option is on.
+  $description:ru-RU: «Показать в папке» при уже открытой папке Проводник выделяет файл в её вкладке, но не переключается на неё (а иногда выбирает не ту вкладку). Мод переключает на нужную. Мод не отличает «Показать в папке» от других программ, которые выделяют файлы в окне Проводника (скрипты, программы синхронизации), поэтому для них вкладка тоже переключается, а окно выходит на передний план, если включена эта настройка.
 - activateTarget: true
   $name: Bring the tabbed window to the foreground
   $name:ru-RU: Выводить окно со вкладками на передний план
-  $description: After adding or selecting a tab, activate the Explorer window (and restore it if minimized).
-  $description:ru-RU: После добавления или выбора вкладки активировать окно Проводника (и разворачивать, если оно свёрнуто).
+  $description: After adding or selecting a tab, activate the Explorer window (and restore it if minimized). This includes a tab where a program selected a file (see the previous option).
+  $description:ru-RU: После добавления или выбора вкладки активировать окно Проводника (и разворачивать, если оно свёрнуто). В том числе для вкладки, где программа выделила файл (см. предыдущую настройку).
 - shiftBypass: true
   $name: Hold Shift to open a separate window
   $name:ru-RU: Shift — открыть отдельным окном
@@ -411,7 +411,20 @@ struct TabSnapshot {
     int count = 0;
     HWND tabs[kMaxSnapshotTabs] = {};
     HWND owners[kMaxSnapshotTabs] = {};
+    DWORD titles[kMaxSnapshotTabs] = {};  // TitleHash of each tab
 };
+
+// Hash of a tab's title (the folder name); 0 if it has none yet. InternalGetWindowText sends no
+// messages, so it is safe for windows of other threads and right inside CreateWindowExW.
+static DWORD TitleHash(HWND hwnd) {
+    WCHAR title[260];
+    int len = hwnd ? InternalGetWindowText(hwnd, title, ARRAYSIZE(title)) : 0;
+    DWORD hash = 2166136261u;  // FNV-1a
+    for (int i = 0; i < len; i++) {
+        hash = (hash ^ title[i]) * 16777619u;
+    }
+    return len ? hash : 0;
+}
 
 static TabSnapshot* TakeTabSnapshot(HWND self, bool mouseDown) {
     auto* snapshot = new TabSnapshot;
@@ -427,6 +440,7 @@ static TabSnapshot* TakeTabSnapshot(HWND self, bool mouseDown) {
         for (int t = 0; t < tabs.count && snapshot->count < kMaxSnapshotTabs; t++) {
             snapshot->tabs[snapshot->count] = tabs.items[t];
             snapshot->owners[snapshot->count] = windows.items[w];
+            snapshot->titles[snapshot->count] = TitleHash(tabs.items[t]);
             snapshot->count++;
         }
     }
@@ -438,11 +452,26 @@ static TabSnapshot* TakeTabSnapshot(HWND self, bool mouseDown) {
 // ~60 ms later destroys the dragged tab in the old window, which stays open. So: a tab that existed
 // when self was created has moved into self, or has left a window that is still open. A closed
 // window doesn't count (its tabs leave with it), and windows being merged are cloaked and not in
-// the snapshot.
-static bool IsDraggedOutTab(HWND self, const TabSnapshot& snapshot) {
+// the snapshot. A tab that left must have the same title as the tab of self: otherwise it is a tab
+// the user closed in another window at that moment. While the title of self (or of the tab) is
+// unknown, the tab counts only if finalCheck is set - the last check before merging stays on the
+// safe side.
+static bool IsDraggedOutTab(HWND self, const TabSnapshot& snapshot, bool finalCheck = false) {
+    DWORD selfTitle = 0;
+    bool selfTitleRead = false;
     for (int i = 0; i < snapshot.count; i++) {
         HWND root = IsWindow(snapshot.tabs[i]) ? GetAncestor(snapshot.tabs[i], GA_ROOT) : nullptr;
-        if (root == self || (root != snapshot.owners[i] && IsWindow(snapshot.owners[i]))) {
+        if (root == self) {
+            return true;
+        }
+        if (root == snapshot.owners[i] || !IsWindow(snapshot.owners[i])) {
+            continue;
+        }
+        if (!selfTitleRead) {
+            selfTitle = TitleHash(GetActiveTab(self));
+            selfTitleRead = true;
+        }
+        if (selfTitle && snapshot.titles[i] ? selfTitle == snapshot.titles[i] : finalCheck) {
             return true;
         }
     }
@@ -1065,7 +1094,7 @@ static bool MergeWindowWith(HWND self, IShellWindows* sw, const TabSnapshot& sna
     }
     // Explorer destroys the dragged tab ~60 ms after creating the window, well before the folder
     // is ready (~250 ms); check once more right before merging.
-    if (g_ignoreMouseDown && IsDraggedOutTab(self, snapshot)) {
+    if (g_ignoreMouseDown && IsDraggedOutTab(self, snapshot, true)) {
         Wh_Log(L"merge: the window is a tab dragged out of another window, leaving it");
         state.Clear();
         return false;
@@ -1173,12 +1202,13 @@ static SelectItem_t* SelectItem_Original;
 static volatile LONG g_switching = 0;
 
 // Last redirect: from tab "from" to "to" (several items arrive as separate calls).
-// Used only on Explorer's UI thread.
-static struct {
+// Every Explorer window has its own UI thread and redirects only between its own tabs.
+struct Redirect {
     HWND from;
     HWND to;
     DWORD at;
-} g_redirect;
+};
+static thread_local Redirect g_redirect;
 
 static HWND GetTabOf(HWND hwnd) {
     for (; hwnd; hwnd = GetParent(hwnd)) {
@@ -1202,6 +1232,7 @@ static bool IsIncomingComCall() {
 // Whether the view shows a file system folder. The item IDs that programs pass to SelectItem are
 // file system IDs; handing them to another kind of folder (This PC, Control Panel, network, archives)
 // makes that folder parse an ID of a foreign format, which some implementations don't survive.
+// An archive (.zip, .cab) is a file on disk, so it also has SFGAO_FILESYSTEM, but with SFGAO_STREAM.
 static bool IsFileSystemView(IShellView* sv) {
     ComPtr<IFolderView> fv;
     if (FAILED(sv->QueryInterface(IID_PPV_ARGS(&fv)))) {
@@ -1214,7 +1245,8 @@ static bool IsFileSystemView(IShellView* sv) {
     ComPtr<IShellItem> item;
     SFGAOF attrs = 0;
     bool fileSystem = SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) &&
-                      SUCCEEDED(item->GetAttributes(SFGAO_FILESYSTEM, &attrs)) && (attrs & SFGAO_FILESYSTEM);
+                      SUCCEEDED(item->GetAttributes(SFGAO_FILESYSTEM | SFGAO_STREAM, &attrs)) &&
+                      (attrs & (SFGAO_FILESYSTEM | SFGAO_STREAM)) == SFGAO_FILESYSTEM;
     ILFree(pidl);
     return fileSystem;
 }
