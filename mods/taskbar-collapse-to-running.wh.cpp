@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-collapse-to-running
 // @name            Taskbar collapse to running apps
-// @description     Hides pinned taskbar icons whose app is not running. Hover, rest on, or click the empty taskbar to reveal them.
-// @version         1.0.0
+// @description     Hides pinned taskbar icons whose app is not running. Hover, rest on, or click the empty taskbar to reveal.
+// @version         1.1.0
 // @author          Lars
 // @github          https://github.com/LarsGudm
 // @license         MIT
@@ -15,42 +15,38 @@
 /*
 # Taskbar collapse to running apps
 
-Hides pinned taskbar icons whose app is not running. Icons hide and unhide in
-place, so pinned order is never touched.
+Hides pinned taskbar icons whose app is not running. Left click, hover or use a hotkey to reveal! 
 
 ![Demo](https://i.imgur.com/jgDv8Su.gif)
 
-*Hovering effect not included. Check out **Taskbar Dock Animation** by **Ph0en1x-dev**!
-**Same goes for the icon sizing and spacing. **Taskbar height and icon size** made by the OG, **m417z**.
+## Collapse/Uncollapse
 
-Running state is read straight from the taskbar's own buttons, so detection
-is exact and language-independent, and the mod reacts the moment an app opens
-or closes.
+* **Hotkey** (default: `Ctrl+Alt+T`) toggle collapse
+* **Click** (default) — left-click empty taskbar to toggle
+* **Hover** — rest the cursor on empty taskbar
+* **Rest** — hover, but triggers only below **Rest speed**
+* **Start** — toggles uncollapse while Start menu is open.
 
-## Revealing
 
-* **Click** (default) — left-click empty taskbar to toggle; right-click stays
-  Windows'.
-* **Hover** — rest the cursor on empty taskbar; collapses again a grace period
-  after the cursor leaves.
-* **Rest** — hover, but only below **Rest speed**, so sweeping past does nothing.
-* **Start** — optional, off by default: everything shows while Start is open.
-* **Hotkey** (`Ctrl+Alt+T`) and the Collapse checkbox flip the whole mod,
-  always instantly.
+**Padding around elements** keeps reveals clear of every other taskbar element.
 
-**Padding around elements** keeps reveals clear of every taskbar element,
-icons and tray alike; **Reveal delay** requires the cursor to stay put first.
+
+*Hovering effect not included. For that, you should check out **Taskbar Dock Animation** by **Ph0en1x-dev**!
+
+*And for the icon sizing and spacing, check out **Taskbar height and icon size**, made by the OG **m417z**.
 
 ## Notes
-* While collapse is on, Windows' own taskbar button animations are switched
-  off; the mod animates the row itself.
 * Built with Claude and tested on Windows 11 build 26200.
 * Thanks to https://easings.net/ for the easing curve values.
+* Does not work with left and right aligned taskbars! Yet...
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- Hotkey: Ctrl+Alt+T
+  $name: Toggle hotkey
+  $description: Modifiers Ctrl, Alt, Shift, Win plus one of A-Z, 0-9, F1-F24, Space.
 - RevealTrigger: click
   $name: Reveal trigger
   $options:
@@ -58,34 +54,16 @@ icons and tray alike; **Reveal delay** requires the cursor to stay put first.
   - rest: Rest
   - hover: Hover
   - never: None, hotkey only
-- RevealOnStart: false
+- RevealOnWinStart: false
   $name: Reveal while Start is open
   $description: >-
     Opening Start, by the Windows key or the Start button, shows every icon and
     keeps them shown until Start closes. Works with any reveal trigger.
-- RevealDelayMs: 30
-  $name: Reveal delay (ms)
+- StartRevealed: true
+  $name: Uncollapsed at startup
   $description: >-
-    How long the cursor must stay in the empty taskbar area before the icons
-    come back (only applies to: Reveal trigger > Hover / Rest)
-- RestSpeedPxPerSec: 300
-  $name: Rest speed (px/s)
-  $description: >-
-    How slow the cursor must be moving across empty taskbar area to count as resting (only applies to: Reveal trigger > Rest)
-- Collapsed: true
-  $name: Collapse taskbar
-  $description: >-
-    Hide pinned icons whose app is not running. The hotkey flips the same
-    switch, but only until settings are saved again, which restores this box.
-- ElementPaddingPx: 12
-  $name: Padding around elements (px)
-  $description: >-
-    Safe area around every taskbar element to prevent unwanted transitions.
-- HoverGraceMs: 150
-  $name: Grace period (ms)
-  $description: >-
-    How long the cursor may be off the taskbar before it collapses again
-    (only applies to: Reveal trigger > Hover / Rest)
+    Reveal full taskbar when the mod loads. Off restores the last collapse
+    state between reboot (excluding Hover)
 - AnimationMode: slide
   $name: Reveal animation
   $description: >-
@@ -100,18 +78,33 @@ icons and tray alike; **Reveal delay** requires the cursor to stay put first.
   - sine: easeInOutSine
   - cubic: easeInOutCubic
   - circ: easeInOutCirc
-- AnimationDurationMs: 160
+- AnimationDurationMs: 240
   $name: Animation length (ms)
-- SnappinessPct: 40
+- SnappinessPct: 50
   $name: Snappiness (%)
   $description: >-
     How much of the motion the mid-transition cut takes. The icons travel to
     their new spots, and this share of that journey is skipped at the cut,
     where the icons swapping hides the jump. 0 is fully smooth, 100 is
     maximum snap.
-- Hotkey: Ctrl+Alt+T
-  $name: Toggle hotkey
-  $description: Modifiers Ctrl, Alt, Shift, Win plus one of A-Z, 0-9, F1-F24, Space. Leave empty for no hotkey.
+- RevealDelayMs: 30
+  $name: Reveal delay (ms)
+  $description: >-
+    How long the cursor must stay in the empty taskbar area before the icons
+    come back (only applies to: Reveal trigger > Hover / Rest)
+- RestSpeedPxPerSec: 300
+  $name: Rest speed (px/s)
+  $description: >-
+    How slow the cursor must be moving across empty taskbar area to count as resting (only applies to: Reveal trigger > Rest)
+- ElementPaddingPx: 12
+  $name: Padding around elements (px)
+  $description: >-
+    Safe area around every taskbar element to prevent unwanted transitions.
+- HoverGraceMs: 150
+  $name: Grace period (ms)
+  $description: >-
+    How long the cursor may be off the taskbar before it collapses again
+    (only applies to: Reveal trigger > Hover / Rest)
 */
 // ==/WindhawkModSettings==
 
@@ -212,7 +205,7 @@ constexpr double kGapHoldMs = 250.0;
 
 struct {
     std::atomic<RevealTrigger> revealTrigger;
-    std::atomic<bool> revealOnStart;
+    std::atomic<bool> revealOnWinStart;
     std::atomic<int> restSpeedPxPerSec;
     std::atomic<int> revealDelayMs;
     std::atomic<int> elementPaddingPx;
@@ -226,22 +219,30 @@ struct {
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 
-std::atomic<bool> g_collapseEnabled = true;
+// Revealed (click, hotkey, startup) holds until the next flip. HoverRevealed
+// (hover, rest, Start) ages out on grace and is never saved.
+enum class RevealState { Collapsed, Revealed, HoverRevealed };
+std::atomic<RevealState> g_reveal = RevealState::Collapsed;
 
-std::atomic<bool> g_revealed = false;
+// Holds a HoverRevealed against grace while Start is open.
+std::atomic<bool> g_startOpen = false;
 
-// Pins the reveal against grace until Start closes.
-std::atomic<bool> g_revealedByStart = false;
+// Click and hotkey: any reveal collapses, collapsed reveals. Atomic because
+// clicks, hover, Start and the hotkey write it from different threads.
+RevealState FlipReveal() {
+    RevealState prev = g_reveal.load();
+    RevealState next;
+    do {
+        next = prev == RevealState::Collapsed ? RevealState::Revealed
+                                              : RevealState::Collapsed;
+    } while (!g_reveal.compare_exchange_weak(prev, next));
+    return next;
+}
 
-// Only click reveals persist: a restored hover reveal would age out on grace
-// anyway, and it keeps hover cycles off the registry.
 std::atomic<int> g_lastSavedRevealed = -1;
 
 void PersistRevealState() {
-    int value = g_revealed && !g_revealedByStart &&
-                        g_settings.revealTrigger == RevealTrigger::Click
-                    ? 1
-                    : 0;
+    int value = g_reveal == RevealState::Revealed ? 1 : 0;
     if (g_lastSavedRevealed.exchange(value) != value) {
         Wh_SetIntValue(L"RevealedState", value);
     }
@@ -1754,12 +1755,7 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     // Windows' animations play from a hidden icon's old spot; off while the mod
     // manages the row.
     if (!g_unloading) {
-        if (!g_collapseEnabled && ctx.hiddenByUs.empty()) {
-            ReanimateButtons(ctx);
-            DetachSlides(ctx);
-        } else {
-            DeanimateRunSet(ctx, buttons, L"apply");
-        }
+        DeanimateRunSet(ctx, buttons, L"apply");
     }
 
     bool instant = instantRequested || ctx.appliedCollapse < 0 ||
@@ -1776,12 +1772,6 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     std::vector<std::pair<FrameworkElement, double>> deferHide;
     SetCollapseState(ctx, buttons, collapse,
                      animateGaps ? &deferHide : nullptr);
-    // Reanimating in the same pass as the shows would play Windows' show
-    // transitions from stale spots; the next apply does it.
-    if (!g_collapseEnabled && ctx.hiddenByUs.empty() &&
-        !ctx.deanimated.empty()) {
-        PostApply(ctx.dispatcher, ctx.threadId);
-    }
     if (!deferHide.empty()) {
         StartGapCloseAnimation(ctx, buttons, std::move(deferHide));
     } else if (!ctx.animActive) {
@@ -2089,28 +2079,27 @@ void OnTimerTick(void* key) {
     // A flip must reach every monitor; only a posted wake does that now.
     bool flipped = false;
 
-    if (g_revealed) {
-        if (!g_collapseEnabled ||
-            (trigger == RevealTrigger::Never && !g_revealedByStart)) {
-            g_revealed = false;
-            g_revealedByStart = false;
+    RevealState reveal = g_reveal;
+    if (reveal == RevealState::HoverRevealed) {
+        bool expire = false;
+        if (g_startOpen) {
+            g_lastCursorInsideTick = now;
+        } else if (!hoverLike) {
+            // Left over from a trigger switch; nothing else would age it.
+            expire = true;
+        } else if (cursorInside) {
+            g_lastCursorInsideTick = now;
+        } else if (now - g_lastCursorInsideTick >
+                   (ULONGLONG)g_settings.hoverGraceMs) {
+            expire = true;
+        }
+        RevealState expected = RevealState::HoverRevealed;
+        if (expire && g_reveal.compare_exchange_strong(
+                          expected, RevealState::Collapsed)) {
             g_emptyHoverSinceTick = 0;
             flipped = true;
-        } else if (g_revealedByStart) {
-            // Pinned while Start is open; the worker ends it on close.
-            g_lastCursorInsideTick = now;
-        } else if (hoverLike) {
-            // Only hover ages out on grace; a click reveal stays.
-            if (cursorInside) {
-                g_lastCursorInsideTick = now;
-            } else if (now - g_lastCursorInsideTick >
-                       (ULONGLONG)g_settings.hoverGraceMs) {
-                g_revealed = false;
-                g_emptyHoverSinceTick = 0;
-                flipped = true;
-            }
         }
-    } else if (hoverLike && g_collapseEnabled) {
+    } else if (reveal == RevealState::Collapsed && hoverLike) {
         // The tick has the last word on the latch; exit events can be missed.
         if (!cursorInside) {
             g_lastPointerQualified = false;
@@ -2135,8 +2124,9 @@ void OnTimerTick(void* key) {
             now - since >= (ULONGLONG)g_settings.revealDelayMs) {
             if (PointerClearsSurfaces(g_lastQualifiedKey,
                                       g_lastQualifiedFramePt)) {
-                g_revealed = true;
-                flipped = true;
+                RevealState expected = RevealState::Collapsed;
+                flipped = g_reveal.compare_exchange_strong(
+                    expected, RevealState::HoverRevealed);
             } else {
                 g_lastPointerQualified = false;
             }
@@ -2148,7 +2138,7 @@ void OnTimerTick(void* key) {
         WakeAllFramesAsync();
     }
 
-    bool desired = g_collapseEnabled && !g_revealed;
+    bool desired = g_reveal == RevealState::Collapsed;
 
     // Consumed only on a successful apply.
     uint64_t instantGen = g_instantApplyGen;
@@ -2194,8 +2184,9 @@ void OnTimerTick(void* key) {
     // The timer runs only while something needs a clock; everything else
     // arrives as events. Reveal terms are global: cost, not correctness.
     bool timing = ctx->animActive || g_emptyHoverSinceTick != 0 ||
-                  (g_revealed && hoverLike && !g_revealedByStart) ||
-                  (hoverLike && g_collapseEnabled && !g_revealed &&
+                  (g_reveal == RevealState::HoverRevealed && hoverLike &&
+                   !g_startOpen) ||
+                  (hoverLike && g_reveal == RevealState::Collapsed &&
                    g_lastPointerQualified) ||
                   ctx->applyRetries > 0;
     if (timing != ctx->timer.IsEnabled()) {
@@ -2597,7 +2588,7 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
 
     RevealTrigger trigger = g_settings.revealTrigger;
     if ((trigger != RevealTrigger::Hover && trigger != RevealTrigger::Rest) ||
-        !g_collapseEnabled || g_revealed) {
+        g_reveal != RevealState::Collapsed) {
         return;
     }
 
@@ -2670,7 +2661,8 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         return;
     }
 
-    g_revealed = true;
+    RevealState expected = RevealState::Collapsed;
+    g_reveal.compare_exchange_strong(expected, RevealState::HoverRevealed);
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
     // Other monitors' taskbars have no running timer to notice the flip.
@@ -2733,8 +2725,7 @@ using TaskbarFrame_OnPointerReleased_t = int(__cdecl*)(void* pThis,
                                                        void* pArgs);
 TaskbarFrame_OnPointerReleased_t TaskbarFrame_OnPointerReleased_Original;
 void HandlePointerReleased(void* pThis, void* pArgs) {
-    if (g_unloading || g_settings.revealTrigger != RevealTrigger::Click ||
-        !g_collapseEnabled) {
+    if (g_unloading || g_settings.revealTrigger != RevealTrigger::Click) {
         return;
     }
 
@@ -2763,10 +2754,7 @@ void HandlePointerReleased(void* pThis, void* pArgs) {
         return;
     }
 
-    // Atomic flip: two taskbars' release hooks can race on this.
-    bool revealed = g_revealed.load();
-    while (!g_revealed.compare_exchange_weak(revealed, !revealed)) {
-    }
+    FlipReveal();
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
     // Other monitors' taskbars have no running timer to notice the flip.
@@ -2830,7 +2818,7 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     // a frame before the posted apply; this hook runs inside the drain's own
     // pass, early enough to hide it unrendered.
     try {
-        if (g_collapseEnabled && !g_revealed) {
+        if (g_reveal == RevealState::Collapsed) {
             // Adapted from taskbar-labels (m417z): pThis is the implementation
             // object, not an ABI pointer; its first interface sits three
             // pointers in.
@@ -2976,17 +2964,11 @@ bool ParseHotkey(std::wstring spec, UINT* modifiers, UINT* vk) {
 
 // Never waits on a taskbar thread, or unload could strand the worker.
 void ToggleCollapse() {
-    // Atomic flip: LoadSettings writes this concurrently on settings saves.
-    bool prev = g_collapseEnabled.load();
-    while (!g_collapseEnabled.compare_exchange_weak(prev, !prev)) {
-    }
-    bool enabled = !prev;
-    g_revealed = false;
-    g_revealedByStart = false;
+    bool revealed = FlipReveal() == RevealState::Revealed;
     g_emptyHoverSinceTick = 0;
     g_lastPointerQualified = false;
     g_instantApplyGen++;
-    Wh_Log(L"Hotkey toggled collapse to %d", (int)enabled);
+    Wh_Log(L"Hotkey toggled reveal to %d", (int)revealed);
     WakeAllFramesAsync();
 
     bool anyFrames;
@@ -3000,36 +2982,32 @@ void ToggleCollapse() {
 }
 
 void OnStartMenuVisibility(bool visible) {
-    if (g_unloading || !g_settings.revealOnStart || !g_collapseEnabled) {
+    if (g_unloading || !g_settings.revealOnWinStart) {
         return;
     }
 
     if (visible) {
-        bool wasRevealed = g_revealed.exchange(true);
-        RevealTrigger trigger = g_settings.revealTrigger;
-        bool hoverLike = trigger == RevealTrigger::Hover ||
-                         trigger == RevealTrigger::Rest;
-        // Adopt an in-flight hover reveal or grace ages it out under Start;
-        // a click reveal stays its own, so Start-close cannot cancel it.
-        if (!wasRevealed || hoverLike) {
-            g_revealedByStart = true;
-        }
-        if (!wasRevealed) {
+        // Flag first, or the tick can age the reveal before it is held.
+        g_startOpen = true;
+        RevealState expected = RevealState::Collapsed;
+        if (g_reveal.compare_exchange_strong(expected,
+                                             RevealState::HoverRevealed)) {
             Wh_Log(L"Start menu opened, revealing");
             WakeAllFramesAsync();
         }
         return;
     }
 
-    if (g_revealedByStart.exchange(false)) {
-        // Hover hands over to grace; click/hotkey reveals end with Start.
+    if (g_startOpen.exchange(false)) {
+        // Hover hands over to grace; elsewhere the reveal ends with Start.
         RevealTrigger trigger = g_settings.revealTrigger;
         bool hoverLike = trigger == RevealTrigger::Hover ||
                          trigger == RevealTrigger::Rest;
         if (hoverLike && CursorOverAnyTaskbar()) {
             g_lastCursorInsideTick = GetTickCount64();
         } else {
-            g_revealed = false;
+            RevealState expected = RevealState::HoverRevealed;
+            g_reveal.compare_exchange_strong(expected, RevealState::Collapsed);
         }
         Wh_Log(L"Start menu closed");
         WakeAllFramesAsync();
@@ -3120,7 +3098,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
     winrt::com_ptr<IAppVisibility> appVisibility;
     DWORD adviseCookie = 0;
     StartVisibilitySink* sink = nullptr;
-    if (g_settings.revealOnStart) {
+    if (g_settings.revealOnWinStart) {
         if (SUCCEEDED(CoCreateInstance(__uuidof(AppVisibility), nullptr,
                                        CLSCTX_ALL,
                                        IID_PPV_ARGS(appVisibility.put())))) {
@@ -3186,7 +3164,7 @@ void StartHotkeyThread() {
         modifiers = 0;
         vk = 0;
     }
-    if (!valid && !g_settings.revealOnStart) {
+    if (!valid && !g_settings.revealOnWinStart) {
         return;
     }
 
@@ -3367,7 +3345,7 @@ void CleanupOnThisThread() {
 // ------------------------------------------------------------------ lifetime
 
 void LoadSettings() {
-    g_settings.revealOnStart = Wh_GetIntSetting(L"RevealOnStart") != 0;
+    g_settings.revealOnWinStart = Wh_GetIntSetting(L"RevealOnWinStart") != 0;
 
     auto trigger = WindhawkUtils::StringSetting::make(L"RevealTrigger");
     g_settings.revealTrigger = RevealTrigger::Click;
@@ -3407,9 +3385,7 @@ void LoadSettings() {
         g_settings.animationCurve = CurveId::Circ;
     }
 
-    g_collapseEnabled = Wh_GetIntSetting(L"Collapsed") != 0;
-    g_revealed = false;
-    g_revealedByStart = false;
+    g_startOpen = false;
     g_emptyHoverSinceTick = 0;
     g_lastPointerQualified = false;
 }
@@ -3506,8 +3482,12 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_revealed = Wh_GetIntValue(L"RevealedState", 0) != 0;
-    g_lastSavedRevealed = g_revealed ? 1 : 0;
+    int saved = Wh_GetIntValue(L"RevealedState", 0);
+    g_lastSavedRevealed = saved;
+    if (saved || Wh_GetIntSetting(L"StartRevealed")) {
+        g_reveal = RevealState::Revealed;
+    }
+    PersistRevealState();
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
