@@ -1,0 +1,1153 @@
+// ==WindhawkMod==
+// @id              brave-acrylic
+// @name            Brave Acrylic
+// @description     Alpha: Acrylic toolbar and vertical tabs for Brave; requires Translucent Windows
+// @version         2.8.4
+// @author          bardelyne
+// @github          https://github.com/bardelyne
+// @homepage        https://github.com/bardelyne/brave-acrylic
+// @license         MIT
+// @architecture    x86-64
+// @include         brave.exe
+// @compilerOptions -lshell32 -luser32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Brave Acrylic
+
+![Brave Acrylic with the built-in blue theme](https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v2.8.png)
+
+Brave Acrylic makes selected toolbar and vertical-tab backgrounds transparent so the desktop backdrop shows through. Regular, private, and Tor windows are checked against their own themes, so blue, purple, and pink windows can work together.
+
+> **Alpha software.** This mod is still being tested and may need fixes after Brave updates. **[Translucent Windows](https://windhawk.net/mods/translucent-windows) is required** and must be enabled for `brave.exe` to provide the background effect.
+
+## Requirements
+
+- **x64 version of Brave**.
+- [Windhawk](https://windhawk.net/) with **Brave Acrylic** enabled.
+- The **[Translucent Windows](https://windhawk.net/mods/translucent-windows)** mod, configured to apply a translucent background effect to `brave.exe`.
+- Windows **Transparency effects** enabled.
+
+## Compatibility
+
+- Tested on **Windows 11 26H2**, **Brave 1.97.59** / **Chromium 155.0.8059.85**, x64.
+- **Windows 10 compatibility is unverified.** Brave Acrylic has no Windows 11 version gate, but the required backdrop must also work on the target system. Translucent Windows documents its SystemBackdrop modes as requiring Windows 11 22H2 or later; do not assume the full setup works on Windows 10.
+- The per-window check has been tested with regular, private, and Tor window themes.
+- Native ARM64 and 32-bit Brave are not supported. Unsupported native processes are refused before any hooks are installed.
+
+**This is an alpha release, not a guarantee of future Brave compatibility.** The resolver tolerates changing relocation addresses and validates cached function boundaries, but it still works with private Brave functions. If a required function or the named-color table cannot be identified, the transparency path stays disabled.
+
+## Fast setup
+
+1. Enable **Brave Acrylic** and the required **Translucent Windows** mod. In Translucent Windows, apply the background effect you want to `brave.exe`.
+2. Open `brave://settings/appearance`, select **Dark** appearance, and choose the built-in **Blue** theme.
+3. Enable **vertical tabs** for the layout in the screenshot.
+4. Close all Brave windows normally and reopen Brave.
+
+The default **Hide duplicate Windows buttons** option removes Windows' underlying caption buttons while keeping Brave's own controls. Turn it off in the mod settings to restore the native layer.
+
+## Advanced setup
+
+### Choose your own colors
+
+To make an area of Brave's interface transparent, pick that area color and add that HEX value to **Colours to make transparent** in the mod's Settings tab.
+
+The list matches **colors across Brave's native interface**. When a listed color appears elsewhere in an enabled window theme, that matching color also becomes transparent. For example, adding a sidebar's color can also affect a toolbar, button, or icon that uses exactly the same color. Add colors carefully: a common color such as pure white can also remove text.
+
+1. Temporarily disable **Brave Acrylic** and close all Brave windows normally. Reopen Brave so you can sample its original, opaque colors.
+2. On Windows 11, press **Win+Shift+S** (or **Print Screen / PrtSc** if configured to open Snipping Tool). Select the **Color picker** eyedropper and choose **HEX**.
+3. For a new theme, sample the **main toolbar** first, then sample each additional area you want to make transparent. Pick a flat background area, away from text, icons, borders, shadows, and hover effects.
+4. Open **Windhawk → Brave Acrylic → Settings → Colours to make transparent**. Add each sampled color on its own row, such as `333C4D` or `#333C4D`.
+5. Save the settings, enable the mod, and close all Brave windows normally before reopening Brave to apply the colors.
+
+See [Microsoft's Snipping Tool color picker instructions](https://blogs.windows.com/windowsexperience/2025/07/22/windows-11-is-the-home-for-ai-on-the-pc-with-even-more-experiences-available-today/#:~:text=To%20try%20color%20picker). If Color picker is unavailable in your Snipping Tool version, sample a screenshot with another color picker.
+
+Use the **original color with the mod disabled**. A color sampled while acrylic is active is already blended with the backdrop and may not match Brave's paint color.
+
+Each value must contain six hexadecimal digits (`RRGGBB`), with an optional leading `#` and no alpha channel. Matching is exact. Up to **16 colors** are supported. An empty list restores the built-in defaults. Invalid rows are reported in the log and skipped; later valid rows are still used.
+
+Fresh installations include these colors for the built-in Dark + Blue theme:
+
+| Default color | Area |
+| --- | --- |
+| `333C4D` | Vertical tab strip |
+| `1D2636` | Main toolbar |
+
+### Blue, purple, and pink together
+
+Keep the blue theme's entries and add the original toolbar and sidebar colors for a purple private window or a pink Tor window. Each window uses its own native color provider, so enabling one theme does not blindly clear another window's background.
+
+An unlisted toolbar color keeps that palette's normal background painting. There are no hardcoded purple or pink presets: private and Tor windows use the same check as ordinary windows.
+
+### Restart after changing colors
+
+Restart Brave normally after enabling, disabling, or changing the mod. Brave caches brushes and opacity information when windows are created. Saving new colors does not rebuild every cached surface. Close **all** Brave windows normally and reopen Brave. If Brave is configured to keep running in the background, exit that background instance normally as well.
+
+### Blur, tint, and backdrop
+
+Use the required **Translucent Windows** mod to choose the background effect and tint for `brave.exe`. Brave Acrylic selects which original browser colors become transparent; Translucent Windows supplies the backdrop visible through them.
+
+These are different controls: the color list selects paint to remove, while the backdrop settings control what you see behind it.
+
+### Diagnostics
+
+Turn on **Log colours (diagnostics)** in the mod's Settings tab to report original color IDs and RGB values. Capture them through Windhawk’s **Advanced → Debug logging → Detailed debug logs → Show log output**, then turn diagnostics off again.
+
+Settings and the signature cache use Windhawk’s own storage. No separate configuration file or administrator access is needed to edit the mod settings.
+
+The [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md) explains theme detection, log collection, startup behavior, and cache validation.
+
+## How it works
+
+1. **Find Brave's native drawing functions.** A loader hook initializes the mod when `chrome.dll` is loaded, before Brave's caller starts using it. The resolver scans actual x64 function entries, with one unique match required for each function. There is no startup polling thread.
+2. **Discover the toolbar color ID.** It finds `kColorToolbar` in Brave's own named-color tables. The enum number is discovered rather than fixed in the mod, and duplicate definitions must agree.
+3. **Check the original palette for each window.** The window's native color provider supplies its original toolbar color. An unmatched or unavailable palette keeps its original background painting.
+4. **Remove matching paint and clear old pixels.** Exact listed opaque colors become transparent. An allowlist of browser containers is cleared on repaint so previous tab labels and backgrounds do not leave trails. Interactive child views are not blanket-cleared.
+5. **Keep one set of window buttons.** For unowned, resizable Chromium browser frames, the optional caption fix hides Windows' underlying buttons. Brave retains its logical window style so its controls and fullscreen restoration continue to work. Turning the option or mod off restores the native buttons. Popups, owned dialogs, and tool windows are excluded.
+6. **Let Translucent Windows supply the backdrop.** The caption fix leaves sizing and fullscreen frame bits alone. Translucent Windows controls the backdrop. The GPU hook only adjusts compatible RGBA composition surfaces; HWND, YUV, and protected-video surfaces keep their original settings.
+
+Function addresses and the toolbar table entry are cached in Windhawk’s per-mod storage for the exact `chrome.dll` build and rechecked before use. A valid cache avoids scanning the full named-color table again. There is no screenshot polling, webpage injection, or recurring full-module scan.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| No transparency | Enable **both mods**, apply Translucent Windows to `brave.exe`, choose Dark + built-in Blue, then restart Brave. |
+| Two sets of minimize/maximize/close buttons | Enable **Hide duplicate Windows buttons** in this mod. |
+| A window needs Windows' original controls | Disable **Hide duplicate Windows buttons** to restore the native layer immediately. |
+| Private or Tor window stays opaque | Add that theme's **original main toolbar color** and any sidebar colors you want removed. An unmatched palette stays opaque deliberately. |
+| Text or icons disappear | Remove the color that also matches those elements, then restart Brave. Avoid adding common foreground colors. |
+| Effect stops after a Brave update | Collect [Windhawk debug output](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md#collect-logs) and include your exact Brave version in a bug report. |
+| Old colors remain after saving settings | Exit every Brave window and any background instance normally, then reopen Brave. |
+
+For a bug report, include Windows and Brave versions, the theme and window type, your color list, Translucent Windows settings, and steps to reproduce. Avoid sharing private browsing information in screenshots or logs.
+
+## Credits and license
+
+Created by [bardelyne](https://github.com/bardelyne) with AI assistance. Built for [Windhawk](https://windhawk.net/). The required [Translucent Windows](https://windhawk.net/mods/translucent-windows) mod provides the backdrop shown in the screenshot. Brave and Chromium provide the native UI and color-provider functions this mod works with.
+
+[MIT license](https://github.com/bardelyne/brave-acrylic/blob/main/LICENSE).
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- colors:
+  - "333C4D"
+  - "1D2636"
+  $name: Colours to make transparent
+  $description: >-
+    Exact RRGGBB colours. Include the original main toolbar colour to enable
+    its theme. Requires Translucent Windows; see the README for setup.
+- hideNativeCaptionButtons: true
+  $name: Hide duplicate Windows buttons
+  $description: >-
+    Hide Windows caption buttons underneath Brave's own minimize, maximize,
+    and close buttons. Applies immediately to browser frames; disabling this
+    restores the native buttons.
+- logColors: false
+  $name: Log colours (diagnostics)
+  $description: >-
+    Log original native colour IDs and RGB values in Windhawk to identify
+    theme colours. Enable Windhawk debug logging to collect them, then turn
+    this off. No page contents or URLs are logged.
+*/
+// ==/WindhawkModSettings==
+
+#include <windhawk_api.h>
+
+#if !defined(__x86_64__) && !defined(_M_X64)
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Brave Acrylic requires x64 Brave; native ARM64 is not supported.");
+    return FALSE;
+}
+
+#else
+
+#include <dxgi1_2.h>
+#include <shellapi.h>
+#include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <windhawk_utils.h>
+
+static constexpr int kMaxTargetColors = 16;
+static constexpr int kRequiredFunctions = 5;
+static constexpr unsigned int kDefaultColors[] = {0x333C4D, 0x1D2636};
+
+struct ColorSettings {
+    unsigned int colors[kMaxTargetColors]{};
+    int count = 0;
+};
+
+static SRWLOCK s_colorsLock = SRWLOCK_INIT;
+static ColorSettings s_colors{{0x333C4D, 0x1D2636}, 2};
+static std::atomic<bool> s_logColors{false};
+static std::atomic<bool> s_transparencyReady{false};
+static std::atomic<bool> s_chromeAttempted{false};
+static SRWLOCK s_initLock = SRWLOCK_INIT;
+static bool s_stopping = false;  // Protected by s_initLock.
+static bool s_activateAfterInit = false;
+static bool s_isBrowserProcess = false;
+static HMODULE s_dxgiModule = nullptr;
+static int s_toolbarColorId = -1;
+
+struct StringView { const char* data; size_t length; };
+using GetColor_t = unsigned int (*)(const void*, int);
+using DrawColor_t = void (*)(void*, unsigned int, int);
+using ViewGetClassNameW_t = StringView* (*)(const void*, StringView*);
+using ViewGetColorProvider_t = const void* (*)(const void*);
+using ViewOnPaintBackground_t = void (*)(void*, void*);
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+using CreateSwapChainForComposition_t = HRESULT (WINAPI*)(
+    IDXGIFactory2*, IUnknown*, const DXGI_SWAP_CHAIN_DESC1*, IDXGIOutput*, IDXGISwapChain1**);
+
+static GetColor_t pOrigGetColor = nullptr;
+static DrawColor_t pCanvasDrawColor = nullptr;
+static ViewGetClassNameW_t pViewGetClassNameW = nullptr;
+static ViewGetColorProvider_t pViewGetColorProvider = nullptr;
+static ViewOnPaintBackground_t pOrigViewOnPaintBackground = nullptr;
+static LoadLibraryExW_t pOrigLoadLibraryExW = nullptr;
+static CreateSwapChainForComposition_t pOrigCreateSwapChainForComposition = nullptr;
+
+// Windows still draws its caption buttons underneath Chromium's transparent
+// custom frame. Hide only WS_SYSMENU, retaining the resize/caption/min/max bits.
+// Chromium reads its original logical style, including when saving fullscreen
+// state; DWM sees the real style without the native buttons.
+static constexpr wchar_t kNativeCaptionProperty[] =
+    L"Windhawk.BraveAcrylic.NativeCaption";
+static std::atomic<bool> s_hideNativeCaptionButtons{true};
+static std::atomic<bool> s_captionFixActive{false};
+static std::atomic<bool> s_captionStopping{false};
+static bool s_captionHooksInstalled = false;
+static decltype(&CreateWindowExW) pOrigCreateWindowExW = nullptr;
+static decltype(&GetWindowLongPtrW) pOrigGetWindowLongPtrW = nullptr;
+static decltype(&SetWindowLongPtrW) pOrigSetWindowLongPtrW = nullptr;
+static decltype(&GetWindowLongW) pOrigGetWindowLongW = nullptr;
+static decltype(&SetWindowLongW) pOrigSetWindowLongW = nullptr;
+static thread_local HWND s_captionStyleWrite = nullptr;
+
+static bool IsBrowserCaptionFrame(HWND window, LONG_PTR style) {
+    constexpr LONG_PTR required = WS_CAPTION | WS_THICKFRAME |
+                                 WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    if (!window || (style & required) != required || (style & WS_CHILD)) return false;
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    if (process != GetCurrentProcessId() || GetAncestor(window, GA_ROOT) != window ||
+        GetWindow(window, GW_OWNER)) return false;
+    const auto exStyle = pOrigGetWindowLongPtrW(window, GWL_EXSTYLE);
+    if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_DLGMODALFRAME)) return false;
+    wchar_t name[32]{};
+    return GetClassNameW(window, name, ARRAYSIZE(name)) &&
+           !wcscmp(name, L"Chrome_WidgetWin_1");
+}
+
+static void RefreshNativeCaption(HWND window) {
+    SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                 SWP_FRAMECHANGED);
+}
+
+static void RestoreNativeCaption(HWND window) {
+    if (!GetPropW(window, kNativeCaptionProperty)) return;
+    RemovePropW(window, kNativeCaptionProperty);
+    // Use the public APIs here: Windhawk has removed the hooks by ModUninit.
+    const auto style = GetWindowLongPtrW(window, GWL_STYLE);
+    SetWindowLongPtrW(window, GWL_STYLE, style | WS_SYSMENU);
+    RefreshNativeCaption(window);
+}
+
+template<typename Value>
+static Value ReadCaptionStyle(HWND window, int index, Value (WINAPI* original)(HWND, int)) {
+    auto value = original(window, index);
+    const DWORD error = GetLastError();
+    if (index == GWL_STYLE && GetPropW(window, kNativeCaptionProperty)) value |= WS_SYSMENU;
+    SetLastError(error);
+    return value;
+}
+
+static LONG_PTR WINAPI GetWindowLongPtrW_Hook(HWND window, int index) {
+    return ReadCaptionStyle(window, index, pOrigGetWindowLongPtrW);
+}
+
+static LONG WINAPI GetWindowLongW_Hook(HWND window, int index) {
+    return ReadCaptionStyle(window, index, pOrigGetWindowLongW);
+}
+
+template<typename Value>
+static Value WriteCaptionStyle(HWND window, int index, Value value,
+                               Value (WINAPI* original)(HWND, int, Value)) {
+    // Windows may forward one API to the other. Translate the style only once.
+    if (index != GWL_STYLE || s_captionStyleWrite == window) return original(window, index, value);
+    const bool owned = GetPropW(window, kNativeCaptionProperty) != nullptr;
+    const bool hide = s_captionFixActive.load(std::memory_order_acquire) &&
+        (value & WS_SYSMENU) && (owned || IsBrowserCaptionFrame(window, value));
+    bool marked = owned;
+    if (hide && !owned) {
+        marked = SetPropW(window, kNativeCaptionProperty, reinterpret_cast<HANDLE>(1)) != FALSE;
+    } else if (!hide && owned) {
+        RemovePropW(window, kNativeCaptionProperty);
+        marked = false;
+    }
+    const HWND previousWrite = s_captionStyleWrite;
+    s_captionStyleWrite = window;
+    // Zero is also a valid previous style. Clear stale errors before testing
+    // whether the native setter failed, as required by SetWindowLong.
+    SetLastError(ERROR_SUCCESS);
+    const auto previous = original(window, index,
+                                   hide && marked ? value & ~static_cast<Value>(WS_SYSMENU) : value);
+    const DWORD error = GetLastError();
+    s_captionStyleWrite = previousWrite;
+    if (!previous && error) {
+        if (owned) SetPropW(window, kNativeCaptionProperty, reinterpret_cast<HANDLE>(1));
+        else RemovePropW(window, kNativeCaptionProperty);
+    } else if (hide && marked && !s_captionFixActive.load(std::memory_order_acquire)) {
+        // A setting can change while SetWindowLong dispatches style messages.
+        RestoreNativeCaption(window);
+    }
+    SetLastError(error);
+    return previous && owned ? previous | WS_SYSMENU : previous;
+}
+
+static LONG_PTR WINAPI SetWindowLongPtrW_Hook(HWND window, int index, LONG_PTR value) {
+    return WriteCaptionStyle(window, index, value, pOrigSetWindowLongPtrW);
+}
+
+static LONG WINAPI SetWindowLongW_Hook(HWND window, int index, LONG value) {
+    return WriteCaptionStyle(window, index, value, pOrigSetWindowLongW);
+}
+
+static void ApplyNativeCaption(HWND window) {
+    if (!s_captionFixActive.load(std::memory_order_acquire) ||
+        GetPropW(window, kNativeCaptionProperty)) return;
+    const auto style = pOrigGetWindowLongPtrW(window, GWL_STYLE);
+    if (!(style & WS_SYSMENU) || !IsBrowserCaptionFrame(window, style)) return;
+    SetWindowLongPtrW_Hook(window, GWL_STYLE, style);
+    if (GetPropW(window, kNativeCaptionProperty)) RefreshNativeCaption(window);
+}
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className, LPCWSTR name,
+                                       DWORD style, int x, int y, int width, int height,
+                                       HWND parent, HMENU menu, HINSTANCE instance, LPVOID param) {
+    const auto window = pOrigCreateWindowExW(exStyle, className, name, style,
+                                            x, y, width, height, parent, menu, instance, param);
+    const DWORD error = GetLastError();
+    if (window) ApplyNativeCaption(window);
+    SetLastError(error);
+    return window;
+}
+
+static BOOL CALLBACK SyncNativeCaptionWindow(HWND window, LPARAM) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    if (process == GetCurrentProcessId()) {
+        if (s_captionFixActive.load(std::memory_order_acquire)) ApplyNativeCaption(window);
+        else RestoreNativeCaption(window);
+    }
+    return TRUE;
+}
+
+static void SyncNativeCaptions() {
+    const bool active = s_captionHooksInstalled &&
+        !s_captionStopping.load(std::memory_order_acquire) &&
+        s_transparencyReady.load(std::memory_order_acquire) &&
+        s_hideNativeCaptionButtons.load(std::memory_order_relaxed);
+    s_captionFixActive.store(active, std::memory_order_release);
+    if (s_captionHooksInstalled) EnumWindows(SyncNativeCaptionWindow, 0);
+}
+
+static void InstallNativeCaptionHooks() {
+    s_captionHooksInstalled =
+        WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &pOrigCreateWindowExW) &&
+        WindhawkUtils::SetFunctionHook(GetWindowLongPtrW, GetWindowLongPtrW_Hook, &pOrigGetWindowLongPtrW) &&
+        WindhawkUtils::SetFunctionHook(SetWindowLongPtrW, SetWindowLongPtrW_Hook, &pOrigSetWindowLongPtrW) &&
+        WindhawkUtils::SetFunctionHook(GetWindowLongW, GetWindowLongW_Hook, &pOrigGetWindowLongW) &&
+        WindhawkUtils::SetFunctionHook(SetWindowLongW, SetWindowLongW_Hook, &pOrigSetWindowLongW);
+    if (!s_captionHooksInstalled) Wh_Log(L"Native caption fix unavailable; acrylic is unchanged");
+}
+
+static bool IsColorSpace(wchar_t ch) {
+    return ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n';
+}
+
+static int ParseHexColor(PCWSTR text) {
+    if (!text) return -1;
+    while (IsColorSpace(*text)) ++text;
+    if (*text == L'#') ++text;
+    unsigned int value = 0;
+    for (int i = 0; i < 6; ++i, ++text) {
+        unsigned int digit;
+        if (*text >= L'0' && *text <= L'9') digit = *text - L'0';
+        else if (*text >= L'a' && *text <= L'f') digit = *text - L'a' + 10;
+        else if (*text >= L'A' && *text <= L'F') digit = *text - L'A' + 10;
+        else return -1;
+        value = (value << 4) | digit;
+    }
+    while (IsColorSpace(*text)) ++text;
+    return *text ? -1 : static_cast<int>(value);
+}
+
+static void LoadModSettings() {
+    ColorSettings next{};
+    for (int i = 0; i < kMaxTargetColors; ++i) {
+        const auto setting = WindhawkUtils::StringSetting::make(L"colors[%d]", i);
+        PCWSTR text = setting.get();
+        if (!text) continue;
+        while (IsColorSpace(*text)) ++text;
+        if (!*text) continue;
+        const int color = ParseHexColor(text);
+        if (color < 0) {
+            Wh_Log(L"Invalid colour row %d: enter exactly six RGB hex digits; row skipped", i + 1);
+            continue;
+        }
+        next.colors[next.count++] = static_cast<unsigned int>(color);
+    }
+    if (!next.count) {
+        memcpy(next.colors, kDefaultColors, sizeof(kDefaultColors));
+        next.count = ARRAYSIZE(kDefaultColors);
+    }
+
+    AcquireSRWLockExclusive(&s_colorsLock);
+    s_colors = next;
+    ReleaseSRWLockExclusive(&s_colorsLock);
+    s_logColors.store(Wh_GetIntSetting(L"logColors") != 0, std::memory_order_relaxed);
+    s_hideNativeCaptionButtons.store(Wh_GetIntSetting(L"hideNativeCaptionButtons") != 0,
+                                    std::memory_order_relaxed);
+
+    char list[kMaxTargetColors * 7 + 1]{};
+    size_t written = 0;
+    for (int i = 0; i < next.count; ++i) {
+        written += std::snprintf(list + written, sizeof(list) - written, "%06X ", next.colors[i]);
+    }
+    Wh_Log(L"settings: %d exact colour(s) [ %S]", next.count, list);
+}
+
+// Caller must hold s_colorsLock. Never hold this lock across native calls.
+static bool ContainsColor(const ColorSettings& settings, unsigned int color) {
+    for (int i = 0; i < settings.count; ++i) {
+        if (settings.colors[i] == color) return true;
+    }
+    return false;
+}
+
+static bool IsThemeBackground(unsigned int color) {
+    AcquireSRWLockShared(&s_colorsLock);
+    const bool found = ContainsColor(s_colors, color);
+    ReleaseSRWLockShared(&s_colorsLock);
+    return found;
+}
+
+static bool HasCompleteTransparencyPath() {
+    return pOrigGetColor && pCanvasDrawColor && pViewGetClassNameW &&
+           pViewGetColorProvider && pOrigViewOnPaintBackground && s_toolbarColorId >= 0;
+}
+
+static bool ReadToolbarColor(const void* provider, unsigned int* color) {
+    if (!s_transparencyReady.load(std::memory_order_acquire) || !provider ||
+        !pOrigGetColor || s_toolbarColorId < 0) return false;
+    *color = pOrigGetColor(provider, s_toolbarColorId);
+    // gfx::kPlaceholderColor denotes a missing native colour ID.
+    return *color != 0xFFFF0000 && (*color >> 24) == 0xFF;
+}
+
+static bool ThemeMatches(const void* provider) {
+    unsigned int toolbar;
+    return ReadToolbarColor(provider, &toolbar) && IsThemeBackground(toolbar & 0xFFFFFF);
+}
+
+static bool ShouldReplaceColor(const void* provider, unsigned int color) {
+    if ((color >> 24) != 0xFF || !IsThemeBackground(color & 0xFFFFFF)) return false;
+    unsigned int toolbar;
+    if (!ReadToolbarColor(provider, &toolbar)) return false;
+    // Recheck both colours in one published settings snapshot after the native call.
+    AcquireSRWLockShared(&s_colorsLock);
+    const bool replace = ContainsColor(s_colors, color & 0xFFFFFF) &&
+                         ContainsColor(s_colors, toolbar & 0xFFFFFF);
+    ReleaseSRWLockShared(&s_colorsLock);
+    return replace;
+}
+
+static bool CanClearForTheme(const void* view) {
+    return view && s_transparencyReady.load(std::memory_order_acquire) &&
+           pViewGetColorProvider && ThemeMatches(pViewGetColorProvider(view));
+}
+
+static bool ShouldClearView(const void* view) {
+    if (!view || !pViewGetClassNameW) return false;
+    StringView name{};
+    pViewGetClassNameW(view, &name);
+    if (!name.data || !name.length || name.length >= 128) return false;
+    static constexpr const char* containers[] = {
+        "BrowserView", "BraveBrowserView",
+        "VerticalTabStripRegionView", "BraveVerticalTabStripRegionView",
+        "VerticalTabStripContainerView", "BraveVerticalTabStripContainerView",
+        "TopContainerView", "ToolbarView", "BraveToolbarView",
+        "BookmarkBarView", "BraveBookmarkBarView", "BrowserFrame",
+        "ContentsSeparator", "RoundedSeparator", "ContentsBackground",
+        "VerticalTabStripBackgroundBlurBackdrop",
+    };
+    for (const char* container : containers) {
+        if (strlen(container) == name.length &&
+            memcmp(name.data, container, name.length) == 0) return CanClearForTheme(view);
+    }
+    return false;
+}
+
+static void LogDiscoveredColor(int id, unsigned int color) {
+    if (!s_logColors.load(std::memory_order_relaxed) || (color >> 24) != 0xFF) return;
+    struct Entry { int id; unsigned int color; };
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static Entry seen[256]{};
+    static unsigned count = 0;
+    bool fresh = false;
+    AcquireSRWLockExclusive(&lock);
+    unsigned i = 0;
+    for (; i < count; ++i) {
+        if (seen[i].id == id && seen[i].color == color) break;
+    }
+    if (i == count && count < ARRAYSIZE(seen)) {
+        seen[count++] = {id, color};
+        fresh = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (fresh) Wh_Log(L"colour id %d -> #%06X match=%d", id, color & 0xFFFFFF,
+                      static_cast<int>(IsThemeBackground(color & 0xFFFFFF)));
+}
+
+static unsigned int GetColor_Hook(const void* provider, int id) {
+    const unsigned int color = pOrigGetColor ? pOrigGetColor(provider, id) : 0;
+    LogDiscoveredColor(id, color);
+    return s_transparencyReady.load(std::memory_order_acquire) &&
+           ShouldReplaceColor(provider, color) ? 0 : color;
+}
+
+static void ViewOnPaintBackground_Hook(void* view, void* canvas) {
+    if (s_transparencyReady.load(std::memory_order_acquire) && canvas && ShouldClearView(view)) {
+        pCanvasDrawColor(canvas, 0, 0 /* SkBlendMode::kClear */);
+        return;
+    }
+    if (pOrigViewOnPaintBackground) pOrigViewOnPaintBackground(view, canvas);
+}
+
+static bool SupportsCompositionAlpha(DXGI_FORMAT format) {
+    switch (format) {
+        case DXGI_FORMAT_B8G8R8A8_UNORM:
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+        case DXGI_FORMAT_R16G16B16A16_FLOAT:
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static HRESULT WINAPI CreateSwapChainForComposition_Hook(
+    IDXGIFactory2* factory, IUnknown* device, const DXGI_SWAP_CHAIN_DESC1* desc,
+    IDXGIOutput* output, IDXGISwapChain1** swapChain) {
+    if (!pOrigCreateSwapChainForComposition) return E_UNEXPECTED;
+    if (!desc || !swapChain ||
+        (desc->Flags & (DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO | DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED |
+                        DXGI_SWAP_CHAIN_FLAG_RESTRICTED_CONTENT)) ||
+        !SupportsCompositionAlpha(desc->Format) ||
+        (desc->AlphaMode != DXGI_ALPHA_MODE_IGNORE &&
+         desc->AlphaMode != DXGI_ALPHA_MODE_UNSPECIFIED)) {
+        return pOrigCreateSwapChainForComposition(factory, device, desc, output, swapChain);
+    }
+    DXGI_SWAP_CHAIN_DESC1 adjusted = *desc;
+    adjusted.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    IDXGISwapChain1* created = nullptr;
+    const HRESULT result = pOrigCreateSwapChainForComposition(
+        factory, device, &adjusted, output, &created);
+    if (SUCCEEDED(result)) {
+        *swapChain = created;
+        return result;
+    }
+    if (created) created->Release();
+    if (result == DXGI_ERROR_INVALID_CALL || result == DXGI_ERROR_UNSUPPORTED) {
+        return pOrigCreateSwapChainForComposition(factory, device, desc, output, swapChain);
+    }
+    *swapChain = nullptr;
+    return result;
+}
+
+static bool InstallGpuHooks() {
+    HMODULE module = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) return false;
+    using CreateFactory_t = HRESULT (WINAPI*)(REFIID, void**);
+    const auto createFactory = reinterpret_cast<CreateFactory_t>(
+        GetProcAddress(module, "CreateDXGIFactory1"));
+    IDXGIFactory2* factory = nullptr;
+    if (!createFactory || FAILED(createFactory(__uuidof(IDXGIFactory2),
+                                               reinterpret_cast<void**>(&factory))) || !factory) {
+        if (factory) factory->Release();
+        FreeLibrary(module);
+        return false;
+    }
+    // Only composition swap chains support this alpha override. Never hook HWND chains.
+    const auto target = reinterpret_cast<CreateSwapChainForComposition_t>(
+        (*reinterpret_cast<void***>(factory))[24]);
+    const bool installed = target && WindhawkUtils::SetFunctionHook(
+        target, CreateSwapChainForComposition_Hook, &pOrigCreateSwapChainForComposition);
+    factory->Release();
+    if (!installed) {
+        FreeLibrary(module);
+        return false;
+    }
+    // Keep the hook's module loaded until Windhawk has removed the hook.
+    s_dxgiModule = module;
+    return true;  // Windhawk applies the hook after Wh_ModInit returns.
+}
+
+
+struct Signature {
+    const char* name;
+    const unsigned char* bytes;
+    const char* mask;
+    size_t length;
+};
+
+static constexpr unsigned char kSigGetColor[] = {
+    0x41, 0x57, 0x41, 0x56, 0x41, 0x54, 0x56, 0x57, 0x55, 0x53, 0x48, 0x83,
+    0xEC, 0x20, 0x89, 0xD7, 0x48, 0x89, 0xCE, 0x4C, 0x8D, 0x71, 0x18, 0x48,
+    0x8B, 0x41, 0x18, 0xEB, 0x09, 0x0F, 0x1F, 0x00, 0x7E, 0x18, 0x48, 0x8B,
+    0x40, 0x08, 0x48, 0x85, 0xC0, 0x74, 0x0D, 0x3B, 0x78, 0x20, 0x7D, 0xF0,
+    0x48, 0x8B, 0x00, 0x48, 0x85, 0xC0, 0x75, 0xF3, 0x31, 0xC0, 0x48, 0x85,
+    0xC0, 0x49, 0x0F, 0x44, 0xC6, 0x4C, 0x39, 0xF0, 0x74, 0x14, 0x8B, 0x68,
+    0x24, 0x89, 0xE8, 0x48, 0x83, 0xC4, 0x20, 0x5B, 0x5D, 0x5F, 0x5E, 0x41,
+    0x5C, 0x41, 0x5E, 0x41, 0x5F, 0xC3, 0x48, 0x8B, 0x0E, 0xBD, 0x00, 0x00,
+    0xFF, 0xFF, 0x48, 0x85, 0xC9, 0x74, 0xE2, 0x48, 0x83, 0xC1, 0x08, 0x89,
+    0xFA, 0xE8, 0xDE, 0x97, 0xE2, 0xFE, 0x3D, 0x00, 0x00, 0xFF, 0xFF, 0x74,
+    0xD0};
+static constexpr char kMaskGetColor[] =
+    "xxxxxxxxxxxxxxxxxxxxxx?xxx?x?xxxx?xxx?xxxx?xx?x?xxxxxxx?xxxxxxxxxxxxx?xx"
+    "?xxxxxxxxxxxxxxxxxxxxxxxxxxxxx?xxxxxxx????xxxxxx?";
+
+static constexpr unsigned char kSigOnPaintBackground[] = {
+    0x56, 0x57, 0x48, 0x83, 0xEC, 0x38, 0x48, 0x89, 0xCE, 0x48, 0x8B, 0x05,
+    0x70, 0x04, 0x7B, 0x12, 0x48, 0x31, 0xE0, 0x48, 0x89, 0x44, 0x24, 0x30,
+    0x48, 0x8B, 0x89, 0x28, 0x02, 0x00, 0x00, 0x48, 0x85, 0xC9, 0x75, 0x1B,
+    0x48, 0x8B, 0x44, 0x24, 0x30, 0x48, 0x31, 0xE0, 0x48, 0x8B, 0x0D, 0x4D,
+    0x04, 0x7B, 0x12, 0x48, 0x39, 0xC1, 0x75, 0x64, 0x48, 0x83, 0xC4, 0x38,
+    0x5F, 0x5E, 0xC3, 0x48, 0x89, 0xD7, 0x48, 0xC7, 0x44, 0x24, 0x20, 0xA2,
+    0x00, 0x00, 0x00, 0x8A, 0x05, 0xC1, 0x40, 0x94, 0x12, 0x84, 0xC0, 0x75,
+    0x54, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x20, 0x48, 0x89, 0xFA, 0x49,
+    0x89, 0xF0, 0xFF, 0x15, 0xD0, 0x57, 0x75, 0x12};
+static constexpr char kMaskOnPaintBackground[] =
+    "xxxxxxxxxxxx????xxxxxxx?xxx????xxxx?xxxx?xxxxxx????xxxx?xxxxxxxxxxxxxx??"
+    "???xx????xxx?xxxxxx?xxxxxxxx????";
+
+// The explicit blend-mode overload forwards r8d to the canvas call. The other
+// overload inserts 'mov r8d, kSrcOver' here. Match through that distinction,
+// rather than choosing an overload by its position in chrome.dll. Relocations,
+// the canvas member displacement and the virtual-call slot are wildcarded.
+static const unsigned char kSigDrawColor[] = {
+    0x48, 0x83, 0xEC, 0x38, 0x48, 0x8B, 0x05, 0, 0, 0, 0, 0x48,
+    0x31, 0xE0, 0x48, 0x89, 0x44, 0x24, 0x30, 0x48, 0x8B, 0x89, 0, 0,
+    0, 0, 0x66, 0x0F, 0x6E, 0xC2, 0x66, 0x0F, 0xEF, 0xC9, 0x66, 0x0F,
+    0x60, 0xC1, 0x66, 0x0F, 0x61, 0xC1, 0x0F, 0x5B, 0xC0, 0x0F, 0x28, 0x0D,
+    0, 0, 0, 0, 0x0F, 0xC6, 0xC0, 0xC6, 0x0F, 0xC6, 0xC9, 0xC6,
+    0x0F, 0x59, 0xC8, 0x48, 0x8D, 0x54, 0x24, 0x20, 0x0F, 0x29, 0x0A,
+    0x48, 0x8B, 0x01, 0x48, 0x8B, 0x80, 0, 0, 0, 0, 0xFF, 0x15, 0, 0, 0, 0};
+static const char kMaskDrawColor[] =
+    "xxxxxxx????xxxxxxxxxxx????xxxxxxxxxxxxxxxxxxxxxx????"
+    "xxxxxxxxxxxxxxxxxxxxxxxxx????xx????";
+
+static constexpr unsigned char kSigGetClassNameW[] = {
+    0x56, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x89, 0xD6, 0x48, 0x8B, 0x81, 0x00,
+    0x01, 0x00, 0x00, 0x48, 0x81, 0xC1, 0x00, 0x01, 0x00, 0x00, 0x48, 0x8B,
+    0x40, 0x08, 0xFF, 0x15, 0x88, 0x9B, 0x33, 0x0F, 0x0F, 0x10, 0x40, 0x08,
+    0x0F, 0x11, 0x06, 0x48, 0x89, 0xF0, 0x48, 0x83, 0xC4, 0x20, 0x5E, 0xC3};
+static constexpr char kMaskGetClassNameW[] =
+    "xxxxxxxxxxx????xxx????xxx?xx????xxx?xxxxxxxxxxxx";
+
+static constexpr unsigned char kSigViewColorProvider[] = {
+    0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x58, 0x48,
+    0x8D, 0x15, 0x3E, 0xAE, 0x61, 0x00, 0x48, 0x39, 0xD0, 0x75, 0x2D, 0x48,
+    0x8B, 0x89, 0x90, 0x01, 0x00, 0x00, 0x48, 0x85, 0xC9, 0x74, 0x37, 0x48,
+    0x8B, 0x41, 0x48, 0x48, 0x83, 0xC1, 0x48, 0x48, 0x8B, 0x40, 0x08, 0x48,
+    0x8D, 0x15, 0x3A, 0x00, 0x00, 0x00, 0x48, 0x39, 0xD0, 0x75, 0x14, 0x48,
+    0x83, 0xC4, 0x28, 0xE9, 0x2C, 0x00, 0x00, 0x00, 0xFF, 0x15, 0x3E, 0x7F,
+    0x12, 0x0D, 0x48, 0x89, 0xC1, 0xEB, 0xCF, 0x48, 0x83, 0xC4, 0x28, 0x48,
+    0xFF, 0x25, 0x2E, 0x7F, 0x12, 0x0D, 0x31, 0xC0, 0x48, 0x83, 0xC4, 0x28,
+    0xC3};
+static constexpr char kMaskViewColorProvider[] =
+    "xxxxxxxxxx?xxx????xxxx?xxx????xxxx?xxx?xxxxxxx?xxx????xxxx?xxxxx????xx??"
+    "??xxxx?xxxxxxx????xxxxxxx";
+static_assert(sizeof(kMaskViewColorProvider) == sizeof(kSigViewColorProvider) + 1);
+static_assert(sizeof(kMaskGetColor) == sizeof(kSigGetColor) + 1);
+static_assert(sizeof(kMaskOnPaintBackground) == sizeof(kSigOnPaintBackground) + 1);
+static_assert(sizeof(kMaskDrawColor) == sizeof(kSigDrawColor) + 1);
+static_assert(sizeof(kMaskGetClassNameW) == sizeof(kSigGetClassNameW) + 1);
+
+
+// Discover the toolbar ID from Chromium's own read-only {id, name} tables.
+// IDs can move between releases; do not hardcode them or read View member offsets.
+struct ReadOnlyImage {
+    const unsigned char* base;
+    size_t size;
+    const IMAGE_SECTION_HEADER* sections;
+    unsigned count;
+
+    bool Contains(size_t rva, size_t length) const {
+        if (rva > size || length > size - rva) return false;
+        for (unsigned i = 0; i < count; ++i) {
+            const auto& s = sections[i];
+            const DWORD flags = s.Characteristics;
+            if (!(flags & IMAGE_SCN_MEM_READ) ||
+                !(flags & IMAGE_SCN_CNT_INITIALIZED_DATA) ||
+                (flags & (IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_EXECUTE)) ||
+                s.VirtualAddress > size || s.Misc.VirtualSize > size - s.VirtualAddress)
+                continue;
+            if (rva >= s.VirtualAddress && rva - s.VirtualAddress <= s.Misc.VirtualSize &&
+                length <= s.Misc.VirtualSize - (rva - s.VirtualAddress)) return true;
+        }
+        return false;
+    }
+};
+
+static bool GetReadOnlyImage(HMODULE mod, ReadOnlyImage* out) {
+    MEMORY_BASIC_INFORMATION memory{};
+    if (!mod || !VirtualQuery(mod, &memory, sizeof(memory)) ||
+        memory.State != MEM_COMMIT || (memory.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+        return false;
+    const auto* base = reinterpret_cast<const unsigned char*>(mod);
+    const size_t headerBytes = memory.RegionSize -
+        (base - static_cast<const unsigned char*>(memory.BaseAddress));
+    if (headerBytes < sizeof(IMAGE_DOS_HEADER)) return false;
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 ||
+        static_cast<size_t>(dos->e_lfanew) > headerBytes ||
+        sizeof(IMAGE_NT_HEADERS64) > headerBytes - dos->e_lfanew) return false;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt->FileHeader.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) ||
+        !nt->FileHeader.NumberOfSections || nt->FileHeader.NumberOfSections > 96)
+        return false;
+    const auto* sections = IMAGE_FIRST_SECTION(nt);
+    const size_t sectionOffset = reinterpret_cast<const unsigned char*>(sections) - base;
+    const size_t sectionBytes = nt->FileHeader.NumberOfSections * sizeof(*sections);
+    const size_t imageSize = nt->OptionalHeader.SizeOfImage;
+    if (sectionOffset > headerBytes || sectionBytes > headerBytes - sectionOffset ||
+        sectionOffset > imageSize || sectionBytes > imageSize - sectionOffset) return false;
+    *out = {base, imageSize, sections, nt->FileHeader.NumberOfSections};
+    return true;
+}
+
+static bool ReadColorName(const ReadOnlyImage& image, size_t row,
+                          unsigned long long* id, size_t* nameRva, size_t* nameLength) {
+    if (!image.Contains(row, 16)) return false;
+    unsigned long long pointer;
+    memcpy(id, image.base + row, 8);
+    memcpy(&pointer, image.base + row + 8, 8);
+    const auto baseAddress = reinterpret_cast<ULONG_PTR>(image.base);
+    if (!*id || *id >= 0x10000 || pointer < baseAddress ||
+        pointer - baseAddress >= image.size) return false;
+    *nameRva = static_cast<size_t>(pointer - baseAddress);
+    // All reads, including the terminator, stay inside read-only module data.
+    for (size_t length = 0; length < 128; ++length) {
+        if (!image.Contains(*nameRva, length + 1)) return false;
+        if (!image.base[*nameRva + length]) {
+            if (length < 7 || memcmp(image.base + *nameRva, "kColor", 6)) return false;
+            *nameLength = length;
+            return true;
+        }
+    }
+    return false;
+}
+
+static int ReadToolbarColorId(const ReadOnlyImage& image, size_t row) {
+    if ((row & 7) || row < 16 || !image.Contains(row - 16, 48)) return -1;
+    unsigned long long id, previous, next;
+    size_t name, length, neighborName, neighborLength;
+    if (!ReadColorName(image, row, &id, &name, &length) ||
+        length != sizeof("kColorToolbar") - 1 ||
+        memcmp(image.base + name, "kColorToolbar", sizeof("kColorToolbar")) ||
+        !ReadColorName(image, row - 16, &previous, &neighborName, &neighborLength) ||
+        !ReadColorName(image, row + 16, &next, &neighborName, &neighborLength) ||
+        previous + 1 != id || id + 1 != next) return -1;
+    return static_cast<int>(id);
+}
+
+static int FindToolbarColorId(HMODULE mod, size_t* rowRva = nullptr) {
+    if (rowRva) *rowRva = 0;
+    ReadOnlyImage image{};
+    if (!GetReadOnlyImage(mod, &image)) return -1;
+    int found = -1;
+    size_t foundRow = 0;
+    for (unsigned i = 0; i < image.count; ++i) {
+        const auto& section = image.sections[i];
+        const size_t start = section.VirtualAddress;
+        const size_t size = section.Misc.VirtualSize;
+        if (size < 48 || !image.Contains(start, size)) continue;
+        for (size_t offset = 16; offset <= size - 32; offset += 8) {
+            const size_t row = start + offset;
+            // Most data is not a colour row. Reject it before inspecting pointers.
+            unsigned long long id;
+            memcpy(&id, image.base + row, 8);
+            if (!id || id >= 0x10000) continue;
+            const int toolbarId = ReadToolbarColorId(image, row);
+            if (toolbarId < 0) continue;
+            // Duplicate tables are normal, but disagreeing definitions are unsafe.
+            if (found >= 0 && found != toolbarId) return -1;
+            found = toolbarId;
+            foundRow = row;
+        }
+    }
+    if (found >= 0 && rowRva) *rowRva = foundRow;
+    return found;
+}
+
+static bool GetTextSection(HMODULE mod, const unsigned char** outBase, size_t* outSize) {
+    auto dos = (const IMAGE_DOS_HEADER*)mod;
+    if (!dos || dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    auto nt = (const IMAGE_NT_HEADERS64*)((const unsigned char*)mod + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+    auto sec = IMAGE_FIRST_SECTION(nt);
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        if (memcmp(sec[i].Name, ".text", 5) == 0) {
+            *outBase = (const unsigned char*)mod + sec[i].VirtualAddress;
+            *outSize = sec[i].Misc.VirtualSize;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool MatchesAt(const unsigned char* p, const Signature& sig) {
+    for (size_t j = 0; j < sig.length; ++j) {
+        if (sig.mask[j] == 'x' && p[j] != sig.bytes[j]) return false;
+    }
+    return true;
+}
+
+struct ScanHit {
+    const unsigned char* first;
+    int count;
+};
+
+static bool GetFunctionTable(HMODULE mod, const RUNTIME_FUNCTION** table, size_t* count) {
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(mod);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
+        reinterpret_cast<const unsigned char*>(mod) + dos->e_lfanew);
+    const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+    const size_t imageSize = nt->OptionalHeader.SizeOfImage;
+    if (!dir.VirtualAddress || dir.VirtualAddress > imageSize ||
+        dir.Size > imageSize - dir.VirtualAddress ||
+        !dir.Size || dir.Size % sizeof(RUNTIME_FUNCTION)) return false;
+    *table = reinterpret_cast<const RUNTIME_FUNCTION*>(
+        reinterpret_cast<const unsigned char*>(mod) + dir.VirtualAddress);
+    *count = dir.Size / sizeof(RUNTIME_FUNCTION);
+    return true;
+}
+
+static bool FunctionContains(HMODULE mod, size_t rva, size_t length) {
+    const RUNTIME_FUNCTION* table;
+    size_t count;
+    if (!GetFunctionTable(mod, &table, &count)) return false;
+    size_t lo = 0, hi = count;
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        if (table[mid].BeginAddress < rva) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo < count && table[lo].BeginAddress == rva &&
+           table[lo].EndAddress > rva && length <= table[lo].EndAddress - rva;
+}
+
+static bool ScanAll(HMODULE mod, const unsigned char* text, size_t size,
+                    const Signature* sigs, int count, ScanHit* out) {
+    unsigned int first4[5]{};
+    if (count <= 0 || count > static_cast<int>(ARRAYSIZE(first4))) return false;
+    for (int i = 0; i < count; ++i) {
+        out[i] = {};
+        if (sigs[i].length < 4) return false;
+        memcpy(&first4[i], sigs[i].bytes, 4);
+    }
+    const RUNTIME_FUNCTION* functions;
+    size_t functionCount;
+    if (!GetFunctionTable(mod, &functions, &functionCount)) return false;
+    const auto* base = reinterpret_cast<const unsigned char*>(mod);
+    const size_t textRva = text - base;
+    for (size_t i = 0; i < functionCount; ++i) {
+        const auto& f = functions[i];
+        if (f.BeginAddress < textRva || f.BeginAddress - textRva > size ||
+            f.EndAddress <= f.BeginAddress) continue;
+        const size_t remaining = size - (f.BeginAddress - textRva);
+        if (remaining < 4) continue;
+        const auto* at = base + f.BeginAddress;
+        unsigned int prefix;
+        memcpy(&prefix, at, 4);
+        for (int s = 0; s < count; ++s) {
+            if (prefix != first4[s] || sigs[s].length > remaining ||
+                sigs[s].length > f.EndAddress - f.BeginAddress ||
+                !MatchesAt(at, sigs[s])) continue;
+            if (++out[s].count == 1) out[s].first = at;
+        }
+    }
+    return true;
+}
+
+
+// A small value in Windhawk's per-mod storage; removed with the mod.
+struct SignatureCache {
+    unsigned long long key;
+    unsigned int count;
+    unsigned int reserved;
+    unsigned long long rva[kRequiredFunctions];
+    unsigned long long toolbarRowRva;
+    char version[64];
+};
+static_assert(sizeof(SignatureCache) == 128);
+
+static unsigned long long BuildKey(HMODULE module) {
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
+        reinterpret_cast<const unsigned char*>(module) + dos->e_lfanew);
+    constexpr unsigned long long signatureRevision = 14;
+    return ((static_cast<unsigned long long>(nt->FileHeader.TimeDateStamp) << 32) ^
+            nt->OptionalHeader.SizeOfImage) + signatureRevision;
+}
+
+static void GetBraveVersion(HMODULE module, char* output, size_t size) {
+    if (!size) return;
+    output[0] = 0;
+    wchar_t path[MAX_PATH]{};
+    if (!GetModuleFileNameW(module, path, ARRAYSIZE(path))) return;
+    wchar_t* slash = wcsrchr(path, L'\\');
+    if (!slash) return;
+    *slash = 0;
+    wchar_t* version = wcsrchr(path, L'\\');
+    if (!version) return;
+    WideCharToMultiByte(CP_UTF8, 0, version + 1, -1, output, static_cast<int>(size), nullptr, nullptr);
+}
+
+static bool LoadCache(unsigned long long key, size_t* rva, int count,
+                      size_t* toolbarRowRva, char* previousVersion, size_t previousSize) {
+    *toolbarRowRva = 0;
+    if (previousVersion && previousSize) previousVersion[0] = 0;
+    if (count != kRequiredFunctions) return false;
+    SignatureCache cache{};
+    if (Wh_GetBinaryValue(L"signatureCache", &cache, sizeof(cache)) != sizeof(cache) ||
+        cache.count != kRequiredFunctions || cache.reserved ||
+        !memchr(cache.version, 0, sizeof(cache.version))) return false;
+    if (previousVersion && previousSize) {
+        std::snprintf(previousVersion, previousSize, "%s", cache.version);
+    }
+    if (cache.key != key) return false;
+    for (int i = 0; i < count; ++i) rva[i] = static_cast<size_t>(cache.rva[i]);
+    *toolbarRowRva = static_cast<size_t>(cache.toolbarRowRva);
+    return true;
+}
+
+static void SaveCache(unsigned long long key, const char* version, const size_t* rva, int count,
+                      size_t toolbarRowRva) {
+    if (count != kRequiredFunctions) return;
+    SignatureCache cache{};
+    cache.key = key;
+    cache.count = count;
+    std::snprintf(cache.version, sizeof(cache.version), "%s", version && *version ? version : "?");
+    for (int i = 0; i < count; ++i) cache.rva[i] = rva[i];
+    cache.toolbarRowRva = toolbarRowRva;
+    if (!Wh_SetBinaryValue(L"signatureCache", &cache, sizeof(cache))) {
+        Wh_Log(L"Could not save the signature cache; the next launch will rescan");
+    }
+}
+
+static bool ResolveBySignature(HMODULE module) {
+    const unsigned char* text = nullptr;
+    size_t textSize = 0;
+    if (!GetTextSection(module, &text, &textSize)) return false;
+    const Signature signatures[kRequiredFunctions] = {
+        {"ui::ColorProvider::GetColor", kSigGetColor, kMaskGetColor, sizeof(kSigGetColor)},
+        {"views::View::OnPaintBackground", kSigOnPaintBackground, kMaskOnPaintBackground,
+         sizeof(kSigOnPaintBackground)},
+        {"gfx::Canvas::DrawColor", kSigDrawColor, kMaskDrawColor, sizeof(kSigDrawColor)},
+        {"views::View::GetClassNameW", kSigGetClassNameW, kMaskGetClassNameW, sizeof(kSigGetClassNameW)},
+        {"views::View::GetColorProvider", kSigViewColorProvider, kMaskViewColorProvider,
+         sizeof(kSigViewColorProvider)},
+    };
+    auto* base = reinterpret_cast<unsigned char*>(module);
+    const size_t textRva = text - base;
+    const DWORD started = GetTickCount();
+    const auto key = BuildKey(module);
+    char version[64]{}, previousVersion[64]{};
+    GetBraveVersion(module, version, sizeof(version));
+    size_t rva[kRequiredFunctions]{};
+    size_t toolbarRowRva = 0;
+    int toolbarId = -1;
+    bool cached = LoadCache(key, rva, kRequiredFunctions, &toolbarRowRva,
+                            previousVersion, sizeof(previousVersion));
+    if (cached) {
+        ReadOnlyImage image{};
+        if (GetReadOnlyImage(module, &image)) toolbarId = ReadToolbarColorId(image, toolbarRowRva);
+        if (toolbarId < 0) cached = false;
+    }
+    if (cached) {
+        for (int i = 0; i < kRequiredFunctions; ++i) {
+            if (!rva[i] || rva[i] < textRva || rva[i] - textRva > textSize ||
+                signatures[i].length > textSize - (rva[i] - textRva) ||
+                !FunctionContains(module, rva[i], signatures[i].length) ||
+                !MatchesAt(base + rva[i], signatures[i])) {
+                cached = false;
+                break;
+            }
+        }
+    }
+    if (!cached) {
+        if (previousVersion[0]) Wh_Log(L"Cached Brave %S needs revalidation for %S", previousVersion, version);
+        toolbarId = FindToolbarColorId(module, &toolbarRowRva);
+        if (toolbarId < 0) {
+            Wh_Log(L"Toolbar colour table missing or ambiguous; transparency stays off");
+            return false;
+        }
+        ScanHit hits[kRequiredFunctions]{};
+        if (!ScanAll(module, text, textSize, signatures, kRequiredFunctions, hits)) return false;
+        for (int i = 0; i < kRequiredFunctions; ++i) {
+            if (hits[i].count != 1) {
+                Wh_Log(L"%S: %d function matches; transparency stays off", signatures[i].name, hits[i].count);
+                return false;
+            }
+            rva[i] = hits[i].first - base;
+        }
+    }
+
+    s_toolbarColorId = toolbarId;
+    Wh_Log(L"per-window theme guard: kColorToolbar ID=%d", s_toolbarColorId);
+    pCanvasDrawColor = reinterpret_cast<DrawColor_t>(base + rva[2]);
+    pViewGetClassNameW = reinterpret_cast<ViewGetClassNameW_t>(base + rva[3]);
+    pViewGetColorProvider = reinterpret_cast<ViewGetColorProvider_t>(base + rva[4]);
+    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<GetColor_t>(base + rva[0]),
+                                       GetColor_Hook, &pOrigGetColor) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<ViewOnPaintBackground_t>(
+                                           base + rva[1]),
+                                       ViewOnPaintBackground_Hook, &pOrigViewOnPaintBackground) ||
+        !HasCompleteTransparencyPath()) {
+        Wh_Log(L"Required paint hooks could not be registered; transparency stays off");
+        return false;
+    }
+    if (!cached) SaveCache(key, version, rva, kRequiredFunctions, toolbarRowRva);
+    Wh_Log(L"%s: %d/%d resolved in %u ms (Brave %S)",
+           cached ? L"signature cache" : L"signature scan", kRequiredFunctions, kRequiredFunctions,
+           GetTickCount() - started, version);
+    return true;
+}
+
+// Installation and shutdown share a barrier. No hook can be registered/applied
+// after Wh_ModBeforeUninit returns, including a loader call that finishes late.
+static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
+    if (!module || s_chromeAttempted.exchange(true, std::memory_order_acq_rel)) return false;
+    AcquireSRWLockExclusive(&s_initLock);
+    bool installed = false;
+    if (!s_stopping && ResolveBySignature(module)) {
+        if (applyNow) {
+            installed = Wh_ApplyHookOperations() != FALSE;
+            s_transparencyReady.store(installed, std::memory_order_release);
+            if (!installed) Wh_Log(L"Could not activate paint hooks; transparency stays off");
+        } else {
+            // Windhawk applies these hooks after Wh_ModInit returns.
+            s_activateAfterInit = true;
+            installed = true;
+        }
+    }
+    ReleaseSRWLockExclusive(&s_initLock);
+    if (applyNow && installed) SyncNativeCaptions();
+    return installed;
+}
+
+static bool IsExecutableLibraryLoad(DWORD flags) {
+    return !(flags & (DONT_RESOLVE_DLL_REFERENCES | LOAD_LIBRARY_AS_DATAFILE |
+                      LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE));
+}
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    const HMODULE module = pOrigLoadLibraryExW(name, file, flags);
+    const DWORD error = GetLastError();
+    if (!s_chromeAttempted.load(std::memory_order_acquire) && module &&
+        IsExecutableLibraryLoad(flags) && module == GetModuleHandleW(L"chrome.dll")) {
+        // Chrome's caller cannot use the new module until this hook returns.
+        TryInstallChromeHooks(module, true);
+    }
+    SetLastError(error);
+    return module;
+}
+
+enum class ProcessRole { Browser, Gpu, Other };
+
+static ProcessRole GetProcessRole() {
+    int count = 0;
+    auto* arguments = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!arguments) return ProcessRole::Other;
+    ProcessRole role = ProcessRole::Browser;
+    for (int i = 1; i < count; ++i) {
+        if (!wcscmp(arguments[i], L"--") ||
+            !wcscmp(arguments[i], L"--single-argument")) break;
+        if (!wcsncmp(arguments[i], L"--type=", 7)) {
+            role = !wcscmp(arguments[i] + 7, L"gpu-process") ? ProcessRole::Gpu : ProcessRole::Other;
+        }
+    }
+    LocalFree(arguments);
+    return role;
+}
+
+BOOL Wh_ModInit() {
+    const auto role = GetProcessRole();
+    if (role == ProcessRole::Gpu) return InstallGpuHooks();
+    if (role != ProcessRole::Browser) return FALSE;
+    s_isBrowserProcess = true;
+    LoadModSettings();
+    InstallNativeCaptionHooks();
+
+    HMODULE chrome = GetModuleHandleW(L"chrome.dll");
+    if (chrome) return TryInstallChromeHooks(chrome, false);
+
+    const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    const auto loader = kernelBase ? reinterpret_cast<LoadLibraryExW_t>(
+        GetProcAddress(kernelBase, "LoadLibraryExW")) : nullptr;
+    if (!loader || !WindhawkUtils::SetFunctionHook(loader, LoadLibraryExW_Hook, &pOrigLoadLibraryExW)) {
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!s_isBrowserProcess) return;
+    AcquireSRWLockExclusive(&s_initLock);
+    if (!s_stopping && s_activateAfterInit) {
+        s_activateAfterInit = false;
+        s_transparencyReady.store(HasCompleteTransparencyPath(), std::memory_order_release);
+    }
+    ReleaseSRWLockExclusive(&s_initLock);
+    // Cover a load between ModInit's check and activation of the loader hook.
+    if (const auto chrome = GetModuleHandleW(L"chrome.dll")) TryInstallChromeHooks(chrome, true);
+    SyncNativeCaptions();
+}
+
+void Wh_ModSettingsChanged() {
+    if (!s_isBrowserProcess) return;
+    LoadModSettings();
+    SyncNativeCaptions();
+    Wh_Log(L"Settings updated; restart Brave normally to rebuild its cached UI brushes");
+}
+
+void Wh_ModBeforeUninit() {
+    s_captionStopping.store(true, std::memory_order_release);
+    s_captionFixActive.store(false, std::memory_order_release);
+    AcquireSRWLockExclusive(&s_initLock);
+    s_stopping = true;
+    s_activateAfterInit = false;
+    s_transparencyReady.store(false, std::memory_order_release);
+    ReleaseSRWLockExclusive(&s_initLock);
+}
+
+void Wh_ModUninit() {
+    if (s_isBrowserProcess) EnumWindows(SyncNativeCaptionWindow, 0);
+    if (s_dxgiModule) {
+        FreeLibrary(s_dxgiModule);
+        s_dxgiModule = nullptr;
+    }
+}
+
+#endif  // x64 native resolver
