@@ -6413,6 +6413,7 @@ struct WatchedNativeWidgetsButton {
 };
 std::vector<WatchedNativeWidgetsButton> g_watchedNativeWidgetsButtons;
 bool g_nativeWidgetsButtonsLookedUp = false;
+ULONGLONG g_lastNativeWidgetsScanTick = 0;
 
 void UnwatchNativeWidgetsButtons() {
     for (auto const& watched : g_watchedNativeWidgetsButtons) {
@@ -6436,9 +6437,41 @@ void RestoreNativeWidgetsButton() {
     g_hiddenNativeWidgetsButtons.clear();
 }
 
+bool HasAliveNativeWidgetsButton() {
+    for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
+        if (auto btn = weakBtn.get()) {
+            try {
+                if (btn.XamlRoot() != nullptr &&
+                    wuxm::VisualTreeHelper::GetParent(btn) != nullptr) {
+                    return true;
+                }
+            } catch (...) {}
+        }
+    }
+    g_nativeWidgetsButtonsLookedUp = false;
+    return false;
+}
+
 [[clang::no_destroy]] wuxc::Border g_playerGrid{nullptr}; // The compact taskbar widget root border
 
 void CacheNativeWidgetsButtons(wux::FrameworkElement const& root);
+
+bool EnsureNativeWidgetsButtonsCached(bool throttle) {
+    if (HasAliveNativeWidgetsButton()) {
+        return true;
+    }
+    ULONGLONG now = GetTickCount64();
+    if (throttle && g_lastNativeWidgetsScanTick != 0 &&
+        now - g_lastNativeWidgetsScanTick < 3000) {
+        return false;
+    }
+    g_lastNativeWidgetsScanTick = now;
+    if (g_playerGrid && g_playerGrid.XamlRoot()) {
+        CacheNativeWidgetsButtons(
+            g_playerGrid.XamlRoot().Content().try_as<wux::FrameworkElement>());
+    }
+    return g_nativeWidgetsButtonsLookedUp;
+}
 
 void ApplyNativeWidgetsButtonState(ModSettings const& settings,
                                    std::wstring const& effectivePos) {
@@ -6446,10 +6479,7 @@ void ApplyNativeWidgetsButtonState(ModSettings const& settings,
         RestoreNativeWidgetsButton();
         return;
     }
-    if (!g_nativeWidgetsButtonsLookedUp && g_playerGrid && g_playerGrid.XamlRoot()) {
-        CacheNativeWidgetsButtons(
-            g_playerGrid.XamlRoot().Content().try_as<wux::FrameworkElement>());
-    }
+    EnsureNativeWidgetsButtonsCached(false);
     for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
         auto btn = weakBtn.get();
         if (!btn) continue;
@@ -6614,7 +6644,7 @@ bool g_renderedBatteryAttention = false;
 void RefreshTaskbarWidgetData();
 
 void CacheNativeWidgetsButtons(wux::FrameworkElement const& root) {
-    if (g_nativeWidgetsButtonsLookedUp || !root) return;
+    if (HasAliveNativeWidgetsButton() || !root) return;
     UnwatchNativeWidgetsButtons();
     g_cachedNativeWidgetsButtons.clear();
     auto buttons = FindNativeWidgetsButtons(root);
@@ -6627,7 +6657,7 @@ void CacheNativeWidgetsButtons(wux::FrameworkElement const& root) {
             g_watchedNativeWidgetsButtons.push_back({winrt::make_weak(btn), token});
         } catch (...) {}
     }
-    g_nativeWidgetsButtonsLookedUp = true;
+    g_nativeWidgetsButtonsLookedUp = !g_cachedNativeWidgetsButtons.empty();
 }
 void RefreshExpandedPopupData();
 void RequestPopupRefresh() { NotifyLiveUi(); }
@@ -8456,6 +8486,8 @@ void RefreshTaskbarWidgetData() {
         if (g_widgetBadgeBorder) g_widgetBadgeBorder.Margin({0, 0, settingsOnly ? 0.0 : 8.0, 0});
         if (g_widgetLine2Text) g_widgetLine2Text.Visibility(settingsOnly || collapsed ? wux::Visibility::Collapsed : wux::Visibility::Visible);
         if (EffectiveTaskbarPosition(settings) == L"root_left") {
+            EnsureNativeWidgetsButtonsCached(true);
+            ApplyNativeWidgetsButtonState(settings, L"root_left");
             g_playerGrid.Margin({ComputeRootLeftOffsetDip(settings), 0.0, 0.0, 0.0});
         } else {
             g_playerGrid.Margin({4.0, 0.0, 4.0, 0.0});
@@ -10440,6 +10472,7 @@ void RemoveInjectedTaskbarWidget() {
     RestoreNativeWidgetsButton();
     g_cachedNativeWidgetsButtons.clear();
     g_nativeWidgetsButtonsLookedUp = false;
+    g_lastNativeWidgetsScanTick = 0;
     g_glassButtonTemplate = nullptr;
     g_glassTemplateFailed = false;
     g_playerGrid = nullptr;
