@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         0.9.238
+// @version         0.9.239
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -2316,7 +2316,10 @@ struct ViewState {
         viewTogglePaletteDirty = true;
     }
     ViewState() {background->notificationLifetime=lifetimeToken;}
-    ~ViewState() { ReleaseViewToggle(); }
+    ~ViewState() {
+        ReleaseViewToggle();
+        if (frameLatencyWaitable) CloseHandle(frameLatencyWaitable);
+    }
     bool rtlLayout = false; // Follow Shell UI direction, not filename script.
     float paintWidth = 0.f; // Cached paint width for inexpensive logical->visual mapping.
     bool inScope = true;
@@ -2976,6 +2979,8 @@ struct ViewState {
     ComPtr<IDCompositionDevice> composition;
     ComPtr<ID2D1Device> d2dDevice;
     bool presentPending = false;
+    HANDLE frameLatencyWaitable = nullptr; // Owned by this tab's GPU lane; zero-time readiness probes only.
+    LARGE_INTEGER rejectedPresentQpc{};
     bool graphicsReady = false;
     bool graphicsInitializing = false;
     bool graphicsReleaseQueued = false, graphicsSuspended = false, gpuDeviceCounted = false;
@@ -12504,8 +12509,10 @@ void DropTarget(ViewState& state) {
     }
     state.visual.Reset();
     state.compTarget.Reset();
+    if (state.frameLatencyWaitable) CloseHandle(std::exchange(state.frameLatencyWaitable,nullptr));
     state.swapChain.Reset();
     state.presentPending = false;
+    state.rejectedPresentQpc = {};
     state.graphicsReady = false;
     state.composition.Reset();
     state.compositionSurfacePoolUsed=false;
@@ -12563,7 +12570,7 @@ bool ResizeTarget(ViewState& state, UINT width, UINT height) {
     state.target->SetTarget(nullptr);
     state.backbuffer.Reset();
     const HRESULT hr = state.swapChain->ResizeBuffers(2, width, height,
-        DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
     if (FAILED(hr) || !BindBackbuffer(state)) {
         DropTarget(state);
         return false;
@@ -12632,10 +12639,18 @@ bool EnsureTarget(ViewState& state) {
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
         desc.Scaling = DXGI_SCALING_STRETCH;
         desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+        desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
         state.graphicsFailureStage=3;
         hr = state.dxgiFactory->CreateSwapChainForComposition(state.d3d.Get(),
             &desc, nullptr, state.swapChain.GetAddressOf());
         if (FAILED(hr)) goto failed;
+        ComPtr<IDXGISwapChain2> paced;
+        hr = state.swapChain.As(&paced);
+        if (FAILED(hr)) goto failed;
+        hr = paced->SetMaximumFrameLatency(1);
+        if (FAILED(hr)) goto failed;
+        state.frameLatencyWaitable = paced->GetFrameLatencyWaitableObject();
+        if (!state.frameLatencyWaitable) { hr = E_FAIL; goto failed; }
     }
     state.graphicsFailureStage=4;
     hr = state.composition->CreateTargetForHwnd(state.hwnd, TRUE,
@@ -13456,6 +13471,18 @@ float ClipboardIconWiggleAngle(float size96, double elapsedMs, size_t seed = 0) 
         (6.283185307179586 / periodMs)));
 }
 
+D2D1_INTERPOLATION_MODE IconInterpolation(float width, float height,
+    float sourceWidth, float sourceHeight, float angle) {
+    if (fabsf(width-sourceWidth)<.001f && fabsf(height-sourceHeight)<.001f && angle==0.f)
+        return D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
+    // Magnifying a small Shell icon over a large tile cannot recover detail.
+    // Use hardware bilinear sampling there, as for thumbnails; keep cubic's
+    // prefilter for minification and its reconstruction for ordinary sizes.
+    if (std::max(width,height)>=512.f && width>=2.f*sourceWidth && height>=2.f*sourceHeight)
+        return D2D1_INTERPOLATION_MODE_LINEAR;
+    return D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
+}
+
 bool DrawCachedIcon(ViewState& state, IconRecord& icon, float x, float y,
                     float opacity = 1.f, float angle = 0.f) {
     if(!VisibleOpacity(opacity)) return true;
@@ -13528,10 +13555,8 @@ bool DrawCachedIcon(ViewState& state, IconRecord& icon, float x, float y,
         }
     } else {
         const auto source=D2D1::RectF(0,0,sourceWidth,sourceHeight);
-        const bool unscaled=fabsf((rect.right-rect.left)-sourceWidth)<.001f &&
-            fabsf((rect.bottom-rect.top)-sourceHeight)<.001f && angle==0.f;
-        state.target->DrawBitmap(icon.bitmap.Get(),&rect,opacity,unscaled ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
-            D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC,&source,nullptr);
+        state.target->DrawBitmap(icon.bitmap.Get(),&rect,opacity,IconInterpolation(
+            rect.right-rect.left,rect.bottom-rect.top,sourceWidth,sourceHeight,angle),&source,nullptr);
     }
     if (angle != 0.f) state.target->SetTransform(previous);
     return true;
@@ -15042,6 +15067,8 @@ void ClearBodyBand(ViewState& state, ID2D1Bitmap1* frame, float top, float botto
     state.target->SetPrimitiveBlend(blend); state.target->SetAntialiasMode(antialias);
 }
 
+bool PresentationFrameReady(ViewState& state);
+
 void Paint(ViewState& state) {
     if(state.presenter && !state.presentationOnly) { SubmitPresentation(state); return; }
     GraphicsContinuation continuation(state);
@@ -15063,6 +15090,14 @@ void Paint(ViewState& state) {
     }
     ScopedFlag rasterPainting(state.textRasterPainting);
     RefreshTextRendering(state,true);
+    ModeCompositionFrame compositionFrame(state);
+    // The presentation lane coalesces input while DXGI owns the previous
+    // frame. Probe before uploading, rasterizing text or drawing large tiles.
+    // DComp planes and their ready-frame handoff do not use that DXGI slot.
+    if (state.presentationOnly) {
+        if (!compositionFrame.active && !state.modeRootAttached && !PresentationFrameReady(state)) return;
+        UploadVisibleIcons(state);
+    }
     ++state.graphicsPaintSerial;
     state.presentationContentAccepted=false;
     if (state.itemOpacityToken != state.token) ResetItemContentOpacity(state);
@@ -15073,7 +15108,6 @@ void Paint(ViewState& state) {
     state.clipboardIconsVisible = false;
     state.clipboardIconSize96 = 0.f;
     state.clipboardIconElapsedMs = 0.;
-    ModeCompositionFrame compositionFrame(state);
     state.uiTracePaint=state.uiTraceDrawItem=false;
     if (g_uiTransitionLogging.load(std::memory_order_relaxed)) {
         EnsurePipelineTrace(state);
@@ -15921,6 +15955,8 @@ void Paint(ViewState& state) {
         PipelineEvent(*state.background,{.operation=L"render.present[pos,target]",.a=static_cast<unsigned>(present),
             .b=PipelineFlags(state),.v={state.scrollNow,state.scrollTarget}});
         state.presentPending = present == DXGI_ERROR_WAS_STILL_DRAWING;
+        if (state.presentPending) QueryPerformanceCounter(&state.rejectedPresentQpc);
+        else state.rejectedPresentQpc = {};
         if (state.uiTracePaint)
             PipelineEvent(*state.background,{.operation=L"ui.submit[scene,accepted,header,rootAttached]",
                 .a=static_cast<unsigned>(present),.b=state.token,
@@ -22390,7 +22426,8 @@ void PublishPresentationReceipt(ViewState& state,const std::shared_ptr<Presentat
         DCOMPOSITION_FRAME_STATISTICS statistics{};
         if(SUCCEEDED(state.composition->GetFrameStatistics(&statistics))) receipt->compositionTime=statistics.currentTime;
     }
-    receipt->ready=state.graphicsReady; receipt->accepted=state.lastAcceptedPaint==state.graphicsPaintSerial && state.lastAcceptedPaint;
+    receipt->ready=state.graphicsReady; receipt->accepted=!state.presentPending &&
+        state.lastAcceptedPaint==state.graphicsPaintSerial && state.lastAcceptedPaint;
     receipt->content=receipt->accepted && state.presentationContentAccepted;
     receipt->failed=failed; receipt->standby=state.graphicsStandby && !state.graphicsStandbyPending;
     receipt->failure=state.graphicsFailure; receipt->failureStage=state.graphicsFailureStage;
@@ -22474,6 +22511,32 @@ void TrimPresentationImages(ViewState& state) {
     state.presentationCachePending=state.iconCacheBytes>budget && attempts>=limit && limit==64;
 }
 
+bool PresentationFrameReady(ViewState& state) {
+    if (!state.frameLatencyWaitable) return true;
+    const DWORD ready=WaitForSingleObject(state.frameLatencyWaitable,0);
+    if (ready==WAIT_OBJECT_0) return true;
+    const DWORD waitError=ready==WAIT_FAILED ? GetLastError() : ERROR_SUCCESS;
+    // Device loss may leave readiness unsignaled. Keep the existing recovery
+    // and native fallback reachable instead of deferring every future paint.
+    const HRESULT device=state.d3d ? state.d3d->GetDeviceRemovedReason() : S_OK;
+    if (ready==WAIT_FAILED || FAILED(device)) {
+        state.graphicsFailure=FAILED(device) ? device : HRESULT_FROM_WIN32(waitError ? waitError : ERROR_GEN_FAILURE);
+        state.graphicsFailureStage=6;
+        DropTarget(state); return false;
+    }
+    // A rejected nonblocking Present can retain the acquired DXGI slot. Retry
+    // at the tab's refresh cadence in that case; never spin/redraw at each
+    // input wake, and never wait for the GPU on Explorer's owner STA.
+    if (state.rejectedPresentQpc.QuadPart) {
+        LARGE_INTEGER now{},frequency{}; QueryPerformanceCounter(&now); QueryPerformanceFrequency(&frequency);
+        if (now.QuadPart-state.rejectedPresentQpc.QuadPart>=frequency.QuadPart/std::max(1,state.refreshHz))
+            return true;
+    }
+    state.presentPending=true;
+    state.presentationContentAccepted=false;
+    return false;
+}
+
 DWORD WINAPI PresentationWorkerProc(LPVOID context) {
     auto& worker=*static_cast<TabBackground::Worker*>(context);
     auto& work=*worker.owner; const auto lane=work.presenter;
@@ -22534,12 +22597,16 @@ DWORD WINAPI PresentationWorkerProc(LPVOID context) {
         }
         BeginFrameProfile(state);
         AdvanceAnimationFrame(state,false);
-        if(state.target) UploadVisibleIcons(state);
+        const auto previousPaint=state.graphicsPaintSerial;
         Paint(state);
         EndFrameProfile(state);
         TrimPresentationImages(state);
         if(state.target) {ScheduleVisibleIconUploads(state);}
-        PublishPresentationReceipt(state,lane,!state.graphicsReady);
+        // A readiness miss produced no new pixels. Keep the last accepted
+        // receipt available to an unpumped owner until a newer model needs a
+        // deferred acknowledgment, or a new paint/device failure supersedes it.
+        if (state.graphicsPaintSerial!=previousPaint || model || !state.graphicsReady)
+            PublishPresentationReceipt(state,lane,!state.graphicsReady);
         const bool handoff=state.modeRootAttached && !state.rowTransitionActive && !state.columnTransitionActive;
         PulsePresentation(lane,state.presentationActive && (NeedsAnimationPaint(state) || handoff || state.presentationCachePending));
     }
