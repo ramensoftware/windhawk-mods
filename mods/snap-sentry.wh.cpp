@@ -115,9 +115,8 @@ Very large images are left alone. The window name used for renaming is the one
 in front when the file appears.
 
 Before deleting anything, SnapSentry checks that the file is still the one it
-copied. If it changed during the countdown, it is kept. If moving it to the
-Recycle Bin fails, it may be left under a name starting with `.snapsentry-`,
-which the log mentions. SnapSentry never deletes or reuses that file.
+copied. If it changed during the countdown, it is kept. If it can't be moved
+to the Recycle Bin, it is kept too.
 
 ## Privacy
 
@@ -179,7 +178,7 @@ page](https://github.com/mario0318/SnapSentry/issues).
 # ---- Renaming ----
 - renameFromWindow: false
   $name: Rename screenshots after the active window
-  $description: Names each screenshot after the window that was in front when you took it, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
+  $description: Names each screenshot after the window that was in front when the file appeared, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
 - captureSessions: false
   $name: Capture sessions
   $description: Adds a SnapSentry tray icon. Start a session, take screenshots, then review their order and captions and export a contact sheet and Markdown packet. Session screenshots are always kept, including when ordinary deletion or duplicate removal is enabled. Sessions are limited to 64 images. Disabling the mod discards only the review list, never the images.
@@ -349,7 +348,6 @@ static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
 static HANDLE g_workEvent;   // Auto-reset: queue has work.
 static HANDLE g_settingsEvent;  // Manual reset: settings reloaded while a prompt is up.
-static std::atomic<bool> g_watchArmed{false};
 static HANDLE g_watchThread;
 static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
@@ -501,9 +499,15 @@ static void LoadSettings() {
 
     EnterCriticalSection(&g_lock);
     g_recentContent.clear();
+    // An unrelated change, such as turning on logging, keeps a recording
+    // session going. Turning sessions off or watching another folder ends it.
+    const bool keepSession =
+        s.sessions && CompareStringOrdinal(s.folder.c_str(), -1,
+                                           g_settings.folder.c_str(), -1,
+                                           TRUE) == CSTR_EQUAL;
     g_settings = std::move(s);
     ++g_generation;
-    g_activeSession.store(0);
+    if (!keepSession) g_activeSession.store(0);
     SetEvent(g_settingsEvent);
     LeaveCriticalSection(&g_lock);
 }
@@ -521,18 +525,11 @@ static bool WaitStop(DWORD ms) {
     return WaitForSingleObject(g_stopEvent, ms) == WAIT_OBJECT_0;
 }
 
-// Only the worker resets this event. Reset under the settings lock so a reload
-// cannot be lost between checking the generation and arming the wait.
-static bool CleanupCancelled(DWORD ms, ULONGLONG generation) {
-    EnterCriticalSection(&g_lock);
-    bool changed = g_generation.load() != generation;
-    if (!changed) ResetEvent(g_settingsEvent);
-    LeaveCriticalSection(&g_lock);
-    if (changed) return true;
-    HANDLE waits[] = {g_stopEvent, g_settingsEvent};
-    DWORD result = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, ms);
-    return result != WAIT_TIMEOUT || WaitStop(0) ||
-           g_generation.load() != generation;
+// Cleanup is scheduled rather than waited for, so this only checks. It must not
+// reset g_settingsEvent: the prompt thread waits on that event to dismiss a
+// popup when settings change, and a reset here could swallow the signal.
+static bool CleanupCancelled(DWORD, ULONGLONG generation) {
+    return WaitStop(0) || g_generation.load() != generation;
 }
 
 // ============================================================================
@@ -824,7 +821,7 @@ static ImageCopy ClipboardImage(const std::wstring& path,
         if (!OpenOwnedClipboard()) {
             break;
         }
-            bool setV5 = SetClipboardData(CF_DIBV5, hV5) != nullptr;
+        bool setV5 = SetClipboardData(CF_DIBV5, hV5) != nullptr;
         if (setV5) {
             hV5 = nullptr;  // Clipboard owns it now.
         }
@@ -2091,30 +2088,43 @@ static AuditOutcome DeleteLocked(CaptureRecord& record, LockedCapture& capture,
         capture.CloseFile();
         return AuditOutcome::Deleted;
     }
-    GUID id;
-    if (FAILED(CoCreateGuid(&id))) return AuditOutcome::Kept;
-    wchar_t text[40];
-    if (!StringFromGUID2(id, text, ARRAYSIZE(text))) return AuditOutcome::Kept;
-    const auto split = record.path.find_last_of(L"\\/");
-    const auto dot = record.path.find_last_of(L'.');
-    const auto extension = dot != std::wstring::npos && dot > split ? record.path.substr(dot) : L".png";
-    const auto stage = record.path.substr(0, split + 1) + L".snapsentry-" + text + extension;
-    MarkNameRecent(stage);
-    if (!RenameLocked(capture.file, stage)) return AuditOutcome::Kept;
-    // The shell accepts a path, not a file handle. A private unpredictable name
-    // isolates ordinary original-name reuse. This is not a security boundary
-    // against a hostile same-user process deliberately discovering the stage.
+    // The shell recycles by path, and the Recycle Bin keeps the name the file had
+    // at that moment, so the original path is recycled. ReOpenFile swaps the held
+    // handle for one on the same file object that still denies writes but lets
+    // the shell move it, with no gap where another file could take its place.
+    HANDLE held = ReOpenFile(capture.file, GENERIC_READ,
+                             FILE_SHARE_READ | FILE_SHARE_DELETE, 0);
+    if (held == INVALID_HANDLE_VALUE) return AuditOutcome::Kept;
     capture.CloseFile();
-    if (!CleanupCancelled(0, generation) && RecycleFile(stage)) return AuditOutcome::Recycled;
-    // Re-open the staged object, verify identity, and restore without replacing
-    // anything a producer put at the original name. A collision retains stage.
-    LockedCapture recovery;
-    if (recovery.Open(stage, settings.folder, true) &&
-        SameIdentity(capture.info, recovery.info) &&
-        RenameLocked(recovery.file, record.path)) return AuditOutcome::Kept;
-    Wh_Log(L"Screenshot kept under recovery name %s", BaseName(stage).c_str());
-    record.path = stage;
-    return AuditOutcome::Kept;
+    capture.file = held;
+    if (CleanupCancelled(0, generation) || !RecycleFile(record.path)) {
+        return AuditOutcome::Kept;
+    }
+    // Another program could still rename the checked file away and put a new
+    // one at the same path just before the shell acts. That file would only go
+    // to the Recycle Bin, where it can be restored, so this is a check and a log
+    // line rather than a guarantee. The checked file is in the bin if its final
+    // path now runs through the volume's $Recycle.Bin folder.
+    DWORD length = GetFinalPathNameByHandleW(held, nullptr, 0, FILE_NAME_NORMALIZED);
+    std::wstring finalPath(length ? length : 1, L'\0');
+    DWORD got = length ? GetFinalPathNameByHandleW(held, finalPath.data(),
+                                                   length, FILE_NAME_NORMALIZED)
+                       : 0;
+    finalPath.resize(got < length ? got : 0);
+    static constexpr wchar_t kBin[] = L"\\$Recycle.Bin\\";
+    bool inBin = false;
+    for (size_t i = 0; !inBin && i + ARRAYSIZE(kBin) - 1 <= finalPath.size(); ++i) {
+        inBin = CompareStringOrdinal(finalPath.c_str() + i, ARRAYSIZE(kBin) - 1,
+                                     kBin, ARRAYSIZE(kBin) - 1,
+                                     TRUE) == CSTR_EQUAL;
+    }
+    if (!inBin) {
+        Wh_Log(L"The file at the screenshot's path was replaced while it was "
+               L"being recycled; the replacement went to the Recycle Bin%s",
+               settings.logDetails ? (L": " + record.path).c_str() : L"");
+        return AuditOutcome::Kept;
+    }
+    return AuditOutcome::Recycled;
 }
 
 // Streaming comparison avoids retaining screenshot bytes in the cache. Both
@@ -2264,9 +2274,10 @@ static void ProcessOne(CaptureRecord record) {
     ULONGLONG generation;
     Settings settings = SnapshotSettings(&generation);
     if (record.generation != generation && record.action == -1 && !record.prompted &&
-        !record.session && IsDirectChildOf(record.path, settings.folder)) {
+        IsDirectChildOf(record.path, settings.folder)) {
         // Nothing has been shown, copied or renamed. Preserve the existing
         // update behavior: apply the new settings to this unhandled capture.
+        // Session captures carry over too, since they are never deleted.
         record.generation = generation;
     }
     if (record.generation != generation || !IsDirectChildOf(record.path, settings.folder) ||
@@ -2610,7 +2621,8 @@ static constexpr UINT kSessionPreviewReady = WM_APP + 21;
 static constexpr UINT kSessionExportFinished = WM_APP + 22;
 static constexpr UINT kTrayMessage = WM_APP + 23;
 enum { SESSION_LIST = 2001, SESSION_CAPTION, SESSION_UP, SESSION_DOWN,
-       SESSION_EXPORT, SESSION_FINISH, SESSION_START, SESSION_CLOSE };
+       SESSION_EXPORT, SESSION_FINISH, SESSION_START, SESSION_CLOSE,
+       SESSION_CAPTION_LABEL, SESSION_PREVIEW, SESSION_STATUS };
 
 static void SessionCaptureFinished(ULONGLONG session) {
     EnterCriticalSection(&g_lock);
@@ -2990,7 +3002,7 @@ static void LayoutSession(HWND window) {
     else move(g_sessionPreview, 2*margin+listW, top, width-3*margin-listW, bottom-top);
     ListView_SetColumnWidth(g_sessionList, 0, px(64));
     ListView_SetColumnWidth(g_sessionList, 1, std::max(px(100),listW-px(90)));
-    move(GetDlgItem(window, 2090), margin, bottom+gap, px(70), px(24));
+    move(GetDlgItem(window, SESSION_CAPTION_LABEL), margin, bottom+gap, px(70), px(24));
     move(g_captionEdit, margin+px(76), bottom+gap, width-2*margin-px(76), px(26));
     move(GetDlgItem(window, SESSION_UP), margin, bottom+px(40), px(95), buttonH);
     move(GetDlgItem(window, SESSION_DOWN), margin+px(103), bottom+px(40), px(105), buttonH);
@@ -3108,15 +3120,15 @@ static LRESULT CALLBACK SessionWindowProc(HWND window, UINT message, WPARAM wp, 
         LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=(PWSTR)L"Include";column.cx=64;
         ListView_InsertColumn(g_sessionList,0,&column);column.pszText=(PWSTR)L"Caption";column.cx=320;
         ListView_InsertColumn(g_sessionList,1,&column);
-        g_sessionPreview=control(L"SnapSentryPreview",L"Contact sheet",0,2091,WS_EX_CLIENTEDGE);
-        control(L"STATIC",L"&Caption",0,2090);
+        g_sessionPreview=control(L"SnapSentryPreview",L"Contact sheet",0,SESSION_PREVIEW,WS_EX_CLIENTEDGE);
+        control(L"STATIC",L"&Caption",0,SESSION_CAPTION_LABEL);
         g_captionEdit=control(L"EDIT",L"",WS_TABSTOP|ES_AUTOHSCROLL,SESSION_CAPTION,WS_EX_CLIENTEDGE);
         SendMessageW(g_captionEdit,EM_SETLIMITTEXT,240,0);
         control(L"BUTTON",L"Move &up",WS_TABSTOP,SESSION_UP);
         control(L"BUTTON",L"Move &down",WS_TABSTOP,SESSION_DOWN);
         control(L"BUTTON",L"&Export packet...",WS_TABSTOP|BS_DEFPUSHBUTTON,SESSION_EXPORT);
         control(L"BUTTON",L"Close",WS_TABSTOP,SESSION_CLOSE);
-        g_sessionStatus=control(L"STATIC",L"",SS_LEFT,2092);
+        g_sessionStatus=control(L"STATIC",L"",SS_LEFT,SESSION_STATUS);
         UpdateSessionFont(window);
         return 0;
     }
@@ -3312,10 +3324,18 @@ static DWORD WINAPI PromptThread(LPVOID) {
         0,0,0,0,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
     g_promptWindow.store(window);
     HANDLE events[] = {g_stopEvent, g_promptEvent};
+    // The loop wakes for every batch of window messages (tray mouse moves,
+    // review window input, COM), so registration and the hotkey are synced only
+    // when the settings change. TaskbarCreated re-adds the tray icon by itself.
+    ULONGLONG syncedGeneration = 0;
     while (!WaitStop(0)) {
-        Settings settings = SnapshotSettings();
-        SyncToastRegistration(settings.popup, false);
-        SyncSessionControls(settings);
+        ULONGLONG generation;
+        Settings settings = SnapshotSettings(&generation);
+        if (generation != syncedGeneration) {
+            syncedGeneration = generation;
+            SyncToastRegistration(settings.popup, false);
+            SyncSessionControls(settings);
+        }
         CaptureRecord record;
         bool pending = false;
         EnterCriticalSection(&g_lock);
@@ -3325,6 +3345,8 @@ static DWORD WINAPI PromptThread(LPVOID) {
         LeaveCriticalSection(&g_lock);
         if (pending) {
             if (record.generation != g_generation.load()) continue;
+            // Retry a registration that failed earlier before each prompt.
+            SyncToastRegistration(settings.popup, false);
             record.action = settings.popup ? ChooseAction(record.path, settings, record.generation) : ACTION_KEEP;
             EnterCriticalSection(&g_lock);
             const bool accepted = record.generation == g_generation.load() &&
@@ -3408,7 +3430,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         if (result == RPC_S_CALLPENDING) continue;
         if (FAILED(result) || index == 0) break;
     }
-    // No staged operation survives its function. Pending jobs never acquire a
+    // No cleanup is left half done here. Pending jobs never acquire a
     // destructive handle until they run, so dropping them on unload keeps files.
     g_pendingCleanup.clear();
     g_retryCaptures.clear();
@@ -3469,7 +3491,6 @@ static std::wstring JoinChild(const std::wstring& dir, const std::wstring& name)
 
 static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     if (!IsSafeChildName(name) || !IsSupportedImage(name)) return;
-    if (name.size() >= 12 && CompareStringOrdinal(name.c_str(), 12, L".snapsentry-", 12, TRUE) == CSTR_EQUAL) return;
     CaptureRecord record;
     record.path = JoinChild(folder, name);
     if (!JustCreated(record.path)) return;
@@ -3610,9 +3631,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
                 break;  // Re-open the directory.
             }
 
-            g_watchArmed.store(true);
             DWORD w = WaitForMultipleObjects(3, readyWaits, FALSE, INFINITE);
-            g_watchArmed.store(false);
             if (w == WAIT_OBJECT_0) {  // Stop.
                 CancelIoEx(dir, &ov);
                 GetOverlappedResult(dir, &ov, &bytes, TRUE);
