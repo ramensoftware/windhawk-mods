@@ -14,6 +14,8 @@
 /*
 # Alt.Binz Dark Mode
 
+![Before and after: the light blue Alt.Binz versus the dark one](https://raw.githubusercontent.com/MrSmith2017/altbinz-dark-mode/main/altbinz-dark-mode.png)
+
 Alt.Binz draws its whole user interface from a light blue skin. This mod
 re-colors everything that is drawn with GDI: brushes, pens, text colors, system
 colors and the opaque skin bitmaps. Common dialogs and shell menus keep
@@ -40,16 +42,17 @@ default blue.
 
 ## Appearance
 
-The three lightness and saturation values are applied when Alt.Binz is
-restarted:
+These values are applied when Alt.Binz is restarted:
 
 * **Background lightness**: how dark the lists and dark areas are (percent).
-* **Text lightness** and **Text color**: how bright text and lines are, and an optional tint for them.
+* **Text lightness**: how bright text and lines are (percent). Ignored when a text color is set.
+* **Text color**: an optional color for text and lines.
 * **List background color**: an optional color for the large list areas.
-* **Column header color**: an optional color for the header bars of the lists.
 * **Saturation**: how colorful the blue skin is (percent).
 
-Everything else is applied live.
+The **column header color** (the header bars of the lists) and everything else is
+applied live. If you disable the mod, restart Alt.Binz to get the original look
+back completely.
 */
 // ==/WindhawkModReadme==
 
@@ -72,7 +75,7 @@ Everything else is applied live.
   - balance: 50
     $name: Balance
     $description: 0 to 100. 50 is the middle, higher gives the end color more room, lower the start color.
-  - angle: "90"
+  - angle: 90
     $name: Angle
     $description: In degrees. 0 = left to right, 90 = top to bottom, 180 = right to left, 270 = bottom to top.
   $name: Surface gradient
@@ -95,7 +98,7 @@ Everything else is applied live.
     $description: In percent. Restart Alt.Binz to apply. 5 is almost black, 20 is dark gray.
   - textLightness: 92
     $name: Text lightness
-    $description: In percent. Restart Alt.Binz to apply.
+    $description: In percent. Ignored when a text color is set. Restart Alt.Binz to apply.
   - textColor: ""
     $name: Text color
     $description: Hex color for text and lines, for example E8EEF8. Leave empty for the neutral light gray. Restart Alt.Binz to apply.
@@ -107,7 +110,7 @@ Everything else is applied live.
     $description: Hex color for the header bars of the lists (Subject, Size, Action, Description ...), for example 2F5A96. Leave empty for the default blue.
   - saturation: 85
     $name: Saturation
-    $description: In percent. 1 is almost gray, 100 keeps the colors of the original skin. Restart Alt.Binz to apply.
+    $description: In percent. 1 is almost gray, 100 keeps the colors of the original skin, up to 200 is more colorful. Restart Alt.Binz to apply.
   - keepSetupTreeDark: false
     $name: Keep the tree in Setup dark gray
     $description: By default the tree on the left of the Setup window uses the color of the surface.
@@ -121,7 +124,7 @@ Everything else is applied live.
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include <map>
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 
@@ -142,10 +145,8 @@ struct Settings {
     float listHue, listSat;
     bool keepSetupTreeDark;
     bool progressOn;
-    float progressHue, progressSat;
     bool progressGradient;
     bool progressHorizontal;
-    float progressHue2, progressSat2;
     COLORREF progressC1, progressC2;
     float progressL1;
     float listL;
@@ -153,7 +154,7 @@ struct Settings {
     COLORREF headerColor;
 };
 static Settings g_cfg = {0.11f, 0.92f, 0.85f, false, RGB(0x2F, 0x5A, 0x96), RGB(0x15, 0x22, 0x38), 90, 0.5f, false, 0.0f, 0.0f, false, 0.0f, 0.0f,
-                         false, false, 0.0f, 0.0f, false, false, 0.0f, 0.0f, 0, 0, 0.0f, 0.0f, false, 0};
+                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0};
 
 // ---- color mapping ----------------------------------------------------------
 
@@ -230,7 +231,6 @@ static bool g_csReady = false;
 struct BmpEntry {
     int state;                    // 1 = transformed, 2 = skip, 3 = dirty (drawn into)
     void* bits;
-    size_t size;
     std::vector<uint8_t> backup;  // original pixels, to restore on unload
 };
 static std::unordered_map<HBITMAP, BmpEntry>* g_bmps;
@@ -279,14 +279,10 @@ static int CallerKind(void* ret) {
                                              L"win32u.dll", L"uxtheme.dll", L"gdiplus.dll", L"msimg32.dll",
                                              L"ntdll.dll", L"kernelbase.dll"};
     int kind = 0;
-    if (_wcsnicmp(base, L"local@", 6) == 0) {
-        kind = 1;  // this mod itself
-    } else {
-        for (const wchar_t* name : kSystem) {
-            if (_wcsicmp(base, name) == 0) {
-                kind = 2;
-                break;
-            }
+    for (const wchar_t* name : kSystem) {
+        if (_wcsicmp(base, name) == 0) {
+            kind = 2;
+            break;
         }
     }
     EnterCriticalSection(&g_cs);
@@ -414,7 +410,6 @@ static void PrepareHbm(HBITMAP hbm, bool hasAlphaBlend = false) {
         bool alpha = ds.dsBm.bmBitsPixel == 32 && (hasAlphaBlend || HasRealAlpha(bits, w, h, stride));
         if (!alpha && size > 0 && size < (64u << 20)) {
             e.bits = bits;
-            e.size = size;
             e.backup.assign(bits, bits + size);
             MapPixels(bits, w, h, stride, ds.dsBm.bmBitsPixel);
             e.state = 1;
@@ -587,10 +582,13 @@ static DWORD WINAPI GetSysColor_hook(int index) {
     return MapColor(c);
 }
 
+typedef HBRUSH(WINAPI* CreateSolidBrush_t)(COLORREF);
+static CreateSolidBrush_t CreateSolidBrush_orig;
+
 static HBRUSH MappedSysBrush(int index) {
     HBRUSH b = g_sysBrushes[index];
     if (!b) {
-        b = CreateSolidBrush(MapColor(GetSysColor_orig(index)));
+        b = CreateSolidBrush_orig(MapColor(GetSysColor_orig(index)));
         g_sysBrushes[index] = b;
     }
     return b;
@@ -605,8 +603,6 @@ static HBRUSH WINAPI GetSysColorBrush_hook(int index) {
     return MappedSysBrush(index);
 }
 
-typedef HBRUSH(WINAPI* CreateSolidBrush_t)(COLORREF);
-static CreateSolidBrush_t CreateSolidBrush_orig;
 // color of the progress fill at gradient position t (0..1) with the shading (lightness) l of the original
 static COLORREF ProgressColor(float t, float l) {
     // blend the two colors in RGB (a hue blend would run through other colors, especially to white),
@@ -624,14 +620,13 @@ static COLORREF ProgressColor(float t, float l) {
     return RGB(r8, g8, b8);
 }
 
-static const COLORREF kOriginalSkinColor = RGB(187, 206, 230);
 // true for the brush that has the (re-colored) light blue of the skin
 static bool IsSkinColorBrush(HBRUSH br) {
     LOGBRUSH lb;
     if (GetObjectW(br, sizeof(lb), &lb) != sizeof(lb) || lb.lbStyle != BS_SOLID) {
         return false;
     }
-    uint8_t r = GetRValue(kOriginalSkinColor), g = GetGValue(kOriginalSkinColor), b = GetBValue(kOriginalSkinColor);
+    uint8_t r = GetRValue(kOriginalSkin), g = GetGValue(kOriginalSkin), b = GetBValue(kOriginalSkin);
     MapRGB(r, g, b);
     return abs((int)GetRValue(lb.lbColor) - r) <= 12 && abs((int)GetGValue(lb.lbColor) - g) <= 12 &&
            abs((int)GetBValue(lb.lbColor) - b) <= 12;
@@ -1072,11 +1067,13 @@ static BOOL WINAPI GdiAlphaBlend_hook(HDC d, int x, int y, int w, int h, HDC s, 
 }
 
 // Copies the pixels of a DIB that is passed to GDI as raw memory, re-colors the copy.
-// ignoreAlpha: for calls that draw only the color channels (StretchDIBits, SetDIBitsToDevice)
-static bool MapDibCopy(const void* bits, const BITMAPINFO* bmi, UINT usage, std::vector<uint8_t>* out, UINT maxLines = 0,
-                       bool ignoreAlpha = false) {
-    if (!bits || !bmi || usage != DIB_RGB_COLORS || bmi->bmiHeader.biCompression != BI_RGB ||
-        (bmi->bmiHeader.biBitCount != 24 && bmi->bmiHeader.biBitCount != 32) || bmi->bmiHeader.biHeight == 0) {
+static bool MapDibCopy(const void* bits, const BITMAPINFO* bmi, UINT usage, std::vector<uint8_t>* out, UINT maxLines = 0) {
+    // the header is the caller's input: only the full BITMAPINFOHEADER is understood, sizes are bounded
+    if (!bits || !bmi || usage != DIB_RGB_COLORS || bmi->bmiHeader.biSize < sizeof(BITMAPINFOHEADER) ||
+        bmi->bmiHeader.biCompression != BI_RGB ||
+        (bmi->bmiHeader.biBitCount != 24 && bmi->bmiHeader.biBitCount != 32) || bmi->bmiHeader.biHeight == 0 ||
+        bmi->bmiHeader.biWidth <= 0 || bmi->bmiHeader.biWidth > 16384 || bmi->bmiHeader.biHeight == INT32_MIN ||
+        abs(bmi->bmiHeader.biHeight) > 16384) {
         return false;
     }
     int w = bmi->bmiHeader.biWidth, h = abs(bmi->bmiHeader.biHeight), bpp = bmi->bmiHeader.biBitCount;
@@ -1089,7 +1086,7 @@ static bool MapDibCopy(const void* bits, const BITMAPINFO* bmi, UINT usage, std:
         return false;
     }
     out->assign((const uint8_t*)bits, (const uint8_t*)bits + size);
-    if (!ignoreAlpha && bpp == 32 && HasRealAlpha(out->data(), w, h, stride)) {
+    if (bpp == 32 && HasRealAlpha(out->data(), w, h, stride)) {
         return false;
     }
     MapPixels(out->data(), w, h, stride, bpp);
@@ -1124,7 +1121,16 @@ static SetDIBits_t SetDIBits_orig;
 static int WINAPI SetDIBits_hook(HDC hdc, HBITMAP hbm, UINT start, UINT lines, const void* bits, const BITMAPINFO* bmi, UINT usage) {
     std::vector<uint8_t> copy;
     bool mapped = ShouldMap(__builtin_return_address(0), nullptr) && MapDibCopy(bits, bmi, usage, &copy, lines);
-    return SetDIBits_orig(hdc, hbm, start, lines, mapped ? copy.data() : bits, bmi, usage);
+    int res = SetDIBits_orig(hdc, hbm, start, lines, mapped ? copy.data() : bits, bmi, usage);
+    if (mapped && hbm) {
+        // the bitmap now holds re-colored pixels: it must not be re-colored again when it is used as a source
+        EnterCriticalSection(&g_cs);
+        BmpEntry e = {};
+        e.state = 2;
+        (*g_bmps)[hbm] = std::move(e);
+        LeaveCriticalSection(&g_cs);
+    }
+    return res;
 }
 
 typedef HBITMAP(WINAPI* CreateDIBitmap_t)(HDC, const BITMAPINFOHEADER*, DWORD, const void*, const BITMAPINFO*, UINT);
@@ -1137,9 +1143,19 @@ static HBITMAP WINAPI CreateDIBitmap_hook(HDC hdc, const BITMAPINFOHEADER* hdr, 
 
 typedef BOOL(WINAPI* EndPaint_t)(HWND, const PAINTSTRUCT*);
 static EndPaint_t EndPaint_orig;
+static void ForgetDcColors(HDC dc) {
+    EnterCriticalSection(&g_cs);
+    g_textColors->erase(dc);
+    g_bkColors->erase(dc);
+    LeaveCriticalSection(&g_cs);
+}
+
 static BOOL WINAPI EndPaint_hook(HWND wnd, const PAINTSTRUCT* ps) {
     if (ps && ps->hdc && WindowClassIs(wnd, L"TbsSkinStatusBar")) {
         FixStatusGlyph(ps->hdc);
+    }
+    if (ps && ps->hdc) {
+        ForgetDcColors(ps->hdc);  // window DCs are released, not deleted, and reused for other windows
     }
     return EndPaint_orig(wnd, ps);
 }
@@ -1149,6 +1165,9 @@ static ReleaseDC_t ReleaseDC_orig;
 static int WINAPI ReleaseDC_hook(HWND wnd, HDC dc) {
     if (dc && WindowClassIs(wnd, L"TbsSkinStatusBar")) {
         FixStatusGlyph(dc);
+    }
+    if (dc) {
+        ForgetDcColors(dc);
     }
     return ReleaseDC_orig(wnd, dc);
 }
@@ -1283,6 +1302,29 @@ static HWND WINAPI CreateWindowExA_hook(DWORD ex, LPCSTR cls, LPCSTR name, DWORD
     return wnd;
 }
 
+static void ResetDarkTheme(HWND hWnd) {
+    wchar_t cls[64];
+    if (hWnd && IsAppWindow(hWnd) && GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
+        (NeedsDarkTheme(cls) || (GetWindowLongW(hWnd, GWL_STYLE) & (WS_HSCROLL | WS_VSCROLL)))) {
+        SetWindowTheme(hWnd, nullptr, nullptr);
+    }
+}
+
+static BOOL CALLBACK ResetDarkThemeEnum(HWND hWnd, LPARAM) {
+    ResetDarkTheme(hWnd);
+    return TRUE;
+}
+
+static BOOL CALLBACK ResetDarkThemeTopLevel(HWND hWnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        ResetDarkTheme(hWnd);
+        EnumChildWindows(hWnd, ResetDarkThemeEnum, 0);
+    }
+    return TRUE;
+}
+
 static BOOL CALLBACK ApplyDarkThemeEnum(HWND hWnd, LPARAM) {
     ApplyDarkTheme(hWnd);
     return TRUE;
@@ -1360,18 +1402,9 @@ static int GetPercentSetting(PCWSTR name, int fallback, int min, int max) {
     return (value < min || value > max) ? fallback : value;
 }
 
-static int GetAngleSetting(int fallback) {
-    PCWSTR text = Wh_GetStringSetting(L"gradient.angle");
-    int angle = fallback;
-    if (text && *text) {
-        wchar_t* end = nullptr;
-        long v = wcstol(text, &end, 10);
-        if (end != text) {
-            angle = (int)(((v % 360) + 360) % 360);
-        }
-    }
-    Wh_FreeStringSetting(text);
-    return angle;
+static int GetAngleSetting() {
+    int v = Wh_GetIntSetting(L"gradient.angle");
+    return ((v % 360) + 360) % 360;
 }
 
 static void LoadSettings() {
@@ -1402,7 +1435,7 @@ static void LoadSettings() {
     g_cfg.headerColor = hcc;
     g_cfg.satScale = GetPercentSetting(L"appearance.saturation", 85, 1, 200) / 100.0f;
     const bool gradientOn = Wh_GetIntSetting(L"gradient.enabled") != 0;
-    g_cfg.angle = GetAngleSetting(90);
+    g_cfg.angle = GetAngleSetting();
     g_cfg.balance = GetPercentSetting(L"gradient.balance", 50, 0, 100) / 100.0f;
 
     COLORREF surface = CLR_INVALID;
@@ -1432,13 +1465,9 @@ static void LoadSettings() {
     PCWSTR dir = Wh_GetStringSetting(L"progress.direction");
     g_cfg.progressHorizontal = dir && wcscmp(dir, L"leftright") == 0;
     Wh_FreeStringSetting(dir);
-    if (g_cfg.progressGradient) {
-        float l2;
-        RgbToHsl(GetRValue(pc2) / 255.0f, GetGValue(pc2) / 255.0f, GetBValue(pc2) / 255.0f, &g_cfg.progressHue2, &g_cfg.progressSat2, &l2);
-    }
     if (g_cfg.progressOn) {
-        float l;
-        RgbToHsl(GetRValue(pc) / 255.0f, GetGValue(pc) / 255.0f, GetBValue(pc) / 255.0f, &g_cfg.progressHue, &g_cfg.progressSat, &l);
+        float h, sat, l;
+        RgbToHsl(GetRValue(pc) / 255.0f, GetGValue(pc) / 255.0f, GetBValue(pc) / 255.0f, &h, &sat, &l);
         g_cfg.progressC1 = pc;
         g_cfg.progressC2 = g_cfg.progressGradient ? pc2 : pc;
         g_cfg.progressL1 = l;
@@ -1458,7 +1487,11 @@ static void RestoreBitmaps() {
             }
         }
     }
-    g_bmps->clear();
+    // only the re-colored ones are forgotten (they are re-colored again on their next use); the
+    // "drawn into" and "skip" entries stay, otherwise composed buffers would be re-colored
+    for (auto it = g_bmps->begin(); it != g_bmps->end();) {
+        it = it->second.state == 1 ? g_bmps->erase(it) : std::next(it);
+    }
     LeaveCriticalSection(&g_cs);
 }
 
@@ -1478,6 +1511,17 @@ static DWORD WINAPI LateRepaint(LPVOID) {
     Sleep(250);
     EnumWindows(RepaintWindow, 0);
     return 0;
+}
+
+// Some controls repaint from cached buffers: paint once more a moment later.
+static void StartLateRepaint() {
+    if (g_lateRepaint) {
+        if (WaitForSingleObject(g_lateRepaint, 0) != WAIT_OBJECT_0) {
+            return;  // the previous one is still pending
+        }
+        CloseHandle(g_lateRepaint);
+    }
+    g_lateRepaint = CreateThread(nullptr, 0, LateRepaint, nullptr, 0, nullptr);
 }
 
 #define HOOK(module, name)                                                                              \
@@ -1549,12 +1593,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     EnumWindows(ApplyDarkThemeTopLevel, 0);
     EnumWindows(RepaintWindow, 0);
-    // some controls repaint from cached buffers: paint once more a moment later
-    if (g_lateRepaint) {
-        WaitForSingleObject(g_lateRepaint, 1000);
-        CloseHandle(g_lateRepaint);
-    }
-    g_lateRepaint = CreateThread(nullptr, 0, LateRepaint, nullptr, 0, nullptr);
+    StartLateRepaint();
 }
 
 void Wh_ModSettingsChanged() {
@@ -1564,15 +1603,18 @@ void Wh_ModSettingsChanged() {
         g_sysBrushes[i] = nullptr;  // rebuilt on demand (the old brushes stay alive: they may still be selected)
     }
     EnumWindows(RepaintWindow, 0);
+    StartLateRepaint();
 }
 
 void Wh_ModUninit() {
     if (g_lateRepaint) {
-        WaitForSingleObject(g_lateRepaint, 1000);
+        // the thread only sleeps and repaints; it must be gone before the DLL is unloaded
+        WaitForSingleObject(g_lateRepaint, INFINITE);
         CloseHandle(g_lateRepaint);
         g_lateRepaint = nullptr;
     }
     SetAppMode(0);
+    EnumWindows(ResetDarkThemeTopLevel, 0);
     RestoreBitmaps();
     EnumWindows(RepaintWindow, 0);
 }
