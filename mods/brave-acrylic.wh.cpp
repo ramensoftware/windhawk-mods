@@ -2,14 +2,14 @@
 // @id              brave-acrylic
 // @name            Brave Acrylic
 // @description     Alpha: Native Brave background transparency; requires Translucent Windows
-// @version         3.3
+// @version         3.4
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @homepage        https://github.com/bardelyne/brave-acrylic
 // @license         MIT
 // @architecture    x86-64
 // @include         brave.exe
-// @compilerOptions -lshell32 -luser32 -lwinhttp
+// @compilerOptions -lshell32 -luser32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -50,8 +50,8 @@ No theme-color setup is required. Old saved color-list and website-code settings
 | **Vertical tabs background** | On | Reveal the backdrop behind the vertical tab area and browser frame. |
 | **Toolbar** | On | Clear the toolbar, bookmarks bar, and unfocused address-field backgrounds. Focused address fields keep their native theme. |
 | **Webpage background** | On | Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS, and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS. |
-| **Hide duplicate Windows buttons** | On | Hide the Windows caption-button layer underneath Brave's own controls. |
-| **Download compatibility data after Brave updates** | On | Download a small compatibility file only when the exact Brave build has no valid local data. Turn off to prevent these downloads. |
+| **Hide duplicate Windows buttons** | Off | Optional workaround that removes the real Windows system-menu style. It can affect Alt+Space, taskbar menus and other window tools. Prefer Brave's **Use compact mode** option in Appearance. |
+| **Use Windhawk online symbol cache** | On | Let Windhawk fetch a small named-symbol cache for an unknown exact build. Turn off and re-enable the mod to use only built-in or locally cached data. |
 
 Some backing views and compositor properties are created with the window, so changing Vertical tabs background or Toolbar may require reopening Brave. Enabling Webpage background applies when a tab is selected, without refreshing the page. Reopening Brave after disabling it restores existing renderer defaults. The caption-button option applies immediately.
 
@@ -79,21 +79,25 @@ Brave's existing transparent-host path enables its compositor to preserve transp
 
 The webpage option clears the native backing during content-view updates and sets Chromium's persistent page-base color when a tab is attached. That value is also used by future renderers, so switching or restoring tabs does not bring the default white background back. Explicit website backgrounds remain visible unless a website-styling extension changes them.
 
-The map contains **13 native functions**, of which **7 are private hooks**. The implementation uses no sampled colors, private object-member offsets, guessed screen rectangles, screenshot polling, extra backing windows, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies one backdrop. Acrylic can turn gray when inactive; choose a suitable blur mode in Translucent Windows if you prefer a persistent effect.
+The native path uses **13 functions**, of which **7 are private hooks**. The implementation uses no sampled colors, private object-member offsets, guessed screen rectangles, screenshot polling, extra backing windows, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies one backdrop. Acrylic can turn gray when inactive; choose a suitable blur mode in Translucent Windows if you prefer a persistent effect.
 
-## Updates and offline use
+## Symbol resolution, privacy and updates
 
-Every launch validates the loaded DLL's identity, architecture, function boundaries, and fingerprints. Direct compiler jump stubs can be resolved for any slot, retaining strict validation of their target. Built-in or cached data works offline. Data for another build or older map format is rejected.
+Brave Acrylic uses Windhawk's supported `HookSymbols` / `WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl` mechanism. A reviewed built-in table covers the reference build without network access. Other builds use Windhawk's local symbol cache first, then optionally a small text file containing the thirteen full C++ prototypes and their locations. Remote PDB downloads are disabled, including when a cache file is missing. There is no custom downloader or 30-minute retry thread.
 
-For an unknown build, the optional worker requests a **1,080-byte** file from this repository's `compatibility-v6` branch. Missing or invalid data is retried **every 30 minutes** while Brave remains running and downloads are enabled, stopping after a valid file is cached. The worker never changes live hooks; restart Brave normally to use newly downloaded data. Known builds make no compatibility request. The mod downloads no PDBs, executable code, or mod updates.
+The cache is published on this repository's [`symbol-cache` branch](https://github.com/bardelyne/brave-acrylic/tree/symbol-cache), under `brave-acrylic/pdb_<GUID-and-age>.txt`. It is about **1 KB** for the reference build. It is hosted by this project's author, not the official Windhawk cache repository. The publisher is trusted: local function-boundary, leaf-layout, jump-target and overlap checks are safeguards, not cryptographic proof of function identity. Native ABI or rendering changes can still require a mod update.
 
-The download setting is an opt-out for users who want no compatibility network requests. Leave it on for automatic recovery when new exact-build data is available; turn it off to use only built-in or already cached data. It cannot adapt to incompatible native ABI changes.
+**No telemetry or uploads:** the mod sends no browsing history, page content, settings, account details or analytics. Windhawk makes the cache download request; the server necessarily sees the requester's IP address and the build-specific URL. Turn **Use Windhawk online symbol cache** off and re-enable the mod for offline-only resolution. Built-in and already cached symbols continue to work offline. Existing requests cannot be withdrawn by changing a setting.
 
-The repository workflow checks official stable releases **every two hours**. It downloads the browser and symbols only for new or changed assets or a changed compatibility contract. Cosmetic documentation changes skip heavy downloads. GitHub can delay scheduled runs. Workflow changes take effect when pushed to `main`; older client data branches remain separate.
+The workflow checks official stable releases **every two hours**. It downloads Brave and its large symbols only on the GitHub runner, and only when release assets or the native compatibility contract change. It verifies the DLL/PDB identity and exact names before publishing the small text cache. GitHub can delay scheduled runs. If data is unavailable, transparency remains off; re-enable the mod or reopen Brave normally after data becomes available. Older binary-map branches are retained only for older clients.
+
+## Duplicate corner buttons
+
+If two sets of minimize/maximize/close buttons appear, first enable **Use compact mode** in Brave **Settings → Appearance**. The optional **Hide duplicate Windows buttons** workaround is off on a fresh install because it removes the window's actual `WS_SYSMENU` style. Windows system menus, taskbar interactions, accessibility tools or other window managers may be affected. Previously saved preferences are preserved. Disabling the option or unloading the mod restores its recorded style changes.
 
 ## Troubleshooting
 
-Reopen Brave normally after installation or native-area changes. Enable Windhawk debug logging to check the exact build key, **13/13 native functions**, or a compatibility-cache message. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.
+Reopen Brave normally after installation or native-area changes. Enable Windhawk debug logging to check **13/13 native functions** or a Windhawk symbol-cache message. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.
 
 For reports, include Windows/Brave versions, window type, enabled areas, backdrop configuration, and reproduction steps. See the [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md), [compatibility data](https://github.com/bardelyne/brave-acrylic/blob/main/docs/compatibility.md), [webview investigation](https://github.com/bardelyne/brave-acrylic/blob/main/docs/webview-background.md), and [changelog](https://github.com/bardelyne/brave-acrylic/blob/main/CHANGELOG.md).
 */
@@ -109,20 +113,22 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
 - transparentPageBackground: true
   $name: Webpage background
   $description: Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS.
-- hideNativeCaptionButtons: true
+- hideNativeCaptionButtons: false
   $name: Hide duplicate Windows buttons
-  $description: Keep Brave's own buttons; hide the Windows button layer underneath. Applies immediately.
-- downloadCompatibilityData: true
-  $name: Download compatibility data after Brave updates
-  $description: Download a small compatibility file only when a Brave update has no valid local data. Cached builds work offline. Turn off to prevent these downloads.
+  $description: "Optional workaround: removes the real Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Prefer Brave Appearance > Use compact mode. Applies immediately."
+- useOnlineSymbolCache: true
+  $name: Use Windhawk online symbol cache
+  $description: Let Windhawk download a small exact-build symbol cache when local data is missing. No telemetry, uploads or remote PDB downloads. The server sees your IP address and the build-specific URL. Turn off and re-enable the mod for offline-only resolution.
 */
 // ==/WindhawkModSettings==
 #include <windhawk_api.h>
-#if !defined(__x86_64__) && !defined(_M_X64)
-BOOL Wh_ModInit(){Wh_Log(L"Brave Acrylic requires x64 Brave.");return FALSE;}
+#ifndef _M_X64
+BOOL Wh_ModInit() {
+    Wh_Log(L"Brave Acrylic requires x64 Brave.");
+    return FALSE;
+}
 #else
 #include <shellapi.h>
-#include <winhttp.h>
 #include <atomic>
 #include <cstdio>
 #include <cwchar>
@@ -225,12 +231,9 @@ inline void* ConstructSidebar(Context& context, void* self, void* browser,
 static BraveBackground::Context s_background;
 static auto& s_transparencyReady = s_background.ready;
 static constexpr unsigned kFunctionSlots = 13;
-static std::atomic<bool> s_chromeAttempted{false}, s_downloadCompatibility{true};
+static std::atomic<bool> s_chromeAttempted{false}, s_useOnlineSymbolCache{true};
 static SRWLOCK s_initLock = SRWLOCK_INIT;
 static bool s_stopping = false, s_activateAfterInit = false, s_isBrowserProcess = false;
-static bool s_afterInit = false, s_downloadAttempted = false;
-static HANDLE s_downloadThread = nullptr, s_downloadStop = nullptr;
-static HMODULE s_recoveryModule = nullptr;
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t pOrigLoadLibraryExW = nullptr;
 
@@ -297,11 +300,15 @@ static bool AddressShouldClear(void* view) {
 }
 
 static bool HasCompleteTransparencyPath() {
- return s_background.Complete()&&s_locationFocus&&s_viewFocus&&s_originalTheme&&s_originalReady&&
-  s_originalLayerColor&&s_setPageBase&&s_originalAttachContents;
+    return s_background.Complete() && s_locationFocus && s_viewFocus &&
+        s_originalTheme && s_originalReady && s_originalLayerColor &&
+        s_setPageBase && s_originalAttachContents;
 }
 static void ViewOnPaintBackground_Hook(void* view, void* canvas) {
-    if(canvas&&AddressShouldClear(view)){s_background.clear(canvas,0,0);return;}
+    if (canvas && AddressShouldClear(view)) {
+        s_background.clear(canvas, 0, 0);
+        return;
+    }
     BraveBackground::PaintBackground(s_background, view, canvas);
 }
 static bool WindowContentsTransparent_Hook(const void* host) {
@@ -317,7 +324,7 @@ static void* SidebarConstructor_Hook(void* self, void* browser, void* host) {
 // state; DWM sees the real style without the native buttons.
 static constexpr wchar_t kNativeCaptionProperty[] =
     L"Windhawk.BraveAcrylic.NativeCaption";
-static std::atomic<bool> s_hideNativeCaptionButtons{true};
+static std::atomic<bool> s_hideNativeCaptionButtons{false};
 static std::atomic<bool> s_captionFixActive{false};
 static std::atomic<bool> s_captionStopping{false};
 static bool s_captionHooksInstalled = false;
@@ -352,7 +359,7 @@ static void RefreshNativeCaption(HWND window) {
 static void RestoreNativeCaption(HWND window) {
     if (!GetPropW(window, kNativeCaptionProperty)) return;
     RemovePropW(window, kNativeCaptionProperty);
-    // Use the public APIs here: Windhawk has removed the hooks by ModUninit.
+    // Restore before hooks are removed; the ownership property is already gone.
     const auto style = GetWindowLongPtrW(window, GWL_STYLE);
     SetWindowLongPtrW(window, GWL_STYLE, style | WS_SYSMENU);
     RefreshNativeCaption(window);
@@ -472,11 +479,11 @@ static void LoadModSettings() {
     unsigned areas = 0;
     if (Wh_GetIntSetting(L"transparentBackground")) areas |= BraveBackground::Background;
     if (Wh_GetIntSetting(L"transparentToolbar")) areas |= BraveBackground::Toolbar;
-    if(Wh_GetIntSetting(L"transparentPageBackground"))areas|=BraveBackground::Page;
+    if (Wh_GetIntSetting(L"transparentPageBackground")) areas |= BraveBackground::Page;
     s_background.areas.store(areas, std::memory_order_relaxed);
     s_hideNativeCaptionButtons.store(Wh_GetIntSetting(L"hideNativeCaptionButtons") != 0,
                                     std::memory_order_relaxed);
-    s_downloadCompatibility.store(Wh_GetIntSetting(L"downloadCompatibilityData") != 0,
+    s_useOnlineSymbolCache.store(Wh_GetIntSetting(L"useOnlineSymbolCache") != 0,
                                   std::memory_order_release);
 }
 
@@ -572,14 +579,8 @@ struct CompatibilityMap {
     DWORD age, machine, timestamp, imageSize;
     FunctionFingerprint functions[kFunctionSlots];
 };
-struct CompatibilityCache {
-    CompatibilityMap map;
-    DWORD revision, reserved;
-    char braveVersion[64], modVersion[16];
-};
 static_assert(sizeof(FunctionFingerprint) == 80);
 static_assert(sizeof(CompatibilityMap) == 1080);
-static_assert(sizeof(CompatibilityCache) == 1168);
 struct BuildIdentity { GUID guid; DWORD age, machine, timestamp, imageSize; };
 
 static bool GetBuildIdentity(HMODULE module, BuildIdentity* identity) {
@@ -626,24 +627,17 @@ static bool GetBuildIdentity(HMODULE module, BuildIdentity* identity) {
     return true;
 }
 
-static void GetBraveVersion(HMODULE module, char* output, size_t size) {
-    if (!size) return;
-    output[0] = 0;
-    wchar_t path[MAX_PATH]{};
-    const DWORD length = GetModuleFileNameW(module, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) return;
-    wchar_t* slash = wcsrchr(path, L'\\');
-    if (!slash) return;
-    *slash = 0;
-    wchar_t* version = wcsrchr(path, L'\\');
-    if (!version) return;
-    WideCharToMultiByte(CP_UTF8, 0, version + 1, -1, output, static_cast<int>(size), nullptr, nullptr);
-}
-
-static bool FocusLeafLayout(const unsigned char* code){
- const unsigned char layout[]={0x48,0x83,0xB9,0,0,0,0,0,0x74,0x13,0x48,0x8B,0x81,0,0,0,0,0x48,0x8B,0x40,0x28,0x83,0x78,0x18,0,0x0F,0x95,0xC0,0xC3,0x31,0xC0,0xC3};
- for(unsigned i=0;i<32;++i)if(!((i>=3&&i<7)||(i>=13&&i<17))&&code[i]!=layout[i])return false;
- return true;
+static bool FocusLeafLayout(const unsigned char* code) {
+    const unsigned char layout[] = {
+        0x48, 0x83, 0xB9, 0, 0, 0, 0, 0, 0x74, 0x13, 0x48, 0x8B, 0x81,
+        0, 0, 0, 0, 0x48, 0x8B, 0x40, 0x28, 0x83, 0x78, 0x18, 0,
+        0x0F, 0x95, 0xC0, 0xC3, 0x31, 0xC0, 0xC3
+    };
+    for (unsigned i = 0; i < ARRAYSIZE(layout); ++i) {
+        const bool memberOffset = (i >= 3 && i < 7) || (i >= 13 && i < 17);
+        if (!memberOffset && code[i] != layout[i]) return false;
+    }
+    return true;
 }
 static bool LeafOutsideUnwind(HMODULE module, size_t rva, size_t length) {
     const RUNTIME_FUNCTION* table;
@@ -679,29 +673,44 @@ static bool ValidateCompatibilityMap(HMODULE module, const CompatibilityMap& map
     for (unsigned i = 0; i < kFunctionSlots; ++i) {
         const auto& f = map.functions[i];
         const DWORD sourceLength = f.kind == 3 ? 5 : f.length;
-        if (!f.rva || (f.kind!=3 && f.reserved) || f.kind > 3 || f.length > 32 ||
+        if (!f.rva || (f.kind != 3 && f.reserved) || f.kind > 3 || f.length > 32 ||
             f.rva < text->VirtualAddress ||
             f.rva - text->VirtualAddress > text->Misc.VirtualSize ||
             sourceLength > text->Misc.VirtualSize - (f.rva - text->VirtualAddress)) return false;
-        const DWORD target=f.kind==3?f.reserved:f.rva;
-        if(target<text->VirtualAddress||target-text->VirtualAddress>text->Misc.VirtualSize||f.length>text->Misc.VirtualSize-(target-text->VirtualAddress))return false;
-        const unsigned char hostPrefix[]={0x48,0x83,0xB9},hostSuffix[]={0,0x74,3,0x31,0xC0,0xC3};
-        const bool shortHost=i==3&&f.length==13&&(f.kind==1||f.kind==3);
-        const bool shortFocus=i==6&&f.length==32&&(f.kind==2||(f.kind==3&&FocusLeafLayout(f.code)));
-        if(f.kind==0||f.kind==3){
-            if(shortHost){
-                if(memcmp(f.code,hostPrefix,3)||memcmp(f.code+7,hostSuffix,6)||!LeafOutsideUnwind(module,target,f.length))return false;
-            }else if(shortFocus){
-                if(!FunctionContains(module,target,f.length)&&!LeafOutsideUnwind(module,target,f.length))return false;
-            }else if(f.length<16||!FunctionContains(module,target,f.length))return false;
-            if(f.kind==3){
-                if(f.rva-text->VirtualAddress>text->Misc.VirtualSize-5||image.base[f.rva]!=0xE9||!LeafOutsideUnwind(module,f.rva,5))return false;
-                int d;memcpy(&d,image.base+f.rva+1,4);if(int64_t(f.rva)+5+d!=target)return false;
+        const DWORD target = f.kind == 3 ? f.reserved : f.rva;
+        if (target < text->VirtualAddress ||
+            target - text->VirtualAddress > text->Misc.VirtualSize ||
+            f.length > text->Misc.VirtualSize - (target - text->VirtualAddress)) return false;
+        const unsigned char hostPrefix[] = {0x48, 0x83, 0xB9};
+        const unsigned char hostSuffix[] = {0, 0x74, 3, 0x31, 0xC0, 0xC3};
+        const bool shortHost = i == 3 && f.length == 13 && (f.kind == 1 || f.kind == 3);
+        const bool shortFocus = i == 6 && f.length == 32 &&
+            (f.kind == 2 || (f.kind == 3 && FocusLeafLayout(f.code)));
+        if (f.kind == 0 || f.kind == 3) {
+            if (shortHost) {
+                if (memcmp(f.code, hostPrefix, 3) || memcmp(f.code + 7, hostSuffix, 6) ||
+                    !LeafOutsideUnwind(module, target, f.length)) return false;
+            } else if (shortFocus) {
+                if (!FunctionContains(module, target, f.length) &&
+                    !LeafOutsideUnwind(module, target, f.length)) return false;
+            } else if (f.length < 16 || !FunctionContains(module, target, f.length)) {
+                return false;
             }
-        }else if(f.kind==1){
-            const unsigned char prefix[]={0x48,0x83,0xB9},suffix[]={0,0x74,3,0x31,0xC0,0xC3};
-            if(i!=3||f.length!=13||memcmp(f.code,prefix,3)||memcmp(f.code+7,suffix,6)||!LeafOutsideUnwind(module,target,f.length))return false;
-        }else if(i!=6||f.length!=32||!FocusLeafLayout(f.code)||!LeafOutsideUnwind(module,target,f.length))return false;
+            if (f.kind == 3) {
+                if (f.rva - text->VirtualAddress > text->Misc.VirtualSize - 5 ||
+                    image.base[f.rva] != 0xE9 || !LeafOutsideUnwind(module, f.rva, 5)) return false;
+                int displacement;
+                memcpy(&displacement, image.base + f.rva + 1, sizeof(displacement));
+                if (int64_t(f.rva) + 5 + displacement != target) return false;
+            }
+        } else if (f.kind == 1) {
+            if (!shortHost || memcmp(f.code, hostPrefix, 3) ||
+                memcmp(f.code + 7, hostSuffix, 6) ||
+                !LeafOutsideUnwind(module, target, f.length)) return false;
+        } else if (!shortFocus || !FocusLeafLayout(f.code) ||
+                   !LeafOutsideUnwind(module, target, f.length)) {
+            return false;
+        }
         unsigned fixed = 0;
         for (unsigned j = 0; j < 32; ++j) {
             if (f.mask[j] != 0 && f.mask[j] != 0xFF) return false;
@@ -712,7 +721,7 @@ static bool ValidateCompatibilityMap(HMODULE module, const CompatibilityMap& map
                 ++fixed;
             }
         }
-        if (fixed < (shortHost?13u:shortFocus?32u:16u)) return false;
+        if (fixed < (shortHost ? 13u : shortFocus ? 32u : 16u)) return false;
         // A named jump stub and its body are separate protected ranges.
         // Reject overlap with either range, including the stub's own body.
         auto overlaps = [](DWORD a, DWORD n, DWORD b, DWORD m) {
@@ -730,16 +739,10 @@ static bool ValidateCompatibilityMap(HMODULE module, const CompatibilityMap& map
         }
     }
     // Never publish a partial address set on a rejected map.
-    for (unsigned i = 0; i < kFunctionSlots; ++i) rva[i]=map.functions[i].kind==3?map.functions[i].reserved:map.functions[i].rva;
+    for (unsigned i = 0; i < kFunctionSlots; ++i) {
+        rva[i] = map.functions[i].kind == 3 ? map.functions[i].reserved : map.functions[i].rva;
+    }
     return true;
-}
-static bool LoadCompatibilityCache(HMODULE module, size_t* rva) {
-    CompatibilityCache cache{};
-    return Wh_GetBinaryValue(L"compatibilityMapV6", &cache, sizeof(cache)) == sizeof(cache) &&
-        cache.revision == 1 && !cache.reserved &&
-        memchr(cache.braveVersion, 0, sizeof(cache.braveVersion)) &&
-        memchr(cache.modVersion, 0, sizeof(cache.modVersion)) &&
-        ValidateCompatibilityMap(module, cache.map, rva);
 }
 // Generated from the official Brave 1.98.60 DLL/PDB; revalidated before use.
 static constexpr unsigned char kBuiltinMap[1080] = {
@@ -813,176 +816,149 @@ static constexpr unsigned char kBuiltinMap[1080] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
-static bool FormatBuildKey(const BuildIdentity& id, wchar_t* key, size_t count) {
-    const auto& g = id.guid;
-    const int n = std::swprintf(key, count,
-        L"%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%X",
-        static_cast<unsigned>(g.Data1), static_cast<unsigned>(g.Data2), static_cast<unsigned>(g.Data3),
-        g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7],
-        static_cast<unsigned>(id.age));
-    return n > 32 && static_cast<size_t>(n) < count;
-}
+// The cache contains named symbol RVAs, not executable updates. Windhawk owns
+// HTTP, its PDB-identity cache key, local persistence, and cancellation. No
+// custom downloader, periodic retry thread, telemetry, or remote PDB fallback.
+static constexpr wchar_t kOnlineSymbolCache[] =
+    L"https://raw.githubusercontent.com/bardelyne/brave-acrylic/symbol-cache/brave-acrylic";
 
-struct InternetHandle {
-    HINTERNET value = nullptr;
-    ~InternetHandle() { if (value) WinHttpCloseHandle(value); }
-};
-static bool DownloadAllowed(HANDLE stop, ULONGLONG deadline) {
-    return s_downloadCompatibility.load(std::memory_order_acquire) &&
-           WaitForSingleObject(stop, 0) == WAIT_TIMEOUT && GetTickCount64() < deadline;
-}
-static bool SetDownloadTimeouts(HINTERNET handle, HANDLE stop, ULONGLONG deadline) {
-    if (!DownloadAllowed(stop, deadline)) return false;
-    const ULONGLONG now = GetTickCount64();
-    if (now >= deadline) return false;
-    const int remaining = static_cast<int>(deadline - now);
-    const int timeout = remaining < 2000 ? remaining : 2000;
-    return WinHttpSetTimeouts(handle, timeout, timeout, timeout, timeout) != FALSE;
-}
-static bool FetchCompatibilityMap(const BuildIdentity& id, HANDLE stop, CompatibilityMap* output) {
-    wchar_t key[48]{}, path[192]{};
-    if (!FormatBuildKey(id, key, ARRAYSIZE(key))) return false;
-    std::swprintf(path, ARRAYSIZE(path),
-        L"/bardelyne/brave-acrylic/compatibility-v6/maps/%ls.bin", key);
-    const ULONGLONG deadline = GetTickCount64() + 8000;
-    InternetHandle session{WinHttpOpen(L"BraveAcrylic/3.3", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
-    if (!session.value || !SetDownloadTimeouts(session.value, stop, deadline)) return false;
-    DWORD attempts = 2; // Permit one alternate address without an unbounded IP retry loop.
-    if (!WinHttpSetOption(session.value, WINHTTP_OPTION_CONNECT_RETRIES, &attempts, sizeof(attempts))) return false;
-    InternetHandle connection{WinHttpConnect(session.value, L"raw.githubusercontent.com", INTERNET_DEFAULT_HTTPS_PORT, 0)};
-    if (!connection.value) return false;
-    InternetHandle request{WinHttpOpenRequest(connection.value, L"GET", path, nullptr,
-        WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)};
-    if (!request.value) return false;
-    DWORD redirect = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
-    DWORD disabled = WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION;
-    if (!WinHttpSetOption(request.value, WINHTTP_OPTION_REDIRECT_POLICY, &redirect, sizeof(redirect)) ||
-        !WinHttpSetOption(request.value, WINHTTP_OPTION_DISABLE_FEATURE, &disabled, sizeof(disabled)) ||
-        !SetDownloadTimeouts(request.value, stop, deadline) ||
-        !WinHttpSendRequest(request.value, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
-        !SetDownloadTimeouts(request.value, stop, deadline) || !WinHttpReceiveResponse(request.value, nullptr)) return false;
-    DWORD status = 0, size = sizeof(status);
-    if (!WinHttpQueryHeaders(request.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-        WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX)) return false;
-    if (status != 200) {
-        Wh_Log(L"Compatibility download returned HTTP %u for this exact build", status);
-        return false;
-    }
-    DWORD advertised = 0;
-    size = sizeof(advertised);
-    if (WinHttpQueryHeaders(request.value, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
-        WINHTTP_HEADER_NAME_BY_INDEX, &advertised, &size, WINHTTP_NO_HEADER_INDEX)) {
-        if (advertised != sizeof(CompatibilityMap)) return false;
-    } else if (GetLastError() != ERROR_WINHTTP_HEADER_NOT_FOUND) return false;
-    unsigned char bytes[sizeof(CompatibilityMap) + 1]{};
-    DWORD total = 0;
-    while (total < sizeof(bytes)) {
-        DWORD received = 0;
-        if (!SetDownloadTimeouts(request.value, stop, deadline) ||
-            !WinHttpReadData(request.value, bytes + total, sizeof(bytes) - total, &received) ||
-            received > sizeof(bytes) - total) return false;
-        if (!received) {
-            if (total != sizeof(CompatibilityMap) || !DownloadAllowed(stop, deadline)) return false;
-            memcpy(output, bytes, sizeof(*output));
-            return true;
-        }
-        total += received;
-    }
-    return false;
-}
-
-static constexpr DWORD kCompatibilityRetryMs = 30 * 60 * 1000;
-
-static DWORD WINAPI CompatibilityWorker(void* argument) {
-    HMODULE module = nullptr;
-    // Acquire the loader reference outside s_initLock to avoid lock inversion
-    // with a simultaneous library load. Never read a borrowed module in a worker.
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<LPCWSTR>(argument), &module)) return 0;
-    if (module != static_cast<HMODULE>(argument)) { FreeLibrary(module); return 0; }
+static bool ValidateSymbolAddresses(HMODULE module, void* const* addresses, size_t* rva) {
     BuildIdentity id{};
-    if (GetBuildIdentity(module, &id)) {
-        while (WaitForSingleObject(s_downloadStop, 0) == WAIT_TIMEOUT) {
-            CompatibilityMap map{};
-            size_t rva[kFunctionSlots]{};
-            bool saved = false;
-            if (s_downloadCompatibility.load(std::memory_order_acquire) &&
-                FetchCompatibilityMap(id, s_downloadStop, &map) &&
-                ValidateCompatibilityMap(module, map, rva)) {
-                AcquireSRWLockExclusive(&s_initLock);
-                if (!s_stopping && s_downloadCompatibility.load(std::memory_order_acquire) &&
-                    WaitForSingleObject(s_downloadStop, 0) == WAIT_TIMEOUT) {
-                    CompatibilityCache cache{};
-                    cache.map = map;
-                    cache.revision = 1;
-                    std::snprintf(cache.modVersion, sizeof(cache.modVersion), "3.3");
-                    GetBraveVersion(module, cache.braveVersion, sizeof(cache.braveVersion));
-                    saved = Wh_SetBinaryValue(L"compatibilityMapV6", &cache, sizeof(cache)) != FALSE;
-                    if (saved) Wh_Log(L"Compatibility data validated and cached; restart or re-enable the mod to apply it");
-                    else Wh_Log(L"Could not save compatibility data; transparency stays off");
-                }
-                ReleaseSRWLockExclusive(&s_initLock);
+    ReadOnlyImage image{};
+    if (!GetBuildIdentity(module, &id) || !GetReadOnlyImage(module, &image)) return false;
+    const IMAGE_SECTION_HEADER* text = nullptr;
+    for (unsigned i = 0; i < image.count; ++i) {
+        const auto& section = image.sections[i];
+        if (!memcmp(section.Name, ".text\0\0\0", 8) &&
+            (section.Characteristics & IMAGE_SCN_MEM_EXECUTE)) {
+            if (text) return false;
+            text = &section;
+        }
+    }
+    if (!text || text->VirtualAddress > image.size ||
+        text->Misc.VirtualSize > image.size - text->VirtualAddress) return false;
+    const auto inText = [&](size_t start, size_t length) {
+        return start >= text->VirtualAddress &&
+            start - text->VirtualAddress <= text->Misc.VirtualSize &&
+            length <= text->Misc.VirtualSize - (start - text->VirtualAddress);
+    };
+    CompatibilityMap local{};
+    local.magic = 0x504D4142;
+    local.format = 6;
+    local.guid = id.guid;
+    local.age = id.age;
+    local.machine = id.machine;
+    local.timestamp = id.timestamp;
+    local.imageSize = id.imageSize;
+    for (unsigned i = 0; i < kFunctionSlots; ++i) {
+        const auto pointer = reinterpret_cast<uintptr_t>(addresses[i]);
+        const auto base = reinterpret_cast<uintptr_t>(module);
+        if (pointer < base || pointer - base >= image.size) return false;
+        const size_t entry = pointer - base;
+        if (!inText(entry, 5)) return false;
+        size_t target = entry;
+        bool thunk = false;
+        if (!FunctionContains(module, entry, 1) && image.base[entry] == 0xE9) {
+            int displacement;
+            memcpy(&displacement, image.base + entry + 1, sizeof(displacement));
+            const int64_t destination = int64_t(entry) + 5 + displacement;
+            if (destination < 0 || uint64_t(destination) >= image.size) return false;
+            target = static_cast<size_t>(destination);
+            thunk = true;
+        }
+        if (!inText(target, 32)) return false;
+        auto& f = local.functions[i];
+        f.rva = static_cast<DWORD>(entry);
+        f.length = 32;
+        f.kind = 0;
+        if (!FunctionContains(module, target, 32)) {
+            if (i == 3) {
+                f.kind = 1;
+                f.length = 13;
+            } else if (i == 6 && FocusLeafLayout(image.base + target)) {
+                f.kind = 2;
+            } else {
+                return false;
             }
-            if (saved) break;
-            if (s_downloadCompatibility.load(std::memory_order_acquire))
-                Wh_Log(L"No cached data for this exact build; retrying in 30 minutes");
-            // An idle event wait consumes no recurring paint/startup work and
-            // wakes immediately during unload. Disabled downloads stay paused.
-            if (WaitForSingleObject(s_downloadStop, kCompatibilityRetryMs) != WAIT_TIMEOUT) break;
         }
+        if (thunk) {
+            f.kind = 3;
+            f.reserved = static_cast<DWORD>(target);
+        }
+        memcpy(f.code, image.base + target, f.length);
+        memset(f.mask, 0xFF, f.length);
     }
-    FreeLibrary(module);
-    return 0;
+    // Bounds, exact unwind entries, approved leaf shapes, direct E9 thunks,
+    // and disjoint entry/body ranges are independent local safety checks.
+    // They do not authenticate names: the symbol-cache publisher is trusted.
+    return ValidateCompatibilityMap(module, local, rva);
 }
 
-// Call under s_initLock, only after Windhawk has activated the initial hooks.
-// This worker only downloads and caches data; it never changes a live paint path.
-static void StartCompatibilityDownloadLocked() {
-    if (s_stopping || !s_afterInit || s_downloadAttempted || !s_recoveryModule ||
-        !s_downloadCompatibility.load(std::memory_order_acquire)) return;
-    s_downloadStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (s_downloadStop) s_downloadThread = CreateThread(nullptr, 0, CompatibilityWorker, s_recoveryModule, 0, nullptr);
-    if (!s_downloadThread) {
-        if (s_downloadStop) CloseHandle(s_downloadStop);
-        s_downloadStop = nullptr;
-        return;
-    }
-    s_downloadAttempted = true;
-    Wh_Log(L"Checking small exact-build compatibility data in the background");
+static bool ResolveSymbolAddresses(HMODULE module, size_t* rva) {
+    void* addresses[kFunctionSlots]{};
+    // chrome.dll
+    WindhawkUtils::SYMBOL_HOOK chromeHooks[] = {
+        {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"}, &addresses[0]},
+        {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"}, &addresses[1]},
+        {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const"}, &addresses[2]},
+        {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const"}, &addresses[3]},
+        {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)"}, &addresses[4]},
+        {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)"}, &addresses[5]},
+        {{L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const"}, &addresses[6]},
+        {{L"public: virtual bool __cdecl views::View::HasFocus(void)const"}, &addresses[7]},
+        {{L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)"}, &addresses[8]},
+        {{L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)"}, &addresses[9]},
+        {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)"}, &addresses[10]},
+        {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)"}, &addresses[11]},
+        {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)"}, &addresses[12]},
+    };
+    static_assert(ARRAYSIZE(chromeHooks) == kFunctionSlots);
+    WH_HOOK_SYMBOLS_OPTIONS options{};
+    options.optionsSize = sizeof(options);
+    options.symbolServer = L""; // Never fall back to downloading a multi-GB PDB.
+    // Use Windhawk's default undecorated C++ prototypes for standard caching.
+    options.onlineCacheUrl = s_useOnlineSymbolCache.load(std::memory_order_acquire)
+        ? kOnlineSymbolCache : L"";
+    // Resolve without installing hooks. HookSymbols can return partial outputs
+    // on failure; nothing is published unless the entire set passes validation.
+    return WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options) &&
+        ValidateSymbolAddresses(module, addresses, rva);
 }
 
-static bool ResolveNativeBackground(HMODULE module){
+static bool ResolveNativeBackground(HMODULE module) {
     size_t rva[kFunctionSlots]{};
-    const bool cached=LoadCompatibilityCache(module,rva);
-    CompatibilityMap builtIn{};memcpy(&builtIn,kBuiltinMap,sizeof(builtIn));
-    if(!cached&&!ValidateCompatibilityMap(module,builtIn,rva)){
-        BuildIdentity id{};if(GetBuildIdentity(module,&id)){
-            s_recoveryModule=module;wchar_t key[48]{};FormatBuildKey(id,key,ARRAYSIZE(key));
-            Wh_Log(L"Brave Acrylic 3.3: no compatible format-6 data for build %s",key);
-        }
+    CompatibilityMap builtIn{};
+    memcpy(&builtIn, kBuiltinMap, sizeof(builtIn));
+    const bool knownBuild = ValidateCompatibilityMap(module, builtIn, rva);
+    if (!knownBuild && !ResolveSymbolAddresses(module, rva)) {
+        Wh_Log(L"Brave Acrylic %s: exact-build symbols unavailable or unsupported; transparency stays off",
+               WH_MOD_VERSION);
         return false;
     }
-    auto* base=reinterpret_cast<unsigned char*>(module);
-    s_setPageBase=reinterpret_cast<NativeSetPageBase>(base+rva[11]);
-    s_locationFocus=reinterpret_cast<NativeFocus>(base+rva[6]);
-    s_viewFocus=reinterpret_cast<NativeFocus>(base+rva[7]);
-    if(!WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeEvent>(base+rva[8]),PageThemeHook,&s_originalTheme)||
-       !WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeEvent>(base+rva[9]),PageReadyHook,&s_originalReady)||
-       !WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeLayerColor>(base+rva[10]),PageLayerColorHook,&s_originalLayerColor)||
-       !WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeAttachContents>(base+rva[12]),AttachContentsHook,&s_originalAttachContents))return false;
-    s_background.clear=reinterpret_cast<BraveBackground::Clear>(base+rva[1]);
-    s_background.getClass=reinterpret_cast<BraveBackground::GetClass>(base+rva[2]);
-    s_background.setBackground=reinterpret_cast<BraveBackground::SetBackground>(base+rva[5]);
-    if(!WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Paint>(base+rva[0]),ViewOnPaintBackground_Hook,&s_background.originalPaint)||
-       !WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Transparent>(base+rva[3]),WindowContentsTransparent_Hook,&s_background.originalTransparent)||
-       !WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Construct>(base+rva[4]),SidebarConstructor_Hook,&s_background.originalConstruct)||!HasCompleteTransparencyPath())return false;
-    unsigned resolved = 0;
-    for (size_t address : rva) if (address) ++resolved;
-    char version[64]{};GetBraveVersion(module,version,sizeof(version));
-    Wh_Log(L"Brave Acrylic 3.3: %u/13 native functions from %s (Brave %S, format 6)", resolved,
-           cached?L"exact-build cache":L"built-in data",version);
+    auto* base = reinterpret_cast<unsigned char*>(module);
+    s_setPageBase = reinterpret_cast<NativeSetPageBase>(base + rva[11]);
+    s_locationFocus = reinterpret_cast<NativeFocus>(base + rva[6]);
+    s_viewFocus = reinterpret_cast<NativeFocus>(base + rva[7]);
+    s_background.clear = reinterpret_cast<BraveBackground::Clear>(base + rva[1]);
+    s_background.getClass = reinterpret_cast<BraveBackground::GetClass>(base + rva[2]);
+    s_background.setBackground = reinterpret_cast<BraveBackground::SetBackground>(base + rva[5]);
+    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeEvent>(base + rva[8]),
+                                      PageThemeHook, &s_originalTheme) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeEvent>(base + rva[9]),
+                                      PageReadyHook, &s_originalReady) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeLayerColor>(base + rva[10]),
+                                      PageLayerColorHook, &s_originalLayerColor) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeAttachContents>(base + rva[12]),
+                                      AttachContentsHook, &s_originalAttachContents) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Paint>(base + rva[0]),
+                                      ViewOnPaintBackground_Hook, &s_background.originalPaint) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Transparent>(base + rva[3]),
+                                      WindowContentsTransparent_Hook, &s_background.originalTransparent) ||
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Construct>(base + rva[4]),
+                                      SidebarConstructor_Hook, &s_background.originalConstruct) ||
+        !HasCompleteTransparencyPath()) return false;
+    Wh_Log(L"Brave Acrylic %s: 13/13 native functions from %s", WH_MOD_VERSION,
+           knownBuild ? L"reviewed built-in data" : L"Windhawk symbol resolution");
     return true;
 }
 
@@ -1003,7 +979,6 @@ static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
             installed = true;
         }
     }
-    if (!installed) StartCompatibilityDownloadLocked();
     ReleaseSRWLockExclusive(&s_initLock);
     if (applyNow && installed) SyncNativeCaptions();
     return installed;
@@ -1053,10 +1028,7 @@ BOOL Wh_ModInit() {
 
     HMODULE chrome = GetModuleHandleW(L"chrome.dll");
     if (chrome) {
-        const bool installed = TryInstallChromeHooks(chrome, false);
-        // Keep the mod resident so AfterInit can check compatibility data if
-        // address discovery failed. No network work runs inside ModInit.
-        return installed || s_recoveryModule != nullptr;
+        return TryInstallChromeHooks(chrome, false);
     }
 
     const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
@@ -1071,12 +1043,10 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     if (!s_isBrowserProcess) return;
     AcquireSRWLockExclusive(&s_initLock);
-    s_afterInit = true;
     if (!s_stopping && s_activateAfterInit) {
         s_activateAfterInit = false;
         s_transparencyReady.store(HasCompleteTransparencyPath(), std::memory_order_release);
     }
-    StartCompatibilityDownloadLocked();
     ReleaseSRWLockExclusive(&s_initLock);
     // Cover a load between ModInit's check and activation of the loader hook.
     if (const auto chrome = GetModuleHandleW(L"chrome.dll")) TryInstallChromeHooks(chrome, true);
@@ -1086,9 +1056,6 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     if (!s_isBrowserProcess) return;
     LoadModSettings();
-    AcquireSRWLockExclusive(&s_initLock);
-    StartCompatibilityDownloadLocked();
-    ReleaseSRWLockExclusive(&s_initLock);
     SyncNativeCaptions();
     Wh_Log(L"Settings updated; restart Brave normally to rebuild its cached UI brushes");
 }
@@ -1098,20 +1065,12 @@ void Wh_ModBeforeUninit() {
     s_captionFixActive.store(false, std::memory_order_release);
     AcquireSRWLockExclusive(&s_initLock);
     s_stopping = true;
-    if (s_downloadStop) SetEvent(s_downloadStop);
     s_activateAfterInit = false;
     s_transparencyReady.store(false, std::memory_order_release);
     ReleaseSRWLockExclusive(&s_initLock);
-    // All HTTP handles belong to this synchronous worker. Join it outside the
-    // install lock; never close a WinHTTP handle during another thread's call.
-    if (s_downloadThread) WaitForSingleObject(s_downloadThread, INFINITE);
-}
-
-void Wh_ModUninit() {
-    if (s_downloadThread) { CloseHandle(s_downloadThread); s_downloadThread = nullptr; }
-    if (s_downloadStop) { CloseHandle(s_downloadStop); s_downloadStop = nullptr; }
+    // Restore the real WS_SYSMENU bit while the getter/setter hooks are still
+    // installed, so Chromium cannot save a stripped style during teardown.
     if (s_isBrowserProcess) EnumWindows(SyncNativeCaptionWindow, 0);
 }
-
 
 #endif  // x64 native background ABI
