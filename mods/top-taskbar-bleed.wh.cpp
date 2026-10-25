@@ -621,9 +621,12 @@ constexpr ULONGLONG kMaxHoldMs = 400;
 // being built, when its band and XAML host aren't ready, so those attempts fail
 // and are throttled. Once the taskbar is up nothing fires the hooks again until
 // the user hovers a button, so the first bleed would wait for an interaction.
-// While the mod has no island, the tracker therefore retries the direct attach
-// itself: every kDiscoveryRetryMs at first, every kDiscoveryRetrySlowMs after
-// kDiscoveryFastWindowMs (there may be no taskbar at all).
+// While any taskbar window of the process lacks an island - none attached yet,
+// a secondary taskbar that wasn't ready when the primary attached, a taskbar
+// rebuilt while another kept its island - the tracker therefore retries the
+// direct attach itself: every kDiscoveryRetryMs at first, every
+// kDiscoveryRetrySlowMs after kDiscoveryFastWindowMs (there may be no taskbar
+// at all, or none this mod understands).
 constexpr double kDiscoveryRetryMs = 1000;
 constexpr double kDiscoveryRetrySlowMs = 10000;
 constexpr ULONGLONG kDiscoveryFastWindowMs = 60000;
@@ -636,8 +639,9 @@ HANDLE g_trackerReady = nullptr;
 ULONGLONG g_trackerStartTick = 0;
 
 // Set by the painter when something else rewrote a forced root theme (see
-// OnRootThemeChanged); the tracker re-asserts the forced theme at this
-// GetTickCount64 deadline (0 = none).
+// OnRootThemeChanged); the tracker re-asserts the forced theme at this NowMs
+// deadline (0 = none). Same clock as the tracker's timer, so the wait lands
+// exactly on it.
 std::atomic<ULONGLONG> g_themeReassertAt{0};
 constexpr ULONGLONG kThemeReassertMs = 500;
 
@@ -1326,7 +1330,7 @@ void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slow
         interval = interval ? std::min(interval, retry) : retry;
     }
     if (ULONGLONG due = g_themeReassertAt) {  // the re-assert runs at its deadline, not at the next poll
-        double left = std::max(1.0, due > now ? (double)(due - now) : 0.0);
+        double left = std::max(1.0, (double)due - NowMs());
         interval = interval ? std::min(interval, left) : left;
     }
     SetPollTimer(interval);
@@ -1373,7 +1377,7 @@ void Tick() {
     for (HWND tb : taskbars) ProcessTaskbar(tb, ctx, anyTarget);
 
     if (ULONGLONG due = g_themeReassertAt;
-        due && GetTickCount64() >= due && g_themeReassertAt.compare_exchange_strong(due, 0)) {
+        due && (ULONGLONG)NowMs() >= due && g_themeReassertAt.compare_exchange_strong(due, 0)) {
         for (HWND tb : taskbars) {
             auto it = g_track.find(tb);
             if (it != g_track.end() && it->second.active) {
@@ -1666,7 +1670,7 @@ void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
     if (now == ForcedThemeValue(*isl)) return;  // our own set, or someone agreeing with it
     isl->originalTheme = now;
     isl->originalSystemLight = SystemLightTheme();
-    g_themeReassertAt = GetTickCount64() + kThemeReassertMs;
+    g_themeReassertAt = (ULONGLONG)NowMs() + kThemeReassertMs;
     RequestTick();
     Wh_Log(L"taskbar %p: root theme changed underneath to %d, re-asserting in %llu ms", hwnd, (int)now,
            kThemeReassertMs);
@@ -1949,14 +1953,16 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
     return true;
 }
 
-// Attach to every taskbar owned by this (the taskbar) thread, straight from the
-// taskbar windows. Used at enable time and after settings changes.
 bool IsTaskbarWindowClass(HWND hWnd) {
     WCHAR cls[32];
     return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
            (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
 }
 
+// Attach to every taskbar owned by this (the taskbar) thread, straight from the
+// taskbar windows. Run at enable time, after settings changes, and by the
+// tracker's discovery retry while g_taskbarMissingIsland says a taskbar window
+// still has no island.
 void WINAPI AttachAllTaskbars(void*) try {
     if (g_unloading) return;
     PruneDeadIslands();
