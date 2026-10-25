@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              secondary-windows-on-active-monitor
 // @name            Secondary windows on the active monitor
-// @name:ru-RU      Дочерние окна на активном мониторе
+// @name:ru-RU      Второстепенные окна на активном мониторе
 // @description     Multi-monitor: secondary windows of the selected apps (Telegram media viewer, etc.) open on the monitor of the app's active window instead of the remembered one
-// @description:ru-RU Для нескольких мониторов: дочерние окна выбранных приложений (просмотрщик Telegram и др.) открываются на мониторе активного окна приложения, а не на запомненном
-// @version         2.0
+// @description:ru-RU Для нескольких мониторов: второстепенные окна выбранных приложений (просмотрщик Telegram и др.) открываются на мониторе активного окна приложения, а не на запомненном
+// @version         2.1
 // @author          limpompo
 // @github          https://github.com/limpompo
 // @homepage        https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/secondary-windows-on-active-monitor
@@ -28,8 +28,14 @@ last time, not where the chat is.
 The mod intercepts the showing of secondary windows of the apps from the
 *Applications* list and, if a window is about to appear on a different monitor
 than the app's active window, moves it to the active window's monitor before
-it is shown. By default the list contains Telegram Desktop (`Telegram.exe`);
+it is shown. By default the list contains a placeholder (`test.exe`), replace it with your app, for example Telegram Desktop (`Telegram.exe`);
 add any other app by its executable name in the mod settings.
+
+For apps that are not built with Qt, the mod decides which windows are regular
+ones by a heuristic (it skips menus, tooltips, tool windows and the like), so
+it may move something it shouldn't, such as a drop-down list or a splash
+screen. Telegram is the only app the mod was tested with; if another app
+misbehaves, use the *Window title filter* of that app.
 
 Which windows are moved: **all** secondary windows of the app that get their
 own window - for Telegram also picture-in-picture video, call windows and
@@ -50,8 +56,9 @@ How a window is placed:
 Keeping the position and accounting for scaling can each be turned off in the
 settings.
 
-The mod is loaded into every process, but hooks only the processes from the
-*Applications* list; changes to the list apply without restarting the app.
+The mod is loaded into every process and unloads itself at once from those that
+are not in the *Applications* list. An app added to the list starts to work
+after it is restarted; removing an app from the list applies immediately.
 
 System files and app data are not modified.
 */
@@ -60,7 +67,7 @@ System files and app data are not modified.
 // ==WindhawkModSettings==
 /*
 - applications:
-  - - process: Telegram.exe
+  - - process: test.exe
       $name: Process
       $name:ru-RU: Процесс
       $description: Executable name (with or without .exe), for example Telegram.exe, or its full path.
@@ -69,11 +76,11 @@ System files and app data are not modified.
       $name: Window title filter
       $name:ru-RU: Фильтр по заголовку окна
       $description: Move only windows whose title contains this text. Empty - move all secondary windows of the app. Titles often depend on the app's interface language.
-      $description:ru-RU: Переносить только окна, в заголовке которых есть этот текст. Пусто — все дочерние окна приложения. Заголовки часто зависят от языка интерфейса приложения.
+      $description:ru-RU: Переносить только окна, в заголовке которых есть этот текст. Пусто — все второстепенные окна приложения. Заголовки часто зависят от языка интерфейса приложения.
   $name: Applications
   $name:ru-RU: Приложения
   $description: Apps whose secondary windows open on the monitor of the app's active window.
-  $description:ru-RU: Приложения, дочерние окна которых открываются на мониторе активного окна приложения.
+  $description:ru-RU: Приложения, второстепенные окна которых открываются на мониторе активного окна приложения.
 - keepPosition: true
   $name: Keep window position
   $name:ru-RU: Сохранять положение окна
@@ -108,7 +115,6 @@ struct Settings {
 // UI thread.
 static std::mutex g_settingsMutex;
 static Settings g_settings;
-static bool g_hooked = false;
 
 static std::wstring ToLower(std::wstring s) {
     for (auto& c : s) {
@@ -474,26 +480,23 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    // The mod is loaded into every process; only the processes from the
-    // Applications list are hooked. The mod stays loaded in the others, so
-    // that adding a running app to the list takes effect (see
-    // Wh_ModSettingsChanged).
+    // The mod is loaded into every process; unload from those that are not
+    // in the Applications list.
     if (!GetSettings().matched) {
-        return TRUE;
+        return FALSE;
     }
     WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
                                    &ShowWindow_Original);
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
-    g_hooked = true;
     Wh_Log(L"Hooked");
     return TRUE;
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     LoadSettings();
-    // Reload to set or remove the hooks when the process was added to or
-    // removed from the Applications list.
-    *bReload = GetSettings().matched != g_hooked;
+    // Reload (and unload) when the process was removed from the Applications
+    // list.
+    *bReload = !GetSettings().matched;
     return TRUE;
 }
