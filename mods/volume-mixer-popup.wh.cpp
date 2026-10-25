@@ -2330,6 +2330,11 @@ std::atomic<DWORD> g_hookOutsideClickTick{0};
 std::atomic<bool> g_hookReplaceOsd{false};
 std::atomic<bool> g_hookTrayWheel{false};
 std::atomic<bool> g_volumeMsgPending{false};
+// Event context of the mod's own endpoint volume changes: only a change made
+// outside the mod lets it replace a Windows flyout.
+constexpr GUID kModVolumeContext = {0x6f1d2a4c, 0x8b3e, 0x4c71, {0x9a, 0x52, 0x1e, 0x7d, 0xc4, 0x08, 0xb3, 0x96}};
+std::atomic<bool> g_externalVolumeChange{false};
+DWORD g_ownVolumeChangeTick = 0;  // UI thread
 std::atomic<bool> g_deviceMsgPending{false};
 std::atomic<bool> g_lockCheckPending{false};
 std::atomic<bool> g_lockRebuildPending{false};
@@ -3395,7 +3400,10 @@ std::wstring DeviceNameOf(const std::wstring& id) {
 void SetItemVolumeRaw(Item& it, float v) {
     v = std::clamp(v, 0.0f, 1.0f);
     it.vol = v;
-    if (it.ep) it.ep->SetMasterVolumeLevelScalar(v, nullptr);
+    if (it.ep) {
+        it.ep->SetMasterVolumeLevelScalar(v, &kModVolumeContext);
+        g_ownVolumeChangeTick = GetTickCount();
+    }
     for (ISimpleAudioVolume* s : it.sav) s->SetMasterVolume(v, nullptr);
 }
 
@@ -3419,7 +3427,10 @@ void SetItemVolume(Item& it, float v) {
 
 void SetItemMute(Item& it, bool mute) {
     it.mute = mute;
-    if (it.ep) it.ep->SetMute(mute ? TRUE : FALSE, nullptr);
+    if (it.ep) {
+        it.ep->SetMute(mute ? TRUE : FALSE, &kModVolumeContext);
+        g_ownVolumeChangeTick = GetTickCount();
+    }
     for (ISimpleAudioVolume* s : it.sav) s->SetMute(mute ? TRUE : FALSE, nullptr);
 }
 
@@ -3604,15 +3615,16 @@ void AdjustMasterVolume(float delta, bool toggleMute, bool alwaysOsd = false) {
     BOOL m = FALSE;
     ep->GetMasterVolumeLevelScalar(&v);
     ep->GetMute(&m);
+    g_ownVolumeChangeTick = GetTickCount();
     if (toggleMute) {
         m = m ? FALSE : TRUE;
-        ep->SetMute(m, nullptr);
+        ep->SetMute(m, &kModVolumeContext);
     } else {
         v = std::clamp(v + delta, 0.0f, 1.0f);
-        ep->SetMasterVolumeLevelScalar(v, nullptr);
+        ep->SetMasterVolumeLevelScalar(v, &kModVolumeContext);
         if (m && delta > 0.0f) {
             m = FALSE;
-            ep->SetMute(FALSE, nullptr);
+            ep->SetMute(FALSE, &kModVolumeContext);
         }
         auto lock = g_lockedVolumes.find(L"devmaster:" + devId);
         if (lock != g_lockedVolumes.end()) {
@@ -3968,7 +3980,8 @@ void EnforceLockedVolumes() {
         float v = 0.0f;
         if (!LockedLevel(e.key, &level)) continue;
         if (SUCCEEDED(e.ep->GetMasterVolumeLevelScalar(&v)) && std::abs(v - level) > 0.004f) {
-            e.ep->SetMasterVolumeLevelScalar(level, nullptr);
+            e.ep->SetMasterVolumeLevelScalar(level, &kModVolumeContext);
+            g_ownVolumeChangeTick = GetTickCount();
         }
     }
 }
@@ -6168,7 +6181,8 @@ public:
     }
 
     // Called on audio service threads: only post to the UI thread.
-    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA data) override {
+        if (!data || !IsEqualGUID(data->guidEventContext, kModVolumeContext)) g_externalVolumeChange = true;
         PostCoalesced(g_volumeMsgPending, WM_APP_VOLUME_CHANGED);
         return S_OK;
     }
@@ -6770,25 +6784,60 @@ void SyncPopupHookState() {
 // instead and follows every further step.
 HWINEVENTHOOK g_flyoutHook = nullptr;
 DWORD g_flyoutHookPid = 0;
-HWND g_sysFlyout = nullptr;         // Windows' indicator window, once clipped or unclipped
-bool g_sysFlyoutClipped = false;
-HWND g_sysFlyoutPending = nullptr;  // shown before its volume change was seen
+std::vector<HWND> g_clippedFlyouts;  // Explorer windows that carry the mod's empty region
+HWND g_sysFlyoutPending = nullptr;   // shown before its volume change was seen
 DWORD g_sysFlyoutTick = 0;
-DWORD g_volumeChangeTick = 0;
-float g_seenMasterVol = -1.0f;      // the master level and mute as the mod last read them
+DWORD g_volumeChangeTick = 0;        // last master volume change made outside the mod
+float g_seenMasterVol = -1.0f;       // the master level and mute as the mod last read them
 bool g_seenMasterMute = false;
 constexpr DWORD kFlyoutMatchMs = 500;  // the flyout and the volume event arrive in either order
+constexpr DWORD kOwnChangeMs = 300;    // a level change this soon after the mod's own is the mod's
 
-// Windows' indicator window in Explorer: an untitled, non-activating XAML
-// island host on Windows 11, a NativeHWNDHost with a DirectUIHWND on Windows 10.
-// It also shows brightness and other indicators, so it's only hidden right
-// after a volume change.
+// Description of the thread that owns a window (empty if unavailable).
+static std::wstring ThreadDescriptionOf(HWND hwnd) {
+    using GetThreadDescription_t = HRESULT(WINAPI*)(HANDLE, PWSTR*);
+    static const auto getDescription =
+        (GetThreadDescription_t)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetThreadDescription");
+    std::wstring result;
+    const DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
+    HANDLE thread = getDescription && tid ? OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid) : nullptr;
+    if (!thread) return result;
+    PWSTR desc = nullptr;
+    if (SUCCEEDED(getDescription(thread, &desc)) && desc) {
+        result = desc;
+        LocalFree(desc);
+    }
+    CloseHandle(thread);
+    return result;
+}
+
+// The virtual desktop switcher shown on Task View hover is a small window of
+// the same class (band ZBID_IMMERSIVE_EDGY, thread "MultitaskingView"), as in
+// win10-volume-brightness-osd and taskbar-thumbnails.
+static bool IsVirtualDesktopSwitcher(HWND hwnd) {
+    using GetWindowBand_t = BOOL(WINAPI*)(HWND, DWORD*);
+    static const auto getBand = (GetWindowBand_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetWindowBand");
+    DWORD band = 0;
+    if (!getBand || !getBand(hwnd, &band) || band != 7) return false;
+    return ThreadDescriptionOf(hwnd) == L"MultitaskingView";
+}
+
+// Windows' indicator window in Explorer: a small, untitled, non-activating
+// XAML island host on Windows 11, a NativeHWNDHost with a DirectUIHWND on
+// Windows 10. It also shows brightness and other indicators, so it's only
+// hidden right after a volume change made outside the mod.
 static bool IsSystemIndicatorWindow(HWND hwnd) {
     if (GetAncestor(hwnd, GA_ROOT) != hwnd || GetWindowTextLengthW(hwnd) != 0) return false;
+    RECT rc{};
+    if (!GetWindowRect(hwnd, &rc)) return false;
+    const float scale = GetMonitorDpiScale(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+    const float w = (rc.right - rc.left) / scale;
+    const float h = (rc.bottom - rc.top) / scale;
+    if (w < 1.0f || h < 1.0f || w > 480.0f || h > 160.0f) return false;  // the indicator is about 240 x 64
     WCHAR cls[64] = {};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
     if (wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0) {
-        return (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE) != 0;
+        return (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE) && !IsVirtualDesktopSwitcher(hwnd);
     }
     return wcscmp(cls, L"NativeHWNDHost") == 0 && FindWindowExW(hwnd, nullptr, L"DirectUIHWND", nullptr);
 }
@@ -6809,23 +6858,34 @@ static void ShowMasterVolumeOsd() {
 }
 
 // An empty window region keeps Windows' indicator invisible even while Explorer
-// shows it again for every step of a gesture, so it never flashes. Brightness
-// and other indicators in the same window get it back unclipped.
-static void ClipSystemFlyout(HWND hwnd, bool clip) {
-    if (hwnd == g_sysFlyout && clip == g_sysFlyoutClipped) return;
-    HRGN rgn = clip ? CreateRectRgn(0, 0, 0, 0) : nullptr;
-    if (SetWindowRgn(hwnd, rgn, TRUE)) {  // the window owns the region from here on
-        g_sysFlyout = hwnd;
-        g_sysFlyoutClipped = clip;
-    } else if (rgn) {
-        DeleteObject(rgn);
-    }
+// shows it again for every step of a gesture, so it never flashes. The region
+// is only touched while Explorer responds, so a hung Explorer can't stall the
+// mod's UI thread.
+static bool SetFlyoutRegion(HWND hwnd, bool empty) {
+    if (IsHungAppWindow(hwnd)) return false;
+    HRGN rgn = empty ? CreateRectRgn(0, 0, 0, 0) : nullptr;
+    if (SetWindowRgn(hwnd, rgn, TRUE)) return true;  // the window owns the region from here on
+    if (rgn) DeleteObject(rgn);
+    return false;
 }
 
-static void UnclipSystemFlyout() {
-    if (g_sysFlyout && g_sysFlyoutClipped && IsWindow(g_sysFlyout)) SetWindowRgn(g_sysFlyout, nullptr, TRUE);
-    g_sysFlyout = nullptr;
-    g_sysFlyoutClipped = false;
+static void ClipSystemFlyout(HWND hwnd) {
+    if (std::find(g_clippedFlyouts.begin(), g_clippedFlyouts.end(), hwnd) != g_clippedFlyouts.end()) return;
+    if (SetFlyoutRegion(hwnd, true)) g_clippedFlyouts.push_back(hwnd);
+}
+
+// Only windows the mod clipped itself get their region removed.
+static void UnclipSystemFlyout(HWND hwnd) {
+    auto it = std::find(g_clippedFlyouts.begin(), g_clippedFlyouts.end(), hwnd);
+    if (it == g_clippedFlyouts.end()) return;
+    if (!IsWindow(hwnd) || SetFlyoutRegion(hwnd, false)) g_clippedFlyouts.erase(it);
+}
+
+static void UnclipAllSystemFlyouts() {
+    for (HWND hwnd : g_clippedFlyouts) {
+        if (IsWindow(hwnd)) SetFlyoutRegion(hwnd, false);
+    }
+    g_clippedFlyouts.clear();
 }
 
 // Reads the master level and mute; true when they differ from the last read.
@@ -6845,36 +6905,40 @@ void ResyncMasterLevel() {
 }
 
 static void ReplaceSystemFlyout(HWND hwnd) {
-    ClipSystemFlyout(hwnd, true);
-    ShowWindow(hwnd, SW_HIDE);
+    ClipSystemFlyout(hwnd);
+    ShowWindowAsync(hwnd, SW_HIDE);  // never waits for Explorer
     g_sysFlyoutPending = nullptr;
     ShowMasterVolumeOsd();
 }
 
 // Explorer changes the volume before it shows its flyout, so a level that
 // differs from the last read tells a volume flyout from a brightness one at
-// once, without waiting for the volume event.
+// once, without waiting for the volume event. Changes made by the mod itself
+// never count.
 static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd || !IsSystemIndicatorWindow(hwnd)) return;
+    const DWORD now = GetTickCount();
     float v = 0.0f;
     bool m = false;
-    if (ReadMasterChange(&v, &m) || GetTickCount() - g_volumeChangeTick < kFlyoutMatchMs) {
+    const bool levelChanged = ReadMasterChange(&v, &m) && now - g_ownVolumeChangeTick > kOwnChangeMs;
+    if (levelChanged || g_externalVolumeChange || now - g_volumeChangeTick < kFlyoutMatchMs) {
         ReplaceSystemFlyout(hwnd);
         return;
     }
-    ClipSystemFlyout(hwnd, false);
+    UnclipSystemFlyout(hwnd);  // brightness or another indicator: shown as Windows wants
     g_sysFlyoutPending = hwnd;
-    g_sysFlyoutTick = GetTickCount();
+    g_sysFlyoutTick = now;
 }
 
 // Called for every change of the default device's volume or mute.
 void OnMasterVolumeChanged() {
-    g_volumeChangeTick = GetTickCount();
+    const bool external = g_externalVolumeChange.exchange(false);
+    if (external) g_volumeChangeTick = GetTickCount();
     float v = 0.0f;
     bool m = false;
     ReadMasterChange(&v, &m);
     if (!g_flyoutHook) return;
-    if (g_sysFlyoutPending && GetTickCount() - g_sysFlyoutTick < kFlyoutMatchMs &&
+    if (external && g_sysFlyoutPending && GetTickCount() - g_sysFlyoutTick < kFlyoutMatchMs &&
         IsWindowVisible(g_sysFlyoutPending)) {
         ReplaceSystemFlyout(g_sysFlyoutPending);
     } else if (IsWindowVisible(g_hwndOsd) && g_osdTarget == OsdTarget::Master &&
@@ -6884,14 +6948,15 @@ void OnMasterVolumeChanged() {
 }
 
 // Watches Explorer's windows being shown while the setting is on; follows
-// Explorer restarts (TaskbarCreated).
+// Explorer restarts (TaskbarCreated). Every clipped window gets its normal
+// shape back when the option is turned off or Explorer changes.
 void UpdateFlyoutHook() {
     DWORD pid = 0;
     HWND tray = g_cfg.replaceWindowsOsd ? FindWindowW(L"Shell_TrayWnd", nullptr) : nullptr;
     if (tray) GetWindowThreadProcessId(tray, &pid);
     if (pid == g_flyoutHookPid) return;
     if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
-    UnclipSystemFlyout();
+    UnclipAllSystemFlyouts();
     g_sysFlyoutPending = nullptr;
     g_flyoutHook = pid ? SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, FlyoutWinEventProc, pid, 0,
                                          WINEVENT_OUTOFCONTEXT)
@@ -6900,13 +6965,13 @@ void UpdateFlyoutHook() {
     if (g_flyoutHook) ResyncMasterLevel();
 }
 
-// Leaves Windows' indicator as it was.
+// Leaves Windows' indicators as they were.
 void StopFlyoutHook() {
     if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
     g_flyoutHook = nullptr;
     g_flyoutHookPid = 0;
     g_sysFlyoutPending = nullptr;
-    UnclipSystemFlyout();
+    UnclipAllSystemFlyouts();
 }
 
 // Hotkeys go through the keyboard hook (works in fullscreen games, no repeats
