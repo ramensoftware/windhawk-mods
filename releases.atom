@@ -2,12 +2,97 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-24T21:01:00.000Z</updated>
+    <updated>2026-10-25T08:01:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Live Update for Windows 11 2.0.206]]></title>
+        <id>https://windhawk.net/mods/live-update-for-windows-widget#43716e11539b8e7bfaab4e9df11350e613c0d859</id>
+        <link href="https://windhawk.net/mods/live-update-for-windows-widget"/>
+        <updated>2026-10-25T08:01:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="liveupdateforwindows11">Live Update for Windows 11</h1>
+<p>A unified, single-slot "Live Activity" widget injected natively into the primary Windows 11 XAML taskbar. Instead of running multiple separate taskbar widgets or external desktop overlay windows, <strong>Live Update</strong> multiplexes contextual activities into one compact taskbar slot with a native XAML flyout popup.</p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview1.png" alt="Overview: Media" /></p>
+<p>Overview: Media</p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview2.png" alt="Overview: RAM Alert" /></p>
+<p>Overview: RAM Alert</p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview3.png" alt="Overview: Device Battery & Bluetooth Battery" /></p>
+<p>Overview: Device Battery &amp; Bluetooth Battery</p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview4.png" alt="Overview: Sensitive Permission" /></p>
+<p>Overview: Sensitive Permission</p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview5.png" alt="Overview: Wi-Fi Hotspot" /></p>
+<p>Overview: Wi-Fi Hotspot</p>
+<h2 id="howthismoddiffersfromexistingmods">How this mod differs from existing mods</h2>
+<ul>
+<li><strong>Native single-slot multiplexer vs. external overlays:</strong> Unlike <em>Dynamic Island for Windows</em> (which runs as a separate overlay window at the top of the screen), this mod embeds directly inside the native Windows 11 taskbar layout (<code>SystemTrayFrameGrid</code> / <code>RootGrid</code>) and shares a single compact slot across all active providers.</li>
+<li><strong>Contextual activity switching vs. single-purpose widgets:</strong> Unlike standalone media mods (<em>Taskbar Music Lounge</em>, <em>Taskbar Fluent Media Player</em>, <em>Island Media Controls</em>) or calendar-only mods (<em>Lunar & Holiday Calendar</em>), this widget automatically switches to newly started activities (such as media playback, power connection, timer start, or microphone/camera access) while keeping a Vietnamese lunar calendar &amp; almanac as the idle baseline.</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Media:</strong> Shows album artwork, track title, artist, interactive seek bar, and Fluent transport controls for players integrated with Windows Global System Media Transport Controls (GSMTC), with session switching for up to 16 active sessions.</li>
+<li><strong>Battery & Bluetooth:</strong> Displays charge percentage, charging/discharging state, estimated remaining/full time, connected Bluetooth device battery levels, and a shortcut to Windows Power &amp; battery settings (<code>ms-settings:powersleep</code>).</li>
+<li><strong>Windows Clock (status reader):</strong> Displays active Stopwatch, Timer, and enabled Alarm entries observed from the Windows Clock app, continuing to advance locally from the last synced state when the app is minimized.</li>
+<li><strong>Lunar Calendar, Almanac & Vietnamese Culture Index:</strong> Computes UTC+7 Vietnamese lunar dates, Can Chi, Nạp Âm, auspicious hours (Giờ Hoàng Đạo), and 12 Trực using the Hồ Ngọc Đức algorithm. Includes a monthly calendar view, Vietnamese holiday list, and a built-in Vietnamese culture topic index that opens reference articles in your default browser.</li>
+<li><strong>Privacy Activity:</strong> Passively monitors active Microphone (Core Audio), Camera (Media Foundation sensor monitor), and Location usage and lists the reporting applications.</li>
+<li><strong>Task Progress:</strong> Passively observes taskbar progress (<code>ITaskbarList3</code>) for File Explorer, browsers, and archivers to display ongoing transfers in one place.</li>
+<li><strong>Displays & Wi-Fi Hotspot:</strong> Shows active external monitors/projection mode (<code>QueryDisplayConfig</code>) and Windows Mobile Hotspot status/connected client count (<code>NetworkOperatorTetheringManager</code>).</li>
+<li><strong>System Alerts (RAM & Storage on by default; Temperature optional, off by default):</strong></li>
+<li><strong>RAM & Storage (enabled by default):</strong> Alerts when physical RAM crosses 80%/90%/95% or when any fixed drive has less than 10% free space (listing the low-space volumes).</li>
+<li><strong>CPU/GPU Temperature (optional, off by default):</strong> Alerts when CPU/GPU temperatures from a local LibreHardwareMonitor web server (<code>http://127.0.0.1:&lt;port&gt;/data.json</code>) cross 70/80/90 °C.</li>
+<li><strong>OBS Studio Recording (optional, off by default):</strong> Connects to local OBS WebSocket v5 (<code>ws://127.0.0.1:&lt;port&gt;</code>) when OBS is running to display recording elapsed time and Pause/Resume/Stop buttons.</li>
+</ul>
+<h2 id="quicktogglespositioningnotes">Quick toggles, positioning &amp; notes</h2>
+<ul>
+<li><strong>Taskbar position (<code>root_left</code> on centered taskbar, automatic <code>tray_left</code> on left-aligned taskbar):</strong> By default (<code>root_left</code>), when the Windows 11 taskbar is centered, the widget sits on the left side of the taskbar right after the native Windows Widgets button (or at the left edge if Widgets is turned off in Windows Settings). You can optionally enable <strong>Hide Windows Widgets button in left corner</strong> (<code>appearance.hideWidgetsButton</code>, off by default) to collapse the native Widgets button while using <code>root_left</code> and restore its original state when disabled. Whenever the taskbar is left-aligned (<code>TaskbarAl = 0</code>), <code>root_left</code> automatically falls back to the system tray (<code>tray_left</code>) so the Start button and app icons are never covered.</li>
+<li><strong>Right-click quick toggles vs. Windhawk settings:</strong> Toggles in the widget's right-click context menu save quick runtime overrides (<code>ui.*</code>) that take precedence over the Windhawk settings tab. Saving settings in Windhawk (or choosing <strong>Reset to Windhawk settings</strong> in the context menu) clears all runtime overrides.</li>
+<li><strong>OBS WebSocket password:</strong> The <code>obs.password</code> field is stored as a standard Windhawk mod setting, so it is included in Windhawk settings exports.</li>
+</ul>
+<h2 id="optionallocalintegrationssetup">Optional local integrations setup</h2>
+<ul>
+<li><strong>OBS Studio:</strong> Enable <strong>Tools > WebSocket Server Settings > Enable WebSocket server</strong> in OBS Studio (v28+), then enable <strong>OBS recording</strong> in the mod settings and match the port (default <code>4455</code>) and password.</li>
+<li><strong>LibreHardwareMonitor (Temperature):</strong> In LibreHardwareMonitor, enable <strong>Options > Remote Web Server > Run</strong>, then enable <strong>Temperature alerts</strong> in the mod settings and match the local port (default <code>8085</code>).</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li><strong>Supported OS:</strong> Windows 11 (build 22000 or later) with the native primary XAML taskbar.</li>
+<li>Windows 10 and third-party replacement taskbars are not supported.</li>
+</ul>
+<hr />
+<h2 id="tingvit">Tiếng Việt</h2>
+<p><strong>Live Update for Windows 11</strong> tích hợp nhiều hoạt động trực tiếp (Live Activities) vào <strong>một vị trí duy nhất</strong> trên thanh taskbar gốc của Windows 11.</p>
+<h3 id="imkhcbitsoviccmodhinc">Điểm khác biệt so với các mod hiện có</h3>
+<ul>
+<li><strong>Tích hợp trực tiếp vào taskbar thay vì cửa sổ nổi:</strong> Khác với <em>Dynamic Island for Windows</em> (tạo cửa sổ nổi riêng phía trên màn hình), mod này gắn trực tiếp vào cây giao diện XAML của taskbar Windows 11 và dùng chung một ô hiển thị duy nhất.</li>
+<li><strong>Tự động chuyển đổi theo ngữ cảnh:</strong> Khác với các mod chỉ hiển thị nhạc hoặc chỉ hiển thị âm lịch, Live Update tự động ưu tiên hoạt động mới phát sinh (như phát nhạc, cắm sạc, bật hẹn giờ, dùng micro/camera, quay OBS) và hiển thị Âm lịch &amp; Tử vi khi ở trạng thái nghỉ.</li>
+</ul>
+<h3 id="cchotnghtr">Các hoạt động hỗ trợ</h3>
+<ul>
+<li><strong>Phương tiện (Media):</strong> Ảnh bìa, tên bài hát, nghệ sĩ, thanh tua và nút điều khiển nhạc hỗ trợ nhiều phiên phát cùng lúc.</li>
+<li><strong>Pin & Thiết bị Bluetooth:</strong> Phần trăm pin, thời gian ước tính, mức pin thiết bị Bluetooth đang kết nối và nút mở nhanh cài đặt Nguồn &amp; Pin của Windows.</li>
+<li><strong>Đồng hồ Windows:</strong> Đọc trạng thái Bấm giờ, Hẹn giờ và Báo thức từ ứng dụng Đồng hồ Windows; tiếp tục đếm từ mốc đồng bộ cuối khi thu nhỏ ứng dụng.</li>
+<li><strong>Âm lịch, Tử vi & Danh mục Văn hóa Việt:</strong> Tính ngày âm lịch, Can Chi, Nạp Âm, Giờ Hoàng Đạo, Trực, lịch tháng và danh sách ngày lễ Việt Nam. Mục <strong>Văn hóa</strong> cung cấp danh mục chủ đề văn hóa Việt Nam và mở bài viết tham khảo trong trình duyệt mặc định khi bấm vào.</li>
+<li><strong>Quyền riêng tư:</strong> Hiển thị ứng dụng đang sử dụng Micro, Camera hoặc Vị trí.</li>
+<li><strong>Tiến trình tác vụ:</strong> Theo dõi trạng thái tiến độ trên taskbar của File Explorer, trình duyệt và phần mềm giải nén.</li>
+<li><strong>Trình chiếu & Điểm phát sóng Wi-Fi:</strong> Hiển thị màn hình phụ đang kết nối và trạng thái Mobile Hotspot cùng danh sách thiết bị.</li>
+<li><strong>Cảnh báo hệ thống (RAM & Bộ nhớ bật mặc định; Nhiệt độ tùy chọn, tắt mặc định):</strong></li>
+<li><strong>RAM & Ổ đĩa (bật mặc định):</strong> Cảnh báo khi RAM vượt 80%/90%/95% hoặc khi ổ đĩa cố định còn dưới 10% dung lượng trống (hiển thị rõ tên ổ đĩa bị đầy).</li>
+<li><strong>Nhiệt độ CPU/GPU (tùy chọn, tắt mặc định):</strong> Cảnh báo khi nhiệt độ CPU/GPU đọc từ LibreHardwareMonitor Remote Web Server (<code>http://127.0.0.1:&lt;port&gt;/data.json</code>) vượt 70/80/90 °C.</li>
+<li><strong>Quay màn hình OBS (tùy chọn, tắt mặc định):</strong> Kết nối cục bộ (<code>127.0.0.1</code>) với OBS WebSocket v5 khi bật trong cài đặt để hiển thị thời lượng quay và nút Tạm dừng/Tiếp tục/Dừng.</li>
+</ul>
+<h3 id="luvvtrmenuchutphimtkhuobs">Lưu ý về vị trí, menu chuột phải &amp; mật khẩu OBS</h3>
+<ul>
+<li><strong>Vị trí mặc định (<code>root_left</code> khi taskbar căn giữa, tự động về <code>tray_left</code> khi taskbar căn trái):</strong> Mặc định khi thanh taskbar Windows 11 căn giữa, widget nằm ở góc trái (<code>root_left</code>) ngay sau nút Các tiện ích (Widgets) của Windows để không chồng lấp (hoặc sát mép trái nếu bạn đã tắt Widgets trong cài đặt Windows). Bạn có thể bật tùy chọn <strong>Ẩn nút Các tiện ích (Widgets) ở góc trái</strong> (<code>appearance.hideWidgetsButton</code>, tắt mặc định) nếu muốn ẩn nút Widgets gốc khi dùng <code>root_left</code> (tự khôi phục đúng trạng thái ban đầu khi tắt). Khi thanh taskbar được căn trái (<code>TaskbarAl = 0</code>), mod sẽ tự động chuyển vị trí về khay hệ thống (<code>tray_left</code>) để không bao giờ đè lên nút Start và các biểu tượng ứng dụng.</li>
+<li><strong>Menu chuột phải và cài đặt Windhawk:</strong> Các tùy chọn bật/tắt nhanh trong menu chuột phải lưu trạng thái ghi đè tạm thời (<code>ui.*</code>) và được ưu tiên hơn trang cài đặt Windhawk. Khi bạn bấm Lưu trong trang cài đặt Windhawk (hoặc chọn <strong>Khôi phục theo cài đặt Windhawk</strong> trong menu chuột phải), các ghi đè tạm thời này sẽ được xóa.</li>
+<li><strong>Mật khẩu OBS WebSocket:</strong> Trường <code>obs.password</code> là cài đặt thông thường của Windhawk nên sẽ được bao gồm khi xuất (export) cài đặt Windhawk.</li>
+</ul>]]></content>
+        <author>
+            <name>caotu2k5</name>
+            <uri>https://github.com/caotu2k5</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Key to Search 1.0]]></title>
         <id>https://windhawk.net/mods/windows-key-to-search#1e165a9cf47b589451bf8628cbf6395ba53c745d</id>
@@ -1056,45 +1141,6 @@ Advanced options (e.g. EcoQoS, P/E-core affinity, power schemes) can be enabled 
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multi PrintScreen 1.0.0]]></title>
-        <id>https://windhawk.net/mods/multi-printscreen#842c9b8b730cab3a5c6fad2c222817b02ec95724</id>
-        <link href="https://windhawk.net/mods/multi-printscreen"/>
-        <updated>2026-10-21T10:04:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="multiprintscreen">Multi PrintScreen</h1>
-<p>Take several screenshots in a row (Win+Shift+S, PrintScreen, …), then press
-<strong>Ctrl+V</strong> repeatedly in a target app: the <strong>first</strong> screenshot is pasted first,
-the <strong>second</strong> on the next Ctrl+V, and so on (First In, First Out).</p>
-<p>How it works (short version):</p>
-<ul>
-<li>A hidden window in a dedicated tool process listens for clipboard changes
-(<code>AddClipboardFormatListener</code>) and copies pure screenshot payloads
-(CF_DIB and PNG) into a private FIFO queue.</li>
-<li>Only pure screenshots are queued. Copying anything else (text, Excel cells,
-files, HTML) automatically clears the queue so Ctrl+V never interferes with
-normal copy/paste.</li>
-<li>A low-level keyboard hook swallows Ctrl+V (in any application) when the
-queue is not empty, puts the oldest screenshot onto the clipboard, then
-re-sends a marked V keystroke so the app pastes it.</li>
-<li>Windows Clipboard History (Win+V) duplicates are suppressed for re-injected
-pastes.</li>
-<li>When the queue is empty, Ctrl+V behaves completely normally.</li>
-</ul>
-<p>Runs as a dedicated tool process in Windhawk. Nothing is injected into explorer.exe
-or into the apps you paste into, so there is nothing to marshal across processes.</p>
-<p>Memory limits:</p>
-<ul>
-<li>Total queue memory is capped at 128 MB (the oldest screenshots are dropped if
-this budget is exceeded). Individual image payloads above 32 MB are skipped.</li>
-</ul>
-<p>Note: When pasting, the physical 'V' keystroke is swallowed while the image is
-restored to the clipboard, then re-injected. Very fast typing immediately after
-Ctrl+V may occasionally land before the pasted image.</p>]]></content>
-        <author>
-            <name>@sharexza</name>
-            <uri>https://github.com/raviadityasetiawan-oss</uri>
         </author>
     </entry>
 </feed>

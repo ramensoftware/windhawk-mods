@@ -9086,6 +9086,34 @@
         "version": "1.0.1"
       }
     },
+    "live-update-for-windows-widget": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792915279000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792915279000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "caotu2k5",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -luser32 -lwindowscodecs -luuid -ladvapi32 -lshell32 -lversion -lsetupapi -lpowrprof",
+        "description": "Live taskbar activities: media, Windows Clock, battery, tasks, recording, displays, hotspot, privacy and lunar almanac",
+        "github": "https://github.com/caotu2k5",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Live Update for Windows 11",
+        "version": "2.0.206"
+      }
+    },
     "live-video-wallpaper": {
       "details": {
         "defaultSorting": 8656,
