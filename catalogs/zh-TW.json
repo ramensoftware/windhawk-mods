@@ -2,7 +2,7 @@
   "app": {
     "version": "1.7.3",
     "versionBleedingEdge": "1.7.3",
-    "versionPreRelease": "2.0.0-alpha.7"
+    "versionPreRelease": "2.0.0-alpha.8"
   },
   "mods": {
     "accent-color-sync": {
@@ -246,7 +246,7 @@
         "ratingBreakdown": [0, 1, 0, 0, 14],
         "ratingUsers": 15,
         "reviews": 0,
-        "trendingSorting": -1.4281557769654603,
+        "trendingSorting": -1.4281557769654605,
         "updated": 1724502505000,
         "users": 2952
       },
@@ -330,7 +330,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 13],
         "ratingUsers": 13,
         "reviews": 0,
-        "trendingSorting": 2.7683561220375394,
+        "trendingSorting": 2.768356122037539,
         "updated": 1792310690000,
         "users": 297
       },
@@ -1700,7 +1700,7 @@
         "ratingBreakdown": [3, 0, 1, 0, 15],
         "ratingUsers": 19,
         "reviews": 0,
-        "trendingSorting": 3.7839725406848763,
+        "trendingSorting": 3.783972540684876,
         "updated": 1714820259000,
         "users": 5440
       },
@@ -1726,7 +1726,7 @@
         "ratingBreakdown": [7, 4, 6, 32, 342],
         "ratingUsers": 391,
         "reviews": 0,
-        "trendingSorting": -1.7037499599597175,
+        "trendingSorting": -1.7037499599597177,
         "updated": 1769880697000,
         "users": 30575
       },
@@ -1812,7 +1812,7 @@
         "ratingBreakdown": [1, 0, 0, 0, 1],
         "ratingUsers": 2,
         "reviews": 0,
-        "trendingSorting": 0.20653526947321899,
+        "trendingSorting": 0.206535269473219,
         "updated": 1742992237000,
         "users": 323
       },
@@ -2029,7 +2029,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 1],
         "ratingUsers": 1,
         "reviews": 0,
-        "trendingSorting": -0.20111028306856746,
+        "trendingSorting": -0.20111028306856743,
         "updated": 1766263013000,
         "users": 266
       },
@@ -2102,7 +2102,7 @@
         "ratingBreakdown": [0, 0, 1, 1, 4],
         "ratingUsers": 6,
         "reviews": 0,
-        "trendingSorting": 1.7403945918661223e-15,
+        "trendingSorting": 1.7403945918661225e-15,
         "updated": 1765225687000,
         "users": 166
       },
@@ -2176,7 +2176,7 @@
         "ratingBreakdown": [1, 0, 0, 0, 1],
         "ratingUsers": 2,
         "reviews": 0,
-        "trendingSorting": -0.11797529054170029,
+        "trendingSorting": -0.11797529054170028,
         "updated": 1751019059000,
         "users": 159
       },
@@ -2200,7 +2200,7 @@
         "ratingBreakdown": [0, 2, 0, 0, 0],
         "ratingUsers": 2,
         "reviews": 0,
-        "trendingSorting": 0.11409404402495339,
+        "trendingSorting": 0.1140940440249534,
         "updated": 1751132322000,
         "users": 128
       },
@@ -2383,7 +2383,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 3],
         "ratingUsers": 3,
         "reviews": 0,
-        "trendingSorting": 0.20070102119371422,
+        "trendingSorting": 0.20070102119371425,
         "updated": 1751232906000,
         "users": 372
       },
@@ -2406,7 +2406,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 2],
         "ratingUsers": 2,
         "reviews": 0,
-        "trendingSorting": 0.18222655992617626,
+        "trendingSorting": 0.18222655992617623,
         "updated": 1725517602000,
         "users": 170
       },
@@ -2431,7 +2431,7 @@
         "ratingBreakdown": [1, 1, 0, 0, 3],
         "ratingUsers": 5,
         "reviews": 0,
-        "trendingSorting": -0.11528585168794461,
+        "trendingSorting": -0.1152858516879446,
         "updated": 1788803607000,
         "users": 224
       },
@@ -2694,7 +2694,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 4],
         "ratingUsers": 5,
         "reviews": 0,
-        "trendingSorting": -0.48183275041746243,
+        "trendingSorting": -0.4818327504174624,
         "updated": 1783833093000,
         "users": 1085
       },
@@ -3084,7 +3084,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 12],
         "ratingUsers": 13,
         "reviews": 0,
-        "trendingSorting": -0.12397347962671407,
+        "trendingSorting": -0.12397347962671408,
         "updated": 1761741507000,
         "users": 498
       },
@@ -3133,7 +3133,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 10],
         "ratingUsers": 10,
         "reviews": 0,
-        "trendingSorting": -0.19530614832857227,
+        "trendingSorting": -0.1953061483285723,
         "updated": 1781721309000,
         "users": 479
       },
@@ -3337,7 +3337,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 14],
         "ratingUsers": 15,
         "reviews": 0,
-        "trendingSorting": 1.3403967652589301,
+        "trendingSorting": 1.34039676525893,
         "updated": 1789046774000,
         "users": 361
       },
@@ -3719,7 +3719,7 @@
         "ratingBreakdown": [3, 0, 3, 7, 37],
         "ratingUsers": 50,
         "reviews": 0,
-        "trendingSorting": -1.0175619441967125,
+        "trendingSorting": -1.0175619441967123,
         "updated": 1770770093000,
         "users": 1712
       },
@@ -4271,7 +4271,7 @@
         "ratingBreakdown": [0, 0, 0, 2, 5],
         "ratingUsers": 7,
         "reviews": 0,
-        "trendingSorting": 1.5229241523202721,
+        "trendingSorting": 1.522924152320272,
         "updated": 1791360090000,
         "users": 131
       },
@@ -4688,7 +4688,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 6],
         "ratingUsers": 7,
         "reviews": 0,
-        "trendingSorting": -0.10386258355124495,
+        "trendingSorting": -0.10386258355124496,
         "updated": 1760516689000,
         "users": 276
       },
@@ -4735,7 +4735,7 @@
         "ratingBreakdown": [2, 0, 0, 1, 5],
         "ratingUsers": 8,
         "reviews": 0,
-        "trendingSorting": 0.44518848620133356,
+        "trendingSorting": 0.4451884862013336,
         "updated": 1775244922000,
         "users": 402
       },
@@ -4853,7 +4853,7 @@
         "ratingBreakdown": [0, 1, 2, 1, 23],
         "ratingUsers": 27,
         "reviews": 1,
-        "trendingSorting": -0.9714169426544849,
+        "trendingSorting": -0.9714169426544847,
         "updated": 1782336467000,
         "users": 722
       },
@@ -4978,7 +4978,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 6],
         "ratingUsers": 6,
         "reviews": 0,
-        "trendingSorting": 1.2344581390044513,
+        "trendingSorting": 1.2344581390044511,
         "updated": 1779652887000,
         "users": 165
       },
@@ -5032,7 +5032,7 @@
         "ratingBreakdown": [0, 0, 1, 0, 3],
         "ratingUsers": 4,
         "reviews": 0,
-        "trendingSorting": -1.0210854014271857,
+        "trendingSorting": -1.0210854014271855,
         "updated": 1703564688000,
         "users": 445
       },
@@ -5629,7 +5629,7 @@
         "ratingBreakdown": [0, 0, 0, 2, 38],
         "ratingUsers": 40,
         "reviews": 0,
-        "trendingSorting": 1.3380962354136325,
+        "trendingSorting": 1.3380962354136323,
         "updated": 1785947860000,
         "users": 1020
       },
@@ -5908,7 +5908,7 @@
         "ratingBreakdown": [0, 0, 2, 4, 92],
         "ratingUsers": 98,
         "reviews": 0,
-        "trendingSorting": 1.8284325600802713,
+        "trendingSorting": 1.828432560080271,
         "updated": 1787310131000,
         "users": 2700
       },
@@ -5958,7 +5958,7 @@
         "ratingBreakdown": [0, 1, 0, 1, 12],
         "ratingUsers": 14,
         "reviews": 0,
-        "trendingSorting": -0.21226308922201262,
+        "trendingSorting": -0.21226308922201265,
         "updated": 1785948930000,
         "users": 202
       },
@@ -6012,7 +6012,7 @@
         "ratingBreakdown": [1, 0, 0, 0, 19],
         "ratingUsers": 20,
         "reviews": 0,
-        "trendingSorting": 1.5060314908069379,
+        "trendingSorting": 1.506031490806938,
         "updated": 1790416959000,
         "users": 730
       },
@@ -6915,7 +6915,7 @@
         "ratingBreakdown": [0, 0, 2, 1, 17],
         "ratingUsers": 20,
         "reviews": 0,
-        "trendingSorting": -1.1335343472258985,
+        "trendingSorting": -1.1335343472258983,
         "updated": 1739658844000,
         "users": 1731
       },
@@ -6942,7 +6942,7 @@
         "ratingBreakdown": [0, 2, 2, 6, 190],
         "ratingUsers": 200,
         "reviews": 0,
-        "trendingSorting": -1.9768493943722867,
+        "trendingSorting": -1.976849394372287,
         "updated": 1748894579000,
         "users": 15921
       },
@@ -7274,7 +7274,7 @@
         "ratingBreakdown": [5, 1, 4, 14, 173],
         "ratingUsers": 197,
         "reviews": 0,
-        "trendingSorting": 15.139616690586843,
+        "trendingSorting": 15.139616690586845,
         "updated": 1791234098000,
         "users": 12723
       },
@@ -7471,7 +7471,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 14],
         "ratingUsers": 15,
         "reviews": 0,
-        "trendingSorting": 1.7941510131147473,
+        "trendingSorting": 1.7941510131147471,
         "updated": 1791579833000,
         "users": 235
       },
@@ -7519,7 +7519,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "reviews": 0,
-        "trendingSorting": -0.9738826497391025,
+        "trendingSorting": -0.9738826497391024,
         "updated": 1775517551000,
         "users": 158
       },
@@ -8046,7 +8046,7 @@
         "ratingBreakdown": [3, 2, 5, 6, 29],
         "ratingUsers": 45,
         "reviews": 0,
-        "trendingSorting": 1.4095194920615501,
+        "trendingSorting": 1.40951949206155,
         "updated": 1780572761000,
         "users": 2147
       },
@@ -8252,7 +8252,7 @@
         "ratingBreakdown": [1, 0, 0, 0, 7],
         "ratingUsers": 8,
         "reviews": 0,
-        "trendingSorting": 0.9042216479490481,
+        "trendingSorting": 0.904221647949048,
         "updated": 1791270116000,
         "users": 186
       },
@@ -8277,7 +8277,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 1.5610936445551038,
-        "updated": 1792098128000,
+        "updated": 1792967860000,
         "users": 153
       },
       "metadata": {
@@ -8285,16 +8285,16 @@
           "x86-64"
         ],
         "author": "gilnett",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering for taskbar apps and system tray icons.",
-        "donateUrl": "https://ko-fi.com/gilnet",
+        "compilerOptions": "-lruntimeobject",
+        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional delayed hover display.",
+        "donateUrl": "https://buymeacoffee.com/gilnett",
         "github": "https://github.com/gilnett",
         "include": [
           "explorer.exe"
         ],
         "license": "GPL-3.0",
         "name": "Hide Taskbar Tooltips",
-        "version": "1.2.0"
+        "version": "1.3.1"
       }
     },
     "hide-titlebar-elements": {
@@ -8305,7 +8305,7 @@
         "ratingBreakdown": [0, 0, 1, 1, 10],
         "ratingUsers": 12,
         "reviews": 0,
-        "trendingSorting": -0.19975644471802734,
+        "trendingSorting": -0.19975644471802737,
         "updated": 1778575498000,
         "users": 264
       },
@@ -9272,7 +9272,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 12],
         "ratingUsers": 12,
         "reviews": 0,
-        "trendingSorting": -0.23593308918885922,
+        "trendingSorting": -0.2359330891888592,
         "updated": 1686183999000,
         "users": 400
       },
@@ -9559,7 +9559,7 @@
         "ratingBreakdown": [32, 27, 53, 158, 972],
         "ratingUsers": 1242,
         "reviews": 0,
-        "trendingSorting": 1.4105282795186467,
+        "trendingSorting": 1.410528279518647,
         "updated": 1792843387000,
         "users": 87113
       },
@@ -9636,7 +9636,7 @@
         "ratingBreakdown": [1, 0, 1, 4, 73],
         "ratingUsers": 79,
         "reviews": 0,
-        "trendingSorting": 22.789947438827646,
+        "trendingSorting": 22.78994743882765,
         "updated": 1792339266000,
         "users": 1211
       },
@@ -10133,7 +10133,7 @@
         "ratingBreakdown": [7, 1, 6, 19, 307],
         "ratingUsers": 340,
         "reviews": 0,
-        "trendingSorting": -1.5109613284839867,
+        "trendingSorting": -1.510961328483987,
         "updated": 1716835371000,
         "users": 37572
       },
@@ -10388,7 +10388,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 4],
         "ratingUsers": 4,
         "reviews": 0,
-        "trendingSorting": -0.023198117248289102,
+        "trendingSorting": -0.023198117248289105,
         "updated": 1779718212000,
         "users": 473
       },
@@ -10653,7 +10653,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 6],
         "ratingUsers": 7,
         "reviews": 0,
-        "trendingSorting": -1.3598895930913915,
+        "trendingSorting": -1.3598895930913917,
         "updated": 1792472577000,
         "users": 426
       },
@@ -10880,7 +10880,7 @@
         "ratingBreakdown": [3, 2, 3, 10, 215],
         "ratingUsers": 233,
         "reviews": 0,
-        "trendingSorting": -1.6737232934328399,
+        "trendingSorting": -1.67372329343284,
         "updated": 1677162292000,
         "users": 21683
       },
@@ -11139,7 +11139,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 3],
         "ratingUsers": 3,
         "reviews": 0,
-        "trendingSorting": 0.24163155452408558,
+        "trendingSorting": 0.2416315545240856,
         "updated": 1719859404000,
         "users": 133
       },
@@ -13170,7 +13170,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 1],
         "ratingUsers": 1,
         "reviews": 0,
-        "trendingSorting": -1.0150295130934195,
+        "trendingSorting": -1.0150295130934197,
         "updated": 1783443138000,
         "users": 111
       },
@@ -13250,7 +13250,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 2],
         "ratingUsers": 2,
         "reviews": 0,
-        "trendingSorting": -0.19899173064893902,
+        "trendingSorting": -0.19899173064893905,
         "updated": 1722203317000,
         "users": 413
       },
@@ -13981,7 +13981,7 @@
         "ratingBreakdown": [0, 1, 0, 0, 14],
         "ratingUsers": 15,
         "reviews": 1,
-        "trendingSorting": -0.23627482225244542,
+        "trendingSorting": -0.23627482225244545,
         "updated": 1791284501000,
         "users": 149
       },
@@ -14217,7 +14217,7 @@
         "ratingBreakdown": [3, 2, 0, 2, 57],
         "ratingUsers": 64,
         "reviews": 0,
-        "trendingSorting": -1.5239164972208639,
+        "trendingSorting": -1.523916497220864,
         "updated": 1761509917000,
         "users": 5883
       },
@@ -14928,7 +14928,7 @@
         "ratingBreakdown": [15, 2, 13, 18, 463],
         "ratingUsers": 511,
         "reviews": 0,
-        "trendingSorting": 0.09778054019312721,
+        "trendingSorting": 0.0977805401931272,
         "updated": 1776872583000,
         "users": 33110
       },
@@ -15359,7 +15359,7 @@
         "ratingBreakdown": [1, 0, 0, 2, 38],
         "ratingUsers": 41,
         "reviews": 0,
-        "trendingSorting": -0.42939698261095804,
+        "trendingSorting": -0.4293969826109581,
         "updated": 1791320634000,
         "users": 1185
       },
@@ -15387,7 +15387,7 @@
         "ratingBreakdown": [0, 0, 0, 5, 19],
         "ratingUsers": 24,
         "reviews": 0,
-        "trendingSorting": 0.24448784864185866,
+        "trendingSorting": 0.24448784864185863,
         "updated": 1789330156000,
         "users": 210
       },
@@ -15526,7 +15526,7 @@
         "ratingBreakdown": [130, 60, 126, 408, 3556],
         "ratingUsers": 4280,
         "reviews": 0,
-        "trendingSorting": 1.8781044775575186,
+        "trendingSorting": 1.8781044775575184,
         "updated": 1771542639000,
         "users": 496331
       },
@@ -15616,7 +15616,7 @@
         "ratingBreakdown": [1, 1, 4, 9, 85],
         "ratingUsers": 100,
         "reviews": 0,
-        "trendingSorting": -0.10341825153309461,
+        "trendingSorting": -0.1034182515330946,
         "updated": 1784829560000,
         "users": 3272
       },
@@ -15643,7 +15643,7 @@
         "ratingBreakdown": [3, 3, 5, 14, 255],
         "ratingUsers": 280,
         "reviews": 0,
-        "trendingSorting": -1.6787119642289041,
+        "trendingSorting": -1.678711964228904,
         "updated": 1770670600000,
         "users": 9770
       },
@@ -15742,7 +15742,7 @@
         "ratingBreakdown": [7, 8, 2, 18, 456],
         "ratingUsers": 491,
         "reviews": 0,
-        "trendingSorting": -1.4280618219904417,
+        "trendingSorting": -1.4280618219904415,
         "updated": 1790202577000,
         "users": 30092
       },
@@ -16203,7 +16203,7 @@
         "ratingBreakdown": [12, 9, 22, 56, 230],
         "ratingUsers": 329,
         "reviews": 0,
-        "trendingSorting": -1.7730486064008795,
+        "trendingSorting": -1.7730486064008797,
         "updated": 1780767350000,
         "users": 5831
       },
@@ -16646,7 +16646,7 @@
         "ratingBreakdown": [4, 0, 4, 17, 170],
         "ratingUsers": 195,
         "reviews": 0,
-        "trendingSorting": -1.0277757323872159,
+        "trendingSorting": -1.027775732387216,
         "updated": 1777136092000,
         "users": 10383
       },
@@ -17095,7 +17095,7 @@
         "ratingBreakdown": [16, 8, 16, 56, 925],
         "ratingUsers": 1021,
         "reviews": 0,
-        "trendingSorting": -1.1464280934667315,
+        "trendingSorting": -1.1464280934667317,
         "updated": 1791547818000,
         "users": 83907
       },
@@ -17271,7 +17271,7 @@
         "ratingBreakdown": [1, 0, 1, 6, 92],
         "ratingUsers": 100,
         "reviews": 0,
-        "trendingSorting": -0.9663756685136421,
+        "trendingSorting": -0.966375668513642,
         "updated": 1777670420000,
         "users": 5485
       },
@@ -17355,7 +17355,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 18],
         "ratingUsers": 18,
         "reviews": 0,
-        "trendingSorting": -0.029502931118907602,
+        "trendingSorting": -0.0295029311189076,
         "updated": 1776237360000,
         "users": 710
       },
@@ -17439,7 +17439,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 3],
         "ratingUsers": 3,
         "reviews": 0,
-        "trendingSorting": 0.18710216320776754,
+        "trendingSorting": 0.1871021632077675,
         "updated": 1746347652000,
         "users": 125
       },
@@ -17491,7 +17491,7 @@
         "ratingBreakdown": [1, 1, 0, 0, 11],
         "ratingUsers": 13,
         "reviews": 0,
-        "trendingSorting": -0.38671028655612627,
+        "trendingSorting": -0.3867102865561262,
         "updated": 1779135688000,
         "users": 895
       },
@@ -17876,7 +17876,7 @@
         "ratingBreakdown": [217, 117, 194, 340, 2039],
         "ratingUsers": 2907,
         "reviews": 0,
-        "trendingSorting": 0.40970949466398043,
+        "trendingSorting": 0.4097094946639804,
         "updated": 1789850420000,
         "users": 175794
       },
@@ -17900,7 +17900,7 @@
         "ratingBreakdown": [2, 1, 3, 5, 40],
         "ratingUsers": 51,
         "reviews": 0,
-        "trendingSorting": 0.20257753153083113,
+        "trendingSorting": 0.2025775315308311,
         "updated": 1781000262000,
         "users": 872
       },
@@ -18353,7 +18353,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 2],
         "ratingUsers": 2,
         "reviews": 0,
-        "trendingSorting": -0.10546475968816053,
+        "trendingSorting": -0.10546475968816052,
         "updated": 1730211947000,
         "users": 278
       },
@@ -19122,7 +19122,7 @@
         "ratingBreakdown": [2, 1, 2, 2, 6],
         "ratingUsers": 13,
         "reviews": 0,
-        "trendingSorting": -0.9862030959994795,
+        "trendingSorting": -0.9862030959994796,
         "updated": 1792594898000,
         "users": 399
       },
@@ -19473,7 +19473,7 @@
         "ratingBreakdown": [0, 2, 1, 1, 6],
         "ratingUsers": 10,
         "reviews": 0,
-        "trendingSorting": 1.0189839903077367,
+        "trendingSorting": 1.018983990307737,
         "updated": 1787923032000,
         "users": 496
       },
@@ -19559,7 +19559,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 5],
         "ratingUsers": 5,
         "reviews": 0,
-        "trendingSorting": 1.1577360819704883,
+        "trendingSorting": 1.1577360819704885,
         "updated": 1789850256000,
         "users": 267
       },
@@ -19745,7 +19745,7 @@
         "ratingBreakdown": [1, 0, 0, 1, 10],
         "ratingUsers": 12,
         "reviews": 0,
-        "trendingSorting": 1.2562624147428623,
+        "trendingSorting": 1.2562624147428625,
         "updated": 1789924580000,
         "users": 675
       },
@@ -19918,7 +19918,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 8],
         "ratingUsers": 8,
         "reviews": 0,
-        "trendingSorting": 1.1928761854140641,
+        "trendingSorting": 1.192876185414064,
         "updated": 1786116651000,
         "users": 496
       },
@@ -20363,7 +20363,7 @@
         "ratingBreakdown": [0, 0, 0, 2, 15],
         "ratingUsers": 17,
         "reviews": 0,
-        "trendingSorting": 0.13412896365433719,
+        "trendingSorting": 0.1341289636543372,
         "updated": 1782159229000,
         "users": 205
       },
@@ -21104,7 +21104,7 @@
         "ratingBreakdown": [24, 7, 12, 31, 179],
         "ratingUsers": 253,
         "reviews": 0,
-        "trendingSorting": 1.8098400297030086,
+        "trendingSorting": 1.8098400297030088,
         "updated": 1773008171000,
         "users": 28709
       },
@@ -21468,7 +21468,7 @@
         "ratingBreakdown": [0, 0, 0, 2, 3],
         "ratingUsers": 5,
         "reviews": 0,
-        "trendingSorting": -0.36442962525592115,
+        "trendingSorting": -0.3644296252559211,
         "updated": 1767605131000,
         "users": 387
       },

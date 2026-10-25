@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T22:02:15.000Z</updated>
+    <updated>2026-10-25T22:37:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.3.1]]></title>
+        <id>https://windhawk.net/mods/hide-taskbar-tooltips#6774848bf06023622d0918a8b2d2110e315a7c9e</id>
+        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
+        <updated>2026-10-25T22:37:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add <code>hideStartButtonTooltip</code> setting to hide or show the Windows Start button tooltip independently of taskbar applications.</li>
+<li>Accurately identify the Start button by querying <code>AutomationProperties.AutomationId == L"StartButton"</code> on the <code>ExperienceToggleButton</code> instance, preventing misclassification of the Task View button.</li>
+<li>Add <code>tooltipHoverDelayMs</code> setting to configure an extra stationary hover delay (in milliseconds) before showing visible tooltips, while keeping hidden tooltip areas permanently suppressed.</li>
+<li>Fall back to native display behavior if delayed tooltip scheduling fails or when tooltips open on external Explorer threads  to prevent them from being swallowed.</li>
+<li>Disarm delayed tooltip Win32 timers synchronously on the <code>Shell_TrayWnd</code> UI thread using <code>SendMessageW</code> in <code>Wh_ModBeforeUninit</code> to guarantee all timers are killed before the DLL is unloaded (<code>FreeLibrary</code>).</li>
+<li>Replace heavy C++/WinRT XAML headers with lightweight ABI COM interfaces, cache <code>IVisualTreeHelperStatics</code> once per visual tree walk, and adopt WRL <code>HString</code> / <code>HStringReference</code> to reduce overhead.</li>
+<li>Clean up unused <code>-lole32</code> and <code>-loleaut32</code> compiler options and remove obsolete <code>#undef GetCurrentTime</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-stats#3aff1348b40c8c1409004dff596106fdca888445</id>
@@ -839,23 +858,6 @@ restrictions for game downloads.</li>
         <author>
             <name>Creeam</name>
             <uri>https://github.com/HaHaWTH</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mond Desktop Clock 5.1]]></title>
-        <id>https://windhawk.net/mods/mond-desktop-clock#f8cc42031b51bfcdb218a3a9a8b1a153168a32f2</id>
-        <link href="https://windhawk.net/mods/mond-desktop-clock"/>
-        <updated>2026-10-24T18:00:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Seconds: new “Show seconds” toggle. Digits use fixed-width cells so the time doesn’t jitter as it ticks.</li>
-<li>Monitors: show the clock on all monitors, the primary only, or a specific monitor number. You can also turn off “Same position on every monitor” to drag and save each monitor’s clock independently.</li>
-<li>Alignment: a global Left / Centre / Right setting, plus a per-row override. The aligned edge stays fixed when weekday or month names change length.</li>
-<li>Settings tidy-up: grouped as Layout → Placement → Weekday → Date → Time → Per-letter, with labelled prefixes and the same order for every row.</li>
-<li>Upgrade note: shadow offsets reset to 2 DIPs, and old weekday letter colours should be re-entered in the new per-letter group. Everything else carries over.</li>
-</ul>]]></content>
-        <author>
-            <name>Elmidin Mahmud</name>
-            <uri>https://github.com/elmidin</uri>
         </author>
     </entry>
 </feed>
