@@ -19,6 +19,20 @@ A customizable Alt+Tab replacement for Windows, based on the
 improvements by [Asteski](https://github.com/Asteski) and
 [bropines](https://github.com/bropines).
 
+## Preview
+
+### Windows 10
+
+![Windows 10](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/preview/Windows-10-Preview.gif)
+
+### Windows 11
+
+![Windows 11](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/preview/Windows-11-Preview.gif)
+
+### Grouped Window Navigation
+
+![Grouped Window Navigation](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/preview/Grouped-Window-Navigation.gif)
+
 ## Features
 
 - Live DWM window previews, with optional titles, icons, close buttons, and
@@ -166,7 +180,7 @@ security-state results from the active switcher session.
 
 ## Screenshots
 
-### Layouts — Default
+### Layouts - Default
 
 | Horizontal squared | Horizontal squared without thumbnails |
 | :---: | :---: |
@@ -184,13 +198,25 @@ security-state results from the active switcher session.
 | :---: |
 | ![Horizontal rounded with thumbnails and no icons](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/8.png) |
 
-### Layouts — Badge (macOS-style)
+### Layouts - Badge (macOS-style)
 
-*Screenshot placeholder — images to be added.*
+| Badge default | Badge centered logo with title above |
+| :---: | :---: |
+| ![Badge default layout](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/badge-layout/BL-Default.png) | ![Badge centered logo with title above](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/badge-layout/BL-LogoCenter-TitleUp.png) |
 
-### Layouts — Dock
+| Badge logo above center with small icon and background |
+| :---: |
+| ![Badge logo above center with small icon and background](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/badge-layout/BL-LogoUpCenter-BgEnabled-IconSmall.png) |
 
-*Screenshot placeholder — images to be added.*
+### Layouts - Dock
+
+| Dock default | Dock without central preview |
+| :---: | :---: |
+| ![Dock default layout](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-Default.png) | ![Dock without central preview](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-CentralPreviewDisabled.png) |
+
+| Dock with bottom icons and overflow chevron |
+| :---: |
+| ![Dock with bottom icons and overflow chevron](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-IconBottom-OverflowChevron.png) |
 
 */
 // ==/WindhawkModReadme==
@@ -918,6 +944,10 @@ static std::atomic<bool> g_detailedDebugLogging{false};
         }                                                                 \
     } while (false)
 
+#ifndef WM_DWMNCRENDERINGCHANGED
+#define WM_DWMNCRENDERINGCHANGED 0x031F
+#endif
+
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
 #define SWS_MAIN_WINDOW_TITLE L"WindhawkSWS_InputEndpoint"
 // Optional selection notification consumed by compatible Windows Animations
@@ -1058,7 +1088,7 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 // single bounded wait, not a synthetic lift or a foreground retry loop.
 #define SWS_NATIVE_TOUCHPAD_HANDOFF_MS 50u
 #define SWS_KEYBOARD_RAPID_PENDING_MS 125u
-#define SWS_KEYBOARD_HANDOFF_PROBE_MS 50u
+#define SWS_KEYBOARD_RELEASE_PROBE_MS 50u
 #define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
 #define SWS_RAW_SWIPE_SESSION_PROP L"WindhawkSWSRawSwipeSession"
 #define SWS_RAW_SWIPE_UP_PROP L"WindhawkSWSRawSwipeUp"
@@ -1114,10 +1144,22 @@ static HWND CreateSWSWindow(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWind
         HWND hWnd = pCreateWindowInBand(dwExStyle, lpClassName, lpWindowName, dwStyle,
                                         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam,
                                         ZBID_SYSTEM_TOOLS);
-        if (hWnd) return hWnd;
+        if (hWnd) {
+            SWS_DEBUG_LOG(L"dwm",
+                          L"window create route=inband hwnd=%p style=0x%08X exStyle=0x%08X",
+                          hWnd, dwStyle, dwExStyle);
+            return hWnd;
+        }
+        SWS_DEBUG_LOG(L"dwm",
+                      L"window create route=inband-failed error=%u style=0x%08X exStyle=0x%08X",
+                      GetLastError(), dwStyle, dwExStyle);
     }
-    return CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
-                           X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    HWND hWnd = CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    SWS_DEBUG_LOG(L"dwm",
+                  L"window create route=classic hwnd=%p error=%u style=0x%08X exStyle=0x%08X",
+                  hWnd, hWnd ? 0u : GetLastError(), dwStyle, dwExStyle);
+    return hWnd;
 }
 
 struct MotionTrackClock {
@@ -1213,12 +1255,26 @@ struct WindowIconCell {
     std::shared_ptr<OwnedWindowIcon> icon;
 };
 
+enum class UwpFrameValidation : unsigned char {
+    NotApplicationFrame,
+    Pending,
+    LiveCoreWindow,
+    LiveThumbnail,
+    Stale,
+};
+
+static constexpr DWORD SWS_UWP_VALIDATION_GRACE_MS = 1000;
+static constexpr unsigned int SWS_UWP_INVALID_SOURCE_LIMIT = 5;
+
 struct WindowEntry {
     HWND hWnd; HICON hIcon; WCHAR title[256]; std::map<HWND, DwmThumbnailRef> hThumbs;
     std::shared_ptr<WindowIconCell> iconCell;
     RECT rcCell; RECT rcThumbActual; RECT rcThumbSlot;
     SIZE sourceSize;           // Raw DWM surface size
     bool thumbnailSourceReady = false;
+    UwpFrameValidation uwpValidation = UwpFrameValidation::NotApplicationFrame;
+    ULONGLONG uwpValidationStartTick = 0;
+    unsigned int uwpInvalidSourceChecks = 0;
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
     std::vector<HWND> groupWindows;  // All app windows when grouping by application
@@ -1514,6 +1570,11 @@ static bool CloseSwitcherEntry(int idx, PCWSTR source = L"unknown");
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 static bool IsApplicationFrameWindowClass(HWND hWnd);
 static bool HasLiveUwpFrameContent(HWND hWnd);
+static bool IsUwpFrameDefinitelyStale(HWND hWnd);
+static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
+                                     HRESULT sourceHr, PCWSTR phase);
+static bool ShouldHideUwpThumbnail(HWND hWnd, bool thumbnailReady);
+static bool RemoveStaleUwpEntriesForPresentation();
 static void LogInvalidUwpThumbnailSource(HWND hWnd, HTHUMBNAIL hThumb,
                                          HRESULT hr, SIZE sourceSize,
                                          PCWSTR phase);
@@ -1541,7 +1602,6 @@ static ULONGLONG g_showDelayDeadlineTick = 0;
 static bool g_touchpadInvocation = false;
 static bool g_keyboardPendingForegroundHandoff = false;
 static bool g_keyboardPendingForegroundHandoffSucceeded = false;
-static bool g_keyboardHiddenHandoffAttempted = false;
 // Alt release observed before keyboard foreground handoff; recheck after handoff.
 static bool g_keyboardPendingAltRelease = false;
 static bool g_keyboardHandoffRevealDeferralLogged = false;
@@ -1552,7 +1612,8 @@ enum class KeyboardReleaseSource : unsigned char {
 };
 static KeyboardReleaseSource g_keyboardPendingReleaseSource =
     KeyboardReleaseSource::None;
-static ULONGLONG g_keyboardHandoffProbeTick = 0;
+static ULONGLONG g_keyboardReleaseProbeTick = 0;
+static unsigned int g_keyboardReleaseProbeSamples = 0;
 static bool g_recoveringShellFocus = false;
 static HFONT g_hFont = NULL;
 static HTHEME g_hTheme = NULL;
@@ -2564,6 +2625,7 @@ static DWORD g_dwSwitcherThreadId = 0;
 static bool g_isExplorer = false;
 static HANDLE g_restartExplorerPromptThread = NULL;
 static std::atomic<HWND> g_restartExplorerPromptWindow{nullptr};
+static HANDLE g_restartExplorerPromptGate = NULL;
 static IsShellWindow_t g_IsShellManagedWindow = nullptr;
 static IsShellWindow_t g_IsShellFrameWindow = nullptr;
 static GhostWindowFromHungWindow_t g_GhostWindowFromHungWindow = nullptr;
@@ -2792,7 +2854,8 @@ static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
     HTHUMBNAIL handle = record->handle;
     InvalidateThumbCache(handle);
     HRESULT result = DwmUnregisterThumbnail(handle);
-    if (SUCCEEDED(result)) {
+    const bool alreadyReleased = result == E_INVALIDARG;
+    if (SUCCEEDED(result) || alreadyReleased) {
         record->handle = nullptr;
         auto it = g_dwmThumbnailRegistrations.find(handle);
         if (it != g_dwmThumbnailRegistrations.end()) {
@@ -2801,6 +2864,11 @@ static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
             }
         }
         g_thumbSourceRects.erase(handle);
+        if (alreadyReleased) {
+            SWS_DEBUG_LOG(L"dwm",
+                          L"DwmUnregisterThumbnail already released handle=%p",
+                          handle);
+        }
     } else {
         Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
                handle, (unsigned)result);
@@ -2829,18 +2897,24 @@ static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
         g_dwmThumbnailRegistrations.erase(registration);
     }
     HRESULT result = DwmUnregisterThumbnail(h);
-    if (SUCCEEDED(result)) {
+    const bool alreadyReleased = result == E_INVALIDARG;
+    if (SUCCEEDED(result) || alreadyReleased) {
         auto it = g_dwmThumbnailRegistrations.find(h);
         if (it != g_dwmThumbnailRegistrations.end()) {
             if (auto current = it->second.lock()) current->handle = nullptr;
             g_dwmThumbnailRegistrations.erase(it);
         }
         g_thumbSourceRects.erase(h);
+        if (alreadyReleased) {
+            SWS_DEBUG_LOG(L"dwm",
+                          L"DwmUnregisterThumbnail already released handle=%p",
+                          h);
+        }
     } else {
         Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
                h, (unsigned)result);
     }
-    return result;
+    return alreadyReleased ? S_OK : result;
 }
 
 // Forward declarations
@@ -2851,6 +2925,9 @@ static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
 static void ApplyPresentationWindowRegion(HWND hWnd);
 static void RefreshNativePresentationCorners(HWND hWnd);
+static void LogPresentationFrameDiagnostics(HWND hWnd, PCWSTR phase);
+static void LogAllPresentationFrameDiagnostics(PCWSTR phase);
+static void LogNccalcSizeDiagnostics(HWND hWnd, WPARAM wParam, LPARAM lParam);
 static void CreateMirrorSwitchers();
 static void ShowMirrorSwitchers();
 static void HideSwitcher();
@@ -2889,8 +2966,7 @@ static void TapUnassignedKeyForForeground();
 static bool ActivateRawTouchpadWindow();
 static void ReconcileDeferredKeyboardReleaseAfterReveal();
 static PCWSTR KeyboardReleaseSourceName(KeyboardReleaseSource source);
-static bool TryHiddenRapidKeyboardCommit();
-static bool TryCompleteHiddenRapidKeyboardCommit();
+static bool TryCommitProtectedRapidKeyboardRelease();
 
 static inline int DpiScale(int val, int dpi) { return MulDiv(val, dpi, 96); }
 
@@ -3320,8 +3396,193 @@ static std::map<HWND, PresentationRegionState> g_presentationRegions;
 // Win11's transient system backdrop owns rounded-corner clipping. Keep this
 // per HWND because mirrors and the main switcher can be recreated separately.
 static std::map<HWND, bool> g_nativeAcrylicWindows;
+enum class PresentationMaterialState {
+    Unknown,
+    None,
+    Mica,
+    NativeAcrylic,
+    LegacyAcrylic,
+};
+static std::map<HWND, PresentationMaterialState> g_presentationMaterialStates;
+static constexpr DWORD kDwmAttributeCaptionButtonBounds = 5;
+static constexpr DWORD kDwmAttributeCaptionColor = 35;
+static constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;
+static constexpr COLORREF kDwmColorNone = 0xFFFFFFFE;
+static bool s_applyingThemeToWindow = false;
 static void SetSwitcherLayoutBounds(int x, int y, int w, int h,
                                     UINT flags = SWP_NOACTIVATE);
+
+static PCWSTR PresentationWindowRole(HWND hWnd) {
+    if (hWnd == g_hSwitcher) return L"main";
+    if (hWnd == g_hCloseBtnWnd) return L"overlay";
+    if (hWnd == g_hBackdropWnd) return L"backdrop";
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (hWnd == hMirror) return L"mirror";
+    }
+    return L"other";
+}
+
+static bool IsPresentationSurfaceWindow(HWND hWnd) {
+    if (!hWnd) return false;
+    if (hWnd == g_hSwitcher) return true;
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (hWnd == hMirror) return true;
+    }
+    return false;
+}
+
+static void ApplyPresentationCaptionColor(HWND hWnd) {
+    if (!IsPresentationSurfaceWindow(hWnd)) return;
+    const bool normalMaterial = ThemeIs(L"mica") || ThemeIs(L"backdrop");
+    COLORREF captionColor = normalMaterial ? kDwmColorNone : kDwmColorDefault;
+    HRESULT hr = DwmSetWindowAttribute(
+        hWnd, kDwmAttributeCaptionColor, &captionColor,
+        sizeof(captionColor));
+    SWS_DEBUG_LOG(L"dwm",
+                  L"caption color normal hwnd=%p color=%s material=%d "
+                  L"hr=0x%08X",
+                  hWnd, normalMaterial ? L"none" : L"default", normalMaterial,
+                  (unsigned)hr);
+}
+
+static void LogPresentationFrameDiagnostics(HWND hWnd, PCWSTR phase) {
+    if (!g_detailedDebugLogging.load(std::memory_order_relaxed) ||
+        !hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    RECT windowRect = {};
+    RECT clientRect = {};
+    RECT clientScreenRect = {};
+    RECT extendedFrameRect = {};
+    bool haveWindowRect = GetWindowRect(hWnd, &windowRect) != FALSE;
+    bool haveClientRect = GetClientRect(hWnd, &clientRect) != FALSE;
+    if (haveClientRect) {
+        POINT clientTopLeft = { clientRect.left, clientRect.top };
+        POINT clientBottomRight = { clientRect.right, clientRect.bottom };
+        MapWindowPoints(hWnd, NULL, &clientTopLeft, 1);
+        MapWindowPoints(hWnd, NULL, &clientBottomRight, 1);
+        clientScreenRect = { clientTopLeft.x, clientTopLeft.y,
+                             clientBottomRight.x, clientBottomRight.y };
+    }
+
+    BOOL ncRenderingEnabled = FALSE;
+    HRESULT ncRenderingHr = DwmGetWindowAttribute(
+        hWnd, DWMWA_NCRENDERING_ENABLED, &ncRenderingEnabled,
+        sizeof(ncRenderingEnabled));
+    HRESULT extendedFrameHr = DwmGetWindowAttribute(
+        hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extendedFrameRect,
+        sizeof(extendedFrameRect));
+    RECT captionButtonBounds = {};
+    HRESULT captionButtonHr = DwmGetWindowAttribute(
+        hWnd, kDwmAttributeCaptionButtonBounds, &captionButtonBounds,
+        sizeof(captionButtonBounds));
+    DWORD visibleBorderThickness = 0;
+    HRESULT visibleBorderHr = DwmGetWindowAttribute(
+        hWnd, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS,
+        &visibleBorderThickness, sizeof(visibleBorderThickness));
+    int systemBackdropType = 0;
+    HRESULT systemBackdropHr = DwmGetWindowAttribute(
+        hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &systemBackdropType,
+        sizeof(systemBackdropType));
+
+    const auto nativeAcrylic = g_nativeAcrylicWindows.find(hWnd);
+    const bool nativeAcrylicActive =
+        nativeAcrylic != g_nativeAcrylicWindows.end() && nativeAcrylic->second;
+    UINT dpi = QueryWindowDpi(hWnd);
+    const bool thickFrame = (style & WS_THICKFRAME) != 0;
+    const bool caption = (style & WS_CAPTION) != 0;
+    const bool windowEdge = (exStyle & WS_EX_WINDOWEDGE) != 0;
+    const bool layered = (exStyle & WS_EX_LAYERED) != 0;
+    const bool transparent = (exStyle & WS_EX_TRANSPARENT) != 0;
+    SWS_DEBUG_LOG(
+        L"dwm",
+        L"frame phase=%s role=%s hwnd=%p style=0x%IX exStyle=0x%IX "
+        L"dpi=%u visible=%d iconic=%d foreground=%d active=%d "
+        L"thick=%d caption=%d windowEdge=%d layered=%d transparent=%d "
+        L"windowOk=%d window=%d,%d-%d,%d "
+        L"clientOk=%d client=%d,%d-%d,%d "
+         L"clientScreenOk=%d clientScreen=%d,%d-%d,%d "
+         L"extendedFrameHr=0x%08X extendedFrame=%d,%d-%d,%d "
+         L"captionButtonHr=0x%08X captionButtons=%d,%d-%d,%d "
+         L"ncRenderingHr=0x%08X ncRenderingEnabled=%d "
+         L"visibleBorderHr=0x%08X visibleBorderThickness=%u "
+         L"backdropHr=0x%08X backdrop=%d nativeAcrylic=%d",
+        phase, PresentationWindowRole(hWnd), hWnd, style, exStyle, dpi,
+        IsWindowVisible(hWnd), IsIconic(hWnd),
+        GetForegroundWindow() == hWnd, GetActiveWindow() == hWnd,
+        thickFrame, caption, windowEdge, layered, transparent,
+        haveWindowRect, windowRect.left, windowRect.top, windowRect.right,
+        windowRect.bottom, haveClientRect, clientRect.left, clientRect.top,
+        clientRect.right, clientRect.bottom, haveClientRect,
+        clientScreenRect.left, clientScreenRect.top, clientScreenRect.right,
+         clientScreenRect.bottom, (unsigned)extendedFrameHr,
+         extendedFrameRect.left, extendedFrameRect.top, extendedFrameRect.right,
+         extendedFrameRect.bottom, (unsigned)captionButtonHr,
+         captionButtonBounds.left, captionButtonBounds.top,
+         captionButtonBounds.right, captionButtonBounds.bottom,
+         (unsigned)ncRenderingHr,
+        ncRenderingEnabled, (unsigned)visibleBorderHr,
+        visibleBorderThickness, (unsigned)systemBackdropHr,
+          systemBackdropType, nativeAcrylicActive);
+}
+
+static void LogAllPresentationFrameDiagnostics(PCWSTR phase) {
+    if (!g_detailedDebugLogging.load(std::memory_order_relaxed)) return;
+    LogPresentationFrameDiagnostics(g_hSwitcher, phase);
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        LogPresentationFrameDiagnostics(hMirror, phase);
+    }
+}
+
+static void LogNccalcSizeDiagnostics(HWND hWnd, WPARAM wParam, LPARAM lParam) {
+    if (!g_detailedDebugLogging.load(std::memory_order_relaxed) || !lParam) {
+        return;
+    }
+
+    if (wParam) {
+        const NCCALCSIZE_PARAMS* params =
+            reinterpret_cast<const NCCALCSIZE_PARAMS*>(lParam);
+        const RECT& before = params->rgrc[0];
+        const RECT& oldWindow = params->rgrc[1];
+        const RECT& oldClient = params->rgrc[2];
+        SWS_DEBUG_LOG(
+            L"dwm",
+            L"nccalc phase=before hwnd=%p role=%s wParam=1 "
+            L"new=%d,%d-%d,%d oldWindow=%d,%d-%d,%d oldClient=%d,%d-%d,%d",
+            hWnd, PresentationWindowRole(hWnd), before.left, before.top,
+            before.right, before.bottom, oldWindow.left, oldWindow.top,
+            oldWindow.right, oldWindow.bottom, oldClient.left, oldClient.top,
+            oldClient.right, oldClient.bottom);
+        // The custom frame handler deliberately leaves rgrc[0] unchanged and
+        // returns zero. Record that outgoing rectangle explicitly.
+        SWS_DEBUG_LOG(L"dwm",
+                      L"nccalc phase=after hwnd=%p role=%s result=0 "
+                      L"new=%d,%d-%d,%d",
+                      hWnd, PresentationWindowRole(hWnd), before.left,
+                      before.top, before.right, before.bottom);
+    } else {
+        const RECT& rect = *reinterpret_cast<const RECT*>(lParam);
+        SWS_DEBUG_LOG(L"dwm",
+                      L"nccalc phase=before hwnd=%p role=%s wParam=0 "
+                      L"rect=%d,%d-%d,%d",
+                      hWnd, PresentationWindowRole(hWnd), rect.left, rect.top,
+                      rect.right, rect.bottom);
+        SWS_DEBUG_LOG(L"dwm",
+                      L"nccalc phase=after hwnd=%p role=%s result=0 "
+                      L"rect=%d,%d-%d,%d",
+                      hWnd, PresentationWindowRole(hWnd), rect.left, rect.top,
+                      rect.right, rect.bottom);
+    }
+}
+
+static void RefreshSwsThemeHandle() {
+    if (g_hTheme) CloseThemeData(g_hTheme);
+    g_hTheme = OpenThemeData(NULL, L"CompositedWindow::Window");
+    SWS_DEBUG_LOG(L"layout", L"theme data refreshed handle=%p", g_hTheme);
+}
 
 // Selection focus: documented 167 ms existing-element point-to-point motion.
 static bool g_animSelectionActive = false;
@@ -3530,6 +3791,7 @@ static void BeginEntranceAnimationClock() {
 }
 
 static void AdvancePresentationAnimation(float dt) {
+    const bool entranceWasActive = g_animEntranceActive;
     if (g_animEntranceActive) {
         StepMotionTrack(g_animEntranceProgress, g_animEntranceDuration, dt);
         g_animEntranceCurrentAlpha = g_easeEntrance.Solve(g_animEntranceProgress);
@@ -3540,6 +3802,9 @@ static void AdvancePresentationAnimation(float dt) {
         g_animExitCurrentAlpha = g_easeEntrance.Solve(g_animExitProgress);
     }
     StepOpacityMotion(g_presentationOpacity, g_presentationOpacityCurrent, dt);
+    if (entranceWasActive && !g_animEntranceActive) {
+        LogAllPresentationFrameDiagnostics(L"entrance-settled");
+    }
 }
 
 // Hover contour: 167 ms transform, with an independent 83 ms linear opacity.
@@ -5327,22 +5592,30 @@ static void UpdateThumbnailAnimations() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             w.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
+            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT);
+            HRESULT sourceHr = registerHr;
+            bool dwmSourceReady = false;
+            if (SUCCEEDED(registerHr) && hT) {
                 w.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 SIZE src = {0};
-                HRESULT hr = DwmQueryThumbnailSourceSize(hT, &src);
-                LogInvalidUwpThumbnailSource(w.hWnd, hT, hr, src,
+                sourceHr = DwmQueryThumbnailSourceSize(hT, &src);
+                LogInvalidUwpThumbnailSource(w.hWnd, hT, sourceHr, src,
                                              L"animation-register");
-                if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+                if (SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0) {
                     w.sourceSize = src;
                     w.thumbnailSourceReady = true;
+                    dwmSourceReady = true;
                 } else {
                     w.thumbnailSourceReady = false;
                 }
             }
+            if (hT) {
+                UpdateUwpFrameValidation(
+                    w, dwmSourceReady, sourceHr, L"animation-register");
+            }
         }
 
-        if (IsApplicationFrameWindowClass(w.hWnd) && !w.thumbnailSourceReady) {
+        if (ShouldHideUwpThumbnail(w.hWnd, w.thumbnailSourceReady)) {
             for (const auto& kv : w.hThumbs) {
                 if (!kv.second) continue;
                 DWM_THUMBNAIL_PROPERTIES hidden = {};
@@ -5374,8 +5647,7 @@ static void UpdateThumbnailAnimations() {
             RECT dst = snap.rcThumbActual;
             OffsetRect(&dst, outOffX, outOffY);
 
-            if (IsApplicationFrameWindowClass(snap.hWnd) &&
-                (!snap.thumbnailSourceReady || !HasLiveUwpFrameContent(snap.hWnd))) {
+            if (ShouldHideUwpThumbnail(snap.hWnd, snap.thumbnailSourceReady)) {
                 for (const auto& kv : snap.hThumbs) {
                     if (!kv.second) continue;
                     DWM_THUMBNAIL_PROPERTIES hidden = {};
@@ -5421,8 +5693,7 @@ static void UpdateThumbnailAnimations() {
         for (const auto& item : g_layoutTransition.departingItems) {
             BYTE departAlpha = (BYTE)roundf(thumbAlpha * item.alpha);
             RECT dst = item.rcThumbCurrent;
-            if (IsApplicationFrameWindowClass(item.hWnd) &&
-                (!item.thumbnailSourceReady || !HasLiveUwpFrameContent(item.hWnd))) {
+            if (ShouldHideUwpThumbnail(item.hWnd, item.thumbnailSourceReady)) {
                 for (const auto& kv : item.hThumbs) {
                     if (!kv.second) continue;
                     DWM_THUMBNAIL_PROPERTIES hidden = {};
@@ -6215,6 +6486,12 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID) {
             CloseHandle(pi.hProcess);
         }
     }
+    HANDLE gate = (HANDLE)InterlockedExchangePointer(
+        reinterpret_cast<PVOID*>(&g_restartExplorerPromptGate), nullptr);
+    if (gate) {
+        ResetEvent(gate);
+        CloseHandle(gate);
+    }
     return 0;
 }
 
@@ -6222,9 +6499,29 @@ static void PromptForExplorerRestart() {
     if (g_restartExplorerPromptThread) {
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0) return;
         CloseHandle(g_restartExplorerPromptThread);
+        g_restartExplorerPromptThread = NULL;
     }
+
+    HANDLE gate = CreateEventW(nullptr, TRUE, TRUE, L"Windhawk_SWS_RestartPrompt");
+    if (!gate) {
+        return;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        SWS_DEBUG_LOG(L"settings", L"restart prompt already owned by another Explorer process");
+        CloseHandle(gate);
+        return;
+    }
+    g_restartExplorerPromptGate = gate;
     g_restartExplorerPromptThread = CreateThread(
         nullptr, 0, RestartPromptThreadProc, nullptr, 0, nullptr);
+    if (!g_restartExplorerPromptThread) {
+        HANDLE failedGate = (HANDLE)InterlockedExchangePointer(
+            reinterpret_cast<PVOID*>(&g_restartExplorerPromptGate), nullptr);
+        if (failedGate) {
+            ResetEvent(failedGate);
+            CloseHandle(failedGate);
+        }
+    }
 }
 
 
@@ -6259,7 +6556,7 @@ static bool ShouldListInAltTab(HWND hwnd) {
     // WS_EX_NOACTIVATE excludes unless WS_EX_APPWINDOW is also set
     if ((ex & WS_EX_NOACTIVATE) && !(ex & WS_EX_APPWINDOW)) return false;
 
-    // Prefer the owner over the child popup/dialog, but only if the owner is actually listable —
+    // Prefer the owner over the child popup/dialog, but only if the owner is actually listable -
     // otherwise both windows disappear from the switcher.
     HWND own = GetWindow(hwnd, GW_OWNER);
     if (!(ex & WS_EX_APPWINDOW) && IsWindow(own) && IsReallyVisible(own) &&
@@ -6314,6 +6611,165 @@ static bool HasLiveUwpFrameContent(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return false;
     if (!IsApplicationFrameWindowClass(hWnd)) return true;
     return FindUwpCoreWindow(hWnd) != nullptr;
+}
+
+static PCWSTR UwpFrameValidationName(UwpFrameValidation validation) {
+    switch (validation) {
+    case UwpFrameValidation::Pending:
+        return L"pending";
+    case UwpFrameValidation::LiveCoreWindow:
+        return L"core-window";
+    case UwpFrameValidation::LiveThumbnail:
+        return L"thumbnail";
+    case UwpFrameValidation::Stale:
+        return L"stale";
+    default:
+        return L"not-application-frame";
+    }
+}
+
+static bool IsUwpFrameDefinitelyStale(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return true;
+    if (!IsApplicationFrameWindowClass(hWnd)) return false;
+
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked,
+                                        sizeof(cloaked))) &&
+        (cloaked & DWM_CLOAKED_APP)) {
+        return true;
+    }
+
+    return !IsWindowVisible(hWnd) && !IsIconic(hWnd);
+}
+
+static void InitializeUwpFrameValidation(WindowEntry& entry) {
+    if (!IsApplicationFrameWindowClass(entry.hWnd)) {
+        entry.uwpValidation = UwpFrameValidation::NotApplicationFrame;
+        entry.uwpValidationStartTick = 0;
+        entry.uwpInvalidSourceChecks = 0;
+        return;
+    }
+
+    entry.uwpValidationStartTick = 0;
+    entry.uwpInvalidSourceChecks = 0;
+    if (IsUwpFrameDefinitelyStale(entry.hWnd)) {
+        entry.uwpValidation = UwpFrameValidation::Stale;
+    } else if (FindUwpCoreWindow(entry.hWnd)) {
+        entry.uwpValidation = UwpFrameValidation::LiveCoreWindow;
+    } else {
+        // CoreWindow may appear after Explorer restores an existing UWP frame.
+        // Keep the visible frame pending until DWM supplies a usable thumbnail.
+        entry.uwpValidation = UwpFrameValidation::Pending;
+    }
+}
+
+static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
+                                     HRESULT sourceHr, PCWSTR phase) {
+    if (!IsApplicationFrameWindowClass(entry.hWnd)) {
+        entry.uwpValidation = UwpFrameValidation::NotApplicationFrame;
+        entry.uwpValidationStartTick = 0;
+        entry.uwpInvalidSourceChecks = 0;
+        return false;
+    }
+
+    if (IsUwpFrameDefinitelyStale(entry.hWnd)) {
+        entry.uwpValidation = UwpFrameValidation::Stale;
+        SWS_DEBUG_LOG(L"uwp",
+                      L"frame validation hwnd=%p phase=%s state=stale "
+                      L"sourceHr=0x%08X sourceReady=%d",
+                      entry.hWnd, phase, (unsigned)sourceHr, thumbnailReady);
+        return true;
+    }
+
+    if (FindUwpCoreWindow(entry.hWnd)) {
+        entry.uwpValidation = UwpFrameValidation::LiveCoreWindow;
+        entry.uwpValidationStartTick = 0;
+        entry.uwpInvalidSourceChecks = 0;
+        return false;
+    }
+
+    if (thumbnailReady) {
+        entry.uwpValidation = UwpFrameValidation::LiveThumbnail;
+        entry.uwpValidationStartTick = 0;
+        entry.uwpInvalidSourceChecks = 0;
+        SWS_DEBUG_LOG(L"uwp",
+                      L"frame validation hwnd=%p phase=%s state=thumbnail "
+                      L"sourceHr=0x%08X sourceReady=1",
+                      entry.hWnd, phase, (unsigned)sourceHr);
+        return false;
+    }
+
+    // Hidden enumeration and Show Delay are setup time, not visible validation
+    // time. Do not consume recovery grace before presentation begins.
+    if (!g_isVisible) {
+        entry.uwpValidation = UwpFrameValidation::Pending;
+        return false;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    if (!entry.uwpValidationStartTick) {
+        entry.uwpValidationStartTick = now;
+    }
+    if (entry.uwpInvalidSourceChecks < 0xFFFFu) {
+        ++entry.uwpInvalidSourceChecks;
+    }
+    entry.uwpValidation = UwpFrameValidation::Pending;
+    const bool expired =
+        entry.uwpInvalidSourceChecks >= SWS_UWP_INVALID_SOURCE_LIMIT &&
+        now >= entry.uwpValidationStartTick &&
+        now - entry.uwpValidationStartTick >= SWS_UWP_VALIDATION_GRACE_MS;
+    SWS_DEBUG_LOG(L"uwp",
+                  L"frame validation hwnd=%p phase=%s state=%s "
+                  L"sourceHr=0x%08X sourceReady=0 checks=%u age=%llu expired=%d",
+                  entry.hWnd, phase, expired ? L"stale" : L"pending",
+                  (unsigned)sourceHr, entry.uwpInvalidSourceChecks,
+                  (unsigned long long)(now - entry.uwpValidationStartTick),
+                  expired);
+    if (expired) {
+        entry.uwpValidation = UwpFrameValidation::Stale;
+    }
+    return expired;
+}
+
+static bool ShouldPruneUwpEntry(const WindowEntry& entry) {
+    if (!IsApplicationFrameWindowClass(entry.hWnd)) return false;
+    // A failed thumbnail/CoreWindow probe is recoverable while the frame is
+    // still visible or minimized. Only remove the entry after the HWND itself
+    // is definitely stale.
+    return IsUwpFrameDefinitelyStale(entry.hWnd);
+}
+
+static bool ShouldHideUwpThumbnail(HWND hWnd, bool thumbnailReady) {
+    if (!IsApplicationFrameWindowClass(hWnd)) return false;
+    return !thumbnailReady || IsUwpFrameDefinitelyStale(hWnd);
+}
+
+static bool RemoveStaleUwpEntriesForPresentation() {
+    bool removedAny = false;
+    for (int i = (int)g_windows.size() - 1; i >= 0; --i) {
+        if (g_windows[i].isDesktopItem || !ShouldPruneUwpEntry(g_windows[i])) {
+            continue;
+        }
+
+        for (const auto& kv : g_windows[i].hThumbs) {
+            if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
+        }
+        g_windows[i].hThumbs.clear();
+        g_windows.erase(g_windows.begin() + i);
+        if (i < g_selectedIndex) --g_selectedIndex;
+        if (i < g_layoutStartIndex) --g_layoutStartIndex;
+        removedAny = true;
+    }
+
+    if (g_selectedIndex < 0) g_selectedIndex = 0;
+    if (g_layoutStartIndex < 0) g_layoutStartIndex = 0;
+    if (g_selectedIndex >= (int)g_windows.size() && !g_windows.empty()) {
+        g_selectedIndex = (int)g_windows.size() - 1;
+    }
+    if (g_layoutStartIndex >= (int)g_windows.size() && !g_windows.empty()) {
+        g_layoutStartIndex = (int)g_windows.size() - 1;
+    }
+    return removedAny;
 }
 
 static void LogInvalidUwpThumbnailSource(HWND hWnd, HTHUMBNAIL hThumb,
@@ -6384,6 +6840,52 @@ static HWND CanonicalAltTabWindow(HWND hWnd) {
         }
     }
     return hTarget && !IsSwitcherWindow(hTarget) ? hTarget : nullptr;
+}
+
+static int FindEntryContainingWindow(HWND hWnd) {
+    if (!hWnd) return -1;
+    for (int i = 0; i < (int)g_windows.size(); ++i) {
+        const auto& entry = g_windows[i];
+        if (entry.hWnd == hWnd ||
+            std::find(entry.groupWindows.begin(), entry.groupWindows.end(), hWnd) !=
+                entry.groupWindows.end()) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// SearchHost and Start are not Alt+Tab entries. When they invoke the keyboard
+// switcher, choose the first eligible top-level window behind the shell source
+// instead of blindly selecting entry zero from the MRU-sorted list.
+static int FindNextEntryAfterInvocation(HWND invocationInput) {
+    if (!invocationInput || IsSwitcherWindow(invocationInput)) return -1;
+
+    HWND sourceRoot = GetAncestor(invocationInput, GA_ROOTOWNER);
+    if (!sourceRoot) sourceRoot = invocationInput;
+
+    bool sourceSeen = false;
+    HWND hWnd = GetTopWindow(nullptr);
+    for (; hWnd; hWnd = GetWindow(hWnd, GW_HWNDNEXT)) {
+        if (!sourceSeen) {
+            if (hWnd == invocationInput || hWnd == sourceRoot) sourceSeen = true;
+            continue;
+        }
+
+        int index = FindEntryContainingWindow(CanonicalAltTabWindow(hWnd));
+        if (index >= 0) return index;
+    }
+
+    if (!sourceSeen) return -1;
+
+    // Wrap to the top when no eligible entry remains below the shell source.
+    hWnd = GetTopWindow(nullptr);
+    for (; hWnd && hWnd != invocationInput && hWnd != sourceRoot;
+         hWnd = GetWindow(hWnd, GW_HWNDNEXT)) {
+        int index = FindEntryContainingWindow(CanonicalAltTabWindow(hWnd));
+        if (index >= 0) return index;
+    }
+    return -1;
 }
 
 static void UpdateMruWindow(HWND hWnd) {
@@ -7012,6 +7514,9 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
     if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd) || IsNativeSwitcherWindow(hWnd)) return false;
     if (IsDesktopSourceWindow(hWnd)) return false;
     if (!IsAltTabWindow(hWnd)) return false;
+    if (IsApplicationFrameWindowClass(hWnd) && IsUwpFrameDefinitelyStale(hWnd)) {
+        return false;
+    }
 
     BOOL cloaked = FALSE;
     DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
@@ -7086,11 +7591,6 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
         return false;
     }
 
-    if (!HasLiveUwpFrameContent(hWnd)) {
-        Wh_Log(L"SWS: rejecting stale UWP frame hwnd=%p title='%s'", hWnd, title);
-        return false;
-    }
-
     // Geometry check: non-minimized windows must be at least 32x32 to exclude 1x1 or 0x0 anchor surfaces
     if (!IsIconic(hWnd)) {
         RECT r = {0};
@@ -7127,6 +7627,7 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
     if (outEntry) {
         outEntry->hWnd = hWnd;
         wcscpy_s(outEntry->title, title);
+        InitializeUwpFrameValidation(*outEntry);
         outEntry->hIcon = LoadWindowIcon(hWnd, &outEntry->iconCell);
     }
     return true;
@@ -7527,7 +8028,15 @@ static SwsOwnerRestoreRequest s_ownerRestoreRequests[2]{};
 static void ClearSwsSwitchAnimationSelection() {
     // Invalidate the commit marker first. A consumer which races this cleanup
     // can then never treat a partially cleared payload as a new selection.
-    if (g_hSwitcher) RemovePropW(g_hSwitcher, SwsSelectionProtocol::TokenProp);
+    if (g_hSwitcher) {
+        SWS_DEBUG_LOG(
+            L"focus", L"selection clear token=%lu target=%p restore=%d",
+            static_cast<unsigned long>(reinterpret_cast<ULONG_PTR>(GetPropW(
+                g_hSwitcher, SwsSelectionProtocol::TokenProp))),
+            GetPropW(g_hSwitcher, SwsSelectionProtocol::TargetProp),
+            GetPropW(g_hSwitcher, SwsSelectionProtocol::RestoreProp) != nullptr);
+        RemovePropW(g_hSwitcher, SwsSelectionProtocol::TokenProp);
+    }
     s_switchAnimationTarget = nullptr;
     s_switchAnimationProcess = 0;
     s_switchAnimationThread = 0;
@@ -7556,6 +8065,11 @@ static void PublishSwsSwitchAnimationSelection(HWND target,
         processId == s_switchAnimationProcess &&
         threadId == s_switchAnimationThread &&
         GetPropW(g_hSwitcher, SwsSelectionProtocol::TokenProp)) {
+        SWS_DEBUG_LOG(L"focus", L"selection reuse target=%p token=%lu restore=%d",
+                      target,
+                      static_cast<unsigned long>(reinterpret_cast<ULONG_PTR>(
+                          GetPropW(g_hSwitcher, SwsSelectionProtocol::TokenProp))),
+                      s_switchAnimationRestoring || restoring);
         return;
     }
 
@@ -7592,6 +8106,8 @@ static void PublishSwsSwitchAnimationSelection(HWND target,
                              reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(token)));
     }
     if (!published) {
+        SWS_DEBUG_LOG(L"focus", L"selection publish failed target=%p restore=%d",
+                      target, restoring);
         ClearSwsSwitchAnimationSelection();
         return;
     }
@@ -7600,6 +8116,12 @@ static void PublishSwsSwitchAnimationSelection(HWND target,
     s_switchAnimationProcess = processId;
     s_switchAnimationThread = threadId;
     s_switchAnimationRestoring = restoring;
+    SWS_DEBUG_LOG(L"focus", L"selection publish target=%p source=%p token=%lu "
+                  L"restore=%d process=%lu thread=%lu",
+                  target, s_switchAnimationSource,
+                  static_cast<unsigned long>(token), restoring,
+                  static_cast<unsigned long>(processId),
+                  static_cast<unsigned long>(threadId));
 }
 
 struct NativeTouchpadInvocation {
@@ -8202,7 +8724,7 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             }
             // If still no AUMID (common on Win10), try to get the process executable and return its icon
             if (aumid.empty() && pid) {
-                // First try window/class icons via WM_GETICON / GetClassLongPtr — sometimes available on Win10
+                // First try window/class icons via WM_GETICON / GetClassLongPtr - sometimes available on Win10
                 HICON hWinIcon = NULL;
                 DWORD_PTR iconRes = 0;
                 if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
@@ -8699,11 +9221,14 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
     SIZE src = {0};
     bool haveSrc = false;
     bool sourceReady = false;
+    bool dwmSourceReady = false;
+    HRESULT sourceHr = hT ? E_FAIL : E_PENDING;
     if (hT) {
-        HRESULT hr = DwmQueryThumbnailSourceSize(hT, &src);
-        if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+        sourceHr = DwmQueryThumbnailSourceSize(hT, &src);
+        if (SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0) {
             haveSrc = true;
             sourceReady = true;
+            dwmSourceReady = true;
         } else {
             SIZE restore = {0};
             if (IsIconic(w.hWnd) && GetWindowRestoreSize(w.hWnd, &restore)) {
@@ -8732,25 +9257,39 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
     if (!haveSrc) {
         if (hT && w.sourceSize.cx > 0 && w.sourceSize.cy > 0) {
             bool readyChanged = w.thumbnailSourceReady;
-            w.thumbnailSourceReady = false;
-            return readyChanged;
+            // Keep the last valid UWP surface visible while DWM briefly loses
+            // its source. A visible frame can recover without a new HWND.
+            if (!IsApplicationFrameWindowClass(w.hWnd) ||
+                IsUwpFrameDefinitelyStale(w.hWnd)) {
+                w.thumbnailSourceReady = false;
+            }
+            bool stale = UpdateUwpFrameValidation(
+                w, dwmSourceReady, sourceHr, L"source-refresh");
+            return readyChanged || stale;
         }
         RECT wr = {0};
         GetWindowRect(w.hWnd, &wr);
         src.cx = wr.right - wr.left;
         src.cy = wr.bottom - wr.top;
-        if (src.cx <= 0 || src.cy <= 0) return false;
+        if (src.cx <= 0 || src.cy <= 0) {
+            return hT ? UpdateUwpFrameValidation(
+                            w, dwmSourceReady, sourceHr, L"source-refresh")
+                      : false;
+        }
     }
 
     bool readyChanged = w.thumbnailSourceReady != sourceReady;
     w.thumbnailSourceReady = sourceReady;
+    bool stale = hT ? UpdateUwpFrameValidation(
+                          w, dwmSourceReady, sourceHr, L"source-refresh")
+                    : false;
     bool changed = (abs(w.sourceSize.cx - src.cx) > 1 || abs(w.sourceSize.cy - src.cy) > 1);
     if (changed || w.sourceSize.cx <= 0 || w.sourceSize.cy <= 0) {
         w.sourceSize = src;
         UpdateEntrySourceCrop(w);
         return true;
     }
-    return readyChanged;
+    return readyChanged || stale;
 }
 
 static void RegisterThumbnailsEarly() {
@@ -8759,29 +9298,45 @@ static void RegisterThumbnailsEarly() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             w.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
+            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT);
+            HRESULT sourceHr = registerHr;
+            bool dwmSourceReady = false;
+            if (SUCCEEDED(registerHr) && hT) {
                 w.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 SIZE src = {0};
-                HRESULT hr = DwmQueryThumbnailSourceSize(hT, &src);
-                LogInvalidUwpThumbnailSource(w.hWnd, hT, hr, src, L"early-register");
-                if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+                sourceHr = DwmQueryThumbnailSourceSize(hT, &src);
+                LogInvalidUwpThumbnailSource(w.hWnd, hT, sourceHr, src,
+                                             L"early-register");
+                if (SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0) {
                     w.sourceSize = src;
                     w.thumbnailSourceReady = true;
+                    dwmSourceReady = true;
                 } else {
                     w.thumbnailSourceReady = false;
                 }
             }
+            if (hT) {
+                UpdateUwpFrameValidation(
+                    w, dwmSourceReady, sourceHr, L"early-register");
+            }
         } else {
             SIZE src = {0};
-            HRESULT hr = DwmQueryThumbnailSourceSize(w.hThumbs[g_hSwitcher], &src);
-            LogInvalidUwpThumbnailSource(w.hWnd, w.hThumbs[g_hSwitcher], hr, src,
+            HRESULT sourceHr = DwmQueryThumbnailSourceSize(
+                w.hThumbs[g_hSwitcher], &src);
+            LogInvalidUwpThumbnailSource(w.hWnd, w.hThumbs[g_hSwitcher],
+                                         sourceHr, src,
                                          L"early-refresh");
-            if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+            const bool dwmSourceReady =
+                SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0;
+            if (dwmSourceReady) {
                 w.sourceSize = src;
                 w.thumbnailSourceReady = true;
-            } else if (!IsIconic(w.hWnd)) {
+            } else if (!IsIconic(w.hWnd) &&
+                       !IsApplicationFrameWindowClass(w.hWnd)) {
                 w.thumbnailSourceReady = false;
             }
+            UpdateUwpFrameValidation(
+                w, dwmSourceReady, sourceHr, L"early-refresh");
         }
         for (HWND m : g_hMirrorSwitchers) {
             if (!w.hThumbs.count(m)) {
@@ -8800,29 +9355,37 @@ static void UpdateDockThumbnailDwm() {
 
     // 1. Show and configure the selected window's thumbnail FIRST
     auto& selWnd = g_windows[g_selectedIndex];
+    RefreshEntrySourceSize(selWnd);
     if (selWnd.rcThumbActual.right > selWnd.rcThumbActual.left &&
         selWnd.rcThumbActual.bottom > selWnd.rcThumbActual.top) {
 
         if (!selWnd.hThumbs.count(g_hSwitcher)) {
             selWnd.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, selWnd.hWnd, &hT))) {
+            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, selWnd.hWnd, &hT);
+            HRESULT sourceHr = registerHr;
+            bool dwmSourceReady = false;
+            if (SUCCEEDED(registerHr) && hT) {
                 selWnd.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 SIZE src = {0};
-                HRESULT hr = DwmQueryThumbnailSourceSize(hT, &src);
-                LogInvalidUwpThumbnailSource(selWnd.hWnd, hT, hr, src,
+                sourceHr = DwmQueryThumbnailSourceSize(hT, &src);
+                LogInvalidUwpThumbnailSource(selWnd.hWnd, hT, sourceHr, src,
                                              L"dock-register");
-                if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+                if (SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0) {
                     selWnd.sourceSize = src;
                     selWnd.thumbnailSourceReady = true;
+                    dwmSourceReady = true;
                 } else {
                     selWnd.thumbnailSourceReady = false;
                 }
             }
+            if (hT) {
+                UpdateUwpFrameValidation(
+                    selWnd, dwmSourceReady, sourceHr, L"dock-register");
+            }
         }
 
-        if (IsApplicationFrameWindowClass(selWnd.hWnd) &&
-            !selWnd.thumbnailSourceReady) {
+        if (ShouldHideUwpThumbnail(selWnd.hWnd, selWnd.thumbnailSourceReady)) {
             for (const auto& kv : selWnd.hThumbs) {
                 if (!kv.second) continue;
                 DWM_THUMBNAIL_PROPERTIES hidden = {};
@@ -9259,7 +9822,7 @@ static void ComputeLayout(HMONITOR hMon) {
     }
     
     g_activePadDivider = activePadDivider;
-    
+
     int headerAndDividerH = rowTitleH + activePadDivider;
     int maxW = monW * g_settings.maxWidthPercent / 100;
     int maxH = monH * g_settings.maxHeightPercent / 100;
@@ -9751,29 +10314,43 @@ static void RegisterThumbnails() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             w.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
+            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT);
+            HRESULT sourceHr = registerHr;
+            bool dwmSourceReady = false;
+            if (SUCCEEDED(registerHr) && hT) {
                 w.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 SIZE src = {0};
-                HRESULT hr = DwmQueryThumbnailSourceSize(hT, &src);
-                LogInvalidUwpThumbnailSource(w.hWnd, hT, hr, src, L"register");
-                if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+                sourceHr = DwmQueryThumbnailSourceSize(hT, &src);
+                LogInvalidUwpThumbnailSource(w.hWnd, hT, sourceHr, src,
+                                             L"register");
+                if (SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0) {
                     w.sourceSize = src;
                     w.thumbnailSourceReady = true;
+                    dwmSourceReady = true;
                 } else {
                     w.thumbnailSourceReady = false;
                 }
             }
+            if (hT) {
+                UpdateUwpFrameValidation(w, dwmSourceReady, sourceHr, L"register");
+            }
         } else {
             SIZE src = {0};
-            HRESULT hr = DwmQueryThumbnailSourceSize(w.hThumbs[g_hSwitcher], &src);
-            LogInvalidUwpThumbnailSource(w.hWnd, w.hThumbs[g_hSwitcher], hr, src,
+            HRESULT sourceHr = DwmQueryThumbnailSourceSize(
+                w.hThumbs[g_hSwitcher], &src);
+            LogInvalidUwpThumbnailSource(w.hWnd, w.hThumbs[g_hSwitcher],
+                                         sourceHr, src,
                                          L"refresh");
-            if (SUCCEEDED(hr) && src.cx > 0 && src.cy > 0) {
+            const bool dwmSourceReady =
+                SUCCEEDED(sourceHr) && src.cx > 0 && src.cy > 0;
+            if (dwmSourceReady) {
                 w.sourceSize = src;
                 w.thumbnailSourceReady = true;
-            } else if (!IsIconic(w.hWnd)) {
+            } else if (!IsIconic(w.hWnd) &&
+                       !IsApplicationFrameWindowClass(w.hWnd)) {
                 w.thumbnailSourceReady = false;
             }
+            UpdateUwpFrameValidation(w, dwmSourceReady, sourceHr, L"refresh");
         }
         UpdateEntrySourceCrop(w);
         for (HWND m : g_hMirrorSwitchers) {
@@ -9783,7 +10360,7 @@ static void RegisterThumbnails() {
             }
         }
 
-        if (IsApplicationFrameWindowClass(w.hWnd) && !w.thumbnailSourceReady) {
+        if (ShouldHideUwpThumbnail(w.hWnd, w.thumbnailSourceReady)) {
             for (const auto& kv : w.hThumbs) {
                 if (!kv.second) continue;
                 DWM_THUMBNAIL_PROPERTIES hidden = {};
@@ -10402,6 +10979,119 @@ static inline int GetHeaderTopForEntry(const WindowEntry& e) {
     return GetHeaderTopForEntry(e.rcCell, e.rcThumbActual, e.rcThumbSlot);
 }
 
+struct NormalHeaderGeometry {
+    int contentLeft = 0;
+    int contentRight = 0;
+    int headerTop = 0;
+    int iconX = 0;
+    int iconY = 0;
+    int textLeft = 0;
+    int textRight = 0;
+    int textTop = 0;
+    int textBottom = 0;
+    bool isIconOnly = false;
+};
+
+static NormalHeaderGeometry ComputeNormalHeaderGeometry(
+    HDC hdc, const WindowEntry& e, const RECT& rcCell,
+    const RECT& rcThumbActual, const RECT& rcThumbSlot, int padLeft,
+    int rowTitleH, int iconSz, int closeBtnReserve, bool isHovered) {
+    NormalHeaderGeometry geometry;
+    geometry.isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle &&
+                          g_settings.showIcon;
+
+    int btnReserve = 0;
+    if (g_settings.showCloseButton && !e.isDesktopItem &&
+        !HeaderIsVertical()) {
+        if (!geometry.isIconOnly &&
+            !(g_settings.showThumbnails && ThumbnailIsSide())) {
+            btnReserve = (g_settings.centerTaskContent || isHovered)
+                             ? closeBtnReserve
+                             : 0;
+        }
+    }
+
+    RECT rcHeaderContent =
+        GetHeaderContentRectForEntry(rcCell, rcThumbActual, rcThumbSlot);
+    geometry.contentLeft = rcHeaderContent.left;
+    geometry.contentRight = rcHeaderContent.right - btnReserve;
+    if (geometry.contentRight < geometry.contentLeft) {
+        geometry.contentRight = geometry.contentLeft;
+    }
+
+    geometry.headerTop =
+        GetHeaderTopForEntry(rcCell, rcThumbActual, rcThumbSlot);
+    geometry.iconX = geometry.contentLeft;
+    geometry.iconY = geometry.isIconOnly
+                         ? rcHeaderContent.top +
+                               (rcHeaderContent.bottom - rcHeaderContent.top -
+                                iconSz) /
+                                   2
+                         : geometry.headerTop + (rowTitleH - iconSz) / 2;
+
+    if (!HeaderIsVertical() && g_settings.showTitle && g_settings.showIcon) {
+        int shift = (g_dpiY - 96) / 24;
+        if (shift > 0) geometry.iconY += shift;
+    }
+
+    geometry.textLeft = geometry.contentLeft;
+    if (g_settings.showIcon) geometry.textLeft += iconSz + padLeft;
+    geometry.textRight = geometry.contentRight;
+    geometry.textTop = geometry.headerTop;
+    geometry.textBottom = geometry.textTop + rowTitleH;
+
+    if (HeaderIsVertical() && !geometry.isIconOnly) {
+        int availableW = geometry.contentRight - geometry.contentLeft;
+        if (availableW < 0) availableW = 0;
+
+        geometry.iconX = geometry.contentLeft +
+                         ((availableW > iconSz) ? (availableW - iconSz) / 2
+                                                 : 0);
+        geometry.iconY = geometry.headerTop;
+
+        int headerGap = DpiScale(4, g_dpiY);
+        int textH = GetHeaderTitleHeightPx();
+        geometry.textTop = g_settings.showIcon
+                               ? (geometry.iconY + iconSz + headerGap)
+                               : geometry.iconY;
+        geometry.textBottom = geometry.textTop + textH;
+        geometry.textLeft = geometry.contentLeft;
+        geometry.textRight = geometry.contentRight;
+    } else if (g_settings.centerTaskContent) {
+        int availableW = geometry.contentRight - geometry.contentLeft;
+        if (availableW < 0) availableW = 0;
+
+        int gap = padLeft;
+        int textMaxW = availableW - (g_settings.showIcon ? iconSz + gap : 0);
+        if (textMaxW < 0) textMaxW = 0;
+
+        int textW = 0;
+        if (g_settings.showTitle && textMaxW > 0 && e.title[0]) {
+            RECT rcMeasure = {0, 0, textMaxW, rowTitleH};
+            DrawTextW(hdc, e.title, -1, &rcMeasure,
+                      DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS |
+                          DT_NOPREFIX | DT_CALCRECT);
+            textW = rcMeasure.right - rcMeasure.left;
+            if (textW < 0) textW = 0;
+            if (textW > textMaxW) textW = textMaxW;
+        }
+
+        int blockW = (g_settings.showIcon ? iconSz : 0) +
+                     ((g_settings.showIcon && textW > 0) ? gap : 0) + textW;
+        if (blockW < availableW) {
+            geometry.iconX = geometry.contentLeft + (availableW - blockW) / 2;
+        }
+
+        geometry.textLeft = geometry.iconX +
+                            (g_settings.showIcon
+                                 ? iconSz + ((textW > 0) ? gap : 0)
+                                 : 0);
+        geometry.textRight = geometry.textLeft + textW;
+    }
+
+    return geometry;
+}
+
 static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, const RECT& rcThumbSlot) {
     if (DockLayoutActive()) {
         if (DockCloseButtonIsHidden()) {
@@ -10779,83 +11469,17 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
     }
 
     // ---- Normal (non-badge) header content rendering ----
-    int btnReserve = 0;
-    bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
-    if (g_settings.showCloseButton && !e.isDesktopItem && !HeaderIsVertical()) {
-        if (!isIconOnly && !(g_settings.showThumbnails && ThumbnailIsSide())) {
-            btnReserve = ((g_settings.centerTaskContent) || isHovered)
-                     ? closeBtnReserve
-                     : 0;
-        }
-    }
-    RECT rcHeaderContent = GetHeaderContentRectForEntry(e);
-    int contentLeft = rcHeaderContent.left;
-    int contentRight = rcHeaderContent.right - btnReserve;
-    if (contentRight < contentLeft) contentRight = contentLeft;
-
-    int headerTop = GetHeaderTopForEntry(e);
-    int iconX = contentLeft;
-    int iconY = isIconOnly ? rcHeaderContent.top +
-        (rcHeaderContent.bottom - rcHeaderContent.top - iconSz) / 2 :
-        headerTop + (rowTitleH - iconSz) / 2;
-
-    if (!HeaderIsVertical() && g_settings.showTitle && g_settings.showIcon) {
-        int shift = (g_dpiY - 96) / 24;
-        if (shift > 0) iconY += shift;
-    }
-
-    int textLeft = contentLeft;
-    if (g_settings.showIcon) textLeft += iconSz + padLeft;
-    int textRight = contentRight;
-    int textTop = headerTop;
-    int textBottom = textTop + rowTitleH;
-
-    if (HeaderIsVertical() && !isIconOnly) {
-        int availableW = contentRight - contentLeft;
-        if (availableW < 0) availableW = 0;
-
-        iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
-        iconY = headerTop;
-
-        int headerGap = DpiScale(4, g_dpiY);
-        int textH = GetHeaderTitleHeightPx();
-        textTop = g_settings.showIcon ? (iconY + iconSz + headerGap) : iconY;
-        textBottom = textTop + textH;
-        textLeft = contentLeft;
-        textRight = contentRight;
-    } else if (g_settings.centerTaskContent) {
-        int availableW = contentRight - contentLeft;
-        if (availableW < 0) availableW = 0;
-
-        int gap = padLeft;
-        int textMaxW = availableW - (g_settings.showIcon ? iconSz + gap : 0);
-        if (textMaxW < 0) textMaxW = 0;
-
-        int textW = 0;
-        if (g_settings.showTitle && textMaxW > 0 && e.title[0]) {
-            RECT rcMeasure = { 0, 0, textMaxW, rowTitleH };
-            DrawTextW(hdc, e.title, -1, &rcMeasure,
-                      DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX | DT_CALCRECT);
-            textW = rcMeasure.right - rcMeasure.left;
-            if (textW < 0) textW = 0;
-            if (textW > textMaxW) textW = textMaxW;
-        }
-
-        int blockW = (g_settings.showIcon ? iconSz : 0) + ((g_settings.showIcon && textW > 0) ? gap : 0) + textW;
-        if (blockW < availableW) {
-            iconX = contentLeft + (availableW - blockW) / 2;
-        }
-
-        textLeft = iconX + (g_settings.showIcon ? iconSz + ((textW > 0) ? gap : 0) : 0);
-        textRight = textLeft + textW;
-    }
+    NormalHeaderGeometry geometry = ComputeNormalHeaderGeometry(
+        hdc, e, e.rcCell, e.rcThumbActual, e.rcThumbSlot, padLeft,
+        rowTitleH, iconSz, closeBtnReserve, isHovered);
+    int iconX = geometry.iconX;
+    int iconY = geometry.iconY;
 
     // Icon
+    e.drawnIconX = iconX;
+    e.drawnIconY = iconY;
+    e.drawnIconSz = g_settings.showIcon ? iconSz : 0;
     if (g_settings.showIcon && e.hIcon) {
-        e.drawnIconX = iconX;
-        e.drawnIconY = iconY;
-        e.drawnIconSz = iconSz;
-
         float iconAlpha = alpha;
         bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
         if (isMin && MinimizedStyleUsesDimming()) {
@@ -10900,14 +11524,11 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
             Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
             gfxDot.FillEllipse(&dotBrush, dotX, dotY, dotSz, dotSz);
         }
-    } else {
-        e.drawnIconX = contentLeft;
-        e.drawnIconY = headerTop;
-        e.drawnIconSz = 0;
     }
     // Title text
     if (g_settings.showTitle) {
-        RECT rcText = { textLeft, textTop, textRight, textBottom };
+        RECT rcText = { geometry.textLeft, geometry.textTop, geometry.textRight,
+                        geometry.textBottom };
         if (rcText.right < rcText.left) rcText.right = rcText.left;
         if (alpha < 0.99f) {
             Gdiplus::Graphics gfx(hdc);
@@ -11287,36 +11908,56 @@ static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd) {
 
 // Rendering
 
+static void ComputeBadgeIconPosition(const RECT& rcThumbActual, int iconSz,
+                                     int* pOutIconX, int* pOutIconY) {
+    if (!pOutIconX || !pOutIconY || iconSz <= 0) return;
+
+    int badgePad = DpiScale(g_settings.badgeIconPadding, g_dpiX);
+    int thumbW = rcThumbActual.right - rcThumbActual.left;
+    int thumbH = rcThumbActual.bottom - rcThumbActual.top;
+    int iconX = 0;
+    int iconY = 0;
+
+    if (BadgeIconPositionIs(L"topLeft") ||
+        BadgeIconPositionIs(L"centerLeft") ||
+        BadgeIconPositionIs(L"bottomLeft")) {
+        iconX = rcThumbActual.left + badgePad;
+    } else if (BadgeIconPositionIs(L"topRight") ||
+               BadgeIconPositionIs(L"centerRight") ||
+               BadgeIconPositionIs(L"bottomRight")) {
+        iconX = rcThumbActual.right - iconSz - badgePad;
+    } else {
+        iconX = rcThumbActual.left + (thumbW - iconSz) / 2;
+    }
+
+    if (BadgeIconPositionIs(L"topLeft") ||
+        BadgeIconPositionIs(L"topCenter") ||
+        BadgeIconPositionIs(L"topRight")) {
+        iconY = rcThumbActual.top + badgePad;
+    } else if (BadgeIconPositionIs(L"bottomLeft") ||
+               BadgeIconPositionIs(L"bottomCenter") ||
+               BadgeIconPositionIs(L"bottomRight")) {
+        iconY = rcThumbActual.bottom - iconSz - badgePad;
+    } else {
+        iconY = rcThumbActual.top + (thumbH - iconSz) / 2;
+    }
+
+    *pOutIconX = iconX + DpiScale(g_settings.badgeIconOffsetX, g_dpiX);
+    *pOutIconY = iconY + DpiScale(g_settings.badgeIconOffsetY, g_dpiY);
+}
+
 static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false, HWND hWnd = NULL, float motionAlpha = 1.0f,
                                  std::shared_ptr<OwnedWindowIcon> iconOwner = {}) {
     if (!BadgeLayoutActive() || !g_settings.showIcon || !hIcon) return;
     int iconSz = GetHeaderIconSizePx();
+    int badgePad = DpiScale(g_settings.badgeIconPadding, g_dpiX);
     int thumbW = rcThumbActual.right - rcThumbActual.left;
     int thumbHt = rcThumbActual.bottom - rcThumbActual.top;
     if (thumbW <= 0 || thumbHt <= 0) return;
 
-    int badgePad = DpiScale(g_settings.badgeIconPadding, g_dpiX);
-    int bIconX = 0, bIconY = 0;
-
-    // Horizontal positioning
-    if (BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"centerLeft") || BadgeIconPositionIs(L"bottomLeft")) {
-        bIconX = rcThumbActual.left + badgePad;
-    } else if (BadgeIconPositionIs(L"topRight") || BadgeIconPositionIs(L"centerRight") || BadgeIconPositionIs(L"bottomRight")) {
-        bIconX = rcThumbActual.right - iconSz - badgePad;
-    } else {
-        bIconX = rcThumbActual.left + (thumbW - iconSz) / 2;
-    }
-    // Vertical positioning
-    if (BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"topCenter") || BadgeIconPositionIs(L"topRight")) {
-        bIconY = rcThumbActual.top + badgePad;
-    } else if (BadgeIconPositionIs(L"bottomLeft") || BadgeIconPositionIs(L"bottomCenter") || BadgeIconPositionIs(L"bottomRight")) {
-        bIconY = rcThumbActual.bottom - iconSz - badgePad;
-    } else {
-        bIconY = rcThumbActual.top + (thumbHt - iconSz) / 2;
-    }
-
-    bIconX += DpiScale(g_settings.badgeIconOffsetX, g_dpiX);
-    bIconY += DpiScale(g_settings.badgeIconOffsetY, g_dpiY);
+    int bIconX = 0;
+    int bIconY = 0;
+    ComputeBadgeIconPosition(rcThumbActual, iconSz, &bIconX, &bIconY);
 
     if (pOutIconX) *pOutIconX = bIconX;
     if (pOutIconY) *pOutIconY = bIconY;
@@ -11464,6 +12105,36 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
         gfxDot.FillEllipse(&dotBrush, dotX, dotY, dotSz, dotSz);
     }
+}
+
+static bool ComputeGroupIndicatorAnchor(
+    HDC hdc, const WindowEntry& entry, const RECT& rcCell,
+    const RECT& rcThumbActual, const RECT& rcThumbSlot, bool isHovered,
+    int* pOutIconX, int* pOutIconY, int* pOutIconSz) {
+    if (!pOutIconX || !pOutIconY || !pOutIconSz || DockLayoutActive() ||
+        !g_settings.showIcon) {
+        return false;
+    }
+
+    if (BadgeLayoutActive()) {
+        if (!HasLayoutRect(rcThumbActual)) return false;
+        int iconSz = GetHeaderIconSizePx();
+        ComputeBadgeIconPosition(rcThumbActual, iconSz, pOutIconX, pOutIconY);
+        *pOutIconSz = iconSz;
+        return true;
+    }
+
+    int padLeft = DpiScale(g_settings.entryPadding, g_dpiX);
+    int rowTitleH = GetHeaderRowHeightPx();
+    int iconSz = GetHeaderIconSizePx();
+    int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
+    NormalHeaderGeometry geometry = ComputeNormalHeaderGeometry(
+        hdc, entry, rcCell, rcThumbActual, rcThumbSlot, padLeft, rowTitleH,
+        iconSz, closeBtnReserve, isHovered);
+    *pOutIconX = geometry.iconX;
+    *pOutIconY = geometry.iconY;
+    *pOutIconSz = iconSz;
+    return true;
 }
 
 static void DrawSwitcherOuterBorder(HDC hdc, int w, int h, int radiusPx) {
@@ -11618,9 +12289,17 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
             DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
-                                 (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
-                                 e.iconCell ? e.iconCell->icon : nullptr);
+                                  (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
+                                  e.iconCell ? e.iconCell->icon : nullptr);
         }
+
+        int groupAnchorX = 0;
+        int groupAnchorY = 0;
+        int groupAnchorSz = 0;
+        bool hasGroupAnchor = ComputeGroupIndicatorAnchor(
+            hdc, e, rcCell, rcThumbActual, rcThumbSlot,
+            i == g_hoverIndex && g_hoverWnd == hWnd, &groupAnchorX,
+            &groupAnchorY, &groupAnchorSz);
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
         if (g_settings.showCloseButton && !e.isDesktopItem && e.closeBtnAlpha > 0.01f) {
@@ -11698,9 +12377,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 RECT bRc = ComputeDockPerimeterRect(rcCell, badgeW, badgeH, g_settings.dockGroupIndicatorPosition, pad);
                 badgeX = bRc.left;
                 badgeY = bRc.top;
-            } else if (drawnIconSz > 0) {
-                badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
-                badgeY = drawnIconY - (badgeH / 2);
+            } else if (hasGroupAnchor) {
+                badgeX = groupAnchorX + groupAnchorSz - (badgeW / 2);
+                badgeY = groupAnchorY - (badgeH / 2);
             } else {
                 int cellPad = DpiScale(4, g_dpiX);
                 badgeX = rcCell.right - badgeW - cellPad;
@@ -11940,6 +12619,14 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
                                  e.iconCell ? e.iconCell->icon : nullptr);
         }
 
+        int groupAnchorX = 0;
+        int groupAnchorY = 0;
+        int groupAnchorSz = 0;
+        bool hasGroupAnchor = ComputeGroupIndicatorAnchor(
+            hdc, e, rcCell, rcThumbActual, e.rcThumbSlot,
+            i == g_hoverIndex && g_hoverWnd == hWnd, &groupAnchorX,
+            &groupAnchorY, &groupAnchorSz);
+
         // Grouped window count badge
         bool showThisGroupBadge = g_settings.showGroupIndicator && g_settings.showApplications && (e.groupWindows.size() > 1);
         if (DockLayoutActive()) {
@@ -11999,9 +12686,9 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
                 RECT bRc = ComputeDockPerimeterRect(rcCell, badgeW, badgeH, g_settings.dockGroupIndicatorPosition, pad);
                 badgeX = bRc.left;
                 badgeY = bRc.top;
-            } else if (drawnIconSz > 0) {
-                badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
-                badgeY = drawnIconY - (badgeH / 2);
+            } else if (hasGroupAnchor) {
+                badgeX = groupAnchorX + groupAnchorSz - (badgeW / 2);
+                badgeY = groupAnchorY - (badgeH / 2);
             } else {
                 int cellPad = DpiScale(4, g_dpiX);
                 badgeX = rcCell.right - badgeW - cellPad;
@@ -12535,10 +13222,10 @@ static void CancelPendingShow() {
     g_touchpadInvocation = false;
     g_keyboardPendingForegroundHandoff = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
-    g_keyboardHiddenHandoffAttempted = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
-    g_keyboardHandoffProbeTick = 0;
+    g_keyboardReleaseProbeTick = 0;
+    g_keyboardReleaseProbeSamples = 0;
     g_keyboardHandoffRevealDeferralLogged = false;
     g_backdropSwitcherPresented = false;
     s_touchpadPending = false;
@@ -13349,23 +14036,30 @@ static void PresentSwitcherWindows() {
             TapUnassignedKeyForForeground();
         }
     }
-    SetLastError(ERROR_SUCCESS);
     BOOL foreground = GetForegroundWindow() == g_hSwitcher;
     if (!foreground) foreground = SetForegroundWindow(g_hSwitcher);
-    DWORD foregroundError = foreground ? ERROR_SUCCESS : GetLastError();
-    if (touchpadPresentation && GetForegroundWindow() != g_hSwitcher) {
+    const bool foregroundFallbackNeeded =
+        (touchpadPresentation || g_keyboardPendingForegroundHandoff) &&
+        GetForegroundWindow() != g_hSwitcher;
+    if (foregroundFallbackNeeded) {
+        // Shell-source keyboard sessions can deny the supported foreground
+        // request even after the eligibility tap. Reuse the bounded legacy
+        // fallback already required by the touchpad path, then verify actual
+        // foreground ownership before allowing a protected commit.
         SwitchToThisWindow(g_hSwitcher, TRUE);
         foreground = GetForegroundWindow() == g_hSwitcher;
+        SWS_DEBUG_LOG(L"focus", L"%s foreground fallback active=%d",
+                      touchpadPresentation ? L"touchpad" : L"keyboard", foreground);
     }
     if (touchpadPresentation) {
         const bool active = GetForegroundWindow() == g_hSwitcher;
         if (active) {
             SWS_DEBUG_LOG(L"focus",
-                          L"touchpad foreground handoff source=%p set=%d active=1 error=%u",
-                          touchpadHandoffSource, foreground, foregroundError);
+                          L"touchpad foreground handoff source=%p set=%d active=1",
+                          touchpadHandoffSource, foreground);
         } else {
-            Wh_Log(L"SWS: touchpad foreground handoff source=%p set=%d active=0 error=%u",
-                   touchpadHandoffSource, foreground, foregroundError);
+            Wh_Log(L"SWS: touchpad foreground handoff source=%p set=%d active=0",
+                   touchpadHandoffSource, foreground);
         }
     }
     if (g_keyboardPendingForegroundHandoff && !touchpadPresentation) {
@@ -13373,14 +14067,14 @@ static void PresentSwitcherWindows() {
             GetForegroundWindow() == g_hSwitcher;
         if (g_keyboardPendingForegroundHandoffSucceeded) {
             SWS_DEBUG_LOG(L"focus",
-                          L"keyboard handoff source=%p set=%d active=1 error=%u alt=%d %s",
-                          keyboardHandoffSource, foreground, foregroundError,
+                          L"keyboard handoff source=%p set=%d active=1 alt=%d %s",
+                          keyboardHandoffSource, foreground,
                           (GetAsyncKeyState(VK_MENU) & 0x8000) != 0,
                           FormatTouchpadForegroundDiagnostic(
                               keyboardHandoffSource, g_hSwitcher).c_str());
         } else {
-            Wh_Log(L"SWS: keyboard handoff after presentation source=%p set=%d active=0 error=%u",
-                   keyboardHandoffSource, foreground, foregroundError);
+            Wh_Log(L"SWS: keyboard handoff after presentation source=%p set=%d active=0",
+                   keyboardHandoffSource, foreground);
         }
     }
     SWS_DEBUG_LOG(L"focus", L"presented switcher foreground=%d active=%d", foreground,
@@ -13421,11 +14115,12 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
 
     const bool touchpadPending = s_touchpadPending;
     const bool rapidPending = touchpadPending && g_settings.rapidSwitching && !g_isSticky;
-    // Keep rapid keyboard taps hidden while the protected-source handoff waits
-    // for one bounded post-handoff release probe.
-    if (!forceImmediate && g_keyboardPendingForegroundHandoffSucceeded &&
-        g_keyboardPendingAltRelease && TryCompleteHiddenRapidKeyboardCommit()) {
-        return;
+    // Give a protected rapid keyboard release one final hidden probe before the
+    // show-delay deadline can expose the switcher. A cancelled probe falls
+    // through to normal visible presentation; a waiting or committed probe does not.
+    if (g_keyboardPendingForegroundHandoff && g_keyboardPendingAltRelease &&
+        TryCommitProtectedRapidKeyboardRelease()) {
+        if (!g_isPendingShow || g_keyboardPendingAltRelease) return;
     }
     // A native-only release can precede the deadline while its adoption wait
     // extends past it. Finish that short stroke without flashing the switcher.
@@ -13472,7 +14167,7 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     // may have called ScrollDockWithDynamicResize / UpdateDockSelectionWithDynamicResize
     // which recompute layout while the switcher is still off-screen at (-32000, -32000).
     // That captures rcWndStart from GetWindowRect at the off-screen position, making the
-    // entrance animation interpolate from (-32000, -32000) → final position — the
+    // entrance animation interpolate from (-32000, -32000) -> final position - the
     // "flies from top-left" bug. Refreshing source sizes and recomputing layout here
     // ensures g_winW/g_winH and g_pendingSwitcherRect are at the true final values
     // before SetWindowPos is called, so rcWndStart == rcWndTarget == final position.
@@ -13501,10 +14196,6 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     g_switcherBaseX = x;
     g_switcherBaseY = y;
     g_switcherBaseInitialized = true;
-
-    // Restore standard DWM non-client rendering policy
-    DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
-    DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
 
     // Build backdrop only after pending sessions have proved they need a visual
     // reveal. Direct touchpad commits must not pay this cost before release.
@@ -13644,10 +14335,37 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
 }
 
 static void ApplyThemeToWindow(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd) || s_applyingThemeToWindow) return;
+    s_applyingThemeToWindow = true;
+    struct ThemeApplyGuard {
+        bool& active;
+        ~ThemeApplyGuard() { active = false; }
+    } themeApplyGuard{ s_applyingThemeToWindow };
+
     // Material/style changes invalidate the region cache. Layout reapplies the
     // region after final geometry, so Acrylic never retains an old mask.
     ClearPresentationWindowRegion(hWnd);
-    g_nativeAcrylicWindows[hWnd] = false;
+
+    const auto previousMaterialIt = g_presentationMaterialStates.find(hWnd);
+    const PresentationMaterialState previousMaterial =
+        previousMaterialIt == g_presentationMaterialStates.end()
+            ? PresentationMaterialState::Unknown
+            : previousMaterialIt->second;
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    ApplyPresentationCaptionColor(hWnd);
+    // Isolate non-client rendering policy from backdrop and activation behavior.
+    // All normal themes retain the normal window-style policy.
+    DWMNCRENDERINGPOLICY ncPolicy = DWMNCRP_USEWINDOWSTYLE;
+    HRESULT ncPolicyHr = DwmSetWindowAttribute(
+        hWnd, DWMWA_NCRENDERING_POLICY, &ncPolicy, sizeof(ncPolicy));
+    SWS_DEBUG_LOG(
+        L"dwm",
+        L"non-client policy hwnd=%p role=%s policy=%d "
+        L"hr=0x%08X thick=%d caption=%d",
+        hWnd, PresentationWindowRole(hWnd), ncPolicy,
+        (unsigned)ncPolicyHr,
+        (style & WS_THICKFRAME) != 0, (style & WS_CAPTION) != 0);
+
     if (ThemeIs(L"none")) {
         // 1. Explicitly clear all DWM system backdrops on Windows 11
         if (IsWin11OrGreater()) {
@@ -13690,6 +14408,9 @@ static void ApplyThemeToWindow(HWND hWnd) {
 
         // 7. Flush style and DWM non-client state
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        g_nativeAcrylicWindows[hWnd] = false;
+        g_presentationMaterialStates[hWnd] = PresentationMaterialState::None;
+        LogPresentationFrameDiagnostics(hWnd, L"theme-none-after");
         return;
     }
 
@@ -13703,7 +14424,7 @@ static void ApplyThemeToWindow(HWND hWnd) {
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
-    // Reset legacy accent policy by default
+    // Reset legacy accent policy before applying the selected material.
     if (g_SetWindowCompositionAttribute) {
         ACCENT_POLICY a = {}; a.AccentState = 0;
         WINDOWCOMPOSITIONATTRIBDATA d = {19, &a, sizeof(a)};
@@ -13718,12 +14439,30 @@ static void ApplyThemeToWindow(HWND hWnd) {
     if (ThemeIs(L"mica")) {
         if (IsWin11OrGreater()) {
             int micaVal = 2; // DWMSBT_MAINWINDOW
-            HRESULT hr = DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &micaVal, sizeof(micaVal));
-            if (FAILED(hr)) {
+            HRESULT systemBackdropHr = DwmSetWindowAttribute(
+                hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &micaVal,
+                sizeof(micaVal));
+            SWS_DEBUG_LOG(L"dwm",
+                          L"system backdrop hwnd=%p type=%d hr=0x%08X",
+                          hWnd, micaVal, (unsigned)systemBackdropHr);
+            HRESULT legacyMicaHr = E_FAIL;
+            if (FAILED(systemBackdropHr)) {
                 int oldMicaVal = 1;
-                hr = DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &oldMicaVal, sizeof(oldMicaVal));
+                legacyMicaHr = DwmSetWindowAttribute(
+                    hWnd, 1029 /* DWMWA_MICA_EFFECT */, &oldMicaVal,
+                    sizeof(oldMicaVal));
+                SWS_DEBUG_LOG(L"dwm",
+                              L"legacy Mica hwnd=%p enabled=%d hr=0x%08X",
+                              hWnd, oldMicaVal, (unsigned)legacyMicaHr);
             }
-            if (FAILED(hr)) {
+            const bool micaEnabled = SUCCEEDED(systemBackdropHr) ||
+                                            SUCCEEDED(legacyMicaHr);
+            SWS_DEBUG_LOG(L"layout",
+                          L"Mica backdrop hwnd=%p systemHr=0x%08X legacyHr=0x%08X "
+                          L"enabled=%d",
+                          hWnd, (unsigned)systemBackdropHr,
+                          (unsigned)legacyMicaHr, micaEnabled);
+            if (!micaEnabled) {
                 // Switch the renderer as well as the window style. A layered
                 // window with the non-layered paint path otherwise stays blank.
                 wcsncpy_s(g_settings.theme, L"backdrop", _TRUNCATE);
@@ -13732,19 +14471,22 @@ static void ApplyThemeToWindow(HWND hWnd) {
                 ApplyThemeToWindow(hWnd);
                 return;
             }
-            SendMessage(hWnd, WM_NCACTIVATE, TRUE, 0);
         }
+        g_nativeAcrylicWindows[hWnd] = false;
+        g_presentationMaterialStates[hWnd] = PresentationMaterialState::Mica;
     } else if (ThemeIs(L"backdrop")) {
-        bool nativeAcrylic = false;
-        // Clear any previous system backdrop before selecting the material for
-        // this theme. This also prevents a stale Mica fallback from surviving a
-        // settings change.
-        if (IsWin11OrGreater()) {
+        bool nativeAcrylic =
+            previousMaterial == PresentationMaterialState::NativeAcrylic;
+        const bool preserveAcrylicState =
+            previousMaterial == PresentationMaterialState::NativeAcrylic ||
+            previousMaterial == PresentationMaterialState::LegacyAcrylic;
+        if (IsWin11OrGreater() && !preserveAcrylicState) {
             int noneVal = 1; // DWMSBT_NONE
-            DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &noneVal, sizeof(noneVal));
+            DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */,
+                                  &noneVal, sizeof(noneVal));
             int disableMica = 0;
-            DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &disableMica, sizeof(disableMica));
-
+            DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */,
+                                  &disableMica, sizeof(disableMica));
             // Native transient backdrop is Desktop Acrylic on Windows 11. It
             // follows DWMWA_WINDOW_CORNER_PREFERENCE, unlike legacy accent
             // Acrylic, which can render a square material surface.
@@ -13752,6 +14494,9 @@ static void ApplyThemeToWindow(HWND hWnd) {
             HRESULT hr = DwmSetWindowAttribute(
                 hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */,
                 &transientBackdrop, sizeof(transientBackdrop));
+            SWS_DEBUG_LOG(L"dwm",
+                          L"system backdrop hwnd=%p type=%d hr=0x%08X",
+                          hWnd, transientBackdrop, (unsigned)hr);
             nativeAcrylic = SUCCEEDED(hr);
             if (SUCCEEDED(hr)) {
                 SWS_DEBUG_LOG(L"layout",
@@ -13777,28 +14522,54 @@ static void ApplyThemeToWindow(HWND hWnd) {
             g_SetWindowCompositionAttribute(hWnd, &data);
         }
         g_nativeAcrylicWindows[hWnd] = nativeAcrylic;
+        g_presentationMaterialStates[hWnd] =
+            nativeAcrylic ? PresentationMaterialState::NativeAcrylic
+                          : PresentationMaterialState::LegacyAcrylic;
     }
 
     const bool nativeAcrylic =
         ThemeIs(L"backdrop") && g_nativeAcrylicWindows[hWnd];
-    MARGINS marGlassInset =
-        (ThemeIs(L"mica") || nativeAcrylic)
-            ? MARGINS{-1, -1, -1, -1}
-            : MARGINS{0, 0, 0, 0};
-    DwmExtendFrameIntoClientArea(hWnd, &marGlassInset);
+    // Negative margins keep Mica and native Acrylic across the full popup
+    // client area. Legacy Acrylic keeps its original zero-margin path.
+    const bool fullGlassMargins = ThemeIs(L"mica") || nativeAcrylic;
+    MARGINS marGlassInset = fullGlassMargins
+                                ? MARGINS{-1, -1, -1, -1}
+                                : MARGINS{0, 0, 0, 0};
+    HRESULT frameHr = DwmExtendFrameIntoClientArea(hWnd, &marGlassInset);
+    SWS_DEBUG_LOG(L"layout",
+                  L"frame extension hwnd=%p theme=%s nativeAcrylic=%d fullGlassMargins=%d "
+                  L"margins=%d,%d,%d,%d hr=0x%08X",
+                  hWnd, g_settings.theme, nativeAcrylic, fullGlassMargins,
+                  marGlassInset.cxLeftWidth, marGlassInset.cyTopHeight,
+                  marGlassInset.cxRightWidth, marGlassInset.cyBottomHeight,
+                  (unsigned)frameHr);
 
     SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
 
     if (IsWin11OrGreater()) {
         INT cp = GetCornerPref();
-        DwmSetWindowAttribute(hWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &cp, sizeof(cp));
+        HRESULT cornerHr = DwmSetWindowAttribute(
+            hWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &cp, sizeof(cp));
         // Always suppress DWM hardware borders. SWS renders its own anti-aliased,
         // alpha-fadeable outer border inside the layered overlay window (g_hCloseBtnWnd).
         COLORREF none = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-        DwmSetWindowAttribute(hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
+        HRESULT borderHr = DwmSetWindowAttribute(
+            hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
+        SWS_DEBUG_LOG(L"layout",
+                      L"corner attributes hwnd=%p pref=%d cornerHr=0x%08X "
+                      L"borderHr=0x%08X",
+                      hWnd, cp, (unsigned)cornerHr, (unsigned)borderHr);
     }
 
-    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    BOOL frameChanged = SetWindowPos(
+        hWnd, NULL, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+            SWP_FRAMECHANGED);
+    SWS_DEBUG_LOG(L"layout",
+                  L"frame changed hwnd=%p result=%d visible=%d foreground=%p",
+                  hWnd, frameChanged, IsWindowVisible(hWnd),
+                  GetForegroundWindow());
+    LogPresentationFrameDiagnostics(hWnd, L"theme-material-after");
 }
 
 static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
@@ -13807,11 +14578,13 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
         GetMonitorInfoW(hM, &mInfo);
         int mx, my;
         GetSwitcherPosition(mInfo.rcWork, &mx, &my);
-        DWORD mirrorExStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | (ThemeIs(L"none") ? WS_EX_LAYERED : 0);
+        DWORD mirrorExStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE |
+                              (ThemeIs(L"none") ? WS_EX_LAYERED : 0);
         HWND hMirror = CreateSWSWindow(mirrorExStyle, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
         if (hMirror) {
-            ApplyThemeToWindow(hMirror);
             g_hMirrorSwitchers.push_back(hMirror);
+            LogPresentationFrameDiagnostics(hMirror, L"create-mirror");
+            ApplyThemeToWindow(hMirror);
             SetPresentationWindowLayout(hMirror, mx, my, g_winW, g_winH);
             // NOTE: mirrors stay hidden here on purpose. They are shown by
             // ShowMirrorSwitchers() only after PaintSwitcher() has pushed frame 0
@@ -13826,6 +14599,7 @@ static void DestroyMirrorSwitchers() {
         g_presentationWindows.erase(hMirror);
         g_presentationRegions.erase(hMirror);
         g_nativeAcrylicWindows.erase(hMirror);
+        g_presentationMaterialStates.erase(hMirror);
         if (IsWindow(hMirror)) {
             ShowWindow(hMirror, SW_HIDE);
             DestroyWindow(hMirror);
@@ -13938,7 +14712,10 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_hCurrentMonitor = hMon;
     UpdateRefreshRateTiming();
     BuildWindowList();
-    
+    if (RemoveStaleUwpEntriesForPresentation()) {
+        SWS_DEBUG_LOG(L"uwp", L"removed definitely stale UWP entries before presentation");
+    }
+
     if (g_windows.empty()) {
         HideSwitcher();
         return;
@@ -13953,14 +14730,12 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_selectedIndex = 0;
     int invocationIndex = -1;
     if (!touchpadInvocation) {
-        for (int i = 0; i < (int)g_windows.size(); ++i) {
-            const auto& e = g_windows[i];
-            if (e.hWnd == invocationWindow ||
-                std::find(e.groupWindows.begin(), e.groupWindows.end(), invocationWindow) != e.groupWindows.end()) {
-                g_selectedIndex = (i + 1) % (int)g_windows.size();
-                invocationIndex = i;
-                break;
-            }
+        invocationIndex = FindEntryContainingWindow(invocationWindow);
+        if (invocationIndex >= 0) {
+            g_selectedIndex = (invocationIndex + 1) % (int)g_windows.size();
+        } else {
+            int fallbackIndex = FindNextEntryAfterInvocation(invocationInput);
+            if (fallbackIndex >= 0) g_selectedIndex = fallbackIndex;
         }
     }
     SWS_DEBUG_LOG(L"enum",
@@ -13977,8 +14752,8 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     // DWM often hasn't produced a surface for just-registered thumbnails yet,
     // so the query inside RegisterThumbnailsEarly can leave sourceSize at 0
     // (1x1 placeholder). Fall back to the live window rect for aspect so the
-    // FIRST layout — and therefore the initial centered position, which matters
-    // most for Dock's single-preview sizing — is already near-final. This avoids
+    // FIRST layout - and therefore the initial centered position, which matters
+    // most for Dock's single-preview sizing - is already near-final. This avoids
     // the "appears top-right then slides to center" correction right after reveal.
     for (auto& w : g_windows) {
         RefreshEntrySourceSize(w);
@@ -14308,9 +15083,9 @@ static void HideSwitcher() {
     g_isPendingShow = false;
     g_keyboardPendingForegroundHandoff = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
-    g_keyboardHiddenHandoffAttempted = false;
     g_keyboardPendingAltRelease = false;
-    g_keyboardHandoffProbeTick = 0;
+    g_keyboardReleaseProbeTick = 0;
+    g_keyboardReleaseProbeSamples = 0;
     RetireMouseUiSession();
     // UI teardown is not the end of the already-owned tap's mouse pair.
     // The short timer keeps only its input filter alive, never its foreground.
@@ -14361,7 +15136,9 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
             request = {};
             return false;
         }
-        if (request.nativeFallback) return false;
+        if (request.nativeFallback) {
+            return false;
+        }
 
         const ULONG_PTR ownerActive = reinterpret_cast<ULONG_PTR>(GetPropW(
             hWnd, SwsSelectionProtocol::OwnerRestoreActiveProp));
@@ -14372,7 +15149,8 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
             GetTickCount64() - request.submittedAt >= 1000 &&
             !ownerRestoreActive && !animationActive) {
             request.nativeFallback = true;
-            if (!ShowWindowAsync(hWnd, SW_RESTORE)) {
+            BOOL asyncRestore = ShowWindowAsync(hWnd, SW_RESTORE);
+            if (!asyncRestore) {
                 PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
             }
             return false;
@@ -14409,7 +15187,8 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
         }
     }
 
-    if (!ShowWindowAsync(hWnd, SW_RESTORE)) {
+    BOOL asyncRestore = ShowWindowAsync(hWnd, SW_RESTORE);
+    if (!asyncRestore) {
         PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
     }
     return false;
@@ -14480,6 +15259,22 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         // synthetic key for every rejected retry (which can keep stealing
         // last-input eligibility while a different app owns the foreground).
         TapUnassignedKeyForForeground();
+        if (keyboardCommit && GetForegroundWindow() != g_hSwitcher) {
+            // SearchHost and Start can remain foreground after the switcher is
+            // created. Reclaim foreground once at commit time, while this
+            // keyboard session still owns the input handoff, before activating
+            // the selected application.
+            HWND commitSource = GetForegroundWindow();
+            BOOL switcherForeground = SetForegroundWindow(g_hSwitcher);
+            if (GetForegroundWindow() != g_hSwitcher) {
+                SwitchToThisWindow(g_hSwitcher, TRUE);
+            }
+            SWS_DEBUG_LOG(L"focus",
+                          L"commit switcher handoff set=%d active=%d source=%p",
+                          switcherForeground,
+                          GetForegroundWindow() == g_hSwitcher,
+                          commitSource);
+        }
     }
     const bool alreadyForeground = !ownerRestorePending &&
                                    GetForegroundWindow() == hForegroundTarget;
@@ -14527,7 +15322,7 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
             // The absolute deadline is established once. Resetting it here on
             // each failed attempt made the 600 ms retry run for many seconds.
             s_touchpadActivationRetryDeadline = GetTickCount64() +
-                (ownerRestorePending ? 3000 : 600);
+                (ownerRestorePending ? 3000u : 600u);
             SetTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID, 40, NULL);
         }
         s_touchpadActivationRetryTarget = ownerRestorePending ? hTarget : hForegroundTarget;
@@ -14641,7 +15436,7 @@ static bool DeferKeyboardHandoffCommit();
 static void SwitchToSelected() {
     // Idempotence guard: both the Alt-release keyup path and the ALT_POLL timer
     // can trigger a commit. If neither a visible nor a pending switcher remains,
-    // the first commit already tore everything down — a second commit must no-op.
+    // the first commit already tore everything down - a second commit must no-op.
     if (!g_isVisible && !g_isPendingShow) return;
     if (DeferKeyboardHandoffCommit()) return;
     StartExitAnimation(true);
@@ -14705,86 +15500,68 @@ static void MarkKeyboardReleaseCandidate(KeyboardReleaseSource source) {
 static void ClearKeyboardReleaseCandidate() {
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
-    g_keyboardHandoffProbeTick = 0;
+    g_keyboardReleaseProbeTick = 0;
+    g_keyboardReleaseProbeSamples = 0;
 }
 
-// Rapid keyboard taps from a source that blocks normal key-state handoff can
-// hand off while the pending switcher remains offscreen and fully transparent.
-// Commit waits for one post-handoff release check before activating the target.
-static bool TryHiddenRapidKeyboardCommit() {
+static bool TryCommitProtectedRapidKeyboardRelease() {
     if (!g_isPendingShow || !g_settings.rapidSwitching || g_isSticky ||
         !g_keyboardPendingForegroundHandoff || !g_keyboardPendingAltRelease ||
-        g_keyboardHiddenHandoffAttempted ||
-        g_isTouchpadGestureActive || !s_altSessionOwner ||
-        (g_keyboardPendingReleaseSource != KeyboardReleaseSource::Poll &&
-         s_altHeld) || CombinedRawReleasePending() || !g_hSwitcher) {
+        g_keyboardPendingForegroundHandoffSucceeded ||
+        g_isTouchpadGestureActive || CombinedRawReleasePending() || !g_hSwitcher) {
         return false;
     }
 
-    HWND source = GetForegroundWindow();
-    if (!source || IsSwitcherWindow(source)) return false;
-
-    g_keyboardHiddenHandoffAttempted = true;
-    TapUnassignedKeyForForeground();
-    SetLastError(ERROR_SUCCESS);
-    BOOL granted = SetForegroundWindow(g_hSwitcher);
-    DWORD error = granted ? ERROR_SUCCESS : GetLastError();
-    bool active = GetForegroundWindow() == g_hSwitcher;
-    if (active) {
-        SWS_DEBUG_LOG(L"focus",
-                      L"hidden keyboard handoff source=%p set=%d active=1 error=%u",
-                      source, granted, error);
-    } else {
-        Wh_Log(L"SWS: hidden keyboard handoff source=%p set=%d active=0 error=%u",
-               source, granted, error);
-    }
-    if (!active) return false;
-
-    g_keyboardPendingForegroundHandoffSucceeded = true;
-    g_keyboardHandoffProbeTick = GetTickCount64();
-    SWS_DEBUG_LOG(L"focus", L"hidden keyboard handoff pending release source=%s hwnd=%p",
-                  KeyboardReleaseSourceName(g_keyboardPendingReleaseSource), source);
-    return true;
-}
-
-static bool TryCompleteHiddenRapidKeyboardCommit() {
-    if (!g_isPendingShow || !g_keyboardPendingForegroundHandoff ||
-        !g_keyboardPendingForegroundHandoffSucceeded ||
-        !g_keyboardPendingAltRelease || !g_hSwitcher) {
-        return false;
-    }
-
-    if (GetForegroundWindow() != g_hSwitcher) {
-        g_keyboardPendingForegroundHandoffSucceeded = false;
-        SWS_DEBUG_LOG(L"focus", L"hidden keyboard handoff lost before release probe; falling back to visible presentation");
-        KeepAltReleasePolling();
-        return false;
-    }
-
-    const KeyboardReleaseSource source = g_keyboardPendingReleaseSource;
     const ULONGLONG now = GetTickCount64();
-    if (now < g_keyboardHandoffProbeTick ||
-        now - g_keyboardHandoffProbeTick < SWS_KEYBOARD_HANDOFF_PROBE_MS) {
+    const bool asyncAltDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    const bool messageAltDown = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    const KeyboardReleaseSource source = g_keyboardPendingReleaseSource;
+    SWS_DEBUG_LOG(L"focus",
+                  L"protected keyboard release probe source=%s asyncAltDown=%d "
+                  L"messageAltDown=%d samples=%u altHeld=%d foreground=%p",
+                  KeyboardReleaseSourceName(source), asyncAltDown, messageAltDown,
+                  g_keyboardReleaseProbeSamples, s_altHeld, GetForegroundWindow());
+    // Either state source reporting Alt-down keeps the session held. A
+    // protected source can delay either physical or thread-message release.
+    if (asyncAltDown || messageAltDown) {
+        s_altHeld = true;
+        ClearKeyboardReleaseCandidate();
+        SWS_DEBUG_LOG(L"focus",
+                      L"protected keyboard release probe cancelled; Alt remains held");
         KeepAltReleasePolling();
         return true;
     }
-    const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    SWS_DEBUG_LOG(L"focus", L"hidden keyboard release probe source=%s altDown=%d foreground=%p",
-                  KeyboardReleaseSourceName(source), altDown, GetForegroundWindow());
-    if (altDown) {
-        s_altHeld = true;
-        ClearKeyboardReleaseCandidate();
-        SWS_DEBUG_LOG(L"focus", L"hidden keyboard release candidate cancelled; Alt remains held");
+
+    if (!g_keyboardReleaseProbeTick) {
+        g_keyboardReleaseProbeTick = now;
+        g_keyboardReleaseProbeSamples = 1;
         KeepAltReleasePolling();
-        return false;
+        SWS_DEBUG_LOG(L"focus",
+                      L"protected keyboard release probe all-up sample=%u",
+                      g_keyboardReleaseProbeSamples);
+        return true;
     }
-    s_altHeld = false;
+    if (now < g_keyboardReleaseProbeTick ||
+        now - g_keyboardReleaseProbeTick < SWS_KEYBOARD_RELEASE_PROBE_MS) {
+        KeepAltReleasePolling();
+        return true;
+    }
+
+    if (g_keyboardReleaseProbeSamples < 2) {
+        ++g_keyboardReleaseProbeSamples;
+        g_keyboardReleaseProbeTick = now;
+        KeepAltReleasePolling();
+        SWS_DEBUG_LOG(L"focus",
+                      L"protected keyboard release probe all-up sample=%u",
+                      g_keyboardReleaseProbeSamples);
+        if (g_keyboardReleaseProbeSamples < 2) return true;
+    }
 
     ClearKeyboardReleaseCandidate();
+    s_altHeld = false;
     s_commitStarted = true;
     s_touchpadCommitActivation = true;
-    SWS_DEBUG_LOG(L"focus", L"hidden rapid keyboard commit eligible source=%s",
-                  KeyboardReleaseSourceName(source));
+    SWS_DEBUG_LOG(L"focus", L"protected rapid keyboard commit while switcher remained hidden");
     StartExitAnimation(true);
     return true;
 }
@@ -14801,17 +15578,10 @@ static bool DeferKeyboardHandoffCommit() {
                   KeyboardReleaseSourceName(g_keyboardPendingReleaseSource),
                   GetForegroundWindow(),
                   (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
-    if (TryHiddenRapidKeyboardCommit()) {
-        if (g_keyboardPendingReleaseSource == KeyboardReleaseSource::ExplicitKeyUp) {
-            TryCompleteHiddenRapidKeyboardCommit();
-        }
-        if (!g_isPendingShow) return true;
-        KeepAltReleasePolling();
-        return true;
-    }
+    if (TryCommitProtectedRapidKeyboardRelease()) return true;
     if (!g_keyboardHandoffRevealDeferralLogged) {
         SWS_DEBUG_LOG(L"focus",
-                      L"deferring protected keyboard release until hidden handoff or visible presentation");
+                      L"deferring protected keyboard release until visible presentation");
         g_keyboardHandoffRevealDeferralLogged = true;
     }
     KeepAltReleasePolling();
@@ -14822,10 +15592,6 @@ static bool TryCommitAfterInputRelease() {
     if (!g_isVisible && !g_isPendingShow) return false;
     AdoptRawThreeFingerState();
     if (s_commitStarted) return true;
-    if (g_isPendingShow && g_keyboardPendingForegroundHandoffSucceeded &&
-        g_keyboardPendingAltRelease && TryCompleteHiddenRapidKeyboardCommit()) {
-        return true;
-    }
     if ((s_altSessionOwner && s_altHeld) || g_isTouchpadGestureActive ||
         CombinedRawReleasePending()) {
         KeepAltReleasePolling();
@@ -14866,12 +15632,16 @@ static void HandleAltRelease(bool fromPoll = false) {
 static void ReconcileDeferredKeyboardReleaseAfterReveal() {
     if (!g_isVisible || !g_keyboardPendingAltRelease) return;
 
-    const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    const bool asyncAltDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    const bool messageAltDown = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    const bool altDown = asyncAltDown || messageAltDown;
     const KeyboardReleaseSource source = g_keyboardPendingReleaseSource;
     SWS_DEBUG_LOG(L"focus",
                   L"deferred keyboard handoff release recheck source=%s "
-                  L"altDown=%d altHeld=%d foreground=%p handoffSucceeded=%d",
-                  KeyboardReleaseSourceName(source), altDown, s_altHeld,
+                  L"asyncAltDown=%d messageAltDown=%d altHeld=%d foreground=%p "
+                  L"handoffSucceeded=%d",
+                  KeyboardReleaseSourceName(source), asyncAltDown, messageAltDown,
+                  s_altHeld,
                   GetForegroundWindow(), g_keyboardPendingForegroundHandoffSucceeded);
 
     if (altDown) {
@@ -14916,11 +15686,15 @@ static void RecomputeAndReposition() {
             if (g_windows[i].isDesktopItem) continue;
             HWND h = g_windows[i].hWnd;
             bool applicationFrame = IsApplicationFrameWindowClass(h);
-            bool liveContent = !applicationFrame || HasLiveUwpFrameContent(h);
-            if (!IsWindow(h) || !liveContent || (!IsWindowVisible(h) && !IsIconic(h))) {
-                if (applicationFrame && !liveContent) {
-                    Wh_Log(L"SWS: pruning stale UWP frame from live list hwnd=%p",
-                           h);
+            bool staleUwp = ShouldPruneUwpEntry(g_windows[i]);
+            if (!IsWindow(h) || staleUwp ||
+                (!IsWindowVisible(h) && !IsIconic(h))) {
+                if (applicationFrame && staleUwp) {
+                    SWS_DEBUG_LOG(L"uwp",
+                                  L"pruning stale UWP frame from live list "
+                                  L"hwnd=%p state=%s",
+                                  h, UwpFrameValidationName(
+                                         g_windows[i].uwpValidation));
                     RemoveMruWindow(h);
                 }
                 for (const auto& kv : g_windows[i].hThumbs) {
@@ -15021,6 +15795,7 @@ static void EnterAppGroup() {
             if (!IsWindow(hw)) continue;
             WindowEntry e = {};
             e.hWnd = hw;
+            InitializeUwpFrameValidation(e);
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
             e.hIcon = LoadWindowIcon(hw, &e.iconCell);
@@ -15083,6 +15858,7 @@ static void EnterAppGroup() {
             if (!IsWindow(hw)) continue;
             WindowEntry e = {};
             e.hWnd = hw;
+            InitializeUwpFrameValidation(e);
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
             e.hIcon = LoadWindowIcon(hw, &e.iconCell);
@@ -15452,7 +16228,7 @@ static void CyclePage(int dir) {
                     ? g_hCurrentMonitor
                     : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
 
-    // Save current start index — the dry-run will overwrite g_layoutStartIndex.
+    // Save current start index - the dry-run will overwrite g_layoutStartIndex.
     // Also save g_winW/g_winH: the dry-run ComputeLayout calls will overwrite them
     // with intermediate values, which would cause WM_PAINT to draw with wrong dims.
     int savedStart = g_layoutStartIndex;
@@ -15533,7 +16309,7 @@ static void CyclePage(int dir) {
                 break;
             }
         }
-        if (!foundTruncation) break;  // all remaining windows fit — done
+        if (!foundTruncation) break;  // all remaining windows fit - done
     }
 
     g_isDryRunLayout = false;
@@ -15569,7 +16345,7 @@ static void CyclePage(int dir) {
 
         g_scrollTransition.outgoingItems.clear();
         g_scrollTransition.preservingThumbnails = false;
-        return;  // nothing changed — no reflow, no repaint, no flicker
+        return;  // nothing changed - no reflow, no repaint, no flicker
     }
 
     // ── Step 5: Apply the new page and do the real reflow ────────────────────
@@ -15577,7 +16353,7 @@ static void CyclePage(int dir) {
     g_winH = savedWinH;
     g_layoutStartIndex = pageStarts[targetPage];
     g_isPaginatedView  = true;
-    RecomputeAndReposition();  // single real reflow — no flicker, no loops
+    RecomputeAndReposition();  // single real reflow - no flicker, no loops
 
     // ── Step 6: Place selection on the first visible window of the new page ──
     g_selectedIndex = g_layoutStartIndex % n;
@@ -16203,6 +16979,7 @@ static bool RefreshGroupRepresentative(WindowEntry& entry) {
     entry.hWnd = members.front();
     entry.sourceSize = {};
     entry.thumbnailSourceReady = false;
+    InitializeUwpFrameValidation(entry);
     entry.effectiveSourceSize = {};
     entry.rcSourceCrop = {};
     UpdateEntryForWindow(entry);
@@ -17171,9 +17948,7 @@ static bool ActivateRawTouchpadWindow() {
     HWND hForeground = GetForegroundWindow();
     SWS_DEBUG_LOG(L"focus", L"touchpad handoff context %s",
                   FormatTouchpadForegroundDiagnostic(hForeground, g_hSwitcher).c_str());
-    SetLastError(ERROR_SUCCESS);
     BOOL setForegroundResult = SetForegroundWindow(g_hSwitcher);
-    DWORD foregroundError = setForegroundResult ? ERROR_SUCCESS : GetLastError();
     if (GetForegroundWindow() != g_hSwitcher) {
         // This legacy fallback is retained for the shell's asynchronous
         // activation path; it is not used to manipulate the source window.
@@ -17183,11 +17958,11 @@ static bool ActivateRawTouchpadWindow() {
     bool active = GetForegroundWindow() == g_hSwitcher;
     if (active) {
         SWS_DEBUG_LOG(L"focus",
-                      L"touchpad foreground handoff set=%d active=1 source=%p error=%u",
-                      setForegroundResult, hForeground, foregroundError);
+                      L"touchpad foreground handoff set=%d active=1 source=%p",
+                      setForegroundResult, hForeground);
     } else {
-        Wh_Log(L"SWS: touchpad foreground handoff set=%d active=0 source=%p error=%u",
-               setForegroundResult, hForeground, foregroundError);
+        Wh_Log(L"SWS: touchpad foreground handoff set=%d active=0 source=%p",
+               setForegroundResult, hForeground);
     }
     return active;
 }
@@ -18652,16 +19427,129 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
     }
 
+    // Mirrors and the layered control overlay must receive mouse input without
+    // becoming the active SWS window. The main window remains the keyboard owner.
+    if (uMsg == WM_MOUSEACTIVATE && hWnd != g_hSwitcher) {
+        return MA_NOACTIVATE;
+    }
+
+    if (uMsg == WM_THEMECHANGED) {
+        RefreshSwsThemeHandle();
+        InvalidateStaticCache();
+        SWS_DEBUG_LOG(L"layout", L"WM_THEMECHANGED hwnd=%p role=%s visible=%d",
+                      hWnd, PresentationWindowRole(hWnd), IsWindowVisible(hWnd));
+        if (IsPresentationSurfaceWindow(hWnd) && !s_applyingThemeToWindow) {
+            ApplyThemeToWindow(hWnd);
+            ApplyPresentationWindowRegion(hWnd);
+            LogPresentationFrameDiagnostics(hWnd, L"theme-changed-after");
+        }
+        return 0;
+    }
+
+    if (uMsg == WM_DWMCOMPOSITIONCHANGED) {
+        SWS_DEBUG_LOG(L"layout", L"WM_DWMCOMPOSITIONCHANGED hwnd=%p role=%s",
+                      hWnd, PresentationWindowRole(hWnd));
+        if (IsPresentationSurfaceWindow(hWnd) && !s_applyingThemeToWindow) {
+            ApplyThemeToWindow(hWnd);
+            ApplyPresentationWindowRegion(hWnd);
+            LogPresentationFrameDiagnostics(hWnd, L"composition-changed-after");
+        }
+        return 0;
+    }
+
+    if (uMsg == WM_DWMNCRENDERINGCHANGED) {
+        SWS_DEBUG_LOG(L"layout",
+                      L"WM_DWMNCRENDERINGCHANGED hwnd=%p role=%s enabled=%d",
+                      hWnd, PresentationWindowRole(hWnd), wParam != FALSE);
+        if (IsPresentationSurfaceWindow(hWnd)) {
+            LogPresentationFrameDiagnostics(hWnd, L"nc-rendering-changed");
+        }
+        return 0;
+    }
+
+    if (uMsg == WM_DWMCOLORIZATIONCOLORCHANGED ||
+        uMsg == WM_SYSCOLORCHANGE) {
+        SWS_DEBUG_LOG(L"layout", L"color notification msg=0x%04X hwnd=%p role=%s",
+                      uMsg, hWnd, PresentationWindowRole(hWnd));
+        if (IsPresentationSurfaceWindow(hWnd)) {
+            LogPresentationFrameDiagnostics(hWnd, L"color-notification");
+        }
+    }
+
+    if (uMsg == WM_STYLECHANGED &&
+        g_detailedDebugLogging.load(std::memory_order_relaxed)) {
+        const STYLESTRUCT* styleChange =
+            reinterpret_cast<const STYLESTRUCT*>(lParam);
+        if (styleChange) {
+            SWS_DEBUG_LOG(L"dwm",
+                          L"style changed hwnd=%p role=%s index=%p old=0x%IX "
+                          L"new=0x%IX",
+                          hWnd, PresentationWindowRole(hWnd),
+                          reinterpret_cast<void*>(wParam),
+                          static_cast<LONG_PTR>(styleChange->styleOld),
+                          static_cast<LONG_PTR>(styleChange->styleNew));
+        }
+        if (IsPresentationSurfaceWindow(hWnd)) {
+            LogPresentationFrameDiagnostics(hWnd, L"style-changed");
+        }
+    }
+
+    if (uMsg == WM_WINDOWPOSCHANGED &&
+        IsPresentationSurfaceWindow(hWnd) &&
+        !g_animEntranceActive && !g_animExitActive &&
+        g_detailedDebugLogging.load(std::memory_order_relaxed)) {
+        const WINDOWPOS* windowPos = reinterpret_cast<const WINDOWPOS*>(lParam);
+        if (windowPos && !(windowPos->flags & SWP_NOSIZE)) {
+            LogPresentationFrameDiagnostics(hWnd, L"windowpos-size-changed");
+        }
+    }
+
+    if (uMsg == WM_ACTIVATE) {
+        SWS_DEBUG_LOG(L"layout",
+                      L"WM_ACTIVATE hwnd=%p state=%u minimized=%d next=%p "
+                      L"foreground=%p visible=%d theme=%s",
+                      hWnd, LOWORD(wParam), HIWORD(wParam) != FALSE,
+                      reinterpret_cast<void*>(lParam), GetForegroundWindow(),
+                      IsWindowVisible(hWnd), g_settings.theme);
+        if (IsPresentationSurfaceWindow(hWnd)) {
+            LogPresentationFrameDiagnostics(
+                hWnd, LOWORD(wParam) == WA_INACTIVE ? L"activate-off"
+                                                     : L"activate-on");
+        }
+    }
     if (uMsg == WM_NCCALCSIZE) {
-        return 0; // Remove standard frame for WS_OVERLAPPED and WS_THICKFRAME
+        LogNccalcSizeDiagnostics(hWnd, wParam, lParam);
+        SWS_DEBUG_LOG(L"layout", L"WM_NCCALCSIZE hwnd=%p wParam=%d theme=%s",
+                      hWnd, wParam != FALSE, g_settings.theme);
+        return 0; // Remove any standard frame from this custom client surface.
     }
     if (uMsg == WM_NCPAINT) {
+        SWS_DEBUG_LOG(L"layout", L"WM_NCPAINT hwnd=%p theme=%s",
+                      hWnd, g_settings.theme);
         return 0; // Suppress default non-client frame/border painting for ALL themes
     }
     if (uMsg == WM_NCACTIVATE) {
-        // Pass TRUE for wParam so DWM keeps the Mica backdrop active.
-        // Pass -1 for lParam to prevent DefWindowProc from painting the default border (suppressing the white/gray flash).
-        return DefWindowProcW(hWnd, uMsg, TRUE, -1);
+        const bool customActivation = ThemeIs(L"mica") || ThemeIs(L"backdrop");
+        SWS_DEBUG_LOG(L"layout",
+                      L"WM_NCACTIVATE hwnd=%p active=%d lParam=%p mode=%s",
+                      hWnd, wParam != FALSE, reinterpret_cast<void*>(lParam),
+                      customActivation ? L"custom" : L"default");
+        LRESULT result = 0;
+        if (customActivation) {
+            // Keep DWM's material active while lParam=-1 suppresses the
+            // default non-client repaint. The switcher owns presentation
+            // state, even when foreground handoff is denied temporarily.
+            result = DefWindowProcW(hWnd, uMsg, TRUE, -1);
+        } else {
+            // Pass TRUE for wParam so DWM keeps the layered presentation active.
+            // Pass -1 for lParam to prevent the default border flash.
+            result = DefWindowProcW(hWnd, uMsg, TRUE, -1);
+        }
+        if (IsPresentationSurfaceWindow(hWnd)) {
+            LogPresentationFrameDiagnostics(
+                hWnd, wParam ? L"ncactivate-on" : L"ncactivate-off");
+        }
+        return result;
     }
 
     if (g_WM_SWS_TOUCHPAD_FRAME && uMsg == g_WM_SWS_TOUCHPAD_FRAME) {
@@ -18764,6 +19652,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_isTouchpadGestureActive && !s_altSessionOwner) {
                 return 0; // Physical Alt key polling strictly disabled during touchpad gestures
             }
+            if (g_isPendingShow && g_keyboardPendingForegroundHandoff &&
+                g_keyboardPendingAltRelease &&
+                TryCommitProtectedRapidKeyboardRelease()) {
+                if (!g_isPendingShow || g_keyboardPendingAltRelease) return 0;
+            }
             if (!g_isSticky && (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) {
                 if (s_altSessionOwner) {
                     HandleAltRelease(true);
@@ -18785,7 +19678,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 GetTickCount64() >= s_touchpadActivationRetryDeadline ||
                 ExplicitShellInputDown()) {
                 if (s_touchpadActivationRetryTarget && !g_isVisible && !g_isPendingShow) {
-                    SWS_DEBUG_LOG(L"focus", L"selected-window activation retry ended");
+                    SWS_DEBUG_LOG(
+                        L"focus",
+                        L"selected-window activation retry ended target=%p visible=%d "
+                        L"pendingShow=%d exitActive=%d deadline=%llu now=%llu "
+                        L"explicitInput=%d",
+                        s_touchpadActivationRetryTarget, g_isVisible, g_isPendingShow,
+                        g_animExitActive,
+                        static_cast<unsigned long long>(s_touchpadActivationRetryDeadline),
+                        static_cast<unsigned long long>(GetTickCount64()),
+                        ExplicitShellInputDown());
                 }
                 KillTimer(hWnd, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
                 s_touchpadActivationRetryTarget = NULL;
@@ -18956,10 +19858,13 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 HWND h = *it;
                 auto request = s_pendingCloseRequests.find(h);
                 bool applicationFrame = IsApplicationFrameWindowClass(h);
+                // Explorer can keep a visible UWP frame alive while its CoreWindow
+                // child is temporarily absent, so missing content is not closure proof.
                 bool liveContent = !applicationFrame || HasLiveUwpFrameContent(h);
-                if (!IsWindow(h) || !liveContent ||
-                    (!IsWindowVisible(h) && !IsIconic(h))) {
-                    // Window truly closed (or hid itself) — remove its entry now.
+                bool windowGone = !IsWindow(h) ||
+                    (!IsWindowVisible(h) && !IsIconic(h));
+                if (windowGone) {
+                    // Window truly closed (or hid itself) - remove its entry now.
                     // With lazy removal, the entry was never taken out eagerly, so
                     // this is the single point of removal and the departing fade
                     // starts from the entry's real position.
@@ -18967,10 +19872,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                                   L"close verification completed hwnd=%p state=%s "
                                   L"visible=%d iconic=%d liveContent=%d",
                                   h,
-                                  request == s_pendingCloseRequests.end()
-                                      ? L"unknown"
-                                      : CloseRequestStateName(request->second.state),
-                                  IsWindowVisible(h), IsIconic(h), liveContent);
+                                   request == s_pendingCloseRequests.end()
+                                       ? L"unknown"
+                                       : CloseRequestStateName(request->second.state),
+                                   IsWindowVisible(h), IsIconic(h), liveContent);
                     if (s_stickyTwoFingerTapCloseTarget == h) {
                         ClearStickyTwoFingerTapOwnership();
                     }
@@ -19045,20 +19950,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             // refreshed at show/reveal time, and the next tick after the
             // entrance completes applies any genuinely late DWM size in one step.
             if (g_isVisible && !g_windows.empty() && !g_scrollTransition.active && !g_layoutTransition.active && !g_animEntranceActive) {
-                bool staleWindow = false;
-                for (const auto& entry : g_windows) {
-                    if (!entry.isDesktopItem &&
-                        IsApplicationFrameWindowClass(entry.hWnd) &&
-                        !HasLiveUwpFrameContent(entry.hWnd)) {
-                        staleWindow = true;
-                        break;
-                    }
-                }
-                if (staleWindow) {
-                    RecomputeAndReposition();
-                    if (!g_isVisible || g_windows.empty()) return 0;
-                }
-
                 bool anyChanged = false;
                 for (auto& w : g_windows) {
                     bool sourceReady = w.thumbnailSourceReady;
@@ -19152,8 +20043,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         s_altHeld = true;
         g_keyboardPendingAltRelease = false;
         g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
-        g_keyboardHiddenHandoffAttempted = false;
-        g_keyboardHandoffProbeTick = 0;
+        g_keyboardReleaseProbeTick = 0;
+        g_keyboardReleaseProbeSamples = 0;
         AdoptRawThreeFingerState(true);
 
         if (!g_isVisible && !g_isPendingShow) {
@@ -19166,7 +20057,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
             // When "Cycle Between Windows of Current Application" is combined with
             // "Group Windows by Application", skip the collapsed group entry and open
-            // the current app's windows directly (issue #5532) — no extra Ctrl tap.
+            // the current app's windows directly (issue #5532) - no extra Ctrl tap.
             if (isAltBacktickTrigger && g_settings.showApplications && !g_drilledIn &&
                 g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() &&
                 g_windows[g_selectedIndex].groupWindows.size() > 1) {
@@ -19529,6 +20420,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_SETTINGCHANGE:
+        SWS_DEBUG_LOG(L"layout", L"WM_SETTINGCHANGE hwnd=%p role=%s wParam=%p",
+                      hWnd, PresentationWindowRole(hWnd),
+                      reinterpret_cast<void*>(wParam));
+        if (IsPresentationSurfaceWindow(hWnd)) {
+            LogPresentationFrameDiagnostics(hWnd, L"setting-change");
+        }
         RefreshClientAreaAnimCache();
         if (!AreAnimationsGloballyEnabled()) {
             if (g_animExitActive) {
@@ -19863,7 +20760,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (IsWindow(hS)) {
                 // Stale/misfired notification: the window is still alive (e.g. it
                 // survived a close attempt by showing a modal dialog). Do NOT touch
-                // the MRU list or the entry — it must stay exactly where it was.
+                // the MRU list or the entry - it must stay exactly where it was.
                 return 0;
             }
             RemoveMruWindow(hS);
@@ -21547,13 +22444,14 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     wc.style = CS_DBLCLKS;
     RegisterClassExW(&wc);
 
-    // Use WS_POPUP | WS_THICKFRAME to get DWM rounded corners and shadows, 
-    // without the system caption buttons. We remove the frame via WM_NCCALCSIZE.
+    // Keep WS_THICKFRAME without WS_CAPTION. DWM uses the frame metadata for
+    // material blur, rounded corners, and shadows; WM_NCCALCSIZE removes it visually.
     DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | (ThemeIs(L"none") ? WS_EX_LAYERED : 0);
     g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE,
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
+    LogPresentationFrameDiagnostics(g_hSwitcher, L"create-main");
     if (BackdropBlurUsesWallpaper()) {
         // Build wallpaper while switcher is idle. Normal Alt+Tab then reuses
         // prepared pixels instead of adding render time after show delay.
@@ -21580,9 +22478,11 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     }
 
     g_hCloseBtnWnd = CreateSWSWindow(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT |
+            WS_EX_NOACTIVATE,
         SWS_CLASSNAME, L"",
         WS_POPUP, 0, 0, 0, 0, g_hSwitcher, NULL, GetModuleHandleW(NULL), NULL);
+    LogPresentationFrameDiagnostics(g_hCloseBtnWnd, L"create-overlay");
 
     g_hDwmCornerWatchStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (g_hDwmCornerWatchStopEvent) {
@@ -21743,6 +22643,7 @@ thread_exit:
     ReleaseTouchpadGestureTakeover();
     g_presentationRegions.clear();
     g_nativeAcrylicWindows.clear();
+    g_presentationMaterialStates.clear();
     g_presentationWindows.clear();
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
     if (g_hFont) { DeleteObject(g_hFont); g_hFont = NULL; }
