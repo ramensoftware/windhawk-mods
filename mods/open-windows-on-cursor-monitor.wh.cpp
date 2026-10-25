@@ -10,18 +10,17 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lversion -luser32
+// @compilerOptions -lversion -luser32 -ldwmapi -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-![演示动图](https://i.imgur.com/zQZIHsM.gif)
+![Demo](https://i.imgur.com/zQZIHsM.gif)
 
 Windows restores a window on the monitor it was last on, and new
-programs always open on the primary monitor. This mod makes them open on the
-monitor under the mouse cursor instead.
+programs always open on the primary monitor. This mod makes every window open
+on the monitor under the mouse cursor instead. All four features have their own
 
----
 
 # 任务栏 / 托盘点击窗口跟随鼠标所在屏幕
 
@@ -30,11 +29,6 @@ Windows 默认行为是：点击任务栏上的程序图标时，窗口回到它
 
 本插件让这两种情况弹出的窗口，都出现在**鼠标所在的显示器**（也就是你点击的
 那个任务栏所在的屏幕）。
-
-## 备注
-
-四个功能开关只在插件加载时安装钩子，改开关后需要重新启用一次插件（关掉再
-打开）才会生效；其余设置项即时生效。
 */
 // ==/WindhawkModReadme==
 
@@ -179,8 +173,8 @@ Windows 默认行为是：点击任务栏上的程序图标时，窗口回到它
   $name:zh-CN: 托盘 / 开始菜单点击的有效期（毫秒）
   $description: >-
     A program may raise its window some time after the click. Only windows that
-    appear within this window are moved. Set to 0 to always accept while the
-    cursor rests on that area
+    appear within this window are moved. Set to 0 for no time limit: the last
+    click position then keeps qualifying, wherever the cursor has moved to
   $description:zh-CN: >-
     点击托盘图标或开始菜单项后，程序可能立刻也可能稍后才弹出/激活窗口。这个
     时间窗内出现的窗口才会被移动；设为 0 表示只要鼠标停在该区域就一直生效
@@ -221,38 +215,31 @@ Windows 默认行为是：点击任务栏上的程序图标时，窗口回到它
 #include <windhawk_utils.h>
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <psapi.h>
+#include <shellscalingapi.h>
 
 #include <atomic>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 // DWM is used to suppress the maximize/restore animation while a maximized
-// window travels to another monitor. It's loaded dynamically so the mod doesn't
-// depend on an import library being present.
-using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-DwmSetWindowAttribute_t g_dwmSetWindowAttribute = nullptr;
-
-void LoadDwmApi() {
-    if (g_dwmSetWindowAttribute) {
-        return;
-    }
-
-    if (HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll")) {
-        g_dwmSetWindowAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
-            GetProcAddress(dwmapi, "DwmSetWindowAttribute"));
-    }
+// window travels to another monitor.
+void SetWindowTransitionsDisabled(HWND hWnd, bool disabled) {
+    BOOL value = disabled ? TRUE : FALSE;
+    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &value,
+                          sizeof(value));
 }
 
-void SetWindowTransitionsDisabled(HWND hWnd, bool disabled) {
-    if (!g_dwmSetWindowAttribute) {
-        return;
-    }
-
-    BOOL value = disabled ? TRUE : FALSE;
-    // DWMWA_TRANSITIONS_FORCEDISABLED
-    g_dwmSetWindowAttribute(hWnd, 3, &value, sizeof(value));
+// Windows keeps cloaked windows "visible" for the window manager while hiding
+// them from the user - the Start menu is cloaked whenever it's closed.
+bool IsWindowCloaked(HWND hWnd) {
+    int cloaked = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked,
+                                           sizeof(cloaked))) &&
+           cloaked != 0;
 }
 
 // ============================================================================
@@ -529,25 +516,12 @@ bool IsExcludedWindow(HWND hWnd) {
 // Monitor / DPI helpers
 // ============================================================================
 
-using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-GetDpiForMonitor_t g_pGetDpiForMonitor = nullptr;
-
-void InitDpiFunctions() {
-    HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr,
-                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (shcore) {
-        g_pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
-            GetProcAddress(shcore, "GetDpiForMonitor"));
-    }
-}
-
 UINT GetMonitorDpi(HMONITOR hMonitor) {
     UINT dpiX = 96;
     UINT dpiY = 96;
 
-    if (g_pGetDpiForMonitor &&
-        SUCCEEDED(g_pGetDpiForMonitor(hMonitor, 0 /* MDT_EFFECTIVE_DPI */,
-                                     &dpiX, &dpiY)) &&
+    if (SUCCEEDED(
+            GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
         dpiX >= 96) {
         return dpiX;
     }
@@ -555,43 +529,19 @@ UINT GetMonitorDpi(HMONITOR hMonitor) {
     return 96;
 }
 
-using GetWindowDpiAwarenessContext_t = intptr_t(WINAPI*)(HWND);
-using GetAwarenessFromDpiAwarenessContext_t = int(WINAPI*)(intptr_t);
-GetWindowDpiAwarenessContext_t g_pGetWindowDpiAwarenessContext = nullptr;
-GetAwarenessFromDpiAwarenessContext_t g_pGetAwarenessFromDpiAwarenessContext =
-    nullptr;
-
-void InitDpiAwarenessFunctions() {
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        return;
-    }
-
-    g_pGetWindowDpiAwarenessContext =
-        reinterpret_cast<GetWindowDpiAwarenessContext_t>(
-            GetProcAddress(user32, "GetWindowDpiAwarenessContext"));
-    g_pGetAwarenessFromDpiAwarenessContext =
-        reinterpret_cast<GetAwarenessFromDpiAwarenessContext_t>(
-            GetProcAddress(user32, "GetAwarenessFromDpiAwarenessContext"));
-}
-
 // True for windows whose app handles DPI changes itself. Windows sends those
 // WM_DPICHANGED when they cross a monitor boundary, and they resize themselves
 // by the DPI ratio - which is the size we can aim at while the window is still
 // on its way over.
 bool IsPerMonitorDpiAwareWindow(HWND hWnd) {
-    if (!g_pGetWindowDpiAwarenessContext ||
-        !g_pGetAwarenessFromDpiAwarenessContext) {
-        return false;
-    }
-
-    intptr_t context = g_pGetWindowDpiAwarenessContext(hWnd);
+    DPI_AWARENESS_CONTEXT context = GetWindowDpiAwarenessContext(hWnd);
     if (!context) {
         return false;
     }
 
-    // DPI_AWARENESS_PER_MONITOR_AWARE (covers both per-monitor v1 and v2).
-    return g_pGetAwarenessFromDpiAwarenessContext(context) == 2;
+    // Covers both per-monitor awareness v1 and v2.
+    return GetAwarenessFromDpiAwarenessContext(context) ==
+           DPI_AWARENESS_PER_MONITOR_AWARE;
 }
 
 // True when the given point lies on one of this process' taskbars, optionally
@@ -685,8 +635,24 @@ std::vector<PendingMove> g_pendingMoves;
 bool g_pendingInitialized = false;
 
 HANDLE g_stopEvent = nullptr;
+// Auto-reset event used to wake the worker thread when a move is queued, so it
+// can sleep until the next move is due instead of polling.
+HANDLE g_wakeEvent = nullptr;
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
+
+// Posted to the worker thread when the settings change: it reads them while
+// moving windows, so reloading them there avoids replacing the setting values
+// under its feet.
+constexpr UINT kReloadSettingsMessage = WM_APP;
+
+// Where and when the last mouse click happened, and what was under the cursor
+// at that moment. The taskbar click hook clears the timestamp to say "this click
+// was a taskbar button, not a tray icon or a Start menu entry".
+std::atomic<DWORD> g_lastMouseDownTick{0};
+std::atomic<LONG> g_lastMouseDownX{0};
+std::atomic<LONG> g_lastMouseDownY{0};
+std::atomic<HWND> g_lastMouseDownHwnd{nullptr};
 
 void QueuePendingMove(HWND hWnd, HMONITOR hMonitor, int delayMs,
                       bool requireForeground, bool adjustOnly,
@@ -844,7 +810,13 @@ void PerformMove(HWND hWnd, HMONITOR hTargetMonitor, bool requireForeground,
         }
     }
 
-    if (!moveOnly) {
+    // Only the modes that rescale on purpose give the window a new size; in the
+    // move-only modes ("auto" and "none") the size is left entirely alone, down
+    // to a window that is bigger than the target monitor.
+    bool rescaling = g_settings.sizeMode == SizeMode::Relative ||
+                     g_settings.sizeMode == SizeMode::Dpi;
+
+    if (rescaling) {
         // Never let rescaling shrink a window into oblivion.
         if (newWidth < g_settings.minWindowSize) {
             newWidth = g_settings.minWindowSize;
@@ -994,6 +966,10 @@ void QueuePendingMove(HWND hWnd, HMONITOR hMonitor, int delayMs,
     EnterCriticalSection(&g_pendingLock);
     g_pendingMoves.push_back(move);
     LeaveCriticalSection(&g_pendingLock);
+
+    if (g_wakeEvent) {
+        SetEvent(g_wakeEvent);
+    }
 }
 
 void ProcessDueMoves() {
@@ -1020,6 +996,31 @@ void ProcessDueMoves() {
         PerformMove(move.hWnd, move.hMonitor, move.requireForeground,
                     move.adjustOnly, move.desiredWidth, move.desiredHeight);
     }
+}
+
+// How long the worker thread may sleep: until the earliest queued move is due,
+// or forever when nothing is queued.
+DWORD GetTimeUntilNextMove() {
+    DWORD now = GetTickCount();
+    DWORD timeout = INFINITE;
+
+    EnterCriticalSection(&g_pendingLock);
+
+    for (const auto& move : g_pendingMoves) {
+        long remaining = (long)(move.dueTime - now);
+        if (remaining <= 0) {
+            timeout = 0;
+            break;
+        }
+
+        if ((DWORD)remaining < timeout) {
+            timeout = (DWORD)remaining;
+        }
+    }
+
+    LeaveCriticalSection(&g_pendingLock);
+
+    return timeout;
 }
 
 void ClearPendingMoves() {
@@ -1062,35 +1063,38 @@ void WINAPI CTaskListWnd__HandleClick_Hook(LPVOID pThis,
                                            int param5) {
     Wh_Log(L"> taskbar click, action %d", clickAction);
 
+    // This click was on a taskbar button. Forget the recorded click, so the
+    // tray / Start menu paths don't mistake it for one of theirs. The low-level
+    // mouse hook records the mouse-down before the taskbar sees the click, so
+    // clearing it here is always in time.
+    g_lastMouseDownTick = 0;
+
     HWND pendingWnd = nullptr;
     bool suppressClick = false;
     bool requireForeground = true;
 
-    if (g_settings.taskbarClickEnabled && taskBtnGroup) {
-        // Shift+click launches a new instance - don't interfere with it.
-        if (GetKeyState(VK_SHIFT) >= 0) {
-            int index = taskItemIndex;
-            if (index < 0) {
-                // Group types: 1 - single/uncombined, 2 - pinned,
-                // 3 - combined (a click only shows thumbnails, skip it).
-                int groupType =
-                    CTaskBtnGroup_GetGroupType_Original(taskBtnGroup);
-                if (groupType == 1 || groupType == 2) {
-                    index = 0;
-                }
+    // eCLICKACTION: 0 - click, 1/2 - Win+number, 3 - new instance (middle
+    // click or Shift+click), 4 - Ctrl+click. Only a plain click restores a
+    // window, so leave the others to Windows.
+    if (g_settings.taskbarClickEnabled && taskBtnGroup && clickAction == 0) {
+        int index = taskItemIndex;
+        if (index < 0) {
+            // Group types: 1 - single/uncombined, 2 - pinned,
+            // 3 - combined (a click only shows thumbnails, skip it).
+            int groupType = CTaskBtnGroup_GetGroupType_Original(taskBtnGroup);
+            if (groupType == 1 || groupType == 2) {
+                index = 0;
             }
+        }
 
-            if (index >= 0) {
-                void* taskItem =
-                    CTaskBtnGroup_GetTaskItem_Original(taskBtnGroup, index);
-                if (taskItem) {
-                    if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
-                        pendingWnd =
-                            CImmersiveTaskItem_GetWindow_Original(taskItem);
-                    } else {
-                        pendingWnd =
-                            CWindowTaskItem_GetWindow_Original(taskItem);
-                    }
+        if (index >= 0) {
+            void* taskItem =
+                CTaskBtnGroup_GetTaskItem_Original(taskBtnGroup, index);
+            if (taskItem) {
+                if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+                    pendingWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
+                } else {
+                    pendingWnd = CWindowTaskItem_GetWindow_Original(taskItem);
                 }
             }
         }
@@ -1129,7 +1133,7 @@ void WINAPI CTaskListWnd__HandleClick_Hook(LPVOID pThis,
 }
 
 bool HookTaskbarSymbols() {
-    // taskbar.dll (Win11), explorer.exe (Win10)
+    // taskbar.dll, explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(protected: void __cdecl CTaskListWnd::_HandleClick(struct ITaskBtnGroup *,int,enum CTaskListWnd::eCLICKACTION,int,int))"},
@@ -1177,45 +1181,43 @@ bool HookTaskbarSymbols() {
 // Shell launch surfaces (Start menu / search panel)
 // ============================================================================
 
-// True when the point lies on the Start menu or the search panel - the two
-// places a program is launched from by clicking.
-bool IsPointOnShellLaunchArea(POINT pt) {
-    struct EnumContext {
-        POINT pt;
-        bool result;
-    } context{pt, false};
+// True when the click landed on the Start menu or the search panel - the two
+// places a program is launched from by clicking. The window is the one that was
+// under the cursor at click time, so it still identifies the click after the
+// Start menu has closed (it's only cloaked by then, which is why the cloaked
+// state has to be checked here rather than by looking at what's on top now).
+bool IsShellLaunchWindow(HWND hWnd) {
+    if (!hWnd) {
+        return false;
+    }
 
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto& ctx = *reinterpret_cast<EnumContext*>(lParam);
+    hWnd = GetAncestor(hWnd, GA_ROOT);
+    if (!hWnd || !IsWindowVisible(hWnd) || IsWindowCloaked(hWnd)) {
+        return false;
+    }
 
-            if (!IsWindowVisible(hWnd)) {
-                return TRUE;
-            }
+    std::wstring name = GetProcessFileName(hWnd);
+    return _wcsicmp(name.c_str(), L"StartMenuExperienceHost.exe") == 0 ||
+           _wcsicmp(name.c_str(), L"SearchHost.exe") == 0 ||
+           _wcsicmp(name.c_str(), L"SearchApp.exe") == 0;
+}
 
-            RECT rect = {};
-            if (!GetWindowRect(hWnd, &rect)) {
-                return TRUE;
-            }
+// True when the click landed on a taskbar button rather than on the tray. The
+// taskbar click hook already rules those out; this is the fallback for the case
+// where that hook couldn't be installed.
+bool IsTaskListWindow(HWND hWnd) {
+    for (HWND w = hWnd; w; w = GetParent(w)) {
+        wchar_t className[64] = {};
+        if (!GetClassNameW(w, className, ARRAYSIZE(className))) {
+            break;
+        }
 
-            if (ctx.pt.x < rect.left || ctx.pt.x > rect.right ||
-                ctx.pt.y < rect.top || ctx.pt.y > rect.bottom) {
-                return TRUE;
-            }
+        if (_wcsicmp(className, L"MSTaskListWClass") == 0) {
+            return true;
+        }
+    }
 
-            std::wstring name = GetProcessFileName(hWnd);
-            if (_wcsicmp(name.c_str(), L"StartMenuExperienceHost.exe") == 0 ||
-                _wcsicmp(name.c_str(), L"SearchHost.exe") == 0 ||
-                _wcsicmp(name.c_str(), L"SearchApp.exe") == 0) {
-                ctx.result = true;
-                return FALSE;
-            }
-
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&context));
-
-    return context.result;
+    return false;
 }
 
 // ============================================================================
@@ -1358,10 +1360,6 @@ void ClearHandledProcesses() {
 // happened, so a window is only moved when the click really landed on the tray
 // area - that keeps ordinary window switching (Alt+Tab, clicking another
 // window, ...) from being hijacked.
-std::atomic<DWORD> g_lastMouseDownTick{0};
-std::atomic<LONG> g_lastMouseDownX{0};
-std::atomic<LONG> g_lastMouseDownY{0};
-
 HWINEVENTHOOK g_windowShownHook = nullptr;
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HHOOK g_mouseHook = nullptr;
@@ -1375,6 +1373,9 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
          wParam == WM_RBUTTONDOWN || wParam == WM_NCRBUTTONDOWN)) {
         auto* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
         if (info) {
+            // WindowFromPoint is cheap and must happen now: a moment later the
+            // clicked surface (Start menu, tray flyout, ...) may be gone.
+            g_lastMouseDownHwnd = WindowFromPoint(info->pt);
             g_lastMouseDownX = info->pt.x;
             g_lastMouseDownY = info->pt.y;
             g_lastMouseDownTick = GetTickCount();
@@ -1407,12 +1408,14 @@ ClickArea GetRecentClickArea(POINT* clickPoint) {
     }
 
     POINT pt{g_lastMouseDownX.load(), g_lastMouseDownY.load()};
+    HWND clickedWnd = g_lastMouseDownHwnd;
 
     ClickArea area = ClickArea::None;
 
-    if (g_settings.trayWindowEnabled && IsPointOnTrayArea(pt)) {
+    if (g_settings.trayWindowEnabled && !IsTaskListWindow(clickedWnd) &&
+        IsPointOnTrayArea(pt)) {
         area = ClickArea::Tray;
-    } else if (g_settings.startMenuEnabled && IsPointOnShellLaunchArea(pt)) {
+    } else if (g_settings.startMenuEnabled && IsShellLaunchWindow(clickedWnd)) {
         area = ClickArea::ShellLaunch;
     }
 
@@ -1571,6 +1574,8 @@ void CALLBACK WindowEventProc(HWINEVENTHOOK,
 // The worker thread owns the accessibility event hook (out-of-context hooks are
 // delivered to the registering thread's message loop) and performs the delayed
 // window moves.
+void UnhookTrayHooks();
+
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     if (g_settings.trayWindowEnabled || g_settings.newWindowEnabled ||
         g_settings.startMenuEnabled) {
@@ -1591,9 +1596,10 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
                                                      WINEVENT_SKIPOWNPROCESS)
                                : nullptr;
 
-        // Only needed to tell tray clicks apart from ordinary window
-        // switching.
-        g_mouseHook = g_settings.trayWindowEnabled
+        // Only needed to tell tray / Start menu clicks apart from ordinary
+        // window switching.
+        g_mouseHook = (g_settings.trayWindowEnabled ||
+                       g_settings.startMenuEnabled)
                           ? SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc,
                                               nullptr, 0)
                           : nullptr;
@@ -1605,24 +1611,45 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
     MSG msg = {};
+    bool stop = false;
 
-    for (;;) {
+    while (!stop) {
         ProcessDueMoves();
 
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
-                return 0;
+                stop = true;
+                break;
             }
+
+            if (msg.message == kReloadSettingsMessage) {
+                LoadSettings();
+                continue;
+            }
+
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
 
-        DWORD wait = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 20,
-                                               QS_ALLINPUT);
+        if (stop) {
+            break;
+        }
+
+        // Sleep until the next move is due - no need to wake up in between.
+        HANDLE handles[] = {g_stopEvent, g_wakeEvent};
+        DWORD wait = MsgWaitForMultipleObjects(
+            ARRAYSIZE(handles), handles, FALSE, GetTimeUntilNextMove(),
+            QS_ALLINPUT);
+
         if (wait == WAIT_OBJECT_0) {
-            return 0;
+            break;
         }
     }
+
+    // WinEvent hooks must be removed by the thread that installed them.
+    UnhookTrayHooks();
+
+    return 0;
 }
 
 bool StartWorkerThread() {
@@ -1631,9 +1658,18 @@ bool StartWorkerThread() {
         return false;
     }
 
+    g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_wakeEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return false;
+    }
+
     g_workerThread =
         CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_workerThread) {
+        CloseHandle(g_wakeEvent);
+        g_wakeEvent = nullptr;
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return false;
@@ -1644,6 +1680,10 @@ bool StartWorkerThread() {
 
 void StopWorkerThread() {
     if (!g_workerThread) {
+        if (g_wakeEvent) {
+            CloseHandle(g_wakeEvent);
+            g_wakeEvent = nullptr;
+        }
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
@@ -1654,11 +1694,16 @@ void StopWorkerThread() {
     SetEvent(g_stopEvent);
     PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
 
-    // Don't wait forever - the process is unloading.
-    WaitForSingleObject(g_workerThread, 3000);
+    // Wait for real: the worker calls into other processes (SetWindowPos,
+    // ShowWindow), which block until those processes answer. Returning before it
+    // finished would leave a thread running in an unloaded DLL.
+    WaitForSingleObject(g_workerThread, INFINITE);
 
     CloseHandle(g_workerThread);
     g_workerThread = nullptr;
+
+    CloseHandle(g_wakeEvent);
+    g_wakeEvent = nullptr;
 
     CloseHandle(g_stopEvent);
     g_stopEvent = nullptr;
@@ -1685,8 +1730,29 @@ void UnhookTrayHooks() {
 // Mod entry points
 // ============================================================================
 
+// Windhawk loads the mod into every explorer.exe process, including the ones
+// that only host folder windows ("Launch folder windows in a separate process").
+// Only the process that hosts the taskbar may install the system-wide hooks -
+// otherwise every instance reacts to the same events and moves the same window
+// several times over.
+bool IsFolderWindowsProcess() {
+    std::wstring commandLine = GetCommandLineW();
+    for (auto& c : commandLine) {
+        c = towlower(c);
+    }
+
+    return commandLine.find(L"/factory") != std::wstring::npos ||
+           commandLine.find(L"-embedding") != std::wstring::npos ||
+           commandLine.find(L"/separate") != std::wstring::npos;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    if (IsFolderWindowsProcess()) {
+        Wh_Log(L"Not the taskbar process, skipping");
+        return FALSE;
+    }
 
     LoadSettings();
 
@@ -1695,11 +1761,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
-
-    InitDpiFunctions();
-    InitDpiAwarenessFunctions();
-
-    LoadDwmApi();
 
     InitializeCriticalSection(&g_pendingLock);
     g_pendingInitialized = true;
@@ -1711,7 +1772,9 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to start the worker thread");
     }
 
-    if (g_settings.taskbarClickEnabled && !HookTaskbarSymbols()) {
+    // Installed whatever the setting is: the hook body checks it, and the hook
+    // is also what tells taskbar clicks apart from tray clicks.
+    if (!HookTaskbarSymbols()) {
         Wh_Log(L"Taskbar click symbols not found");
     }
 
@@ -1721,9 +1784,8 @@ BOOL Wh_ModInit() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
-    // Unhook first, so no callback can queue work after the thread is gone.
-    UnhookTrayHooks();
-
+    // The worker thread unhooks the WinEvent hooks on its way out, so stopping
+    // it is all that's needed here.
     StopWorkerThread();
 }
 
@@ -1731,8 +1793,6 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     StopWorkerThread();
-
-    UnhookTrayHooks();
 
     ClearPendingMoves();
     ClearHandledProcesses();
@@ -1748,24 +1808,30 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
-    bool prevTaskbarClick = g_settings.taskbarClickEnabled;
-    bool prevTrayWindow = g_settings.trayWindowEnabled;
-    bool prevNewWindow = g_settings.newWindowEnabled;
-    bool prevStartMenu = g_settings.startMenuEnabled;
+    bool taskbarClick = Wh_GetIntSetting(L"taskbarClickEnabled") != 0;
+    bool trayWindow = Wh_GetIntSetting(L"trayWindowEnabled") != 0;
+    bool newWindow = Wh_GetIntSetting(L"newWindowEnabled") != 0;
+    bool startMenu = Wh_GetIntSetting(L"startMenuClickEnabled") != 0;
 
-    LoadSettings();
-
-    // The hooks are installed at init only, so toggling a feature requires
-    // reloading the mod (disable and enable it again).
-    bool needsReload = prevTaskbarClick != g_settings.taskbarClickEnabled ||
-                       prevTrayWindow != g_settings.trayWindowEnabled ||
-                       prevNewWindow != g_settings.newWindowEnabled ||
-                       prevStartMenu != g_settings.startMenuEnabled;
-
-    if (needsReload) {
-        Wh_Log(L"A feature toggle changed, reload the mod to apply it");
+    // The hooks are installed at init only, so changing a feature toggle needs a
+    // reload - and the reload re-reads every setting anyway.
+    if (taskbarClick != g_settings.taskbarClickEnabled ||
+        trayWindow != g_settings.trayWindowEnabled ||
+        newWindow != g_settings.newWindowEnabled ||
+        startMenu != g_settings.startMenuEnabled) {
+        *bReload = TRUE;
+        return TRUE;
     }
+
+    // The worker thread reads the settings while it moves windows, so let it
+    // reload them instead of replacing the values here.
+    if (g_workerThreadId &&
+        !PostThreadMessageW(g_workerThreadId, kReloadSettingsMessage, 0, 0)) {
+        LoadSettings();
+    }
+
+    return TRUE;
 }
