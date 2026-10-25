@@ -326,7 +326,9 @@ void DrawIconWithAlpha(HWND hListView, HDC hdc, int iItem,
     }
 
     RECT rcIcon = {LVIR_ICON};
-    SendMessageW(hListView, LVM_GETITEMRECT, iItem, (LPARAM)&rcIcon);
+    if (!SendMessageW(hListView, LVM_GETITEMRECT, iItem, (LPARAM)&rcIcon)) {
+        return;
+    }
 
     // Query the live icon size so that custom sizes (Ctrl+mouse wheel on the
     // desktop) are respected.
