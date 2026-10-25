@@ -78,7 +78,7 @@ BOOL Wh_ModInit() {
     }
 
     // taskmgr.exe
-    WindhawkUtils::SYMBOL_HOOK taskmgr_exe_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForColumnHeader(void)" },
             &SetBorderUponNavigationForColumnHeader_Original,
@@ -101,7 +101,7 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(taskmgr, taskmgr_exe_hooks, ARRAYSIZE(taskmgr_exe_hooks))) {
+    if (!WindhawkUtils::HookSymbols(taskmgr, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"Failed to resolve/hook the required Task Manager border methods");
         return FALSE;
     }
