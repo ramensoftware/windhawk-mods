@@ -2388,19 +2388,12 @@ LRESULT CALLBACK DesktopListViewSubclassProc(HWND hwnd, UINT message, WPARAM wPa
         }
     }
     if (message == g_msgRefresh) {
-        static DWORD lastRefresh = 0;
-        DWORD now = GetTickCount();
-        if (now - lastRefresh < 200) {
-            return 0;
-        }
-        lastRefresh = now;
         AcquireSRWLockShared(&g_listViewsLock);
         for (const auto& rc : g_lastDesktopDotRects) {
             InvalidateRect(hwnd, &rc, TRUE);
         }
         ReleaseSRWLockShared(&g_listViewsLock);
-        InvalidateRect(hwnd, nullptr, TRUE);
-        UpdateWindow(hwnd);
+        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
     if (message == WM_NCDESTROY) {
@@ -2491,13 +2484,16 @@ BOOL CALLBACK FindFileViewsProc(HWND hwnd, LPARAM) {
 // Row decoration and tag painting
 // ---------------------------------------------------------------------------
 
-thread_local HWND g_paintDefView;
-thread_local std::wstring g_paintFolder;
-thread_local DWORD g_paintFolderChecked;
-thread_local bool g_capturingPaintFolder;
-thread_local bool g_paintDetailsMode;
-thread_local int g_paintTagsOffset;
-thread_local int g_paintTagsWidth;
+struct DefViewPaintState {
+    std::wstring folder;
+    DWORD folderChecked = 0;
+    bool capturing = false;
+    bool detailsMode = false;
+    int tagsOffset = -1;
+    int tagsWidth = 0;
+};
+std::unordered_map<HWND, DefViewPaintState> g_paintStates;
+SRWLOCK g_paintStatesLock = SRWLOCK_INIT;
 
 HWND FolderViewAncestor(HWND hwnd) {
     for (int i = 0; hwnd && i < 24; i++, hwnd = GetParent(hwnd)) {
@@ -2542,10 +2538,10 @@ std::wstring FolderPathForDefView(HWND defView) {
     return result;
 }
 
-void CaptureTagsColumn(HWND defView, const Settings& settings) {
-    g_paintDetailsMode = false;
-    g_paintTagsOffset = -1;
-    g_paintTagsWidth = 0;
+void CaptureTagsColumn(HWND defView, DefViewPaintState& state) {
+    state.detailsMode = false;
+    state.tagsOffset = -1;
+    state.tagsWidth = 0;
     IShellBrowser* browser = BrowserForDefView(defView);
     if (!browser) {
         return;
@@ -2568,7 +2564,7 @@ void CaptureTagsColumn(HWND defView, const Settings& settings) {
         SUCCEEDED(folderView->GetViewModeAndIconSize(&mode, &iconSize)) &&
         mode == FVM_DETAILS &&
         SUCCEEDED(view->QueryInterface(IID_PPV_ARGS(&manager))) && manager) {
-        g_paintDetailsMode = true;
+        state.detailsMode = true;
         UINT count = 0;
         if (SUCCEEDED(manager->GetColumnCount(CM_ENUM_VISIBLE, &count)) &&
             count && count <= 128) {
@@ -2584,8 +2580,8 @@ void CaptureTagsColumn(HWND defView, const Settings& settings) {
                         width = info.uWidth;
                     }
                     if (column == PKEY_Keywords) {
-                        g_paintTagsOffset = offset;
-                        g_paintTagsWidth = (int)width;
+                        state.tagsOffset = offset;
+                        state.tagsWidth = (int)width;
                         break;
                     }
                     offset += (int)width;
@@ -2646,17 +2642,32 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG* message) {
         }
         if (message->message == WM_PAINT || message->message == WM_ERASEBKGND) {
             HWND defView = FolderViewAncestor(message->hwnd);
-            DWORD now = GetTickCount();
-            if (defView &&
-                (defView != g_paintDefView || now - g_paintFolderChecked > 250) &&
-                !g_capturingPaintFolder) {
-                g_capturingPaintFolder = true;
-                std::wstring folder = FolderPathForDefView(defView);
-                CaptureTagsColumn(defView, *GetSettings());
-                g_capturingPaintFolder = false;
-                g_paintDefView = defView;
-                g_paintFolder = std::move(folder);
-                g_paintFolderChecked = now;
+            if (defView) {
+                DWORD now = GetTickCount();
+                bool needCapture = false;
+                AcquireSRWLockShared(&g_paintStatesLock);
+                auto it = g_paintStates.find(defView);
+                if (it == g_paintStates.end() || (now - it->second.folderChecked > 250 && !it->second.capturing)) {
+                    needCapture = true;
+                }
+                ReleaseSRWLockShared(&g_paintStatesLock);
+
+                if (needCapture) {
+                    AcquireSRWLockExclusive(&g_paintStatesLock);
+                    g_paintStates[defView].capturing = true;
+                    ReleaseSRWLockExclusive(&g_paintStatesLock);
+
+                    std::wstring folder = FolderPathForDefView(defView);
+                    DefViewPaintState newState;
+                    newState.folder = std::move(folder);
+                    newState.folderChecked = now;
+                    newState.capturing = false;
+                    CaptureTagsColumn(defView, newState);
+
+                    AcquireSRWLockExclusive(&g_paintStatesLock);
+                    g_paintStates[defView] = std::move(newState);
+                    ReleaseSRWLockExclusive(&g_paintStatesLock);
+                }
             }
         }
     }
@@ -2705,18 +2716,32 @@ std::vector<std::wstring> TagsForPaintPath(const std::wstring& path) {
     auto found = g_taggedByPath.find(lower);
     if (found != g_taggedByPath.end()) {
         tags = found->second;
-    } else {
-        std::wstring prefix = lower + L".";
-        for (const auto& pair : g_taggedByPath) {
-            if (pair.first.size() > prefix.size() &&
-                pair.first.compare(0, prefix.size(), prefix) == 0 &&
-                pair.first.find(L'\\', prefix.size()) == std::wstring::npos) {
-                tags = pair.second;
-                break;
-            }
-        }
+        ReleaseSRWLockShared(&g_countsLock);
+        return tags;
     }
     ReleaseSRWLockShared(&g_countsLock);
+
+    DWORD attr = GetFileAttributesW(path.c_str());
+    if (attr != INVALID_FILE_ATTRIBUTES) {
+        return tags;
+    }
+
+    WIN32_FIND_DATAW fd;
+    std::wstring searchPattern = path + L".*";
+    HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        size_t lastSlash = path.find_last_of(L"\\/");
+        std::wstring dir = (lastSlash != std::wstring::npos) ? path.substr(0, lastSlash + 1) : L"";
+        std::wstring fullPath = dir + fd.cFileName;
+        FindClose(hFind);
+
+        AcquireSRWLockShared(&g_countsLock);
+        auto foundReal = g_taggedByPath.find(LowerPath(fullPath));
+        if (foundReal != g_taggedByPath.end()) {
+            tags = foundReal->second;
+        }
+        ReleaseSRWLockShared(&g_countsLock);
+    }
     return tags;
 }
 
@@ -2725,20 +2750,38 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
         return;
     }
 
-    HWND defView = g_paintDefView;
-    DWORD now = GetTickCount();
-    if (!defView || g_paintFolder.empty() || (now - g_paintFolderChecked > 500)) {
-        HWND hwnd = WindowFromDC(dc);
-        HWND foundDefView = FolderViewAncestor(hwnd);
-        if (foundDefView) {
-            defView = foundDefView;
-            g_paintDefView = defView;
-            g_paintFolder = FolderPathForDefView(defView);
-            CaptureTagsColumn(defView, *GetSettings());
-            g_paintFolderChecked = now;
-        }
+    HWND hwnd = WindowFromDC(dc);
+    HWND defView = hwnd ? FolderViewAncestor(hwnd) : nullptr;
+    if (!defView) {
+        return;
     }
-    if (g_paintFolder.empty()) {
+
+    DefViewPaintState st;
+    DWORD now = GetTickCount();
+    bool needRefresh = false;
+
+    AcquireSRWLockShared(&g_paintStatesLock);
+    auto it = g_paintStates.find(defView);
+    if (it != g_paintStates.end() && !it->second.folder.empty() && (now - it->second.folderChecked <= 500)) {
+        st = it->second;
+    } else {
+        needRefresh = true;
+    }
+    ReleaseSRWLockShared(&g_paintStatesLock);
+
+    if (needRefresh) {
+        std::wstring folder = FolderPathForDefView(defView);
+        st.folder = std::move(folder);
+        st.folderChecked = now;
+        st.capturing = false;
+        CaptureTagsColumn(defView, st);
+
+        AcquireSRWLockExclusive(&g_paintStatesLock);
+        g_paintStates[defView] = st;
+        ReleaseSRWLockExclusive(&g_paintStatesLock);
+    }
+
+    if (st.folder.empty()) {
         return;
     }
 
@@ -2747,7 +2790,7 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
         return;
     }
 
-    std::wstring path = g_paintFolder;
+    std::wstring path = st.folder;
     if (!path.empty() && path.back() != L'\\' && path.back() != L'/') {
         path += L'\\';
     }
@@ -2821,8 +2864,8 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
 
     int dotY = row.top + ((row.bottom - row.top) - diameter) / 2;
     int curDotX = textStartX + textSize.cx + Dip(6, dpi);
-    int maxDotX = (g_paintDetailsMode && g_paintTagsOffset > 0)
-                      ? (row.left + g_paintTagsOffset - Dip(6, dpi))
+    int maxDotX = (st.detailsMode && st.tagsOffset > 0)
+                      ? (row.left + st.tagsOffset - Dip(6, dpi))
                       : (row.right - Dip(6, dpi));
 
     Gdiplus::Graphics g(dc);
@@ -2843,9 +2886,9 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
     }
 
     // 2. In Details view, draw colored tag pills in the Tags column
-    if (g_paintDetailsMode && g_paintTagsOffset >= 0 && g_paintTagsWidth > 0) {
-        int columnLeft = row.left + g_paintTagsOffset;
-        int columnRight = columnLeft + g_paintTagsWidth;
+    if (st.detailsMode && st.tagsOffset >= 0 && st.tagsWidth > 0) {
+        int columnLeft = row.left + st.tagsOffset;
+        int columnRight = columnLeft + st.tagsWidth;
 
         int rowH = row.bottom - row.top;
         int pillHeight = std::min(rowH - Dip(4, dpi), Dip(18, dpi));
@@ -3540,6 +3583,9 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     WaitForZero(g_hookCalls, L"calls inside the hooks");
+    AcquireSRWLockExclusive(&g_paintStatesLock);
+    g_paintStates.clear();
+    ReleaseSRWLockExclusive(&g_paintStatesLock);
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
