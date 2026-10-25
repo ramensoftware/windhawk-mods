@@ -2,7 +2,7 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.7.1
+// @version         1.7.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -767,7 +767,7 @@ const Theme g_themeWindowGlass = {{
     ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid > Grid#GalleryRootGrid", {
         L"Background:=$MainContentBG"}},
     ThemeTargetStyles{L"ToolTip", {
-        L"Background:=<AcrylicBrush TintColor=\"#15323232\" Opacity=\"0.96\"/>"}},
+        L"Background:=$AcrylicBackground"}},
     ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
@@ -805,7 +805,11 @@ const Theme g_themeWindowGlass = {{
         L"Background:=$Background",
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
-        L"Margin=0,0,0,-5",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.CommandBarFlyoutCommandBar > Grid#LayoutRoot@ExpansionStates > Grid#OuterContentRoot > Grid#ContentRoot > Microsoft.UI.Xaml.Controls.Primitives.Popup#OverflowPopup", {
+        L"VerticalOffset@ExpandedUp=-5",
+        L"VerticalOffset@ExpandedDown=5"}},
+    ThemeTargetStyles{L"Grid#OuterOverflowContentRootV2", {
         L"CornerRadius=$CornerRadius"}},
     ThemeTargetStyles{L"Grid#OuterOverflowContentRootV2 > Grid#OverflowContentRoot > CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
         L"Background:=$Background",
@@ -817,8 +821,8 @@ const Theme g_themeWindowGlass = {{
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
         L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
-        L"Background:=<AcrylicBrush TintColor=\"#15323232\" Opacity=\"0.96\"/>",
+    ThemeTargetStyles{L"Grid#SecondaryItemsControlShadowWrapper > CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
+        L"Background:=$AcrylicBackground",
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
         L"CornerRadius=$CornerRadius"}},
@@ -838,12 +842,13 @@ const Theme g_themeWindowGlass = {{
         L"Background=Transparent"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border > Microsoft.UI.Xaml.Controls.Button#AddButton", {
         L"RenderTransform:=<TranslateTransform Y=\"-6\" />"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TextBlock#TextLabel", {
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar > * > Microsoft.UI.Xaml.Controls.TextBlock#TextLabel", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#SubItemChevronPanel > Microsoft.UI.Xaml.Controls.FontIcon#SubItemChevron", {
         L"RenderTransform:=<TranslateTransform X=\"-5\" Y=\"12\" />"}},
 }, {
     L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#15323232\"/>",
+    L"AcrylicBackground=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumLowColor}\" TintOpacity=\"0.9\" Opacity=\"0.96\"/>",
     L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SystemChromeLowColor}\" Offset=\"0.15\" /><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.95\" /></LinearGradientBrush>",
     L"BorderThickness=0.3,1,0.3,0.3",
     L"ButtonBackground=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\" />",
@@ -5395,15 +5400,16 @@ void StopImageLoadRetriesForCurrentThread() {
     }
 }
 
-void SetupImageTracking(DependencyObject const& target,
-                        DependencyProperty const& sourceProperty,
-                        Media::Imaging::BitmapImage const& bitmapImage,
-                        winrt::Windows::Foundation::Uri const& uri) {
+Media::Imaging::BitmapImage SetupImageTracking(
+    DependencyObject const& target,
+    DependencyProperty const& sourceProperty,
+    Media::Imaging::BitmapImage const& bitmapImage,
+    winrt::Windows::Foundation::Uri const& uri) {
     {
         std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
         if (g_imageRetryStopping) {
-            return;
+            return nullptr;
         }
     }
 
@@ -5428,13 +5434,22 @@ void SetupImageTracking(DependencyObject const& target,
         if ((*it)->uri.Equals(uri)) {
             RestoreRejectedImageSource(*it, bitmapImage);
 
-            // The value being applied takes over from whatever a retry has put
-            // there, so it's what a load failure is judged by, and what decides
-            // whether the target has an image.
-            (*it)->usingCache = !bitmapImage.UriSource().Equals(uri);
+            // A declared image which shows nothing has typically failed, and
+            // isn't loaded again by being reapplied, so it would blank a retry
+            // image which has loaded since, or cut short one which is still
+            // loading. The target keeps its retry image instead.
+            Media::Imaging::BitmapImage retryImage{nullptr};
+            if (bitmapImage.PixelWidth() == 0) {
+                retryImage = (*it)->retryImage.get();
+            }
+            auto const& applied = retryImage ? retryImage : bitmapImage;
+
+            // The image being applied is what a load failure is judged by, and
+            // what decides whether the target has an image.
+            (*it)->usingCache = !applied.UriSource().Equals(uri);
 
             bool wasLoaded = (*it)->loaded;
-            (*it)->loaded = bitmapImage.PixelWidth() != 0;
+            (*it)->loaded = applied.PixelWidth() != 0;
 
             // Nothing else starts a round for a target which loses its image
             // this way: the value may have failed already, which raises no
@@ -5443,7 +5458,7 @@ void SetupImageTracking(DependencyObject const& target,
                 ScheduleImageLoadRetryOnCurrentThread(kImageRetryBaseDelayMs,
                                                       /*reschedule=*/false);
             }
-            return;
+            return retryImage;
         }
 
         images.erase(it);
@@ -5582,7 +5597,7 @@ void SetupImageTracking(DependencyObject const& target,
 
         // Checked again, since StopImageLoadRetries runs on another thread.
         if (g_imageRetryStopping) {
-            return;
+            return nullptr;
         }
 
         g_imageRetryActive = true;
@@ -5612,7 +5627,7 @@ void SetupImageTracking(DependencyObject const& target,
     }
 
     if (!registerHandler) {
-        return;
+        return nullptr;
     }
 
     winrt::event_token token = RegisterNetworkStatusChangedHandler();
@@ -5635,22 +5650,25 @@ void SetupImageTracking(DependencyObject const& target,
     if (stopped && token) {
         UnregisterNetworkStatusChangedHandler(token);
     }
+
+    return nullptr;
 }
 
 // Tracks the target if the image source is a remote URL, which can fail to
-// load and is worth caching.
-void TrackIfRemoteImageSource(
+// load and is worth caching. Returns the image to apply in place of
+// `imageSource`, null if it's `imageSource` itself.
+Media::Imaging::BitmapImage TrackIfRemoteImageSource(
     DependencyObject const& target,
     DependencyProperty const& sourceProperty,
     winrt::Windows::Foundation::IInspectable const& imageSource) {
     auto bitmapImage = imageSource.try_as<Media::Imaging::BitmapImage>();
     if (!bitmapImage) {
-        return;
+        return nullptr;
     }
 
     auto uri = bitmapImage.UriSource();
     if (!uri) {
-        return;
+        return nullptr;
     }
 
     auto scheme = uri.SchemeName();
@@ -5661,15 +5679,15 @@ void TrackIfRemoteImageSource(
         // them are given.
         auto it = g_imageCacheUriRemotes.find(std::wstring(uri.RawUri()));
         if (it == g_imageCacheUriRemotes.end()) {
-            return;
+            return nullptr;
         }
 
         uri = it->second;
     } else if (scheme != L"http" && scheme != L"https") {
-        return;
+        return nullptr;
     }
 
-    SetupImageTracking(target, sourceProperty, bitmapImage, uri);
+    return SetupImageTracking(target, sourceProperty, bitmapImage, uri);
 }
 
 // Stops tracking the image which the target shows through `sourceProperty`.
@@ -5759,11 +5777,17 @@ winrt::Windows::Foundation::IInspectable SetOrClearValue(
                                      imageBrush.ImageSource());
         } else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
             if (property == Media::ImageBrush::ImageSourceProperty()) {
-                TrackIfRemoteImageSource(imageBrush, property, value);
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(imageBrush, property, value)) {
+                    value = retryImage;
+                }
             }
         } else if (auto image = elementDo.try_as<Controls::Image>()) {
             if (property == Controls::Image::SourceProperty()) {
-                TrackIfRemoteImageSource(image, property, value);
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(image, property, value)) {
+                    value = retryImage;
+                }
             }
         }
     }
@@ -8194,11 +8218,10 @@ std::vector<std::wstring> WithdrawCapturesForElement(
             continue;
         }
 
-        size_t removed =
-            std::erase_if(varIt->second,
-                          [elementId](const StyleVariableCapture& capture) {
-                              return capture.elementId == elementId;
-                          });
+        size_t removed = std::erase_if(
+            varIt->second, [elementId](const StyleVariableCapture& capture) {
+                return capture.elementId == elementId;
+            });
         if (!removed) {
             continue;
         }
@@ -10229,6 +10252,13 @@ TargetWindowType GetTargetWindowType(HWND hWnd) {
     }
 
     if (_wcsicmp(className, L"CabinetWClass") == 0) {
+        // The legacy frame, used for Control Panel, hosts its toolbar in a
+        // WorkerW child. It has no XAML, and its content isn't readable over
+        // the background effect.
+        if (FindWindowEx(hWnd, nullptr, L"WorkerW", nullptr)) {
+            return TargetWindowType::None;
+        }
+
         return TargetWindowType::FileExplorer;
     }
 
@@ -10457,10 +10487,8 @@ constexpr struct {
     PCWSTR themeClass;
     int partId;
 } kDarkModeBackgroundParts[] = {
-    {L"DarkMode::ItemsView", 0},
-    {L"DarkMode::ExplorerNavPane", 0},
-    {L"DarkMode::ExplorerStatusBar", 0},
-    {L"DarkMode::ReadingPane", 1},
+    {L"DarkMode::ItemsView", 0},         {L"DarkMode::ExplorerNavPane", 0},
+    {L"DarkMode::ExplorerStatusBar", 0}, {L"DarkMode::ReadingPane", 1},
     {L"DarkMode::ProperTree", 2},
 };
 
