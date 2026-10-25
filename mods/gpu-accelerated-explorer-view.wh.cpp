@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         0.9.239
+// @version         0.9.240
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -5417,7 +5417,10 @@ IconPixels LoadShellItemIcon(IWICImagingFactory* factory, const IconJob& job,
     ComPtr<IWICBitmap> source;
     if (SUCCEEDED(hr) && bitmap)
         hr = factory->CreateBitmapFromHBITMAP(bitmap.get(), nullptr,
-            WICBitmapUsePremultipliedAlpha, source.GetAddressOf());
+            // Shell image-factory HBITMAPs carry straight BGRA. Let the
+            // existing WIC conversion premultiply once, including edge/shadow
+            // pixels; declaring this source PBGRA creates bright fringes.
+            WICBitmapUseAlpha, source.GetAddressOf());
     if (FAILED(hr) || !source) { if (status) *status = FAILED(hr) ? hr : E_FAIL; return {}; }
     auto pixels = DecodeIconPixels(factory, source.Get(), status, job.pixelSize,
         4ULL*job.pixelSize*job.pixelSize);
