@@ -1,3 +1,8 @@
+## 1.7.1 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/32487935f11043237f1f92606db29d60475d7953/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Updated the WindowGlass theme to fix a broken background for some context menus.
+* Improved translucent background effects in dark mode which are now applied more uniformly to the whole Explorer window.
+
 ## 1.7 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/51ade424ed357b916e17107b2200e91c6f73b30a/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Improved the translucent background effect option when applied to the entire window. Among the improvements, scrollbars and list headers are now translucent as well, text rendering is improved, and light mode is now supported.

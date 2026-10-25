@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-24T23:21:06.000Z</updated>
+    <updated>2026-10-25T00:50:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.7.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#32487935f11043237f1f92606db29d60475d7953</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2026-10-25T00:50:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the WindowGlass theme to fix a broken background for some context menus.</li>
+<li>Improved translucent background effects in dark mode which are now applied more uniformly to the whole Explorer window.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.8]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#4197cf6f0971248a458b2cf23c1279e44200b907</id>
@@ -728,22 +742,6 @@ reproduce it, and share the lines from the mod's log. You should see logs being 
         <author>
             <name>IIKiiNGsLYII</name>
             <uri>https://github.com/IIKiiNGsLYII</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.10.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-percentage#296517f68b3f6840c58f222c5e810db41e96ff15</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
-        <updated>2026-10-23T18:04:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added visual mute cues for volume text (strikethrough and customizable dimming opacity) across all display styles when using "Same as Display style".</li>
-<li>Added a mute style that keeps the volume level, avoiding the layout shift in the native icon styles (fixes #6421).</li>
-<li>Fixed mute state layout update when muting audio while volume level is already at 0%.</li>
-<li>Added explicit <code>&lt;optional&gt;</code> include.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
         </author>
     </entry>
 </feed>
