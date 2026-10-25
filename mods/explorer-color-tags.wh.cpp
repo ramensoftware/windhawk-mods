@@ -4,8 +4,8 @@
 // @description     Finder-like colored tags for File Explorer, with Alt+1...8 shortcuts, dots after file names and colored tag pills in the Tags column
 // @version         0.3.1
 // @author          renegade
-// @github          https://github.com/renegadefree
-// @homepage        https://github.com/renegadefree/explorer-tags
+// @github          https://github.com/renegadeFree
+// @homepage        https://github.com/renegadeFree/explorer-color-tags
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
@@ -3456,7 +3456,7 @@ bool InstallDetailsColumnHooks() {
         Wh_Log(L"Tags column disabled: shell32.dll is unavailable");
         return false;
     }
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {
             {
                 L"public: virtual long __cdecl CDefView::UIActivate(unsigned int)",
@@ -3478,7 +3478,7 @@ bool InstallDetailsColumnHooks() {
             CDefViewSetCurrentViewMode_Hook,
         },
     };
-    if (!WindhawkUtils::HookSymbols(shell32, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Tags column disabled: CDefView symbols changed");
         return false;
     }
