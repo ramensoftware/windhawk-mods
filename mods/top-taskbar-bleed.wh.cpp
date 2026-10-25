@@ -2,7 +2,7 @@
 // @id              top-taskbar-bleed
 // @name            Top Taskbar Bleed
 // @description     Bleeds the color of a maximized window's top edge into a top-docked taskbar behind the task buttons
-// @version         1.0.0
+// @version         1.0.1
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -92,9 +92,10 @@ alone - the mod drives those (the background is a gradient brush).
   labels on a light panel (and vice versa). While a panel is showing, the mod
   switches that monitor's taskbar to the theme that matches the bled color
   (light panel -> light mode, dark panel -> dark mode) and restores the
-  previous theme when the panel hides. This is done per taskbar through XAML's
-  `RequestedTheme`, so only the affected monitor changes and the system theme
-  itself is untouched.
+  taskbar's own theme when the panel hides - the one matching the current
+  Windows mode, also when the mode was switched while the panel was showing.
+  This is done per taskbar through XAML's `RequestedTheme`, so only the
+  affected monitor changes and the system theme itself is untouched.
 
 ## Credits
 
@@ -473,7 +474,9 @@ struct Island {
     bool shown = false;
     bool strokeHidden = false;
     int forcedTheme = ThemeNone;
-    wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // RequestedTheme before we forced one
+    wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // the root's own RequestedTheme (restored on hide)
+    bool originalSystemLight = false;  // Windows mode when originalTheme was captured
+    int64_t themeCallbackToken = 0;  // RegisterPropertyChangedCallback on the root's RequestedTheme (0 = none)
     Rgb color{};         // dominant color of the edge (theme decision)
     Gradient gradient{};  // what the panel shows
 };
@@ -512,7 +515,7 @@ wu::Color ToColor(Rgb c) {
 // restoring RequestedTheme re-resolves the island's theme resources, and when
 // the Opacity change sits in the same pass the panel stays on screen until
 // that pass is done.
-enum class UpdateStep { Full, PanelOnly, StrokeAndTheme };
+enum class UpdateStep { Full, PanelOnly, StrokeAndTheme, ReassertTheme };
 
 struct IslandUpdate {
     HWND hwnd;
@@ -612,9 +615,30 @@ constexpr int kFastRearmTicks = 3;
 constexpr int kNewTargetStableSamples = 2;
 constexpr ULONGLONG kMaxHoldMs = 400;
 
+// ---- Discovery retry -------------------------------------------------------
+// At Explorer start the mod loads before the taskbar exists: Wh_ModAfterInit
+// finds no taskbar window, and the layout hooks fire while the taskbar is still
+// being built, when its band and XAML host aren't ready, so those attempts fail
+// and are throttled. Once the taskbar is up nothing fires the hooks again until
+// the user hovers a button, so the first bleed would wait for an interaction.
+// While the mod has no island, the tracker therefore retries the direct attach
+// itself: every kDiscoveryRetryMs at first, every kDiscoveryRetrySlowMs after
+// kDiscoveryFastWindowMs (there may be no taskbar at all).
+constexpr double kDiscoveryRetryMs = 1000;
+constexpr double kDiscoveryRetrySlowMs = 10000;
+constexpr ULONGLONG kDiscoveryFastWindowMs = 60000;
+void WINAPI AttachAllTaskbars(void*);  // painter section
+
 HANDLE g_trackerThread = nullptr;
 DWORD g_trackerThreadId = 0;
 HANDLE g_trackerReady = nullptr;
+ULONGLONG g_trackerStartTick = 0;
+
+// Set by the painter when something else rewrote a forced root theme (see
+// OnRootThemeChanged); the tracker re-asserts the forced theme at this
+// GetTickCount64 deadline (0 = none).
+std::atomic<ULONGLONG> g_themeReassertAt{0};
+constexpr ULONGLONG kThemeReassertMs = 500;
 
 // Tracker-thread-only state.
 HANDLE g_timer = nullptr;              // one waitable timer for both schedules below
@@ -1276,7 +1300,7 @@ void SetPollTimer(double intervalMs) {
 
 // Picks the poll rate for the next tick: fast while something is changing or
 // an event just happened, slow once still, off with nothing to follow.
-void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slowPollMs) {
+void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slowPollMs, bool haveIslands) {
     g_stillTicks = anyChanging ? 0 : g_stillTicks + 1;
     bool followUp = now < g_followUpUntil;
     bool busy = anyChanging || followUp;
@@ -1293,7 +1317,11 @@ void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slow
         g_fastBlockedUntilStill = false;
     }
 
-    bool wantPoll = anyTarget || followUp;
+    if (!haveIslands) {  // nothing to paint into yet: keep retrying discovery instead
+        SetPollTimer(now - g_trackerStartTick < kDiscoveryFastWindowMs ? kDiscoveryRetryMs : kDiscoveryRetrySlowMs);
+        return;
+    }
+    bool wantPoll = anyTarget || followUp || g_themeReassertAt != 0;
     SetPollTimer(!wantPoll ? 0 : g_fastSince ? kFastPollMs : slowPollMs);
 }
 
@@ -1305,6 +1333,14 @@ void Tick() {
     }
     Settings s = GetSettings();
     auto taskbars = SnapshotIslandWindows();
+    if (taskbars.empty()) {
+        // No island yet (Explorer just started, or a taskbar was rebuilt):
+        // attach directly from the taskbar windows, as Wh_ModAfterInit does.
+        if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+            RunFromWindowThread(hTaskbarWnd, AttachAllTaskbars, nullptr);
+            taskbars = SnapshotIslandWindows();
+        }
+    }
 
     if (bool anim = WindowAnimationsEnabled(); anim != g_animationsOn || !g_animationsKnown) {
         Wh_Log(L"window animations %s", anim ? L"on" : L"off");
@@ -1327,6 +1363,17 @@ void Tick() {
     bool anyTarget = false;
     for (HWND tb : taskbars) ProcessTaskbar(tb, ctx, anyTarget);
 
+    if (ULONGLONG due = g_themeReassertAt; due && GetTickCount64() >= due) {
+        g_themeReassertAt = 0;
+        for (HWND tb : taskbars) {
+            auto it = g_track.find(tb);
+            if (it != g_track.end() && it->second.active) {
+                SendIslandUpdate(tb, true, it->second.committed, it->second.committedGradient,
+                                 UpdateStep::ReassertTheme);
+            }
+        }
+    }
+
     // Drop state for taskbars that disappeared.
     bool anyChanging = false;
     for (auto it = g_track.begin(); it != g_track.end();) {
@@ -1341,7 +1388,7 @@ void Tick() {
         it = alive ? std::next(it) : g_track.erase(it);
     }
 
-    UpdatePollRate(anyTarget, anyChanging, GetTickCount64(), (double)s.pollIntervalMs);
+    UpdatePollRate(anyTarget, anyChanging, GetTickCount64(), (double)s.pollIntervalMs, !taskbars.empty());
 }
 
 // Window events arrive in bursts (a restore fires many over 100-300 ms). The
@@ -1390,6 +1437,7 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
 
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the queue
+    g_trackerStartTick = GetTickCount64();
     g_timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     if (!g_timer) g_timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);  // pre-1803 fallback
     SetEvent(g_trackerReady);
@@ -1541,9 +1589,10 @@ void SetPanelVisible(Island& isl, bool visible) {
 // ---- Adaptive theme ---------------------------------------------------------
 // RequestedTheme on the island's root content re-resolves every theme-resource
 // brush under it (labels, monochrome icons, hover highlights, the tray) for
-// this island only, i.e. for this monitor's taskbar. The root's previous
-// RequestedTheme is saved the first time a theme is forced and restored when
-// the panel hides, so a value set by another mod survives.
+// this island only, i.e. for this monitor's taskbar. The root's own value is
+// captured when a theme is first forced, kept current while forced (see
+// OnRootThemeChanged and RestoreThemeValue: the taskbar rewrites it whenever
+// the Windows mode changes), and restored when the panel hides.
 
 // Perceived brightness above which a bled color counts as light (black text
 // starts out-contrasting white around here), with an 8-level hysteresis band.
@@ -1556,6 +1605,65 @@ int PerceivedBrightness(Rgb c) {
     return (int)std::lround(0.299 * c.r + 0.587 * c.g + 0.114 * c.b);
 }
 
+// Windows mode (Settings > Personalization > Colors > "Choose your mode"); the
+// taskbar follows this one, not the apps mode.
+bool SystemLightTheme() {
+    DWORD value = 1, size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value != 0;
+}
+
+// What to put back when the panel hides. The taskbar mirrors the Windows mode
+// into the root's RequestedTheme, and its write can go unseen: if the window
+// recolored first and the panel already forced the new mode's value, the
+// taskbar's identical write changes nothing and fires no callback, leaving the
+// captured original stale. So an explicit original is trusted only while the
+// Windows mode is still the one it was captured under; otherwise the current
+// mode is restored. Default follows the system by itself and is left alone.
+wux::ElementTheme RestoreThemeValue(Island& isl) {
+    bool light = SystemLightTheme();
+    if (isl.originalTheme != wux::ElementTheme::Default && light != isl.originalSystemLight) {
+        isl.originalTheme = light ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
+        isl.originalSystemLight = light;
+    }
+    return isl.originalTheme;
+}
+
+wux::ElementTheme ForcedThemeValue(Island& isl) {
+    return isl.forcedTheme == ThemeLight ? wux::ElementTheme::Light
+           : isl.forcedTheme == ThemeDark ? wux::ElementTheme::Dark
+                                          : RestoreThemeValue(isl);
+}
+
+// The taskbar sets RequestedTheme on its root itself and rewrites it when the
+// system theme changes. A value saved once would go stale: forced Dark under a
+// dark system theme, then Windows switched to light and the panel hidden, would
+// restore the saved Dark. So the property is watched: while a theme is forced,
+// a value set by anyone else becomes the new original, and on hide that latest
+// original is restored.
+//
+// The forced value is NOT put back here. The taskbar's theme-change handling
+// (and a styler's) computes things that don't follow RequestedTheme - the bar
+// background above all - from the theme in effect while it runs; re-forcing
+// inside the callback made it compute a dark background that then stayed after
+// the panel hid and the theme was restored. The handling is let to finish
+// under the real theme (the panel covers the background meanwhile), and the
+// tracker re-asserts the forced theme kThemeReassertMs after the last write.
+void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
+    auto isl = FindIslandByHwnd(hwnd);
+    if (!isl || isl->forcedTheme == ThemeNone) return;
+    wux::ElementTheme now = root.RequestedTheme();
+    if (now == ForcedThemeValue(*isl)) return;  // our own set, or someone agreeing with it
+    isl->originalTheme = now;
+    isl->originalSystemLight = SystemLightTheme();
+    g_themeReassertAt = GetTickCount64() + kThemeReassertMs;
+    RequestTick();
+    Wh_Log(L"taskbar %p: root theme changed underneath to %d, re-asserting in %llu ms", hwnd, (int)now,
+           kThemeReassertMs);
+} catch (...) {
+}
+
 wux::FrameworkElement ThemeRootOf(Island& isl) {
     if (auto r = isl.themeRoot.get()) return r;
     try {
@@ -1563,6 +1671,12 @@ wux::FrameworkElement ThemeRootOf(Island& isl) {
             if (auto xr = isl.panel.XamlRoot()) {
                 if (auto root = xr.Content().try_as<wux::FrameworkElement>()) {
                     isl.themeRoot = root;
+                    HWND hwnd = isl.hwnd;
+                    isl.themeCallbackToken = root.RegisterPropertyChangedCallback(
+                        wux::FrameworkElement::RequestedThemeProperty(),
+                        [hwnd](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
+                            if (auto fe = sender.try_as<wux::FrameworkElement>()) OnRootThemeChanged(hwnd, fe);
+                        });
                     return root;
                 }
             }
@@ -1586,16 +1700,24 @@ void ApplyTheme(Island& isl, bool active, Rgb color) {
 
     auto root = ThemeRootOf(isl);
     if (!root) return;
-    if (isl.forcedTheme == ThemeNone) isl.originalTheme = root.RequestedTheme();
+    if (isl.forcedTheme == ThemeNone) {
+        isl.originalTheme = root.RequestedTheme();
+        isl.originalSystemLight = SystemLightTheme();
+        Wh_Log(L"taskbar %p: root RequestedTheme %d captured (Windows mode %s)", isl.hwnd, (int)isl.originalTheme,
+               isl.originalSystemLight ? L"light" : L"dark");
+    }
     // Forced unconditionally while the panel shows (identical to the original
-    // when it happens to match, and immune to the system theme changing
-    // underneath); the original value again when the panel hides.
-    root.RequestedTheme(want == ThemeLight  ? wux::ElementTheme::Light
-                        : want == ThemeDark ? wux::ElementTheme::Dark
-                                            : isl.originalTheme);
-    Wh_Log(L"taskbar %p: theme %s (brightness %d)", isl.hwnd,
-           want == ThemeLight ? L"light" : want == ThemeDark ? L"dark" : L"restored", lum);
+    // when it happens to match); the root's own value again when the panel
+    // hides. forcedTheme is set before the property so the change callback
+    // recognizes the write as ours.
     isl.forcedTheme = want;
+    root.RequestedTheme(ForcedThemeValue(isl));
+    if (want == ThemeNone) {
+        Wh_Log(L"taskbar %p: theme restored to %d (Windows mode %s)", isl.hwnd, (int)isl.originalTheme,
+               isl.originalSystemLight ? L"light" : L"dark");
+    } else {
+        Wh_Log(L"taskbar %p: theme %s (brightness %d)", isl.hwnd, want == ThemeLight ? L"light" : L"dark", lum);
+    }
 }
 
 void SetStrokeHidden(Island& isl, bool hide) {
@@ -1623,6 +1745,15 @@ void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
     auto isl = FindIslandByHwnd(upd.hwnd);
     if (!isl || !IsPanelParented(*isl)) return;
 
+    if (upd.step == UpdateStep::ReassertTheme) {
+        if (isl->shown && isl->forcedTheme != ThemeNone) {
+            if (auto root = ThemeRootOf(*isl)) {
+                root.RequestedTheme(ForcedThemeValue(*isl));
+                Wh_Log(L"taskbar %p: forced theme re-asserted", upd.hwnd);
+            }
+        }
+        return;
+    }
     bool panel = upd.step != UpdateStep::StrokeAndTheme;
     bool rest = upd.step != UpdateStep::PanelOnly;
     if (upd.active) {
@@ -1654,10 +1785,17 @@ void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
 }
 
 void TeardownIsland(Island& isl) try {
-    if (isl.forcedTheme != ThemeNone) {
-        if (auto root = ThemeRootOf(isl)) root.RequestedTheme(isl.originalTheme);
-        isl.forcedTheme = ThemeNone;
+    if (auto root = isl.themeRoot.get()) {
+        if (isl.themeCallbackToken) {
+            root.UnregisterPropertyChangedCallback(wux::FrameworkElement::RequestedThemeProperty(), isl.themeCallbackToken);
+            isl.themeCallbackToken = 0;
+        }
+        if (isl.forcedTheme != ThemeNone) {
+            isl.forcedTheme = ThemeNone;
+            root.RequestedTheme(RestoreThemeValue(isl));
+        }
     }
+    isl.forcedTheme = ThemeNone;
     SetStrokeHidden(isl, false);
     if (isl.panel) {
         if (auto parent = isl.panel.Parent().try_as<wuxc::Panel>()) {
