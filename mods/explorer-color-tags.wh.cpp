@@ -30,7 +30,7 @@ This is a fork of
 The mod keeps an internal shortcut-folder record as a rebuildable index, so
 tags remain valid for every extension and folder. That record is stored in
 Windhawk's internal mod storage directory and is not shown in the navigation pane.
-Tags are not written to `System.Keywords`, so tile files, ZIP archives,
+Tags are not written to `System.Keywords`, so text files, ZIP archives,
 executables and folders all use the same visual path without modifying file contents.
 
 Hotkeys only act while an Explorer file view is in the foreground. The classic
@@ -80,7 +80,7 @@ and unchecking "Tags".
     under this folder is watched, so keep it out of busy folders.
 - tagColumnWidth: 160
   $name: Tags column width
-  $description: Width in logical pixels at 100% DPI.
+  $description: Width in logical pixels at 100% DPI (only applies when "Automatically add Tags column" adds the column).
 - autoAddTagColumn: false
   $name: Automatically add Tags column
   $description: >-
@@ -129,14 +129,9 @@ and unchecking "Tags".
 
 #include <windhawk_utils.h>
 
-extern IMAGE_DOS_HEADER __ImageBase;
-#define THIS_MODULE ((HINSTANCE)&__ImageBase)
 
 #define CWM_GETISHELLBROWSER (WM_USER + 7)
-#define TIMER_REPAINT 1
 
-// Uncomment only while diagnosing a missing overlay: every item gets a TEST pill.
-// #define DEBUG_FORCE_TAGS
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -373,15 +368,13 @@ void LoadSettings() {
     s.tagColumnWidth = std::min(s.tagColumnWidth, 500);
     s.explorerDotSize = Wh_GetIntSetting(L"explorerDotSize");
     if (s.explorerDotSize < 4) {
-        int legacy = Wh_GetIntSetting(L"dotSize");
-        s.explorerDotSize = (legacy >= 4) ? legacy : 10;
+        s.explorerDotSize = 10;
     }
     s.explorerDotSize = std::min(s.explorerDotSize, 32);
 
     s.desktopDotSize = Wh_GetIntSetting(L"desktopDotSize");
     if (s.desktopDotSize < 4) {
-        int legacy = Wh_GetIntSetting(L"dotSize");
-        s.desktopDotSize = (legacy >= 4) ? legacy : 8;
+        s.desktopDotSize = 8;
     }
     s.desktopDotSize = std::min(s.desktopDotSize, 32);
     s.autoAddTagColumn = Wh_GetIntSetting(L"autoAddTagColumn") != 0;
@@ -1229,61 +1222,27 @@ void Commit(const std::wstring& dbPath, const std::vector<Row>& rows, bool chang
 
 std::wstring TargetIfTagShortcut(const std::wstring& path, const std::wstring& root);
 
-// Copy of what the worker thread last read, so the window thread (panel
-// counts, checkmarks in the menu) never touches the disk or the mutex.
-std::vector<std::pair<std::wstring, int>> g_counts;
 // Lowered path -> its tags. Keyed and lowered by the worker: a right-click
 // then costs one lookup per selected file instead of a walk, and an
 // allocation, over every row there is.
 std::unordered_map<std::wstring, std::vector<std::wstring>> g_taggedByPath;
 std::unordered_map<std::wstring, std::wstring> g_linkTargets;     // lnk -> target
-std::unordered_set<std::wstring> g_readyFolders;  // tag folders known to exist
 SRWLOCK g_countsLock = SRWLOCK_INIT;
 
 void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
-    std::vector<std::pair<std::wstring, int>> counts;
-    for (const auto& t : s.tags) {
-        int n = 0;
-        for (const auto& r : rows) {
-            if (r.tag == t.name) {
-                n++;
-            }
-        }
-        counts.push_back({t.name, n});
-    }
     std::unordered_map<std::wstring, std::vector<std::wstring>> taggedByPath;
     taggedByPath.reserve(rows.size());
     std::unordered_map<std::wstring, std::wstring> linkTargets;
     linkTargets.reserve(rows.size());
     for (const auto& r : rows) {
         taggedByPath[LowerPath(r.path)].push_back(r.tag);
-        // The worker already knows where every shortcut it wrote points, so
-        // the window thread never has to open a .lnk to find out.
         linkTargets[LowerPath(s.root + L"\\" + FolderNameFor(r.tag) + L"\\" + r.lnk)] = r.path;
-    }
-    // Which tag folders exist, so the window thread can decide whether it can
-    // navigate to one without asking the disk itself.
-    std::unordered_set<std::wstring> ready;
-    for (const auto& t : s.tags) {
-        std::wstring folder = s.root + L"\\" + t.folderName;
-        if (CheckExists(folder) == Exists::Yes) {
-            ready.insert(LowerPath(folder));
-        }
     }
 
     AcquireSRWLockExclusive(&g_countsLock);
-    g_counts.swap(counts);
     g_taggedByPath.swap(taggedByPath);
     g_linkTargets.swap(linkTargets);
-    g_readyFolders.swap(ready);
     ReleaseSRWLockExclusive(&g_countsLock);
-}
-
-bool FolderIsReady(const std::wstring& folder) {
-    AcquireSRWLockShared(&g_countsLock);
-    bool ready = g_readyFolders.count(LowerPath(folder)) > 0;
-    ReleaseSRWLockShared(&g_countsLock);
-    return ready;
 }
 
 // Window thread: a tag folder shortcut stands for the file it points to. Only
@@ -1335,17 +1294,6 @@ TagHits CountTagHits(const std::vector<std::wstring>& paths) {
     return hits;
 }
 
-int GetCount(const std::wstring& tag) {
-    int n = 0;
-    AcquireSRWLockShared(&g_countsLock);
-    for (const auto& c : g_counts) {
-        if (c.first == tag) {
-            n = c.second;
-        }
-    }
-    ReleaseSRWLockShared(&g_countsLock);
-    return n;
-}
 
 // Only a full SyncAll saves the root; until then, any sync ignores the
 // markers (rebuilds instead of removing tags). It lives next to the database,
@@ -1537,33 +1485,6 @@ void AddPaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
     UpdateCounts(rows, *s);
 }
 
-// Worker: make a tag's folder exist so a window can navigate to it. No marker
-// is written, so the next sync rebuilds the shortcuts into it instead of
-// reading an empty folder as "the user removed these tags".
-void EnsureTagFolder(const std::wstring& tag) {
-    auto s = GetSettings();
-    for (const auto& t : s->tags) {
-        if (t.name != tag) {
-            continue;
-        }
-        std::wstring folder = s->root + L"\\" + t.folderName;
-        if (CheckExists(folder) == Exists::No &&
-            SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr) == ERROR_SUCCESS) {
-            NotifyShell(SHCNE_MKDIR, folder);
-        }
-        bool exists = CheckExists(folder) == Exists::Yes;
-        AcquireSRWLockExclusive(&g_countsLock);
-        if (exists) {
-            g_readyFolders.insert(LowerPath(folder));
-        } else {
-            // Stops the panel from trying to open a folder that isn't there.
-            g_readyFolders.erase(LowerPath(folder));
-        }
-        ReleaseSRWLockExclusive(&g_countsLock);
-        return;
-    }
-}
-
 // Empty tag: removes all tags from these files.
 void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
     auto s = GetSettings();
@@ -1706,7 +1627,7 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
 // Worker thread: watches the tags folder and does all the disk work.
 // ---------------------------------------------------------------------------
 
-enum class WorkKind { Add, Remove, EnsureFolder };
+enum class WorkKind { Add, Remove };
 
 struct WorkItem {
     std::wstring tag;
@@ -1767,18 +1688,6 @@ void QueueRemove(const std::wstring& tag, std::vector<std::wstring> paths) {
     SetEvent(g_workEvent);
 
     BroadcastRefresh();
-}
-
-// Clicking a tag whose folder doesn't exist yet: the folder is created here,
-// on the worker, and the panel navigates when it learns the folder is ready.
-void QueueEnsureFolder(const std::wstring& tag) {
-    if (g_unloading) {
-        return;
-    }
-    AcquireSRWLockExclusive(&g_workLock);
-    g_workQueue.push_back(WorkItem{tag, {}, WorkKind::EnsureFolder});
-    ReleaseSRWLockExclusive(&g_workLock);
-    SetEvent(g_workEvent);
 }
 
 void QueueSync() {
@@ -1916,9 +1825,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 case WorkKind::Remove:
                     RemovePaths(item.tag, item.paths);
                     break;
-                case WorkKind::EnsureFolder:
-                    EnsureTagFolder(item.tag);
-                    break;
             }
         }
         // Work done while there was nothing to watch (a first tag on a clean
@@ -1973,7 +1879,6 @@ std::vector<HWND> g_trackedFileViews;
 SRWLOCK g_fileViewsLock = SRWLOCK_INIT;
 
 UINT g_msgRefresh;
-UINT g_msgCancelMenu;
 ULONG_PTR g_gdiplusToken;
 
 std::atomic<int> g_busy;
@@ -1992,26 +1897,20 @@ struct HookCall {
 HWND FindDesktopListView();
 
 void BroadcastRefresh() {
+    std::vector<HWND> views;
     AcquireSRWLockExclusive(&g_fileViewsLock);
-    for (auto it = g_trackedFileViews.begin(); it != g_trackedFileViews.end(); ) {
-        if (!IsWindow(*it)) {
-            it = g_trackedFileViews.erase(it);
-        } else {
-            PostMessageW(*it, g_msgRefresh, 0, 0);
-            RedrawWindow(*it, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-            HWND parent = GetParent(*it);
-            if (parent && IsWindow(parent)) {
-                RedrawWindow(parent, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-            }
-            ++it;
-        }
-    }
+    std::erase_if(g_trackedFileViews, [](HWND h) { return !IsWindow(h); });
+    views = g_trackedFileViews;
     ReleaseSRWLockExclusive(&g_fileViewsLock);
+
+    for (HWND h : views) {
+        HWND target = GetParent(h) ? GetParent(h) : h;
+        RedrawWindow(target, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
 
     HWND desktop = FindDesktopListView();
     if (desktop && IsWindow(desktop)) {
         PostMessageW(desktop, g_msgRefresh, 0, 0);
-        RedrawWindow(desktop, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
     }
 }
 
@@ -3527,7 +3426,6 @@ BOOL Wh_ModInit() {
     }
 
     g_msgRefresh = RegisterWindowMessageW(L"WhExplorerColorTags_Refresh");
-    g_msgCancelMenu = RegisterWindowMessageW(L"WhExplorerColorTags_CancelMenu");
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
     if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != Gdiplus::Ok) {
