@@ -2,7 +2,7 @@
 // @id              cursor-trail
 // @name            Simple Cursor Trail
 // @description     A fully customizable cursor trail for the Windows desktop.
-// @version         1.5
+// @version         1.6
 // @author          Ulrizza
 // @github          https://github.com/Ulrizza
 // @license         MIT
@@ -733,6 +733,8 @@ struct Runtime {
     HWND   drawHwnd = NULL;                   // overlay-thread-only; own window or band
     HWND   failedBand = NULL;                 // band that rejected UpdateLayeredWindow
     HWND   watchedBand = NULL;                // band already told to watch this process
+    DWORD  lastBandLookup = 0;                // overlay-thread-only; last FindBandWindow tick
+    DWORD  failedBandAt = 0;                  // overlay-thread-only; when failedBand was set
     bool   drawShown = false;                 // overlay-thread-only; drawHwnd visibility
     HANDLE threadHandle = NULL;
     DWORD  overlayThreadId = 0;
@@ -2262,6 +2264,17 @@ static HWND ResolveDrawTarget() {
         return runtime.bandHwnd;
     }
 
+    DWORD now = GetTickCount();
+    if (now - runtime.lastBandLookup < 1000) {
+        return runtime.overlayHwnd;
+    }
+    runtime.lastBandLookup = now;
+
+    if (runtime.failedBand && now - runtime.failedBandAt >= 30000) {
+        runtime.failedBand = nullptr;
+        runtime.failedBandAt = 0;
+    }
+
     runtime.bandHwnd = FindBandWindow();
     if (!runtime.bandHwnd) {
         return runtime.overlayHwnd;
@@ -2987,6 +3000,7 @@ static void BlitOverlay(HDC hdcScreen, int vX, int vY, int vW, int vH,
                L"overlay window",
                err);
         runtime.failedBand = target;
+        runtime.failedBandAt = GetTickCount();
         if (runtime.bandHwnd == target) {
             runtime.bandHwnd = nullptr;
         }
@@ -3494,6 +3508,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     runtime.bandHwnd = nullptr;
     runtime.watchedBand = nullptr;
     runtime.failedBand = nullptr;
+    runtime.lastBandLookup = 0;
+    runtime.failedBandAt = 0;
 
     UnregisterHotKey(runtime.overlayHwnd, kHotkeyId);
     DestroyWindow(runtime.overlayHwnd);
