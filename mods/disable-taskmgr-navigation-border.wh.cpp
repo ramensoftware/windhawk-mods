@@ -77,7 +77,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Taskmgr.exe
+    // taskmgr.exe
     WindhawkUtils::SYMBOL_HOOK taskmgr_exe_hooks[] = {
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForColumnHeader(void)" },
