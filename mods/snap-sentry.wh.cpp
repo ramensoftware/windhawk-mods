@@ -2,12 +2,12 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.21.3
+// @version         0.22.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
 // @license         GPL-3.0
-// @compilerOptions -lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid
+// @compilerOptions -lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid -lgdi32
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
@@ -43,7 +43,7 @@ notification.
 ## Naming
 
 You can have SnapSentry rename each new screenshot from the window that was in
-front when it was taken, together with a timestamp, so a file ends up named for
+front when the new file was observed, together with a timestamp, so a file ends up named for
 what it shows instead of Screenshot (1). The file stays in the same folder.
 
 ![Screenshots renamed after the window they were taken from](https://raw.githubusercontent.com/mario0318/SnapSentry/70157e72808d7788583e09480e4011e95e8e8868/assets/demo-rename.png)
@@ -90,6 +90,34 @@ that as a cue to stay quiet: it still copies to the clipboard but shows no dialo
 and never auto deletes. A multi-page or animated image is kept rather than
 deleted, because only its first frame can go on the clipboard, and afterwards a
 short notice says so, when the notification is available.
+
+## Capture sessions
+
+Turn on **Capture sessions** to add a tray icon. Its menu or **Ctrl+Alt+F8** starts
+a session. Take screenshots as usual, then finish the session to review them.
+Check the images to include, edit captions, and use **Move up** or **Move down**
+to order them. The contact sheet preview follows that order.
+
+**Export packet** asks for a folder outside the watched folder and creates a new
+packet there: numbered copies of the included screenshots, a contact sheet, and
+a Markdown page that links to them. Export never removes the originals, and
+leaving an image unchecked only leaves it out of the packet. A screenshot that
+was edited or replaced after it was taken is not exported.
+
+Closing the review stops recording but keeps the list, so the shortcut reopens
+it. Use **Start session** or the tray menu to begin a new one. A session holds up
+to 64 screenshots; any taken after that stay on disk, outside the session. A
+packet can hold up to 1 GB of screenshots. The list is forgotten when SnapSentry
+stops, but the screenshots are not.
+
+Only ordinary image files saved directly in the watched folder are handled.
+Very large images are left alone. The window name used for renaming is the one
+in front when the file appears.
+
+Before deleting anything, SnapSentry checks that the file is still the one it
+copied. If it changed during the countdown, it is kept. If moving it to the
+Recycle Bin fails, it may be left under a name starting with `.snapsentry-`,
+which the log mentions. SnapSentry never deletes or reuses that file.
 
 ## Privacy
 
@@ -146,12 +174,19 @@ page](https://github.com/mario0318/SnapSentry/issues).
   $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
-  $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
+  $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. A countdown no longer holds up the next screenshot, which is copied straight away. Popups appear one at a time. Maximum 3600.
 
 # ---- Renaming ----
 - renameFromWindow: false
   $name: Rename screenshots after the active window
   $description: Names each screenshot after the window that was in front when you took it, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
+- captureSessions: false
+  $name: Capture sessions
+  $description: Adds a SnapSentry tray icon. Start a session, take screenshots, then review their order and captions and export a contact sheet and Markdown packet. Session screenshots are always kept, including when ordinary deletion or duplicate removal is enabled. Sessions are limited to 64 images. Disabling the mod discards only the review list, never the images.
+- sessionHotkey: 119
+  $name: Session hotkey
+  $description: The key pressed together with Ctrl+Alt, as a Windows key code. 119 is F8 and 120 is F9. Starts the first session, finishes recording, or reopens the existing review. Use Start session or the tray menu for a new session. The tray menu is available if the shortcut is already in use.
+
 # ---- Advanced ----
 - folder: ""
   $name: Folder to watch (leave empty for Screenshots)
@@ -211,6 +246,10 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
+#include <algorithm>
+#include <memory>
+#include <cstddef>
 
 // ============================================================================
 // Settings and shared state
@@ -227,6 +266,8 @@ struct Settings {
     bool renameFromWindow;
     bool removeExactDuplicates;
     bool logDetails;
+    bool sessions;
+    int sessionHotkey;
 };
 
 static CRITICAL_SECTION g_lock;       // Guards g_settings and watcher/session state below.
@@ -234,8 +275,34 @@ static Settings g_settings;
 // Bumped only when settings are reloaded, so a prompt on screen is cancelled
 // by an actual settings change and never by a watcher restart.
 static std::atomic<ULONGLONG> g_generation{0};
-static std::deque<std::wstring> g_queue;   // Full paths waiting to be processed.
-static std::set<std::wstring> g_inflight;  // Names queued or in progress (dedup).
+struct CaptureRecord {
+    std::wstring path;
+    std::wstring label;
+    FILETIME observed{};
+    BY_HANDLE_FILE_INFORMATION identity{};
+    bool identified = false;
+    ULONGLONG generation = 0;
+    ULONGLONG session = 0;
+    int action = -1;
+    bool prompted = false;
+    unsigned retries = 0;
+};
+
+struct NameLess {
+    bool operator()(const std::wstring& a, const std::wstring& b) const {
+        return CompareStringOrdinal(a.c_str(), -1, b.c_str(), -1, TRUE) == CSTR_LESS_THAN;
+    }
+};
+static constexpr size_t kMaxPendingCaptures = 128;
+static constexpr size_t kMaxDecodedBytes = 128 * 1024 * 1024;
+static HANDLE g_promptEvent = nullptr;
+static HANDLE g_promptThread = nullptr;
+static HWND g_clipboardOwner = nullptr;
+static ULONGLONG g_clipboardGeneration = 0;
+static std::atomic<ULONGLONG> g_activeSession{0};
+static std::atomic<unsigned> g_sessionPending{0};
+static std::deque<CaptureRecord> g_queue;   // Full paths waiting to be processed.
+static std::set<std::wstring, NameLess> g_inflight;  // Names queued or in progress (dedup).
 
 // Names already present when the watched folder was opened. They are never acted
 // on, which is the literal safety invariant "never touch files that were already
@@ -243,7 +310,7 @@ static std::set<std::wstring> g_inflight;  // Names queued or in progress (dedup
 // hydrates a folder full of old screenshots: each download surfaces as an ADDED
 // or RENAMED event for a name in this set, so it is ignored. Refreshed every time
 // the folder is (re)opened.
-static std::set<std::wstring> g_preexisting;
+static std::set<std::wstring, NameLess> g_preexisting;
 
 // Names finished processing recently, each with an expiry tick. Swallows a
 // duplicate filesystem event for an already-handled screenshot that arrives
@@ -260,6 +327,7 @@ struct RecentContent {
     std::array<BYTE, 32> hash;
     std::wstring keeper;
     ULONGLONG expires;
+    BY_HANDLE_FILE_INFORMATION identity{};
 };
 static std::deque<RecentContent> g_recentContent;
 static constexpr ULONGLONG kContentDuplicateWindowMs = 10 * 60 * 1000;
@@ -273,6 +341,7 @@ static void MarkNameRecent(const std::wstring& name) {
     ULONGLONG now = GetTickCount64();
     EnterCriticalSection(&g_lock);
     g_recent.push_back({name, now + kDuplicateEventWindowMs});
+    while (g_recent.size() > 1024) g_recent.pop_front();
     LeaveCriticalSection(&g_lock);
 }
 
@@ -280,6 +349,7 @@ static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
 static HANDLE g_workEvent;   // Auto-reset: queue has work.
 static HANDLE g_settingsEvent;  // Manual reset: settings reloaded while a prompt is up.
+static std::atomic<bool> g_watchArmed{false};
 static HANDLE g_watchThread;
 static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
@@ -371,8 +441,14 @@ static void LoadSettings() {
     // Kept as its own toggle so file paths can be withheld from a log the user
     // might share; Windhawk's own logging switch is all-or-nothing.
     s.logDetails = Wh_GetIntSetting(L"logDetails") != 0;
+    s.sessions = Wh_GetIntSetting(L"captureSessions") != 0;
+    s.sessionHotkey = std::clamp(Wh_GetIntSetting(L"sessionHotkey"), 0, 255);
+    if (!s.sessionHotkey) s.sessionHotkey = VK_F8;
 
     s.mode = WindhawkUtils::StringSetting::make(L"clipboardMode").get();
+    if (s.mode != L"image" && s.mode != L"file" && s.mode != L"path" && s.mode != L"none") {
+        s.mode = L"image";
+    }
     s.pathFormat = WindhawkUtils::StringSetting::make(L"pathFormat").get();
     s.folder = WindhawkUtils::StringSetting::make(L"folder").get();
     const auto firstNonWhitespace = s.folder.find_first_not_of(L" \t\r\n");
@@ -427,6 +503,7 @@ static void LoadSettings() {
     g_recentContent.clear();
     g_settings = std::move(s);
     ++g_generation;
+    g_activeSession.store(0);
     SetEvent(g_settingsEvent);
     LeaveCriticalSection(&g_lock);
 }
@@ -540,47 +617,6 @@ static std::wstring ActiveWindowLabel() {
     return SanitizeForFilename(title);
 }
 
-// Renames a just-created screenshot to "<timestamp> <window>.<ext>" in the same
-// folder. Returns the new full path, or L"" if it didn't rename (no usable title,
-// or the move failed) so the caller keeps using the original. The result stays a
-// plain file directly inside the watched folder, preserving the safety invariant.
-static std::wstring RenameByActiveWindow(const std::wstring& path) {
-    std::wstring label = ActiveWindowLabel();
-    if (label.empty()) return L"";
-
-    size_t slash = path.find_last_of(L"\\/");
-    if (slash == std::wstring::npos) return L"";
-    std::wstring dir = path.substr(0, slash + 1);
-    std::wstring name = path.substr(slash + 1);
-    size_t dot = name.find_last_of(L'.');
-    std::wstring ext = (dot == std::wstring::npos) ? L"" : name.substr(dot);
-
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    wchar_t stamp[32];
-    swprintf_s(stamp, L"%04u-%02u-%02u %02u-%02u-%02u", st.wYear, st.wMonth,
-               st.wDay, st.wHour, st.wMinute, st.wSecond);
-    std::wstring base = std::wstring(stamp) + L" " + label;
-
-    for (int n = 1; n <= 50; n++) {
-        std::wstring suffix =
-            (n == 1) ? std::wstring() : (L" (" + std::to_wstring(n) + L")");
-        std::wstring childName = base + suffix + ext;
-        std::wstring candidate = dir + childName;
-        if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            continue;  // name already taken
-        }
-        // Register the target before moving so the watcher ignores the event our
-        // own rename fires, instead of re-processing (and re-renaming) the file.
-        MarkNameRecent(childName);
-        if (MoveFileW(path.c_str(), candidate.c_str())) {
-            return candidate;
-        }
-        return L"";  // move failed; keep the original name
-    }
-    return L"";
-}
-
 // ============================================================================
 // Path text formatting (Path clipboard mode)
 // ============================================================================
@@ -619,6 +655,19 @@ static std::wstring FormatPathText(const std::wstring& path,
 // Clipboard payloads
 // ============================================================================
 
+static bool OpenOwnedClipboard() {
+    for (unsigned i = 0; i < 12; ++i) {
+        if (WaitStop(0) || g_generation.load() != g_clipboardGeneration) return false;
+        if (g_clipboardOwner && OpenClipboard(g_clipboardOwner)) {
+            if (EmptyClipboard()) return true;
+            CloseClipboard();
+            return false;
+        }
+        if (WaitStop(25)) return false;
+    }
+    return false;
+}
+
 static bool ClipboardText(const std::wstring& text) {
     size_t bytes = (text.size() + 1) * sizeof(wchar_t);
     HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
@@ -633,11 +682,10 @@ static bool ClipboardText(const std::wstring& text) {
     memcpy(p, text.c_str(), bytes);
     GlobalUnlock(h);
 
-    if (!OpenClipboard(nullptr)) {
+    if (!OpenOwnedClipboard()) {
         GlobalFree(h);
         return false;
     }
-    EmptyClipboard();
     bool ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;
     if (!ok) {
         GlobalFree(h);  // Ownership stays with us on failure.
@@ -663,11 +711,10 @@ static bool ClipboardFile(const std::wstring& path) {
            (path.size() + 1) * sizeof(wchar_t));
     GlobalUnlock(h);
 
-    if (!OpenClipboard(nullptr)) {
+    if (!OpenOwnedClipboard()) {
         GlobalFree(h);
         return false;
     }
-    EmptyClipboard();
     bool ok = SetClipboardData(CF_HDROP, h) != nullptr;
     if (!ok) {
         GlobalFree(h);
@@ -735,6 +782,7 @@ static ImageCopy ClipboardImage(const std::wstring& path,
 
         size_t stride = (size_t)width * 4;
         size_t pixels = stride * height;
+        if (pixels > kMaxDecodedBytes || WaitStop(0)) break;
 
         hV5 = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pixels);
         if (!hV5) {
@@ -773,11 +821,10 @@ static ImageCopy ClipboardImage(const std::wstring& path,
         }
         GlobalUnlock(hV5);
 
-        if (!OpenClipboard(nullptr)) {
+        if (!OpenOwnedClipboard()) {
             break;
         }
-        EmptyClipboard();
-        bool setV5 = SetClipboardData(CF_DIBV5, hV5) != nullptr;
+            bool setV5 = SetClipboardData(CF_DIBV5, hV5) != nullptr;
         if (setV5) {
             hV5 = nullptr;  // Clipboard owns it now.
         }
@@ -1328,8 +1375,14 @@ static bool BuildToast(const std::wstring& xml,
     }
 
     setting = NotificationSetting_Enabled;
-    settingReadable = SUCCEEDED(notifier->get_Setting(&setting));
-    if (!settingReadable || setting != NotificationSetting_Enabled) {
+    HRESULT settingResult = notifier->get_Setting(&setting);
+    settingReadable = SUCCEEDED(settingResult);
+    // A newly registered desktop identity can have no settings record yet.
+    // Try its first notification, but never infer permission to auto-delete
+    // from this missing record. Other lookup errors still use the dialog.
+    const bool settingsNotCreated = settingResult == HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    if ((!settingReadable && !settingsNotCreated) ||
+        (settingReadable && setting != NotificationSetting_Enabled)) {
         return false;
     }
 
@@ -1380,6 +1433,8 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
     std::wstring name = BaseName(path);
     ULONGLONG toastId = GetTickCount64();
     std::wstring id = std::to_wstring(toastId);
+    const std::wstring deleteAction = (s.mode == L"file" || s.mode == L"path") ? L"" :
+        L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>";
     std::wstring xml =
         L"<toast scenario=\"reminder\" duration=\"long\" "
         L"activationType=\"background\" launch=\"body|" + id + L"\">"
@@ -1387,8 +1442,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
         L"<text>Screenshot saved</text><text>" +
         XmlEscape(name) +
         L"</text><text placement=\"attribution\">SnapSentry</text>"
-        L"</binding></visual><actions>"
-        L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>"
+        L"</binding></visual><actions>" + deleteAction +
         L"<action content=\"Copy + delete\" arguments=\"copydelete|" + id + L"\" activationType=\"background\"/>"
         L"<action content=\"Keep, don't copy\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
         L"</actions></toast>";
@@ -1510,7 +1564,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
             // Focus assist, presentation mode, a full-screen app or the secure
             // desktop all suppress the banner without failing delivery, so the
             // countdown would be deleting for a prompt nobody was shown.
-            settle(noCountdown || !enabled || !notificationsAcceptedAtShow
+            settle(noCountdown || !settingReadable || !enabled || !notificationsAcceptedAtShow
                        ? ACTION_COPY_ONLY
                                                      : ACTION_AUTO);
             break;
@@ -1699,8 +1753,9 @@ static int AskAction(const std::wstring& path, const Settings& s,
     c.pszMainIcon = TD_INFORMATION_ICON;
     c.pszMainInstruction = L"Screenshot saved";
     c.pszContent = initialText.c_str();
-    c.cButtons = ARRAYSIZE(buttons);
-    c.pButtons = buttons;
+    const bool allowDelete = s.mode != L"file" && s.mode != L"path";
+    c.cButtons = ARRAYSIZE(buttons) - (allowDelete ? 0 : 1);
+    c.pButtons = buttons + (allowDelete ? 0 : 1);
     c.nDefaultButton = ACTION_KEEP;  // Enter should never be the destructive choice.
     c.pfCallback = DialogCallback;
     c.lpCallbackData = (LONG_PTR)&state;
@@ -1860,73 +1915,6 @@ static bool RecycleFile(const std::wstring& path) {
     return ok;
 }
 
-// Deletes a watched-folder file, refusing to follow a reparse point so we never
-// act on something that redirects outside the folder. In Recycle Bin mode a file
-// that can't be recycled is kept rather than permanently deleted, so choosing
-// "recoverable" never silently turns into a permanent delete.
-static AuditOutcome DeleteWatched(const std::wstring& path, const Settings& s) {
-    DWORD attrs = GetFileAttributesW(path.c_str());
-    if (attrs == INVALID_FILE_ATTRIBUTES) {
-        return AuditOutcome::Skipped;  // Already gone.
-    }
-    if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) {
-        Wh_Log(L"Refusing to delete reparse point%s",
-               s.logDetails ? (L": " + path).c_str() : L"");
-        return AuditOutcome::Kept;
-    }
-    if (s.recycle) {
-        if (RecycleFile(path)) {
-            return AuditOutcome::Recycled;
-        }
-        return AuditOutcome::Kept;
-    }
-    if (DeleteFileW(path.c_str())) {
-        return AuditOutcome::Deleted;
-    } else {
-        Wh_Log(L"Delete failed (%lu)%s", GetLastError(),
-               s.logDetails ? (L": " + path).c_str() : L"");
-    }
-    return AuditOutcome::Kept;
-}
-
-// Waits until the screenshot has finished being written, or the mod stops.
-// Rather than waiting for Snipping Tool (or an antivirus scan) to release the
-// file, it watches the size stop changing and confirms the file can be opened
-// with full sharing. This reacts in about 50-100ms instead of stalling for
-// seconds behind another process's handle. A half-written file simply fails to
-// decode later, so acting slightly early is safe.
-static bool WaitForStableFile(const std::wstring& path) {
-    LONGLONG lastSize = -1;
-    for (int i = 0; i < 40; i++) {  // ~2s cap at 50ms steps.
-        WIN32_FILE_ATTRIBUTE_DATA info;
-        if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &info)) {
-            LONGLONG size =
-                ((LONGLONG)info.nFileSizeHigh << 32) | info.nFileSizeLow;
-            if (size > 0 && size == lastSize) {
-                HANDLE h = CreateFileW(
-                    path.c_str(), GENERIC_READ,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                    nullptr, OPEN_EXISTING, 0, nullptr);
-                if (h != INVALID_HANDLE_VALUE) {
-                    CloseHandle(h);
-                    return true;
-                }
-            }
-            lastSize = size;
-        } else {
-            DWORD err = GetLastError();
-            if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
-                return false;  // Deleted before we got to it.
-            }
-        }
-        if (WaitStop(50)) {
-            return false;
-        }
-    }
-    // Size never settled; proceed only if the file still exists.
-    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
-}
-
 static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
     BCRYPT_HASH_HANDLE hash = nullptr;
     bool ok = false;
@@ -1965,8 +1953,8 @@ static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
 // Caller holds g_lock.
 static void RememberRecentContent(const std::array<BYTE, 32>& hash,
                                   const std::wstring& path,
-                                  ULONGLONG now) {
-    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs});
+                                  ULONGLONG now, const BY_HANDLE_FILE_INFORMATION& identity) {
+    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs, identity});
     while (g_recentContent.size() > kMaxRecentContent)
         g_recentContent.pop_front();
 }
@@ -1974,7 +1962,9 @@ static void RememberRecentContent(const std::array<BYTE, 32>& hash,
 static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
                                          const std::wstring& path,
                                          ULONGLONG now,
-                                         std::wstring& keeper) {
+                                         std::wstring& keeper,
+                                         BY_HANDLE_FILE_INFORMATION& keeperIdentity,
+                                         const BY_HANDLE_FILE_INFORMATION& identity) {
     while (!g_recentContent.empty() && g_recentContent.front().expires <= now)
         g_recentContent.pop_front();
     for (auto it = g_recentContent.begin(); it != g_recentContent.end();) {
@@ -1982,14 +1972,14 @@ static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
             ++it;
             continue;
         }
-        if (_wcsicmp(it->keeper.c_str(), path.c_str()) != 0 &&
-            GetFileAttributesW(it->keeper.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        if (CompareStringOrdinal(it->keeper.c_str(), -1, path.c_str(), -1, TRUE) != CSTR_EQUAL) {
             keeper = it->keeper;
+            keeperIdentity = it->identity;
             return true;
         }
         it = g_recentContent.erase(it);
     }
-    RememberRecentContent(hash, path, now);
+    RememberRecentContent(hash, path, now, identity);
     return false;
 }
 
@@ -2004,57 +1994,128 @@ static bool IsDirectChildOf(const std::wstring& path, const std::wstring& folder
            _wcsicmp(path.substr(0, split).c_str(), parent.c_str()) == 0;
 }
 
+static bool SameIdentity(const BY_HANDLE_FILE_INFORMATION& a,
+                         const BY_HANDLE_FILE_INFORMATION& b) {
+    return a.dwVolumeSerialNumber == b.dwVolumeSerialNumber &&
+        a.nFileIndexHigh == b.nFileIndexHigh && a.nFileIndexLow == b.nFileIndexLow;
+}
+static bool SameRevision(const BY_HANDLE_FILE_INFORMATION& a,
+                         const BY_HANDLE_FILE_INFORMATION& b) {
+    return SameIdentity(a, b) && a.nFileSizeHigh == b.nFileSizeHigh &&
+        a.nFileSizeLow == b.nFileSizeLow &&
+        CompareFileTime(&a.ftLastWriteTime, &b.ftLastWriteTime) == 0;
+}
+static bool PlainFileInfo(HANDLE file, BY_HANDLE_FILE_INFORMATION& info) {
+    return GetFileInformationByHandle(file, &info) &&
+        !(info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
+        info.nNumberOfLinks == 1;
+}
+static bool ObserveIdentity(const std::wstring& path, BY_HANDLE_FILE_INFORMATION& info) {
+    HANDLE file = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    const bool ok = PlainFileInfo(file, info);
+    CloseHandle(file);
+    return ok;
+}
+
 class LockedCapture {
 public:
     HANDLE file = INVALID_HANDLE_VALUE;
     HANDLE folder = INVALID_HANDLE_VALUE;
+    BY_HANDLE_FILE_INFORMATION info{};
+    bool canDelete = false;
     LockedCapture() = default;
     LockedCapture(const LockedCapture&) = delete;
     LockedCapture& operator=(const LockedCapture&) = delete;
-    ~LockedCapture() {
-        Close();
+    ~LockedCapture() { Close(); }
+    void CloseFile() {
+        if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+        file = INVALID_HANDLE_VALUE;
     }
     void Close() {
         CloseFile();
         if (folder != INVALID_HANDLE_VALUE) CloseHandle(folder);
         folder = INVALID_HANDLE_VALUE;
     }
-    void CloseFile() {
-        if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
-        file = INVALID_HANDLE_VALUE;
-    }
     bool Open(const std::wstring& path, const std::wstring& parent,
-              bool shareDelete = true) {
+               bool deletion = false) {
         Close();
-        auto split = path.find_last_of(L"\\/");
         if (!IsDirectChildOf(path, parent) ||
-            path.find(L':', split) != std::wstring::npos) return false;
+            path.find(L':', path.find_last_of(L"\\/")) != std::wstring::npos) return false;
         folder = CreateFileW(parent.c_str(), FILE_READ_ATTRIBUTES,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                             OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS |
-                             FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-        BY_HANDLE_FILE_INFORMATION info{};
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        BY_HANDLE_FILE_INFORMATION directory{};
         if (folder == INVALID_HANDLE_VALUE ||
-            !GetFileInformationByHandle(folder, &info) ||
-            !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
-            (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-            Close();
-            return false;
+            !GetFileInformationByHandle(folder, &directory) ||
+            !(directory.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            (directory.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            Close(); return false;
         }
-        file = CreateFileW(path.c_str(), GENERIC_READ,
-                           FILE_SHARE_READ | (shareDelete ? FILE_SHARE_DELETE : 0), nullptr,
-                           OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-        if (file == INVALID_HANDLE_VALUE ||
-            !GetFileInformationByHandle(file, &info) ||
-            (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY |
-                                      FILE_ATTRIBUTE_REPARSE_POINT)) ||
-            info.nNumberOfLinks != 1) {
-            Close();
-            return false;
+        canDelete = deletion;
+        file = CreateFileW(path.c_str(), GENERIC_READ | (deletion ? DELETE : 0),
+            FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (file == INVALID_HANDLE_VALUE || !PlainFileInfo(file, info)) {
+            Close(); return false;
         }
         return true;
     }
 };
+
+// FileRenameInfo with ReplaceIfExists=false acts on the held object and never
+// overwrites a collision. Keep the parent pinned until any shell operation ends.
+static bool RenameLocked(HANDLE file, const std::wstring& target) {
+    const DWORD bytes = (DWORD)(target.size() * sizeof(wchar_t));
+    // FileNameLength excludes the terminator, but the Win32 wrapper also needs
+    // a terminated FileName while translating the path to its NT form.
+    std::vector<BYTE> storage(offsetof(FILE_RENAME_INFO, FileName) + bytes + sizeof(wchar_t));
+    auto* rename = reinterpret_cast<FILE_RENAME_INFO*>(storage.data());
+    rename->ReplaceIfExists = FALSE;
+    rename->RootDirectory = nullptr;
+    rename->FileNameLength = bytes;
+    memcpy(rename->FileName, target.data(), bytes);
+    return SetFileInformationByHandle(file, FileRenameInfo, rename,
+                                       (DWORD)storage.size()) != FALSE;
+}
+
+static AuditOutcome DeleteLocked(CaptureRecord& record, LockedCapture& capture,
+                                 const Settings& settings, ULONGLONG generation) {
+    if (!capture.canDelete || CleanupCancelled(0, generation)) return AuditOutcome::Kept;
+    if (!settings.recycle) {
+        FILE_DISPOSITION_INFO disposition{TRUE};
+        if (!SetFileInformationByHandle(capture.file, FileDispositionInfo,
+                                        &disposition, sizeof(disposition)))
+            return AuditOutcome::Kept;
+        capture.CloseFile();
+        return AuditOutcome::Deleted;
+    }
+    GUID id;
+    if (FAILED(CoCreateGuid(&id))) return AuditOutcome::Kept;
+    wchar_t text[40];
+    if (!StringFromGUID2(id, text, ARRAYSIZE(text))) return AuditOutcome::Kept;
+    const auto split = record.path.find_last_of(L"\\/");
+    const auto dot = record.path.find_last_of(L'.');
+    const auto extension = dot != std::wstring::npos && dot > split ? record.path.substr(dot) : L".png";
+    const auto stage = record.path.substr(0, split + 1) + L".snapsentry-" + text + extension;
+    MarkNameRecent(stage);
+    if (!RenameLocked(capture.file, stage)) return AuditOutcome::Kept;
+    // The shell accepts a path, not a file handle. A private unpredictable name
+    // isolates ordinary original-name reuse. This is not a security boundary
+    // against a hostile same-user process deliberately discovering the stage.
+    capture.CloseFile();
+    if (!CleanupCancelled(0, generation) && RecycleFile(stage)) return AuditOutcome::Recycled;
+    // Re-open the staged object, verify identity, and restore without replacing
+    // anything a producer put at the original name. A collision retains stage.
+    LockedCapture recovery;
+    if (recovery.Open(stage, settings.folder, true) &&
+        SameIdentity(capture.info, recovery.info) &&
+        RenameLocked(recovery.file, record.path)) return AuditOutcome::Kept;
+    Wh_Log(L"Screenshot kept under recovery name %s", BaseName(stage).c_str());
+    record.path = stage;
+    return AuditOutcome::Kept;
+}
 
 // Streaming comparison avoids retaining screenshot bytes in the cache. Both
 // handles deny writes; the keeper also denies deletion until recycling finishes.
@@ -2073,269 +2134,257 @@ static bool SameFileContents(HANDLE a, HANDLE b) {
     }
 }
 
-static AuditOutcome CleanupDuplicate(const std::wstring& path,
-                                     ULONGLONG generation,
-                                     LockedCapture& capture) {
-    // Keep the folder pinned for the shell operation, but release the incoming
-    // file handle so the shell can recycle it in place, with its original path.
-    capture.CloseFile();
-    if (g_generation.load() != generation || WaitStop(0))
-        return AuditOutcome::Kept;
-    return RecycleFile(path) ? AuditOutcome::RecycledDuplicate : AuditOutcome::Kept;
+struct PendingCleanup {
+    CaptureRecord record;
+    BY_HANDLE_FILE_INFORMATION revision{};
+    std::array<BYTE, 32> digest{};
+    std::wstring keeper;
+    BY_HANDLE_FILE_INFORMATION keeperIdentity{};
+    ULONGLONG due = 0;
+    bool duplicate = false;
+    bool recycle = true;
+    Settings settings;
+};
+static std::deque<PendingCleanup> g_pendingCleanup;  // Processing thread only.
+struct RetryCapture { CaptureRecord record; ULONGLONG due; };
+static std::deque<RetryCapture> g_retryCaptures; // Bounded, processing thread only.
+static constexpr size_t kMaxPendingPrompts = 64;
+static std::deque<CaptureRecord> g_promptQueue;  // g_lock.
+
+static void ProcessCleanup(PendingCleanup& job) {
+    const auto& settings = job.settings;
+    if (CleanupCancelled(0, job.record.generation)) {
+        AuditResult(settings, AuditOutcome::Kept, L"cleanup cancelled", job.record.path);
+        return;
+    }
+    LockedCapture incoming;
+    std::array<BYTE, 32> digest;
+    if (!incoming.Open(job.record.path, settings.folder, true) ||
+        !SameRevision(job.revision, incoming.info) ||
+        !HashFile(incoming.file, digest) || digest != job.digest) {
+        AuditResult(settings, AuditOutcome::Kept, L"capture changed before cleanup", job.record.path);
+        return;
+    }
+    LockedCapture keeper;
+    if (job.duplicate && (!keeper.Open(job.keeper, settings.folder) ||
+                         !SameIdentity(job.keeperIdentity, keeper.info) ||
+                         !SameFileContents(incoming.file, keeper.file))) {
+        // The incoming image is intact. Remember it as a possible future keeper.
+        EnterCriticalSection(&g_lock);
+        if (job.record.generation == g_generation.load()) {
+            std::erase_if(g_recentContent, [&](const RecentContent& entry) {
+                return CompareStringOrdinal(entry.keeper.c_str(), -1, job.keeper.c_str(), -1, TRUE) == CSTR_EQUAL;
+            });
+            RememberRecentContent(job.digest, job.record.path, GetTickCount64(), incoming.info);
+        }
+        LeaveCriticalSection(&g_lock);
+        AuditResult(settings, AuditOutcome::Kept, L"earlier copy changed or disappeared", job.record.path);
+        return;
+    }
+    Settings deletionSettings = settings;
+    deletionSettings.recycle = job.recycle;
+    AuditOutcome outcome = DeleteLocked(job.record, incoming, deletionSettings,
+                                        job.record.generation);
+    if (job.duplicate && outcome == AuditOutcome::Recycled)
+        outcome = AuditOutcome::RecycledDuplicate;
+    if (outcome == AuditOutcome::Kept && job.duplicate) {
+        EnterCriticalSection(&g_lock);
+        if (job.record.generation == g_generation.load())
+            RememberRecentContent(job.digest, job.record.path, GetTickCount64(), job.revision);
+        LeaveCriticalSection(&g_lock);
+    }
+    AuditResult(settings, outcome, job.duplicate ? L"exact duplicate cleanup" : L"capture cleanup",
+                job.record.path);
 }
 
-// Defined with the worker below, which is also where it is normally called.
-static void SyncToastRegistration(bool wantPopup, bool unloading = false);
+static void RunDueCleanup() {
+    const ULONGLONG now = GetTickCount64();
+    // Jobs are not necessarily in due order: a popup action may overtake an
+    // automatic countdown. Inspect the bounded queue without holding g_lock.
+    for (auto it = g_pendingCleanup.begin(); it != g_pendingCleanup.end();) {
+        if (WaitStop(0)) return;
+        if (it->record.generation != g_generation.load() || it->due <= now) {
+            PendingCleanup job = std::move(*it);
+            it = g_pendingCleanup.erase(it);
+            ProcessCleanup(job);
+        } else ++it;
+    }
+}
 
-static void ProcessOne(std::wstring path) {
+static void QueuePrompt(const CaptureRecord& record, const Settings& settings) {
+    bool queued = false;
+    EnterCriticalSection(&g_lock);
+    if (g_promptQueue.size() < kMaxPendingPrompts &&
+        record.generation == g_generation.load()) {
+        CaptureRecord prompt = record;
+        prompt.prompted = true;
+        g_promptQueue.push_back(std::move(prompt));
+        queued = true;
+    }
+    LeaveCriticalSection(&g_lock);
+    if (queued) SetEvent(g_promptEvent);
+    else AuditResult(settings, AuditOutcome::Kept, L"prompt queue full or settings changed", record.path);
+}
+
+static std::wstring RenameObserved(CaptureRecord& record, LockedCapture& capture) {
+    if (record.label.empty() || !capture.canDelete) return {};
+    FILETIME local;
+    SYSTEMTIME time;
+    // Observation time was captured before any earlier prompt/countdown.
+    if (!FileTimeToLocalFileTime(&record.observed, &local) ||
+        !FileTimeToSystemTime(&local, &time)) return {};
+    wchar_t stamp[32];
+    swprintf_s(stamp, L"%04u-%02u-%02u %02u-%02u-%02u", time.wYear, time.wMonth,
+               time.wDay, time.wHour, time.wMinute, time.wSecond);
+    const auto slash = record.path.find_last_of(L"\\/");
+    const auto dot = record.path.find_last_of(L'.');
+    const auto extension = dot != std::wstring::npos && dot > slash ? record.path.substr(dot) : L"";
+    const auto prefix = record.path.substr(0, slash + 1) + stamp + L" " + record.label;
+    for (int n = 1; n <= 50; ++n) {
+        const auto target = prefix + (n == 1 ? L"" : L" (" + std::to_wstring(n) + L")") + extension;
+        if (target == record.path) return {};
+        MarkNameRecent(target);
+        if (RenameLocked(capture.file, target)) return target;
+        if (GetLastError() != ERROR_ALREADY_EXISTS && GetLastError() != ERROR_FILE_EXISTS) break;
+    }
+    return {};
+}
+
+// Session functions are defined below; they never remove source captures.
+static bool AddSessionCapture(const CaptureRecord&, const Settings&, LockedCapture&,
+                               const std::array<BYTE, 32>&);
+static void SessionCaptureFinished(ULONGLONG);
+
+static void ProcessOne(CaptureRecord record) {
+    struct Completion {
+        ULONGLONG session;
+        bool deferred = false;
+        ~Completion() { if (session && !deferred) SessionCaptureFinished(session); }
+    } completion{record.session};
     ULONGLONG generation;
-    Settings s = SnapshotSettings(&generation);
-
-    DWORD t0 = GetTickCount();
-    if (!WaitForStableFile(path)) {
-        AuditResult(s, AuditOutcome::Skipped,
-                    L"file was unavailable or processing stopped", path);
+    Settings settings = SnapshotSettings(&generation);
+    if (record.generation != generation && record.action == -1 && !record.prompted &&
+        !record.session && IsDirectChildOf(record.path, settings.folder)) {
+        // Nothing has been shown, copied or renamed. Preserve the existing
+        // update behavior: apply the new settings to this unhandled capture.
+        record.generation = generation;
+    }
+    if (record.generation != generation || !IsDirectChildOf(record.path, settings.folder) ||
+        !record.identified || WaitStop(0)) {
+        AuditResult(settings, AuditOutcome::Kept, L"capture cancelled or folder changed", record.path);
         return;
     }
-    if (WaitStop(0)) {
-        AuditResult(s, AuditOutcome::Kept, L"processing stopped", path);
+    if (settings.popup && record.action == -1 && !record.session) {
+        QueuePrompt(record, settings);
         return;
     }
-    if (g_generation.load() != generation) {
-        // Nothing has been acted on yet, so the new settings simply apply.
-        s = SnapshotSettings(&generation);
-    }
-    // The file may come from a folder that is no longer watched, whether settings
-    // changed during the wait above or before it was taken off the queue.
-    if (!IsDirectChildOf(path, s.folder)) {
-        AuditResult(s, AuditOutcome::Skipped, L"watched folder changed", path);
-        return;
-    }
-    if (s.logDetails) {
-        Wh_Log(L"stable in %lu ms: %s", GetTickCount() - t0, path.c_str());
-    }
-
-    // Optional: rename to match the window in front, before anything downstream
-    // (clipboard payloads and deletion) uses the path.
-    if (s.renameFromWindow) {
-        std::wstring renamed = RenameByActiveWindow(path);
-        if (!renamed.empty()) {
-            path = std::move(renamed);
-            if (s.logDetails) {
-                Wh_Log(L"renamed to %s", path.c_str());
-            }
-        }
-    }
-
-    // The popup setting decides whether the toast is registered, so follow the
-    // exact settings this file is about to be handled with.
-    SyncToastRegistration(s.popup);
-    DWORD t1 = GetTickCount();
-    int action = s.popup ? ChooseAction(path, s, generation) : ACTION_AUTO;
-    if (s.logDetails) {
-        Wh_Log(L"popup returned %d in %lu ms", action, GetTickCount() - t1);
-    }
-    // Keep, or anything we don't recognize, leaves the file alone. "Unknown means
-    // delete" is the wrong way round for this mod. ACTION_COPY_ONLY still runs the
-    // copy below (it just never deletes), so it passes through here.
+    const int action = record.action == -1 ? ACTION_AUTO : record.action;
     if (action != ACTION_AUTO && action != ACTION_DELETE &&
         action != ACTION_COPY_DELETE && action != ACTION_COPY_ONLY) {
-        AuditResult(s, AuditOutcome::Skipped, L"no action selected", path);
+        AuditResult(settings, AuditOutcome::Kept, L"capture kept", record.path);
         return;
     }
-    if (action == ACTION_DELETE) {
-        if (CleanupCancelled(0, generation)) {
-            AuditResult(s, AuditOutcome::Kept, L"requested deletion cancelled", path);
+    LockedCapture capture;
+    // Read-only files must remain copyable even if cleanup/rename rights fail.
+    bool needsDeleteAccess = settings.renameFromWindow || action == ACTION_DELETE ||
+        action == ACTION_COPY_DELETE || settings.deleteFile || settings.removeExactDuplicates;
+    if (!(needsDeleteAccess && capture.Open(record.path, settings.folder, true)) &&
+        !capture.Open(record.path, settings.folder)) {
+        if (record.retries < 40 && g_retryCaptures.size() < kMaxPendingCaptures &&
+            record.generation == g_generation.load() && !WaitStop(0)) {
+            ++record.retries;
+            completion.deferred = true;
+            g_retryCaptures.push_back({std::move(record), GetTickCount64() + 100});
             return;
         }
-        AuditResult(s, DeleteWatched(path, s), L"requested deletion", path);
+        AuditResult(settings, AuditOutcome::Kept, L"capture busy or unavailable", record.path);
         return;
     }
-
-    // ACTION_COPY_DELETE forces the durable image path + deletion regardless of
-    // the configured clipboard mode. ACTION_AUTO / timeout uses the settings.
-    bool forceImage = (action == ACTION_COPY_DELETE);
-    LockedCapture capture;
-    bool duplicateCandidate = s.removeExactDuplicates &&
-        (forceImage || s.mode == L"image");
-    if (duplicateCandidate && !capture.Open(path, s.folder)) {
-        // A file that can't be opened for reading this way (still held for write by
-        // another program, or failing the folder and file checks) must not stop an
-        // otherwise valid clipboard copy or the configured normal cleanup path. It
-        // only disables deduplication for this file.
-        duplicateCandidate = false;
-        Wh_Log(L"Duplicate check skipped, could not open the screenshot%s",
-               s.logDetails ? (L": " + path).c_str() : L"");
+    if (!SameIdentity(record.identity, capture.info)) {
+        AuditResult(settings, AuditOutcome::Kept, L"observed file was replaced", record.path);
+        return;
     }
-
-    bool copied;
-    bool multiFrame = false;  // True when only frame 0 of a multi-frame image copied.
-    if (forceImage || s.mode == L"image") {
-        ImageCopy r = ClipboardImage(path, capture.file);
-        copied = (r != ImageCopy::Failed);
-        multiFrame = (r == ImageCopy::CopiedFirstFrameOnly);
-    } else if (s.mode == L"file") {
-        copied = ClipboardFile(path);
-    } else if (s.mode == L"path") {
-        copied = ClipboardText(FormatPathText(path, s.pathFormat));
-    } else {  // "none"
-        copied = true;
+    const ULONGLONG fileBytes = ((ULONGLONG)capture.info.nFileSizeHigh << 32) | capture.info.nFileSizeLow;
+    if (fileBytes > 512ULL * 1024 * 1024) {
+        AuditResult(settings, AuditOutcome::Kept, L"capture exceeds processing size limit", record.path);
+        return;
     }
-
-    if (!copied) {
-        AuditResult(s, AuditOutcome::Skipped, L"clipboard copy failed", path);
-        return;  // Invariant: never delete when a requested copy failed.
+    if (CleanupCancelled(0, generation)) return;
+    if (settings.renameFromWindow && !record.session) {
+        auto renamed = RenameObserved(record, capture);
+        if (!renamed.empty()) record.path = std::move(renamed);
     }
-    bool fullImageCopied = (forceImage || s.mode == L"image") && !multiFrame;
-    if (fullImageCopied && duplicateCandidate && !WaitStop(0)) {
-        std::array<BYTE, 32> digest;
-        if (HashFile(capture.file, digest)) {
-            EnterCriticalSection(&g_lock);
-            bool current = generation == g_generation.load();
-            std::wstring keeper;
-            bool duplicate = current && SeenRecentContentAndRemember(
-                digest, path, GetTickCount64(), keeper);
-            LeaveCriticalSection(&g_lock);
-            if (!current) {
-                AuditResult(s, AuditOutcome::Copied,
-                            L"copy completed before settings changed", path);
-                return;
-            }
-            if (duplicate && action == ACTION_AUTO) {
-                // A duplicate that stays on disk was never remembered as a keeper.
-                // Without this, once the earlier copy is gone the next identical
-                // capture becomes a second survivor instead of matching this one.
-                auto rememberKept = [&]() {
-                    EnterCriticalSection(&g_lock);
-                    if (generation == g_generation.load()) {
-                        RememberRecentContent(digest, path, GetTickCount64());
-                    }
-                    LeaveCriticalSection(&g_lock);
-                };
-                DWORD delay = s.popup ? 0 : (DWORD)s.delaySeconds * 1000;
-                BY_HANDLE_FILE_INFORMATION beforeCleanup{};
-                if (!GetFileInformationByHandle(capture.file, &beforeCleanup)) {
-                    AuditResult(s, AuditOutcome::Kept,
-                                L"file changed before cleanup", path);
-                    return;
-                }
-                capture.Close();
-                if (CleanupCancelled(delay, generation)) {
-                    rememberKept();
-                    AuditResult(s, AuditOutcome::Kept,
-                                L"duplicate cleanup cancelled or stopped", path);
-                    return;
-                }
-                LockedCapture kept;
-                if (!kept.Open(keeper, s.folder, false)) {
-                    rememberKept();
-                    AuditResult(s, AuditOutcome::Kept,
-                                L"earlier copy is unavailable", path);
-                    return;
-                }
-                LockedCapture again;
-                BY_HANDLE_FILE_INFORMATION afterCleanup{};
-                if (!again.Open(path, s.folder, false) ||
-                    !GetFileInformationByHandle(again.file, &afterCleanup) ||
-                    beforeCleanup.dwVolumeSerialNumber !=
-                        afterCleanup.dwVolumeSerialNumber ||
-                    beforeCleanup.nFileIndexHigh != afterCleanup.nFileIndexHigh ||
-                    beforeCleanup.nFileIndexLow != afterCleanup.nFileIndexLow ||
-                    beforeCleanup.nFileSizeHigh != afterCleanup.nFileSizeHigh ||
-                    beforeCleanup.nFileSizeLow != afterCleanup.nFileSizeLow ||
-                    CompareFileTime(&beforeCleanup.ftLastWriteTime,
-                                    &afterCleanup.ftLastWriteTime) != 0) {
-                    AuditResult(s, AuditOutcome::Kept,
-                                L"file changed before cleanup", path);
-                    return;
-                }
-                // Both handles deny writes, so a byte-for-byte match against the
-                // kept copy is the whole guarantee that recycling this one loses
-                // nothing.
-                if (!SameFileContents(again.file, kept.file)) {
-                    // The incoming file just passed the identity, size and time
-                    // check and is locked against writes. If it still hashes to
-                    // what was recorded, the earlier copy is what changed, so drop
-                    // its stale entry and remember this one in its place.
-                    std::array<BYTE, 32> incomingDigest;
-                    if (HashFile(again.file, incomingDigest) &&
-                        incomingDigest == digest) {
-                        EnterCriticalSection(&g_lock);
-                        if (generation == g_generation.load()) {
-                            std::erase_if(g_recentContent, [&](const RecentContent& e) {
-                                return _wcsicmp(e.keeper.c_str(), keeper.c_str()) == 0;
-                            });
-                            RememberRecentContent(digest, path, GetTickCount64());
-                        }
-                        LeaveCriticalSection(&g_lock);
-                    }
-                    AuditResult(s, AuditOutcome::Kept,
-                                L"file contents changed before cleanup", path);
-                    return;
-                }
-                AuditOutcome outcome =
-                    CleanupDuplicate(path, generation, again);
-                if (outcome != AuditOutcome::RecycledDuplicate) rememberKept();
-                AuditResult(s, outcome, outcome == AuditOutcome::RecycledDuplicate
-                                ? L"exact duplicate"
-                                : L"duplicate cleanup failed; file kept",
-                            path);
-                return;
-            }
-        } else {
-            Wh_Log(L"Could not check screenshot for a recent duplicate%s",
-                   s.logDetails ? (L": " + path).c_str() : L"");
-        }
+    std::array<BYTE, 32> digest{};
+    const bool fingerprinted = HashFile(capture.file, digest);
+    const bool forceImage = action == ACTION_COPY_DELETE;
+    bool multiFrame = false;
+    bool copied = action == ACTION_DELETE; // Explicit Delete does not request a copy.
+    g_clipboardGeneration = generation;
+    if (action != ACTION_DELETE) {
+        if (forceImage || settings.mode == L"image") {
+            LARGE_INTEGER beginning{};
+            SetFilePointerEx(capture.file, beginning, nullptr, FILE_BEGIN);
+            const auto result = ClipboardImage(record.path, capture.file);
+            copied = result != ImageCopy::Failed;
+            multiFrame = result == ImageCopy::CopiedFirstFrameOnly;
+        } else if (settings.mode == L"file") copied = ClipboardFile(record.path);
+        else if (settings.mode == L"path") copied = ClipboardText(FormatPathText(record.path, settings.pathFormat));
+        else copied = true;
     }
+    if (record.session) {
+        // Session ownership suppresses ordinary prompts and every deletion path,
+        // including duplicate removal. Export always leaves originals in place.
+        if (fingerprinted) AddSessionCapture(record, settings, capture, digest);
+        AuditResult(settings, AuditOutcome::Kept, L"capture session keeps originals", record.path);
+        return;
+    }
+    if (!copied || multiFrame || CleanupCancelled(0, generation)) {
+        if (multiFrame && settings.popup) ShowKeptToast(BaseName(record.path));
+        AuditResult(settings, AuditOutcome::Kept,
+                    multiFrame ? L"only the first frame copied" : L"copy failed or action cancelled", record.path);
+        return;
+    }
+    std::wstring keeper;
+    BY_HANDLE_FILE_INFORMATION keeperIdentity{};
+    bool duplicate = false;
+    if (fingerprinted && action == ACTION_AUTO && settings.mode == L"image" &&
+        settings.removeExactDuplicates) {
+        EnterCriticalSection(&g_lock);
+        if (generation == g_generation.load())
+            duplicate = SeenRecentContentAndRemember(digest, record.path, GetTickCount64(), keeper, keeperIdentity, capture.info);
+        LeaveCriticalSection(&g_lock);
+    }
+    const bool referencesFile = !forceImage && (settings.mode == L"file" || settings.mode == L"path");
+    const bool requested = action != ACTION_COPY_ONLY && !referencesFile &&
+        (action == ACTION_DELETE || forceImage || duplicate || (settings.deleteFile && !referencesFile));
+    if (!requested || !fingerprinted ||
+        g_pendingCleanup.size() >= kMaxPendingCaptures) {
+        AuditResult(settings, AuditOutcome::Kept, L"copy complete; source kept", record.path);
+        return;
+    }
+    PendingCleanup job;
+    job.record = record;
+    job.revision = capture.info;
+    job.digest = digest;
+    job.keeper = keeper;
+    job.keeperIdentity = keeperIdentity;
+    job.duplicate = duplicate;
+    job.recycle = duplicate || settings.recycle;
+    job.settings = settings;
+    const DWORD delay = (record.action != -1 || action == ACTION_DELETE || forceImage)
+        ? 0 : (DWORD)settings.delaySeconds * 1000;
+    job.due = GetTickCount64() + delay;
+    // Release the copy handle before scheduling. Cleanup reacquires and validates
+    // identity AND bytes, then acts on that held object, not the observed name.
     capture.Close();
-    // Deletion only makes sense for self-contained payloads (image / none).
-    // File and Path payloads reference the file, so deleting would break them.
-    bool payloadReferencesFile =
-        !forceImage && (s.mode == L"file" || s.mode == L"path");
-    // forceImage (Copy + delete) short-circuits payloadReferencesFile, so the
-    // request-to-delete test has to carry it as its own term.
-    bool deleteRequested =
-        action != ACTION_COPY_ONLY &&
-        (forceImage || (s.deleteFile && !payloadReferencesFile));
-    // A multi-page or animated image copied only part of itself (frame 0), so
-    // deleting the file would lose the rest. Keep it, the same treatment file/path
-    // payloads get.
-    if (multiFrame) {
-        if (deleteRequested) {
-            // A popup was in play (an explicit Copy + delete, or letting the countdown
-            // run), so tell the user the file was kept instead of deleted, otherwise the
-            // button is a silent no-op. Fire-and-forget toast; a failure leaves the log.
-            if (s.popup) {
-                ShowKeptToast(BaseName(path));
-            }
-        }
-        AuditResult(s, AuditOutcome::Kept,
-                    L"multi-frame image was only partly copied", path);
-    }
-    bool wantsDelete = deleteRequested && !multiFrame;
-    if (!wantsDelete) {
-        if (!multiFrame) {
-            AuditResult(s, AuditOutcome::Copied,
-                        L"copy completed and file was kept", path);
-        }
-        return;
-    }
-
-    // With the popup, the countdown already elapsed, so delete immediately.
-    DWORD delay = (s.popup || forceImage) ? 0 : (DWORD)s.delaySeconds * 1000;
-    if (CleanupCancelled(delay, generation)) {
-        AuditResult(s, AuditOutcome::Kept,
-                    L"cleanup cancelled or stopped", path);
-        return;
-    }
-    AuditResult(s, DeleteWatched(path, s), L"automatic cleanup", path);
+    g_pendingCleanup.push_back(std::move(job));
 }
 
 // ============================================================================
 // Worker: drains the queue on a dedicated COM (STA) thread
 // ============================================================================
 
-static bool DequeueOne(std::wstring& path) {
+static bool DequeueOne(CaptureRecord& path) {
     EnterCriticalSection(&g_lock);
     bool has = !g_queue.empty();
     if (has) {
@@ -2354,7 +2403,7 @@ static bool SeenRecently(const std::wstring& name, ULONGLONG now) {
         g_recent.pop_front();
     }
     for (const auto& entry : g_recent) {
-        if (entry.first == name) {
+        if (CompareStringOrdinal(entry.first.c_str(), -1, name.c_str(), -1, TRUE) == CSTR_EQUAL) {
             return true;
         }
     }
@@ -2362,11 +2411,11 @@ static bool SeenRecently(const std::wstring& name, ULONGLONG now) {
 }
 
 static void ReleaseInflight(const std::wstring& path) {
-    std::wstring name = BaseName(path);
     ULONGLONG now = GetTickCount64();
     EnterCriticalSection(&g_lock);
-    g_inflight.erase(name);
-    g_recent.push_back({name, now + kDuplicateEventWindowMs});
+    g_inflight.erase(path);
+    g_recent.push_back({path, now + kDuplicateEventWindowMs});
+    while (g_recent.size() > 1024) g_recent.pop_front();
     LeaveCriticalSection(&g_lock);
 }
 
@@ -2491,59 +2540,882 @@ static void SyncToastRegistration(bool wantPopup, bool unloading) {
     g_toastRegApplied = false;
 }
 
-static DWORD WINAPI WorkerThread(LPVOID) {
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    RoInitialize(RO_INIT_SINGLETHREADED);
-    if (BCryptOpenAlgorithmProvider(&g_hashAlgorithm, BCRYPT_SHA256_ALGORITHM,
-                                    nullptr, 0) != 0) {
-        g_hashAlgorithm = nullptr;
-        Wh_Log(L"SHA-256 provider could not be opened; duplicate checking disabled");
-    }
+struct BitmapBuffer {
+    UINT width = 0, height = 0;
+    std::vector<BYTE> pixels; // Top-down BGRA, at most kMaxDecodedBytes.
+};
+struct SessionItem {
+    CaptureRecord record;
+    BY_HANDLE_FILE_INFORMATION revision{};
+    std::array<BYTE, 32> digest{};
+    std::shared_ptr<const BitmapBuffer> thumbnail;
+    std::wstring caption;
+    bool included = true;
+};
+static constexpr size_t kMaxSessionItems = 64;
+static std::vector<SessionItem> g_sessionItems; // g_lock, worker + UI STA.
+static ULONGLONG g_sessionSerial = 0;
+static std::atomic<HWND> g_sessionWindow{nullptr};
+static HWND g_sessionList, g_captionEdit, g_sessionStatus, g_sessionPreview;
+static bool g_refreshingSession = false;
+static bool g_previewRequested = false;
+static bool g_exportRequested = false;
+static std::atomic<bool> g_exportBusy{false};
+static IFileDialog* g_openFolderPicker = nullptr; // UI STA only.
+static ULONGLONG g_pickerGeneration = 0;
+static HFONT g_sessionFont = nullptr;
+static UINT WindowDpi(HWND window) {
+    using GetDpi_t = UINT(WINAPI*)(HWND);
+    static auto getDpi = (GetDpi_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
+    if (getDpi) { UINT dpi = getDpi(window); if (dpi) return dpi; }
+    HDC dc = GetDC(window);
+    UINT dpi = dc ? (UINT)GetDeviceCaps(dc, LOGPIXELSX) : 96;
+    if (dc) ReleaseDC(window, dc);
+    return dpi ? dpi : 96;
+}
+static void EnablePerMonitorUi() {
+    using SetContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    auto setContext = (SetContext_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+    if (setContext && !setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+        setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+}
+static BOOL CALLBACK SetSessionChildFont(HWND child, LPARAM font) {
+    SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
+    return TRUE;
+}
 
-    {
-        // Registration is only worth anything when a popup can actually appear.
-        Settings s = SnapshotSettings();
-        SyncToastRegistration(s.popup);
-    }
+static HRESULT CALLBACK SessionResetCallback(HWND dialog, UINT message,
+                                              WPARAM, LPARAM, LONG_PTR ref) {
+    if (message == TDN_TIMER &&
+        (WaitStop(0) || *(ULONGLONG*)ref != g_generation.load()))
+        SendMessageW(dialog, TDM_CLICK_BUTTON, IDCANCEL, 0);
+    return S_OK;
+}
 
-    // CoWaitForMultipleHandles (rather than plain WaitForMultipleObjects) pumps
-    // incoming COM calls -- needed so a toast button click can be dispatched to
-    // ToastActivator::Activate even while idling between screenshots.
-    HANDLE waits[] = {g_stopEvent, g_workEvent};
-    while (true) {
-        DWORD idx = 0;
-        HRESULT hr = CoWaitForMultipleHandles(
-            COWAIT_DISPATCH_CALLS | COWAIT_DISPATCH_WINDOW_MESSAGES, INFINITE,
-            ARRAYSIZE(waits), waits, &idx);
-        if (FAILED(hr) || idx == 0) {
-            break;  // Stop (or an unexpected error -- treat as shutdown).
+static void UpdateSessionFont(HWND window) {
+    HFONT next = CreateFontW(-MulDiv(13, WindowDpi(window), 96), 0,0,0,FW_NORMAL,
+        FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+    if (!next) return;
+    EnumChildWindows(window, SetSessionChildFont, (LPARAM)next);
+    if (g_sessionFont) DeleteObject(g_sessionFont);
+    g_sessionFont = next;
+}
+static std::wstring g_exportParent, g_exportStatus;
+static std::vector<SessionItem> g_exportItems;
+static ULONGLONG g_exportGeneration = 0;
+static std::shared_ptr<const BitmapBuffer> g_readyPreview;
+static constexpr UINT kSessionChanged = WM_APP + 20;
+static constexpr UINT kSessionPreviewReady = WM_APP + 21;
+static constexpr UINT kSessionExportFinished = WM_APP + 22;
+static constexpr UINT kTrayMessage = WM_APP + 23;
+enum { SESSION_LIST = 2001, SESSION_CAPTION, SESSION_UP, SESSION_DOWN,
+       SESSION_EXPORT, SESSION_FINISH, SESSION_START, SESSION_CLOSE };
+
+static void SessionCaptureFinished(ULONGLONG session) {
+    EnterCriticalSection(&g_lock);
+    if (session == g_sessionSerial && g_sessionPending.load()) --g_sessionPending;
+    LeaveCriticalSection(&g_lock);
+    PostMessageW(g_sessionWindow.load(), kSessionChanged, 0, 0);
+}
+
+static std::vector<SessionItem> SnapshotSession() {
+    EnterCriticalSection(&g_lock);
+    auto items = g_sessionItems;
+    LeaveCriticalSection(&g_lock);
+    return items;
+}
+
+static std::shared_ptr<BitmapBuffer> DecodeThumbnail(HANDLE file) {
+    using Microsoft::WRL::ComPtr;
+    ComPtr<IWICImagingFactory> factory;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICBitmapScaler> scaler;
+    ComPtr<IWICFormatConverter> converter;
+    LARGE_INTEGER zero{};
+    if (!SetFilePointerEx(file, zero, nullptr, FILE_BEGIN) || WaitStop(0) ||
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                 IID_PPV_ARGS(&factory))) ||
+        FAILED(factory->CreateDecoderFromFileHandle((ULONG_PTR)file, nullptr,
+                 WICDecodeMetadataCacheOnDemand, &decoder)) ||
+        FAILED(decoder->GetFrame(0, &frame))) return {};
+    UINT width = 0, height = 0;
+    if (FAILED(frame->GetSize(&width, &height)) || !width || !height ||
+        width > 30000 || height > 30000 ||
+        (ULONGLONG)width * height * 4 > kMaxDecodedBytes) return {};
+    const double ratio = std::min(1.0, std::min(320.0 / width, 180.0 / height));
+    auto result = std::make_shared<BitmapBuffer>();
+    result->width = std::max(1u, (UINT)(width * ratio));
+    result->height = std::max(1u, (UINT)(height * ratio));
+    result->pixels.resize((size_t)result->width * result->height * 4);
+    if (FAILED(factory->CreateBitmapScaler(&scaler)) ||
+        FAILED(scaler->Initialize(frame.Get(), result->width, result->height,
+                                   WICBitmapInterpolationModeFant)) ||
+        FAILED(factory->CreateFormatConverter(&converter)) ||
+        FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppBGRA,
+                 WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)) ||
+        FAILED(converter->CopyPixels(nullptr, result->width * 4,
+                 (UINT)result->pixels.size(), result->pixels.data()))) return {};
+    return result;
+}
+
+static void RequestSessionPreview() {
+    EnterCriticalSection(&g_lock);
+    g_previewRequested = true;
+    LeaveCriticalSection(&g_lock);
+    SetEvent(g_workEvent);
+}
+
+static bool AddSessionCapture(const CaptureRecord& record, const Settings&,
+                               LockedCapture& capture, const std::array<BYTE, 32>& digest) {
+    auto thumb = DecodeThumbnail(capture.file);
+    if (!thumb) return false;
+    bool added = false;
+    EnterCriticalSection(&g_lock);
+    if (record.generation == g_generation.load() && record.session == g_sessionSerial &&
+        g_sessionItems.size() < kMaxSessionItems) {
+        g_sessionItems.push_back({record, capture.info, digest, std::move(thumb), record.label, true});
+        g_previewRequested = true;
+        added = true;
+    }
+    LeaveCriticalSection(&g_lock);
+    if (added) {
+        PostMessageW(g_sessionWindow.load(), kSessionChanged, 0, 0);
+        SetEvent(g_workEvent);
+    }
+    return added;
+}
+
+static std::shared_ptr<BitmapBuffer> BuildContactSheet(const std::vector<SessionItem>& items) {
+    size_t count = std::count_if(items.begin(), items.end(), [](const auto& item) { return item.included; });
+    if (!count) return {};
+    const UINT columns = (UINT)std::min<size_t>(3, count);
+    constexpr UINT cellW = 360, cellH = 248;
+    auto result = std::make_shared<BitmapBuffer>();
+    result->width = columns * cellW;
+    result->height = (UINT)((count + columns - 1) / columns) * cellH;
+    const size_t bytes = (size_t)result->width * result->height * 4;
+    if (bytes > kMaxDecodedBytes) return {};
+    result->pixels.resize(bytes);
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), (LONG)result->width, -(LONG)result->height,
+                       1, 32, BI_RGB, (DWORD)bytes, 0, 0, 0, 0};
+    void* pixels = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bitmap = dc ? CreateDIBSection(dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0) : nullptr;
+    if (!bitmap) { if (dc) DeleteDC(dc); return {}; }
+    auto oldBitmap = SelectObject(dc, bitmap);
+    RECT canvas{0, 0, (LONG)result->width, (LONG)result->height};
+    HBRUSH background = CreateSolidBrush(RGB(255,255,255));
+    FillRect(dc, &canvas, background);
+    DeleteObject(background);
+    HFONT font = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+        DEFAULT_PITCH, L"Segoe UI");
+    auto oldFont = SelectObject(dc, font);
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(32,32,32));
+    size_t index = 0;
+    for (const auto& item : items) {
+        if (!item.included) continue;
+        if (WaitStop(0)) { SelectObject(dc, oldFont); DeleteObject(font);
+            SelectObject(dc, oldBitmap); DeleteObject(bitmap); DeleteDC(dc); return {}; }
+        const LONG x = (LONG)(index % columns) * cellW;
+        const LONG y = (LONG)(index / columns) * cellH;
+        if (item.thumbnail) {
+            const auto& image = *item.thumbnail;
+            BITMAPINFO source{};
+            source.bmiHeader = {sizeof(BITMAPINFOHEADER), (LONG)image.width, -(LONG)image.height,
+                                1, 32, BI_RGB, 0, 0, 0, 0, 0};
+            StretchDIBits(dc, x + 20 + (320 - image.width)/2,
+                y + 12 + (180 - image.height)/2, image.width, image.height,
+                0, 0, image.width, image.height, image.pixels.data(), &source, DIB_RGB_COLORS, SRCCOPY);
         }
-        // Settings changes wake us here too, so switching processing or the popup
-        // on or off takes effect without a reload.
-        {
-            Settings s = SnapshotSettings();
-            SyncToastRegistration(s.popup);
+        RECT label{x + 20, y + 200, x + 340, y + 240};
+        const auto text = std::to_wstring(index + 1) + L". " +
+            (item.caption.empty() ? BaseName(item.record.path) : item.caption);
+        DrawTextW(dc, text.c_str(), (int)text.size(), &label,
+                   DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+        ++index;
+    }
+    GdiFlush();
+    memcpy(result->pixels.data(), pixels, bytes);
+    for (size_t i = 3; i < bytes; i += 4) result->pixels[i] = 255;
+    SelectObject(dc, oldFont); DeleteObject(font);
+    SelectObject(dc, oldBitmap); DeleteObject(bitmap); DeleteDC(dc);
+    return result;
+}
+
+static bool WriteNewFile(const std::wstring&, const void*, size_t);
+static bool EncodeContactSheet(const std::wstring& path, const BitmapBuffer& image) {
+    using Microsoft::WRL::ComPtr;
+    ComPtr<IWICImagingFactory> factory;
+    ComPtr<IStream> stream;
+    ComPtr<IWICBitmapEncoder> encoder;
+    ComPtr<IWICBitmapFrameEncode> frame;
+    ComPtr<IPropertyBag2> options;
+    WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
+    bool ok = !WaitStop(0) &&
+        SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory))) &&
+        SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) &&
+        SUCCEEDED(factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder)) &&
+        SUCCEEDED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache)) &&
+        SUCCEEDED(encoder->CreateNewFrame(&frame, &options)) &&
+        SUCCEEDED(frame->Initialize(options.Get())) &&
+        SUCCEEDED(frame->SetSize(image.width, image.height)) &&
+        SUCCEEDED(frame->SetPixelFormat(&format)) && IsEqualGUID(format, GUID_WICPixelFormat32bppBGRA) &&
+        SUCCEEDED(frame->WritePixels(image.height, image.width * 4,
+                                    (UINT)image.pixels.size(), (BYTE*)image.pixels.data())) &&
+        SUCCEEDED(frame->Commit()) && SUCCEEDED(encoder->Commit());
+    if (!ok || WaitStop(0)) return false;
+    STATSTG stat{};
+    HGLOBAL memory = nullptr;
+    if (FAILED(stream->Stat(&stat, STATFLAG_NONAME)) || stat.cbSize.HighPart ||
+        !stat.cbSize.LowPart || stat.cbSize.LowPart > kMaxDecodedBytes ||
+        FAILED(GetHGlobalFromStream(stream.Get(), &memory))) return false;
+    void* bytes = GlobalLock(memory);
+    if (!bytes) return false;
+    ok = WriteNewFile(path, bytes, stat.cbSize.LowPart);
+    GlobalUnlock(memory);
+    return ok;
+}
+
+static std::wstring FinalFolderName(HANDLE handle) {
+    DWORD length = GetFinalPathNameByHandleW(handle, nullptr, 0, FILE_NAME_NORMALIZED);
+    if (!length) return {};
+    std::wstring name(length + 1, L'\0');
+    DWORD got = GetFinalPathNameByHandleW(handle, name.data(), (DWORD)name.size(), FILE_NAME_NORMALIZED);
+    if (!got || got >= name.size()) return {};
+    name.resize(got);
+    while (!name.empty() && name.back() == L'\\') name.pop_back();
+    return name;
+}
+static bool NestedFolder(const std::wstring& child, const std::wstring& parent) {
+    return child.size() >= parent.size() &&
+        CompareStringOrdinal(child.c_str(), (int)parent.size(), parent.c_str(), (int)parent.size(), TRUE) == CSTR_EQUAL &&
+        (child.size() == parent.size() || child[parent.size()] == L'\\');
+}
+static std::string Utf8(const std::wstring& value) {
+    int size = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), (int)value.size(), nullptr, 0, nullptr, nullptr);
+    std::string result(size, '\0');
+    if (size) WideCharToMultiByte(CP_UTF8, 0, value.c_str(), (int)value.size(), result.data(), size, nullptr, nullptr);
+    return result;
+}
+static std::wstring MarkdownCaption(const std::wstring& value) {
+    std::wstring result;
+    for (wchar_t c : value) {
+        if (c == L'\r' || c == L'\n') { result += L' '; continue; }
+        if (wcschr(L"\\`*_{}[]<>()!#|", c)) result += L'\\';
+        if (c >= 32) result += c;
+    }
+    return result;
+}
+static bool WriteNewFile(const std::wstring& path, const void* data, size_t bytes) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = bytes <= MAXDWORD && WriteFile(file, data, (DWORD)bytes, &written, nullptr) && written == bytes && FlushFileBuffers(file);
+    CloseHandle(file);
+    return ok;
+}
+static bool CopyLockedFile(HANDLE source, const std::wstring& destination, ULONGLONG generation) {
+    HANDLE target = CreateFileW(destination.c_str(), GENERIC_WRITE, 0, nullptr,
+                                CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (target == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER zero{};
+    bool ok = SetFilePointerEx(source, zero, nullptr, FILE_BEGIN) != FALSE;
+    std::array<BYTE, 64 * 1024> buffer;
+    while (ok && !CleanupCancelled(0, generation)) {
+        DWORD read = 0, written = 0;
+        if (!ReadFile(source, buffer.data(), (DWORD)buffer.size(), &read, nullptr)) { ok = false; break; }
+        if (!read) break;
+        if (!WriteFile(target, buffer.data(), read, &written, nullptr) || written != read) { ok = false; break; }
+    }
+    ok = ok && !CleanupCancelled(0, generation) && FlushFileBuffers(target);
+    CloseHandle(target);
+    return ok;
+}
+
+static bool ExportSession(const std::vector<SessionItem>& items, const std::wstring& destination,
+                           const Settings& settings, ULONGLONG generation, std::wstring& result) {
+    HANDLE parent = CreateFileW(destination.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    HANDLE watched = CreateFileW(settings.folder.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    BY_HANDLE_FILE_INFORMATION info{};
+    bool valid = parent != INVALID_HANDLE_VALUE && watched != INVALID_HANDLE_VALUE &&
+        GetFileInformationByHandle(parent, &info) && (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+        !(info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
+    const auto parentName = valid ? FinalFolderName(parent) : L"";
+    const auto watchedName = valid ? FinalFolderName(watched) : L"";
+    valid = valid && !parentName.empty() && !watchedName.empty() && !NestedFolder(parentName, watchedName);
+    if (watched != INVALID_HANDLE_VALUE) CloseHandle(watched);
+    if (!valid) {
+        if (parent != INVALID_HANDLE_VALUE) CloseHandle(parent);
+        result = L"Choose an accessible folder outside the watched folder. Originals were kept.";
+        return false;
+    }
+    GUID id;
+    wchar_t text[40];
+    if (FAILED(CoCreateGuid(&id)) || !StringFromGUID2(id, text, ARRAYSIZE(text))) {
+        CloseHandle(parent); result = L"Could not create an export name. Originals were kept."; return false;
+    }
+    const auto packet = destination + L"\\SnapSentry-" + text;
+    if (!CreateDirectoryW(packet.c_str(), nullptr)) {
+        CloseHandle(parent); result = L"Could not create the packet folder. Check permissions and free space."; return false;
+    }
+    HANDLE packetHandle = CreateFileW(packet.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    bool ok = packetHandle != INVALID_HANDLE_VALUE;
+    std::wstring markdown = L"# Screenshot session\n\n![Contact sheet](contact-sheet.png)\n\n";
+    size_t number = 0;
+    ULONGLONG total = 0;
+    for (const auto& item : items) {
+        if (!item.included || !ok) continue;
+        if (CleanupCancelled(0, generation)) { ok = false; break; }
+        LockedCapture capture;
+        std::array<BYTE,32> digest;
+        if (!capture.Open(item.record.path, settings.folder) ||
+            !SameRevision(item.revision, capture.info) ||
+            !HashFile(capture.file, digest) || digest != item.digest) { ok = false; break; }
+        total += ((ULONGLONG)capture.info.nFileSizeHigh << 32) | capture.info.nFileSizeLow;
+        if (total > 1024ULL * 1024 * 1024) { ok = false; break; }
+        const auto dot = item.record.path.find_last_of(L'.');
+        std::wstring extension = dot == std::wstring::npos ? L".png" : item.record.path.substr(dot);
+        // Only supported image suffixes from a plain observed filename enter here.
+        if (!IsSupportedImage(L"image" + extension) || extension.find_first_of(L"\\/: ") != std::wstring::npos) { ok = false; break; }
+        wchar_t filename[32];
+        swprintf_s(filename, L"%02u%s", (unsigned)++number, extension.c_str());
+        if (!CopyLockedFile(capture.file, packet + L"\\" + filename, generation)) { ok = false; break; }
+        markdown += L"## " + std::to_wstring(number) + L". " +
+            MarkdownCaption(item.caption.empty() ? BaseName(item.record.path) : item.caption) +
+            L"\n\n![Screenshot " + std::to_wstring(number) + L"](" + filename + L")\n\n";
+    }
+    auto sheet = ok && number ? BuildContactSheet(items) : nullptr;
+    ok = ok && sheet && !CleanupCancelled(0, generation) &&
+        EncodeContactSheet(packet + L"\\contact-sheet.png", *sheet);
+    if (ok) {
+        const auto utf8 = Utf8(markdown);
+        ok = !CleanupCancelled(0, generation) && WriteNewFile(packet + L"\\index.md", utf8.data(), utf8.size());
+    }
+    if (!ok) {
+        static const char message[] = "Export incomplete. Original screenshots were not changed. Retry into a new packet.\r\n";
+        WriteNewFile(packet + L"\\INCOMPLETE.txt", message, sizeof(message) - 1);
+    }
+    if (packetHandle != INVALID_HANDLE_VALUE) CloseHandle(packetHandle);
+    CloseHandle(parent);
+    result = ok ? L"Exported " + std::to_wstring(number) + L" images to " + packet
+                : L"Export incomplete. A source changed, access failed, or export was cancelled. Originals were kept. Check the packet folder and retry.";
+    return ok;
+}
+
+static void RunSessionWork() {
+    bool preview, exporting;
+    std::vector<SessionItem> items;
+    std::wstring parent;
+    ULONGLONG generation;
+    EnterCriticalSection(&g_lock);
+    preview = std::exchange(g_previewRequested, false);
+    exporting = std::exchange(g_exportRequested, false);
+    if (exporting) { items = std::move(g_exportItems); parent = g_exportParent; }
+    generation = g_exportGeneration;
+    LeaveCriticalSection(&g_lock);
+    if (preview) {
+        auto sheet = BuildContactSheet(SnapshotSession());
+        EnterCriticalSection(&g_lock); g_readyPreview = std::move(sheet); LeaveCriticalSection(&g_lock);
+        PostMessageW(g_sessionWindow.load(), kSessionPreviewReady, 0, 0);
+    }
+    if (exporting) {
+        Settings settings = SnapshotSettings();
+        std::wstring status;
+        ExportSession(items, parent, settings, generation, status);
+        EnterCriticalSection(&g_lock);
+        g_exportStatus = std::move(status); g_exportBusy = false;
+        LeaveCriticalSection(&g_lock);
+        PostMessageW(g_sessionWindow.load(), kSessionExportFinished, 0, 0);
+    }
+}
+
+static int SelectedSessionItem() { return ListView_GetNextItem(g_sessionList, -1, LVNI_SELECTED); }
+static void RefreshSessionList() {
+    const auto items = SnapshotSession();
+    const int selected = SelectedSessionItem();
+    g_refreshingSession = true;
+    ListView_DeleteAllItems(g_sessionList);
+    for (size_t i = 0; i < items.size(); ++i) {
+        auto number = std::to_wstring(i + 1);
+        LVITEMW item{}; item.mask = LVIF_TEXT; item.iItem = (int)i; item.pszText = number.data();
+        ListView_InsertItem(g_sessionList, &item);
+        auto caption = items[i].caption.empty() ? BaseName(items[i].record.path) : items[i].caption;
+        ListView_SetItemText(g_sessionList, (int)i, 1, caption.data());
+        ListView_SetCheckState(g_sessionList, (int)i, items[i].included);
+    }
+    if (!items.empty()) ListView_SetItemState(g_sessionList,
+        std::clamp(selected, 0, (int)items.size()-1), LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+    const int row = items.empty() ? -1 : std::clamp(selected, 0, (int)items.size()-1);
+    SetWindowTextW(g_captionEdit, row >= 0 ? items[row].caption.c_str() : L"");
+    g_refreshingSession = false;
+    EnableWindow(g_captionEdit, row >= 0 && !g_exportBusy);
+    EnableWindow(g_sessionList, !g_exportBusy);
+    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_UP), row > 0 && !g_exportBusy);
+    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_DOWN), row >= 0 && row+1 < (int)items.size() && !g_exportBusy);
+    const auto title = g_activeSession.load() ? L"SnapSentry - Recording session" : L"SnapSentry - Review session";
+    SetWindowTextW(g_sessionWindow.load(), title);
+    const auto status = items.size() == kMaxSessionItems && g_activeSession.load()
+        ? L"Session full at 64 images. Extra screenshots are kept outside the packet. Finish and review to export."
+        : std::to_wstring(items.size()) + L" / 64 captures. Check images to include. Originals are always kept.";
+    SetWindowTextW(g_sessionStatus, status.c_str());
+    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_FINISH), g_activeSession.load() != 0);
+    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_EXPORT), !items.empty() && !g_exportBusy && !g_activeSession.load() && !g_sessionPending.load());
+}
+
+static void LayoutSession(HWND window) {
+    RECT bounds; GetClientRect(window, &bounds);
+    UINT dpi = WindowDpi(window);
+    auto px = [=](int value) { return MulDiv(value, dpi, 96); };
+    int width = bounds.right, height = bounds.bottom, margin = px(16), gap = px(8), buttonH = px(30);
+    auto move = [&](HWND child,int x,int y,int w,int h) { MoveWindow(child,x,y,std::max(1,w),std::max(1,h),TRUE); };
+    move(GetDlgItem(window, SESSION_START), margin, margin, px(130), buttonH);
+    move(GetDlgItem(window, SESSION_FINISH), margin + px(138), margin, px(140), buttonH);
+    const bool stacked = width < px(820);
+    const int top = margin + buttonH + gap;
+    const int bottom = height - margin - px(118);
+    const int listW = stacked ? width - 2*margin : (width - 3*margin)*52/100;
+    const int listH = stacked ? std::max(px(100),(bottom-top)*50/100) : bottom-top;
+    move(g_sessionList, margin, top, listW, listH);
+    if (stacked) move(g_sessionPreview, margin, top+listH+gap, listW, bottom-top-listH-gap);
+    else move(g_sessionPreview, 2*margin+listW, top, width-3*margin-listW, bottom-top);
+    ListView_SetColumnWidth(g_sessionList, 0, px(64));
+    ListView_SetColumnWidth(g_sessionList, 1, std::max(px(100),listW-px(90)));
+    move(GetDlgItem(window, 2090), margin, bottom+gap, px(70), px(24));
+    move(g_captionEdit, margin+px(76), bottom+gap, width-2*margin-px(76), px(26));
+    move(GetDlgItem(window, SESSION_UP), margin, bottom+px(40), px(95), buttonH);
+    move(GetDlgItem(window, SESSION_DOWN), margin+px(103), bottom+px(40), px(105), buttonH);
+    move(GetDlgItem(window, SESSION_EXPORT), width-margin-px(224), bottom+px(40), px(130), buttonH);
+    move(GetDlgItem(window, SESSION_CLOSE), width-margin-px(86), bottom+px(40), px(86), buttonH);
+    move(g_sessionStatus, margin, height-margin-px(38), width-2*margin, px(38));
+}
+
+static void StartSession(HWND owner) {
+    const Settings settings = SnapshotSettings();
+    if (!settings.sessions || g_exportBusy) return;
+    if (!SnapshotSession().empty()) {
+        TASKDIALOGCONFIG prompt{sizeof(prompt)};
+        prompt.hwndParent = owner;
+        const TASKDIALOG_BUTTON buttons[] = {{SESSION_START, L"Start session"}, {IDCANCEL, L"Keep current session"}};
+        prompt.cButtons = ARRAYSIZE(buttons);
+        prompt.pButtons = buttons;
+        prompt.nDefaultButton = IDCANCEL;
+        prompt.dwFlags = TDF_CALLBACK_TIMER | TDF_ALLOW_DIALOG_CANCELLATION;
+        ULONGLONG generation = g_generation.load();
+        prompt.lpCallbackData = (LONG_PTR)&generation;
+        prompt.pfCallback = SessionResetCallback;
+        prompt.pszWindowTitle = L"SnapSentry";
+        prompt.pszMainInstruction = L"Start a new session?";
+        prompt.pszContent = L"The current review list and captions will be cleared. All original screenshots stay on disk.";
+        int result = IDCANCEL;
+        if (FAILED(TaskDialogIndirect(&prompt, &result, nullptr, nullptr)) || result != SESSION_START) return;
+    }
+    EnterCriticalSection(&g_lock);
+    g_sessionItems.clear(); g_readyPreview.reset(); ++g_sessionSerial; g_sessionPending.store(0);
+    g_activeSession.store(g_sessionSerial);
+    LeaveCriticalSection(&g_lock);
+    RefreshSessionList();
+    InvalidateRect(g_sessionPreview, nullptr, TRUE);
+}
+
+static void ChooseExportFolder(HWND owner) {
+    if (g_exportBusy || g_activeSession.load() || g_sessionPending.load()) return;
+    const auto current = SnapshotSession();
+    if (std::none_of(current.begin(), current.end(), [](const auto& item) { return item.included; })) {
+        SetWindowTextW(g_sessionStatus, L"Check at least one image to export. Originals are kept.");
+        return;
+    }
+    using Microsoft::WRL::ComPtr;
+    ComPtr<IFileOpenDialog> picker;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&picker)))) return;
+    picker->SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
+    picker->SetTitle(L"Choose a folder outside the watched screenshots folder");
+    g_openFolderPicker = picker.Get();
+    g_pickerGeneration = g_generation.load();
+    SetTimer(owner, 2, 200, nullptr);
+    const HRESULT picked = picker->Show(owner);
+    KillTimer(owner, 2);
+    g_openFolderPicker = nullptr;
+    if (FAILED(picked) || g_pickerGeneration != g_generation.load() || WaitStop(0)) return;
+    ComPtr<IShellItem> folder;
+    PWSTR name = nullptr;
+    if (FAILED(picker->GetResult(&folder)) || FAILED(folder->GetDisplayName(SIGDN_FILESYSPATH, &name))) return;
+    EnterCriticalSection(&g_lock);
+    if (!g_exportBusy && !g_activeSession.load() && !g_sessionPending.load()) {
+        g_exportParent = name; g_exportItems = g_sessionItems;
+        g_exportGeneration = g_generation.load();
+        g_exportBusy = true; g_exportRequested = true;
+    }
+    LeaveCriticalSection(&g_lock);
+    CoTaskMemFree(name);
+    SetWindowTextW(g_sessionStatus, L"Exporting copies. Originals are kept. You can close this window.");
+    EnableWindow(GetDlgItem(owner, SESSION_EXPORT), FALSE);
+    EnableWindow(GetDlgItem(owner, SESSION_START), FALSE);
+    EnableWindow(g_sessionList, FALSE);
+    EnableWindow(g_captionEdit, FALSE);
+    EnableWindow(GetDlgItem(owner, SESSION_UP), FALSE);
+    EnableWindow(GetDlgItem(owner, SESSION_DOWN), FALSE);
+    SetEvent(g_workEvent);
+}
+
+static LRESULT CALLBACK PreviewWindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == WM_PAINT || message == WM_PRINTCLIENT) {
+        PAINTSTRUCT paint{}; HDC dc = message == WM_PAINT ? BeginPaint(window, &paint) : (HDC)wp;
+        RECT area; GetClientRect(window, &area);
+        FillRect(dc, &area, GetSysColorBrush(COLOR_WINDOW));
+        EnterCriticalSection(&g_lock); auto image = g_readyPreview; LeaveCriticalSection(&g_lock);
+        if (image) {
+            const double scale = std::min((double)area.right/image->width,(double)area.bottom/image->height);
+            const int width = (int)(image->width*scale), height=(int)(image->height*scale);
+            BITMAPINFO info{};
+            info.bmiHeader={sizeof(BITMAPINFOHEADER),(LONG)image->width,-(LONG)image->height,1,32,BI_RGB,0,0,0,0,0};
+            SetStretchBltMode(dc, HALFTONE);
+            StretchDIBits(dc,(area.right-width)/2,(area.bottom-height)/2,width,height,
+                0,0,image->width,image->height,image->pixels.data(),&info,DIB_RGB_COLORS,SRCCOPY);
+        } else {
+            SetBkMode(dc, TRANSPARENT); SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+            DrawTextW(dc,L"Contact sheet preview\nStart a session and take a screenshot.",-1,&area,
+                       DT_CENTER|DT_WORDBREAK|DT_NOPREFIX);
         }
-        std::wstring path;
-        while (!WaitStop(0) && DequeueOne(path)) {
-            ProcessOne(path);
-            ReleaseInflight(path);
+        if (message == WM_PAINT) EndPaint(window,&paint);
+        return 0;
+    }
+    return DefWindowProcW(window,message,wp,lp);
+}
+
+static LRESULT CALLBACK SessionWindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+    switch(message) {
+    case WM_CREATE: {
+        auto control=[&](PCWSTR type,PCWSTR text,DWORD style,int id,DWORD ex=0) {
+            HWND child=CreateWindowExW(ex,type,text,WS_CHILD|WS_VISIBLE|style,0,0,1,1,window,
+                (HMENU)(INT_PTR)id,GetModuleHandleW(nullptr),nullptr);
+            SendMessageW(child,WM_SETFONT,(WPARAM)GetStockObject(DEFAULT_GUI_FONT),TRUE);
+            return child;
+        };
+        control(L"BUTTON",L"Start session",WS_TABSTOP,SESSION_START);
+        control(L"BUTTON",L"Finish and review",WS_TABSTOP,SESSION_FINISH);
+        g_sessionList=control(WC_LISTVIEWW,L"Screenshots",WS_TABSTOP|LVS_REPORT|LVS_SINGLESEL|LVS_SHOWSELALWAYS,SESSION_LIST,WS_EX_CLIENTEDGE);
+        ListView_SetExtendedListViewStyle(g_sessionList,LVS_EX_CHECKBOXES|LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
+        LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=(PWSTR)L"Include";column.cx=64;
+        ListView_InsertColumn(g_sessionList,0,&column);column.pszText=(PWSTR)L"Caption";column.cx=320;
+        ListView_InsertColumn(g_sessionList,1,&column);
+        g_sessionPreview=control(L"SnapSentryPreview",L"Contact sheet",0,2091,WS_EX_CLIENTEDGE);
+        control(L"STATIC",L"&Caption",0,2090);
+        g_captionEdit=control(L"EDIT",L"",WS_TABSTOP|ES_AUTOHSCROLL,SESSION_CAPTION,WS_EX_CLIENTEDGE);
+        SendMessageW(g_captionEdit,EM_SETLIMITTEXT,240,0);
+        control(L"BUTTON",L"Move &up",WS_TABSTOP,SESSION_UP);
+        control(L"BUTTON",L"Move &down",WS_TABSTOP,SESSION_DOWN);
+        control(L"BUTTON",L"&Export packet...",WS_TABSTOP|BS_DEFPUSHBUTTON,SESSION_EXPORT);
+        control(L"BUTTON",L"Close",WS_TABSTOP,SESSION_CLOSE);
+        g_sessionStatus=control(L"STATIC",L"",SS_LEFT,2092);
+        UpdateSessionFont(window);
+        return 0;
+    }
+    case WM_SIZE: LayoutSession(window);return 0;
+    case WM_DPICHANGED: {
+        RECT* rect=(RECT*)lp;SetWindowPos(window,nullptr,rect->left,rect->top,
+            rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);
+        UpdateSessionFont(window);LayoutSession(window);return 0;
+    }
+    case WM_GETMINMAXINFO: {
+        UINT dpi=WindowDpi(window);
+        auto* info=(MINMAXINFO*)lp;info->ptMinTrackSize={MulDiv(640,dpi,96),MulDiv(520,dpi,96)};return 0;
+    }
+    case WM_NOTIFY: {
+        auto* header=(NMHDR*)lp;
+        if(header->idFrom==SESSION_LIST&&header->code==LVN_ITEMCHANGED&&!g_refreshingSession){
+            auto* change=(NMLISTVIEW*)lp;
+            const int selected=SelectedSessionItem();
+            EnterCriticalSection(&g_lock);
+            if(change->iItem>=0&&(size_t)change->iItem<g_sessionItems.size())
+                g_sessionItems[change->iItem].included=ListView_GetCheckState(g_sessionList,change->iItem)!=0;
+            std::wstring caption=selected>=0&&(size_t)selected<g_sessionItems.size()?g_sessionItems[selected].caption:L"";
+            LeaveCriticalSection(&g_lock);
+            g_refreshingSession=true;SetWindowTextW(g_captionEdit,caption.c_str());g_refreshingSession=false;
+            const auto count = ListView_GetItemCount(g_sessionList);
+            EnableWindow(g_captionEdit, selected >= 0 && !g_exportBusy);
+            EnableWindow(GetDlgItem(window, SESSION_UP), selected > 0 && !g_exportBusy);
+            EnableWindow(GetDlgItem(window, SESSION_DOWN), selected >= 0 && selected+1 < count && !g_exportBusy);
+            RequestSessionPreview();
+        }
+        return 0;
+    }
+    case WM_COMMAND: {
+        int command=LOWORD(wp);
+        if(command==SESSION_START)StartSession(window);
+        else if(command==SESSION_FINISH){g_activeSession.store(0);RefreshSessionList();}
+        else if(command==SESSION_CLOSE||command==IDCANCEL){g_activeSession.store(0);RefreshSessionList();ShowWindow(window,SW_HIDE);}
+        else if(command==SESSION_EXPORT)ChooseExportFolder(window);
+        else if(command==SESSION_UP||command==SESSION_DOWN){
+            int from=SelectedSessionItem(),to=from+(command==SESSION_UP?-1:1);
+            EnterCriticalSection(&g_lock);
+            bool valid=from>=0&&to>=0&&(size_t)to<g_sessionItems.size();
+            if(valid)std::swap(g_sessionItems[from],g_sessionItems[to]);
+            LeaveCriticalSection(&g_lock);
+            if(valid){RefreshSessionList();ListView_SetItemState(g_sessionList,from,0,LVIS_SELECTED);
+                ListView_SetItemState(g_sessionList,to,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+                ListView_EnsureVisible(g_sessionList,to,FALSE);RequestSessionPreview();}
+        }else if(command==SESSION_CAPTION&&HIWORD(wp)==EN_CHANGE&&!g_refreshingSession){
+            wchar_t caption[241];GetWindowTextW(g_captionEdit,caption,ARRAYSIZE(caption));
+            int index=SelectedSessionItem();EnterCriticalSection(&g_lock);
+            if(index>=0&&(size_t)index<g_sessionItems.size())g_sessionItems[index].caption=caption;
+            LeaveCriticalSection(&g_lock);
+            if(index>=0)ListView_SetItemText(g_sessionList,index,1,caption);
+            SetTimer(window,1,300,nullptr);
+        }
+        return 0;
+    }
+    case WM_TIMER:
+        if (wp == 2) {
+            if (g_openFolderPicker && (WaitStop(0) || g_pickerGeneration != g_generation.load()))
+                g_openFolderPicker->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        } else { KillTimer(window,1); RequestSessionPreview(); }
+        return 0;
+    case kSessionChanged: RefreshSessionList();return 0;
+    case kSessionPreviewReady:InvalidateRect(g_sessionPreview,nullptr,TRUE);return 0;
+    case kSessionExportFinished:{
+        EnterCriticalSection(&g_lock);auto status=g_exportStatus;LeaveCriticalSection(&g_lock);
+        RefreshSessionList();
+        SetWindowTextW(g_sessionStatus,status.c_str());
+        EnableWindow(GetDlgItem(window,SESSION_START),TRUE);
+        EnableWindow(GetDlgItem(window,SESSION_EXPORT),!g_activeSession.load());return 0;
+    }
+    case WM_CLOSE:g_activeSession.store(0);RefreshSessionList();ShowWindow(window,SW_HIDE);return 0;
+    case WM_DESTROY:
+        if (g_sessionFont) DeleteObject(g_sessionFont);
+        g_sessionFont=nullptr;g_sessionWindow.store(nullptr);return 0;
+    }
+    return DefWindowProcW(window,message,wp,lp);
+}
+
+static void ShowSessionWindow(bool start) {
+    HWND window=g_sessionWindow.load();
+    if(!window){
+        WNDCLASSW preview{};preview.lpfnWndProc=PreviewWindowProc;preview.hInstance=GetModuleHandleW(nullptr);
+        preview.lpszClassName=L"SnapSentryPreview";preview.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&preview);
+        WNDCLASSW cls{};cls.lpfnWndProc=SessionWindowProc;cls.hInstance=GetModuleHandleW(nullptr);
+        cls.lpszClassName=L"SnapSentrySession";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+        cls.hbrBackground=GetSysColorBrush(COLOR_BTNFACE);cls.hIcon=LoadIconW(nullptr,IDI_APPLICATION);RegisterClassW(&cls);
+        window=CreateWindowExW(WS_EX_CONTROLPARENT,L"SnapSentrySession",L"SnapSentry - Review session",
+            WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,980,680,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+        g_sessionWindow.store(window);
+        if (window) {
+            const UINT dpi = WindowDpi(window);
+            MONITORINFO monitor{sizeof(monitor)};
+            GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor);
+            const int width = std::min<int>(MulDiv(980,dpi,96), monitor.rcWork.right-monitor.rcWork.left);
+            const int height = std::min<int>(MulDiv(680,dpi,96), monitor.rcWork.bottom-monitor.rcWork.top);
+            if (width > 0 && height > 0) SetWindowPos(window,nullptr,0,0,width,height,
+                SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
         }
     }
+    if(!window)return;
+    if(start)StartSession(window);
+    RefreshSessionList();LayoutSession(window);ShowWindow(window,SW_SHOWNORMAL);SetForegroundWindow(window);
+}
 
-    // Leave nothing behind. Done here, while this thread's COM apartment is still
-    // live, because removing the shortcut has to read its properties through COM;
-    // the uninit thread has no apartment. Everything is recreated on the next load.
-    SyncToastRegistration(false, /*unloading=*/true);
+static std::atomic<HWND> g_promptWindow{nullptr};
+static constexpr UINT kPromptStop = WM_APP + 30;
+static NOTIFYICONDATAW g_trayIcon{}; // UI STA only.
+static int g_registeredSessionKey = 0;
 
-    if (g_hashAlgorithm) {
-        BCryptCloseAlgorithmProvider(g_hashAlgorithm, 0);
-        g_hashAlgorithm = nullptr;
+static void SyncSessionControls(const Settings& settings) {
+    HWND window = g_promptWindow.load();
+    if (!window) return;
+    if (g_registeredSessionKey && (!settings.sessions || settings.sessionHotkey != g_registeredSessionKey)) {
+        UnregisterHotKey(window, 1); g_registeredSessionKey = 0;
     }
+    if (settings.sessions && !g_registeredSessionKey) {
+        if (RegisterHotKey(window, 1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, settings.sessionHotkey))
+            g_registeredSessionKey = settings.sessionHotkey;
+        else Wh_Log(L"Session shortcut is in use; use the SnapSentry tray menu");
+    }
+    if (settings.sessions && !g_trayIcon.cbSize) {
+        g_trayIcon = {};
+        g_trayIcon.cbSize = sizeof(g_trayIcon); g_trayIcon.hWnd = window; g_trayIcon.uID = 1;
+        g_trayIcon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+        g_trayIcon.uCallbackMessage = kTrayMessage;
+        g_trayIcon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+        wcscpy_s(g_trayIcon.szTip, L"SnapSentry capture sessions");
+        if (!Shell_NotifyIconW(NIM_ADD, &g_trayIcon)) g_trayIcon = {};
+    } else if (!settings.sessions && g_trayIcon.cbSize) {
+        Shell_NotifyIconW(NIM_DELETE, &g_trayIcon); g_trayIcon = {};
+    }
+    if (!settings.sessions) {
+        g_activeSession.store(0);
+        HWND review = g_sessionWindow.load(); if (review) ShowWindow(review, SW_HIDE);
+    }
+}
 
-    RoUninitialize();
-    CoUninitialize();
+static LRESULT CALLBACK PromptWindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+    static const UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    if (message == taskbarCreated) {
+        g_trayIcon = {};
+        SyncSessionControls(SnapshotSettings());
+        return 0;
+    }
+    if (message == kPromptStop) {
+        if (g_openFolderPicker) g_openFolderPicker->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        if (HWND dialog = g_dialog.load()) PostMessageW(dialog, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+        return 0;
+    }
+    if (message == WM_HOTKEY && SnapshotSettings().sessions) {
+        if (g_activeSession.load()) { g_activeSession.store(0); ShowSessionWindow(false); }
+        else ShowSessionWindow(SnapshotSession().empty());
+        return 0;
+    }
+    if (message == kTrayMessage && SnapshotSettings().sessions) {
+        if (lp == WM_LBUTTONDBLCLK) { ShowSessionWindow(false); return 0; }
+        if (lp == WM_RBUTTONUP || lp == WM_CONTEXTMENU) {
+            HMENU menu = CreatePopupMenu();
+            if (!menu) return 0;
+            AppendMenuW(menu, MF_STRING | (g_exportBusy ? MF_GRAYED : 0), SESSION_START, L"Start new session");
+            AppendMenuW(menu, MF_STRING, SESSION_FINISH, L"Finish and review");
+            POINT point; GetCursorPos(&point); SetForegroundWindow(window);
+            const UINT choice = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                point.x, point.y, 0, window, nullptr);
+            DestroyMenu(menu);
+            if (choice == SESSION_START) ShowSessionWindow(true);
+            else if (choice == SESSION_FINISH) { g_activeSession.store(0); ShowSessionWindow(false); }
+            PostMessageW(window, WM_NULL, 0, 0);
+        }
+        return 0;
+    }
+    return DefWindowProcW(window, message, wp, lp);
+}
+
+static DWORD WINAPI PromptThread(LPVOID) {
+    HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT runtime = RoInitialize(RO_INIT_SINGLETHREADED);
+    if (FAILED(apartment) || FAILED(runtime)) {
+        Wh_Log(L"Notification apartment could not be initialized");
+        if (SUCCEEDED(runtime)) RoUninitialize();
+        if (SUCCEEDED(apartment)) CoUninitialize();
+        SetEvent(g_stopEvent); return 0;
+    }
+    EnablePerMonitorUi();
+    INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES};
+    InitCommonControlsEx(&controls);
+    WNDCLASSW cls{}; cls.lpfnWndProc = PromptWindowProc; cls.hInstance = GetModuleHandleW(nullptr);
+    cls.lpszClassName = L"SnapSentryControl"; RegisterClassW(&cls);
+    // Hidden top-level window receives Explorer restart broadcasts for its tray icon.
+    HWND window = CreateWindowExW(0, cls.lpszClassName, L"SnapSentry control", 0,
+        0,0,0,0,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    g_promptWindow.store(window);
+    HANDLE events[] = {g_stopEvent, g_promptEvent};
+    while (!WaitStop(0)) {
+        Settings settings = SnapshotSettings();
+        SyncToastRegistration(settings.popup, false);
+        SyncSessionControls(settings);
+        CaptureRecord record;
+        bool pending = false;
+        EnterCriticalSection(&g_lock);
+        if (!g_promptQueue.empty()) {
+            record = std::move(g_promptQueue.front()); g_promptQueue.pop_front(); pending = true;
+        }
+        LeaveCriticalSection(&g_lock);
+        if (pending) {
+            if (record.generation != g_generation.load()) continue;
+            record.action = settings.popup ? ChooseAction(record.path, settings, record.generation) : ACTION_KEEP;
+            EnterCriticalSection(&g_lock);
+            const bool accepted = record.generation == g_generation.load() &&
+                                   g_queue.size() < kMaxPendingCaptures;
+            if (accepted) g_queue.push_back(std::move(record));
+            LeaveCriticalSection(&g_lock);
+            if (accepted) SetEvent(g_workEvent);
+            else AuditResult(settings, AuditOutcome::Kept, L"prompt action cancelled or queue full", record.path);
+            continue;
+        }
+        DWORD result = MsgWaitForMultipleObjectsEx(ARRAYSIZE(events), events,
+            INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
+        if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
+        MSG message;
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            HWND review = g_sessionWindow.load();
+            if (review && IsDialogMessageW(review, &message)) continue;
+            TranslateMessage(&message); DispatchMessageW(&message);
+        }
+    }
+    SyncToastRegistration(false, true);
+    Settings disabled{}; SyncSessionControls(disabled);
+    if (HWND review = g_sessionWindow.load()) DestroyWindow(review);
+    if (window) DestroyWindow(window);
+    g_promptWindow.store(nullptr);
+    UnregisterClassW(L"SnapSentryControl", GetModuleHandleW(nullptr));
+    UnregisterClassW(L"SnapSentrySession", GetModuleHandleW(nullptr));
+    UnregisterClassW(L"SnapSentryPreview", GetModuleHandleW(nullptr));
+    RoUninitialize(); CoUninitialize();
     return 0;
+}
+
+static DWORD WINAPI WorkerThread(LPVOID) {
+    HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT runtime = RoInitialize(RO_INIT_SINGLETHREADED);
+    if (FAILED(apartment) || FAILED(runtime)) {
+        if (SUCCEEDED(runtime)) RoUninitialize();
+        if (SUCCEEDED(apartment)) CoUninitialize();
+        SetEvent(g_stopEvent); return 0;
+    }
+    g_clipboardOwner = CreateWindowExW(0, L"STATIC", L"SnapSentry clipboard", 0,
+        0,0,0,0,HWND_MESSAGE,nullptr,GetModuleHandleW(nullptr),nullptr);
+    if (!g_clipboardOwner) { RoUninitialize(); CoUninitialize(); SetEvent(g_stopEvent); return 0; }
+    if (BCryptOpenAlgorithmProvider(&g_hashAlgorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) {
+        g_hashAlgorithm = nullptr;
+        Wh_Log(L"SHA-256 unavailable; cleanup and session export stay disabled");
+    }
+    HANDLE events[] = {g_stopEvent, g_workEvent};
+    while (!WaitStop(0)) {
+        RunDueCleanup();
+        RunSessionWork();
+        CaptureRecord record;
+        if (DequeueOne(record)) {
+            ProcessOne(record);
+            ReleaseInflight(record.path);
+            continue;
+        }
+        const ULONGLONG now = GetTickCount64();
+        auto ready = std::find_if(g_retryCaptures.begin(), g_retryCaptures.end(),
+            [&](const RetryCapture& retry) { return retry.due <= now || retry.record.generation != g_generation.load(); });
+        if (ready != g_retryCaptures.end()) {
+            CaptureRecord retry = std::move(ready->record);
+            g_retryCaptures.erase(ready);
+            ProcessOne(std::move(retry));
+            continue;
+        }
+        DWORD timeout = INFINITE;
+        for (const auto& job : g_pendingCleanup) {
+            ULONGLONG now = GetTickCount64();
+            DWORD remaining = job.due <= now ? 0 : (DWORD)std::min<ULONGLONG>(job.due - now, MAXDWORD-1);
+            timeout = std::min(timeout, remaining);
+        }
+        for (const auto& retry : g_retryCaptures) {
+            ULONGLONG tick = GetTickCount64();
+            timeout = std::min(timeout, retry.due <= tick ? 0u :
+                (DWORD)std::min<ULONGLONG>(retry.due - tick, MAXDWORD-1));
+        }
+        DWORD index = 0;
+        HRESULT result = CoWaitForMultipleHandles(COWAIT_DISPATCH_CALLS | COWAIT_DISPATCH_WINDOW_MESSAGES,
+            timeout, ARRAYSIZE(events), events, &index);
+        if (result == RPC_S_CALLPENDING) continue;
+        if (FAILED(result) || index == 0) break;
+    }
+    // No staged operation survives its function. Pending jobs never acquire a
+    // destructive handle until they run, so dropping them on unload keeps files.
+    g_pendingCleanup.clear();
+    g_retryCaptures.clear();
+    if (g_hashAlgorithm) BCryptCloseAlgorithmProvider(g_hashAlgorithm, 0);
+    g_hashAlgorithm = nullptr;
+    DestroyWindow(g_clipboardOwner); g_clipboardOwner = nullptr;
+    RoUninitialize(); CoUninitialize(); return 0;
 }
 
 // A file turning up in the folder is not the same thing as a screenshot being
@@ -2596,31 +3468,33 @@ static std::wstring JoinChild(const std::wstring& dir, const std::wstring& name)
 }
 
 static void Enqueue(const std::wstring& folder, const std::wstring& name) {
-    if (!IsSafeChildName(name) || !IsSupportedImage(name)) {
-        return;
-    }
-    std::wstring path = JoinChild(folder, name);
-    if (!JustCreated(path)) {
-        return;
-    }
-    ULONGLONG now = GetTickCount64();
+    if (!IsSafeChildName(name) || !IsSupportedImage(name)) return;
+    if (name.size() >= 12 && CompareStringOrdinal(name.c_str(), 12, L".snapsentry-", 12, TRUE) == CSTR_EQUAL) return;
+    CaptureRecord record;
+    record.path = JoinChild(folder, name);
+    if (!JustCreated(record.path)) return;
+    record.identified = ObserveIdentity(record.path, record.identity);
+    if (!record.identified) return;
+    GetSystemTimeAsFileTime(&record.observed);
+    record.label = ActiveWindowLabel();
+    const ULONGLONG now = GetTickCount64();
+    static ULONGLONG lastOverflow = 0; // Watcher thread only.
     EnterCriticalSection(&g_lock);
-    // Skip names present when watching started (g_preexisting), then dedup rapid
-    // duplicate events (g_inflight) and the delayed follow-up event for a name we
-    // just finished handling (g_recent), such as OneDrive rewriting the file as a
-    // placeholder after the first notification closed.
-    bool added = !SeenRecently(name, now) && g_preexisting.count(name) == 0 &&
-                 g_inflight.insert(name).second;
+    record.generation = g_generation.load();
+    record.session = g_activeSession.load();
+    bool added = g_queue.size() < kMaxPendingCaptures &&
+        !SeenRecently(record.path, now) && !g_preexisting.count(name) &&
+        g_inflight.insert(record.path).second;
     if (added) {
-        g_queue.push_back(std::move(path));
+        if (record.session) ++g_sessionPending;
+        g_queue.push_back(std::move(record));
     }
-    bool logDetails = g_settings.logDetails;
+    bool full = g_queue.size() >= kMaxPendingCaptures;
     LeaveCriticalSection(&g_lock);
-    if (added) {
-        SetEvent(g_workEvent);
-        if (logDetails) {
-            Wh_Log(L"detected %s", name.c_str());
-        }
+    if (added) SetEvent(g_workEvent);
+    else if (full && now - lastOverflow >= 5000) {
+        lastOverflow = now;
+        Wh_Log(L"Capture queue full; additional files are kept untouched");
     }
 }
 
@@ -2628,32 +3502,19 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
 // Watcher: overlapped ReadDirectoryChangesW with a clean stop/reload path
 // ============================================================================
 
-static void ParseNotifications(const std::wstring& folder, const BYTE* buffer,
-                               DWORD bytes) {
-    const BYTE* endp = buffer + bytes;
-    for (auto* info = (const FILE_NOTIFY_INFORMATION*)buffer;;) {
-        // Bound every field against the reported size, so a malformed record can't
-        // walk off the buffer.
-        const BYTE* rec = (const BYTE*)info;
-        if (rec + sizeof(FILE_NOTIFY_INFORMATION) > endp) {
-            break;
-        }
-        const BYTE* nameEnd =
-            (const BYTE*)(info->FileName) + info->FileNameLength;
-        if (nameEnd > endp) {
-            break;
-        }
-        if (info->Action == FILE_ACTION_ADDED ||
-            info->Action == FILE_ACTION_RENAMED_NEW_NAME) {
-            std::wstring name(info->FileName,
-                              info->FileNameLength / sizeof(wchar_t));
-            Enqueue(folder, name);
-        }
-        if (!info->NextEntryOffset) {
-            break;
-        }
-        info = (const FILE_NOTIFY_INFORMATION*)((const BYTE*)info +
-                                                info->NextEntryOffset);
+static void ParseNotifications(const std::wstring& folder, const BYTE* buffer, DWORD bytes) {
+    const size_t header = offsetof(FILE_NOTIFY_INFORMATION, FileName);
+    size_t offset = 0;
+    while (offset <= bytes && bytes - offset >= header) {
+        const auto* info = reinterpret_cast<const FILE_NOTIFY_INFORMATION*>(buffer + offset);
+        const size_t available = bytes - offset;
+        if (info->FileNameLength % sizeof(wchar_t) || info->FileNameLength > available - header) break;
+        if (info->Action == FILE_ACTION_ADDED || info->Action == FILE_ACTION_RENAMED_NEW_NAME)
+            Enqueue(folder, std::wstring(info->FileName, info->FileNameLength / sizeof(wchar_t)));
+        const size_t next = info->NextEntryOffset;
+        if (!next) break;
+        if (next % alignof(DWORD) || next < header + info->FileNameLength || next > available) break;
+        offset += next;
     }
 }
 
@@ -2662,8 +3523,8 @@ static void ParseNotifications(const std::wstring& folder, const BYTE* buffer,
 // each time the directory is opened, before the first change notification is
 // armed. Placeholders are enumerated like any other entry, so dehydrated old
 // screenshots are captured too.
-static void SnapshotExistingNames(const std::wstring& folder) {
-    std::set<std::wstring> names;
+static bool SnapshotExistingNames(const std::wstring& folder) {
+    std::set<std::wstring, NameLess> names;
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW(JoinChild(folder, L"*").c_str(), &fd);
     if (h != INVALID_HANDLE_VALUE) {
@@ -2672,12 +3533,15 @@ static void SnapshotExistingNames(const std::wstring& folder) {
                 names.insert(fd.cFileName);
             }
         } while (FindNextFileW(h, &fd));
+        const DWORD result = GetLastError();
         FindClose(h);
-    }
+        if (result != ERROR_NO_MORE_FILES) return false;
+    } else if (GetLastError() != ERROR_FILE_NOT_FOUND) return false;
     EnterCriticalSection(&g_lock);
     g_recentContent.clear();
     g_preexisting = std::move(names);
     LeaveCriticalSection(&g_lock);
+    return true;
 }
 
 static DWORD WINAPI WatchThread(LPVOID) {
@@ -2724,7 +3588,13 @@ static DWORD WINAPI WatchThread(LPVOID) {
 
         // Snapshot existing names before arming notifications so downloads or
         // sync churn on pre-existing files never look like new screenshots.
-        SnapshotExistingNames(s.folder);
+        if (!SnapshotExistingNames(s.folder)) {
+            CloseHandle(dir);
+            Wh_Log(L"Could not snapshot existing files; folder is left untouched");
+            HANDLE idle[] = {g_stopEvent, g_reloadEvent};
+            WaitForMultipleObjects(2, idle, FALSE, 2000);
+            continue;
+        }
 
         // ReadDirectoryChangesW writes FILE_NOTIFY_INFORMATION records that must
         // be DWORD aligned; alignas guarantees it (a plain BYTE array need not be).
@@ -2740,7 +3610,9 @@ static DWORD WINAPI WatchThread(LPVOID) {
                 break;  // Re-open the directory.
             }
 
+            g_watchArmed.store(true);
             DWORD w = WaitForMultipleObjects(3, readyWaits, FALSE, INFINITE);
+            g_watchArmed.store(false);
             if (w == WAIT_OBJECT_0) {  // Stop.
                 CancelIoEx(dir, &ov);
                 GetOverlappedResult(dir, &ov, &bytes, TRUE);
@@ -2801,9 +3673,11 @@ BOOL WhTool_ModInit() {
     g_reloadEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
     g_settingsEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);  // Manual reset.
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);    // Auto reset.
+    g_promptEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_toastActionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
     if (!g_stopEvent || !g_reloadEvent || !g_settingsEvent || !g_workEvent ||
-        !g_toastActionEvent) {
+        !g_toastActionEvent || !g_promptEvent) {
+        if (g_promptEvent) CloseHandle(g_promptEvent);
         if (g_stopEvent) CloseHandle(g_stopEvent);
         if (g_reloadEvent) CloseHandle(g_reloadEvent);
         if (g_settingsEvent) CloseHandle(g_settingsEvent);
@@ -2817,15 +3691,19 @@ BOOL WhTool_ModInit() {
     }
 
     LoadSettings();
+    g_promptThread = CreateThread(nullptr, 0, PromptThread, nullptr, 0, nullptr);
     g_workerThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
     g_watchThread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
-    if (!g_workerThread || !g_watchThread) {
+    if (!g_workerThread || !g_watchThread || !g_promptThread) {
         SetEvent(g_stopEvent);
         SetEvent(g_workEvent);
+        if (g_promptThread) WaitForSingleObject(g_promptThread, INFINITE);
+        if (g_promptThread) CloseHandle(g_promptThread);
         if (g_watchThread) WaitForSingleObject(g_watchThread, INFINITE);
         if (g_workerThread) WaitForSingleObject(g_workerThread, INFINITE);
         if (g_watchThread) CloseHandle(g_watchThread);
         if (g_workerThread) CloseHandle(g_workerThread);
+        CloseHandle(g_promptEvent);
         CloseHandle(g_stopEvent);
         CloseHandle(g_reloadEvent);
         CloseHandle(g_settingsEvent);
@@ -2843,30 +3721,34 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModSettingsChanged() {
     LoadSettings();
+    SetEvent(g_promptEvent);
     SetEvent(g_reloadEvent);  // Re-open the folder in case the path changed.
     SetEvent(g_workEvent);    // Wake the worker so it can follow the popup setting.
 }
 
 void WhTool_ModUninit() {
     SetEvent(g_stopEvent);
+    PostMessageW(g_promptWindow.load(), kPromptStop, 0, 0);
 
     // Dismiss an open action dialog as "Keep" so shutdown never triggers a delete.
     HWND dlg = g_dialog.load();
     if (dlg) {
-        SendMessageW(dlg, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+        PostMessageW(dlg, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
     }
     SetEvent(g_workEvent);
 
-    HANDLE threads[] = {g_watchThread, g_workerThread};
+    HANDLE threads[] = {g_watchThread, g_workerThread, g_promptThread};
     // Both threads observe g_stopEvent and must be gone before their events and
     // critical sections are destroyed.
-    WaitForMultipleObjects(2, threads, TRUE, INFINITE);
+    WaitForMultipleObjects(ARRAYSIZE(threads), threads, TRUE, INFINITE);
+    if (g_promptThread) CloseHandle(g_promptThread);
     if (g_watchThread) {
         CloseHandle(g_watchThread);
     }
     if (g_workerThread) {
         CloseHandle(g_workerThread);
     }
+    if (g_promptEvent) CloseHandle(g_promptEvent);
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
     }
