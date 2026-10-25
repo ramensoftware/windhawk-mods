@@ -682,24 +682,53 @@ HWND FindDesktopListView() {
         }
     }
 
-    if (!hDefView) {
-        HWND hWorkerW = nullptr;
-        while ((hWorkerW =
-                    FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) !=
-               nullptr) {
-            hDefView = FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-            if (hDefView) {
-                break;
-            }
+    if (hDefView) {
+        HWND hListView =
+            FindWindowExW(hDefView, nullptr, L"SysListView32", nullptr);
+        if (IsDesktopListView(hListView)) {
+            return hListView;
         }
     }
 
-    if (!hDefView) {
-        return nullptr;
+    // With some wallpaper setups the DefView lives under a top-level WorkerW.
+    // WorkerW is a generic class that other processes can use too, so verify
+    // each candidate instead of stopping at the first one.
+    HWND hWorkerW = nullptr;
+    while ((hWorkerW =
+                FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) !=
+           nullptr) {
+        HWND hDefViewW =
+            FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
+        if (!hDefViewW) {
+            continue;
+        }
+
+        HWND hListView =
+            FindWindowExW(hDefViewW, nullptr, L"SysListView32", nullptr);
+        if (IsDesktopListView(hListView)) {
+            return hListView;
+        }
     }
 
-    HWND hListView = FindWindowExW(hDefView, nullptr, L"SysListView32", nullptr);
-    return IsDesktopListView(hListView) ? hListView : nullptr;
+    return nullptr;
+}
+
+// Subclasses the desktop's SHELLDLL_DefView, which routes NM_CUSTOMDRAW to
+// the custom draw handler. Idempotent: returns true if already subclassed.
+bool SubclassShellView(HWND hShellView) {
+    if (!hShellView || hShellView == g_shellViewWnd.load()) {
+        return hShellView != nullptr;
+    }
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hShellView,
+                                                       ShellViewSubclassProc,
+                                                       0)) {
+        Wh_Log(L"Failed to subclass the desktop DefView");
+        return false;
+    }
+
+    g_shellViewWnd = hShellView;
+    return true;
 }
 
 void SubclassDesktop(HWND hListView) {
@@ -735,17 +764,14 @@ void SubclassDesktop(HWND hListView) {
 
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hListView,
                                                        ListViewSubclassProc, 0)) {
+        Wh_Log(L"Failed to subclass the desktop list view");
         return;
     }
 
-    if (hShellView != g_shellViewWnd.load()) {
-        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-                hShellView, ShellViewSubclassProc, 0)) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hListView,
-                                                             ListViewSubclassProc);
-            return;
-        }
-        g_shellViewWnd = hShellView;
+    if (!SubclassShellView(hShellView)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hListView,
+                                                         ListViewSubclassProc);
+        return;
     }
 
     g_listViewWnd = hListView;
@@ -759,25 +785,71 @@ void SubclassDesktop(HWND hListView) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// CreateWindowExW hook: catches the desktop list view when it's created
-// (desktop recreation, Explorer restart of the view, etc.)
+// CreateWindowExW hook: catches the desktop windows when they are created
+// (boot, desktop recreation, Explorer restart of the view, etc.)
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+// Nesting depth of CreateWindowExW calls on the current thread. Window
+// creation nests: the desktop list view is created inside its DefView's
+// WM_CREATE, which in turn creates tooltips and other children. Windows
+// become discoverable (and subclassable "successfully") while still being
+// constructed, but a subclass installed at that point does not function.
+// Attaching is therefore deferred until the depth returns to zero, i.e. no
+// creation is in flight on this thread anymore.
+static thread_local int g_createWindowHookDepth = 0;
 
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
                                  LPCWSTR lpWindowName, DWORD dwStyle, int X,
                                  int Y, int nWidth, int nHeight,
                                  HWND hWndParent, HMENU hMenu,
                                  HINSTANCE hInstance, LPVOID lpParam) {
+    g_createWindowHookDepth++;
     HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
                                          dwStyle, X, Y, nWidth, nHeight,
                                          hWndParent, hMenu, hInstance, lpParam);
+    g_createWindowHookDepth--;
 
-    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
-        _wcsicmp(lpClassName, L"SysListView32") == 0 &&
-        IsDesktopListView(hWnd)) {
-        SubclassDesktop(hWnd);
+    // True only when this hook body runs with no window creation still in
+    // flight on this thread, i.e. every existing window is fully constructed.
+    bool safeToAttach = (g_createWindowHookDepth == 0);
+
+    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (_wcsicmp(lpClassName, L"SHELLDLL_DefView") == 0) {
+            // The desktop's DefView is created before (or while creating) its
+            // list view child, so this is the primary boot-time attach point.
+            // Folder windows and common dialogs create DefViews too, so check
+            // the parent. Pattern follows smooth-desktop-icons-auto-hide.
+            if (safeToAttach && IsDesktopParent(GetParent(hWnd))) {
+                SubclassShellView(hWnd);
+                // The list view usually already exists at this point (it's
+                // created during the DefView's WM_CREATE); if not, the
+                // SysListView32 branch or the probe below catches it later.
+                HWND hListView =
+                    FindWindowExW(hWnd, nullptr, L"SysListView32", nullptr);
+                if (hListView && IsDesktopListView(hListView)) {
+                    SubclassDesktop(hListView);
+                }
+            }
+        } else if (_wcsicmp(lpClassName, L"SysListView32") == 0 &&
+                   safeToAttach && IsDesktopListView(hWnd)) {
+            SubclassDesktop(hWnd);
+        }
+    }
+
+    // Boot-time catch-up: if the desktop existed before the mod was loaded,
+    // or its creation was missed above, keep probing on subsequent window
+    // creations until the desktop is attached. Only attach from the desktop
+    // window's own thread at depth zero, so that the windows are fully
+    // constructed and no cross-thread creation race is possible.
+    if (safeToAttach && !g_listViewWnd.load(std::memory_order_relaxed)) {
+        HWND hDesktop = FindDesktopListView();
+        if (hDesktop &&
+            GetWindowThreadProcessId(hDesktop, nullptr) ==
+                GetCurrentThreadId()) {
+            SubclassDesktop(hDesktop);
+        }
     }
 
     return hWnd;
@@ -972,6 +1044,10 @@ void Wh_ModAfterInit() {
     HWND hListView = FindDesktopListView();
     if (hListView) {
         SubclassDesktop(hListView);
+    } else {
+        // Normal at boot: the desktop doesn't exist yet; the CreateWindowExW
+        // hook subclasses it as soon as it's created.
+        Wh_Log(L"No desktop list view yet, waiting for it to be created");
     }
 }
 
