@@ -627,7 +627,8 @@ constexpr ULONGLONG kMaxHoldMs = 400;
 constexpr double kDiscoveryRetryMs = 1000;
 constexpr double kDiscoveryRetrySlowMs = 10000;
 constexpr ULONGLONG kDiscoveryFastWindowMs = 60000;
-void WINAPI AttachAllTaskbars(void*);  // painter section
+void WINAPI AttachAllTaskbars(void*);          // painter section
+std::atomic<bool> g_taskbarMissingIsland{false};  // set by AttachAllTaskbars: a taskbar window it couldn't attach
 
 HANDLE g_trackerThread = nullptr;
 DWORD g_trackerThreadId = 0;
@@ -1317,12 +1318,18 @@ void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slow
         g_fastBlockedUntilStill = false;
     }
 
-    if (!haveIslands) {  // nothing to paint into yet: keep retrying discovery instead
-        SetPollTimer(now - g_trackerStartTick < kDiscoveryFastWindowMs ? kDiscoveryRetryMs : kDiscoveryRetrySlowMs);
-        return;
+    double interval = 0;
+    bool wantPoll = anyTarget || followUp;
+    if (wantPoll) interval = g_fastSince ? kFastPollMs : slowPollMs;
+    if (!haveIslands || g_taskbarMissingIsland) {  // a taskbar without an island: keep retrying discovery
+        double retry = now - g_trackerStartTick < kDiscoveryFastWindowMs ? kDiscoveryRetryMs : kDiscoveryRetrySlowMs;
+        interval = interval ? std::min(interval, retry) : retry;
     }
-    bool wantPoll = anyTarget || followUp || g_themeReassertAt != 0;
-    SetPollTimer(!wantPoll ? 0 : g_fastSince ? kFastPollMs : slowPollMs);
+    if (ULONGLONG due = g_themeReassertAt) {  // the re-assert runs at its deadline, not at the next poll
+        double left = std::max(1.0, due > now ? (double)(due - now) : 0.0);
+        interval = interval ? std::min(interval, left) : left;
+    }
+    SetPollTimer(interval);
 }
 
 void Tick() {
@@ -1333,9 +1340,11 @@ void Tick() {
     }
     Settings s = GetSettings();
     auto taskbars = SnapshotIslandWindows();
-    if (taskbars.empty()) {
-        // No island yet (Explorer just started, or a taskbar was rebuilt):
-        // attach directly from the taskbar windows, as Wh_ModAfterInit does.
+    if (taskbars.empty() || g_taskbarMissingIsland) {
+        // Some taskbar has no island yet (Explorer just started, a secondary
+        // taskbar wasn't ready when the others attached, a taskbar was
+        // rebuilt): attach directly from the taskbar windows, as
+        // Wh_ModAfterInit does.
         if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
             RunFromWindowThread(hTaskbarWnd, AttachAllTaskbars, nullptr);
             taskbars = SnapshotIslandWindows();
@@ -1363,8 +1372,8 @@ void Tick() {
     bool anyTarget = false;
     for (HWND tb : taskbars) ProcessTaskbar(tb, ctx, anyTarget);
 
-    if (ULONGLONG due = g_themeReassertAt; due && GetTickCount64() >= due) {
-        g_themeReassertAt = 0;
+    if (ULONGLONG due = g_themeReassertAt;
+        due && GetTickCount64() >= due && g_themeReassertAt.compare_exchange_strong(due, 0)) {
         for (HWND tb : taskbars) {
             auto it = g_track.find(tb);
             if (it != g_track.end() && it->second.active) {
@@ -1942,29 +1951,39 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
 
 // Attach to every taskbar owned by this (the taskbar) thread, straight from the
 // taskbar windows. Used at enable time and after settings changes.
+bool IsTaskbarWindowClass(HWND hWnd) {
+    WCHAR cls[32];
+    return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
+           (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+}
+
 void WINAPI AttachAllTaskbars(void*) try {
     if (g_unloading) return;
     PruneDeadIslands();
+    bool missing = false;
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM) -> BOOL {
+        [](HWND hWnd, LPARAM lp) -> BOOL {
+            bool& missing = *reinterpret_cast<bool*>(lp);
+            if (!IsTaskbarWindowClass(hWnd)) return TRUE;
+            bool attached = false;
             try {
                 auto xamlRoot = XamlRootOfTaskbarWindow(hWnd);
-                if (!xamlRoot) return TRUE;
-                auto rep = FindDescendantByName(xamlRoot.Content(), L"TaskbarFrameRepeater", 12);
-                if (!rep) {
-                    Wh_Log(L"taskbar %p: TaskbarFrameRepeater not found", hWnd);
-                    return TRUE;
+                if (xamlRoot) {
+                    auto rep = FindDescendantByName(xamlRoot.Content(), L"TaskbarFrameRepeater", 12);
+                    if (rep) attached = AttachIsland(rep, hWnd);
+                    else Wh_Log(L"taskbar %p: TaskbarFrameRepeater not found", hWnd);
                 }
-                AttachIsland(rep, hWnd);
             } catch (winrt::hresult_error const& e) {
                 Wh_Log(L"taskbar %p: attach failed: %08X", hWnd, e.code().value);
             } catch (...) {
                 Wh_Log(L"taskbar %p: attach failed", hWnd);
             }
+            if (!attached) missing = true;
             return TRUE;
         },
-        0);
+        reinterpret_cast<LPARAM>(&missing));
+    g_taskbarMissingIsland = missing;
 } catch (...) {
     Wh_Log(L"AttachAllTaskbars failed");
 }
