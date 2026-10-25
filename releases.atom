@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-25T17:31:25.000Z</updated>
+    <updated>2026-10-25T18:01:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Shortcut Arrow Overlays 1.0.0]]></title>
+        <id>https://windhawk.net/mods/remove-shortcut-arrows#99b2c90b8dcdc892d7bcbe4d5978e47dced3a0bb</id>
+        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
+        <updated>2026-10-25T18:01:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removeshortcutarrowoverlays">Remove Shortcut Arrow Overlays</h1>
+<p>Removes the shortcut arrow overlay from desktop and File Explorer icons cleanly
+in memory without modifying the Windows Registry.</p>
+<h3 id="whythisisbetterthantheregistrytweak">Why this is better than the Registry tweak:</h3>
+<ul>
+<li><strong>In-Place Overlay Replacement</strong>: Modifies Explorer's system image lists
+in-place with zero image slot leaks.</li>
+<li><strong>No Black Squares</strong>: The common registry tweak (<code>Shell Icons\29</code> pointing to
+a blank <code>.ico</code>) frequently causes visual bugs such as black squares on icons
+after icon cache updates or on high-DPI displays.</li>
+<li><strong>No Registry Tampering</strong>: Does not alter system registry keys and does not
+require copying files into <code>C:\Windows\System32</code>.</li>
+<li><strong>Zero Dependencies</strong>: Generates a 100% transparent icon dynamically in
+memory. No external <code>.ico</code> files are needed.</li>
+<li><strong>Instant Reversibility</strong>: Automatically restores the original Windows
+shortcut arrows when the mod is disabled or unloaded without an Explorer restart.</li>
+<li><strong>Optional Custom Icon</strong>: Allows using a custom badge or icon instead of a
+completely transparent one.</li>
+</ul>
+<h3 id="scopeprocessbehavior">Scope &amp; Process Behavior</h3>
+<ul>
+<li>System image lists are per-process, so this mod targets <code>explorer.exe</code> (Desktop
+and File Explorer). Shell Open/Save dialogs hosted inside other application
+processes retain their separate process image lists.</li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>Credit to the <strong>Hide Desktop Icon Text and Shortcut Arrows</strong> mod
+(<code>hide-desktop-icon-text</code>) by kivsak for the transparent GDI icon generation and
+shell image list technique.</li>
+</ul>]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Alt+Tab Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win-7-8-alt-tab-recreation#050499fc10276da12a825ffdf909175f4d43a87e</id>
@@ -1216,65 +1257,6 @@ Custom Shortcuts mod.</p>]]></content>
         <author>
             <name>Shaerif</name>
             <uri>https://github.com/Shaerif</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fullscreen Start (Launchpad style) 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fullscreen-start#6cea3b683d857f0cc4cf22360c2c07cdeff7b8f1</id>
-        <link href="https://windhawk.net/mods/fullscreen-start"/>
-        <updated>2026-10-22T10:02:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fullscreenstartlaunchpadstyle">Fullscreen Start (Launchpad style)</h1>
-<p><img src="https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/fullscreen-start.png" alt="Fullscreen Start" /></p>
-<p>Replaces the Windows Start menu with a screen in the style of the macOS
-Launchpad: all installed apps in a grid, with search at the top and a blurred
-background.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Fullscreen</strong>: takes the whole work area of the monitor where the mouse
-is, without covering the taskbar, other side bars or the Dock of the
-<strong>Standalone Dock (macOS-like)</strong> mod.</li>
-<li><strong>All apps</strong>: the same ones as the "All apps" list of Start (programs and
-Store apps), in alphabetical order, with icon and name.</li>
-<li><strong>Search</strong>: just type. The list is filtered instantly, ignoring case and
-accents; names that start with the text come first.</li>
-<li><strong>Adjustable blurred background</strong>: configurable strength, opacity and
-color.</li>
-</ul>
-<h2 id="howtoopen">How to open</h2>
-<p>Everything that would open the Windows Start menu opens this one instead:</p>
-<ul>
-<li>the <strong>Windows</strong> key and <strong>Ctrl+Esc</strong>;</li>
-<li>the <strong>Start button</strong> of the taskbar, or of the Dock of the Standalone Dock
-mod.</li>
-</ul>
-<p>The mod hooks the function Explorer uses to show Start
-(<code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code>), so the original
-Start doesn't open at all. Windhawk downloads the symbols of that file the
-first time the mod loads.</p>
-<h2 id="keyboardandmouse">Keyboard and mouse</h2>
-<ul>
-<li>Type to search; <strong>Backspace</strong> deletes, <strong>Ctrl+Backspace</strong> deletes the last
-word, <strong>Ctrl+V</strong> pastes.</li>
-<li><strong>Arrows</strong> select an app, <strong>Enter</strong> opens the selected one (while
-searching, the first result is already selected).</li>
-<li><strong>Esc</strong> clears the search; with an empty search, it closes.</li>
-<li>The mouse wheel or <strong>Page Up/Page Down</strong> scroll the list.</li>
-<li>Clicking outside the icons or switching windows closes it.</li>
-</ul>
-<h2 id="blur">Blur</h2>
-<ul>
-<li><strong>Adjustable</strong> (default): the mod takes a screenshot the moment it opens
-and blurs it with the chosen strength. The background stays still while
-Start is open.</li>
-<li><strong>Acrylic</strong> and <strong>Windows blur</strong>: the effect is applied by DWM composition
-and follows what changes behind it. Windows doesn't allow changing the
-strength of that blur, so the strength setting doesn't apply to them.</li>
-<li><strong>No blur</strong>: only the color on top.</li>
-</ul>
-<p>Changes to the settings apply the next time Start opens.</p>]]></content>
-        <author>
-            <name>Rafael Mendes</name>
-            <uri>https://github.com/RafaelMendes1407</uri>
         </author>
     </entry>
 </feed>

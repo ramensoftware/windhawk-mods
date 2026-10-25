@@ -12833,6 +12833,30 @@
         "version": "1.0"
       }
     },
+    "remove-shortcut-arrows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792951318000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792951318000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-lgdi32",
+        "description": "Removes shortcut arrow overlays from desktop and File Explorer icons cleanly in memory.",
+        "github": "https://github.com/Dev-StudioCode",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Remove Shortcut Arrow Overlays",
+        "version": "1.0.0"
+      }
+    },
     "remove-spotlight-shortcut": {
       "details": {
         "defaultSorting": 575,

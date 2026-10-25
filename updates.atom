@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T17:31:25.000Z</updated>
+    <updated>2026-10-25T18:01:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Shortcut Arrow Overlays 1.0.0]]></title>
+        <id>https://windhawk.net/mods/remove-shortcut-arrows#99b2c90b8dcdc892d7bcbe4d5978e47dced3a0bb</id>
+        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
+        <updated>2026-10-25T18:01:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removeshortcutarrowoverlays">Remove Shortcut Arrow Overlays</h1>
+<p>Removes the shortcut arrow overlay from desktop and File Explorer icons cleanly
+in memory without modifying the Windows Registry.</p>
+<h3 id="whythisisbetterthantheregistrytweak">Why this is better than the Registry tweak:</h3>
+<ul>
+<li><strong>In-Place Overlay Replacement</strong>: Modifies Explorer's system image lists
+in-place with zero image slot leaks.</li>
+<li><strong>No Black Squares</strong>: The common registry tweak (<code>Shell Icons\29</code> pointing to
+a blank <code>.ico</code>) frequently causes visual bugs such as black squares on icons
+after icon cache updates or on high-DPI displays.</li>
+<li><strong>No Registry Tampering</strong>: Does not alter system registry keys and does not
+require copying files into <code>C:\Windows\System32</code>.</li>
+<li><strong>Zero Dependencies</strong>: Generates a 100% transparent icon dynamically in
+memory. No external <code>.ico</code> files are needed.</li>
+<li><strong>Instant Reversibility</strong>: Automatically restores the original Windows
+shortcut arrows when the mod is disabled or unloaded without an Explorer restart.</li>
+<li><strong>Optional Custom Icon</strong>: Allows using a custom badge or icon instead of a
+completely transparent one.</li>
+</ul>
+<h3 id="scopeprocessbehavior">Scope &amp; Process Behavior</h3>
+<ul>
+<li>System image lists are per-process, so this mod targets <code>explorer.exe</code> (Desktop
+and File Explorer). Shell Open/Save dialogs hosted inside other application
+processes retain their separate process image lists.</li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>Credit to the <strong>Hide Desktop Icon Text and Shortcut Arrows</strong> mod
+(<code>hide-desktop-icon-text</code>) by kivsak for the transparent GDI icon generation and
+shell image list technique.</li>
+</ul>]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Alt+Tab Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win-7-8-alt-tab-recreation#050499fc10276da12a825ffdf909175f4d43a87e</id>
@@ -863,21 +904,6 @@ Traditional Chinese falls back to English (can be chosen manually).</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.2.0]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#f6935fd18ae8941fe2ad6da3803b1329433aee0f</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-10-24T12:03:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: close animation. When a window closes it flows to the top, bottom, left or right edge of its screen. Contributed by MrCrustyToast.</li>
-<li>New: optional close animation for apps that hide to the tray instead of closing.</li>
-<li>Close and app-launch animations are now on by default, and the classic genie is the default style.</li>
-</ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
