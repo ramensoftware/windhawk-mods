@@ -12404,19 +12404,19 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 2.6215177491963875,
-        "updated": 1791212599000,
+        "updated": 1792955014000,
         "users": 916
       },
       "metadata": {
         "author": "cheliks1123",
-        "compilerOptions": "-lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -loleaut32 -ldwmapi -lcomctl32",
+        "compilerOptions": "-lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -loleaut32 -ldwmapi -lcomctl32 -ladvapi32 -lwininet",
         "description": "A slim animated dock on the screen edge: drop a shortcut or pick a program with \"+\", then launch it in one click",
         "github": "https://github.com/cheliks1123",
         "include": [
           "windhawk.exe"
         ],
         "name": "Quick Launch Dock",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "quick-launch-media-panel": {

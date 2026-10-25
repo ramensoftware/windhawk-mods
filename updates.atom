@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T18:17:20.000Z</updated>
+    <updated>2026-10-25T19:03:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Launch Dock 1.1.0]]></title>
+        <id>https://windhawk.net/mods/quick-launch-dock#5483048714c0596d3ecfc91670898c77b60d0ead</id>
+        <link href="https://windhawk.net/mods/quick-launch-dock"/>
+        <updated>2026-10-25T19:03:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Up to four dock panels (right, left, top, bottom) in any combination, each with its own independent list of programs.</li>
+<li>Icons can be reordered by pressing and holding an icon and dragging it along the dock, or onto another panel. All panels slide out while you drag.</li>
+<li>Panel size settings: panel thickness, space around each icon and panel inner padding, set separately from the icon size.</li>
+<li>Websites can be added as slots from the "Add to the dock" item of the right-click menu, or by pasting a link from the clipboard. A click opens the address in the default browser.</li>
+<li>Websites get a gray globe icon. The optional "Download site icons" setting (off by default) lets the mod request only the site's own /favicon.ico in the background: a spinner is shown while it downloads and the globe stays if it cannot be downloaded. No third-party servers are contacted.</li>
+<li>Downloaded site icons that blend in with the panel color get a light or dark backing so they stay visible.</li>
+<li>Seven animation styles: Slide and pop (default), Jelly, Ripple, Fade, Genie, Oval and Droplet.</li>
+<li>Added an animation speed setting (default 25%) that applies to every style.</li>
+<li>Icon magnification under the cursor, like in macOS, works with any animation style.</li>
+<li>Panel opacity setting (10-100%, the icons stay opaque) and a glass style.</li>
+<li>Change icon / Reset icon in the right-click menu (PNG, JPG, BMP, GIF, ICO). The choice is remembered.</li>
+<li>Shortcut icons are taken from the shortcut target, so the shortcut arrow overlay is no longer shown.</li>
+<li>The "+" slot can be hidden in the settings. Items can still be added by drag and drop or from the "Add to the dock" item of the right-click menu of any icon.</li>
+<li>The dock lists are now stored separately for every Windows account. The first account that starts this version takes over the list saved by earlier versions.</li>
+<li>Fixed Chrome not starting and programs launching slowly: programs are now launched through Explorer.</li>
+<li>Fixed black squares behind icons.</li>
+<li>The old "Screen side" setting was removed. The list saved by previous versions stays on the right panel, so users who kept the dock on the left will see their list on the right panel.</li>
+<li>Added an animation refresh rate setting (Auto, 120, 144, 180, 240 or 360 Hz), useful for laptops whose refresh rate changes.</li>
+<li>Corner radius setting for the panel.</li>
+<li>"Follow the Windows theme" option: takes light/dark colors and the accent color from Windows and updates when the theme changes.</li>
+<li>Optional dot on icons of running programs (on by default).</li>
+<li>Small press effect when you click an icon.</li>
+</ul>]]></content>
+        <author>
+            <name>cheliks1123</name>
+            <uri>https://github.com/cheliks1123</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.7.2]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#12b5a5cebac0d359e06df2efdb1aa0c4014c86a2</id>
@@ -829,79 +863,6 @@ text, so only one of them can win. Pick one of the two.</li>
         <author>
             <name>MrAlexFreeman</name>
             <uri>https://github.com/MrAlexFreeman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Animation 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-hover-animations#1d74732f9dd03c1a6f029404bd1d29cbd09567f1</id>
-        <link href="https://windhawk.net/mods/taskbar-hover-animations"/>
-        <updated>2026-10-24T14:05:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbariconanimation">Taskbar Icon Animation</h1>
-<p><img src="https://i.imgur.com/nHvCbY5.gif" alt="Preview" />
-<img src="https://i.imgur.com/YyZFtgA.gif" alt="Preview" /></p>
-<p>When the mouse hovers over a taskbar icon, an animation plays on a transparent
-overlay above the icon (the overlay does not block clicks).</p>
-<h2 id="effects">Effects</h2>
-<ul>
-<li><strong>Heartbeat</strong>: Grows and shrinks twice in a "lub-dub" rhythm, with a red/pink halo flashing behind it.</li>
-<li><strong>Flash</strong>: White glow plus a lens flare, double flash.</li>
-<li><strong>Ripple</strong>: 3 rings spreading out from around the icon.</li>
-<li><strong>Neon glow</strong>: A rainbow halo that changes color.</li>
-<li><strong>Sparkle</strong>: Glints appearing randomly around the icon.</li>
-<li><strong>Bounce</strong>: 3 damped bounces.</li>
-<li><strong>Wobble</strong>: A damped side-to-side wobble.</li>
-<li><strong>Spin</strong>: A full rotation while growing slightly, with a ring appearing around it.</li>
-<li><strong>Jelly</strong>: A jelly-like squash and stretch that gradually settles.</li>
-<li><strong>Flip</strong>: Flips around the horizontal axis like a coin.</li>
-<li><strong>Shake</strong>: A fast horizontal shake.</li>
-<li><strong>Confetti</strong>: A burst of colorful confetti.</li>
-<li><strong>Bubbles</strong>: Soap bubbles rising from below the icon.</li>
-<li><strong>Love</strong>: A heartbeat plus hearts floating upward.</li>
-<li><strong>Random / Cycle</strong>: A different effect on every hover.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Works on both the Windows 10 and Windows 11 taskbar (button positions are found with UI Automation).</li>
-<li>The mod runs in its own dedicated process, not inside Explorer, so a problem in the mod cannot crash the shell.</li>
-<li>Animations are not played over fullscreen apps.</li>
-<li>The animation is played on the overlay using a screenshot of the icon, so if the
-icon is very dark or the same color as the background, its edges may look soft.</li>
-<li>When "App buttons only" is enabled, Start, Search, tray icons, etc. are not animated.</li>
-</ul>
-<hr />
-<h1 id="grevubuukonanimasyonu">Görev Çubuğu İkon Animasyonu</h1>
-<p>Fare görev çubuğundaki bir ikonun üzerine geldiğinde, ikonun üstünde (tıklamayı
-engellemeyen) şeffaf bir katman üzerinde animasyon oynatır.</p>
-<h2 id="efektler">Efektler</h2>
-<ul>
-<li><strong>Kalp atışı</strong>: "lub-dub" şeklinde iki kez büyüyüp küçülür, arkasında kırmızı/pembe halo yanıp söner.</li>
-<li><strong>Flaş</strong>: Beyaz parlama + mercek yıldızı (lens flare), çift flaş.</li>
-<li><strong>Dalga</strong>: İkonun etrafından yayılan 3 halka.</li>
-<li><strong>Neon parıltı</strong>: Renk değiştiren gökkuşağı halo.</li>
-<li><strong>Yıldız parıltısı</strong>: İkonun etrafında rastgele beliren ışıltılar.</li>
-<li><strong>Zıplama</strong>: Sönümlenen 3 zıplama.</li>
-<li><strong>Sallanma</strong>: Sağa sola sönümlenen sallanma.</li>
-<li><strong>Dönüş</strong>: Tam tur dönerken hafifçe büyür, etrafında halka belirir.</li>
-<li><strong>Jöle</strong>: Sıkışıp gerilerek sönümlenen jöle gibi esneme.</li>
-<li><strong>Çevirme</strong>: Madeni para gibi yatay eksende çevrilir.</li>
-<li><strong>Titreme</strong>: Hızlı yatay titreme.</li>
-<li><strong>Konfeti</strong>: Renkli konfeti patlaması.</li>
-<li><strong>Baloncuklar</strong>: İkonun altından yükselen sabun köpüğü baloncukları.</li>
-<li><strong>Aşk</strong>: Kalp atışı ve yukarı süzülen kalpler.</li>
-<li><strong>Rastgele / Sırayla</strong>: Her hover'da farklı efekt.</li>
-</ul>
-<h2 id="notlar">Notlar</h2>
-<ul>
-<li>Windows 10 ve Windows 11 görev çubuğunda çalışır (UI Automation ile düğme konumu bulunur).</li>
-<li>Mod, Explorer'ın içinde değil kendi ayrı sürecinde çalışır. Bu yüzden modda bir sorun olsa bile kabuk çökmez.</li>
-<li>Tam ekran uygulamaların üstünde animasyon oynatılmaz.</li>
-<li>Animasyon, ikonun ekran görüntüsü alınarak katmanda oynatılır; bu yüzden
-ikon çok koyu/arka planla aynı renkteyse kenarlar yumuşak görünebilir.</li>
-<li>"Sadece uygulama düğmeleri" açıksa Başlat, Arama, tepsi ikonları vb. animasyon almaz.</li>
-</ul>]]></content>
-        <author>
-            <name>DahaSakinOlamazdim</name>
-            <uri>https://github.com/DahaSakinOlamazdim</uri>
         </author>
     </entry>
 </feed>
