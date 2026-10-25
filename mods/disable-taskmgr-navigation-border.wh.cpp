@@ -79,27 +79,22 @@ BOOL Wh_ModInit() {
 
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
-            {L"private: void __cdecl AtmView::SetBorderUponNavigationForColumnHeader(void)",
-             L"private: void AtmView::SetBorderUponNavigationForColumnHeader(void)"},
+            { L"private: void __cdecl AtmView::SetBorderUponNavigationForColumnHeader(void)" },
             &SetBorderUponNavigationForColumnHeader_Original,
             SetBorderUponNavigationForColumnHeader_Hook,
         },
         {
-            {L"private: void __cdecl AtmView::SetBorderUponNavigationForListRow(void)",
-             L"private: void AtmView::SetBorderUponNavigationForListRow(void)"},
+            { L"private: void __cdecl AtmView::SetBorderUponNavigationForListRow(void)" },
             &SetBorderUponNavigationForListRow_Original,
             SetBorderUponNavigationForListRow_Hook,
         },
         {
-            {L"private: void __cdecl AtmView::SetBorderUponNavigationForListRowWithColumnTraversal(void)",
-             L"private: void AtmView::SetBorderUponNavigationForListRowWithColumnTraversal(void)"},
+            { L"private: void __cdecl AtmView::SetBorderUponNavigationForListRowWithColumnTraversal(void)" },
             &SetBorderUponNavigationForListRowWithColumnTraversal_Original,
             SetBorderUponNavigationForListRowWithColumnTraversal_Hook,
         },
         {
-            {L"?SetBorderUponNavigatingIntoElement@@YAXPEAVElement@DirectUI@@@Z",
-             L"void __cdecl SetBorderUponNavigatingIntoElement(class DirectUI::Element *)",
-             L"void __cdecl SetBorderUponNavigatingIntoElement(DirectUI::Element *)"},
+            { L"void __cdecl SetBorderUponNavigatingIntoElement(class DirectUI::Element *)" },
             &SetBorderUponNavigatingIntoElement_Original,
             SetBorderUponNavigatingIntoElement_Hook,
         },
