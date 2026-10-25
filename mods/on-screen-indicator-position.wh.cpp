@@ -75,13 +75,15 @@ says so on a build where the entry points have moved.
 
 ## Independent offsets and display profiles
 
-Each indicator can inherit either main offset or use its own value, including
-zero. Its position can also be left at the Windows default independently.
+Each indicator can use the main horizontal and vertical offsets, or its own
+values, including zero. Each one can also stay at the Windows default position
+while the others move.
 
-Display profiles select placement for the screen Windows already chose. Match
-an interface-name fragment, a connected-monitor count, and optionally one kind
-of indicator. The first enabled match wins; fields left inherited keep the
-indicator settings. For example, use a different position with a dock connected.
+Display profiles change the placement on the screen Windows already chose. A
+profile can match part of the monitor's name, the number of monitors in use, and
+one kind of indicator. The first enabled profile that matches wins, and anything
+it leaves on "Keep" uses the indicator settings. For example, use a different
+position when a dock is connected.
 
 **Seconds on screen** changes the indicator's one-shot timeout from 1 to 60
 seconds. Leave it at 0 to keep the Windows timeout. It does not change animations.
@@ -108,11 +110,8 @@ a monitor by number or by interface name. The two work together.
   Skipping the slide out makes it easier to catch rather than harder, since what
   lands at the new spot is the tail end of the previous indicator instead of an
   empty frame.
-* Placement regression tests also cover builds 26200.9807 and 26300.9807 x64.
-  Windows 10 and older Windows 11 builds without HardwareConfirmator are outside
-  this mod's scope. Build 28000 has not been verified on hardware.
-* The original placement was tested on Windows 11 build 26200 (25H2) x64,
-  on a 100% and a 150% display.
+* Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
+  Build 26300 uses the same confirmator, so it should behave the same.
   The ARM64 hooks were checked against the disassembly of the confirmator DLL
   but not run on hardware, so if you use it there please let me know how it
   goes.
@@ -170,7 +169,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Volume
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -184,7 +183,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Brightness
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -198,7 +197,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Keyboard brightness
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -212,7 +211,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Airplane mode
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -226,7 +225,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Camera
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -240,7 +239,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Microphone
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -254,7 +253,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Other indicators
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -268,7 +267,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Virtual desktop name
     $options:
     - same: Same as the main position
-    - windowsDefault: Windows default (ignore the main position)
+    - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
     - topRight: Top right
@@ -424,7 +423,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       $description: Optional unique part of the monitor interface name, or its display name such as DISPLAY1. Leave empty to match any monitor. Enable mod logs to see names.
     - monitorCount: 0
       $name: Number of connected monitors
-      $description: 0 matches any setup. For example, 1 matches your laptop alone and 2 matches a docked setup.
+      $description: 0 matches any setup. Counts the monitors Windows is using for the desktop, so a mirrored pair counts as one, and a closed laptop with one external screen also counts as one. Use the monitor name to tell such setups apart.
     - indicator: all
       $name: Indicator
       $options:
@@ -578,7 +577,9 @@ public:
 bool AnyPerIndicator(const Settings& settings) {
     for (size_t i = 0; i < (size_t)Indicator::count; i++) {
         if (settings.perIndicator[i] != Position::inherit ||
-            settings.offsets[i].customX || settings.offsets[i].customY) return true;
+            settings.offsets[i].customX || settings.offsets[i].customY) {
+            return true;
+        }
     }
     return !settings.profiles.empty();
 }
@@ -644,8 +645,10 @@ Placement ResolvePlacement(const Settings& settings, Indicator kind,
             bool matched = false;
             for (size_t start = 0; start + needle <= length; ++start) {
                 if (CompareStringOrdinal(monitorName + start, (int)needle,
-                    profile.monitor.c_str(), (int)needle, TRUE) == CSTR_EQUAL) {
-                    matched = true; break;
+                                         profile.monitor.c_str(), (int)needle,
+                                         TRUE) == CSTR_EQUAL) {
+                    matched = true;
+                    break;
                 }
             }
             if (!matched) continue;
@@ -904,61 +907,18 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     return ConfirmatorHostControl_Hide_Original(pThis);
 }
 
-// A hidden USER32-owned probe gives the exact monitor DPI, including custom
-// scaling, without calling GetDpiForMonitor from Explorer's per-monitor thread.
-// It has no callback or user-data pointer into this mod, so closing it by message
-// during unload cannot leave executable code pointing into an unloaded module.
-constexpr PCWSTR kDpiProbeProperty = L"mario0318.OSI.DpiProbe";
-std::atomic<HWND> g_dpiProbe{nullptr};
+// GetDpiForMonitor returns the real effective DPI only to a per-monitor aware
+// caller, so make sure of that for the call and restore the thread's own context.
 UINT QueryMonitorDpi(HMONITOR monitor) {
-    using SetContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    using GetDpi_t = UINT(WINAPI*)(HWND);
-    static const auto setContext = (SetContext_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
-    static const auto getDpi = (GetDpi_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
-    thread_local bool querying = false;
-    UINT dpi = 0;
-    if (!querying && setContext && getDpi) {
-        querying = true;
-        ResetOnExit reset{querying};
-        auto previous = setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        if (!previous) previous = setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
-        if (previous) {
-            MONITORINFO info{sizeof(info)};
-            if (GetMonitorInfoW(monitor, &info)) {
-                HWND window = g_dpiProbe.load();
-                if (window && GetPropW(window, kDpiProbeProperty) != (HANDLE)1) {
-                    HWND stale = window;
-                    g_dpiProbe.compare_exchange_strong(stale, nullptr);
-                    window = g_dpiProbe.load();
-                }
-                if (!window) {
-                    window = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"",
-                        WS_POPUP | WS_DISABLED, info.rcMonitor.left+1, info.rcMonitor.top+1,
-                        1,1,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
-                    if (window && !SetPropW(window, kDpiProbeProperty, (HANDLE)1)) {
-                        DestroyWindow(window); window = nullptr;
-                    }
-                    HWND empty = nullptr;
-                    if (window && !g_dpiProbe.compare_exchange_strong(empty, window)) {
-                        DestroyWindow(window); window = empty;
-                    }
-                }
-                if (window && GetPropW(window, kDpiProbeProperty) == (HANDLE)1 &&
-                    GetWindowThreadProcessId(window, nullptr) == GetCurrentThreadId()) {
-                    SetWindowPos(window, nullptr, info.rcMonitor.left+1, info.rcMonitor.top+1,
-                        1,1,SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-                    dpi = getDpi(window);
-                }
-            }
-            setContext(previous);
-        }
+    DPI_AWARENESS_CONTEXT previous =
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    UINT dpiX = 0;
+    UINT dpiY = 0;
+    HRESULT hr = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    if (previous) {
+        SetThreadDpiAwarenessContext(previous);
     }
-    if (!dpi) {
-        DEVICE_SCALE_FACTOR scale = SCALE_100_PERCENT;
-        GetScaleFactorForMonitor(monitor, &scale);
-        dpi = (UINT)MulDiv((int)scale, 96, 100);
-    }
-    return dpi ? dpi : 96;
+    return SUCCEEDED(hr) && dpiX ? dpiX : 96;
 }
 
 void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
@@ -1047,10 +1007,10 @@ Position PositionFromString(PCWSTR value, Position fallback = Position::windowsD
     }
 
     // A stale or mistyped stored value would otherwise look like the mod simply
-    // isn't working. "same" is a valid per-indicator value, handled by the caller.
-    if (*value && wcscmp(value, L"windowsDefault") != 0 &&
-        wcscmp(value, L"same") != 0) {
-        Wh_Log(L"Unknown position \"%s\", using the inherited/default position", value);
+    // isn't working.
+    if (wcscmp(value, L"windowsDefault") != 0) {
+        Wh_Log(L"Unknown position \"%s\", using the inherited/default position",
+               value);
         return fallback;
     }
 
@@ -1085,17 +1045,24 @@ void LoadSettings() {
         settings->perIndicator[i] = PositionFromString(position.get(), Position::inherit);
         settings->offsets[i] = LoadOffsets(std::wstring(L"indicatorOffsets.") + names[i]);
     }
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0;; ++i) {
         const auto prefix = L"displayProfiles[" + std::to_wstring(i) + L"]";
         auto kind = WindhawkUtils::StringSetting::make((prefix + L".indicator").c_str());
+        // Every stored entry has an indicator value, so an empty one is the end
+        // of the array.
+        if (!*kind.get()) break;
 
         if (!Wh_GetIntSetting((prefix + L".enabled").c_str())) continue;
         DisplayProfile profile;
         profile.monitor = WindhawkUtils::StringSetting::make((prefix + L".monitor").c_str()).get();
-        profile.monitorCount = std::clamp(Wh_GetIntSetting((prefix + L".monitorCount").c_str()), 0, 64);
-        bool valid = !*kind.get() || wcscmp(kind.get(), L"all") == 0;
+        profile.monitorCount = std::clamp(
+            Wh_GetIntSetting((prefix + L".monitorCount").c_str()), 0, 64);
+        bool valid = wcscmp(kind.get(), L"all") == 0;
         for (size_t j = 0; j < ARRAYSIZE(names); ++j) {
-            if (wcscmp(kind.get(), names[j]) == 0) { profile.indicator = (Indicator)j; valid = true; }
+            if (wcscmp(kind.get(), names[j]) == 0) {
+                profile.indicator = (Indicator)j;
+                valid = true;
+            }
         }
         if (!valid) continue;
         auto position = WindhawkUtils::StringSetting::make((prefix + L".position").c_str());
@@ -1123,19 +1090,32 @@ FILETIME* AdjustDueTime(void* caller, const FILETIME* due, DWORD period,
     value.HighPart = due->dwHighDateTime;
     if (value.QuadPart > -10000000LL || value.QuadPart < -600000000LL)
         return const_cast<FILETIME*>(due);
+    Wh_Log(L"Indicator timeout %lld ms -> %d ms", -value.QuadPart / 10000,
+           seconds * 1000);
     value.QuadPart = -10000000LL * seconds;
     adjusted = {value.LowPart, (DWORD)value.HighPart};
     return &adjusted;
 }
 decltype(&SetThreadpoolTimer) SetThreadpoolTimer_Original;
-void WINAPI SetThreadpoolTimer_Hook(PTP_TIMER timer, PFILETIME due, DWORD period, DWORD window) {
+void WINAPI SetThreadpoolTimer_Hook(PTP_TIMER timer,
+                                    PFILETIME due,
+                                    DWORD period,
+                                    DWORD window) {
     FILETIME adjusted;
-    SetThreadpoolTimer_Original(timer, AdjustDueTime(__builtin_return_address(0), due, period, adjusted), period, window);
+    FILETIME* dueTime =
+        AdjustDueTime(__builtin_return_address(0), due, period, adjusted);
+    SetThreadpoolTimer_Original(timer, dueTime, period, window);
 }
+
 decltype(&SetThreadpoolTimerEx) SetThreadpoolTimerEx_Original;
-BOOL WINAPI SetThreadpoolTimerEx_Hook(PTP_TIMER timer, PFILETIME due, DWORD period, DWORD window) {
+BOOL WINAPI SetThreadpoolTimerEx_Hook(PTP_TIMER timer,
+                                      PFILETIME due,
+                                      DWORD period,
+                                      DWORD window) {
     FILETIME adjusted;
-    return SetThreadpoolTimerEx_Original(timer, AdjustDueTime(__builtin_return_address(0), due, period, adjusted), period, window);
+    FILETIME* dueTime =
+        AdjustDueTime(__builtin_return_address(0), due, period, adjusted);
+    return SetThreadpoolTimerEx_Original(timer, dueTime, period, window);
 }
 
 BOOL Wh_ModInit() {
@@ -1369,12 +1349,17 @@ BOOL Wh_ModInit() {
         Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
     }
 
-    // These exports are stable Win32 APIs; failure is visible and never prevents
-    // the placement feature from loading.
-    if (!WindhawkUtils::SetFunctionHook(SetThreadpoolTimer, SetThreadpoolTimer_Hook,
-                                       &SetThreadpoolTimer_Original) ||
-        !WindhawkUtils::SetFunctionHook(SetThreadpoolTimerEx, SetThreadpoolTimerEx_Hook,
-                                       &SetThreadpoolTimerEx_Original)) {
+    // Every threadpool timer in Explorer goes through these hooks, so they are
+    // only installed while Seconds on screen is in use. Turning it on or off
+    // reloads the mod (see Wh_ModSettingsChanged). Failure is logged and never
+    // prevents the placement feature from loading.
+    if (settings->durationSeconds &&
+        (!WindhawkUtils::SetFunctionHook(SetThreadpoolTimer,
+                                         SetThreadpoolTimer_Hook,
+                                         &SetThreadpoolTimer_Original) ||
+         !WindhawkUtils::SetFunctionHook(SetThreadpoolTimerEx,
+                                         SetThreadpoolTimerEx_Hook,
+                                         &SetThreadpoolTimerEx_Original))) {
         Wh_Log(L"Duration timer hook unavailable; Windows timeout may be retained");
     }
     return TRUE;
@@ -1383,20 +1368,20 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (HWND probe = g_dpiProbe.exchange(nullptr)) {
-        if (GetPropW(probe, kDpiProbeProperty) == (HANDLE)1) PostMessageW(probe, WM_CLOSE, 0, 0);
-    }
     if (g_hardwareConfirmatorModule) {
         FreeLibrary(g_hardwareConfirmatorModule);
         g_hardwareConfirmatorModule = nullptr;
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
+    const bool hadDuration = g_settings.duration() != 0;
     LoadSettings();
     const auto settings = g_settings.load();
+    // Reload to install or remove the timer hooks.
+    *bReload = hadDuration != (settings->durationSeconds != 0);
     if (g_kindUnreliable && AnyPerIndicator(*settings)) {
         Wh_Log(L"%s", kKindUnreliableMessage);
     }
@@ -1410,4 +1395,6 @@ void Wh_ModSettingsChanged() {
             Position::inherit) {
         Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
     }
+
+    return TRUE;
 }
