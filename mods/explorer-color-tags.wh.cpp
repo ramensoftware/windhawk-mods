@@ -8,8 +8,8 @@
 // @homepage        https://github.com/renegadefree/explorer-tags
 // @license         MIT
 // @include         explorer.exe
-// @architecture    amd64
-// @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -lshlwapi -lpropsys -lcomctl32 -lgdi32 -lgdiplus -ladvapi32
+// @architecture    x86-64
+// @compilerOptions -lole32 -luuid -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lgdiplus -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,30 +19,28 @@
 This is a fork of
 [Explorer Tags](https://github.com/buedgik/explorer-tags), extended with:
 
-![Colored dots and tags column](https://raw.githubusercontent.com/renegadefree/explorer-tags/main/docs/explorer-color-tags.png)
-
-![Tags in the classic context menu](https://raw.githubusercontent.com/renegadefree/explorer-tags/main/docs/menu.png)
-
 - `Alt+1` through `Alt+8` assign a tag to the selected files.
 - `Alt+0` removes every tag from the selected files.
-- Colored dots are drawn next to tagged items in File Explorer.
-- A native **Tags** column is added to Details view as a canvas for compact
+- Colored dots are drawn next to tagged items in File Explorer and on the Desktop.
+- A native **Tags** column can be displayed in Details view as a canvas for compact
   colored pills drawn by the mod.
 - The original context menu remains. The navigation-pane Tags section is
   removed because it opens cross-folder shortcut views.
 
-The mod keeps the original shortcut-folder record as a rebuildable index, so
-tags remain valid for every extension and folder. That record is not shown in
-the navigation pane. Tags are not written to `System.Keywords`, so tile files,
-ZIP archives, executables and folders all use the same visual path.
+The mod keeps an internal shortcut-folder record as a rebuildable index, so
+tags remain valid for every extension and folder. That record is stored in
+Windhawk's internal mod storage directory and is not shown in the navigation pane.
+Tags are not written to `System.Keywords`, so tile files, ZIP archives,
+executables and folders all use the same visual path without modifying file contents.
 
 Hotkeys only act while an Explorer file view is in the foreground. The classic
 context menu is required for the **Tags** submenu; Windows 11's new menu is not
 changed.
 
-Do not place the tags folder in OneDrive, Dropbox or another actively synced
-location. A shortcut that disappears during synchronization is interpreted as
-a removed tag.
+Explorer saves column configurations per folder in view state (Bags), so
+folders visited while the "Automatically add Tags column" option is enabled
+retain the column until manually removed by right-clicking the column header
+and unchecking "Tags".
 */
 // ==/WindhawkModReadme==
 
@@ -74,7 +72,7 @@ a removed tag.
   $name: Internal tags storage
   $description: >-
     Where the internal shortcut record goes. It is not shown in the navigation
-    pane. Empty uses %USERPROFILE%\Tags.
+    pane. Empty uses the mod's internal storage in Windhawk's application data folder.
 
     Changing this rebuilds the shortcuts under the new folder and leaves the
     old one behind. Avoid synced folders (OneDrive, Dropbox, network shares):
@@ -88,7 +86,15 @@ a removed tag.
   $description: >-
     If enabled, automatically adds the native Tags column to all folders
     in Details view. If disabled (default), you choose which folders display
-    it by right-clicking the column header and checking/unchecking "Tag".
+    it by right-clicking the column header and checking/unchecking "Tags".
+    Note: Explorer saves column configurations per folder in view state (Bags),
+    so folders visited while enabled keep the column until manually removed.
+- explorerDotSize: 10
+  $name: File Explorer dot size
+  $description: Diameter of the colored dots next to file names in File Explorer, in logical pixels at 100% DPI (default is 10).
+- desktopDotSize: 8
+  $name: Desktop dot size
+  $description: Diameter of the colored dots next to items on the Desktop, in logical pixels at 100% DPI (default is 8).
 */
 // ==/WindhawkModSettings==
 
@@ -126,7 +132,6 @@ a removed tag.
 extern IMAGE_DOS_HEADER __ImageBase;
 #define THIS_MODULE ((HINSTANCE)&__ImageBase)
 
-#define PANEL_CLASS L"WhExplorerTagsPanel"
 #define CWM_GETISHELLBROWSER (WM_USER + 7)
 #define TIMER_REPAINT 1
 
@@ -149,8 +154,9 @@ struct TagDef {
 struct Settings {
     std::vector<TagDef> tags;
     std::wstring root;
-    int maxRows = 8;
     int tagColumnWidth = 160;
+    int explorerDotSize = 10;
+    int desktopDotSize = 8;
     bool autoAddTagColumn = false;
 };
 
@@ -313,7 +319,7 @@ void LoadSettings() {
     auto folder = WindhawkUtils::StringSetting::make(L"folder");
     std::wstring root = Trim(folder.get());
     if (root.empty()) {
-        root = L"%USERPROFILE%\\Tags";
+        root = DbFolder() + L"\\Tags";
     }
     WCHAR expanded[MAX_PATH * 2];
     DWORD n = ExpandEnvironmentStringsW(root.c_str(), expanded, ARRAYSIZE(expanded));
@@ -356,21 +362,28 @@ void LoadSettings() {
     // explorer.exe's current folder, which is System32).
     if (!valid || PathIsRootW(root.c_str()) || root.size() <= 3) {
         Wh_Log(L"Invalid tags folder (%s), using the default", root.c_str());
-        n = ExpandEnvironmentStringsW(L"%USERPROFILE%\\Tags", expanded, ARRAYSIZE(expanded));
-        root = (n > 0 && n <= ARRAYSIZE(expanded)) ? expanded : L"C:\\Tags";
+        root = DbFolder() + L"\\Tags";
     }
     s.root = root;
 
-    s.maxRows = Wh_GetIntSetting(L"maxRows");
-    if (s.maxRows <= 0) {
-        s.maxRows = 8;
-    }
-    s.maxRows = std::min(s.maxRows, 40);
     s.tagColumnWidth = Wh_GetIntSetting(L"tagColumnWidth");
     if (s.tagColumnWidth < 80) {
         s.tagColumnWidth = 160;
     }
     s.tagColumnWidth = std::min(s.tagColumnWidth, 500);
+    s.explorerDotSize = Wh_GetIntSetting(L"explorerDotSize");
+    if (s.explorerDotSize < 4) {
+        int legacy = Wh_GetIntSetting(L"dotSize");
+        s.explorerDotSize = (legacy >= 4) ? legacy : 10;
+    }
+    s.explorerDotSize = std::min(s.explorerDotSize, 32);
+
+    s.desktopDotSize = Wh_GetIntSetting(L"desktopDotSize");
+    if (s.desktopDotSize < 4) {
+        int legacy = Wh_GetIntSetting(L"dotSize");
+        s.desktopDotSize = (legacy >= 4) ? legacy : 8;
+    }
+    s.desktopDotSize = std::min(s.desktopDotSize, 32);
     s.autoAddTagColumn = Wh_GetIntSetting(L"autoAddTagColumn") != 0;
 
     auto loaded = std::make_shared<const Settings>(std::move(s));
@@ -1216,180 +1229,6 @@ void Commit(const std::wstring& dbPath, const std::vector<Row>& rows, bool chang
 
 std::wstring TargetIfTagShortcut(const std::wstring& path, const std::wstring& root);
 
-const wchar_t* EmojiForTagColor(COLORREF color) {
-    struct Choice {
-        int r, g, b;
-        const wchar_t* emoji;
-    };
-    static constexpr Choice choices[] = {
-        {232, 17, 35, L"\U0001F534"},    // red
-        {255, 140, 0, L"\U0001F7E0"},    // orange
-        {200, 160, 0, L"\U0001F7E1"},    // yellow
-        {16, 124, 16, L"\U0001F7E2"},    // green
-        {0, 120, 212, L"\U0001F535"},    // blue
-        {135, 100, 184, L"\U0001F7E3"},  // purple
-        {118, 118, 118, L"\U000026AB"},  // black
-        {238, 238, 238, L"\U000026AA"},  // white
-    };
-    int r = GetRValue(color);
-    int g = GetGValue(color);
-    int b = GetBValue(color);
-    const wchar_t* best = choices[0].emoji;
-    int bestDistance = std::numeric_limits<int>::max();
-    for (const auto& choice : choices) {
-        int dr = r - choice.r;
-        int dg = g - choice.g;
-        int db = b - choice.b;
-        int distance = dr * dr + dg * dg + db * db;
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            best = choice.emoji;
-        }
-    }
-    return best;
-}
-
-std::wstring KeywordForTag(const TagDef& tag) {
-    return std::wstring(EmojiForTagColor(tag.color)) + L" " + tag.name;
-}
-
-bool IsManagedKeyword(const std::wstring& value, const Settings& settings) {
-    static const wchar_t* emojis[] = {
-        L"\U0001F534", L"\U0001F7E0", L"\U0001F7E1", L"\U0001F7E2",
-        L"\U0001F535", L"\U0001F7E3", L"\U0001F7E4", L"\U000026AB",
-        L"\U000026AA",
-    };
-    for (const auto& tag : settings.tags) {
-        if (_wcsicmp(value.c_str(), tag.name.c_str()) == 0) {
-            return true;
-        }
-        for (const wchar_t* emoji : emojis) {
-            std::wstring decorated = std::wstring(emoji) + L" " + tag.name;
-            if (_wcsicmp(value.c_str(), decorated.c_str()) == 0) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-// Best-effort mirror into the standard Tags property. The mod's own record
-// remains authoritative because some formats do not expose a writable Windows
-// property handler. Other keywords already present on the item are preserved.
-bool SyncNativeKeywords(const std::wstring& path, const std::vector<std::wstring>& wanted,
-                        const Settings& settings) {
-    IShellItem2* item = nullptr;
-    HRESULT hr = SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item));
-    if (FAILED(hr) || !item) {
-        return false;
-    }
-
-    IPropertyStore* store = nullptr;
-    hr = item->GetPropertyStore(GPS_READWRITE, IID_PPV_ARGS(&store));
-    if (FAILED(hr) || !store) {
-        item->Release();
-        return false;
-    }
-
-    PROPVARIANT oldValue;
-    PropVariantInit(&oldValue);
-    store->GetValue(PKEY_Keywords, &oldValue);
-
-    std::vector<std::wstring> keywords;
-    ULONG count = oldValue.vt == (VT_VECTOR | VT_LPWSTR)
-                      ? oldValue.calpwstr.cElems
-                      : 0;
-    if (count > 0) {
-        for (ULONG i = 0; i < count && i < 10000; i++) {
-            PWSTR value = nullptr;
-            if (FAILED(PropVariantGetStringElem(&oldValue, i, &value)) || !value) {
-                continue;
-            }
-            bool managed = IsManagedKeyword(value, settings);
-            if (!managed && *value) {
-                keywords.emplace_back(value);
-            }
-            CoTaskMemFree(value);
-        }
-    } else {
-        PWSTR value = nullptr;
-        if (SUCCEEDED(PropVariantToStringAlloc(oldValue, &value)) && value) {
-            bool managed = IsManagedKeyword(value, settings);
-            if (!managed && *value) {
-                keywords.emplace_back(value);
-            }
-            CoTaskMemFree(value);
-        }
-    }
-    PropVariantClear(&oldValue);
-
-    for (const auto& tag : wanted) {
-        auto definition = std::find_if(
-            settings.tags.begin(), settings.tags.end(),
-            [&](const TagDef& item) { return _wcsicmp(item.name.c_str(), tag.c_str()) == 0; });
-        std::wstring keyword = definition == settings.tags.end()
-                                   ? tag
-                                   : KeywordForTag(*definition);
-        bool exists = std::any_of(keywords.begin(), keywords.end(), [&](const std::wstring& value) {
-            return _wcsicmp(value.c_str(), keyword.c_str()) == 0;
-        });
-        if (!exists) {
-            keywords.push_back(std::move(keyword));
-        }
-    }
-
-    std::vector<PCWSTR> pointers;
-    pointers.reserve(keywords.size());
-    for (const auto& keyword : keywords) {
-        pointers.push_back(keyword.c_str());
-    }
-
-    PROPVARIANT newValue;
-    PropVariantInit(&newValue);
-    hr = pointers.empty()
-             ? S_OK
-             : InitPropVariantFromStringVector(pointers.data(),
-                                               (ULONG)pointers.size(), &newValue);
-    if (SUCCEEDED(hr)) {
-        hr = store->SetValue(PKEY_Keywords, newValue);
-        if (SUCCEEDED(hr)) {
-            hr = store->Commit();
-        }
-    }
-    PropVariantClear(&newValue);
-    store->Release();
-    item->Release();
-
-    if (SUCCEEDED(hr)) {
-        NotifyShell(SHCNE_UPDATEITEM, path);
-        return true;
-    }
-    // Unsupported writers are expected (TXT, ZIP, EXE, links, cloud items).
-    Wh_Log(L"Native Tags property is not writable for %s (0x%08X)", path.c_str(), hr);
-    return false;
-}
-
-void SyncNativeKeywordsForPaths(std::vector<Row>& rows, const std::wstring& root,
-                                const Settings& settings,
-                                const std::vector<std::wstring>& paths) {
-    for (std::wstring path : paths) {
-        path = TargetIfTagShortcut(path, root);
-        std::vector<std::wstring> wanted;
-        std::wstring volume;
-        std::wstring fileId;
-        GetFileIdentity(path, volume, fileId);
-        for (const auto& row : rows) {
-            bool same = (!fileId.empty() && row.volume == volume && row.fileId == fileId) ||
-                        _wcsicmp(row.path.c_str(), path.c_str()) == 0;
-            if (same &&
-                std::find(wanted.begin(), wanted.end(), row.tag) == wanted.end()) {
-                wanted.push_back(row.tag);
-            }
-        }
-        SyncNativeKeywords(path, wanted, settings);
-    }
-}
-
 // Copy of what the worker thread last read, so the window thread (panel
 // counts, checkmarks in the menu) never touches the disk or the mutex.
 std::vector<std::pair<std::wstring, int>> g_counts;
@@ -1438,39 +1277,6 @@ void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
     g_linkTargets.swap(linkTargets);
     g_readyFolders.swap(ready);
     ReleaseSRWLockExclusive(&g_countsLock);
-}
-
-void MigrateNativeKeywordsIfNeeded() {
-    if (Wh_GetIntValue(L"nativeKeywordVersion", 0) >= 2) {
-        return;
-    }
-    auto settings = GetSettings();
-    DbLock lock;
-    if (!lock.ok()) {
-        return;
-    }
-    std::vector<Row> rows;
-    if (!LoadRows(DbPath(), rows)) {
-        return;
-    }
-    std::vector<std::wstring> paths;
-    std::unordered_set<std::wstring> seenPaths;
-    paths.reserve(rows.size());
-    seenPaths.reserve(rows.size());
-    for (const auto& row : rows) {
-        if (seenPaths.insert(LowerPath(row.path)).second) {
-            paths.push_back(row.path);
-        }
-        if (paths.size() >= 10000 || Stopping()) {
-            break;
-        }
-    }
-    for (const auto& path : paths) {
-        SyncNativeKeywords(path, {}, *settings);
-    }
-    if (!Stopping()) {
-        Wh_SetIntValue(L"nativeKeywordVersion", 2);
-    }
 }
 
 bool FolderIsReady(const std::wstring& folder) {
@@ -2029,7 +1835,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
     HANDLE change = WatchRoot(root);
 
     SyncAll();
-    MigrateNativeKeywordsIfNeeded();
     BroadcastRefresh();
 
     while (!Stopping()) {
@@ -2161,130 +1966,52 @@ void StopWorker() {
 }
 
 // ---------------------------------------------------------------------------
-// Panel
+// Helpers and state
 // ---------------------------------------------------------------------------
 
-class TagDropTarget;
-
-struct Panel {
-    HWND tree;       // NamespaceTreeControl
-    HWND sink;       // CtrlNotifySink, parent of the tree and the panel
-    HWND shellTab;   // ShellTabWindowClass
-    HWND wnd = nullptr;
-    TagDropTarget* drop = nullptr;
-    int panelHeight = 0;
-    std::wstring currentFolder;  // folder shown in the tab, for the open tag row
-    std::wstring pendingOpen;     // tag folder to open once the worker made it
-    std::wstring pendingOpenTag;  // and the tag it belongs to, to ask again
-    int pendingOpenRetries = 0;   // asking again, bounded: see the handler
-    bool pendingOpenNewWindow = false;
-    ULONGLONG pendingOpenAt = 0;
-    // Bumped by every click. Opening a folder runs messages, so a second
-    // click can happen inside the first one; whoever comes back and finds a
-    // different number is the older one and keeps its hands off.
-    unsigned openSeq = 0;
-    int hot = -1;
-    int pressed = -1;
-    int dropHot = -1;
-    int scroll = 0;
-    int wheelDelta = 0;
-    int rowHeight = 0;    // from the tree, cached: see GetMetrics
-    int rowHeightDpi = 0;
-    bool trackingLeave = false;
-    bool inLayout = false;
-    HFONT iconFont = nullptr;
-    int iconFontDpi = 0;
-};
-
-const int HIT_NONE = -1;
-const int HIT_HEADER = -2;
-
-std::vector<Panel*> g_panels;
-std::vector<HWND> g_subclassedTrees;
-std::vector<HWND> g_subclassedFileViews;
-SRWLOCK g_panelsLock = SRWLOCK_INIT;
+std::vector<HWND> g_trackedFileViews;
 SRWLOCK g_fileViewsLock = SRWLOCK_INIT;
 
-UINT g_msgAttach;
-UINT g_msgDetach;
 UINT g_msgRefresh;
-UINT g_msgLayout;
 UINT g_msgCancelMenu;
-UINT g_msgHotkeyRebalance;
-
-std::atomic<bool> g_collapsed;
 ULONG_PTR g_gdiplusToken;
 
-// Always looked up again: a stored HWND could die and be reused by a window
-// on another thread, and SendMessage to it would hang.
-HWND TreeViewOf(Panel* p) {
-    return FindWindowExW(p->tree, nullptr, L"SysTreeView32", nullptr);
-}
-
-// Mod code on a window thread's stack (inside an IDropTarget method, a menu,
-// a navigation). Unloading waits, with no deadline, for it to reach zero.
 std::atomic<int> g_busy;
-
-// Drags in progress over a panel: between DragEnter and DragLeave/Drop, OLE
-// keeps the object and calls it again, so the module can't be unloaded while
-// the count is above zero. Unloading releases the mod's own reference first,
-// so a drag whose source died can still end when OLE lets go.
-std::atomic<int> g_drags;
+std::atomic<int> g_hookCalls;
 
 struct BusyScope {
     BusyScope() { g_busy++; }
     ~BusyScope() { g_busy--; }
 };
 
-// Calls in progress inside the hooks. Windhawk removes the hooks before
-// Wh_ModUninit, but a call that already entered (an open menu) still returns
-// to the hook code: Wh_ModUninit waits for them.
-std::atomic<int> g_hookCalls;
-
 struct HookCall {
     HookCall() { g_hookCalls++; }
     ~HookCall() { g_hookCalls--; }
 };
 
-Panel* FindPanel(HWND hwnd) {
-    Panel* found = nullptr;
-    AcquireSRWLockShared(&g_panelsLock);
-    for (Panel* p : g_panels) {
-        if (p->tree == hwnd || p->sink == hwnd || p->wnd == hwnd) {
-            found = p;
-            break;
-        }
-    }
-    ReleaseSRWLockShared(&g_panelsLock);
-    return found;
-}
-
-void BroadcastMessage(UINT msg) {
-    AcquireSRWLockShared(&g_panelsLock);
-    for (Panel* p : g_panels) {
-        if (p->wnd) {
-            PostMessageW(p->wnd, msg, 0, 0);
-        }
-    }
-    ReleaseSRWLockShared(&g_panelsLock);
-}
-
 HWND FindDesktopListView();
 
 void BroadcastRefresh() {
-    BroadcastMessage(g_msgRefresh);
-    AcquireSRWLockShared(&g_fileViewsLock);
-    for (HWND fileView : g_subclassedFileViews) {
-        if (fileView) {
-            PostMessageW(fileView, g_msgRefresh, 0, 0);
-            InvalidateRect(fileView, nullptr, FALSE);
+    AcquireSRWLockExclusive(&g_fileViewsLock);
+    for (auto it = g_trackedFileViews.begin(); it != g_trackedFileViews.end(); ) {
+        if (!IsWindow(*it)) {
+            it = g_trackedFileViews.erase(it);
+        } else {
+            PostMessageW(*it, g_msgRefresh, 0, 0);
+            RedrawWindow(*it, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            HWND parent = GetParent(*it);
+            if (parent && IsWindow(parent)) {
+                RedrawWindow(parent, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            }
+            ++it;
         }
     }
-    ReleaseSRWLockShared(&g_fileViewsLock);
+    ReleaseSRWLockExclusive(&g_fileViewsLock);
 
     HWND desktop = FindDesktopListView();
-    if (desktop) {
+    if (desktop && IsWindow(desktop)) {
         PostMessageW(desktop, g_msgRefresh, 0, 0);
+        RedrawWindow(desktop, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
     }
 }
 
@@ -2292,127 +2019,21 @@ int Dip(int value, int dpi) {
     return MulDiv(value, dpi, 96);
 }
 
-struct Metrics {
-    int dpi;
-    int rowH;
-    int topPad;
-    int sepY;
-    int bottomPad;
-    int tagCount;
-    int rowsShown;  // rows that fit in the actual height
-};
-
-Metrics GetMetrics(Panel* p, const Settings& s, int height) {
-    Metrics m;
-    m.dpi = GetDpiForWindow(p->wnd ? p->wnd : p->sink);
-    if (!m.dpi) {
-        m.dpi = 96;
-    }
-    // Asking the tree costs a FindWindowEx plus a SendMessage, and this runs
-    // on every mouse move; it only changes with the theme or the DPI.
-    if (p->rowHeight <= 0 || p->rowHeightDpi != m.dpi) {
-        int itemH = TreeView_GetItemHeight(TreeViewOf(p));
-        p->rowHeight = itemH > 0 ? itemH : Dip(32, m.dpi);
-        p->rowHeightDpi = m.dpi;
-    }
-    m.rowH = p->rowHeight;
-    m.topPad = Dip(12, m.dpi);
-    m.sepY = Dip(6, m.dpi);
-    m.bottomPad = Dip(6, m.dpi);
-    m.tagCount = (int)s.tags.size();
-    int wanted = g_collapsed ? 0 : std::min(std::max(m.tagCount, 1), s.maxRows);
-    if (height < 0) {
-        m.rowsShown = wanted;
-    } else {
-        int room = (height - m.topPad - m.rowH - m.bottomPad) / m.rowH;
-        m.rowsShown = std::max(0, std::min(wanted, room));
-    }
-    return m;
+void FillRounded(Gdiplus::Graphics& g, COLORREF color, int x, int y, int w, int h, int r) {
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    Gdiplus::GraphicsPath path;
+    int d = r * 2;
+    path.AddArc(x, y, d, d, 180, 90);
+    path.AddArc(x + w - d - 1, y, d, d, 270, 90);
+    path.AddArc(x + w - d - 1, y + h - d - 1, d, d, 0, 90);
+    path.AddArc(x, y + h - d - 1, d, d, 90, 90);
+    path.CloseFigure();
+    g.FillPath(&brush, &path);
 }
 
-int WantedHeight(Panel* p, const Settings& s) {
-    Metrics m = GetMetrics(p, s, -1);
-    return m.topPad + m.rowH + m.rowsShown * m.rowH + (g_collapsed ? 0 : m.bottomPad);
-}
-
-void ClampScroll(Panel* p, const Metrics& m) {
-    int maxScroll = std::max(0, m.tagCount - m.rowsShown);
-    p->scroll = std::clamp(p->scroll, 0, maxScroll);
-}
-
-void LayoutPanel(Panel* p) {
-    if (p->inLayout || !p->wnd || !IsWindow(p->sink) || !IsWindow(p->tree)) {
-        return;
-    }
-    // Touching the tree can make DirectUI touch the container, which calls
-    // this again.
-    p->inLayout = true;
-    auto s = GetSettings();
-    RECT rc;
-    GetClientRect(p->sink, &rc);
-    int width = rc.right;
-    int height = rc.bottom;
-
-    Metrics m = GetMetrics(p, *s, -1);
-    int wanted = WantedHeight(p, *s);
-    // The tree always keeps at least two rows.
-    int ph = std::max(0, std::min(wanted, height - m.rowH * 2));
-    p->panelHeight = ph;
-
-    SetWindowPos(p->wnd, nullptr, 0, height - ph, width, ph,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-    RECT tr;
-    GetWindowRect(p->tree, &tr);
-    MapWindowPoints(nullptr, p->sink, (POINT*)&tr, 2);
-    int treeH = std::max(0, height - ph - (int)tr.top);
-    if (tr.bottom - tr.top != treeH) {
-        SetWindowPos(p->tree, nullptr, 0, 0, tr.right - tr.left, treeH,
-                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    }
-    InvalidateRect(p->wnd, nullptr, FALSE);
-    p->inLayout = false;
-}
-
-// No AddRef: the pointer belongs to the tab.
-IShellBrowser* GetBrowser(Panel* p) {
-    auto browser = (IShellBrowser*)SendMessageW(p->shellTab, CWM_GETISHELLBROWSER, 0, 0);
-    if (!browser) {
-        browser = (IShellBrowser*)SendMessageW(GetAncestor(p->shellTab, GA_ROOT), CWM_GETISHELLBROWSER, 0, 0);
-    }
-    return browser;
-}
-
-// Folder shown in the tab, to mark the open tag.
-std::wstring GetCurrentFolder(Panel* p) {
-    std::wstring result;
-    IShellBrowser* browser = GetBrowser(p);
-    if (!browser) {
-        return result;
-    }
-    IShellView* view = nullptr;
-    if (SUCCEEDED(browser->QueryActiveShellView(&view)) && view) {
-        IFolderView* folderView = nullptr;
-        if (SUCCEEDED(view->QueryInterface(IID_PPV_ARGS(&folderView)))) {
-            IPersistFolder2* folder = nullptr;
-            if (SUCCEEDED(folderView->GetFolder(IID_PPV_ARGS(&folder)))) {
-                PIDLIST_ABSOLUTE pidl = nullptr;
-                if (SUCCEEDED(folder->GetCurFolder(&pidl)) && pidl) {
-                    // Not MAX_PATH: a tags folder deeper than that would
-                    // never light up the row for the tag being shown.
-                    WCHAR path[4096];
-                    if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path), GPFIDL_DEFAULT)) {
-                        result = path;
-                    }
-                    CoTaskMemFree(pidl);
-                }
-                folder->Release();
-            }
-            folderView->Release();
-        }
-        view->Release();
-    }
-    return result;
+bool HasClass(HWND hwnd, PCWSTR name) {
+    WCHAR cls[64];
+    return hwnd && GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, name) == 0;
 }
 
 // Add System.Keywords to a Details view without discarding the user's existing
@@ -2486,1243 +2107,12 @@ void EnsureTagsColumnForView(IUnknown* unknown, const Settings& settings) {
     columnManager->Release();
 }
 
-void EnsureTagsColumn(Panel* p, const Settings& settings) {
-    IShellBrowser* browser = GetBrowser(p);
-    if (!browser) {
-        return;
-    }
-    IShellView* view = nullptr;
-    if (SUCCEEDED(browser->QueryActiveShellView(&view)) && view) {
-        EnsureTagsColumnForView((IUnknown*)view, settings);
-        view->Release();
-    }
-}
-
-bool Navigate(Panel* p, const std::wstring& folder) {
-    IShellBrowser* browser = GetBrowser(p);
-    if (!browser) {
-        Wh_Log(L"No IShellBrowser in the tab");
-        return false;
-    }
-    PIDLIST_ABSOLUTE pidl = nullptr;
-    if (FAILED(SHParseDisplayName(folder.c_str(), nullptr, &pidl, 0, nullptr))) {
-        return false;
-    }
-    HRESULT hr = browser->BrowseObject(pidl, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-    CoTaskMemFree(pidl);
-    return SUCCEEDED(hr);
-}
-
-// After Navigate or ShellExecute the Panel may no longer exist (these calls
-// pump messages): only the HWND saved beforehand is used.
-// ShellExecuteW would put up the shell's own "Windows cannot find..." box on
-// this window's thread when the folder isn't there, and that is exactly the
-// case the caller knows how to handle by itself.
-bool OpenFolderWindow(const std::wstring& folder) {
-    SHELLEXECUTEINFOW info = {sizeof(info)};
-    // No SEE_MASK_NOASYNC: that would hold this window's thread until the
-    // shell is done, and there is nothing here that needs to wait.
-    info.fMask = SEE_MASK_FLAG_NO_UI;
-    info.lpVerb = L"open";
-    info.lpFile = folder.c_str();
-    info.nShow = SW_SHOWNORMAL;
-    return ShellExecuteExW(&info) != FALSE;
-}
-
-void OpenTag(Panel* p, int index, bool newWindow) {
-    // Count first, then check g_unloading: in the reverse order, unloading
-    // could see zero between the two.
-    BusyScope busy;
-    auto s = GetSettings();
-    if (g_unloading || index < 0 || index >= (int)s->tags.size()) {
-        return;
-    }
-    HWND panelWnd = p->wnd;
-    // This click replaces any earlier one still waiting for its folder:
-    // otherwise the old one would open on top of this one when it arrives.
-    p->pendingOpen.clear();
-    unsigned seq = ++p->openSeq;
-    std::wstring folder = s->root + L"\\" + s->tags[index].folderName;
-
-    // Whether the folder exists is the worker's last word on it, which can be
-    // out of date: a folder deleted behind its back still reads as ready, and
-    // navigating there used to do nothing at all (measured 2026-09-18). So
-    // the open is attempted, and only on failure does it wait for the worker.
-    bool opened = false;
-    if (FolderIsReady(folder)) {
-        opened = newWindow ? OpenFolderWindow(folder) : Navigate(p, folder);
-        if (opened) {
-            // Fixes shortcuts for files moved since last time. Doesn't touch
-            // the panel, so it is safe before the checks below.
-            QueueSync();
-        }
-        // Both of those run messages: the panel can have been destroyed
-        // inside them, and another click can have been through here.
-        if ((Panel*)GetWindowLongPtrW(panelWnd, GWLP_USERDATA) != p || p->openSeq != seq) {
-            return;
-        }
-        if (opened) {
-            if (!newWindow) {
-                SetTimer(panelWnd, TIMER_REPAINT, 350, nullptr);
-            }
-            return;
-        }
-    }
-
-    // The folder isn't there, or opening it failed: the panel opens it when
-    // the worker says it is ready. Armed only now, and never before the
-    // attempt above: the worker's answer arriving inside it found a click
-    // still waiting and opened a second window (measured 2026-09-19).
-    //
-    // Not one disk call on this thread, either: making the folder here froze
-    // the whole Explorer window when the tags folder lived on a drive that
-    // had stopped responding. The worker makes it and answers.
-    p->pendingOpen = folder;
-    p->pendingOpenTag = s->tags[index].name;
-    p->pendingOpenNewWindow = newWindow;
-    p->pendingOpenAt = GetTickCount64();
-    p->pendingOpenRetries = 0;
-    QueueEnsureFolder(s->tags[index].name);
-}
-
-struct Colors {
-    COLORREF bk, text, dim, sep, hot, selected;
-};
-
-COLORREF Blend(COLORREF a, COLORREF b, double t) {
-    return RGB((int)(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * t),
-               (int)(GetGValue(a) + (GetGValue(b) - GetGValue(a)) * t),
-               (int)(GetBValue(a) + (GetBValue(b) - GetBValue(a)) * t));
-}
-
-Colors GetColors(Panel* p) {
-    Colors c;
-    HWND tv = TreeViewOf(p);
-    c.bk = tv ? TreeView_GetBkColor(tv) : CLR_NONE;
-    c.text = tv ? TreeView_GetTextColor(tv) : CLR_NONE;
-    if (c.bk == CLR_NONE) {
-        c.bk = GetSysColor(COLOR_WINDOW);
-    }
-    if (c.text == CLR_NONE) {
-        c.text = GetSysColor(COLOR_WINDOWTEXT);
-    }
-    // Measured on the tree in dark theme: background 25, separator 56, selection 51.
-    c.sep = Blend(c.bk, c.text, 0.135);
-    c.selected = Blend(c.bk, c.text, 0.113);
-    c.hot = Blend(c.bk, c.text, 0.075);
-    c.dim = Blend(c.bk, c.text, 0.6);
-    return c;
-}
-
-// A lambda here would be a __cdecl function pointer and wouldn't build for
-// x86 or arm64, where FONTENUMPROCW is __stdcall.
-int CALLBACK FoundFontFamily(const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM param) {
-    *(bool*)param = true;
-    return 0;
-}
-
-// Segoe Fluent Icons only ships with Windows 11, and CreateFontW quietly
-// picks some other face when a family isn't installed, which draws the three
-// glyphs as missing-glyph boxes. Segoe MDL2 Assets has all three at the same
-// code points. Asked of the system rather than of the build number, which
-// says nothing about a font added or removed by hand.
-PCWSTR IconFontFace() {
-    static PCWSTR face = [] {
-        LOGFONTW lf = {};
-        lf.lfCharSet = DEFAULT_CHARSET;
-        wcscpy_s(lf.lfFaceName, L"Segoe Fluent Icons");
-        bool found = false;
-        if (HDC dc = GetDC(nullptr)) {
-            EnumFontFamiliesExW(dc, &lf, FoundFontFamily, (LPARAM)&found, 0);
-            ReleaseDC(nullptr, dc);
-        }
-        return found ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
-    }();
-    return face;
-}
-
-HFONT GetIconFont(Panel* p, int dpi) {
-    if (!p->iconFont || p->iconFontDpi != dpi) {
-        if (p->iconFont) {
-            DeleteObject(p->iconFont);
-        }
-        p->iconFont = CreateFontW(-Dip(12, dpi), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  CLEARTYPE_QUALITY, DEFAULT_PITCH, IconFontFace());
-        p->iconFontDpi = dpi;
-    }
-    return p->iconFont;
-}
-
-void FillRounded(Gdiplus::Graphics& g, COLORREF color, int x, int y, int w, int h, int r) {
-    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
-    Gdiplus::GraphicsPath path;
-    int d = r * 2;
-    path.AddArc(x, y, d, d, 180, 90);
-    path.AddArc(x + w - d - 1, y, d, d, 270, 90);
-    path.AddArc(x + w - d - 1, y + h - d - 1, d, d, 0, 90);
-    path.AddArc(x, y + h - d - 1, d, d, 90, 90);
-    path.CloseFigure();
-    g.FillPath(&brush, &path);
-}
-
-void DrawTextAt(HDC hdc, const std::wstring& text, RECT rc, COLORREF color, UINT flags) {
-    SetTextColor(hdc, color);
-    DrawTextW(hdc, text.c_str(), (int)text.size(), &rc,
-              flags | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
-}
-
-void PaintPanel(Panel* p, HDC target) {
-    RECT rc;
-    GetClientRect(p->wnd, &rc);
-    int width = rc.right;
-    int height = rc.bottom;
-    if (width <= 0 || height <= 0) {
-        return;
-    }
-
-    auto s = GetSettings();
-    Metrics m = GetMetrics(p, *s, height);
-    ClampScroll(p, m);
-    Colors c = GetColors(p);
-    int dpi = m.dpi;
-
-    HDC hdc = CreateCompatibleDC(target);
-    HBITMAP bmp = CreateCompatibleBitmap(target, width, height);
-    HGDIOBJ oldBmp = SelectObject(hdc, bmp);
-
-    HBRUSH bk = CreateSolidBrush(c.bk);
-    FillRect(hdc, &rc, bk);
-    DeleteObject(bk);
-
-    RECT sep = {Dip(10, dpi), m.sepY, width - Dip(8, dpi), m.sepY + 1};
-    HBRUSH sepBrush = CreateSolidBrush(c.sep);
-    FillRect(hdc, &sep, sepBrush);
-    DeleteObject(sepBrush);
-
-    int selected = HIT_NONE;
-    const std::wstring& current = p->currentFolder;
-    for (int i = 0; i < m.tagCount; i++) {
-        std::wstring folder = s->root + L"\\" + s->tags[i].folderName;
-        if (!current.empty() && _wcsicmp(current.c_str(), folder.c_str()) == 0) {
-            selected = i;
-        }
-    }
-
-    int headerTop = m.topPad;
-    int rowsTop = headerTop + m.rowH;
-
-    {
-        Gdiplus::Graphics g(hdc);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        // The tree's selection spans the full width (measured).
-        int radius = Dip(4, dpi);
-
-        if (p->hot == HIT_HEADER) {
-            FillRounded(g, c.hot, 0, headerTop, width, m.rowH, radius);
-        }
-        for (int row = 0; row < m.rowsShown; row++) {
-            int i = row + p->scroll;
-            if (i >= m.tagCount) {
-                break;
-            }
-            int y = rowsTop + row * m.rowH;
-            if (i == p->dropHot) {
-                FillRounded(g, Blend(c.bk, s->tags[i].color, 0.35), 0, y, width, m.rowH, radius);
-            } else if (i == selected) {
-                FillRounded(g, c.selected, 0, y, width, m.rowH, radius);
-            } else if (i == p->hot) {
-                FillRounded(g, c.hot, 0, y, width, m.rowH, radius);
-            }
-
-            COLORREF tc = s->tags[i].color;
-            Gdiplus::SolidBrush dot(Gdiplus::Color(255, GetRValue(tc), GetGValue(tc), GetBValue(tc)));
-            Gdiplus::REAL d = (Gdiplus::REAL)Dip(10, dpi);
-            Gdiplus::REAL cx = (Gdiplus::REAL)Dip(47, dpi);
-            Gdiplus::REAL cy = (Gdiplus::REAL)y + m.rowH / 2.0f;
-            g.FillEllipse(&dot, cx - d / 2, cy - d / 2, d, d);
-        }
-    }
-
-    SetBkMode(hdc, TRANSPARENT);
-
-    // Title: collapse arrow, tag icon, "Tags".
-    HGDIOBJ oldFont = SelectObject(hdc, GetIconFont(p, dpi));
-    RECT chevron = {Dip(8, dpi), headerTop, Dip(24, dpi), headerTop + m.rowH};
-    DrawTextAt(hdc, g_collapsed ? L"\uE76C" : L"\uE70D", chevron, c.dim, DT_CENTER);
-    RECT icon = {Dip(31, dpi), headerTop, Dip(47, dpi), headerTop + m.rowH};
-    DrawTextAt(hdc, L"\uE8EC", icon, c.text, DT_CENTER);
-
-    HFONT treeFont = (HFONT)SendMessageW(TreeViewOf(p), WM_GETFONT, 0, 0);
-    SelectObject(hdc, treeFont ? treeFont : (HFONT)GetStockObject(DEFAULT_GUI_FONT));
-    RECT title = {Dip(53, dpi), headerTop, width - Dip(8, dpi), headerTop + m.rowH};
-    DrawTextAt(hdc, L"Tags", title, c.text, DT_LEFT);
-
-    if (!g_collapsed) {
-        if (m.tagCount == 0 && m.rowsShown > 0) {
-            RECT r = {Dip(61, dpi), rowsTop, width - Dip(8, dpi), rowsTop + m.rowH};
-            DrawTextAt(hdc, L"Create tags in the mod settings", r, c.dim, DT_LEFT);
-        }
-        for (int row = 0; row < m.rowsShown; row++) {
-            int i = row + p->scroll;
-            if (i >= m.tagCount) {
-                break;
-            }
-            int y = rowsTop + row * m.rowH;
-            int count = GetCount(s->tags[i].name);
-            int countW = 0;
-            if (count > 0) {
-                std::wstring countText = std::to_wstring(count);
-                RECT measure = {0, 0, 0, 0};
-                DrawTextW(hdc, countText.c_str(), -1, &measure, DT_SINGLELINE | DT_CALCRECT);
-                countW = measure.right + Dip(8, dpi);
-                RECT cr = {width - Dip(12, dpi) - measure.right, y, width - Dip(12, dpi), y + m.rowH};
-                DrawTextAt(hdc, countText, cr, c.dim, DT_RIGHT);
-            }
-            RECT tr = {Dip(61, dpi), y, width - Dip(12, dpi) - countW, y + m.rowH};
-            DrawTextAt(hdc, s->tags[i].name, tr, c.text, DT_LEFT);
-        }
-    }
-
-    SelectObject(hdc, oldFont);
-    BitBlt(target, 0, 0, width, height, hdc, 0, 0, SRCCOPY);
-    SelectObject(hdc, oldBmp);
-    DeleteObject(bmp);
-    DeleteDC(hdc);
-}
-
-int HitTest(Panel* p, POINT pt) {
-    RECT rc;
-    GetClientRect(p->wnd, &rc);
-    if (pt.x < 0 || pt.x >= rc.right || pt.y < 0 || pt.y >= rc.bottom) {
-        return HIT_NONE;
-    }
-    auto s = GetSettings();
-    Metrics m = GetMetrics(p, *s, rc.bottom);
-    ClampScroll(p, m);
-    if (pt.y >= m.topPad && pt.y < m.topPad + m.rowH) {
-        return HIT_HEADER;
-    }
-    int rowsTop = m.topPad + m.rowH;
-    if (g_collapsed || pt.y < rowsTop) {
-        return HIT_NONE;
-    }
-    int row = (pt.y - rowsTop) / m.rowH;
-    if (row >= m.rowsShown) {
-        return HIT_NONE;
-    }
-    int i = row + p->scroll;
-    return i < m.tagCount ? i : HIT_NONE;
-}
-
-void SetHot(Panel* p, int hot) {
-    if (p->hot != hot) {
-        p->hot = hot;
-        InvalidateRect(p->wnd, nullptr, FALSE);
-    }
-}
-
-void ToggleCollapsed() {
-    g_collapsed = !g_collapsed;
-    Wh_SetIntValue(L"collapsed", g_collapsed ? 1 : 0);
-    BroadcastMessage(g_msgLayout);
-}
-
-// ---------------------------------------------------------------------------
-// Dropping files onto a tag
-// ---------------------------------------------------------------------------
-
-std::vector<std::wstring> GetDroppedPaths(IDataObject* data) {
-    std::vector<std::wstring> paths;
-    IShellItemArray* items = nullptr;
-    if (SUCCEEDED(SHCreateShellItemArrayFromDataObject(data, IID_PPV_ARGS(&items)))) {
-        DWORD count = 0;
-        items->GetCount(&count);
-        for (DWORD i = 0; i < count; i++) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(items->GetItemAt(i, &item))) {
-                PWSTR path = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path) {
-                    paths.push_back(path);
-                    CoTaskMemFree(path);
-                }
-                item->Release();
-            }
-        }
-        items->Release();
-    }
-    if (paths.empty()) {
-        FORMATETC fe = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-        STGMEDIUM stg;
-        if (SUCCEEDED(data->GetData(&fe, &stg))) {
-            HDROP drop = (HDROP)GlobalLock(stg.hGlobal);
-            if (drop) {
-                UINT n = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
-                for (UINT i = 0; i < n; i++) {
-                    WCHAR buf[4096];
-                    if (DragQueryFileW(drop, i, buf, ARRAYSIZE(buf))) {
-                        paths.push_back(buf);
-                    }
-                }
-                GlobalUnlock(stg.hGlobal);
-            }
-            ReleaseStgMedium(&stg);
-        }
-    }
-    return paths;
-}
-
-bool HasFiles(IDataObject* data) {
-    FORMATETC hdrop = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-    if (data->QueryGetData(&hdrop) == S_OK) {
-        return true;
-    }
-    static CLIPFORMAT idList = (CLIPFORMAT)RegisterClipboardFormatW(CFSTR_SHELLIDLIST);
-    FORMATETC ids = {idList, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-    return data->QueryGetData(&ids) == S_OK;
-}
-
-void SetDropDescription(IDataObject* data, DROPIMAGETYPE type, PCWSTR message, PCWSTR insert) {
-    static CLIPFORMAT cf = (CLIPFORMAT)RegisterClipboardFormatW(CFSTR_DROPDESCRIPTION);
-    FORMATETC fe = {cf, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-    STGMEDIUM stg = {};
-    stg.tymed = TYMED_HGLOBAL;
-    stg.hGlobal = GlobalAlloc(GHND, sizeof(DROPDESCRIPTION));
-    if (!stg.hGlobal) {
-        return;
-    }
-    DROPDESCRIPTION* dd = (DROPDESCRIPTION*)GlobalLock(stg.hGlobal);
-    if (!dd) {
-        GlobalFree(stg.hGlobal);
-        return;
-    }
-    dd->type = type;
-    lstrcpynW(dd->szMessage, message, ARRAYSIZE(dd->szMessage));
-    lstrcpynW(dd->szInsert, insert, ARRAYSIZE(dd->szInsert));
-    GlobalUnlock(stg.hGlobal);
-    if (FAILED(data->SetData(&fe, &stg, TRUE))) {
-        ReleaseStgMedium(&stg);
-    }
-}
-
-class TagDropTarget final : public IDropTarget {
-   public:
-    explicit TagDropTarget(HWND hwnd) : m_hwnd(hwnd) {
-        CoCreateInstance(CLSID_DragDropHelper, nullptr, CLSCTX_INPROC_SERVER,
-                         IID_PPV_ARGS(&m_helper));
-    }
-
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == IID_IUnknown || riid == IID_IDropTarget) {
-            *ppv = static_cast<IDropTarget*>(this);
-            AddRef();
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_ref); }
-    ULONG STDMETHODCALLTYPE Release() override {
-        LONG ref = InterlockedDecrement(&m_ref);
-        if (ref == 0) {
-            delete this;
-        }
-        return ref;
-    }
-
-    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
-        BusyScope busy;
-        // Counted even when refused: OLE keeps this object and keeps calling
-        // DragOver/DragLeave until the cursor leaves.
-        BeginDrag();
-        if (g_unloading) {
-            *effect = DROPEFFECT_NONE;
-            return S_OK;
-        }
-        if (m_data) {
-            m_data->Release();
-        }
-        m_data = data;
-        m_data->AddRef();
-        m_hasFiles = HasFiles(data);
-        m_described = HIT_NONE - 1;
-        POINT p = {pt.x, pt.y};
-        Update(pt, effect);
-        if (m_helper) {
-            m_helper->DragEnter(m_hwnd, data, &p, *effect);
-        }
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* effect) override {
-        BusyScope busy;
-        if (!m_inDrag) {
-            *effect = DROPEFFECT_NONE;
-            return S_OK;
-        }
-        Update(pt, effect);
-        if (m_helper) {
-            POINT p = {pt.x, pt.y};
-            m_helper->DragOver(&p, *effect);
-        }
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE DragLeave() override {
-        BusyScope busy;
-        if (!m_inDrag) {
-            return S_OK;
-        }
-        if (m_data) {
-            SetDropDescription(m_data, DROPIMAGE_INVALID, L"", L"");
-        }
-        SetDropHot(HIT_NONE);
-        if (m_helper) {
-            m_helper->DragLeave();
-        }
-        if (m_data) {
-            m_data->Release();
-            m_data = nullptr;
-        }
-        EndDrag();
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
-        BusyScope busy;
-        if (!m_inDrag) {
-            *effect = DROPEFFECT_NONE;
-            return S_OK;
-        }
-        int index = Update(pt, effect);
-        if (m_helper) {
-            POINT p = {pt.x, pt.y};
-            m_helper->Drop(data, &p, *effect);
-        }
-        SetDropDescription(data, DROPIMAGE_INVALID, L"", L"");
-        SetDropHot(HIT_NONE);
-
-        if (index >= 0 && *effect != DROPEFFECT_NONE) {
-            auto s = GetSettings();
-            std::vector<std::wstring> paths = GetDroppedPaths(data);
-            if (index < (int)s->tags.size() && !paths.empty()) {
-                QueueAdd(s->tags[index].name, std::move(paths));
-            } else {
-                *effect = DROPEFFECT_NONE;
-            }
-        }
-        if (m_data) {
-            m_data->Release();
-            m_data = nullptr;
-        }
-        EndDrag();
-        return S_OK;
-    }
-
-   private:
-    void BeginDrag() {
-        if (!m_inDrag) {
-            m_inDrag = true;
-            g_drags++;
-        }
-    }
-    void EndDrag() {
-        if (m_inDrag) {
-            m_inDrag = false;
-            g_drags--;
-        }
-    }
-
-    ~TagDropTarget() {
-        EndDrag();
-        if (m_helper) {
-            m_helper->Release();
-        }
-        if (m_data) {
-            m_data->Release();
-        }
-    }
-
-    void SetDropHot(int index) {
-        Panel* p = FindPanel(m_hwnd);
-        if (p && p->dropHot != index) {
-            p->dropHot = index;
-            InvalidateRect(m_hwnd, nullptr, FALSE);
-        }
-    }
-
-    int Update(POINTL pt, DWORD* effect) {
-        Panel* p = FindPanel(m_hwnd);
-        POINT client = {pt.x, pt.y};
-        ScreenToClient(m_hwnd, &client);
-        int index = (p && m_hasFiles && !g_unloading) ? HitTest(p, client) : HIT_NONE;
-        if (index < 0) {
-            index = HIT_NONE;
-        }
-
-        // Never DROPEFFECT_MOVE: the source would delete the files.
-        DWORD allowed = *effect;
-        if (index >= 0 && (allowed & DROPEFFECT_LINK)) {
-            *effect = DROPEFFECT_LINK;
-        } else if (index >= 0 && (allowed & DROPEFFECT_COPY)) {
-            *effect = DROPEFFECT_COPY;
-        } else {
-            *effect = DROPEFFECT_NONE;
-            index = HIT_NONE;
-        }
-
-        SetDropHot(index);
-        if (m_data && index != m_described) {
-            m_described = index;
-            auto s = GetSettings();
-            if (index >= 0 && index < (int)s->tags.size()) {
-                SetDropDescription(m_data, *effect == DROPEFFECT_LINK ? DROPIMAGE_LINK : DROPIMAGE_COPY,
-                                   L"Tag as %1", s->tags[index].name.c_str());
-            } else {
-                SetDropDescription(m_data, DROPIMAGE_INVALID, L"", L"");
-            }
-        }
-        return index;
-    }
-
-    LONG m_ref = 1;
-    HWND m_hwnd;
-    IDropTargetHelper* m_helper = nullptr;
-    IDataObject* m_data = nullptr;
-    bool m_hasFiles = false;
-    bool m_inDrag = false;
-    int m_described = HIT_NONE - 1;
-};
-
-// ---------------------------------------------------------------------------
-// Panel window
-// ---------------------------------------------------------------------------
-
-void HandleTagHotkey(UINT id);
-void TryRegisterHotkeys(HWND hWnd);
-void ReleaseHotkeys(HWND hWnd);
-
-LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    Panel* p = (Panel*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
-
-    if (msg == WM_NCCREATE) {
-        auto cs = (CREATESTRUCTW*)lParam;
-        SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
-        return DefWindowProcW(hWnd, msg, wParam, lParam);
-    }
-    if (!p) {
-        return DefWindowProcW(hWnd, msg, wParam, lParam);
-    }
-
-    if (msg == g_msgRefresh) {
-        // A click that had to wait for its folder to be created. If the
-        // folder never appeared (an unreachable drive), the click is dropped:
-        // opening the window minutes later is worse than not opening it.
-        if (!p->pendingOpen.empty() && GetTickCount64() - p->pendingOpenAt > 10000) {
-            p->pendingOpen.clear();
-        }
-        // The count keeps unloading from returning while any of this runs.
-        BusyScope busy;
-        if (g_unloading) {
-            return 0;
-        }
-        if (!p->pendingOpen.empty() && FolderIsReady(p->pendingOpen)) {
-            Panel* before = p;
-            unsigned seq = p->openSeq;
-            std::wstring folder = p->pendingOpen;
-            bool newWindow = p->pendingOpenNewWindow;
-            ULONGLONG since = p->pendingOpenAt;
-            // Cleared while it is being acted on, so that the messages run
-            // below can't find it and open the same folder a second time.
-            p->pendingOpen.clear();
-            bool opened = newWindow ? OpenFolderWindow(folder) : Navigate(p, folder);
-            // Both of those run messages: the panel can be destroyed inside
-            // them (the tab closing, or the mod being unloaded), and a click
-            // can have come through. The Panel is re-read, never reused.
-            p = (Panel*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
-            if (!p || p != before || p->openSeq != seq) {
-                return 0;
-            }
-            if (opened) {
-                if (!newWindow) {
-                    SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
-                }
-            } else if (p->pendingOpen.empty() && ++p->pendingOpenRetries <= 2) {
-                // The worker's word on the folder was out of date after all:
-                // keep waiting for it, under the same deadline, instead of
-                // dropping the click, and ask for the folder again — nothing
-                // else would bring another answer. Twice at most: a folder
-                // that is there and still won't open is failing for another
-                // reason, and asking forever would be the worker and this
-                // window shouting at each other until the deadline.
-                p->pendingOpen = folder;
-                p->pendingOpenNewWindow = newWindow;
-                p->pendingOpenAt = since;
-                QueueEnsureFolder(p->pendingOpenTag);
-            }
-        }
-        p->currentFolder = GetCurrentFolder(p);
-        EnsureTagsColumn(p, *GetSettings());
-        HWND root = GetAncestor(hWnd, GA_ROOT);
-        if (root) {
-            RedrawWindow(root, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
-        }
-        InvalidateRect(hWnd, nullptr, FALSE);
-        return 0;
-    }
-    if (msg == g_msgCancelMenu) {
-        // Arrives inside the TrackPopupMenu loop, on the right thread.
-        EndMenu();
-        return 0;
-    }
-    if (msg == g_msgLayout) {
-        LayoutPanel(p);
-        return 0;
-    }
-    if (msg == g_msgHotkeyRebalance) {
-        TryRegisterHotkeys(hWnd);
-        return 0;
-    }
-
-    switch (msg) {
-        case WM_HOTKEY:
-            HandleTagHotkey((UINT)wParam);
-            return 0;
-
-        case WM_ERASEBKGND:
-            return 1;
-
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-            PaintPanel(p, hdc);
-            EndPaint(hWnd, &ps);
-            return 0;
-        }
-
-        case WM_MOUSEMOVE: {
-            if (!p->trackingLeave) {
-                TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hWnd, 0};
-                p->trackingLeave = TrackMouseEvent(&tme);
-            }
-            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            SetHot(p, HitTest(p, pt));
-            return 0;
-        }
-
-        case WM_MOUSELEAVE:
-            p->trackingLeave = false;
-            SetHot(p, HIT_NONE);
-            return 0;
-
-        case WM_LBUTTONDOWN: {
-            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            p->pressed = HitTest(p, pt);
-            SetCapture(hWnd);
-            return 0;
-        }
-
-        case WM_LBUTTONUP: {
-            if (GetCapture() == hWnd) {
-                ReleaseCapture();
-            }
-            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            int hit = HitTest(p, pt);
-            int pressed = p->pressed;
-            p->pressed = HIT_NONE;
-            if (hit != pressed) {
-                return 0;
-            }
-            if (hit == HIT_HEADER) {
-                ToggleCollapsed();
-            } else if (hit >= 0) {
-                OpenTag(p, hit, false);
-            }
-            return 0;
-        }
-
-        case WM_MBUTTONUP: {
-            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            int hit = HitTest(p, pt);
-            if (hit >= 0) {
-                OpenTag(p, hit, true);
-            }
-            return 0;
-        }
-
-        case WM_CONTEXTMENU: {
-            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            POINT client = pt;
-            if (pt.x == -1 && pt.y == -1) {
-                return 0;
-            }
-            ScreenToClient(hWnd, &client);
-            int hit = HitTest(p, client);
-            if (hit < 0) {
-                return 0;
-            }
-            // Held over everything below, the menu included: unloading waits
-            // for this count, and between two scopes the module could go.
-            BusyScope busy;
-            if (g_unloading) {
-                return 0;
-            }
-            int cmd;
-            {
-                HMENU menu = CreatePopupMenu();
-                AppendMenuW(menu, MF_STRING, 1, L"Open");
-                AppendMenuW(menu, MF_STRING, 2, L"Open in new window");
-                SetMenuDefaultItem(menu, 1, FALSE);
-                cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, nullptr);
-                DestroyMenu(menu);
-            }
-            // The menu pumps messages: the window may have closed meanwhile.
-            Panel* before = p;
-            p = (Panel*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
-            if (p == before && (cmd == 1 || cmd == 2)) {
-                OpenTag(p, hit, cmd == 2);
-            }
-            return 0;
-        }
-
-        case WM_MOUSEWHEEL: {
-            RECT rc;
-            GetClientRect(hWnd, &rc);
-            auto s = GetSettings();
-            Metrics m = GetMetrics(p, *s, rc.bottom);
-            // Nothing visible to scroll (collapsed, or a navigation pane too
-            // short for a single row) and scrolling anyway drove p->scroll to
-            // the end of the list behind the user's back.
-            if (!g_collapsed && m.rowsShown > 0 && m.tagCount > m.rowsShown) {
-                // Same feel as the tree above: system lines per notch, and
-                // partial notches (precision touchpads) accumulate.
-                UINT lines = 3;
-                SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-                // "One screen at a time" in the mouse settings reports
-                // WHEEL_PAGESCROLL (0xFFFFFFFF); taken as a line count that
-                // is -1, and the list scrolled backwards.
-                int step = lines == WHEEL_PAGESCROLL ? std::max(1, m.rowsShown)
-                                                     : (int)(lines ? lines : 1);
-                p->wheelDelta += GET_WHEEL_DELTA_WPARAM(wParam);
-                int notches = p->wheelDelta / WHEEL_DELTA;
-                p->wheelDelta -= notches * WHEEL_DELTA;
-                p->scroll -= notches * step;
-                ClampScroll(p, m);
-                // The rows moved under a cursor that didn't: without this the
-                // highlight stays on the row that used to be there.
-                POINT cursor;
-                if (GetCursorPos(&cursor)) {
-                    ScreenToClient(hWnd, &cursor);
-                    SetHot(p, HitTest(p, cursor));
-                }
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            break;
-        }
-
-        case WM_TIMER:
-            if (wParam == TIMER_REPAINT) {
-                KillTimer(hWnd, TIMER_REPAINT);
-                // Only after navigation, not on every repaint: this is a COM
-                // round trip and repaints happen on every hover change.
-                p->currentFolder = GetCurrentFolder(p);
-                EnsureTagsColumn(p, *GetSettings());
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            break;
-
-        case WM_DPICHANGED_AFTERPARENT:
-            p->rowHeight = 0;
-            LayoutPanel(p);
-            return 0;
-
-        case WM_DESTROY:
-            if (p->drop) {
-                RevokeDragDrop(hWnd);
-                p->drop->Release();
-                p->drop = nullptr;
-            }
-            KillTimer(hWnd, TIMER_REPAINT);
-            break;
-
-        case WM_NCDESTROY:
-            ReleaseHotkeys(hWnd);
-            SetWindowLongPtrW(hWnd, GWLP_USERDATA, 0);
-            if (p->iconFont) {
-                DeleteObject(p->iconFont);
-                p->iconFont = nullptr;
-            }
-            p->wnd = nullptr;
-            break;
-    }
-    return DefWindowProcW(hWnd, msg, wParam, lParam);
-}
-
-// ---------------------------------------------------------------------------
-// Connecting to the navigation tree
-// ---------------------------------------------------------------------------
-
-bool HasClass(HWND hwnd, PCWSTR name) {
-    WCHAR cls[64];
-    return hwnd && GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, name) == 0;
-}
-
-// One process-wide hotkey owner is enough: Explorer sends WM_HOTKEY to the
-// window that registered it, and that window then inspects the foreground
-// Explorer window instead of assuming it is the focused one.
-const UINT HOTKEY_CLEAR_ID = 0xE700;
-const UINT HOTKEY_TAG_ID = 0xE701;
-HWND g_hotkeyOwner;
-SRWLOCK g_hotkeyLock = SRWLOCK_INIT;
-
-std::vector<std::wstring> GetSelectedPaths(HWND defView);
-
-void TryRegisterHotkeys(HWND hWnd) {
-    if (!hWnd || g_unloading) {
-        return;
-    }
-    AcquireSRWLockExclusive(&g_hotkeyLock);
-    if (g_hotkeyOwner) {
-        ReleaseSRWLockExclusive(&g_hotkeyLock);
-        return;
-    }
-    if (!RegisterHotKey(hWnd, HOTKEY_CLEAR_ID, MOD_ALT | MOD_NOREPEAT, L'0')) {
-        ReleaseSRWLockExclusive(&g_hotkeyLock);
-        Wh_Log(L"Alt+0 is already registered by another program");
-        return;
-    }
-    for (UINT i = 0; i < 8; i++) {
-        if (!RegisterHotKey(hWnd, HOTKEY_TAG_ID + i, MOD_ALT | MOD_NOREPEAT,
-                            (UINT)L'1' + i)) {
-            Wh_Log(L"Alt+%u is already registered; tag shortcut %u is unavailable",
-                   i + 1, i + 1);
-        }
-    }
-    g_hotkeyOwner = hWnd;
-    ReleaseSRWLockExclusive(&g_hotkeyLock);
-}
-
-void ReleaseHotkeys(HWND hWnd) {
-    AcquireSRWLockExclusive(&g_hotkeyLock);
-    if (g_hotkeyOwner != hWnd) {
-        ReleaseSRWLockExclusive(&g_hotkeyLock);
-        return;
-    }
-    UnregisterHotKey(hWnd, HOTKEY_CLEAR_ID);
-    for (UINT i = 0; i < 8; i++) {
-        UnregisterHotKey(hWnd, HOTKEY_TAG_ID + i);
-    }
-    g_hotkeyOwner = nullptr;
-    ReleaseSRWLockExclusive(&g_hotkeyLock);
-
-    AcquireSRWLockShared(&g_panelsLock);
-    for (Panel* panel : g_panels) {
-        if (panel && panel->wnd && panel->wnd != hWnd) {
-            PostMessageW(panel->wnd, g_msgHotkeyRebalance, 0, 0);
-        }
-    }
-    ReleaseSRWLockShared(&g_panelsLock);
-    AcquireSRWLockShared(&g_fileViewsLock);
-    for (HWND fileView : g_subclassedFileViews) {
-        if (fileView && fileView != hWnd) {
-            TryRegisterHotkeys(fileView);
-            break;
-        }
-    }
-    ReleaseSRWLockShared(&g_fileViewsLock);
-}
-
-BOOL CALLBACK FindVisibleDefViewProc(HWND hwnd, LPARAM lParam) {
-    if (IsWindowVisible(hwnd) && HasClass(hwnd, L"SHELLDLL_DefView")) {
-        *(HWND*)lParam = hwnd;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-HWND ForegroundDefView() {
-    HWND foreground = GetForegroundWindow();
-    if (!foreground) {
-        return nullptr;
-    }
-    HWND root = GetAncestor(foreground, GA_ROOT);
-    DWORD pid = 0;
-    GetWindowThreadProcessId(root, &pid);
-    if (pid != GetCurrentProcessId()) {
-        return nullptr;
-    }
-    HWND defView = nullptr;
-    EnumChildWindows(root, FindVisibleDefViewProc, (LPARAM)&defView);
-    if (!defView && (HasClass(root, L"Progman") || HasClass(root, L"WorkerW"))) {
-        HWND desktop = FindDesktopListView();
-        if (desktop) {
-            defView = GetParent(desktop);
-        }
-    }
-    return defView;
-}
-
-void HandleTagHotkey(UINT id) {
-    if (g_unloading ||
-        ((id < HOTKEY_TAG_ID || id >= HOTKEY_TAG_ID + 8) &&
-         id != HOTKEY_CLEAR_ID)) {
-        return;
-    }
-    BusyScope busy;
-    HWND defView = ForegroundDefView();
-    if (!defView) {
-        return;
-    }
-    std::vector<std::wstring> paths = GetSelectedPaths(defView);
-    if (paths.empty()) {
-        return;
-    }
-    if (id == HOTKEY_CLEAR_ID) {
-        QueueRemove(L"", std::move(paths));
-        return;
-    }
-    auto settings = GetSettings();
-    size_t index = id - HOTKEY_TAG_ID;
-    if (index < settings->tags.size()) {
-        const std::wstring tag = settings->tags[index].name;
-        TagHits hits = CountTagHits(paths);
-        auto found = hits.perTag.find(tag);
-        if (found != hits.perTag.end() && found->second == (int)paths.size()) {
-            QueueRemove(tag, std::move(paths));
-        } else {
-            QueueAdd(tag, std::move(paths));
-        }
-    }
-}
-
-LRESULT CALLBACK TreeSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
-LRESULT CALLBACK SinkSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
-
-void RemoveTreeSubclass(HWND tree) {
-    AcquireSRWLockExclusive(&g_panelsLock);
-    g_subclassedTrees.erase(std::remove(g_subclassedTrees.begin(), g_subclassedTrees.end(), tree),
-                            g_subclassedTrees.end());
-    ReleaseSRWLockExclusive(&g_panelsLock);
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(tree, TreeSubclassProc);
-}
-
-void SubclassTree(HWND tree) {
-    AcquireSRWLockExclusive(&g_panelsLock);
-    // g_unloading checked inside the lock: Wh_ModBeforeUninit sets it while
-    // holding the lock, so a tree either ends up in the list it iterates or
-    // never gets subclassed.
-    bool already = g_unloading || std::find(g_subclassedTrees.begin(), g_subclassedTrees.end(),
-                                            tree) != g_subclassedTrees.end();
-    if (!already) {
-        g_subclassedTrees.push_back(tree);
-    }
-    ReleaseSRWLockExclusive(&g_panelsLock);
-    if (already) {
-        return;
-    }
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(tree, TreeSubclassProc, 0)) {
-        AcquireSRWLockExclusive(&g_panelsLock);
-        g_subclassedTrees.erase(std::remove(g_subclassedTrees.begin(), g_subclassedTrees.end(), tree),
-                                g_subclassedTrees.end());
-        ReleaseSRWLockExclusive(&g_panelsLock);
-        return;
-    }
-    PostMessageW(tree, g_msgAttach, 0, 0);
-}
-
-// Runs on the window thread.
-void Attach(HWND tree) {
-    // This fork removes the navigation-pane Tags section. The context menu,
-    // hotkeys and file-row decorations are independent of it.
-    RemoveTreeSubclass(tree);
-    return;
-#if 0
-    if (g_unloading || FindPanel(tree)) {
-        return;
-    }
-    HWND sink = GetParent(tree);
-    HWND shellTab = nullptr;
-    for (HWND h = sink; h; h = GetParent(h)) {
-        if (HasClass(h, L"ShellTabWindowClass")) {
-            shellTab = h;
-            break;
-        }
-    }
-    if (!HasClass(sink, L"CtrlNotifySink") || !shellTab) {
-        // Tree belonging to something else (for example a dialog): not ours.
-        RemoveTreeSubclass(tree);
-        return;
-    }
-
-    Panel* p = new Panel();
-    p->tree = tree;
-    p->sink = sink;
-    p->shellTab = shellTab;
-
-    p->wnd = CreateWindowExW(0, PANEL_CLASS, L"Tags", WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0,
-                             sink, nullptr, THIS_MODULE, p);
-    if (!p->wnd) {
-        Wh_Log(L"Couldn't create the panel: %u", GetLastError());
-        delete p;
-        RemoveTreeSubclass(tree);
-        return;
-    }
-
-    AcquireSRWLockExclusive(&g_panelsLock);
-    g_panels.push_back(p);
-    ReleaseSRWLockExclusive(&g_panelsLock);
-    TryRegisterHotkeys(p->wnd);
-
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(sink, SinkSubclassProc, 0)) {
-        // Without it the panel doesn't follow the pane being resized.
-        Wh_Log(L"Couldn't subclass the container %p", sink);
-    }
-
-    p->drop = new TagDropTarget(p->wnd);
-    HRESULT hr = RegisterDragDrop(p->wnd, p->drop);
-    if (FAILED(hr)) {
-        Wh_Log(L"RegisterDragDrop failed: 0x%08X", hr);
-        p->drop->Release();
-        p->drop = nullptr;
-    }
-
-    p->currentFolder = GetCurrentFolder(p);
-    EnsureTagsColumn(p, *GetSettings());
-    LayoutPanel(p);
-    Wh_Log(L"Panel attached to tree %p", tree);
-#endif
-}
-
-// Runs on the window thread.
-void Detach(Panel* p) {
-    AcquireSRWLockExclusive(&g_panelsLock);
-    g_panels.erase(std::remove(g_panels.begin(), g_panels.end(), p), g_panels.end());
-    ReleaseSRWLockExclusive(&g_panelsLock);
-
-    if (p->wnd) {
-        DestroyWindow(p->wnd);
-    }
-    // If the panel was already partway through being destroyed (the
-    // container closing), DestroyWindow returns without doing anything and
-    // its WM_NCDESTROY arrives later: it can't find this Panel.
-    if (p->wnd && IsWindow(p->wnd)) {
-        SetWindowLongPtrW(p->wnd, GWLP_USERDATA, 0);
-    }
-    if (p->drop) {
-        if (p->wnd && IsWindow(p->wnd)) {
-            RevokeDragDrop(p->wnd);
-        }
-        p->drop->Release();
-        p->drop = nullptr;
-    }
-    if (p->iconFont) {
-        DeleteObject(p->iconFont);
-        p->iconFont = nullptr;
-    }
-    if (IsWindow(p->sink)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(p->sink, SinkSubclassProc);
-        if (IsWindow(p->tree)) {
-            RECT rc;
-            GetClientRect(p->sink, &rc);
-            RECT tr;
-            GetWindowRect(p->tree, &tr);
-            MapWindowPoints(nullptr, p->sink, (POINT*)&tr, 2);
-            SetWindowPos(p->tree, nullptr, 0, 0, tr.right - tr.left, std::max(0, (int)(rc.bottom - tr.top)),
-                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-    }
-    delete p;
-}
-
-LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
-    if (msg == g_msgAttach) {
-        Attach(hWnd);
-        return 0;
-    }
-    if (msg == g_msgDetach) {
-        if (Panel* p = FindPanel(hWnd)) {
-            Detach(p);
-        }
-        return 0;
-    }
-
-    switch (msg) {
-        case WM_WINDOWPOSCHANGING: {
-            Panel* p = FindPanel(hWnd);
-            auto wp = (WINDOWPOS*)lParam;
-            if (p && p->wnd && !(wp->flags & SWP_NOSIZE)) {
-                RECT rc;
-                GetClientRect(p->sink, &rc);
-                int top = wp->y;
-                if (wp->flags & SWP_NOMOVE) {
-                    RECT tr;
-                    GetWindowRect(hWnd, &tr);
-                    MapWindowPoints(nullptr, p->sink, (POINT*)&tr, 2);
-                    top = tr.top;
-                }
-                int maxH = std::max(0, (int)rc.bottom - p->panelHeight - top);
-                if (wp->cy > maxH) {
-                    wp->cy = maxH;
-                }
-            }
-            break;
-        }
-
-        case WM_NOTIFY: {
-            auto hdr = (NMHDR*)lParam;
-            if (hdr && hdr->code == TVN_SELCHANGEDW) {
-                if (Panel* p = FindPanel(hWnd); p && p->wnd) {
-                    SetTimer(p->wnd, TIMER_REPAINT, 350, nullptr);
-                }
-            }
-            break;
-        }
-
-        case WM_THEMECHANGED:
-        case WM_SYSCOLORCHANGE:
-        case WM_SETTINGCHANGE:
-            if (Panel* p = FindPanel(hWnd); p && p->wnd) {
-                // The tree's row height can change with the theme, and with it
-                // the height the panel needs. The layout is deferred: the
-                // inner tree hasn't seen this message yet, so measuring it now
-                // would cache the old height and keep it.
-                p->rowHeight = 0;
-                PostMessageW(p->wnd, g_msgLayout, 0, 0);
-            }
-            break;
-
-        case WM_NCDESTROY:
-            if (Panel* p = FindPanel(hWnd)) {
-                Detach(p);
-            }
-            AcquireSRWLockExclusive(&g_panelsLock);
-            g_subclassedTrees.erase(
-                std::remove(g_subclassedTrees.begin(), g_subclassedTrees.end(), hWnd),
-                g_subclassedTrees.end());
-            ReleaseSRWLockExclusive(&g_panelsLock);
-            break;
-    }
-    return DefSubclassProc(hWnd, msg, wParam, lParam);
-}
-
-LRESULT CALLBACK SinkSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
-    if (msg == WM_WINDOWPOSCHANGED) {
-        LRESULT result = DefSubclassProc(hWnd, msg, wParam, lParam);
-        Panel* p = FindPanel(hWnd);
-        if (p && p->sink == hWnd) {
-            LayoutPanel(p);
-        }
-        return result;
-    }
-    return DefSubclassProc(hWnd, msg, wParam, lParam);
-}
+void SubclassDesktopListView(HWND hwnd);
+void TrackFileView(HWND hwnd);
+BOOL CALLBACK FindFileViewsProc(HWND hwnd, LPARAM lParam);
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
-void TrackFileView(HWND hwnd);
-BOOL CALLBACK FindFileViewsProc(HWND hwnd, LPARAM lParam);
 
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
                                  DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
@@ -3731,34 +2121,20 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth,
                                          nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hwnd && hWndParent && !g_unloading &&
-        (IS_INTRESOURCE(lpClassName) || _wcsicmp(lpClassName, L"NamespaceTreeControl") == 0) &&
-        HasClass(hwnd, L"NamespaceTreeControl")) {
-        SubclassTree(hwnd);
-    }
-    if (hwnd && hWndParent && !g_unloading &&
         HasClass(hwnd, L"DirectUIHWND") && HasClass(hWndParent, L"SHELLDLL_DefView")) {
         TrackFileView(hwnd);
     }
     if (hwnd && hWndParent && !g_unloading &&
         HasClass(hwnd, L"SysListView32") && HasClass(hWndParent, L"SHELLDLL_DefView")) {
-        void SubclassDesktopListView(HWND hwnd);
         SubclassDesktopListView(hwnd);
     }
     return hwnd;
-}
-
-BOOL CALLBACK FindTreesProc(HWND hwnd, LPARAM) {
-    if (HasClass(hwnd, L"NamespaceTreeControl")) {
-        SubclassTree(hwnd);
-    }
-    return TRUE;
 }
 
 BOOL CALLBACK FindExplorerWindowsProc(HWND hwnd, LPARAM) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid == GetCurrentProcessId() && HasClass(hwnd, L"CabinetWClass")) {
-        EnumChildWindows(hwnd, FindTreesProc, 0);
         EnumChildWindows(hwnd, FindFileViewsProc, 0);
     }
     return TRUE;
@@ -3774,9 +2150,10 @@ BOOL CALLBACK FindExplorerWindowsProc(HWND hwnd, LPARAM) {
 // doesn't go through here.
 // ---------------------------------------------------------------------------
 
-// Owners of menus with our entries currently open (under g_panelsLock), so
+// Owners of menus with our entries currently open (under g_menuOwnersLock), so
 // they can be closed when unloading.
 std::vector<HWND> g_menuOwners;
+SRWLOCK g_menuOwnersLock = SRWLOCK_INIT;
 
 const UINT MENU_ID_RANGE = 0x100;
 const UINT MENU_ID_REMOVE_ALL = 0xFE;
@@ -3949,35 +2326,12 @@ std::vector<std::wstring> GetSelectedPaths(HWND defView) {
 // File view subclassing and hotkeys
 // ---------------------------------------------------------------------------
 
-void HandleTagHotkey(UINT id);
-void TryRegisterHotkeys(HWND hWnd);
-void ReleaseHotkeys(HWND hWnd);
 
-LRESULT CALLBACK FileViewSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
-                                      LPARAM lParam, DWORD_PTR) {
-    if (message == WM_HOTKEY) {
-        HandleTagHotkey((UINT)wParam);
-        return 0;
-    }
-    if (message == g_msgRefresh) {
-        InvalidateRect(hwnd, nullptr, FALSE);
-        return 0;
-    }
-    if (message == WM_NCDESTROY) {
-        ReleaseHotkeys(hwnd);
-        AcquireSRWLockExclusive(&g_fileViewsLock);
-        g_subclassedFileViews.erase(
-            std::remove(g_subclassedFileViews.begin(), g_subclassedFileViews.end(), hwnd),
-            g_subclassedFileViews.end());
-        ReleaseSRWLockExclusive(&g_fileViewsLock);
-        return DefSubclassProc(hwnd, message, wParam, lParam);
-    }
-    return DefSubclassProc(hwnd, message, wParam, lParam);
-}
 
 std::vector<std::wstring> TagsForPaintPath(const std::wstring& path);
 HWND g_desktopListView = nullptr;
 std::vector<HWND> g_subclassedListViews;
+std::vector<RECT> g_lastDesktopDotRects;
 SRWLOCK g_listViewsLock = SRWLOCK_INIT;
 
 void PaintDesktopDots(HWND hwnd) {
@@ -4006,7 +2360,7 @@ void PaintDesktopDots(HWND hwnd) {
 
     int dpi = GetDpiForWindow(hwnd);
     if (!dpi) dpi = 96;
-    int diameter = Dip(8, dpi);
+    int diameter = Dip(settings->desktopDotSize, dpi);
     int gap = Dip(3, dpi);
 
     HFONT hFont = (HFONT)SendMessageW(hwnd, WM_GETFONT, 0, 0);
@@ -4015,6 +2369,7 @@ void PaintDesktopDots(HWND hwnd) {
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
+    std::vector<RECT> currentDotRects;
     for (int i = 0; i < count; i++) {
         WCHAR itemName[MAX_PATH] = {};
         LVITEMW lvi = {};
@@ -4087,6 +2442,7 @@ void PaintDesktopDots(HWND hwnd) {
             dotY = rcLabel.bottom - diameter - Dip(2, dpi);
         }
 
+        int dotStartX = curDotX;
         for (size_t t = 0; t < activeTags.size() && t < 3; t++) {
             COLORREF tc = activeTags[t].color;
             Gdiplus::SolidBrush dotBrush(
@@ -4095,13 +2451,43 @@ void PaintDesktopDots(HWND hwnd) {
                           (Gdiplus::REAL)diameter, (Gdiplus::REAL)diameter);
             curDotX += diameter + gap;
         }
+        RECT itemDotRect = {dotStartX - 2, dotY - 2, curDotX + 2, dotY + diameter + 2};
+        currentDotRects.push_back(itemDotRect);
     }
 
     ReleaseDC(hwnd, hdc);
+
+    AcquireSRWLockExclusive(&g_listViewsLock);
+    for (const auto& oldRc : g_lastDesktopDotRects) {
+        bool stillPresent = false;
+        for (const auto& curRc : currentDotRects) {
+            if (EqualRect(&oldRc, &curRc)) {
+                stillPresent = true;
+                break;
+            }
+        }
+        if (!stillPresent) {
+            InvalidateRect(hwnd, &oldRc, TRUE);
+        }
+    }
+    g_lastDesktopDotRects = std::move(currentDotRects);
+    ReleaseSRWLockExclusive(&g_listViewsLock);
 }
 
 LRESULT CALLBACK DesktopListViewSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
                                             LPARAM lParam, DWORD_PTR) {
+    if (message == WM_MOUSEMOVE) {
+        static int lastHot = -1;
+        int hot = (int)SendMessageW(hwnd, LVM_GETHOTITEM, 0, 0);
+        if (hot != lastHot) {
+            lastHot = hot;
+            AcquireSRWLockShared(&g_listViewsLock);
+            for (const auto& rc : g_lastDesktopDotRects) {
+                InvalidateRect(hwnd, &rc, TRUE);
+            }
+            ReleaseSRWLockShared(&g_listViewsLock);
+        }
+    }
     if (message == g_msgRefresh) {
         static DWORD lastRefresh = 0;
         DWORD now = GetTickCount();
@@ -4109,7 +2495,12 @@ LRESULT CALLBACK DesktopListViewSubclassProc(HWND hwnd, UINT message, WPARAM wPa
             return 0;
         }
         lastRefresh = now;
-        InvalidateRect(hwnd, nullptr, FALSE);
+        AcquireSRWLockShared(&g_listViewsLock);
+        for (const auto& rc : g_lastDesktopDotRects) {
+            InvalidateRect(hwnd, &rc, TRUE);
+        }
+        ReleaseSRWLockShared(&g_listViewsLock);
+        InvalidateRect(hwnd, nullptr, TRUE);
         UpdateWindow(hwnd);
         return 0;
     }
@@ -4173,12 +2564,15 @@ HWND FindDesktopListView() {
 }
 
 void TrackFileView(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return;
+    }
     AcquireSRWLockExclusive(&g_fileViewsLock);
     bool already = g_unloading ||
-                   std::find(g_subclassedFileViews.begin(), g_subclassedFileViews.end(), hwnd) !=
-                       g_subclassedFileViews.end();
+                   std::find(g_trackedFileViews.begin(), g_trackedFileViews.end(), hwnd) !=
+                       g_trackedFileViews.end();
     if (!already) {
-        g_subclassedFileViews.push_back(hwnd);
+        g_trackedFileViews.push_back(hwnd);
     }
     ReleaseSRWLockExclusive(&g_fileViewsLock);
     if (!already) {
@@ -4312,42 +2706,39 @@ void CaptureTagsColumn(HWND defView, const Settings& settings) {
 LRESULT WINAPI DispatchMessageW_Hook(const MSG* message) {
     if (message) {
         if (message->message == WM_SYSKEYDOWN && !(message->lParam & (1 << 30))) {
-            WPARAM key = message->wParam;
-            int tagIdx = -1;
-            if (key >= '1' && key <= '8') {
-                tagIdx = (int)(key - '1');
-            } else if (key >= VK_NUMPAD1 && key <= VK_NUMPAD8) {
-                tagIdx = (int)(key - VK_NUMPAD1);
-            } else if (key == '0' || key == VK_NUMPAD0) {
-                tagIdx = 1000;
-            }
+            if ((GetKeyState(VK_CONTROL) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0) {
+                HWND focus = GetFocus();
+                if (!focus || !HasClass(focus, L"Edit")) {
+                    WPARAM key = message->wParam;
+                    int tagIdx = -1;
+                    if (key >= '1' && key <= '8') {
+                        tagIdx = (int)(key - '1');
+                    } else if (key == '0') {
+                        tagIdx = 1000;
+                    }
 
-            if (tagIdx >= 0) {
-                HWND defView = DefViewFor(message->hwnd);
-                if (!defView) {
-                    defView = FolderViewAncestor(message->hwnd);
-                }
-                if (!defView) {
-                    defView = ForegroundDefView();
-                }
-                if (defView) {
-                    std::vector<std::wstring> paths = GetSelectedPaths(defView);
-                    if (!paths.empty()) {
-                        if (tagIdx == 1000) {
-                            QueueRemove(L"", std::move(paths));
-                            return 0;
-                        } else {
-                            auto settings = GetSettings();
-                            if ((size_t)tagIdx < settings->tags.size()) {
-                                const std::wstring tag = settings->tags[tagIdx].name;
-                                TagHits hits = CountTagHits(paths);
-                                auto found = hits.perTag.find(tag);
-                                if (found != hits.perTag.end() && found->second == (int)paths.size()) {
-                                    QueueRemove(tag, std::move(paths));
+                    if (tagIdx >= 0) {
+                        HWND defView = DefViewFor(message->hwnd);
+                        if (defView) {
+                            std::vector<std::wstring> paths = GetSelectedPaths(defView);
+                            if (!paths.empty()) {
+                                if (tagIdx == 1000) {
+                                    QueueRemove(L"", std::move(paths));
+                                    return 0;
                                 } else {
-                                    QueueAdd(tag, std::move(paths));
+                                    auto settings = GetSettings();
+                                    if ((size_t)tagIdx < settings->tags.size()) {
+                                        const std::wstring tag = settings->tags[tagIdx].name;
+                                        TagHits hits = CountTagHits(paths);
+                                        auto found = hits.perTag.find(tag);
+                                        if (found != hits.perTag.end() && found->second == (int)paths.size()) {
+                                            QueueRemove(tag, std::move(paths));
+                                        } else {
+                                            QueueAdd(tag, std::move(paths));
+                                        }
+                                        return 0;
+                                    }
                                 }
-                                return 0;
                             }
                         }
                     }
@@ -4410,10 +2801,21 @@ std::wstring FileNameForElement(void* element) {
 
 std::vector<std::wstring> TagsForPaintPath(const std::wstring& path) {
     std::vector<std::wstring> tags;
+    std::wstring lower = LowerPath(path);
     AcquireSRWLockShared(&g_countsLock);
-    auto found = g_taggedByPath.find(LowerPath(path));
+    auto found = g_taggedByPath.find(lower);
     if (found != g_taggedByPath.end()) {
         tags = found->second;
+    } else {
+        std::wstring prefix = lower + L".";
+        for (const auto& pair : g_taggedByPath) {
+            if (pair.first.size() > prefix.size() &&
+                pair.first.compare(0, prefix.size(), prefix) == 0 &&
+                pair.first.find(L'\\', prefix.size()) == std::wstring::npos) {
+                tags = pair.second;
+                break;
+            }
+        }
     }
     ReleaseSRWLockShared(&g_countsLock);
     return tags;
@@ -4477,7 +2879,7 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
         dpi = 96;
     }
 
-    int diameter = Dip(8, dpi);
+    int diameter = Dip(settings->explorerDotSize, dpi);
     int gap = Dip(3, dpi);
 
     // Stable text measurement using system icon title font (Segoe UI 9pt)
@@ -4642,9 +3044,7 @@ bool InstallRowPainter() {
     if (!g_duiGetAccRole || !g_duiReleaseValue || !g_duiStrToID ||
         !g_duiFindDescendent || !paint ||
         !WindhawkUtils::SetFunctionHook(paint, PaintBackgroundHook,
-                                        &g_paintBackgroundOriginal) ||
-        !WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
-                                        &g_dispatchMessageOriginal)) {
+                                        &g_paintBackgroundOriginal)) {
         Wh_Log(L"Dot painter disabled: DirectUI exports changed");
         FreeLibrary(g_dui);
         g_dui = nullptr;
@@ -4931,17 +3331,6 @@ BOOL TrackWithTagMenu(HMENU menu, UINT flags, HWND owner, int x, int y, Original
     if (IsColumnHeaderMenu(menu)) {
         return original();
     }
-    if (x != -1 || y != -1) {
-        POINT pt = {x, y};
-        ScreenToClient(defView, &pt);
-        RECT rcDefView = {};
-        GetClientRect(defView, &rcDefView);
-        int dpi = GetDpiForWindow(defView);
-        int headerHeight = Dip(52, dpi ? dpi : 96);
-        if (pt.y >= 0 && pt.y <= headerHeight && pt.x >= 0 && pt.x <= rcDefView.right) {
-            return original();
-        }
-    }
 
     int itemCount = GetMenuItemCount(menu);
     bool looksRight = LooksLikeItemContextMenu(menu);
@@ -4978,18 +3367,18 @@ BOOL TrackWithTagMenu(HMENU menu, UINT flags, HWND owner, int x, int y, Original
         return original();
     }
 
-    AcquireSRWLockExclusive(&g_panelsLock);
+    AcquireSRWLockExclusive(&g_menuOwnersLock);
     g_menuOwners.push_back(owner);
-    ReleaseSRWLockExclusive(&g_panelsLock);
+    ReleaseSRWLockExclusive(&g_menuOwnersLock);
 
     BOOL result = original();
 
-    AcquireSRWLockExclusive(&g_panelsLock);
+    AcquireSRWLockExclusive(&g_menuOwnersLock);
     auto it = std::find(g_menuOwners.begin(), g_menuOwners.end(), owner);
     if (it != g_menuOwners.end()) {
         g_menuOwners.erase(it);
     }
-    ReleaseSRWLockExclusive(&g_panelsLock);
+    ReleaseSRWLockExclusive(&g_menuOwnersLock);
 
     // The reserved block is chosen from the IDs present when the menu opens,
     // but shell submenus (Send to, Open with) fill themselves in later: check
@@ -5062,7 +3451,7 @@ HRESULT __thiscall CDefViewSetCurrentViewMode_Hook(void* pThis, UINT viewMode) {
 }
 
 bool InstallDetailsColumnHooks() {
-    HMODULE shell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
     if (!shell32) {
         Wh_Log(L"Tags column disabled: shell32.dll is unavailable");
         return false;
@@ -5119,25 +3508,14 @@ BOOL InitFailed() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    // Windhawk loads a fresh copy of the image on every enable, so these are
-    // already zero; setting them costs nothing and means no future change to
-    // the teardown path can leave the mod inert without it being obvious.
     g_unloading = false;
     g_workerThread = nullptr;
     g_busy = 0;
-    g_drags = 0;
     g_hookCalls = 0;
 
     LoadSettings();
-    g_collapsed = Wh_GetIntValue(L"collapsed", 0) != 0;
 
-    // The record is one file per user under Windhawk's machine-wide storage,
-    // so the same account signed in twice (console and a remote session) has
-    // to take the same lock, and that means the global namespace. The name
-    // carries the user, so accounts don't wait on each other; the fallback is
-    // for the name being held in Global by someone else, which comes back as
-    // access denied.
-    std::wstring mutexName = L"WindhawkExplorerTagsDb-" + CurrentUserKey();
+    std::wstring mutexName = L"WindhawkExplorerColorTagsDb-" + CurrentUserKey();
     g_dbMutex = CreateMutexW(nullptr, FALSE, (L"Global\\" + mutexName).c_str());
     if (!g_dbMutex) {
         g_dbMutex = CreateMutexW(nullptr, FALSE, (L"Local\\" + mutexName).c_str());
@@ -5148,40 +3526,27 @@ BOOL Wh_ModInit() {
         return InitFailed();
     }
 
-    g_msgAttach = RegisterWindowMessageW(L"WhExplorerTags_Attach");
-    g_msgDetach = RegisterWindowMessageW(L"WhExplorerTags_Detach");
-    g_msgRefresh = RegisterWindowMessageW(L"WhExplorerTags_Refresh");
-    g_msgLayout = RegisterWindowMessageW(L"WhExplorerTags_Layout");
-    g_msgCancelMenu = RegisterWindowMessageW(L"WhExplorerTags_CancelMenu");
-    g_msgHotkeyRebalance = RegisterWindowMessageW(L"WhExplorerTags_HotkeyRebalance");
+    g_msgRefresh = RegisterWindowMessageW(L"WhExplorerColorTags_Refresh");
+    g_msgCancelMenu = RegisterWindowMessageW(L"WhExplorerColorTags_CancelMenu");
 
-    WNDCLASSW wc = {};
-    wc.lpfnWndProc = PanelWndProc;
-    wc.hInstance = THIS_MODULE;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.lpszClassName = PANEL_CLASS;
-    if (!RegisterClassW(&wc)) {
-        Wh_Log(L"RegisterClass failed: %u", GetLastError());
-        return InitFailed();
-    }
     Gdiplus::GdiplusStartupInput gdiplusInput;
     if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != Gdiplus::Ok) {
         g_gdiplusToken = 0;
-        UnregisterClassW(PANEL_CLASS, THIS_MODULE);
         return InitFailed();
     }
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                         &CreateWindowExW_Original)) {
-        Wh_Log(L"Couldn't hook CreateWindowExW: no panel will be created");
+        Wh_Log(L"Couldn't hook CreateWindowExW");
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
-        UnregisterClassW(PANEL_CLASS, THIS_MODULE);
         return InitFailed();
     }
+
+    WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
+                                   &g_dispatchMessageOriginal);
     InstallDetailsColumnHooks();
     InstallRowPainter();
-    // The panel works without these two; only the context menu is lost.
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
                                         &TrackPopupMenuEx_Original) ||
         !WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenu_Hook,
@@ -5197,25 +3562,17 @@ void Wh_ModAfterInit() {
     EnumWindows(FindExplorerWindowsProc, 0);
     HWND desktop = FindDesktopListView();
     if (desktop) {
-        void SubclassDesktopListView(HWND hwnd);
         SubclassDesktopListView(desktop);
     }
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    // The worker notices a changed tags folder by itself; stopping it here
-    // would block Windhawk's engine thread on whatever it is doing.
+    EnumWindows(FindExplorerWindowsProc, 0);
     QueueSync();
-    BroadcastMessage(g_msgLayout);
+    BroadcastRefresh();
 }
 
-// A menu the user leaves open would otherwise hold unloading forever. Waiting
-// is what keeps code from being unmapped under a live call, so it is worth
-// some patience, but not an unbounded hang of Windhawk's engine: past the
-// deadline it gives up and says so. Only the menu-driven counts get a
-// deadline; the drag count must not, because OLE holds a pointer into this
-// image until it releases the drop target.
 const DWORD UNLOAD_WAIT_MS = 2000;
 
 bool WaitForZero(const std::atomic<int>& counter, PCWSTR what) {
@@ -5231,51 +3588,25 @@ bool WaitForZero(const std::atomic<int>& counter, PCWSTR what) {
 }
 
 void Wh_ModBeforeUninit() {
-    AcquireSRWLockExclusive(&g_panelsLock);
     g_unloading = true;
-    std::vector<HWND> trees = g_subclassedTrees;
-    ReleaseSRWLockExclusive(&g_panelsLock);
-    ReleaseHotkeys(g_hotkeyOwner);
 
-    // A drag, a menu, or a navigation in progress will still return to mod
-    // code. With g_unloading set, none new can start; an open menu is
-    // closed.
-    BroadcastMessage(g_msgCancelMenu);
-    AcquireSRWLockShared(&g_panelsLock);
+    AcquireSRWLockShared(&g_menuOwnersLock);
     for (HWND owner : g_menuOwners) {
-        // DefWindowProc closes the current menu with WM_CANCELMODE; if the
-        // view doesn't do it, the user is expected to close it.
-        PostMessageW(owner, WM_CANCELMODE, 0, 0);
-    }
-    ReleaseSRWLockShared(&g_panelsLock);
-
-    // Detach FIRST, then wait. Detach revokes and releases the mod's own
-    // reference on each drop target, so when OLE lets go of its reference the
-    // object is destroyed and its destructor ends the drag. Waiting first
-    // would hang forever in exactly the case being guarded against: a drag
-    // whose source died never gets a DragLeave, and the mod's own reference
-    // would keep the count above zero.
-    //
-    // The reorder is safe because Detach runs on the window's own thread via
-    // SendMessage, so it can't interleave with an IDropTarget call, and the
-    // code already survives the panel disappearing under it (FindPanel then
-    // returns null and the drop methods do nothing).
-    for (HWND tree : trees) {
-        if (IsWindow(tree)) {
-            SendMessageW(tree, g_msgDetach, 0, 0);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(tree, TreeSubclassProc);
+        if (IsWindow(owner)) {
+            PostMessageW(owner, WM_CANCELMODE, 0, 0);
         }
     }
+    ReleaseSRWLockShared(&g_menuOwnersLock);
+
     std::vector<HWND> fileViews;
     {
         AcquireSRWLockExclusive(&g_fileViewsLock);
-        fileViews.swap(g_subclassedFileViews);
+        fileViews.swap(g_trackedFileViews);
         ReleaseSRWLockExclusive(&g_fileViewsLock);
     }
     for (HWND fileView : fileViews) {
         if (IsWindow(fileView)) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                fileView, FileViewSubclassProc);
+            InvalidateRect(fileView, nullptr, FALSE);
         }
     }
     std::vector<HWND> listViews;
@@ -5292,6 +3623,12 @@ void Wh_ModBeforeUninit() {
         }
     }
     if (g_desktopListView && IsWindow(g_desktopListView)) {
+        AcquireSRWLockExclusive(&g_listViewsLock);
+        for (const auto& rc : g_lastDesktopDotRects) {
+            InvalidateRect(g_desktopListView, &rc, TRUE);
+        }
+        g_lastDesktopDotRects.clear();
+        ReleaseSRWLockExclusive(&g_listViewsLock);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             g_desktopListView, DesktopListViewSubclassProc);
         InvalidateRect(g_desktopListView, nullptr, FALSE);
@@ -5299,24 +3636,12 @@ void Wh_ModBeforeUninit() {
     }
 
     WaitForZero(g_busy, L"mod code on a window thread");
-    ULONGLONG dragWaitStart = GetTickCount64();
-    while (g_drags > 0 && (GetTickCount64() - dragWaitStart < 2000)) {
-        Sleep(20);
-    }
 
     StopWorker();
 }
 
 void Wh_ModUninit() {
-    // The hooks have already been removed; what's left is exiting calls that
-    // had already entered. The count covers every popup menu in the process,
-    // including ones the mod never touched, so this waits with a deadline.
     WaitForZero(g_hookCalls, L"calls inside the hooks");
-    if (!UnregisterClassW(PANEL_CLASS, THIS_MODULE)) {
-        // The next load would then fail with ERROR_CLASS_ALREADY_EXISTS and
-        // the mod would be inert in this process with no trace of why.
-        Wh_Log(L"UnregisterClass failed: %u", GetLastError());
-    }
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
