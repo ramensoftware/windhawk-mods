@@ -844,11 +844,23 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
     // window's own thread at depth zero, so that the windows are fully
     // constructed and no cross-thread creation race is possible.
     if (safeToAttach && !g_listViewWnd.load(std::memory_order_relaxed)) {
-        HWND hDesktop = FindDesktopListView();
-        if (hDesktop &&
-            GetWindowThreadProcessId(hDesktop, nullptr) ==
-                GetCurrentThreadId()) {
-            SubclassDesktop(hDesktop);
+        // Explorer processes that don't host the desktop (e.g. folder windows
+        // with "Launch folder windows in a separate process") can never pass
+        // the desktop checks; skip the probe once the shell window belongs to
+        // another process. Before the shell window exists this process may
+        // still be the shell, and the search there is trivial anyway.
+        HWND hShellWnd = GetShellWindow();
+        DWORD shellPid = 0;
+        bool shellInOtherProcess =
+            hShellWnd && GetWindowThreadProcessId(hShellWnd, &shellPid) &&
+            shellPid != GetCurrentProcessId();
+        if (!shellInOtherProcess) {
+            HWND hDesktop = FindDesktopListView();
+            if (hDesktop &&
+                GetWindowThreadProcessId(hDesktop, nullptr) ==
+                    GetCurrentThreadId()) {
+                SubclassDesktop(hDesktop);
+            }
         }
     }
 
