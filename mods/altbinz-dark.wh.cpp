@@ -21,6 +21,12 @@ re-colors everything that is drawn with GDI: brushes, pens, text colors, system
 colors and the opaque skin bitmaps. Common dialogs and shell menus keep
 Windows' own dark mode.
 
+## Compatibility
+
+Tested with Alt.Binz 0.48.4 (32-bit) at 100% display scaling on Windows 11. Some
+elements (the column header bars, the progress bar fills and the status bar button)
+are recognized by their size and color, so another version may look different.
+
 ## Surface color
 
 The blue skin surface (toolbar, tabs, status bar, dialogs, Setup) can get another
@@ -1154,8 +1160,10 @@ static BOOL WINAPI EndPaint_hook(HWND wnd, const PAINTSTRUCT* ps) {
     if (ps && ps->hdc && WindowClassIs(wnd, L"TbsSkinStatusBar")) {
         FixStatusGlyph(ps->hdc);
     }
-    if (ps && ps->hdc) {
-        ForgetDcColors(ps->hdc);  // window DCs are released, not deleted, and reused for other windows
+    // window DCs are released, not deleted, and reused for other windows; a window with its own DC keeps
+    // its attributes (and so its mapped colors), its entry must stay
+    if (ps && ps->hdc && !(GetClassLongPtrW(wnd, GCL_STYLE) & (CS_OWNDC | CS_CLASSDC))) {
+        ForgetDcColors(ps->hdc);
     }
     return EndPaint_orig(wnd, ps);
 }
@@ -1166,7 +1174,7 @@ static int WINAPI ReleaseDC_hook(HWND wnd, HDC dc) {
     if (dc && WindowClassIs(wnd, L"TbsSkinStatusBar")) {
         FixStatusGlyph(dc);
     }
-    if (dc) {
+    if (dc && !(GetClassLongPtrW(wnd, GCL_STYLE) & (CS_OWNDC | CS_CLASSDC))) {
         ForgetDcColors(dc);
     }
     return ReleaseDC_orig(wnd, dc);
