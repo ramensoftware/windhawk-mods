@@ -16,13 +16,17 @@
 /*
 # Modern Run Dialog UI For Windows 10 & 11
 
-![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/liquidglass.png)
+![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306liquidglass.png)
 
 Modern Run Dialog UI Preview (Liquid Glass)
 
-![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/windowsblur.png)
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306windowsblur.png)
 
 Modern Run Dialog UI Preview (Windows Blur)
+
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306goiyungdung.png)
+
+Modern Run Dialog UI Preview (Application recommendation system)
 
 ---
 
@@ -34,7 +38,7 @@ Modern Run Dialog UI Preview (Windows Blur)
 
 - **Full Windows 10 & Windows 11 Compatibility (Symbol-Less Fallback Included):**
   * Works seamlessly on both **Windows 10** and **Windows 11** (`x86-64`), automatically anchoring right above the Taskbar and supporting Per-Monitor DPI scaling.
-  * Includes an automatic **symbol-less hooking fallback** (`DialogBoxParamW` / `DialogBoxIndirectParamW` / `CreateDialogParamW` / `CreateDialogIndirectParamW` + `ShowWindow`) so the mod works reliably even when Microsoft's symbol server returns HTTP 404 for `shell32.pdb` on newer Insider or cumulative builds.
+  * Includes an automatic **symbol-less hooking fallback** (`DialogBoxParamW`) targeting the Run dialog resource (`#1003`) so the mod works reliably even when Microsoft's symbol server returns HTTP 404 for `shell32.pdb` on newer Insider or cumulative builds.
 
 - **PowerToys Run-Style App & Command Suggestions (Experimental):**
   * Dynamically suggests installed applications (Start Menu shortcuts, Registry `App Paths`), built-in system tools (`cmd`, `regedit`, `dxdiag`, `services.msc`, `control`, etc.), and recent commands while you type.
@@ -251,7 +255,6 @@ Modern Run Dialog UI Preview (Windows Blur)
 constexpr WORD kRunDialogResourceId = 1003;
 constexpr int kRunDlgComboId        = 12298; // 0x300A (IDD_COMMAND)
 constexpr int kRunDlgBrowseId       = 12288; // 0x3000 (IDD_BROWSE)
-constexpr int kRunDlgIconId         = 12297; // 0x3009 (IDD_ICON)
 
 enum ACCENT_STATE {
     ACCENT_DISABLED = 0,
@@ -280,18 +283,12 @@ using ShowWindow_t = decltype(&ShowWindow);
 using SetForegroundWindow_t = decltype(&SetForegroundWindow);
 using SwitchToThisWindow_t = decltype(&SwitchToThisWindow);
 using DialogBoxParamW_t = decltype(&DialogBoxParamW);
-using DialogBoxIndirectParamW_t = decltype(&DialogBoxIndirectParamW);
-using CreateDialogParamW_t = decltype(&CreateDialogParamW);
-using CreateDialogIndirectParamW_t = decltype(&CreateDialogIndirectParamW);
 using RunDlgProc_t = INT_PTR(CALLBACK*)(HWND, UINT, WPARAM, LPARAM);
 
 ShowWindow_t ShowWindow_Orig = nullptr;
 SetForegroundWindow_t SetForegroundWindow_Orig = nullptr;
 SwitchToThisWindow_t SwitchToThisWindow_Orig = nullptr;
 DialogBoxParamW_t DialogBoxParamW_Orig = nullptr;
-DialogBoxIndirectParamW_t DialogBoxIndirectParamW_Orig = nullptr;
-CreateDialogParamW_t CreateDialogParamW_Orig = nullptr;
-CreateDialogIndirectParamW_t CreateDialogIndirectParamW_Orig = nullptr;
 RunDlgProc_t RunDlgProc_Orig = nullptr;
 
 HMODULE g_hShell32 = nullptr;
@@ -1121,6 +1118,8 @@ const std::vector<HistoryItem>& GetActiveRowItems(const RunDialogState* state) {
 
 // Atomic state shared safely across threads
 std::atomic<HWND> g_hActiveRunDlg{nullptr};
+std::atomic<HWND> g_hFallbackInterceptedDlg{nullptr};
+std::atomic<int> g_fallbackDialogRefCount{0};
 std::atomic<ULONGLONG> g_openTick{0};
 std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
@@ -1221,6 +1220,7 @@ void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
 void PerformDialogUninit(HWND hWnd, RunDialogState* state);
 void RecomputeDialogMetrics(RunDialogState* state);
+void UpdateDialogEditFont(RunDialogState* state);
 void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& query);
 
 int GetDlgWidth(const RunDialogState* state) {
@@ -2020,7 +2020,7 @@ struct AppSuggestionCandidate {
 };
 
 std::mutex g_catalogMutex;
-[[clang::no_destroy]] std::vector<AppSuggestionCandidate> g_appCatalog;
+std::vector<AppSuggestionCandidate> g_appCatalog;
 ULONGLONG g_catalogLastBuildTick = 0;
 
 bool IsNoiseShortcutName(std::wstring_view nameLower) {
@@ -2729,17 +2729,8 @@ void DrawD2DCloseCrossVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1St
     pRT->DrawLine(D2D1::Point2F(cx + r, cy - r), D2D1::Point2F(cx - r, cy + r), pBrush, sw, pStroke);
 }
 
-void RecomputeDialogMetrics(RunDialogState* state) {
+void UpdateDialogEditFont(RunDialogState* state) {
     if (!state) return;
-    int rowCount = (int)GetActiveRowItems(state).size();
-    int padTop = GetListPadTop(state);
-    int padBot = GetListPadBottom(state);
-    int rowH   = GetRowHeight(state);
-    int barH   = GetInputBarHeight(state);
-
-    state->topAreaHeight = (rowCount > 0) ? (padTop + rowCount * rowH + padBot) : 0;
-    state->totalHeight   = state->topAreaHeight + barH;
-
     if (state->hFontEditCtl) {
         DeleteObject(state->hFontEditCtl);
     }
@@ -2750,6 +2741,18 @@ void RecomputeDialogMetrics(RunDialogState* state) {
     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
         SendMessageW(state->hModernEdit, WM_SETFONT, (WPARAM)state->hFontEditCtl, FALSE);
     }
+}
+
+void RecomputeDialogMetrics(RunDialogState* state) {
+    if (!state) return;
+    int rowCount = (int)GetActiveRowItems(state).size();
+    int padTop = GetListPadTop(state);
+    int padBot = GetListPadBottom(state);
+    int rowH   = GetRowHeight(state);
+    int barH   = GetInputBarHeight(state);
+
+    state->topAreaHeight = (rowCount > 0) ? (padTop + rowCount * rowH + padBot) : 0;
+    state->totalHeight   = state->topAreaHeight + barH;
 }
 
 LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -2830,23 +2833,15 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
     LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-    bool textMayHaveChanged = (uMsg == WM_CHAR || uMsg == WM_PASTE || uMsg == WM_CUT ||
-                               uMsg == WM_SETTEXT || uMsg == WM_IME_COMPOSITION ||
-                               uMsg == WM_IME_ENDCOMPOSITION || uMsg == WM_IME_CHAR ||
-                               (uMsg == WM_KEYUP && (wParam == VK_BACK || wParam == VK_DELETE)));
-
-    if (textMayHaveChanged || uMsg == WM_KEYUP || uMsg == WM_KEYDOWN ||
-        uMsg == WM_IME_STARTCOMPOSITION || uMsg == EM_SETSEL) {
+    if (uMsg == WM_CHAR || uMsg == WM_KEYUP || uMsg == WM_KEYDOWN ||
+        uMsg == WM_PASTE || uMsg == WM_CUT || uMsg == WM_SETTEXT ||
+        uMsg == WM_IME_STARTCOMPOSITION || uMsg == WM_IME_COMPOSITION ||
+        uMsg == WM_IME_ENDCOMPOSITION || uMsg == WM_IME_CHAR ||
+        uMsg == EM_SETSEL) {
         state->caretVisible = true;
-        std::wstring currentText = GetEffectiveInputText(hWnd);
-        SyncInputToNativeCombo(state, currentText.c_str());
-        if (textMayHaveChanged && !state->suppressSuggestionUpdate) {
-            UpdateAppSuggestionsForQuery(state, currentText);
-            InvalidateRect(state->hDlg, nullptr, FALSE);
-        } else {
-            RECT rcBar = { 0, state->topAreaHeight, GetDlgWidth(state), state->totalHeight };
-            InvalidateRect(state->hDlg, &rcBar, FALSE);
-        }
+        SyncInputToNativeCombo(state);
+        RECT rcBar = { 0, state->topAreaHeight, GetDlgWidth(state), state->totalHeight };
+        InvalidateRect(state->hDlg, &rcBar, FALSE);
     }
 
     if (uMsg == WM_NCDESTROY) {
@@ -2860,6 +2855,8 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
     KillTimer(hWnd, kTimerLuminance);
     HWND expected = hWnd;
     g_hActiveRunDlg.compare_exchange_strong(expected, nullptr);
+    HWND expectedFallback = hWnd;
+    g_hFallbackInterceptedDlg.compare_exchange_strong(expectedFallback, nullptr);
     g_isBrowsingFile.store(false);
     StopKeyHookThread();
     RemovePropW(hWnd, L"WindhawkModernRunApplied");
@@ -2987,6 +2984,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_DPICHANGED: {
             if (state) {
                 state->dpi = HIWORD(wParam);
+                UpdateDialogEditFont(state);
                 RecomputeDialogMetrics(state);
                 const RECT* prcSuggested = reinterpret_cast<const RECT*>(lParam);
                 int dlgW = GetDlgWidth(state);
@@ -3803,6 +3801,7 @@ void TransformRunDialog(HWND hDlg) {
     }
 
     LoadHistoryItems(state);
+    UpdateDialogEditFont(state);
     RecomputeDialogMetrics(state);
 
     int dlgW = GetDlgWidth(state);
@@ -3888,25 +3887,14 @@ bool IsRunDialogWindow(HWND hDlg) {
     return false;
 }
 
-bool ShouldInterceptShellDialog(HINSTANCE hInstance, LPCWSTR lpTemplateName, DLGPROC lpDialogFunc) {
-    if (!lpDialogFunc || g_unloading.load()) return false;
-    if (RunDlgProc_Orig != nullptr) return false; // Symbol hook is active
-
-    if (lpTemplateName && IS_INTRESOURCE(lpTemplateName) &&
-        LOWORD(reinterpret_cast<ULONG_PTR>(lpTemplateName)) == kRunDialogResourceId) {
-        return true;
-    }
-    if (hInstance && g_hShell32 && hInstance == g_hShell32) {
-        return true;
-    }
-
-    HMODULE hMod = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCWSTR>(lpDialogFunc), &hMod) &&
-        hMod != nullptr && hMod == g_hShell32) {
-        return true;
-    }
-    return false;
+bool IsRunDialogTemplate(HINSTANCE hInstance, LPCWSTR lpTemplateName) {
+    return !g_unloading.load() &&
+           lpTemplateName &&
+           IS_INTRESOURCE(lpTemplateName) &&
+           LOWORD(reinterpret_cast<ULONG_PTR>(lpTemplateName)) == kRunDialogResourceId &&
+           hInstance &&
+           g_hShell32 &&
+           hInstance == g_hShell32;
 }
 
 thread_local DLGPROC tl_pendingShellDlgProc = nullptr;
@@ -3917,20 +3905,35 @@ INT_PTR CALLBACK FallbackRunDlgProcWrapper(HWND hDlg, UINT uMsg, WPARAM wParam, 
         origProc = tl_pendingShellDlgProc;
         tl_pendingShellDlgProc = nullptr;
         SetPropW(hDlg, L"WindhawkOrigShellDlgProc", reinterpret_cast<HANDLE>(origProc));
+        g_hFallbackInterceptedDlg.store(hDlg);
+    }
+
+    if (uMsg == WM_INITDIALOG) {
+        // Hand DWLP_DLGPROC back to shell32's original dialog procedure immediately so
+        // the window no longer points to FallbackRunDlgProcWrapper after WM_INITDIALOG.
+        if (origProc) {
+            SetWindowLongPtrW(hDlg, DWLP_DLGPROC, reinterpret_cast<LONG_PTR>(origProc));
+        }
+        RemovePropW(hDlg, L"WindhawkOrigShellDlgProc");
+
+        INT_PTR ret = origProc ? origProc(hDlg, uMsg, wParam, lParam) : FALSE;
+
+        if (!g_unloading.load() && IsRunDialogWindow(hDlg)) {
+            TransformRunDialog(hDlg);
+            if (HWND hModernEdit = GetDlgItem(hDlg, kModernEditId)) {
+                SetFocus(hModernEdit);
+                return FALSE;
+            }
+        }
+        return ret;
     }
 
     INT_PTR ret = origProc ? origProc(hDlg, uMsg, wParam, lParam) : FALSE;
 
-    if (uMsg == WM_INITDIALOG && !g_unloading.load() && IsRunDialogWindow(hDlg)) {
-        TransformRunDialog(hDlg);
-        if (HWND hModernEdit = GetDlgItem(hDlg, kModernEditId)) {
-            SetFocus(hModernEdit);
-            return FALSE;
-        }
-    }
-
     if (uMsg == WM_NCDESTROY) {
         RemovePropW(hDlg, L"WindhawkOrigShellDlgProc");
+        HWND expected = hDlg;
+        g_hFallbackInterceptedDlg.compare_exchange_strong(expected, nullptr);
     }
 
     return ret;
@@ -3938,54 +3941,18 @@ INT_PTR CALLBACK FallbackRunDlgProcWrapper(HWND hDlg, UINT uMsg, WPARAM wParam, 
 
 INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE hInstance, LPCWSTR lpTemplateName, HWND hWndParent,
                                     DLGPROC lpDialogFunc, LPARAM dwInitParam) {
-    if (ShouldInterceptShellDialog(hInstance, lpTemplateName, lpDialogFunc)) {
-        DLGPROC prevPending = tl_pendingShellDlgProc;
-        tl_pendingShellDlgProc = lpDialogFunc;
-        INT_PTR res = DialogBoxParamW_Orig(hInstance, lpTemplateName, hWndParent,
-                                           FallbackRunDlgProcWrapper, dwInitParam);
-        tl_pendingShellDlgProc = prevPending;
-        return res;
+    if (!lpDialogFunc || !IsRunDialogTemplate(hInstance, lpTemplateName)) {
+        return DialogBoxParamW_Orig(hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
     }
-    return DialogBoxParamW_Orig(hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
-}
 
-INT_PTR WINAPI DialogBoxIndirectParamW_Hook(HINSTANCE hInstance, LPCDLGTEMPLATEW hDialogTemplate, HWND hWndParent,
-                                            DLGPROC lpDialogFunc, LPARAM dwInitParam) {
-    if (ShouldInterceptShellDialog(hInstance, nullptr, lpDialogFunc)) {
-        DLGPROC prevPending = tl_pendingShellDlgProc;
-        tl_pendingShellDlgProc = lpDialogFunc;
-        INT_PTR res = DialogBoxIndirectParamW_Orig(hInstance, hDialogTemplate, hWndParent,
-                                                   FallbackRunDlgProcWrapper, dwInitParam);
-        tl_pendingShellDlgProc = prevPending;
-        return res;
-    }
-    return DialogBoxIndirectParamW_Orig(hInstance, hDialogTemplate, hWndParent, lpDialogFunc, dwInitParam);
-}
-
-HWND WINAPI CreateDialogParamW_Hook(HINSTANCE hInstance, LPCWSTR lpTemplateName, HWND hWndParent,
-                                    DLGPROC lpDialogFunc, LPARAM dwInitParam) {
-    if (ShouldInterceptShellDialog(hInstance, lpTemplateName, lpDialogFunc)) {
-        DLGPROC prevPending = tl_pendingShellDlgProc;
-        tl_pendingShellDlgProc = lpDialogFunc;
-        HWND hDlg = CreateDialogParamW_Orig(hInstance, lpTemplateName, hWndParent,
-                                            FallbackRunDlgProcWrapper, dwInitParam);
-        tl_pendingShellDlgProc = prevPending;
-        return hDlg;
-    }
-    return CreateDialogParamW_Orig(hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
-}
-
-HWND WINAPI CreateDialogIndirectParamW_Hook(HINSTANCE hInstance, LPCDLGTEMPLATEW lpTemplate, HWND hWndParent,
-                                            DLGPROC lpDialogFunc, LPARAM lParamInit) {
-    if (ShouldInterceptShellDialog(hInstance, nullptr, lpDialogFunc)) {
-        DLGPROC prevPending = tl_pendingShellDlgProc;
-        tl_pendingShellDlgProc = lpDialogFunc;
-        HWND hDlg = CreateDialogIndirectParamW_Orig(hInstance, lpTemplate, hWndParent,
-                                                    FallbackRunDlgProcWrapper, lParamInit);
-        tl_pendingShellDlgProc = prevPending;
-        return hDlg;
-    }
-    return CreateDialogIndirectParamW_Orig(hInstance, lpTemplate, hWndParent, lpDialogFunc, lParamInit);
+    g_fallbackDialogRefCount.fetch_add(1);
+    DLGPROC prevPending = tl_pendingShellDlgProc;
+    tl_pendingShellDlgProc = lpDialogFunc;
+    INT_PTR res = DialogBoxParamW_Orig(hInstance, lpTemplateName, hWndParent,
+                                       FallbackRunDlgProcWrapper, dwInitParam);
+    tl_pendingShellDlgProc = prevPending;
+    g_fallbackDialogRefCount.fetch_sub(1);
+    return res;
 }
 
 INT_PTR CALLBACK RunDlgProc_Hook(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -4003,14 +3970,6 @@ INT_PTR CALLBACK RunDlgProc_Hook(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 }
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    if (!g_unloading.load() && nCmdShow != SW_HIDE && hWnd &&
-        !GetPropW(hWnd, L"WindhawkModernRunApplied") && IsRunDialogWindow(hWnd)) {
-        TransformRunDialog(hWnd);
-        if (HWND hModernEdit = GetDlgItem(hWnd, kModernEditId)) {
-            SetFocus(hModernEdit);
-        }
-    }
-
     HWND hActive = g_hActiveRunDlg.load();
     if (!g_internalActivation && hActive && hWnd == hActive) {
         if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_FORCEMINIMIZE) {
@@ -4095,6 +4054,7 @@ void ReleaseGlobalResources() {
             }
         }
         g_appCatalog.clear();
+        g_appCatalog.shrink_to_fit();
     }
     if (g_pDWriteFactory) {
         g_pDWriteFactory->Release();
@@ -4131,22 +4091,22 @@ BOOL Wh_ModInit() {
     g_msgUninit = RegisterWindowMessageW(L"Windhawk_Uninit_" WH_MOD_ID);
     g_msgToggle = RegisterWindowMessageW(L"Windhawk_Toggle_" WH_MOD_ID);
 
-    g_hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    g_hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!g_hShell32) {
-        Wh_Log(L"Failed to load shell32.dll");
+        Wh_Log(L"Failed to get shell32.dll module handle");
         ReleaseGlobalResources();
         return FALSE;
     }
 
     // Attempt symbol hook for RunDlgProc, but remember if the current shell32.dll build
     // lacks public Microsoft PDB symbols (e.g., HTTP 404 on Windows 11 build 26300.9807)
-    // so we immediately activate our symbol-less DialogBox/ShowWindow fallback hooks.
+    // so we immediately activate our symbol-less DialogBoxParamW fallback hook.
     std::wstring currentShell32Sig = GetModulePeSignature(g_hShell32);
     wchar_t cachedFailedSig[64] = {};
     Wh_GetStringValue(L"SkipSymbolShell32Sig", cachedFailedSig, ARRAYSIZE(cachedFailedSig));
 
     if (!currentShell32Sig.empty() && currentShell32Sig == cachedFailedSig) {
-        Wh_Log(L"Using symbol-less Run dialog hooks for shell32.dll (%s)", currentShell32Sig.c_str());
+        Wh_Log(L"Using symbol-less DialogBoxParamW fallback hook for shell32.dll (%s)", currentShell32Sig.c_str());
     } else {
         WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
@@ -4161,7 +4121,7 @@ BOOL Wh_ModInit() {
 
         if (!WindhawkUtils::HookSymbols(g_hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks)) ||
             RunDlgProc_Orig == nullptr) {
-            Wh_Log(L"Symbol resolution for RunDlgProc in shell32.dll unavailable; activating symbol-less fallback hooks");
+            Wh_Log(L"Symbol resolution for RunDlgProc in shell32.dll unavailable; activating DialogBoxParamW fallback hook");
             if (!currentShell32Sig.empty()) {
                 Wh_SetStringValue(L"SkipSymbolShell32Sig", currentShell32Sig.c_str());
             }
@@ -4170,10 +4130,10 @@ BOOL Wh_ModInit() {
         }
     }
 
-    WindhawkUtils::SetFunctionHook(DialogBoxParamW, DialogBoxParamW_Hook, &DialogBoxParamW_Orig);
-    WindhawkUtils::SetFunctionHook(DialogBoxIndirectParamW, DialogBoxIndirectParamW_Hook, &DialogBoxIndirectParamW_Orig);
-    WindhawkUtils::SetFunctionHook(CreateDialogParamW, CreateDialogParamW_Hook, &CreateDialogParamW_Orig);
-    WindhawkUtils::SetFunctionHook(CreateDialogIndirectParamW, CreateDialogIndirectParamW_Hook, &CreateDialogIndirectParamW_Orig);
+    if (RunDlgProc_Orig == nullptr) {
+        WindhawkUtils::SetFunctionHook(DialogBoxParamW, DialogBoxParamW_Hook, &DialogBoxParamW_Orig);
+    }
+
     WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook, &ShowWindow_Orig);
     WindhawkUtils::SetFunctionHook(SetForegroundWindow, SetForegroundWindow_Hook, &SetForegroundWindow_Orig);
     WindhawkUtils::SetFunctionHook(SwitchToThisWindow, SwitchToThisWindow_Hook, &SwitchToThisWindow_Orig);
@@ -4195,10 +4155,22 @@ void Wh_ModBeforeUninit() {
            SendMessageW(hDlg, g_msgUninit, 0, 0) != 1) {
         Sleep(50);
     }
+
+    // If a fallback-intercepted dialog is still open (even if not transformed), close it
+    // so its modal DialogBoxParamW loop exits promptly before Wh_ModUninit waits on ref count.
+    if (HWND hFallback = g_hFallbackInterceptedDlg.exchange(nullptr)) {
+        if (IsWindow(hFallback)) {
+            CloseRunDialog(hFallback);
+        }
+    }
+
     StopKeyHookThread();
 }
 
 void Wh_ModUninit() {
+    while (g_fallbackDialogRefCount.load() > 0) {
+        Sleep(200);
+    }
     StopKeyHookThread();
     ReleaseGlobalResources();
 }
