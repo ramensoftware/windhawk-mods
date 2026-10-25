@@ -150,32 +150,32 @@
       - no: No
       - yes: Yes
       - use_global: Use Global Setting
-  - darkModeThemeColorizationType: 1
+  - darkModeThemeColorizationType: start_hover
     $name: Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - lightModeThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: start_hover
     $name: Light Accent Source
     $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   - darkModeBorderColor: "0xFF2B2B2B"
     $name: Dark Border Color
     $description: Dark mode border color in ARGB hex format 0xAARRGGBB
@@ -292,32 +292,32 @@
       - no: No
       - yes: Yes
       - use_global: Use Global Setting
-  - darkModeThemeColorizationType: 1
+  - darkModeThemeColorizationType: start_hover
     $name: Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - lightModeThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: start_hover
     $name: Light Accent Source
     $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   - darkModeBorderColor: "0xFF2B2B2B"
     $name: Dark Border Color
     $description: Dark mode border color in ARGB hex format 0xAARRGGBB
@@ -375,32 +375,32 @@
   - separator_enableThemeColorization: 0
     $name: Separator / Enable Theme Colorization
     $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  - separator_darkThemeColorizationType: 1
+  - separator_darkThemeColorizationType: start_hover
     $name: Separator / Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - separator_lightThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - separator_lightThemeColorizationType: start_hover
     $name: Separator / Light Accent Source
     $description: Choose which immersive color slot is used in light mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   - focusing_disabled: 0
     $name: Focusing / Disabled
     $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
@@ -419,32 +419,32 @@
   - focusing_enableThemeColorization: 0
     $name: Focusing / Enable Theme Colorization
     $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  - focusing_darkThemeColorizationType: 1
+  - focusing_darkThemeColorizationType: start_hover
     $name: Focusing / Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - focusing_lightThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - focusing_lightThemeColorizationType: start_hover
     $name: Focusing / Light Accent Source
     $description: Choose which immersive color slot is used in light mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   - disabledHot_disabled: 0
     $name: Disabled Hot / Disabled
     $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
@@ -460,32 +460,32 @@
   - disabledHot_enableThemeColorization: 0
     $name: Disabled Hot / Enable Theme Colorization
     $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  - disabledHot_darkThemeColorizationType: 1
+  - disabledHot_darkThemeColorizationType: start_hover
     $name: Disabled Hot / Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - disabledHot_lightThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - disabledHot_lightThemeColorizationType: start_hover
     $name: Disabled Hot / Light Accent Source
     $description: Choose which immersive color slot is used in light mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   - hot_disabled: 0
     $name: Hot / Disabled
     $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
@@ -501,32 +501,32 @@
   - hot_enableThemeColorization: 0
     $name: Hot / Enable Theme Colorization
     $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  - hot_darkThemeColorizationType: 1
+  - hot_darkThemeColorizationType: start_hover
     $name: Hot / Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - hot_lightThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - hot_lightThemeColorizationType: start_hover
     $name: Hot / Light Accent Source
     $description: Choose which immersive color slot is used in light mode for this sub-part
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   $name: Menu
 
 - tooltip:
@@ -577,32 +577,32 @@
       - no: No
       - yes: Yes
       - use_global: Use Global Setting
-  - darkModeThemeColorizationType: 1
+  - darkModeThemeColorizationType: start_hover
     $name: Dark Accent Source
     $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
-  - lightModeThemeColorizationType: 1
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: start_hover
     $name: Light Accent Source
     $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
     $options:
-      - 0: ImmersiveStartBackground
-      - 1: ImmersiveStartHoverBackground
-      - 2: ImmersiveSystemAccent
-      - 3: ImmersiveSystemAccentDark1
-      - 4: ImmersiveSystemAccentDark2
-      - 5: ImmersiveSystemAccentDark3
-      - 6: ImmersiveSystemAccentLight1
-      - 7: ImmersiveSystemAccentLight2
-      - 8: ImmersiveSystemAccentLight3
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
   - darkModeBorderColor: "0xFF2B2B2B"
     $name: Dark Border Color
     $description: Dark mode border color in ARGB hex format 0xAARRGGBB
