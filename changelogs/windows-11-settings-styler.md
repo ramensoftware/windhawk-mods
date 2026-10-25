@@ -1,3 +1,8 @@
+## 1.2.1 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ecb4b86d0e225b72c8b04ba636c260554129fefa/mods/windows-11-settings-styler.wh.cpp))
+
+* Fixed a regression that causes a crash when navigating to some pages such as Personalization > Background.
+* Improved navigation handling that fixes some minor quirks such as the Printers view not being centered and the sidebar losing its background effect.
+
 ## 1.2 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7986323bd6b7c28686248b4347550ea9df58d723/mods/windows-11-settings-styler.wh.cpp))
 
 * Added the Translucent Seamless theme.
