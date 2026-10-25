@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         0.6.0
+// @version         0.7.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -70,7 +70,9 @@ Everything is reachable without touching the mouse.
 | Shortcut | Action |
 | --- | --- |
 | **Alt + Space** | Open / close the search bar (configurable) |
-| **↑ / ↓ / Tab** | Move the selection |
+| **↑ / ↓** | Move the selection |
+| **Tab** | Switch between apps and Files (when the file browser is on) |
+| **F1** | Show the shortcut and calculator cheat sheet |
 | **Enter** | Open the selected app |
 | **Esc** | Close the details panel, then the search bar |
 | **Ctrl + Enter** | Open the file location |
@@ -83,6 +85,8 @@ Everything is reachable without touching the mouse.
 | Mouse wheel | Scroll the list without changing the selection |
 | Mouse hover | Highlight the row under the cursor |
 
+Press **F1** at any time (or click **Help** in the footer) for a cheat sheet with every shortcut, prefix and file filter. Its second page (**Tab**) documents the calculator syntax.
+
 **Alt + Space** is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it.
 
 ### Details panel
@@ -92,6 +96,65 @@ Press **Ctrl + I** (or **Ctrl + K** / **Ctrl + Space** / **F4**) with an app sel
 ### Built-in calculator
 
 Type a calculation and the result appears as you go: a highlighted card at the top of the list shows it, and it is also shown faintly next to what you typed. Press **Enter** to copy the result; recent results are kept so you can reuse them. It only reacts when the whole text looks like a calculation, so ordinary searches are left alone.
+
+It understands `+ - * /`, `^`, `!`, `%`, `mod` and `of`; the functions `sqrt cbrt abs round floor ceil trunc sign sin cos tan asin acos atan sinh cosh tanh log ln log2 exp fact`; the constants `pi e tau phi ans`; and conversions such as `10 km to mi`, `100 f to c`, `255 to hex`, `0xFF` or `0b1010`. **F1 → Calculator** has the full reference.
+
+### Web search
+
+With **Web search** on, a **Search the web for …** result appears at the end of the list for whatever you type (it is not offered while the text is being used as a calculation). Press **Enter** on it to open the search in your default browser. If what you type looks like a web address (for example `gmail.com`), the result becomes **Open …** and opens the site directly. The engine is configurable: Google, Bing, DuckDuckGo, YouTube or Wikipedia.
+
+### Windows settings
+
+Searching for a common settings page (for example `bluetooth`, `display`, `sound`, `update` or `wifi`) also offers a **Setting** result that opens the matching page in the Settings app. No prefix is needed; these appear after your app matches, and a valid calculation hides them, like the web result.
+
+### Files
+
+A folder button at the right of the search box switches between apps and files (the **Tab** key does the same, except while a calculation is on screen). The **File browser** setting can turn the whole mode off, hiding the button and leaving Tab for the app list. In file mode the bar shows a **Files** chip, a row of location chips (Home, Downloads, Documents, Pictures, Music, Videos) and a **path bar** with the folder you are in. When the path is long, the start is shortened (`…\MDG\logs`) so the last folders always stay visible.
+
+* **Browse inside the launcher**: **Enter** on a folder goes into it; **Enter** on a file opens it. Very large folders stop at 5,000 folders and 5,000 files, and the path bar shows how many of the total are listed; typing searches past that cap.
+* **Deep search**: whatever you type is searched in the current folder *and all its subfolders* (results show the folder they live in). Closer matches come first and appear while the search is still running. Dot-folders such as `.config` are included; other hidden/system items and offline/cloud folders are skipped. The scan stops when the bar closes.
+* **History**: go back and forward through the folders you visited; going back highlights the folder you came from.
+* **Edit the path**: click the path bar (or **Ctrl + L** / **Alt + D**) and type or paste a path. It understands `~`, `%USERPROFILE%`, quotes (Copy as path), `/` slashes, `..` and paths relative to the current folder. **Tab** completes folder names (Shift + Tab goes back). **Enter** goes there (a file path opens its folder with the file highlighted), **Esc** cancels.
+* **Actions menu**: **Ctrl + I** (your configured details key) opens a menu for the highlighted item: open, show in its folder, reveal in your file manager, run as administrator, terminal here, rename, copy path / name / file, new folder, new file, properties and move to the Recycle Bin (asks for a second Enter). Copying keeps the bar open and the footer confirms it with *Copied*.
+
+#### Filters
+
+Combine them with normal text, in any order:
+
+| Filter | Meaning |
+| --- | --- |
+| `*.pdf` or `ext:pdf` | Only that extension (`ext:png,jpg` for several) |
+| `type:image` | A category: `image`, `doc`, `audio`, `video`, `archive`, `code` |
+| `dir:` / `folder:` | Only folders (`dir:logs` = folders named logs) |
+| `file:` | Only files |
+
+For example `report *.pdf` or `dir: projects`. The active filters are shown in the path bar.
+
+| Shortcut | Action |
+| --- | --- |
+| **Enter** / **→** | Open the file / enter the highlighted folder |
+| **←** (empty box) | Go to the parent folder |
+| **Backspace** (empty box) | Go up one folder (at a location root it leaves file mode) |
+| **Alt + ←** / **Alt + →** | Back / forward in the folder history (mouse back/forward buttons too) |
+| **Alt + ↑** | Parent folder |
+| **Alt + Home** | Home |
+| **Ctrl + 1…6** / **Ctrl + ←/→** (empty box) | Jump to a location chip |
+| **Ctrl + L** / **Alt + D** | Edit the path |
+| **Ctrl + I** | Actions menu |
+| **Ctrl + Enter** | Show in your default file manager |
+| **Ctrl + Shift + Enter** | Run as administrator (programs) |
+| **Ctrl + G** | Show the item in its own folder (handy after a deep search) |
+| **F2** | Rename |
+| **Ctrl + Shift + N** | New folder |
+| **Ctrl + T** | Open a terminal in the folder |
+| **Ctrl + P** | Properties |
+| **Ctrl + Shift + C** | Copy the path |
+
+Images show a thumbnail preview and other files a type icon; previews decode in the background (skipped on network drives and cloud placeholders, and very wide/tall images are center-cropped to fill the square without stretching). Switching modes clears the query and file mode is never remembered between opens. Deleting, renaming or creating a folder or file keeps the bar open in the same folder.
+
+### Prefixes
+
+Start the query with a short prefix to pick a mode; a small tag then shows the mode at the left of the search box. `?` searches the web (the bar stays compact and Enter runs the search), `g:`, `b:`, `d:`, `y:` and `w:` search on Google, Bing, DuckDuckGo, YouTube and Wikipedia, and `>` lists built-in commands such as locking the PC, opening Task Manager or the Settings app. Destructive commands (hibernate, shut down, restart, sign out, empty the Recycle Bin) need a second Enter to run.
 
 ### Soft interface sounds
 
@@ -127,6 +190,8 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 1. Install [Windhawk](https://windhawk.net) (Windows 10 or 11).
 2. In Windhawk, open **Mods** and search for **Spotlight Launcher**, then click **Install**.
 3. Press **Alt + Space** to open it. Change the shortcut, position, effect and colour from the mod's **Settings** tab.
+
+If you used an earlier version, your previous settings keep working after the update. The Settings tab now groups them into sections and shows default values until you save it once; saving it applies what the tab shows.
 
 ### From source
 
@@ -171,102 +236,136 @@ Copyright (c) 2026-present David Ravelo.
 
 // ==WindhawkModSettings==
 /*
-- Hotkey: alt+space
-  $name: Keyboard shortcut
-  $description: Key combination that opens and closes the search bar.
-  $options:
-    - alt+space: Alt + Space
-    - ctrl+space: Ctrl + Space
-    - ctrl+alt+space: Ctrl + Alt + Space
-    - shift+alt+space: Shift + Alt + Space
-    - ctrl+shift+space: Ctrl + Shift + Space
-- VerticalPosition: 30
-  $name: Vertical position (percentage of screen height)
-  $description: Where the search bar sits, as a percentage of the screen height. 0 sticks it to the very top, 50 centres it and 100 sits it just above the taskbar. In Compact mode only the search box appears at this height; in Expanded mode the bar grows downward from here, so raise or lower this value if you want it to look centred.
-- MaxResults: 8
-  $name: Maximum results
-  $description: How many apps the search shows at once. It does not change the height of the bar; when there are more matches, you reach the rest by scrolling the list.
-- Opacity: 90
-  $name: Panel opacity (percentage)
-  $description: How solid the colour of the bar is, from 70 to 100. A lower value lets more of the background show through and a higher value makes the colour stronger (Glass stays see-through in any case). Ignored with "Solid", which is always fully opaque.
-- Effect: acrylic
-  $name: Background effect
-  $description: The background style of the bar. Acrylic, Mica, Glass, Frosted and Aurora show a blurred view of whatever is behind the bar, each with its own look; "Solid" shows a plain colour with no blur.
-  $options:
-    - acrylic: Acrylic
-    - mica: Mica
-    - glass: Glass
-    - frosted: Frosted
-    - aurora: Aurora
-    - solid: Solid (no effect)
-- LiveAcrylic: true
-  $name: Live acrylic (real time)
-  $description: Keeps the background blur live. Acrylic, Glass, Frosted and Aurora follow whatever is behind the bar in real time. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. With it on, the blur strength of those effects is fixed by Windows and the Blur strength setting has no effect on them (Mica always follows it). Needs Windows 10 1803 or newer.
-- BlurAmount: 50
-  $name: Blur strength (0 to 100)
-  $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects only while Live acrylic is off (with it on, Windows sets their blur strength). Ignored with "Solid".
-- Color: midnight
-  $name: Color
-  $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
-  $options:
-    - midnight: Midnight blue
-    - graphite: Graphite
-    - black: Black
-    - violet: Violet
-    - emerald: Emerald
-    - teal: Teal
-    - rose: Rose
-    - crimson: Crimson
-    - amber: Amber
-    - white: White
-    - sky: Sky
-    - lavender: Lavender
-- HideUtilityEntries: true
-  $name: Hide uninstallers and documentation
-  $description: Hides the "Uninstall …" shortcuts and the readme, help and web-link shortcuts that installers add to the Start menu. It checks what each shortcut really opens, so genuine tools whose names merely contain "uninstall" are kept.
-- ReindexMode: auto
-  $name: App index updates
-  $description: How often the list of installed apps is refreshed. Automatic notices apps as they are installed or removed and stays idle when nothing changes, so it uses almost no resources (recommended).
-  $options:
-    - auto: Automatic
-    - always: Every time it opens
-    - min1: 1 minute
-    - min3: 3 minutes
-    - min5: 5 minutes
-    - min10: 10 minutes
-- ListMode: expanded
-  $name: List mode
-  $description: Compact shows only the search bar until you type. Expanded also shows your recent apps and suggestions while the search box is empty.
-  $options:
-    - compact: Compact
-    - expanded: Expanded
-- DetailsKey: ctrl+i
-  $name: Details panel shortcut
-  $description: Key that shows or hides the actions and details panel for the selected app. If you pick Ctrl + Space here, choose a different combination for the main shortcut so the two do not clash.
-  $options:
-    - ctrl+i: Ctrl + I
-    - ctrl+k: Ctrl + K
-    - ctrl+space: Ctrl + Space
-    - f4: F4
-- DisableInFullscreen: true
-  $name: Disable in fullscreen
-  $description: When on, the shortcut is ignored while a fullscreen window is focused (a game, a video player, a fullscreen browser). It also closes the bar if a fullscreen window takes over while the bar is open.
-- CalculatorEnabled: true
-  $name: Calculator
-  $description: While you type, the text is also tried as a calculation (for example "12*8", "100+15%" or "sqrt(2)+pi") and the result is shown. It only reacts when the whole text looks like a maths expression, so ordinary searches are left alone. Press Enter to copy the result, which is also saved to a small history you can reuse.
-- CalculatorStyle: both
-  $name: Calculator display
-  $description: How the result is shown. The card is a highlighted result at the top of the list, the inline text appears faintly right after what you typed, and "Both" shows the card and the inline text together.
-  $options:
-    - hero: Result card
-    - ghost: Inline text
-    - both: Card and inline text
-- SoundEnabled: true
-  $name: Interface sounds
-  $description: Soft sounds when the bar opens, when the details panel opens or closes, and as you type. They are generated inside the mod, so they work with no internet connection.
-- SoundVolume: 20
-  $name: Sound volume (0 to 100)
-  $description: How loud the interface sounds are. Ignored while interface sounds are turned off.
+- Appearance:
+  - ListMode: expanded
+    $name: List mode
+    $description: Compact shows only the search bar until you type. Expanded also shows your recent apps and suggestions while the search box is empty.
+    $options:
+      - compact: Compact
+      - expanded: Expanded
+  - VerticalPosition: 30
+    $name: Vertical position (percentage of screen height)
+    $description: Where the search bar sits, as a percentage of the screen height. 0 sticks it to the very top, 50 centres it and 100 sits it just above the taskbar. In Compact mode only the search box appears at this height; in Expanded mode the bar grows downward from here, so raise or lower this value if you want it to look centred.
+  - Opacity: 90
+    $name: Panel opacity (percentage)
+    $description: How solid the colour of the bar is, from 70 to 100. A lower value lets more of the background show through and a higher value makes the colour stronger (Glass stays see-through in any case). Ignored with "Solid", which is always fully opaque.
+  - Effect: acrylic
+    $name: Background effect
+    $description: The background style of the bar. Acrylic, Mica, Glass, Frosted and Aurora show a blurred view of whatever is behind the bar, each with its own look; "Solid" shows a plain colour with no blur.
+    $options:
+      - acrylic: Acrylic
+      - mica: Mica
+      - glass: Glass
+      - frosted: Frosted
+      - aurora: Aurora
+      - solid: Solid (no effect)
+  - LiveAcrylic: true
+    $name: Live acrylic (real time)
+    $description: Keeps the background blur live. Acrylic, Glass, Frosted and Aurora follow whatever is behind the bar in real time. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. With it on, the blur strength of those effects is fixed by Windows and the Blur strength setting has no effect on them (Mica always follows it). Needs Windows 10 1803 or newer.
+  - BlurAmount: 50
+    $name: Blur strength (0 to 100)
+    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects only while Live acrylic is off (with it on, Windows sets their blur strength). Ignored with "Solid".
+  - Color: midnight
+    $name: Color
+    $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
+    $options:
+      - midnight: Midnight blue
+      - graphite: Graphite
+      - black: Black
+      - violet: Violet
+      - emerald: Emerald
+      - teal: Teal
+      - rose: Rose
+      - crimson: Crimson
+      - amber: Amber
+      - white: White
+      - sky: Sky
+      - lavender: Lavender
+  $name: Appearance
+- Behavior:
+  - OpenOn: cursor
+    $name: Open on monitor
+    $description: Which monitor the search bar appears on. "Monitor with the mouse" follows the cursor, "Monitor of the active window" uses the monitor of the window you were using, and "Primary monitor" always uses the main monitor.
+    $options:
+      - cursor: Monitor with the mouse
+      - foreground: Monitor of the active window
+      - primary: Primary monitor
+  - MaxResults: 8
+    $name: Maximum results
+    $description: How many apps the search shows at once. It does not change the height of the bar; when there are more matches, you reach the rest by scrolling the list.
+  - DisableInFullscreen: true
+    $name: Disable in fullscreen
+    $description: When on, the shortcut is ignored while a fullscreen window is focused (a game, a video player, a fullscreen browser). It also closes the bar if a fullscreen window takes over while the bar is open.
+  $name: Behavior
+- Shortcuts:
+  - Hotkey: alt+space
+    $name: Keyboard shortcut
+    $description: Key combination that opens and closes the search bar.
+    $options:
+      - alt+space: Alt + Space
+      - ctrl+space: Ctrl + Space
+      - ctrl+alt+space: Ctrl + Alt + Space
+      - shift+alt+space: Shift + Alt + Space
+      - ctrl+shift+space: Ctrl + Shift + Space
+  - DetailsKey: ctrl+i
+    $name: Details panel shortcut
+    $description: Key that shows or hides the actions and details panel for the selected app. If you pick Ctrl + Space here, choose a different combination for the main shortcut so the two do not clash.
+    $options:
+      - ctrl+i: Ctrl + I
+      - ctrl+k: Ctrl + K
+      - ctrl+space: Ctrl + Space
+      - f4: F4
+  $name: Shortcuts
+- Apps:
+  - HideUtilityEntries: true
+    $name: Hide uninstallers and documentation
+    $description: Hides the "Uninstall …" shortcuts and the readme, help and web-link shortcuts that installers add to the Start menu. It checks what each shortcut really opens, so genuine tools whose names merely contain "uninstall" are kept.
+  - ReindexMode: auto
+    $name: App index updates
+    $description: How often the list of installed apps is refreshed. Automatic notices apps as they are installed or removed and stays idle when nothing changes, so it uses almost no resources (recommended).
+    $options:
+      - auto: Automatic
+      - always: Every time it opens
+      - min1: 1 minute
+      - min3: 3 minutes
+      - min5: 5 minutes
+      - min10: 10 minutes
+  $name: Apps
+- Features:
+  - FilesEnabled: true
+    $name: File browser
+    $description: Adds the Files mode, which browses drives and folders, previews images and manages files. Press Tab or the folder button in the bar to switch between apps and files. When off, the folder button is hidden and Tab moves through the app list.
+  - CalculatorEnabled: true
+    $name: Calculator
+    $description: While you type, the text is also tried as a calculation (for example "12*8", "100+15%" or "sqrt(2)+pi") and the result is shown. It only reacts when the whole text looks like a maths expression, so ordinary searches are left alone. Press Enter to copy the result, which is also saved to a small history you can reuse.
+  - CalculatorStyle: both
+    $name: Calculator display
+    $description: How the result is shown. The card is a highlighted result at the top of the list, the inline text appears faintly right after what you typed, and "Both" shows the card and the inline text together.
+    $options:
+      - hero: Result card
+      - ghost: Inline text
+      - both: Card and inline text
+  - WebSearch: true
+    $name: Web search
+    $description: Shows a result at the end of the list for what you typed. Press Enter to open it. A web address (like gmail.com) opens the site directly; prefix with ? to search instead. It is never offered while the text is being used as a calculation.
+  - WebEngine: google
+    $name: Web search engine
+    $description: Which search engine the web result opens. Ignored while web search is off.
+    $options:
+      - google: Google
+      - bing: Bing
+      - duckduckgo: DuckDuckGo
+      - youtube: YouTube
+      - wikipedia: Wikipedia
+  $name: Features
+- Sounds:
+  - SoundEnabled: true
+    $name: Interface sounds
+    $description: Soft sounds when the bar opens, when the details panel opens or closes, and as you type. They are generated inside the mod, so they work with no internet connection.
+  - SoundVolume: 20
+    $name: Sound volume (0 to 100)
+    $description: How loud the interface sounds are. Ignored while interface sounds are turned off.
+  $name: Sounds
 */
 // ==/WindhawkModSettings==
 
@@ -297,6 +396,7 @@ Copyright (c) 2026-present David Ravelo.
 #include <cmath>
 #include <cstdint>
 #include <cwctype>
+#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -1307,6 +1407,8 @@ static const float kFooterH = 40.f;    // footer with shortcuts (expanded only)
 static const float kSectionH = 26.f;   // section header ("Recent" / "Suggestions")
 static const float kHeroH = 84.f;      // calculator result card, reserved above the list
 static const float kHistRowH = 34.f;   // compact row for the calculator history
+static const float kChipH = 44.f;      // file-mode filter band (location chips)
+static const float kPathH = 30.f;      // file-mode path band (breadcrumb)
 
 // Details panel (card to the right of the search bar)
 static const float kPanelW = 320.f;
@@ -1323,7 +1425,13 @@ static const float kInfoRowH = 22.f;
 static const size_t kMaxRecents = 4;
 
 static const wchar_t kTxtPlaceholder[] = L"Search applications…";
+static const wchar_t kTxtPlaceholderFiles[] = L"Search files…  (try *.pdf or dir:)";
+static const wchar_t kTxtFilesMode[] = L"Files";
+static const wchar_t kTxtFolder[] = L"Folder";
 static const wchar_t kTxtOpen[] = L"Open";
+static const wchar_t kTxtRun[] = L"Run";
+static const wchar_t kTxtConfirm[] = L"Press Enter again to confirm";
+static const wchar_t kTxtSearchLabel[] = L"Search";
 static const wchar_t kTxtEnterGlyph[] = L"↵";
 static const wchar_t kTxtNoResults[] = L"No results";
 static const wchar_t kTxtIndexing[] = L"Indexing applications…";
@@ -1334,8 +1442,17 @@ static const wchar_t kTxtInfo[] = L"Information";
 static const wchar_t kTxtDetails[] = L"Details";
 static const wchar_t kTxtReindex[] = L"Reindex";
 static const wchar_t* const kReindexKeys[2] = {L"Ctrl", L"R"};
+static const wchar_t kTxtHelp[] = L"Help";
+static const wchar_t* const kHelpKeys[1] = {L"F1"};
 static const wchar_t kTxtTypeApp[] = L"Application";
 static const wchar_t kTxtTypeStore[] = L"Store app";
+static const wchar_t kTxtKindWeb[] = L"Web";
+static const wchar_t kTxtKindUrl[] = L"Website";
+static const wchar_t kTxtKindCommand[] = L"Command";
+static const wchar_t kTxtKindFile[] = L"File";
+static const wchar_t kTxtBrowse[] = L"Browse";
+static const wchar_t kTxtSearching[] = L"Searching…";
+static const wchar_t kTxtKindSetting[] = L"Setting";
 static const wchar_t kTxtCalcCopy[] = L"Copy result";
 static const wchar_t kTxtCalcCopied[] = L"Copied";
 static const wchar_t kTxtCalcAdd[] = L"Add to operation";
@@ -1349,6 +1466,8 @@ static const UINT WM_APP_ICON = WM_APP + 2;
 static const UINT WM_APP_INDEX_DONE = WM_APP + 3;
 static const UINT WM_APP_SETTINGS = WM_APP + 4;
 static const UINT WM_APP_MENU_CHANGED = WM_APP + 5;  // the watcher detected changes in the Start menu
+static const UINT WM_APP_FILES = WM_APP + 6;         // deep file search finished
+static const UINT WM_APP_THUMB = WM_APP + 7;         // a background image preview was decoded
 
 // Start menu reindexing
 static const double kAutoSafetyRescanSec = 600.0;  // fallback in Automatic mode (MSIX apps)
@@ -1360,6 +1479,9 @@ static const UINT_PTR TIMER_FRAME = 1;
 static const UINT_PTR TIMER_BLINK = 2;
 static const UINT_PTR TIMER_COPY = 3;  // clears the calculator "Copied" flash
 static const UINT_PTR TIMER_CALC = 4;  // debounce for calculator evaluation
+static const UINT_PTR TIMER_CONFIRM = 5;  // cancels an armed destructive command after a while
+static const UINT_PTR TIMER_FSEARCH = 6;  // debounce for the deep file search
+static const UINT_PTR TIMER_HIDE = 7;     // fallback: completes a hide whose animation stalled
 static const int HOTKEY_ID = 1;
 
 // ===== Types =====
@@ -1367,12 +1489,15 @@ static const int HOTKEY_ID = 1;
 enum class ReindexMode { Auto, Always, Interval };
 enum class ListMode { Compact, Expanded };
 enum class DetailsKey { CtrlI, CtrlK, CtrlSpace, F4 };
+enum class OpenMonitor { Cursor, Foreground, Primary };
+enum class WebEngine { Google, Bing, DuckDuckGo, YouTube, Wikipedia };
 enum class BgEffect { Acrylic, Mica, Glass, Frosted, Aurora, Solid };
 enum class CalcStyle { Hero, Ghost, Both };
 
 struct LauncherSettings {
     ListMode listMode = ListMode::Expanded;
     DetailsKey detailsKey = DetailsKey::CtrlI;
+    OpenMonitor openMonitor = OpenMonitor::Cursor;
     ReindexMode reindexMode = ReindexMode::Auto;
     double reindexIntervalSec = 0;  // only with ReindexMode::Interval
     UINT hotkeyMods = MOD_ALT;
@@ -1390,6 +1515,9 @@ struct LauncherSettings {
     CalcStyle calcStyle = CalcStyle::Both;
     bool sounds = true;      // soft interface sounds (open, details panel, typing)
     int soundVolume = 70;    // 0..100
+    bool webSearch = true;   // offer a "search the web" result for the query
+    WebEngine webEngine = WebEngine::Google;
+    bool filesEnabled = true;  // show the file browser mode (Tab and the folder button)
 };
 
 struct AppEntry {
@@ -1405,10 +1533,21 @@ struct AppEntry {
     ID2D1Bitmap* bmp = nullptr;
 };
 
+// Where a result comes from. Every kind is produced today: App for the app index, Web/Url for
+// web search, Command for built-in commands, File for the file browser and Setting for Windows
+// settings pages. Each kind carries its own text and payload.
+enum class ResultKind { App, Web, Url, Command, File, Setting };
+
 struct SearchResult {
-    int app = 0;
+    ResultKind kind = ResultKind::App;
+    int app = -1;     // ResultKind::App: index into g_apps
     int score = 0;
     int section = 0;  // 0 = no section (search), 1 = Recent, 2 = Suggestions
+    // Non-App results carry their own text and payload (URL, command, path, ...).
+    std::wstring title;
+    std::wstring subtitle;
+    std::wstring payload;
+    int icon = -1;  // provider-specific icon id (Web: the search engine, see WebEngine)
     IDWriteTextLayout* layout = nullptr;
 };
 
@@ -1458,6 +1597,8 @@ struct ThemePalette {
     D2D1_COLOR_F caretSel;
     D2D1_COLOR_F accent;   // main accent (selection, highlighted letters, Aurora gradient)
     D2D1_COLOR_F accent2;  // second color of the Aurora gradient
+    D2D1_COLOR_F accentInk;     // accent tuned for use as a foreground (text/icons) on the card
+    D2D1_COLOR_F accentStrong;  // deeper accent for emphasized text (active chips)
     bool light;
     float shadowAlpha;
 };
@@ -1528,6 +1669,8 @@ static double g_offY = 0;
 static double g_lastFrame = 0;
 static bool g_frameTimerOn = false;
 static bool g_dirty = false;
+static bool g_opGuard = false;      // a shell file operation is running: ignore focus loss
+static double g_focusGrace = 0;     // ignore focus loss until this time after such an operation
 
 static double g_scale = 1.0;
 static int g_bmpW = 0;
@@ -1550,14 +1693,20 @@ static ID2D1SolidColorBrush* g_brush = nullptr;
 static ID2D1SolidColorBrush* g_matchBrush = nullptr;
 static ID2D1StrokeStyle* g_roundStroke = nullptr;
 static ID2D1LinearGradientBrush* g_gradBrush = nullptr;  // subtle sheen at the top of the cards
+static ID2D1BitmapBrush* g_thumbBrush = nullptr;  // reused for image previews (device-dependent)
 static ID2D1LinearGradientBrush* g_glow1 = nullptr;      // Aurora effect gradient (accent 1)
 static ID2D1LinearGradientBrush* g_glow2 = nullptr;      // Aurora effect gradient (accent 2)
 static IDWriteTextFormat* g_fmtInput = nullptr;
 static IDWriteTextFormat* g_fmtTitle = nullptr;
 static IDWriteTextFormat* g_fmtHint = nullptr;
 static IDWriteTextFormat* g_fmtKey = nullptr;
+static IDWriteTextFormat* g_fmtKeyBold = nullptr;  // emphasized chip labels (active filter/name)
 static IDWriteTextFormat* g_fmtEmpty = nullptr;
+static IDWriteTextFormat* g_fmtBadge = nullptr;       // engine initial in the web icon badge
 static IDWriteTextFormat* g_fmtSection = nullptr;     // "Recent" / "Actions" headers
+static IDWriteTextFormat* g_fmtMeta = nullptr;        // metadata line under a file row
+static IDWriteTextFormat* g_fmtExt = nullptr;         // extension label inside a file-type tile
+static IDWriteTextFormat* g_fmtPath = nullptr;        // last segment of the path band (semibold)
 static IDWriteTextFormat* g_fmtPanelTitle = nullptr;  // app name in the panel
 static IDWriteTextFormat* g_fmtPanelSub = nullptr;    // panel subtitle
 static IDWriteTextFormat* g_fmtPanelRow = nullptr;    // panel rows
@@ -1602,8 +1751,14 @@ static double g_detailPos = 0;     // 0..1, animated
 static double g_detailTarget = 0;
 static int g_hoverAction = -1;     // id of the action under the mouse, or -1
 static bool g_hoverReindex = false;  // the mouse is over the footer reindex button
+static bool g_hoverHelp = false;     // the mouse is over the footer help button
 static std::wstring g_panelAppId;  // last app shown in the panel (for the fade-out)
 static std::unordered_map<std::wstring, AppDetails> g_detailsCache;
+
+// Help sheet (F1): replaces the list with a cheat sheet. Page 0 lists the shortcuts, page 1
+// documents the calculator syntax (operators, functions, constants and conversions).
+static bool g_helpOpen = false;
+static int g_helpPage = 0;
 
 static UINT g_gen = 0;
 static bool g_indexing = false;
@@ -1733,16 +1888,79 @@ static std::wstring FoldString(const std::wstring& s) {
     return r;
 }
 
-static std::wstring GetStringSetting(const wchar_t* name) {
+// ----- Settings migration (flat names -> grouped names) -----
+// Earlier releases stored every setting under a flat name (`Hotkey`, `Effect`, `Color`, ...).
+// The settings are now grouped (`Shortcuts.Hotkey`, `Appearance.Effect`, ...), so nothing is
+// stored under the new names for an existing install. While `g_legacySettings` is on, the old
+// flat names are read instead, so a user keeps their shortcut, colour, effect and the rest.
+// It switches off for good the first time the user saves the settings in the new layout
+// (see WhTool_ModSettingsChanged), because from then on the new names hold real values.
+// A fresh install has no old values, so there is nothing to carry over.
+static const wchar_t kSettingsGroupedKey[] = L"settings.grouped_v1";
+static bool g_legacySettings = false;  // UI thread only
+
+// "Shortcuts.Hotkey" -> "Hotkey" (the name the setting had before it was grouped).
+static const wchar_t* LegacyLeaf(const wchar_t* name) {
+    const wchar_t* dot = wcschr(name, L'.');
+    return dot ? dot + 1 : name;
+}
+
+// Integer settings that did NOT exist in the last release that used flat names. An integer has
+// no "not stored" state (a missing value reads as 0), so for these the old name must not be
+// read, or a feature that never existed back then would come out switched off. Text settings
+// do not need this: an empty text means "not stored".
+static bool IntSettingExistedBeforeGrouping(const wchar_t* leaf) {
+    static const wchar_t* const kNewer[] = {
+        L"FilesEnabled", L"WebSearch",
+    };
+    for (const wchar_t* n : kNewer) {
+        if (wcscmp(leaf, n) == 0) return false;
+    }
+    return true;
+}
+
+static std::wstring ReadTextSetting(const wchar_t* name) {
     PCWSTR s = Wh_GetStringSetting(name);  // never returns NULL
     std::wstring r = s;
     Wh_FreeStringSetting(s);
     return r;
 }
 
+// Decides once, when the mod starts, whether there are old flat values to carry over.
+static void DetectLegacySettings() {
+    g_legacySettings = false;
+    if (Wh_GetIntValue(kSettingsGroupedKey, 0) != 0) return;  // already on the new names
+    static const wchar_t* const kProbes[] = {
+        L"Hotkey", L"Effect", L"Color", L"ListMode", L"ReindexMode", L"OpenOn", L"DetailsKey",
+    };
+    for (const wchar_t* p : kProbes) {
+        if (!ReadTextSetting(p).empty()) {
+            g_legacySettings = true;
+            return;
+        }
+    }
+    Wh_SetIntValue(kSettingsGroupedKey, 1);  // nothing to carry over: do not look again
+}
+
+static std::wstring GetStringSetting(const wchar_t* name) {
+    if (g_legacySettings) {
+        std::wstring old = ReadTextSetting(LegacyLeaf(name));
+        if (!old.empty()) return old;
+    }
+    return ReadTextSetting(name);
+}
+
+static int GetIntSetting(const wchar_t* name) {
+    if (g_legacySettings) {
+        const wchar_t* leaf = LegacyLeaf(name);
+        if (IntSettingExistedBeforeGrouping(leaf)) return Wh_GetIntSetting(leaf);
+    }
+    return Wh_GetIntSetting(name);
+}
+
 static void LoadSettings() {
     LauncherSettings c;
-    std::wstring hk = GetStringSetting(L"Hotkey");
+    std::wstring hk = GetStringSetting(L"Shortcuts.Hotkey");
     UINT mods = 0;
     if (hk == L"alt+space") {
         mods = MOD_ALT;
@@ -1760,11 +1978,17 @@ static void LoadSettings() {
     c.hotkeyMods = mods;
     c.hotkeyVk = VK_SPACE;
 
-    c.verticalPct = std::clamp(Wh_GetIntSetting(L"VerticalPosition"), 0, 100);
-    c.maxRows = std::clamp(Wh_GetIntSetting(L"MaxResults"), 3, 12);
-    c.opacityPct = std::clamp(Wh_GetIntSetting(L"Opacity"), 70, 100);
+    c.verticalPct = std::clamp(GetIntSetting(L"Appearance.VerticalPosition"), 0, 100);
     {
-        std::wstring ef = GetStringSetting(L"Effect");
+        std::wstring mo = GetStringSetting(L"Behavior.OpenOn");
+        c.openMonitor = (mo == L"foreground") ? OpenMonitor::Foreground
+                        : (mo == L"primary")  ? OpenMonitor::Primary
+                                              : OpenMonitor::Cursor;
+    }
+    c.maxRows = std::clamp(GetIntSetting(L"Behavior.MaxResults"), 3, 12);
+    c.opacityPct = std::clamp(GetIntSetting(L"Appearance.Opacity"), 70, 100);
+    {
+        std::wstring ef = GetStringSetting(L"Appearance.Effect");
         c.effect = (ef == L"mica")      ? BgEffect::Mica
                    : (ef == L"glass")   ? BgEffect::Glass
                    : (ef == L"frosted") ? BgEffect::Frosted
@@ -1772,11 +1996,11 @@ static void LoadSettings() {
                    : (ef == L"solid")   ? BgEffect::Solid
                                         : BgEffect::Acrylic;
     }
-    c.blurPct = std::clamp(Wh_GetIntSetting(L"BlurAmount"), 0, 100);
-    c.liveAcrylic = Wh_GetIntSetting(L"LiveAcrylic") != 0;
+    c.blurPct = std::clamp(GetIntSetting(L"Appearance.BlurAmount"), 0, 100);
+    c.liveAcrylic = GetIntSetting(L"Appearance.LiveAcrylic") != 0;
 
     {
-        std::wstring col = GetStringSetting(L"Color");
+        std::wstring col = GetStringSetting(L"Appearance.Color");
         c.colorIdx = 0;
         for (int i = 0; i < (int)(sizeof(kColors) / sizeof(kColors[0])); ++i) {
             if (col == kColors[i].id) {
@@ -1785,10 +2009,10 @@ static void LoadSettings() {
             }
         }
     }
-    c.hideUtility = Wh_GetIntSetting(L"HideUtilityEntries") != 0;
-    c.disableFullscreen = Wh_GetIntSetting(L"DisableInFullscreen") != 0;
+    c.hideUtility = GetIntSetting(L"Apps.HideUtilityEntries") != 0;
+    c.disableFullscreen = GetIntSetting(L"Behavior.DisableInFullscreen") != 0;
 
-    std::wstring rm = GetStringSetting(L"ReindexMode");
+    std::wstring rm = GetStringSetting(L"Apps.ReindexMode");
     if (rm == L"always") {
         c.reindexMode = ReindexMode::Always;
     } else if (rm == L"min1" || rm == L"min3" || rm == L"min5" || rm == L"min10") {
@@ -1798,10 +2022,10 @@ static void LoadSettings() {
         c.reindexMode = ReindexMode::Auto;  // default (and if the value is not recognized)
     }
 
-    std::wstring lm = GetStringSetting(L"ListMode");
+    std::wstring lm = GetStringSetting(L"Appearance.ListMode");
     c.listMode = (lm == L"compact") ? ListMode::Compact : ListMode::Expanded;
 
-    std::wstring dk = GetStringSetting(L"DetailsKey");
+    std::wstring dk = GetStringSetting(L"Shortcuts.DetailsKey");
     c.detailsKey = (dk == L"ctrl+k")       ? DetailsKey::CtrlK
                    : (dk == L"ctrl+space") ? DetailsKey::CtrlSpace
                    : (dk == L"f4")         ? DetailsKey::F4
@@ -1811,16 +2035,28 @@ static void LoadSettings() {
         c.detailsKey = DetailsKey::CtrlI;
     }
 
-    c.calculatorEnabled = Wh_GetIntSetting(L"CalculatorEnabled") != 0;
+    c.calculatorEnabled = GetIntSetting(L"Features.CalculatorEnabled") != 0;
     {
-        std::wstring cs = GetStringSetting(L"CalculatorStyle");
+        std::wstring cs = GetStringSetting(L"Features.CalculatorStyle");
         c.calcStyle = (cs == L"hero")  ? CalcStyle::Hero
                       : (cs == L"ghost") ? CalcStyle::Ghost
                                          : CalcStyle::Both;
     }
 
-    c.sounds = Wh_GetIntSetting(L"SoundEnabled") != 0;
-    c.soundVolume = std::clamp(Wh_GetIntSetting(L"SoundVolume"), 0, 100);
+    c.sounds = GetIntSetting(L"Sounds.SoundEnabled") != 0;
+    c.soundVolume = std::clamp(GetIntSetting(L"Sounds.SoundVolume"), 0, 100);
+
+    c.webSearch = GetIntSetting(L"Features.WebSearch") != 0;
+    {
+        std::wstring we = GetStringSetting(L"Features.WebEngine");
+        c.webEngine = (we == L"bing")         ? WebEngine::Bing
+                      : (we == L"duckduckgo") ? WebEngine::DuckDuckGo
+                      : (we == L"youtube")    ? WebEngine::YouTube
+                      : (we == L"wikipedia")  ? WebEngine::Wikipedia
+                                              : WebEngine::Google;
+    }
+
+    c.filesEnabled = GetIntSetting(L"Features.FilesEnabled") != 0;
 
     g_cfg = c;
 }
@@ -2203,11 +2439,15 @@ static void LoadPalette() {
         const D2D1_COLOR_F ink = Mix(D2D1::ColorF(0.09f, 0.11f, 0.16f), A, 0.10f);
         g_pal.border = D2D1::ColorF(ink.r, ink.g, ink.b, 0.18f);
         g_pal.text = ink;
-        g_pal.textDim = Mix(ink, white, 0.45f);
-        g_pal.selection = D2D1::ColorF(A.r, A.g, A.b, 0.13f);
+        g_pal.textDim = Mix(ink, white, 0.25f);  // was 0.45: too light to read over Aurora
+        // The accent as a brush is too light on a pale/Aurora card, so darken it for
+        // anything that is drawn as ink (labels, icons, highlighted letters).
+        g_pal.accentInk = Mix(A, ink, 0.50f);
+        g_pal.accentStrong = Mix(A, ink, 0.68f);  // emphasized chip labels
+        g_pal.selection = D2D1::ColorF(A.r, A.g, A.b, 0.15f);
         g_pal.separator = D2D1::ColorF(ink.r, ink.g, ink.b, 0.10f);
         g_pal.keycap = D2D1::ColorF(ink.r, ink.g, ink.b, 0.08f);
-        g_pal.match = Mix(A, D2D1::ColorF(0.f, 0.f, 0.f), 0.10f);
+        g_pal.match = g_pal.accentInk;
         g_pal.caretSel = D2D1::ColorF(A.r, A.g, A.b, 0.25f);
         g_pal.shadowAlpha = 0.025f;
     } else {
@@ -2215,6 +2455,9 @@ static void LoadPalette() {
         g_pal.border = Mix(white, A, 0.30f, 0.19f);
         g_pal.text = Mix(white, A, 0.07f);
         g_pal.textDim = Mix(D2D1::ColorF(0.64f, 0.65f, 0.68f), A, 0.22f);
+        // Slightly lift the accent so it stays clear over the Aurora sheen.
+        g_pal.accentInk = Mix(A, white, 0.12f);
+        g_pal.accentStrong = Mix(A, white, 0.30f);  // emphasized chip labels
         g_pal.selection = D2D1::ColorF(A.r * 0.8f, A.g * 0.8f, A.b * 0.8f, 0.30f);
         g_pal.separator = Mix(white, A, 0.30f, 0.11f);
         g_pal.keycap = Mix(white, A, 0.30f, 0.13f);
@@ -2365,6 +2608,905 @@ static std::vector<std::wstring> Tokenize(const std::wstring& text) {
         out.push_back(FoldString(cur));
     }
     return out;
+}
+
+// ===== Activators (typed prefixes that switch the launcher into a mode) =====
+// A leading trigger selects a mode: "?" and "g:", "y:" ... search the web (optionally on a fixed
+// engine) and ">" lists built-in commands.
+enum class LauncherMode { Web, Commands };
+
+struct ActivatorDef {
+    const wchar_t* trigger;
+    const wchar_t* name;
+    LauncherMode mode;
+    int engine;  // Web: WebEngine value, or -1 to use the engine from settings
+};
+
+static const ActivatorDef kActivators[] = {
+    {L"?", L"Web", LauncherMode::Web, -1},
+    {L">", L"Commands", LauncherMode::Commands, -1},
+    {L"g:", L"Google", LauncherMode::Web, (int)WebEngine::Google},
+    {L"b:", L"Bing", LauncherMode::Web, (int)WebEngine::Bing},
+    {L"d:", L"DuckDuckGo", LauncherMode::Web, (int)WebEngine::DuckDuckGo},
+    {L"y:", L"YouTube", LauncherMode::Web, (int)WebEngine::YouTube},
+    {L"w:", L"Wikipedia", LauncherMode::Web, (int)WebEngine::Wikipedia},
+};
+static const int kActivatorCount = (int)(sizeof(kActivators) / sizeof(kActivators[0]));
+static int g_activator = -1;  // index into kActivators, or -1 when no mode is active
+static int g_confirmCmd = -1;  // index into kCommands armed for a second-Enter confirm, or -1
+
+// Web modes have a single deterministic action, so the bar stays compact; command mode lists
+// entries and expands like a normal search.
+static bool ModeIsWeb() {
+    return g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::Web;
+}
+
+// Built-in commands offered by the ">" activator. id is the stable action key (see RunCommand).
+// glyph/color give each command its own badge icon (see DrawCommandGlyph).
+enum class CmdGlyph {
+    Lock, Moon, Bars, Sliders, Chip, List, Key, Globe, Update, Grid, Monitor, Speaker, Bluetooth,
+    Printer, Terminal, Folder, Gear, Power, Restart, SignOut, Hibernate, Recycle, Wifi, Clock, Bell,
+    Camera, Mic, Doc, Home, Download, Image, Music, Video, Close, ExternalLink, ChevronRight, ChevronLeft
+};
+
+struct CommandDef {
+    const wchar_t* id;
+    const wchar_t* title;
+    const wchar_t* keywords;
+    const wchar_t* category;
+    CmdGlyph glyph;
+    D2D1_COLOR_F color;
+    bool destructive;  // needs a second Enter to run (see LaunchSelected)
+};
+
+static const CommandDef kCommands[] = {
+    {L"lock", L"Lock", L"lock workstation screen", L"Power", CmdGlyph::Lock,
+     D2D1::ColorF(0.36f, 0.46f, 0.66f), false},
+    {L"sleep", L"Sleep", L"sleep suspend standby", L"Power", CmdGlyph::Moon,
+     D2D1::ColorF(0.44f, 0.42f, 0.72f), false},
+    {L"hibernate", L"Hibernate", L"hibernate sleep to disk", L"Power", CmdGlyph::Hibernate,
+     D2D1::ColorF(0.40f, 0.50f, 0.62f), true},
+    {L"shutdown", L"Shut Down", L"shut down power off turn off", L"Power", CmdGlyph::Power,
+     D2D1::ColorF(0.85f, 0.30f, 0.30f), true},
+    {L"restart", L"Restart", L"restart reboot", L"Power", CmdGlyph::Restart,
+     D2D1::ColorF(0.85f, 0.45f, 0.28f), true},
+    {L"signout", L"Sign Out", L"sign out log off logoff", L"Power", CmdGlyph::SignOut,
+     D2D1::ColorF(0.80f, 0.44f, 0.52f), true},
+    {L"taskmgr", L"Task Manager", L"task manager processes", L"System", CmdGlyph::Bars,
+     D2D1::ColorF(0.20f, 0.56f, 0.56f), false},
+    {L"control", L"Control Panel", L"control panel", L"System", CmdGlyph::Sliders,
+     D2D1::ColorF(0.42f, 0.50f, 0.60f), false},
+    {L"devmgmt", L"Device Manager", L"device manager hardware", L"System", CmdGlyph::Chip,
+     D2D1::ColorF(0.30f, 0.56f, 0.40f), false},
+    {L"services", L"Services", L"services background", L"System", CmdGlyph::List,
+     D2D1::ColorF(0.72f, 0.56f, 0.24f), false},
+    {L"regedit", L"Registry Editor", L"registry editor regedit", L"System", CmdGlyph::Key,
+     D2D1::ColorF(0.62f, 0.44f, 0.30f), false},
+    {L"netconnections", L"Network Connections", L"network connections adapters", L"System",
+     CmdGlyph::Globe, D2D1::ColorF(0.20f, 0.47f, 0.76f), false},
+    {L"settings", L"Settings", L"settings windows", L"Settings", CmdGlyph::Gear,
+     D2D1::ColorF(0.46f, 0.51f, 0.60f), false},
+    {L"windowsupdate", L"Windows Update", L"windows update", L"Settings", CmdGlyph::Update,
+     D2D1::ColorF(0.24f, 0.53f, 0.82f), false},
+    {L"installedapps", L"Installed Apps", L"installed apps uninstall programs", L"Settings",
+     CmdGlyph::Grid, D2D1::ColorF(0.50f, 0.42f, 0.70f), false},
+    {L"display", L"Display Settings", L"display settings monitor brightness", L"Settings",
+     CmdGlyph::Monitor, D2D1::ColorF(0.24f, 0.52f, 0.68f), false},
+    {L"sound", L"Sound Settings", L"sound audio volume output input", L"Settings",
+     CmdGlyph::Speaker, D2D1::ColorF(0.72f, 0.40f, 0.47f), false},
+    {L"bluetooth", L"Bluetooth", L"bluetooth devices", L"Settings", CmdGlyph::Bluetooth,
+     D2D1::ColorF(0.22f, 0.50f, 0.80f), false},
+    {L"printers", L"Printers & Scanners", L"printers scanners print", L"Settings",
+     CmdGlyph::Printer, D2D1::ColorF(0.46f, 0.49f, 0.55f), false},
+    {L"terminal", L"Terminal", L"terminal powershell cmd console", L"Tools", CmdGlyph::Terminal,
+     D2D1::ColorF(0.18f, 0.19f, 0.23f), false},
+    {L"explorer", L"File Explorer", L"file explorer files folders", L"Tools", CmdGlyph::Folder,
+     D2D1::ColorF(0.84f, 0.64f, 0.26f), false},
+    {L"emptyrecyclebin", L"Empty Recycle Bin", L"empty recycle bin trash", L"Tools",
+     CmdGlyph::Recycle, D2D1::ColorF(0.66f, 0.42f, 0.42f), true},
+};
+static const int kCommandCount = (int)(sizeof(kCommands) / sizeof(kCommands[0]));
+
+// Windows Settings pages surfaced in normal search (no prefix): typing "bluetooth", "display" or
+// "update" offers a result that opens the matching page in the Settings app. uri is the
+// ms-settings: target; glyph/color give each page its own badge icon (see DrawCommandGlyph).
+struct SettingDef {
+    const wchar_t* title;
+    const wchar_t* keywords;
+    const wchar_t* uri;
+    CmdGlyph glyph;
+    D2D1_COLOR_F color;
+};
+
+static const SettingDef kSettings[] = {
+    {L"Wi-Fi", L"wifi wireless network internet wlan", L"ms-settings:network-wifi",
+     CmdGlyph::Wifi, D2D1::ColorF(0.24f, 0.56f, 0.82f)},
+    {L"Bluetooth", L"bluetooth devices pairing", L"ms-settings:bluetooth",
+     CmdGlyph::Bluetooth, D2D1::ColorF(0.22f, 0.50f, 0.80f)},
+    {L"Airplane mode", L"airplane mode flight radio", L"ms-settings:network-airplanemode",
+     CmdGlyph::Globe, D2D1::ColorF(0.20f, 0.47f, 0.76f)},
+    {L"Ethernet", L"ethernet wired network lan cable", L"ms-settings:network-ethernet",
+     CmdGlyph::Globe, D2D1::ColorF(0.20f, 0.47f, 0.76f)},
+    {L"VPN", L"vpn virtual private network", L"ms-settings:network-vpn", CmdGlyph::Key,
+     D2D1::ColorF(0.30f, 0.44f, 0.68f)},
+    {L"Proxy", L"proxy server", L"ms-settings:network-proxy", CmdGlyph::Globe,
+     D2D1::ColorF(0.20f, 0.47f, 0.76f)},
+    {L"Mobile hotspot", L"mobile hotspot tethering share internet",
+     L"ms-settings:network-mobilehotspot", CmdGlyph::Globe, D2D1::ColorF(0.26f, 0.52f, 0.78f)},
+    {L"Display", L"display monitor screen resolution brightness scaling", L"ms-settings:display",
+     CmdGlyph::Monitor, D2D1::ColorF(0.24f, 0.52f, 0.68f)},
+    {L"Night light", L"night light blue light filter", L"ms-settings:nightlight",
+     CmdGlyph::Moon, D2D1::ColorF(0.42f, 0.40f, 0.68f)},
+    {L"Sound", L"sound audio volume output input speaker microphone", L"ms-settings:sound",
+     CmdGlyph::Speaker, D2D1::ColorF(0.72f, 0.40f, 0.47f)},
+    {L"Notifications", L"notifications alerts banners actions", L"ms-settings:notifications",
+     CmdGlyph::Bell, D2D1::ColorF(0.86f, 0.55f, 0.25f)},
+    {L"Focus assist", L"focus assist do not disturb quiet hours", L"ms-settings:quiethours",
+     CmdGlyph::Moon, D2D1::ColorF(0.44f, 0.44f, 0.72f)},
+    {L"Power & sleep", L"power sleep screen timeout", L"ms-settings:powersleep",
+     CmdGlyph::Power, D2D1::ColorF(0.44f, 0.42f, 0.72f)},
+    {L"Battery", L"battery saver power usage", L"ms-settings:batterysaver", CmdGlyph::Power,
+     D2D1::ColorF(0.34f, 0.62f, 0.40f)},
+    {L"Storage", L"storage disk space drives cleanup sense", L"ms-settings:storagesense",
+     CmdGlyph::Folder, D2D1::ColorF(0.72f, 0.56f, 0.24f)},
+    {L"Multitasking", L"multitasking snap windows virtual desktops", L"ms-settings:multitasking",
+     CmdGlyph::Grid, D2D1::ColorF(0.38f, 0.52f, 0.66f)},
+    {L"Apps & features", L"apps features uninstall programs installed software",
+     L"ms-settings:appsfeatures", CmdGlyph::Grid, D2D1::ColorF(0.50f, 0.42f, 0.70f)},
+    {L"Default apps", L"default apps file associations", L"ms-settings:defaultapps",
+     CmdGlyph::Grid, D2D1::ColorF(0.50f, 0.42f, 0.70f)},
+    {L"Startup apps", L"startup apps boot login startup", L"ms-settings:startupapps",
+     CmdGlyph::List, D2D1::ColorF(0.46f, 0.49f, 0.58f)},
+    {L"Windows Update", L"windows update upgrade patch", L"ms-settings:windowsupdate",
+     CmdGlyph::Update, D2D1::ColorF(0.24f, 0.53f, 0.82f)},
+    {L"Personalization", L"personalization desktop appearance", L"ms-settings:personalization",
+     CmdGlyph::Gear, D2D1::ColorF(0.56f, 0.42f, 0.72f)},
+    {L"Background", L"background wallpaper picture", L"ms-settings:personalization-background",
+     CmdGlyph::Gear, D2D1::ColorF(0.56f, 0.42f, 0.72f)},
+    {L"Colors", L"colors accent colour dark light mode", L"ms-settings:colors", CmdGlyph::Gear,
+     D2D1::ColorF(0.56f, 0.42f, 0.72f)},
+    {L"Themes", L"themes theme pack", L"ms-settings:themes", CmdGlyph::Gear,
+     D2D1::ColorF(0.56f, 0.42f, 0.72f)},
+    {L"Lock screen", L"lock screen", L"ms-settings:lockscreen", CmdGlyph::Lock,
+     D2D1::ColorF(0.42f, 0.46f, 0.60f)},
+    {L"Taskbar", L"taskbar system tray corner", L"ms-settings:taskbar", CmdGlyph::Bars,
+     D2D1::ColorF(0.40f, 0.44f, 0.56f)},
+    {L"Date & time", L"date time clock timezone", L"ms-settings:dateandtime", CmdGlyph::Clock,
+     D2D1::ColorF(0.36f, 0.50f, 0.68f)},
+    {L"Language", L"language keyboard input region", L"ms-settings:regionlanguage",
+     CmdGlyph::Globe, D2D1::ColorF(0.30f, 0.54f, 0.72f)},
+    {L"Region", L"region format locale country", L"ms-settings:regionformatting",
+     CmdGlyph::Globe, D2D1::ColorF(0.30f, 0.54f, 0.72f)},
+    {L"Accessibility", L"accessibility ease narrator magnifier contrast", L"ms-settings:easeofaccess",
+     CmdGlyph::Sliders, D2D1::ColorF(0.30f, 0.56f, 0.62f)},
+    {L"Typing", L"typing keyboard autocorrect", L"ms-settings:typing", CmdGlyph::Sliders,
+     D2D1::ColorF(0.46f, 0.49f, 0.58f)},
+    {L"Mouse", L"mouse cursor pointer speed", L"ms-settings:mousetouchpad", CmdGlyph::Sliders,
+     D2D1::ColorF(0.46f, 0.49f, 0.58f)},
+    {L"Touchpad", L"touchpad gestures", L"ms-settings:devices-touchpad", CmdGlyph::Sliders,
+     D2D1::ColorF(0.46f, 0.49f, 0.58f)},
+    {L"Cameras", L"camera webcam", L"ms-settings:camera", CmdGlyph::Camera,
+     D2D1::ColorF(0.30f, 0.52f, 0.66f)},
+    {L"Microphone", L"microphone mic privacy", L"ms-settings:privacy-microphone", CmdGlyph::Mic,
+     D2D1::ColorF(0.62f, 0.40f, 0.56f)},
+    {L"Location", L"location gps privacy", L"ms-settings:privacy-location", CmdGlyph::Globe,
+     D2D1::ColorF(0.28f, 0.54f, 0.60f)},
+    {L"Devices", L"devices connected bluetooth printers", L"ms-settings:connecteddevices",
+     CmdGlyph::Chip, D2D1::ColorF(0.30f, 0.56f, 0.40f)},
+    {L"Printers & scanners", L"printers scanners print", L"ms-settings:printers",
+     CmdGlyph::Printer, D2D1::ColorF(0.46f, 0.49f, 0.55f)},
+    {L"About", L"about system info specifications pc this", L"ms-settings:about",
+     CmdGlyph::List, D2D1::ColorF(0.46f, 0.49f, 0.58f)},
+    {L"Clipboard", L"clipboard history copy paste", L"ms-settings:clipboard", CmdGlyph::Bars,
+     D2D1::ColorF(0.46f, 0.49f, 0.58f)},
+    {L"Accounts", L"accounts your info microsoft profile", L"ms-settings:yourinfo",
+     CmdGlyph::SignOut, D2D1::ColorF(0.40f, 0.50f, 0.70f)},
+    {L"Sign-in options", L"sign in options password pin windows hello security",
+     L"ms-settings:signinoptions", CmdGlyph::SignOut, D2D1::ColorF(0.40f, 0.50f, 0.70f)},
+};
+static const int kSettingCount = (int)(sizeof(kSettings) / sizeof(kSettings[0]));
+
+// ===== File browsing (toggled by the folder button next to the search box) =====
+// The chips at the top of file mode scope the listing to a folder inside the user profile.
+struct FileLocationDef {
+    const wchar_t* label;
+    const wchar_t* sub;  // relative to %USERPROFILE% (empty = the profile itself)
+    CmdGlyph glyph;
+};
+
+static const FileLocationDef kFileLocations[] = {
+    {L"Home", L"", CmdGlyph::Home},         {L"Downloads", L"Downloads", CmdGlyph::Download},
+    {L"Documents", L"Documents", CmdGlyph::Doc}, {L"Pictures", L"Pictures", CmdGlyph::Image},
+    {L"Music", L"Music", CmdGlyph::Music},  {L"Videos", L"Videos", CmdGlyph::Video},
+};
+static const int kFileLocationCount = (int)(sizeof(kFileLocations) / sizeof(kFileLocations[0]));
+
+struct FileEntry {
+    std::wstring name;
+    std::wstring path;    // full path
+    std::wstring dir;     // containing folder
+    std::wstring ext;     // uppercase extension without the dot ("" when none)
+    std::wstring folded;  // name, lowercased and accent-free (for filtering and sorting)
+    std::wstring meta;    // "Folder · 18/10/2026 16:02", built the first time it is shown
+    uint64_t size = 0;
+    FILETIME writeTime = {};
+    DWORD attr = 0;  // WIN32_FIND_DATA attributes (cloud/offline checks)
+    bool isDir = false;
+};
+
+static bool g_fileMode = false;                 // file mode active (folder button)
+static int g_fileLoc = 0;                       // chip index containing the current folder, or -1
+static double g_chipSelPos = 0;                 // animated position of the location-chip highlight
+static double g_chipSelTarget = 0;
+static std::wstring g_fileCur;                  // folder being browsed
+static std::wstring g_fileDir;                  // folder currently listed ("" = needs refresh)
+static std::vector<FileEntry> g_fileEntries;    // its children (capped, see kMaxListed*)
+static bool g_fileListTrunc = false;            // the listing hit the cap
+static size_t g_fileListTotal = 0;              // entries the folder has (listing cap included)
+static std::vector<std::wstring> g_fileBack;    // navigation history (back)
+static std::vector<std::wstring> g_fileFwd;     // navigation history (forward)
+static std::wstring g_pendingSelect;            // path to highlight after navigating
+static std::vector<FileEntry> g_fileDeep;       // deep search results under g_fileCur
+static std::wstring g_fileDeepKey;              // folder + query the deep results belong to
+static bool g_fileDeepTrunc = false;
+static bool g_fileDeepDone = false;             // the deep search for g_fileDeepKey has finished
+static bool g_fileSearching = false;
+static std::vector<FileEntry>* g_fileSrc = &g_fileEntries;  // vector SearchResult::icon indexes into
+static volatile LONG g_fileSearchGen = 0;
+static volatile LONG g_fileSearchRunning = 0;  // deep-search threads still alive
+static HANDLE g_fileSearchIdle = nullptr;      // manual-reset, signaled when none is alive
+
+static void FileSearchStarted() {
+    if (InterlockedIncrement(&g_fileSearchRunning) == 1 && g_fileSearchIdle) {
+        ResetEvent(g_fileSearchIdle);
+    }
+}
+
+static void FileSearchFinished() {
+    if (InterlockedDecrement(&g_fileSearchRunning) == 0 && g_fileSearchIdle) {
+        SetEvent(g_fileSearchIdle);
+    }
+}
+
+// Decoded previews, keyed by full path and kept in a small LRU. File entries come and go with
+// every deep-search snapshot, so the images live outside them.
+struct ThumbCacheItem {
+    ID2D1Bitmap* bmp = nullptr;
+    uint64_t used = 0;
+    bool failed = false;
+};
+static std::unordered_map<std::wstring, ThumbCacheItem> g_thumbCache;  // UI thread only
+static std::unordered_set<std::wstring> g_thumbPending;                // queued, UI thread only
+static uint64_t g_thumbClock = 0;
+static const size_t kThumbCacheMax = 96;
+static HANDLE g_thumbThread = nullptr;
+static HANDLE g_thumbEvent = nullptr;
+static HANDLE g_thumbStop = nullptr;  // manual-reset: asks the preview worker to exit
+static CRITICAL_SECTION g_thumbLock;  // guards g_thumbQueue (UI enqueues, worker dequeues)
+static std::deque<std::wstring> g_thumbQueue;
+
+static std::vector<FileEntry>& FileSrc() { return *g_fileSrc; }
+
+// ---- Query filters: *.pdf  ext:png,jpg  type:image  dir:  file:  (combinable with name text) ----
+struct FileFilter {
+    bool onlyDirs = false;
+    bool onlyFiles = false;
+    std::vector<std::wstring> exts;  // lowercase, without the dot
+    std::vector<std::wstring> tags;  // what the path bar shows for the active filters
+    bool Active() const { return onlyDirs || onlyFiles || !exts.empty(); }
+};
+static FileFilter g_fileFilter;
+
+static void AddFilterExt(FileFilter& f, std::wstring e) {
+    while (!e.empty() && e.front() == L'.') e.erase(e.begin());
+    if (e.empty()) return;
+    if (std::find(f.exts.begin(), f.exts.end(), e) == f.exts.end()) f.exts.push_back(e);
+}
+
+static void AddFilterExtList(FileFilter& f, const std::wstring& list, bool tag) {
+    std::wstring cur;
+    auto flush = [&] {
+        if (!cur.empty()) {
+            AddFilterExt(f, cur);
+            if (tag) f.tags.push_back(L"." + cur);
+        }
+        cur.clear();
+    };
+    for (wchar_t c : list) {
+        if (c == L',' || c == L';' || c == L'|') flush();
+        else cur.push_back(c);
+    }
+    flush();
+}
+
+static bool CsvHas(const wchar_t* csv, const std::wstring& w) {
+    const std::wstring all = std::wstring(L",") + csv + L",";
+    return all.find(L"," + w + L",") != std::wstring::npos;
+}
+
+// "type:image" style categories; returns false when the word is not a known category.
+static bool AddFilterType(FileFilter& f, const std::wstring& w) {
+    static const struct {
+        const wchar_t* names;
+        const wchar_t* exts;
+        const wchar_t* tag;
+    } kTypes[] = {
+        {L"image,images,img,photo,photos,picture,pictures",
+         L"png,jpg,jpeg,gif,bmp,webp,tif,tiff,ico,svg,heic,avif", L"Images"},
+        {L"doc,docs,document,documents,text",
+         L"pdf,doc,docx,odt,rtf,txt,md,xls,xlsx,csv,ods,ppt,pptx,odp", L"Documents"},
+        {L"audio,music,sound,sounds", L"mp3,wav,flac,ogg,m4a,aac,wma,opus", L"Audio"},
+        {L"video,videos,movie,movies", L"mp4,mkv,avi,mov,wmv,webm,flv,m4v", L"Video"},
+        {L"archive,archives,zip,compressed", L"zip,rar,7z,tar,gz,bz2,xz,tgz", L"Archives"},
+        {L"code,source,dev",
+         L"c,cpp,h,hpp,cs,js,ts,jsx,tsx,py,java,kt,dart,go,rs,rb,php,html,css,json,xml,yaml,yml,sh,ps1,bat,sql,lua,swift",
+         L"Code"},
+    };
+    for (const auto& t : kTypes) {
+        if (CsvHas(t.names, w)) {
+            AddFilterExtList(f, t.exts, false);
+            f.tags.push_back(t.tag);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Splits the typed query into name tokens and filters.
+static std::vector<std::wstring> ParseFileQuery(const std::wstring& query, FileFilter& f) {
+    f = FileFilter();
+    std::vector<std::wstring> out;
+    for (const std::wstring& t : Tokenize(query)) {
+        auto starts = [&](const wchar_t* pre) {
+            const size_t n = wcslen(pre);
+            return t.size() >= n && t.compare(0, n, pre) == 0;
+        };
+        if (starts(L"*.")) {
+            AddFilterExtList(f, t.substr(2), true);
+        } else if (starts(L"ext:")) {
+            AddFilterExtList(f, t.substr(4), true);
+        } else if (starts(L"type:")) {
+            std::wstring cur;
+            const std::wstring v = t.substr(5) + L",";
+            for (wchar_t c : v) {
+                if (c != L',') {
+                    cur.push_back(c);
+                    continue;
+                }
+                if (!cur.empty() && !AddFilterType(f, cur)) AddFilterExtList(f, cur, true);
+                cur.clear();
+            }
+        } else if (starts(L"dir:") || starts(L"folder:") || starts(L"folders:")) {
+            f.onlyDirs = true;
+            const std::wstring rest = t.substr(t.find(L':') + 1);
+            if (!rest.empty()) out.push_back(rest);  // "dir:logs" = folders named logs
+        } else if (starts(L"file:") || starts(L"files:")) {
+            f.onlyFiles = true;
+            const std::wstring rest = t.substr(t.find(L':') + 1);
+            if (!rest.empty()) out.push_back(rest);
+        } else if (t != L"*") {
+            out.push_back(t);
+        }
+    }
+    if (f.onlyDirs && f.onlyFiles) f.onlyDirs = f.onlyFiles = false;  // contradictory: ignore both
+    if (!f.exts.empty()) f.onlyDirs = false;                           // extensions imply files
+    if (f.onlyDirs) f.tags.insert(f.tags.begin(), L"Folders");
+    if (f.onlyFiles) f.tags.insert(f.tags.begin(), L"Files");
+    return out;
+}
+
+static bool NameEndsWithExt(const std::wstring& lower, const std::wstring& ext) {
+    if (lower.size() <= ext.size() + 1) return false;
+    const size_t off = lower.size() - ext.size();
+    return lower[off - 1] == L'.' && lower.compare(off, ext.size(), ext) == 0;
+}
+
+static bool FileFilterMatches(const FileFilter& f, const std::wstring& foldedName, bool isDir) {
+    if (f.onlyDirs && !isDir) return false;
+    if (f.onlyFiles && isDir) return false;
+    if (!f.exts.empty()) {
+        if (isDir) return false;
+        for (const auto& e : f.exts) {
+            if (NameEndsWithExt(foldedName, e)) return true;
+        }
+        return false;
+    }
+    return true;
+}
+
+// ---- Band editor (path / rename) and the file actions menu ----
+enum class BandEdit { None, Path, Rename };
+static BandEdit g_bandEdit = BandEdit::None;
+static std::wstring g_bandText;
+static int g_bandCaret = 0, g_bandAnchor = 0;
+static float g_bandScroll = 0;
+static std::wstring g_bandTarget;  // Rename: full path being renamed
+static std::wstring g_bandError;
+static double g_bandErrorAt = 0;
+static std::vector<std::wstring> g_bandComp;  // Tab-completion candidates (folder names)
+static std::wstring g_bandCompDir, g_bandCompLast;
+static int g_bandCompIdx = -1;
+
+enum FileActId {
+    FA_OPEN = 1, FA_GOTO, FA_REVEAL, FA_ADMIN, FA_TERMINAL, FA_RENAME,
+    FA_COPYPATH, FA_COPYNAME, FA_COPYFILE, FA_NEWFOLDER, FA_NEWFILE, FA_PROPS, FA_DELETE
+};
+struct FileMenuItem {
+    int id;
+    const wchar_t* label;
+    const wchar_t* keys;
+};
+static std::vector<FileMenuItem> g_fileMenu;
+static bool g_fileMenuOpen = false;
+static int g_fileMenuSel = 0;
+static bool g_fileMenuArmed = false;       // delete is waiting for its confirming Enter
+static FileEntry g_fileMenuTarget;         // copy: results can change while the menu is open
+static bool g_fileMenuHasTarget = false;
+static double g_fileCopiedAt = -1e9;       // last "copy path/name/file", for the footer flash
+
+static bool FileQueryActive() { return !g_tokens.empty() || g_fileFilter.Active(); }
+
+static std::wstring FileFilterSummary() {
+    std::wstring s;
+    for (const auto& t : g_fileFilter.tags) {
+        if (!s.empty()) s += L" · ";
+        s += t;
+    }
+    return s;
+}
+
+static void ReleaseThumbCache() {
+    for (auto& kv : g_thumbCache) SafeRelease(kv.second.bmp);
+    g_thumbCache.clear();
+    g_thumbPending.clear();
+}
+
+// Drops a cached preview (or a pending request) for one path, e.g. after a rename or a delete.
+static void ForgetFileThumb(const std::wstring& path) {
+    auto it = g_thumbCache.find(path);
+    if (it != g_thumbCache.end()) {
+        SafeRelease(it->second.bmp);
+        g_thumbCache.erase(it);
+    }
+    g_thumbPending.erase(path);
+}
+
+// Drops previews still waiting to be decoded (e.g. after navigating away or closing the bar),
+// so a folder the user left cannot delay the one now on screen.
+static void CancelThumbQueue() {
+    if (!g_thumbThread) return;
+    EnterCriticalSection(&g_thumbLock);
+    g_thumbQueue.clear();
+    LeaveCriticalSection(&g_thumbLock);
+    g_thumbPending.clear();
+}
+
+static void ClearFileDeep() {
+    g_fileDeep.clear();
+    g_fileDeepKey.clear();
+    g_fileDeepTrunc = false;
+    g_fileDeepDone = false;
+}
+
+// Resolves the folder of a file location, or an empty string on failure.
+static std::wstring ResolveFileLocation(int loc) {
+    if (loc < 0 || loc >= kFileLocationCount) return L"";
+    wchar_t base[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"USERPROFILE", base, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return L"";
+    std::wstring dir = base;
+    const wchar_t* sub = kFileLocations[loc].sub;
+    if (sub && *sub) {
+        dir += L'\\';
+        dir += sub;
+    }
+    return dir;
+}
+
+static std::wstring JoinPath(const std::wstring& dir, const std::wstring& name) {
+    if (dir.empty()) return name;
+    return (dir.back() == L'\\') ? dir + name : dir + L'\\' + name;
+}
+
+// Parent folder, or "" when there is none (drive root).
+static std::wstring ParentDir(const std::wstring& p) {
+    std::wstring t = p;
+    while (t.size() > 3 && t.back() == L'\\') t.pop_back();
+    if (t.size() <= 3) return L"";
+    const size_t i = t.find_last_of(L'\\');
+    if (i == std::wstring::npos) return L"";
+    std::wstring r = t.substr(0, i);
+    if (r.size() == 2 && r[1] == L':') r += L'\\';
+    return r;
+}
+
+static bool SamePath(const std::wstring& a, const std::wstring& b) {
+    auto trim = [](std::wstring t) {
+        while (t.size() > 3 && t.back() == L'\\') t.pop_back();
+        return t;
+    };
+    return _wcsicmp(trim(a).c_str(), trim(b).c_str()) == 0;
+}
+
+// Chip whose folder is the deepest ancestor of (or equal to) the path, or -1.
+static int LocationForPath(const std::wstring& path) {
+    int best = -1;
+    size_t bestLen = 0;
+    for (int i = 0; i < kFileLocationCount; ++i) {
+        const std::wstring loc = ResolveFileLocation(i);
+        if (loc.empty() || path.size() < loc.size()) continue;
+        if (_wcsnicmp(path.c_str(), loc.c_str(), loc.size()) != 0) continue;
+        if (path.size() > loc.size() && path[loc.size()] != L'\\') continue;
+        if (loc.size() > bestLen) {
+            best = i;
+            bestLen = loc.size();
+        }
+    }
+    return best;
+}
+
+// Short human-readable size for files.
+static std::wstring FormatFileSize(uint64_t bytes) {
+    const wchar_t* units[] = {L"KB", L"MB", L"GB", L"TB"};
+    if (bytes < 1024) {
+        wchar_t buf[32];
+        swprintf_s(buf, L"%llu B", (unsigned long long)bytes);
+        return buf;
+    }
+    double v = (double)bytes / 1024.0;
+    int u = 0;
+    while (v >= 1024.0 && u < 3) {
+        v /= 1024.0;
+        ++u;
+    }
+    wchar_t buf[32];
+    if (v < 10.0) {
+        swprintf_s(buf, L"%.1f %s", v, units[u]);
+    } else {
+        swprintf_s(buf, L"%.0f %s", v, units[u]);
+    }
+    return buf;
+}
+
+// Uppercase extension of a file name (without the dot); empty when it has none.
+static std::wstring FileExtOf(const std::wstring& name) {
+    const size_t d = name.find_last_of(L'.');
+    if (d == std::wstring::npos || d == 0 || d + 1 >= name.size()) return L"";
+    std::wstring e = name.substr(d + 1);
+    if (e.size() > 4) return L"";  // too long to be a real extension
+    for (auto& c : e) c = (wchar_t)towupper(c);
+    return e;
+}
+
+static bool IsImageExt(const std::wstring& ext) {
+    return ext == L"PNG" || ext == L"JPG" || ext == L"JPEG" || ext == L"JPE" ||
+           ext == L"JFIF" || ext == L"GIF" || ext == L"BMP" || ext == L"WEBP" || ext == L"TIF" ||
+           ext == L"TIFF" || ext == L"ICO" || ext == L"HEIC" || ext == L"HEIF" ||
+           ext == L"AVIF" || ext == L"JXR" || ext == L"HDP" || ext == L"WDP";
+}
+
+static bool SkipFindEntry(const WIN32_FIND_DATAW& fd) {
+    if (fd.cFileName[0] == L'.' &&
+        (fd.cFileName[1] == 0 || (fd.cFileName[1] == L'.' && fd.cFileName[2] == 0))) {
+        return true;
+    }
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) return true;
+    // Hidden entries stay out (AppData, ...), except dot-folders/files such as .claude or .vscode.
+    return (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) && fd.cFileName[0] != L'.';
+}
+
+static FileEntry MakeFileEntry(const WIN32_FIND_DATAW& fd, const std::wstring& dir) {
+    FileEntry e;
+    e.name = fd.cFileName;
+    e.folded = FoldString(e.name);
+    e.isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    e.attr = fd.dwFileAttributes;
+    e.dir = dir;
+    e.path = JoinPath(dir, e.name);
+    if (!e.isDir) e.ext = FileExtOf(e.name);
+    ULARGE_INTEGER sz;
+    sz.LowPart = fd.nFileSizeLow;
+    sz.HighPart = fd.nFileSizeHigh;
+    e.size = sz.QuadPart;
+    e.writeTime = fd.ftLastWriteTime;
+    return e;
+}
+
+// The "Folder · 18/10/2026 16:02" line, formatted the first time the entry is shown. Listing a
+// large folder no longer pays for a date/size format per file.
+static const std::wstring& FileEntryMeta(FileEntry& e) {
+    if (e.meta.empty()) {
+        e.meta = std::wstring(e.isDir ? kTxtFolder : kTxtKindFile) + L" · " +
+                 (e.isDir ? std::wstring() : FormatFileSize(e.size) + L" · ") +
+                 FormatFileTime(e.writeTime);
+    }
+    return e.meta;
+}
+
+// A folder with hundreds of thousands of entries would freeze the bar and eat memory just to
+// show a list nobody scrolls to the end of. The listing stops at these caps (the deep search
+// still looks past them) and the path band says so.
+static const size_t kMaxListedDirs = 5000;
+static const size_t kMaxListedFiles = 5000;
+
+// Reads the children of g_fileCur into g_fileEntries (folders first).
+static void RefreshFileListing() {
+    CancelThumbQueue();
+    g_fileEntries.clear();
+    g_fileListTrunc = false;
+    g_fileListTotal = 0;
+    g_fileDir = g_fileCur;
+    if (g_fileDir.empty()) return;
+    const std::wstring pattern = JoinPath(g_fileDir, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch,
+                               nullptr, FIND_FIRST_EX_LARGE_FETCH);
+    if (h == INVALID_HANDLE_VALUE) return;
+    size_t dirs = 0, files = 0, dropped = 0;
+    do {
+        if (SkipFindEntry(fd)) continue;
+        const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        if (isDir && dirs >= kMaxListedDirs) {
+            g_fileListTrunc = true;
+            ++dropped;
+            continue;
+        }
+        if (!isDir && files >= kMaxListedFiles) {
+            g_fileListTrunc = true;
+            ++dropped;
+            continue;
+        }
+        if (isDir) ++dirs;
+        else ++files;
+        g_fileEntries.push_back(MakeFileEntry(fd, g_fileDir));
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    g_fileListTotal = g_fileEntries.size() + dropped;
+    // Ordinal on the pre-folded name: no per-comparison locale collation.
+    std::sort(g_fileEntries.begin(), g_fileEntries.end(), [](const FileEntry& a, const FileEntry& b) {
+        if (a.isDir != b.isDir) return a.isDir;  // folders first
+        const int c = CompareStringOrdinal(a.folded.c_str(), -1, b.folded.c_str(), -1, TRUE);
+        if (c == CSTR_EQUAL) return wcscmp(a.name.c_str(), b.name.c_str()) < 0;
+        return c == CSTR_LESS_THAN;
+    });
+}
+
+static std::wstring FileSearchKey() {
+    std::wstring k = g_fileCur;
+    k += L'\n';
+    for (const auto& t : g_tokens) {
+        k += t;
+        k += L' ';
+    }
+    k += L'\n';
+    k += g_fileFilter.onlyDirs ? L'd' : L'-';
+    k += g_fileFilter.onlyFiles ? L'f' : L'-';
+    for (const auto& e : g_fileFilter.exts) {
+        k += L' ';
+        k += e;
+    }
+    return k;
+}
+
+// Builds the result list for file mode: the folder's children, or the deep matches when
+// a query is typed (local matches are shown until the deep search finishes).
+static void BuildFileResults() {
+    g_results.clear();
+    const bool deep = FileQueryActive() && g_fileDeepKey == FileSearchKey();
+    g_fileSrc = deep ? &g_fileDeep : &g_fileEntries;
+    std::vector<FileEntry>& src = *g_fileSrc;
+    for (size_t i = 0; i < src.size(); ++i) {
+        FileEntry& e = src[i];
+        if (!deep) {
+            if (!FileFilterMatches(g_fileFilter, e.folded, e.isDir)) continue;
+            bool ok = true;
+            for (const auto& t : g_tokens) {
+                if (e.folded.find(t) == std::wstring::npos) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok) continue;
+        }
+        SearchResult r;
+        r.kind = ResultKind::File;
+        r.title = e.name;
+        r.subtitle = FileEntryMeta(e);
+        r.payload = e.path;
+        r.icon = (int)i;  // index into FileSrc()
+        g_results.push_back(std::move(r));
+        if ((int)g_results.size() >= 300) break;
+    }
+}
+
+// ---- Deep search (background, breadth-first so shallow matches come first) ----
+struct FileSearchJob {
+    HWND hwnd;
+    LONG gen;
+    std::wstring root;
+    std::wstring key;
+    std::vector<std::wstring> tokens;
+    FileFilter filter;
+};
+
+struct FileSearchResult {
+    LONG gen;
+    std::wstring key;
+    std::vector<FileEntry> entries;
+    bool truncated;
+    bool done;  // false for a partial snapshot sent while the search is still running
+};
+
+static DWORD WINAPI FileSearchThread(LPVOID param) {
+    std::unique_ptr<FileSearchJob> job((FileSearchJob*)param);
+    struct DoneGuard {
+        ~DoneGuard() { FileSearchFinished(); }
+    } doneGuard;
+    const size_t kMaxHits = 300, kMaxScanned = 400000;  // matches the 300 rows BuildFileResults keeps
+    const int kMaxDepth = 14;
+    const DWORD kBudgetMs = 6000;
+    struct Item {
+        std::wstring dir;
+        int depth;
+    };
+    struct Hit {
+        FileEntry e;
+        int score;
+    };
+    std::vector<Item> queue;
+    std::vector<Hit> hits;
+    queue.push_back({job->root, 0});
+    size_t qi = 0, scanned = 0;
+    bool truncated = false;
+    const DWORD t0 = GetTickCount();
+    DWORD lastPost = t0;
+    auto cancelled = [&] { return job->gen != g_fileSearchGen; };
+    auto sortHits = [&] {
+        std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
+            if (a.score != b.score) return a.score > b.score;
+            return CompareStringOrdinal(a.e.folded.c_str(), -1, b.e.folded.c_str(), -1, TRUE) ==
+                   CSTR_LESS_THAN;
+        });
+    };
+    // Sends the current hits so results appear while the search keeps running.
+    auto post = [&](bool isFinal) {
+        sortHits();
+        auto* res = new FileSearchResult();
+        res->gen = job->gen;
+        res->key = job->key;
+        res->truncated = truncated;
+        res->done = isFinal;
+        res->entries.reserve(hits.size());
+        for (const auto& ht : hits) res->entries.push_back(ht.e);
+        if (!PostMessageW(job->hwnd, WM_APP_FILES, 0, (LPARAM)res)) delete res;
+    };
+
+    while (qi < queue.size() && !truncated) {
+        if (cancelled()) return 0;
+        if (!hits.empty() && GetTickCount() - lastPost > 250) {
+            post(false);
+            lastPost = GetTickCount();
+        }
+        const Item it = queue[qi++];
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileExW(JoinPath(it.dir, L"*").c_str(), FindExInfoBasic, &fd,
+                                    FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (SkipFindEntry(fd)) continue;
+            ++scanned;
+            if ((scanned & 255) == 0) {
+                if (cancelled()) {
+                    FindClose(h);
+                    return 0;
+                }
+                if (GetTickCount() - t0 > kBudgetMs || scanned > kMaxScanned) {
+                    truncated = true;
+                    break;
+                }
+            }
+            const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            const std::wstring folded = FoldString(fd.cFileName);
+            bool ok = FileFilterMatches(job->filter, folded, isDir);
+            int score = 100;
+            for (size_t k = 0; ok && k < job->tokens.size(); ++k) {
+                const size_t pos = folded.find(job->tokens[k]);
+                if (pos == std::wstring::npos) {
+                    ok = false;
+                    break;
+                }
+                if (k == 0) {
+                    if (pos == 0) score = 300;
+                    else if (!iswalnum(folded[pos - 1])) score = 200;
+                }
+            }
+            if (ok) {
+                Hit ht;
+                ht.e = MakeFileEntry(fd, it.dir);
+                FileEntryMeta(ht.e);  // formatted here, off the UI thread, and kept in snapshots
+                ht.score = score + (isDir ? 20 : 0) - it.depth * 15;
+                hits.push_back(std::move(ht));
+                if (hits.size() >= kMaxHits) {
+                    truncated = true;
+                    break;
+                }
+            }
+            if (isDir && it.depth < kMaxDepth) {
+                const bool link = (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
+                                  (fd.dwReserved0 == 0xA000000C || fd.dwReserved0 == 0xA0000003);
+                // Offline/cloud folders may download on access: do not walk into them.
+                const bool cloud =
+                    (fd.dwFileAttributes &
+                     (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) != 0;
+                const std::wstring fn = folded;
+                if (!link && !cloud && fn != L"node_modules" && fn != L".git") {
+                    queue.push_back({JoinPath(it.dir, fd.cFileName), it.depth + 1});
+                }
+            }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    if (cancelled()) return 0;
+
+    post(true);
+    return 0;
+}
+
+// Brand-ish colour for a file-type tile, by extension.
+static D2D1_COLOR_F ExtColor(const std::wstring& ext) {
+    auto c = [](float r, float g, float b) { return D2D1::ColorF(r, g, b); };
+    if (ext == L"PDF") return c(0.86f, 0.29f, 0.24f);
+    if (ext == L"DOC" || ext == L"DOCX" || ext == L"RTF" || ext == L"ODT") return c(0.24f, 0.46f, 0.85f);
+    if (ext == L"XLS" || ext == L"XLSX" || ext == L"CSV" || ext == L"ODS") return c(0.20f, 0.62f, 0.33f);
+    if (ext == L"PPT" || ext == L"PPTX" || ext == L"ODP") return c(0.90f, 0.47f, 0.20f);
+    if (ext == L"JSON" || ext == L"XML" || ext == L"YAML" || ext == L"YML" || ext == L"INI")
+        return c(0.80f, 0.60f, 0.20f);
+    if (ext == L"TXT" || ext == L"MD" || ext == L"LOG") return c(0.44f, 0.47f, 0.55f);
+    if (ext == L"ZIP" || ext == L"RAR" || ext == L"7Z" || ext == L"TAR" || ext == L"GZ")
+        return c(0.72f, 0.52f, 0.28f);
+    if (ext == L"EXE" || ext == L"MSI" || ext == L"BAT" || ext == L"CMD" || ext == L"PS1")
+        return c(0.40f, 0.43f, 0.50f);
+    if (ext == L"MP3" || ext == L"WAV" || ext == L"FLAC" || ext == L"OGG" || ext == L"M4A" ||
+        ext == L"AAC" || ext == L"WMA")
+        return c(0.60f, 0.36f, 0.80f);
+    if (ext == L"MP4" || ext == L"MKV" || ext == L"AVI" || ext == L"MOV" || ext == L"WMV" ||
+        ext == L"WEBM" || ext == L"FLV")
+        return c(0.85f, 0.36f, 0.55f);
+    if (ext == L"C" || ext == L"CPP" || ext == L"H" || ext == L"HPP" || ext == L"CS" || ext == L"JAVA" ||
+        ext == L"PY" || ext == L"JS" || ext == L"TS" || ext == L"HTML" || ext == L"CSS" || ext == L"RS" ||
+        ext == L"GO" || ext == L"SH" || ext == L"PHP" || ext == L"RB" || ext == L"SQL")
+        return c(0.42f, 0.45f, 0.85f);
+    if (IsImageExt(ext)) return c(0.25f, 0.62f, 0.62f);
+    return c(0.44f, 0.47f, 0.54f);
+}
+
+static bool StartsWithTrigger(const std::wstring& text, const wchar_t* trigger) {
+    const size_t n = wcslen(trigger);
+    if (text.size() < n) return false;
+    for (size_t i = 0; i < n; ++i) {
+        if (towlower(text[i]) != towlower(trigger[i])) return false;
+    }
+    return true;
+}
+
+// Detects a leading activator, stores it in g_activator and returns the remaining query (trimmed).
+// With no activator, g_activator is -1 and the trimmed text is returned unchanged.
+static std::wstring ActivationQuery(const std::wstring& text) {
+    g_activator = -1;
+    const size_t a = text.find_first_not_of(L" \t");
+    if (a == std::wstring::npos) return std::wstring();
+    std::wstring t = text.substr(a);
+    const size_t b = t.find_last_not_of(L" \t");
+    t = t.substr(0, b + 1);
+    for (int i = 0; i < kActivatorCount; ++i) {
+        if (StartsWithTrigger(t, kActivators[i].trigger)) {
+            g_activator = i;
+            std::wstring q = t.substr(wcslen(kActivators[i].trigger));
+            const size_t qa = q.find_first_not_of(L" \t");
+            return qa == std::wstring::npos ? std::wstring() : q.substr(qa);
+        }
+    }
+    return t;
 }
 
 static void ReleaseResultLayouts() {
@@ -2523,6 +3665,11 @@ static double HeroH() {
     return HeroShown() ? kHeroH : 0.0;
 }
 
+// Height (DIP) of the file-mode filter band (the location chips) above the list.
+static double FileChipsH() {
+    return g_fileMode ? kChipH + kPathH : 0.0;
+}
+
 // True when the calculation is actually visible (card or inline text).
 static bool CalcShown() {
     return HeroShown() || GhostShown();
@@ -2532,7 +3679,8 @@ static void UpdateCalc() {
     g_calc = Calc::Result();
     g_calcDisplay.clear();
     g_calcActive = false;
-    if (!g_cfg.calculatorEnabled || g_text.empty()) {
+    ActivationQuery(g_text);  // keep g_activator in sync with what is typed
+    if (!g_cfg.calculatorEnabled || g_text.empty() || g_activator >= 0 || g_fileMode) {
         return;
     }
     Calc::Context ctx;
@@ -2694,10 +3842,228 @@ static void AddCalcHistory(const std::wstring& expr, const std::wstring& resFmt,
     SaveCalcHistory();
 }
 
+// ---- Web search -------------------------------------------------------------
+static const wchar_t* WebEngineName(WebEngine e) {
+    switch (e) {
+        case WebEngine::Bing: return L"Bing";
+        case WebEngine::DuckDuckGo: return L"DuckDuckGo";
+        case WebEngine::YouTube: return L"YouTube";
+        case WebEngine::Wikipedia: return L"Wikipedia";
+        default: return L"Google";
+    }
+}
+
+// Brand colour of the engine, used for the web result's icon badge.
+static D2D1_COLOR_F WebEngineColor(WebEngine e) {
+    switch (e) {
+        case WebEngine::Bing: return D2D1::ColorF(0.00f, 0.51f, 0.45f);        // #008373
+        case WebEngine::DuckDuckGo: return D2D1::ColorF(0.87f, 0.35f, 0.20f);  // #DE5833
+        case WebEngine::YouTube: return D2D1::ColorF(0.90f, 0.13f, 0.09f);     // #E62117
+        case WebEngine::Wikipedia: return D2D1::ColorF(0.33f, 0.33f, 0.33f);   // #545454
+        default: return D2D1::ColorF(0.26f, 0.52f, 0.96f);                     // #4285F4 (Google)
+    }
+}
+
+// Percent-encodes the query for a URL (UTF-8, unreserved characters kept as-is).
+static std::wstring UrlEncode(const std::wstring& s) {
+    if (s.empty()) return L"";
+    int len = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return L"";
+    std::string utf8((size_t)len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), &utf8[0], len, nullptr, nullptr);
+    static const wchar_t* hex = L"0123456789ABCDEF";
+    std::wstring out;
+    out.reserve((size_t)len * 3);
+    for (unsigned char c : utf8) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+            c == '-' || c == '_' || c == '.' || c == '~') {
+            out.push_back((wchar_t)c);
+        } else {
+            out.push_back(L'%');
+            out.push_back(hex[c >> 4]);
+            out.push_back(hex[c & 0x0F]);
+        }
+    }
+    return out;
+}
+
+static std::wstring WebSearchUrl(WebEngine e, const std::wstring& query) {
+    const std::wstring q = UrlEncode(query);
+    switch (e) {
+        case WebEngine::Bing: return L"https://www.bing.com/search?q=" + q;
+        case WebEngine::DuckDuckGo: return L"https://duckduckgo.com/?q=" + q;
+        case WebEngine::YouTube: return L"https://www.youtube.com/results?search_query=" + q;
+        case WebEngine::Wikipedia: return L"https://en.wikipedia.org/w/index.php?search=" + q;
+        default: return L"https://www.google.com/search?q=" + q;
+    }
+}
+
+static bool IsIPv4(const std::wstring& s) {
+    int parts = 0, val = 0, digits = 0;
+    for (size_t i = 0; i <= s.size(); ++i) {
+        if (i < s.size() && s[i] >= L'0' && s[i] <= L'9') {
+            val = val * 10 + (s[i] - L'0');
+            if (++digits > 3 || val > 255) return false;
+        } else if (i < s.size() && s[i] == L'.') {
+            if (digits == 0) return false;
+            ++parts;
+            val = 0;
+            digits = 0;
+        } else if (i == s.size()) {
+            return parts == 3 && digits > 0;
+        } else {
+            return false;
+        }
+    }
+    return false;
+}
+
+static bool IsCommonFileExtension(const std::wstring& ext) {
+    static const wchar_t* kExts[] = {
+        L"txt",  L"log",  L"ini",  L"cfg",  L"conf", L"pdf",  L"png",  L"jpg",  L"jpeg", L"gif",
+        L"bmp",  L"svg",  L"ico",  L"mp3",  L"wav",  L"flac", L"mp4",  L"avi",  L"mkv",  L"mov",
+        L"exe",  L"dll",  L"msi",  L"bat",  L"cmd",  L"ps1",  L"reg",  L"sys",  L"tmp",  L"bak",
+        L"zip",  L"rar",  L"7z",   L"tar",  L"gz",   L"iso",  L"json", L"xml",  L"yaml", L"yml",
+        L"csv",  L"tsv",  L"md",   L"doc",  L"docx", L"xls",  L"xlsx", L"ppt",  L"pptx", L"py",
+        L"js",   L"ts",   L"c",    L"h",    L"cs",   L"cpp",  L"hpp",  L"java", L"rs",   L"go",
+        L"rb",   L"php",  L"sh",   L"lnk",  L"url",  L"dat",  L"bin",  L"obj",  L"lib",  L"pdb",
+    };
+    for (const wchar_t* e : kExts) {
+        if (ext == e) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether the text looks like something to open rather than to search for: a URL with a scheme,
+// a "www." host, localhost, an IPv4 address, or a bare domain with a plausible TLD.
+static bool LooksLikeUrl(const std::wstring& s) {
+    if (s.empty() || s.find(L' ') != std::wstring::npos ||
+        s.find(L'\t') != std::wstring::npos) {
+        return false;
+    }
+    const std::wstring low = FoldString(s);
+    const wchar_t* schemes[] = {L"http://", L"https://", L"ftp://", L"file://", L"mailto:"};
+    for (const wchar_t* sc : schemes) {
+        if (low.rfind(sc, 0) == 0) {
+            return true;
+        }
+    }
+    if (low.rfind(L"www.", 0) == 0) {
+        return true;
+    }
+    // Keep only the host: drop an optional path, query, fragment and port.
+    std::wstring host = low.substr(0, low.find_first_of(L"/?#"));
+    const size_t colon = host.find(L':');
+    if (colon != std::wstring::npos) {
+        host = host.substr(0, colon);
+    }
+    if (host == L"localhost" || IsIPv4(host)) {
+        return true;
+    }
+    // Bare domain: at least one dot, a letters-only TLD of 2+, and a valid host before it.
+    const size_t dot = host.rfind(L'.');
+    if (dot == std::wstring::npos || dot == 0 || dot + 2 >= host.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < host.size(); ++i) {
+        const wchar_t c = host[i];
+        if (!((c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9') || c == L'-' || c == L'.')) {
+            return false;
+        }
+    }
+    for (size_t i = dot + 1; i < host.size(); ++i) {
+        if (host[i] < L'a' || host[i] > L'z') {
+            return false;
+        }
+    }
+    return !IsCommonFileExtension(host.substr(dot + 1));
+}
+
+// Adds a scheme when the user typed a bare host, so the browser opens it as a site.
+static std::wstring NormalizeUrl(const std::wstring& s) {
+    const std::wstring low = FoldString(s);
+    const wchar_t* schemes[] = {L"http://", L"https://", L"ftp://", L"file://", L"mailto:"};
+    for (const wchar_t* sc : schemes) {
+        if (low.rfind(sc, 0) == 0) {
+            return s;
+        }
+    }
+    std::wstring host = low.substr(0, low.find_first_of(L"/?#"));
+    const size_t colon = host.find(L':');
+    if (colon != std::wstring::npos) {
+        host = host.substr(0, colon);
+    }
+    if (host == L"localhost" || IsIPv4(host)) {
+        return L"http://" + s;
+    }
+    return L"https://" + s;
+}
+
 static void RunSearch() {
     ReleaseResultLayouts();
     g_results.clear();
-    g_tokens = Tokenize(g_text);
+
+    const std::wstring query = ActivationQuery(g_text);
+    g_tokens = Tokenize(query);
+
+    // File mode (toggled by the folder button) lists the selected location and filters it
+    // locally; a typed activator still takes precedence (it is handled just below).
+    if (g_activator < 0 && g_fileMode) {
+        g_tokens = ParseFileQuery(query, g_fileFilter);
+        g_calc = Calc::Result();
+        g_calcDisplay.clear();
+        g_calcActive = false;
+        if (g_fileDir.empty() || !SamePath(g_fileDir, g_fileCur)) RefreshFileListing();
+        BuildFileResults();
+        BuildRowOffsets();
+        return;
+    }
+
+    // An activator switches into a mode.
+    if (g_activator >= 0) {
+        g_calc = Calc::Result();
+        g_calcDisplay.clear();
+        g_calcActive = false;
+        if (kActivators[g_activator].mode == LauncherMode::Commands) {
+            for (int i = 0; i < kCommandCount; ++i) {
+                const CommandDef& c = kCommands[i];
+                std::wstring hay = FoldString(c.title);
+                hay += L' ';
+                hay += FoldString(c.keywords);
+                bool ok = true;
+                for (const auto& t : g_tokens) {
+                    if (hay.find(t) == std::wstring::npos) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (!ok) continue;
+                SearchResult r;
+                r.kind = ResultKind::Command;
+                r.title = c.title;
+                r.subtitle = c.category;
+                r.payload = c.id;
+                r.icon = i;  // index into kCommands, for the badge glyph/colour
+                g_results.push_back(std::move(r));
+            }
+        } else if (!query.empty()) {
+            // Web mode: a single result, always a search (never the direct-open behaviour),
+            // optionally pinned to one engine.
+            const int ei = kActivators[g_activator].engine;
+            const WebEngine eng = ei >= 0 ? (WebEngine)ei : g_cfg.webEngine;
+            SearchResult w;
+            w.kind = ResultKind::Web;
+            w.title = L"Search the web for “" + query + L"”";
+            w.subtitle = WebEngineName(eng);
+            w.icon = (int)eng;
+            w.payload = WebSearchUrl(eng, query);
+            g_results.push_back(std::move(w));
+        }
+        BuildRowOffsets();
+        return;
+    }
 
     if (g_tokens.empty()) {
         // No query: Compact = nothing; Expanded = recents + suggestions.
@@ -2755,6 +4121,51 @@ static void RunSearch() {
         g_calc = Calc::Result();  // apps matched: drop the constant's result card
         g_calcDisplay.clear();
         g_calcActive = false;
+    }
+    // Windows Settings pages that match the query (no prefix needed). Kept after the apps and
+    // capped so they never flood the list; a valid calculation suppresses them, like the web row.
+    if (!CalcOk()) {
+        int shown = 0;
+        for (int i = 0; i < kSettingCount && shown < 3; ++i) {
+            const SettingDef& sd = kSettings[i];
+            std::wstring hay = FoldString(sd.title);
+            hay += L' ';
+            hay += FoldString(sd.keywords);
+            bool ok = true;
+            for (const auto& t : g_tokens) {
+                if (hay.find(t) == std::wstring::npos) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok) continue;
+            SearchResult r;
+            r.kind = ResultKind::Setting;
+            r.title = sd.title;
+            r.payload = sd.uri;
+            r.icon = i;  // index into kSettings, for the badge glyph/colour
+            g_results.push_back(std::move(r));
+            ++shown;
+        }
+    }
+
+    // Web: a single result at the end of the list (not offered while the text is a valid
+    // calculation, so Enter still copies the result). If the text looks like a URL it opens the
+    // site directly; use a "?" prefix to force a search instead.
+    if (g_cfg.webSearch && !query.empty() && !CalcOk()) {
+        SearchResult w;
+        if (LooksLikeUrl(query)) {
+            w.kind = ResultKind::Url;
+            w.title = L"Open “" + query + L"”";
+            w.payload = NormalizeUrl(query);
+        } else {
+            w.kind = ResultKind::Web;
+            w.title = L"Search the web for “" + query + L"”";
+            w.subtitle = WebEngineName(g_cfg.webEngine);
+            w.icon = (int)g_cfg.webEngine;
+            w.payload = WebSearchUrl(g_cfg.webEngine, query);
+        }
+        g_results.push_back(std::move(w));
     }
     BuildRowOffsets();
 }
@@ -3240,17 +4651,22 @@ static std::wstring GetTileLogoPath(IShellItem* item) {
     return r;
 }
 
-// Loads a PNG (or other image) with WIC as premultiplied BGRA, scaled to at most 64 px
+// Loads an image with WIC as premultiplied BGRA, at most 64 px on its longest side. With
+// `centerSquare` the source is first cropped to its largest centered square: previews are drawn
+// cover-fitted into a square, so huge panoramas and long screenshots (previously rejected by a
+// 4096 px limit) now decode fine and show exactly the same visible area.
 static bool LoadImageFilePixels(IWICImagingFactory* wic,
                                 const std::wstring& path,
                                 std::vector<uint32_t>& px,
                                 int& w,
-                                int& h) {
+                                int& h,
+                                bool centerSquare = false) {
     if (!wic) {
         return false;
     }
     IWICBitmapDecoder* dec = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
+    IWICBitmapClipper* clip = nullptr;
     IWICBitmapScaler* scaler = nullptr;
     IWICFormatConverter* conv = nullptr;
     bool ok = false;
@@ -3260,42 +4676,56 @@ static bool LoadImageFilePixels(IWICImagingFactory* wic,
         dec && SUCCEEDED(dec->GetFrame(0, &frame)) && frame) {
         UINT fw = 0, fh = 0;
         frame->GetSize(&fw, &fh);
-        if (fw > 0 && fh > 0 && fw <= 4096 && fh <= 4096) {
+        if (fw > 0 && fh > 0) {
             IWICBitmapSource* src = frame;
-            UINT tw = fw, th = fh;
-            const UINT kMax = 64;
-            if (fw > kMax || fh > kMax) {
-                UINT nw = fw, nh = fh;
-                if (fw >= fh) {
-                    nw = kMax;
-                    nh = std::max<UINT>(1, fh * kMax / fw);
-                } else {
-                    nh = kMax;
-                    nw = std::max<UINT>(1, fw * kMax / fh);
-                }
-                if (SUCCEEDED(wic->CreateBitmapScaler(&scaler)) && scaler &&
-                    SUCCEEDED(scaler->Initialize(frame, nw, nh, WICBitmapInterpolationModeFant))) {
-                    src = scaler;
-                    tw = nw;
-                    th = nh;
+            UINT sw = fw, sh = fh;
+            if (centerSquare && fw != fh) {
+                const UINT side = std::min(fw, fh);
+                WICRect rc = {(INT)((fw - side) / 2), (INT)((fh - side) / 2), (INT)side,
+                              (INT)side};
+                if (SUCCEEDED(wic->CreateBitmapClipper(&clip)) && clip &&
+                    SUCCEEDED(clip->Initialize(frame, &rc))) {
+                    src = clip;
+                    sw = sh = side;
                 }
             }
-            if (SUCCEEDED(wic->CreateFormatConverter(&conv)) && conv &&
-                SUCCEEDED(conv->Initialize(src, GUID_WICPixelFormat32bppPBGRA,
-                                           WICBitmapDitherTypeNone, nullptr, 0.0,
-                                           WICBitmapPaletteTypeCustom))) {
-                px.assign((size_t)tw * th, 0);
-                if (SUCCEEDED(conv->CopyPixels(nullptr, tw * 4, (UINT)(px.size() * 4),
-                                               (BYTE*)px.data()))) {
-                    w = (int)tw;
-                    h = (int)th;
-                    ok = true;
+            // Only refuse absurd images (e.g. a 30000x30000 scan) instead of decoding them.
+            if ((uint64_t)sw * sh <= 64ull * 1000 * 1000) {
+                UINT tw = sw, th = sh;
+                const UINT kMax = 64;
+                if (sw > kMax || sh > kMax) {
+                    if (sw >= sh) {
+                        tw = kMax;
+                        th = std::max<UINT>(1, (UINT)((uint64_t)sh * kMax / sw));
+                    } else {
+                        th = kMax;
+                        tw = std::max<UINT>(1, (UINT)((uint64_t)sw * kMax / sh));
+                    }
+                }
+                const bool scaled = tw != sw || th != sh;
+                if (!scaled || (SUCCEEDED(wic->CreateBitmapScaler(&scaler)) && scaler &&
+                                SUCCEEDED(scaler->Initialize(src, tw, th,
+                                                             WICBitmapInterpolationModeFant)))) {
+                    if (scaled) src = scaler;
+                    if (SUCCEEDED(wic->CreateFormatConverter(&conv)) && conv &&
+                        SUCCEEDED(conv->Initialize(src, GUID_WICPixelFormat32bppPBGRA,
+                                                   WICBitmapDitherTypeNone, nullptr, 0.0,
+                                                   WICBitmapPaletteTypeCustom))) {
+                        px.assign((size_t)tw * th, 0);
+                        if (SUCCEEDED(conv->CopyPixels(nullptr, tw * 4, (UINT)(px.size() * 4),
+                                                       (BYTE*)px.data()))) {
+                            w = (int)tw;
+                            h = (int)th;
+                            ok = true;
+                        }
+                    }
                 }
             }
         }
     }
     SafeRelease(conv);
     SafeRelease(scaler);
+    SafeRelease(clip);
     SafeRelease(frame);
     SafeRelease(dec);
     return ok;
@@ -3653,10 +5083,31 @@ static std::wstring UsageKey(const std::wstring& id) {
 static void UpdateTargets(bool snap, bool followSelection);
 static void MarkDirty();
 
+// Two-step confirmation for destructive commands: the first Enter arms the command (and shows a
+// warning), a second Enter within a few seconds runs it; anything else disarms it.
+static void CancelConfirm() {
+    if (g_confirmCmd < 0) return;
+    g_confirmCmd = -1;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_CONFIRM);
+    MarkDirty();
+}
+
+static void ArmConfirm(int cmdIndex) {
+    g_confirmCmd = cmdIndex;
+    if (g_hwnd) {
+        KillTimer(g_hwnd, TIMER_CONFIRM);
+        SetTimer(g_hwnd, TIMER_CONFIRM, 4000, nullptr);
+    }
+    MarkDirty();
+}
+
 static void ApplyIndex(IndexResult& r) {
     // Remember the selected app so a reindex while the bar is open does not reset the selection.
     std::wstring keepId;
-    if (g_sel >= 0 && g_sel < (int)g_results.size()) keepId = g_apps[g_results[g_sel].app].id;
+    if (g_sel >= 0 && g_sel < (int)g_results.size() &&
+        g_results[g_sel].kind == ResultKind::App) {
+        keepId = g_apps[g_results[g_sel].app].id;
+    }
 
     std::unordered_map<std::wstring, size_t> old;
     for (size_t i = 0; i < g_apps.size(); ++i) {
@@ -3698,7 +5149,7 @@ static void ApplyIndex(IndexResult& r) {
     RunSearch();
     g_sel = 0;
     for (size_t i = 0; i < g_results.size() && !keepId.empty(); ++i) {
-        if (g_apps[g_results[i].app].id == keepId) {
+        if (g_results[i].kind == ResultKind::App && g_apps[g_results[i].app].id == keepId) {
             g_sel = (int)i;
             break;
         }
@@ -3772,8 +5223,10 @@ static IDWriteTextFormat* MakeFormat(const wchar_t* family, float size, DWRITE_F
 }
 
 static void ReleaseFormats() {
-    IDWriteTextFormat** fmts[] = {&g_fmtInput, &g_fmtTitle,      &g_fmtHint,     &g_fmtKey,     &g_fmtEmpty,
-                                  &g_fmtSection, &g_fmtPanelTitle, &g_fmtPanelSub, &g_fmtPanelRow};
+    IDWriteTextFormat** fmts[] = {&g_fmtInput, &g_fmtTitle,      &g_fmtHint,      &g_fmtKey,
+                                  &g_fmtKeyBold, &g_fmtEmpty,    &g_fmtBadge,     &g_fmtSection,
+                                  &g_fmtPanelTitle, &g_fmtPanelSub, &g_fmtPanelRow, &g_fmtMeta,
+                                  &g_fmtExt, &g_fmtPath};
     for (auto** f : fmts) SafeRelease(*f);
     SafeRelease(g_ellipsis);
     SafeRelease(g_ellipsisSm);
@@ -3792,8 +5245,13 @@ static void RebuildFormats() {
     g_fmtTitle = MakeFormat(fam, Sc(15.f), normal);
     g_fmtHint = MakeFormat(fam, Sc(12.5f), normal, DWRITE_TEXT_ALIGNMENT_TRAILING);
     g_fmtKey = MakeFormat(fam, Sc(13.f), normal, DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_fmtKeyBold = MakeFormat(fam, Sc(13.f), semi, DWRITE_TEXT_ALIGNMENT_CENTER);
     g_fmtEmpty = MakeFormat(fam, Sc(14.f), normal, DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_fmtBadge = MakeFormat(fam, Sc(19.f), semi, DWRITE_TEXT_ALIGNMENT_CENTER);
     g_fmtSection = MakeFormat(fam, Sc(11.5f), semi);
+    g_fmtMeta = MakeFormat(fam, Sc(12.f), normal);
+    g_fmtExt = MakeFormat(fam, Sc(10.5f), semi, DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_fmtPath = MakeFormat(fam, Sc(12.5f), semi);
     g_fmtPanelTitle = MakeFormat(fam, Sc(16.f), semi);
     g_fmtPanelSub = MakeFormat(fam, Sc(12.f), normal);
     g_fmtPanelRow = MakeFormat(fam, Sc(13.f), normal);
@@ -3807,7 +5265,7 @@ static void RebuildFormats() {
     if (g_fmtPanelRow) {
         g_dw->CreateEllipsisTrimmingSign(g_fmtPanelRow, &g_ellipsisSm);
         if (g_ellipsisSm) {
-            for (IDWriteTextFormat* f : {g_fmtPanelRow, g_fmtPanelTitle, g_fmtPanelSub}) {
+            for (IDWriteTextFormat* f : {g_fmtPanelRow, g_fmtPanelTitle, g_fmtPanelSub, g_fmtMeta}) {
                 if (f) f->SetTrimming(&tr, g_ellipsisSm);
             }
         }
@@ -3971,6 +5429,7 @@ static float EffectTintAlpha() {
 
 // ---- Undocumented API (SetWindowCompositionAttribute + WCA_ACCENT_POLICY) ----
 enum LvAccentState {
+    LV_ACCENT_DISABLED = 0,
     LV_ACCENT_ACRYLICBLURBEHIND = 4,
 };
 
@@ -3991,6 +5450,7 @@ typedef BOOL(WINAPI* LvSetWindowCompositionAttribute_t)(HWND, LvWinCompAttrData*
 
 static HWND g_liveWnd = nullptr;                    // acrylic window (below g_hwnd)
 static bool g_liveSupported = false;                // API present and Windows >= 1803
+static bool g_liveAccentOn = false;                 // accent policy currently applied
 static LvSetWindowCompositionAttribute_t g_pSetWCA = nullptr;
 static HWND g_livePanel = nullptr;                  // acrylic of the details panel
 static bool g_liveWin11 = false;                    // Windows 11: corners rounded by DWM
@@ -4091,11 +5551,25 @@ static void LiveApplyAccent() {
     LvWinCompAttrData d = {19 /*WCA_ACCENT_POLICY*/, &p, sizeof(p)};
     if (g_liveWnd) g_pSetWCA(g_liveWnd, &d);
     if (g_livePanel) g_pSetWCA(g_livePanel, &d);
+    g_liveAccentOn = true;
+}
+
+// Turns the acrylic off before hiding: DWM occasionally keeps the last blur frame on screen
+// when a window with an accent policy is hidden (the effect rectangle that survived a close).
+static void LiveDisableAccent() {
+    if (!g_pSetWCA || !g_liveAccentOn) return;
+    LvAccentPolicy p = {};
+    p.AccentState = LV_ACCENT_DISABLED;
+    LvWinCompAttrData d = {19 /*WCA_ACCENT_POLICY*/, &p, sizeof(p)};
+    if (g_liveWnd) g_pSetWCA(g_liveWnd, &d);
+    if (g_livePanel) g_pSetWCA(g_livePanel, &d);
+    g_liveAccentOn = false;
 }
 
 static void LiveHide() {
-    if (g_liveWnd && IsWindowVisible(g_liveWnd)) ShowWindow(g_liveWnd, SW_HIDE);
-    if (g_livePanel && IsWindowVisible(g_livePanel)) ShowWindow(g_livePanel, SW_HIDE);
+    LiveDisableAccent();
+    if (g_liveWnd) ShowWindow(g_liveWnd, SW_HIDE);
+    if (g_livePanel) ShowWindow(g_livePanel, SW_HIDE);
     memset(g_liveRgnSize, 0, sizeof(g_liveRgnSize));
     memset(g_livePos, 0, sizeof(g_livePos));
 }
@@ -4213,12 +5687,14 @@ static bool EnsureBackdropBrushes() {
 // Releases everything that depends on the render target (in case it has to be recreated)
 static void ReleaseTarget() {
     ReleaseResultLayouts();
+    ReleaseThumbCache();  // preview bitmaps belong to the render target
     for (auto& a : g_apps) {
         SafeRelease(a.bmp);
     }
     SafeRelease(g_brush);
     SafeRelease(g_matchBrush);
     SafeRelease(g_gradBrush);
+    SafeRelease(g_thumbBrush);
     SafeRelease(g_glow1);
     SafeRelease(g_glow2);
     ReleaseBackdropResources();  // the pixels (g_backPx) are kept: the bitmap is recreated on draw
@@ -4250,7 +5726,7 @@ static bool EnsureTarget() {
 
 // Height (DIP) of the expanded search bar; fixed, and equal to the details panel.
 static double ExpandedH() {
-    return kExpandedMinH;
+    return kExpandedMinH + (g_fileMode ? kPathH : 0.f);
 }
 
 // Height (DIP) of the details panel; always matches the search bar.
@@ -4268,7 +5744,7 @@ static bool EnsureSurface(double scale) {
     // closed), and is at least as tall as the panel.
     int newW = (int)std::ceil((kWidth + kPanelGap + kPanelW + 2 * kMargin) * scale);
     // The surface must be tall enough for the bar / details panel.
-    const double maxH = std::max<double>(ExpandedH(), kExpandedMinH);
+    const double maxH = kExpandedMinH + kPathH;
     int newH = (int)std::ceil((maxH + 2 * kMargin) * scale);
     bool scaleChanged = std::fabs(scale - g_scale) > 0.001;
     if (g_dib && !scaleChanged && newW == g_bmpW && newH == g_bmpH) {
@@ -4313,7 +5789,7 @@ static int VisibleRows() {
     if (n == 0) return 0;
     // Available height for rows: expanded card minus the bar, the footer, the calculator card
     // and both paddings.
-    const double rowsArea = ExpandedH() - kBarH - kFooterH - 2 * kListPad - HeroH();
+    const double rowsArea = ExpandedH() - kBarH - FileChipsH() - kFooterH - 2 * kListPad - HeroH();
     int cap = (int)std::floor(rowsArea / kRowH);
     if (cap < 1) cap = 1;
     return std::min(n, cap);
@@ -4326,7 +5802,7 @@ static double ListRowsHeight() {
 
 // Height (DIP) of the visible rows area: below the bar, above the footer, minus the padding.
 static double ListViewportH() {
-    return ExpandedH() - kBarH - kFooterH - 2 * kListPad - HeroH();
+    return ExpandedH() - kBarH - FileChipsH() - kFooterH - 2 * kListPad - HeroH();
 }
 
 // Inverse of RowOffset(): given a vertical position `v` (DIP, in the same coordinates as
@@ -4358,9 +5834,14 @@ static double MaxScrollPx() {
 static void UpdateTargets(bool snap, bool followSelection = true) {
     int rows = VisibleRows();
     // There are only two heights: bar alone, or expanded (fixed). While typing it is always
-    // expanded, even without results ("No results" fills the list area).
+    // expanded, even without results ("No results" fills the list area). Web modes are the
+    // exception: they have a single, deterministic action, so the bar stays compact.
     double h = kBarH;
-    if (rows > 0 || !g_tokens.empty()) {
+    if (g_helpOpen) {
+        h = ExpandedH();
+    } else if (ModeIsWeb()) {
+        h = kBarH;
+    } else if (g_fileMode || rows > 0 || !g_tokens.empty()) {
         h = ExpandedH();
     } else if (g_apps.empty() && !g_indexedOnce) {
         h += kEmptyRowH;
@@ -4402,10 +5883,11 @@ static void UpdateTargets(bool snap, bool followSelection = true) {
     g_selTarget = g_sel;
 
     // Details panel: there is only a panel if it is enabled and there is a selected app.
-    if (n > 0 && g_sel >= 0 && g_sel < n) {
+    if (n > 0 && g_sel >= 0 && g_sel < n && g_results[g_sel].kind == ResultKind::App) {
         g_panelAppId = g_apps[g_results[g_sel].app].id;
     }
-    g_detailTarget = (g_detailsOpen && n > 0) ? 1.0 : 0.0;
+    g_detailTarget =
+        (g_detailsOpen && n > 0 && g_results[g_sel].kind == ResultKind::App) ? 1.0 : 0.0;
 
     if (snap) {
         g_curH = g_targetH;
@@ -4440,6 +5922,7 @@ static void ResetBlink() {
 static void SetSelection(int idx) {
     int n = (int)g_results.size();
     if (n == 0) return;
+    CancelConfirm();  // moving the selection disarms a pending destructive command
     g_sel = std::clamp(idx, 0, n - 1);
     UpdateTargets(false, /*followSelection=*/true);
     MarkDirty();
@@ -4457,7 +5940,11 @@ static void SelectDelta(int d) {
     SetSelection(idx);
 }
 
+static void ScheduleFileSearch();
+static void CancelFileSearch();
+
 static void OnTextChanged() {
+    CancelConfirm();  // typing disarms a pending destructive command
     // The calculator is debounced: clear its state now so typing feels instant (app searches
     // update immediately) and only re-evaluate shortly after the user stops typing. That way
     // typing "pith" never flashes the value of "pi" on the way.
@@ -4466,12 +5953,15 @@ static void OnTextChanged() {
     g_calcActive = false;
     g_calcHistSel = -1;
     g_histScroll = 0;
-    g_calcPending = true;
+    // File mode never shows the calculator, so it must not wake up later and re-run the search
+    // (which would reset the selection while browsing a folder).
+    g_calcPending = !g_fileMode;
     if (g_hwnd) {
         KillTimer(g_hwnd, TIMER_CALC);
-        SetTimer(g_hwnd, TIMER_CALC, 200, nullptr);
+        if (g_calcPending) SetTimer(g_hwnd, TIMER_CALC, 200, nullptr);
     }
     RunSearch();
+    ScheduleFileSearch();
     g_sel = 0;
     g_scrollTarget = 0;
     UpdateTargets(false, /*followSelection=*/true);  // layout/selection follow the new results
@@ -4506,16 +5996,31 @@ static ID2D1Bitmap* EnsureIcon(AppEntry& a) {
     return a.bmp;
 }
 
-static IDWriteTextLayout* BuildTitleLayout(const AppEntry& a, float widthPx, float heightPx) {
+// Short label shown on the right of a row, by result kind.
+static const wchar_t* ResultTypeLabel(ResultKind k) {
+    switch (k) {
+        case ResultKind::Web: return kTxtKindWeb;
+        case ResultKind::Url: return kTxtKindUrl;
+        case ResultKind::Command: return kTxtKindCommand;
+        case ResultKind::File: return kTxtKindFile;
+        case ResultKind::Setting: return kTxtKindSetting;
+        default: return kTxtTypeApp;
+    }
+}
+
+// Title layout for any result text, with the matching letters set in the accent colour and
+// semibold (used by the app rows and by results from other providers).
+static IDWriteTextLayout* BuildMatchLayout(const std::wstring& name, const std::wstring& folded,
+                                           float widthPx, float heightPx) {
     IDWriteTextLayout* l = nullptr;
-    if (FAILED(g_dw->CreateTextLayout(a.name.c_str(), (UINT32)a.name.size(), g_fmtTitle, widthPx,
+    if (FAILED(g_dw->CreateTextLayout(name.c_str(), (UINT32)name.size(), g_fmtTitle, widthPx,
                                       heightPx, &l)) ||
         !l) {
         return nullptr;
     }
-    std::vector<char> mask(a.folded.size(), 0);
+    std::vector<char> mask(folded.size(), 0);
     for (const auto& t : g_tokens) {
-        ScoreToken(a.name, a.folded, t, &mask);
+        ScoreToken(name, folded, t, &mask);
     }
     size_t i = 0;
     while (i < mask.size()) {
@@ -4533,12 +6038,547 @@ static IDWriteTextLayout* BuildTitleLayout(const AppEntry& a, float widthPx, flo
     return l;
 }
 
+static IDWriteTextLayout* BuildTitleLayout(const AppEntry& a, float widthPx, float heightPx) {
+    return BuildMatchLayout(a.name, a.folded, widthPx, heightPx);
+}
+
 static void DrawMagnifier(float cx, float cy) {
     SetBrush(g_pal.textDim);
     D2D1_ELLIPSE e = D2D1::Ellipse(D2D1::Point2F(cx - Sc(2.f), cy - Sc(2.f)), Sc(7.5f), Sc(7.5f));
     g_rt->DrawEllipse(&e, g_brush, Sc(2.f), g_roundStroke);
     g_rt->DrawLine(D2D1::Point2F(cx + Sc(3.4f), cy + Sc(3.4f)),
                    D2D1::Point2F(cx + Sc(9.f), cy + Sc(9.f)), g_brush, Sc(2.f), g_roundStroke);
+}
+
+// Fills a closed polygon (device pixels) with the current brush.
+static void FillPolygon(const D2D1_POINT_2F* pts, int n) {
+    if (!g_d2d || !g_rt || n < 3) return;
+    ID2D1PathGeometry* geo = nullptr;
+    ID2D1GeometrySink* sink = nullptr;
+    if (FAILED(g_d2d->CreatePathGeometry(&geo)) || !geo) return;
+    if (FAILED(geo->Open(&sink)) || !sink) {
+        geo->Release();
+        return;
+    }
+    sink->BeginFigure(pts[0], D2D1_FIGURE_BEGIN_FILLED);
+    for (int i = 1; i < n; ++i) {
+        sink->AddLine(pts[i]);
+    }
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    g_rt->FillGeometry(geo, g_brush);
+    sink->Release();
+    geo->Release();
+}
+
+// White line-art glyph for a command row, centred in a size x size tile placed at (x, y). The
+// design grid is 24x24; `tile` is the badge colour and is used to punch the cut-outs.
+static void DrawCommandGlyph(CmdGlyph g, float x, float y, float size, const D2D1_COLOR_F& tile,
+                             const D2D1_COLOR_F& ink = D2D1::ColorF(1.f, 1.f, 1.f)) {
+    if (!g_rt) return;
+    const float u = size / 24.f;
+    const float sw = 1.9f * u;
+    const D2D1_COLOR_F white = ink;
+    auto pt = [&](float gx, float gy) { return D2D1::Point2F(x + gx * u, y + gy * u); };
+    auto ln = [&](float a, float b, float c, float d) {
+        g_rt->DrawLine(pt(a, b), pt(c, d), g_brush, sw, g_roundStroke);
+    };
+    auto el = [&](float gx, float gy, float rx, float ry) {
+        D2D1_ELLIPSE e = D2D1::Ellipse(pt(gx, gy), rx * u, ry * u);
+        g_rt->DrawEllipse(&e, g_brush, sw, g_roundStroke);
+    };
+    auto fe = [&](float gx, float gy, float r) {
+        D2D1_ELLIPSE e = D2D1::Ellipse(pt(gx, gy), r * u, r * u);
+        g_rt->FillEllipse(&e, g_brush);
+    };
+    auto rr = [&](float a, float b, float c, float d, float r) {
+        D2D1_ROUNDED_RECT R =
+            D2D1::RoundedRect(D2D1::RectF(x + a * u, y + b * u, x + c * u, y + d * u), r * u, r * u);
+        g_rt->DrawRoundedRectangle(&R, g_brush, sw, g_roundStroke);
+    };
+    auto fr = [&](float a, float b, float c, float d, float r) {
+        FillRR(x + a * u, y + b * u, x + c * u, y + d * u, r * u, white);
+    };
+
+    SetBrush(white);
+    switch (g) {
+        case CmdGlyph::Lock:
+            el(12, 11, 4, 4);
+            fr(6.5f, 10.5f, 17.5f, 19.5f, 2.f);
+            SetBrush(tile);
+            fe(12, 15, 1.7f);
+            break;
+        case CmdGlyph::Moon:
+            fe(11, 12, 7);
+            SetBrush(tile);
+            fe(14.5f, 9, 6.4f);
+            break;
+        case CmdGlyph::Bars:
+            fr(6.f, 13.f, 9.5f, 18.f, 1.f);
+            fr(10.5f, 8.5f, 14.f, 18.f, 1.f);
+            fr(15.f, 11.f, 18.5f, 18.f, 1.f);
+            break;
+        case CmdGlyph::Sliders:
+            ln(6, 9, 18, 9);
+            fe(14.5f, 9, 2.4f);
+            ln(6, 15, 18, 15);
+            fe(9.5f, 15, 2.4f);
+            break;
+        case CmdGlyph::Chip:
+            rr(8, 8, 16, 16, 2);
+            ln(10, 6, 10, 8.2f);
+            ln(12, 6, 12, 8.2f);
+            ln(14, 6, 14, 8.2f);
+            ln(10, 15.8f, 10, 18);
+            ln(12, 15.8f, 12, 18);
+            ln(14, 15.8f, 14, 18);
+            ln(6, 10, 8.2f, 10);
+            ln(6, 12, 8.2f, 12);
+            ln(6, 14, 8.2f, 14);
+            ln(15.8f, 10, 18, 10);
+            ln(15.8f, 12, 18, 12);
+            ln(15.8f, 14, 18, 14);
+            rr(10.5f, 10.5f, 13.5f, 13.5f, 0.5f);
+            break;
+        case CmdGlyph::List:
+            rr(7, 5.5f, 17, 9.5f, 1.4f);
+            fe(9.6f, 7.5f, 0.9f);
+            ln(12.2f, 7.5f, 15, 7.5f);
+            rr(7, 10, 17, 14, 1.4f);
+            fe(9.6f, 12, 0.9f);
+            ln(12.2f, 12, 15, 12);
+            rr(7, 14.5f, 17, 18.5f, 1.4f);
+            fe(9.6f, 16.5f, 0.9f);
+            ln(12.2f, 16.5f, 15, 16.5f);
+            break;
+        case CmdGlyph::Key:
+            el(9, 12, 3.3f, 3.3f);
+            ln(12.3f, 12, 18, 12);
+            ln(15.4f, 12, 15.4f, 14.6f);
+            ln(17.6f, 12, 17.6f, 14.2f);
+            break;
+        case CmdGlyph::Globe:
+            el(12, 12, 7, 7);
+            el(12, 12, 2.8f, 7);
+            ln(5, 12, 19, 12);
+            ln(6.3f, 8.5f, 17.7f, 8.5f);
+            ln(6.3f, 15.5f, 17.7f, 15.5f);
+            break;
+        case CmdGlyph::Update: {
+            ln(12, 5.5f, 12, 14.5f);
+            D2D1_POINT_2F tri[3] = {pt(8.6f, 11.f), pt(12, 15.f), pt(15.4f, 11.f)};
+            FillPolygon(tri, 3);
+            ln(6.5f, 15.5f, 6.5f, 18);
+            ln(6.5f, 18, 17.5f, 18);
+            ln(17.5f, 18, 17.5f, 15.5f);
+            break;
+        }
+        case CmdGlyph::Grid:
+            fr(6, 6, 11, 11, 1.6f);
+            fr(13, 6, 18, 11, 1.6f);
+            fr(6, 13, 11, 18, 1.6f);
+            fr(13, 13, 18, 18, 1.6f);
+            break;
+        case CmdGlyph::Monitor:
+            rr(5, 6, 19, 15, 1.6f);
+            ln(12, 15, 12, 18);
+            ln(8.5f, 18, 15.5f, 18);
+            break;
+        case CmdGlyph::Speaker: {
+            fr(6.5f, 9.5f, 10.f, 14.5f, 0.8f);
+            D2D1_POINT_2F spk[4] = {pt(10.f, 8.5f), pt(15, 5.5f), pt(15, 18.5f), pt(10.f, 15.5f)};
+            FillPolygon(spk, 4);
+            break;
+        }
+        case CmdGlyph::Bluetooth: {
+            const float bw = 1.6f * u;
+            auto bl = [&](float a, float b, float c, float d) {
+                g_rt->DrawLine(pt(a, b), pt(c, d), g_brush, bw, g_roundStroke);
+            };
+            bl(12, 4.5f, 12, 19.5f);
+            bl(12, 4.5f, 16.5f, 8.f);
+            bl(16.5f, 8.f, 7.5f, 15.5f);
+            bl(7.5f, 8.5f, 16.5f, 16.f);
+            bl(16.5f, 16.f, 12, 19.5f);
+            break;
+        }
+        case CmdGlyph::Printer:
+            rr(8, 5.5f, 16, 9, 0.8f);
+            fr(4.5f, 9, 19.5f, 15.5f, 1.5f);
+            SetBrush(tile);
+            fe(7, 11.3f, 0.9f);
+            SetBrush(white);
+            rr(8, 15, 16, 19, 0.8f);
+            break;
+        case CmdGlyph::Terminal:
+            ln(7, 8, 10.5f, 11.5f);
+            ln(10.5f, 11.5f, 7, 15);
+            ln(12.5f, 15, 17.5f, 15);
+            break;
+        case CmdGlyph::Folder: {
+            D2D1_POINT_2F fol[6] = {pt(4, 8.5f), pt(9, 8.5f),  pt(10.6f, 5.5f),
+                                    pt(20, 5.5f), pt(20, 19.f), pt(4, 19.f)};
+            FillPolygon(fol, 6);
+            break;
+        }
+        case CmdGlyph::Gear:
+            for (int k = 0; k < 8; ++k) {
+                const double a = k * kPi / 4.0;
+                const float ca = (float)std::cos(a), sa = (float)std::sin(a);
+                g_rt->DrawLine(
+                    D2D1::Point2F(x + (12 + ca * 4.6f) * u, y + (12 + sa * 4.6f) * u),
+                    D2D1::Point2F(x + (12 + ca * 7.4f) * u, y + (12 + sa * 7.4f) * u), g_brush,
+                    2.3f * u, g_roundStroke);
+            }
+            el(12, 12, 4.6f, 4.6f);
+            SetBrush(tile);
+            fe(12, 12, 1.8f);
+            break;
+        case CmdGlyph::Hibernate:
+            fe(9.5f, 13.5f, 6);
+            SetBrush(tile);
+            fe(12.5f, 10.5f, 5.4f);
+            SetBrush(white);
+            ln(14.5f, 5.5f, 19, 5.5f);
+            ln(19, 5.5f, 14.5f, 9.5f);
+            ln(14.5f, 9.5f, 19, 9.5f);
+            break;
+        case CmdGlyph::Power:
+            el(12, 13, 5.8f, 5.8f);
+            FillRR(x + 10.2f * u, y + 4.2f * u, x + 13.8f * u, y + 9.f * u, 0.f, tile);
+            SetBrush(white);
+            ln(12, 4.6f, 12, 11.4f);
+            break;
+        case CmdGlyph::Restart:
+            el(12, 12, 6.2f, 6.2f);
+            FillRR(x + 10.5f * u, y + 2.6f * u, x + 19.f * u, y + 8.6f * u, 0.f, tile);
+            SetBrush(white);
+            {
+                D2D1_POINT_2F ah[3] = {pt(13.6f, 3.4f), pt(18.8f, 6.4f), pt(13.2f, 9.2f)};
+                FillPolygon(ah, 3);
+            }
+            break;
+        case CmdGlyph::SignOut:
+            rr(6.5f, 5.f, 12.5f, 19.f, 1.4f);
+            ln(11, 12, 18.5f, 12);
+            {
+                D2D1_POINT_2F ah[3] = {pt(15.6f, 8.6f), pt(19.6f, 12.f), pt(15.6f, 15.4f)};
+                FillPolygon(ah, 3);
+            }
+            break;
+        case CmdGlyph::Recycle: {
+            ln(6.5f, 7.f, 17.5f, 7.f);
+            ln(10.f, 4.6f, 14.f, 4.6f);
+            ln(10.f, 4.6f, 10.f, 7.f);
+            ln(14.f, 4.6f, 14.f, 7.f);
+            D2D1_POINT_2F bin[4] = {pt(7.6f, 8.4f), pt(16.4f, 8.4f), pt(15.4f, 19.f), pt(8.6f, 19.f)};
+            FillPolygon(bin, 4);
+            break;
+        }
+        case CmdGlyph::Wifi:
+            fe(12, 16.6f, 1.7f);
+            ln(8.6f, 13.2f, 12, 10.2f);
+            ln(12, 10.2f, 15.4f, 13.2f);
+            ln(6.f, 12.8f, 12, 7.2f);
+            ln(12, 7.2f, 18.f, 12.8f);
+            break;
+        case CmdGlyph::Clock:
+            el(12, 12, 7.6f, 7.6f);
+            ln(12, 12, 12, 7.4f);
+            ln(12, 12, 15.6f, 13.6f);
+            break;
+        case CmdGlyph::Bell: {
+            D2D1_POINT_2F body[5] = {pt(8.6f, 15.6f), pt(8.6f, 11.f), pt(12, 7.4f),
+                                     pt(15.4f, 11.f), pt(15.4f, 15.6f)};
+            FillPolygon(body, 5);
+            fr(7.f, 15.f, 17.f, 16.6f, 0.6f);
+            fe(12, 18.f, 1.3f);
+            fe(12, 6.6f, 1.f);
+            break;
+        }
+        case CmdGlyph::Camera:
+            fr(3.5f, 7.5f, 20.5f, 17.5f, 2.5f);
+            fr(8.5f, 5.f, 15.5f, 7.6f, 0.8f);
+            SetBrush(tile);
+            fe(12, 12.5f, 3.2f);
+            break;
+        case CmdGlyph::Mic:
+            fr(9.8f, 4.2f, 14.2f, 12.4f, 2.2f);
+            ln(12, 12.4f, 12, 16.4f);
+            ln(8.2f, 16.4f, 15.8f, 16.4f);
+            break;
+        case CmdGlyph::Doc:
+            rr(6, 3.5f, 18, 20.5f, 2);
+            ln(9, 9, 15, 9);
+            ln(9, 12.5f, 15, 12.5f);
+            ln(9, 16, 13, 16);
+            break;
+        case CmdGlyph::Home:
+            ln(4.5f, 11.5f, 12, 4.8f);
+            ln(12, 4.8f, 19.5f, 11.5f);
+            rr(7, 11, 17, 19.5f, 1.2f);
+            ln(10.5f, 19.5f, 10.5f, 14.5f);
+            ln(13.5f, 19.5f, 13.5f, 14.5f);
+            ln(10.5f, 14.5f, 13.5f, 14.5f);
+            break;
+        case CmdGlyph::Download:
+            ln(12, 4.5f, 12, 15.f);
+            ln(8, 11, 12, 15.f);
+            ln(16, 11, 12, 15.f);
+            ln(5.5f, 19, 18.5f, 19);
+            break;
+        case CmdGlyph::Image:
+            rr(4, 5.5f, 20, 18.5f, 1.8f);
+            el(8.8f, 10, 1.7f, 1.7f);
+            ln(5, 17, 10.2f, 11.8f);
+            ln(10.2f, 11.8f, 14.f, 15.6f);
+            ln(14.f, 15.6f, 16.6f, 13.f);
+            ln(16.6f, 13.f, 20, 16.4f);
+            break;
+        case CmdGlyph::Music:
+            ln(9.5f, 17.5f, 9.5f, 6.f);
+            ln(9.5f, 6.f, 18.5f, 4.4f);
+            ln(18.5f, 4.4f, 18.5f, 15.f);
+            fe(6.8f, 17.5f, 2.7f);
+            fe(15.8f, 15.f, 2.7f);
+            break;
+        case CmdGlyph::Video:
+            rr(4, 6.f, 20, 18.f, 1.8f);
+            fe(6.6f, 8.6f, 1.1f);
+            fe(6.6f, 12.f, 1.1f);
+            fe(6.6f, 15.4f, 1.1f);
+            fe(17.4f, 8.6f, 1.1f);
+            fe(17.4f, 12.f, 1.1f);
+            fe(17.4f, 15.4f, 1.1f);
+            break;
+        case CmdGlyph::Close:
+            ln(8.f, 8.f, 16.f, 16.f);
+            ln(16.f, 8.f, 8.f, 16.f);
+            break;
+        case CmdGlyph::ExternalLink:
+            ln(5.5f, 10.5f, 5.5f, 18.5f);
+            ln(5.5f, 18.5f, 13.5f, 18.5f);
+            ln(13.5f, 18.5f, 13.5f, 12.5f);
+            ln(11.f, 13.f, 18.5f, 5.5f);
+            ln(13.5f, 5.5f, 18.5f, 5.5f);
+            ln(18.5f, 5.5f, 18.5f, 10.5f);
+            break;
+        case CmdGlyph::ChevronRight:
+            ln(9.f, 6.f, 15.f, 12.f);
+            ln(15.f, 12.f, 9.f, 18.f);
+            break;
+        case CmdGlyph::ChevronLeft:
+            ln(15.f, 6.f, 9.f, 12.f);
+            ln(9.f, 12.f, 15.f, 18.f);
+            break;
+    }
+}
+
+// ===== File icons (outline folder, type tiles and image previews) =====
+
+// Line-art folder outline (used instead of the filled badge for folders).
+static void DrawFolderOutline(float x, float y, float size, const D2D1_COLOR_F& c) {
+    if (!g_rt) return;
+    const float u = size / 24.f;
+    const float sw = 1.9f * u;
+    auto pt = [&](float gx, float gy) { return D2D1::Point2F(x + gx * u, y + gy * u); };
+    auto ln = [&](float a, float b, float cc, float d) {
+        g_rt->DrawLine(pt(a, b), pt(cc, d), g_brush, sw, g_roundStroke);
+    };
+    SetBrush(c);
+    ln(4.f, 9.f, 4.f, 19.f);
+    ln(4.f, 19.f, 20.f, 19.f);
+    ln(20.f, 19.f, 20.f, 6.5f);
+    ln(20.f, 6.5f, 11.f, 6.5f);
+    ln(11.f, 6.5f, 9.5f, 9.f);
+    ln(9.5f, 9.f, 4.f, 9.f);
+}
+
+// Rounded tile with the extension text (falls back to a page glyph when there is no extension).
+static void DrawFileTile(float x, float y, float size, const std::wstring& ext,
+                         const D2D1_COLOR_F& col) {
+    if (!g_rt) return;
+    FillRR(x, y, x + size, y + size, size * 0.22f, col);
+    if (!ext.empty() && g_fmtExt) {
+        SetBrush(D2D1::ColorF(1.f, 1.f, 1.f));
+        D2D1_RECT_F tr = D2D1::RectF(x, y, x + size, y + size);
+        g_rt->DrawText(ext.c_str(), (UINT32)ext.size(), g_fmtExt, &tr, g_brush);
+    } else {
+        DrawCommandGlyph(CmdGlyph::Doc, x, y, size, col);
+    }
+}
+
+// Draws a cached preview bitmap "cover"-fitted into a rounded box.
+static void DrawThumbImage(ID2D1Bitmap* bmp, float x, float y, float size, float radius) {
+    if (!bmp || !g_rt) return;
+    const D2D1_SIZE_F sz = bmp->GetSize();
+    if (sz.width <= 0.f || sz.height <= 0.f) return;
+    const float sc = std::max(size / sz.width, size / sz.height);
+    const float ox = x + (size - sz.width * sc) / 2.f;
+    const float oy = y + (size - sz.height * sc) / 2.f;
+    if (!g_thumbBrush) {
+        D2D1_BITMAP_BRUSH_PROPERTIES bp =
+            D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
+                                        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        D2D1_BRUSH_PROPERTIES bpp =
+            D2D1::BrushProperties(1.f, D2D1::Matrix3x2F::Identity());
+        if (FAILED(g_rt->CreateBitmapBrush(bmp, bp, bpp, &g_thumbBrush))) {
+            g_thumbBrush = nullptr;
+            return;
+        }
+    }
+    // One brush for every preview: only the bitmap and the transform change per row.
+    g_thumbBrush->SetBitmap(bmp);
+    g_thumbBrush->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc) *
+                               D2D1::Matrix3x2F::Translation(ox, oy));
+    D2D1_ROUNDED_RECT r =
+        D2D1::RoundedRect(D2D1::RectF(x, y, x + size, y + size), radius, radius);
+    g_rt->FillRoundedRectangle(&r, g_thumbBrush);
+    SetBrush(D2D1::ColorF(1.f, 1.f, 1.f), 0.16f);
+    D2D1_ROUNDED_RECT bd = D2D1::RoundedRect(D2D1::RectF(x, y, x + size, y + size), radius, radius);
+    g_rt->DrawRoundedRectangle(&bd, g_brush, 1.f);
+}
+
+// Drive-type lookups can be slow for disconnected mapped drives, so they are cached per letter.
+static bool IsRemoteDrive(wchar_t letter) {
+    const int i = towupper(letter) - L'A';
+    if (i < 0 || i >= 26) return false;
+    static bool known[26] = {};
+    static bool remote[26] = {};
+    if (!known[i]) {
+        wchar_t root[4] = {letter, L':', L'\\', 0};
+        remote[i] = GetDriveTypeW(root) == DRIVE_REMOTE;
+        known[i] = true;
+    }
+    return remote[i];
+}
+
+// True when the pixels of a file live elsewhere (network share, cloud placeholder). Decoding one
+// of these blocks the UI thread for as long as the transfer takes, so previews are skipped.
+static bool FileThumbRemote(const FileEntry& e) {
+    if ((e.attr & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) != 0) {
+        return true;
+    }
+    if (e.path.size() >= 2 && e.path[1] == L':') return IsRemoteDrive(e.path[0]);
+    return e.path.size() >= 2 && e.path[0] == L'\\' && e.path[1] == L'\\';
+}
+
+struct ThumbResult {
+    std::wstring path;
+    std::vector<uint32_t> px;
+    int w = 0;
+    int h = 0;
+    bool ok = false;
+};
+
+// Decodes previews off the UI thread. The bitmap itself is still created on the UI thread (it
+// belongs to the Direct2D render target); only the slow WIC/file work happens here.
+static DWORD WINAPI ThumbThreadProc(LPVOID param) {
+    const HWND hwnd = (HWND)param;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    IWICImagingFactory* wic = nullptr;
+    CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
+    HANDLE waits[2] = {g_thumbEvent, g_thumbStop};
+    for (;;) {
+        if (WaitForMultipleObjects(2, waits, FALSE, INFINITE) != WAIT_OBJECT_0) break;
+        for (;;) {
+            if (WaitForSingleObject(g_thumbStop, 0) == WAIT_OBJECT_0) break;
+            std::wstring path;
+            EnterCriticalSection(&g_thumbLock);
+            if (!g_thumbQueue.empty()) {
+                path = std::move(g_thumbQueue.front());
+                g_thumbQueue.pop_front();
+            }
+            LeaveCriticalSection(&g_thumbLock);
+            if (path.empty()) break;
+            auto* tr = new ThumbResult();
+            tr->path = std::move(path);
+            tr->ok = LoadImageFilePixels(wic, tr->path, tr->px, tr->w, tr->h,
+                                         /*centerSquare=*/true) &&
+                     tr->w > 0 && tr->h > 0;
+            if (!tr->ok) {
+                tr->px.clear();
+                tr->w = tr->h = 0;
+                Wh_Log(L"No preview for %s", tr->path.c_str());
+            }
+            if (!hwnd || !PostMessageW(hwnd, WM_APP_THUMB, 0, (LPARAM)tr)) delete tr;
+        }
+        if (WaitForSingleObject(g_thumbStop, 0) == WAIT_OBJECT_0) break;
+    }
+    SafeRelease(wic);
+    CoUninitialize();
+    return 0;
+}
+
+static bool EnsureThumbThread() {
+    if (g_thumbThread) return true;
+    InitializeCriticalSection(&g_thumbLock);
+    g_thumbEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_thumbStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_thumbEvent && g_thumbStop) {
+        g_thumbThread = CreateThread(nullptr, 0, ThumbThreadProc, g_hwnd, 0, nullptr);
+    }
+    if (!g_thumbThread) {
+        if (g_thumbEvent) CloseHandle(g_thumbEvent);
+        g_thumbEvent = nullptr;
+        if (g_thumbStop) CloseHandle(g_thumbStop);
+        g_thumbStop = nullptr;
+        DeleteCriticalSection(&g_thumbLock);
+        return false;
+    }
+    return true;
+}
+
+// Asks the preview worker to exit and waits for it. Must run before the window is destroyed, so
+// the worker cannot post previews to a dead window. A blocked decode (slow or disconnected
+// drive) makes the wait time out; the process exits right after, so the handles stay open.
+static void StopThumbThread() {
+    if (!g_thumbThread) return;
+    if (g_thumbStop) SetEvent(g_thumbStop);
+    const DWORD waited = WaitForSingleObject(g_thumbThread, 3000);
+    if (waited != WAIT_OBJECT_0) return;
+    CloseHandle(g_thumbThread);
+    g_thumbThread = nullptr;
+    if (g_thumbEvent) CloseHandle(g_thumbEvent);
+    g_thumbEvent = nullptr;
+    if (g_thumbStop) CloseHandle(g_thumbStop);
+    g_thumbStop = nullptr;
+    DeleteCriticalSection(&g_thumbLock);
+}
+
+static void TrimThumbCache() {
+    while (g_thumbCache.size() > kThumbCacheMax) {
+        auto victim = g_thumbCache.begin();
+        for (auto it = g_thumbCache.begin(); it != g_thumbCache.end(); ++it) {
+            if (it->second.used < victim->second.used) victim = it;
+        }
+        SafeRelease(victim->second.bmp);
+        g_thumbCache.erase(victim);
+    }
+}
+
+// Returns the cached preview for an entry, queueing a background decode when there is none yet.
+// Rows show their type tile until WM_APP_THUMB arrives and the bar redraws.
+static ID2D1Bitmap* EnsureFileThumb(FileEntry& e) {
+    if (e.isDir || !IsImageExt(e.ext) || FileThumbRemote(e)) return nullptr;
+    auto it = g_thumbCache.find(e.path);
+    if (it != g_thumbCache.end()) {
+        it->second.used = ++g_thumbClock;
+        return it->second.bmp;  // null when the decode failed
+    }
+    if (!g_thumbPending.count(e.path) && EnsureThumbThread()) {
+        g_thumbPending.insert(e.path);
+        EnterCriticalSection(&g_thumbLock);
+        if (g_thumbQueue.size() < 64) {
+            g_thumbQueue.push_back(e.path);
+        } else {
+            g_thumbPending.erase(e.path);  // try again on a later frame
+        }
+        LeaveCriticalSection(&g_thumbLock);
+        SetEvent(g_thumbEvent);
+    }
+    return nullptr;
 }
 
 // ===== Details panel: technical data, available actions and drawing =====
@@ -5027,6 +7067,226 @@ static float TextWidth(const wchar_t* txt, IDWriteTextFormat* fmt) {
     return m.widthIncludingTrailingWhitespace;
 }
 
+// Splits a path into a dim head and an emphasised last segment, dropping the leading folders
+// (shown as "…\") until it fits in maxW.
+static void FitPathTail(const std::wstring& path, IDWriteTextFormat* fh, IDWriteTextFormat* ft,
+                        float maxW, std::wstring& head, std::wstring& tail) {
+    std::vector<std::wstring> seg;
+    std::wstring cur;
+    for (wchar_t c : path) {
+        if (c == L'\\') {
+            if (!cur.empty()) seg.push_back(cur);
+            cur.clear();
+        } else {
+            cur.push_back(c);
+        }
+    }
+    if (!cur.empty()) seg.push_back(cur);
+    head.clear();
+    if (seg.empty()) {
+        tail = path;
+        return;
+    }
+    const size_t n = seg.size();
+    tail = seg[n - 1];
+    if (n == 1) tail += L'\\';
+    const float tw = TextWidth(tail.c_str(), ft);
+    for (size_t k = 0; k < n; ++k) {
+        std::wstring h = k > 0 ? L"…\\" : L"";
+        for (size_t j = k; j + 1 < n; ++j) {
+            h += seg[j];
+            h += L'\\';
+        }
+        head = h;
+        if (TextWidth(h.c_str(), fh) + tw <= maxW) return;
+    }
+}
+
+static D2D1_RECT_F FilePathBackRect(float cx, float cy) {
+    const float s = (float)g_scale;
+    const float mid = cy + (kBarH + kChipH + kPathH / 2) * s;
+    return D2D1::RectF(cx + 10 * s, mid - 12 * s, cx + 34 * s, mid + 12 * s);
+}
+
+static void DrawRefreshIcon(float cx, float cy, float r, double angle, const D2D1_COLOR_F& color);
+
+static const wchar_t* BandPrefix() { return g_bandEdit == BandEdit::Rename ? L"Rename" : L""; }
+
+// Rectangle of the editable field that replaces the breadcrumb while editing.
+static void BandFieldRect(float cx, float cy, float cw, float& x0, float& y0, float& x1, float& y1) {
+    const float s = (float)g_scale;
+    const float top = cy + (kBarH + kChipH) * s;
+    x0 = cx + 38 * s;
+    x1 = cx + cw - 14 * s;
+    y0 = top + 4 * s;
+    y1 = top + (kPathH - 4) * s;
+}
+
+// X where the text starts inside the field (after the optional "Rename" label).
+static float BandTextX(float x0) {
+    const float s = (float)g_scale;
+    float tx = x0 + 10 * s;
+    const wchar_t* pre = BandPrefix();
+    if (*pre) tx += TextWidth(pre, g_fmtHint) + 14 * s;
+    return tx;
+}
+
+static IDWriteTextLayout* BandLayout() {
+    IDWriteTextLayout* tl = nullptr;
+    g_dw->CreateTextLayout(g_bandText.c_str(), (UINT32)g_bandText.size(), g_fmtMeta, 10000.f,
+                           kPathH * (float)g_scale, &tl);
+    return tl;
+}
+
+// Character index under a client x position (for clicks inside the field).
+static int BandIndexAt(float cx, float cy, float cw, int mx) {
+    float x0, y0, x1, y1;
+    BandFieldRect(cx, cy, cw, x0, y0, x1, y1);
+    IDWriteTextLayout* tl = BandLayout();
+    if (!tl) return (int)g_bandText.size();
+    BOOL trailing = FALSE, inside = FALSE;
+    DWRITE_HIT_TEST_METRICS hm = {};
+    tl->HitTestPoint((float)mx - (BandTextX(x0) - g_bandScroll), kPathH * (float)g_scale / 2,
+                     &trailing, &inside, &hm);
+    tl->Release();
+    return std::clamp((int)hm.textPosition + (trailing ? (int)hm.length : 0), 0,
+                      (int)g_bandText.size());
+}
+
+static void DrawBandEditor(float cx, float cy, float cw) {
+    const float s = (float)g_scale;
+    float x0, y0, x1, y1;
+    BandFieldRect(cx, cy, cw, x0, y0, x1, y1);
+    const float mid = (y0 + y1) / 2;
+    const bool err = !g_bandError.empty();
+    const D2D1_COLOR_F red = D2D1::ColorF(0.93f, 0.35f, 0.35f);
+    FillRR(x0, y0, x1, y1, 8 * s, g_pal.selection, 0.7f);
+    SetBrush(err ? red : g_pal.accent, 0.95f);
+    D2D1_ROUNDED_RECT rr =
+        D2D1::RoundedRect(D2D1::RectF(x0 + 0.5f, y0 + 0.5f, x1 - 0.5f, y1 - 0.5f), 8 * s, 8 * s);
+    g_rt->DrawRoundedRectangle(&rr, g_brush, 1.3f);
+
+    const wchar_t* pre = BandPrefix();
+    if (*pre) {
+        DrawLabel(pre, g_fmtHint, x0 + 10 * s, y0, x0 + 10 * s + TextWidth(pre, g_fmtHint) + 4 * s, y1,
+                  g_pal.accentInk, 1.f);
+    }
+    float tr = x1 - 10 * s;
+    if (err) {
+        const float ew = TextWidth(g_bandError.c_str(), g_fmtHint);
+        DrawLabel(g_bandError, g_fmtHint, tr - ew - 2 * s, y0, tr, y1, red, 1.f);
+        tr -= ew + 14 * s;
+    }
+    const float tx = BandTextX(x0);
+    IDWriteTextLayout* tl = BandLayout();
+    if (!tl) return;
+    float caretX = 0, tmp = 0;
+    DWRITE_HIT_TEST_METRICS hm = {};
+    tl->HitTestTextPosition((UINT32)g_bandCaret, FALSE, &caretX, &tmp, &hm);
+    const float fieldW = tr - tx;
+    if (caretX - g_bandScroll > fieldW - 4 * s) g_bandScroll = caretX - (fieldW - 4 * s);
+    if (caretX - g_bandScroll < 0) g_bandScroll = caretX;
+    if (g_bandScroll < 0) g_bandScroll = 0;
+    const float ox = tx - g_bandScroll;
+    const float top = cy + (kBarH + kChipH) * s;
+
+    D2D1_RECT_F clip = D2D1::RectF(tx, y0, tr, y1);
+    g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+    if (g_bandAnchor != g_bandCaret) {
+        float ax = 0;
+        DWRITE_HIT_TEST_METRICS hm2 = {};
+        tl->HitTestTextPosition((UINT32)g_bandAnchor, FALSE, &ax, &tmp, &hm2);
+        SetBrush(g_pal.caretSel);
+        D2D1_RECT_F sr = D2D1::RectF(ox + std::min(ax, caretX), mid - 9 * s, ox + std::max(ax, caretX),
+                                     mid + 9 * s);
+        g_rt->FillRectangle(&sr, g_brush);
+    }
+    SetBrush(g_pal.text);
+    g_rt->DrawTextLayout(D2D1::Point2F(ox, top), tl, g_brush);
+    if (g_caretOn && g_vis != Vis::Hiding) {
+        SetBrush(g_pal.text);
+        D2D1_RECT_F cr = D2D1::RectF(ox + caretX, mid - 8 * s, ox + caretX + 1.5f * s, mid + 8 * s);
+        g_rt->FillRectangle(&cr, g_brush);
+    }
+    g_rt->PopAxisAlignedClip();
+    tl->Release();
+}
+
+// Breadcrumb band: back button, folder icon, the path (tail kept when it is long) and a status.
+static void DrawPathBand(float cx, float cy, float cw) {
+    const float s = (float)g_scale;
+    const float top = cy + (kBarH + kChipH) * s;
+    const float mid = top + kPathH * s / 2;
+    SetBrush(g_pal.separator, 0.7f);
+    D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, top, cx + cw - 12 * s, top + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+
+    const D2D1_RECT_F br = FilePathBackRect(cx, cy);
+    D2D1_COLOR_F bc = g_fileBack.empty() ? g_pal.textDim : g_pal.text;
+    if (g_fileBack.empty()) bc.a *= 0.4f;
+    DrawCommandGlyph(CmdGlyph::ChevronLeft, br.left + 2 * s, mid - 10 * s, 20 * s, bc, bc);
+
+    if (g_bandEdit != BandEdit::None) {
+        DrawBandEditor(cx, cy, cw);
+        return;
+    }
+    DrawFolderOutline(cx + 40 * s, mid - 8 * s, 16 * s, g_pal.accentInk);
+
+    std::wstring status;
+    const bool keyOk = FileQueryActive() && g_fileDeepKey == FileSearchKey();
+    if (g_fileSearching) {
+        wchar_t b[64];
+        if (keyOk) swprintf_s(b, L"Searching… %d found", (int)g_results.size());
+        else swprintf_s(b, L"Searching…");
+        status = b;
+    } else if (keyOk) {
+        wchar_t b[48];
+        swprintf_s(b, L"%d results%s", (int)g_results.size(), g_fileDeepTrunc ? L"+" : L"");
+        status = b;
+    } else if (!FileQueryActive() && (int)g_results.size() < (int)g_fileListTotal) {
+        // The row list is capped (see BuildFileResults) and/or the folder is a very large one.
+        wchar_t b[64];
+        swprintf_s(b, g_fileListTrunc ? L"Showing first %d of %d" : L"Showing %d of %d",
+                   (int)g_results.size(), (int)g_fileListTotal);
+        status = b;
+    }
+    const std::wstring filt = FileFilterSummary();
+    if (!filt.empty()) status = status.empty() ? filt : filt + L" · " + status;
+    const float spinW = g_fileSearching ? 22 * s : 0.f;
+    const float statusW = status.empty() ? 0.f : TextWidth(status.c_str(), g_fmtHint) + 14 * s + spinW;
+    const float x0 = cx + 64 * s;
+    const float x1 = cx + cw - 16 * s - statusW;
+    if (!status.empty()) {
+        const float sx1 = cx + cw - 16 * s;
+        DrawLabel(status, g_fmtHint, x1, top, sx1, top + kPathH * s,
+                  g_fileSearching ? g_pal.accentInk : g_pal.textDim, 1.f);
+        if (g_fileSearching) {
+            DrawRefreshIcon(sx1 - TextWidth(status.c_str(), g_fmtHint) - 12 * s, mid, 6.f * s,
+                            std::fmod(NowSec() * 6.0, 2 * kPi), g_pal.accentInk);
+        }
+    }
+    if (g_fileSearching) {
+        // Thin indeterminate bar along the bottom of the band.
+        const float bx0 = cx + 12 * s, bw = cw - 24 * s;
+        const double t = std::fmod(NowSec() * 0.9, 1.0) * 1.3;
+        const float l = (float)std::clamp(t - 0.3, 0.0, 1.0), r = (float)std::clamp(t, 0.0, 1.0);
+        if (r > l) {
+            SetBrush(g_pal.accent, 0.8f);
+            D2D1_RECT_F pb = D2D1::RectF(bx0 + l * bw, top + kPathH * s - 2 * s, bx0 + r * bw,
+                                         top + kPathH * s);
+            g_rt->FillRectangle(&pb, g_brush);
+        }
+    }
+    std::wstring head, tail;
+    FitPathTail(g_fileCur, g_fmtMeta, g_fmtPath, x1 - x0, head, tail);
+    D2D1_RECT_F clip = D2D1::RectF(x0, top + 1.f, x1 + 2 * s, top + kPathH * s);
+    g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+    const float hw = TextWidth(head.c_str(), g_fmtMeta);
+    DrawLabel(head, g_fmtMeta, x0, top, x0 + hw + 4 * s, top + kPathH * s, g_pal.textDim, 1.f);
+    DrawLabel(tail, g_fmtPath, x0 + hw, top, x1 + 40 * s, top + kPathH * s, g_pal.text, 1.f);
+    g_rt->PopAxisAlignedClip();
+}
+
 static float KeycapWidth(const wchar_t* txt) {
     const float s = (float)g_scale;
     return std::max(24 * s, TextWidth(txt, g_fmtKey) + 14 * s);
@@ -5073,6 +7333,61 @@ static D2D1_RECT_F ReindexButtonRect(float cx, float footerTop) {
     return D2D1::RectF(x0, footerTop + 5 * s, x0 + w, footerTop + (kFooterH - 5) * s);
 }
 
+// Rectangle (surface pixels) of the footer help button: "Help [F1]".
+static D2D1_RECT_F HelpButtonRect(float cx, float footerTop) {
+    const float s = (float)g_scale;
+    const float x0 = ReindexButtonRect(cx, footerTop).right + 8 * s;
+    const float w = HintWidth(kTxtHelp, kHelpKeys, 1) + 8 * s;
+    return D2D1::RectF(x0, footerTop + 5 * s, x0 + w, footerTop + (kFooterH - 5) * s);
+}
+
+// Rectangle (surface pixels) of the Apps/Files toggle button at the right of the search bar.
+static D2D1_RECT_F FileToggleRect(float cx, float cy) {
+    const float s = (float)g_scale;
+    const float cw = kWidth * s;
+    const float rightX = cx + cw - 24 * s;
+    const float w = 34 * s;
+    const float mid = cy + kBarH * s / 2;
+    return D2D1::RectF(rightX - w, mid - w / 2, rightX, mid + w / 2);
+}
+
+// Rectangle (surface pixels) of the i-th location chip in the file-mode filter band.
+static float FileChipWidth(int i) {
+    const float s = (float)g_scale;
+    // Sized with the bold format so the active (emphasized) label still fits.
+    return 30 * s + TextWidth(kFileLocations[i].label, g_fmtKeyBold) + 9 * s;
+}
+
+static D2D1_RECT_F FileChipRect(float cx, float cy, int i) {
+    const float s = (float)g_scale;
+    const float mid = cy + (kBarH + kChipH / 2) * s;
+    float x = cx + 14 * s;
+    for (int j = 0; j < i; ++j) {
+        x += FileChipWidth(j) + 8 * s;
+    }
+    const float w = FileChipWidth(i);
+    return D2D1::RectF(x, mid - 14 * s, x + w, mid + 14 * s);
+}
+
+// Rounded "Files" chip at the left of the search box: folder icon + label + close button.
+static D2D1_RECT_F FileModeChipRect(float cx, float cy) {
+    const float s = (float)g_scale;
+    const float mid = cy + kBarH * s / 2;
+    const float h = 26 * s;
+    const float labelW = TextWidth(kTxtFilesMode, g_fmtKeyBold);
+    const float w = 64 * s + labelW;  // 10 + 16 + 8 + label + 10 + 12 + 8
+    const float x = cx + 16 * s;
+    return D2D1::RectF(x, mid - h / 2, x + w, mid + h / 2);
+}
+
+static D2D1_RECT_F FileModeChipCloseRect(float cx, float cy) {
+    const float s = (float)g_scale;
+    const D2D1_RECT_F r = FileModeChipRect(cx, cy);
+    const float cs = 16 * s;
+    const float midY = (r.top + r.bottom) / 2;
+    return D2D1::RectF(r.right - 8 * s - cs, midY - cs / 2, r.right - 8 * s, midY + cs / 2);
+}
+
 // Circular arrow made of short segments. `angle` rotates it (it spins while indexing).
 static void DrawRefreshIcon(float cx, float cy, float r, double angle, const D2D1_COLOR_F& color) {
     const float s = (float)g_scale;
@@ -5100,7 +7415,86 @@ static void DrawRefreshIcon(float cx, float cy, float r, double angle, const D2D
 
 // Card footer: separator, reindex button on the left and shortcut hints on the right.
 static bool CalcHistoryVisible();  // defined further down
-static void DrawFooter(float cx, float footerTop, float cw, bool hasSel) {
+// Actions menu: a popup anchored above the footer, at the right.
+static void FileMenuRect(float cx, float cy, float cw, float& x0, float& y0, float& x1, float& y1,
+                         float& itemH) {
+    const float s = (float)g_scale;
+    const int n = std::max(1, (int)g_fileMenu.size());
+    const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
+    const float avail = footerTop - (cy + (kBarH + (float)FileChipsH()) * s) - 14 * s;
+    itemH = std::min(28 * s, (avail - 10 * s) / n);
+    x1 = cx + cw - 14 * s;
+    x0 = x1 - 300 * s;
+    y1 = footerTop - 6 * s;
+    y0 = y1 - (n * itemH + 10 * s);
+}
+
+static void DrawFileMenu(float cx, float cy, float cw) {
+    const float s = (float)g_scale;
+    float x0, y0, x1, y1, ih;
+    FileMenuRect(cx, cy, cw, x0, y0, x1, y1, ih);
+    FillRR(x0 - 1 * s, y0 + 3 * s, x1 + 1 * s, y1 + 6 * s, 14 * s, D2D1::ColorF(0, 0, 0), 0.28f);
+    FillRR(x0, y0, x1, y1, 12 * s, g_pal.bg);
+    SetBrush(g_pal.border);
+    D2D1_ROUNDED_RECT rr =
+        D2D1::RoundedRect(D2D1::RectF(x0 + 0.5f, y0 + 0.5f, x1 - 0.5f, y1 - 0.5f), 12 * s, 12 * s);
+    g_rt->DrawRoundedRectangle(&rr, g_brush, 1.f);
+    const D2D1_COLOR_F red = D2D1::ColorF(0.93f, 0.40f, 0.40f);
+    for (int i = 0; i < (int)g_fileMenu.size(); ++i) {
+        const FileMenuItem& it = g_fileMenu[i];
+        const float y = y0 + 5 * s + i * ih;
+        const bool sel = (i == g_fileMenuSel);
+        const bool del = (it.id == FA_DELETE);
+        if (sel) {
+            if (del && g_fileMenuArmed) FillRR(x0 + 5 * s, y, x1 - 5 * s, y + ih, 8 * s, red, 0.22f);
+            else FillRR(x0 + 5 * s, y, x1 - 5 * s, y + ih, 8 * s, g_pal.accent, 0.20f);
+        }
+        const wchar_t* label = (del && g_fileMenuArmed) ? kTxtConfirm : it.label;
+        const D2D1_COLOR_F fg = del ? red : (sel ? g_pal.text : g_pal.textDim);
+        DrawLabel(label, g_fmtPanelRow, x0 + 16 * s, y, x1 - 16 * s, y + ih, fg, 1.f);
+        if (it.keys && *it.keys && !(del && g_fileMenuArmed)) {
+            DrawLabel(it.keys, g_fmtHint, x0 + 16 * s, y, x1 - 16 * s, y + ih, g_pal.textDim, 0.9f);
+        }
+    }
+}
+
+static void FooterDivider(float& x, float yMid) {
+    const float s = (float)g_scale;
+    x -= 12 * s;
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F vd = D2D1::RectF(x, yMid - 9 * s, x + 1.f, yMid + 9 * s);
+    g_rt->FillRectangle(&vd, g_brush);
+    x -= 12 * s;
+}
+
+// Footer while the actions menu or the path/rename field has the keyboard.
+static void DrawModalFooter(float cx, float cw, float yMid) {
+    const float s = (float)g_scale;
+    float x = cx + cw - 20 * s;
+    if (g_fileMenuOpen) {
+        const wchar_t* ok[1] = {kTxtEnterGlyph};
+        x = DrawHint(L"Run", ok, 1, x, yMid);
+        FooterDivider(x, yMid);
+        const wchar_t* nav[2] = {L"↑", L"↓"};
+        x = DrawHint(L"Navigate", nav, 2, x, yMid);
+        FooterDivider(x, yMid);
+        const wchar_t* esc[1] = {L"Esc"};
+        DrawHint(L"Close", esc, 1, x, yMid);
+        return;
+    }
+    const wchar_t* ok[1] = {kTxtEnterGlyph};
+    x = DrawHint(g_bandEdit == BandEdit::Rename ? L"Rename" : L"Go", ok, 1, x, yMid);
+    if (g_bandEdit == BandEdit::Path) {
+        FooterDivider(x, yMid);
+        const wchar_t* tab[1] = {L"Tab"};
+        x = DrawHint(L"Complete", tab, 1, x, yMid);
+    }
+    FooterDivider(x, yMid);
+    const wchar_t* esc[1] = {L"Esc"};
+    DrawHint(L"Cancel", esc, 1, x, yMid);
+}
+
+static void DrawFooter(float cx, float footerTop, float cw, int sel) {
     const float s = (float)g_scale;
     SetBrush(g_pal.separator);
     D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, footerTop, cx + cw - 12 * s, footerTop + 1.f);
@@ -5114,6 +7508,27 @@ static void DrawFooter(float cx, float footerTop, float cw, bool hasSel) {
     DrawRefreshIcon(btn.left + 18 * s, yMid, 6.5f * s, angle, g_hoverReindex ? g_pal.text : g_pal.textDim);
     DrawHint(kTxtReindex, kReindexKeys, 2, btn.right - 6 * s, yMid);
 
+    if (g_fileMenuOpen || g_bandEdit != BandEdit::None) {
+        DrawModalFooter(cx, cw, yMid);
+        return;
+    }
+
+    // Help is always one key (or click) away, even with an empty list.
+    {
+        const D2D1_RECT_F hb = HelpButtonRect(cx, footerTop);
+        if (g_hoverHelp) FillRR(hb.left, hb.top, hb.right, hb.bottom, 8 * s, g_pal.selection);
+        DrawHint(kTxtHelp, kHelpKeys, 1, hb.right - 6 * s, yMid);
+    }
+
+    // Copying keeps the bar open, so the footer confirms it for a moment.
+    if (g_fileMode && NowSec() - g_fileCopiedAt < 1.4) {
+        const float lw = TextWidth(kTxtCalcCopied, g_fmtHint);
+        const float x = cx + cw - 20 * s;
+        DrawLabel(kTxtCalcCopied, g_fmtHint, x - lw, yMid - 12 * s, x, yMid + 12 * s,
+                  g_pal.accentInk, 1.f);
+        return;
+    }
+
     // The calculation owns the footer while its history is on screen: it offers removing the
     // highlighted entry or clearing the whole history (same shortcut as "remove from recents").
     if (CalcHistoryVisible()) {
@@ -5122,27 +7537,47 @@ static void DrawFooter(float cx, float footerTop, float cw, bool hasSel) {
         DrawHint(g_calcHistSel >= 0 ? kTxtCalcDelete : kTxtCalcClear, dk, 3, x, yMid);
         return;
     }
-    if (!hasSel) return;
+    if (sel < 0 || sel >= (int)g_results.size()) return;
+    const ResultKind kind = g_results[sel].kind;
 
-    const wchar_t* dk[2] = {L"Ctrl", L"I"};
-    int nk = 2;
-    switch (g_cfg.detailsKey) {
-        case DetailsKey::CtrlI:     dk[1] = L"I"; break;
-        case DetailsKey::CtrlK:     dk[1] = L"K"; break;
-        case DetailsKey::CtrlSpace: dk[1] = L"Space"; break;
-        case DetailsKey::F4:        dk[0] = L"F4"; nk = 1; break;
+    // A destructive command is armed: show a red warning until the second Enter (or a timeout).
+    if (kind == ResultKind::Command && g_confirmCmd >= 0 && g_results[sel].icon == g_confirmCmd) {
+        const D2D1_COLOR_F red = D2D1::ColorF(0.93f, 0.35f, 0.35f);
+        const float lw = TextWidth(kTxtConfirm, g_fmtHint);
+        const float x = cx + cw - 20 * s;
+        DrawLabel(kTxtConfirm, g_fmtHint, x - lw, yMid - 12 * s, x, yMid + 12 * s, red, 1.f);
+        return;
     }
-    float x = cx + cw - 20 * s;
-    x = DrawHint(kTxtDetails, dk, nk, x, yMid);
 
-    x -= 12 * s;
-    SetBrush(g_pal.separator);
-    D2D1_RECT_F vdiv = D2D1::RectF(x, yMid - 9 * s, x + 1.f, yMid + 9 * s);
-    g_rt->FillRectangle(&vdiv, g_brush);
-    x -= 12 * s;
+    float x = cx + cw - 20 * s;
+    if (kind == ResultKind::App) {
+        const wchar_t* dk[2] = {L"Ctrl", L"I"};
+        int nk = 2;
+        switch (g_cfg.detailsKey) {
+            case DetailsKey::CtrlI:     dk[1] = L"I"; break;
+            case DetailsKey::CtrlK:     dk[1] = L"K"; break;
+            case DetailsKey::CtrlSpace: dk[1] = L"Space"; break;
+            case DetailsKey::F4:        dk[0] = L"F4"; nk = 1; break;
+        }
+        x = DrawHint(kTxtDetails, dk, nk, x, yMid);
+
+        x -= 12 * s;
+        SetBrush(g_pal.separator);
+        D2D1_RECT_F vdiv = D2D1::RectF(x, yMid - 9 * s, x + 1.f, yMid + 9 * s);
+        g_rt->FillRectangle(&vdiv, g_brush);
+        x -= 12 * s;
+    }
 
     const wchar_t* ok[1] = {kTxtEnterGlyph};
-    DrawHint(kTxtOpen, ok, 1, x, yMid);
+    if (kind == ResultKind::File) {
+        // The file footer only keeps the primary action: the rest (reveal, actions, back) is in
+        // the F1 cheat sheet, so the hints never crowd the reindex and help buttons.
+        const int fi = g_results[sel].icon;
+        const bool isDir = fi >= 0 && fi < (int)FileSrc().size() && FileSrc()[fi].isDir;
+        DrawHint(isDir ? kTxtBrowse : kTxtOpen, ok, 1, x, yMid);
+        return;
+    }
+    DrawHint(kind == ResultKind::Command ? kTxtRun : kTxtOpen, ok, 1, x, yMid);
 }
 
 // True when a client point is over the (fully revealed) footer reindex button.
@@ -5152,6 +7587,16 @@ static bool HitReindex(int mx, int my) {
     float cx = 0, cy = 0;
     MainOrigin(cx, cy);
     const D2D1_RECT_F r = ReindexButtonRect(cx, cy + (float)(ExpandedH() - kFooterH) * s);
+    return mx >= r.left && mx < r.right && my >= r.top && my < r.bottom;
+}
+
+// True when a client point is over the (fully revealed) footer help button.
+static bool HitHelp(int mx, int my) {
+    if (g_vis == Vis::Hidden || !g_fmtHint || g_curH < ExpandedH() - 2) return false;
+    const float s = (float)g_scale;
+    float cx = 0, cy = 0;
+    MainOrigin(cx, cy);
+    const D2D1_RECT_F r = HelpButtonRect(cx, cy + (float)(ExpandedH() - kFooterH) * s);
     return mx >= r.left && mx < r.right && my >= r.top && my < r.bottom;
 }
 
@@ -5234,6 +7679,7 @@ static void DrawDetailsPanel(AppEntry& app, const AppDetails& d) {
 static int HitAction(int mx, int my) {
     if (!g_detailsOpen || g_detailPos < 0.6 || g_results.empty()) return -1;
     if (g_sel < 0 || g_sel >= (int)g_results.size()) return -1;
+    if (g_results[g_sel].kind != ResultKind::App) return -1;
     const float s = (float)g_scale;
     float mainX = 0, mainY = 0;
     MainOrigin(mainX, mainY);
@@ -5361,7 +7807,7 @@ static void DrawCalcHero(float cx, float top, float cw) {
     if (CalcOk() && g_calcHistSel < 0) {
         const bool copied = (NowSec() - g_copiedAt) < 1.4;
         if (copied) {
-            SetBrush(g_pal.accent);
+            SetBrush(g_pal.accentInk);
             D2D1_RECT_F cr = D2D1::RectF(x1 - 120 * s, y0, x1 - pad, y1);
             g_rt->DrawText(kTxtCalcCopied, (UINT32)wcslen(kTxtCalcCopied), g_fmtHint, &cr, g_brush);
         } else {
@@ -5543,6 +7989,229 @@ static void ClearCalcHistory() {
     MarkDirty();
 }
 
+// ---- Help sheet (F1) ----
+
+struct HelpRow {
+    const wchar_t* key;
+    const wchar_t* desc;
+};
+
+struct HelpSection {
+    const wchar_t* title;
+    const HelpRow* rows;
+    int count;
+};
+
+static const wchar_t* const kHelpTabs[2] = {L"Shortcuts", L"Calculator"};
+
+// Rectangle (surface pixels) of a page tab at the top of the help sheet.
+static D2D1_RECT_F HelpTabRect(float cx, float cy, int i) {
+    const float s = (float)g_scale;
+    const float top = cy + (kBarH + 12) * s;
+    const float x0 = cx + 26 * s;
+    const float w0 = TextWidth(kHelpTabs[0], g_fmtKeyBold) + 22 * s;
+    if (i == 0) return D2D1::RectF(x0, top, x0 + w0, top + 22 * s);
+    const float x1 = x0 + w0 + 6 * s;
+    const float w1 = TextWidth(kHelpTabs[1], g_fmtKeyBold) + 22 * s;
+    return D2D1::RectF(x1, top, x1 + w1, top + 22 * s);
+}
+
+// Labels for the F1 sheet, built from the configured shortcuts so the sheet never shows a
+// combination the user has changed.
+static std::wstring HotkeyHelpText() {
+    switch (g_cfg.hotkeyMods) {
+        case MOD_CONTROL: return L"Ctrl + Space";
+        case MOD_CONTROL | MOD_ALT: return L"Ctrl + Alt + Space";
+        case MOD_SHIFT | MOD_ALT: return L"Shift + Alt + Space";
+        case MOD_CONTROL | MOD_SHIFT: return L"Ctrl + Shift + Space";
+        default: return L"Alt + Space";
+    }
+}
+
+static std::wstring DetailsKeyHelpText() {
+    switch (g_cfg.detailsKey) {
+        case DetailsKey::CtrlK: return L"Ctrl + K";
+        case DetailsKey::CtrlSpace: return L"Ctrl + Space";
+        case DetailsKey::F4: return L"F4";
+        default: return L"Ctrl + I";
+    }
+}
+
+static const HelpRow kHelpPrefixRows[] = {
+    {L"?", L"Search the web"},
+    {L"g: b: d: y: w:", L"Search on a specific engine"},
+    {L">", L"Built-in commands (power, tools, settings)"},
+};
+
+static const HelpRow kHelpCalcRows[] = {
+    {L"12*8, 15%", L"Calculations as you type"},
+    {L"Enter", L"Copy the result"},
+};
+
+static const HelpRow kHelpFileRows[] = {
+    {L"Tab", L"Enter or leave the file browser"},
+    {L"Enter / →", L"Open the file or folder"},
+    {L"Backspace", L"Go up one folder"},
+    {L"Alt + ← / →", L"Back and forward"},
+    {L"Ctrl + 1…6", L"Jump to a location"},
+    {L"F2", L"Rename"},
+    {L"Ctrl + Shift + N", L"New folder"},
+    {L"Ctrl + T", L"Terminal in this folder"},
+    {L"Ctrl + Shift + C", L"Copy the path"},
+};
+
+static const HelpRow kHelpFilterRows[] = {
+    {L"*.pdf", L"Match by extension"},
+    {L"type:image", L"Images, documents, audio…"},
+    {L"dir: / file:", L"Only folders / only files"},
+};
+
+static const HelpRow kCalcOpRows[] = {
+    {L"+ - * /", L"Add, subtract, multiply, divide"},
+    {L"^", L"Power: 2^10 = 1024"},
+    {L"%", L"Percent: 15% = 0.15"},
+    {L"100 + 15%", L"Add or subtract a percentage"},
+    {L"! or fact(x)", L"Factorial: 5! = 120"},
+    {L"mod", L"Remainder: 10 mod 3 = 1"},
+    {L"of", L"Multiply: 20% of 150 = 30"},
+    {L"( )", L"Group: (2+3)*4 = 20"},
+};
+
+static const HelpRow kCalcConstRows[] = {
+    {L"pi, e, tau", L"3.14159, 2.71828, 6.28318"},
+    {L"phi", L"Golden ratio: 1.61803"},
+    {L"ans", L"Last result"},
+};
+
+static const HelpRow kCalcFnRows[] = {
+    {L"sqrt cbrt", L"Square and cube root"},
+    {L"abs sign", L"Absolute value, -1 / 0 / 1"},
+    {L"round floor ceil trunc", L"Rounding"},
+    {L"sin cos tan", L"Trigonometry (radians)"},
+    {L"asin acos atan", L"Inverse trigonometry"},
+    {L"sinh cosh tanh", L"Hyperbolic functions"},
+    {L"log ln log2 exp", L"Logs and e raised to x"},
+};
+
+static const HelpRow kCalcUnitRows[] = {
+    {L"10 km to mi", L"Convert compatible units"},
+    {L"100 f to c", L"Temperature"},
+    {L"255 to hex", L"Output hex, bin or oct"},
+    {L"0xFF 0b1010 0o17", L"Hex, binary and octal input"},
+};
+
+static const HelpRow kCalcExampleRows[] = {
+    {L"100 - 15%", L"= 85"},
+};
+
+static void DrawHelpColumn(const HelpSection* secs, int n, float x, float y, float w, float s) {
+    const float headerH = 22 * s;
+    const float rowH = 17 * s;
+    const float gap = 6 * s;
+    for (int i = 0; i < n; ++i) {
+        const HelpSection& sec = secs[i];
+        DrawLabel(sec.title, g_fmtSection, x, y, x + w, y + headerH, g_pal.accentStrong, 1.f);
+        y += headerH;
+        for (int r = 0; r < sec.count; ++r) {
+            const HelpRow& row = sec.rows[r];
+            const float kw = TextWidth(row.key, g_fmtMeta);
+            DrawLabel(row.key, g_fmtMeta, x, y, x + kw + 0.5f, y + rowH, g_pal.text, 1.f);
+            DrawLabel(row.desc, g_fmtMeta, x + kw + 12 * s, y, x + w, y + rowH, g_pal.textDim, 1.f);
+            y += rowH;
+        }
+        y += gap;
+    }
+}
+
+// The sheet fills the expanded card: the bar stays on top, two tabs pick the page and the
+// footer says how to switch pages and close. There is no scrolling: the columns are sized to
+// fit the expanded height.
+static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
+    const float top = cy + (kBarH + 12) * s;
+    const float contentTop = top + 28 * s;
+    const float bottom = cy + ch - 30 * s;
+    if (bottom <= contentTop) return;
+
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F topSep =
+        D2D1::RectF(cx + 12 * s, cy + kBarH * s, cx + cw - 12 * s, cy + kBarH * s + 1.f);
+    g_rt->FillRectangle(&topSep, g_brush);
+
+    for (int i = 0; i < 2; ++i) {
+        const D2D1_RECT_F tr = HelpTabRect(cx, cy, i);
+        const bool on = (g_helpPage == i);
+        if (on) FillRR(tr.left, tr.top, tr.right, tr.bottom, 11 * s, g_pal.accent, 0.20f);
+        DrawLabel(kHelpTabs[i], on ? g_fmtKeyBold : g_fmtKey, tr.left, tr.top, tr.right, tr.bottom,
+                  on ? g_pal.accentInk : g_pal.textDim, 1.f);
+    }
+
+    const float pad = 26 * s;
+    const float gap = 28 * s;
+    const float colW = std::max(0.f, (cw - 2 * pad - gap) / 2);
+    const float rx = cx + pad + colW + gap;
+    D2D1_RECT_F clip = D2D1::RectF(cx, contentTop, cx + cw, bottom);
+    g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+
+    if (g_helpPage == 0) {
+        const std::wstring hotkey = HotkeyHelpText();
+        const std::wstring details = DetailsKeyHelpText();
+        const HelpRow navRows[] = {
+            {hotkey.c_str(), L"Open or close the bar"},
+            {L"↑ / ↓", L"Move through the results"},
+            {L"Enter", L"Open the selected item"},
+            {L"Esc", L"Close the details panel, then the bar"},
+        };
+        const HelpRow actionRows[] = {
+            {details.c_str(), L"Actions and details (configurable)"},
+            {L"Ctrl + R", L"Rebuild the app index"},
+        };
+        const HelpSection left[] = {
+            {L"GETTING AROUND", navRows, ARRAYSIZE(navRows)},
+            {L"ACTIONS", actionRows, ARRAYSIZE(actionRows)},
+            {L"PREFIXES", kHelpPrefixRows, ARRAYSIZE(kHelpPrefixRows)},
+            {L"CALCULATOR", kHelpCalcRows, ARRAYSIZE(kHelpCalcRows)},
+        };
+        DrawHelpColumn(left, ARRAYSIZE(left), cx + pad, contentTop, colW, s);
+
+        if (g_cfg.filesEnabled) {
+            const HelpSection right[] = {
+                {L"FILES", kHelpFileRows, ARRAYSIZE(kHelpFileRows)},
+                {L"FILTERS", kHelpFilterRows, ARRAYSIZE(kHelpFilterRows)},
+            };
+            DrawHelpColumn(right, ARRAYSIZE(right), rx, contentTop, colW, s);
+        } else {
+            DrawLabel(L"FILES", g_fmtSection, rx, contentTop, rx + colW, contentTop + 22 * s,
+                      g_pal.accentStrong, 1.f);
+            DrawLabel(L"File browser is off in the mod's settings.", g_fmtMeta, rx,
+                      contentTop + 22 * s, rx + colW, contentTop + 39 * s, g_pal.textDim, 1.f);
+        }
+    } else {
+        const HelpSection left[] = {
+            {L"OPERATORS", kCalcOpRows, ARRAYSIZE(kCalcOpRows)},
+            {L"CONSTANTS", kCalcConstRows, ARRAYSIZE(kCalcConstRows)},
+        };
+        const HelpSection right[] = {
+            {L"FUNCTIONS", kCalcFnRows, ARRAYSIZE(kCalcFnRows)},
+            {L"NUMBERS & UNITS", kCalcUnitRows, ARRAYSIZE(kCalcUnitRows)},
+            {L"EXAMPLE", kCalcExampleRows, ARRAYSIZE(kCalcExampleRows)},
+        };
+        DrawHelpColumn(left, ARRAYSIZE(left), cx + pad, contentTop, colW, s);
+        DrawHelpColumn(right, ARRAYSIZE(right), rx, contentTop, colW, s);
+    }
+    g_rt->PopAxisAlignedClip();
+
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F sep =
+        D2D1::RectF(cx + 12 * s, cy + ch - 30 * s, cx + cw - 12 * s, cy + ch - 30 * s + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+    const float hintMid = cy + ch - 15 * s;
+    const wchar_t* closeKeys[2] = {L"Esc", L"F1"};
+    float hx = DrawHint(L"Close", closeKeys, 2, cx + cw - 24 * s, hintMid);
+    FooterDivider(hx, hintMid);
+    const wchar_t* tabKeys[1] = {L"Tab"};
+    DrawHint(g_helpPage == 0 ? L"Calculator" : L"Shortcuts", tabKeys, 1, hx, hintMid);
+}
+
 static void Render() {
     if (!g_dib || !g_dw || !EnsureTarget()) {
         return;
@@ -5555,7 +8224,8 @@ static void Render() {
     AppEntry* panelApp = nullptr;
     const AppDetails* panelDetails = nullptr;
     if (g_detailPos > 0.01) {
-        if (g_sel >= 0 && g_sel < (int)g_results.size()) {
+        if (g_sel >= 0 && g_sel < (int)g_results.size() &&
+            g_results[g_sel].kind == ResultKind::App) {
             panelApp = &g_apps[g_results[g_sel].app];
         } else if (!g_panelAppId.empty()) {
             for (auto& a : g_apps) {
@@ -5588,10 +8258,46 @@ static void Render() {
 
     // ---- Search bar ----
     const float barMid = cy + kBarH * s / 2;
-    DrawMagnifier(cx + 30 * s, barMid);
-
-    const float fieldX = cx + 58 * s;
-    const float fieldW = (kWidth - 58 - 24) * s;
+    const float rightX = cx + cw - 24 * s;
+    // With a mode active the bar stays compact and no footer is shown, so keep a small
+    // "Enter Search" hint inside the bar itself.
+    const bool modeHint = ModeIsWeb() && !g_results.empty();
+    const wchar_t* const enterKey[1] = {kTxtEnterGlyph};
+    const float hintReserve = modeHint ? HintWidth(kTxtSearchLabel, enterKey, 1) + 8 * s : 0.f;
+    // The Apps/Files toggle only makes sense outside a typed web/command mode. When the file
+    // browser is disabled the button is hidden (but still drawn while leaving the mode).
+    const bool showToggle = (g_activator < 0 && (g_cfg.filesEnabled || g_fileMode));
+    const float toggleReserve = showToggle ? 44 * s : 0.f;
+    float fieldX = cx + 58 * s;
+    if (g_activator >= 0) {
+        // Activator pill: rounded tag with the name of the active mode.
+        const std::wstring name = kActivators[g_activator].name;
+        const float pillH = 26 * s;
+        const float pillW = TextWidth(name.c_str(), g_fmtKey) + 20 * s;
+        const float pillX = cx + 16 * s;
+        FillRR(pillX, barMid - pillH / 2, pillX + pillW, barMid + pillH / 2, pillH / 2,
+               g_pal.accent, 0.15f);
+        DrawLabel(name, g_fmtKey, pillX, barMid - pillH / 2, pillX + pillW, barMid + pillH / 2,
+                  g_pal.accentInk, 1.f);
+        fieldX = pillX + pillW + 12 * s;
+    } else if (g_fileMode) {
+        // Files chip: folder icon + label + a close button that leaves file mode.
+        const D2D1_RECT_F cr = FileModeChipRect(cx, cy);
+        FillRR(cr.left, cr.top, cr.right, cr.bottom, 13 * s, g_pal.accent, 0.15f);
+        DrawFolderOutline(cr.left + 10 * s, (cr.top + cr.bottom) / 2 - 8 * s, 16 * s,
+                          g_pal.accentInk);
+        const float labelX = cr.left + 34 * s;  // 10 + 16 + 8
+        const float labelW = TextWidth(kTxtFilesMode, g_fmtKeyBold);
+        DrawLabel(kTxtFilesMode, g_fmtKeyBold, labelX, cr.top, labelX + labelW, cr.bottom,
+                  g_pal.accentStrong, 1.f);
+        const D2D1_RECT_F xr = FileModeChipCloseRect(cx, cy);
+        DrawCommandGlyph(CmdGlyph::Close, xr.left, xr.top, xr.right - xr.left, g_pal.accentInk,
+                         g_pal.accentInk);
+        fieldX = cr.right + 12 * s;
+    } else {
+        DrawMagnifier(cx + 30 * s, barMid);
+    }
+    const float fieldW = rightX - toggleReserve - hintReserve - fieldX;
     {
         D2D1_RECT_F clip = D2D1::RectF(fieldX, cy, fieldX + fieldW, cy + kBarH * s);
         g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
@@ -5599,8 +8305,13 @@ static void Render() {
         if (g_text.empty()) {
             SetBrush(g_pal.textDim, 0.85f);
             D2D1_RECT_F r = D2D1::RectF(fieldX, cy, fieldX + fieldW, cy + kBarH * s);
-            g_rt->DrawText(kTxtPlaceholder, (UINT32)wcslen(kTxtPlaceholder), g_fmtInput, &r, g_brush);
-            if (g_caretOn && g_vis != Vis::Hiding) {
+            const wchar_t* ph =
+                g_helpOpen ? (g_helpPage == 0 ? L"Keyboard shortcuts and tips"
+                                              : L"Calculator syntax and examples")
+                : g_fileMode ? kTxtPlaceholderFiles
+                             : kTxtPlaceholder;
+            g_rt->DrawText(ph, (UINT32)wcslen(ph), g_fmtInput, &r, g_brush);
+            if (g_caretOn && !g_helpOpen && g_bandEdit == BandEdit::None && g_vis != Vis::Hiding) {
                 SetBrush(g_pal.text);
                 float ch2 = 26 * s;
                 D2D1_RECT_F cr = D2D1::RectF(fieldX, barMid - ch2 / 2, fieldX + 1.5f * s, barMid + ch2 / 2);
@@ -5647,7 +8358,7 @@ static void Render() {
                     g_rt->DrawText(ghost.c_str(), (UINT32)ghost.size(), g_fmtInput, &gr, g_brush);
                 }
 
-                if (g_caretOn && g_vis != Vis::Hiding) {
+                if (g_caretOn && !g_helpOpen && g_bandEdit == BandEdit::None && g_vis != Vis::Hiding) {
                     SetBrush(g_pal.text);
                     D2D1_RECT_F cr =
                         D2D1::RectF(ox + cxPos, barMid - chh / 2, ox + cxPos + 1.5f * s, barMid + chh / 2);
@@ -5657,6 +8368,30 @@ static void Render() {
             }
         }
         g_rt->PopAxisAlignedClip();
+    }
+
+    // Apps/Files toggle: an outline folder at the right end of the bar.
+    if (showToggle) {
+        const D2D1_RECT_F tr = FileToggleRect(cx, cy);
+        const float gs = (tr.right - tr.left) * 0.78f;
+        const D2D1_COLOR_F fc = g_fileMode ? g_pal.accentInk : g_pal.textDim;
+        DrawFolderOutline(tr.left + (tr.right - tr.left - gs) / 2,
+                          (tr.top + tr.bottom) / 2 - gs / 2, gs, fc);
+    }
+
+    if (modeHint) {
+        DrawHint(kTxtSearchLabel, enterKey, 1, rightX, barMid);
+    }
+
+    // ---- Help sheet: replaces the list, footer and details panel ----
+    if (g_helpOpen) {
+        DrawHelp(cx, cy, cw, ch, s);
+        const HRESULT hrHelp = g_rt->EndDraw();
+        if (hrHelp == D2DERR_RECREATE_TARGET) {
+            ReleaseTarget();
+            g_dirty = true;
+        }
+        return;
     }
 
     // ---- List / messages ----
@@ -5669,6 +8404,40 @@ static void Render() {
         g_rt->FillRectangle(&sep, g_brush);
     }
 
+    // File-mode filter band: a chip per location, each with its own icon. The highlight
+    // slides between chips when the active location changes (animated via g_chipSelPos).
+    if (g_fileMode && kFileLocationCount > 0) {
+        const float chipMid = listTop + kChipH * s / 2;
+        float lefts[kFileLocationCount];
+        float widths[kFileLocationCount];
+        float chipX = cx + 14 * s;
+        for (int i = 0; i < kFileLocationCount; ++i) {
+            lefts[i] = chipX;
+            widths[i] = FileChipWidth(i);
+            chipX += widths[i] + 8 * s;
+        }
+        const double pos = std::clamp(g_chipSelPos, 0.0, (double)(kFileLocationCount - 1));
+        const int a = (int)pos;
+        const int b = std::min(a + 1, kFileLocationCount - 1);
+        const float tl = (float)(pos - a);
+        const float hx = lefts[a] + (lefts[b] - lefts[a]) * tl;
+        const float hw = widths[a] + (widths[b] - widths[a]) * tl;
+        if (g_fileLoc >= 0) {
+            FillRR(hx, chipMid - 14 * s, hx + hw, chipMid + 14 * s, 14 * s, g_pal.accent, 0.18f);
+        }
+        for (int i = 0; i < kFileLocationCount; ++i) {
+            const wchar_t* label = kFileLocations[i].label;
+            const bool on = (i == g_fileLoc);
+            const D2D1_COLOR_F fg = on ? g_pal.accentInk : g_pal.textDim;
+            const D2D1_COLOR_F lc = on ? g_pal.accentStrong : g_pal.textDim;
+            IDWriteTextFormat* lfmt = on ? g_fmtKeyBold : g_fmtKey;
+            DrawCommandGlyph(kFileLocations[i].glyph, lefts[i] + 9 * s, chipMid - 7 * s, 14 * s, fg, fg);
+            DrawLabel(label, lfmt, lefts[i] + 30 * s, chipMid - 14 * s, lefts[i] + widths[i] - 9 * s,
+                      chipMid + 14 * s, lc, 1.f);
+        }
+        DrawPathBand(cx, cy, cw);
+    }
+
     // Calculator result card, in the space reserved above the list.
     if (ch > kBarH * s + 2 && HeroShown()) {
         DrawCalcHero(cx, listTop, cw);
@@ -5677,20 +8446,26 @@ static void Render() {
     // The footer takes the end of the expanded height; the list ends just above it.
     const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
     const float listBottom = std::min(cy + ch, footerTop - kListPad * s);
-    D2D1_RECT_F listClip = D2D1::RectF(cx, listTop + 1.f, cx + cw, listBottom);
+    D2D1_RECT_F listClip =
+        D2D1::RectF(cx, listTop + (float)FileChipsH() * s + 1.f, cx + cw, listBottom);
     g_rt->PushAxisAlignedClip(&listClip, D2D1_ANTIALIAS_MODE_ALIASED);
 
     if (rows > 0) {
-        const float rowsOrigin = listTop + (kListPad + (float)HeroH()) * s;
+        const float rowsOrigin = listTop + (kListPad + (float)HeroH() + (float)FileChipsH()) * s;
         const float rowH = kRowH * s;
         const float rowX0 = cx + 8 * s;
         const float rowX1 = cx + cw - 8 * s;
         const double scrollOff = ScrollPx();
 
         const float hlY = rowsOrigin + (float)(RowOffset(g_selPos) - scrollOff) * s;
-        FillRR(rowX0, hlY, rowX1, hlY + rowH, kRowRadius * s, g_pal.selection);
+        const bool armedRow =
+            g_confirmCmd >= 0 && g_sel >= 0 && g_sel < (int)g_results.size() &&
+            g_results[g_sel].kind == ResultKind::Command && g_results[g_sel].icon == g_confirmCmd;
+        const D2D1_COLOR_F hlCol =
+            armedRow ? D2D1::ColorF(0.93f, 0.30f, 0.30f, 0.26f) : g_pal.selection;
+        FillRR(rowX0, hlY, rowX1, hlY + rowH, kRowRadius * s, hlCol);
         {
-            SetBrush(g_pal.text, 0.06f);
+            SetBrush(armedRow ? D2D1::ColorF(0.93f, 0.30f, 0.30f) : g_pal.text, armedRow ? 0.5f : 0.06f);
             D2D1_ROUNDED_RECT so = D2D1::RoundedRect(
                 D2D1::RectF(rowX0 + 0.5f, hlY + 0.5f, rowX1 - 0.5f, hlY + rowH - 0.5f), kRowRadius * s,
                 kRowRadius * s);
@@ -5699,13 +8474,13 @@ static void Render() {
 
         const float iconPx = kIconSize * s;
         const float textX = rowX0 + (10 + kIconSize + 14) * s;
-        const float textW = (rowX1 - textX) - 130 * s;
+        const float textW = (rowX1 - textX) - (g_fileMode ? 26 * s : 130 * s);
 
         int first = std::max(0, (int)std::floor(g_scrollPos) - (g_kbScroll ? 2 : 0));
         int last = std::min((int)g_results.size() - 1, (int)std::ceil(g_scrollPos) + rows);
         for (int i = first; i <= last; ++i) {
             SearchResult& res = g_results[i];
-            AppEntry& app = g_apps[res.app];
+            AppEntry* app = (res.kind == ResultKind::App) ? &g_apps[res.app] : nullptr;
             float y = rowsOrigin + (float)(RowOffset((double)i) - scrollOff) * s;
 
             // Section header ("Recent" / "Suggestions") above the first row of each group
@@ -5718,26 +8493,123 @@ static void Render() {
 
             float ix = rowX0 + 10 * s;
             float iy = y + (rowH - iconPx) / 2;
-            ID2D1Bitmap* bmp = EnsureIcon(app);
+            ID2D1Bitmap* bmp = app ? EnsureIcon(*app) : nullptr;
             if (bmp) {
                 D2D1_RECT_F dst = D2D1::RectF(ix, iy, ix + iconPx, iy + iconPx);
                 g_rt->DrawBitmap(bmp, &dst, 1.f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            } else if (res.kind == ResultKind::Web) {
+                // Engine badge: brand colour square with the engine's initial.
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s,
+                       WebEngineColor((WebEngine)res.icon));
+                const wchar_t letter[2] = {res.subtitle.empty() ? L'?' : res.subtitle[0], 0};
+                SetBrush(D2D1::ColorF(1.f, 1.f, 1.f));
+                D2D1_RECT_F lr = D2D1::RectF(ix, iy, ix + iconPx, iy + iconPx);
+                g_rt->DrawText(letter, 1, g_fmtBadge, &lr, g_brush);
+            } else if (res.kind == ResultKind::Url) {
+                // Direct link: a link-blue square with a small globe.
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s,
+                       D2D1::ColorF(0.20f, 0.55f, 0.90f));
+                const float cx = ix + iconPx * 0.5f, cy = iy + iconPx * 0.5f;
+                const float r = iconPx * 0.26f;
+                SetBrush(D2D1::ColorF(1.f, 1.f, 1.f));
+                g_rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), g_brush, 1.6f * s);
+                g_rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r * 0.42f, r), g_brush,
+                                  1.6f * s);
+                g_rt->DrawLine(D2D1::Point2F(cx - r, cy), D2D1::Point2F(cx + r, cy), g_brush,
+                               1.6f * s);
+            } else if (res.kind == ResultKind::Command) {
+                // Command badge: a coloured tile with the command's own glyph.
+                const int ci = (res.icon >= 0 && res.icon < kCommandCount) ? res.icon : -1;
+                const CmdGlyph cg = ci >= 0 ? kCommands[ci].glyph : CmdGlyph::Terminal;
+                const D2D1_COLOR_F tint =
+                    ci >= 0 ? kCommands[ci].color : D2D1::ColorF(0.33f, 0.34f, 0.42f);
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, tint);
+                DrawCommandGlyph(cg, ix, iy, iconPx, tint);
+            } else if (res.kind == ResultKind::Setting) {
+                // Settings badge: same tile style, with the settings page's own glyph.
+                const int si = (res.icon >= 0 && res.icon < kSettingCount) ? res.icon : -1;
+                const CmdGlyph sg = si >= 0 ? kSettings[si].glyph : CmdGlyph::Gear;
+                const D2D1_COLOR_F st =
+                    si >= 0 ? kSettings[si].color : D2D1::ColorF(0.33f, 0.34f, 0.42f);
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, st);
+                DrawCommandGlyph(sg, ix, iy, iconPx, st);
+            } else if (res.kind == ResultKind::File) {
+                // Folders: outline folder. Files: image preview, else a type tile.
+                const int fi = (res.icon >= 0 && res.icon < (int)FileSrc().size()) ? res.icon : -1;
+                if (fi >= 0 && FileSrc()[fi].isDir) {
+                    DrawFolderOutline(ix + 1 * s, iy + 1 * s, iconPx - 2 * s,
+                                      D2D1::ColorF(0.90f, 0.68f, 0.28f));
+                } else if (fi >= 0) {
+                    FileEntry& fe = FileSrc()[fi];
+                    ID2D1Bitmap* th = EnsureFileThumb(fe);
+                    if (th) {
+                        DrawThumbImage(th, ix, iy, iconPx, iconPx * 0.22f);
+                    } else {
+                        DrawFileTile(ix, iy, iconPx, fe.ext, ExtColor(fe.ext));
+                    }
+                } else {
+                    DrawFolderOutline(ix + 1 * s, iy + 1 * s, iconPx - 2 * s,
+                                      D2D1::ColorF(0.60f, 0.63f, 0.70f));
+                }
             } else {
                 FillRR(ix + 2 * s, iy + 2 * s, ix + iconPx - 2 * s, iy + iconPx - 2 * s, 8 * s,
                        g_pal.textDim, 0.18f);
             }
 
-            if (!res.layout) {
-                res.layout = BuildTitleLayout(app, textW, rowH);
-            }
-            if (res.layout) {
-                SetBrush(g_pal.text);
-                g_rt->DrawTextLayout(D2D1::Point2F(textX, y), res.layout, g_brush);
+            if (res.kind == ResultKind::File) {
+                // Two lines: the name on top, its metadata (type · size · date · folder) below.
+                if (!res.layout) {
+                    const int fi2 = res.icon;
+                    const std::wstring& folded = (fi2 >= 0 && fi2 < (int)FileSrc().size())
+                                                     ? FileSrc()[fi2].folded
+                                                     : res.title;
+                    res.layout = BuildMatchLayout(res.title, folded, textW, rowH * 0.5f);
+                }
+                if (res.layout) {
+                    SetBrush(g_pal.text);
+                    g_rt->DrawTextLayout(D2D1::Point2F(textX, y + 3 * s), res.layout, g_brush);
+                }
+                if (!res.subtitle.empty()) {
+                    const float my0 = y + rowH * 0.5f, my1 = y + rowH - 3 * s;
+                    const float mw = std::min(TextWidth(res.subtitle.c_str(), g_fmtMeta), textW);
+                    DrawLabel(res.subtitle, g_fmtMeta, textX, my0, textX + mw, my1, g_pal.textDim, 0.9f);
+                    const int mi = res.icon;
+                    const float sepW = TextWidth(L" · ", g_fmtMeta);
+                    if (mi >= 0 && mi < (int)FileSrc().size() && textW - mw - sepW > 40 * s) {
+                        std::wstring mh, mt;
+                        FitPathTail(FileSrc()[mi].dir, g_fmtMeta, g_fmtMeta, textW - mw - sepW, mh, mt);
+                        const std::wstring rest = L" · " + mh + mt;
+                        DrawLabel(rest, g_fmtMeta, textX + mw, my0, textX + textW, my1, g_pal.textDim, 0.9f);
+                    }
+                }
+            } else {
+                if (!res.layout) {
+                    if (app) {
+                        res.layout = BuildTitleLayout(*app, textW, rowH);
+                    } else {
+                        res.layout = BuildMatchLayout(res.title, FoldString(res.title), textW, rowH);
+                    }
+                }
+                if (res.layout) {
+                    SetBrush(g_pal.text);
+                    g_rt->DrawTextLayout(D2D1::Point2F(textX, y), res.layout, g_brush);
+                }
             }
 
-            // Type label, on the right (like "Application" / "Command" in other launchers)
-            {
-                const wchar_t* typeTxt = IsPackagedId(app.id) ? kTxtTypeStore : kTxtTypeApp;
+            // Right-hand label: an "open externally" icon for files, a type label otherwise.
+            if (res.kind == ResultKind::File && !app) {
+                const float es = 16 * s;
+                const int gi = res.icon;
+                const bool gDir = gi >= 0 && gi < (int)FileSrc().size() && FileSrc()[gi].isDir;
+                DrawCommandGlyph(gDir ? CmdGlyph::ChevronRight : CmdGlyph::ExternalLink, rowX1 - 14 * s - es,
+                                 y + (rowH - es) / 2, es, g_pal.textDim, g_pal.textDim);
+            } else {
+                const wchar_t* typeTxt;
+                if (app) {
+                    typeTxt = IsPackagedId(app->id) ? kTxtTypeStore : kTxtTypeApp;
+                } else {
+                    typeTxt = res.subtitle.empty() ? ResultTypeLabel(res.kind) : res.subtitle.c_str();
+                }
                 SetBrush(g_pal.textDim);
                 D2D1_RECT_F tr = D2D1::RectF(rowX1 - 150 * s, y, rowX1 - 14 * s, y + rowH);
                 g_rt->DrawText(typeTxt, (UINT32)wcslen(typeTxt), g_fmtHint, &tr, g_brush);
@@ -5747,7 +8619,9 @@ static void Render() {
         DrawCalcHistory(cx, listTop, cw);
     } else if (ch > kBarH * s + 8) {
         const wchar_t* msg = nullptr;
-        if (!g_tokens.empty() && !CalcShown()) {
+        if (g_fileMode && g_fileSearching && FileQueryActive()) {
+            msg = kTxtSearching;
+        } else if ((!g_tokens.empty() || (g_fileMode && g_fileFilter.Active())) && !CalcShown()) {
             msg = kTxtNoResults;
         } else if (g_apps.empty() && !g_indexedOnce && !CalcShown()) {
             msg = kTxtIndexing;
@@ -5766,9 +8640,12 @@ static void Render() {
     if (cy + ch > footerTop + 2.f) {
         D2D1_RECT_F footClip = D2D1::RectF(cx, footerTop, cx + cw, cy + ch);
         g_rt->PushAxisAlignedClip(&footClip, D2D1_ANTIALIAS_MODE_ALIASED);
-        DrawFooter(cx, footerTop, cw, !g_results.empty() && g_sel >= 0 && g_sel < (int)g_results.size());
+        DrawFooter(cx, footerTop, cw,
+                   (g_sel >= 0 && g_sel < (int)g_results.size()) ? g_sel : -1);
         g_rt->PopAxisAlignedClip();
     }
+
+    if (g_fileMenuOpen && g_fileMode) DrawFileMenu(cx, cy, cw);
 
     // ---- Details panel (on the right) ----
     if (panelApp && panelDetails) {
@@ -5866,7 +8743,11 @@ static void FinishHide() {
     KillTimer(g_hwnd, TIMER_BLINK);
     KillTimer(g_hwnd, TIMER_COPY);
     KillTimer(g_hwnd, TIMER_CALC);
+    KillTimer(g_hwnd, TIMER_HIDE);
+    CancelFileSearch();   // no point scanning the disk while the bar is hidden
+    CancelThumbQueue();   // nor decoding previews nobody is looking at
     g_calcPending = false;
+    g_helpOpen = false;  // next open starts on the list, not on the cheat sheet
     ShowWindow(g_hwnd, SW_HIDE);
     LiveHide();
     g_vis = Vis::Hidden;
@@ -5877,6 +8758,12 @@ static void FinishHide() {
     MaybeReindexInBackground();  // changes detected while it was open
 }
 
+// A shell operation (delete, mostly) may steal the focus. While it runs, and for a short
+// moment after it, losing the foreground must not close the bar: the user keeps their folder.
+static bool IgnoreFocusLoss() {
+    return g_opGuard || NowSec() < g_focusGrace;
+}
+
 static void HideLauncher() {
     if (g_vis == Vis::Hidden || g_vis == Vis::Hiding) {
         return;
@@ -5884,15 +8771,27 @@ static void HideLauncher() {
     g_vis = Vis::Hiding;
     g_visStart = NowSec();
     StartFrameTimer();
+    // Safety net: if the animation is ever interrupted (e.g. the frame timer is lost while the
+    // shell runs a modal loop), finish the hide so no acrylic layer is left on screen.
+    if (g_hwnd) SetTimer(g_hwnd, TIMER_HIDE, 600, nullptr);
 }
 
 static void ShowLauncher() {
     if (!g_hwnd) {
         return;
     }
-    POINT pt = {};
-    GetCursorPos(&pt);
-    HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR mon = nullptr;
+    if (g_cfg.openMonitor == OpenMonitor::Primary) {
+        mon = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    } else if (g_cfg.openMonitor == OpenMonitor::Foreground) {
+        HWND fg = GetForegroundWindow();
+        mon = (fg && fg != g_hwnd) ? MonitorFromWindow(fg, MONITOR_DEFAULTTOPRIMARY) : nullptr;
+    }
+    if (!mon) {
+        POINT pt = {};
+        GetCursorPos(&pt);
+        mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(mon, &mi);
@@ -5914,6 +8813,22 @@ static void ShowLauncher() {
     g_inputScroll = 0;
     g_caretOn = true;
     g_copiedAt = -1e9;
+    g_fileCopiedAt = -1e9;
+    g_activator = -1;
+    g_confirmCmd = -1;
+    g_fileDir.clear();  // refresh the file listing next time file mode is shown
+    g_fileMode = false;  // file mode never persists across opens
+    g_fileLoc = 0;       // and neither does the selected location
+    g_fileCur.clear();
+    g_fileBack.clear();
+    g_fileFwd.clear();
+    g_pendingSelect.clear();
+    g_bandEdit = BandEdit::None;
+    g_fileMenuOpen = false;
+    ClearFileDeep();
+    CancelFileSearch();
+    g_fileSrc = &g_fileEntries;
+    g_chipSelPos = g_chipSelTarget = 0;
     g_calc = Calc::Result();
     g_calcDisplay.clear();
     g_calcActive = false;
@@ -5922,12 +8837,15 @@ static void ShowLauncher() {
     g_histScroll = 0;
     if (g_hwnd) KillTimer(g_hwnd, TIMER_COPY);
     if (g_hwnd) KillTimer(g_hwnd, TIMER_CALC);
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_HIDE);  // a pending safety hide must not fire now
     g_lastMouse = {-1, -1};
     g_sel = 0;
     g_scrollTarget = 0;
     g_detailsOpen = false;  // the details panel starts closed on each open
     g_detailPos = g_detailTarget = 0;
+    g_helpOpen = false;
     g_hoverAction = -1;
+    g_hoverHelp = false;
     g_hoverReindex = false;
     RunSearch();
     UpdateTargets(true, /*followSelection=*/true);
@@ -5944,7 +8862,7 @@ static void ShowLauncher() {
                                        g_cfg.verticalPct / 100.0;
 
     // Place the window so the collapsed card sits at g_anchorTop and the surface stays on screen.
-    const double expandedCardH = kExpandedMinH * g_scale;
+    const double expandedCardH = (kExpandedMinH + kPathH) * g_scale;
     g_winY = (int)std::lround(g_anchorTop - kMargin * g_scale);
     if (g_winY + expandedCardH + 2 * kMargin * g_scale > mi.rcMonitor.bottom) {
         g_winY = (int)std::lround(mi.rcMonitor.bottom - expandedCardH - 2 * kMargin * g_scale);
@@ -6024,10 +8942,16 @@ static void OnFrame() {
 
     if (g_vis != Vis::Hidden) {
         if (Smooth(g_selPos, g_selTarget, 28.0, dt, 0.002)) { active = true; g_dirty = true; }
+        if (Smooth(g_chipSelPos, g_chipSelTarget, 22.0, dt, 0.002)) { active = true; g_dirty = true; }
         if (Smooth(g_scrollPos, g_scrollTarget, 22.0, dt, 0.002)) { active = true; g_dirty = true; }
         if (Smooth(g_curH, g_targetH, 20.0, dt, 0.3)) { active = true; g_dirty = true; }
         if (Smooth(g_detailPos, g_detailTarget, 16.0, dt, 0.003)) { active = true; g_dirty = true; }
-        if (g_indexing) { active = true; g_dirty = true; }  // keeps the footer icon spinning
+        if (g_indexing || g_fileSearching) { active = true; g_dirty = true; }  // keeps the footer icon spinning
+        if (!g_bandError.empty()) {
+            if (NowSec() - g_bandErrorAt > 2.2) g_bandError.clear();
+            active = true;
+            g_dirty = true;
+        }
     }
 
     if (g_dirty) {
@@ -6117,11 +9041,856 @@ static void LaunchApp(int appIdx) {
     HideLauncher();
 }
 
+// Opens a URL in the default browser (used for web searches and direct links).
+static void OpenWebResult(const std::wstring& url) {
+    if (url.empty()) {
+        return;
+    }
+    AllowSetForegroundWindow(ASFW_ANY);
+    ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    HideLauncher();
+}
+
+// Closes the launcher and opens a shell target (executable, .msc, ms-settings:, ...).
+static void RunShellOpen(const wchar_t* target) {
+    HideLauncher();
+    AllowSetForegroundWindow(ASFW_ANY);
+    ShellExecuteW(nullptr, L"open", target, nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// Full path of a System32 executable, so CreateProcess cannot pick up a same-named file from
+// the working directory or the search path.
+static std::wstring SystemExe(const wchar_t* name) {
+    wchar_t dir[MAX_PATH];
+    UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return name;
+    std::wstring path = dir;
+    path += L'\\';
+    path += name;
+    return path;
+}
+
+// Runs an executable with arguments, without flashing a console window.
+static void RunConsoleHidden(const wchar_t* exe, const wchar_t* args) {
+    HideLauncher();
+    wchar_t cmd[512];
+    swprintf_s(cmd, L"\"%s\" %s", exe, args);
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+    if (CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr,
+                       &si, &pi)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+}
+
+// Runs a built-in command by its stable id (see kCommands).
+static void RunCommand(const std::wstring& id) {
+    if (id == L"lock") {
+        HideLauncher();
+        LockWorkStation();
+    } else if (id == L"sleep") {
+        HideLauncher();
+        // Loaded dynamically so the mod does not need to link against PowrProf.lib.
+        typedef BOOLEAN(WINAPI * SuspendFn)(BOOLEAN, BOOLEAN, BOOLEAN);
+        HMODULE h = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (h) {
+            auto fn = (SuspendFn)GetProcAddress(h, "SetSuspendState");
+            if (fn) fn(FALSE, FALSE, FALSE);
+            FreeLibrary(h);
+        }
+    } else if (id == L"hibernate") {
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/h");
+    } else if (id == L"shutdown") {
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/s /t 0");
+    } else if (id == L"restart") {
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/r /t 0");
+    } else if (id == L"signout") {
+        RunConsoleHidden(SystemExe(L"shutdown.exe").c_str(), L"/l");
+    } else if (id == L"emptyrecyclebin") {
+        HideLauncher();
+        SHEmptyRecycleBinW(nullptr, nullptr,
+                           SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+    } else if (id == L"taskmgr") {
+        RunShellOpen(L"taskmgr.exe");
+    } else if (id == L"control") {
+        RunShellOpen(L"control.exe");
+    } else if (id == L"devmgmt") {
+        RunShellOpen(L"devmgmt.msc");
+    } else if (id == L"services") {
+        RunShellOpen(L"services.msc");
+    } else if (id == L"regedit") {
+        RunShellOpen(L"regedit.exe");
+    } else if (id == L"netconnections") {
+        RunShellOpen(L"ncpa.cpl");
+    } else if (id == L"settings") {
+        RunShellOpen(L"ms-settings:");
+    } else if (id == L"windowsupdate") {
+        RunShellOpen(L"ms-settings:windowsupdate");
+    } else if (id == L"installedapps") {
+        RunShellOpen(L"ms-settings:appsfeatures");
+    } else if (id == L"display") {
+        RunShellOpen(L"ms-settings:display");
+    } else if (id == L"sound") {
+        RunShellOpen(L"ms-settings:sound");
+    } else if (id == L"bluetooth") {
+        RunShellOpen(L"ms-settings:bluetooth");
+    } else if (id == L"printers") {
+        RunShellOpen(L"ms-settings:printers");
+    } else if (id == L"terminal") {
+        // Windows Terminal, falling back to PowerShell if it is not installed.
+        HideLauncher();
+        AllowSetForegroundWindow(ASFW_ANY);
+        if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"wt.exe", nullptr, nullptr, SW_SHOWNORMAL) <=
+            32) {
+            ShellExecuteW(nullptr, L"open", L"powershell.exe", nullptr, nullptr, SW_SHOWNORMAL);
+        }
+    } else if (id == L"explorer") {
+        RunShellOpen(L"explorer.exe");
+    }
+}
+
+// ===== File navigation (folders, history, deep search) =====
+
+static void CancelFileSearch() {
+    InterlockedIncrement(&g_fileSearchGen);
+    g_fileSearching = false;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_FSEARCH);
+}
+
+// Called after the query changes: shows local matches now and starts the deep search shortly.
+static void ScheduleFileSearch() {
+    if (!g_fileMode || g_activator >= 0 || !FileQueryActive()) {
+        CancelFileSearch();
+        return;
+    }
+    if (g_fileDeepDone && FileSearchKey() == g_fileDeepKey) {
+        CancelFileSearch();
+        return;
+    }
+    InterlockedIncrement(&g_fileSearchGen);
+    g_fileSearching = true;
+    if (g_hwnd) SetTimer(g_hwnd, TIMER_FSEARCH, 140, nullptr);
+}
+
+static void StartFileSearch() {
+    if (!g_fileMode || !FileQueryActive() || g_fileCur.empty()) {
+        g_fileSearching = false;
+        return;
+    }
+    auto* job = new FileSearchJob();
+    job->hwnd = g_hwnd;
+    job->gen = InterlockedIncrement(&g_fileSearchGen);
+    job->root = g_fileCur;
+    job->key = FileSearchKey();
+    job->tokens = g_tokens;
+    job->filter = g_fileFilter;
+    FileSearchStarted();
+    HANDLE th = CreateThread(nullptr, 0, FileSearchThread, job, 0, nullptr);
+    if (!th) {
+        FileSearchFinished();
+        delete job;
+        g_fileSearching = false;
+        return;
+    }
+    // The search must never make typing or scrolling feel slower.
+    SetThreadPriority(th, THREAD_PRIORITY_BELOW_NORMAL);
+    CloseHandle(th);
+}
+
+static void FileGoTo(const std::wstring dir, bool record, const std::wstring select) {
+    if (dir.empty()) return;
+    const DWORD at = GetFileAttributesW(dir.c_str());
+    if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY)) return;
+    if (record && !g_fileCur.empty() && !SamePath(dir, g_fileCur)) {
+        g_fileBack.push_back(g_fileCur);
+        if (g_fileBack.size() > 64) g_fileBack.erase(g_fileBack.begin());
+        g_fileFwd.clear();
+    }
+    g_bandEdit = BandEdit::None;
+    g_fileMenuOpen = false;
+    CancelFileSearch();
+    ClearFileDeep();
+    g_fileCur = dir;
+    g_fileLoc = LocationForPath(g_fileCur);
+    if (g_fileLoc >= 0) g_chipSelTarget = g_fileLoc;
+    g_fileDir.clear();
+    g_pendingSelect = select;
+    g_text.clear();
+    g_caret = g_anchor = 0;
+    g_inputScroll = 0;
+    g_calc = Calc::Result();
+    g_calcDisplay.clear();
+    g_calcActive = false;
+    g_calcPending = false;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_CALC);
+    CancelConfirm();
+    g_sel = 0;
+    g_scrollTarget = g_scrollPos = 0;
+    g_kbScroll = false;
+    RunSearch();
+    if (!g_pendingSelect.empty()) {
+        for (size_t i = 0; i < g_results.size(); ++i) {
+            if (SamePath(g_results[i].payload, g_pendingSelect)) {
+                g_sel = (int)i;
+                break;
+            }
+        }
+        g_pendingSelect.clear();
+    }
+    UpdateTargets(false, /*followSelection=*/true);
+    ResetBlink();
+    MarkDirty();
+}
+
+static void FileBack() {
+    if (g_fileBack.empty()) return;
+    const std::wstring prev = g_fileBack.back();
+    g_fileBack.pop_back();
+    const std::wstring from = g_fileCur;
+    g_fileFwd.push_back(from);
+    FileGoTo(prev, false, from);
+}
+
+static void FileForward() {
+    if (g_fileFwd.empty()) return;
+    const std::wstring next = g_fileFwd.back();
+    g_fileFwd.pop_back();
+    const std::wstring from = g_fileCur;
+    g_fileBack.push_back(from);
+    FileGoTo(next, false, L"");
+}
+
+static void FileUp() {
+    const std::wstring parent = ParentDir(g_fileCur);
+    if (parent.empty()) return;
+    FileGoTo(parent, true, g_fileCur);
+}
+
+// A chip jump (Ctrl+1..6, Ctrl+Left/Right, click).
+static void SetFileLocation(int loc) {
+    if (loc < 0 || loc >= kFileLocationCount) return;
+    FileGoTo(ResolveFileLocation(loc), true, L"");
+}
+
+static bool SelectedFileIsDir() {
+    if (g_sel < 0 || g_sel >= (int)g_results.size()) return false;
+    const SearchResult& r = g_results[g_sel];
+    if (r.kind != ResultKind::File || r.icon < 0 || r.icon >= (int)FileSrc().size()) return false;
+    return FileSrc()[r.icon].isDir;
+}
+
+// Shows the selected file or folder in Windows Explorer.
+static void FileReveal() {
+    if (g_sel < 0 || g_sel >= (int)g_results.size()) return;
+    const SearchResult& r = g_results[g_sel];
+    if (r.kind != ResultKind::File) return;
+    const bool dir = SelectedFileIsDir();
+    const std::wstring path = r.payload;
+    HideLauncher();
+    AllowSetForegroundWindow(ASFW_ANY);
+    // Opened through the shell so the default file manager handles it, not explorer.exe.
+    const std::wstring folder = dir ? path : ParentDir(path);
+    if (!folder.empty()) {
+        ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+}
+
+// ===== Path field, rename and file actions =====
+
+static void CopyTextToClipboard(const std::wstring& s);  // defined further down
+
+static void BandFail(const wchar_t* msg) {
+    g_bandError = msg;
+    g_bandErrorAt = NowSec();
+    ResetBlink();
+    MarkDirty();
+}
+
+static const FileEntry* SelectedFileEntry() {
+    if (g_sel < 0 || g_sel >= (int)g_results.size()) return nullptr;
+    const SearchResult& r = g_results[g_sel];
+    if (r.kind != ResultKind::File || r.icon < 0 || r.icon >= (int)FileSrc().size()) return nullptr;
+    return &FileSrc()[r.icon];
+}
+
+// Remembers the highlighted entry as the target of the next action.
+static bool CaptureFileTarget() {
+    const FileEntry* e = SelectedFileEntry();
+    g_fileMenuHasTarget = e != nullptr;
+    if (e) g_fileMenuTarget = *e;
+    return e != nullptr;
+}
+
+static bool IsExeLike(const std::wstring& name) {
+    const std::wstring n = FoldString(name);
+    return NameEndsWithExt(n, L"exe") || NameEndsWithExt(n, L"bat") || NameEndsWithExt(n, L"cmd") ||
+           NameEndsWithExt(n, L"msi") || NameEndsWithExt(n, L"com") || NameEndsWithExt(n, L"lnk");
+}
+
+// Resolves what was typed in the path field: ~, %VARS%, "quotes", / slashes, ".." and paths
+// relative to the folder being browsed.
+static std::wstring AbsFromInput(std::wstring in) {
+    auto ws = [](wchar_t c) { return c == L' ' || c == L'\t'; };
+    while (!in.empty() && ws(in.back())) in.pop_back();
+    size_t a = 0;
+    while (a < in.size() && ws(in[a])) ++a;
+    in.erase(0, a);
+    in.erase(std::remove(in.begin(), in.end(), L'"'), in.end());
+    for (auto& c : in) {
+        if (c == L'/') c = L'\\';
+    }
+    if (in.empty()) return g_fileCur;
+    if (in[0] == L'~' && (in.size() == 1 || in[1] == L'\\')) {
+        const std::wstring home = ResolveFileLocation(0);
+        in = home + in.substr(1);
+    }
+    if (in.find(L'%') != std::wstring::npos) {
+        wchar_t buf[2048];
+        const DWORD n = ExpandEnvironmentStringsW(in.c_str(), buf, 2048);
+        if (n > 0 && n <= 2048) in = buf;
+    }
+    if (in.size() == 2 && in[1] == L':') in += L'\\';
+    const bool absolute = (in.size() >= 3 && in[1] == L':' && in[2] == L'\\') || in[0] == L'\\';
+    if (!absolute) in = JoinPath(g_fileCur, in);
+    std::wstring out(1024, L'\0');
+    DWORD n = GetFullPathNameW(in.c_str(), (DWORD)out.size(), &out[0], nullptr);
+    if (n >= out.size()) {
+        out.assign(n + 1, L'\0');
+        n = GetFullPathNameW(in.c_str(), (DWORD)out.size(), &out[0], nullptr);
+    }
+    if (n == 0) return in;
+    out.resize(n);
+    while (out.size() > 3 && out.back() == L'\\') out.pop_back();
+    return out;
+}
+
+static void BeginPathEdit() {
+    if (!g_fileMode || g_fileCur.empty()) return;
+    g_fileMenuOpen = false;
+    g_bandEdit = BandEdit::Path;
+    g_bandText = g_fileCur;
+    g_bandAnchor = 0;
+    g_bandCaret = (int)g_bandText.size();
+    g_bandScroll = 0;
+    g_bandError.clear();
+    g_bandComp.clear();
+    g_bandCompIdx = -1;
+    ResetBlink();
+    MarkDirty();
+}
+
+static void BeginRename(const FileEntry& t) {
+    g_fileMenuOpen = false;
+    g_bandEdit = BandEdit::Rename;
+    g_bandTarget = t.path;
+    g_bandText = t.name;
+    const size_t dot = t.isDir ? std::wstring::npos : t.name.find_last_of(L'.');
+    g_bandAnchor = 0;  // the name without its extension starts selected, like in Explorer
+    g_bandCaret = (dot != std::wstring::npos && dot > 0) ? (int)dot : (int)t.name.size();
+    g_bandScroll = 0;
+    g_bandError.clear();
+    ResetBlink();
+    MarkDirty();
+}
+
+static void BandReplace(const std::wstring& ins) {
+    const int a = std::min(g_bandAnchor, g_bandCaret);
+    const int b = std::max(g_bandAnchor, g_bandCaret);
+    const std::wstring t = g_bandText.substr(0, a) + ins + g_bandText.substr(b);
+    if (t.size() > 1024) return;
+    g_bandText = t;
+    g_bandCaret = g_bandAnchor = a + (int)ins.size();
+    g_bandError.clear();
+    g_bandComp.clear();
+    g_bandCompIdx = -1;
+    ResetBlink();
+    MarkDirty();
+}
+
+static void BandMove(int pos, bool extend) {
+    pos = std::clamp(pos, 0, (int)g_bandText.size());
+    g_bandCaret = pos;
+    if (!extend) g_bandAnchor = pos;
+    ResetBlink();
+    MarkDirty();
+}
+
+static bool BandSep(wchar_t c) {
+    return c == L'\\' || c == L'/' || c == L' ' || c == L'.' || c == L'_' || c == L'-';
+}
+
+static int BandPrevWord(int pos) {
+    while (pos > 0 && BandSep(g_bandText[pos - 1])) --pos;
+    while (pos > 0 && !BandSep(g_bandText[pos - 1])) --pos;
+    return pos;
+}
+
+static int BandNextWord(int pos) {
+    const int n = (int)g_bandText.size();
+    while (pos < n && !BandSep(g_bandText[pos])) ++pos;
+    while (pos < n && BandSep(g_bandText[pos])) ++pos;
+    return pos;
+}
+
+static std::wstring ClipboardText() {
+    std::wstring r;
+    if (!OpenClipboard(g_hwnd)) return r;
+    HANDLE h = GetClipboardData(CF_UNICODETEXT);
+    if (h) {
+        const wchar_t* p = (const wchar_t*)GlobalLock(h);
+        if (p) {
+            r = p;
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    return r;
+}
+
+// Tab in the path field: completes the last segment with the matching sub-folders, cycling.
+static void BandComplete(bool back) {
+    if (g_bandEdit != BandEdit::Path) return;
+    if (g_bandComp.empty() || g_bandText != g_bandCompLast) {
+        const size_t sl = g_bandText.find_last_of(L"\\/");
+        const std::wstring dirPart = sl == std::wstring::npos ? L"" : g_bandText.substr(0, sl + 1);
+        const std::wstring namePart = sl == std::wstring::npos ? g_bandText : g_bandText.substr(sl + 1);
+        const std::wstring base = AbsFromInput(dirPart);
+        g_bandComp.clear();
+        g_bandCompIdx = -1;
+        g_bandCompDir = dirPart;
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileExW(JoinPath(base, L"*").c_str(), FindExInfoBasic, &fd,
+                                    FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (SkipFindEntry(fd) || !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+                if (_wcsnicmp(fd.cFileName, namePart.c_str(), namePart.size()) != 0) continue;
+                g_bandComp.push_back(fd.cFileName);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        std::sort(g_bandComp.begin(), g_bandComp.end(),
+                  [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+    }
+    const int n = (int)g_bandComp.size();
+    if (n == 0) return;
+    g_bandCompIdx = back ? (g_bandCompIdx <= 0 ? n - 1 : g_bandCompIdx - 1) : (g_bandCompIdx + 1) % n;
+    g_bandText = g_bandCompDir + g_bandComp[g_bandCompIdx] + L"\\";
+    g_bandCompLast = g_bandText;
+    g_bandCaret = g_bandAnchor = (int)g_bandText.size();
+    g_bandError.clear();
+    ResetBlink();
+    MarkDirty();
+}
+
+static void CommitPath() {
+    const std::wstring p = AbsFromInput(g_bandText);
+    const DWORD at = GetFileAttributesW(p.c_str());
+    if (at == INVALID_FILE_ATTRIBUTES) {
+        BandFail(L"Path not found");
+        return;
+    }
+    g_bandEdit = BandEdit::None;
+    if (at & FILE_ATTRIBUTE_DIRECTORY) {
+        FileGoTo(p, true, L"");
+    } else {
+        FileGoTo(ParentDir(p), true, p);  // a file path: open its folder with the file highlighted
+    }
+}
+
+static void CommitRename() {
+    std::wstring name = g_bandText;
+    while (!name.empty() && name.back() == L' ') name.pop_back();
+    size_t a = 0;
+    while (a < name.size() && name[a] == L' ') ++a;
+    name.erase(0, a);
+    const std::wstring old = g_bandTarget;
+    const std::wstring dir = ParentDir(old);
+    const size_t sl = old.find_last_of(L'\\');
+    const std::wstring oldName = sl == std::wstring::npos ? old : old.substr(sl + 1);
+    if (name == oldName) {
+        g_bandEdit = BandEdit::None;
+        MarkDirty();
+        return;
+    }
+    if (name.empty() || name == L"." || name == L".." ||
+        name.find_first_of(L"\\/:*?\"<>|") != std::wstring::npos || name.back() == L'.') {
+        BandFail(L"Invalid name");
+        return;
+    }
+    const std::wstring np = JoinPath(dir, name);
+    if (_wcsicmp(np.c_str(), old.c_str()) != 0 && GetFileAttributesW(np.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        BandFail(L"Name already exists");
+        return;
+    }
+    if (!MoveFileW(old.c_str(), np.c_str())) {
+        BandFail(L"Could not rename");
+        return;
+    }
+    g_bandEdit = BandEdit::None;
+    for (auto& e : g_fileDeep) {  // keep deep results in sync
+        if (SamePath(e.path, old)) {
+            e.name = name;
+            e.folded = FoldString(name);
+            e.path = np;
+            e.meta.clear();  // the type/size line may have changed
+            if (!e.isDir) e.ext = FileExtOf(name);
+        }
+    }
+    ForgetFileThumb(old);
+    ForgetFileThumb(np);
+    g_fileDir.clear();  // relist the folder
+    RunSearch();
+    for (size_t i = 0; i < g_results.size(); ++i) {
+        if (SamePath(g_results[i].payload, np)) {
+            g_sel = (int)i;
+            break;
+        }
+    }
+    UpdateTargets(false, /*followSelection=*/true);
+    ResetBlink();
+    MarkDirty();
+}
+
+// Creates "New folder" in the folder being browsed and starts renaming it.
+static void FileNewFolder() {
+    if (!g_fileMode || g_fileCur.empty()) return;
+    std::wstring path;
+    for (int i = 1; i < 1000; ++i) {
+        const std::wstring name = i == 1 ? L"New folder" : L"New folder (" + std::to_wstring(i) + L")";
+        const std::wstring cand = JoinPath(g_fileCur, name);
+        if (CreateDirectoryW(cand.c_str(), nullptr)) {
+            path = cand;
+            break;
+        }
+        if (GetLastError() != ERROR_ALREADY_EXISTS) return;
+    }
+    if (path.empty()) return;
+    FileGoTo(g_fileCur, false, path);  // relists with the new folder highlighted
+    if (const FileEntry* e = SelectedFileEntry()) {
+        if (SamePath(e->path, path)) BeginRename(*e);
+    }
+}
+
+// Creates "New file.txt" in the folder being browsed and starts renaming it. The name without
+// the extension is selected, so typing replaces it and the extension stays unless the user
+// edits it.
+static void FileNewFile() {
+    if (!g_fileMode || g_fileCur.empty()) return;
+    std::wstring path;
+    for (int i = 1; i < 1000; ++i) {
+        const std::wstring base =
+            i == 1 ? L"New file" : L"New file (" + std::to_wstring(i) + L")";
+        const std::wstring cand = JoinPath(g_fileCur, base + L".txt");
+        HANDLE h = CreateFileW(cand.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+            path = cand;
+            break;
+        }
+        const DWORD err = GetLastError();
+        if (err != ERROR_FILE_EXISTS && err != ERROR_ALREADY_EXISTS) return;
+    }
+    if (path.empty()) return;
+    FileGoTo(g_fileCur, false, path);  // relists with the new file highlighted
+    if (const FileEntry* e = SelectedFileEntry()) {
+        if (SamePath(e->path, path)) BeginRename(*e);
+    }
+}
+
+static void CopyFileToClipboard(const std::wstring& path) {
+    const size_t bytes = sizeof(DROPFILES) + (path.size() + 2) * sizeof(wchar_t);
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
+    if (!h) return;
+    auto* df = (DROPFILES*)GlobalLock(h);
+    if (!df) {
+        GlobalFree(h);
+        return;
+    }
+    df->pFiles = sizeof(DROPFILES);
+    df->fWide = TRUE;
+    memcpy((BYTE*)df + sizeof(DROPFILES), path.c_str(), path.size() * sizeof(wchar_t));
+    GlobalUnlock(h);
+    if (!OpenClipboard(g_hwnd)) {
+        GlobalFree(h);
+        return;
+    }
+    EmptyClipboard();
+    if (!SetClipboardData(CF_HDROP, h)) GlobalFree(h);
+    CloseClipboard();
+}
+
+// Sends the entry to the Recycle Bin and refreshes the list.
+static void FileDelete(const FileEntry& t) {
+    std::wstring from = t.path;
+    from.push_back(L'\0');  // pFrom is double-null terminated
+    SHFILEOPSTRUCTW op = {};
+    op.hwnd = g_hwnd;
+    op.wFunc = FO_DELETE;
+    op.pFrom = from.c_str();
+    // WANTNUKEWARNING re-enables the shell prompt when the item cannot go to the Recycle Bin
+    // (network share, item larger than the bin, no bin on the volume): without it the shell
+    // would silently turn "Move to Recycle Bin" into a permanent delete.
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
+    // The shell briefly takes the foreground while deleting. That must not close the bar (the
+    // user would lose the folder they are working in), so focus loss is ignored during the call
+    // and for a moment after it; then the bar takes the focus back.
+    g_opGuard = true;
+    const int delResult = SHFileOperationW(&op);
+    const bool failed = delResult != 0 || op.fAnyOperationsAborted;
+    g_opGuard = false;
+    g_focusGrace = NowSec() + 0.6;
+    if (g_vis == Vis::Shown) ForceForeground(g_hwnd);
+    if (failed) return;
+    for (size_t i = 0; i < g_fileDeep.size(); ++i) {
+        if (SamePath(g_fileDeep[i].path, t.path)) {
+            g_fileDeep.erase(g_fileDeep.begin() + i);
+            break;
+        }
+    }
+    ForgetFileThumb(t.path);
+    const int keep = g_sel;
+    g_fileDir.clear();
+    RunSearch();
+    g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
+    UpdateTargets(false, /*followSelection=*/true);
+    MarkDirty();
+}
+
+// File copies keep the bar open, so the footer confirms them for a moment.
+static void FileCopied() {
+    g_fileCopiedAt = NowSec();
+    SetTimer(g_hwnd, TIMER_COPY, 1400, nullptr);
+}
+
+static void RunFileAction(int id) {
+    const FileEntry t = g_fileMenuTarget;
+    const bool has = g_fileMenuHasTarget;
+    g_fileMenuOpen = false;
+    g_fileMenuArmed = false;
+    if (!has && id != FA_NEWFOLDER && id != FA_NEWFILE) {
+        MarkDirty();
+        return;
+    }
+    switch (id) {
+        case FA_OPEN:
+            if (t.isDir) FileGoTo(t.path, true, L"");
+            else RunShellOpen(t.path.c_str());
+            break;
+        case FA_GOTO:
+            FileGoTo(t.dir, true, t.path);
+            break;
+        case FA_REVEAL: {
+            HideLauncher();
+            AllowSetForegroundWindow(ASFW_ANY);
+            const std::wstring folder = t.isDir ? t.path : t.dir;
+            ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            break;
+        }
+        case FA_ADMIN:
+            HideLauncher();
+            AllowSetForegroundWindow(ASFW_ANY);
+            ShellExecuteW(nullptr, L"runas", t.path.c_str(), nullptr, t.dir.c_str(), SW_SHOWNORMAL);
+            break;
+        case FA_TERMINAL: {
+            const std::wstring folder = t.isDir ? t.path : t.dir;
+            std::wstring arg = folder;
+            if (!arg.empty() && arg.back() == L'\\') arg += L'.';  // a trailing \ would escape the quote
+            arg = L"-d \"" + arg + L"\"";
+            HideLauncher();
+            AllowSetForegroundWindow(ASFW_ANY);
+            HINSTANCE r = ShellExecuteW(nullptr, L"open", L"wt.exe", arg.c_str(), folder.c_str(), SW_SHOWNORMAL);
+            if ((INT_PTR)r <= 32) {  // no Windows Terminal: plain console in that folder
+                ShellExecuteW(nullptr, L"open", L"cmd.exe", nullptr, folder.c_str(), SW_SHOWNORMAL);
+            }
+            break;
+        }
+        case FA_RENAME:
+            BeginRename(t);
+            break;
+        case FA_COPYPATH:
+            CopyTextToClipboard(t.path);
+            FileCopied();
+            break;
+        case FA_COPYNAME:
+            CopyTextToClipboard(t.name);
+            FileCopied();
+            break;
+        case FA_COPYFILE:
+            CopyFileToClipboard(t.path);
+            FileCopied();
+            break;
+        case FA_NEWFOLDER:
+            FileNewFolder();
+            break;
+        case FA_NEWFILE:
+            FileNewFile();
+            break;
+        case FA_PROPS: {
+            SHELLEXECUTEINFOW sei = {};
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_INVOKEIDLIST;
+            sei.lpVerb = L"properties";
+            sei.lpFile = t.path.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+            HideLauncher();
+            break;
+        }
+        case FA_DELETE:
+            FileDelete(t);
+            break;
+    }
+    MarkDirty();
+}
+
+static void BuildFileMenu() {
+    g_fileMenu.clear();
+    if (g_fileMenuHasTarget) {
+        const FileEntry& t = g_fileMenuTarget;
+        g_fileMenu.push_back({FA_OPEN, t.isDir ? L"Open folder" : L"Open", L"↵"});
+        if (!SamePath(t.dir, g_fileCur)) g_fileMenu.push_back({FA_GOTO, L"Show in its folder", L"Ctrl+G"});
+        g_fileMenu.push_back({FA_REVEAL, L"Reveal in file manager", L"Ctrl+↵"});
+        if (!t.isDir && IsExeLike(t.name)) {
+            g_fileMenu.push_back({FA_ADMIN, L"Run as administrator", L"Ctrl+Shift+↵"});
+        }
+        g_fileMenu.push_back({FA_TERMINAL, L"Open terminal here", L"Ctrl+T"});
+        g_fileMenu.push_back({FA_RENAME, L"Rename", L"F2"});
+        g_fileMenu.push_back({FA_COPYPATH, L"Copy path", L"Ctrl+Shift+C"});
+        g_fileMenu.push_back({FA_COPYNAME, L"Copy name", L""});
+        g_fileMenu.push_back({FA_COPYFILE, L"Copy file", L""});
+    }
+    g_fileMenu.push_back({FA_NEWFOLDER, L"New folder", L"Ctrl+Shift+N"});
+    g_fileMenu.push_back({FA_NEWFILE, L"New file", L""});
+    if (g_fileMenuHasTarget) {
+        g_fileMenu.push_back({FA_PROPS, L"Properties", L"Ctrl+P"});
+        g_fileMenu.push_back({FA_DELETE, L"Move to Recycle Bin", L""});
+    }
+}
+
+static void OpenFileMenu() {
+    CaptureFileTarget();
+    BuildFileMenu();
+    g_fileMenuSel = 0;
+    g_fileMenuArmed = false;
+    g_fileMenuOpen = true;
+    MarkDirty();
+}
+
+static void FileMenuRunSel() {
+    if (g_fileMenuSel < 0 || g_fileMenuSel >= (int)g_fileMenu.size()) return;
+    const int id = g_fileMenu[g_fileMenuSel].id;
+    if (id == FA_DELETE && !g_fileMenuArmed) {  // destructive: needs a second Enter
+        g_fileMenuArmed = true;
+        MarkDirty();
+        return;
+    }
+    RunFileAction(id);
+}
+
 static void LaunchSelected() {
     if (g_results.empty() || g_sel < 0 || g_sel >= (int)g_results.size()) {
         return;
     }
-    LaunchApp(g_results[g_sel].app);
+    SearchResult& r = g_results[g_sel];
+    if (r.kind == ResultKind::Command) {
+        const int ci = (r.icon >= 0 && r.icon < kCommandCount) ? r.icon : -1;
+        if (ci >= 0 && kCommands[ci].destructive && g_confirmCmd != ci) {
+            ArmConfirm(ci);  // first Enter: arm and warn; a second Enter actually runs it
+            return;
+        }
+        CancelConfirm();
+        RunCommand(r.payload);
+        return;
+    }
+    CancelConfirm();
+    if (r.kind == ResultKind::Web || r.kind == ResultKind::Url) {
+        OpenWebResult(r.payload);
+        return;
+    }
+    if (r.kind == ResultKind::Setting) {
+        RunShellOpen(r.payload.c_str());  // opens the ms-settings: page
+        return;
+    }
+    if (r.kind == ResultKind::File) {
+        if (SelectedFileIsDir()) {
+            const std::wstring path = r.payload;
+            FileGoTo(path, true, L"");  // browse inside the launcher
+        } else {
+            RunShellOpen(r.payload.c_str());
+        }
+        return;
+    }
+    if (r.kind != ResultKind::App) {
+        return;  // other non-app results are activated by their own provider
+    }
+    LaunchApp(r.app);
+}
+
+// Switches between the app list and the file browser (folder button in the search bar).
+static void ToggleFileMode() {
+    if (!g_fileMode && !g_cfg.filesEnabled) return;  // the file browser is turned off
+    g_fileMode = !g_fileMode;
+    g_bandEdit = BandEdit::None;
+    g_fileMenuOpen = false;
+    CancelFileSearch();
+    ClearFileDeep();
+    g_fileBack.clear();
+    g_fileFwd.clear();
+    g_pendingSelect.clear();
+    g_fileSrc = &g_fileEntries;
+    g_fileCur = g_fileMode ? ResolveFileLocation(0) : std::wstring();
+    g_fileLoc = 0;
+    g_chipSelPos = g_chipSelTarget = 0;  // no slide when entering/leaving the mode
+    g_fileDir.clear();  // force a fresh listing next RunSearch
+    // Switching context starts from a clean slate: the query is not carried over.
+    g_text.clear();
+    g_caret = 0;
+    g_anchor = 0;
+    g_inputScroll = 0;
+    g_calc = Calc::Result();
+    g_calcDisplay.clear();
+    g_calcActive = false;
+    g_calcPending = false;
+    g_calcHistSel = -1;
+    g_histScroll = 0;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_CALC);
+    CancelConfirm();
+    g_sel = 0;
+    g_scrollTarget = 0;
+    g_scrollPos = 0;
+    RunSearch();
+    ResetBlink();
+    UpdateTargets(false, /*followSelection=*/true);
+    MarkDirty();
+}
+
+// ===== Help sheet =====
+
+static void CloseHelp() {
+    if (!g_helpOpen) return;
+    g_helpOpen = false;  // the list behind is untouched, so it comes back as it was
+    ResetBlink();
+    UpdateTargets(false, /*followSelection=*/false);
+    MarkDirty();
+}
+
+static void OpenHelp() {
+    if (g_helpOpen) return;
+    if (g_fileMode) ToggleFileMode();  // the sheet replaces the file browser
+    g_helpOpen = true;
+    g_helpPage = 0;
+    g_bandEdit = BandEdit::None;
+    g_fileMenuOpen = false;
+    g_detailsOpen = false;
+    g_detailTarget = 0;
+    CancelConfirm();
+    ResetBlink();
+    UpdateTargets(false, /*followSelection=*/false);
+    MarkDirty();
 }
 
 // ===== Details panel actions =====
@@ -6171,8 +9940,10 @@ static void RunAction(int actionId, int appIdx) {
         }
 
         case ACT_LOCATION: {
-            std::wstring args = L"/select,\"" + target + L"\"";
-            ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+            const std::wstring folder = ParentDir(target);
+            if (!folder.empty()) {
+                ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
             HideLauncher();
             return;
         }
@@ -6304,15 +10075,206 @@ static void PasteClipboard() {
     }
 }
 
+// Keys while the path / rename field is being edited: it swallows everything.
+static bool HandleBandKey(WPARAM vk, bool ctrl, bool shift) {
+    const int len = (int)g_bandText.size();
+    const bool sel = g_bandAnchor != g_bandCaret;
+    switch (vk) {
+        case VK_ESCAPE:
+            g_bandEdit = BandEdit::None;
+            g_bandError.clear();
+            MarkDirty();
+            return true;
+        case VK_RETURN:
+            if (g_bandEdit == BandEdit::Rename) CommitRename();
+            else CommitPath();
+            return true;
+        case VK_TAB:
+            BandComplete(shift);
+            return true;
+        case VK_LEFT:
+            if (sel && !shift && !ctrl) BandMove(std::min(g_bandAnchor, g_bandCaret), false);
+            else BandMove(ctrl ? BandPrevWord(g_bandCaret) : g_bandCaret - 1, shift);
+            return true;
+        case VK_RIGHT:
+            if (sel && !shift && !ctrl) BandMove(std::max(g_bandAnchor, g_bandCaret), false);
+            else BandMove(ctrl ? BandNextWord(g_bandCaret) : g_bandCaret + 1, shift);
+            return true;
+        case VK_HOME:
+            BandMove(0, shift);
+            return true;
+        case VK_END:
+            BandMove(len, shift);
+            return true;
+        case VK_BACK:
+            if (sel) {
+                BandReplace(L"");
+            } else if (g_bandCaret > 0) {
+                g_bandAnchor = ctrl ? BandPrevWord(g_bandCaret) : g_bandCaret - 1;
+                BandReplace(L"");
+            }
+            return true;
+        case VK_DELETE:
+            if (sel) {
+                BandReplace(L"");
+            } else if (g_bandCaret < len) {
+                g_bandAnchor = ctrl ? BandNextWord(g_bandCaret) : g_bandCaret + 1;
+                BandReplace(L"");
+            }
+            return true;
+        case 'A':
+            if (ctrl) {
+                g_bandAnchor = 0;
+                g_bandCaret = len;
+                MarkDirty();
+            }
+            return true;
+        case 'C':
+        case 'X':
+            if (ctrl && sel) {
+                const int a = std::min(g_bandAnchor, g_bandCaret);
+                const int b = std::max(g_bandAnchor, g_bandCaret);
+                CopyTextToClipboard(g_bandText.substr(a, b - a));
+                if (vk == 'X') BandReplace(L"");
+            }
+            return true;
+        case 'V':
+            if (ctrl) {
+                std::wstring t = ClipboardText();
+                const size_t nl = t.find_first_of(L"\r\n");
+                if (nl != std::wstring::npos) t.erase(nl);
+                if (g_bandEdit == BandEdit::Path) t.erase(std::remove(t.begin(), t.end(), L'"'), t.end());
+                if (!t.empty()) BandReplace(t);
+            }
+            return true;
+    }
+    return true;
+}
+
+// Keys while the actions menu is open.
+static bool HandleFileMenuKey(WPARAM vk, bool ctrl, bool shift) {
+    const int n = (int)g_fileMenu.size();
+    if (IsDetailsKey(vk, ctrl, shift)) {
+        g_fileMenuOpen = false;
+        MarkDirty();
+        return true;
+    }
+    auto move = [&](int to) {
+        if (n == 0) return;
+        g_fileMenuSel = (to % n + n) % n;
+        g_fileMenuArmed = false;
+        MarkDirty();
+    };
+    switch (vk) {
+        case VK_ESCAPE:
+            g_fileMenuOpen = false;
+            g_fileMenuArmed = false;
+            MarkDirty();
+            return true;
+        case VK_DOWN:
+            move(g_fileMenuSel + 1);
+            return true;
+        case VK_UP:
+            move(g_fileMenuSel - 1);
+            return true;
+        case VK_TAB:
+            move(g_fileMenuSel + (shift ? -1 : 1));
+            return true;
+        case VK_HOME:
+            move(0);
+            return true;
+        case VK_END:
+            move(n - 1);
+            return true;
+        case VK_RETURN:
+            FileMenuRunSel();
+            return true;
+    }
+    return true;
+}
+
 static bool HandleKeyDown(WPARAM vk) {
     const bool ctrl = CtrlDown();
     const bool shift = ShiftDown();
     const int len = (int)g_text.size();
     const bool hasSel = g_anchor != g_caret;
 
+    if (g_bandEdit != BandEdit::None) return HandleBandKey(vk, ctrl, shift);
+    if (g_fileMenuOpen) return HandleFileMenuKey(vk, ctrl, shift);
+
+    // The help sheet is modal: Esc or F1 closes it, Tab and the arrows switch pages and every
+    // other key is swallowed, so a stray Enter cannot launch whatever was selected behind it.
+    if (g_helpOpen) {
+        if (vk == VK_ESCAPE || vk == VK_F1) {
+            CloseHelp();
+        } else if (vk == VK_TAB || vk == VK_LEFT || vk == VK_RIGHT) {
+            const int page = (vk == VK_LEFT) ? 0 : (vk == VK_RIGHT) ? 1 : 1 - g_helpPage;
+            if (page != g_helpPage) {
+                g_helpPage = page;
+                MarkDirty();
+            }
+        }
+        return true;
+    }
+    if (vk == VK_F1 && !ctrl && !shift) {
+        OpenHelp();
+        return true;
+    }
+
+    // Any key other than Enter disarms a pending destructive confirmation.
+    if (vk != VK_RETURN) CancelConfirm();
+
+    // File mode: actions menu, path field, rename and the other file shortcuts.
+    if (g_fileMode && g_activator < 0) {
+        if (IsDetailsKey(vk, ctrl, shift)) {
+            OpenFileMenu();
+            return true;
+        }
+        if (ctrl && !shift && vk == 'L') {
+            BeginPathEdit();
+            return true;
+        }
+        if (!ctrl && !shift && vk == VK_F2) {
+            if (CaptureFileTarget()) BeginRename(g_fileMenuTarget);
+            return true;
+        }
+        if (ctrl && shift && vk == 'N') {
+            FileNewFolder();
+            return true;
+        }
+        if (ctrl && !shift && vk == 'T') {
+            if (!CaptureFileTarget()) {  // empty folder: open the terminal in the folder itself
+                g_fileMenuTarget = FileEntry();
+                g_fileMenuTarget.path = g_fileMenuTarget.dir = g_fileCur;
+                g_fileMenuTarget.isDir = true;
+                g_fileMenuHasTarget = !g_fileCur.empty();
+            }
+            RunFileAction(FA_TERMINAL);
+            return true;
+        }
+        if (ctrl && !shift && vk == 'G') {
+            if (CaptureFileTarget()) RunFileAction(FA_GOTO);
+            return true;
+        }
+        if (ctrl && !shift && vk == 'P') {
+            if (CaptureFileTarget()) RunFileAction(FA_PROPS);
+            return true;
+        }
+        if (ctrl && shift && vk == VK_RETURN) {
+            if (CaptureFileTarget() && !g_fileMenuTarget.isDir && IsExeLike(g_fileMenuTarget.name)) {
+                RunFileAction(FA_ADMIN);
+            }
+            return true;
+        }
+    }
+
     // Details panel: shortcut to show/hide it, and direct keyboard actions
     if (IsDetailsKey(vk, ctrl, shift)) {
         SetDetailsOpen(!g_detailsOpen);
+        return true;
+    }
+    if (ctrl && vk == VK_RETURN && g_fileMode && !shift) {
+        FileReveal();
         return true;
     }
     if (ctrl && vk == VK_RETURN) {
@@ -6321,6 +10283,12 @@ static bool HandleKeyDown(WPARAM vk) {
     }
     if (ctrl && vk == 'P' && !shift) {
         RunActionOnSelection(ACT_PROPS);
+        return true;
+    }
+    if (ctrl && shift && vk == 'C' && g_fileMode && g_sel >= 0 && g_sel < (int)g_results.size() &&
+        g_results[g_sel].kind == ResultKind::File) {
+        CopyTextToClipboard(g_results[g_sel].payload);
+        FileCopied();
         return true;
     }
     if (ctrl && shift && vk == 'C') {
@@ -6344,6 +10312,23 @@ static bool HandleKeyDown(WPARAM vk) {
     if (ctrl && !shift && vk == 'R') {
         ForceReindex();
         return true;
+    }
+
+    if (g_fileMode && g_activator < 0 && ctrl && !shift) {
+        if (vk >= '1' && vk <= '0' + kFileLocationCount) {
+            SetFileLocation((int)(vk - '1'));
+            return true;
+        }
+        if (g_text.empty() && (vk == VK_LEFT || vk == VK_RIGHT)) {
+            // Outside every chip (the folder does not belong to one) both keys land on the first.
+            if (g_fileLoc < 0) {
+                SetFileLocation(0);
+            } else {
+                SetFileLocation(std::clamp(g_fileLoc + (vk == VK_LEFT ? -1 : 1), 0,
+                                           kFileLocationCount - 1));
+            }
+            return true;
+        }
     }
 
     switch (vk) {
@@ -6409,11 +10394,21 @@ static bool HandleKeyDown(WPARAM vk) {
             SelectDelta(-1);
             return true;
         case VK_TAB:
-            // With a history row selected, Tab pulls its original expression into the field so it
-            // can be edited (replacing whatever was typed). Otherwise it cycles the selection.
-            if (CalcHistoryVisible() && g_calcHistSel >= 0 &&
-                g_calcHistSel < (int)g_calcHist.size()) {
-                EditCalcHistoryOp(g_calcHistSel);
+            // In a calculator context Tab keeps its meaning: pull a history row in for editing,
+            // otherwise move the selection.
+            if (CalcHistoryVisible() || CalcShown()) {
+                if (CalcHistoryVisible() && g_calcHistSel >= 0 &&
+                    g_calcHistSel < (int)g_calcHist.size()) {
+                    EditCalcHistoryOp(g_calcHistSel);
+                } else {
+                    SelectDelta(shift ? -1 : 1);
+                }
+                return true;
+            }
+            // Otherwise Tab alternates between searching apps and files (outside a prefix mode),
+            // or just moves the selection when the file browser is disabled.
+            if (g_activator < 0 && g_cfg.filesEnabled) {
+                ToggleFileMode();
                 return true;
             }
             SelectDelta(shift ? -1 : 1);
@@ -6425,6 +10420,10 @@ static bool HandleKeyDown(WPARAM vk) {
             SelectDelta(-std::max(1, VisibleRows()));
             return true;
         case VK_LEFT:
+            if (g_fileMode && g_activator < 0 && !hasSel && !shift && !ctrl && g_text.empty()) {
+                FileUp();  // empty field: Left goes to the parent folder
+                return true;
+            }
             if (hasSel && !shift) {
                 MoveCaret(std::min(g_anchor, g_caret), false);
             } else {
@@ -6432,6 +10431,11 @@ static bool HandleKeyDown(WPARAM vk) {
             }
             return true;
         case VK_RIGHT:
+            if (g_fileMode && g_activator < 0 && !hasSel && !shift && !ctrl && g_caret == len &&
+                SelectedFileIsDir()) {
+                LaunchSelected();  // Right enters the highlighted folder
+                return true;
+            }
             if (hasSel && !shift) {
                 MoveCaret(std::max(g_anchor, g_caret), false);
             } else {
@@ -6452,6 +10456,17 @@ static bool HandleKeyDown(WPARAM vk) {
                 g_anchor = ctrl ? PrevWord(g_caret) : g_caret - 1;
                 ReplaceSelection(L"");
                 Sound::OnErase();
+            } else if (g_fileMode && g_activator < 0 && g_text.empty()) {
+                // Empty field: go up a folder; at a chip root (or a drive root) leave file mode.
+                bool atRoot = ParentDir(g_fileCur).empty();
+                for (int i = 0; i < kFileLocationCount && !atRoot; ++i) {
+                    if (SamePath(ResolveFileLocation(i), g_fileCur)) atRoot = true;
+                }
+                if (atRoot) {
+                    ToggleFileMode();
+                } else {
+                    FileUp();
+                }
             }
             return true;
         case VK_DELETE:
@@ -6496,6 +10511,20 @@ static bool HandleKeyDown(WPARAM vk) {
 }
 
 // Index of the result under a client point, or -1
+// Row of the actions menu under a client point (-1 outside any row); `inside` tells if the point
+// is over the popup at all.
+static int HitFileMenu(int mx, int my, bool& inside) {
+    const float s = (float)g_scale;
+    float cx = 0, cy = 0;
+    MainOrigin(cx, cy);
+    float x0, y0, x1, y1, ih;
+    FileMenuRect(cx, cy, kWidth * s, x0, y0, x1, y1, ih);
+    inside = mx >= x0 && mx < x1 && my >= y0 && my < y1;
+    if (!inside) return -1;
+    const int i = (int)std::floor(((float)my - (y0 + 5 * s)) / ih);
+    return (i >= 0 && i < (int)g_fileMenu.size()) ? i : -1;
+}
+
 static int HitRow(int mx, int my) {
     const float s = (float)g_scale;
     float cx = 0, cy = 0;
@@ -6505,7 +10534,7 @@ static int HitRow(int mx, int my) {
     if (rows <= 0) return -1;
     if (mx < cx || mx > cx + cw) return -1;
 
-    const float rowsOrigin = cy + (kBarH + kListPad + (float)HeroH()) * s;
+    const float rowsOrigin = cy + (kBarH + kListPad + (float)HeroH() + (float)FileChipsH()) * s;
     // The hit area is limited to what is really visible (rows area above the footer).
     const double hitH = std::min(ListRowsHeight(), ListViewportH());
     if (my < rowsOrigin || my >= rowsOrigin + (float)hitH * s) return -1;
@@ -6589,8 +10618,20 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 RunSearch();
                 UpdateTargets(false, /*followSelection=*/true);
                 MarkDirty();
+            } else if (wp == TIMER_FSEARCH) {
+                KillTimer(g_hwnd, TIMER_FSEARCH);
+                StartFileSearch();
+            } else if (wp == TIMER_HIDE) {
+                KillTimer(g_hwnd, TIMER_HIDE);
+                if (g_vis == Vis::Hiding) FinishHide();
+            } else if (wp == TIMER_CONFIRM) {
+                KillTimer(g_hwnd, TIMER_CONFIRM);
+                if (g_confirmCmd >= 0) {
+                    g_confirmCmd = -1;
+                    MarkDirty();
+                }
             } else if (wp == TIMER_BLINK) {
-                if (g_vis == Vis::Shown && GetForegroundWindow() != g_hwnd &&
+                if (g_vis == Vis::Shown && !IgnoreFocusLoss() && GetForegroundWindow() != g_hwnd &&
                     NowSec() - g_shownAt > 0.5) {
                     HideLauncher();  // focus was lost without WM_ACTIVATE arriving
                 } else if (g_vis != Vis::Hidden) {
@@ -6605,7 +10646,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             return 0;
 
         case WM_ACTIVATE:
-            if (LOWORD(wp) == WA_INACTIVE && g_vis != Vis::Hidden &&
+            if (LOWORD(wp) == WA_INACTIVE && g_vis != Vis::Hidden && !IgnoreFocusLoss() &&
                 NowSec() - g_shownAt > 0.15) {
                 HideLauncher();
             } else if (LOWORD(wp) == WA_ACTIVE && g_cfg.disableFullscreen &&
@@ -6620,6 +10661,19 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         case WM_CHAR: {
             wchar_t c = (wchar_t)wp;
+            if (g_helpOpen) return 0;
+            if (g_fileMenuOpen) return 0;
+            if (g_bandEdit != BandEdit::None) {
+                if (c >= 32 && c != 127) {
+                    if (g_bandEdit == BandEdit::Rename && wcschr(L"\\/:*?\"<>|", c)) {
+                        BandFail(L"Invalid character");
+                    } else {
+                        BandReplace(std::wstring(1, c));
+                        Sound::OnKey(c);
+                    }
+                }
+                return 0;
+            }
             if (c == L' ' && CtrlDown()) return 0;  // Ctrl+Space (panel shortcut) does not type
             if (c >= 32 && c != 127) {
                 ReplaceSelection(std::wstring(1, c));
@@ -6630,6 +10684,20 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         // Alt held after the shortcut: do not open system menus or beep
         case WM_SYSKEYDOWN:
+            if (g_fileMode && g_activator < 0 && g_bandEdit == BandEdit::None && !g_fileMenuOpen) {
+                if (wp == 'D') BeginPathEdit();
+                else if (wp == VK_LEFT) FileBack();
+                else if (wp == VK_RIGHT) FileForward();
+                else if (wp == VK_UP) FileUp();
+                else if (wp == VK_HOME) SetFileLocation(0);
+            }
+            return 0;
+        case WM_XBUTTONDOWN:
+            if (g_fileMode && g_activator < 0 && g_bandEdit == BandEdit::None && !g_fileMenuOpen) {
+                if (GET_XBUTTON_WPARAM(wp) == XBUTTON1) FileBack();
+                else if (GET_XBUTTON_WPARAM(wp) == XBUTTON2) FileForward();
+            }
+            return TRUE;
         case WM_SYSKEYUP:
         case WM_SYSCHAR:
             return 0;
@@ -6639,6 +10707,17 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         case WM_MOUSEMOVE: {
             POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            if (g_fileMenuOpen) {
+                bool inside = false;
+                const int h = HitFileMenu(p.x, p.y, inside);
+                if (h >= 0 && h != g_fileMenuSel) {
+                    g_fileMenuSel = h;
+                    g_fileMenuArmed = false;
+                    MarkDirty();
+                }
+                return 0;
+            }
+            if (g_helpOpen) return 0;  // no hover on the hidden list
             if (p.x != g_lastMouse.x || p.y != g_lastMouse.y) {
                 bool first = g_lastMouse.x == -1 && g_lastMouse.y == -1;
                 g_lastMouse = p;
@@ -6663,9 +10742,11 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             }
             const int act = HitAction(p.x, p.y);
             const bool overReindex = HitReindex(p.x, p.y);
-            if (act != g_hoverAction || overReindex != g_hoverReindex) {
+            const bool overHelp = HitHelp(p.x, p.y);
+            if (act != g_hoverAction || overReindex != g_hoverReindex || overHelp != g_hoverHelp) {
                 g_hoverAction = act;
                 g_hoverReindex = overReindex;
+                g_hoverHelp = overHelp;
                 MarkDirty();
             }
             return 0;
@@ -6676,6 +10757,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             // selection stays where it is (or follows the mouse hover, which is handled in
             // WM_MOUSEMOVE).
             const int delta = GET_WHEEL_DELTA_WPARAM(wp);
+            if (g_helpOpen) return 0;  // the sheet does not scroll
             if (CalcHistoryVisible()) {
                 const double step = (delta > 0 ? -3.0 : 3.0) * (double)kHistRowH;
                 g_histScroll = std::max(0.0, g_histScroll + step);
@@ -6696,6 +10778,92 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         }
 
         case WM_LBUTTONDOWN: {
+            if (g_helpOpen) {
+                float hx = 0, hy = 0;
+                MainOrigin(hx, hy);
+                const int mx = GET_X_LPARAM(lp), my = GET_Y_LPARAM(lp);
+                for (int i = 0; i < 2; ++i) {
+                    const D2D1_RECT_F tr = HelpTabRect(hx, hy, i);
+                    if (mx >= tr.left && mx < tr.right && my >= tr.top && my < tr.bottom) {
+                        g_helpPage = i;
+                        MarkDirty();
+                        return 0;
+                    }
+                }
+                CloseHelp();
+                return 0;
+            }
+            if (g_fileMenuOpen) {
+                bool inside = false;
+                const int h = HitFileMenu(GET_X_LPARAM(lp), GET_Y_LPARAM(lp), inside);
+                if (h >= 0) {
+                    g_fileMenuSel = h;
+                    FileMenuRunSel();
+                } else if (!inside) {
+                    g_fileMenuOpen = false;
+                    g_fileMenuArmed = false;
+                    MarkDirty();
+                }
+                return 0;
+            }
+            if (g_bandEdit != BandEdit::None) {
+                float bx = 0, by = 0;
+                MainOrigin(bx, by);
+                float fx0, fy0, fx1, fy1;
+                BandFieldRect(bx, by, kWidth * (float)g_scale, fx0, fy0, fx1, fy1);
+                const int mx = GET_X_LPARAM(lp), my = GET_Y_LPARAM(lp);
+                if (mx >= fx0 && mx < fx1 && my >= fy0 && my < fy1) {
+                    BandMove(BandIndexAt(bx, by, kWidth * (float)g_scale, mx), ShiftDown());
+                    return 0;
+                }
+                g_bandEdit = BandEdit::None;  // a click elsewhere cancels, then acts normally
+                MarkDirty();
+            }
+            // Apps/Files toggle button and the file-mode location chips (inside the bar).
+            if (g_activator < 0) {
+                float ocx = 0, ocy = 0;
+                MainOrigin(ocx, ocy);
+                const int mx = GET_X_LPARAM(lp), my = GET_Y_LPARAM(lp);
+                const D2D1_RECT_F tr = FileToggleRect(ocx, ocy);
+                if (mx >= tr.left && mx < tr.right && my >= tr.top && my < tr.bottom) {
+                    ToggleFileMode();
+                    return 0;
+                }
+                if (g_fileMode) {
+                    const D2D1_RECT_F xr = FileModeChipCloseRect(ocx, ocy);
+                    if (mx >= xr.left && mx < xr.right && my >= xr.top && my < xr.bottom) {
+                        ToggleFileMode();  // the chip's close button leaves file mode
+                        return 0;
+                    }
+                    for (int i = 0; i < kFileLocationCount; ++i) {
+                        const D2D1_RECT_F cr = FileChipRect(ocx, ocy, i);
+                        if (mx >= cr.left && mx < cr.right && my >= cr.top && my < cr.bottom) {
+                            SetFileLocation(i);
+                            return 0;
+                        }
+                    }
+                }
+            }
+            if (g_fileMode && g_activator < 0) {
+                float bcx = 0, bcy = 0;
+                MainOrigin(bcx, bcy);
+                const D2D1_RECT_F pb = FilePathBackRect(bcx, bcy);
+                const int px = GET_X_LPARAM(lp), py = GET_Y_LPARAM(lp);
+                if (px >= pb.left && px < pb.right && py >= pb.top && py < pb.bottom) {
+                    FileBack();
+                    return 0;
+                }
+                const float bandTop = bcy + (kBarH + kChipH) * (float)g_scale;
+                if (px >= bcx + 38 * (float)g_scale && px < bcx + kWidth * (float)g_scale &&
+                    py >= bandTop && py < bandTop + kPathH * (float)g_scale) {
+                    BeginPathEdit();  // click on the path: edit it
+                    return 0;
+                }
+            }
+            if (HitHelp(GET_X_LPARAM(lp), GET_Y_LPARAM(lp))) {
+                OpenHelp();
+                return 0;
+            }
             if (HitReindex(GET_X_LPARAM(lp), GET_Y_LPARAM(lp))) {
                 ForceReindex();
                 return 0;
@@ -6758,6 +10926,63 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             }
             return 0;
 
+        case WM_APP_FILES: {
+            auto* r = (FileSearchResult*)lp;
+            if (r->gen == g_fileSearchGen && g_fileMode && r->key == FileSearchKey()) {
+                const int oldSel = g_sel;
+                std::wstring keep;
+                if (oldSel > 0 && oldSel < (int)g_results.size()) keep = g_results[oldSel].payload;
+                ReleaseResultLayouts();
+                g_results.clear();
+                g_fileDeep = std::move(r->entries);
+                g_fileDeepKey = r->key;
+                g_fileDeepTrunc = r->truncated;
+                g_fileDeepDone = r->done;
+                g_fileSearching = !r->done;
+                RunSearch();
+                int restored = -1;
+                for (size_t i = 0; i < g_results.size() && !keep.empty(); ++i) {
+                    if (g_results[i].payload == keep) {
+                        restored = (int)i;
+                        break;
+                    }
+                }
+                g_sel = restored >= 0 ? restored : std::min(oldSel, (int)g_results.size() - 1);
+                if (g_sel < 0) g_sel = 0;
+                // Partial snapshots must not yank the view: keep the scroll unless the user had
+                // actually moved the highlight (then keep that row in sight).
+                if (r->done && restored < 0 && oldSel == 0) g_scrollTarget = 0;
+                UpdateTargets(false, /*followSelection=*/restored >= 0);
+                MarkDirty();
+            }
+            delete r;
+            return 0;
+        }
+
+        case WM_APP_THUMB: {
+            auto* tr = (ThumbResult*)lp;
+            g_thumbPending.erase(tr->path);
+            if (g_rt) {  // hidden or between render targets: drop it, it will be requested again
+                ThumbCacheItem item;
+                if (tr->ok) {
+                    D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(
+                        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                          D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
+                    g_rt->CreateBitmap(D2D1::SizeU((UINT32)tr->w, (UINT32)tr->h), tr->px.data(),
+                                       (UINT32)tr->w * 4, &bp, &item.bmp);
+                }
+                item.failed = item.bmp == nullptr;
+                item.used = ++g_thumbClock;
+                ThumbCacheItem& slot = g_thumbCache[tr->path];
+                SafeRelease(slot.bmp);
+                slot = item;
+                TrimThumbCache();
+                MarkDirty();
+            }
+            delete tr;
+            return 0;
+        }
+
         case WM_APP_MENU_CHANGED:
             g_menuDirty = true;
             MaybeReindexInBackground();
@@ -6765,6 +10990,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
+            g_legacySettings = false;  // the user saved the new layout: its values are the real ones
             LoadSettings();
             Sound::Configure();
             Sound::ApplyVolume();
@@ -6797,6 +11023,8 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    g_fileSearchIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    DetectLegacySettings();
     LoadSettings();
     LoadCalcHistory();
     LoadCalcAns();
@@ -6843,6 +11071,14 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     StopWatcher();
+    CancelFileSearch();
+    if (g_fileSearchIdle) {
+        if (WaitForSingleObject(g_fileSearchIdle, 3000) == WAIT_OBJECT_0) {
+            CloseHandle(g_fileSearchIdle);
+            g_fileSearchIdle = nullptr;
+        }
+    }
+    StopThumbThread();
     UnregisterHotKey(g_hwnd, HOTKEY_ID);
     Sound::Shutdown();
     LiveDestroy();
@@ -6870,6 +11106,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    Wh_SetIntValue(kSettingsGroupedKey, 1);  // from now on only the grouped names are read
     if (g_hwnd) {
         PostMessageW(g_hwnd, WM_APP_SETTINGS, 0, 0);
     }

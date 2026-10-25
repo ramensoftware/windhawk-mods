@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.9.0
+// @version         1.10.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @architecture    x86-64
@@ -38,6 +38,7 @@ level, updated in real time.
   - On the left
 - **Custom prefix**: Text prefix used with the "Prefix and percentage" style (default: `Vol `).
 - **Mute display style**: Style of the mute indicator when audio is muted:
+  - Same as Display style (Keep volume level) (default)
   - MUT
   - Mute
   - 0%
@@ -48,6 +49,12 @@ level, updated in real time.
   - Native mute icon and 0%
   - Custom text
 - **Custom mute text**: Text used when the "Custom text" or "Native mute icon and text" mute style is selected (default: `Mute`).
+- **Mute visual cue for volume text**: Visual cue applied to the volume text when audio is muted and "Same as Display style" is selected:
+  - Strikethrough text (default)
+  - Dimmed (reduced opacity)
+  - Strikethrough and dimmed
+  - None (keep text unchanged)
+- **Mute dimmed opacity percentage**: Opacity percentage (10 to 90) used when the dimmed cue is active (default: `50`).
 - **Icon spacing**: Space between the icon and the text (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Container width**: Width of the volume area (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Volume font size**: Size in pixels for the volume text indicator. Set to `0` to use the default size.
@@ -101,9 +108,10 @@ If you find this mod useful, you can support its development and maintenance:
 - customPrefix: "Vol "
   $name: Custom prefix
   $description: Used with the "Prefix and percentage" display style.
-- muteStyle: mut
+- muteStyle: currentVolume
   $name: Mute display style
   $options:
+  - currentVolume: Same as Display style (Keep volume level)
   - mut: MUT
   - mute: Mute
   - zero: 0%
@@ -118,6 +126,21 @@ If you find this mod useful, you can support its development and maintenance:
   $description: >-
     Used with the "Custom text" and "Native mute icon and text" mute display
     styles.
+- muteTextCue: strikethrough
+  $name: Mute visual cue for volume text
+  $description: >-
+    Visual indication applied to the volume text when audio is muted and "Same
+    as Display style" is selected.
+  $options:
+  - strikethrough: Strikethrough text
+  - dimmed: Dimmed (reduced opacity)
+  - strikethroughAndDimmed: Strikethrough and dimmed
+  - none: None (keep text unchanged)
+- muteOpacity: 50
+  $name: Mute dimmed opacity percentage
+  $description: >-
+    Opacity percentage (10 to 90) used when the dimmed cue is active. Defaults
+    to 50%.
 - iconSpacing: -1
   $name: Icon spacing
   $description: >-
@@ -171,6 +194,7 @@ If you find this mod useful, you can support its development and maintenance:
 #include <cwctype>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -203,6 +227,7 @@ enum class ElementPosition {
 };
 
 enum class MuteStyle {
+    currentVolume,
     mut,
     mute,
     zero,
@@ -214,12 +239,21 @@ enum class MuteStyle {
     custom,
 };
 
+enum class MuteTextCue {
+    strikethrough,
+    dimmed,
+    strikethroughAndDimmed,
+    none,
+};
+
 struct {
     DisplayStyle displayStyle;
     ElementPosition elementPosition;
     WindhawkUtils::StringSetting customPrefix;
     MuteStyle muteStyle;
     WindhawkUtils::StringSetting customMuteText;
+    MuteTextCue muteTextCue;
+    int muteOpacity;
     int containerWidth;
     int iconSpacing;
     double fontSize;
@@ -427,7 +461,7 @@ bool IsDualBoxStyle() {
 }
 
 std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
-    if (isMuted) {
+    if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
         std::wstring customText = g_settings.customMuteText.get();
         return (g_settings.muteStyle == MuteStyle::mute)        ? L"Mute"
                : (g_settings.muteStyle == MuteStyle::zero)      ? L"0%"
@@ -465,10 +499,14 @@ std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
         return rawPrefix + number + L"%";
     }
     if (g_settings.displayStyle == DisplayStyle::emoji) {
+        PCWSTR emojiIcon =
+            (isMuted && g_settings.muteStyle == MuteStyle::currentVolume)
+                ? L"\U0001F507"
+                : L"\U0001F50A";
         if (g_settings.elementPosition == ElementPosition::left) {
-            return L"\U0001F50A " + number + L"%";
+            return std::wstring(emojiIcon) + L" " + number + L"%";
         }
-        return number + L"% \U0001F50A";
+        return number + L"% " + emojiIcon;
     }
 
     return number + L"%";
@@ -1001,7 +1039,31 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
         return;
     }
 
-    if (isMuted) {
+    bool applyMuteCue =
+        isMuted && g_settings.muteStyle == MuteStyle::currentVolume;
+
+    if (applyMuteCue) {
+        bool doStrikethrough =
+            g_settings.muteTextCue == MuteTextCue::strikethrough ||
+            g_settings.muteTextCue == MuteTextCue::strikethroughAndDimmed;
+        bool doDim =
+            g_settings.muteTextCue == MuteTextCue::dimmed ||
+            g_settings.muteTextCue == MuteTextCue::strikethroughAndDimmed;
+
+        subBlock.TextDecorations(
+            doStrikethrough
+                ? winrt::Windows::UI::Text::TextDecorations::Strikethrough
+                : winrt::Windows::UI::Text::TextDecorations::None);
+        subBlock.Opacity(
+            doDim ? (static_cast<double>(g_settings.muteOpacity) / 100.0)
+                  : 1.0);
+    } else {
+        subBlock.TextDecorations(
+            winrt::Windows::UI::Text::TextDecorations::None);
+        subBlock.Opacity(1.0);
+    }
+
+    if (isMuted && g_settings.muteStyle != MuteStyle::currentVolume) {
         if (g_settings.muteStyle == MuteStyle::emoji) {
             double effectiveIconSize = (g_settings.iconSize > 0)
                                            ? g_settings.iconSize
@@ -1069,7 +1131,10 @@ void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
                                        ? g_settings.iconSize
                                        : kDefaultIconFontSize;
         std::wstring numPart = number + L"%";
-        std::wstring emojiPart = L"\U0001F50A";
+        std::wstring emojiPart =
+            (isMuted && g_settings.muteStyle == MuteStyle::currentVolume)
+                ? L"\U0001F507"
+                : L"\U0001F50A";
 
         subBlock.Text(L"");
         subBlock.Inlines().Clear();
@@ -1269,7 +1334,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
     bool isDualBoxRequested = IsDualBoxStyle();
     bool isMuteDualBox = isDualBoxRequested && g_isMuted &&
-                         (g_settings.muteStyle == MuteStyle::glyphText ||
+                         (g_settings.muteStyle == MuteStyle::currentVolume ||
+                          g_settings.muteStyle == MuteStyle::glyphText ||
                           g_settings.muteStyle == MuteStyle::glyphZero);
     bool showDualBox = isDualBoxRequested && (!g_isMuted || isMuteDualBox);
 
@@ -1537,11 +1603,21 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
     Wh_Log(L"> tid=%u volume=%.2f muted=%d", GetCurrentThreadId(), volumeLevel,
            isMuted);
 
+    float curVolume = 0.0f;
+    bool curMuted = false;
+    bool stateChanged = false;
+
     {
         std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        if (!g_hasVolumeState || g_volumeLevel != volumeLevel ||
+            g_isMuted != isMuted) {
+            stateChanged = true;
+        }
         g_volumeLevel = volumeLevel;
         g_isMuted = isMuted;
         g_hasVolumeState = true;
+        curVolume = volumeLevel;
+        curMuted = isMuted;
 
         if (spatialSoundName) {
             g_spatialSoundName = *spatialSoundName;
@@ -1552,6 +1628,15 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
 
     VolumeSystemTrayIconDataModel_UpdateVolume_Original(
         pThis, volumeLevel, isMuted, spatialSoundName);
+
+    if (stateChanged && !g_unloading) {
+        SafeXamlCall([curVolume, curMuted] {
+            g_volumeText = FormatVolumeText(curVolume, curMuted);
+            g_volumeTextChanged = true;
+            UpdateAllVolumeLayouts();
+            ApplyVolumeIconViewsWidth();
+        });
+    }
 }
 
 HRESULT WINAPI
@@ -1819,7 +1904,8 @@ void LoadSettings() {
 
     auto muteStyle = WindhawkUtils::StringSetting::make(L"muteStyle");
     std::wstring_view ms = muteStyle.get();
-    g_settings.muteStyle = (ms == L"mute")        ? MuteStyle::mute
+    g_settings.muteStyle = (ms == L"mut")         ? MuteStyle::mut
+                           : (ms == L"mute")      ? MuteStyle::mute
                            : (ms == L"zero")      ? MuteStyle::zero
                            : (ms == L"cross")     ? MuteStyle::cross
                            : (ms == L"emoji")     ? MuteStyle::emoji
@@ -1827,10 +1913,31 @@ void LoadSettings() {
                            : (ms == L"glyphText") ? MuteStyle::glyphText
                            : (ms == L"glyphZero") ? MuteStyle::glyphZero
                            : (ms == L"custom")    ? MuteStyle::custom
-                                                  : MuteStyle::mut;
+                                                  : MuteStyle::currentVolume;
 
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
+
+    auto muteTextCue = WindhawkUtils::StringSetting::make(L"muteTextCue");
+    std::wstring_view mtc = muteTextCue.get();
+    g_settings.muteTextCue =
+        (mtc == L"dimmed")
+            ? MuteTextCue::dimmed
+        : (mtc == L"strikethroughAndDimmed")
+            ? MuteTextCue::strikethroughAndDimmed
+        : (mtc == L"none")
+            ? MuteTextCue::none
+            : MuteTextCue::strikethrough;
+
+    int opacity = Wh_GetIntSetting(L"muteOpacity");
+    if (opacity <= 0) {
+        opacity = 50;
+    } else if (opacity < 10) {
+        opacity = 10;
+    } else if (opacity > 90) {
+        opacity = 90;
+    }
+    g_settings.muteOpacity = opacity;
 
     g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
 
