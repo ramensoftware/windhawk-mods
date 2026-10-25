@@ -1,13 +1,15 @@
 // ==WindhawkMod==
-// @id              disable-taskmgr-navigation-border
-// @name            Disable Task Manager Navigation Border
-// @description     Disable Task Manager navigation and generic focus borders.
-// @version         0.1
-// @author          GF-Huang
-// @github          https://github.com/GF-Huang
-// @include         Taskmgr.exe
-// @architecture    x86-64
-// @license         MIT
+// @id                  disable-taskmgr-navigation-border
+// @name                Disable Task Manager Navigation Border
+// @name:zh-CN          禁用任务管理器的导航边框
+// @description         Disable Task Manager navigation and generic focus borders.
+// @description:zh-CN   禁用任务管理器的导航边框和焦点边框。
+// @version             0.1
+// @author              GF-Huang
+// @github              https://github.com/GF-Huang
+// @include             Taskmgr.exe
+// @architecture        x86-64
+// @license             MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +18,7 @@
 
 ![Compared](https://i.imgur.com/00TkdHI.png)
 
-Disables the ugly focus borders in Windows 11 Task Manager. Restart Task Manager after enabling or disabling the MOD.
+Disables the ugly focus borders in Windows 11 Task Manager.
 
 It works by replacing the following functions with empty implementations:
 
@@ -34,7 +36,7 @@ files or signatures are modified.
 
 ------------------------------------
 
-禁用 Windows 11 任务管理器上丑陋的焦点边框。启用或禁用该 MOD 后需重启任务管理器。
+禁用 Windows 11 任务管理器上丑陋的焦点边框。
 
 实现原理是将以下方法替换为空实现：
 
@@ -50,17 +52,8 @@ files or signatures are modified.
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
-#include <windows.h>
 
 namespace {
-
-// x64 non-static member functions receive the AtmView* in RCX.
-using SetBorder_t = void(__cdecl *)(void *view);
-
-SetBorder_t SetBorderUponNavigationForColumnHeader_Original;
-SetBorder_t SetBorderUponNavigationForListRow_Original;
-SetBorder_t SetBorderUponNavigationForListRowWithColumnTraversal_Original;
-SetBorder_t SetBorderUponNavigatingIntoElement_Original;
 
 // Intentionally do nothing and never call the original functions.
 void __cdecl SetBorderUponNavigationForColumnHeader_Hook(void * /*view*/) {}
@@ -81,22 +74,22 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForColumnHeader(void)" },
-            &SetBorderUponNavigationForColumnHeader_Original,
+            nullptr,
             SetBorderUponNavigationForColumnHeader_Hook,
         },
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForListRow(void)" },
-            &SetBorderUponNavigationForListRow_Original,
+            nullptr,
             SetBorderUponNavigationForListRow_Hook,
         },
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForListRowWithColumnTraversal(void)" },
-            &SetBorderUponNavigationForListRowWithColumnTraversal_Original,
+            nullptr,
             SetBorderUponNavigationForListRowWithColumnTraversal_Hook,
         },
         {
             { L"void __cdecl SetBorderUponNavigatingIntoElement(class DirectUI::Element *)" },
-            &SetBorderUponNavigatingIntoElement_Original,
+            nullptr,
             SetBorderUponNavigatingIntoElement_Hook,
         },
     };
@@ -106,11 +99,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Navigation border hooks installed");
+    Wh_Log(L"Hooks installed");
     return TRUE;
-}
-
-void Wh_ModUninit() {
-    // Windhawk removes the hooks automatically on unload.
-    Wh_Log(L"Navigation border mod unloaded");
 }
