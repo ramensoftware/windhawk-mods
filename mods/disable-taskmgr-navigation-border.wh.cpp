@@ -55,6 +55,14 @@ files or signatures are modified.
 
 namespace {
 
+// x64 non-static member functions receive the AtmView* in RCX.
+using SetBorder_t = void(__cdecl *)(void *view);
+
+SetBorder_t SetBorderUponNavigationForColumnHeader_Original;
+SetBorder_t SetBorderUponNavigationForListRow_Original;
+SetBorder_t SetBorderUponNavigationForListRowWithColumnTraversal_Original;
+SetBorder_t SetBorderUponNavigatingIntoElement_Original;
+
 // Intentionally do nothing and never call the original functions.
 void __cdecl SetBorderUponNavigationForColumnHeader_Hook(void * /*view*/) {}
 void __cdecl SetBorderUponNavigationForListRow_Hook(void * /*view*/) {}
@@ -70,26 +78,26 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // taskmgr.exe
+     // taskmgr.exe
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForColumnHeader(void)" },
-            nullptr,
+            &SetBorderUponNavigationForColumnHeader_Original,
             SetBorderUponNavigationForColumnHeader_Hook,
         },
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForListRow(void)" },
-            nullptr,
+            &SetBorderUponNavigationForListRow_Original,
             SetBorderUponNavigationForListRow_Hook,
         },
         {
             { L"private: void __cdecl AtmView::SetBorderUponNavigationForListRowWithColumnTraversal(void)" },
-            nullptr,
+            &SetBorderUponNavigationForListRowWithColumnTraversal_Original,
             SetBorderUponNavigationForListRowWithColumnTraversal_Hook,
         },
         {
             { L"void __cdecl SetBorderUponNavigatingIntoElement(class DirectUI::Element *)" },
-            nullptr,
+            &SetBorderUponNavigatingIntoElement_Original,
             SetBorderUponNavigatingIntoElement_Hook,
         },
     };
