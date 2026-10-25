@@ -102,6 +102,8 @@ value that cannot be read falls back to its default. Changes apply right away.
 #include <windhawk_api.h>
 #include <windows.h>
 #include <windowsx.h>
+#include <cwchar>
+#include <cwctype>
 
 // ---- Settings ---------------------------------------------------------------
 
@@ -121,10 +123,10 @@ struct Settings {
     int buttonWidth;
     int glyphSize;
     bool fixComboFlash;
+    COLORREF flashColor;
 };
 
 static Settings g_cfg;
-static HBRUSH g_comboFlashBrush;
 
 static const COLORREF kGlyphDisabled = RGB(72, 72, 72);
 
@@ -185,11 +187,7 @@ static void LoadSettings() {
     g_cfg.buttonWidth = GetSizeSetting(L"layout.buttonWidth", 29, 16, 80);
     g_cfg.glyphSize = GetSizeSetting(L"layout.glyphSize", 10, 6, 20);
     g_cfg.fixComboFlash = Wh_GetIntSetting(L"fixComboFlash") != 0;
-
-    HBRUSH brush = CreateSolidBrush(GetColorSetting(L"flashColor", RGB(0x3C, 0x3C, 0x3C)));
-    // The previous brush is not deleted: another thread might still be drawing with
-    // it. It is a few bytes and only replaced when the settings change.
-    InterlockedExchangePointer((PVOID*)&g_comboFlashBrush, brush);
+    g_cfg.flashColor = GetColorSetting(L"flashColor", RGB(0x3C, 0x3C, 0x3C));
 }
 
 // ---- Layout constants (at 100% scaling) --------------------------------------
@@ -277,7 +275,7 @@ static bool GetFrameInfo(HWND hWnd, FrameInfo* fi) {
         fi->client = {origin.x - wr.left, origin.y - wr.top,
                       origin.x - wr.left + cr.right, origin.y - wr.top + cr.bottom};
 
-        int edge = (GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE) ? GetSystemMetrics(SM_CYEDGE) : 0;
+        int edge = (GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE) ? GetSystemMetricsForDpi(SM_CYEDGE, fi->dpi) : 0;
         fi->capBottom = fi->client.top - edge;
     }
     fi->centerY = (1 + fi->capBottom) / 2;
@@ -375,8 +373,8 @@ static void PaintFrame(HWND hWnd) {
     const int dpi = fi.dpi;
 
     LONG style = GetWindowLongW(hWnd, GWL_STYLE);
-    const int scrollW = (!fi.iconic && (style & WS_VSCROLL)) ? GetSystemMetrics(SM_CXVSCROLL) : 0;
-    const int scrollH = (!fi.iconic && (style & WS_HSCROLL)) ? GetSystemMetrics(SM_CYHSCROLL) : 0;
+    const int scrollW = (!fi.iconic && (style & WS_VSCROLL)) ? GetSystemMetricsForDpi(SM_CXVSCROLL, dpi) : 0;
+    const int scrollH = (!fi.iconic && (style & WS_HSCROLL)) ? GetSystemMetricsForDpi(SM_CYHSCROLL, dpi) : 0;
 
     const bool active = IsActiveMdiChild(hWnd);
     const int hot = GetState(hWnd, kHotProp) - 1;
@@ -406,15 +404,16 @@ static void PaintFrame(HWND hWnd) {
     FillRect(mem, &top, capBrush);
 
     // Buttons
-    int textRight = W - 6;
+    const int pad = MulDiv(6, dpi, 96);
+    int textRight = W - pad;
     for (int i = 0; i < 3; i++) {
         RECT b;
         DWORD state;
         if (!GetButton(hWnd, fi, i, &b, &state)) {
             continue;
         }
-        if (b.left - 6 < textRight) {
-            textRight = b.left - 6;
+        if (b.left - pad < textRight) {
+            textRight = b.left - pad;
         }
 
         const bool disabled = (state & STATE_SYSTEM_UNAVAILABLE) != 0;
@@ -691,7 +690,8 @@ static LRESULT HandleMessage(DefMDIChildProc_t orig, HWND hWnd, UINT msg, WPARAM
             }
             return 0;
 
-        case WM_NCLBUTTONDOWN: {
+        case WM_NCLBUTTONDOWN:
+        case WM_NCLBUTTONDBLCLK: {  // a double-click on a button counts as another press
             int btn = ButtonFromHitTest(wParam);
             if (btn >= 0) {
                 TrackButton(hWnd, btn);
@@ -732,17 +732,19 @@ static bool IsPspComboBox(HWND hWnd) {
 }
 
 static BOOL WINAPI PatBlt_hook(HDC hdc, int x, int y, int w, int h, DWORD rop) {
-    HBRUSH flashBrush = g_comboFlashBrush;
-    if (g_cfg.fixComboFlash && flashBrush && rop == PATCOPY && w >= 20 && w <= 400 && h >= 8 && h <= 40) {
+    if (g_cfg.fixComboFlash && rop == PATCOPY && w >= 20 && w <= 400 && h >= 8 && h <= 40) {
         LOGBRUSH lb;
         HGDIOBJ brush = GetCurrentObject(hdc, OBJ_BRUSH);
         if (brush && GetObjectW(brush, sizeof(lb), &lb) == sizeof(lb) && lb.lbStyle == BS_SOLID &&
             lb.lbColor == RGB(255, 255, 255)) {
             HWND wnd = WindowFromDC(hdc);
             if (wnd && IsPspComboBox(wnd)) {
-                HGDIOBJ old = SelectObject(hdc, flashBrush);
+                // The stock DC brush can neither leak nor be freed while another thread draws with it.
+                HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+                COLORREF oldColor = SetDCBrushColor(hdc, g_cfg.flashColor);
                 BOOL res = PatBlt_orig(hdc, x, y, w, h, rop);
-                SelectObject(hdc, old);
+                SetDCBrushColor(hdc, oldColor);
+                SelectObject(hdc, oldBrush);
                 return res;
             }
         }
@@ -752,8 +754,16 @@ static BOOL WINAPI PatBlt_hook(HDC hdc, int x, int y, int w, int h, DWORD rop) {
 
 // ---- Mod lifecycle ------------------------------------------------------------
 
+static bool g_unloading;
+
 static BOOL CALLBACK RedrawMdiChild(HWND hWnd, LPARAM) {
     if (GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_MDICHILD) {
+        if (g_unloading) {
+            // the per-window state must not outlive the mod (it would be stale when the mod is enabled again)
+            RemovePropW(hWnd, kHotProp);
+            RemovePropW(hWnd, kPressedProp);
+            RemovePropW(hWnd, kActiveProp);
+        }
         RedrawWindow(hWnd, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
     }
     return TRUE;
@@ -797,5 +807,6 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    g_unloading = true;
     EnumWindows(RedrawTopLevel, 0);
 }
