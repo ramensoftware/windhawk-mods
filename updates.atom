@@ -2,12 +2,208 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T15:35:55.000Z</updated>
+    <updated>2026-10-25T17:31:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Alt+Tab Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win-7-8-alt-tab-recreation#050499fc10276da12a825ffdf909175f4d43a87e</id>
+        <link href="https://windhawk.net/mods/win-7-8-alt-tab-recreation"/>
+        <updated>2026-10-25T17:31:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows781alttabrecreation">Windows 7/8.1 Alt+Tab Recreation</h1>
+<p><strong>Windows 7</strong></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7alttab.png" alt="Windows 7 switcher" /></p>
+<p><strong>Windows 8.1</strong></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81alttab.png" alt="Windows 8.1 switcher" /></p>
+<p>This mod recreates the Windows 7 and the Windows 8.1 Alt+Tab switchers on
+Windows 10 and Windows 11, with live previews of the windows. It runs in its own
+process and does not modify <code>explorer.exe</code>.</p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li>Draws the switcher the way Windows 7 or Windows 8.1 drew it; the style is
+chosen in the settings.</li>
+<li>Shows a live preview of every window, minimized windows included.</li>
+<li>Shows the icon of the application in the corner of every preview.</li>
+<li>Draws the Windows 7 panel as Aero glass and the Windows 8.1 one as the solid
+band it was.</li>
+<li>Does not page: the previews shrink until every window fits, as the originals
+did.</li>
+<li>Does not touch <code>explorer.exe</code> and does not ask for an Explorer restart.</li>
+<li>If the switcher cannot be shown, Alt+Tab keeps working as usual.</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 or Windows 11, 64-bit. The mod was tested on Windows 11 24H2 and
+on Windows 11 25H2.</li>
+<li>Windhawk installed, with <code>windhawk.exe</code> not excluded.</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Install the mod in Windhawk and enable it.</li>
+<li>Press Alt+Tab. The switcher appears in the style chosen in the settings.</li>
+<li>To remove it, disable or uninstall the mod.</li>
+</ol>
+<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
+<p>| Shortcut | Action |
+| --- | --- |
+| <code>Alt+Tab</code>, <code>Alt+Shift+Tab</code> | Opens the switcher and moves the selection |
+| <code>Alt</code> (release) | Activates the selected window |
+| <code>Tab</code> / <code>Shift+Tab</code>, arrow keys, wheel | Moves the selection while open |
+| <code>Enter</code> / <code>Space</code> / click | Activates the selected window |
+| <code>Alt+F4</code> while open | Closes the selected window |
+| <code>Esc</code> while open | Closes the switcher without switching |
+| <code>Ctrl+Alt+F11</code> | Opens or closes the switcher manually (fallback) |
+| <code>Alt+`</code> | Optional, off by default: windows of the same app only |
+| <code>Ctrl+Alt+Tab</code>, <code>Win+Tab</code> | Left to Windows |
+| <code>Ctrl+Shift+Esc</code> | Left to Windows, opens Task Manager |</p>
+<h2 id="styles">Styles</h2>
+<ul>
+<li><strong>Windows 7</strong>: a glass panel with rounded corners and a light sheen, the name
+of the selected window above the row, the previews in a row with the
+application icon in the corner, and a thin double frame around the selected
+preview. A minimized window shows its application icon.</li>
+<li><strong>Windows 8.1</strong>: a solid colored band with square corners, a white title above
+the row, and the previews in a row with the application icon inside their
+bottom right corner. The selected preview has a white frame.</li>
+</ul>
+<h2 id="comparisonwithotheralttabmods">Comparison with other Alt+Tab mods</h2>
+<p><strong>Windows 7/8.x Alt+Tab Loader (aubymori)</strong> loads the original Alt+Tab component
+of Windows 7 or Windows 8.x. It is the most faithful option, and the hardest to
+set up: files have to be copied into the system folder, a matching theme has to
+be prepared, and Explorer has to be restarted when the mod is enabled and again
+when it is disabled.</p>
+<p><strong>Simple Window Switcher (Lone)</strong> is a configurable window switcher, built
+around Windows 10 and 11 style layouts and around other arrangements as well;
+recreating the Windows 7 or the 8.1 interface is not its purpose.</p>
+<p><strong>This mod</strong> recreates those two interfaces and nothing else. Configuration is
+reduced to the style and a few options, and no file has to be copied, no theme
+prepared and no restart done. It takes some drawing ideas from the Simple Window
+Switcher, but it works in a different way and its purpose is a narrower one.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Switcher style</strong>: Windows 7 or Windows 8.1.</li>
+<li><strong>Show the switcher on</strong>: the primary monitor, the monitor with the cursor, or
+the monitor of the active window.</li>
+<li><strong>Panel color</strong>: follow the Windows accent color, as both originals did, or
+use a custom color.</li>
+<li><strong>Custom accent color</strong>: used only when the panel color is set to custom.</li>
+<li><strong>Glass density</strong>: how much the Windows 7 panel hides the desktop behind it.</li>
+<li><strong>Desktop dimming</strong>: how much the desktop behind the switcher is darkened.</li>
+<li><strong>Only windows of the current virtual desktop</strong>: the filter of the originals.
+Minimized windows are always listed.</li>
+<li><strong>The Desktop card</strong>: the Desktop at the end of the row, as both originals
+had.</li>
+<li><strong>Auto-cycle while Alt is held</strong>, <strong>Mouse navigation</strong>, <strong>Alt+`</strong>,
+<strong>Ctrl+Alt+F11</strong>: the optional extras.</li>
+<li><strong>Blurred glass behind the panel</strong>: for the Windows 7 style.</li>
+<li><strong>Fade the switcher in and out</strong>: 250 ms, off by default.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Use one Alt+Tab replacement at a time.</li>
+<li>The previews are live, not screenshots: they show the window as it is now.</li>
+<li>The desktop behind the switcher is a still image.</li>
+<li>Windows 11 tabbed File Explorer windows appear as one item per window.</li>
+<li>True fullscreen exclusive games may not show the switcher, like other overlay
+mods.</li>
+<li>Windows of applications started as administrator can't be listed or
+activated: the mod runs at the normal permission level, so the system doesn't
+let it watch the keyboard of those windows and doesn't let it read their
+icons or close them with Ctrl+Alt+F4. Such a window keeps the system
+switcher when it has the focus.</li>
+<li>The mod can't be turned off from inside an elevated window for the same
+reason: use a normal window.</li>
+<li>The mod is released under the GPL-2.0 license.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>The look of both styles follows the measurements of the two original
+switchers.</li>
+<li>AdministratoX for testing the mod on Windows 11 25H2.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win81-start-screen-recreation#5f736702f73799aea88466b725d4aa031003066b</id>
+        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
+        <updated>2026-10-25T17:31:21.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows81startscreenrecreation">Windows 8.1 Start Screen Recreation</h1>
+<p>This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png" alt="Screenshot" /></p>
+<h2 id="aboutthemod">About the mod</h2>
+<p>The mod replaces the Start experience with a full-screen Start screen modeled after
+Windows 8.1: tiles arranged in groups, an All Apps view, type-to-search, and the
+corresponding menus and animations. Feedback and suggestions are accepted. The mod
+has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<p>Note: This is a best-effort modification. Layout, colors, icons and animations are
+inspired by Windows 8.1. Tiles display the real Windows 10/11 applications, so
+certain original elements (such as Live Tiles and Metro apps) cannot be restored.
+The mod does <strong>not</strong> replace system files.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Tiles</strong>: all four sizes (small, medium, wide, large). Tiles can be dragged,
+apps can be pinned and unpinned, and groups can be named via right-click on empty
+space and <strong>Name groups</strong>.</li>
+<li><strong>8.1 menus</strong>: right-clicking a tile opens the Windows 8.1 Update menu with the
+cascading <strong>Resize</strong> submenu. The bottom command bar (touch / keyboard) provides
+Advanced, Run, Resize and Unpin.</li>
+<li><strong>Search</strong>: typing starts a search. The search charm covers apps, settings and
+files, with the Everywhere / Apps / Settings / Files scopes.</li>
+<li><strong>All Apps view</strong>: accessed via the circle arrow at the bottom left; sortable by
+name, date installed or category.</li>
+<li><strong>Real tile colors</strong>: packaged apps use their own tile color and artwork; classic
+programs that declare a tile color (such as Chrome) use it as well.</li>
+<li><strong>Background options</strong>: the classic petal artwork, a solid color, the accent
+color, the desktop wallpaper, or a custom image.</li>
+<li><strong>Optional 8.1-style layout</strong>: modern versions of the old Windows 8.1 apps
+(Outlook, Calendar, Photos, Weather, and others) can be pinned automatically when
+installed. Disabled by default; it can be enabled in the settings.</li>
+</ul>
+<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
+<p>| Shortcut | Action |
+| --- | --- |
+| Windows key / Start button | Opens or closes Start |
+| Typing | Starts a search |
+| Ctrl+Tab | Opens the All Apps view |
+| Arrow keys + Enter | Navigates and opens apps |
+| Esc | Closes menus / Start |</p>
+<h2 id="additionalinformation">Additional information</h2>
+<ul>
+<li>The mod is compatible with the <strong>Windows 8/8.1 Charms Bar Recreation</strong> and the
+<strong>Windows 8/8.1 Search Charm Recreation</strong> mods for a complete Windows 8.1
+experience.</li>
+<li>The mod is available in English, Italian, Spanish, French and Portuguese. The language
+follows the Windows display language.</li>
+<li>All options are documented on the mod's settings page in Windhawk.</li>
+<li>If the Start hook cannot be installed (for example on an unsupported Windows build), the
+mod falls back to keyboard interception. A lone Windows key press is then detected by a
+keyboard hook, and the mod sends a synthetic key press of an unassigned key (VK 0xE8) so
+that Explorer does not open its own Start menu as well.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>AdmnistratoX</strong> - for the original Windows 8 (8045) Start Screen mod on which this
+mod is based.</li>
+<li><strong>WinBoeing 777</strong> - Testing on Windows 10 22H2</li>
+<li>All testers who reported bugs and provided feedback.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>This modification is not affiliated with, endorsed by, or sponsored by Microsoft. This project represents a community contribution to help users improve their Windows experience by recreating a legacy component of an old operating system. Windows is a trademark owned by Microsoft Corporation. This modification is an independent companion project intended to complement, not replace, the standard Windows experience, and is provided free of charge for personal, non-commercial use.</li>
+<li>For problems, please report an issue on GitHub.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Settings Styler 1.2.1]]></title>
         <id>https://windhawk.net/mods/windows-11-settings-styler#ecb4b86d0e225b72c8b04ba636c260554129fefa</id>
@@ -682,130 +878,6 @@ Traditional Chinese falls back to English (can be chosen manually).</li>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Column View 0.43]]></title>
-        <id>https://windhawk.net/mods/explorer-column-view#705ab89383dce727aaa7f8906d045de634c5581c</id>
-        <link href="https://windhawk.net/mods/explorer-column-view"/>
-        <updated>2026-10-24T12:03:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorercolumnview">Explorer Column View</h1>
-<p>Bring Finder-style column browsing to Windows 11 File Explorer. Follow a folder
-path across resizable columns, revisit earlier selections, and inspect files
-beside your folders.</p>
-<h2 id="inaction">In action</h2>
-<p>Native Windows styling, with folder columns and the audio Inspector:</p>
-<p><img src="https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-light.png" alt="Folder columns and audio waveform in Windows 11 light mode" /></p>
-<p>Columns also follow your existing Explorer styling. See the
-<a href="https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-styled.png">customized Explorer screenshot</a>;
-its glass appearance comes from the user's other customization tools.</p>
-<h2 id="browsewithacleartrail">Browse with a clear trail</h2>
-<ul>
-<li>Select a folder to reveal its contents in the next column. Choose a different
-folder earlier in the trail to replace the columns that follow it.</li>
-<li>Start with one column and add only the columns you use. Drag a thin divider to
-resize a column live; the layout scrolls horizontally as your path grows.</li>
-<li>Press <strong>Right Arrow</strong> to enter the selected folder's column and <strong>Left Arrow</strong>
-to focus the previous column. Folder double-click and Enter extend the trail.</li>
-<li>Each Explorer tab keeps its own folders, selections, column widths and Inspector.</li>
-<li>On supported Shell versions, <strong>Open in new tab</strong> targets the owning Explorer window; ordinary folder opening
-continues along the column trail. <strong>Open in new window</strong> keeps its native behavior.</li>
-<li>Browse <strong>Home</strong> and <strong>This PC</strong>, local and network folders, and archives exposed
-by your Windows Shell providers, including supported ZIP, RAR and 7z folders.</li>
-</ul>
-<h2 id="lookcloserwiththeinspector">Look closer with the Inspector</h2>
-<p>Selecting a file opens its Inspector after the folder columns, filling the
-remaining space. Prefer a sidebar? Enable <strong>Use fixed-width Inspector</strong> to dock
-it on the right and show folder details too.</p>
-<ul>
-<li>File information, icons and registered <strong>Open with</strong> applications.</li>
-<li>Image previews and installed Windows preview handlers for supported documents.</li>
-<li>Inline audio and video playback for supported formats and installed codecs.</li>
-<li>Scrubbable audio waveforms, with duration, sample rate, bit depth and channel
-information when available.</li>
-<li>Playback starts when you press Play and pauses when its tab is hidden.</li>
-</ul>
-<h2 id="turncolumnsonoroff">Turn columns on or off</h2>
-<p>With Explorer focused, press <strong>Ctrl+Alt+Shift+V</strong> (the default) to switch column
-browsing across open and new Explorer windows and tabs. Change <strong>Toggle shortcut</strong>
-in the mod settings, for example to <code>Ctrl+Shift+C</code> or <code>F8</code>. Use <code>Ctrl</code>, <code>Alt</code>,
-<code>Shift</code> and/or <code>Win</code> separated by <code>+</code>, followed by a letter, digit, <code>F1</code>–<code>F24</code>,
-or a named key: <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>, <code>Backspace</code>, <code>Delete</code>, <code>Insert</code>,
-<code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Left</code>, <code>Right</code>, <code>Up</code>, or <code>Down</code>.
-Other keyboard virtual-key codes can be written in hexadecimal, e.g. <code>Ctrl+0xBA</code>.
-Names are case-insensitive; leave the setting empty to disable the shortcut.
-Invalid shortcuts fall back to <strong>Ctrl+Alt+Shift+V</strong> and are logged.</p>
-<p>The shortcut only runs in Explorer, not while typing in an address/search/rename
-field or using Right Alt (AltGr). Extra modifiers prevent a match. Choose a
-combination that does not conflict with another Explorer command: the configured
-shortcut takes precedence there, but cannot override Windows-reserved shortcuts.
-It remains available to other apps. <strong>Enable columns by default</strong> controls the
-initial mode.
-Use Explorer's main sidebar or address bar to change the first column's location.
-Click <strong>Save settings</strong> in Windhawk to apply configuration changes.</p>
-<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
-<ul>
-<li>Designed for Windows 11. The mod hosts native Shell views and follows existing
-Explorer styling; it does not include a glass theme.</li>
-<li>Windows 11 context menus are available on supported x64 builds in the 26100
-and 26200 families. Other builds and architectures use classic menus.
-<strong>Use classic context menus</strong> forces that fallback inside the columns.</li>
-<li>Use a column's context menu or keyboard shortcuts for file operations. The
-hidden native view's selection is cleared before columns cover it. The outer
-command bar's <strong>New</strong> and <strong>Paste</strong> still target the original tab folder;
-its status bar can reflect that folder rather than the focused column.
-Selecting or renaming a new item there temporarily reveals native Explorer.
-Deselect it to return to the existing column trail and Inspector.</li>
-<li>Home contents depend on Windows' Shell provider. Unavailable recent entries
-cannot be previewed. Unsupported virtual roots return to the regular native view.</li>
-<li>Previews depend on installed handlers/codecs. Some archive providers expose
-folders but no file streams. Encrypted archives and playback inside archives
-require an external application.</li>
-<li>Some metadata and document-preview calls run on Explorer's UI thread. A slow
-handler or unavailable network file can pause the window. Installed media
-codecs run inside Explorer; <strong>Enable inline audio and video</strong> can be turned
-off for setups with incompatible codecs. Slow providers can delay unload.</li>
-<li>Other mods that rearrange Explorer's file area may need compatibility testing.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p><strong>Refresh views after navigation and resizing</strong> keeps additional redraw recovery
-enabled. If another styling mod causes excessive flashing, compare with it off.</p>]]></content>
-        <author>
-            <name>ItsMikesch</name>
-            <uri>https://github.com/ItsMikesch</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Terminal Admin Aliases 1.0.4]]></title>
-        <id>https://windhawk.net/mods/explorer-terminal-admin-alias#640e843644d6bef023896312768387eb5b7065c4</id>
-        <link href="https://windhawk.net/mods/explorer-terminal-admin-alias"/>
-        <updated>2026-10-24T11:01:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexplorerterminaladminaliases">🛠️ File Explorer Terminal Admin Aliases</h1>
-<p>Launch elevated (Administrator) command prompts, Windows Terminal, PowerShell, or custom shells directly from any Windows File Explorer address bar, opened to your active directory.</p>
-<p>Just like typing <code>cmd</code>, <code>wt</code>, or <code>powershell</code> into File Explorer—but with administrator privileges and completely customizable aliases!</p>
-<hr />
-<h2 id="features">⚡ Features</h2>
-<ul>
-<li><strong>Configurable Aliases</strong>: Choose any alias trigger you want (<code>cmda</code>, <code>wta</code>, <code>psa</code>, <code>pwsha</code>, <code>basha</code>, or your own custom commands).</li>
-<li><strong>Native & Silent Elevation</strong>: Intercepts shell execution directly inside File Explorer and launches with native <code>runas</code> elevation—no background PowerShell spawns, no <code>.bat</code> files, and zero flickering.</li>
-<li><strong>Zero PATH Pollution</strong>: Works without needing to edit your system/user <code>Path</code> environment variable.</li>
-<li><strong>Directory Preservation</strong>: Accurately preserves the active directory in elevated sessions, handling spaces, special characters, drive roots, and network UNC paths.</li>
-<li><strong>Virtual Folder Fallback</strong>: Automatically defaults to <code>%USERPROFILE%</code> when launched from virtual folders (e.g., "This PC", "Quick Access", or "Home").</li>
-<li><strong>Clean UAC Cancellation</strong>: If you cancel or dismiss the UAC prompt, the mod cleanly suppresses the annoying "Windows cannot find…" error dialog.</li>
-<li><strong>Inline Arguments Supported</strong>: Type extra arguments directly in the address bar (e.g. <code>cmda dir</code> or <code>wta -p PowerShell</code>).</li>
-</ul>
-<hr />
-<h2 id="configuration">⚙️ Configuration</h2>
-<p>Open the mod's <strong>Settings</strong> tab in Windhawk to:</p>
-<ol>
-<li>Customize aliases for <strong>Command Prompt</strong>, <strong>Windows Terminal</strong>, <strong>PowerShell 5.1</strong>, <strong>PowerShell 7+</strong>, and <strong>Git Bash</strong>.</li>
-<li>Toggle elevation (<code>runas</code>) on or off per shell.</li>
-<li>Configure custom aliases for any tool (e.g. <code>code</code>, <code>wsl</code>, <code>nvim</code>).</li>
-<li>Set an optional profile name for Windows Terminal.</li>
-</ol>]]></content>
-        <author>
-            <name>RobotsNeverDie</name>
-            <uri>https://github.com/RBND</uri>
         </author>
     </entry>
 </feed>
