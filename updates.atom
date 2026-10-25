@@ -2,12 +2,185 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T19:03:34.000Z</updated>
+    <updated>2026-10-25T22:02:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#3aff1348b40c8c1409004dff596106fdca888445</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
+        <updated>2026-10-25T22:02:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>option to measure RAM as private bytes (like System Informer)</li>
+<li>CPU is now shown before RAM (configurable) and labels use a colon ("CPU: 3.4% · RAM: 412 MB")</li>
+<li>"N/A" instead of "…" while the CPU usage is being measured</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 0.7.1]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#29d1380647b00ebd4049d838db77d2773779aad1</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-10-25T22:02:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>A chip for every drive.</strong> File mode now shows a chip (with a disk icon) for each of your drives on a <strong>second row</strong>, kept apart from the location chips so the two groups do not read as one list. A chip is added for every fixed and removable drive that is ready; empty card readers, optical drives with no disc and network drives are skipped, so nothing ever raises a "there is no disk" dialog. The row appears only when you have <strong>two or more</strong> drives (with a single drive there is nothing to switch to). The chips are detected automatically, no setup.</li>
+<li><strong>A "This PC" drives view.</strong> Going up from a drive root — <strong>←</strong> or <strong>Backspace</strong> on an empty box, or <strong>Alt + ↑</strong> — now opens a list of all your drives instead of doing nothing, so you can move between drives with the arrows alone. <strong>Enter</strong> or <strong>→</strong> opens the highlighted drive; each row shows its label and free space.</li>
+<li><strong>Location chips follow moved folders.</strong> The Home, Downloads, Documents, Pictures, Music and Videos chips now resolve to each folder's real location, so they still work when a folder has been moved to another drive or redirected (for example a <code>OneDrive</code>-backed Documents).</li>
+<li><strong>Switch drives with Ctrl + Tab.</strong> <code>Ctrl + Tab</code> cycles forward through the drive chips and <code>Ctrl + Shift + Tab</code> backward (the six location chips are left out, since they are a separate idea). <code>Ctrl + 1…9</code> now jumps to any chip — locations first, then drives — and typing a path such as <code>D:\</code> in the path bar still works.</li>
+<li><strong>Start drive setting.</strong> A new <strong>Start drive</strong> option (a single drive letter) chooses which drive the file browser opens on the first time you use it in a session. Empty — or a drive that is not available, such as an unplugged USB stick — opens on Home, as before.</li>
+<li>The F1 cheat sheet and the README shortcut tables list the new keys.</li>
+<li><strong>The F1 help sheet no longer resets the bar.</strong> It now overlays the current view and closing it returns exactly where you were — the same folder and selection in the file browser, or the calculation you were working on — instead of starting over as if the launcher had just opened.</li>
+</ul>]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Clock Styler 0.5.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-clock-styler#2541b69f337db2d7ca6af06371083de0156500f9</id>
+        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
+        <updated>2026-10-25T22:02:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added comprehensive localization for 12 new locales (Simplified Chinese, Traditional Chinese, Japanese, Korean, German, Spanish, Brazilian Portuguese, French, Italian, Polish, Russian, Ukrainian) alongside English and Turkish (14 languages total).</li>
+<li>Increased default digit font size from 92 to 140 for improved readability and prominence on modern displays.</li>
+<li>Enabled live seconds toggle by default across all supported themes.</li>
+<li>Streamlined feature overview and reordered screenshots showcase to feature Retro Pixel.</li>
+<li>Clarified glass opacity setting description specifically for Modern Flip cards.</li>
+<li>Cleaned up unused compiler flags (-lcomctl32).</li>
+<li>Added Community Contributing &amp; Feedback guidelines.</li>
+</ul>]]></content>
+        <author>
+            <name>ali0zdas</name>
+            <uri>https://github.com/ali0zdas</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mac Island & Dock 2.1.0]]></title>
+        <id>https://windhawk.net/mods/mac-island-dock#41fdb9158f257c7d4bbc3358369facf21ab625a7</id>
+        <link href="https://windhawk.net/mods/mac-island-dock"/>
+        <updated>2026-10-25T22:01:59.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Folders</strong></p>
+<ul>
+<li>Sorting by date now finds the newest files in folders with more than 200 items; wider columns.</li>
+<li>Sorted as in Explorer (name, date modified, type or size, either way, with the date, type or size shown), only one kind of file shown or folders mixed with the files, and each pin with its own icon and color (with an "Apply" button to close the choice); pinned folders show a folder icon again.</li>
+<li>A file's row has two buttons: copy the file (pasted in a folder, it goes there) and copy its path (#6161).</li>
+<li>Windows' places open with a click; their pin, at the row's end, pins them (a click used to pin them, #6161).</li>
+<li>Favorite files: a star on a file's row keeps it with the pinned folders, where a click opens it and its buttons copy the file or its path; one deleted or moved leaves the list, one on a drive taken out comes back with the drive (up to 40).</li>
+<li>The pins, their icons and colors and the folders' order are each Windows account's own (another account on the same PC no longer shares them).</li>
+</ul>
+<p><strong>Calendar</strong></p>
+<ul>
+<li>Clicking an upcoming event or holiday shows its day in the calendar (#6156).</li>
+</ul>
+<p><strong>Notifications</strong></p>
+<ul>
+<li>With islands on several monitors, the Monitors section chooses which islands show the notifications (the main one by default). The main island keeps the sounds, Windows' banners, Win+N, and calls, alarms and reminders; opening, deleting or minimizing a notification on one island closes it on the others (#6159).</li>
+<li>The apps with notifications can fold into an arrow, like the tray: they come out a moment when a notification comes, and under the mouse (an option, #6129, #6204, #6208).</li>
+<li>Chat apps that only blink their tray icon instead of sending notifications to Windows (the Chinese WeChat, WeCom, DingTalk) show on the pill with their dot when it starts blinking (#6074, #6215).</li>
+</ul>
+<p><strong>The pill</strong></p>
+<ul>
+<li>The time can be turned off (on by default, per profile): the date alone shows then, with its own options as before, or nothing when they're off too.</li>
+<li>A "Show desktop" button for the control center and the pill (off by default).</li>
+<li>The language bubble only shows when the app in front changes its own mode (Shift, the indicator), not when another app comes in front, and it's no longer cut with a low pill (#6422).</li>
+<li>An item drawn in two parts (the battery or the volume and its percentage) has one hover highlight (#6460).</li>
+<li>Win+J (an option, off by default, #6519) minimizes the islands to their line and brings them back; its keys can be changed by recording them in the settings (a click, then the new keys; Win+J back with one click), with a warning when Windows or another app uses them too.</li>
+<li>With notches, the keyboard language bubble shows once, from the middle notch (#6199).</li>
+<li>What's playing's note, its cover and title, and its buttons are three items of their own in the pill's order (each placed and turned on or off on its own; current layouts keep them together).</li>
+<li>A control center button that's on (like night light) shows its icon in the accent color with a dot under it, instead of a white disc behind it.</li>
+<li>A notification's title too long scrolls under the mouse (#6200).</li>
+</ul>
+<p><strong>Media</strong></p>
+<ul>
+<li>A mixer in the media panel: every app with audio sessions on the default output, one entry per program with its icon, name, volume and mute by clicking the icon; the playing app keeps its own volume and mute in the player, with the device's volume and a button for Windows' mixer below it (Win+Ctrl+V on Windows 11 23H2+, sndvol on older versions or if input fails). The mixer opens collapsed and expands with an animated arrow. The session list and icon conversion are shared with the control center.</li>
+<li>Source chips show the apps' icons, dimmed when paused, and Automatic has its own glyph. They wrap into more rows when needed.</li>
+<li>A larger cover, the whole modal tinted from the cover's average color with a smooth color transition, a small app icon beside its name, and two pill switches with rounded highlights in a compact footer; the panel scrolls for long lists and stays within its monitor, with press and spring animations, crossfading/sliding media source transitions and animated mute icons/volume bars.</li>
+<li>Volume sliders follow the pointer while dragging; audio writes are coalesced off the drawing thread, the mixer reveal keeps its existing row geometry, and footer labels have padding on both sides. Accent colors, media text and icons are cached outside drawing; idle monitor/notch profiles are skipped by the animation loop.</li>
+<li>Lyrics default to Follows the line (each line's own width, up to 360 DIPs); Short, Medium and Long hold the widest line until a pause or gap.</li>
+</ul>
+<p><strong>Credits</strong></p>
+<ul>
+<li>The README's credits (English and Portuguese) link m417z's mod and ask for credit, with a link, from anyone reusing this mod's code or inspired by it (a request, not a license condition).</li>
+</ul>
+<p><strong>New items on the pill</strong> (each off by default, #6157)</p>
+<ul>
+<li>The Recycle Bin: how many items; open it, or empty it with a second click; always shown, or only once what's in it weighs 100 MB, 500 MB, 1 GB or 5 GB.</li>
+<li>A timer, a stopwatch (with hundredths) and Pomodoro, each on its own (all three can run at once), in a panel like the macOS Clock app: lengths in hours, minutes and seconds on wheels (the mouse wheel, a drag or typed), a ring while it runs, Pomodoro's focus and break chosen; the pill shows the one ending first, in orange, and a click on it lists every one going as Live Activities like the iPhone's (each with its time, Pause and Cancel, the next alarm with its switch, Show all); a notice when each ends, with Repeat and Stop (Pomodoro: Stop and OK); and alarms in the same panel: a time each day on wheels, each on or off, with or without a sound, edited with a pencil, its notice with Stop (its sound repeats until then, a minute at most); alarms ring and timers end on time also behind a full-screen app or while the island restarts, and each Windows account has its own; Control Center buttons for the stopwatch, Pomodoro and alarms (#6156).</li>
+<li>The network's speed, up and down.</li>
+<li>An audio visualizer: six rounded bars jumping with the beat of the playing app's own sound (or any sound, like VLC's) while something plays, or swaying smoothly like the iPhone's (an option), with a sensitivity slider and a color (the icons', Windows' accent, a rainbow, your own or the cover's).</li>
+<li>World clocks: Windows' own additional clocks (Date &amp; time settings), shown as soon as they're added there, with a day ahead or behind marked; a click opens Windows' list of them.</li>
+<li>The time until the next event, alarm, timer or Pomodoro part (each can be left out; in the next 12 hours); a click opens it.</li>
+<li>The pill filling like a loading bar (each an option, off by default, in the Animations tab): with the progress apps show on their taskbar button (downloads, copies, installs; #6071, read from the taskbar's own progress bar), and with a laptop's battery charge while it charges (not while it's held at a charge limit, like 80%); one bar across the Fixed style's notches (the whole bar in the Bar style), a solid line under it like the taskbar's; a color for each kind (downloads and other apps, Windows' file copies, the battery: green, blue, Windows' accent or your own; red for an error, yellow paused); it moves simply, as a liquid wave or as a glow with particles; paused it breathes, an error shakes, done flashes with a check, canceled drains back.</li>
+<li>Song lyrics (an option, off by default, goes online: each song's title and artist are sent to lrclib.net): the line sung now on the pill, in time with the song (its size, color and longest line chosen; or in the song title's place while a line is sung, an option), and all of them in a panel where a line clicked goes there in the song. Only for songs (with an artist, 45 s to 20 min, not videos or voice messages), and "Apps that look for lyrics" lists the apps seen playing as cards with their icons, each one's lyrics turned off with its switch; a search result is taken only when its title, artist and length match.</li>
+</ul>
+<p><strong>Status notices</strong> (from the pill, an option, off by default)</p>
+<ul>
+<li>The charger plugged in, the battery under 20% and 10%, a Bluetooth audio device connected, and "Do not disturb" turned on or off (#6158, #6204); on the main island, also when it doesn't show the apps' notifications.</li>
+</ul>
+<p><strong>Tray icons</strong></p>
+<ul>
+<li>The grid of the icons not pinned has its own number of columns (6 as before, #6162).</li>
+</ul>
+<p><strong>Languages</strong></p>
+<ul>
+<li>The island and Windhawk's settings in German, Spanish, Russian and Japanese too (#6472), chosen in the island's settings or like Windows' display language; the dates follow them.</li>
+</ul>
+<p><strong>Settings</strong></p>
+<ul>
+<li>The island's settings open in a window of their own, like Windows' Settings (the gear under the island and the control center's): a side bar with the search and a tab per subject (also Dock, About and Logs), each option on a card with a line saying what it does, the island's preview at the top (its items in their order, dragged to move them), resizable, in the island's colors over Mica. A dimmed option says why under its name, and a click there goes to what it needs. Logs copies or saves a summary, the settings and the island's last 300 log lines without turning on Windhawk's logs.</li>
+<li>Clearer texts for the two options that hide the clock and the tray (the Windows taskbar's, with the island; the dock's, without it).</li>
+<li>The Monitors page: where the island appears as three buttons that say what they do, the screens as a bigger map (the islands marked), and with an island on every monitor a card for each (its notifications, its look).</li>
+<li>One settings window a monitor (a notch opens its monitor's), opened at its own monitor's size, and back where it was after the island starts again.</li>
+<li>A What's new tab (between About and Logs) with the notes of every published version (2.0.0, 2.0.1, 2.0.6 and 2.1.0) for users, in the island's 7 languages, switched by flags the mod draws itself (Direct2D shapes, nothing downloaded); it opens in the island's language, and the search finds the notes. The language buttons in General show the flags too.</li>
+<li>Once per version (also on a first install), 10 seconds after the main island starts, a notice from the pill says what's new and stays until one of its buttons opens that tab or closes it (an option, on by default, per profile). The language buttons' flags sit on whole pixels, sharp at 150% and 175% too.</li>
+</ul>
+<p><strong>Control center</strong></p>
+<ul>
+<li>Every pill item that opens something can also be a control center button (hidden until added with Edit): notifications, calendar, what's playing, power, CPU/RAM use, profiles, keyboard language, privacy, USB drives, virtual desktops, folders, wallpaper, komorebi's layout, world clocks, next event, Recycle Bin, timer and the tray icons.</li>
+<li>The magnifier, the narrator and the new on-screen keyboard are buttons that start them (their state wasn't always read right; the magnifier falls back to Win+Plus when it doesn't start); the on-screen keyboard can also go on the control center and the pill (#6160).</li>
+</ul>
+<p><strong>Brightness</strong></p>
+<ul>
+<li>A laptop's own screen has its slider and wheel too (through WMI, like Windows' own slider), beside monitors with DDC/CI; a monitor without DDC/CI shows none, as before (#6436, #6457, #6501, #6350).</li>
+<li>The wheel on the brightness adds up small turns (touchpads, smooth wheels) instead of losing them (#6420).</li>
+</ul>
+<p><strong>Fixes</strong></p>
+<ul>
+<li>The island's window no longer reaches 3 pixels into a monitor above its own (it kept that monitor's dock from coming up at the middle of its edge).</li>
+<li>Panels stay inside their monitor and never as tall as it (a long list went past the screen's bottom, into the next monitor, and Wallpaper Engine took it for a full-screen app and stopped).</li>
+<li>Win+N and Win+A open on the main island wherever the mouse is; minimizing a notification sets its app aside on every island.</li>
+<li>Every item on the pill grows in and shrinks away (the tray, the media's parts, the uses, the app in focus, the folders, the minimize button and the percentages used to jump); a group whose contents change size follows them smoothly.</li>
+<li>The Bar style scrolls through its items when they don't fit; the control center has no limit of eight and grows wider to fit the screen.</li>
+<li>A notification's app icon missing right after a restart is looked for again within seconds.</li>
+<li>Closing a virtual desktop from the desktops' list closes that one, also when it's a few desktops away, and goes back to where you were (#6164).</li>
+<li>The network item no longer shows a cable on Wi-Fi when Windows doesn't give the Wi-Fi's details (#6361).</li>
+<li>The Task Manager button opens it also with an administrator's window in front (it pressed Ctrl+Shift+Esc, which Windows dropped then).</li>
+<li>The dock comes up only with the mouse at the screen's bottom edge again; the strip above the edge counts only with another monitor below (#6472).</li>
+<li>A Windhawk setting chooses the height over the bottom edge that brings the dock (or the transparent taskbar) up (in pixels at 100% scale), the same on every monitor; 0, the default, keeps it automatic (#6472).</li>
+<li>The minimized line's invisible strip is half as thick: the mouse passing near the edge no longer brings the island back (#6468).</li>
+<li>The control center's Emoji and Clipboard buttons open for the app in front, instead of closing at once.</li>
+<li>While a panel opened from the pill is open, the pill keeps its width (a longer or shorter media title scrolls in it) and resizes once the panel closes, so the panel's corners stay put; one wider than the pill closes up before narrowing, so its contents aren't cut at the sides.</li>
+<li>Right after Windows starts, the progress fill waits 30 seconds (apps restoring themselves reported a progress they didn't have and filled the whole bar).</li>
+<li>A taskbar button without an app ID for a moment no longer makes its badge blink or loses the taskbar's own picture.</li>
+<li>The dock no longer shows the plate the taskbar stacks behind an app with more windows, and an overlay picture (like a browser profile's photo) stays sharp at its own size as the icon grows.</li>
+<li>With the timer's item on the pill, the next event item no longer shows the timer and Pomodoro too.</li>
+<li>The progress fill reaches into the notches' curves.</li>
+<li>The progress fill follows only what the taskbar's buttons show, read again every second while it shows (it no longer stays after an app has finished), and a new progress fills the pill after 5 seconds (Windows' file copies at once).</li>
+<li>The visualizer follows the playing app's loudest audio session (a browser has several), and the output's sound while that app is paused or quiet, instead of staying still.</li>
+<li>Turning the mod off puts the taskbar's auto-hide back only once Windows confirms it (and tries again later if it didn't), each taskbar button keeps its own app's icon and badge, and one taskbar element failing no longer stops the rest of the cleanup.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Launch Dock 1.1.0]]></title>
         <id>https://windhawk.net/mods/quick-launch-dock#5483048714c0596d3ecfc91670898c77b60d0ead</id>
@@ -683,186 +856,6 @@ restrictions for game downloads.</li>
         <author>
             <name>Elmidin Mahmud</name>
             <uri>https://github.com/elmidin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CoverTabby 1.1]]></title>
-        <id>https://windhawk.net/mods/covertabby#06ce71bdeee78673eae1739196e0779619abe5de</id>
-        <link href="https://windhawk.net/mods/covertabby"/>
-        <updated>2026-10-24T17:03:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Aero 3D, with parallel tilted Alt+Tab previews and cyclic navigation.</li>
-<li>Add a bottom selection indicator and localized window count that follow search results.</li>
-<li>Expand Win+Tab with desktop gallery layouts, an animated full-screen desktop view, and accent hover feedback.</li>
-<li>Add a minimized-window strip, desktop rename/delete controls, and window actions in the expanded overview.</li>
-<li>Stop navigation wrapping in stacks of five or more desktops and animate desktop-to-desktop transitions.</li>
-<li>Add optional Alt+Tab navigation across virtual desktops and refine quick-tap/hold Win+Tab behavior.</li>
-<li>Add live wallpaper-host previews while the switcher is open, with a static fallback.</li>
-</ul>]]></content>
-        <author>
-            <name>LTHC</name>
-            <uri>https://github.com/LoreTheHolyChip</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.0.2]]></title>
-        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#25462332c30b60131ce2d02809ed23eecb17fe46</id>
-        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
-        <updated>2026-10-24T17:03:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Decouple immune family processes from handled PID set in memory trim arbiter</li>
-<li>Protect descendants of visible non-minimized windows during working set trim</li>
-<li>Report working set reduction as trimmed bytes rather than ambient memory noise</li>
-<li>Separate hard memory reclamation from soft priority demotion accounting</li>
-<li>Remove residual standby accounting and sort top entries by trimmed bytes</li>
-<li>Prevent side-effecting map mutation in const EvaluatePreOpen arbiter method</li>
-<li>Guard power scheme state persistence against failed PowerSetActiveScheme invocations</li>
-<li>Eliminate hardcoded kNonGames blacklist in favor of native GameConfigStore</li>
-<li>Evaluate D3D exclusive fullscreen and game folders before the packaged app filter</li>
-<li>Avoid game launcher false positives by dropping ambiguous launcher folders</li>
-<li>Add configurable game Alt-Tab grace period setting (default 30 seconds)</li>
-<li>Remove generic -m CLI marker and add jittered TTL to AI inference cache</li>
-<li>Calibrate automatic memory thresholds for systems with 32 GB or more RAM</li>
-<li>Count only actually boosted processes in ProBalance logs</li>
-<li>Fix access-denied count in the unload session report</li>
-<li>Streamline ProBalance process tree logging and normalize log statements</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8 Network Flyout Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win8-network-flyout-restorer#35d6cd4fc00a4f4967d447e43526abc262498e88</id>
-        <link href="https://windhawk.net/mods/win8-network-flyout-restorer"/>
-        <updated>2026-10-24T16:33:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows8networkflyoutrestorer">Windows 8 Network Flyout Restorer</h1>
-<p>This mod restores the Windows 8-style network panel from the taskbar network icon.
-The panel provides access to Wi-Fi networks, wired connections, VPN connections
-and Airplane mode, where supported by Windows and the installed hardware.</p>
-<p>This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<p>On builds that still contain the legacy network components, the mod uses them
-directly and downloads nothing; the result is usually closer to the original
-Windows 8 panel, since the system's own providers are used. On newer builds,
-the required Microsoft components are downloaded from Microsoft's Symbol Server
-and verified with SHA-256 before use.</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/winserverpicture.png" alt="winserverpicture" /></p>
-<p>Note: This is a best-effort modification. The Windows 8 network flyout and its dependencies had been removed in Windows 11 24H2+ and the restoration is done within modern Windows' limitations.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>64-bit Windows 10 (build 17763 or later) or Windows 11.</li>
-<li>Windhawk 1.4 or later.</li>
-<li>An internet connection for the first download, if additional components are needed.</li>
-<li>Native ARM64 Windows is not supported: fallback artifacts are AMD64-only and
-the native component route is unavailable on ARM64 builds.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>Compatible Windows components already on the computer are used when available.
-Otherwise, the required Microsoft components are downloaded from Microsoft's
-Symbol Server and kept in Windhawk's private storage. System files are not replaced.
-Compatibility depends on the Windows build; the panel may not work on every system.</p>
-<p>Downloaded files are checked with SHA-256 before use. Damaged cached downloads are
-replaced automatically when possible. If verification still fails, the downloaded
-panel remains inactive rather than loading an unverified file.</p>
-<h2 id="options">Options</h2>
-<p>The classic network icon is optional and disabled by default. If enabling it
-causes Explorer to restart, leave it disabled and use the alternative network icon.
-The settings control the classic network icon, the optional Win+Shift+N shortcut
-and the panel language. The downloaded panel supports English, Italian, Spanish,
-French and Brazilian Portuguese. When built-in Windows components are used, their
-original Windows language is retained. Restart Explorer after changing the panel language.</p>
-<h2 id="privacyandsystemchanges">Privacy and system changes</h2>
-<p>The mod does not create or modify entries in the live HKCU/HKLM registry and
-does not create system-wide COM registrations. In fallback mode, registry access
-needed by the legacy components is redirected to a private application hive
-loaded with <code>RegLoadAppKeyW</code> from a unique file in this mod's Windhawk storage.
-Each <code>explorer.exe</code> instance gets its own hive file, so concurrent Explorer
-processes do not contend for one backing file. The hive is not mounted under
-HKCU/HKLM and is not visible to other processes. On normal unload the mod closes
-the hive and attempts to remove its file; a crash can leave an orphaned hive
-file in mod storage. Downloaded components are also kept in Windhawk storage to
-avoid downloading them at every start.</p>
-<p>If you used an earlier release, its <code>HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry</code>
-subtree (or the older <code>windows-8-network-flyout-restorer</code> name) may still be
-present. This release does not delete old registry data automatically; after
-all older mod/Explorer instances have stopped, remove those legacy entries
-manually if you want to clean them up.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If a handled C++ error occurs, the mod stops accepting requests for that session
-and attempts to shut down its features. Restart Explorer before trying again.
-This does not protect Explorer from every possible error in legacy Windows components.</p>
-<p>If the panel does not open, check the internet connection and Windhawk's mod log.
-An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
-restores the normal Windows behavior. If shutdown gets stuck, some resources may
-be kept until Explorer exits to avoid unloading code that is still running.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdministratoX - Testing on Windows 11 25H2</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DeepSeek Balance in Taskbar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/deepseek-balance-tray#0ab510bd7f577ef5e7ea4b1f5d2f528d580c24d3</id>
-        <link href="https://windhawk.net/mods/deepseek-balance-tray"/>
-        <updated>2026-10-24T14:05:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="deepseekbalanceintaskbar">DeepSeek Balance in Taskbar</h1>
-<p>Shows the current DeepSeek API account balance right in the Windows taskbar
-clock:</p>
-<pre><code>0:17
-22.10.2026 | ≈1 058 ₽
-</code></pre>
-<p>Works in <code>explorer.exe</code> on Windows 10 and Windows 11 with the stock taskbar.
-Networking uses the built-in WinHTTP stack and JSON/XML parsing is hand-written,
-so there are no external dependencies.</p>
-<p><img src="https://raw.githubusercontent.com/MrAlexFreeman/deepseek-balance-tray/main/screenshots/clock.png" alt="screenshot" /></p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>The mod hooks <code>GetTimeFormatEx</code> / <code>GetDateFormatEx</code> from <code>kernelbase.dll</code> —
-the functions the taskbar clock uses to format its text (Windows 10:
-<code>ClockButton::UpdateTextStringsIfNecessary</code>, Windows 11:
-<code>ClockSystemTrayIconDataModel::RefreshIcon</code>).</li>
-<li>Formatting is only decorated while the clock is refreshing (a thread-local
-flag), so dates in other Explorer windows are left alone.</li>
-<li>A background thread polls <code>https://api.deepseek.com/user/balance</code> through
-WinHTTP, parses the JSON and updates the clock suffix.</li>
-<li>When a display currency is selected, the mod fetches the official Bank of
-Russia rates (<code>https://www.cbr.ru/scripts/XML_daily.asp</code>, windows-1251),
-caches them for six hours and converts the balance. With the default
-<code>native</code> mode no such request is made.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>DeepSeek API key</strong> — <code>sk-...</code> key stored in Windhawk's mod settings on this
-PC. Leave it empty to use the <code>DEEPSEEK_API_KEY</code> environment variable.</li>
-<li><strong>Refresh interval</strong> — how often to poll the API, in minutes.</li>
-<li><strong>Clock line</strong> — append to the bottom (date) line or the top (time) line.</li>
-<li><strong>Display currency</strong> — <code>native</code> keeps the currency returned by the API;
-<code>CNY</code>, <code>RUB</code> and <code>USD</code> convert the balance with the official Bank of Russia
-rates.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Requires symbols (PDB) for <code>explorer.exe</code> / <code>SystemTray.dll</code>; Windhawk
-downloads them automatically on first start.</li>
-<li>The old Windows 10 taskbar on Windows 11 (ExplorerPatcher) is not supported.</li>
-<li>The API key is stored in plain text in the mod settings: Windhawk has no
-secret setting type. The key is only sent to <code>api.deepseek.com</code> and is never
-logged; no other endpoints are contacted except <code>www.cbr.ru</code>, and only when a
-display currency other than <code>native</code> is selected.
-In a regular (non-portable) Windhawk install the settings are machine-wide,
-so every Windows account on this PC shares the same key.</li>
-<li>Do not enable this mod together with Taskbar Clock Customization: both hook
-the same formatting functions of the clock, and that mod replaces the line
-text, so only one of them can win. Pick one of the two.</li>
-</ul>]]></content>
-        <author>
-            <name>MrAlexFreeman</name>
-            <uri>https://github.com/MrAlexFreeman</uri>
         </author>
     </entry>
 </feed>

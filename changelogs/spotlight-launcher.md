@@ -1,3 +1,13 @@
+## 0.7.1 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/29d1380647b00ebd4049d838db77d2773779aad1/mods/spotlight-launcher.wh.cpp))
+
+* **A chip for every drive.** File mode now shows a chip (with a disk icon) for each of your drives on a **second row**, kept apart from the location chips so the two groups do not read as one list. A chip is added for every fixed and removable drive that is ready; empty card readers, optical drives with no disc and network drives are skipped, so nothing ever raises a "there is no disk" dialog. The row appears only when you have **two or more** drives (with a single drive there is nothing to switch to). The chips are detected automatically, no setup.
+* **A "This PC" drives view.** Going up from a drive root — **←** or **Backspace** on an empty box, or **Alt + ↑** — now opens a list of all your drives instead of doing nothing, so you can move between drives with the arrows alone. **Enter** or **→** opens the highlighted drive; each row shows its label and free space.
+* **Location chips follow moved folders.** The Home, Downloads, Documents, Pictures, Music and Videos chips now resolve to each folder's real location, so they still work when a folder has been moved to another drive or redirected (for example a `OneDrive`-backed Documents).
+* **Switch drives with Ctrl + Tab.** `Ctrl + Tab` cycles forward through the drive chips and `Ctrl + Shift + Tab` backward (the six location chips are left out, since they are a separate idea). `Ctrl + 1…9` now jumps to any chip — locations first, then drives — and typing a path such as `D:\` in the path bar still works.
+* **Start drive setting.** A new **Start drive** option (a single drive letter) chooses which drive the file browser opens on the first time you use it in a session. Empty — or a drive that is not available, such as an unplugged USB stick — opens on Home, as before.
+* The F1 cheat sheet and the README shortcut tables list the new keys.
+* **The F1 help sheet no longer resets the bar.** It now overlays the current view and closing it returns exactly where you were — the same folder and selection in the file browser, or the calculation you were working on — instead of starting over as if the launcher had just opened.
+
 ## 0.7.0 ([Oct 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6fcd3d85b84e3caf6c8ff1add265132f272a0735/mods/spotlight-launcher.wh.cpp))
 
 * Added a **Files** mode: browse drives and folders in the launcher with location chips, a path bar, folder history, an actions menu (rename, copy, new folder, terminal, properties, Recycle Bin), filters and image thumbnails.

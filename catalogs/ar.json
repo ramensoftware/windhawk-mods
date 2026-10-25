@@ -9337,7 +9337,7 @@
         "ratingUsers": 12,
         "reviews": 0,
         "trendingSorting": 23.5,
-        "updated": 1792775004000,
+        "updated": 1792965724000,
         "users": 235
       },
       "metadata": {
@@ -9345,7 +9345,7 @@
           "x86-64"
         ],
         "author": "ali0zdas",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
         "description": "Customize the Windows 11 lock screen clock with modern styles, date display, and widget controls.",
         "github": "https://github.com/ali0zdas",
         "include": [
@@ -9353,7 +9353,7 @@
         ],
         "license": "MIT",
         "name": "Lock Screen Clock Styler",
-        "version": "0.4.0"
+        "version": "0.5.0"
       }
     },
     "lockscreen-datetime-format": {
@@ -9445,7 +9445,7 @@
         "ratingUsers": 354,
         "reviews": 5,
         "trendingSorting": 67.59275918349097,
-        "updated": 1792555438000,
+        "updated": 1792965719000,
         "users": 9300
       },
       "metadata": {
@@ -9461,7 +9461,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Mac Island & Dock",
-        "version": "2.0.6"
+        "version": "2.1.0"
       }
     },
     "mac-magnifying-cursor": {
@@ -14039,7 +14039,7 @@
         "ratingUsers": 38,
         "reviews": 1,
         "trendingSorting": 16.531912486976253,
-        "updated": 1792746246000,
+        "updated": 1792965729000,
         "users": 609
       },
       "metadata": {
@@ -14052,7 +14052,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "0.7.0"
+        "version": "0.7.1"
       }
     },
     "standard-title-bar-colors": {
@@ -16891,7 +16891,7 @@
         "ratingUsers": 42,
         "reviews": 0,
         "trendingSorting": 1.1418182417922182,
-        "updated": 1791835389000,
+        "updated": 1792965735000,
         "users": 549
       },
       "metadata": {
@@ -16907,7 +16907,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Thumbnail Stats",
-        "version": "1.4"
+        "version": "1.5"
       }
     },
     "taskbar-thumbnails": {

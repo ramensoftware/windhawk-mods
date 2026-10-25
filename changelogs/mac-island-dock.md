@@ -1,3 +1,101 @@
+## 2.1.0 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/41fdb9158f257c7d4bbc3358369facf21ab625a7/mods/mac-island-dock.wh.cpp))
+
+**Folders**
+* Sorting by date now finds the newest files in folders with more than 200 items; wider columns.
+* Sorted as in Explorer (name, date modified, type or size, either way, with the date, type or size shown), only one kind of file shown or folders mixed with the files, and each pin with its own icon and color (with an "Apply" button to close the choice); pinned folders show a folder icon again.
+* A file's row has two buttons: copy the file (pasted in a folder, it goes there) and copy its path (#6161).
+* Windows' places open with a click; their pin, at the row's end, pins them (a click used to pin them, #6161).
+* Favorite files: a star on a file's row keeps it with the pinned folders, where a click opens it and its buttons copy the file or its path; one deleted or moved leaves the list, one on a drive taken out comes back with the drive (up to 40).
+* The pins, their icons and colors and the folders' order are each Windows account's own (another account on the same PC no longer shares them).
+
+**Calendar**
+* Clicking an upcoming event or holiday shows its day in the calendar (#6156).
+
+**Notifications**
+* With islands on several monitors, the Monitors section chooses which islands show the notifications (the main one by default). The main island keeps the sounds, Windows' banners, Win+N, and calls, alarms and reminders; opening, deleting or minimizing a notification on one island closes it on the others (#6159).
+* The apps with notifications can fold into an arrow, like the tray: they come out a moment when a notification comes, and under the mouse (an option, #6129, #6204, #6208).
+* Chat apps that only blink their tray icon instead of sending notifications to Windows (the Chinese WeChat, WeCom, DingTalk) show on the pill with their dot when it starts blinking (#6074, #6215).
+
+**The pill**
+* The time can be turned off (on by default, per profile): the date alone shows then, with its own options as before, or nothing when they're off too.
+* A "Show desktop" button for the control center and the pill (off by default).
+* The language bubble only shows when the app in front changes its own mode (Shift, the indicator), not when another app comes in front, and it's no longer cut with a low pill (#6422).
+* An item drawn in two parts (the battery or the volume and its percentage) has one hover highlight (#6460).
+* Win+J (an option, off by default, #6519) minimizes the islands to their line and brings them back; its keys can be changed by recording them in the settings (a click, then the new keys; Win+J back with one click), with a warning when Windows or another app uses them too.
+* With notches, the keyboard language bubble shows once, from the middle notch (#6199).
+* What's playing's note, its cover and title, and its buttons are three items of their own in the pill's order (each placed and turned on or off on its own; current layouts keep them together).
+* A control center button that's on (like night light) shows its icon in the accent color with a dot under it, instead of a white disc behind it.
+* A notification's title too long scrolls under the mouse (#6200).
+
+**Media**
+* A mixer in the media panel: every app with audio sessions on the default output, one entry per program with its icon, name, volume and mute by clicking the icon; the playing app keeps its own volume and mute in the player, with the device's volume and a button for Windows' mixer below it (Win+Ctrl+V on Windows 11 23H2+, sndvol on older versions or if input fails). The mixer opens collapsed and expands with an animated arrow. The session list and icon conversion are shared with the control center.
+* Source chips show the apps' icons, dimmed when paused, and Automatic has its own glyph. They wrap into more rows when needed.
+* A larger cover, the whole modal tinted from the cover's average color with a smooth color transition, a small app icon beside its name, and two pill switches with rounded highlights in a compact footer; the panel scrolls for long lists and stays within its monitor, with press and spring animations, crossfading/sliding media source transitions and animated mute icons/volume bars.
+* Volume sliders follow the pointer while dragging; audio writes are coalesced off the drawing thread, the mixer reveal keeps its existing row geometry, and footer labels have padding on both sides. Accent colors, media text and icons are cached outside drawing; idle monitor/notch profiles are skipped by the animation loop.
+* Lyrics default to Follows the line (each line's own width, up to 360 DIPs); Short, Medium and Long hold the widest line until a pause or gap.
+
+**Credits**
+* The README's credits (English and Portuguese) link m417z's mod and ask for credit, with a link, from anyone reusing this mod's code or inspired by it (a request, not a license condition).
+
+**New items on the pill** (each off by default, #6157)
+* The Recycle Bin: how many items; open it, or empty it with a second click; always shown, or only once what's in it weighs 100 MB, 500 MB, 1 GB or 5 GB.
+* A timer, a stopwatch (with hundredths) and Pomodoro, each on its own (all three can run at once), in a panel like the macOS Clock app: lengths in hours, minutes and seconds on wheels (the mouse wheel, a drag or typed), a ring while it runs, Pomodoro's focus and break chosen; the pill shows the one ending first, in orange, and a click on it lists every one going as Live Activities like the iPhone's (each with its time, Pause and Cancel, the next alarm with its switch, Show all); a notice when each ends, with Repeat and Stop (Pomodoro: Stop and OK); and alarms in the same panel: a time each day on wheels, each on or off, with or without a sound, edited with a pencil, its notice with Stop (its sound repeats until then, a minute at most); alarms ring and timers end on time also behind a full-screen app or while the island restarts, and each Windows account has its own; Control Center buttons for the stopwatch, Pomodoro and alarms (#6156).
+* The network's speed, up and down.
+* An audio visualizer: six rounded bars jumping with the beat of the playing app's own sound (or any sound, like VLC's) while something plays, or swaying smoothly like the iPhone's (an option), with a sensitivity slider and a color (the icons', Windows' accent, a rainbow, your own or the cover's).
+* World clocks: Windows' own additional clocks (Date & time settings), shown as soon as they're added there, with a day ahead or behind marked; a click opens Windows' list of them.
+* The time until the next event, alarm, timer or Pomodoro part (each can be left out; in the next 12 hours); a click opens it.
+* The pill filling like a loading bar (each an option, off by default, in the Animations tab): with the progress apps show on their taskbar button (downloads, copies, installs; #6071, read from the taskbar's own progress bar), and with a laptop's battery charge while it charges (not while it's held at a charge limit, like 80%); one bar across the Fixed style's notches (the whole bar in the Bar style), a solid line under it like the taskbar's; a color for each kind (downloads and other apps, Windows' file copies, the battery: green, blue, Windows' accent or your own; red for an error, yellow paused); it moves simply, as a liquid wave or as a glow with particles; paused it breathes, an error shakes, done flashes with a check, canceled drains back.
+* Song lyrics (an option, off by default, goes online: each song's title and artist are sent to lrclib.net): the line sung now on the pill, in time with the song (its size, color and longest line chosen; or in the song title's place while a line is sung, an option), and all of them in a panel where a line clicked goes there in the song. Only for songs (with an artist, 45 s to 20 min, not videos or voice messages), and "Apps that look for lyrics" lists the apps seen playing as cards with their icons, each one's lyrics turned off with its switch; a search result is taken only when its title, artist and length match.
+
+**Status notices** (from the pill, an option, off by default)
+* The charger plugged in, the battery under 20% and 10%, a Bluetooth audio device connected, and "Do not disturb" turned on or off (#6158, #6204); on the main island, also when it doesn't show the apps' notifications.
+
+**Tray icons**
+* The grid of the icons not pinned has its own number of columns (6 as before, #6162).
+
+**Languages**
+* The island and Windhawk's settings in German, Spanish, Russian and Japanese too (#6472), chosen in the island's settings or like Windows' display language; the dates follow them.
+
+**Settings**
+* The island's settings open in a window of their own, like Windows' Settings (the gear under the island and the control center's): a side bar with the search and a tab per subject (also Dock, About and Logs), each option on a card with a line saying what it does, the island's preview at the top (its items in their order, dragged to move them), resizable, in the island's colors over Mica. A dimmed option says why under its name, and a click there goes to what it needs. Logs copies or saves a summary, the settings and the island's last 300 log lines without turning on Windhawk's logs.
+* Clearer texts for the two options that hide the clock and the tray (the Windows taskbar's, with the island; the dock's, without it).
+* The Monitors page: where the island appears as three buttons that say what they do, the screens as a bigger map (the islands marked), and with an island on every monitor a card for each (its notifications, its look).
+* One settings window a monitor (a notch opens its monitor's), opened at its own monitor's size, and back where it was after the island starts again.
+* A What's new tab (between About and Logs) with the notes of every published version (2.0.0, 2.0.1, 2.0.6 and 2.1.0) for users, in the island's 7 languages, switched by flags the mod draws itself (Direct2D shapes, nothing downloaded); it opens in the island's language, and the search finds the notes. The language buttons in General show the flags too.
+* Once per version (also on a first install), 10 seconds after the main island starts, a notice from the pill says what's new and stays until one of its buttons opens that tab or closes it (an option, on by default, per profile). The language buttons' flags sit on whole pixels, sharp at 150% and 175% too.
+
+**Control center**
+* Every pill item that opens something can also be a control center button (hidden until added with Edit): notifications, calendar, what's playing, power, CPU/RAM use, profiles, keyboard language, privacy, USB drives, virtual desktops, folders, wallpaper, komorebi's layout, world clocks, next event, Recycle Bin, timer and the tray icons.
+* The magnifier, the narrator and the new on-screen keyboard are buttons that start them (their state wasn't always read right; the magnifier falls back to Win+Plus when it doesn't start); the on-screen keyboard can also go on the control center and the pill (#6160).
+
+**Brightness**
+* A laptop's own screen has its slider and wheel too (through WMI, like Windows' own slider), beside monitors with DDC/CI; a monitor without DDC/CI shows none, as before (#6436, #6457, #6501, #6350).
+* The wheel on the brightness adds up small turns (touchpads, smooth wheels) instead of losing them (#6420).
+
+**Fixes**
+* The island's window no longer reaches 3 pixels into a monitor above its own (it kept that monitor's dock from coming up at the middle of its edge).
+* Panels stay inside their monitor and never as tall as it (a long list went past the screen's bottom, into the next monitor, and Wallpaper Engine took it for a full-screen app and stopped).
+* Win+N and Win+A open on the main island wherever the mouse is; minimizing a notification sets its app aside on every island.
+* Every item on the pill grows in and shrinks away (the tray, the media's parts, the uses, the app in focus, the folders, the minimize button and the percentages used to jump); a group whose contents change size follows them smoothly.
+* The Bar style scrolls through its items when they don't fit; the control center has no limit of eight and grows wider to fit the screen.
+* A notification's app icon missing right after a restart is looked for again within seconds.
+* Closing a virtual desktop from the desktops' list closes that one, also when it's a few desktops away, and goes back to where you were (#6164).
+* The network item no longer shows a cable on Wi-Fi when Windows doesn't give the Wi-Fi's details (#6361).
+* The Task Manager button opens it also with an administrator's window in front (it pressed Ctrl+Shift+Esc, which Windows dropped then).
+* The dock comes up only with the mouse at the screen's bottom edge again; the strip above the edge counts only with another monitor below (#6472).
+* A Windhawk setting chooses the height over the bottom edge that brings the dock (or the transparent taskbar) up (in pixels at 100% scale), the same on every monitor; 0, the default, keeps it automatic (#6472).
+* The minimized line's invisible strip is half as thick: the mouse passing near the edge no longer brings the island back (#6468).
+* The control center's Emoji and Clipboard buttons open for the app in front, instead of closing at once.
+* While a panel opened from the pill is open, the pill keeps its width (a longer or shorter media title scrolls in it) and resizes once the panel closes, so the panel's corners stay put; one wider than the pill closes up before narrowing, so its contents aren't cut at the sides.
+* Right after Windows starts, the progress fill waits 30 seconds (apps restoring themselves reported a progress they didn't have and filled the whole bar).
+* A taskbar button without an app ID for a moment no longer makes its badge blink or loses the taskbar's own picture.
+* The dock no longer shows the plate the taskbar stacks behind an app with more windows, and an overlay picture (like a browser profile's photo) stays sharp at its own size as the icon grows.
+* With the timer's item on the pill, the next event item no longer shows the timer and Pomodoro too.
+* The progress fill reaches into the notches' curves.
+* The progress fill follows only what the taskbar's buttons show, read again every second while it shows (it no longer stays after an app has finished), and a new progress fills the pill after 5 seconds (Windows' file copies at once).
+* The visualizer follows the playing app's loudest audio session (a browser has several), and the output's sound while that app is paused or quiet, instead of staying still.
+* Turning the mod off puts the taskbar's auto-hide back only once Windows confirms it (and tries again later if it didn't), each taskbar button keeps its own app's icon and badge, and one taskbar element failing no longer stops the rest of the cleanup.
+
 ## 2.0.6 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f0be7478ca936e97c740aa3ffa3407b421e4a7cf/mods/mac-island-dock.wh.cpp))
 
 **The dock**
