@@ -2,12 +2,129 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T08:01:19.000Z</updated>
+    <updated>2026-10-25T10:03:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Top Taskbar Bleed 1.0.0]]></title>
+        <id>https://windhawk.net/mods/top-taskbar-bleed#734714f248424422007d996d861940948d4eb2e5</id>
+        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
+        <updated>2026-10-25T10:03:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="toptaskbarbleed">Top Taskbar Bleed</h1>
+<p>When a maximized window sits under a top-docked taskbar, the taskbar gets a
+full-width color panel behind its buttons that matches the window's top edge
+(optionally as a gradient, for Mica title bars), so the window's title bar
+appears to continue up into the bar.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif" alt="Demo" /></p>
+<p><strong>Requires a taskbar docked at the top of the screen</strong> (via the taskbar
+position setting on builds that have it, or a mod such as <em>Taskbar on top for
+Windows 11</em>). On other dock positions this mod stays idle.</p>
+<p>How it works:</p>
+<ul>
+<li>A tracker thread watches window events and finds, per monitor, the foremost
+maximized window (the first maximized window in z-order on that monitor -
+not necessarily the foreground window, so a small dialog on top of a
+maximized app doesn't cancel the bleed).</li>
+<li>The window's top edge row is captured from the screen and reduced to its
+dominant color (so a bit of text or an icon can't skew it); that color is
+the panel and decides the taskbar theme. Pixels covered by another window -
+a flyout, a thumbnail, a tooltip, a dialog near the top edge - are left out,
+so floating windows never tint the bleed. Hovering a taskbar thumbnail
+(Aero Peek) bleeds the peeked window if it is maximized on that monitor and
+hides the panel otherwise, since the desktop is what shows through.</li>
+<li>Experimental <strong>Gradient bleed</strong>: instead of one color, the dominant colors
+of four windows at 20/40/60/80% of the width - away from the app icon on the
+left, the caption buttons on the right and a centered title - become a
+horizontal gradient, so a Mica or gradient title bar continues into the bar
+(a flat one stays flat). A point that doesn't fit the rest (a toolbar
+reaching that far, a hovered control) is bridged from its neighbors. Off by
+default: apps that put content along their very top edge can still show it.</li>
+<li>One panel per taskbar is inserted into the taskbar's XAML tree, above the
+taskbar background and below the buttons. The panel mirrors the edge: window
+changes (switching, maximizing, minimizing) are picked up from window events
+and applied on the next composed frame, and the edge is re-sampled in
+between - every <strong>Poll interval</strong> (250 ms by default) while it is static,
+every 25 ms while it is changing - so a title bar that recolors in place
+(focus fade, tab switch, app theme change) is followed frame by frame. With
+Windows animations on, a window being zoomed into place isn't committed
+until its edge has actually landed, so the panel never flashes the background
+behind it; with animations off the first sample is applied as is.</li>
+</ul>
+<p>Supports multiple monitors (each taskbar follows its own monitor).</p>
+<p>Settings: <strong>Poll interval</strong> (how often a static edge is re-checked; window
+changes are event-driven regardless), <strong>Excluded programs</strong> (executables whose
+windows should never trigger the bleed) and the experimental <strong>Gradient bleed</strong>
+toggle described above.</p>
+<p>The panel is a regular XAML <code>Border</code> named <code>TaskbarBleedPanel</code>, so its shape can
+be styled with <em>Windows 11 Taskbar Styler</em> like any other taskbar element.
+Target <code>Border#TaskbarBleedPanel</code> and set, for example, <code>Margin=4,4,4,0</code> or
+<code>CornerRadius=8,8,0,0</code> (the panel's bottom edge meets the window, so the
+rounded corners are normally the top ones). Leave <code>Background</code> and <code>Opacity</code>
+alone - the mod drives those (the background is a gradient brush).</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The taskbar's XAML tree is reached through <code>taskbar.dll</code> and
+<code>Taskbar.View.dll</code> symbols (downloaded by Windhawk on first run), not through
+XAML diagnostics, so the mod coexists with Windows 11 Taskbar Styler and other
+XAML-diagnostics consumers. The bleed applies as soon as the mod is enabled.</li>
+<li>Cost: with a maximized window present, each poll is one small screen
+readback (a 1px-high strip) plus a window enumeration; it doesn't register in
+Task Manager at either rate, and the fast rate only runs during a transition.
+With no maximized window the poll timer is off, and window events are only
+acted on when they come from a maximized window or the window being
+followed, so tooltips, thumbnails and overlays cost nothing.</li>
+<li>Windows that exclude themselves from capture (protected media, some
+remote-desktop clients) return no usable pixels; the panel then keeps its
+last color.</li>
+<li>The 1px taskbar border line (<code>BackgroundStroke</code>) breaks the illusion; it is
+hidden while a panel is showing and restored when the panel hides.</li>
+<li>Readability: a light title bar bled into a dark-mode taskbar leaves white
+labels on a light panel (and vice versa). While a panel is showing, the mod
+switches that monitor's taskbar to the theme that matches the bled color
+(light panel -&gt; light mode, dark panel -&gt; dark mode) and restores the
+previous theme when the panel hides. This is done per taskbar through XAML's
+<code>RequestedTheme</code>, so only the affected monitor changes and the system theme
+itself is untouched.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The taskbar-thread helpers (<code>RunFromWindowThread</code>, <code>FindCurrentProcessTaskbarWnd</code>)
+and the <code>taskbar.dll</code> XAML-root lookup are ported from
+<a href="https://windhawk.net/mods/taskbar-multirow">Taskbar multi-row</a> by m417z,
+licensed under the GNU GPL v3.0. This mod is published under the same license.</p>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Drag to Scroll 1.0.0]]></title>
+        <id>https://windhawk.net/mods/drag-to-scroll#365a77bb8705c9f36705cf265a395a7c499780a8</id>
+        <link href="https://windhawk.net/mods/drag-to-scroll"/>
+        <updated>2026-10-25T10:03:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dragtoscroll">Drag to Scroll</h1>
+<p>Hold <strong><code>Ctrl</code> + Right-Click</strong> and drag your mouse to scroll smoothly and naturally across desktop applications, including web browsers (Chrome, Edge, Firefox), text editors (VS Code, Notepad++), File Explorer, and legacy Win32 utilities.</p>
+<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/preview-global-drag-to-scroll.webp" alt="Drag to Scroll Demo" /></p>
+<h2 id="keyfeatures">Key Features</h2>
+<ul>
+<li><strong>High-Resolution Micro-Scrolling:</strong> Injects fractional wheel increments for fluid, trackpad-like scrolling in modern desktop apps and web browsers.</li>
+<li><strong>Legacy Control Detection:</strong> Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete <code>WM_VSCROLL</code> line steps to preserve native line-by-line movement.</li>
+<li><strong>Hands-Free Cruising:</strong> Release the Right Mouse Button while continuing to hold <code>Ctrl</code> to let the page cruise automatically based on cursor offset. Cruising disengages instantly on keypress, mouse click, or <code>Ctrl</code> release.</li>
+<li><strong>Zero Zoom Interference:</strong> Dynamically masks <code>Ctrl</code> state during scroll dispatch so applications never accidentally trigger browser zoom or editor scaling.</li>
+<li><strong>Accidental Click Protection:</strong> Tapping <code>Ctrl + Right-Click</code> in place without exceeding the deadzone transparently passes through as a regular right-click.</li>
+</ul>
+<h2 id="compatibilitylimitations">Compatibility &amp; Limitations</h2>
+<ul>
+<li><strong>Packaged & Modern UI Surfaces:</strong> Certain modern Windows interfaces (such as the Windows Start Menu or some packaged store apps) do not process standard Win32 mouse-drag messages through the message queue and are not supported.</li>
+<li><strong>CAD & 3D Software:</strong> If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to <code>Ctrl + Right-Click</code>, you can exclude those executables under the mod's <strong>Advanced</strong> tab in Windhawk.</li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Live Update for Windows 11 2.0.206]]></title>
         <id>https://windhawk.net/mods/live-update-for-windows-widget#43716e11539b8e7bfaab4e9df11350e613c0d859</id>
@@ -707,57 +824,6 @@ Windows 11 build 26220.</li>
         <author>
             <name>Maveric2005</name>
             <uri>https://github.com/Maveric2005</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 3.0.4]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#75402edd191fb26b9987dc4b0d60bf49288224ee</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-10-24T04:00:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added full compatibility support for both <strong>Windows 10</strong> and <strong>Windows 11</strong> (<code>x86-64</code>), anchoring the Run dialog flush above the Taskbar regardless of history item count.</li>
-<li>Added <strong>Liquid Glass</strong> surface theme featuring dual refractive rim strokes, pointer-following specular highlights, glass pill buttons, and automatic 16×16 background luminance contrast adaptation (alongside <strong>Windows Blur</strong> and <strong>Opaque</strong> themes).</li>
-<li>Added <strong>Auto Light / Dark Mode</strong> support (<code>Auto</code>, <code>Dark</code>, <code>Light</code>) and <strong>Italian (<code>it</code>)</strong> localization.</li>
-<li>Upgraded the rendering engine to <strong>Direct2D & DirectWrite</strong> (<code>IDWriteTextLayout</code>) for crisp <code>Segoe UI</code> typography and uniform multilingual diacritics scaling.</li>
-<li>Updated history list interaction: clicking a history item now executes the command immediately instead of only filling the input box.</li>
-<li>Fixed <strong>"Max History Items"</strong> (expanded range to <code>0–10</code>) and <strong>"Show Last Executed Time"</strong> not working when Windows <code>RunMRU</code> tracking is disabled, isolated stored history per Windows user (<code>HistoryTimestamps_&lt;SID&gt;</code>), added non-destructive history clearing (<code>HiddenRunMru_&lt;SID&gt;</code> &amp; <code>Delete</code> key shortcut) without deleting Windows' native <code>RunMRU</code> entries, and hid the clock icon when timestamps are turned off (#6467).</li>
-</ul>]]></content>
-        <author>
-            <name>caotu2k5</name>
-            <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.0]]></title>
-        <id>https://windhawk.net/mods/start-everything#45217a613b9826883069ffed9129215b7851c0ce</id>
-        <link href="https://windhawk.net/mods/start-everything"/>
-        <updated>2026-10-24T04:00:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Move search into its own Windows 11 window. Win+S, the taskbar search icon, Start’s search bar, and typing in Start open it while Start remains available normally.</p></li>
-<li><p>Copy Start’s size, alignment, background, rounded corners, and supported Start Menu Styler appearance. Copy supported static composition effects with their actual tint, blur, and color adjustments; retain their hook dependencies safely. Apply context-menu and submenu styling before they appear, with fixed menu corner radii.</p></li>
-<li><p>Preserve captured glass across updates and off/on cycles using validated effect definitions in this mod's Windhawk storage, scoped to the current Start process and matching brush identities. Keep live caches bounded and non-owning, invalidate reused identities and unsupported replacements, and leave Start's brush lifecycle and properties unchanged.</p></li>
-<li><p>Add 50 bundled left-to-right interface language options, automatic Windows display-language detection, and a manual language override. Translate search, context menus, preview labels, keyboard hints, and utility messages; keep Windows-provided app and Settings names in their native language.</p></li>
-<li><p>Add suggested apps and custom commands for empty searches, with both using the same matching and favorite-learning system.</p></li>
-<li><p>Add custom commands with CMD, Windows PowerShell, PowerShell 7, or a custom shell; optional hidden terminals; and emoji, Windows glyph, image, icon, or executable icons.</p></li>
-<li><p>Add an optional global search shortcut with modifier and key dropdowns, custom menu width and height, and a Files-panel toggle that also pauses Everything queries.</p></li>
-<li><p>Add automatic text and monochrome-icon contrast using one cached background map, plus a fixed text-color override. Pause background sampling during animations, scrolling, and dragging.</p></li>
-<li><p>Switch immediately when typing in Start and buffer opening input. Replay IME opening keys through Windows native input after the editable text context is ready, and improve focus recovery. Typing or Backspace closes context menus and continues the query; Escape closes the menu before clearing search. Preview clicks dismiss context menus so preview details remain copyable.</p></li>
-<li><p>Fetch previews on a dedicated background thread, with built-in Windows image decoding, PDF rendering, SVG rasterization, and bounded animation caches. Use native muted, looping video playback without a separate helper process. Add more copyable preview details and Copy name for files and folders.</p></li>
-<li><p>Animate preview height changes smoothly. With a bottom taskbar, short previews align at the top and tall previews at the bottom; top and side taskbars keep previews top-aligned and growing downward.</p></li>
-<li><p>Improve native shell drag input and drag-image tracking, and resolve optional pointer conversion by name. Keep drag and drop copy-only and suppress previews throughout the drag.</p></li>
-<li><p>Discover Windows Settings names and search keywords from Windows’ local database and navigation metadata. Cache results in memory, refresh changed catalogs in the background, retain additional Windows tools, and fall back to the built-in list when native data is unavailable. Prefer specific Settings names over broad keywords and avoid repeated Settings subtitles.</p></li>
-<li><p>Add postfix percentages such as <code>10% × 7</code>, mathematical symbols (<code>×</code>, <code>·</code>, <code>÷</code>, <code>−</code>, <code>π</code>, <code>√</code>), and decimal-comma calculator input. Keep binary remainder and existing English expressions compatible, support symbol-based unit conversions, reject malformed numeric tokens, and bound input length and recursion.</p></li>
-<li><p>Support opening and closing animations for top, left, and right taskbars. Keep these animations within the selected monitor and place the preview to the left for a right-side taskbar.</p></li>
-<li><p>Defer search UI creation until first use to avoid startup crashes, and remove obsolete code from the earlier in-Start design.</p></li>
-<li><p>Complete asynchronous XAML cleanup before the search UI thread exits, so Taskbar Styler can continue applying themes after mod updates or reloads.</p></li>
-<li><p>Organize settings into collapsible sections and remove Search Panel Margin. Existing 1.x preferences must be reapplied in the new sections; custom-command and unit-conversion keys are unchanged.</p></li>
-<li><p>Use typed material hooks, query protected brush interfaces from their live base objects, and remove development diagnostics from the submitted mod.</p></li>
-<li><p>Update the README and screenshot, including compatibility notes for the tested Windows 11 25H2 and 26H2 builds, language selection, symbol-based utility input, and theme setup after installation or updates.</p></li>
-<li><p>Fix Ctrl+V in Start so search opens immediately and receives the clipboard text.</p></li>
-</ul>]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
         </author>
     </entry>
 </feed>

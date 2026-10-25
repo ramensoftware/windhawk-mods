@@ -4918,6 +4918,31 @@
         "version": "1.0.0"
       }
     },
+    "drag-to-scroll": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792922585000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792922585000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "ArvindSaini978",
+        "compilerOptions": "-luser32",
+        "description": "Hold Ctrl + Right-Click and drag to scroll smoothly in desktop applications with adaptive line precision, dynamic velocity, and hands-free cruising.",
+        "github": "https://github.com/ArvindSaini978",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Drag to Scroll",
+        "version": "1.0.0"
+      }
+    },
     "dropbox-reduce-explorer-cpu-usage": {
       "details": {
         "defaultSorting": 2770,
@@ -17610,6 +17635,34 @@
         ],
         "name": "Toggle Hidden Files",
         "version": "1.1.0"
+      }
+    },
+    "top-taskbar-bleed": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792922589000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792922589000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Deen-0x",
+        "compilerOptions": "-lgdi32 -ldwmapi -lole32 -loleaut32 -lruntimeobject",
+        "description": "Bleeds the color of a maximized window's top edge into a top-docked taskbar behind the task buttons",
+        "github": "https://github.com/Deen-0x",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Top Taskbar Bleed",
+        "version": "1.0.0"
       }
     },
     "tortoisegit-progress-animation-background-fix": {
