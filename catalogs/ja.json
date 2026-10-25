@@ -20534,7 +20534,7 @@
         "ratingUsers": 3563,
         "reviews": 1,
         "trendingSorting": 1.5799829383419184,
-        "updated": 1792889403000,
+        "updated": 1792952240000,
         "users": 333445
       },
       "metadata": {
@@ -20551,7 +20551,7 @@
         ],
         "name": "Windows 11 File Explorer Styler",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.7.1"
+        "version": "1.7.2"
       }
     },
     "windows-11-native-four-column-snap-layout": {

@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T18:01:58.000Z</updated>
+    <updated>2026-10-25T18:17:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.7.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#12b5a5cebac0d359e06df2efdb1aa0c4014c86a2</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2026-10-25T18:17:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the WindowGlass theme with context menu styling fixes.</li>
+<li>Background effects are no longer applied for Explorer windows with the legacy frame and for the legacy Control Panel. It was never supported, and previous versions styled only some of the elements in these cases, resulting in a bad experience. If you want background effects for these windows, you might want to try the Translucent Windows mod.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Shortcut Arrow Overlays 1.0.0]]></title>
         <id>https://windhawk.net/mods/remove-shortcut-arrows#99b2c90b8dcdc892d7bcbe4d5978e47dced3a0bb</id>
@@ -888,22 +902,6 @@ ikon çok koyu/arka planla aynı renkteyse kenarlar yumuşak görünebilir.</li>
         <author>
             <name>DahaSakinOlamazdim</name>
             <uri>https://github.com/DahaSakinOlamazdim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Hover Info 1.1.2]]></title>
-        <id>https://windhawk.net/mods/file-hover-info#270fb9181c02b6e02af4604f0a11d6ae777f99cf</id>
-        <link href="https://windhawk.net/mods/file-hover-info"/>
-        <updated>2026-10-24T12:03:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Simplified Chinese localization for the info card (thanks @nekOStorm).</li>
-<li>Auto-detect Simplified Chinese only for mainland China and Singapore;
-Traditional Chinese falls back to English (can be chosen manually).</li>
-<li>Update the README to document Simplified Chinese support.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

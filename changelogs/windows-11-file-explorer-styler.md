@@ -1,3 +1,8 @@
+## 1.7.2 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/12b5a5cebac0d359e06df2efdb1aa0c4014c86a2/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Updated the WindowGlass theme with context menu styling fixes.
+* Background effects are no longer applied for Explorer windows with the legacy frame and for the legacy Control Panel. It was never supported, and previous versions styled only some of the elements in these cases, resulting in a bad experience. If you want background effects for these windows, you might want to try the Translucent Windows mod.
+
 ## 1.7.1 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/32487935f11043237f1f92606db29d60475d7953/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Updated the WindowGlass theme to fix a broken background for some context menus.
