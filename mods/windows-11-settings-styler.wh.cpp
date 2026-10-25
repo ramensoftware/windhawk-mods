@@ -2,14 +2,14 @@
 // @id              windows-11-settings-styler
 // @name            Windows 11 Settings Styler
 // @description     Customize the Windows Settings app with themes contributed by others or create your own
-// @version         1.1
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         SystemSettings.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -65,6 +65,12 @@ WindowGlass](https://github.com/ramensoftware/windows-11-settings-styling-guide/
 \
 OLED](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/OLED/README.md)
 
+[![Translucent
+Seamless](https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Translucent%20Seamless/screenshot-small.png)
+\
+Translucent
+Seamless](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Translucent%20Seamless/README.md)
+
 More themes can be found in the **Themes** section of [The Windows 11 Settings
 styling
 guide](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/README.md#themes)
@@ -104,6 +110,7 @@ from the **TranslucentTB** project.
   - WindowGlass: WindowGlass
   - OLED_variant_ModrinthGreen: OLED (Modrinth Green)
   - OLED_variant_SystemAscent: OLED (System Ascent)
+  - Translucent_Seamless: Translucent Seamless
 - styleConstants: [""]
   $name: Style constants
   $description: >-
@@ -2582,17 +2589,170 @@ const Theme g_themeOLED_variant_SystemAscent = {{
         L"Background=Transparent"}},
 }};
 
+const Theme g_themeTranslucent_Seamless = {{
+    ThemeTargetStyles{L"SystemSettings.View.SettingsExpander > Grid > SystemSettings.View.ExpanderToggleButton#ContainerButton > ContentPresenter#ContentPresenter", {
+        L"CornerRadius:=12,12,12,12"}},
+    ThemeTargetStyles{L"SystemSettings.View.SpacingStackPanel > ContentPresenter > SystemSettings.View.EntityItem > Grid", {
+        L"CornerRadius:=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.EntityItem#BluetoothRadioToggleEntityItem > Grid", {
+        L"CornerRadius:=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.TwoSegmentsHeroUserControl#DefaultOneSegmentHeroUserControl > Grid#LayoutRoot > Grid#LeftLayout > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > StackPanel > Button > ContentPresenter#ContentPresenter", {
+        L"CornerRadius:=12",
+        L"Width=250"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsExpander > Grid > ContentPresenter#RevealedContent", {
+        L"CornerRadius:=12"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > SystemSettings.View.EntityItem > Grid", {
+        L"CornerRadius:=$InRadius"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > Border", {
+        L"CornerRadius:=$InRadius"}},
+    ThemeTargetStyles{L"SystemSettings.View.ButtonEntityItem > Button#ContainerButton > ContentPresenter#ContentPresenter", {
+        L"CornerRadius:=$InRadius"}},
+    ThemeTargetStyles{L"Grid#PaneRoot", {
+        L"Background:=<AcrylicBrush BackgroundSource=\"HostBackdrop\" FallbackColor=\"#00000000\" TintColor=\"#101010\" TintLuminosityOpacity=\"0.45\" TintOpacity=\"0.4\"/>",
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView", {
+        L"PaneBorderThickness=0",
+        L"BorderThickness=0",
+        L"PaneBorderBrush:=<SolidColorBrush Color=\"#00000000\"/>",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Rectangle", {
+        L"Visibility=Collapsed",
+        L"Width=0"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Border#PaneBorder", {
+        L"BorderThickness=0",
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#ContentRoot", {
+        L"Margin=-2,0,0,0",
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#ContentRoot > Border", {
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#ContentRoot > Border > Grid#ContentGrid", {
+        L"Background:=<AcrylicBrush BackgroundSource=\"HostBackdrop\" FallbackColor=\"#00000000\" TintColor=\"#101010\" TintLuminosityOpacity=\"0.45\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=0",
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Grid#ContentRoot", {
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Grid#ContentRoot > Border > Grid#ContentGrid > ContentControl#HeaderContent", {
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Frame#PermanentNavRootFrame", {
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"SystemSettings.View.RootPage > Grid#RootPageGrid", {
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid", {
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid", {
+        L"Background:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Grid#TitleBar", {
+        L"Background:=<AcrylicBrush BackgroundSource=\"HostBackdrop\" FallbackColor=\"#00000000\" TintColor=\"#101010\" TintLuminosityOpacity=\"0.45\" TintOpacity=\"0.4\"/>"}},
+    ThemeTargetStyles{L"Border#TitleBarBackground", {
+        L"Background:=<AcrylicBrush BackgroundSource=\"HostBackdrop\" FallbackColor=\"#00000000\" TintColor=\"#101010\" TintLuminosityOpacity=\"0.45\" TintOpacity=\"0.4\"/>"}},
+    ThemeTargetStyles{L"StackPanel#SettingsCommandSearchBoxBackground", {
+        L"CornerRadius=$InRadius",
+        L"MinHeight=32"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox", {
+        L"CornerRadius=$InRadius",
+        L"VerticalContentAlignment=Center",
+        L"Background:=<AcrylicBrush BackgroundSource=\"HostBackdrop\" FallbackColor=\"#00000000\" TintColor=\"#252525\" TintLuminosityOpacity=\"0.6\" TintOpacity=\"0.5\"/>",
+        L"BorderBrush:=<SolidColorBrush Color=\"#22FFFFFF\"/>",
+        L"BorderThickness=1"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > ScrollViewer", {
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#ProgressBarIndicator", {
+        L"RadiusX=4",
+        L"RadiusY=4",
+        L"Height=6",
+        L"Fill:=<SolidColorBrush Color=\"{ThemeResource Accent}\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#DeterminateRoot", {
+        L"CornerRadius=3",
+        L"Height=6"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ProgressBar", {
+        L"Height=6"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#TopBreakdownBar > Windows.UI.Xaml.Controls.ProgressBar > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#DeterminateRoot > Windows.UI.Xaml.Shapes.Rectangle#ProgressBarIndicator", {
+        L"Height=16"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#TopBreakdownBar > Windows.UI.Xaml.Controls.ProgressBar > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#DeterminateRoot", {
+        L"Height=16"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#TopBreakdownBar > Windows.UI.Xaml.Controls.ProgressBar", {
+        L"Height=16"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsExpander > Grid", {
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsExpander", {
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter", {
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > Border", {
+        L"BorderThickness=0",
+        L"BorderBrush:=<SolidColorBrush Color=\"#00000000\"/>"}},
+}, {
+    L"OutRadius=8",
+    L"InRadius=10",
+    L"BgBorder=<SolidColorBrush Color=\"#00000000\"/>",
+}, {
+    L"Overlay@Light=#55FFFFFF",
+    L"Overlay@Dark=#09FFFFFF",
+    L"Border@Light=#00000000",
+    L"Border@Dark=#00000000",
+    L"Accent@Dark={ThemeResource SystemAccentColorLight2}",
+    L"Accent@Light={ThemeResource SystemAccentColorDark1}",
+    L"WindowCaptionBackground@Dark=#00000000",
+    L"WindowCaptionBackground@Light=#00000000",
+    L"WindowCaptionBackgroundDisabled@Dark=#00000000",
+    L"WindowCaptionBackgroundDisabled@Light=#00000000",
+    L"SolidBackgroundFillColorBase@Dark=#00000000",
+    L"SolidBackgroundFillColorBase@Light=#00000000",
+    L"SolidBackgroundFillColorSecondary@Dark=#00000000",
+    L"SolidBackgroundFillColorSecondary@Light=#00000000",
+    L"LayerFillColorDefault@Dark=#00000000",
+    L"LayerFillColorDefault@Light=#00000000",
+    L"ApplicationPageBackgroundThemeBrush@Dark=#00000000",
+    L"ApplicationPageBackgroundThemeBrush@Light=#00000000",
+    L"CardStrokeColorDefault@Dark=#00000000",
+    L"CardStrokeColorDefault@Light=#00000000",
+    L"ControlStrokeColorDefault@Dark=#00000000",
+    L"ControlStrokeColorDefault@Light=#00000000",
+    L"SurfaceStrokeColorDefault@Dark=#00000000",
+    L"SurfaceStrokeColorDefault@Light=#00000000",
+    L"NavigationViewItemSeparatorForeground@Dark=#00000000",
+    L"NavigationViewItemSeparatorForeground@Light=#00000000",
+    L"SystemControlForegroundBaseLowBrush@Dark=#00000000",
+    L"SystemControlForegroundBaseLowBrush@Light=#00000000",
+    L"SplitViewPaneBorderBrush@Dark=#00000000",
+    L"SplitViewPaneBorderBrush@Light=#00000000",
+    L"NavigationViewBorderBrush@Dark=#00000000",
+    L"NavigationViewBorderBrush@Light=#00000000",
+}};
+
 // clang-format on
 
 std::atomic<DWORD> g_targetThreadId = 0;
 
-void ApplyCustomizations(InstanceHandle handle,
+// An InstanceHandle is the address of an interface on the element, so it names
+// an element only for as long as that element lives: an element allocated over
+// a destroyed one is reported under the same handle. Everything the mod records
+// is therefore keyed by an id minted per reported element, which is never
+// reused, rather than by the handle itself.
+enum class ElementId : uint64_t { None = 0 };
+
+ElementId GetOrCreateElementId(
+    InstanceHandle handle,
+    winrt::Windows::Foundation::IInspectable const& element);
+ElementId FindElementId(InstanceHandle handle);
+void ForgetElementId(InstanceHandle handle);
+
+void ApplyCustomizations(ElementId elementId,
                          winrt::Windows::UI::Xaml::FrameworkElement element,
                          PCWSTR fallbackClassName);
-void CleanupCustomizations(InstanceHandle handle);
+void CleanupCustomizations(ElementId elementId);
+void QueueDiagnosticsRelease(InstanceHandle handle);
+void FlushDiagnosticsReleasesIfQuiet();
 void TrackSplitView(winrt::Windows::UI::Xaml::FrameworkElement element);
-void ReleaseDiscardedSplitViewChild(
-    winrt::Windows::Foundation::IInspectable removedElement);
+void TrackSplitViewChildHost(
+    winrt::Windows::UI::Xaml::FrameworkElement element);
 
 HMODULE GetCurrentModuleHandle() {
     HMODULE module;
@@ -2605,12 +2765,24 @@ HMODULE GetCurrentModuleHandle() {
     return module;
 }
 
+// The XAML composition diagnostics rebuild a process-wide visual tree walker
+// without any locking whenever a DirectComposition visual is added, so any UI
+// thread which adds one corrupts the heap while another thread is in the same
+// code. Only element mutations are needed here, and those are reported by an
+// unrelated code path, so the composition diagnostics are kept from being
+// created at all: XamlDiagnostics::CreateCompVisualDiag skips them when the
+// HKLM\Software\Microsoft\XAML\Debug\DisableCompositionDiag value is 1.
+// Windows.UI.Xaml.dll reads and caches the value once, from within
+// AdviseVisualTreeChange, so answering that single read is enough.
+thread_local bool g_reportCompositionDiagAsDisabled;
+
 ////////////////////////////////////////////////////////////////////////////////
 // clang-format off
 
 #pragma region winrt_hpp
 
 #include <Unknwn.h>
+#include <weakreference.h>
 #include <winrt/base.h>
 
 // forward declare namespaces we alias
@@ -2625,11 +2797,51 @@ namespace winrt {
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
 
+// A weak reference for the object, or an empty one when the object is null or
+// doesn't support weak references: cppwinrt's make_weak dereferences a null
+// pointer for an object without that support instead of reporting it. Throws,
+// as make_weak does, when the object supports weak references but one can't be
+// made.
+winrt::weak_ref<wf::IInspectable> TryMakeWeak(wf::IInspectable const& object)
+{
+    if (!object.try_as<::IWeakReferenceSource>())
+    {
+        return nullptr;
+    }
+
+    return winrt::make_weak(object);
+}
+
 #pragma endregion  // winrt_hpp
 
 #pragma region visualtreewatcher_hpp
 
 #include <winrt/Windows.UI.Xaml.h>
+
+// XamlDiagnostics implements this interface too, and xamlom.h does not declare
+// it. UnregisterInstance closes the runtime object cached for a handle, the
+// only reference the diagnostics keep to an element once it was reported.
+static constexpr GUID IID_IXamlDiagnosticsTestHooks =
+    {0x735941a2, 0x3ee3, 0x495a, {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
+
+struct IXamlDiagnosticsTestHooks : IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE UnregisterInstance(InstanceHandle handle) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TryGetDispatcherQueueForObject(InstanceHandle handle, void** dispatcherQueue) = 0;
+};
+
+// The handle a mutation callback would report for an element, for elements
+// which were reached some other way, e.g. by walking the visual tree. Derived
+// the way the diagnostics derive it, by querying IInspectable and taking the
+// pointer, and not through GetHandleFromIInspectable: that one creates the
+// runtime object when none is cached, so asking it about an element whose
+// reference was released would take a new reference and pin it again.
+InstanceHandle HandleFromInspectable(wf::IInspectable const& instance)
+{
+    winrt::com_ptr<::IInspectable> inspectable;
+    winrt::check_hresult(reinterpret_cast<::IUnknown*>(winrt::get_abi(instance))->QueryInterface(winrt::guid_of<wf::IInspectable>(), inspectable.put_void()));
+    return reinterpret_cast<InstanceHandle>(inspectable.get());
+}
 
 class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile>
 {
@@ -2646,6 +2858,8 @@ public:
 
     void UnadviseVisualTreeChange();
 
+    bool ReleaseDiagnosticsReference(InstanceHandle handle);
+
 private:
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
     HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element, VisualElementState elementState, LPCWSTR context) noexcept override;
@@ -2658,6 +2872,7 @@ private:
     }
 
     winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
+    winrt::com_ptr<IXamlDiagnosticsTestHooks> m_XamlDiagnosticsTestHooks = nullptr;
 };
 
 #pragma endregion  // visualtreewatcher_hpp
@@ -2668,6 +2883,12 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
     Wh_Log(L"Constructing VisualTreeWatcher");
+
+    HRESULT hr = m_XamlDiagnostics->QueryInterface(IID_IXamlDiagnosticsTestHooks, m_XamlDiagnosticsTestHooks.put_void());
+    if (FAILED(hr)) {
+        Wh_Log(L"IXamlDiagnosticsTestHooks is unavailable, elements will be leaked: %08X", hr);
+    }
+
     // winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
 
     // Calling AdviseVisualTreeChange from the current thread causes the app to
@@ -2677,7 +2898,10 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
         nullptr, 0,
         [](LPVOID lpParam) -> DWORD {
             auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
-            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
+            auto service = watcher->m_XamlDiagnostics.as<IVisualTreeService3>();
+            g_reportCompositionDiagAsDisabled = true;
+            HRESULT hr = service->AdviseVisualTreeChange(watcher);
+            g_reportCompositionDiagAsDisabled = false;
             watcher->Release();
             if (FAILED(hr)) {
                 Wh_Log(L"Error %08X", hr);
@@ -2705,7 +2929,44 @@ void VisualTreeWatcher::UnadviseVisualTreeChange()
     }
 }
 
-HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
+// Reports whether dropping the reference destroyed the element, which is what
+// tells the caller that the handle is free to name a different element from now
+// on and that the id recorded for this one has to go.
+bool VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle)
+{
+    if (!m_XamlDiagnosticsTestHooks) {
+        return false;
+    }
+
+    winrt::weak_ref<wf::IInspectable> weakElement;
+    {
+        // Not through FromHandle: a handle whose runtime object is already gone
+        // fails to resolve routinely, and throwing for it would pay for an
+        // originate with a stack capture every time. The strong reference has
+        // to be gone again before the release below, hence the scope.
+        wf::IInspectable element;
+        HRESULT hr = m_XamlDiagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(element)));
+        if (SUCCEEDED(hr) && element) {
+            try {
+                weakElement = TryMakeWeak(element);
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult());
+            }
+        }
+    }
+
+    HRESULT hr = m_XamlDiagnosticsTestHooks->UnregisterInstance(handle);
+    if (FAILED(hr)) {
+        Wh_Log(L"UnregisterInstance failed with error %08X", hr);
+        return false;
+    }
+
+    // Not every reported object supports weak references, and then the release
+    // just proceeds unobserved.
+    return weakElement && !weakElement.get();
+}
+
+HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) try
 {
     if (GetCurrentThreadId() != g_targetThreadId)
     {
@@ -2732,25 +2993,60 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
 
     Wh_Log(L"Element type: %s", element.Type);
 
+    // Caught here rather than by the handler below, so that the bookkeeping
+    // which hands the element's reference back still runs when the styling work
+    // throws. Otherwise a single failed element would be held for good.
+    try
+    {
+        if (mutationType == Add)
+        {
+            const auto inspectable = FromHandle(element.Handle);
+            auto elementId = GetOrCreateElementId(element.Handle, inspectable);
+            auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
+            if (frameworkElement)
+            {
+                Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
+                TrackSplitView(frameworkElement);
+                TrackSplitViewChildHost(frameworkElement);
+                if (elementId == ElementId::None)
+                {
+                    Wh_Log(L"Skipping element which can't be given an id");
+                }
+                else
+                {
+                    ApplyCustomizations(elementId, frameworkElement, element.Type);
+                }
+            }
+            else
+            {
+                Wh_Log(L"Skipping non-FrameworkElement");
+            }
+        }
+        else if (mutationType == Remove)
+        {
+            CleanupCustomizations(FindElementId(element.Handle));
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"Error %08X", winrt::to_hresult());
+    }
+
+    // A tree discarded whole is never dismantled, so it reports no removals to
+    // be released by.
+    FlushDiagnosticsReleasesIfQuiet();
+
     if (mutationType == Add)
     {
-        const auto inspectable = FromHandle(element.Handle);
-        auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
-        if (frameworkElement)
-        {
-            Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
-            TrackSplitView(frameworkElement);
-            ApplyCustomizations(element.Handle, frameworkElement, element.Type);
-        }
-        else
-        {
-            Wh_Log(L"Skipping non-FrameworkElement");
-        }
+        QueueDiagnosticsRelease(element.Handle);
+        QueueDiagnosticsRelease(relation.Parent);
     }
     else if (mutationType == Remove)
     {
-        CleanupCustomizations(element.Handle);
-        ReleaseDiscardedSplitViewChild(FromHandle(element.Handle));
+        // Queued rather than released outright: this report arrives from inside
+        // the Leave walk which is still visiting the subtree being removed.
+        QueueDiagnosticsRelease(element.Handle);
+        ForgetElementId(element.Handle);
     }
 
     return S_OK;
@@ -2777,7 +3073,10 @@ HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementSt
 
 #include <ocidl.h>
 
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+// Read by the UI threads while the thread which injects or uninitializes the TAP
+// replaces it.
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+SRWLOCK g_visualTreeWatcherLock = SRWLOCK_INIT;
 
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
 static constexpr CLSID CLSID_WindhawkTAP = { 0xc85d8cc7, 0x5463, 0x40e8, { 0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5 } };
@@ -2796,13 +3095,30 @@ private:
 
 #pragma region tap_cpp
 
+winrt::com_ptr<VisualTreeWatcher> GetVisualTreeWatcher()
+{
+    AcquireSRWLockShared(&g_visualTreeWatcherLock);
+    auto watcher = g_visualTreeWatcher;
+    ReleaseSRWLockShared(&g_visualTreeWatcherLock);
+    return watcher;
+}
+
+// Hands the previous watcher back to be unadvised and released outside the
+// lock: both can wait on the UI threads, which take it.
+winrt::com_ptr<VisualTreeWatcher> ExchangeVisualTreeWatcher(winrt::com_ptr<VisualTreeWatcher> watcher)
+{
+    AcquireSRWLockExclusive(&g_visualTreeWatcherLock);
+    std::swap(g_visualTreeWatcher, watcher);
+    ReleaseSRWLockExclusive(&g_visualTreeWatcherLock);
+    return watcher;
+}
+
 HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
 {
     // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher)
+    if (auto previous = ExchangeVisualTreeWatcher(nullptr))
     {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+        previous->UnadviseVisualTreeChange();
     }
 
     site.copy_from(pUnkSite);
@@ -2812,7 +3128,7 @@ HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
         // Decrease refcount increased by InitializeXamlDiagnosticsEx.
         FreeLibrary(GetCurrentModuleHandle());
 
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
+        ExchangeVisualTreeWatcher(winrt::make_self<VisualTreeWatcher>(site));
     }
 
     return S_OK;
@@ -2969,6 +3285,8 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <charconv>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <filesystem>
 #include <limits>
 #include <list>
 #include <memory>
@@ -2991,6 +3309,7 @@ using namespace std::string_view_literals;
 #include <commctrl.h>
 #include <d2d1_1.h>
 #include <roapi.h>
+#include <shlwapi.h>
 #include <windows.graphics.effects.h>
 #include <winstring.h>
 
@@ -3011,8 +3330,12 @@ using namespace std::string_view_literals;
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
+#define WH_WINRT_WINUI2
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+
 using namespace winrt::Windows::UI::Xaml;
 
+namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace wge = winrt::Windows::Graphics::Effects;
 namespace wuc = winrt::Windows::UI::Composition;
 namespace wuxh = wux::Hosting;
@@ -3151,15 +3474,16 @@ using PropertyOverridesMaybeUnresolved =
 // value change on some other capture of the same name be skipped.
 struct StyleVariableDependency {
     std::wstring name;
-    InstanceHandle owner = 0;  // 0 when the variable was undefined
+    ElementId owner = ElementId::None;  // None when the variable was undefined
 };
 
 // Interned node of an element's visual-tree spine. Nodes are shared by every
 // tracked element under the same ancestor, so the pool holds one node per
 // distinct ancestor rather than a full path per element. Once a node exists its
 // `parent` and `depth` are final; an element that is later reparented keeps the
-// spine it was first seen with, and only a node interned as a root before its
-// object was attached (see GetOrCreateElementTreeNode) is ever replaced.
+// spine it was first seen with, and only the nodes of a spine interned before
+// its root object was attached (see GetOrCreateElementTreeNode) are ever
+// replaced.
 struct ElementTreeNode {
     // A node can outlive the object it describes -- descendant nodes and
     // not-yet-cleaned-up ElementCustomizationState entries keep it alive -- so
@@ -3167,6 +3491,9 @@ struct ElementTreeNode {
     winrt::weak_ref<DependencyObject> ref;
     std::shared_ptr<ElementTreeNode> parent;
     uint32_t depth = 0;
+    // The depth-0 node this spine hangs from, `this` for a root itself. The
+    // parent chain keeps it alive, so a raw pointer is enough.
+    ElementTreeNode* root = nullptr;
 };
 
 // Keyed by the object's IUnknown pointer: COM only guarantees a stable pointer
@@ -3180,6 +3507,16 @@ size_t g_elementTreeNodesReapThreshold = 64;
 
 void* ElementIdentityKey(DependencyObject const& object) {
     return winrt::get_abi(object.as<winrt::Windows::Foundation::IUnknown>());
+}
+
+// A depth-0 node is a placeholder root until proven otherwise: if its object
+// has since gained a parent, the spine was interned before that object was
+// attached and stops short of the real root. Asked of any node on the spine,
+// not just of the root itself, so that a descendant interned through a
+// placeholder root is repaired too.
+bool IsStaleSpine(ElementTreeNode const& node) {
+    auto object = node.root->ref.get();
+    return object && Media::VisualTreeHelper::GetParent(object);
 }
 
 // Fetch (or build) the spine node for `object`. Uses
@@ -3212,18 +3549,16 @@ std::shared_ptr<ElementTreeNode> GetOrCreateElementTreeNode(
                 if (!existing || !existing->ref.get()) {
                     Wh_Log(L"Replacing stale tree node for a reused address");
                     g_elementTreeNodes.erase(it);
-                } else if (existing->depth > 0 ||
-                           !Media::VisualTreeHelper::GetParent(iter)) {
+                } else if (!IsStaleSpine(*existing)) {
                     node = std::move(existing);
                     break;
                 } else {
-                    // A depth-0 node was interned as a root. Having a parent
-                    // now means the object was only partly attached back then
-                    // and the node stops short of the real root, so drop it and
-                    // let the walk rebuild the full spine. Elements interned
-                    // through the old node keep it and stay unrankable against
-                    // the rest of the tree, which is the same answer they got
-                    // before the repair.
+                    // Drop the node and keep walking: the ancestors above it
+                    // are stale for the same reason, up to the placeholder
+                    // root, above which the real spine gets built. A stale
+                    // shared_ptr already cached elsewhere (see
+                    // EnsureElementTreeNode) is refreshed the same way on its
+                    // own next use, so no element is stuck unrankable.
                     Wh_Log(L"Rebuilding tree node interned before attachment");
                     g_elementTreeNodes.erase(it);
                 }
@@ -3236,6 +3571,7 @@ std::shared_ptr<ElementTreeNode> GetOrCreateElementTreeNode(
             auto fresh = std::make_shared<ElementTreeNode>();
             fresh->ref = *it;
             fresh->depth = node ? node->depth + 1 : 0;
+            fresh->root = node ? node->root : fresh.get();
             fresh->parent = std::move(node);
             g_elementTreeNodes[ElementIdentityKey(*it)] = fresh;
             node = std::move(fresh);
@@ -3304,6 +3640,8 @@ struct ElementPropertyCustomizationState {
     // one of those before being stored, and the source template lives
     // separately in `dynamicTemplate` below.
     std::optional<PropertyOverrideValue> customValue;
+    // The value SetOrClearValue wrote for customValue, which is what a write
+    // by something else is told apart from.
     winrt::Windows::Foundation::IInspectable lastAppliedValue{nullptr};
     int64_t propertyChangedToken = 0;
     // Source template for dynamic styles whose value contains `{{...}}`
@@ -3360,16 +3698,118 @@ struct ElementCustomizationState {
         perVisualStateGroup;
 };
 
-std::unordered_map<InstanceHandle, ElementCustomizationState>
+std::unordered_map<ElementId, ElementCustomizationState>
     g_elementsCustomizationState;
 
-// The element's spine node, built on first use if the eager attempt in
-// ApplyCustomizations came up empty. An element can be matched before it is
-// attached, and a spine built then would stop short of the real root; retrying
-// on use picks up the real one once the element is in the tree.
+// Empties a thread local container and frees its storage, which clear() keeps.
+// A thread local isn't destroyed when the module is unloaded while its thread
+// lives on, so what it still holds then is leaked.
+template <typename T>
+void ResetThreadLocal(T& container) {
+    container = T{};
+}
+
+// The weak reference is what keeps an id honest. A handle is an address, so a
+// destroyed element can be replaced by one reporting the same handle, and an
+// entry whose element is gone, or is no longer the element being asked about,
+// belongs to that destroyed predecessor and must not name the new one.
+struct ElementIdEntry {
+    ElementId id = ElementId::None;
+    winrt::weak_ref<wf::IInspectable> element;
+};
+
+thread_local std::unordered_map<InstanceHandle, ElementIdEntry> g_elementIds;
+thread_local uint64_t g_lastElementId;
+
+ElementId GetOrCreateElementId(InstanceHandle handle,
+                               wf::IInspectable const& element) {
+    if (!handle || !element) {
+        return ElementId::None;
+    }
+
+    auto& entry = g_elementIds[handle];
+    if (entry.id != ElementId::None && entry.element.get() == element) {
+        return entry.id;
+    }
+
+    entry.id = static_cast<ElementId>(++g_lastElementId);
+
+    winrt::weak_ref<wf::IInspectable> weakElement;
+    try {
+        weakElement = TryMakeWeak(element);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    if (!weakElement) {
+        // Without a weak reference the entry cannot be told apart from one for
+        // a successor at the same address, so neither it nor the id it names is
+        // kept: an id no lookup can reach again would key state that nothing
+        // could ever tear down, on an element nothing would then hold back from
+        // being released.
+        g_elementIds.erase(handle);
+        return ElementId::None;
+    }
+
+    entry.element = std::move(weakElement);
+    return entry.id;
+}
+
+// By handle alone, for the element which is being reported as removed: it is
+// the element the entry was made for, and a stale entry names something already
+// destroyed, whose state is due for teardown either way.
+ElementId FindElementId(InstanceHandle handle) {
+    auto it = g_elementIds.find(handle);
+    return it != g_elementIds.end() ? it->second.id : ElementId::None;
+}
+
+void ForgetElementId(InstanceHandle handle) {
+    g_elementIds.erase(handle);
+}
+
+// Dead entries are reaped once the map grows past this, which is then set to
+// twice the surviving size, making the sweep amortized O(1).
+thread_local size_t g_elementIdsReapThreshold = 64;
+
+// An element whose diagnostics reference was handed back is destroyed without a
+// removal being reported for it, so what the mod keys by that element has to be
+// found rather than told. An entry whose weak reference no longer resolves
+// names such an element, and is torn down the way its removal would have.
+void ReapDeadElementIdsIfNeeded() {
+    if (g_elementIds.size() < g_elementIdsReapThreshold) {
+        return;
+    }
+
+    // Collected before anything is torn down: CleanupCustomizations runs XAML
+    // work which can re-enter ApplyCustomizations and rehash the map.
+    std::vector<std::pair<InstanceHandle, ElementId>> dead;
+    for (const auto& [handle, entry] : g_elementIds) {
+        if (!entry.element.get()) {
+            dead.push_back({handle, entry.id});
+        }
+    }
+
+    if (!dead.empty()) {
+        Wh_Log(L"Reaping %zu of %zu element ids", dead.size(),
+               g_elementIds.size());
+    }
+
+    for (const auto& [handle, elementId] : dead) {
+        CleanupCustomizations(elementId);
+        g_elementIds.erase(handle);
+    }
+
+    g_elementIdsReapThreshold = std::max<size_t>(64, g_elementIds.size() * 2);
+}
+
+// The element's spine node. An element can be matched before its subtree is
+// attached, in which case the eager build in ApplyCustomizations interns a
+// spine that stops at a placeholder root; re-checked on every use so it's
+// rebuilt once the subtree is actually in the tree.
 ElementTreeNode* EnsureElementTreeNode(
     ElementCustomizationState& elementCustomizationState) {
-    if (!elementCustomizationState.treeNode) {
+    if (!elementCustomizationState.treeNode ||
+        IsStaleSpine(*elementCustomizationState.treeNode)) {
         if (auto element = elementCustomizationState.element.get()) {
             elementCustomizationState.treeNode =
                 GetOrCreateElementTreeNode(element);
@@ -3395,14 +3835,14 @@ struct StyleVariableValue {
 };
 
 // One element's capture of a variable. FindElementPropertyOverrides dedupes
-// captures by name, so (name, elementHandle) identifies an entry.
+// captures by name, so (name, elementId) identifies an entry.
 struct StyleVariableCapture {
-    InstanceHandle elementHandle;
+    ElementId elementId;
     StyleVariableValue value;
 };
 
 struct StyleVariableConsumer {
-    InstanceHandle elementHandle;
+    ElementId elementId;
     DependencyProperty property{nullptr};
     // Each consumer remembers its own fallbackClassName so that propagation can
     // re-resolve dynamic styles using the consumer's match-site context, not
@@ -3418,6 +3858,13 @@ struct StyleVariableState {
         variables;
     std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
         consumers;
+    // How many entries the two maps above hold for each element. They're keyed
+    // by variable name, so without this, asking whether an element appears in
+    // either of them means walking every name.
+    std::unordered_map<ElementId, size_t> elementRefs;
+    // Elements whose captures are out of `variables` while they sit in a
+    // recycled repeater item. See RefreshRecycledItemCaptures.
+    std::unordered_set<ElementId> withdrawnCaptureOwners;
 };
 
 StyleVariableState g_styleVariableState;
@@ -3429,10 +3876,34 @@ int g_styleVariablePropagationDepth;
 struct PendingStyleVariablePropagation {
     StyleVariableState* state;
     std::wstring varName;
-    std::optional<InstanceHandle> changedOwner;
+    std::optional<ElementId> changedOwner;
 
     bool operator==(const PendingStyleVariablePropagation&) const = default;
 };
+
+void AddStyleVariableElementRef(StyleVariableState* state,
+                                ElementId elementId) {
+    state->elementRefs[elementId]++;
+}
+
+void ReleaseStyleVariableElementRefs(StyleVariableState* state,
+                                     ElementId elementId,
+                                     size_t count) {
+    if (!count) {
+        return;
+    }
+
+    auto it = state->elementRefs.find(elementId);
+    if (it == state->elementRefs.end()) {
+        return;
+    }
+
+    if (it->second > count) {
+        it->second -= count;
+    } else {
+        state->elementRefs.erase(it);
+    }
+}
 
 // Propagations queued while another one is running, drained by the outermost
 // PropagateStyleVariableChange frame.
@@ -3444,14 +3915,26 @@ StyleVariableState* GetStyleVariableState() {
 
 bool g_elementPropertyModifying;
 
-// An ImageBrush with a remote source fails to load when the process starts
-// before the network is up. Such brushes are tracked so that the load can be
-// retried once there's internet access. Only a brush which has no image is
-// retried, so replacing its source has nothing to hide, and the source is never
-// cleared, so an image that's currently displayed can't be blanked out.
-struct TrackedImageBrush {
-    winrt::weak_ref<Media::ImageBrush> brush;
+// An image with a remote source fails to load when the process starts before
+// the network is up. Such images are tracked so that the load can be retried
+// once there's internet access, and are cached in a file in the mod storage
+// folder, which is what's loaded when it's there, so that the image shows up at
+// once and offline. Only a target which has no image is retried, and only a
+// source which isn't showing anything is replaced, so an image that's currently
+// displayed can't be blanked out.
+struct TrackedImage {
+    // An ImageBrush or an Image element. Both hold an image source which can
+    // fail to load and both report the outcome, but through unrelated types, so
+    // the source is addressed by DependencyProperty and each type gets its own
+    // revoker pair.
+    winrt::weak_ref<DependencyObject> target;
+    DependencyProperty sourceProperty{nullptr};
+    // The remote address: the entry's identity and what's downloaded, even
+    // while the cached file is what's loaded.
     winrt::Windows::Foundation::Uri uri{nullptr};
+    std::wstring url;
+    // The cached copy of the image, empty when there's no cache folder.
+    std::filesystem::path cachePath;
 
     // Decode properties of the BitmapImage the style declared, reapplied to the
     // BitmapImage a retry creates.
@@ -3463,33 +3946,52 @@ struct TrackedImageBrush {
         Media::Imaging::BitmapCreateOptions::None;
     bool autoPlay = true;
 
-    Media::ImageBrush::ImageFailed_revoker imageFailedRevoker;
-    Media::ImageBrush::ImageOpened_revoker imageOpenedRevoker;
+    Media::ImageBrush::ImageFailed_revoker brushImageFailedRevoker;
+    Media::ImageBrush::ImageOpened_revoker brushImageOpenedRevoker;
+    Controls::Image::ImageFailed_revoker elementImageFailedRevoker;
+    Controls::Image::ImageOpened_revoker elementImageOpenedRevoker;
 
-    // Whether the brush has an image. Retries target the brushes which don't.
+    // Whether the target has an image. Retries target the ones which don't.
     bool loaded = false;
+
+    // Whether the target is loading from the cached file rather than from the
+    // remote address, which is what a load failure is judged by.
+    bool usingCache = false;
+
+    // The BitmapImage the last retry assigned to the target, which is the mod's
+    // value just like the one the style declared.
+    winrt::weak_ref<Media::Imaging::BitmapImage> retryImage;
 
     ULONGLONG lastRetryTick = 0;
     int retryCount = 0;
 };
 
-struct TrackedImageBrushesForThread {
+struct TrackedImagesForThread {
     // Entries are held by shared_ptr so that event handlers can reference them
     // via a weak_ptr and do nothing once an entry is gone.
-    std::list<std::shared_ptr<TrackedImageBrush>> brushes;
+    std::list<std::shared_ptr<TrackedImage>> images;
     winrt::Windows::System::DispatcherQueue dispatcher{nullptr};
-    winrt::Windows::System::DispatcherQueueTimer retryDebounceTimer{nullptr};
+    winrt::Windows::System::DispatcherQueueTimer retryTimer{nullptr};
     winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
-        retryDebounceTimerTickRevoker;
+        retryTimerTickRevoker;
+    // Tick the scheduled retry round is due at, zero if none is scheduled.
+    ULONGLONG retryDueTick = 0;
 };
 
-thread_local TrackedImageBrushesForThread g_trackedImageBrushesForThread;
+thread_local TrackedImagesForThread g_trackedImagesForThread;
+
+// The remote address of each cached file which has been substituted for one, so
+// that a target given an already substituted source is tracked as well.
+// Outlives the entries, since the style value it describes is shared by targets
+// which come and go. Thread local like that value.
+thread_local std::unordered_map<std::wstring, winrt::Windows::Foundation::Uri>
+    g_imageCacheUriRemotes;
 
 // A single connectivity transition raises several network status events, and
 // the state right after the first one isn't final yet.
 constexpr DWORD kNetworkChangeDebounceMs = 2000;
 
-// Minimum delay between the retries of a brush, doubling with each attempt up
+// Minimum delay between the retries of an image, doubling with each attempt up
 // to about five minutes. Also keeps a retry from being started while the
 // previous one is still loading.
 constexpr ULONGLONG kImageRetryBaseDelayMs = 5000;
@@ -3497,9 +3999,9 @@ constexpr int kImageRetryMaxBackoffShift = 6;
 constexpr ULONGLONG kImageRetryMaxDelayMs = kImageRetryBaseDelayMs
                                             << kImageRetryMaxBackoffShift;
 
-// Caps the attempts of a brush so that an event storm doesn't retry it
-// endlessly. The count starts over once the brush has been idle for the maximum
-// delay, so connectivity which returns much later can still recover the image.
+// Caps the attempts of an image, bounding the series of retries which a failure
+// starts. The count starts over once the image has been idle for the maximum
+// delay, so connectivity which returns much later can still recover it.
 constexpr int kImageRetryMaxCount = 20;
 
 // Guards the globals below it. The network status handler acquires it, so it
@@ -3508,14 +4010,49 @@ constexpr int kImageRetryMaxCount = 20;
 // UI thread pumps messages, which can re-enter this code on the same thread.
 std::mutex g_imageRetryMutex;
 bool g_imageRetryActive;
-// The dispatcher of each UI thread which has tracked brushes, used to run a
-// retry on the thread that owns the brush.
+// Set once the mod is being unloaded, so that nothing which runs during the
+// uninitialization tracks an image again.
+bool g_imageRetryStopping;
+// The dispatcher of each UI thread which has tracked images, used to run a
+// retry on the thread that owns the image.
 std::vector<winrt::weak_ref<winrt::Windows::System::DispatcherQueue>>
     g_imageRetryDispatchers;
 winrt::event_token g_networkStatusChangedToken;
 // Set while a thread is registering the handler outside the mutex, so that a
 // concurrent or re-entrant call doesn't register a second one.
 bool g_networkStatusChangedRegistering;
+// Callbacks which are on their way into mod code, counted so that the module
+// isn't freed out from under them.
+size_t g_imageRetryPendingCallbacks;
+std::condition_variable g_imageRetryPendingCallbacksCv;
+
+// A cached file is fetched again once it's this old, and its write time is
+// stamped whether or not the fetch gets through, so that the write time doubles
+// as when the file was last known to be in use.
+constexpr ULONGLONG kImageCacheRefreshIntervalMs = 7ULL * 24 * 60 * 60 * 1000;
+// A file which nothing stamps ages until it's swept. Long enough for a theme
+// which is switched away from and back to keep its images.
+constexpr ULONGLONG kImageCacheMaxUnusedMs = 30ULL * 24 * 60 * 60 * 1000;
+
+// Guards the globals below it.
+std::mutex g_imageDownloadMutex;
+// The URL of each image to fetch, or an empty string for a cache sweep. The
+// path a URL is cached at follows from the URL, so it isn't carried along.
+std::list<std::wstring> g_imageDownloadQueue;
+// The URL of every queued and in flight job, so that one image isn't fetched
+// twice at once. A job which failed is dropped: the retries of the image it's
+// for are what ask again, and they're already paced and capped.
+std::unordered_set<std::wstring> g_imageDownloadUrls;
+// The URL of every cached file which failed to load, taking the images it's
+// for back to the remote address for the rest of the process. Not per entry,
+// since the file is what was rejected and the entries which share the URL
+// would otherwise hand it out again. Global for the same reason: the file is
+// process wide, not thread wide.
+std::unordered_set<std::wstring> g_imageCacheRejectedUrls;
+PTP_WORK g_imageDownloadWork;
+// Whether a callback is draining the queue; a job added meanwhile joins it.
+bool g_imageDownloadRunning;
+bool g_imageDownloadStopping;
 
 enum class ResourceVariableTheme {
     None,
@@ -3606,17 +4143,19 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 // Generates a tileable noise BMP in memory. Density controls the brightness
 // distribution curve via a power function (lower density = sparser bright
 // pixels). Opacity is handled downstream by the composition effect graph.
+
+// The last stream generated, cached to avoid regenerating when density hasn't
+// changed. The cached stream is never read directly; callers get independent
+// clones via CloneStream() so they don't share a seek cursor.
+thread_local float g_noiseStreamDensity =
+    std::numeric_limits<float>::quiet_NaN();
+thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
+    g_noiseStream{nullptr};
+
 winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     float density) {
-    // Cache the last stream to avoid regenerating when density hasn't changed.
-    // The cached stream is never read directly; callers get independent clones
-    // via CloneStream() so they don't share a seek cursor.
-    thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
-    thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
-        cachedStream{nullptr};
-
-    if (density == cachedDensity && cachedStream) {
-        return cachedStream.CloneStream();
+    if (density == g_noiseStreamDensity && g_noiseStream) {
+        return g_noiseStream.CloneStream();
     }
 
     // Use 256x256 to minimize visible tiling seams.
@@ -3676,10 +4215,10 @@ winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     writer.StoreAsync().get();
     writer.DetachStream();
 
-    cachedStream = std::move(stream);
-    cachedDensity = density;
+    g_noiseStream = std::move(stream);
+    g_noiseStreamDensity = density;
 
-    return cachedStream.CloneStream();
+    return g_noiseStream.CloneStream();
 }
 
 // Blur background implementation, copied from TranslucentTB.
@@ -5108,7 +5647,7 @@ void XamlBlurBrush::RefreshBrush()
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
-// Helper functions for tracking and retrying failed ImageBrush loads.
+// Helper functions for tracking, caching and retrying remote image loads.
 
 // Reports true if the query itself fails, as a retry which turns out to be
 // pointless is harmless, while skipping a necessary one leaves images missing.
@@ -5125,18 +5664,396 @@ bool HasInternetAccess() {
     }
 }
 
-void StartImageBrushRetry(const std::shared_ptr<TrackedImageBrush>& tracked) {
-    auto brush = tracked->brush.get();
-    if (!brush) {
+// The folder the remote images are cached in, empty if it's not available, in
+// which case images are only ever loaded from their remote source.
+const std::filesystem::path& GetImageCacheDir() {
+    static const std::filesystem::path dir = []() -> std::filesystem::path {
+        WCHAR storagePathBuffer[MAX_PATH];
+        if (!Wh_GetModStoragePath(storagePathBuffer,
+                                  ARRAYSIZE(storagePathBuffer))) {
+            Wh_Log(L"Wh_GetModStoragePath failed");
+            return std::filesystem::path();
+        }
+
+        auto path = std::filesystem::path{storagePathBuffer} / L"images";
+
+        std::error_code ec;
+        std::filesystem::create_directories(path, ec);
+        if (!std::filesystem::is_directory(path, ec)) {
+            Wh_Log(L"Failed to create %s", path.c_str());
+            return std::filesystem::path();
+        }
+
+        return path;
+    }();
+
+    return dir;
+}
+
+// The cached copy of a remote image, named uniquely after its URL. Empty when
+// there's no cache folder. The extension of the URL is kept so that the folder
+// can be looked through.
+std::filesystem::path ImageCachePath(std::wstring_view url) {
+    const auto& cacheDir = GetImageCacheDir();
+    if (cacheDir.empty()) {
+        return std::filesystem::path();
+    }
+
+    // FNV-1a; one mod's folder, so an unlikely collision is good enough.
+    uint64_t hash = 14695981039346656037ULL;
+    for (wchar_t c : url) {
+        hash ^= (uint16_t)c;
+        hash *= 1099511628211ULL;
+    }
+
+    WCHAR hashString[17];
+    swprintf_s(hashString, L"%016llx", hash);
+
+    std::wstring name = hashString;
+
+    auto urlPath = url.substr(0, url.find_first_of(L"?#"));
+    auto extension = std::filesystem::path(urlPath).extension().native();
+    if (extension.length() >= 2 && extension.length() <= 5 &&
+        std::all_of(extension.begin() + 1, extension.end(), [](wchar_t c) {
+            return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') ||
+                   (c >= L'0' && c <= L'9');
+        })) {
+        name += extension;
+    }
+
+    return cacheDir / name;
+}
+
+// XAML loads a local image through a file URI.
+winrt::Windows::Foundation::Uri ImageCacheFileUri(
+    const std::filesystem::path& path) {
+    // Room for every character to be escaped, plus the scheme.
+    std::wstring uri(path.native().size() * 3 + 16, L'\0');
+
+    DWORD uriLength = (DWORD)uri.size();
+    HRESULT hr = UrlCreateFromPath(path.c_str(), uri.data(), &uriLength, 0);
+    if (FAILED(hr)) {
+        Wh_Log(L"UrlCreateFromPath returned 0x%08X", hr);
+        return nullptr;
+    }
+
+    uri.resize(uriLength);
+
+    try {
+        return winrt::Windows::Foundation::Uri(uri);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return nullptr;
+    }
+}
+
+// The time since a file was written.
+ULONGLONG FileAgeMs(std::filesystem::file_time_type writeTime) {
+    auto age = std::filesystem::file_time_type::clock::now() - writeTime;
+
+    // A file stamped in the future, e.g. after a clock change, is brand new.
+    if (age.count() <= 0) {
+        return 0;
+    }
+
+    return std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
+}
+
+// The time since a file was written, nullopt if there's no such file.
+std::optional<ULONGLONG> FileAgeMs(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto writeTime = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+
+    return FileAgeMs(writeTime);
+}
+
+void TouchFile(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::last_write_time(
+        path, std::filesystem::file_time_type::clock::now(), ec);
+}
+
+// Removes the files which haven't been stamped for a long time, which is what
+// becomes of a theme's images once it's out of use, and of what an interrupted
+// download leaves behind.
+void SweepImageCache() {
+    const auto& cacheDir = GetImageCacheDir();
+    if (cacheDir.empty()) {
         return;
     }
 
-    Wh_Log(L"Retrying image load for: %s", tracked->uri.RawUri().c_str());
+    Wh_Log(L"Sweeping the image cache");
+
+    try {
+        std::error_code ec;
+        for (const auto& entry :
+             std::filesystem::directory_iterator(cacheDir, ec)) {
+            if (!entry.is_regular_file(ec)) {
+                continue;
+            }
+
+            auto writeTime = entry.last_write_time(ec);
+            if (ec || FileAgeMs(writeTime) < kImageCacheMaxUnusedMs) {
+                continue;
+            }
+
+            Wh_Log(L"Removing unused cached image: %s",
+                   entry.path().filename().c_str());
+            std::filesystem::remove(entry.path(), ec);
+        }
+    } catch (const std::exception& ex) {
+        Wh_Log(L"Error sweeping the image cache: %S", ex.what());
+    }
+}
+
+// Via a temporary file, so that a partial or failed response, which the engine
+// writes before the status code is known, never becomes the cached image.
+void DownloadImage(const std::wstring& url) {
+    auto cachePath = ImageCachePath(url);
+    if (cachePath.empty()) {
+        return;
+    }
+
+    auto tempPath = cachePath;
+    tempPath += L".tmp" + std::to_wstring(GetCurrentProcessId());
+
+    bool succeeded = false;
+
+    WH_GET_URL_CONTENT_OPTIONS options{
+        .optionsSize = sizeof(options),
+        .targetFilePath = tempPath.c_str(),
+    };
+
+    if (const WH_URL_CONTENT* urlContent =
+            Wh_GetUrlContent(url.c_str(), &options)) {
+        if (urlContent->statusCode == 200) {
+            succeeded = true;
+        } else {
+            Wh_Log(L"Wh_GetUrlContent returned %d", urlContent->statusCode);
+        }
+
+        Wh_FreeUrlContent(urlContent);
+    } else {
+        Wh_Log(L"Wh_GetUrlContent failed");
+    }
+
+    std::error_code ec;
+
+    if (succeeded) {
+        auto size = std::filesystem::file_size(tempPath, ec);
+        if (ec || size == 0) {
+            Wh_Log(L"No downloaded file to move into place");
+            succeeded = false;
+        }
+    }
+
+    if (succeeded) {
+        std::filesystem::rename(tempPath, cachePath, ec);
+        if (ec) {
+            // Another process can be reading it.
+            Wh_Log(L"Failed to move %s into place", tempPath.c_str());
+        }
+    }
+
+    std::filesystem::remove(tempPath, ec);
+}
+
+void ProcessImageDownloads() {
+    for (;;) {
+        std::wstring url;
+
+        {
+            std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+            if (g_imageDownloadStopping || g_imageDownloadQueue.empty()) {
+                g_imageDownloadRunning = false;
+                return;
+            }
+
+            url = std::move(g_imageDownloadQueue.front());
+            g_imageDownloadQueue.pop_front();
+        }
+
+        if (url.empty()) {
+            SweepImageCache();
+            continue;
+        }
+
+        Wh_Log(L"Downloading image: %s", url.c_str());
+        DownloadImage(url);
+
+        std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+        g_imageDownloadUrls.erase(url);
+    }
+}
+
+// Must be called with g_imageDownloadMutex held, with the job it's for already
+// queued.
+void SubmitImageDownloadWork() {
+    if (g_imageDownloadRunning) {
+        return;
+    }
+
+    if (!g_imageDownloadWork) {
+        g_imageDownloadWork =
+            CreateThreadpoolWork([](PTP_CALLBACK_INSTANCE, PVOID,
+                                    PTP_WORK) { ProcessImageDownloads(); },
+                                 nullptr, nullptr);
+        if (!g_imageDownloadWork) {
+            Wh_Log(L"Failed to create the image download work item");
+            g_imageDownloadQueue.clear();
+            g_imageDownloadUrls.clear();
+            return;
+        }
+    }
+
+    g_imageDownloadRunning = true;
+    SubmitThreadpoolWork(g_imageDownloadWork);
+}
+
+void QueueImageDownload(const std::wstring& url) {
+    std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+    if (g_imageDownloadStopping) {
+        return;
+    }
+
+    if (!g_imageDownloadUrls.insert(url).second) {
+        return;
+    }
+
+    g_imageDownloadQueue.push_back(url);
+
+    SubmitImageDownloadWork();
+}
+
+// Asks the download thread for a sweep, once per process. Not tied to there
+// being anything to download, so that a cache which is fully up to date, and
+// whose unused files nothing else removes, is swept too.
+void QueueImageCacheSweep() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+        if (g_imageDownloadStopping) {
+            return;
+        }
+
+        g_imageDownloadQueue.emplace_back();
+
+        SubmitImageDownloadWork();
+    });
+}
+
+// Whether the cached file of a URL failed to load, which takes the images it's
+// for back to the remote address.
+bool IsImageCacheRejected(const std::wstring& url) {
+    std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+    return g_imageCacheRejectedUrls.contains(url);
+}
+
+void RejectImageCache(const std::wstring& url) {
+    std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+    g_imageCacheRejectedUrls.insert(url);
+}
+
+void StopImageDownloads() {
+    PTP_WORK work;
+
+    {
+        std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+        g_imageDownloadStopping = true;
+        g_imageDownloadQueue.clear();
+        g_imageDownloadUrls.clear();
+        g_imageCacheRejectedUrls.clear();
+
+        work = g_imageDownloadWork;
+        g_imageDownloadWork = nullptr;
+    }
+
+    // A request which is in flight can't be cancelled, so a server which is
+    // slow to answer holds up the unload for as long as it takes. Accepted as
+    // it is: the alternative is letting the callback run on into a module which
+    // is going away.
+    if (work) {
+        WaitForThreadpoolWorkCallbacks(work, TRUE);
+        CloseThreadpoolWork(work);
+    }
+}
+
+// The address an entry should load from: the cached file when there is one, the
+// remote address otherwise. Asks for the download the answer implies.
+winrt::Windows::Foundation::Uri ImageSourceUri(
+    const std::shared_ptr<TrackedImage>& tracked) {
+    if (!tracked->cachePath.empty() && !IsImageCacheRejected(tracked->url)) {
+        if (auto age = FileAgeMs(tracked->cachePath)) {
+            if (*age >= kImageCacheRefreshIntervalMs) {
+                // Stamped whether or not the download gets through, so that an
+                // offline machine doesn't lose the images it's using.
+                TouchFile(tracked->cachePath);
+                QueueImageDownload(tracked->url);
+            }
+
+            if (auto uri = ImageCacheFileUri(tracked->cachePath)) {
+                return uri;
+            }
+        } else {
+            QueueImageDownload(tracked->url);
+        }
+    }
+
+    return tracked->uri;
+}
+
+// Takes the BitmapImage the style declared off a cached file which has been
+// rejected, so that reapplying the value doesn't put the file which failed back
+// on the target. Nothing is showing from that file, so this is the one case
+// where a source is replaced without regard for what the target holds.
+void RestoreRejectedImageSource(
+    const std::shared_ptr<TrackedImage>& tracked,
+    Media::Imaging::BitmapImage const& bitmapImage) {
+    try {
+        if (bitmapImage.UriSource().Equals(tracked->uri) ||
+            !IsImageCacheRejected(tracked->url)) {
+            return;
+        }
+
+        Wh_Log(L"Loading remote image for: %s", tracked->url.c_str());
+
+        bitmapImage.UriSource(tracked->uri);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StartImageRetry(const std::shared_ptr<TrackedImage>& tracked) {
+    auto target = tracked->target.get();
+    if (!target) {
+        return;
+    }
+
+    Wh_Log(L"Retrying image load for: %s", tracked->url.c_str());
 
     tracked->lastRetryTick = GetTickCount64();
     tracked->retryCount++;
 
+    // An Image element's source is a property the mod customizes, and writing
+    // to it would otherwise be seen as an external change and reverted to the
+    // failed source the style declared.
+    bool wasModifying = g_elementPropertyModifying;
+    g_elementPropertyModifying = true;
+
     try {
+        // The cached file when a download has landed since the last attempt.
+        auto uri = ImageSourceUri(tracked);
+        tracked->usingCache = !uri.Equals(tracked->uri);
+
         Media::Imaging::BitmapImage retryImage;
         // Bypass the XAML image cache: a retry is only needed when what the
         // cache holds for the URI is a failed or missing image.
@@ -5147,19 +6064,40 @@ void StartImageBrushRetry(const std::shared_ptr<TrackedImageBrush>& tracked) {
         retryImage.DecodePixelWidth(tracked->decodePixelWidth);
         retryImage.DecodePixelHeight(tracked->decodePixelHeight);
         retryImage.AutoPlay(tracked->autoPlay);
-        retryImage.UriSource(tracked->uri);
 
         // A BitmapImage is loaded by the framework as part of the tree it's
-        // used in, so it has to be assigned to the brush for anything to
+        // used in, so it has to be assigned to the target for anything to
         // happen. A new object rather than the failed one, since reassigning
-        // the same URI to a BitmapImage doesn't reload it. The brush's own
+        // the same URI to a BitmapImage doesn't reload it. The target's own
         // ImageOpened and ImageFailed report how this attempt went.
-        brush.ImageSource(retryImage);
+        target.SetValue(tracked->sourceProperty, retryImage);
+        tracked->retryImage = winrt::make_weak(retryImage);
+
+        // The URI goes last: XAML decodes an image to the size it's displayed
+        // at only when the BitmapImage is already connected to the live tree by
+        // the time its source is set. Setting the URI first decodes at the
+        // image's natural size, which is then scaled at render time and looks
+        // poor.
+        retryImage.UriSource(uri);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
+
+    g_elementPropertyModifying = wasModifying;
 }
 
+// The wait before the next attempt of an image which has been retried
+// `retryCount` times.
+ULONGLONG ImageRetryDelayMs(int retryCount) {
+    return kImageRetryBaseDelayMs
+           << std::clamp(retryCount - 1, 0, kImageRetryMaxBackoffShift);
+}
+
+void ScheduleImageLoadRetryOnCurrentThread(ULONGLONG delayMs, bool reschedule);
+
+// Retries every image which is due, and arms the next round for the earliest
+// image which isn't, so that a failed image recovers on its own instead of
+// waiting for something external to start a round.
 void RetryFailedImageLoadsOnCurrentThread() {
     if (GetCurrentThreadId() != g_targetThreadId) {
         return;
@@ -5167,78 +6105,136 @@ void RetryFailedImageLoadsOnCurrentThread() {
 
     Wh_Log(L"Retrying failed image loads on current thread");
 
-    auto& brushes = g_trackedImageBrushesForThread.brushes;
+    auto& images = g_trackedImagesForThread.images;
 
-    std::erase_if(brushes,
-                  [](const auto& tracked) { return !tracked->brush.get(); });
+    std::erase_if(images,
+                  [](const auto& tracked) { return !tracked->target.get(); });
 
-    // Copy the entries before iterating: a retry can raise ImageBrush events,
-    // and their handlers modify the entries.
-    std::vector<std::shared_ptr<TrackedImageBrush>> snapshot(brushes.begin(),
-                                                             brushes.end());
+    // Copy the entries before iterating: a retry can raise image events, and
+    // their handlers modify the entries.
+    std::vector<std::shared_ptr<TrackedImage>> snapshot(images.begin(),
+                                                        images.end());
 
     ULONGLONG tick = GetTickCount64();
+
+    ULONGLONG nextRoundDelay = 0;
+    auto armNextRoundIn = [&nextRoundDelay](ULONGLONG delay) {
+        if (!nextRoundDelay || delay < nextRoundDelay) {
+            nextRoundDelay = delay;
+        }
+    };
 
     for (const auto& tracked : snapshot) {
         if (tracked->loaded) {
             continue;
         }
 
+        ULONGLONG remaining = 0;
+
         if (tracked->lastRetryTick) {
             ULONGLONG sinceLastRetry = tick - tracked->lastRetryTick;
             if (sinceLastRetry >= kImageRetryMaxDelayMs) {
                 tracked->retryCount = 0;
             } else {
-                ULONGLONG delay = kImageRetryBaseDelayMs
-                                  << std::clamp(tracked->retryCount - 1, 0,
-                                                kImageRetryMaxBackoffShift);
+                ULONGLONG delay = ImageRetryDelayMs(tracked->retryCount);
                 if (sinceLastRetry < delay) {
-                    continue;
+                    remaining = delay - sinceLastRetry;
                 }
             }
         }
 
+        // An image which ran out of attempts is left to a network status
+        // change, which is what the count starting over is for.
         if (tracked->retryCount >= kImageRetryMaxCount) {
             continue;
         }
 
-        StartImageBrushRetry(tracked);
+        if (remaining) {
+            armNextRoundIn(remaining);
+            continue;
+        }
+
+        StartImageRetry(tracked);
+
+        if (tracked->retryCount < kImageRetryMaxCount) {
+            armNextRoundIn(ImageRetryDelayMs(tracked->retryCount));
+        }
+    }
+
+    if (nextRoundDelay) {
+        ScheduleImageLoadRetryOnCurrentThread(nextRoundDelay,
+                                              /*reschedule=*/false);
     }
 }
 
-// Retries once the network status events stop coming, since the connectivity a
-// single transition ends up at isn't there yet when the first of them arrives.
-void ScheduleImageLoadRetryOnCurrentThread() {
+// Runs a retry round in `delayMs`. A round which is already scheduled is kept
+// if it's due sooner, unless `reschedule` moves it to the new time.
+void ScheduleImageLoadRetryOnCurrentThread(ULONGLONG delayMs, bool reschedule) {
     if (GetCurrentThreadId() != g_targetThreadId) {
         return;
     }
 
-    auto& timer = g_trackedImageBrushesForThread.retryDebounceTimer;
+    auto& state = g_trackedImagesForThread;
+
+    ULONGLONG dueTick = GetTickCount64() + delayMs;
+
+    if (!reschedule && state.retryDueTick && state.retryDueTick <= dueTick) {
+        return;
+    }
 
     try {
-        if (!timer) {
-            auto dispatcher = g_trackedImageBrushesForThread.dispatcher;
-            if (!dispatcher) {
+        if (!state.retryTimer) {
+            if (!state.dispatcher) {
                 return;
             }
 
-            timer = dispatcher.CreateTimer();
-            timer.Interval(std::chrono::milliseconds{kNetworkChangeDebounceMs});
-            timer.IsRepeating(false);
-            g_trackedImageBrushesForThread.retryDebounceTimerTickRevoker =
-                timer.Tick(
-                    winrt::auto_revoke,
-                    [](winrt::Windows::System::DispatcherQueueTimer const&,
-                       winrt::Windows::Foundation::IInspectable const&) {
-                        RetryFailedImageLoadsOnCurrentThread();
-                    });
+            state.retryTimer = state.dispatcher.CreateTimer();
+            state.retryTimer.IsRepeating(false);
+            state.retryTimerTickRevoker = state.retryTimer.Tick(
+                winrt::auto_revoke,
+                [](winrt::Windows::System::DispatcherQueueTimer const&,
+                   winrt::Windows::Foundation::IInspectable const&) {
+                    g_trackedImagesForThread.retryDueTick = 0;
+                    RetryFailedImageLoadsOnCurrentThread();
+                });
         }
 
-        timer.Stop();
-        timer.Start();
+        state.retryTimer.Stop();
+        state.retryTimer.Interval(std::chrono::milliseconds{delayMs});
+        state.retryTimer.Start();
+        state.retryDueTick = dueTick;
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
+}
+
+// Counts a callback which is about to be handed to code outside the mod for as
+// long as the returned reference is alive, so that StopImageLoadRetries waits
+// for it whether it ends up running or being dropped. Null once the retries
+// have been stopped, which is the caller's cue not to hand it over at all.
+std::shared_ptr<void> TrackImageRetryCallback() {
+    {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
+
+        if (!g_imageRetryActive) {
+            return nullptr;
+        }
+
+        g_imageRetryPendingCallbacks++;
+    }
+
+    // The pointer is only a non-null tag; the deleter is what the reference is
+    // for, and it runs whether the shared_ptr is destroyed or its construction
+    // throws.
+    return std::shared_ptr<void>(&g_imageRetryPendingCallbacks, [](void*) {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
+
+        g_imageRetryPendingCallbacks--;
+
+        // Under the lock, since the module can be freed as soon as the waiter
+        // sees the count drop.
+        g_imageRetryPendingCallbacksCv.notify_all();
+    });
 }
 
 void ScheduleImageLoadRetryOnAllUiThreads() {
@@ -5269,9 +6265,16 @@ void ScheduleImageLoadRetryOnAllUiThreads() {
     }
 
     for (auto& dispatcher : dispatchers) {
+        auto callbackRef = TrackImageRetryCallback();
+        if (!callbackRef) {
+            return;
+        }
+
         try {
-            dispatcher.TryEnqueue(
-                []() { ScheduleImageLoadRetryOnCurrentThread(); });
+            dispatcher.TryEnqueue([callbackRef]() {
+                ScheduleImageLoadRetryOnCurrentThread(kNetworkChangeDebounceMs,
+                                                      /*reschedule=*/true);
+            });
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error dispatching retry to UI thread %08X: %s", ex.code(),
                    ex.message().c_str());
@@ -5290,9 +6293,22 @@ void OnNetworkStatusChanged(
 
 // Must not be called with g_imageRetryMutex held.
 winrt::event_token RegisterNetworkStatusChangedHandler() {
+    // Removing the handler doesn't wait for an invocation which is already in
+    // flight, and the event source releases the handler, which is mod code,
+    // only after that invocation. The handler holds the reference so that it
+    // covers both.
+    auto callbackRef = TrackImageRetryCallback();
+    if (!callbackRef) {
+        return {};
+    }
+
     try {
         auto token = winrt::Windows::Networking::Connectivity::
-            NetworkInformation::NetworkStatusChanged(OnNetworkStatusChanged);
+            NetworkInformation::NetworkStatusChanged(
+                [callbackRef](
+                    winrt::Windows::Foundation::IInspectable const& sender) {
+                    OnNetworkStatusChanged(sender);
+                });
         Wh_Log(L"Registered global network status change handler");
         return token;
     } catch (winrt::hresult_error const& ex) {
@@ -5324,6 +6340,7 @@ void StopImageLoadRetries() {
         // early, which is what stops the retries. Removing the handler only
         // stops further invocations.
         g_imageRetryActive = false;
+        g_imageRetryStopping = true;
 
         token = g_networkStatusChangedToken;
         g_networkStatusChangedToken = {};
@@ -5334,17 +6351,27 @@ void StopImageLoadRetries() {
     if (token) {
         UnregisterNetworkStatusChangedHandler(token);
     }
+
+    // The module is freed once the mod is uninitialized, so the callbacks which
+    // are already on their way into it are let through first. What they wait on
+    // is a connectivity query and a dispatcher pass of a UI thread, and the
+    // uninitialization which follows depends on those threads running anyway.
+    // A callback still returns through mod code after dropping its reference,
+    // which the rest of the uninitialization is left to outlast.
+    std::unique_lock<std::mutex> lock(g_imageRetryMutex);
+    g_imageRetryPendingCallbacksCv.wait(
+        lock, [] { return g_imageRetryPendingCallbacks == 0; });
 }
 
 // Drops the calling thread from the dispatcher registry, and stops the retries
 // altogether once the last thread is out of it.
 void StopImageLoadRetriesForCurrentThread() {
-    auto dispatcher = g_trackedImageBrushesForThread.dispatcher;
+    auto dispatcher = g_trackedImagesForThread.dispatcher;
     if (!dispatcher) {
         return;
     }
 
-    g_trackedImageBrushesForThread.dispatcher = nullptr;
+    g_trackedImagesForThread.dispatcher = nullptr;
 
     winrt::event_token token;
 
@@ -5375,38 +6402,83 @@ void StopImageLoadRetriesForCurrentThread() {
     }
 }
 
-void SetupImageBrushTracking(Media::ImageBrush const& brush,
-                             Media::Imaging::BitmapImage const& bitmapImage,
-                             winrt::Windows::Foundation::Uri const& uri) {
-    auto& brushes = g_trackedImageBrushesForThread.brushes;
+Media::Imaging::BitmapImage SetupImageTracking(
+    DependencyObject const& target,
+    DependencyProperty const& sourceProperty,
+    Media::Imaging::BitmapImage const& bitmapImage,
+    winrt::Windows::Foundation::Uri const& uri) {
+    {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
-    std::erase_if(brushes,
-                  [](const auto& tracked) { return !tracked->brush.get(); });
+        if (g_imageRetryStopping) {
+            return nullptr;
+        }
+    }
 
-    auto it = std::find_if(brushes.begin(), brushes.end(),
-                           [&brush](const auto& tracked) {
-                               if (auto trackedBrush = tracked->brush.get()) {
-                                   return trackedBrush == brush;
+    auto& images = g_trackedImagesForThread.images;
+
+    std::erase_if(images,
+                  [](const auto& tracked) { return !tracked->target.get(); });
+
+    auto it = std::find_if(images.begin(), images.end(),
+                           [&target](const auto& tracked) {
+                               if (auto trackedTarget = tracked->target.get()) {
+                                   return trackedTarget == target;
                                }
                                return false;
                            });
 
-    if (it != brushes.end()) {
-        // Resolved style values are cached, so the same brush object is applied
-        // to many elements and reapplied on every visual state change. Keep the
-        // load state which was collected so far unless the source changed.
+    if (it != images.end()) {
+        // Resolved style values are cached, so the same source object is
+        // applied to many targets and reapplied on every visual state change.
+        // Keep the retry state which was collected so far unless the source
+        // changed.
         if ((*it)->uri.Equals(uri)) {
-            return;
+            RestoreRejectedImageSource(*it, bitmapImage);
+
+            // A declared image which shows nothing has typically failed, and
+            // isn't loaded again by being reapplied, so it would blank a retry
+            // image which has loaded since, or cut short one which is still
+            // loading. The target keeps its retry image instead.
+            Media::Imaging::BitmapImage retryImage{nullptr};
+            if (bitmapImage.PixelWidth() == 0) {
+                retryImage = (*it)->retryImage.get();
+            }
+            auto const& applied = retryImage ? retryImage : bitmapImage;
+
+            // The image being applied is what a load failure is judged by, and
+            // what decides whether the target has an image.
+            (*it)->usingCache = !applied.UriSource().Equals(uri);
+
+            bool wasLoaded = (*it)->loaded;
+            (*it)->loaded = applied.PixelWidth() != 0;
+
+            // Nothing else starts a round for a target which loses its image
+            // this way: the value may have failed already, which raises no
+            // further event.
+            if (wasLoaded && !(*it)->loaded) {
+                ScheduleImageLoadRetryOnCurrentThread(kImageRetryBaseDelayMs,
+                                                      /*reschedule=*/false);
+            }
+            return retryImage;
         }
 
-        brushes.erase(it);
+        images.erase(it);
     }
 
-    Wh_Log(L"Tracking ImageBrush with remote source: %s", uri.RawUri().c_str());
+    Wh_Log(L"Tracking %s with remote image source: %s",
+           winrt::get_class_name(target).c_str(), uri.RawUri().c_str());
 
-    auto tracked = std::make_shared<TrackedImageBrush>();
-    tracked->brush = winrt::make_weak(brush);
+    auto tracked = std::make_shared<TrackedImage>();
+    tracked->target = winrt::make_weak(target);
+    tracked->sourceProperty = sourceProperty;
     tracked->uri = uri;
+    tracked->url = std::wstring(uri.RawUri());
+    tracked->cachePath = ImageCachePath(tracked->url);
+
+    if (!tracked->cachePath.empty()) {
+        QueueImageCacheSweep();
+    }
 
     try {
         tracked->decodePixelWidth = bitmapImage.DecodePixelWidth();
@@ -5419,58 +6491,125 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
         // one that isn't. An image which is still loading counts as missing,
         // which at worst costs a redundant download.
         tracked->loaded = bitmapImage.PixelWidth() != 0;
+
+        // The cached file when there is one, and a download asked for when
+        // there isn't.
+        auto sourceUri = ImageSourceUri(tracked);
+
+        // Assigned to the BitmapImage the style declared rather than to a new
+        // object, so that the value the element customization state knows stays
+        // the one which is applied and nothing looks like an external change.
+        // Only while the image isn't showing anything: swapping a source which
+        // is would blank its targets for the length of a load, and the file is
+        // there for the next process either way.
+        if (!tracked->loaded && !sourceUri.Equals(bitmapImage.UriSource())) {
+            bool fromCache = !sourceUri.Equals(uri);
+            Wh_Log(L"Loading %s image for: %s",
+                   fromCache ? L"cached" : L"remote", tracked->url.c_str());
+
+            // Recorded before the substitution, so that a source which was
+            // pointed at a cached file is never one no entry can be recovered
+            // from.
+            if (fromCache) {
+                g_imageCacheUriRemotes.insert_or_assign(
+                    std::wstring(sourceUri.RawUri()), uri);
+            }
+
+            bitmapImage.UriSource(sourceUri);
+        }
+
+        tracked->usingCache = !bitmapImage.UriSource().Equals(uri);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
 
-    std::weak_ptr<TrackedImageBrush> trackedWeak = tracked;
+    std::weak_ptr<TrackedImage> trackedWeak = tracked;
 
-    tracked->imageFailedRevoker = brush.ImageFailed(
-        winrt::auto_revoke,
-        [trackedWeak](winrt::Windows::Foundation::IInspectable const&,
-                      ExceptionRoutedEventArgs const& e) {
-            auto tracked = trackedWeak.lock();
-            if (!tracked) {
-                return;
-            }
+    auto onImageFailed = [trackedWeak](
+                             winrt::Windows::Foundation::IInspectable const&,
+                             ExceptionRoutedEventArgs const& e) {
+        auto tracked = trackedWeak.lock();
+        if (!tracked) {
+            return;
+        }
 
-            Wh_Log(L"ImageBrush load failed for: %s, error: %s",
-                   tracked->uri.RawUri().c_str(), e.ErrorMessage().c_str());
+        Wh_Log(L"Image load failed for: %s, error: %s", tracked->url.c_str(),
+               e.ErrorMessage().c_str());
 
-            tracked->loaded = false;
-        });
+        tracked->loaded = false;
 
-    tracked->imageOpenedRevoker = brush.ImageOpened(
-        winrt::auto_revoke,
-        [trackedWeak](winrt::Windows::Foundation::IInspectable const&,
-                      RoutedEventArgs const&) {
-            auto tracked = trackedWeak.lock();
-            if (!tracked) {
-                return;
-            }
+        // A cached file which doesn't decode is dropped, taking every image the
+        // URL is for back to the remote address and fetching the file once
+        // more, in case it was left incomplete, for the next process. The
+        // declared source is pointed back at the remote address by the next
+        // apply, rather than from here, so that a source isn't swapped from
+        // within the event which reports how loading it went.
+        if (tracked->usingCache) {
+            Wh_Log(L"Dropping the cached image which failed to load");
 
-            Wh_Log(L"ImageBrush loaded for: %s", tracked->uri.RawUri().c_str());
+            tracked->usingCache = false;
+            RejectImageCache(tracked->url);
 
-            tracked->loaded = true;
-            tracked->retryCount = 0;
-            tracked->lastRetryTick = 0;
-        });
+            std::error_code ec;
+            std::filesystem::remove(tracked->cachePath, ec);
 
-    brushes.push_back(std::move(tracked));
+            QueueImageDownload(tracked->url);
+        }
+
+        // Waiting for the base delay coalesces the failures of a batch of
+        // images into a single round, and keeps the retries off the burst of
+        // requests the failures came from.
+        ScheduleImageLoadRetryOnCurrentThread(kImageRetryBaseDelayMs,
+                                              /*reschedule=*/false);
+    };
+
+    auto onImageOpened = [trackedWeak](
+                             winrt::Windows::Foundation::IInspectable const&,
+                             RoutedEventArgs const&) {
+        auto tracked = trackedWeak.lock();
+        if (!tracked) {
+            return;
+        }
+
+        Wh_Log(L"Image loaded for: %s", tracked->url.c_str());
+
+        tracked->loaded = true;
+        tracked->retryCount = 0;
+        tracked->lastRetryTick = 0;
+    };
+
+    if (auto brush = target.try_as<Media::ImageBrush>()) {
+        tracked->brushImageFailedRevoker =
+            brush.ImageFailed(winrt::auto_revoke, onImageFailed);
+        tracked->brushImageOpenedRevoker =
+            brush.ImageOpened(winrt::auto_revoke, onImageOpened);
+    } else if (auto image = target.try_as<Controls::Image>()) {
+        tracked->elementImageFailedRevoker =
+            image.ImageFailed(winrt::auto_revoke, onImageFailed);
+        tracked->elementImageOpenedRevoker =
+            image.ImageOpened(winrt::auto_revoke, onImageOpened);
+    }
+
+    images.push_back(std::move(tracked));
 
     bool registerHandler = false;
 
     {
         std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
+        // Checked again, since StopImageLoadRetries runs on another thread.
+        if (g_imageRetryStopping) {
+            return nullptr;
+        }
+
         g_imageRetryActive = true;
 
-        if (!g_trackedImageBrushesForThread.dispatcher) {
+        if (!g_trackedImagesForThread.dispatcher) {
             try {
                 auto dispatcher = winrt::Windows::System::DispatcherQueue::
                     GetForCurrentThread();
                 if (dispatcher) {
-                    g_trackedImageBrushesForThread.dispatcher = dispatcher;
+                    g_trackedImagesForThread.dispatcher = dispatcher;
                     g_imageRetryDispatchers.push_back(
                         winrt::make_weak(dispatcher));
                     Wh_Log(
@@ -5490,7 +6629,7 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
     }
 
     if (!registerHandler) {
-        return;
+        return nullptr;
     }
 
     winrt::event_token token = RegisterNetworkStatusChangedHandler();
@@ -5513,35 +6652,82 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
     if (stopped && token) {
         UnregisterNetworkStatusChangedHandler(token);
     }
+
+    return nullptr;
 }
 
-// Tracks the brush if the image source is a remote URL, which can fail to load
-// and be worth retrying.
-void TrackImageBrushIfRemoteSource(
-    Media::ImageBrush const& brush,
+// Tracks the target if the image source is a remote URL, which can fail to
+// load and is worth caching. Returns the image to apply in place of
+// `imageSource`, null if it's `imageSource` itself.
+Media::Imaging::BitmapImage TrackIfRemoteImageSource(
+    DependencyObject const& target,
+    DependencyProperty const& sourceProperty,
     winrt::Windows::Foundation::IInspectable const& imageSource) {
     auto bitmapImage = imageSource.try_as<Media::Imaging::BitmapImage>();
     if (!bitmapImage) {
-        return;
+        return nullptr;
     }
 
     auto uri = bitmapImage.UriSource();
     if (!uri) {
-        return;
+        return nullptr;
     }
 
     auto scheme = uri.SchemeName();
-    if (scheme != L"http" && scheme != L"https") {
-        return;
+    if (scheme == L"file") {
+        // A cached file which was substituted for its remote address, by which
+        // the entry is identified. A style value is shared by many targets, so
+        // the substitution a previous target's entry made is what the rest of
+        // them are given.
+        auto it = g_imageCacheUriRemotes.find(std::wstring(uri.RawUri()));
+        if (it == g_imageCacheUriRemotes.end()) {
+            return nullptr;
+        }
+
+        uri = it->second;
+    } else if (scheme != L"http" && scheme != L"https") {
+        return nullptr;
     }
 
-    SetupImageBrushTracking(brush, bitmapImage, uri);
+    return SetupImageTracking(target, sourceProperty, bitmapImage, uri);
 }
 
-void SetOrClearValue(DependencyObject elementDo,
-                     DependencyProperty property,
-                     const PropertyOverrideValue& overrideValue,
-                     bool initialApply = false) {
+// Stops tracking the image which the target shows through `sourceProperty`.
+void UntrackImageTarget(DependencyObject const& target,
+                        DependencyProperty const& sourceProperty) {
+    std::erase_if(g_trackedImagesForThread.images, [&](const auto& tracked) {
+        return tracked->sourceProperty == sourceProperty &&
+               tracked->target.get() == target;
+    });
+}
+
+// Whether `value` is the image a retry assigned to the target's
+// `sourceProperty`.
+bool IsImageRetryValue(DependencyObject const& target,
+                       DependencyProperty const& sourceProperty,
+                       winrt::Windows::Foundation::IInspectable const& value) {
+    if (!value) {
+        return false;
+    }
+
+    const auto& images = g_trackedImagesForThread.images;
+    return std::any_of(images.begin(), images.end(), [&](const auto& tracked) {
+        return tracked->sourceProperty == sourceProperty &&
+               tracked->retryImage.get() == value &&
+               tracked->target.get() == target;
+    });
+}
+
+// Returns the value written, UnsetValue for a clear, so that callers can
+// record what they applied. Reading it back is not an option: while a visual
+// state has a setter on the property, ReadLocalValue keeps reporting the value
+// from before that state rather than the one written.
+winrt::Windows::Foundation::IInspectable SetOrClearValue(
+    DependencyObject elementDo,
+    DependencyProperty property,
+    const PropertyOverrideValue& overrideValue,
+    bool initialApply = false,
+    bool trackImage = true) {
     winrt::Windows::Foundation::IInspectable value;
     if (auto* inspectable =
             std::get_if<winrt::Windows::Foundation::IInspectable>(
@@ -5560,11 +6746,11 @@ void SetOrClearValue(DependencyObject elementDo,
                 winrt::hstring(blurBrushParams->fallbackThemeResourceKey));
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
-            return;
+            return nullptr;
         }
     } else {
         Wh_Log(L"Unsupported override value");
-        return;
+        return nullptr;
     }
 
     if (value == DependencyProperty::UnsetValue()) {
@@ -5574,22 +6760,37 @@ void SetOrClearValue(DependencyObject elementDo,
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
-        return;
+        return value;
     }
 
     Wh_Log(L"Setting property value %s",
            value ? winrt::get_class_name(value).c_str() : L"(null)");
 
-    // Track ImageBrush with remote ImageSource for retry on network
-    // reconnection. This handles cases where an ImageBrush is set as a property
-    // value (e.g., Background).
-    if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
-        TrackImageBrushIfRemoteSource(imageBrush, imageBrush.ImageSource());
-    }
-    // Also handle direct ImageSource property being set on an ImageBrush.
-    else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
-        if (property == Media::ImageBrush::ImageSourceProperty()) {
-            TrackImageBrushIfRemoteSource(imageBrush, value);
+    // Track a remote image source for retry on network reconnection. A style
+    // can declare one as the ImageBrush a property is set to (e.g. Background),
+    // as the ImageSource of an ImageBrush it targets, or as the Source of an
+    // Image element. A value being restored isn't tracked: it's the app's own,
+    // and during uninitialization tracking it would register handlers which
+    // outlive the mod.
+    if (trackImage) {
+        if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
+            TrackIfRemoteImageSource(imageBrush,
+                                     Media::ImageBrush::ImageSourceProperty(),
+                                     imageBrush.ImageSource());
+        } else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
+            if (property == Media::ImageBrush::ImageSourceProperty()) {
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(imageBrush, property, value)) {
+                    value = retryImage;
+                }
+            }
+        } else if (auto image = elementDo.try_as<Controls::Image>()) {
+            if (property == Controls::Image::SourceProperty()) {
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(image, property, value)) {
+                    value = retryImage;
+                }
+            }
         }
     }
 
@@ -5654,6 +6855,20 @@ void SetOrClearValue(DependencyObject elementDo,
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
+
+    return value;
+}
+
+// Puts back the value the property had before the style. The target's image
+// entry goes with the style's value: a retry would put that image back, and the
+// restored image's load events would be taken for it.
+void RestoreOriginalValue(
+    DependencyObject elementDo,
+    DependencyProperty property,
+    winrt::Windows::Foundation::IInspectable const& originalValue) {
+    UntrackImageTarget(elementDo, property);
+    SetOrClearValue(elementDo, property, originalValue, /*initialApply=*/false,
+                    /*trackImage=*/false);
 }
 
 // https://stackoverflow.com/a/5665377
@@ -6267,8 +7482,16 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement element,
 }
 
 // Locale-independent double formatter. Uses `std::to_chars` shortest round-trip
-// representation so XAML always sees `.` as the decimal separator.
+// representation so XAML always sees `.` as the decimal separator. Non-finite
+// values use the spellings the XAML double converter accepts (case-sensitive;
+// it rejects "-NaN").
 std::wstring FormatDoubleInvariant(double d) {
+    if (std::isnan(d)) {
+        return L"NaN";
+    }
+    if (std::isinf(d)) {
+        return d < 0 ? L"-Infinity" : L"Infinity";
+    }
     char buf[64];
     auto [end, ec] = std::to_chars(buf, buf + std::size(buf), d);
     if (ec != std::errc{}) {
@@ -6599,7 +7822,7 @@ struct StyleVariableResolution {
     // Points into state->variables; only valid until that map is next touched,
     // so read it out before doing anything that could apply a style.
     const StyleVariableValue* value = nullptr;
-    InstanceHandle owner = 0;
+    ElementId owner = ElementId::None;
 };
 
 // How well a capture serves a consumer, as a sort key -- smaller is better.
@@ -6609,10 +7832,11 @@ struct StyleVariableResolution {
 //  2. Shallowest capture element. On a tie the capture that lies on the
 //     consumer's own parent chain *is* the common ancestor, so this is what
 //     makes a capture on an ancestor beat one on a cousin below it.
-//  3. Registration order, applied by the callers below keeping the first of
-//     equal keys. Only a last resort: it follows the order XamlDiagnostics
-//     reports elements in, which is not stable across boots or across taskbar
-//     item recycling.
+//  3. Registration order, applied by the callers below keeping the last of
+//     equal keys. Only a last resort, but latest-wins is the useful direction:
+//     a host that rebuilds a subtree often leaves the previous copy in the tree
+//     beside the new one, and a consumer above both ties on the keys above.
+//     The newer capture is the live one.
 //
 // The closest capture wins even when its value is opaque, in which case the
 // consuming style is skipped rather than falling through to a farther capture
@@ -6642,22 +7866,22 @@ StyleVariableResolution FindWinningCapture(
     if (captures.size() == 1) {
         // The common case by far: nothing to rank, and the owner's spine node
         // never has to be resolved.
-        return {&captures.front().value, captures.front().elementHandle};
+        return {&captures.front().value, captures.front().elementId};
     }
 
     std::pair<int, int> bestRank;
     for (const auto& capture : captures) {
         ElementTreeNode const* captureNode = nullptr;
         if (auto elementIt =
-                g_elementsCustomizationState.find(capture.elementHandle);
+                g_elementsCustomizationState.find(capture.elementId);
             elementIt != g_elementsCustomizationState.end()) {
             captureNode = EnsureElementTreeNode(elementIt->second);
         }
 
         auto rank = StyleVariableCaptureRank(consumerNode, captureNode);
-        if (!result.value || rank < bestRank) {
+        if (!result.value || rank <= bestRank) {
             bestRank = rank;
-            result = {&capture.value, capture.elementHandle};
+            result = {&capture.value, capture.elementId};
         }
     }
 
@@ -6668,7 +7892,7 @@ StyleVariableResolution FindWinningCapture(
 // snapshot stays usable even after re-entrant work tears the owning element
 // down.
 struct StyleVariableCandidate {
-    InstanceHandle owner = 0;
+    ElementId owner = ElementId::None;
     std::shared_ptr<ElementTreeNode> node;
 };
 
@@ -6682,9 +7906,9 @@ std::vector<StyleVariableCandidate> SnapshotStyleVariableCaptures(
 
     for (const auto& capture : captures) {
         StyleVariableCandidate candidate;
-        candidate.owner = capture.elementHandle;
+        candidate.owner = capture.elementId;
         if (auto elementIt =
-                g_elementsCustomizationState.find(capture.elementHandle);
+                g_elementsCustomizationState.find(capture.elementId);
             elementIt != g_elementsCustomizationState.end()) {
             auto& elementCustomizationState = elementIt->second;
             EnsureElementTreeNode(elementCustomizationState);
@@ -6701,17 +7925,17 @@ std::vector<StyleVariableCandidate> SnapshotStyleVariableCaptures(
 // taken before a re-entrant capture change can go stale, which at worst skips a
 // consumer that needed redoing -- the change that invalidated it queues its own
 // propagation, and that pass re-snapshots and picks the consumer up.
-InstanceHandle PickWinningCaptureOwner(
+ElementId PickWinningCaptureOwner(
     const std::vector<StyleVariableCandidate>& candidates,
     ElementTreeNode const* consumerNode) {
-    InstanceHandle owner = 0;
+    ElementId owner = ElementId::None;
     bool haveBest = false;
     std::pair<int, int> bestRank;
 
     for (const auto& candidate : candidates) {
         auto rank =
             StyleVariableCaptureRank(consumerNode, candidate.node.get());
-        if (!haveBest || rank < bestRank) {
+        if (!haveBest || rank <= bestRank) {
             haveBest = true;
             bestRank = rank;
             owner = candidate.owner;
@@ -6767,11 +7991,17 @@ struct StyleExpressionValue {
     bool IsNumber() const { return number.has_value(); }
 };
 
+// Thrown by a live skip() call to unwind the evaluator. Not a std::exception,
+// so a generic failure handler on the way up does not mistake it for an error.
+struct StyleVariableSkipRequested {};
+
 // Recursive-descent evaluator for `{{ ... }}` expressions. Operands: number
 // literals, backtick-delimited string literals, style variable references, and
 // parenthesized subexpressions. Operators: binary + - * /, unary - / +, the
-// comparisons < <= == >= > !=, the conditional operator cond ? a : b, and the
-// two-arg functions min(a, b) and max(a, b). Standard math precedence.
+// comparisons < <= == >= > !=, the conditional operator cond ? a : b, the
+// two-arg functions min(a, b) and max(a, b), and skip(), which throws
+// StyleVariableSkipRequested so the consuming style is left unapplied.
+// Standard math precedence.
 // Arithmetic, relational, unary-sign, and min/max operators require numeric
 // operands; == and != compare two numbers or two strings; the conditional
 // selects one of its (possibly string) branches. Evaluate() formats the result
@@ -6788,10 +8018,7 @@ class StyleVariableExpressionEvaluator {
     // Returns the text form of the result: numeric results are formatted with
     // FormatDoubleInvariant, string results are returned verbatim. Throws
     // std::runtime_error on parse / evaluation failure (including when a value
-    // is used where the grammar requires a number, or when a numeric result is
-    // non-finite -- NaN/Inf can't be formatted into XAML attributes
-    // meaningfully and would also break the consumer-equality check in
-    // SetStyleVariableIfChangedAndPropagate, since NaN != NaN).
+    // is used where the grammar requires a number).
     std::wstring Evaluate() {
         m_pos = 0;
         SkipWhitespace();
@@ -6802,10 +8029,6 @@ class StyleVariableExpressionEvaluator {
                 "Unexpected trailing characters in style variable expression");
         }
         if (v.IsNumber()) {
-            if (!std::isfinite(*v.number)) {
-                throw std::runtime_error(
-                    "Style variable expression produced a non-finite result");
-            }
             return FormatDoubleInvariant(*v.number);
         }
         return v.text;
@@ -6879,8 +8102,8 @@ class StyleVariableExpressionEvaluator {
     // Short-circuit: only the taken branch is evaluated. The untaken branch is
     // still parsed (to advance the position and enforce syntax) with m_live
     // cleared, which suppresses value-level errors (division by zero, a
-    // non-numeric / undefined variable, an unknown function) and dependency
-    // capture for that branch.
+    // non-numeric / undefined variable, an unknown function), skip(), and
+    // dependency capture for that branch.
     StyleExpressionValue ParseTernary() {
         StyleExpressionValue cond = ParseEquality();
         if (!ConsumeChar(L'?')) {
@@ -7124,6 +8347,18 @@ class StyleVariableExpressionEvaluator {
         SkipWhitespace();
         if (m_pos < m_text.size() && m_text[m_pos] == L'(') {
             m_pos++;
+            if (ident == L"skip") {
+                if (!ConsumeChar(L')')) {
+                    throw std::runtime_error(
+                        "skip() takes no arguments in style variable "
+                        "expression");
+                }
+                if (m_live) {
+                    throw StyleVariableSkipRequested{};
+                }
+                // Dead ternary branch: value discarded.
+                return StyleExpressionValue::Number(0.0);
+            }
             double a = RequireNumber(ParseExpression());
             if (!ConsumeChar(L',')) {
                 throw std::runtime_error(
@@ -7203,7 +8438,8 @@ class StyleVariableExpressionEvaluator {
 // both cause this function to return std::nullopt, at which point
 // ExpandStyleVariables aborts the whole expansion and the consuming style is
 // skipped. This matches the arithmetic path's behaviour of failing closed
-// rather than substituting a value that won't parse.
+// rather than substituting a value that won't parse. A live skip() call unwinds
+// through here as StyleVariableSkipRequested.
 std::optional<std::wstring> EvaluateStyleVariableExpression(
     std::wstring_view exprText,
     const StyleVariableLookupContext* context) {
@@ -7238,6 +8474,10 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
     try {
         StyleVariableExpressionEvaluator eval(trimmed, context);
         return eval.Evaluate();
+    } catch (StyleVariableSkipRequested const&) {
+        Wh_Log(L"skip() reached in '%.*s'; leaving style unapplied",
+               static_cast<int>(trimmed.size()), trimmed.data());
+        throw;
     } catch (std::exception const& ex) {
         Wh_Log(L"Style variable expression failed: %S (in '%.*s')", ex.what(),
                static_cast<int>(trimmed.size()), trimmed.data());
@@ -7246,7 +8486,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
 }
 
 // Walks the input text, repeatedly expanding the innermost `{{ ... }}`
-// substitution. Returns std::nullopt on parse failure (and logs a warning).
+// substitution. Returns std::nullopt on parse failure (and logs a warning); a
+// StyleVariableSkipRequested from an expression propagates out.
 //
 // Inner-matching rule: the first `}}` is paired with the *rightmost* `{{` that
 // precedes it. So `{{{x}}}` -> `{` + value-of-x + `}` (literal outer braces).
@@ -7352,14 +8593,14 @@ StyleVariableValue ReadCapturedStyleVariableValue(FrameworkElement element,
     return out;
 }
 
-// Remove this (handle, property) entry from the consumer lists of every
+// Remove this (elementId, property) entry from the consumer lists of every
 // variable named in oldDeps, then add it for every variable named in newDeps.
 // `fallbackClassName` is stored on each newly-added consumer entry so the
 // per-consumer context is preserved across propagations; it is irrelevant when
 // newDeps is empty (pure-removal calls from the cleanup paths).
 void UpdateStyleVariableConsumers(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     DependencyProperty property,
     PCWSTR fallbackClassName,
     const std::vector<StyleVariableDependency>& oldDeps,
@@ -7379,9 +8620,11 @@ void UpdateStyleVariableConsumers(
             continue;
         }
         auto& consumers = it->second;
-        std::erase_if(consumers, [&](const StyleVariableConsumer& c) {
-            return c.elementHandle == handle && c.property == property;
-        });
+        ReleaseStyleVariableElementRefs(
+            state, elementId,
+            std::erase_if(consumers, [&](const StyleVariableConsumer& c) {
+                return c.elementId == elementId && c.property == property;
+            }));
         if (consumers.empty()) {
             state->consumers.erase(it);
         }
@@ -7393,18 +8636,127 @@ void UpdateStyleVariableConsumers(
         auto& consumers = state->consumers[dep.name];
         bool already = std::any_of(consumers.begin(), consumers.end(),
                                    [&](const StyleVariableConsumer& c) {
-                                       return c.elementHandle == handle &&
+                                       return c.elementId == elementId &&
                                               c.property == property;
                                    });
         if (!already) {
-            consumers.push_back({handle, property, fallbackClassNameStr});
+            consumers.push_back({elementId, property, fallbackClassNameStr});
+            AddStyleVariableElementRef(state, elementId);
         }
     }
 }
 
+// Value comparison of `a` and `b` as boxes of the first struct type in
+// T, Ts... that `a` is a box of; nullopt when it is none of them.
+template <typename T, typename... Ts>
+std::optional<bool> SameBoxedStruct(
+    winrt::Windows::Foundation::IInspectable const& a,
+    winrt::Windows::Foundation::IInspectable const& b) {
+    if (auto ra = a.try_as<winrt::Windows::Foundation::IReference<T>>()) {
+        auto rb = b.try_as<winrt::Windows::Foundation::IReference<T>>();
+        return rb && ra.Value() == rb.Value();
+    }
+    if constexpr (sizeof...(Ts) > 0) {
+        return SameBoxedStruct<Ts...>(a, b);
+    } else {
+        return std::nullopt;
+    }
+}
+
+// Whether two values read from a property are the same local value. XAML boxes
+// value types anew on every read, so those compare by value: primitives and
+// enums through TryUnboxPropertyValue, then the struct types styles commonly
+// set. Any other boxed value type is taken as unchanged: adopting a value that
+// may be the mod's own would leave it in place on cleanup, the worse mistake.
+// Reference types, UnsetValue included, compare by identity.
+bool SameLocalValue(winrt::Windows::Foundation::IInspectable const& a,
+                    winrt::Windows::Foundation::IInspectable const& b) {
+    if (a == b) {
+        return true;
+    }
+    if (!a || !b) {
+        return false;
+    }
+
+    auto ua = TryUnboxPropertyValue(a);
+    auto ub = TryUnboxPropertyValue(b);
+    if (ua || ub) {
+        return ua && ub &&
+               std::visit(
+                   [](auto const& x, auto const& y) -> bool {
+                       using X = std::decay_t<decltype(x)>;
+                       if constexpr (!std::is_same_v<
+                                         X, std::decay_t<decltype(y)>>) {
+                           return false;
+                       } else if constexpr (std::is_floating_point_v<X>) {
+                           return x == y || (std::isnan(x) && std::isnan(y));
+                       } else {
+                           return x == y;
+                       }
+                   },
+                   *ua, *ub);
+    }
+
+    if (auto same = SameBoxedStruct<
+            Thickness, CornerRadius, GridLength,
+            winrt::Windows::Foundation::Point, winrt::Windows::Foundation::Size,
+            winrt::Windows::Foundation::Rect, winrt::Windows::UI::Color,
+            winrt::Windows::UI::Text::FontWeight>(a, b)) {
+        return *same;
+    }
+
+    auto isBoxedValue = [](winrt::Windows::Foundation::IInspectable const& v) {
+        return v.try_as<winrt::Windows::Foundation::IPropertyValue>() !=
+                   nullptr ||
+               std::wstring_view(winrt::get_class_name(v))
+                   .starts_with(L"Windows.Foundation.IReference`1<");
+    };
+    return isBoxedValue(a) && isBoxedValue(b);
+}
+
+// Record a write by something other than the mod as the property's pre-style
+// value. A local value still equal to the one the mod applied means nothing
+// external happened (an animation changes only the effective value), and
+// adopting the mod's own brush would make it survive cleanup and crash when
+// the DLL is unloaded. An image which a retry assigned is the mod's too.
+void AdoptExternalValueAsOriginal(
+    FrameworkElement element,
+    DependencyProperty property,
+    ElementPropertyCustomizationState* propertyCustomizationState) {
+    if (!propertyCustomizationState->customValue) {
+        return;
+    }
+    auto localValue = ReadLocalValueWithWorkaround(element, property);
+    if (!SameLocalValue(localValue,
+                        propertyCustomizationState->lastAppliedValue) &&
+        !IsImageRetryValue(element, property, localValue)) {
+        propertyCustomizationState->originalValue = localValue;
+    }
+}
+
+// Put the property back to its pre-style value and forget what was applied.
+// Leaves the dynamic template alone, so a later variable change can apply the
+// style again.
+void UnapplyStyleValue(
+    FrameworkElement element,
+    DependencyProperty property,
+    ElementPropertyCustomizationState* propertyCustomizationState) {
+    AdoptExternalValueAsOriginal(element, property, propertyCustomizationState);
+    if (propertyCustomizationState->originalValue) {
+        bool wasModifying = g_elementPropertyModifying;
+        g_elementPropertyModifying = true;
+        RestoreOriginalValue(element, property,
+                             *propertyCustomizationState->originalValue);
+        g_elementPropertyModifying = wasModifying;
+        propertyCustomizationState->originalValue.reset();
+    }
+    propertyCustomizationState->lastAppliedValue = nullptr;
+    propertyCustomizationState->customValue.reset();
+}
+
 // Re-evaluate the dynamic template stored on `propertyCustomizationState` and
 // return the resolved IInspectable / XamlBlurBrushParams ready to be applied.
-// Updates the (handle, property) -> state->consumers registry to match the
+// Updates the (elementId, property) -> state->consumers registry to match the
 // freshly computed dependency set so future variable changes route to this
 // property. The dependency registry is committed *before* the final XAML
 // resolution attempt: ExpandStyleVariables records every variable name it scans
@@ -7424,13 +8776,14 @@ void UpdateStyleVariableConsumers(
 //
 // `elementCustomizationState` is the consumer's own entry when the caller
 // already has it, saving the lookup needed to rank captures by proximity; pass
-// nullptr to have it looked up from `handle`.
+// nullptr to have it looked up from `elementId`.
 //
 // Returns std::nullopt if the state has no template, expansion failed, or XAML
-// resolution failed.
+// resolution failed. A skip() in the rule body also yields std::nullopt, after
+// putting the property back to its original value.
 std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     FrameworkElement element,
     DependencyProperty property,
     PCWSTR fallbackClassName,
@@ -7443,7 +8796,7 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
     const auto& tmpl = *propertyCustomizationState->dynamicTemplate;
 
     if (!elementCustomizationState) {
-        if (auto it = g_elementsCustomizationState.find(handle);
+        if (auto it = g_elementsCustomizationState.find(elementId);
             it != g_elementsCustomizationState.end()) {
             elementCustomizationState = &it->second;
         }
@@ -7456,12 +8809,26 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
 
     std::vector<StyleVariableDependency> newDeps;
     StyleVariableLookupContext context{state, consumerNode, &newDeps};
-    auto expanded = ExpandStyleVariables(tmpl.rawValue, &context);
+    std::optional<std::wstring> expanded;
+    bool skipped = false;
+    try {
+        expanded = ExpandStyleVariables(tmpl.rawValue, &context);
+    } catch (StyleVariableSkipRequested const&) {
+        skipped = true;
+    }
 
     UpdateStyleVariableConsumers(
-        state, handle, property, fallbackClassName,
+        state, elementId, property, fallbackClassName,
         propertyCustomizationState->variableDependencies, newDeps);
     propertyCustomizationState->variableDependencies = std::move(newDeps);
+
+    if (skipped) {
+        // Every variable that decides whether skip() is reached was read
+        // before it, so targeted propagation still reaches this property.
+        propertyCustomizationState->lastResolveFailed = false;
+        UnapplyStyleValue(element, property, propertyCustomizationState);
+        return std::nullopt;
+    }
 
     if (!expanded) {
         propertyCustomizationState->lastResolveFailed = true;
@@ -7493,8 +8860,8 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
 bool StyleVariableChangeAffectsConsumer(
     const ElementPropertyCustomizationState& propertyCustomizationState,
     const std::wstring& varName,
-    std::optional<InstanceHandle> changedOwner,
-    InstanceHandle winningOwner) {
+    std::optional<ElementId> changedOwner,
+    ElementId winningOwner) {
     if (propertyCustomizationState.lastResolveFailed) {
         return true;
     }
@@ -7516,10 +8883,9 @@ bool StyleVariableChangeAffectsConsumer(
 // was registered), so propagation uses the consumer's own match-site context to
 // re-parse the rule body, even when the capturer was matched against a
 // different type/fallback class.
-void PropagateStyleVariableChangeCore(
-    StyleVariableState* state,
-    const std::wstring& varName,
-    std::optional<InstanceHandle> changedOwner) {
+void PropagateStyleVariableChangeCore(StyleVariableState* state,
+                                      const std::wstring& varName,
+                                      std::optional<ElementId> changedOwner) {
     auto consumersIt = state->consumers.find(varName);
     if (consumersIt == state->consumers.end()) {
         return;
@@ -7538,15 +8904,16 @@ void PropagateStyleVariableChangeCore(
 
     auto consumersCopy = consumersIt->second;
     for (const auto& consumer : consumersCopy) {
-        auto stateIt =
-            g_elementsCustomizationState.find(consumer.elementHandle);
+        auto stateIt = g_elementsCustomizationState.find(consumer.elementId);
         if (stateIt == g_elementsCustomizationState.end()) {
             continue;
         }
         // A reference rather than the iterator: applying a style below can
         // realize children, which re-enters ApplyCustomizations and may rehash
         // g_elementsCustomizationState. Rehashing invalidates iterators but not
-        // references to the mapped values.
+        // references to the mapped values. A re-entrant cleanup or re-apply of
+        // this same elementId would invalidate both the reference and the loop
+        // below, but the re-entrancy is for the newly realized children.
         auto& elementState = stateIt->second;
 
         auto element = elementState.element.get();
@@ -7556,8 +8923,8 @@ void PropagateStyleVariableChangeCore(
 
         // A handful of pointer comparisons against the snapshot above, far
         // cheaper than the re-parse it avoids.
-        InstanceHandle winningOwner =
-            changedOwner ? 0
+        ElementId winningOwner =
+            changedOwner ? ElementId::None
                          : PickWinningCaptureOwner(
                                candidates, EnsureElementTreeNode(elementState));
 
@@ -7583,11 +8950,13 @@ void PropagateStyleVariableChangeCore(
             }
 
             auto resolved = ResolveDynamicStyleValue(
-                state, consumer.elementHandle, element, consumer.property,
+                state, consumer.elementId, element, consumer.property,
                 consumerFallbackClassName, &propState, &elementState);
             if (!resolved) {
                 continue;
             }
+            AdoptExternalValueAsOriginal(element, consumer.property,
+                                         &propState);
             if (!propState.originalValue) {
                 propState.originalValue =
                     ReadLocalValueWithWorkaround(element, consumer.property);
@@ -7596,9 +8965,8 @@ void PropagateStyleVariableChangeCore(
 
             bool wasModifying = g_elementPropertyModifying;
             g_elementPropertyModifying = true;
-            SetOrClearValue(element, consumer.property, *resolved);
             propState.lastAppliedValue =
-                ReadLocalValueWithWorkaround(element, consumer.property);
+                SetOrClearValue(element, consumer.property, *resolved);
             g_elementPropertyModifying = wasModifying;
         }
     }
@@ -7614,7 +8982,7 @@ void PropagateStyleVariableChangeCore(
 // drains the queue, which also coalesces a burst into one pass.
 void PropagateStyleVariableChange(StyleVariableState* state,
                                   const std::wstring& varName,
-                                  std::optional<InstanceHandle> changedOwner) {
+                                  std::optional<ElementId> changedOwner) {
     PendingStyleVariablePropagation propagation{state, varName, changedOwner};
 
     if (g_styleVariablePropagationDepth > 0) {
@@ -7659,6 +9027,16 @@ void PropagateStyleVariableChange(StyleVariableState* state,
     }
 }
 
+// std::optional<double>'s operator== follows IEEE (NaN != NaN), which would
+// report a NaN capture such as Height=Auto as changed on every re-read.
+bool SameNumericValue(const std::optional<double>& a,
+                      const std::optional<double>& b) {
+    if (a.has_value() != b.has_value()) {
+        return false;
+    }
+    return !a || *a == *b || (std::isnan(*a) && std::isnan(*b));
+}
+
 // Store a capture's freshly read value and notify dependents if it changed.
 // The comparison is against this capture's own previous value: comparing
 // against whichever capture currently wins would silently drop a second
@@ -7667,7 +9045,7 @@ void PropagateStyleVariableChange(StyleVariableState* state,
 // SizeChanged catch-all -- so the no-op fast path applies uniformly.
 void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
                                            const std::wstring& varName,
-                                           InstanceHandle owner,
+                                           ElementId owner,
                                            StyleVariableValue value) {
     auto varIt = state->variables.find(varName);
     if (varIt == state->variables.end()) {
@@ -7677,7 +9055,7 @@ void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
     auto& captures = varIt->second;
     auto it = std::find_if(captures.begin(), captures.end(),
                            [owner](const StyleVariableCapture& capture) {
-                               return capture.elementHandle == owner;
+                               return capture.elementId == owner;
                            });
     if (it == captures.end()) {
         // The capture was torn down between the notification and here.
@@ -7685,7 +9063,7 @@ void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
     }
 
     if (it->value.stringForm == value.stringForm &&
-        it->value.numeric == value.numeric &&
+        SameNumericValue(it->value.numeric, value.numeric) &&
         it->value.substitutable == value.substitutable) {
         Wh_Log(L"Style variable '%s' unchanged at '%s'", varName.c_str(),
                value.stringForm.c_str());
@@ -7723,7 +9101,7 @@ bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
 // carries its own consumer-side fallback, so propagation routes through the
 // right context per consumer.
 void SetUpCapturesForElement(StyleVariableState* state,
-                             InstanceHandle handle,
+                             ElementId elementId,
                              FrameworkElement element,
                              const std::vector<CaptureSpec>& captures,
                              ElementCustomizationState* elementState) {
@@ -7774,7 +9152,8 @@ void SetUpCapturesForElement(StyleVariableState* state,
             L"(%zu other capture(s))",
             capture.varName.c_str(), winrt::get_class_name(element).c_str(),
             value.stringForm.c_str(), capturesForVar.size());
-        capturesForVar.push_back({handle, std::move(value)});
+        capturesForVar.push_back({elementId, std::move(value)});
+        AddStyleVariableElementRef(state, elementId);
 
         seededVarNames.push_back(capture.varName);
 
@@ -7789,7 +9168,7 @@ void SetUpCapturesForElement(StyleVariableState* state,
         captureState.propertyChangedToken =
             elementDo.RegisterPropertyChangedCallback(
                 capture.property,
-                [state, varName, handle, elementWeakRef](
+                [state, varName, elementId, elementWeakRef](
                     DependencyObject sender, DependencyProperty property) {
                     auto element = elementWeakRef.get();
                     if (!element) {
@@ -7798,13 +9177,13 @@ void SetUpCapturesForElement(StyleVariableState* state,
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
                     SetStyleVariableIfChangedAndPropagate(
-                        state, varName, handle, std::move(value));
+                        state, varName, elementId, std::move(value));
                 });
     }
 
     if (!sizeChangedCaptures.empty()) {
         elementState->captureSizeChangedToken = element.SizeChanged(
-            [state, handle, elementWeakRef,
+            [state, elementId, elementWeakRef,
              sizeChangedCaptures = std::move(sizeChangedCaptures)](
                 winrt::Windows::Foundation::IInspectable const& sender,
                 SizeChangedEventArgs const& e) {
@@ -7819,7 +9198,7 @@ void SetUpCapturesForElement(StyleVariableState* state,
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
                     SetStyleVariableIfChangedAndPropagate(
-                        state, varName, handle, std::move(value));
+                        state, varName, elementId, std::move(value));
                 }
             });
     }
@@ -7862,9 +9241,82 @@ void RestoreCapturesForElement(FrameworkElement element,
     }
 }
 
+// Take an element's captures out of the registry, returning the names they were
+// under. Other elements may still capture the same names, so a name only
+// becomes undefined once its last capture is gone.
+std::vector<std::wstring> WithdrawCapturesForElement(
+    StyleVariableState* state,
+    ElementId elementId,
+    const ElementCustomizationState& elementState) {
+    std::vector<std::wstring> varNames;
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (captureState.varName.empty()) {
+            continue;
+        }
+
+        auto varIt = state->variables.find(captureState.varName);
+        if (varIt == state->variables.end()) {
+            continue;
+        }
+
+        size_t removed = std::erase_if(
+            varIt->second, [elementId](const StyleVariableCapture& capture) {
+                return capture.elementId == elementId;
+            });
+        if (!removed) {
+            continue;
+        }
+
+        ReleaseStyleVariableElementRefs(state, elementId, removed);
+
+        varNames.push_back(captureState.varName);
+        if (varIt->second.empty()) {
+            state->variables.erase(varIt);
+        }
+    }
+
+    return varNames;
+}
+
+// Put back the captures WithdrawCapturesForElement took out, returning the
+// names they're under. Values are read afresh: the capture callbacks drop
+// changes for a capture that isn't in the registry.
+std::vector<std::wstring> RepublishCapturesForElement(
+    StyleVariableState* state,
+    ElementId elementId,
+    FrameworkElement element,
+    const ElementCustomizationState& elementState) {
+    std::vector<std::wstring> varNames;
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (captureState.varName.empty()) {
+            continue;
+        }
+
+        auto& captures = state->variables[captureState.varName];
+        if (std::any_of(captures.begin(), captures.end(),
+                        [elementId](const StyleVariableCapture& capture) {
+                            return capture.elementId == elementId;
+                        })) {
+            continue;
+        }
+
+        captures.push_back(
+            {elementId, ReadCapturedStyleVariableValue(element, property)});
+        AddStyleVariableElementRef(state, elementId);
+
+        varNames.push_back(captureState.varName);
+    }
+
+    return varNames;
+}
+
 void ApplyCustomizationsForVisualStateGroup(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     FrameworkElement element,
     VisualStateGroup visualStateGroup,
     PCWSTR fallbackClassName,
@@ -7901,7 +9353,7 @@ void ApplyCustomizationsForVisualStateGroup(
             if (auto* tmpl = std::get_if<DynamicStyleTemplate>(&it->second)) {
                 propertyCustomizationState.dynamicTemplate = *tmpl;
                 resolved = ResolveDynamicStyleValue(
-                    state, handle, element, property, fallbackClassName,
+                    state, elementId, element, property, fallbackClassName,
                     &propertyCustomizationState,
                     /*elementCustomizationState=*/nullptr);
             } else {
@@ -7912,10 +9364,8 @@ void ApplyCustomizationsForVisualStateGroup(
                 propertyCustomizationState.originalValue =
                     ReadLocalValueWithWorkaround(element, property);
                 propertyCustomizationState.customValue = *resolved;
-                SetOrClearValue(element, property, *resolved,
-                                /*initialApply=*/true);
-                propertyCustomizationState.lastAppliedValue =
-                    ReadLocalValueWithWorkaround(element, property);
+                propertyCustomizationState.lastAppliedValue = SetOrClearValue(
+                    element, property, *resolved, /*initialApply=*/true);
             }
         }
 
@@ -7937,28 +9387,17 @@ void ApplyCustomizationsForVisualStateGroup(
                         return;
                     }
 
-                    auto localValue =
-                        ReadLocalValueWithWorkaround(element, property);
-
-                    // Only update originalValue if the local value was changed
-                    // externally (e.g. by a Setter). When an animation changes
-                    // only the effective value, the local value still matches
-                    // what we set, so updating originalValue would corrupt it
-                    // with our own brush - causing the brush to survive cleanup
-                    // and crash when the mod's DLL is unloaded.
-                    if (localValue !=
-                        propertyCustomizationState.lastAppliedValue) {
-                        propertyCustomizationState.originalValue = localValue;
-                    }
+                    AdoptExternalValueAsOriginal(element, property,
+                                                 &propertyCustomizationState);
 
                     Wh_Log(L"Re-applying style for %s",
                            winrt::get_class_name(element).c_str());
 
                     g_elementPropertyModifying = true;
-                    SetOrClearValue(element, property,
-                                    *propertyCustomizationState.customValue);
                     propertyCustomizationState.lastAppliedValue =
-                        ReadLocalValueWithWorkaround(element, property);
+                        SetOrClearValue(
+                            element, property,
+                            *propertyCustomizationState.customValue);
                     g_elementPropertyModifying = false;
                 });
     }
@@ -7970,7 +9409,7 @@ void ApplyCustomizationsForVisualStateGroup(
         elementCustomizationStateForVisualStateGroup
             ->visualStateGroupCurrentStateChangedToken =
             visualStateGroup.CurrentStateChanged(
-                [state, elementWeakRef, propertyOverrides, handle,
+                [state, elementWeakRef, propertyOverrides, elementId,
                  fallbackClassNameStr,
                  elementCustomizationStateForVisualStateGroup](
                     winrt::Windows::Foundation::IInspectable const& sender,
@@ -8023,7 +9462,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 propertyCustomizationState.dynamicTemplate =
                                     *tmpl;
                                 resolved = ResolveDynamicStyleValue(
-                                    state, handle, element, property,
+                                    state, elementId, element, property,
                                     fallbackClassNamePtr,
                                     &propertyCustomizationState,
                                     /*elementCustomizationState=*/nullptr);
@@ -8034,7 +9473,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 if (propertyCustomizationState
                                         .dynamicTemplate) {
                                     UpdateStyleVariableConsumers(
-                                        state, handle, property,
+                                        state, elementId, property,
                                         /*fallbackClassName=*/nullptr,
                                         propertyCustomizationState
                                             .variableDependencies,
@@ -8049,6 +9488,9 @@ void ApplyCustomizationsForVisualStateGroup(
                             }
 
                             if (resolved) {
+                                AdoptExternalValueAsOriginal(
+                                    element, property,
+                                    &propertyCustomizationState);
                                 if (!propertyCustomizationState.originalValue) {
                                     propertyCustomizationState.originalValue =
                                         ReadLocalValueWithWorkaround(element,
@@ -8057,15 +9499,14 @@ void ApplyCustomizationsForVisualStateGroup(
 
                                 propertyCustomizationState.customValue =
                                     *resolved;
-                                SetOrClearValue(element, property, *resolved);
                                 propertyCustomizationState.lastAppliedValue =
-                                    ReadLocalValueWithWorkaround(element,
-                                                                 property);
+                                    SetOrClearValue(element, property,
+                                                    *resolved);
                             }
                         } else {
                             if (propertyCustomizationState.dynamicTemplate) {
                                 UpdateStyleVariableConsumers(
-                                    state, handle, property,
+                                    state, elementId, property,
                                     /*fallbackClassName=*/nullptr,
                                     propertyCustomizationState
                                         .variableDependencies,
@@ -8075,17 +9516,8 @@ void ApplyCustomizationsForVisualStateGroup(
                                 propertyCustomizationState.dynamicTemplate
                                     .reset();
                             }
-                            if (propertyCustomizationState.originalValue) {
-                                SetOrClearValue(
-                                    element, property,
-                                    *propertyCustomizationState.originalValue);
-                                propertyCustomizationState.originalValue
-                                    .reset();
-                            }
-                            propertyCustomizationState.lastAppliedValue =
-                                nullptr;
-
-                            propertyCustomizationState.customValue.reset();
+                            UnapplyStyleValue(element, property,
+                                              &propertyCustomizationState);
                         }
                     }
 
@@ -8096,49 +9528,14 @@ void ApplyCustomizationsForVisualStateGroup(
 
 void RestoreCustomizationsForVisualStateGroup(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     FrameworkElement element,
     std::optional<winrt::weak_ref<VisualStateGroup>>
         visualStateGroupOptionalWeakPtr,
     const ElementCustomizationStateForVisualStateGroup&
         elementCustomizationStateForVisualStateGroup) {
-    if (element) {
-        for (const auto& [property, propState] :
-             elementCustomizationStateForVisualStateGroup
-                 .propertyCustomizationStates) {
-            try {
-                element.UnregisterPropertyChangedCallback(
-                    property, propState.propertyChangedToken);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-            }
-
-            if (!propState.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(state, handle, property,
-                                             /*fallbackClassName=*/nullptr,
-                                             propState.variableDependencies,
-                                             {});
-            }
-
-            if (propState.originalValue) {
-                SetOrClearValue(element, property, *propState.originalValue);
-            }
-        }
-    } else {
-        // Element is gone; still clear consumer entries so a stale (handle,
-        // property) pair isn't visited during PropagateStyleVariableChange.
-        for (const auto& [property, propState] :
-             elementCustomizationStateForVisualStateGroup
-                 .propertyCustomizationStates) {
-            if (!propState.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(state, handle, property,
-                                             /*fallbackClassName=*/nullptr,
-                                             propState.variableDependencies,
-                                             {});
-            }
-        }
-    }
-
+    // Before the properties are restored, so that a visual state change which
+    // restoring one causes can't apply the style again.
     auto visualStateGroupIter = visualStateGroupOptionalWeakPtr
                                     ? visualStateGroupOptionalWeakPtr->get()
                                     : nullptr;
@@ -8152,11 +9549,436 @@ void RestoreCustomizationsForVisualStateGroup(
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
+
+    if (element) {
+        for (const auto& [property, propState] :
+             elementCustomizationStateForVisualStateGroup
+                 .propertyCustomizationStates) {
+            try {
+                element.UnregisterPropertyChangedCallback(
+                    property, propState.propertyChangedToken);
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, elementId, property,
+                                             /*fallbackClassName=*/nullptr,
+                                             propState.variableDependencies,
+                                             {});
+            }
+
+            if (propState.originalValue) {
+                RestoreOriginalValue(element, property,
+                                     *propState.originalValue);
+            }
+        }
+    } else {
+        // Element is gone; still clear consumer entries so a stale (elementId,
+        // property) pair isn't visited during PropagateStyleVariableChange.
+        for (const auto& [property, propState] :
+             elementCustomizationStateForVisualStateGroup
+                 .propertyCustomizationStates) {
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, elementId, property,
+                                             /*fallbackClassName=*/nullptr,
+                                             propState.variableDependencies,
+                                             {});
+            }
+        }
+    }
+}
+
+// Item elements the current virtualization pass recycled, consumed by the
+// matching ElementPrepared. A freshly created element is prepared without ever
+// having been cleared, and its Add mutation already applied the styles, so
+// re-matching it would restore and re-push every value for nothing.
+thread_local std::unordered_set<ElementId> g_recycledElements;
+
+// The item each element was last matched against, which lets a reuse for that
+// same item be left alone. A layout can realize elements during measure only to
+// ask for their size and recycle them again during arrange, so an element is
+// cleared and handed straight back for the same item on every layout pass.
+// Re-matching there sets dependency properties from inside the pass, which
+// dirties layout and schedules another one, and layout never settles: XAML
+// gives up after enough passes and fails the process with a layout cycle.
+//
+// A boxed value is recorded by value, since a source can box it anew on every
+// read. Anything else is recorded by a weak reference, so that a destroyed item
+// can't be mistaken for a successor at the same address, which would leave an
+// element wearing the styles matched for its predecessor.
+using RepeaterItem =
+    std::variant<winrt::weak_ref<wf::IInspectable>, UnboxedPropertyValue>;
+
+thread_local std::unordered_map<ElementId, RepeaterItem> g_elementMatchedItems;
+
+struct VirtualizingRepeaterState {
+    muxc::ItemsRepeater::ElementClearing_revoker elementClearingRevoker;
+    muxc::ItemsRepeater::ElementPrepared_revoker elementPreparedRevoker;
+};
+
+thread_local std::unordered_map<ElementId, VirtualizingRepeaterState>
+    g_virtualizingRepeaters;
+
+// The id of an element which was reached some other way, e.g. by walking the
+// visual tree. None for an element the mutation callbacks never reported, which
+// leaves callers to skip it rather than key it by something made up.
+ElementId ElementIdFromElement(FrameworkElement const& element) {
+    if (!element) {
+        return ElementId::None;
+    }
+
+    try {
+        auto it = g_elementIds.find(HandleFromInspectable(element));
+        if (it == g_elementIds.end() || it->second.element.get() != element) {
+            return ElementId::None;
+        }
+
+        return it->second.id;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return ElementId::None;
+    }
+}
+
+// Tear down and re-match every element of a subtree. The whole subtree is
+// revisited rather than only its root, since a rule can match a descendant
+// through a condition on an ancestor, and descendants of a reused element get
+// no mutation of their own.
+void ReapplyCustomizationsForSubtree(FrameworkElement element) {
+    // Caught per element, both because these run from a layout pass the caller
+    // can't fail, and so that one element's failure doesn't skip the rest of
+    // the subtree.
+    try {
+        if (auto elementId = ElementIdFromElement(element);
+            elementId != ElementId::None) {
+            CleanupCustomizations(elementId);
+            auto className = winrt::get_class_name(element);
+            ApplyCustomizations(elementId, element, className.c_str());
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    // Snapshotted because applying a style runs arbitrary XAML work which can
+    // change the children collection mid-walk.
+    std::vector<FrameworkElement> children;
+    try {
+        int count = Media::VisualTreeHelper::GetChildrenCount(element);
+        for (int i = 0; i < count; i++) {
+            if (auto child = Media::VisualTreeHelper::GetChild(element, i)
+                                 .try_as<FrameworkElement>()) {
+                children.push_back(std::move(child));
+            }
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return;
+    }
+
+    for (const auto& child : children) {
+        ReapplyCustomizationsForSubtree(child);
+    }
+}
+
+// The item a repeater realized an element for, nullopt when there is no such
+// item or it is neither a boxed value nor supports a weak reference.
+std::optional<RepeaterItem> RepeaterItemAt(muxc::ItemsRepeater const& repeater,
+                                           int index) {
+    try {
+        auto itemsSourceView = repeater.ItemsSourceView();
+        if (!itemsSourceView || index < 0 || index >= itemsSourceView.Count()) {
+            return std::nullopt;
+        }
+
+        auto item = itemsSourceView.GetAt(index);
+        if (auto value = TryUnboxPropertyValue(item)) {
+            return RepeaterItem{std::move(*value)};
+        }
+
+        if (auto weakItem = TryMakeWeak(item)) {
+            return RepeaterItem{std::move(weakItem)};
+        }
+
+        return std::nullopt;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return std::nullopt;
+    }
+}
+
+// Never true for a destroyed item.
+bool SameRepeaterItem(RepeaterItem const& a, RepeaterItem const& b) {
+    using WeakItem = winrt::weak_ref<wf::IInspectable>;
+    if (auto* weakA = std::get_if<WeakItem>(&a)) {
+        auto* weakB = std::get_if<WeakItem>(&b);
+        auto strongA = weakA->get();
+        return weakB && strongA && strongA == weakB->get();
+    }
+
+    auto* valueB = std::get_if<UnboxedPropertyValue>(&b);
+    return valueB && std::get<UnboxedPropertyValue>(a) == *valueB;
+}
+
+// Whether the element is in an item element a repeater holds without having it
+// realized, i.e. one sitting in its recycle pool.
+bool IsInRecycledRepeaterItem(FrameworkElement element) {
+    try {
+        DependencyObject child = element;
+        while (child) {
+            auto parent = Media::VisualTreeHelper::GetParent(child);
+            if (auto repeater = parent.try_as<muxc::ItemsRepeater>()) {
+                if (repeater.GetElementIndex(child.as<UIElement>()) < 0) {
+                    return true;
+                }
+            }
+
+            child = std::move(parent);
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    return false;
+}
+
+thread_local bool g_recycledItemCapturesRefreshQueued;
+thread_local winrt::Windows::System::DispatcherQueueTimer
+    g_recycledItemCapturesRefreshTimer{nullptr};
+thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
+    g_recycledItemCapturesRefreshTimerTickRevoker;
+
+// The captures of an element in a recycled repeater item are withdrawn, as if
+// the item was removed: the recycle pool keeps the item in the tree, out of
+// sight, and its captures would keep publishing the values they last saw. This
+// runs once layout is done rather than on each clear and prepare, since a
+// layout can clear an element and hand it straight back within a pass, and
+// flipping the captures there would restyle their consumers on every pass.
+void RefreshRecycledItemCaptures() {
+    g_recycledItemCapturesRefreshQueued = false;
+
+    auto* state = GetStyleVariableState();
+
+    std::vector<ElementId> owners(state->withdrawnCaptureOwners.begin(),
+                                  state->withdrawnCaptureOwners.end());
+    for (const auto& [varName, captures] : state->variables) {
+        for (const auto& capture : captures) {
+            owners.push_back(capture.elementId);
+        }
+    }
+
+    std::sort(owners.begin(), owners.end());
+    owners.erase(std::unique(owners.begin(), owners.end()), owners.end());
+
+    std::vector<std::wstring> changedVarNames;
+    for (ElementId owner : owners) {
+        auto it = g_elementsCustomizationState.find(owner);
+        if (it == g_elementsCustomizationState.end()) {
+            continue;
+        }
+
+        auto& elementState = it->second;
+        auto element = elementState.element.get();
+        if (!element) {
+            continue;
+        }
+
+        bool withdrawn = state->withdrawnCaptureOwners.contains(owner);
+        if (IsInRecycledRepeaterItem(element) == withdrawn) {
+            continue;
+        }
+
+        std::vector<std::wstring> varNames;
+        if (withdrawn) {
+            Wh_Log(L"Republishing captures of %llu",
+                   static_cast<uint64_t>(owner));
+            varNames = RepublishCapturesForElement(state, owner, element,
+                                                   elementState);
+            state->withdrawnCaptureOwners.erase(owner);
+        } else {
+            Wh_Log(L"Withdrawing captures of %llu",
+                   static_cast<uint64_t>(owner));
+            varNames = WithdrawCapturesForElement(state, owner, elementState);
+            state->withdrawnCaptureOwners.insert(owner);
+        }
+
+        changedVarNames.insert(changedVarNames.end(), varNames.begin(),
+                               varNames.end());
+    }
+
+    std::sort(changedVarNames.begin(), changedVarNames.end());
+    changedVarNames.erase(
+        std::unique(changedVarNames.begin(), changedVarNames.end()),
+        changedVarNames.end());
+
+    for (const auto& varName : changedVarNames) {
+        PropagateStyleVariableChange(state, varName, std::nullopt);
+    }
+}
+
+// Armed from inside a layout pass, and the timer carries the refresh out of it.
+void QueueRecycledItemCapturesRefresh() {
+    if (g_recycledItemCapturesRefreshQueued) {
+        return;
+    }
+
+    auto* state = GetStyleVariableState();
+    if (state->variables.empty() && state->withdrawnCaptureOwners.empty()) {
+        return;
+    }
+
+    try {
+        if (!g_recycledItemCapturesRefreshTimer) {
+            auto dispatcherQueue =
+                winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+            if (!dispatcherQueue) {
+                Wh_Log(L"No dispatcher queue, recycled item captures stay");
+                return;
+            }
+
+            g_recycledItemCapturesRefreshTimer = dispatcherQueue.CreateTimer();
+            g_recycledItemCapturesRefreshTimer.IsRepeating(false);
+            g_recycledItemCapturesRefreshTimer.Interval(
+                std::chrono::milliseconds{1});
+            g_recycledItemCapturesRefreshTimerTickRevoker =
+                g_recycledItemCapturesRefreshTimer.Tick(
+                    winrt::auto_revoke,
+                    [](winrt::Windows::System::DispatcherQueueTimer const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                        RefreshRecycledItemCaptures();
+                    });
+        }
+
+        g_recycledItemCapturesRefreshTimer.Start();
+        g_recycledItemCapturesRefreshQueued = true;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StopRecycledItemCapturesRefresh() {
+    if (g_recycledItemCapturesRefreshTimer) {
+        try {
+            g_recycledItemCapturesRefreshTimer.Stop();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_recycledItemCapturesRefreshTimerTickRevoker.revoke();
+    g_recycledItemCapturesRefreshTimer = nullptr;
+    g_recycledItemCapturesRefreshQueued = false;
+}
+
+// A virtualizing container recycles its item elements instead of destroying
+// them: the recycle pool keeps the element parented, out of sight, so XAML
+// diagnostics reports no Remove/Add mutation and the styles matched for the
+// previous item would stay on the element once it's reused for another one.
+// Treat a cleared element as removed and a prepared one as newly added.
+void HandleVirtualizingRepeater(ElementId elementId, FrameworkElement element) {
+    auto repeater = element.try_as<muxc::ItemsRepeater>();
+    if (!repeater || g_virtualizingRepeaters.contains(elementId)) {
+        return;
+    }
+
+    Wh_Log(L"Tracking recycling of %s", winrt::get_class_name(element).c_str());
+
+    auto& state = g_virtualizingRepeaters[elementId];
+
+    state.elementClearingRevoker = repeater.ElementClearing(
+        winrt::auto_revoke,
+        [](muxc::ItemsRepeater const&,
+           muxc::ItemsRepeaterElementClearingEventArgs const& args) {
+            // Ahead of the early returns: the item's descendants can hold
+            // captures even when the item itself has no id.
+            QueueRecycledItemCapturesRefresh();
+
+            auto element = args.Element().try_as<FrameworkElement>();
+            if (!element) {
+                return;
+            }
+
+            auto elementId = ElementIdFromElement(element);
+            if (elementId == ElementId::None) {
+                return;
+            }
+
+            Wh_Log(L"Element cleared: %llu", static_cast<uint64_t>(elementId));
+
+            // Nothing is restored here. Whether the styles still apply depends
+            // on the item the element is handed back for, which only the
+            // matching ElementPrepared knows, and until then they sit on an
+            // element the recycle pool keeps out of sight.
+            g_recycledElements.insert(elementId);
+        });
+
+    state.elementPreparedRevoker = repeater.ElementPrepared(
+        winrt::auto_revoke,
+        [](muxc::ItemsRepeater const& sender,
+           muxc::ItemsRepeaterElementPreparedEventArgs const& args) {
+            QueueRecycledItemCapturesRefresh();
+
+            auto element = args.Element().try_as<FrameworkElement>();
+            if (!element) {
+                return;
+            }
+
+            auto elementId = ElementIdFromElement(element);
+            if (elementId == ElementId::None) {
+                return;
+            }
+
+            auto item = RepeaterItemAt(sender, args.Index());
+
+            // Held across the walk below, so that an item which no weak
+            // reference can get back, such as one a source wraps anew on every
+            // read, is never recorded: an entry which could match nothing would
+            // keep the element held for good.
+            wf::IInspectable strongItem;
+            if (item) {
+                if (auto* weakItem =
+                        std::get_if<winrt::weak_ref<wf::IInspectable>>(
+                            &*item)) {
+                    strongItem = weakItem->get();
+                    if (!strongItem) {
+                        item.reset();
+                    }
+                }
+            }
+
+            if (!g_recycledElements.erase(elementId)) {
+                // Freshly created, so the styles its Add mutation applied are
+                // the ones for this item, and only the item is recorded.
+                if (item) {
+                    g_elementMatchedItems[elementId] = std::move(*item);
+                }
+                return;
+            }
+
+            if (item) {
+                auto it = g_elementMatchedItems.find(elementId);
+                if (it != g_elementMatchedItems.end() &&
+                    SameRepeaterItem(it->second, *item)) {
+                    Wh_Log(L"Element reused for the same item: %llu",
+                           static_cast<uint64_t>(elementId));
+                    return;
+                }
+            }
+
+            Wh_Log(L"Element reused: %llu", static_cast<uint64_t>(elementId));
+
+            ReapplyCustomizationsForSubtree(element);
+
+            // After the walk, which erases the entry as part of the teardown.
+            if (item) {
+                g_elementMatchedItems[elementId] = std::move(*item);
+            }
+        });
 }
 
 void MergeResourceVariables();
 
-void ApplyCustomizations(InstanceHandle handle,
+void ApplyCustomizations(ElementId elementId,
                          FrameworkElement element,
                          PCWSTR fallbackClassName) {
     // Merge resource dictionary on first element add. Merging it earlier on
@@ -8165,6 +9987,10 @@ void ApplyCustomizations(InstanceHandle handle,
     if (!g_resourceVariablesThemeDict) {
         MergeResourceVariables();
     }
+
+    // Before the early return below: a repeater rarely has styles of its own,
+    // but its item elements do.
+    HandleVirtualizingRepeater(elementId, element);
 
     auto* state = GetStyleVariableState();
     if (!state) {
@@ -8180,12 +10006,12 @@ void ApplyCustomizations(InstanceHandle handle,
 
     Wh_Log(L"Applying styles to %s", winrt::get_class_name(element).c_str());
 
-    auto& elementCustomizationState = g_elementsCustomizationState[handle];
+    auto& elementCustomizationState = g_elementsCustomizationState[elementId];
 
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
         RestoreCustomizationsForVisualStateGroup(
-            state, handle, element, visualStateGroupOptionalWeakPtrIter,
+            state, elementId, element, visualStateGroupOptionalWeakPtrIter,
             stateIter);
     }
 
@@ -8194,9 +10020,10 @@ void ApplyCustomizations(InstanceHandle handle,
 
     // Elements that neither capture nor consume a variable pay nothing. The
     // rest get their spine now that the element has been matched; if it isn't
-    // attached yet the walk yields nothing and EnsureElementTreeNode retries on
-    // first use. Cleared unconditionally so a re-apply that drops all variable
-    // use cannot leave a stale node behind.
+    // attached yet the spine stops at a placeholder root, which
+    // EnsureElementTreeNode rebuilds on first use once the element is actually
+    // in the tree. Cleared unconditionally so a re-apply that drops all
+    // variable use cannot leave a stale node behind.
     elementCustomizationState.treeNode = nullptr;
     if (!resolved.captures.empty() || resolved.hasDynamicValues) {
         elementCustomizationState.treeNode =
@@ -8207,8 +10034,14 @@ void ApplyCustomizations(InstanceHandle handle,
     // dynamic value-rules applied below. Note: SetUpCapturesForElement does not
     // need this element's fallbackClassName -- propagation routes through each
     // consumer's own stored fallback.
-    SetUpCapturesForElement(state, handle, element, resolved.captures,
+    SetUpCapturesForElement(state, elementId, element, resolved.captures,
                             &elementCustomizationState);
+
+    // The element may be in an item already sitting in a recycle pool, which
+    // no clear will be reported for.
+    if (!resolved.captures.empty()) {
+        QueueRecycledItemCapturesRefresh();
+    }
 
     for (auto& [visualStateGroup, overridesForVisualStateGroup] :
          resolved.overridesPerVSG) {
@@ -8224,27 +10057,342 @@ void ApplyCustomizations(InstanceHandle handle,
             &elementCustomizationState.perVisualStateGroup.back().second;
 
         ApplyCustomizationsForVisualStateGroup(
-            state, handle, element, visualStateGroup, fallbackClassName,
+            state, elementId, element, visualStateGroup, fallbackClassName,
             std::move(overridesForVisualStateGroup),
             elementCustomizationStateForVisualStateGroup);
     }
 }
 
-// XAML diagnostics, which the mod relies on to observe the visual tree, holds a
-// strong reference to every element it reports. Template content that a control
-// discarded therefore stays alive, still owning the children the control handed
-// to it. When the control instantiates its template again, taking those
-// children back fails the association check with E_INVALIDARG, and XAML turns
-// that into an unhandled error which terminates the app. The Settings app hits
-// this with the SplitView inside its NavigationView: `PaneRoot` binds
-// `Border.Child` to `SplitView.Pane`. Hand the children back while the content
-// holding them is torn down, which happens before the replacement is built.
+// With XAML diagnostics enabled, which the mod relies on to observe the visual
+// tree, CFrameworkElement::UpdateImplicitStyle drops an element's implicit
+// style when all implicit styles are invalidated, instead of looking it up
+// again. Changing the app's resources does that, e.g. opening Personalization >
+// Background or Bluetooth & devices > Printers & scanners, and leaves controls
+// with their default styles, such as the navigation pane without its backdrop.
+// The diagnostics check is patched to take the path it takes without
+// diagnostics. With no symbols to go by, it's found by the code around it.
 //
-// The owner is found from the Border rather than from the child: once content
-// leaves the tree, neither VisualTreeHelper::GetParent nor
-// FrameworkElement.Parent reports an owner for the child anymore, while
-// Border.Child keeps reading fine.
-std::vector<winrt::weak_ref<Controls::SplitView>> g_trackedSplitViews;
+// The patched code behaves as the original does with diagnostics disabled and
+// refers to nothing in the mod, so it's left in place when the mod unloads.
+bool g_implicitStyleDiagnosticsCheckPatchAttempted;
+
+struct CodeRange {
+    const BYTE* begin;
+    const BYTE* end;
+};
+
+// The executable sections of a module, or for an ARM64X module, its ARM64 code
+// without the ARM64EC code it also holds.
+std::vector<CodeRange> GetNativeCodeRanges(HMODULE module) {
+    auto* base = reinterpret_cast<const BYTE*>(module);
+    auto* ntHeaders = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+        base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+
+    std::vector<CodeRange> ranges;
+
+#ifdef _M_ARM64
+    // IMAGE_ARM64EC_METADATA and IMAGE_CHPE_RANGE_ENTRY, which the headers
+    // don't define. The low bits of a range's start hold its code type, ARM64
+    // being 0.
+    struct Arm64EcMetadata {
+        ULONG Version;
+        ULONG CodeMap;
+        ULONG CodeMapCount;
+    };
+    struct ChpeRangeEntry {
+        ULONG StartOffset;
+        ULONG Length;
+    };
+
+    const auto& loadConfigDirectory =
+        ntHeaders->OptionalHeader
+            .DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG];
+    auto* loadConfig = reinterpret_cast<const IMAGE_LOAD_CONFIG_DIRECTORY*>(
+        base + loadConfigDirectory.VirtualAddress);
+    if (loadConfigDirectory.VirtualAddress &&
+        loadConfig->Size >=
+            offsetof(IMAGE_LOAD_CONFIG_DIRECTORY, CHPEMetadataPointer) +
+                sizeof(loadConfig->CHPEMetadataPointer) &&
+        loadConfig->CHPEMetadataPointer) {
+        auto* metadata = reinterpret_cast<const Arm64EcMetadata*>(
+            base + (loadConfig->CHPEMetadataPointer -
+                    ntHeaders->OptionalHeader.ImageBase));
+        auto* codeMap =
+            reinterpret_cast<const ChpeRangeEntry*>(base + metadata->CodeMap);
+        for (ULONG i = 0; i < metadata->CodeMapCount; i++) {
+            if ((codeMap[i].StartOffset & 3) == 0) {
+                const BYTE* begin = base + codeMap[i].StartOffset;
+                ranges.push_back({begin, begin + codeMap[i].Length});
+            }
+        }
+
+        return ranges;
+    }
+#endif
+
+    auto* section = IMAGE_FIRST_SECTION(ntHeaders);
+    for (WORD i = 0; i < ntHeaders->FileHeader.NumberOfSections;
+         i++, section++) {
+        if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE) {
+            const BYTE* begin = base + section->VirtualAddress;
+            ranges.push_back({begin, begin + section->Misc.VirtualSize});
+        }
+    }
+
+    return ranges;
+}
+
+#if defined(_M_X64)
+// The opcode of `test al, al`, which `xor al, al` replaces.
+using CheckCode = BYTE;
+constexpr CheckCode kPatchedCheck = 0x30;
+
+// xor r8d, r8d
+// lea edx, [r8+5]  ; RuntimeEnabledFeature::XamlDiagnostics
+// call IsFeatureEnabled
+// test al, al
+// je <lookup>
+//
+// Directly after the comparison of the old and new styles, which branches to
+// the same place:
+// jne <lookup>
+// mov rcx, [rbp+disp8] or mov rcx, [rsp+disp8]
+void FindImplicitStyleDiagnosticsChecks(CodeRange range,
+                                        std::vector<CheckCode*>& found) {
+    constexpr BYTE kFeatureCheck[] = {0x45, 0x33, 0xC0, 0x41,
+                                      0x8D, 0x50, 0x05, 0xE8};
+    for (const BYTE* p = range.begin + 11; p + 20 <= range.end; p++) {
+        if (memcmp(p, kFeatureCheck, sizeof(kFeatureCheck)) != 0 ||
+            (p[12] != 0x84 && p[12] != kPatchedCheck) || p[13] != 0xC0 ||
+            p[14] != 0x0F || p[15] != 0x84) {
+            continue;
+        }
+
+        const BYTE* lookup = p + 20 + *reinterpret_cast<const INT32*>(p + 16);
+
+        const BYTE* mov;
+        if (p[-4] == 0x48 && p[-3] == 0x8B && p[-2] == 0x4D) {
+            mov = p - 4;
+        } else if (p[-5] == 0x48 && p[-4] == 0x8B && p[-3] == 0x4C &&
+                   p[-2] == 0x24) {
+            mov = p - 5;
+        } else {
+            continue;
+        }
+
+        if ((mov[-2] == 0x75 && mov + static_cast<INT8>(mov[-1]) == lookup) ||
+            (mov[-6] == 0x0F && mov[-5] == 0x85 &&
+             mov + *reinterpret_cast<const INT32*>(mov - 4) == lookup)) {
+            found.push_back(const_cast<BYTE*>(p + 12));
+        }
+    }
+}
+#elif defined(_M_ARM64)
+// The call of IsFeatureEnabled, which `mov w0, #0` replaces.
+using CheckCode = DWORD;
+constexpr CheckCode kPatchedCheck = 0x52800000;
+
+// mov w2, #0
+// mov w1, #5  ; RuntimeEnabledFeature::XamlDiagnostics
+// bl IsFeatureEnabled
+// uxtb w8, w0 + cbz w8, <lookup> or tbz x0, #0, <lookup>
+// mov wN, #1  ; possibly after a branch
+// ...
+// <lookup>:
+// mov wN, #0
+//
+// x0 is set before the call too, and the order of the moves varies.
+void FindImplicitStyleDiagnosticsChecks(CodeRange range,
+                                        std::vector<CheckCode*>& found) {
+    auto* begin = reinterpret_cast<const DWORD*>(range.begin);
+    auto* end = reinterpret_cast<const DWORD*>(range.end);
+
+    auto branchTarget = [](const DWORD* p, int shift, int bits) {
+        INT32 offset =
+            static_cast<INT32>((*p >> shift) << (32 - bits)) >> (32 - bits);
+        return p + offset;
+    };
+
+    for (const DWORD* p = begin + 3; p + 3 <= end; p++) {
+        if ((*p >> 26 != 0x25 && *p != kPatchedCheck) ||
+            std::find(p - 3, p, 0x52800002) == p ||
+            std::find(p - 3, p, 0x528000A1) == p) {
+            continue;
+        }
+
+        const DWORD* branch = p + 1;
+        const DWORD* lookup;
+        if (branch[0] == 0x53001C08 && (branch[1] & 0xFF00001F) == 0x34000008) {
+            branch++;
+            lookup = branchTarget(branch, 5, 19);
+        } else if ((branch[0] & 0xFFF8001F) == 0x36000000) {
+            lookup = branchTarget(branch, 5, 14);
+        } else {
+            continue;
+        }
+
+        const DWORD* set = branch + 1;
+        if (set < end && *set >> 26 == 0x05) {
+            set = branchTarget(set, 0, 26);
+        }
+
+        if (lookup >= begin && lookup < end && set >= begin && set < end &&
+            (*lookup & 0xFFFFFFE0) == 0x52800000 && *set == (*lookup | 0x20)) {
+            found.push_back(const_cast<DWORD*>(p));
+        }
+    }
+}
+#endif
+
+void PatchImplicitStyleDiagnosticsCheck() {
+    if (g_implicitStyleDiagnosticsCheckPatchAttempted) {
+        return;
+    }
+
+    g_implicitStyleDiagnosticsCheckPatchAttempted = true;
+
+    HMODULE module = GetModuleHandle(L"Windows.UI.Xaml.dll");
+    if (!module) {
+        Wh_Log(L"Windows.UI.Xaml.dll isn't loaded");
+        return;
+    }
+
+    std::vector<CheckCode*> found;
+    for (const auto& range : GetNativeCodeRanges(module)) {
+        FindImplicitStyleDiagnosticsChecks(range, found);
+    }
+
+    if (found.size() != 1) {
+        Wh_Log(L"Found %zu implicit style diagnostics checks", found.size());
+        return;
+    }
+
+    CheckCode* check = found[0];
+    if (*check == kPatchedCheck) {
+        Wh_Log(L"Implicit style diagnostics check is already patched");
+        return;
+    }
+
+    DWORD oldProtect;
+    if (!VirtualProtect(check, sizeof(*check), PAGE_EXECUTE_READWRITE,
+                        &oldProtect)) {
+        Wh_Log(L"VirtualProtect failed: %u", GetLastError());
+        return;
+    }
+
+    // A single store, since other UI threads may be running the code.
+    *reinterpret_cast<volatile CheckCode*>(check) = kPatchedCheck;
+
+    VirtualProtect(check, sizeof(*check), oldProtect, &oldProtect);
+    FlushInstructionCache(GetCurrentProcess(), check, sizeof(*check));
+
+    Wh_Log(L"Patched the implicit style diagnostics check at %p", check);
+}
+
+// If the diagnostics check above can't be patched, the dropped implicit style
+// also replaces the template of a control styled that way. The Settings app
+// hits this with the SplitView inside its NavigationView, e.g. when opening
+// Personalization > Background. The SplitView keeps its old `PaneRoot` and
+// `ContentRoot` until the new template is applied, and their Borders still own
+// `SplitView.Pane` and `SplitView.Content`, which the new template binds
+// `Border.Child` to. Taking them over fails the association check with
+// E_INVALIDARG, and XAML turns that into an unhandled error which terminates
+// the app. Hand the children back as soon as the template changes, before the
+// replacement is built.
+//
+// By then the old content has left the tree, where neither
+// VisualTreeHelper::GetParent nor FrameworkElement.Parent reports an owner for
+// the children anymore, so the Borders holding them are recorded as they're
+// added.
+struct TrackedSplitView {
+    winrt::weak_ref<Controls::SplitView> splitView;
+    int64_t templateChangedToken = 0;
+    std::vector<winrt::weak_ref<Controls::Border>> childHosts;
+};
+
+std::vector<TrackedSplitView> g_trackedSplitViews;
+
+bool IsSplitViewChild(Controls::SplitView const& splitView,
+                      UIElement const& element) {
+    return element &&
+           (element == splitView.Pane() || element == splitView.Content());
+}
+
+void AddSplitViewChildHost(TrackedSplitView& tracked,
+                           Controls::Border const& border) {
+    std::erase_if(tracked.childHosts,
+                  [](const auto& host) { return !host.get(); });
+
+    if (std::any_of(
+            tracked.childHosts.begin(), tracked.childHosts.end(),
+            [&border](const auto& host) { return host.get() == border; })) {
+        return;
+    }
+
+    tracked.childHosts.push_back(winrt::make_weak(border));
+}
+
+// For a SplitView whose template was applied before it was reported. The
+// children themselves aren't descended into, since they can be whole pages.
+void FindSplitViewChildHosts(TrackedSplitView& tracked,
+                             Controls::SplitView const& splitView,
+                             DependencyObject const& element) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i);
+        if (auto border = child.try_as<Controls::Border>();
+            border && IsSplitViewChild(splitView, border.Child())) {
+            AddSplitViewChildHost(tracked, border);
+        } else if (!IsSplitViewChild(splitView, child.try_as<UIElement>())) {
+            FindSplitViewChildHosts(tracked, splitView, child);
+        }
+    }
+}
+
+void TrackSplitViewChildHost(FrameworkElement element) {
+    auto border = element.try_as<Controls::Border>();
+    if (!border) {
+        return;
+    }
+
+    auto child = border.Child();
+    for (auto& tracked : g_trackedSplitViews) {
+        auto splitView = tracked.splitView.get();
+        if (splitView && IsSplitViewChild(splitView, child)) {
+            AddSplitViewChildHost(tracked, border);
+            return;
+        }
+    }
+}
+
+void ReleaseSplitViewChildren(Controls::SplitView const& splitView) {
+    auto it =
+        std::find_if(g_trackedSplitViews.begin(), g_trackedSplitViews.end(),
+                     [&splitView](const TrackedSplitView& tracked) {
+                         return tracked.splitView.get() == splitView;
+                     });
+    if (it == g_trackedSplitViews.end()) {
+        return;
+    }
+
+    // A copy: detaching reports removals, which re-enter the mod.
+    auto childHosts = it->childHosts;
+    for (const auto& host : childHosts) {
+        auto border = host.get();
+        if (!border) {
+            continue;
+        }
+
+        auto child = border.Child();
+        if (!IsSplitViewChild(splitView, child)) {
+            continue;
+        }
+
+        Wh_Log(L"Detaching %s from the replaced SplitView template",
+               winrt::get_class_name(child).c_str());
+        border.Child(nullptr);
+    }
+}
 
 void TrackSplitView(FrameworkElement element) {
     auto splitView = element.try_as<Controls::SplitView>();
@@ -8252,64 +10400,241 @@ void TrackSplitView(FrameworkElement element) {
         return;
     }
 
-    // An element is reported again every time it re-enters the tree, so without
-    // this the same SplitView piles up.
-    std::erase_if(g_trackedSplitViews,
-                  [&splitView](const auto& trackedWeakPtr) {
-                      auto tracked = trackedWeakPtr.get();
-                      return !tracked || tracked == splitView;
-                  });
-
-    g_trackedSplitViews.push_back(winrt::make_weak(splitView));
-}
-
-void ReleaseDiscardedSplitViewChild(
-    winrt::Windows::Foundation::IInspectable removedElement) {
-    auto border = removedElement.try_as<Controls::Border>();
-    if (!border) {
-        return;
-    }
-
-    auto child = border.Child();
-    if (!child) {
-        return;
-    }
-
-    bool discarded = false;
-    std::erase_if(g_trackedSplitViews, [&](const auto& splitViewWeakPtr) {
-        auto splitView = splitViewWeakPtr.get();
-        if (!splitView) {
-            return true;
-        }
-
-        // A SplitView on its way out of the tree takes its content with it and
-        // keeps using it once it's back, so only a SplitView that stays needs
-        // its children handed back.
-        if (!Media::VisualTreeHelper::GetParent(splitView)) {
-            return false;
-        }
-
-        if (child == splitView.Pane() || child == splitView.Content()) {
-            discarded = true;
-        }
-
-        return false;
+    std::erase_if(g_trackedSplitViews, [](const TrackedSplitView& tracked) {
+        return !tracked.splitView.get();
     });
 
-    if (!discarded) {
+    // An element is reported again every time it re-enters the tree.
+    if (std::any_of(g_trackedSplitViews.begin(), g_trackedSplitViews.end(),
+                    [&splitView](const TrackedSplitView& tracked) {
+                        return tracked.splitView.get() == splitView;
+                    })) {
         return;
     }
 
-    Wh_Log(L"Detaching %s from discarded SplitView template content",
-           winrt::get_class_name(child).c_str());
+    auto token = splitView.RegisterPropertyChangedCallback(
+        Controls::Control::TemplateProperty(),
+        [](DependencyObject const& sender, DependencyProperty const&) {
+            // Runs from within XAML's own property change, which an exception
+            // escaping into would turn into a crash.
+            try {
+                if (auto splitView = sender.try_as<Controls::SplitView>()) {
+                    ReleaseSplitViewChildren(splitView);
+                }
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult());
+            }
+        });
 
-    // Detaching reports the child as removed, which re-enters this function, so
-    // it has to happen once the tracked SplitViews are no longer being walked.
-    border.Child(nullptr);
+    g_trackedSplitViews.push_back({winrt::make_weak(splitView), token});
+
+    FindSplitViewChildHosts(g_trackedSplitViews.back(), splitView, splitView);
 }
 
-void CleanupCustomizations(InstanceHandle handle) {
-    auto it = g_elementsCustomizationState.find(handle);
+void UntrackSplitViews() {
+    for (const auto& tracked : g_trackedSplitViews) {
+        auto splitView = tracked.splitView.get();
+        if (!splitView) {
+            continue;
+        }
+
+        try {
+            splitView.UnregisterPropertyChangedCallback(
+                Controls::Control::TemplateProperty(),
+                tracked.templateChangedToken);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_trackedSplitViews.clear();
+}
+
+// The diagnostics create a runtime object which holds every element they
+// report, and drop it only once the element is reported as removed. Removals
+// are reported for elements taken out of their parent, which is how a recycled
+// list item is released, but a tree which is discarded whole is never taken
+// apart that way: dropping its root would destroy it. Holding every element is
+// what stops that destruction, so nothing is ever removed and nothing is ever
+// reported. Elements nothing is keyed by are handed back from here so the
+// teardown can happen.
+//
+// Reporting an element recreates the runtime object of its parent, which is why
+// each report queues the parent as well, and why the queue is drained only once
+// the burst of reports has stopped: releasing mid-burst would just be undone by
+// the next child of whatever was released.
+thread_local std::vector<InstanceHandle> g_pendingDiagnosticsRelease;
+thread_local ULONGLONG g_lastDiagnosticsReleaseQueueTick;
+thread_local bool g_diagnosticsReleaseDrainQueued;
+thread_local winrt::Windows::System::DispatcherQueueTimer
+    g_diagnosticsReleaseDrainTimer{nullptr};
+thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
+    g_diagnosticsReleaseDrainTimerTickRevoker;
+
+// Long enough to sit out a tree being built.
+constexpr ULONGLONG kDiagnosticsReleaseDelay = 200;
+
+// The drain waits on a one-shot timer, which the thread teardown can stop,
+// rather than on a dispatcher item, which it cannot: the module is freed once
+// the mod is uninitialized, and an item still on the dispatcher would call into
+// it. The interval only has to carry the drain out of the report which arms it.
+constexpr ULONGLONG kDiagnosticsReleaseDrainDelay = 1;
+
+// Releasing an element the mod still records something for would strand that
+// recording, since no removal is reported for a handle whose runtime object is
+// gone. Such an element stays held, and its own removal releases it.
+//
+// Which leaves a styled element of a tree discarded whole held for good, and
+// with it everything below it, since a parent holds its children. Rules that
+// match the Settings app match almost nothing of such a tree, so what this
+// retains is small, but a rule written against a bare type would retain much
+// more.
+bool ElementHasState(ElementId elementId) {
+    if (elementId == ElementId::None) {
+        return false;
+    }
+
+    if (g_elementsCustomizationState.contains(elementId) ||
+        g_virtualizingRepeaters.contains(elementId) ||
+        g_recycledElements.contains(elementId) ||
+        g_elementMatchedItems.contains(elementId)) {
+        return true;
+    }
+
+    if (g_styleVariableState.elementRefs.contains(elementId)) {
+        return true;
+    }
+
+    for (const auto& propagation : g_pendingStyleVariablePropagations) {
+        if (propagation.changedOwner == elementId) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void FlushDiagnosticsReleases() {
+    auto pending = std::move(g_pendingDiagnosticsRelease);
+    g_pendingDiagnosticsRelease.clear();
+
+    auto visualTreeWatcher = GetVisualTreeWatcher();
+    if (!visualTreeWatcher) {
+        return;
+    }
+
+    // A handle is queued once per report naming it, so a parent appears once
+    // per child, and each repeat would pay for another ElementHasState scan.
+    std::sort(pending.begin(), pending.end());
+    pending.erase(std::unique(pending.begin(), pending.end()), pending.end());
+
+    for (InstanceHandle handle : pending) {
+        if (ElementHasState(FindElementId(handle))) {
+            continue;
+        }
+
+        if (visualTreeWatcher->ReleaseDiagnosticsReference(handle)) {
+            ForgetElementId(handle);
+        }
+    }
+
+    // Here rather than anywhere else on the report path: the releases above are
+    // what let elements be destroyed unreported, and this runs from the
+    // dispatcher, so the teardown of what they were keyed by is outside the
+    // walk the reports came from.
+    ReapDeadElementIdsIfNeeded();
+}
+
+void QueueDiagnosticsRelease(InstanceHandle handle) {
+    if (!handle) {
+        return;
+    }
+
+    g_pendingDiagnosticsRelease.push_back(handle);
+    g_lastDiagnosticsReleaseQueueTick = GetTickCount64();
+}
+
+// Whether the burst has stopped is decided when this is scheduled: the report
+// which schedules it queues its own handles right afterwards, so the time since
+// the last queue is short again by the time this runs.
+void DrainDiagnosticsReleases() {
+    g_diagnosticsReleaseDrainQueued = false;
+    FlushDiagnosticsReleases();
+}
+
+// Reports arrive from inside XAML's own Enter and Leave walks, and a release
+// there re-enters the diagnostics while the tree is being mutated: dropping the
+// last reference to an element the walk is still visiting destroys it mid-walk.
+// The drain is therefore armed on the thread's dispatcher, which runs it once
+// the walk has finished.
+//
+// Whether to arm it is decided by the next report rather than by a recurring
+// timer, so that nothing of the mod is left waiting on a thread it does not
+// tear down. A thread which goes quiet therefore holds its last burst until it
+// is used again.
+void FlushDiagnosticsReleasesIfQuiet() {
+    if (g_pendingDiagnosticsRelease.empty() ||
+        g_diagnosticsReleaseDrainQueued ||
+        GetTickCount64() - g_lastDiagnosticsReleaseQueueTick <
+            kDiagnosticsReleaseDelay) {
+        return;
+    }
+
+    try {
+        if (!g_diagnosticsReleaseDrainTimer) {
+            auto dispatcherQueue =
+                winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+            if (!dispatcherQueue) {
+                // Releasing from here is the one thing that isn't safe, so the
+                // elements stay held instead.
+                Wh_Log(L"No dispatcher queue, elements will be held");
+                return;
+            }
+
+            g_diagnosticsReleaseDrainTimer = dispatcherQueue.CreateTimer();
+            g_diagnosticsReleaseDrainTimer.IsRepeating(false);
+            g_diagnosticsReleaseDrainTimer.Interval(
+                std::chrono::milliseconds{kDiagnosticsReleaseDrainDelay});
+            g_diagnosticsReleaseDrainTimerTickRevoker =
+                g_diagnosticsReleaseDrainTimer.Tick(
+                    winrt::auto_revoke,
+                    [](winrt::Windows::System::DispatcherQueueTimer const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                        DrainDiagnosticsReleases();
+                    });
+        }
+
+        g_diagnosticsReleaseDrainTimer.Start();
+        g_diagnosticsReleaseDrainQueued = true;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StopDiagnosticsReleases() {
+    ResetThreadLocal(g_pendingDiagnosticsRelease);
+
+    if (g_diagnosticsReleaseDrainTimer) {
+        try {
+            g_diagnosticsReleaseDrainTimer.Stop();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_diagnosticsReleaseDrainTimerTickRevoker.revoke();
+    g_diagnosticsReleaseDrainTimer = nullptr;
+    g_diagnosticsReleaseDrainQueued = false;
+}
+
+void CleanupCustomizations(ElementId elementId) {
+    // Unconditional: a repeater, or an item element which matched no rule, has
+    // no customization state but can still have virtualization bookkeeping.
+    g_virtualizingRepeaters.erase(elementId);
+    g_recycledElements.erase(elementId);
+    g_elementMatchedItems.erase(elementId);
+
+    auto it = g_elementsCustomizationState.find(elementId);
     if (it == g_elementsCustomizationState.end()) {
         return;
     }
@@ -8317,7 +10642,10 @@ void CleanupCustomizations(InstanceHandle handle) {
     // A reference rather than the iterator: restoring a style below runs
     // arbitrary XAML work that can re-enter ApplyCustomizations and rehash
     // g_elementsCustomizationState, which invalidates iterators but not
-    // references to the mapped values.
+    // references to the mapped values. A re-entrant cleanup or re-apply of this
+    // same elementId would invalidate both the reference and the loop below,
+    // but the re-entrancy is for other elements, not the one being torn down
+    // here.
     auto& elementCustomizationState = it->second;
 
     auto element = elementCustomizationState.element.get();
@@ -8325,48 +10653,25 @@ void CleanupCustomizations(InstanceHandle handle) {
 
     RestoreCapturesForElement(element, elementCustomizationState);
 
-    // Drop this element's captures from the registry. Other elements may still
-    // capture the same names, so a name only becomes undefined once its last
-    // capture is gone. Runs after RestoreCapturesForElement so the
-    // just-unregistered capture callbacks can't re-seed a variable
-    // mid-teardown.
+    // After RestoreCapturesForElement so the just-unregistered capture
+    // callbacks can't re-seed a variable mid-teardown.
     std::vector<std::wstring> removedVarNames;
     if (state) {
-        for (const auto& [property, captureState] :
-             elementCustomizationState.captureCustomizationStates) {
-            if (captureState.varName.empty()) {
-                continue;
-            }
-
-            auto varIt = state->variables.find(captureState.varName);
-            if (varIt == state->variables.end()) {
-                continue;
-            }
-
-            if (!std::erase_if(varIt->second,
-                               [handle](const StyleVariableCapture& capture) {
-                                   return capture.elementHandle == handle;
-                               })) {
-                continue;
-            }
-
-            removedVarNames.push_back(captureState.varName);
-            if (varIt->second.empty()) {
-                state->variables.erase(varIt);
-            }
-        }
+        removedVarNames = WithdrawCapturesForElement(state, elementId,
+                                                     elementCustomizationState);
+        state->withdrawnCaptureOwners.erase(elementId);
     }
 
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
         RestoreCustomizationsForVisualStateGroup(
-            state, handle, element, visualStateGroupOptionalWeakPtrIter,
+            state, elementId, element, visualStateGroupOptionalWeakPtrIter,
             stateIter);
     }
 
-    // By handle, not by `it`: a re-entrant apply above may have rehashed the
+    // By elementId, not by `it`: a re-entrant apply above may have rehashed the
     // map since the lookup.
-    g_elementsCustomizationState.erase(handle);
+    g_elementsCustomizationState.erase(elementId);
 
     ReapElementTreeNodesIfNeeded();
 
@@ -9152,6 +11457,8 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeOLED_variant_ModrinthGreen;
     } else if (wcscmp(themeName, L"OLED_variant_SystemAscent") == 0) {
         theme = &g_themeOLED_variant_SystemAscent;
+    } else if (wcscmp(themeName, L"Translucent_Seamless") == 0) {
+        theme = &g_themeTranslucent_Seamless;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -9226,22 +11533,41 @@ void UninitializeResourceVariables() {
 }
 
 void UninitializeSettingsAndTap() {
-    // Clear tracked image brushes for this thread (revokers will automatically
+    // Clear tracked images for this thread (revokers will automatically
     // unregister).
-    if (auto& timer = g_trackedImageBrushesForThread.retryDebounceTimer) {
+    if (auto& timer = g_trackedImagesForThread.retryTimer) {
         try {
             timer.Stop();
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
-    g_trackedImageBrushesForThread.retryDebounceTimerTickRevoker.revoke();
-    g_trackedImageBrushesForThread.retryDebounceTimer = nullptr;
-    g_trackedImageBrushesForThread.brushes.clear();
+    g_trackedImagesForThread.retryTimerTickRevoker.revoke();
+    g_trackedImagesForThread.retryTimer = nullptr;
+    g_trackedImagesForThread.retryDueTick = 0;
+    g_trackedImagesForThread.images.clear();
+    ResetThreadLocal(g_imageCacheUriRemotes);
     StopImageLoadRetriesForCurrentThread();
 
-    for (const auto& [handle, elementCustomizationState] :
-         g_elementsCustomizationState) {
+    // Before the teardown below, so that no recycling callback can fire into
+    // half-cleared state, and no pending release can consult state which is
+    // being cleared.
+    StopDiagnosticsReleases();
+    StopRecycledItemCapturesRefresh();
+    ResetThreadLocal(g_virtualizingRepeaters);
+    ResetThreadLocal(g_recycledElements);
+    ResetThreadLocal(g_elementMatchedItems);
+
+    // Detached from the global before being walked: restoring a value runs
+    // arbitrary XAML work, and whatever it re-enters looks its elements up in
+    // g_elementsCustomizationState. Walking a map nothing else can reach keeps
+    // a re-entrant insert or erase from invalidating this loop, and leaving the
+    // global empty makes those lookups miss, which is what teardown wants.
+    auto elementsCustomizationState = std::move(g_elementsCustomizationState);
+    g_elementsCustomizationState.clear();
+
+    for (const auto& [elementId, elementCustomizationState] :
+         elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
         auto* state = GetStyleVariableState();
 
@@ -9250,23 +11576,30 @@ void UninitializeSettingsAndTap() {
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                state, handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, elementId, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
     }
 
     // Before g_elementTreeNodes, since the states hold the last strong refs to
     // the spine nodes.
-    g_elementsCustomizationState.clear();
+    elementsCustomizationState.clear();
     g_elementTreeNodes.clear();
     g_elementTreeNodesReapThreshold = 64;
     g_pendingStyleVariablePropagations.clear();
     g_styleVariableState = {};
 
+    // After everything keyed by an id. g_lastElementId keeps counting, since an
+    // id must never name two elements.
+    ResetThreadLocal(g_elementIds);
+    g_elementIdsReapThreshold = 64;
+
     g_elementsCustomizationRules.clear();
-    g_trackedSplitViews.clear();
+    UntrackSplitViews();
 
     UninitializeResourceVariables();
+
+    g_noiseStream = nullptr;
 
     g_targetThreadId = 0;
 }
@@ -9279,6 +11612,8 @@ void InitializeSettingsAndTap() {
     }
 
     ProcessAllStylesFromSettings();
+
+    PatchImplicitStyleDiagnosticsCheck();
 
     HRESULT hr = InjectWindhawkTAP();
     if (FAILED(hr)) {
@@ -9485,6 +11820,66 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+RegOpenKeyExW_t RegOpenKeyExW_Original;
+LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey,
+                                  LPCWSTR lpSubKey,
+                                  DWORD ulOptions,
+                                  REGSAM samDesired,
+                                  PHKEY phkResult) {
+    LSTATUS result = RegOpenKeyExW_Original(hKey, lpSubKey, ulOptions,
+                                            samDesired, phkResult);
+    if (result == ERROR_SUCCESS || !g_reportCompositionDiagAsDisabled ||
+        hKey != HKEY_LOCAL_MACHINE || !lpSubKey ||
+        _wcsicmp(lpSubKey, L"Software\\Microsoft\\XAML\\Debug") != 0) {
+        return result;
+    }
+
+    // The key usually doesn't exist, and the value isn't queried unless the key
+    // could be opened, so hand out a key which does exist.
+    Wh_Log(L"Substituting the XAML debug key");
+    return RegOpenKeyExW_Original(HKEY_LOCAL_MACHINE, L"Software\\Microsoft",
+                                  ulOptions, samDesired, phkResult);
+}
+
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+RegQueryValueExW_t RegQueryValueExW_Original;
+LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
+                                     LPCWSTR lpValueName,
+                                     LPDWORD lpReserved,
+                                     LPDWORD lpType,
+                                     LPBYTE lpData,
+                                     LPDWORD lpcbData) {
+    if (!g_reportCompositionDiagAsDisabled || !lpValueName ||
+        _wcsicmp(lpValueName, L"DisableCompositionDiag") != 0) {
+        return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType,
+                                         lpData, lpcbData);
+    }
+
+    Wh_Log(L"Reporting DisableCompositionDiag as set");
+
+    if (lpType) {
+        *lpType = REG_DWORD;
+    }
+
+    if (lpData && (!lpcbData || *lpcbData < sizeof(DWORD))) {
+        if (lpcbData) {
+            *lpcbData = sizeof(DWORD);
+        }
+        return ERROR_MORE_DATA;
+    }
+
+    if (lpData) {
+        *reinterpret_cast<DWORD*>(lpData) = 1;
+    }
+
+    if (lpcbData) {
+        *lpcbData = sizeof(DWORD);
+    }
+
+    return ERROR_SUCCESS;
+}
+
 HWND GetCoreWnd() {
     struct ENUM_WINDOWS_PARAM {
         HWND* hWnd;
@@ -9501,6 +11896,23 @@ HWND GetCoreWnd() {
                 return TRUE;
             }
 
+            auto isCurrentProcessWnd = [](HWND hWnd) {
+                DWORD dwProcessId = 0;
+                return GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                       dwProcessId == GetCurrentProcessId();
+            };
+
+            // The CoreWindow is top-level until the frame window adopts it,
+            // and while the app is minimized.
+            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+                if (isCurrentProcessWnd(hWnd)) {
+                    *param.hWnd = hWnd;
+                    return FALSE;
+                }
+
+                return TRUE;
+            }
+
             if (_wcsicmp(szClassName, L"ApplicationFrameWindow") != 0) {
                 return TRUE;
             }
@@ -9510,9 +11922,7 @@ HWND GetCoreWnd() {
             while ((hCoreWnd = FindWindowEx(hWnd, hCoreWnd,
                                             L"Windows.UI.Core.CoreWindow",
                                             nullptr)) != nullptr) {
-                DWORD dwProcessId = 0;
-                if (GetWindowThreadProcessId(hCoreWnd, &dwProcessId) &&
-                    dwProcessId == GetCurrentProcessId()) {
+                if (isCurrentProcessWnd(hCoreWnd)) {
                     *param.hWnd = hCoreWnd;
                     return FALSE;
                 }
@@ -9531,7 +11941,7 @@ bool StartStatsTimer() {
     static constexpr WCHAR kStatsBaseUrl[] =
         L"https://github.com/ramensoftware/"
         L"windows-11-settings-styling-guide/"
-        L"releases/download/stats-v1/";
+        L"releases/download/stats-v2/";
 
     ULONGLONG lastStatsTime = 0;
     Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
@@ -9597,6 +12007,8 @@ bool StartStatsTimer() {
                              L' ', L'_');
                 std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
                              L'&', L'_');
+                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
+                             L'.', L'_');
 
                 std::wstring statsUrl = kStatsBaseUrl;
                 statsUrl += themeNameEscaped;
@@ -9675,6 +12087,18 @@ BOOL Wh_ModInit() {
         }
     }
 
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    void* pKernelBaseRegOpenKeyExW =
+        (void*)GetProcAddress(kernelBaseModule, "RegOpenKeyExW");
+    Wh_SetFunctionHook(pKernelBaseRegOpenKeyExW, (void*)RegOpenKeyExW_Hook,
+                       (void**)&RegOpenKeyExW_Original);
+
+    void* pKernelBaseRegQueryValueExW =
+        (void*)GetProcAddress(kernelBaseModule, "RegQueryValueExW");
+    Wh_SetFunctionHook(pKernelBaseRegQueryValueExW,
+                       (void*)RegQueryValueExW_Hook,
+                       (void**)&RegQueryValueExW_Original);
+
     StartStatsTimer();
 
     return TRUE;
@@ -9696,13 +12120,14 @@ void Wh_ModUninit() {
 
     StopStatsTimer();
 
+    StopImageDownloads();
+
     // Before the UI threads are uninitialized, so that a retry can't be
     // scheduled on a thread which is being uninitialized.
     StopImageLoadRetries();
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+    if (auto watcher = ExchangeVisualTreeWatcher(nullptr)) {
+        watcher->UnadviseVisualTreeChange();
     }
 
     HWND hCoreWnd = GetCoreWnd();
@@ -9716,9 +12141,8 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+    if (auto watcher = ExchangeVisualTreeWatcher(nullptr)) {
+        watcher->UnadviseVisualTreeChange();
     }
 
     HWND hCoreWnd = GetCoreWnd();
