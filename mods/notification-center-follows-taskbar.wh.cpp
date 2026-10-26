@@ -14,6 +14,8 @@
 /*
 # Notification Center Follows Taskbar
 
+![Demonstration](https://github.com/Asteski/Windhawk-Mods/blob/1744240412f6ac4ec4cdfaa1dc313807644b6d07/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png)
+
 Keeps the Windows 11 Notification Center (Win+N, including its calendar)
 correctly positioned with top, bottom, left, and right taskbars. Detects the
 taskbar on the flyout's monitor automatically. Adds the missing correction for
