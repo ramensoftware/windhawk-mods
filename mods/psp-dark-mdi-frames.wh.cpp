@@ -8,14 +8,14 @@
 // @homepage        https://github.com/MrSmith2017/psp-dark-image-windows
 // @license         MIT
 // @include         Corel PaintShop Pro.exe
-// @compilerOptions -lgdi32 -luser32
+// @compilerOptions -lgdi32 -luser32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # PaintShop Pro Dark Mode
 
-![Before and after: PaintShop Pro with its original look versus the dark mode](https://raw.githubusercontent.com/MrSmith2017/psp-dark-image-windows/main/psp-dark-image-windows.png)
+![Before and after: PaintShop Pro with its original look versus the dark mode](https://raw.githubusercontent.com/MrSmith2017/psp-dark-image-windows/main/psp-dark-mode.png)
 
 Corel PaintShop Pro has a dark theme, but it is not really dark: the surfaces are
 a medium gray, the title bar is gray with an orange tab, and the image windows in
@@ -123,6 +123,7 @@ Pro. Maximized image windows are left to Windows.
 // ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
@@ -1654,10 +1655,8 @@ static HANDLE g_tileThread;
 static volatile LONG g_tileStop;
 static HWND g_tileDlg;
 
-static WNDPROC g_tileOldProc;
-
 // keeps the dialog hidden even when the program tries to show it again (mouse over the workspace)
-static LRESULT CALLBACK TileSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+static LRESULT CALLBACK TileSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if (g_cfg.hideTiles && !g_tileStop) {
         if (m == WM_WINDOWPOSCHANGING) {
             WINDOWPOS* wp = (WINDOWPOS*)l;
@@ -1672,7 +1671,7 @@ static LRESULT CALLBACK TileSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             }
         }
     }
-    return CallWindowProcW(g_tileOldProc, h, m, w, l);
+    return DefSubclassProc(h, m, w, l);
 }
 
 static bool IsMainFrameClass(HWND w) {
@@ -1707,7 +1706,7 @@ static BOOL CALLBACK HideTilesChild(HWND h, LPARAM) {
     if (big >= 8) {
         if (g_tileDlg != h) {
             g_tileDlg = h;
-            g_tileOldProc = (WNDPROC)SetWindowLongPtrW(h, GWLP_WNDPROC, (LONG_PTR)TileSubclassProc);
+            WindhawkUtils::SetWindowSubclassFromAnyThread(h, TileSubclassProc, 0);
         }
         if (IsWindowVisible(h)) {
             SetWindowPos(h, nullptr, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
@@ -1749,10 +1748,7 @@ static void StopTileWatcher() {
         g_tileThread = nullptr;
     }
     if (g_tileDlg && IsWindow(g_tileDlg)) {
-        if (g_tileOldProc) {
-            SetWindowLongPtrW(g_tileDlg, GWLP_WNDPROC, (LONG_PTR)g_tileOldProc);
-            g_tileOldProc = nullptr;
-        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tileDlg, TileSubclassProc);
         HWND mdi = FindWindowExW(GetParent(g_tileDlg), nullptr, L"MDIClient", nullptr);
         if (!mdi || !GetWindow(mdi, GW_CHILD)) {  // only when no image is open
             SetWindowPos(g_tileDlg, nullptr, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
