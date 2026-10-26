@@ -96,10 +96,13 @@ short notice says so, when the notification is available.
 
 ## Capture sessions
 
-Turn on **Capture sessions** to add a tray icon. Its menu or **Ctrl+Alt+F8** starts
+Turn on **Capture sessions** to add a tray icon. Its menu or **Ctrl+Alt+F8** (you
+can pick another F key in the settings) starts
 a session. Take screenshots as usual, then finish the session to review them.
 Check the images to include, edit captions, and use **Move up** or **Move down**
 to order them. The contact sheet preview follows that order.
+
+![Reviewing a capture session before exporting it](https://raw.githubusercontent.com/mario0318/SnapSentry/6fd426c877bbb3f0a806dc97bb092aaff18b2a8f/assets/demo-session.png)
 
 **Export packet** asks for a folder outside the watched folder and creates a new
 packet there: numbered copies of the included screenshots, a contact sheet, and
@@ -185,9 +188,21 @@ page](https://github.com/mario0318/SnapSentry/issues).
 - captureSessions: false
   $name: Capture sessions
   $description: Adds a SnapSentry tray icon. Start a session, take screenshots, then review their order and captions and export a contact sheet and Markdown packet. Session screenshots are always kept, including when ordinary deletion or duplicate removal is enabled. Sessions are limited to 64 images. Disabling the mod discards only the review list, never the images.
-- sessionHotkey: 119
+- sessionHotkey: F8
   $name: Session hotkey
-  $description: The key pressed together with Ctrl+Alt, as a Windows key code. 119 is F8 and 120 is F9. Starts the first session, finishes recording, or reopens the existing review. Use Start session or the tray menu for a new session. The tray menu is available if the shortcut is already in use.
+  $options:
+  - F1: Ctrl+Alt+F1
+  - F2: Ctrl+Alt+F2
+  - F3: Ctrl+Alt+F3
+  - F4: Ctrl+Alt+F4
+  - F5: Ctrl+Alt+F5
+  - F6: Ctrl+Alt+F6
+  - F7: Ctrl+Alt+F7
+  - F8: Ctrl+Alt+F8
+  - F9: Ctrl+Alt+F9
+  - F10: Ctrl+Alt+F10
+  - F11: Ctrl+Alt+F11
+  $description: Starts the first session, finishes recording, or reopens the existing review. Use Start session or the tray menu for a new session. The tray menu is available if the shortcut is already in use.
 
 # ---- Advanced ----
 - folder: ""
@@ -335,7 +350,9 @@ struct RecentContent {
 static std::deque<RecentContent> g_recentContent;
 static constexpr ULONGLONG kContentDuplicateWindowMs = 10 * 60 * 1000;
 static constexpr size_t kMaxRecentContent = 64;
-static BCRYPT_ALG_HANDLE g_hashAlgorithm = nullptr;  // Worker thread only.
+// Opened and closed by the worker, which joins the export thread (also a user)
+// before closing it. Algorithm handles may be shared between threads.
+static BCRYPT_ALG_HANDLE g_hashAlgorithm = nullptr;
 
 // Pre-seed the recent-name set so a file event we cause ourselves (the rename
 // below) is swallowed by the watcher instead of being handled as a brand-new
@@ -357,9 +374,9 @@ static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
 
 // A popup with no countdown (delaySeconds 0) waits for an answer, but not
-// forever: it runs on the single worker thread, so an unanswered one parks every
-// screenshot behind it. Running out is treated as Keep, since nobody chose to
-// delete anything.
+// forever: popups are shown one at a time on the prompt thread, so an
+// unanswered one holds back every later popup. Running out is treated as Keep,
+// since nobody chose to delete anything.
 static constexpr DWORD kNoAnswerCapMs = 10 * 60 * 1000;
 
 enum {
@@ -444,8 +461,18 @@ static void LoadSettings() {
     // might share; Windhawk's own logging switch is all-or-nothing.
     s.logDetails = Wh_GetIntSetting(L"logDetails") != 0;
     s.sessions = Wh_GetIntSetting(L"captureSessions") != 0;
-    s.sessionHotkey = std::clamp(Wh_GetIntSetting(L"sessionHotkey"), 0, 255);
-    if (!s.sessionHotkey) s.sessionHotkey = VK_F8;
+    // F1 to F11 map to consecutive key codes. F12 is left out because Windows
+    // reserves it for the debugger. Anything else falls back to F8.
+    {
+        auto key = WindhawkUtils::StringSetting::make(L"sessionHotkey");
+        PCWSTR text = key.get();
+        int number = 0;
+        if ((text[0] == L'F' || text[0] == L'f') && text[1]) {
+            number = _wtoi(text + 1);
+        }
+        s.sessionHotkey =
+            number >= 1 && number <= 11 ? VK_F1 + number - 1 : VK_F8;
+    }
 
     s.mode = WindhawkUtils::StringSetting::make(L"clipboardMode").get();
     if (s.mode != L"image" && s.mode != L"file" && s.mode != L"path" && s.mode != L"none") {
@@ -1417,7 +1444,8 @@ static std::wstring BaseName(const std::wstring& path) {
 }
 
 // Builds and shows the toast, then waits up to s.delaySeconds for a button
-// click (via ToastActivator::Activate, dispatched by CoWaitForMultipleHandles)
+// click (via ToastActivator::Activate, dispatched by the prompt thread's message
+// pump in the wait below)
 // or an explicit dismissal. Returns false, meaning "use the dialog instead",
 // if registration hasn't succeeded or any WinRT step fails, so the mod stays
 // usable even where toast notifications don't work.
@@ -1721,7 +1749,7 @@ static int AskAction(const std::wstring& path, const Settings& s,
     state.generation = generation;
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
-    // worker and no later screenshot is copied or deleted until someone does.
+    // prompt thread and no later popup appears until someone does.
     state.showCountdown = s.delaySeconds > 0;
     state.timeoutMs =
         state.showCountdown ? (DWORD)s.delaySeconds * 1000 : kNoAnswerCapMs;
@@ -2448,8 +2476,8 @@ static void ReleaseInflight(const std::wstring& path) {
 }
 
 // Whether the Start Menu shortcut and the CLSID key are currently in place.
-// Worker thread only: the shortcut work reads and writes COM objects and needs
-// this thread's apartment.
+// Prompt thread only: the shortcut work reads and writes COM objects and needs
+// that thread's apartment, which also hosts the toast activator.
 static bool g_toastRegApplied = false;
 // The first pass always runs, even when there is nothing to register. Windows can
 // be shut down or the tool process killed without the mod ever unloading cleanly,
@@ -2841,20 +2869,40 @@ static bool WriteNewFile(const std::wstring& path, const void* data, size_t byte
     CloseHandle(file);
     return ok;
 }
-static bool CopyLockedFile(HANDLE source, const std::wstring& destination, ULONGLONG generation) {
+// An export is cancelled by unloading or by watching a different folder, not by
+// any settings change: toggling logging mid-export should not leave a packet
+// marked incomplete. Same rule as a recording session (see LoadSettings).
+struct ExportGuard {
+    ULONGLONG generation;
+    std::wstring folder;
+    bool Cancelled() {
+        if (WaitStop(0)) return true;
+        const ULONGLONG current = g_generation.load();
+        if (current == generation) return false;
+        EnterCriticalSection(&g_lock);
+        const bool sameFolder =
+            CompareStringOrdinal(g_settings.folder.c_str(), -1, folder.c_str(),
+                                 -1, TRUE) == CSTR_EQUAL;
+        LeaveCriticalSection(&g_lock);
+        if (sameFolder) generation = current;
+        return !sameFolder;
+    }
+};
+
+static bool CopyLockedFile(HANDLE source, const std::wstring& destination, ExportGuard& guard) {
     HANDLE target = CreateFileW(destination.c_str(), GENERIC_WRITE, 0, nullptr,
                                 CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (target == INVALID_HANDLE_VALUE) return false;
     LARGE_INTEGER zero{};
     bool ok = SetFilePointerEx(source, zero, nullptr, FILE_BEGIN) != FALSE;
     std::array<BYTE, 64 * 1024> buffer;
-    while (ok && !CleanupCancelled(0, generation)) {
+    while (ok && !guard.Cancelled()) {
         DWORD read = 0, written = 0;
         if (!ReadFile(source, buffer.data(), (DWORD)buffer.size(), &read, nullptr)) { ok = false; break; }
         if (!read) break;
         if (!WriteFile(target, buffer.data(), read, &written, nullptr) || written != read) { ok = false; break; }
     }
-    ok = ok && !CleanupCancelled(0, generation) && FlushFileBuffers(target);
+    ok = ok && !guard.Cancelled() && FlushFileBuffers(target);
     CloseHandle(target);
     return ok;
 }
@@ -2892,12 +2940,13 @@ static bool ExportSession(const std::vector<SessionItem>& items, const std::wstr
     HANDLE packetHandle = CreateFileW(packet.c_str(), FILE_READ_ATTRIBUTES,
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     bool ok = packetHandle != INVALID_HANDLE_VALUE;
+    ExportGuard guard{generation, settings.folder};
     std::wstring markdown = L"# Screenshot session\n\n![Contact sheet](contact-sheet.png)\n\n";
     size_t number = 0;
     ULONGLONG total = 0;
     for (const auto& item : items) {
         if (!item.included || !ok) continue;
-        if (CleanupCancelled(0, generation)) { ok = false; break; }
+        if (guard.Cancelled()) { ok = false; break; }
         LockedCapture capture;
         std::array<BYTE,32> digest;
         if (!capture.Open(item.record.path, settings.folder) ||
@@ -2911,17 +2960,17 @@ static bool ExportSession(const std::vector<SessionItem>& items, const std::wstr
         if (!IsSupportedImage(L"image" + extension) || extension.find_first_of(L"\\/: ") != std::wstring::npos) { ok = false; break; }
         wchar_t filename[32];
         swprintf_s(filename, L"%02u%s", (unsigned)++number, extension.c_str());
-        if (!CopyLockedFile(capture.file, packet + L"\\" + filename, generation)) { ok = false; break; }
+        if (!CopyLockedFile(capture.file, packet + L"\\" + filename, guard)) { ok = false; break; }
         markdown += L"## " + std::to_wstring(number) + L". " +
             MarkdownCaption(item.caption.empty() ? BaseName(item.record.path) : item.caption) +
             L"\n\n![Screenshot " + std::to_wstring(number) + L"](" + filename + L")\n\n";
     }
     auto sheet = ok && number ? BuildContactSheet(items) : nullptr;
-    ok = ok && sheet && !CleanupCancelled(0, generation) &&
+    ok = ok && sheet && !guard.Cancelled() &&
         EncodeContactSheet(packet + L"\\contact-sheet.png", *sheet);
     if (ok) {
         const auto utf8 = Utf8(markdown);
-        ok = !CleanupCancelled(0, generation) && WriteNewFile(packet + L"\\index.md", utf8.data(), utf8.size());
+        ok = !guard.Cancelled() && WriteNewFile(packet + L"\\index.md", utf8.data(), utf8.size());
     }
     if (!ok) {
         static const char message[] = "Export incomplete. Original screenshots were not changed. Retry into a new packet.\r\n";
@@ -2982,73 +3031,125 @@ static DWORD WINAPI ExportThread(LPVOID) {
     return 0;
 }
 
-static int SelectedSessionItem() { return ListView_GetNextItem(g_sessionList, -1, LVNI_SELECTED); }
+static int SelectedSessionItem() {
+    return ListView_GetNextItem(g_sessionList, -1, LVNI_SELECTED);
+}
+
 static void RefreshSessionList() {
     const auto items = SnapshotSession();
     const int selected = SelectedSessionItem();
+    HWND window = g_sessionWindow.load();
     g_refreshingSession = true;
     ListView_DeleteAllItems(g_sessionList);
     for (size_t i = 0; i < items.size(); ++i) {
         auto number = std::to_wstring(i + 1);
-        LVITEMW item{}; item.mask = LVIF_TEXT; item.iItem = (int)i; item.pszText = number.data();
+        LVITEMW item{};
+        item.mask = LVIF_TEXT;
+        item.iItem = (int)i;
+        item.pszText = number.data();
         ListView_InsertItem(g_sessionList, &item);
-        auto caption = items[i].caption.empty() ? BaseName(items[i].record.path) : items[i].caption;
+        auto caption = items[i].caption.empty() ? BaseName(items[i].record.path)
+                                                : items[i].caption;
         ListView_SetItemText(g_sessionList, (int)i, 1, caption.data());
         ListView_SetCheckState(g_sessionList, (int)i, items[i].included);
     }
-    if (!items.empty()) ListView_SetItemState(g_sessionList,
-        std::clamp(selected, 0, (int)items.size()-1), LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-    const int row = items.empty() ? -1 : std::clamp(selected, 0, (int)items.size()-1);
+    const int row =
+        items.empty() ? -1 : std::clamp(selected, 0, (int)items.size() - 1);
+    if (row >= 0) {
+        ListView_SetItemState(g_sessionList, row, LVIS_SELECTED | LVIS_FOCUSED,
+                              LVIS_SELECTED | LVIS_FOCUSED);
+    }
     SetWindowTextW(g_captionEdit, row >= 0 ? items[row].caption.c_str() : L"");
     g_refreshingSession = false;
-    EnableWindow(g_captionEdit, row >= 0 && !g_exportBusy);
-    EnableWindow(g_sessionList, !g_exportBusy);
-    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_UP), row > 0 && !g_exportBusy);
-    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_DOWN), row >= 0 && row+1 < (int)items.size() && !g_exportBusy);
-    const auto title = g_activeSession.load() ? L"SnapSentry - Recording session" : L"SnapSentry - Review session";
-    SetWindowTextW(g_sessionWindow.load(), title);
-    const auto status = items.size() == kMaxSessionItems && g_activeSession.load()
-        ? L"Session full at 64 images. Extra screenshots are kept outside the packet. Finish and review to export."
-        : std::to_wstring(items.size()) + L" / 64 captures. Check images to include. Originals are always kept.";
+
+    const bool busy = g_exportBusy;
+    const bool recording = g_activeSession.load() != 0;
+    EnableWindow(g_captionEdit, row >= 0 && !busy);
+    EnableWindow(g_sessionList, !busy);
+    EnableWindow(GetDlgItem(window, SESSION_UP), row > 0 && !busy);
+    EnableWindow(GetDlgItem(window, SESSION_DOWN),
+                 row >= 0 && row + 1 < (int)items.size() && !busy);
+    SetWindowTextW(window, recording ? L"SnapSentry - Recording session"
+                                     : L"SnapSentry - Review session");
+    const std::wstring status =
+        items.size() == kMaxSessionItems && recording
+            ? L"Session full at 64 images. Extra screenshots are kept outside "
+              L"the packet. Finish and review to export."
+            : std::to_wstring(items.size()) +
+                  L" / 64 captures. Check images to include. Originals are "
+                  L"always kept.";
     SetWindowTextW(g_sessionStatus, status.c_str());
-    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_FINISH), g_activeSession.load() != 0);
-    EnableWindow(GetDlgItem(g_sessionWindow.load(), SESSION_EXPORT), !items.empty() && !g_exportBusy && !g_activeSession.load() && !g_sessionPending.load());
+    EnableWindow(GetDlgItem(window, SESSION_FINISH), recording);
+    EnableWindow(GetDlgItem(window, SESSION_EXPORT),
+                 !items.empty() && !busy && !recording &&
+                     !g_sessionPending.load());
 }
 
 static void LayoutSession(HWND window) {
-    RECT bounds; GetClientRect(window, &bounds);
-    UINT dpi = WindowDpi(window);
+    RECT bounds;
+    GetClientRect(window, &bounds);
+    const UINT dpi = WindowDpi(window);
     auto px = [=](int value) { return MulDiv(value, dpi, 96); };
-    int width = bounds.right, height = bounds.bottom, margin = px(16), gap = px(8), buttonH = px(30);
-    auto move = [&](HWND child,int x,int y,int w,int h) { MoveWindow(child,x,y,std::max(1,w),std::max(1,h),TRUE); };
+    auto move = [](HWND child, int x, int y, int w, int h) {
+        MoveWindow(child, x, y, std::max(1, w), std::max(1, h), TRUE);
+    };
+    const int width = bounds.right;
+    const int height = bounds.bottom;
+    const int margin = px(16);
+    const int gap = px(8);
+    const int buttonH = px(30);
+
     move(GetDlgItem(window, SESSION_START), margin, margin, px(130), buttonH);
-    move(GetDlgItem(window, SESSION_FINISH), margin + px(138), margin, px(140), buttonH);
+    move(GetDlgItem(window, SESSION_FINISH), margin + px(138), margin, px(140),
+         buttonH);
+
+    // Side by side on a wide window, list above preview on a narrow one.
     const bool stacked = width < px(820);
     const int top = margin + buttonH + gap;
     const int bottom = height - margin - px(118);
-    const int listW = stacked ? width - 2*margin : (width - 3*margin)*52/100;
-    const int listH = stacked ? std::max(px(100),(bottom-top)*50/100) : bottom-top;
+    const int listW =
+        stacked ? width - 2 * margin : (width - 3 * margin) * 52 / 100;
+    const int listH =
+        stacked ? std::max(px(100), (bottom - top) * 50 / 100) : bottom - top;
     move(g_sessionList, margin, top, listW, listH);
-    if (stacked) move(g_sessionPreview, margin, top+listH+gap, listW, bottom-top-listH-gap);
-    else move(g_sessionPreview, 2*margin+listW, top, width-3*margin-listW, bottom-top);
+    if (stacked) {
+        move(g_sessionPreview, margin, top + listH + gap, listW,
+             bottom - top - listH - gap);
+    } else {
+        move(g_sessionPreview, 2 * margin + listW, top,
+             width - 3 * margin - listW, bottom - top);
+    }
     ListView_SetColumnWidth(g_sessionList, 0, px(64));
-    ListView_SetColumnWidth(g_sessionList, 1, std::max(px(100),listW-px(90)));
-    move(GetDlgItem(window, SESSION_CAPTION_LABEL), margin, bottom+gap, px(70), px(24));
-    move(g_captionEdit, margin+px(76), bottom+gap, width-2*margin-px(76), px(26));
-    move(GetDlgItem(window, SESSION_UP), margin, bottom+px(40), px(95), buttonH);
-    move(GetDlgItem(window, SESSION_DOWN), margin+px(103), bottom+px(40), px(105), buttonH);
-    move(GetDlgItem(window, SESSION_EXPORT), width-margin-px(224), bottom+px(40), px(130), buttonH);
-    move(GetDlgItem(window, SESSION_CLOSE), width-margin-px(86), bottom+px(40), px(86), buttonH);
-    move(g_sessionStatus, margin, height-margin-px(38), width-2*margin, px(38));
+    ListView_SetColumnWidth(g_sessionList, 1, std::max(px(100), listW - px(90)));
+
+    move(GetDlgItem(window, SESSION_CAPTION_LABEL), margin, bottom + gap, px(70),
+         px(24));
+    move(g_captionEdit, margin + px(76), bottom + gap,
+         width - 2 * margin - px(76), px(26));
+    move(GetDlgItem(window, SESSION_UP), margin, bottom + px(40), px(95),
+         buttonH);
+    move(GetDlgItem(window, SESSION_DOWN), margin + px(103), bottom + px(40),
+         px(105), buttonH);
+    move(GetDlgItem(window, SESSION_EXPORT), width - margin - px(224),
+         bottom + px(40), px(130), buttonH);
+    move(GetDlgItem(window, SESSION_CLOSE), width - margin - px(86),
+         bottom + px(40), px(86), buttonH);
+    move(g_sessionStatus, margin, height - margin - px(38), width - 2 * margin,
+         px(38));
 }
 
 static void StartSession(HWND owner) {
     const Settings settings = SnapshotSettings();
-    if (!settings.sessions || g_exportBusy) return;
+    if (!settings.sessions || g_exportBusy) {
+        return;
+    }
     if (!SnapshotSession().empty()) {
         TASKDIALOGCONFIG prompt{sizeof(prompt)};
         prompt.hwndParent = owner;
-        const TASKDIALOG_BUTTON buttons[] = {{SESSION_START, L"Start session"}, {IDCANCEL, L"Keep current session"}};
+        const TASKDIALOG_BUTTON buttons[] = {
+            {SESSION_START, L"Start session"},
+            {IDCANCEL, L"Keep current session"},
+        };
         prompt.cButtons = ARRAYSIZE(buttons);
         prompt.pButtons = buttons;
         prompt.nDefaultButton = IDCANCEL;
@@ -3058,12 +3159,20 @@ static void StartSession(HWND owner) {
         prompt.pfCallback = SessionResetCallback;
         prompt.pszWindowTitle = L"SnapSentry";
         prompt.pszMainInstruction = L"Start a new session?";
-        prompt.pszContent = L"The current review list and captions will be cleared. All original screenshots stay on disk.";
+        prompt.pszContent =
+            L"The current review list and captions will be cleared. All "
+            L"original screenshots stay on disk.";
         int result = IDCANCEL;
-        if (FAILED(TaskDialogIndirect(&prompt, &result, nullptr, nullptr)) || result != SESSION_START) return;
+        if (FAILED(TaskDialogIndirect(&prompt, &result, nullptr, nullptr)) ||
+            result != SESSION_START) {
+            return;
+        }
     }
     EnterCriticalSection(&g_lock);
-    g_sessionItems.clear(); g_readyPreview.reset(); ++g_sessionSerial; g_sessionPending.store(0);
+    g_sessionItems.clear();
+    g_readyPreview.reset();
+    ++g_sessionSerial;
+    g_sessionPending.store(0);
     g_activeSession.store(g_sessionSerial);
     LeaveCriticalSection(&g_lock);
     RefreshSessionList();
@@ -3071,52 +3180,79 @@ static void StartSession(HWND owner) {
 }
 
 static void ChooseExportFolder(HWND owner) {
-    if (g_exportBusy || g_activeSession.load() || g_sessionPending.load()) return;
+    if (g_exportBusy || g_activeSession.load() || g_sessionPending.load()) {
+        return;
+    }
     const auto current = SnapshotSession();
-    if (std::none_of(current.begin(), current.end(), [](const auto& item) { return item.included; })) {
-        SetWindowTextW(g_sessionStatus, L"Check at least one image to export. Originals are kept.");
+    if (std::none_of(current.begin(), current.end(),
+                     [](const auto& item) { return item.included; })) {
+        SetWindowTextW(g_sessionStatus,
+                       L"Check at least one image to export. Originals are "
+                       L"kept.");
         return;
     }
     using Microsoft::WRL::ComPtr;
     ComPtr<IFileOpenDialog> picker;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&picker)))) return;
-    picker->SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&picker)))) {
+        return;
+    }
+    picker->SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM |
+                       FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
     picker->SetTitle(L"Choose a folder outside the watched screenshots folder");
     g_openFolderPicker = picker.Get();
     g_pickerGeneration = g_generation.load();
+    // Timer 2 closes the picker if the mod unloads or settings change.
     SetTimer(owner, 2, 200, nullptr);
     const HRESULT picked = picker->Show(owner);
     KillTimer(owner, 2);
     g_openFolderPicker = nullptr;
-    if (FAILED(picked) || g_pickerGeneration != g_generation.load() || WaitStop(0)) return;
+    if (FAILED(picked) || g_pickerGeneration != g_generation.load() ||
+        WaitStop(0)) {
+        return;
+    }
     ComPtr<IShellItem> folder;
     PWSTR name = nullptr;
-    if (FAILED(picker->GetResult(&folder)) || FAILED(folder->GetDisplayName(SIGDN_FILESYSPATH, &name))) return;
+    if (FAILED(picker->GetResult(&folder)) ||
+        FAILED(folder->GetDisplayName(SIGDN_FILESYSPATH, &name))) {
+        return;
+    }
     bool start = false;
     EnterCriticalSection(&g_lock);
     if (!g_exportBusy && !g_activeSession.load() && !g_sessionPending.load()) {
-        g_exportParent = name; g_exportItems = g_sessionItems;
+        g_exportParent = name;
+        g_exportItems = g_sessionItems;
         g_exportGeneration = g_generation.load();
         g_exportBusy = true;
         start = true;
     }
     LeaveCriticalSection(&g_lock);
     CoTaskMemFree(name);
-    if (!start) return;
+    if (!start) {
+        return;
+    }
     // The previous export has finished (g_exportBusy was clear), so this only
     // releases its handle.
     JoinExportThread();
-    HANDLE thread = CreateThread(nullptr, 0, ExportThread, nullptr, 0, nullptr);
+    // Created suspended so its handle is stored before it can run. Otherwise an
+    // unload in between would find nothing to join and close the hash provider
+    // while the export is already hashing.
+    HANDLE thread = CreateThread(nullptr, 0, ExportThread, nullptr,
+                                 CREATE_SUSPENDED, nullptr);
     if (!thread) {
         EnterCriticalSection(&g_lock);
         g_exportBusy = false;
         g_exportItems.clear();
         LeaveCriticalSection(&g_lock);
-        SetWindowTextW(g_sessionStatus, L"Export could not start. Originals were kept.");
+        SetWindowTextW(g_sessionStatus,
+                       L"Export could not start. Originals were kept.");
         return;
     }
     g_exportThread.store(thread);
-    SetWindowTextW(g_sessionStatus, L"Exporting copies. Originals are kept. You can close this window.");
+    ResumeThread(thread);
+    SetWindowTextW(g_sessionStatus,
+                   L"Exporting copies. Originals are kept. You can close this "
+                   L"window.");
     EnableWindow(GetDlgItem(owner, SESSION_EXPORT), FALSE);
     EnableWindow(GetDlgItem(owner, SESSION_START), FALSE);
     EnableWindow(g_sessionList, FALSE);
@@ -3125,162 +3261,333 @@ static void ChooseExportFolder(HWND owner) {
     EnableWindow(GetDlgItem(owner, SESSION_DOWN), FALSE);
 }
 
-static LRESULT CALLBACK PreviewWindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
-    if (message == WM_PAINT || message == WM_PRINTCLIENT) {
-        PAINTSTRUCT paint{}; HDC dc = message == WM_PAINT ? BeginPaint(window, &paint) : (HDC)wp;
-        RECT area; GetClientRect(window, &area);
-        FillRect(dc, &area, GetSysColorBrush(COLOR_WINDOW));
-        EnterCriticalSection(&g_lock); auto image = g_readyPreview; LeaveCriticalSection(&g_lock);
-        if (image) {
-            const double scale = std::min((double)area.right/image->width,(double)area.bottom/image->height);
-            const int width = (int)(image->width*scale), height=(int)(image->height*scale);
-            BITMAPINFO info{};
-            info.bmiHeader={sizeof(BITMAPINFOHEADER),(LONG)image->width,-(LONG)image->height,1,32,BI_RGB,0,0,0,0,0};
-            SetStretchBltMode(dc, HALFTONE);
-            StretchDIBits(dc,(area.right-width)/2,(area.bottom-height)/2,width,height,
-                0,0,image->width,image->height,image->pixels.data(),&info,DIB_RGB_COLORS,SRCCOPY);
-        } else {
-            SetBkMode(dc, TRANSPARENT); SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
-            DrawTextW(dc,L"Contact sheet preview\nStart a session and take a screenshot.",-1,&area,
-                       DT_CENTER|DT_WORDBREAK|DT_NOPREFIX);
-        }
-        if (message == WM_PAINT) EndPaint(window,&paint);
-        return 0;
+static LRESULT CALLBACK PreviewWindowProc(HWND window,
+                                          UINT message,
+                                          WPARAM wp,
+                                          LPARAM lp) {
+    if (message != WM_PAINT && message != WM_PRINTCLIENT) {
+        return DefWindowProcW(window, message, wp, lp);
     }
-    return DefWindowProcW(window,message,wp,lp);
+    PAINTSTRUCT paint{};
+    HDC dc = message == WM_PAINT ? BeginPaint(window, &paint) : (HDC)wp;
+    RECT area;
+    GetClientRect(window, &area);
+    FillRect(dc, &area, GetSysColorBrush(COLOR_WINDOW));
+    EnterCriticalSection(&g_lock);
+    auto image = g_readyPreview;
+    LeaveCriticalSection(&g_lock);
+    if (image) {
+        // Fit the contact sheet inside the pane, keeping its proportions.
+        const double scale = std::min((double)area.right / image->width,
+                                      (double)area.bottom / image->height);
+        const int width = (int)(image->width * scale);
+        const int height = (int)(image->height * scale);
+        BITMAPINFO info{};
+        info.bmiHeader = {sizeof(BITMAPINFOHEADER),
+                          (LONG)image->width,
+                          -(LONG)image->height,
+                          1,
+                          32,
+                          BI_RGB,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0};
+        SetStretchBltMode(dc, HALFTONE);
+        StretchDIBits(dc, (area.right - width) / 2, (area.bottom - height) / 2,
+                      width, height, 0, 0, image->width, image->height,
+                      image->pixels.data(), &info, DIB_RGB_COLORS, SRCCOPY);
+    } else {
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+        DrawTextW(dc,
+                  L"Contact sheet preview\nStart a session and take a "
+                  L"screenshot.",
+                  -1, &area, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+    }
+    if (message == WM_PAINT) {
+        EndPaint(window, &paint);
+    }
+    return 0;
 }
 
-static LRESULT CALLBACK SessionWindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
-    switch(message) {
-    case WM_CREATE: {
-        auto control=[&](PCWSTR type,PCWSTR text,DWORD style,int id,DWORD ex=0) {
-            HWND child=CreateWindowExW(ex,type,text,WS_CHILD|WS_VISIBLE|style,0,0,1,1,window,
-                (HMENU)(INT_PTR)id,GetModuleHandleW(nullptr),nullptr);
-            SendMessageW(child,WM_SETFONT,(WPARAM)GetStockObject(DEFAULT_GUI_FONT),TRUE);
-            return child;
-        };
-        control(L"BUTTON",L"Start session",WS_TABSTOP,SESSION_START);
-        control(L"BUTTON",L"Finish and review",WS_TABSTOP,SESSION_FINISH);
-        g_sessionList=control(WC_LISTVIEWW,L"Screenshots",WS_TABSTOP|LVS_REPORT|LVS_SINGLESEL|LVS_SHOWSELALWAYS,SESSION_LIST,WS_EX_CLIENTEDGE);
-        ListView_SetExtendedListViewStyle(g_sessionList,LVS_EX_CHECKBOXES|LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
-        LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=(PWSTR)L"Include";column.cx=64;
-        ListView_InsertColumn(g_sessionList,0,&column);column.pszText=(PWSTR)L"Caption";column.cx=320;
-        ListView_InsertColumn(g_sessionList,1,&column);
-        g_sessionPreview=control(L"SnapSentryPreview",L"Contact sheet",0,SESSION_PREVIEW,WS_EX_CLIENTEDGE);
-        control(L"STATIC",L"&Caption",0,SESSION_CAPTION_LABEL);
-        g_captionEdit=control(L"EDIT",L"",WS_TABSTOP|ES_AUTOHSCROLL,SESSION_CAPTION,WS_EX_CLIENTEDGE);
-        SendMessageW(g_captionEdit,EM_SETLIMITTEXT,240,0);
-        control(L"BUTTON",L"Move &up",WS_TABSTOP,SESSION_UP);
-        control(L"BUTTON",L"Move &down",WS_TABSTOP,SESSION_DOWN);
-        control(L"BUTTON",L"&Export packet...",WS_TABSTOP|BS_DEFPUSHBUTTON,SESSION_EXPORT);
-        control(L"BUTTON",L"Close",WS_TABSTOP,SESSION_CLOSE);
-        g_sessionStatus=control(L"STATIC",L"",SS_LEFT,SESSION_STATUS);
-        UpdateSessionFont(window);
-        return 0;
+static void CreateSessionControls(HWND window) {
+    auto control = [&](PCWSTR type, PCWSTR text, DWORD style, int id,
+                       DWORD exStyle = 0) {
+        HWND child = CreateWindowExW(exStyle, type, text,
+                                     WS_CHILD | WS_VISIBLE | style, 0, 0, 1, 1,
+                                     window, (HMENU)(INT_PTR)id,
+                                     GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(child, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT),
+                     TRUE);
+        return child;
+    };
+    control(L"BUTTON", L"Start session", WS_TABSTOP, SESSION_START);
+    control(L"BUTTON", L"Finish and review", WS_TABSTOP, SESSION_FINISH);
+    g_sessionList = control(
+        WC_LISTVIEWW, L"Screenshots",
+        WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+        SESSION_LIST, WS_EX_CLIENTEDGE);
+    ListView_SetExtendedListViewStyle(
+        g_sessionList,
+        LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    LVCOLUMNW column{};
+    column.mask = LVCF_TEXT | LVCF_WIDTH;
+    column.pszText = (PWSTR)L"Include";
+    column.cx = 64;
+    ListView_InsertColumn(g_sessionList, 0, &column);
+    column.pszText = (PWSTR)L"Caption";
+    column.cx = 320;
+    ListView_InsertColumn(g_sessionList, 1, &column);
+    g_sessionPreview = control(L"SnapSentryPreview", L"Contact sheet", 0,
+                               SESSION_PREVIEW, WS_EX_CLIENTEDGE);
+    control(L"STATIC", L"&Caption", 0, SESSION_CAPTION_LABEL);
+    g_captionEdit = control(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL,
+                            SESSION_CAPTION, WS_EX_CLIENTEDGE);
+    SendMessageW(g_captionEdit, EM_SETLIMITTEXT, 240, 0);
+    control(L"BUTTON", L"Move &up", WS_TABSTOP, SESSION_UP);
+    control(L"BUTTON", L"Move &down", WS_TABSTOP, SESSION_DOWN);
+    control(L"BUTTON", L"&Export packet...", WS_TABSTOP | BS_DEFPUSHBUTTON,
+            SESSION_EXPORT);
+    control(L"BUTTON", L"Close", WS_TABSTOP, SESSION_CLOSE);
+    g_sessionStatus = control(L"STATIC", L"", SS_LEFT, SESSION_STATUS);
+    UpdateSessionFont(window);
+}
+
+// The list's check boxes include or exclude an item, and selecting a row
+// shows its caption for editing.
+static void OnSessionListChanged(HWND window, const NMLISTVIEW* change) {
+    const int selected = SelectedSessionItem();
+    EnterCriticalSection(&g_lock);
+    if (change->iItem >= 0 && (size_t)change->iItem < g_sessionItems.size()) {
+        g_sessionItems[change->iItem].included =
+            ListView_GetCheckState(g_sessionList, change->iItem) != 0;
     }
-    case WM_SIZE: LayoutSession(window);return 0;
-    case WM_DPICHANGED: {
-        RECT* rect=(RECT*)lp;SetWindowPos(window,nullptr,rect->left,rect->top,
-            rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);
-        UpdateSessionFont(window);LayoutSession(window);return 0;
+    std::wstring caption =
+        selected >= 0 && (size_t)selected < g_sessionItems.size()
+            ? g_sessionItems[selected].caption
+            : L"";
+    LeaveCriticalSection(&g_lock);
+    g_refreshingSession = true;
+    SetWindowTextW(g_captionEdit, caption.c_str());
+    g_refreshingSession = false;
+    const int count = ListView_GetItemCount(g_sessionList);
+    EnableWindow(g_captionEdit, selected >= 0 && !g_exportBusy);
+    EnableWindow(GetDlgItem(window, SESSION_UP), selected > 0 && !g_exportBusy);
+    EnableWindow(GetDlgItem(window, SESSION_DOWN),
+                 selected >= 0 && selected + 1 < count && !g_exportBusy);
+    RequestSessionPreview();
+}
+
+static void MoveSessionItem(int offset) {
+    const int from = SelectedSessionItem();
+    const int to = from + offset;
+    EnterCriticalSection(&g_lock);
+    const bool valid =
+        from >= 0 && to >= 0 && (size_t)to < g_sessionItems.size();
+    if (valid) {
+        std::swap(g_sessionItems[from], g_sessionItems[to]);
     }
-    case WM_GETMINMAXINFO: {
-        UINT dpi=WindowDpi(window);
-        auto* info=(MINMAXINFO*)lp;info->ptMinTrackSize={MulDiv(640,dpi,96),MulDiv(520,dpi,96)};return 0;
+    LeaveCriticalSection(&g_lock);
+    if (!valid) {
+        return;
     }
-    case WM_NOTIFY: {
-        auto* header=(NMHDR*)lp;
-        if(header->idFrom==SESSION_LIST&&header->code==LVN_ITEMCHANGED&&!g_refreshingSession){
-            auto* change=(NMLISTVIEW*)lp;
-            const int selected=SelectedSessionItem();
-            EnterCriticalSection(&g_lock);
-            if(change->iItem>=0&&(size_t)change->iItem<g_sessionItems.size())
-                g_sessionItems[change->iItem].included=ListView_GetCheckState(g_sessionList,change->iItem)!=0;
-            std::wstring caption=selected>=0&&(size_t)selected<g_sessionItems.size()?g_sessionItems[selected].caption:L"";
-            LeaveCriticalSection(&g_lock);
-            g_refreshingSession=true;SetWindowTextW(g_captionEdit,caption.c_str());g_refreshingSession=false;
-            const auto count = ListView_GetItemCount(g_sessionList);
-            EnableWindow(g_captionEdit, selected >= 0 && !g_exportBusy);
-            EnableWindow(GetDlgItem(window, SESSION_UP), selected > 0 && !g_exportBusy);
-            EnableWindow(GetDlgItem(window, SESSION_DOWN), selected >= 0 && selected+1 < count && !g_exportBusy);
-            RequestSessionPreview();
+    RefreshSessionList();
+    ListView_SetItemState(g_sessionList, from, 0, LVIS_SELECTED);
+    ListView_SetItemState(g_sessionList, to, LVIS_SELECTED | LVIS_FOCUSED,
+                          LVIS_SELECTED | LVIS_FOCUSED);
+    ListView_EnsureVisible(g_sessionList, to, FALSE);
+    RequestSessionPreview();
+}
+
+static void OnCaptionEdited(HWND window) {
+    wchar_t caption[241];
+    GetWindowTextW(g_captionEdit, caption, ARRAYSIZE(caption));
+    const int index = SelectedSessionItem();
+    EnterCriticalSection(&g_lock);
+    if (index >= 0 && (size_t)index < g_sessionItems.size()) {
+        g_sessionItems[index].caption = caption;
+    }
+    LeaveCriticalSection(&g_lock);
+    if (index >= 0) {
+        ListView_SetItemText(g_sessionList, index, 1, caption);
+    }
+    // Timer 1 redraws the preview once typing pauses.
+    SetTimer(window, 1, 300, nullptr);
+}
+
+static void HideSessionWindow(HWND window) {
+    g_activeSession.store(0);
+    RefreshSessionList();
+    ShowWindow(window, SW_HIDE);
+}
+
+static LRESULT CALLBACK SessionWindowProc(HWND window,
+                                          UINT message,
+                                          WPARAM wp,
+                                          LPARAM lp) {
+    switch (message) {
+        case WM_CREATE:
+            CreateSessionControls(window);
+            return 0;
+
+        case WM_SIZE:
+            LayoutSession(window);
+            return 0;
+
+        case WM_DPICHANGED: {
+            const RECT* rect = (const RECT*)lp;
+            SetWindowPos(window, nullptr, rect->left, rect->top,
+                         rect->right - rect->left, rect->bottom - rect->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            UpdateSessionFont(window);
+            LayoutSession(window);
+            return 0;
         }
-        return 0;
-    }
-    case WM_COMMAND: {
-        int command=LOWORD(wp);
-        if(command==SESSION_START)StartSession(window);
-        else if(command==SESSION_FINISH){g_activeSession.store(0);RefreshSessionList();}
-        else if(command==SESSION_CLOSE||command==IDCANCEL){g_activeSession.store(0);RefreshSessionList();ShowWindow(window,SW_HIDE);}
-        else if(command==SESSION_EXPORT)ChooseExportFolder(window);
-        else if(command==SESSION_UP||command==SESSION_DOWN){
-            int from=SelectedSessionItem(),to=from+(command==SESSION_UP?-1:1);
-            EnterCriticalSection(&g_lock);
-            bool valid=from>=0&&to>=0&&(size_t)to<g_sessionItems.size();
-            if(valid)std::swap(g_sessionItems[from],g_sessionItems[to]);
-            LeaveCriticalSection(&g_lock);
-            if(valid){RefreshSessionList();ListView_SetItemState(g_sessionList,from,0,LVIS_SELECTED);
-                ListView_SetItemState(g_sessionList,to,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
-                ListView_EnsureVisible(g_sessionList,to,FALSE);RequestSessionPreview();}
-        }else if(command==SESSION_CAPTION&&HIWORD(wp)==EN_CHANGE&&!g_refreshingSession){
-            wchar_t caption[241];GetWindowTextW(g_captionEdit,caption,ARRAYSIZE(caption));
-            int index=SelectedSessionItem();EnterCriticalSection(&g_lock);
-            if(index>=0&&(size_t)index<g_sessionItems.size())g_sessionItems[index].caption=caption;
-            LeaveCriticalSection(&g_lock);
-            if(index>=0)ListView_SetItemText(g_sessionList,index,1,caption);
-            SetTimer(window,1,300,nullptr);
+
+        case WM_GETMINMAXINFO: {
+            const UINT dpi = WindowDpi(window);
+            auto* info = (MINMAXINFO*)lp;
+            info->ptMinTrackSize = {MulDiv(640, dpi, 96), MulDiv(520, dpi, 96)};
+            return 0;
         }
-        return 0;
+
+        case WM_NOTIFY: {
+            const auto* header = (const NMHDR*)lp;
+            if (header->idFrom == SESSION_LIST &&
+                header->code == LVN_ITEMCHANGED && !g_refreshingSession) {
+                OnSessionListChanged(window, (const NMLISTVIEW*)lp);
+            }
+            return 0;
+        }
+
+        case WM_COMMAND: {
+            const int command = LOWORD(wp);
+            if (command == SESSION_START) {
+                StartSession(window);
+            } else if (command == SESSION_FINISH) {
+                g_activeSession.store(0);
+                RefreshSessionList();
+            } else if (command == SESSION_CLOSE || command == IDCANCEL) {
+                HideSessionWindow(window);
+            } else if (command == SESSION_EXPORT) {
+                ChooseExportFolder(window);
+            } else if (command == SESSION_UP) {
+                MoveSessionItem(-1);
+            } else if (command == SESSION_DOWN) {
+                MoveSessionItem(1);
+            } else if (command == SESSION_CAPTION &&
+                       HIWORD(wp) == EN_CHANGE && !g_refreshingSession) {
+                OnCaptionEdited(window);
+            }
+            return 0;
+        }
+
+        case WM_TIMER:
+            if (wp == 2) {
+                if (g_openFolderPicker &&
+                    (WaitStop(0) ||
+                     g_pickerGeneration != g_generation.load())) {
+                    g_openFolderPicker->Close(
+                        HRESULT_FROM_WIN32(ERROR_CANCELLED));
+                }
+            } else {
+                KillTimer(window, 1);
+                RequestSessionPreview();
+            }
+            return 0;
+
+        case kSessionChanged:
+            RefreshSessionList();
+            return 0;
+
+        case kSessionPreviewReady:
+            InvalidateRect(g_sessionPreview, nullptr, TRUE);
+            return 0;
+
+        case kSessionExportFinished: {
+            EnterCriticalSection(&g_lock);
+            std::wstring status = g_exportStatus;
+            LeaveCriticalSection(&g_lock);
+            RefreshSessionList();
+            SetWindowTextW(g_sessionStatus, status.c_str());
+            EnableWindow(GetDlgItem(window, SESSION_START), TRUE);
+            EnableWindow(GetDlgItem(window, SESSION_EXPORT),
+                         !g_activeSession.load());
+            return 0;
+        }
+
+        case WM_CLOSE:
+            HideSessionWindow(window);
+            return 0;
+
+        case WM_DESTROY:
+            if (g_sessionFont) {
+                DeleteObject(g_sessionFont);
+            }
+            g_sessionFont = nullptr;
+            g_sessionWindow.store(nullptr);
+            return 0;
     }
-    case WM_TIMER:
-        if (wp == 2) {
-            if (g_openFolderPicker && (WaitStop(0) || g_pickerGeneration != g_generation.load()))
-                g_openFolderPicker->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
-        } else { KillTimer(window,1); RequestSessionPreview(); }
-        return 0;
-    case kSessionChanged: RefreshSessionList();return 0;
-    case kSessionPreviewReady:InvalidateRect(g_sessionPreview,nullptr,TRUE);return 0;
-    case kSessionExportFinished:{
-        EnterCriticalSection(&g_lock);auto status=g_exportStatus;LeaveCriticalSection(&g_lock);
-        RefreshSessionList();
-        SetWindowTextW(g_sessionStatus,status.c_str());
-        EnableWindow(GetDlgItem(window,SESSION_START),TRUE);
-        EnableWindow(GetDlgItem(window,SESSION_EXPORT),!g_activeSession.load());return 0;
-    }
-    case WM_CLOSE:g_activeSession.store(0);RefreshSessionList();ShowWindow(window,SW_HIDE);return 0;
-    case WM_DESTROY:
-        if (g_sessionFont) DeleteObject(g_sessionFont);
-        g_sessionFont=nullptr;g_sessionWindow.store(nullptr);return 0;
-    }
-    return DefWindowProcW(window,message,wp,lp);
+    return DefWindowProcW(window, message, wp, lp);
 }
 
 static HICON AppIcon(bool small);  // Defined with the tray icon below.
 
 static void ShowSessionWindow(bool start) {
-    HWND window=g_sessionWindow.load();
-    if(!window){
-        WNDCLASSW preview{};preview.lpfnWndProc=PreviewWindowProc;preview.hInstance=GetModuleHandleW(nullptr);
-        preview.lpszClassName=L"SnapSentryPreview";preview.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&preview);
-        WNDCLASSW cls{};cls.lpfnWndProc=SessionWindowProc;cls.hInstance=GetModuleHandleW(nullptr);
-        cls.lpszClassName=L"SnapSentrySession";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
-        cls.hbrBackground=GetSysColorBrush(COLOR_BTNFACE);cls.hIcon=AppIcon(false);RegisterClassW(&cls);
-        window=CreateWindowExW(WS_EX_CONTROLPARENT,L"SnapSentrySession",L"SnapSentry - Review session",
-            WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,980,680,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    HWND window = g_sessionWindow.load();
+    if (!window) {
+        WNDCLASSW preview{};
+        preview.lpfnWndProc = PreviewWindowProc;
+        preview.hInstance = GetModuleHandleW(nullptr);
+        preview.lpszClassName = L"SnapSentryPreview";
+        preview.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        RegisterClassW(&preview);
+
+        WNDCLASSW cls{};
+        cls.lpfnWndProc = SessionWindowProc;
+        cls.hInstance = GetModuleHandleW(nullptr);
+        cls.lpszClassName = L"SnapSentrySession";
+        cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        cls.hbrBackground = GetSysColorBrush(COLOR_BTNFACE);
+        cls.hIcon = AppIcon(false);
+        RegisterClassW(&cls);
+
+        window = CreateWindowExW(
+            WS_EX_CONTROLPARENT, L"SnapSentrySession",
+            L"SnapSentry - Review session", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
+            CW_USEDEFAULT, 980, 680, nullptr, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
         g_sessionWindow.store(window);
         if (window) {
+            // Scale the default size for the monitor, but keep it on screen.
             const UINT dpi = WindowDpi(window);
             MONITORINFO monitor{sizeof(monitor)};
-            GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor);
-            const int width = std::min<int>(MulDiv(980,dpi,96), monitor.rcWork.right-monitor.rcWork.left);
-            const int height = std::min<int>(MulDiv(680,dpi,96), monitor.rcWork.bottom-monitor.rcWork.top);
-            if (width > 0 && height > 0) SetWindowPos(window,nullptr,0,0,width,height,
-                SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+            GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+                            &monitor);
+            const int width =
+                std::min<int>(MulDiv(980, dpi, 96),
+                              monitor.rcWork.right - monitor.rcWork.left);
+            const int height =
+                std::min<int>(MulDiv(680, dpi, 96),
+                              monitor.rcWork.bottom - monitor.rcWork.top);
+            if (width > 0 && height > 0) {
+                SetWindowPos(window, nullptr, 0, 0, width, height,
+                             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
         }
     }
-    if(!window)return;
-    if(start)StartSession(window);
-    RefreshSessionList();LayoutSession(window);ShowWindow(window,SW_SHOWNORMAL);SetForegroundWindow(window);
+    if (!window) {
+        return;
+    }
+    if (start) {
+        StartSession(window);
+    }
+    RefreshSessionList();
+    LayoutSession(window);
+    ShowWindow(window, SW_SHOWNORMAL);
+    SetForegroundWindow(window);
 }
 
 static std::atomic<HWND> g_promptWindow{nullptr};
@@ -3290,17 +3597,21 @@ static int g_registeredSessionKey = 0;
 static HICON g_appIconLarge = nullptr;  // UI STA only, destroyed on exit.
 static HICON g_appIconSmall = nullptr;
 
-// SnapSentry runs inside windhawk.exe, so its icon is the one that identifies
-// it in the tray. Falls back to the stock application icon.
+// The shell's own "image files" icon, so the tray entry reads as a screenshot
+// tool and isn't mistaken for Windhawk's own tray icon. Falls back to the
+// stock application icon.
 static HICON AppIcon(bool small) {
-    if (!g_appIconLarge && !g_appIconSmall) {
-        wchar_t path[MAX_PATH];
-        DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-        if (length && length < ARRAYSIZE(path)) {
-            ExtractIconExW(path, 0, &g_appIconLarge, &g_appIconSmall, 1);
+    HICON& icon = small ? g_appIconSmall : g_appIconLarge;
+    if (!icon) {
+        SHSTOCKICONINFO info{};
+        info.cbSize = sizeof(info);
+        if (SUCCEEDED(SHGetStockIconInfo(
+                SIID_IMAGEFILES,
+                SHGSI_ICON | (small ? SHGSI_SMALLICON : SHGSI_LARGEICON),
+                &info))) {
+            icon = info.hIcon;
         }
     }
-    HICON icon = small ? g_appIconSmall : g_appIconLarge;
     return icon ? icon : LoadIconW(nullptr, IDI_APPLICATION);
 }
 
