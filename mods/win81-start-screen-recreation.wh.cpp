@@ -10,13 +10,13 @@
 // @description:es  Este mod recrea la pantalla de inicio de Windows 8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
-// @version         1.0.0
+// @version         1.1.0
 // @license         GPL-3.0-or-later
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore
+// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32
 // ==/WindhawkMod==
 //
 // ==WindhawkModReadme==
@@ -31,7 +31,8 @@ This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 The mod replaces the Start experience with a full-screen Start screen modeled after
 Windows 8.1: tiles arranged in groups, an All Apps view, type-to-search, and the
 corresponding menus and animations. Feedback and suggestions are accepted. The mod
-has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.
+has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2, Windows 11 25H2
+and Windows 11 26H2.
 
 Note: This is a best-effort modification. Layout, colors, icons and animations are
 inspired by Windows 8.1. Tiles display the real Windows 10/11 applications, so
@@ -51,6 +52,23 @@ The mod does **not** replace system files.
   name, date installed or category.
 - **Real tile colors**: packaged apps use their own tile color and artwork; classic
   programs that declare a tile color (such as Chrome) use it as well.
+- **StartAllBack Start button**: clicking the Start button of StartAllBack's own taskbar opens
+  this Start screen instead of the Windows 11 Start menu. StartAllBack draws that button itself and
+  it never goes through the Windows launcher, so the mod detects the button window (`Start`, or
+  `SIBOrb` on builds that use that name) and intercepts the click with the low-level mouse hook it
+  already uses for the search charm. The click is consumed inside the button's own window
+  procedure, which is what makes it work on the first click too.
+- **Windows 8/8.1 tile gradients**: every tile is shaded the way Windows 8 and 8.1 did
+  it, with the top lighter and the bottom darker, instead of the flat fill that Windows
+  10 and 11 use. The gradient is derived from the color of the tile, so it covers the
+  Windows 10/11 UWP apps (the `BackgroundColor` of the package manifest or of the
+  VisualElements manifest), the 8.x Metro style apps, the tiles whose color is sampled
+  from the app icon and the classic programs that declare a tile color. A soft gradient
+  is also laid over the app artwork, so packaged apps that ship full-bleed artwork are no
+  longer flat either.
+- **Friendly to taskbar patchers**: StartAllBack and ExplorerPatcher are detected and
+  everything that touches the shell is deferred until their taskbar exists (see
+  *Compatibility with StartAllBack and ExplorerPatcher* below).
 - **Background options**: the classic petal artwork, a solid color, the accent
   color, the desktop wallpaper, or a custom image.
 - **Optional 8.1-style layout**: modern versions of the old Windows 8.1 apps
@@ -66,6 +84,55 @@ The mod does **not** replace system files.
 | Ctrl+Tab | Opens the All Apps view |
 | Arrow keys + Enter | Navigates and opens apps |
 | Esc | Closes menus / Start |
+
+The search charm can be opened with the Search button in the header or by typing on the Start
+screen. With an empty query it only shows the search box, the scope selector and the Windows 8.1
+hint; clicking anywhere in the panel does nothing else, and a click outside it closes it.
+
+## Compatibility with StartAllBack and ExplorerPatcher
+
+Up to version 1.0.0 the mod could leave the taskbar in the stock style after a sign-in or
+after `explorer.exe` was restarted, when StartAllBack and ExplorerPatcher were installed:
+Windhawk loads a mod before Explorer starts executing, and in that window the mod loaded
+`twinui.pcshell.dll`, created a full-screen window in a z-band and installed a keyboard
+hook. StartAllBack and ExplorerPatcher patch the shell in the very same phase, and the
+Win32 taskbar was created before they could finish.
+
+From version 1.1.0:
+
+- `Wh_ModInit` only reads the settings. It no longer loads any DLL, creates any window or
+  hooks anything.
+- The Start screen window, the full-screen buffers, the Direct2D device and the keyboard
+  hook are created only after `Shell_TrayWnd` and the shell window exist, plus a settle
+  delay (**Delay before creating the Start screen window**, 4000 ms by default when a
+  third-party shell is detected).
+- `twinui.pcshell.dll` is hooked by a background thread as soon as Windows itself loads
+  the DLL. The forced load is only a fallback, done after the shell has settled, and it
+  can be turned off with **Let Windows load the Start menu code**.
+- StartAllBack and ExplorerPatcher are detected from their modules and from their
+  settings keys (`HKCU\Software\StartIsBack`, `HKCU\Software\ExplorerPatcher`). The
+  detection can be overridden with the **Compatibility with StartAllBack and
+  ExplorerPatcher** setting.
+- The mod still never hooks or patches taskbar functions, bands or XAML: it only reads
+  the shell state. The Windows key is handled by the mod's own keyboard hook.
+- **The StartAllBack Start button** is handled separately: StartAllBack draws that button itself
+  (a child window of the taskbar of class `Start`, the same name Explorer uses for the classic Start
+  button) and it never calls the Windows launcher, which is why the Windows key worked while its
+  Start button opened the Windows 11 menu. The mod looks for that window and, while the mouse is over
+  it, consumes the click inside the button's own window procedure (window subclassing), so
+  StartAllBack never sees it and cannot open the Windows 11 Start menu. The low-level mouse hook is
+  kept as a fallback for the case in which the button cannot be subclassed. A second click on the
+  button closes the Start screen again, like Windows does. Nothing else on the taskbar is affected, and turning off **Open with the StartAllBack
+  Start button** restores the previous behaviour. The mod log prints
+  `StartAllBack Start button subclassed: clicking it opens this Start screen` once the button is
+  detected and the subclass installed.
+
+If the classic taskbar still comes back once, restart Explorer from the patcher's own
+menu (StartAllBack: *StartAllBack > Restart Explorer*; ExplorerPatcher: *Properties >
+Restart File Explorer*), or set **Compatibility** to *Always on* and the delay to 8000 ms. The
+keyboard hook is enough to open the Start screen even when the `ShowStartView` hook could
+not be installed; in that case use the Windows key instead of the Start button, or keep
+StartAllBack's own Start menu disabled as you already do.
 
 ## Additional information
 - The mod is compatible with the **Windows 8/8.1 Charms Bar Recreation** and the
@@ -85,6 +152,43 @@ The mod does **not** replace system files.
   mod is based.
 - **WinBoeing 777** - Testing on Windows 10 22H2
 - All testers who reported bugs and provided feedback.
+
+## Changelog
+
+### 1.1.0
+- **Windows 8/8.1 tile gradients.** Tiles were drawn with a flat fill; they now use the
+  Windows 8.1 shading (lighter at the top, darker at the bottom) derived from the color of
+  each tile. This covers the Windows 10/11 UWP apps (package manifest `BackgroundColor`),
+  the 8.x Metro style apps (VisualElements manifest), the tiles whose color is sampled
+  from the app icon and the classic programs that declare a tile color. A soft gradient is
+  also drawn over the app artwork, so packaged apps with full-bleed artwork are shaded as
+  well. New settings: **Windows 8/8.1 tile gradients**, **Gradient strength**, **Keep the
+  gradient over the app artwork**. Turning the first one off restores the flat 1.0.0 look.
+- **StartAllBack and ExplorerPatcher compatibility.** Fixed the taskbar reverting to the
+  classic style after a sign-in or an Explorer restart when the mod ran together with
+  StartAllBack (native Start menu disabled) and ExplorerPatcher. `Wh_ModInit` no longer
+  loads `twinui.pcshell.dll`, creates no window and installs no hook; the shell is only
+  touched once the taskbar exists, after a configurable settle delay. The `ShowStartView`
+  hook is installed in the background when Windows loads the DLL. New settings:
+  **Compatibility with StartAllBack and ExplorerPatcher**, **Delay before creating the
+  Start screen window**, **Let Windows load the Start menu code**.
+- **Search charm, empty state.** Clicking the search charm while the query was empty could open
+  an application: the click fell through the panel to the All Apps list drawn underneath, whose
+  rows are hidden with an empty query, so an invisible row was launched. The charm now owns every
+  click inside its panel, and the empty state shows the Windows 8.1 "type to search" hint instead
+  of a blank area.
+- **Tile captions.** The caption of a Medium tile no longer runs outside the tile: it uses the
+  smaller Windows 8.1 font on Medium/Small tiles and is clipped with an ellipsis. The caption box
+  is DPI-scaled now as well, so it no longer drifts on scaled displays.
+- The default gradient strength is **Subtle**, the closest to the Windows 8 start screen.
+- All of the new settings are applied live; the compatibility settings are read at sign-in
+  and take effect at the next Explorer start.
+- **The StartAllBack Start button now opens this Start screen.** With StartAllBack's own taskbar,
+  clicking its Start button opened the Windows 11 Start menu while the Windows key opened this one,
+  because that button never goes through the Windows launcher. The mod now finds the button window
+  (class `Start` on the tested StartAllBack build, `SIBOrb` on others) and intercepts its click. New setting: **Open with
+  the StartAllBack Start button**.
+- Tested on Windows 11 26H2 next to StartAllBack and ExplorerPatcher.
 
 ## Notes 
 
@@ -271,6 +375,123 @@ The mod does **not** replace system files.
   $description:es: "Esta configuración da a cada icono con imagen un relleno plano muestreado del tono dominante del icono, como la opción del menú Inicio de Windows 10, en lugar de los colores fijos de la paleta de Windows 8.1. Los iconos sin imagen mantienen su color de paleta. Portada de la mod Windows 10 1507 Start Menu Recreation. Las aplicaciones empaquetadas siempre usan el color de su propio icono, como en Windows 8.1; esta configuración extiende el muestreo a todos los iconos."
   $description:fr: "Ce paramètre donne à chaque vignette avec icône un fond uni échantillonné depuis la teinte dominante de l'icône, comme l'option du menu Démarrer de Windows 10, au lieu des couleurs fixes de la palette Windows 8.1. Les vignettes sans icône gardent leur couleur de palette. Porté du mod Windows 10 1507 Start Menu Recreation. Les applications packagées utilisent toujours la couleur de leur propre vignette, comme Windows 8.1 ; ce paramètre étend l'échantillonnage à toutes les vignettes."
   $description:pt: "Esta configuração dá a cada bloco com ícone um preenchimento sólido amostrado do tom dominante do ícone, como a opção do menu Iniciar do Windows 10, em vez das cores fixas da paleta do Windows 8.1. Blocos sem ícone mantêm a cor da paleta. Portado da mod Windows 10 1507 Start Menu Recreation. Os aplicativos empacotados sempre usam a cor do seu próprio bloco, como no Windows 8.1; esta configuração estende a amostragem a todos os blocos."
+- tileGradients: true
+  $name: "Windows 8/8.1 tile gradients"
+  $name:it: "Sfumatura delle tile in stile Windows 8/8.1"
+  $name:es: "Degradado de los iconos estilo Windows 8/8.1"
+  $name:fr: "Dégradés des vignettes façon Windows 8/8.1"
+  $name:pt: "Gradientes dos blocos no estilo Windows 8/8.1"
+  $description: "Windows 8 and 8.1 never drew flat tiles: the tile colour is lighter towards the top and darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why the UWP apps, the 8.x Metro style apps and the tiles whose colour is sampled from the app icon look like Windows 10. Turning this on derives the Windows 8.1 gradient from the colour of every tile, including the BackgroundColor that packaged apps declare in their manifest. Turning it off restores the flat 1.0.0 look."
+  $description:it: "Windows 8 e 8.1 non disegnavano mai tile piatte: il colore della tile è più chiaro in alto e più scuro in basso. Windows 10 e 11 l'hanno sostituito con un riempimento pieno, ed è per questo che le app UWP, le app in stile Metro di Windows 8.x e le tile il cui colore è campionato dall'icona sembrano di Windows 10. Attivando questa opzione la sfumatura di Windows 8.1 viene ricavata dal colore di ogni tile, incluso il BackgroundColor che le app in pacchetto dichiarano nel loro manifesto. Disattivandola si torna all'aspetto piatto della 1.0.0."
+  $description:es: "Windows 8 y 8.1 nunca dibujaban iconos planos: el color del icono es más claro arriba y más oscuro abajo. Windows 10 y 11 lo sustituyeron por un relleno plano, y por eso las aplicaciones UWP, las aplicaciones estilo Metro de 8.x y los iconos cuyo color se muestrea del icono de la aplicación parecen de Windows 10. Al activarlo, el degradado de Windows 8.1 se obtiene del color de cada icono, incluido el BackgroundColor que las aplicaciones empaquetadas declaran en su manifiesto. Al desactivarlo se recupera el aspecto plano de la 1.0.0."
+  $description:fr: "Windows 8 et 8.1 ne dessinaient jamais de vignettes unies : la couleur de la vignette est plus claire en haut et plus sombre en bas. Windows 10 et 11 l'ont remplacée par un fond uni, et c'est pourquoi les applications UWP, les applications de style Metro 8.x et les vignettes dont la couleur est échantillonnée depuis l'icône ressemblent à Windows 10. En activant ce paramètre, le dégradé de Windows 8.1 est calculé à partir de la couleur de chaque vignette, y compris le BackgroundColor que les applications packagées déclarent dans leur manifeste. Le désactiver restaure l'aspect uni de la 1.0.0."
+  $description:pt: "O Windows 8 e 8.1 nunca desenhavam blocos lisos: a cor do bloco é mais clara em cima e mais escura em baixo. O Windows 10 e 11 substituíram isso por um preenchimento liso, e é por isso que os apps UWP, os apps no estilo Metro do 8.x e os blocos cuja cor é amostrada do ícone parecem do Windows 10. Ao ativar esta opção, o gradiente do Windows 8.1 é obtido a partir da cor de cada bloco, incluindo o BackgroundColor que os apps empacotados declaram no manifesto. Ao desativá-la, volta o aspecto liso da 1.0.0."
+- tileGradientStrength: subtle
+  $name: "Gradient strength"
+  $name:it: "Intensità della sfumatura"
+  $name:es: "Intensidad del degradado"
+  $name:fr: "Intensité du dégradé"
+  $name:pt: "Intensidade do gradiente"
+  $description: "How pronounced the Windows 8/8.1 gradient is. Subtle (the default) is closest to the Windows 8 start screen, Normal matches Windows 8.1, Strong is more visible. Changes apply immediately."
+  $description:it: "Quanto è marcata la sfumatura di Windows 8/8.1. Sobria è la più vicina alla schermata Start di Windows 8, Normale corrisponde a Windows 8.1, Forte è più visibile. Le modifiche si applicano subito."
+  $description:es: "Cómo de marcado es el degradado de Windows 8/8.1. Sutil es el más cercano a la pantalla de inicio de Windows 8, Normal corresponde a Windows 8.1 y Fuerte es más visible. Los cambios se aplican al momento."
+  $description:fr: "L'intensité du dégradé Windows 8/8.1. Subtil est le plus proche de l'écran d'accueil de Windows 8, Normal correspond à Windows 8.1 et Fort est plus visible. Les changements s'appliquent immédiatement."
+  $description:pt: "O quão marcado é o gradiente do Windows 8/8.1. Sutil é o mais próximo da Tela Inicial do Windows 8, Normal corresponde ao Windows 8.1 e Forte é mais visível. As mudanças valem na hora."
+  $options:
+  - subtle: "Subtle (closest to the Windows 8 tiles)"
+  - normal: "Normal (Windows 8.1 look)"
+  - strong: "Strong (more pronounced)"
+  $options:it:
+  - subtle: "Sobria (la più vicina alle tile di Windows 8)"
+  - normal: "Normale (aspetto di Windows 8.1)"
+  - strong: "Forte (più marcata)"
+  $options:es:
+  - subtle: "Sutil (la más cercana a los iconos de Windows 8)"
+  - normal: "Normal (aspecto de Windows 8.1)"
+  - strong: "Fuerte (más marcado)"
+  $options:fr:
+  - subtle: "Subtil (au plus près des vignettes de Windows 8)"
+  - normal: "Normal (aspect Windows 8.1)"
+  - strong: "Fort (plus marqué)"
+  $options:pt:
+  - subtle: "Sutil (o mais próximo dos blocos do Windows 8)"
+  - normal: "Normal (aspecto do Windows 8.1)"
+  - strong: "Forte (mais marcado)"
+- gradientOverArt: true
+  $name: "Keep the gradient over the app artwork"
+  $name:it: "Mantieni la sfumatura sopra la grafica delle app"
+  $name:es: "Mantener el degradado sobre la ilustración de la aplicación"
+  $name:fr: "Conserver le dégradé par-dessus l'illustration de l'application"
+  $name:pt: "Manter o gradiente sobre a arte do aplicativo"
+  $description: "Windows 10/11 packaged apps usually ship artwork that covers the whole tile, so the gradient behind it would never be visible. This draws the Windows 8.1 gradient over the artwork as well, which is what makes those tiles match the Windows 8/8.1 apps. Turn it off to keep the artwork untouched."
+  $description:it: "Le app in pacchetto di Windows 10/11 di solito hanno una grafica che copre tutta la tile, quindi la sfumatura sotto non si vedrebbe. Questa opzione disegna la sfumatura di Windows 8.1 anche sopra la grafica, ed è ciò che fa somigliare queste tile a quelle di Windows 8/8.1. Disattivala per lasciare intatta la grafica."
+  $description:es: "Las aplicaciones empaquetadas de Windows 10/11 suelen incluir una ilustración que cubre todo el icono, así que el degradado de debajo nunca se vería. Esta opción dibuja el degradado de Windows 8.1 también sobre la ilustración, que es lo que hace que esos iconos se parezcan a los de Windows 8/8.1. Desactívala para dejar la ilustración intacta."
+  $description:fr: "Les applications packagées de Windows 10/11 fournissent souvent une illustration qui couvre toute la vignette, si bien que le dégradé placé dessous ne serait jamais visible. Ce paramètre dessine aussi le dégradé Windows 8.1 par-dessus l'illustration, ce qui rapproche ces vignettes de celles de Windows 8/8.1. Désactivez-le pour laisser l'illustration intacte."
+  $description:pt: "Os apps empacotados do Windows 10/11 costumam trazer uma arte que cobre todo o bloco, então o gradiente por baixo nunca apareceria. Esta opção desenha o gradiente do Windows 8.1 também sobre a arte, e é isso que faz esses blocos se parecerem com os do Windows 8/8.1. Desative para deixar a arte intacta."
+- shellCompat: auto
+  $name: "Compatibility with StartAllBack and ExplorerPatcher"
+  $name:it: "Compatibilità con StartAllBack ed ExplorerPatcher"
+  $name:es: "Compatibilidad con StartAllBack y ExplorerPatcher"
+  $name:fr: "Compatibilité avec StartAllBack et ExplorerPatcher"
+  $name:pt: "Compatibilidade com o StartAllBack e o ExplorerPatcher"
+  $description: "StartAllBack and ExplorerPatcher patch the shell while Explorer starts, in the same phase in which Windhawk loads this mod. In this mode the mod leaves the shell completely alone until the taskbar exists, and then waits for the delay below, so that the patched taskbar can be created first. Auto detects StartAllBack and ExplorerPatcher. Always on applies the delay in every case, Always off never does (the 1.0.0 behaviour). Read at sign-in and when Explorer starts."
+  $description:it: "StartAllBack ed ExplorerPatcher modificano la shell mentre Explorer si avvia, nella stessa fase in cui Windhawk carica questa mod. In questa modalità la mod non tocca per nulla la shell finché la barra delle applicazioni non esiste, e poi attende il ritardo indicato sotto, così la barra modificata può essere creata per prima. Auto rileva StartAllBack ed ExplorerPatcher. Attiva applica sempre il ritardo, Disattiva mai (comportamento della 1.0.0). Viene letta all'accesso e all'avvio di Explorer."
+  $description:es: "StartAllBack y ExplorerPatcher modifican el shell mientras Explorer se inicia, en la misma fase en la que Windhawk carga esta mod. En este modo la mod no toca el shell hasta que existe la barra de tareas y después espera el retraso de abajo, para que la barra modificada pueda crearse primero. Auto detecta StartAllBack y ExplorerPatcher. Activada aplica siempre el retraso, Desactivada nunca (comportamiento de la 1.0.0). Se lee al iniciar sesión y al arrancar Explorer."
+  $description:fr: "StartAllBack et ExplorerPatcher modifient le shell pendant le démarrage d'Explorer, dans la même phase où Windhawk charge ce mod. Dans ce mode, le mod ne touche pas au shell tant que la barre des tâches n'existe pas, puis attend le délai ci-dessous, afin que la barre modifiée puisse être créée en premier. Auto détecte StartAllBack et ExplorerPatcher. Activé applique toujours le délai, Désactivé jamais (comportement de la 1.0.0). Ce paramètre est lu à l'ouverture de session et au démarrage d'Explorer."
+  $description:pt: "O StartAllBack e o ExplorerPatcher modificam o shell enquanto o Explorer inicia, na mesma fase em que o Windhawk carrega esta mod. Neste modo a mod não toca no shell até a barra de tarefas existir e depois espera o atraso abaixo, para que a barra modificada possa ser criada primeiro. Auto detecta o StartAllBack e o ExplorerPatcher. Ativada aplica sempre o atraso, Desativada nunca (comportamento da 1.0.0). É lida ao entrar e quando o Explorer inicia."
+  $options:
+  - auto: "Auto (on when StartAllBack or ExplorerPatcher is detected)"
+  - always: "Always on"
+  - never: "Always off (the 1.0.0 behaviour)"
+  $options:it:
+  - auto: "Auto (attiva quando viene rilevato StartAllBack o ExplorerPatcher)"
+  - always: "Sempre attiva"
+  - never: "Sempre disattivata (comportamento della 1.0.0)"
+  $options:es:
+  - auto: "Auto (activada si se detecta StartAllBack o ExplorerPatcher)"
+  - always: "Siempre activada"
+  - never: "Siempre desactivada (comportamiento de la 1.0.0)"
+  $options:fr:
+  - auto: "Auto (activé si StartAllBack ou ExplorerPatcher est détecté)"
+  - always: "Toujours activé"
+  - never: "Toujours désactivé (comportement de la 1.0.0)"
+  $options:pt:
+  - auto: "Auto (ativada se o StartAllBack ou o ExplorerPatcher for detectado)"
+  - always: "Sempre ativada"
+  - never: "Sempre desativada (comportamento da 1.0.0)"
+- startupDelayMs: 4000
+  $name: "Delay before creating the Start screen window (milliseconds)"
+  $name:it: "Ritardo prima di creare la finestra della schermata Start (millisecondi)"
+  $name:es: "Retraso antes de crear la ventana de la pantalla de inicio (milisegundos)"
+  $name:fr: "Délai avant de créer la fenêtre de l'écran d'accueil (millisecondes)"
+  $name:pt: "Atraso antes de criar a janela da Tela Inicial (milissegundos)"
+  $description: "Used only when the compatibility mode above is active. After the taskbar appears the mod waits this long before it creates its window, its buffers and its keyboard hook, so that StartAllBack and ExplorerPatcher can finish. Allowed range 0 to 60000; default 4000. Raise it to 8000 or 10000 if the taskbar still comes back in the classic style."
+  $description:it: "Usato solo quando la modalità di compatibilità qui sopra è attiva. Dopo la comparsa della barra delle applicazioni la mod attende questo tempo prima di creare la propria finestra, i propri buffer e l'hook da tastiera, così StartAllBack ed ExplorerPatcher possono finire. Intervallo consentito da 0 a 60000; predefinito 4000. Alzalo a 8000 o 10000 se la barra continua a tornare in stile classico."
+  $description:es: "Se usa solo cuando el modo de compatibilidad de arriba está activo. Tras aparecer la barra de tareas, la mod espera este tiempo antes de crear su ventana, sus búferes y su enlace de teclado, para que StartAllBack y ExplorerPatcher puedan terminar. Rango permitido de 0 a 60000; predeterminado 4000. Auméntalo a 8000 o 10000 si la barra sigue volviendo al estilo clásico."
+  $description:fr: "Utilisé uniquement lorsque le mode de compatibilité ci-dessus est actif. Une fois la barre des tâches apparue, le mod attend ce délai avant de créer sa fenêtre, ses tampons et son hook clavier, afin que StartAllBack et ExplorerPatcher puissent terminer. Plage autorisée de 0 à 60000 ; défaut 4000. Passez à 8000 ou 10000 si la barre revient encore au style classique."
+  $description:pt: "Usado apenas quando o modo de compatibilidade acima está ativo. Depois de a barra de tarefas aparecer, a mod espera este tempo antes de criar sua janela, seus buffers e seu hook de teclado, para que o StartAllBack e o ExplorerPatcher possam terminar. Faixa permitida de 0 a 60000; padrão 4000. Aumente para 8000 ou 10000 se a barra continuar voltando ao estilo clássico."
+- deferStartHook: true
+  $name: "Let Windows load the Start menu code"
+  $name:it: "Lascia che Windows carichi il codice del menu Start"
+  $name:es: "Dejar que Windows cargue el código del menú Inicio"
+  $name:fr: "Laisser Windows charger le code du menu Démarrer"
+  $name:pt: "Deixar o Windows carregar o código do menu Iniciar"
+  $description: "The mod opens this Start screen by hooking XamlLauncher::ShowStartView in twinui.pcshell.dll. Loading that DLL during Explorer start-up is what used to disturb StartAllBack and ExplorerPatcher, so the mod now waits for Windows to load it and hooks it from a background thread. The forced load is kept as a fallback, done 15 seconds after the shell has settled; turn this off to go back to loading the DLL immediately at sign-in. Read when the mod starts."
+  $description:it: "La mod apre questa schermata Start agganciando XamlLauncher::ShowStartView in twinui.pcshell.dll. Caricare quella DLL durante l'avvio di Explorer è ciò che disturbava StartAllBack ed ExplorerPatcher, quindi ora la mod aspetta che la carichi Windows e la aggancia da un thread in background. Il caricamento forzato resta come riserva, 15 secondi dopo che la shell si è stabilizzata; disattiva questa opzione per tornare a caricare la DLL subito all'accesso. Viene letta all'avvio della mod."
+  $description:es: "La mod abre esta pantalla de inicio enganchando XamlLauncher::ShowStartView en twinui.pcshell.dll. Cargar esa DLL durante el inicio de Explorer es lo que molestaba a StartAllBack y ExplorerPatcher, así que ahora la mod espera a que la cargue Windows y la engancha desde un hilo en segundo plano. La carga forzada se mantiene como reserva, 15 segundos después de que el shell se estabilice; desactiva esta opción para volver a cargar la DLL al iniciar sesión. Se lee al arrancar la mod."
+  $description:fr: "Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
+  $description:pt: "A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
+- startButtonHook: true
+  $name: "Open with the StartAllBack Start button"
+  $name:it: "Apri con il pulsante Start di StartAllBack"
+  $name:es: "Abrir con el botón Inicio de StartAllBack"
+  $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack"
+  $name:pt: "Abrir com o botão Iniciar do StartAllBack"
+  $description: "StartAllBack draws its own taskbar and its own Start button, and that button does not go through the Windows launcher, so the Windows key setting alone cannot catch it. With this on, clicking the StartAllBack Start button opens this Start screen instead of the Windows 11 Start menu. The mod finds the button by its window class (Start or SIBOrb) and never touches anything else on the taskbar. Turn this off if you want StartAllBack's own Start menu back."
+  $description:it: "StartAllBack disegna una propria barra delle applicazioni e un proprio pulsante Start, e quel pulsante non passa dal launcher di Windows, quindi l'opzione del tasto Windows da sola non lo intercetta. Con questa opzione attiva, facendo clic sul pulsante Start di StartAllBack si apre questa schermata Start invece del menu Start di Windows 11. La mod trova il pulsante dalla sua classe finestra (Start o SIBOrb) e non tocca nient'altro della barra. Disattivala se vuoi riavere il menu Start di StartAllBack."
+  $description:es: "StartAllBack dibuja su propia barra de tareas y su propio botón Inicio, y ese botón no pasa por el lanzador de Windows, así que la opción de la tecla Windows no lo intercepta. Con esta opción activada, al hacer clic en el botón Inicio de StartAllBack se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. La mod encuentra el botón por su clase de ventana (SIBOrb) y no toca nada más de la barra."
+  $description:fr: "StartAllBack dessine sa propre barre des tâches et son propre bouton Démarrer, et ce bouton ne passe pas par le lanceur de Windows : l'option de la touche Windows ne suffit donc pas. Avec cette option active, cliquer sur le bouton Démarrer de StartAllBack ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Le mod repère le bouton par sa classe de fenêtre (SIBOrb) et ne touche à rien d'autre sur la barre."
+  $description:pt: "O StartAllBack desenha sua própria barra de tarefas e seu próprio botão Iniciar, e esse botão não passa pelo launcher do Windows, então a opção da tecla Windows sozinha não o intercepta. Com esta opção ativa, clicar no botão Iniciar do StartAllBack abre esta Tela Inicial em vez do menu Iniciar do Windows 11. A mod encontra o botão pela classe da janela (SIBOrb) e não mexe em mais nada na barra."
 - seedStartLayout: false
   $name: "Populate Start with a Windows 8.1 style layout from installed apps"
   $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
@@ -307,6 +528,7 @@ The mod does **not** replace system files.
 #include <objbase.h>
 #include <shellapi.h>
 #include <commoncontrols.h>
+#include <commctrl.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <wtsapi32.h>
@@ -457,7 +679,7 @@ static T RunGuardedValue(const wchar_t* step, T fallback, Function&& function) {
 enum StrId {
     STR_START, STR_DESKTOP,
     STR_TILE_EXPLORER, STR_TILE_COMPUTER, STR_TILE_CONTROLPANEL, STR_TILE_STORE,
-    STR_APPS, STR_RESULTS_FOR, STR_NO_RESULTS, STR_SEARCH_APPS, STR_SEARCH_FOR, STR_SEARCH_IN,
+    STR_APPS, STR_RESULTS_FOR, STR_NO_RESULTS, STR_CHARM_TYPE_TO_SEARCH, STR_SEARCH_APPS, STR_SEARCH_FOR, STR_SEARCH_IN,
     STR_ROW_APPS, STR_ROW_SETTINGS, STR_ROW_FILES, STR_ROW_STORE,
     STR_BAR_ADVANCED, STR_BAR_UNPIN, STR_BAR_PIN_START, STR_BAR_SMALLER, STR_BAR_LARGER,
     STR_ADV_MANAGE, STR_ADV_MAP, STR_ADV_DISCONNECT, STR_ADV_PROPERTIES, STR_ADV_RUNAS, STR_ADV_OPENFILE,
@@ -491,6 +713,7 @@ static const LocRow kStrings[STR_COUNT] = {
     { { L"Apps", L"App", L"Aplicaciones", L"Applications", L"Aplicativos" } },
     { { L"Results for \"%s\" (%u)", L"Risultati per \"%s\" (%u)", L"Resultados para \"%s\" (%u)", L"R\u00e9sultats pour \u00ab %s \u00bb (%u)", L"Resultados para \"%s\" (%u)" } },
     { { L"No applications matched your search.", L"Nessuna applicazione corrisponde alla ricerca.", L"Ninguna aplicaci\u00f3n coincidi\u00f3 con la b\u00fasqueda.", L"Aucune application ne correspond \u00e0 votre recherche.", L"Nenhum aplicativo correspondeu \u00e0 sua pesquisa." } },
+    { { L"Type to search apps, settings and files.", L"Digita per cercare app, impostazioni e file.", L"Escribe para buscar aplicaciones, configuraciones y archivos.", L"Tapez pour rechercher des applications, des param\u00e8tres et des fichiers.", L"Digite para pesquisar apps, configura\u00e7\u00f5es e arquivos." } },
     { { L"Search Apps", L"Cerca app", L"Buscar aplicaciones", L"Rechercher des applications", L"Pesquisar aplicativos" } },
     { { L"Search for", L"Cerca", L"Buscar", L"Rechercher", L"Pesquisar" } },
     { { L"Search in", L"Cerca in", L"Buscar en", L"Rechercher dans", L"Pesquisar em" } },
@@ -697,6 +920,7 @@ static const UINT WM_APP_CHARM_POINTER = WM_APP + 14;
 static const UINT WM_APP_SEED_LAYOUT = WM_APP + 15;
 static const UINT WM_APP_FILES_READY = WM_APP + 16;
 static const UINT WM_APP_APPS_REFRESH = WM_APP + 17;
+static const UINT_PTR kOrbTimerId = 0xA5;
 static const UINT WM_HOOKCTL_MOUSE_ON  = WM_APP + 30;
 static const UINT WM_HOOKCTL_MOUSE_OFF = WM_APP + 31;
 static const ULONG_PTR kMagic = 0x38303435;
@@ -718,6 +942,7 @@ static DWORD  g_hookTid = 0;
 static volatile bool g_useWinKey = true;
 static volatile bool g_keyboardOnly = false;
 static volatile bool g_startHooked = false;
+static HANDLE g_startHookThread = NULL, g_startHookStop = NULL;
 static DWORD g_lastToggleTick = 0;
 static volatile LONG g_openSlideMs = 360, g_closeSlideMs = 600;
 static volatile LONG g_openAtLogon = 1;
@@ -836,6 +1061,46 @@ static bool g_winDown = false, g_winCombo = false;
 static volatile LONG g_privacyMode = 0;
 static volatile LONG g_appTileColors = 0;
 static volatile LONG g_tileColorsDirty = 0;
+// Windows 8/8.1 tile shading: 0 = flat fill (the 1.0.0 look), 1 = gradient like Windows 8/8.1.
+static volatile LONG g_tileGradient = 1;
+static volatile LONG g_tileGradientStrength = 0;   // 0 = subtle (default), 1 = normal, 2 = strong
+static volatile LONG g_gradientOverArt = 1;        // shade the app artwork as well
+// Third-party shell compatibility (StartAllBack, ExplorerPatcher). See WaitForShellSettle.
+static volatile LONG g_shellCompat = 0;            // 0 = auto, 1 = always, 2 = never
+static volatile LONG g_startupDelayMs = 4000;      // settle delay before the shell is touched
+static volatile LONG g_deferStartHook = 1;         // don't force-load twinui.pcshell.dll
+static volatile LONG g_shellPatch = 0;             // bitmask of the detected third-party shells
+static volatile LONG g_startButtonHook = 1;        // intercept the StartAllBack Start button
+
+// StartAllBack draws its own taskbar and its own Start button, and that button does not go through
+// XamlLauncher::ShowStartView, so hooking the Windows launcher never sees it: clicking it opened the
+// Windows 11 Start menu while the Windows key opened this one. The button is a window of class
+// SIBOrb (the name is inside StartAllBackX64.dll), so the mod watches for it and swallows the click
+// with the low-level mouse hook it already uses for the search charm.
+static HWND g_orbWnd[8] = {};
+static RECT g_orbRect[8] = {};
+static int g_orbCount = 0;
+static bool g_orbLogged = false;
+static bool g_orbSwallowUp = false;
+static volatile LONG g_mouseHookWant = 0;   // bit 0 = search charm, bit 1 = StartAllBack Start button
+
+// Subclassing the Start button window is the reliable path: the click never reaches StartAllBack, so
+// its Windows 11 Start menu cannot open, no matter what the hit-testing or the hook timing says.
+// Installed with WindhawkUtils::SetWindowSubclassFromAnyThread (the helper does the cross-thread
+// work and drops the subclass on WM_NCDESTROY), removed with
+// WindhawkUtils::RemoveWindowSubclassFromAnyThread before this DLL is unloaded.
+static HWND g_orbSub[8] = {};
+static int g_orbSubCount = 0;
+static DWORD g_orbPressTick = 0;
+static HWND g_orbPressWnd = NULL;     // window that took the capture for the current press
+static bool g_orbSubFailLogged = false;
+static volatile LONG g_orbClicks = 0; // clicks forwarded to the Start screen, for the log
+// The same physical click can be reported by both the subclass and the mouse hook; the Start window
+// ignores a second toggle that arrives inside this window, and a user double click is still fast
+// enough to be swallowed here (which is what "click, click" has to do anyway).
+static const DWORD kOrbToggleDebounceMs = 250;
+static void EnsureOrbSubclass();
+static void RemoveOrbSubclasses();
 static volatile LONG g_appSort = 0;
 static int g_charmScope = 0;
 static int g_ctxRow = -1;
@@ -1016,6 +1281,8 @@ static void CommitAllApps();
 static float LeaveEase(int i, DWORD now);
 static int g_charmCont = 0;
 static void CharmMoveSel(int delta);
+static bool CharmListActive();
+static bool CharmOwnsPoint(int lx, int ly);
 static COLORREF SystemAccentColor();
 static bool GetWallpaperPath(wchar_t* out, size_t capacity);
 static void AccountRect(RECT* r);
@@ -1045,6 +1312,8 @@ static void RepaintNow();
 static void BuildOneTile(int i, HDC screenDC);
 static void CloseStart(bool immediate = false);
 static HFONT g_fTitle = NULL, g_fUser = NULL, g_fLabel = NULL, g_fTopLabel = NULL;
+// Windows 8.1 uses a smaller caption on the Medium (and Small) tiles than on the Wide/Large ones.
+static HFONT g_fLabelMedium = NULL;
 static HFONT g_fHdrGlyph = NULL, g_fBarMeas = NULL;
 static HBITMAP g_avatarPicBmp = NULL;
 static ID2D1Bitmap* g_avatarPicGpu = NULL;
@@ -2275,6 +2544,87 @@ static void BuildBuffers() {
     g_dirty = true;
 }
 
+// Windows 8 and 8.1 never drew a flat tile: the tile colour is lighter towards the top and
+// darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why
+// the packaged apps, the 8.x Metro style apps and the icon-sampled tiles looked like Windows
+// 10. Everything below derives the 8.1 gradient from the colour each tile already uses.
+static COLORREF ShadeColor(COLORREF c, float k) {
+    const auto toward = [k](int value, int target) {
+        float mixed = (float)value + ((float)target - (float)value) * k;
+        if (mixed < 0.0f) mixed = 0.0f;
+        if (mixed > 255.0f) mixed = 255.0f;
+        return (int)(mixed + 0.5f);
+    };
+    if (k >= 0.0f)
+        return RGB(toward(GetRValue(c), 255), toward(GetGValue(c), 255), toward(GetBValue(c), 255));
+    return RGB(toward(GetRValue(c), 0), toward(GetGValue(c), 0), toward(GetBValue(c), 0));
+}
+
+static float TileGradientAmount() {
+    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
+    if (strength <= 0) return 0.11f;
+    if (strength >= 2) return 0.32f;
+    return 0.19f;
+}
+
+// Returns false when the gradient is off, leaving *top and *bottom equal to `base` so that the
+// flat Windows 10 style of version 1.0.0 stays available.
+static bool TileGradientPair(COLORREF base, COLORREF* top, COLORREF* bottom) {
+    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) {
+        *top = *bottom = base;
+        return false;
+    }
+    const float k = TileGradientAmount();
+    *top = ShadeColor(base, k);
+    *bottom = ShadeColor(base, -k * 0.60f);
+    return true;
+}
+
+// Fills `dc` with a vertical veil that keeps the destination visible: white towards the top and
+// black towards the bottom, both fading out in the middle. Premultiplied, so it can be blended
+// over the opaque artwork of packaged apps.
+static void GradientVeil(HDC dc, int w, int h, BYTE light, BYTE dark) {
+    if (!dc || w <= 0 || h <= 0) return;
+    void* bits = NULL;
+    HBITMAP bmp = MakeDib(dc, w, h, &bits);
+    if (!bmp || !bits) {
+        if (bmp) DeleteObject(bmp);
+        return;
+    }
+    DWORD* px = (DWORD*)bits;
+    for (int y = 0; y < h; ++y) {
+        const float t = h > 1 ? (float)y / (float)(h - 1) : 0.5f;
+        const bool lightRow = t < 0.5f;
+        const float k = lightRow ? (0.5f - t) * 2.0f : (t - 0.5f) * 2.0f;
+        const BYTE a = (BYTE)((lightRow ? light : dark) * k);
+        const DWORD premul = lightRow ? (((DWORD)a << 16) | ((DWORD)a << 8) | a) : 0;
+        const DWORD row = ((DWORD)a << 24) | premul;
+        for (int x = 0; x < w; ++x) px[(size_t)y * (size_t)w + (size_t)x] = row;
+    }
+    GdiFlush();
+    HDC mem = CreateCompatibleDC(dc);
+    if (mem) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        AlphaBlend(dc, 0, 0, w, h, mem, 0, 0, w, h, blend);
+        if (old) SelectObject(mem, old);
+        DeleteDC(mem);
+    }
+    DeleteObject(bmp);
+}
+
+// Windows 10/11 packaged apps ship artwork that covers the whole tile, so the gradient behind it
+// would never show. This lays the same shading over the artwork, which is what makes those tiles
+// look like the Windows 8/8.1 ones.
+static void ApplyTileGradientOverArt(HDC dc, int w, int h) {
+    if (InterlockedCompareExchange(&g_gradientOverArt, 0, 0) == 0) return;
+    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) return;
+    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
+    const BYTE light = strength <= 0 ? 14 : (strength >= 2 ? 44 : 28);
+    const BYTE dark = strength <= 0 ? 18 : (strength >= 2 ? 52 : 34);
+    GradientVeil(dc, w, h, light, dark);
+}
+
 static COLORREF Mix(COLORREF a, COLORREF b, float k) {
     k = Clamp01(k);
     return RGB((int)(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * k),
@@ -2382,21 +2732,39 @@ static void DrawDesktopWallpaperTile(HDC dc, HDC screen, int w, int h) {
     DrawTextW(dc, T(STR_DESKTOP), -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
 }
 
+// Picks the caption font and the caption box for a tile of this size. The Medium tiles use the
+// smaller Windows 8.1 caption, and every caption is clipped with an ellipsis instead of running
+// outside the tile ("Pannello di controllo" used to be cut mid-word on a Medium tile).
+static HFONT TileCaptionFont(int w, int h) {
+    const HFONT small = g_fLabelMedium ? g_fLabelMedium : g_fLabel;
+    const bool large = w > ScI(180) || h > ScI(180);
+    return (large || !small) ? g_fLabel : small;
+}
+static bool TileCaptionRect(int w, int h, RECT* out) {
+    if (!out) return false;
+    out->left = ScI(12);
+    out->right = w - ScI(8);
+    out->bottom = h - ScI(8);
+    out->top = h - ScI(30);
+    return out->right > out->left && out->bottom > out->top;
+}
 static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, bool dark = false) {
     if (!text || !*text || h < ScI(100)) return;
+    RECT label;
+    if (!TileCaptionRect(w, h, &label)) return;
     SetBkMode(dc, TRANSPARENT);
-    SelectObject(dc, g_fLabel);
-    RECT label = { 12, h - 30, w - 8, h - 8 };
+    SelectObject(dc, TileCaptionFont(w, h));
+    const UINT flags = DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
     if (dark) {
         SetTextColor(dc, RGB(0, 0, 0));
-        DrawTextW(dc, text, -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextW(dc, text, -1, &label, flags);
         return;
     }
-    RECT shadow = label; OffsetRect(&shadow, 1, 1);
+    RECT shadow = label; OffsetRect(&shadow, ScI(1), ScI(1));
     SetTextColor(dc, RGB(17, 12, 35));
-    DrawTextW(dc, text, -1, &shadow, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextW(dc, text, -1, &shadow, flags);
     SetTextColor(dc, RGB(255, 255, 255));
-    DrawTextW(dc, text, -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextW(dc, text, -1, &label, flags);
 }
 
 static void DrawTileHover(HDC dc, int w, int h) {
@@ -2495,18 +2863,36 @@ static void BuildOneTile(int i, HDC screenDC) {
         std::vector<BYTE> art;
         int aw = 0, ah = 0;
         COLORREF c1 = t.c1, c2 = t.c2;
-        if (t.hasAppC && (t.style == PINNED_APP || InterlockedCompareExchange(&g_appTileColors, 0, 0))) c1 = c2 = t.appC;
+        // Base colour the Windows 8/8.1 gradient is derived from: the palette colour of the
+        // tile, the colour sampled from the icon, or the BackgroundColor declared by the app
+        // (Windows 10/11 packages and 8.x VisualElements manifests alike).
+        COLORREF base = (c1 != c2) ? Mix(c1, c2, 0.5f) : c1;
+        if (t.hasAppC && (t.style == PINNED_APP || InterlockedCompareExchange(&g_appTileColors, 0, 0))) base = t.appC;
         if (t.style == PINNED_APP && t.target) {
             AcquireSRWLockShared(&g_artLock);
             for (const auto& entry : g_packageArts) if (!_wcsicmp(entry.target.c_str(), t.target)) {
                 if (t.cw == TS_WIDE) { art = entry.wide; aw = entry.wideW; ah = entry.wideH; }
                 else { art = entry.square; aw = entry.squareW; ah = entry.squareH; }
-                if (entry.hasBackground) c1 = c2 = entry.background;
+                if (entry.hasBackground) base = entry.background;
                 break;
             }
             ReleaseSRWLockShared(&g_artLock);
         }
-        if (c1 == c2) {
+        COLORREF topColor = base, bottomColor = base;
+        const bool shaded = TileGradientPair(base, &topColor, &bottomColor);
+        if (shaded && t.style == DESKTOP_REFERENCE) {
+            // The desktop tile is a live wallpaper preview: keep its own dark-to-light shading.
+            topColor = ShadeColor(c1, TileGradientAmount() * 0.5f);
+            bottomColor = c2;
+        }
+        if (shaded) {
+            TRIVERTEX v[2] = {
+                { 0, 0, (COLOR16)(GetRValue(topColor) << 8), (COLOR16)(GetGValue(topColor) << 8), (COLOR16)(GetBValue(topColor) << 8), 0 },
+                { w, h, (COLOR16)(GetRValue(bottomColor) << 8), (COLOR16)(GetGValue(bottomColor) << 8), (COLOR16)(GetBValue(bottomColor) << 8), 0 },
+            };
+            GRADIENT_RECT gr = { 0, 1 };
+            GradientFill(tdc, v, 2, &gr, 1, GRADIENT_FILL_RECT_V);
+        } else if (c1 == c2) {
             HBRUSH br = CreateSolidBrush(c1);
             RECT fr = { 0, 0, w, h };
             FillRect(tdc, &fr, br);
@@ -2532,6 +2918,7 @@ static void BuildOneTile(int i, HDC screenDC) {
                     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
                     AlphaBlend(tdc, 0, 0, w, h, src, 0, 0, aw, ah, blend);
                     SelectObject(src, previous);
+                    ApplyTileGradientOverArt(tdc, w, h);
                     DrawModernTileCaption(tdc, t.label, w, h);
                     if (hover) DrawTileHover(tdc, w, h);
                     DeleteObject(bmp);
@@ -2556,6 +2943,7 @@ static void BuildOneTile(int i, HDC screenDC) {
                 if (t.cw == TS_WIDE) AlphaBlend(tdc, (w - h) / 2, 0, h, h, src, 0, 0, iw, ih, blend);
                 else AlphaBlend(tdc, 0, 0, w, h, src, 0, 0, iw, ih, blend);
                 SelectObject(src, prev);
+                ApplyTileGradientOverArt(tdc, w, h);
                 if (!t.veHideName) DrawModernTileCaption(tdc, t.label, w, h, t.veDarkText);
                 if (hover) DrawTileHover(tdc, w, h);
                 DeleteObject(bmp);
@@ -2662,10 +3050,11 @@ static void BuildOneTile(int i, HDC screenDC) {
                 DrawModernTileCaption(tdc, t.label, w, h);
             } else {
                 SetTextColor(tdc, t.style == STORE_CAPTION ? RGB(195, 65, 21) : RGB(255, 255, 255));
-                SelectObject(tdc, g_fLabel);
-                RECT lr = { ScI(12), h - ScI(30), w - ScI(8), h - ScI(8) };
-                DrawTextW(tdc, t.label, -1, &lr,
-                          DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+                SelectObject(tdc, TileCaptionFont(w, h));
+                RECT lr;
+                if (TileCaptionRect(w, h, &lr))
+                    DrawTextW(tdc, t.label, -1, &lr,
+                              DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
             }
         }
 
@@ -2901,6 +3290,7 @@ static void CreateUiFonts() {
     g_fTitle = MakeFont(ScI(56), L"Segoe UI Light");
     g_fUser  = MakeFont(ScI(28), L"Segoe UI Light");
     g_fLabel = MakeFont(ScI(15), L"Segoe UI");
+    g_fLabelMedium = MakeFont(ScI(13), L"Segoe UI");
     g_fTopLabel = MakeFont(ScI(24), L"Segoe UI Light");
     g_fHdrGlyph = MakeFont(ScI(20), L"Segoe UI Symbol");
     g_fBarMeas = MakeFont(ScI(13), L"Segoe UI");
@@ -2910,6 +3300,7 @@ static void RecreateFonts() {
     if (g_fTitle) { DeleteObject(g_fTitle); g_fTitle = NULL; }
     if (g_fUser) { DeleteObject(g_fUser); g_fUser = NULL; }
     if (g_fLabel) { DeleteObject(g_fLabel); g_fLabel = NULL; }
+    if (g_fLabelMedium) { DeleteObject(g_fLabelMedium); g_fLabelMedium = NULL; }
     if (g_fTopLabel) { DeleteObject(g_fTopLabel); g_fTopLabel = NULL; }
     if (g_fHdrGlyph) { DeleteObject(g_fHdrGlyph); g_fHdrGlyph = NULL; }
     if (g_fBarMeas) { DeleteObject(g_fBarMeas); g_fBarMeas = NULL; }
@@ -4386,7 +4777,10 @@ static void OnSearchKey(UINT vk) {
             if (g_charmSel >= (int)g_results.size()) g_charmSel = 0;
             CharmRender(g_charmCont); RepaintNow(); break;
         case VK_RETURN:
-            if (!g_results.empty()) LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
+            // Only when the charm is actually showing rows: with an empty query g_results still
+            // holds the All Apps list, but nothing of it is drawn in the charm.
+            if (CharmListActive() && !g_results.empty())
+                LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
             break;
         case VK_DOWN: CharmMoveSel(1); break;
         case VK_UP:   CharmMoveSel(-1); break;
@@ -4432,6 +4826,9 @@ static void OnSearchKey(UINT vk) {
 
 // Search
 static void OnSearchClick(int x, int y) {
+    // The search charm is drawn over this view: while it is open the All Apps list must not react to
+    // clicks, or an app that the user cannot even see gets launched.
+    if (g_charmOpen) return;
     if (g_alphaGrid) { AlphaGridClick(x, y); return; }
     if (BarClick(x, y)) return;
     {
@@ -7039,6 +7436,14 @@ static RECT CharmClearBtn() {
     b.left = b.right - CharmClearW();
     return b;
 }
+// The rows the charm actually draws. The empty-query state (the 8.1 "type to search" hint) is
+// not an app list, so it must not be clickable either: see CharmHit.
+static bool CharmListActive() { return g_charmOpen && g_queryLen > 0; }
+static RECT CharmListRect() {
+    CharmLay L = CharmLayout();
+    RECT r = { 0, L.listY, g_charmW, std::max(L.listY, g_charmH - ScI(20)) };
+    return r;
+}
 static RECT CharmScrollTrack() {
     CharmLay L = CharmLayout();
     RECT r = { g_charmW - ScI(8), L.listY, g_charmW - ScI(3), g_charmH - ScI(20) };
@@ -7154,7 +7559,16 @@ static void CharmRender(int contOff) {
     }
     {
         SrwGuard g(&g_appsLock, false);
-        if (g_queryLen > 0 && g_results.empty()) {
+        if (g_queryLen == 0) {
+            // Windows 8.1 shows a hint here instead of an empty area, which also makes it obvious
+            // that there is nothing to click.
+            HFONT tf = (HFONT)SelectObject(dc, fSub.get());
+            SetTextColor(dc, CharmBlend(pane, 45));
+            const wchar_t* hint = T(STR_CHARM_TYPE_TO_SEARCH);
+            RECT hr = { L.mx + ox, L.listY, W - ScI(24) + ox, L.listY + ScI(40) };
+            DrawTextW(dc, hint, -1, &hr, DT_SINGLELINE | DT_TOP | DT_NOPREFIX | DT_END_ELLIPSIS);
+            SelectObject(dc, tf);
+        } else if (g_results.empty()) {
             HFONT tf = (HFONT)SelectObject(dc, fText.get());
             SetTextColor(dc, RGB(255, 255, 255));
             const wchar_t* msg = T(STR_NO_RESULTS);
@@ -7344,8 +7758,260 @@ static bool DismissCompanionSearchCharm(POINT screenPt, bool havePt) {
 }
 static void SuppressOtherSearchCharm() { POINT z = { 0, 0 }; DismissCompanionSearchCharm(z, false); }
 
+static LRESULT CALLBACK CharmMouseProc(int code, WPARAM wp, LPARAM lp);
+
+// The low-level mouse hook is shared by the search charm and the StartAllBack Start button, so it is
+// reference counted: it stays installed while at least one of them needs it.
+static void UpdateMouseHook() {
+    const LONG want = InterlockedCompareExchange(&g_mouseHookWant, 0, 0);
+    if (want != 0 && !g_mouseHook) {
+        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CharmMouseProc, GetModuleHandleW(NULL), 0);
+        if (g_mouseHook) Wh_Log(L"Mouse hook installed");
+        else Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed, error %u", (unsigned)GetLastError());
+    } else if (want == 0 && g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = NULL;
+    }
+}
+static void SetMouseHookBit(LONG bit, bool on) {
+    if (on) InterlockedOr(&g_mouseHookWant, bit);
+    else InterlockedAnd(&g_mouseHookWant, ~bit);
+    UpdateMouseHook();
+}
 static void SetCharmMouseHook(bool on) {
     if (g_hookTid) PostThreadMessageW(g_hookTid, on ? WM_HOOKCTL_MOUSE_ON : WM_HOOKCTL_MOUSE_OFF, 0, 0);
+}
+
+// Window classes of the Start button drawn by StartAllBack. StartAllBackX64.dll contains both
+// "SIBOrb" and the classic name, and a real installation reports the Start button as a child window
+// of Shell_TrayWnd whose class is plain "Start" (that is the class Explorer uses for the classic
+// taskbar Start button too), so both names are accepted.
+static bool IsStartOrbClass(const wchar_t* cls, bool insideTaskbar) {
+    if (!cls || !*cls) return false;
+    if (!_wcsicmp(cls, L"SIBOrb") || !_wcsicmp(cls, L"SIBStartButton") ||
+        !_wcsicmp(cls, L"SABOrb") || !_wcsicmp(cls, L"SABStartButton")) return true;
+    // A generic name like this is only trusted inside a taskbar window.
+    return insideTaskbar && !_wcsicmp(cls, L"Start");
+}
+static bool IsTaskbarRootClass(const wchar_t* cls) {
+    if (!cls || !*cls) return false;
+    if (!_wcsicmp(cls, L"Shell_TrayWnd") || !_wcsicmp(cls, L"Shell_SecondaryTrayWnd") ||
+        !_wcsicmp(cls, L"SIBTaskbar") || !_wcsicmp(cls, L"TaskbarSIB")) return true;
+    // StartAllBack may rename its taskbar host between builds: treat any SIB*/SAB* window as one, so
+    // that the Start button is still found inside it.
+    return !_wcsnicmp(cls, L"SIB", 3) || !_wcsnicmp(cls, L"SAB", 3);
+}
+static BOOL CALLBACK OrbEnumChildProc(HWND h, LPARAM lp) {
+    int* count = (int*)lp;
+    if (*count >= (int)ARRAYSIZE(g_orbWnd)) return FALSE;
+    wchar_t cls[64] = {};
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && IsStartOrbClass(cls, true))
+        g_orbWnd[(*count)++] = h;
+    return TRUE;
+}
+static BOOL CALLBACK OrbEnumProc(HWND h, LPARAM lp) {
+    int* count = (int*)lp;
+    if (*count >= (int)ARRAYSIZE(g_orbWnd)) return FALSE;
+    wchar_t cls[64] = {};
+    if (!GetClassNameW(h, cls, ARRAYSIZE(cls))) return TRUE;
+    if (IsStartOrbClass(cls, false)) { g_orbWnd[(*count)++] = h; return TRUE; }
+    if (IsTaskbarRootClass(cls)) EnumChildWindows(h, OrbEnumChildProc, lp);
+    return TRUE;
+}
+// Diagnosis aid: when StartAllBack is present but its Start button was not found, print the window
+// classes of the taskbar once, so that a renamed button is easy to spot in the mod log.
+static bool g_orbScanLogged = false;
+static BOOL CALLBACK OrbClassLogProc(HWND h, LPARAM lp) {
+    int* n = (int*)lp;
+    if (*n >= 14) return FALSE;
+    wchar_t cls[80] = {};
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && cls[0])
+        Wh_Log(L"  taskbar child window: class %s", cls);
+    ++(*n);
+    return TRUE;
+}
+static void LogTaskbarClassesOnce() {
+    if (g_orbScanLogged) return;
+    if (InterlockedCompareExchange(&g_shellPatch, 0, 0) == 0) return;
+    HWND bar = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!bar) return;
+    g_orbScanLogged = true;
+    Wh_Log(L"StartAllBack Start button not found by class name; listing the taskbar windows instead");
+    int n = 0;
+    EnumChildWindows(bar, OrbClassLogProc, (LPARAM)&n);
+}
+
+// Runs on the hook thread, which is also the thread the low-level mouse hook runs on, so the rects
+// below are only read and written there.
+static void RefreshStartOrb() {
+    const bool enabled = InterlockedCompareExchange(&g_startButtonHook, 0, 0) != 0;
+    if (!enabled) {
+        if (g_orbCount) { g_orbCount = 0; SetMouseHookBit(2, false); }
+        return;
+    }
+    HWND previous[8];
+    memcpy(previous, g_orbWnd, sizeof(previous));
+    const int previousCount = g_orbCount;
+    memset(g_orbWnd, 0, sizeof(g_orbWnd));
+    g_orbCount = 0;
+    EnumWindows(OrbEnumProc, (LPARAM)&g_orbCount);
+    int kept = 0;
+    for (int i = 0; i < g_orbCount; ++i) {
+        RECT r = {};
+        if (!IsWindowVisible(g_orbWnd[i]) || !GetWindowRect(g_orbWnd[i], &r)) continue;
+        const int w = r.right - r.left, h = r.bottom - r.top;
+        if (w < 4 || h < 4) continue;
+        // A Start button is small and roughly square; refuse anything that spans the taskbar, so that
+        // a container window with the same class name can never swallow clicks by mistake.
+        if (w > ScI(600) || w > 12 * h) {
+            wchar_t clsSkip[64] = {};
+            GetClassNameW(g_orbWnd[i], clsSkip, ARRAYSIZE(clsSkip));
+            Wh_Log(L"Skipping Start-like window of class %s: %dx%d px is not a Start button", clsSkip, w, h);
+            continue;
+        }
+        g_orbWnd[kept] = g_orbWnd[i];
+        g_orbRect[kept] = r;
+        ++kept;
+    }
+    g_orbCount = kept;
+    if (g_orbCount == 0) g_orbSwallowUp = false;
+    SetMouseHookBit(2, g_orbCount > 0);
+    if (g_orbCount > 0 && (!g_orbLogged || previousCount != g_orbCount)) {
+        wchar_t cls[64] = {};
+        GetClassNameW(g_orbWnd[0], cls, ARRAYSIZE(cls));
+        RECT r = g_orbRect[0];
+        Wh_Log(L"StartAllBack Start button found (class %s, %d window(s), rect %d,%d-%d,%d): it opens this Start screen",
+               cls, g_orbCount, (int)r.left, (int)r.top, (int)r.right, (int)r.bottom);
+        g_orbLogged = true;
+    } else if (g_orbCount == 0) {
+        g_orbLogged = false;
+        LogTaskbarClassesOnce();
+    }
+    EnsureOrbSubclass();
+}
+// True only when the Start button itself is the window under the cursor. The rect alone is not
+// enough: once this Start screen is open it covers the button, and a click there has to reach the
+// Start screen instead of toggling it.
+// Screen-space test used by the Start window itself: while the Start screen is open it covers the
+// button, so a click there must close the screen instead of doing nothing. The rects are refreshed
+// by the hook thread; a stale or half updated rect can only make this click do nothing, which is
+// exactly what happened before.
+static bool OrbScreenContains(POINT pt) {
+    const int count = g_orbCount;
+    for (int i = 0; i < count && i < (int)ARRAYSIZE(g_orbRect); ++i)
+        if (PtInRect(&g_orbRect[i], pt)) return true;
+    return false;
+}
+// Every Start button click ends up here, whichever path saw it first, so that the counter and the
+// log stay meaningful. The toggle itself is decided by the Start window, where g_open, g_closing and
+// the current view are all consistent.
+static void RequestStartToggle(const wchar_t* source) {
+    if (!g_wnd) return;
+    const LONG n = InterlockedIncrement(&g_orbClicks);
+    if (n <= 3 || n % 20 == 0)
+        Wh_Log(L"StartAllBack Start button click %d via the %s: open=%d closing=%d",
+               (int)n, source, (int)g_open, (int)g_closing);
+    if (!PostMessageW(g_wnd, WM_APP_TOGGLE, 0, 0))
+        Wh_Log(L"Couldn't post the Start toggle, error %u", (unsigned)GetLastError());
+}
+
+// Clicks on the StartAllBack Start button, intercepted inside its own window procedure: the press and
+// the release are consumed here, so neither StartAllBack nor Explorer ever sees them.
+// WindhawkUtils::WH_SUBCLASSPROC takes (HWND, UINT, WPARAM, LPARAM, DWORD_PTR dwRefData): unlike
+// comctl32's SUBCLASSPROC there is no uIdSubclass parameter, and the wrapper removes the subclass on
+// WM_NCDESTROY by itself.
+static LRESULT CALLBACK OrbSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR dwRefData) {
+    (void)dwRefData;
+    switch (msg) {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+    case WM_NCLBUTTONDOWN:
+        g_orbPressTick = GetTickCount();
+        g_orbPressWnd = hWnd;
+        // Take the capture. Without it the release goes to whichever window happens to be under the
+        // cursor, so moving the mouse by one pixel while clicking lost the click completely - that is
+        // why the Start button only worked now and then.
+        SetCapture(hWnd);
+        return 0;
+    case WM_LBUTTONUP:
+    case WM_NCLBUTTONUP: {
+        const bool pressed = g_orbPressTick && GetTickCount() - g_orbPressTick < 5000;
+        g_orbPressTick = 0;
+        if (g_orbPressWnd == hWnd && GetCapture() == hWnd) ReleaseCapture();
+        g_orbPressWnd = NULL;
+        // With the capture held, the release arrives here even when the mouse was dragged away: only
+        // a release on the button counts, like a normal push button.
+        POINT cp = {};
+        const bool onButton = !GetCursorPos(&cp) || OrbScreenContains(cp);
+        if (pressed && onButton) {
+            RequestStartToggle(L"window subclass");
+            return 0;
+        }
+        break;
+    }
+    }
+    return DefSubclassProc(hWnd, msg, wp, lp);
+}
+static void RemoveOrbSubclasses() {
+    for (int i = 0; i < g_orbSubCount; ++i)
+        if (IsWindow(g_orbSub[i]))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_orbSub[i], OrbSubclassProc);
+    g_orbSubCount = 0;
+}
+static void EnsureOrbSubclass() {
+    if (InterlockedCompareExchange(&g_startButtonHook, 0, 0) == 0) { RemoveOrbSubclasses(); return; }
+    for (int i = 0; i < g_orbCount; ++i) {
+        HWND h = g_orbWnd[i];
+        bool known = false;
+        for (int k = 0; k < g_orbSubCount; ++k) if (g_orbSub[k] == h) known = true;
+        if (known) continue;
+        if (g_orbSubCount >= (int)ARRAYSIZE(g_orbSub)) break;
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(h, OrbSubclassProc, 0)) {
+            g_orbSubFailLogged = false;
+            g_orbSub[g_orbSubCount++] = h;
+            Wh_Log(L"StartAllBack Start button subclassed: clicking it opens this Start screen");
+        } else if (!g_orbSubFailLogged) {
+            // Not fatal: the mouse hook covers the button as well.
+            g_orbSubFailLogged = true;
+            Wh_Log(L"Couldn't subclass the StartAllBack Start button; the mouse hook handles it instead");
+        }
+    }
+    int kept = 0;
+    for (int k = 0; k < g_orbSubCount; ++k)
+        if (IsWindow(g_orbSub[k])) g_orbSub[kept++] = g_orbSub[k];
+    g_orbSubCount = kept;
+}
+
+// True when the window is the taskbar or one of its children (including StartAllBack's own layers).
+static bool IsTaskbarWindow(HWND h) {
+    for (HWND w = h; w; w = GetParent(w)) {
+        wchar_t cls[64] = {};
+        if (GetClassNameW(w, cls, ARRAYSIZE(cls)) && IsTaskbarRootClass(cls)) return true;
+    }
+    return false;
+}
+static bool OrbContains(POINT pt) {
+    for (int i = 0; i < g_orbCount; ++i) {
+        if (!PtInRect(&g_orbRect[i], pt)) continue;
+        HWND at = WindowFromPoint(pt);
+        if (!at) return true;   // nothing owns the point: trust the rect
+        // This Start screen is on top of the button. While it is open the click belongs to it (it
+        // closes on that click), but while it is still sliding away the click has to bring it back,
+        // otherwise the button looks dead for a moment.
+        if (at == g_wnd || IsChild(g_wnd, at)) return g_closing != false;
+        // The button itself, one of its children, or one of the windows that host it: some builds
+        // skip the button in hit-testing, in which case the taskbar gets the click.
+        if (at == g_orbWnd[i]) return true;
+        if (IsChild(g_orbWnd[i], at)) return true;
+        if (IsChild(at, g_orbWnd[i])) return true;
+        if (GetParent(g_orbWnd[i]) == at) return true;
+        if (GetAncestor(at, GA_ROOT) == g_orbWnd[i]) return true;
+        // StartAllBack may put its own layer over the button; anything of the taskbar inside the
+        // button rectangle is accepted. A hidden taskbar is not matched, so an auto-hidden taskbar
+        // never makes the mod swallow a click meant for another window.
+        if (IsTaskbarWindow(at)) return true;
+    }
+    return false;
 }
 static void OpenCharm(wchar_t firstChar) {
     if (!g_open || g_closing) return;
@@ -7378,6 +8044,7 @@ static void CharmToggle() {
     else OpenCharm(0);
 }
 static void CharmMoveSel(int delta) {
+    if (!CharmListActive()) return;   // no visible rows, no visible selection to move
     int n = (int)g_results.size();
     if (!n) return;
     g_charmSel += delta;
@@ -7405,8 +8072,12 @@ static int CharmHit(int lx, int ly, int* rowOut) {
         return CH_DDCLOSE;
     }
     if (PtInRect(&sco, p)) return CH_SCOPE;
-    if (g_queryLen > 0) { RECT cbHit = cb; cbHit.left -= ScI(10);
-                          if (PtInRect(&cbHit, p)) return CH_CLEAR; }
+    // With an empty query the charm only shows the "type to search" hint: nothing in the list area
+    // may react, otherwise the invisible rows of the All Apps list that RunSearch leaves in
+    // g_results could be clicked and would launch an app through the character grid.
+    if (!CharmListActive()) return CH_NONE;
+    { RECT cbHit = cb; cbHit.left -= ScI(10);
+      if (PtInRect(&cbHit, p)) return CH_CLEAR; }
     if (PtInRect(&sb, p)) return CH_SUBMIT;
     if ((int)g_results.size() > CharmLayout().vis &&
         lx >= tr.left - ScI(7) && lx <= g_charmW && ly >= tr.top - ScI(4) && ly < tr.bottom + ScI(4))
@@ -7417,6 +8088,23 @@ static int CharmHit(int lx, int ly, int* rowOut) {
         if (r >= 0 && r < (int)g_results.size()) { *rowOut = r; return CH_ROW; }
     }
     return CH_NONE;
+}
+
+// True when a point belongs to the search charm, so that the panel swallows the click instead of
+// letting it reach the Start screen underneath. Keep this in sync with CharmHit.
+static bool CharmOwnsPoint(int lx, int ly) {
+    POINT p = { lx, ly };
+    RECT sco = CharmScopeRect(), sb = CharmSubmitBtn(), cb = CharmClearBtn();
+    if (g_charmDdOpen) return true;                     // the drop-down closes on an outside click
+    if (PtInRect(&sco, p) || PtInRect(&sb, p)) return true;
+    if (CharmListActive()) {
+        RECT cbHit = cb; cbHit.left -= ScI(10);
+        if (PtInRect(&cbHit, p)) return true;
+    }
+    RECT list = CharmListRect();
+    if (CharmListActive() && PtInRect(&list, p)) return true;
+    if (g_charmScroll && PtInRect(&list, p)) return true;   // the rows the user can still see
+    return false;
 }
 
 static int UserTextWidth() {
@@ -7513,6 +8201,9 @@ static void ShowUserMenu(HWND owner) {
     ShowMenuFor(owner, anchor, 0);
 }
 static void CharmClickActions(int hit, int row, int ly) {
+    // Second line of defence: with an empty query (the "type to search" hint) the charm shows no
+    // rows at all, so a row hit can only be a stale index into the hidden All Apps list.
+    if (hit == CH_ROW && !CharmListActive()) { RepaintNow(); return; }
     if (hit == CH_SCOPE) {
         g_charmDdOpen = !g_charmDdOpen;
         g_charmDdHover = -1;
@@ -7531,7 +8222,8 @@ static void CharmClickActions(int hit, int row, int ly) {
         g_queryLen = 0; g_query[0] = 0; RunSearch(); g_charmSel = 0;
         CharmRender(g_charmCont); RepaintNow();
     } else if (hit == CH_SUBMIT) {
-        if (!g_results.empty()) LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
+        if (CharmListActive() && !g_results.empty())
+            LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
     } else if (hit == CH_SCROLL) {
         RECT tr = CharmScrollTrack();
         int total = (int)g_results.size(), vis = CharmLayout().vis;
@@ -8477,10 +9169,23 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_TOGGLE: {
         DWORD now = NowMs();
-        if (now - g_lastToggleTick < 250) return 0;
+        // The Start button and the Windows key can report the same click through two different
+        // paths: only the first report inside the debounce window acts.
+        if (now - g_lastToggleTick < kOrbToggleDebounceMs) {
+            Wh_Log(L"Start toggle ignored: another one %u ms ago", (unsigned)(now - g_lastToggleTick));
+            return 0;
+        }
         g_lastToggleTick = now;
         g_userToggledStart = true;
-        if (g_open) { if (g_view == VIEW_SEARCH) LeaveSearch(); else CloseStart(); } else OpenStart();
+        if (g_open && !g_closing) {
+            Wh_Log(L"Start toggle: closing (view=%d)", (int)g_view);
+            if (g_view == VIEW_SEARCH) LeaveSearch(); else CloseStart();
+        } else {
+            // Also when the previous close is still animating: that click opens the screen again,
+            // instead of being dropped because g_open was already false.
+            Wh_Log(L"Start toggle: opening (closing=%d)", (int)g_closing);
+            OpenStart();
+        }
         return 0;
     }
     case WM_APP_CHARM_POINTER: {
@@ -8883,6 +9588,13 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_LBUTTONUP: {
         ReleaseCapture();
+        {
+            // Clicking the Start button of StartAllBack while this Start screen is open closes it,
+            // the way Windows does, even though the button itself is covered by the screen.
+            POINT spt = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            ClientToScreen(h, &spt);
+            if (g_open && !g_closing && !g_charmOpen && OrbScreenContains(spt)) { CloseStart(); return 0; }
+        }
         if (g_swallowMenuUp) { g_swallowMenuUp = false; return 0; }
         if (g_swallowCharmUp) { g_swallowCharmUp = false; g_pressed = -1; g_charmPressed = -1; return 0; }
         if (g_swallowNamingUp) { g_swallowNamingUp = false; return 0; }
@@ -8923,17 +9635,23 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                         g_charmPressed = -1;
                         return 0;
                     }
+                    // The charm is open, so its panel owns the click: close it, but don't let the
+                    // click reach the Start screen (tiles or groups) that is drawn underneath.
                     CloseCharm(false);
                     return 0;
                 }
                 if (g_open && !g_closing && g_view == VIEW_START && PtInRect(&sc, pt)) {
-                    g_pressed = -1; EnterSearchEmpty(); return 0;
+                    g_pressed = -1;
+                    // While the search charm is open the Start screen must not react below it.
+                    if (!g_charmOpen) EnterSearchEmpty();
+                    return 0;
                 }
                 if (g_open && !g_closing && g_view == VIEW_START && PtInRect(&pw, pt)) {
                     g_pressed = -1; ShowMenuFor(h, pw, 1); return 0;
                 }
                 if (g_open && !g_closing && PtInRect(&arw, pt)) {
                     g_pressed = -1;
+                    if (g_charmOpen) return 0;
                     if (g_view == VIEW_START) EnterAllApps(); else LeaveSearch();
                     return 0;
                 }
@@ -8960,6 +9678,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     CharmClickActions(hit, row, ly);
             }
             return 0;
+        }
+        if (g_open && !g_closing && g_charmOpen) {
+            // The search charm owns every click inside its panel, including the empty areas where no
+            // control lives. Without this the click fell through to the view underneath, where
+            // OnSearchClick() launched whichever app sat at those coordinates in a list that is not
+            // even drawn: the "invisible but clickable list" seen with an empty search charm.
+            POINT upt = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT upr;
+            if (CharmPaneRect(&upr) && PtInRect(&upr, upt)) {
+                int lx = upt.x - upr.left - g_charmCont, ly = upt.y - upr.top;
+                if (CharmOwnsPoint(lx, ly)) { g_pressed = -1; return 0; }
+            }
         }
         if (g_barVisible && (g_barPressedButton >= 0 || g_advPressedRow >= 0 || g_resizePressedRow >= 0)) {
             int pressedButton = g_barPressedButton, pressedRow = g_advPressedRow, pressedSize = g_resizePressedRow;
@@ -9004,17 +9734,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             else if (delta > 0 && g_alphaGrid) { g_alphaGrid = false; g_searchTick = NowMs(); RepaintNow(); }
             return 0;
         }
-        g_scrollTarget -= (float)delta * 2.5f;
         if (g_charmOpen) {
             RECT pr; POINT pw2 = { (short)LOWORD(lp), (short)HIWORD(lp) };
             if (CharmPaneRect(&pr) && PtInRect(&pr, pw2)) {
+                // Scroll the charm, not the list hidden behind it.
                 int delta = GET_WHEEL_DELTA_WPARAM(wp) > 0 ? -3 : 3;
-                int total = (int)g_results.size(), vis = CharmLayout().vis;
+                int total = CharmListActive() ? (int)g_results.size() : 0, vis = CharmLayout().vis;
                 g_charmScroll = std::min(std::max(0, g_charmScroll + delta), std::max(0, total - vis));
                 CharmRender(g_charmCont); RepaintNow();
                 return 0;
             }
         }
+        g_scrollTarget -= (float)delta * 2.5f;
         float m = (g_view == VIEW_SEARCH) ? MaxScrollSearch() : MaxScroll();
         if (g_scrollTarget < 0.0f) g_scrollTarget = 0.0f;
         if (g_scrollTarget > m) g_scrollTarget = m;
@@ -9023,6 +9754,98 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return DefWindowProcW(h, msg, wp, lp);
     });
+}
+
+// ---------------------------------------------------------------------------------------
+// Third-party shell compatibility (StartAllBack, ExplorerPatcher)
+//
+// Windhawk loads a mod before explorer.exe starts executing, so anything done in Wh_ModInit
+// happens while the shell is still being built. StartAllBack and ExplorerPatcher patch the
+// shell in that very same phase and need it for themselves: when this mod loaded
+// twinui.pcshell.dll, created a full-screen window in a z-band and installed a keyboard hook
+// first, their taskbar could not be created and the stock taskbar came up instead, until
+// Explorer was restarted. Everything that touches the shell is now deferred until the taskbar
+// exists, plus a settle delay, and Wh_ModInit itself only reads the settings.
+enum : LONG { SHELL_COMPAT_AUTO = 0, SHELL_COMPAT_ALWAYS = 1, SHELL_COMPAT_NEVER = 2 };
+enum : LONG { SHELL_PATCH_STARTALLBACK = 1, SHELL_PATCH_EXPLORERPATCHER = 2 };
+
+static bool ShellModuleLoaded(const wchar_t* name) {
+    return name && GetModuleHandleW(name) != NULL;
+}
+
+static bool RegistryKeyExists(HKEY root, const wchar_t* subKey) {
+    HKEY key = NULL;
+    if (!subKey || RegOpenKeyExW(root, subKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) return false;
+    RegCloseKey(key);
+    return true;
+}
+
+// Bitmask of the third-party shells present in this Windows installation.
+static LONG DetectThirdPartyShell() {
+    LONG patch = 0;
+    static const wchar_t* const kStartAllBackModules[] = {
+        L"StartAllBackX64.dll", L"StartAllBack.dll",
+        L"StartAllBackLoaderX64.dll", L"StartAllBackLoader.dll",
+    };
+    for (const wchar_t* module : kStartAllBackModules) {
+        if (ShellModuleLoaded(module)) { patch |= SHELL_PATCH_STARTALLBACK; break; }
+    }
+    if (!(patch & SHELL_PATCH_STARTALLBACK) &&
+        (RegistryKeyExists(HKEY_CURRENT_USER, L"Software\\StartIsBack") ||
+         RegistryKeyExists(HKEY_LOCAL_MACHINE, L"Software\\StartIsBack")))
+        patch |= SHELL_PATCH_STARTALLBACK;
+    static const wchar_t* const kExplorerPatcherModules[] = {
+        L"ExplorerPatcher.amd64.dll", L"ExplorerPatcher.dll", L"ep_taskbar.dll", L"ep_extra.dll",
+    };
+    for (const wchar_t* module : kExplorerPatcherModules) {
+        if (ShellModuleLoaded(module)) { patch |= SHELL_PATCH_EXPLORERPATCHER; break; }
+    }
+    if (!(patch & SHELL_PATCH_EXPLORERPATCHER) &&
+        RegistryKeyExists(HKEY_CURRENT_USER, L"Software\\ExplorerPatcher"))
+        patch |= SHELL_PATCH_EXPLORERPATCHER;
+    return patch;
+}
+
+static bool ShellCompatActive() {
+    const LONG mode = InterlockedCompareExchange(&g_shellCompat, 0, 0);
+    if (mode == SHELL_COMPAT_NEVER) return false;
+    if (mode == SHELL_COMPAT_ALWAYS) return true;
+    return InterlockedCompareExchange(&g_shellPatch, 0, 0) != 0;
+}
+
+static bool ShellIsUp() {
+    return GetShellWindow() != NULL && FindWindowW(L"Shell_TrayWnd", NULL) != NULL;
+}
+
+// True once the mod is being unloaded, or once the Start hook thread has been asked to stop.
+static bool StopRequested() {
+    if (g_uiStop && WaitForSingleObject(g_uiStop, 0) == WAIT_OBJECT_0) return true;
+    if (g_startHookStop && WaitForSingleObject(g_startHookStop, 0) == WAIT_OBJECT_0) return true;
+    return false;
+}
+
+// Sleeps in short slices, so that the mod can still be unloaded without waiting for the end.
+static void SleepShort(DWORD ms) {
+    while (ms > 0) {
+        const DWORD slice = ms > 100 ? 100 : ms;
+        Sleep(slice);
+        if (StopRequested()) return;
+        ms -= slice;
+    }
+}
+
+// Waits, only when the compatibility mode is active, for Explorer's taskbar and then for the
+// configured settle delay, so that StartAllBack/ExplorerPatcher can create their taskbar first.
+static void WaitForShellSettle() {
+    if (!ShellCompatActive()) return;
+    const ULONGLONG start = GetTickCount64();
+    while (!ShellIsUp() && GetTickCount64() - start < 60000 && !StopRequested()) Sleep(100);
+    LONG delay = InterlockedCompareExchange(&g_startupDelayMs, 0, 0);
+    if (delay < 0) delay = 0;
+    if (delay > 60000) delay = 60000;
+    Wh_Log(L"Third-party shell detected (mask 0x%X): waiting %d ms for the taskbar to settle before touching the shell",
+           (unsigned)InterlockedCompareExchange(&g_shellPatch, 0, 0), (int)delay);
+    SleepShort((DWORD)delay);
 }
 
 using XamlLauncher_ShowStartView_t = HRESULT (WINAPI*)(void* pThis, int immersiveLauncherShowMethod,
@@ -9038,7 +9861,10 @@ static HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int method, i
     return XamlLauncher_ShowStartView_Original(pThis, method, flags);
 }
 
-static bool InstallStartHook() {
+// Loads twinui.pcshell.dll only as a last resort. Who loads that DLL, and when, is what decides
+// whether StartAllBack and ExplorerPatcher can create their taskbar: forcing it from Wh_ModInit
+// left them with the stock taskbar until Explorer was restarted.
+static bool InstallStartHookOnce(bool allowLoad) {
     // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
@@ -9048,17 +9874,43 @@ static bool InstallStartHook() {
         },
     };
     HMODULE twinui = GetModuleHandleW(L"twinui.pcshell.dll");
-    if (!twinui) twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!twinui) {
-        Wh_Log(L"Couldn't load twinui.pcshell.dll");
-        return false;
+    if (!twinui && allowLoad) {
+        Wh_Log(L"twinui.pcshell.dll is still not loaded; loading it as a last resort");
+        twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
+    if (!twinui) return false;   // not loaded yet: keep waiting
     if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"HookSymbols failed for ShowStartView; using the keyboard hook only");
-        return false;
+        return true;             // give up: retrying would fail the same way
     }
+    g_startHooked = true;
     Wh_Log(L"ShowStartView hooked: the Windows key and the taskbar Start button open this Start screen");
     return true;
+}
+
+// The Start menu hook is installed from a background thread: as soon as Windows itself loads
+// twinui.pcshell.dll the symbol is hooked, and the forced load only happens after the shell has
+// settled. With the "Let Windows load the Start menu code" setting off, the 1.0.0 behaviour is
+// kept and the DLL is loaded right away.
+static DWORD WINAPI StartHookThread(LPVOID) {
+  RunGuarded(L"StartHookThread", [] {
+    WaitForShellSettle();
+    const bool deferLoad = InterlockedCompareExchange(&g_deferStartHook, 0, 0) != 0;
+    const ULONGLONG start = GetTickCount64();
+    const ULONGLONG kForceLoadAfterMs = 15000;
+    for (;;) {
+        if (g_startHookStop && WaitForSingleObject(g_startHookStop, 0) == WAIT_OBJECT_0) return;
+        if (g_startHooked) return;
+        const bool lastResort = !deferLoad || GetTickCount64() - start >= kForceLoadAfterMs;
+        if (InstallStartHookOnce(lastResort)) return;
+        if (GetTickCount64() - start >= kForceLoadAfterMs && deferLoad) {
+            Wh_Log(L"ShowStartView is not hooked; the keyboard hook is the only way to open the Start screen");
+            return;
+        }
+        SleepShort(400);
+    }
+  });
+  return 0;
 }
 
 // An unassigned key pressed between the Windows key down and up stops Explorer from treating it as a lone press.
@@ -9174,12 +10026,39 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
 
 static LRESULT CALLBACK CharmMouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION) {
+        const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
+        // The StartAllBack Start button is handled by the low level hook *and* by the window
+        // subclass, every time, because either path can miss a click on its own: the hook loses it if
+        // the hit test does not recognise the window under the cursor, the subclass loses it if
+        // StartAllBack recreates the button window or if the press lands on one of its children.
+        // They cannot both report the same click: swallowing the press here means the window never
+        // sees it, so the subclass stays quiet, and vice versa.
+        if (m && g_orbCount > 0) {
+            if (wp == WM_LBUTTONDOWN) {
+                if (OrbContains(m->pt)) {
+                    // The press never reaches StartAllBack, so its own Start menu cannot open.
+                    if (!g_orbSwallowUp) {
+                        g_orbSwallowUp = true;
+                        // Keep the button rectangle current: StartAllBack may have just rebuilt it.
+                        PostThreadMessageW(GetCurrentThreadId(), WM_TIMER, kOrbTimerId, 0);
+                    }
+                    return 1;
+                }
+                g_orbSwallowUp = false;
+            } else if (wp == WM_LBUTTONUP && g_orbSwallowUp) {
+                // The press was swallowed, so swallow the release too; toggle only if the mouse is
+                // still over the button (a drag away cancels it, like a normal button).
+                const bool stillOnButton = OrbContains(m->pt);
+                g_orbSwallowUp = false;
+                if (stillOnButton) RequestStartToggle(L"mouse hook");
+                return 1;
+            }
+        }
         switch (wp) {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
         case WM_XBUTTONDOWN: {
-            const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
             if (m && g_wnd)
                 PostMessageW(g_wnd, WM_APP_CHARM_POINTER,
                              (WPARAM)(LONG_PTR)m->pt.x, (LPARAM)(LONG_PTR)m->pt.y);
@@ -9198,18 +10077,19 @@ static DWORD WINAPI HookThread(LPVOID) {
     g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, GetModuleHandleW(NULL), 0);
     if (g_hook) Wh_Log(L"Keyboard hook installed");
     else Wh_Log(L"SetWindowsHookEx failed, error %u", (unsigned)GetLastError());
+    // Watch for the StartAllBack Start button; the first check runs right away. The period is short
+    // because StartAllBack rebuilds its taskbar windows while it settles, and a button window that
+    // is not watched yet is a click that goes to StartAllBack instead of to this Start screen.
+    SetTimer(NULL, kOrbTimerId, 300, NULL);
+    RefreshStartOrb();
     while (GetMessageW(&m, NULL, 0, 0) > 0) {
-        if (m.message == WM_HOOKCTL_MOUSE_ON) {
-            if (!g_mouseHook) g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CharmMouseProc, GetModuleHandleW(NULL), 0);
-            continue;
-        }
-        if (m.message == WM_HOOKCTL_MOUSE_OFF) {
-            if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = NULL; }
-            continue;
-        }
+        if (m.message == WM_HOOKCTL_MOUSE_ON) { SetMouseHookBit(1, true); continue; }
+        if (m.message == WM_HOOKCTL_MOUSE_OFF) { SetMouseHookBit(1, false); continue; }
+        if (m.message == WM_TIMER && m.hwnd == NULL && m.wParam == kOrbTimerId) { RefreshStartOrb(); continue; }
         TranslateMessage(&m);
         DispatchMessageW(&m);
     }
+    KillTimer(NULL, kOrbTimerId);
     if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = NULL; }
     if (g_hook) UnhookWindowsHookEx(g_hook);
     g_hook = NULL;
@@ -9305,6 +10185,9 @@ static void InitTiles() {
 }
 
 static void UiRun() {
+    // Nothing below may run while a third-party shell is still building the taskbar. This is a
+    // no-op unless StartAllBack or ExplorerPatcher is installed (see ShellCompatActive).
+    WaitForShellSettle();
     g_uiCoInit = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
     DetectUiLanguage();
     Gdiplus::GdiplusStartupInput gdipInput;
@@ -9377,7 +10260,8 @@ static void UiRun() {
 }
 
 static void UiTeardown() {
-
+    // The subclass procedures live in this DLL: they must be gone before it is unmapped.
+    RemoveOrbSubclasses();
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
     if (g_logonStop) { CloseHandle(g_logonStop); g_logonStop = NULL; }
@@ -9436,7 +10320,7 @@ static void UiTeardown() {
     if (g_writeFactory) { g_writeFactory->Release(); g_writeFactory = NULL; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = NULL; }
     for (int i = 0; i < g_tileCount; i++) FreeTile(g_tiles[i]);
-    HFONT* fonts[] = { &g_fTitle, &g_fUser, &g_fLabel, &g_fTopLabel, &g_fHdrGlyph, &g_fBarMeas };
+    HFONT* fonts[] = { &g_fTitle, &g_fUser, &g_fLabel, &g_fLabelMedium, &g_fTopLabel, &g_fHdrGlyph, &g_fBarMeas };
     for (HFONT* f : fonts) if (*f) { DeleteObject(*f); *f = NULL; }
     if (g_stockAppIcon) { DestroyIcon(g_stockAppIcon); g_stockAppIcon = NULL; }
     UnregisterUserMenuClass();
@@ -9548,6 +10432,41 @@ static void LoadSettings() {
     bool chromeChanged = false;
     if (InterlockedExchange(&g_privacyMode, priv) != priv) { g_userTextW = -1; chromeChanged = true; }
     if (InterlockedExchange(&g_appTileColors, appc) != appc) { InterlockedExchange(&g_tileColorsDirty, 1); chromeChanged = true; }
+    {
+        // Windows 8/8.1 tile shading.
+        const LONG grad = Wh_GetIntSetting(L"tileGradients") != 0 ? 1 : 0;
+        const LONG overArt = Wh_GetIntSetting(L"gradientOverArt") != 0 ? 1 : 0;
+        LONG strength = 0;   // subtle, unless the setting says otherwise
+        {
+            WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"tileGradientStrength"));
+            if (wcscmp(value.get(), L"subtle") == 0) strength = 0;
+            else if (wcscmp(value.get(), L"strong") == 0) strength = 2;
+        }
+        if (InterlockedExchange(&g_tileGradient, grad) != grad) chromeChanged = true;
+        if (InterlockedExchange(&g_tileGradientStrength, strength) != strength) chromeChanged = true;
+        if (InterlockedExchange(&g_gradientOverArt, overArt) != overArt) chromeChanged = true;
+    }
+    {
+        // Third-party shell compatibility. These are read at sign-in and when Explorer starts.
+        InterlockedExchange(&g_shellPatch, DetectThirdPartyShell());
+        LONG mode = SHELL_COMPAT_AUTO;
+        WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"shellCompat"));
+        if (wcscmp(value.get(), L"always") == 0) mode = SHELL_COMPAT_ALWAYS;
+        else if (wcscmp(value.get(), L"never") == 0) mode = SHELL_COMPAT_NEVER;
+        const LONG oldMode = InterlockedExchange(&g_shellCompat, mode);
+        LONG delay = Wh_GetIntSetting(L"startupDelayMs");
+        if (delay < 0) delay = 0;
+        if (delay > 60000) delay = 60000;
+        const LONG oldDelay = InterlockedExchange(&g_startupDelayMs, delay);
+        const LONG defer = Wh_GetIntSetting(L"deferStartHook") != 0 ? 1 : 0;
+        const LONG oldDefer = InterlockedExchange(&g_deferStartHook, defer);
+        InterlockedExchange(&g_startButtonHook, Wh_GetIntSetting(L"startButtonHook") != 0 ? 1 : 0);
+        // These three decide what happens while Explorer starts, so they only take effect the
+        // next time Explorer starts; say so instead of silently ignoring the change.
+        if (oldMode != mode || oldDelay != delay || oldDefer != defer)
+            Wh_Log(L"Shell compatibility settings changed (mode=%d delay=%d deferLoad=%d): they apply the next time Explorer starts",
+                   (int)mode, (int)delay, (int)defer);
+    }
     if ((bgChanged || chromeChanged) && g_wnd)
         PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
 }
@@ -9587,7 +10506,11 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Not the shell explorer.exe; not hosting the Start screen here");
             return FALSE;
         }
+        InterlockedExchange(&g_shellPatch, DetectThirdPartyShell());
         LoadSettings();
+        if (g_shellPatch) Wh_Log(L"Third-party shell present (mask 0x%X): compatibility mode is %ls",
+                                (unsigned)g_shellPatch,
+                                ShellCompatActive() ? L"active" : L"inactive");
         g_uiReady = CreateEventW(NULL, TRUE, FALSE, NULL);
         g_uiStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_uiReady && g_uiStop) g_thread = CreateThread(NULL, 0, UiThread, NULL, 0, &g_tid);
@@ -9596,13 +10519,28 @@ BOOL Wh_ModInit() {
             if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
             return FALSE;
         }
-        if (!g_keyboardOnly) g_startHooked = InstallStartHook();
+        // The Start menu hook is installed in the background, never from Wh_ModInit: this runs
+        // before Explorer has built its shell, and StartAllBack/ExplorerPatcher need that window
+        // for themselves. See StartHookThread.
+        if (!g_keyboardOnly) {
+            g_startHookStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+            g_startHookThread = CreateThread(NULL, 0, StartHookThread, NULL, 0, NULL);
+            if (!g_startHookThread)
+                Wh_Log(L"Couldn't create the Start hook thread; the keyboard hook is the only way to open the Start screen");
+        }
         return TRUE;
     });
 }
 
 void Wh_ModUninit() {
     RunGuarded(L"ModUninit", [] {
+        if (g_startHookStop) SetEvent(g_startHookStop);
+        if (g_startHookThread) {
+            WaitForSingleObject(g_startHookThread, INFINITE);
+            CloseHandle(g_startHookThread);
+            g_startHookThread = NULL;
+        }
+        if (g_startHookStop) { CloseHandle(g_startHookStop); g_startHookStop = NULL; }
         if (g_thread) {
             if (g_uiStop) SetEvent(g_uiStop);
             HANDLE readyWait[2] = { g_uiReady, g_thread };
