@@ -24,6 +24,8 @@ are left unchanged. There are no settings.
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <shellapi.h>
+#include <cstdio>
 
 static HANDLE g_thread;
 static HANDLE g_ready;
@@ -98,6 +100,9 @@ static DWORD WINAPI HookThread(void*) {
     MSG message;
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, nullptr, 0);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
+    }
     g_hookInstalled = hook != nullptr;
     SetEvent(g_ready);
     if (!hook) {
@@ -119,33 +124,5 @@ static DWORD WINAPI HookThread(void*) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_ready) {
-        return FALSE;
-    }
-    g_thread = CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_threadId);
-    if (g_thread) {
-        WaitForSingleObject(g_ready, INFINITE);
-    }
-    CloseHandle(g_ready);
-    g_ready = nullptr;
-    if (!g_thread || !g_hookInstalled) {
-        if (g_thread) {
-            WaitForSingleObject(g_thread, INFINITE);
-            CloseHandle(g_thread);
-            g_thread = nullptr;
-        }
-        return FALSE;
-    }
-    return TRUE;
-}
-
-void Wh_ModUninit() {
-    if (g_thread) {
-        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, INFINITE);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
-    }
-}
