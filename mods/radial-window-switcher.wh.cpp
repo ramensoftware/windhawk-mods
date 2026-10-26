@@ -141,7 +141,10 @@ struct Settings {
 };
 
 static Settings g_settings;
-static std::atomic<DWORD> g_triggerScan{0x0F};
+// The trigger key: matched by virtual-key code (Tab, Q), or by scan code for
+// the key above Tab, whose virtual-key code depends on the layout.
+static std::atomic<DWORD> g_triggerVk{VK_TAB};
+static std::atomic<DWORD> g_triggerScan{0};
 static std::atomic<bool> g_activateOnRelease{true};
 
 static void LoadSettings() {
@@ -164,16 +167,18 @@ static void LoadSettings() {
     g_settings = s;
     g_activateOnRelease = s.activateOnRelease;
 
-    // Matched by scan code, so the physical key is the same on every layout.
     switch (s.trigger) {
         case Trigger::AltQ:
-            g_triggerScan = 0x10;
+            g_triggerVk = 'Q';
+            g_triggerScan = 0;
             break;
         case Trigger::AltBacktick:
+            g_triggerVk = 0;
             g_triggerScan = 0x29;  // the key above Tab
             break;
         default:
-            g_triggerScan = 0x0F;  // Tab
+            g_triggerVk = VK_TAB;
+            g_triggerScan = 0;
             break;
     }
 }
@@ -415,11 +420,18 @@ static AppInfo GetAppInfo(const std::wstring& path, int iconPx) {
         g_appCache.clear();
     }
     AppInfo info;
+    // In a 32-bit tool process, reads of System32 files would be redirected
+    // to SysWOW64, where 64-bit-only system apps don't exist.
+    PVOID wow64State = nullptr;
+    BOOL redirectionOff = Wow64DisableWow64FsRedirection(&wow64State);
     info.name = GetFileDescription(path);
+    info.icon = LoadExeIcon(path, iconPx);
+    if (redirectionOff) {
+        Wow64RevertWow64FsRedirection(wow64State);
+    }
     if (info.name.empty()) {
         info.name = FileStem(path);
     }
-    info.icon = LoadExeIcon(path, iconPx);
     g_appCache.emplace(key, info);
     return info;
 }
@@ -1265,7 +1277,10 @@ static LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
     bool up = wp == WM_KEYUP || wp == WM_SYSKEYUP;
     DWORD vk = k->vkCode;
-    bool isTrigger = k->scanCode == g_triggerScan && !(k->flags & LLKHF_EXTENDED);
+    const DWORD triggerVk = g_triggerVk;
+    bool isTrigger = triggerVk ? vk == triggerVk
+                               : (k->scanCode == g_triggerScan &&
+                                  !(k->flags & LLKHF_EXTENDED));
     bool isAlt = vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU;
     bool isModifier = isAlt || vk == VK_SHIFT || vk == VK_LSHIFT ||
                       vk == VK_RSHIFT || vk == VK_CONTROL ||
@@ -1515,8 +1530,6 @@ static LRESULT CALLBACK PreviewProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static DWORD WINAPI ThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     gp::GdiplusStartupInput gdipInput;
     ULONG_PTR gdipToken = 0;
     gp::GdiplusStartup(&gdipToken, &gdipInput, nullptr);
