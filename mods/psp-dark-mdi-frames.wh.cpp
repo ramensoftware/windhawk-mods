@@ -39,6 +39,11 @@ mod goes the rest of the way.
 * **Flash fix (optional):** when you switch between images, PaintShop Pro
   rebuilds the drop-down lists in the tool options bar. For a few frames their
   selection fields flash white; the fix paints that field dark instead.
+* **Tool options bar flicker (optional, experimental, off by default):** while
+  PaintShop Pro refills the tool options bar, the bar is not redrawn for a short
+  moment (at most 250 ms) and drawn once afterwards. This uses
+  `LockWindowUpdate`, which can lock only one window on the whole desktop at a
+  time, so you have to switch it on yourself.
 
 Everything is done by re-coloring while PaintShop Pro draws, so no theme files,
 program files or system settings are touched, and the mod only affects PaintShop
@@ -58,7 +63,10 @@ Pro. Maximized image windows are left to Windows.
 * Tested with PaintShop Pro 2022 on Windows 11. Other versions may work, but have
   not been tested.
 * Some parts of the interface are recognized by their size and color, so a
-  different version may look different in places.
+  different version may look different in places. Display scaling above 100% is
+  not tested.
+* The colors you work with (the swatches in the Material palette and in the color
+  dialog, the content of your images) are shown unchanged.
 * If something looks wrong, disable the mod: the original look comes back after
   restarting PaintShop Pro.
 */
@@ -116,6 +124,9 @@ Pro. Maximized image windows are left to Windows.
 - fixComboFlash: true
   $name: Fix white flash in the tool options bar
   $description: Paints the selection field of the drop-down lists dark while PaintShop Pro rebuilds them.
+- freezeOptionsBar: false
+  $name: Reduce flicker of the tool options bar (experimental)
+  $description: While PaintShop Pro refills the controls of the tool options bar (for example when another image is activated), the bar is not redrawn for a short moment, at most 250 ms, and drawn once afterwards. This uses LockWindowUpdate, which can lock only one window on the whole desktop at a time, so it is off by default.
 - flashColor: "3C3C3C"
   $name: Color used instead of white
   $description: Hex color for the flash fix.
@@ -127,12 +138,14 @@ Pro. Maximized image windows are left to Windows.
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <cwchar>
 #include <cwctype>
-#include <unordered_set>
 #include <unordered_map>
-#include <string>
 
 // ---- Settings ---------------------------------------------------------------
 
@@ -159,6 +172,7 @@ struct Settings {
     bool accentOn;
     float accentH, accentS, accentL;
     bool hideTiles;
+    bool freezeBar;
 };
 
 static Settings g_cfg;
@@ -278,6 +292,7 @@ static void LoadSettings() {
         g_cfg.accentL = l;
     }
     g_cfg.hideTiles = Wh_GetIntSetting(L"hideStartTiles") != 0;
+    g_cfg.freezeBar = Wh_GetIntSetting(L"freezeOptionsBar") != 0;
 }
 
 // ---- Layout constants (at 100% scaling) --------------------------------------
@@ -855,6 +870,23 @@ static const UINT kSettleMs = 80;       // quiet time after the last change befo
 static const ULONGLONG kMaxHoldMs = 250;  // the longest the bar is held back
 static const wchar_t kFrozenProp[] = L"PspDarkMdi.Frozen";
 static HHOOK g_optionsHook;
+static UINT g_teardownMsg;  // sent to the main frame: the hook is taken down on the thread that runs it
+static void ThawAll();
+
+static bool IsMainFrameClass(HWND w) {
+    wchar_t cls[64];
+    return w && GetClassNameW(w, cls, ARRAYSIZE(cls)) && wcsstr(cls, L"PSPMainFrame");
+}
+
+static BOOL CALLBACK FindMainFrame(HWND h, LPARAM l) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid == GetCurrentProcessId() && IsMainFrameClass(h)) {
+        *(HWND*)l = h;
+        return FALSE;
+    }
+    return TRUE;
+}
 
 static void CALLBACK ThawProc(HWND hWnd, UINT, UINT_PTR id, DWORD) {
     KillTimer(hWnd, id);
@@ -915,7 +947,17 @@ static bool IsStateChange(HWND hWnd, UINT msg, WPARAM wParam) {
 }
 
 static LRESULT CALLBACK OptionsHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && lParam && g_cfg.fixComboFlash) {
+    if (code == HC_ACTION && lParam && g_teardownMsg && ((const CWPSTRUCT*)lParam)->message == g_teardownMsg) {
+        // runs on the UI thread, where the lock belongs: release it and take the hook down
+        HHOOK hook = g_optionsHook;
+        g_optionsHook = nullptr;
+        ThawAll();
+        if (hook) {
+            UnhookWindowsHookEx(hook);
+        }
+        return 0;
+    }
+    if (code == HC_ACTION && lParam && g_cfg.freezeBar) {
         const CWPSTRUCT* m = (const CWPSTRUCT*)lParam;
         switch (m->message) {
             case CB_RESETCONTENT:
@@ -950,7 +992,7 @@ static LRESULT CALLBACK OptionsHookProc(int code, WPARAM wParam, LPARAM lParam) 
 
 // installed from the first image window on (the UI thread of PaintShop Pro), not during startup
 static void EnsureOptionsHook() {
-    if (g_optionsHook) {
+    if (g_optionsHook || !g_cfg.freezeBar) {
         return;
     }
     HMODULE self = nullptr;
@@ -974,6 +1016,27 @@ static BOOL CALLBACK ThawTopLevel(HWND hWnd, LPARAM) {
         EnumChildWindows(hWnd, ThawChild, 0);
     }
     return TRUE;
+}
+
+static void ThawAll() {
+    EnumWindows(ThawTopLevel, 0);
+}
+
+// Takes the hook down on the UI thread of PaintShop Pro (the lock on the window and the timers belong to
+// that thread). Only when it does not answer, the hook is removed from here.
+static void RemoveOptionsHook() {
+    if (!g_optionsHook) {
+        return;
+    }
+    HWND frame = nullptr;
+    EnumWindows(FindMainFrame, (LPARAM)&frame);
+    DWORD_PTR result = 0;
+    if (!frame || !g_teardownMsg || !SendMessageTimeoutW(frame, g_teardownMsg, 0, 0, SMTO_ABORTIFHUNG, 5000, &result)) {
+        if (g_optionsHook) {
+            UnhookWindowsHookEx(g_optionsHook);
+            g_optionsHook = nullptr;
+        }
+    }
 }
 
 // ---- Mod lifecycle ------------------------------------------------------------
@@ -1012,15 +1075,15 @@ static BOOL CALLBACK RedrawTopLevel(HWND hWnd, LPARAM) {
 static HMODULE g_exeModule;
 static wchar_t g_exeDir[MAX_PATH];
 static size_t g_exeDirLen;
-static uint32_t g_callerCache[1024];
+static std::atomic<uintptr_t> g_callerCache[1024];  // address and kind in one word (the low 2 bits)
 
 // true when the code that asks is PaintShop Pro itself (its exe or a library in its own folder)
 static bool IsAppCaller(void* ret) {
-    const uint32_t a = (uint32_t)(uintptr_t)ret;
+    const uintptr_t a = (uintptr_t)ret;
     const size_t slot = ((a >> 2) ^ (a >> 12)) & 1023;
-    const uint32_t v = g_callerCache[slot];
-    if (v != 0 && (v & ~3u) == (a & ~3u)) {
-        return (v & 3u) == 1;
+    const uintptr_t v = g_callerCache[slot].load(std::memory_order_relaxed);
+    if (v != 0 && (v & ~(uintptr_t)3) == (a & ~(uintptr_t)3)) {
+        return (v & 3) == 1;
     }
     HMODULE m = nullptr;
     bool app = false;
@@ -1039,7 +1102,7 @@ static bool IsAppCaller(void* ret) {
             }
         }
     }
-    g_callerCache[slot] = (a & ~3u) | (app ? 1u : 2u);
+    g_callerCache[slot].store((a & ~(uintptr_t)3) | (app ? 1 : 2), std::memory_order_relaxed);
     return app;
 }
 
@@ -1063,12 +1126,6 @@ static COLORREF DarkenColor(COLORREF c) {
     if (c & 0xFF000000) {  // palette index, system color index
         return c;
     }
-    {
-        const COLORREF a = AccentColor(c);
-        if (a != c) {
-            return a;
-        }
-    }
     const int r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
     const int mx = std::max(r, std::max(g, b)), mn = std::min(r, std::min(g, b));
     if (mx - mn > 16) {
@@ -1091,19 +1148,57 @@ static CreateSolidBrush_t CreateSolidBrush_orig;
 typedef DWORD(WINAPI* GetSysColor_t)(int);
 static GetSysColor_t GetSysColor_orig;
 
-static CRITICAL_SECTION g_darkBrushCs;
-static std::unordered_set<HBRUSH>* g_darkBrushes;       // brushes that already have the darker color
-static std::unordered_map<COLORREF, HBRUSH>* g_classBrushes;  // class background brushes made by the mod
+// the critical section lives as long as the DLL (hooks may still run on other threads while the mod unloads)
+struct BrushSync {
+    CRITICAL_SECTION cs;
+    BrushSync() { InitializeCriticalSection(&cs); }
+    ~BrushSync() { DeleteCriticalSection(&cs); }
+};
+static BrushSync g_brushSync;
+
+struct BrushLock {
+    BrushLock() { EnterCriticalSection(&g_brushSync.cs); }
+    ~BrushLock() { LeaveCriticalSection(&g_brushSync.cs); }
+};
+
+static std::unordered_map<HBRUSH, COLORREF> g_darkBrushes;    // brushes with the darker color -> the color that was asked for
+static std::unordered_map<COLORREF, HBRUSH> g_modBrushes;     // brushes made by the mod, by color; kept alive (PaintShop Pro may cache them)
+static std::unordered_map<ATOM, HBRUSH> g_origClassBrush;     // background brushes of window classes before the mod changed them
+
+static COLORREF DarkenColorFrom(COLORREF c, int lowBound);
+
+// colors below this are what the mod itself made: they must not be darkened a second time
+static int DarkLowBound() {
+    return std::max(0x1A, (int)(0x48 * g_cfg.darkness / 100.0f) + 1);
+}
+
+static void RememberDarkBrush(HBRUSH b, COLORREF original) {
+    if (b) {
+        BrushLock lock;
+        g_darkBrushes[b] = original;
+    }
+}
 
 static HBRUSH WINAPI CreateSolidBrush_hook(COLORREF c) {
     const COLORREF n = Dark(c, __builtin_return_address(0));
     HBRUSH b = CreateSolidBrush_orig(n);
-    if (b && n != c) {
-        EnterCriticalSection(&g_darkBrushCs);
-        g_darkBrushes->insert(b);
-        LeaveCriticalSection(&g_darkBrushCs);
+    if (n != c) {
+        RememberDarkBrush(b, c);
     }
     return b;
+}
+
+// a brush of the mod with this color
+static HBRUSH ModBrush(COLORREF n, COLORREF original) {
+    BrushLock lock;
+    HBRUSH& slot = g_modBrushes[n];
+    if (!slot) {
+        slot = CreateSolidBrush_orig(n);
+    }
+    if (slot) {
+        g_darkBrushes.emplace(slot, original);
+    }
+    return slot;
 }
 
 // the background brush of a window class: windows fill their empty area with it themselves
@@ -1112,37 +1207,39 @@ static HBRUSH DarkClassBrush(HBRUSH b) {
         return b;
     }
     COLORREF c;
+    COLORREF n;
     if ((ULONG_PTR)b <= 32) {  // a system color index + 1
         c = GetSysColor_orig((int)(ULONG_PTR)b - 1);
+        n = DarkenColor(c);
     } else {
-        EnterCriticalSection(&g_darkBrushCs);
-        const bool done = g_darkBrushes->count(b) != 0;
-        LeaveCriticalSection(&g_darkBrushCs);
+        {
+            BrushLock lock;
+            if (g_darkBrushes.count(b)) {
+                return b;
+            }
+        }
         LOGBRUSH lb;
-        if (done || GetObjectW(b, sizeof(lb), &lb) != sizeof(lb) || lb.lbStyle != BS_SOLID) {
+        if (GetObjectW(b, sizeof(lb), &lb) != sizeof(lb) || lb.lbStyle != BS_SOLID) {
             return b;
         }
         c = lb.lbColor;
+        n = DarkenColorFrom(c, DarkLowBound());  // a brush of an earlier run of the mod is already dark
     }
-    const COLORREF n = DarkenColor(c);
     if (n == c) {
         return b;
     }
-    EnterCriticalSection(&g_darkBrushCs);
-    HBRUSH& slot = (*g_classBrushes)[n];
-    if (!slot) {
-        slot = CreateSolidBrush_orig(n);
-        g_darkBrushes->insert(slot);
-    }
-    HBRUSH r = slot;
-    LeaveCriticalSection(&g_darkBrushCs);
-    return r;
+    return ModBrush(n, c);
 }
 
 static BOOL CALLBACK PatchClassBrushEnum(HWND hWnd, LPARAM) {
     const HBRUSH old = (HBRUSH)GetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND);
     const HBRUSH nb = DarkClassBrush(old);
     if (nb != old) {
+        const ATOM atom = (ATOM)GetClassLongPtrW(hWnd, GCW_ATOM);
+        {
+            BrushLock lock;
+            g_origClassBrush.emplace(atom, old);  // the first one is the real original
+        }
         SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)nb);
     }
     return TRUE;
@@ -1158,13 +1255,49 @@ static BOOL CALLBACK PatchClassBrushTop(HWND hWnd, LPARAM) {
     return TRUE;
 }
 
+// puts the original background brushes back (the brushes of the mod stay alive)
+static BOOL CALLBACK RestoreClassBrushEnum(HWND hWnd, LPARAM) {
+    const ATOM atom = (ATOM)GetClassLongPtrW(hWnd, GCW_ATOM);
+    HBRUSH original = nullptr;
+    bool ours = false;
+    const HBRUSH current = (HBRUSH)GetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND);
+    {
+        BrushLock lock;
+        auto it = g_origClassBrush.find(atom);
+        if (it == g_origClassBrush.end()) {
+            return TRUE;
+        }
+        original = it->second;
+        ours = g_darkBrushes.count(current) != 0;
+    }
+    if (ours && current != original) {
+        SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)original);
+    }
+    return TRUE;
+}
+
+static BOOL CALLBACK RestoreClassBrushTop(HWND hWnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        RestoreClassBrushEnum(hWnd, 0);
+        EnumChildWindows(hWnd, RestoreClassBrushEnum, 0);
+    }
+    return TRUE;
+}
+
 typedef ATOM(WINAPI* RegisterClassW_t)(const WNDCLASSW*);
 static RegisterClassW_t RegisterClassW_orig;
 static ATOM WINAPI RegisterClassW_hook(const WNDCLASSW* wc) {
     if (wc && IsAppCaller(__builtin_return_address(0))) {
         WNDCLASSW copy = *wc;
         copy.hbrBackground = DarkClassBrush(wc->hbrBackground);
-        return RegisterClassW_orig(&copy);
+        const ATOM atom = RegisterClassW_orig(&copy);
+        if (atom && copy.hbrBackground != wc->hbrBackground) {
+            BrushLock lock;
+            g_origClassBrush.emplace(atom, wc->hbrBackground);
+        }
+        return atom;
     }
     return RegisterClassW_orig(wc);
 }
@@ -1175,7 +1308,12 @@ static ATOM WINAPI RegisterClassExW_hook(const WNDCLASSEXW* wc) {
     if (wc && IsAppCaller(__builtin_return_address(0))) {
         WNDCLASSEXW copy = *wc;
         copy.hbrBackground = DarkClassBrush(wc->hbrBackground);
-        return RegisterClassExW_orig(&copy);
+        const ATOM atom = RegisterClassExW_orig(&copy);
+        if (atom && copy.hbrBackground != wc->hbrBackground) {
+            BrushLock lock;
+            g_origClassBrush.emplace(atom, wc->hbrBackground);
+        }
+        return atom;
     }
     return RegisterClassExW_orig(wc);
 }
@@ -1186,9 +1324,26 @@ static HBRUSH WINAPI CreateBrushIndirect_hook(const LOGBRUSH* lb) {
     if (lb && lb->lbStyle == BS_SOLID) {
         LOGBRUSH copy = *lb;
         copy.lbColor = Dark(lb->lbColor, __builtin_return_address(0));
-        return CreateBrushIndirect_orig(&copy);
+        HBRUSH b = CreateBrushIndirect_orig(&copy);
+        if (copy.lbColor != lb->lbColor) {
+            RememberDarkBrush(b, lb->lbColor);
+        }
+        return b;
     }
     return CreateBrushIndirect_orig(lb);
+}
+
+// GDI hands out the same handle values again: a deleted brush must not stay in the list
+typedef BOOL(WINAPI* DeleteObject_t)(HGDIOBJ);
+static DeleteObject_t DeleteObject_orig;
+static BOOL WINAPI DeleteObject_hook(HGDIOBJ obj) {
+    {
+        BrushLock lock;
+        if (!g_darkBrushes.empty()) {
+            g_darkBrushes.erase((HBRUSH)obj);
+        }
+    }
+    return DeleteObject_orig(obj);
 }
 
 typedef HPEN(WINAPI* CreatePen_t)(int, int, COLORREF);
@@ -1249,9 +1404,44 @@ static HBRUSH WINAPI GetSysColorBrush_hook(int index) {
     return GetSysColorBrush_orig(index);
 }
 
+// the color swatches (the current material color, the colors of the color dialog) are small MFC windows. They
+// show colors the user chose, which must not be changed.
+static thread_local HWND g_swatchLastWnd;
+static thread_local bool g_swatchLastIs;
+
+static bool IsSwatchDC(HDC dc) {
+    HWND wnd = WindowFromDC(dc);
+    if (wnd != g_swatchLastWnd) {
+        char cls[16] = "";
+        RECT r = {};
+        g_swatchLastIs = wnd && GetClassNameA(wnd, cls, sizeof(cls)) && strncmp(cls, "AfxWnd140u", 10) == 0 &&
+                         GetWindowRect(wnd, &r) && r.right - r.left <= 90 && r.bottom - r.top <= 90;
+        g_swatchLastWnd = wnd;
+    }
+    return g_swatchLastIs;
+}
+
 typedef int(WINAPI* FillRect_t)(HDC, const RECT*, HBRUSH);
 static FillRect_t FillRect_orig;
 static int WINAPI FillRect_hook(HDC hdc, const RECT* rc, HBRUSH br) {
+    if ((ULONG_PTR)br > 32 && g_cfg.darkness < 100 && IsAppCaller(__builtin_return_address(0))) {
+        COLORREF original = 0;
+        bool known = false;
+        {
+            BrushLock lock;
+            auto it = g_darkBrushes.find(br);
+            if (it != g_darkBrushes.end()) {
+                original = it->second;
+                known = true;
+            }
+        }
+        if (known && IsSwatchDC(hdc)) {
+            HBRUSH exact = CreateSolidBrush_orig(original);
+            const int result = FillRect_orig(hdc, rc, exact);
+            DeleteObject_orig(exact);
+            return result;
+        }
+    }
     if ((ULONG_PTR)br > 0 && (ULONG_PTR)br <= 32 && IsAppCaller(__builtin_return_address(0))) {
         const int index = (int)(ULONG_PTR)br - 1;  // a system color index, as in FillRect(dc, rc, COLOR_x + 1)
         const COLORREF c = GetSysColor_orig(index);
@@ -1261,20 +1451,6 @@ static int WINAPI FillRect_hook(HDC hdc, const RECT* rc, HBRUSH br) {
                 g_darkSysBrush[index] = CreateSolidBrush_orig(n);
             }
             br = g_darkSysBrush[index];
-        }
-    }
-    if (rc && rc->right - rc->left >= 300 && (ULONG_PTR)br > 32 && g_cfg.darkness < 100) {
-        // the pane of a tab control (around the color wheel) gets the dialog gray
-        char tcls[24] = "";
-        HWND tw = WindowFromDC(hdc);
-        if (tw && GetClassNameA(tw, tcls, sizeof(tcls)) && _stricmp(tcls, "SysTabControl32") == 0) {
-            static HBRUSH paneBrush;
-            static int paneDarkness;
-            if (!paneBrush || paneDarkness != g_cfg.darkness) {
-                paneBrush = CreateSolidBrush_orig(DarkenColor(RGB(0x2F, 0x2F, 0x2F)));
-                paneDarkness = g_cfg.darkness;
-            }
-            br = paneBrush;
         }
     }
     if ((ULONG_PTR)br > 32 && IsAppCaller(__builtin_return_address(0))) {
@@ -1294,15 +1470,13 @@ static void InstallDarkHooks() {
         }
         g_exeDirLen = wcslen(g_exeDir);
     }
-    InitializeCriticalSection(&g_darkBrushCs);
-    g_darkBrushes = new std::unordered_set<HBRUSH>();
-    g_classBrushes = new std::unordered_map<COLORREF, HBRUSH>();
     if (!user32 || !gdi32) {
         return;
     }
 #define DARK_HOOK(mod, name) \
     Wh_SetFunctionHook((void*)GetProcAddress(mod, #name), (void*)name##_hook, (void**)&name##_orig)
     DARK_HOOK(gdi32, CreateSolidBrush);
+    DARK_HOOK(gdi32, DeleteObject);
     DARK_HOOK(gdi32, CreateBrushIndirect);
     DARK_HOOK(gdi32, CreatePen);
     DARK_HOOK(gdi32, CreatePenIndirect);
@@ -1323,8 +1497,8 @@ static void InstallDarkHooks() {
 // bitmaps that are stretched or copied. For these windows the bitmap is copied to a temporary one,
 // the dark grays in it are made darker, and that is drawn instead.
 
-static HWND g_barLastWnd;
-static bool g_barLastIs;
+static thread_local HWND g_barLastWnd;
+static thread_local bool g_barLastIs;
 
 static bool IsBarDC(HDC d) {
     if (GetObjectType(d) != OBJ_DC) {
@@ -1459,7 +1633,7 @@ static bool TabPaneBlit(HDC d, int x, int y, int w, int h, HDC src, int sx, int 
         const float f = g_cfg.darkness / 100.0f;
         for (size_t i = 0, n = (size_t)w * h; i < n; i++, p += 4) {
             const int b = p[0], g = p[1], r = p[2];
-            if (r == g && g == b && r >= 0x2C && r <= 0x32) {  // the gray around the wheel
+            if (r == 0x2F && g == 0x2F && b == 0x2F) {  // the gray around the wheel
                 p[0] = p[1] = p[2] = (uint8_t)(r * f + 0.5f);
             }
         }
@@ -1498,9 +1672,11 @@ static void InstallBarHooks() {
 }
 
 
-// ---- Title bar ----------------------------------------------------------------------------
-// PaintShop Pro draws its own title bar with GDI+ into a bitmap, as horizontal bands over the whole width.
-// The bands that have the usual gray are filled with the chosen color instead.
+// ---- Title bar and accent color ------------------------------------------------------------
+// PaintShop Pro draws its own title bar with GDI+ into a bitmap: horizontal gray bands over the whole width,
+// the orange tab and the orange line below it. Only small fills at the top (120 pixels, which also covers
+// a larger display scaling) are looked at, so
+// colors that the user works with (swatches, gradients, tool previews) are never changed.
 
 typedef int(WINAPI* GdipFillRectangleI_t)(void*, void*, int, int, int, int);
 static GdipFillRectangleI_t GdipFillRectangleI_orig;
@@ -1510,30 +1686,98 @@ typedef int(WINAPI* GdipCreateSolidFill_t)(DWORD, void**);
 static GdipCreateSolidFill_t GdipCreateSolidFill_p;
 typedef int(WINAPI* GdipDeleteBrush_t)(void*);
 static GdipDeleteBrush_t GdipDeleteBrush_p;
+typedef int(WINAPI* GdipGetSolidFillColor_t)(void*, DWORD*);
+static GdipGetSolidFillColor_t GdipGetSolidFillColor_p;
+typedef int(WINAPI* GdipGetLineColors_t)(void*, DWORD*);
+static GdipGetLineColors_t GdipGetLineColors_p;
+struct GpPointI {
+    int X, Y;
+};
+typedef int(WINAPI* GdipCreateLineBrushI_t)(const GpPointI*, const GpPointI*, DWORD, DWORD, int, void**);
+static GdipCreateLineBrushI_t GdipCreateLineBrushI_p;
+
 static void* g_titleBrush;
 static DWORD g_titleBrushArgb;
 
+static DWORD AccentArgb(DWORD argb) {
+    const COLORREF c = AccentColor(RGB((argb >> 16) & 255, (argb >> 8) & 255, argb & 255));
+    return (argb & 0xFF000000u) | ((DWORD)GetRValue(c) << 16) | ((DWORD)GetGValue(c) << 8) | GetBValue(c);
+}
+
+static void* TitleBrush() {
+    const DWORD want = 0xFF000000u | ((DWORD)GetRValue(g_cfg.titleColor) << 16) |
+                       ((DWORD)GetGValue(g_cfg.titleColor) << 8) | GetBValue(g_cfg.titleColor);
+    BrushLock lock;
+    if (!g_titleBrush || g_titleBrushArgb != want) {
+        void* nb = nullptr;
+        if (GdipCreateSolidFill_p(want, &nb) == 0 && nb) {
+            g_titleBrush = nb;  // a previous brush is not freed: another thread could be using it
+            g_titleBrushArgb = want;
+        }
+    }
+    return g_titleBrush;
+}
+
 static int WINAPI GdipFillRectangleI_hook(void* g, void* brush, int x, int y, int w, int h) {
-    // the title bar: three gradient bands of 16 pixels over the whole width at the top
-    if (g_cfg.titleOn && x <= 8 && h == 16 && y >= 0 && y <= 40 && (y % 4) == 0 && w >= 300 && GdipGetBrushType_p &&
-        GdipCreateSolidFill_p) {
+    if ((g_cfg.titleOn || g_cfg.accentOn) && y >= 0 && y + h <= 120 && h <= 60 && GdipGetBrushType_p &&
+        GdipCreateSolidFill_p && GdipDeleteBrush_p) {
         int type = -1;
-        if (GdipGetBrushType_p(brush, &type) == 0 && type == 4) {  // linear gradient
-            const DWORD want = 0xFF000000u | ((DWORD)GetRValue(g_cfg.titleColor) << 16) |
-                               ((DWORD)GetGValue(g_cfg.titleColor) << 8) | GetBValue(g_cfg.titleColor);
-            if (!g_titleBrush || g_titleBrushArgb != want) {
-                void* nb = nullptr;
-                if (GdipCreateSolidFill_p(want, &nb) == 0 && nb) {
-                    g_titleBrush = nb;  // the old brush is not freed: another thread could be using it
-                    g_titleBrushArgb = want;
+        if (GdipGetBrushType_p(brush, &type) == 0) {
+            if (g_cfg.titleOn && x <= 16 && w >= 300 && h >= 12 && h <= 48 && type == 4) {
+                // the title bar: three gradient bands of 16 pixels over the whole width
+                void* tb = TitleBrush();
+                if (tb) {
+                    brush = tb;
                 }
-            }
-            if (g_titleBrush) {
-                brush = g_titleBrush;
+            } else if (g_cfg.accentOn) {
+                void* temp = nullptr;
+                if (type == 0 && GdipGetSolidFillColor_p) {
+                    DWORD c = 0;
+                    if (GdipGetSolidFillColor_p(brush, &c) == 0 && AccentArgb(c) != c) {
+                        GdipCreateSolidFill_p(AccentArgb(c), &temp);
+                    }
+                } else if (type == 4 && GdipGetLineColors_p && GdipCreateLineBrushI_p) {
+                    DWORD c[2] = {};
+                    if (GdipGetLineColors_p(brush, c) == 0 && (AccentArgb(c[0]) != c[0] || AccentArgb(c[1]) != c[1])) {
+                        const GpPointI p1 = {x, y}, p2 = {x, y + h};
+                        GdipCreateLineBrushI_p(&p1, &p2, AccentArgb(c[0]), AccentArgb(c[1]), 0, &temp);
+                    }
+                }
+                if (temp) {
+                    const int result = GdipFillRectangleI_orig(g, temp, x, y, w, h);
+                    GdipDeleteBrush_p(temp);
+                    return result;
+                }
             }
         }
     }
     return GdipFillRectangleI_orig(g, brush, x, y, w, h);
+}
+
+// the tab and the home button are rounded shapes, filled as paths
+typedef int(WINAPI* GdipFillPath_t)(void*, void*, void*);
+static GdipFillPath_t GdipFillPath_orig;
+typedef int(WINAPI* GdipGetPathWorldBounds_t)(void*, float*, const void*, void*);
+static GdipGetPathWorldBounds_t GdipGetPathWorldBounds_p;
+
+static int WINAPI GdipFillPath_hook(void* g, void* brush, void* path) {
+    if (g_cfg.accentOn && GdipGetBrushType_p && GdipGetSolidFillColor_p && GdipGetPathWorldBounds_p &&
+        GdipCreateSolidFill_p && GdipDeleteBrush_p) {
+        int type = -1;
+        DWORD c = 0;
+        if (GdipGetBrushType_p(brush, &type) == 0 && type == 0 && GdipGetSolidFillColor_p(brush, &c) == 0 &&
+            AccentArgb(c) != c) {
+            float b[4] = {};  // x, y, width, height
+            void* temp = nullptr;
+            if (GdipGetPathWorldBounds_p(path, b, nullptr, nullptr) == 0 && b[1] >= 0 && b[1] + b[3] <= 120 &&
+                GdipCreateSolidFill_p(AccentArgb(c), &temp) == 0 && temp) {
+                const int result = GdipFillPath_orig(g, temp, path);
+                GdipDeleteBrush_p(temp);
+                return result;
+            }
+        }
+    }
+    return GdipFillPath_orig(g, brush, path);
 }
 
 static void InstallTitleHooks() {
@@ -1547,104 +1791,13 @@ static void InstallTitleHooks() {
     GdipGetBrushType_p = (GdipGetBrushType_t)GetProcAddress(gdip, "GdipGetBrushType");
     GdipCreateSolidFill_p = (GdipCreateSolidFill_t)GetProcAddress(gdip, "GdipCreateSolidFill");
     GdipDeleteBrush_p = (GdipDeleteBrush_t)GetProcAddress(gdip, "GdipDeleteBrush");
+    GdipGetSolidFillColor_p = (GdipGetSolidFillColor_t)GetProcAddress(gdip, "GdipGetSolidFillColor");
+    GdipGetLineColors_p = (GdipGetLineColors_t)GetProcAddress(gdip, "GdipGetLineColors");
+    GdipCreateLineBrushI_p = (GdipCreateLineBrushI_t)GetProcAddress(gdip, "GdipCreateLineBrushI");
+    GdipGetPathWorldBounds_p = (GdipGetPathWorldBounds_t)GetProcAddress(gdip, "GdipGetPathWorldBounds");
     Wh_SetFunctionHook((void*)GetProcAddress(gdip, "GdipFillRectangleI"), (void*)GdipFillRectangleI_hook,
                        (void**)&GdipFillRectangleI_orig);
-}
-
-
-// ---- GDI+ colors: the orange of the title bar tab and line ----------------------------------------------
-static DWORD AccentArgb(DWORD argb) {
-    if (!g_cfg.accentOn) {
-        return argb;
-    }
-    const COLORREF c = AccentColor(RGB((argb >> 16) & 255, (argb >> 8) & 255, argb & 255));
-    return (argb & 0xFF000000u) | ((DWORD)GetRValue(c) << 16) | ((DWORD)GetGValue(c) << 8) | GetBValue(c);
-}
-
-typedef int(WINAPI* GdipCreateSolidFill_t2)(DWORD, void**);
-static GdipCreateSolidFill_t2 GdipCreateSolidFill_orig;
-static DWORD AccentDarkArgb(DWORD argb) {
-    return AccentArgb(argb);
-}
-
-static int WINAPI GdipCreateSolidFill_hook(DWORD argb, void** brush) {
-    return GdipCreateSolidFill_orig(AccentDarkArgb(argb), brush);
-}
-
-typedef int(WINAPI* GdipSetSolidFillColor_t)(void*, DWORD);
-static GdipSetSolidFillColor_t GdipSetSolidFillColor_orig;
-static int WINAPI GdipSetSolidFillColor_hook(void* brush, DWORD argb) {
-    return GdipSetSolidFillColor_orig(brush, AccentDarkArgb(argb));
-}
-
-typedef int(WINAPI* GdipGraphicsClear_t)(void*, DWORD);
-static GdipGraphicsClear_t GdipGraphicsClear_orig;
-static int WINAPI GdipGraphicsClear_hook(void* graphics, DWORD argb) {
-    return GdipGraphicsClear_orig(graphics, AccentDarkArgb(argb));
-}
-
-typedef int(WINAPI* GdipCreateLineBrush_t)(const void*, const void*, DWORD, DWORD, int, void**);
-static GdipCreateLineBrush_t GdipCreateLineBrush_orig;
-static int WINAPI GdipCreateLineBrush_hook(const void* p1, const void* p2, DWORD c1, DWORD c2, int wrap, void** brush) {
-    return GdipCreateLineBrush_orig(p1, p2, AccentArgb(c1), AccentArgb(c2), wrap, brush);
-}
-
-static GdipCreateLineBrush_t GdipCreateLineBrushI_orig;
-static int WINAPI GdipCreateLineBrushI_hook(const void* p1, const void* p2, DWORD c1, DWORD c2, int wrap, void** brush) {
-    return GdipCreateLineBrushI_orig(p1, p2, AccentArgb(c1), AccentArgb(c2), wrap, brush);
-}
-
-typedef int(WINAPI* GdipCreateLineBrushFromRect_t)(const void*, DWORD, DWORD, int, int, void**);
-static GdipCreateLineBrushFromRect_t GdipCreateLineBrushFromRect_orig;
-static int WINAPI GdipCreateLineBrushFromRect_hook(const void* rc, DWORD c1, DWORD c2, int mode, int wrap, void** brush) {
-    return GdipCreateLineBrushFromRect_orig(rc, AccentArgb(c1), AccentArgb(c2), mode, wrap, brush);
-}
-
-static GdipCreateLineBrushFromRect_t GdipCreateLineBrushFromRectI_orig;
-static int WINAPI GdipCreateLineBrushFromRectI_hook(const void* rc, DWORD c1, DWORD c2, int mode, int wrap, void** brush) {
-    return GdipCreateLineBrushFromRectI_orig(rc, AccentArgb(c1), AccentArgb(c2), mode, wrap, brush);
-}
-
-typedef int(WINAPI* GdipSetLineColors_t)(void*, DWORD, DWORD);
-static GdipSetLineColors_t GdipSetLineColors_orig;
-static int WINAPI GdipSetLineColors_hook(void* brush, DWORD c1, DWORD c2) {
-    return GdipSetLineColors_orig(brush, AccentArgb(c1), AccentArgb(c2));
-}
-
-typedef int(WINAPI* GdipCreatePen1_t)(DWORD, float, int, void**);
-static GdipCreatePen1_t GdipCreatePen1_orig;
-static int WINAPI GdipCreatePen1_hook(DWORD argb, float width, int unit, void** pen) {
-    return GdipCreatePen1_orig(AccentArgb(argb), width, unit, pen);
-}
-
-typedef int(WINAPI* GdipSetPenColor_t)(void*, DWORD);
-static GdipSetPenColor_t GdipSetPenColor_orig;
-static int WINAPI GdipSetPenColor_hook(void* pen, DWORD argb) {
-    return GdipSetPenColor_orig(pen, AccentArgb(argb));
-}
-
-
-static void InstallAccentHooks() {
-    HMODULE gdip = GetModuleHandleW(L"gdiplus.dll");
-    if (!gdip) {
-        gdip = LoadLibraryW(L"gdiplus.dll");
-    }
-    if (!gdip) {
-        return;
-    }
-#define AC_HOOK(name) \
-    Wh_SetFunctionHook((void*)GetProcAddress(gdip, #name), (void*)name##_hook, (void**)&name##_orig)
-    AC_HOOK(GdipCreateSolidFill);
-    AC_HOOK(GdipSetSolidFillColor);
-    AC_HOOK(GdipGraphicsClear);
-    AC_HOOK(GdipCreateLineBrush);
-    AC_HOOK(GdipCreateLineBrushI);
-    AC_HOOK(GdipCreateLineBrushFromRect);
-    AC_HOOK(GdipCreateLineBrushFromRectI);
-    AC_HOOK(GdipSetLineColors);
-    AC_HOOK(GdipCreatePen1);
-    AC_HOOK(GdipSetPenColor);
-#undef AC_HOOK
+    Wh_SetFunctionHook((void*)GetProcAddress(gdip, "GdipFillPath"), (void*)GdipFillPath_hook, (void**)&GdipFillPath_orig);
 }
 
 // ---- The start tiles ----------------------------------------------------------------------------
@@ -1652,7 +1805,7 @@ static void InstallAccentHooks() {
 // hint. A small watcher thread hides that dialog (asynchronously, it never waits for the UI thread).
 
 static HANDLE g_tileThread;
-static volatile LONG g_tileStop;
+static std::atomic<bool> g_tileStop;
 static HWND g_tileDlg;
 
 // keeps the dialog hidden even when the program tries to show it again (mouse over the workspace)
@@ -1672,11 +1825,6 @@ static LRESULT CALLBACK TileSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l, DWO
         }
     }
     return DefSubclassProc(h, m, w, l);
-}
-
-static bool IsMainFrameClass(HWND w) {
-    wchar_t cls[64];
-    return w && GetClassNameW(w, cls, ARRAYSIZE(cls)) && wcsstr(cls, L"PSPMainFrame");
 }
 
 static BOOL CALLBACK CountBigButtons(HWND h, LPARAM l) {
@@ -1726,24 +1874,28 @@ static BOOL CALLBACK HideTilesTop(HWND h, LPARAM) {
     return TRUE;
 }
 
+// looks for the dialog quickly until it is found; once it is subclassed it only has to notice a new one
 static DWORD WINAPI TileThread(LPVOID) {
     while (!g_tileStop) {
-        if (g_cfg.hideTiles) {
-            EnumWindows(HideTilesTop, 0);
-        }
-        Sleep(120);
+        EnumWindows(HideTilesTop, 0);
+        Sleep(g_tileDlg && IsWindow(g_tileDlg) ? 500 : 120);
     }
     return 0;
 }
 
 static void StartTileWatcher() {
-    g_tileThread = CreateThread(nullptr, 0, TileThread, nullptr, 0, nullptr);
+    if (!g_tileThread) {
+        g_tileStop = false;
+        g_tileThread = CreateThread(nullptr, 0, TileThread, nullptr, 0, nullptr);
+    }
 }
 
+// The thread may be inside SetWindowSubclassFromAnyThread, which waits for the UI thread: wait until it is gone,
+// the mod must not unload while it still runs mod code.
 static void StopTileWatcher() {
     if (g_tileThread) {
-        InterlockedExchange(&g_tileStop, 1);
-        WaitForSingleObject(g_tileThread, 2000);
+        g_tileStop = true;
+        WaitForSingleObject(g_tileThread, INFINITE);
         CloseHandle(g_tileThread);
         g_tileThread = nullptr;
     }
@@ -1754,6 +1906,7 @@ static void StopTileWatcher() {
             SetWindowPos(g_tileDlg, nullptr, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
         }
     }
+    g_tileDlg = nullptr;
 }
 
 BOOL Wh_ModInit() {
@@ -1771,32 +1924,44 @@ BOOL Wh_ModInit() {
                        (void*)DefMDIChildProcA_hook, (void**)&DefMDIChildProcA_orig);
     Wh_SetFunctionHook((void*)GetProcAddress(gdi32, "PatBlt"), (void*)PatBlt_hook,
                        (void**)&PatBlt_orig);
+    g_teardownMsg = RegisterWindowMessageW(L"PspDarkMode.OptionsBarTeardown");
     InstallDarkHooks();
     InstallBarHooks();
     InstallTitleHooks();
-    InstallAccentHooks();
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    StartTileWatcher();
+    if (g_cfg.hideTiles) {
+        StartTileWatcher();
+    }
     EnumWindows(PatchClassBrushTop, 0);  // classes that were registered before the hooks
     // Repaint image windows that are already open.
     EnumWindows(RedrawTopLevel, 0);
 }
 
 void Wh_ModSettingsChanged() {
+    const bool hadFreeze = g_cfg.freezeBar;
     LoadSettings();
+    if (g_cfg.hideTiles) {
+        StartTileWatcher();
+    } else {
+        StopTileWatcher();
+    }
+    if (hadFreeze && !g_cfg.freezeBar) {
+        RemoveOptionsHook();
+    }
     EnumWindows(RedrawTopLevel, 0);
 }
 
 void Wh_ModUninit() {
     g_unloading = true;
     StopTileWatcher();
-    if (g_optionsHook) {
-        UnhookWindowsHookEx(g_optionsHook);
-        g_optionsHook = nullptr;
+    RemoveOptionsHook();
+    EnumWindows(RestoreClassBrushTop, 0);
+    if (g_titleBrush && GdipDeleteBrush_p) {
+        GdipDeleteBrush_p(g_titleBrush);
+        g_titleBrush = nullptr;
     }
-    EnumWindows(ThawTopLevel, 0);
     EnumWindows(RedrawTopLevel, 0);
 }
