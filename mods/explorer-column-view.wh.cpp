@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.48
+// @version         0.49
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -348,6 +348,9 @@ std::atomic<bool> g_fitWindow{false};
 std::atomic<int> g_minFittedColumnWidthSetting{kDefaultMinimumFittedColumnWidth};
 SRWLOCK g_savedColumnWidthsLock = SRWLOCK_INIT;
 
+// Windhawk's RegistrySettings::GetInt accepts numeric REG_SZ as well as
+// REG_DWORD (v1.7.3 RawItemToInt), so these readers support both dropdowns
+// and numeric preferences saved before the dropdown migration.
 int ReadMinimumFittedColumnWidthSetting() {
     int width = Wh_GetIntSetting(L"MinimumFittedColumnWidth");
     return width ? std::clamp(width, kMinColumnWidth, kMaxColumnWidth) : kDefaultMinimumFittedColumnWidth;
@@ -375,13 +378,27 @@ void StoreSavedColumnWidth(int index, int width) {
 }
 
 void ClearSavedColumnWidths() {
+    bool failed = false;
     AcquireSRWLockExclusive(&g_savedColumnWidthsLock);
-    for (int i = 0; i < kMaxColumns; ++i) {
-        wchar_t key[48] = {};
-        swprintf_s(key, ARRAYSIZE(key), L"ColumnWidthV1_%d", i);
-        Wh_DeleteValue(key);
+    if (!g_rememberColumnWidths.load()) {
+        for (int i = 0; i < kMaxColumns; ++i) {
+            wchar_t key[48] = {};
+            swprintf_s(key, ARRAYSIZE(key), L"ColumnWidthV1_%d", i);
+            // Zero/missing values cannot restore a width. Avoid deleting absent
+            // entries on every normal startup with Remember disabled.
+            if (Wh_GetIntValue(key, 0) && !Wh_DeleteValue(key)) failed = true;
+        }
     }
     ReleaseSRWLockExclusive(&g_savedColumnWidthsLock);
+    if (failed) Wh_Log(L"[Columns] Could not clear all saved column widths");
+}
+
+void ApplyRememberColumnWidthsSetting(bool initializing) {
+    bool remember = Wh_GetIntSetting(L"RememberColumnWidths") != 0;
+    bool previous = g_rememberColumnWidths.exchange(remember);
+    // Settings can be changed while the mod is disabled. Clear before any
+    // startup sessions can load widths, not just during a running true->false.
+    if (!remember && (initializing || previous)) ClearSavedColumnWidths();
 }
 int ReadDefaultColumnWidthSetting() {
     int width = Wh_GetIntSetting(L"DefaultColumnWidth");
@@ -6209,9 +6226,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             else LayoutPanes(hwnd);
             RedrawWindow(hwnd, nullptr, nullptr,
                          RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
-            Wh_Log(L"[Columns settings] Applied v%s tab=%p fixedInspector=%d classicMenus=%d divider=%d",
+            Wh_Log(L"[Columns settings] Applied v%s tab=%p fixedInspector=%d classicMenus=%d divider=%d minFit=%d",
                 WH_MOD_VERSION, Context().tab, Context().fixedInspector,
-                g_classicContextMenus.load(), Context().dividerWidth);
+                g_classicContextMenus.load(), Context().dividerWidth, Context().minFittedColumnWidth);
             return 0;
         }
         case WM_DPICHANGED:
@@ -7348,15 +7365,16 @@ BOOL Wh_ModInit() {
     g_fixedInspectorSetting.store(Wh_GetIntSetting(L"FixedInspector") != 0);
     g_classicContextMenus.store(Wh_GetIntSetting(L"ClassicContextMenus") != 0);
     g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
-    g_rememberColumnWidths.store(Wh_GetIntSetting(L"RememberColumnWidths") != 0);
+    ApplyRememberColumnWidthsSetting(true);
     g_fitWindow.store(Wh_GetIntSetting(L"FitWindow") != 0);
     g_minFittedColumnWidthSetting.store(ReadMinimumFittedColumnWidthSetting());
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
     LoadToggleShortcut();
-    Wh_Log(L"[Columns settings] Loaded v%s default=%d fixedInspector=%d classicMenus=%d",
-        WH_MOD_VERSION, g_enableByDefault.load(), g_fixedInspectorSetting.load(), g_classicContextMenus.load());
+    Wh_Log(L"[Columns settings] Loaded v%s default=%d fixedInspector=%d classicMenus=%d divider=%d minFit=%d",
+        WH_MOD_VERSION, g_enableByDefault.load(), g_fixedInspectorSetting.load(), g_classicContextMenus.load(),
+        g_dividerWidthSetting.load(), g_minFittedColumnWidthSetting.load());
     const auto& platform = GetMenuPlatform();
     Wh_Log(L"[Columns platform] Windows=%u.%u.%u.%u arch=%u knownV2Family=%d",
         platform.major, platform.minor, platform.build, platform.revision,
@@ -7391,9 +7409,7 @@ void Wh_ModSettingsChanged() {
     g_fixedInspectorSetting.store(Wh_GetIntSetting(L"FixedInspector") != 0);
     g_classicContextMenus.store(Wh_GetIntSetting(L"ClassicContextMenus") != 0);
     g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
-    bool remember = Wh_GetIntSetting(L"RememberColumnWidths") != 0;
-    if (g_rememberColumnWidths.exchange(remember) && !remember)
-        ClearSavedColumnWidths();
+    ApplyRememberColumnWidthsSetting(false);
     g_fitWindow.store(Wh_GetIntSetting(L"FitWindow") != 0);
     g_minFittedColumnWidthSetting.store(ReadMinimumFittedColumnWidthSetting());
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
@@ -7405,9 +7421,9 @@ void Wh_ModSettingsChanged() {
         g_preferenceChangePending.store(true);
         if (g_threadId) PostThreadMessageW(g_threadId, kReconcileModeMessage, 0, 0);
     }
-    Wh_Log(L"[Columns settings] Saved v%s default=%d fixedInspector=%d classicMenus=%d modeChange=%d",
+    Wh_Log(L"[Columns settings] Saved v%s default=%d fixedInspector=%d classicMenus=%d modeChange=%d divider=%d minFit=%d",
         WH_MOD_VERSION, preference, g_fixedInspectorSetting.load(), g_classicContextMenus.load(),
-        g_preferenceChangePending.load());
+        g_preferenceChangePending.load(), g_dividerWidthSetting.load(), g_minFittedColumnWidthSetting.load());
     if (!g_unloading.load())
         for (HWND overlay : SessionWindows())
             if (IsWindow(overlay)) PostMessageW(overlay, kLayoutSettingsChangedMessage, 0, 0);
