@@ -39,6 +39,11 @@ Use **Toggle buttons visibility** to choose which buttons appear. Drag items in
 hides that button; adding it back shows it when its visibility toggle is
 enabled. Battery appears only on devices where Windows reports a battery.
 
+**Icon padding** adds horizontal or vertical space around each tray button.
+Both values default to 0 and apply to all five buttons. This changes spacing
+between buttons without resizing their glyphs or hover highlights. Values are
+in XAML pixels (DIPs), scaled by the monitor's display scale.
+
 Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
 muting. **Volume scroll step** selects Windows' default step or 1, 5, or 10
 percentage points per wheel notch. Middle-click can instead run a custom
@@ -68,9 +73,10 @@ standard tray-button dimensions when percentage is hidden. It defaults to
 off, retaining the wider horizontal battery button. Vertical icon-only sizing
 and percentage-enabled layout are unchanged.
 
-On first use on a device with a battery, the mod enables Windows' battery
-percentage preference. Later changes in Settings or the battery menu are
-preserved, including across Explorer restarts.
+**Battery percentage display** defaults to Always show. Choose Follow Windows
+setting or Always hide to change the mod's display without changing Windows'
+own preference. The Battery percentage context-menu item changes the Windows
+preference only when clicked; Follow Windows setting reflects that choice.
 
 Battery percentage appears beside the icon on horizontal taskbars and below
 it on vertical taskbars. **Use small battery icon** switches between 12- and
@@ -259,6 +265,13 @@ menu presenter receives its name after creation.
       $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
   $name: Control Center
 - battery:
+    - showPercentage: always
+      $name: Battery percentage display
+      $description: "Controls percentage in this mod without changing Windows' setting. The Battery percentage context-menu item changes Windows' preference, reflected here in Follow Windows setting mode."
+      $options:
+      - follow: Follow Windows setting
+      - always: Always show
+      - never: Always hide
     - smallGlyph: false
       $name: Use small battery icon
       $description: Use a smaller battery icon. Turn off for the default size. Percentage text keeps its normal size.
@@ -301,6 +314,15 @@ menu presenter receives its name after creation.
   - network: Network
   - controlcenter: Control Center
   - battery: Battery
+- iconPadding:
+    - horizontal: 0
+      $name: Horizontal padding
+      $description: "Extra space on the left and right of each tray button, outside its highlight. Range 0-32. Glyph and highlight dimensions are unchanged."
+    - vertical: 0
+      $name: Vertical padding
+      $description: "Extra space above and below each tray button, outside its highlight. Range 0-32. Glyph and highlight dimensions are unchanged."
+  $name: Icon padding
+  $description: "Applies to Sound, Bluetooth, Network, Control Center, and Battery. Values are in XAML pixels (DIPs); 0 preserves the existing spacing."
 - swapTroubleshootingWithBottom: false
   $name: Swap troubleshooting position
   $description: "Move troubleshooting to the bottom of Bluetooth, network, and sound menus, swapping it with the bottom action(s)."
@@ -408,12 +430,15 @@ struct Settings {
     bool showControlCenterButton = true;
     bool showBatteryButton = true;
     bool smallBatteryGlyph = false;
+    std::wstring batteryShowPercentage = L"always";
     bool batteryMatchOtherButtonSize = false;
     bool energySaverLeafGlyph = true;
     bool showCurrentlyPlayingInSoundTooltip = true;
     bool soundIconFollowsOutputDevice = false;
     std::wstring buttonOrder = L"sound,bluetooth,network,controlcenter,battery";
     bool swapTroubleshootingWithBottom = false;
+    int iconPaddingHorizontal = 0;
+    int iconPaddingVertical = 0;
 };
 
 enum class NetworkKind {
@@ -729,6 +754,7 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"visibility.showBatteryButton") != 0;
     // Preserve the existing stored toggle when upgrading from battery-only sizing.
     g_settings.smallBatteryGlyph = Wh_GetIntSetting(L"battery.smallGlyph") != 0;
+    g_settings.batteryShowPercentage = GetStringSettingWithDefault(L"battery.showPercentage", L"always");
     g_settings.batteryMatchOtherButtonSize = Wh_GetIntSetting(L"battery.matchOtherButtonSize") != 0;
     g_settings.energySaverLeafGlyph = Wh_GetIntSetting(L"battery.energySaverLeafGlyph") != 0;
     g_settings.showCurrentlyPlayingInSoundTooltip =
@@ -738,6 +764,8 @@ static void LoadSettings() {
     g_settings.buttonOrder = LoadButtonOrderSetting();
     g_settings.swapTroubleshootingWithBottom =
         Wh_GetIntSetting(L"swapTroubleshootingWithBottom") != 0;
+    g_settings.iconPaddingHorizontal = std::clamp(Wh_GetIntSetting(L"iconPadding.horizontal"), 0, 32);
+    g_settings.iconPaddingVertical = std::clamp(Wh_GetIntSetting(L"iconPadding.vertical"), 0, 32);
     Wh_Log(L"Tray button settings: bluetooth=%d network=%d sound=%d order=[%s].",
            g_settings.showBluetoothButton, g_settings.showNetworkButton,
            g_settings.showSoundButton, g_settings.buttonOrder.c_str());
@@ -2571,6 +2599,12 @@ static bool IsBatteryLayoutHorizontal() {
     return horizontal;
 }
 
+static bool ShouldShowBatteryPercentage() {
+    if (g_settings.batteryShowPercentage == L"always") return true;
+    if (g_settings.batteryShowPercentage == L"never") return false;
+    return g_batteryPercentageEnabled.load() == 1;
+}
+
 static double GetBatteryLeafOffsetX() {
     const double base = g_settings.smallBatteryGlyph ? -4 : -5;
     const bool shiftRight = !g_settings.smallBatteryGlyph &&
@@ -2583,22 +2617,22 @@ static double GetBatteryLeafOffsetX() {
 // fallback uses the same local exclusion rectangle and themed spacing.
 using NativeTooltipPlacement_t = void(__cdecl*)(
     wuc::ToolTip const&, int, wf::Size, wf::Size, bool, bool);
-static NativeTooltipPlacement_t g_nativeTooltipPlacement = nullptr;
-static bool g_nativeTooltipResolutionAttempted = false;
+static std::atomic<NativeTooltipPlacement_t> g_nativeTooltipPlacement{nullptr};
+static std::atomic<bool> g_nativeTooltipResolutionAttempted{false};
 
-static void ResolveNativeTooltipPlacement() {
-    if (g_nativeTooltipResolutionAttempted) return;
-    auto module = GetModuleHandleW(L"Taskbar.View.dll");
+static void ResolveNativeTooltipPlacement(HMODULE module) {
     if (!module) return;
-    g_nativeTooltipResolutionAttempted = true;
-    // Taskbar.View.dll
+    if (g_nativeTooltipResolutionAttempted.exchange(true)) return;
+    NativeTooltipPlacement_t resolved = nullptr;
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{
             LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))"
-        }, &g_nativeTooltipPlacement, nullptr, true},
+        }, &resolved, nullptr, true},
     };
     WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
-    Wh_Log(L"Native taskbar tooltip placement helper: %p.", g_nativeTooltipPlacement);
+    g_nativeTooltipPlacement.store(resolved);
+    Wh_Log(L"Native taskbar tooltip placement helper: %p.", resolved);
 }
 
 static void ApplyNativeTrayToolTipPlacement(
@@ -2654,12 +2688,11 @@ static void ApplyNativeTrayToolTipPlacement(
                 .as<wf::IReference<wf::Rect>>());
     };
 
-    ResolveNativeTooltipPlacement();
-    if (g_nativeTooltipPlacement) {
+    if (auto placementHelper = g_nativeTooltipPlacement.load()) {
         try {
             // The optional flags select special button layouts. These tray
             // buttons use the ordinary, non-expanded layout.
-            g_nativeTooltipPlacement(tip, location, desired, actual, false, false);
+            placementHelper(tip, location, desired, actual, false, false);
             excludeVerticalTray();
             return;
         } catch (...) {
@@ -3016,6 +3049,16 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
         return;
     }
 
+    // Space outside the native hit target, rather than changing its content
+    // padding or template. Battery's measured layout and highlights stay intact.
+    // At zero, retain the template/style's existing margin; settings changes
+    // recreate the injected controls, so resetting to zero restores that margin.
+    if (g_settings.iconPaddingHorizontal || g_settings.iconPaddingVertical) {
+        const double x = g_settings.iconPaddingHorizontal;
+        const double y = g_settings.iconPaddingVertical;
+        element.Margin({x, y, x, y});
+    }
+
     try {
         element.ClearValue(wux::FrameworkElement::WidthProperty());
         element.ClearValue(wux::FrameworkElement::HeightProperty());
@@ -3035,7 +3078,7 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
     element.MaxWidth(g_trayButtonWidth);
     if (element.Name() == L"SeparateQuickSettingsXamlBattery") {
         const bool horizontal = IsBatteryLayoutHorizontal();
-        const bool percentage = g_batteryPercentageEnabled.load() == 1;
+        const bool percentage = ShouldShowBatteryPercentage();
         // Icon-only layout must not depend on repeated glyph measurements.
         const double iconWidth = horizontal && !g_settings.batteryMatchOtherButtonSize
             ? (g_settings.smallBatteryGlyph ? 31.0 : 36.0) : g_trayButtonWidth;
@@ -3791,14 +3834,6 @@ static void UpdateSeparateBatteryButton() {
     SetTrayVisibility(g_batteryButton, present && g_settings.showBatteryButton
         ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     if (!present) return;
-    static bool percentageDefaultChecked = false;
-    if (!percentageDefaultChecked) {
-        percentageDefaultChecked = true;
-        // This is a Windows preference. Initialize it once per installation,
-        // then honor subsequent changes from Settings or the battery menu.
-        if (!Wh_GetIntValue(L"batteryPercentageDefaultApplied", 0))
-            QueueEnergySaverWork(3);
-    }
     const bool percentKnown = status.BatteryLifePercent <= 100;
     const int percent = percentKnown ? status.BatteryLifePercent : 0;
     const int level = (std::clamp)((percent + 9) / 10, 1, 10);
@@ -3864,7 +3899,7 @@ static void UpdateSeparateBatteryButton() {
         }
         SetTrayVisibility(g_batteryLeafIcon, showLeaf ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     }
-    const bool showPercent = percentKnown && g_batteryPercentageEnabled.load() == 1;
+    const bool showPercent = percentKnown && ShouldShowBatteryPercentage();
     // Visibility and text must participate in this measure pass, rather than
     // changing them after the button has already chosen its size.
     const std::wstring label = percentKnown ? std::to_wstring(percent) + L"%" : L"";
@@ -5447,7 +5482,7 @@ static SRWLOCK g_energySaverQueueLock = SRWLOCK_INIT;
 static unsigned g_batteryOperationsQueued = 0;
 
 struct EnergySaverWork {
-    int operation;  // 0: refresh, 1: saver toggle, 2: percentage toggle, 3: initial percentage enable.
+    int operation;  // 0: refresh, 1: saver toggle, 2: percentage toggle (explicit menu actions only).
 };
 
 static DWORD WINAPI EnergySaverWorker(void* parameter) {
@@ -5462,13 +5497,13 @@ nextOperation:
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         initialized = true;
         {
-            const bool percentageOperation = work.operation == 2 || work.operation == 3;
+            const bool percentageOperation = work.operation == 2;
             auto setting = GetBatteryBooleanSetting(percentageOperation
                 ? L"SystemSettings_PowerAndBattery_BatteryPercentageToggle"
                 : L"SystemSettings_PowerAndBattery_EnergySaverAlwaysOn");
             bool enabled = ReadBatteryBooleanSetting(setting);
-            if (work.operation && (work.operation != 3 || !enabled)) {
-                const bool requested = work.operation == 3 ? true : !enabled;
+            if (work.operation) {
+                const bool requested = !enabled;
                 auto value = winrt::box_value(requested);
                 winrt::hstring key{L"Value"};
                 winrt::check_hresult(setting->SetValue(
@@ -5492,8 +5527,6 @@ nextOperation:
             if (percentageOperation)
                 stateChanged = g_batteryPercentageEnabled.exchange(enabled ? 1 : 0) != (enabled ? 1 : 0);
             else stateChanged = g_energySaverState.exchange(enabled ? 1 : 0) != (enabled ? 1 : 0);
-            if (work.operation == 3 && enabled)
-                Wh_SetIntValue(L"batteryPercentageDefaultApplied", 1);
         }
     } catch (...) {
         error = winrt::to_hresult();
@@ -5504,8 +5537,7 @@ nextOperation:
     }
     AcquireSRWLockExclusive(&g_energySaverQueueLock);
     if (g_batteryOperationsQueued) {
-        work.operation = (g_batteryOperationsQueued & 1) ? 1 :
-            (g_batteryOperationsQueued & 2) ? 2 : 3;
+        work.operation = (g_batteryOperationsQueued & 1) ? 1 : 2;
         g_batteryOperationsQueued &= ~(1u << (work.operation - 1));
         ReleaseSRWLockExclusive(&g_energySaverQueueLock);
         goto nextOperation;
@@ -7236,30 +7268,37 @@ static std::atomic<bool> g_enabled = false;
 static void LoadSettings() {
     g_enabled = Wh_GetIntSetting(L"sound.showMasterVolumeInOutputPicker") != 0;
 }
-static HANDLE g_stopEvent;
-static HANDLE g_attachThread;
 static wchar_t g_statusKey[MAX_PATH];
 static void Status(PCWSTR message) {
     Wh_SetStringValue(g_statusKey, message);
     Wh_Log(L"%s", message);
 }
 
-// All XAML work, including Core Audio access, stays on its owning UI thread.
-// Poll only while the flyout row is loaded. Resolving the default endpoint on
-// every operation also prevents a device switch from leaving stale bindings.
-static winrt::com_ptr<IAudioEndpointVolume> DefaultVolume() {
-    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
-    winrt::check_hresult(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-        CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), enumerator.put_void()));
-    winrt::com_ptr<IMMDevice> device;
-    winrt::check_hresult(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
-                                                            device.put()));
-    winrt::com_ptr<IAudioEndpointVolume> volume;
-    winrt::check_hresult(device->Activate(__uuidof(IAudioEndpointVolume),
-                                         CLSCTX_INPROC_SERVER, nullptr,
-                                         volume.put_void()));
-    return volume;
-}
+// Audio callbacks never access XAML. They coalesce work onto the row's UI
+// dispatcher; endpoint discovery happens only when binding or devices change.
+struct MasterRow;
+struct RowAudioObserver : winrt::implements<RowAudioObserver,
+        IMMNotificationClient, IAudioEndpointVolumeCallback> {
+    std::weak_ptr<MasterRow> row;
+    winrt::agile_ref<CoreDispatcher> dispatcher;
+    std::mutex mutex;
+    bool stopped = false, queued = false, rebind = false;
+    RowAudioObserver(std::weak_ptr<MasterRow> owner, CoreDispatcher const& ui)
+        : row(std::move(owner)), dispatcher(ui) {}
+    void Queue(bool bind) noexcept;
+    void Stop() noexcept { std::lock_guard lock(mutex); stopped = true; }
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
+        Queue(false); return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
+        if (flow == eRender && role == eMultimedia) Queue(true);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { Queue(true); return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { Queue(true); return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { Queue(true); return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
+};
 
 struct MasterRow : std::enable_shared_from_this<MasterRow> {
     controls::Grid row{nullptr}, wrapper{nullptr};
@@ -7268,13 +7307,60 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
     controls::Button mute{nullptr};
     controls::FontIcon glyph{nullptr};
     controls::Slider slider{nullptr};
-    xaml::DispatcherTimer timer{nullptr};
-    winrt::event_token clicked{}, changed{}, loaded{}, unloaded{}, tick{};
+    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+    winrt::com_ptr<IAudioEndpointVolume> volume;
+    winrt::com_ptr<RowAudioObserver> audioObserver;
+    bool enumeratorRegistered = false, volumeRegistered = false;
+    winrt::event_token clicked{}, changed{}, loaded{}, unloaded{};
     winrt::event_token entered{}, exited{}, themeChanged{};
     int oldRow{}, oldColumn{}, oldRowSpan{}, oldColumnSpan{};
     bool updating = false;
     bool hasMuteState = false, lastMuted = false;
     bool hovering = false;
+
+    ~MasterRow() { StopAudio(); }
+
+    void BindVolume() noexcept {
+        if (volume && volumeRegistered) volume->UnregisterControlChangeNotify(audioObserver.get());
+        volumeRegistered = false;
+        volume = nullptr;
+        try {
+            winrt::com_ptr<IMMDevice> device;
+            winrt::check_hresult(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, device.put()));
+            winrt::check_hresult(device->Activate(__uuidof(IAudioEndpointVolume),
+                CLSCTX_INPROC_SERVER, nullptr, volume.put_void()));
+            winrt::check_hresult(volume->RegisterControlChangeNotify(audioObserver.get()));
+            volumeRegistered = true;
+        } catch (...) {
+            volume = nullptr;
+            Wh_Log(L"Master volume endpoint binding failed: %08X", winrt::to_hresult());
+        }
+    }
+
+    void StartAudio() noexcept {
+        if (enumerator || g_stopping) return;
+        try {
+            winrt::check_hresult(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), enumerator.put_void()));
+            audioObserver = winrt::make_self<RowAudioObserver>(weak_from_this(), row.Dispatcher());
+            winrt::check_hresult(enumerator->RegisterEndpointNotificationCallback(audioObserver.get()));
+            enumeratorRegistered = true;
+            BindVolume();
+        } catch (...) {
+            Wh_Log(L"Master volume notifications failed: %08X", winrt::to_hresult());
+            StopAudio();
+        }
+    }
+
+    void StopAudio() noexcept {
+        if (audioObserver) audioObserver->Stop();
+        if (volume && volumeRegistered) volume->UnregisterControlChangeNotify(audioObserver.get());
+        if (enumerator && enumeratorRegistered) enumerator->UnregisterEndpointNotificationCallback(audioObserver.get());
+        volumeRegistered = enumeratorRegistered = false;
+        volume = nullptr;
+        enumerator = nullptr;
+        audioObserver = nullptr;
+    }
 
     void UpdateHighlight() noexcept {
         try {
@@ -7292,7 +7378,7 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
         try {
             const int size = kGlyphSize;
             if (glyph.FontSize() != size) glyph.FontSize(size);
-            auto volume = DefaultVolume();
+            if (!volume) throw winrt::hresult_error(E_NOTFOUND);
             float level;
             BOOL muted;
             winrt::check_hresult(volume->GetMasterVolumeLevelScalar(&level));
@@ -7399,7 +7485,8 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
         clicked = mute.Click([weak](auto const&, auto const&) {
             if (auto self = weak.lock(); self && !g_stopping) {
                 try {
-                    auto volume = DefaultVolume();
+                    auto volume = self->volume;
+                    if (!volume) throw winrt::hresult_error(E_NOTFOUND);
                     BOOL muted;
                     winrt::check_hresult(volume->GetMute(&muted));
                     winrt::check_hresult(volume->SetMute(!muted, nullptr));
@@ -7410,7 +7497,8 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
         changed = slider.ValueChanged([weak](auto const&, auto const& args) {
             if (auto self = weak.lock(); self && !self->updating && !g_stopping) {
                 try {
-                    auto volume = DefaultVolume();
+                    auto volume = self->volume;
+                    if (!volume) throw winrt::hresult_error(E_NOTFOUND);
                     winrt::check_hresult(volume->SetMasterVolumeLevelScalar(
                         static_cast<float>(args.NewValue() / 100), nullptr));
                     winrt::check_hresult(volume->SetMute(FALSE, nullptr));
@@ -7418,19 +7506,14 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
                 self->Refresh();
             }
         });
-        timer = xaml::DispatcherTimer();
-        timer.Interval(std::chrono::milliseconds(150));
-        tick = timer.Tick([weak](auto const&, auto const&) {
-            if (auto self = weak.lock(); self && !g_stopping) self->Refresh();
-        });
         loaded = row.Loaded([weak](auto const&, auto const&) {
             if (auto self = weak.lock(); self && !g_stopping) {
+                self->StartAudio();
                 self->Refresh();
-                self->timer.Start();
             }
         });
         unloaded = row.Unloaded([weak](auto const&, auto const&) {
-            if (auto self = weak.lock()) self->timer.Stop();
+            if (auto self = weak.lock()) self->StopAudio();
         });
 
         wrapper = controls::Grid();
@@ -7465,6 +7548,7 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
             parent.Children().InsertAt(index, list);
             throw;
         }
+        StartAudio();
         Refresh();
         Wh_Log(L"Inserted master volume above %s#%s",
                winrt::get_class_name(list).c_str(), list.Name().c_str());
@@ -7478,9 +7562,9 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
         controls::Grid::SetColumnSpan(list, oldColumnSpan);
     }
 
-    void Remove() noexcept {
+    bool Remove() noexcept {
+        StopAudio();
         try {
-            if (timer) { timer.Stop(); timer.Tick(tick); }
             if (mute) {
                 mute.Click(clicked);
                 mute.PointerEntered(entered);
@@ -7498,9 +7582,39 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
                     parent.Children().InsertAt(index, list);
                 }
             }
-        } catch (...) { Wh_Log(L"Row cleanup failed: %08X", winrt::to_hresult()); }
+            return true;
+        } catch (...) {
+            Wh_Log(L"Row cleanup failed: %08X", winrt::to_hresult());
+            return false;
+        }
     }
 };
+
+void RowAudioObserver::Queue(bool bind) noexcept {
+    std::lock_guard lock(mutex);
+    if (stopped || g_stopping) return;
+    rebind = rebind || bind;
+    if (queued) return;
+    queued = true;
+    try {
+        dispatcher.get().RunAsync(CoreDispatcherPriority::Low, [self = get_strong()] {
+            bool bind;
+            {
+                std::lock_guard lock(self->mutex);
+                self->queued = false;
+                if (self->stopped || g_stopping) return;
+                bind = std::exchange(self->rebind, false);
+            }
+            if (auto row = self->row.lock()) {
+                if (bind && row->enumerator) row->BindVolume();
+                row->Refresh();
+            }
+        });
+    } catch (...) {
+        queued = false;
+        Wh_Log(L"Master volume dispatcher unavailable: %08X", winrt::to_hresult());
+    }
+}
 
 struct UiState {
     DWORD threadId{};
@@ -7514,15 +7628,17 @@ struct UiState {
     std::vector<Observer> observers;
 };
 static std::mutex g_uiMutex;
-static std::vector<std::shared_ptr<UiState>> g_uiStates;
+[[clang::no_destroy]] static std::optional<std::vector<std::shared_ptr<UiState>>>
+    g_uiStates{std::in_place};
 static std::shared_ptr<UiState> CurrentUi(xaml::FrameworkElement const& element) {
     std::lock_guard lock(g_uiMutex);
-    for (auto const& state : g_uiStates)
+    if (g_stopping || !g_uiStates) return nullptr;
+    for (auto const& state : *g_uiStates)
         if (state->threadId == GetCurrentThreadId()) return state;
     auto state = std::make_shared<UiState>();
     state->threadId = GetCurrentThreadId();
     state->dispatcher = element.Dispatcher();
-    g_uiStates.push_back(state);
+    g_uiStates->push_back(state);
     return state;
 }
 
@@ -7548,6 +7664,7 @@ static void ConsiderElement(xaml::FrameworkElement const& element) {
     }
     if (!mixer) return;
     auto state = CurrentUi(mixer);
+    if (!state) return;
     for (auto it = state->rows.begin(); it != state->rows.end();) {
         if (!(*it)->wrapper.XamlRoot()) {
             (*it)->Remove();
@@ -7611,6 +7728,7 @@ static HRESULT WINAPI ActivateType_Hook(void* type, void** result) {
         auto element = object.try_as<xaml::FrameworkElement>();
         if (element && winrt::get_class_name(element) == L"ControlCenter.VolumeMixerList") {
             auto state = CurrentUi(element);
+            if (!state) return hr;
             auto weak = winrt::make_weak(element);
             auto token = element.Loaded([weak](auto const&, auto const&) {
                 if (g_stopping) return;
@@ -7626,105 +7744,104 @@ static HRESULT WINAPI ActivateType_Hook(void* type, void** result) {
     return hr;
 }
 
-static DWORD WINAPI AttachThread(void*) {
-    HRESULT apartmentHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(apartmentHr)) return 0;
-    while (!g_stopping) {
-        auto module = GetModuleHandleW(L"ControlCenter.dll");
-        if (!module) module = GetModuleHandleW(L"Windows.UI.ControlCenter.dll");
-        if (module) {
-            try {
-                auto factoryFn = reinterpret_cast<HRESULT(WINAPI*)(void*,void**)>(
-                    GetProcAddress(module, "DllGetActivationFactory"));
-                if (!factoryFn) throw winrt::hresult_error(E_NOINTERFACE);
-                winrt::hstring name = L"ControlCenter.XamlMetaDataProvider";
-                foundation::IActivationFactory factory{nullptr};
-                winrt::check_hresult(factoryFn(winrt::get_abi(name), winrt::put_abi(factory)));
-                auto provider = factory.ActivateInstance<foundation::IInspectable>()
-                    .as<xaml::Markup::IXamlMetadataProvider>();
-                auto type = provider.GetXamlType(L"ControlCenter.VolumeMixerList");
-                if (!type || !type.IsConstructible()) throw winrt::hresult_error(E_NOINTERFACE);
-                // Six IInspectable methods precede twelve IXamlType getters.
-                auto target = (*reinterpret_cast<void***>(winrt::get_abi(type)))[18];
-                if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(ActivateType_Hook),
-                                        reinterpret_cast<void**>(&ActivateType_Original)) ||
-                    !Wh_ApplyHookOperations()) throw winrt::hresult_error(E_FAIL);
-                Wh_Log(L"Hooked native mixer XAML activation at %p; no diagnostics connection", target);
-                Status(L"Native mixer activation hooked; no diagnostics connection");
-                break;
-            } catch (...) {
-                Wh_Log(L"Mixer activation hook unavailable: %08X", winrt::to_hresult());
-                // A loaded but incompatible provider won't improve by polling.
-                break;
-            }
-        }
-        if (WaitForSingleObject(g_stopEvent, 250) != WAIT_TIMEOUT) break;
+static std::atomic<bool> g_activationHookAttempted{false};
+
+static HMODULE GetControlCenterModule() {
+    auto module = GetModuleHandleW(L"ControlCenter.dll");
+    return module ? module : GetModuleHandleW(L"Windows.UI.ControlCenter.dll");
+}
+
+static void HandleControlCenterModule(HMODULE module, bool applyHooks) {
+    if (!module || !g_enabled || g_stopping || g_activationHookAttempted.exchange(true)) return;
+    const HRESULT apartmentHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool uninitialize = SUCCEEDED(apartmentHr);
+    try {
+        if (FAILED(apartmentHr) && apartmentHr != RPC_E_CHANGED_MODE)
+            winrt::throw_hresult(apartmentHr);
+        auto factoryFn = reinterpret_cast<HRESULT(WINAPI*)(void*,void**)>(
+            GetProcAddress(module, "DllGetActivationFactory"));
+        if (!factoryFn) throw winrt::hresult_error(E_NOINTERFACE);
+        winrt::hstring name = L"ControlCenter.XamlMetaDataProvider";
+        foundation::IActivationFactory factory{nullptr};
+        winrt::check_hresult(factoryFn(winrt::get_abi(name), winrt::put_abi(factory)));
+        auto provider = factory.ActivateInstance<foundation::IInspectable>()
+            .as<xaml::Markup::IXamlMetadataProvider>();
+        auto type = provider.GetXamlType(L"ControlCenter.VolumeMixerList");
+        if (!type || !type.IsConstructible()) throw winrt::hresult_error(E_NOINTERFACE);
+        // Six IInspectable methods precede twelve IXamlType getters.
+        auto target = (*reinterpret_cast<void***>(winrt::get_abi(type)))[18];
+        if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(ActivateType_Hook),
+                               reinterpret_cast<void**>(&ActivateType_Original)) ||
+            (applyHooks && !Wh_ApplyHookOperations()))
+            throw winrt::hresult_error(E_FAIL);
+        Wh_Log(L"Hooked native mixer XAML activation at %p", target);
+        Status(L"Native mixer activation hooked");
+    } catch (...) {
+        Wh_Log(L"Mixer activation hook unavailable: %08X", winrt::to_hresult());
+        Status(L"Native mixer activation hook unavailable");
     }
-    CoUninitialize();
-    return 0;
+    if (uninitialize) CoUninitialize();
 }
 
 BOOL Init() {
     LoadSettings();
-    wchar_t path[MAX_PATH];
+    if (!g_enabled) return FALSE;
+    wchar_t path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     auto name = wcsrchr(path, L'\\');
     swprintf_s(g_statusKey, L"%s.status", name ? name + 1 : path);
-    Status(L"Waiting for ControlCenter module");
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    return g_stopEvent != nullptr;
+    Status(L"Waiting for ControlCenter module load notification");
+    HandleControlCenterModule(GetControlCenterModule(), false);
+    return TRUE;
 }
 
 void AfterInit() {
-    g_attachThread = CreateThread(nullptr, 0, AttachThread, nullptr, 0, nullptr);
-    if (!g_attachThread) Wh_Log(L"Couldn't start XAML attachment thread");
+    // Close the race between the initial lookup and enabling the loader hook.
+    HandleControlCenterModule(GetControlCenterModule(), true);
 }
 
-void SettingsChanged() {
-    LoadSettings();
-    std::vector<std::shared_ptr<UiState>> states;
-    { std::lock_guard lock(g_uiMutex); states = g_uiStates; }
-    for (auto const& state : states) {
-        try {
-            state->dispatcher.RunAsync(CoreDispatcherPriority::Low, [state] {
-                if (g_stopping) return;
-                if (!g_enabled) {
-                    for (auto const& row : state->rows) row->Remove();
-                    state->rows.clear();
-                } else {
-                    for (auto const& observer : state->observers)
-                        if (auto element = observer.element.get()) ConsiderElement(element);
-                }
-            }).get();
-        } catch (...) { Wh_Log(L"Master volume settings update failed: %08X", winrt::to_hresult()); }
-    }
-}
 
 void Uninit() {
     g_stopping = true;
-    SetEvent(g_stopEvent);
-    if (g_attachThread) {
-        WaitForSingleObject(g_attachThread, INFINITE);
-        CloseHandle(g_attachThread);
-    }
     std::vector<std::shared_ptr<UiState>> states;
-    { std::lock_guard lock(g_uiMutex); states.swap(g_uiStates); }
+    {
+        std::lock_guard lock(g_uiMutex);
+        if (g_uiStates) states = std::move(*g_uiStates);
+        g_uiStates.reset();
+    }
     for (auto const& state : states) {
         try {
             // Queue behind the observation callbacks at the same priority so
             // no queued lambda remains when Windhawk unloads the module.
-            state->dispatcher.RunAsync(CoreDispatcherPriority::Low, [state] {
+            // RunAsync can silently succeed without running the callback
+            // during dispatcher shutdown. TryRunAsync reports that case.
+            const bool cleaned = state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low, [state] {
                 for (auto const& observer : state->observers)
                     if (auto element = observer.element.get())
                         element.Loaded(observer.loaded);
                 state->observers.clear();
-                for (auto const& row : state->rows) row->Remove();
+                for (auto const& row : state->rows)
+                    if (!row->Remove()) throw winrt::hresult_error(E_FAIL);
                 state->rows.clear();
                 state->pending.clear();
             }).get();
-        } catch (...) { Wh_Log(L"UI thread has shut down: %08X", winrt::to_hresult()); }
+            if (!cleaned) throw winrt::hresult_error(RPC_E_DISCONNECTED);
+            // StopAudio synchronizes callback dispatch. Drain callbacks queued
+            // before it stopped before allowing our code to be unloaded.
+            if (!state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low, [] {}).get())
+                throw winrt::hresult_error(RPC_E_DISCONNECTED);
+        } catch (...) {
+            Wh_Log(L"UI thread has shut down; retaining affine state: %08X", winrt::to_hresult());
+            // The UI apartment is gone. Intentional process-lifetime retention
+            // is safer than releasing its XAML objects on Windhawk's thread.
+            // Any orphaned native event/audio callback also needs its code
+            // to remain mapped until the host exits. Normal unload never pins.
+            HMODULE owner = nullptr;
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<PCWSTR>(&Uninit), &owner);
+            (void)new std::shared_ptr<UiState>(state);
+        }
     }
-    CloseHandle(g_stopEvent);
 }
 
 
@@ -7732,18 +7849,53 @@ void Uninit() {
 
 static bool g_isSoundOutputHost = false;
 
+static HMODULE GetTaskbarViewModuleHandle() {
+    auto module = GetModuleHandleW(L"Taskbar.View.dll");
+    return module ? module : GetModuleHandleW(L"ExplorerExtensions.dll");
+}
+
+static void HandleRelevantModuleLoaded(HMODULE module) {
+    if (!module || g_unloading) return;
+    if (g_isSoundOutputHost) {
+        if (module == SoundOutputMasterVolume::GetControlCenterModule())
+            SoundOutputMasterVolume::HandleControlCenterModule(module, true);
+    } else if (module == GetTaskbarViewModuleHandle()) {
+        ResolveNativeTooltipPlacement(module);
+    }
+}
+
+using ModuleLoad_t = decltype(&LoadLibraryExW);
+static ModuleLoad_t g_moduleLoadOriginal = nullptr;
+static HMODULE WINAPI ModuleLoadHook(LPCWSTR name, HANDLE file, DWORD flags) {
+    auto module = g_moduleLoadOriginal(name, file, flags);
+    if (module) HandleRelevantModuleLoaded(module);
+    return module;
+}
+
+static bool HookModuleLoading() {
+    auto kernelbase = GetModuleHandleW(L"kernelbase.dll");
+    auto target = kernelbase ? reinterpret_cast<ModuleLoad_t>(
+        GetProcAddress(kernelbase, "LoadLibraryExW")) : nullptr;
+    return target && WindhawkUtils::SetFunctionHook(target, ModuleLoadHook, &g_moduleLoadOriginal);
+}
+
 BOOL Wh_ModInit() {
     wchar_t processPath[MAX_PATH]{};
     GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath));
     const wchar_t* processName = wcsrchr(processPath, L'\\');
     processName = processName ? processName + 1 : processPath;
     g_isSoundOutputHost = _wcsicmp(processName, L"explorer.exe") != 0;
-    if (g_isSoundOutputHost) return SoundOutputMasterVolume::Init();
+    if (g_isSoundOutputHost) {
+        if (!SoundOutputMasterVolume::Init()) return FALSE;
+        return HookModuleLoading();
+    }
     LoadSettings();
 
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
+    if (!HookModuleLoading()) return FALSE;
+    ResolveNativeTooltipPlacement(GetTaskbarViewModuleHandle());
 
     Wh_Log(L"Separate Quick Settings Tray Icons XAML loaded.");
     return TRUE;
@@ -7751,20 +7903,24 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     if (g_isSoundOutputHost) { SoundOutputMasterVolume::AfterInit(); return; }
+    // Also handle a module loaded during initialization, before hooks applied.
+    HandleRelevantModuleLoaded(GetTaskbarViewModuleHandle());
     ApplyFromTaskbarThread();
 }
 
-void Wh_ModSettingsChanged() {
-    if (g_isSoundOutputHost) { SoundOutputMasterVolume::SettingsChanged(); return; }
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = FALSE;
+    if (g_isSoundOutputHost) { *reload = TRUE; return TRUE; }
     if (HWND currentTaskbar = FindCurrentProcessTaskbarWnd())
         g_taskbarWnd = currentTaskbar;
     if (g_taskbarWnd &&
         RunFromWindowThread(g_taskbarWnd, ReloadSettingsAndReapplyProc, nullptr))
-        return;
+        return TRUE;
 
     // Explorer can briefly have no taskbar during a rebuild. Preserve the new
     // values so the next TrayUI::StartTaskbar injection uses them.
     LoadSettings();
+    return TRUE;
 }
 
 void Wh_ModUninit() {
