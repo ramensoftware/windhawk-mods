@@ -87,7 +87,10 @@ folder and one registry entry. Turning the popup off or disabling the mod remove
 both again. If the notification can't be shown, SnapSentry falls back
 to a standard dialog. If you have turned its notifications off, it takes
 that as a cue to stay quiet: it still copies to the clipboard but shows no dialog
-and never auto deletes. A multi-page or animated image is kept rather than
+and never auto deletes. Windows forgets that choice when SnapSentry is disabled,
+updated or turned off, because its notification entry is removed then, so turn
+its notifications off again in Windows settings if you want it to stay quiet.
+A multi-page or animated image is kept rather than
 deleted, because only its first frame can go on the clipboard, and afterwards a
 short notice says so, when the notification is available.
 
@@ -285,6 +288,7 @@ struct CaptureRecord {
     int action = -1;
     bool prompted = false;
     unsigned retries = 0;
+    unsigned deleteRetries = 0;
 };
 
 struct NameLess {
@@ -2299,8 +2303,21 @@ static void ProcessOne(CaptureRecord record) {
     // Read-only files must remain copyable even if cleanup/rename rights fail.
     bool needsDeleteAccess = settings.renameFromWindow || action == ACTION_DELETE ||
         action == ACTION_COPY_DELETE || settings.deleteFile || settings.removeExactDuplicates;
-    if (!(needsDeleteAccess && capture.Open(record.path, settings.folder, true)) &&
-        !capture.Open(record.path, settings.folder)) {
+    const bool deleteOpened =
+        needsDeleteAccess && capture.Open(record.path, settings.folder, true);
+    // A thumbnailer or sync client can hold a new file briefly without letting
+    // it be renamed or deleted. Wait about a second for it to let go, rather
+    // than silently skipping the rename and cleanup. A file that never allows
+    // it, such as a read-only one, is then still copied.
+    if (!deleteOpened && needsDeleteAccess && record.deleteRetries < 10 &&
+        g_retryCaptures.size() < kMaxPendingCaptures &&
+        record.generation == g_generation.load() && !WaitStop(0)) {
+        ++record.deleteRetries;
+        completion.deferred = true;
+        g_retryCaptures.push_back({std::move(record), GetTickCount64() + 100});
+        return;
+    }
+    if (!deleteOpened && !capture.Open(record.path, settings.folder)) {
         if (record.retries < 40 && g_retryCaptures.size() < kMaxPendingCaptures &&
             record.generation == g_generation.load() && !WaitStop(0)) {
             ++record.retries;
@@ -2570,7 +2587,6 @@ static std::atomic<HWND> g_sessionWindow{nullptr};
 static HWND g_sessionList, g_captionEdit, g_sessionStatus, g_sessionPreview;
 static bool g_refreshingSession = false;
 static bool g_previewRequested = false;
-static bool g_exportRequested = false;
 static std::atomic<bool> g_exportBusy{false};
 static IFileDialog* g_openFolderPicker = nullptr; // UI STA only.
 static ULONGLONG g_pickerGeneration = 0;
@@ -2583,12 +2599,6 @@ static UINT WindowDpi(HWND window) {
     UINT dpi = dc ? (UINT)GetDeviceCaps(dc, LOGPIXELSX) : 96;
     if (dc) ReleaseDC(window, dc);
     return dpi ? dpi : 96;
-}
-static void EnablePerMonitorUi() {
-    using SetContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    auto setContext = (SetContext_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
-    if (setContext && !setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
-        setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
 }
 static BOOL CALLBACK SetSessionChildFont(HWND child, LPARAM font) {
     SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
@@ -2924,31 +2934,52 @@ static bool ExportSession(const std::vector<SessionItem>& items, const std::wstr
     return ok;
 }
 
+// Preview rendering is small and stays on the worker.
 static void RunSessionWork() {
-    bool preview, exporting;
-    std::vector<SessionItem> items;
-    std::wstring parent;
-    ULONGLONG generation;
     EnterCriticalSection(&g_lock);
-    preview = std::exchange(g_previewRequested, false);
-    exporting = std::exchange(g_exportRequested, false);
-    if (exporting) { items = std::move(g_exportItems); parent = g_exportParent; }
-    generation = g_exportGeneration;
+    const bool preview = std::exchange(g_previewRequested, false);
     LeaveCriticalSection(&g_lock);
     if (preview) {
         auto sheet = BuildContactSheet(SnapshotSession());
         EnterCriticalSection(&g_lock); g_readyPreview = std::move(sheet); LeaveCriticalSection(&g_lock);
         PostMessageW(g_sessionWindow.load(), kSessionPreviewReady, 0, 0);
     }
-    if (exporting) {
-        Settings settings = SnapshotSettings();
-        std::wstring status;
-        ExportSession(items, parent, settings, generation, status);
-        EnterCriticalSection(&g_lock);
-        g_exportStatus = std::move(status); g_exportBusy = false;
-        LeaveCriticalSection(&g_lock);
-        PostMessageW(g_sessionWindow.load(), kSessionExportFinished, 0, 0);
+}
+
+// Export copies and hashes up to 1 GB, so it runs on its own thread and new
+// screenshots keep being copied meanwhile. It stops on unload like the other
+// work (ExportSession checks the stop event), and the worker joins it before
+// closing the hash provider they share.
+static std::atomic<HANDLE> g_exportThread{nullptr};
+
+static void JoinExportThread() {
+    if (HANDLE thread = g_exportThread.exchange(nullptr)) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
+}
+
+static DWORD WINAPI ExportThread(LPVOID) {
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    EnterCriticalSection(&g_lock);
+    std::vector<SessionItem> items = std::move(g_exportItems);
+    g_exportItems.clear();
+    const std::wstring parent = g_exportParent;
+    const ULONGLONG generation = g_exportGeneration;
+    LeaveCriticalSection(&g_lock);
+    std::wstring status = L"Export could not start. Originals were kept.";
+    if (SUCCEEDED(com)) {
+        ExportSession(items, parent, SnapshotSettings(), generation, status);
+    }
+    EnterCriticalSection(&g_lock);
+    g_exportStatus = std::move(status);
+    g_exportBusy = false;
+    LeaveCriticalSection(&g_lock);
+    if (HWND window = g_sessionWindow.load()) {
+        PostMessageW(window, kSessionExportFinished, 0, 0);
+    }
+    if (SUCCEEDED(com)) CoUninitialize();
+    return 0;
 }
 
 static int SelectedSessionItem() { return ListView_GetNextItem(g_sessionList, -1, LVNI_SELECTED); }
@@ -3061,14 +3092,30 @@ static void ChooseExportFolder(HWND owner) {
     ComPtr<IShellItem> folder;
     PWSTR name = nullptr;
     if (FAILED(picker->GetResult(&folder)) || FAILED(folder->GetDisplayName(SIGDN_FILESYSPATH, &name))) return;
+    bool start = false;
     EnterCriticalSection(&g_lock);
     if (!g_exportBusy && !g_activeSession.load() && !g_sessionPending.load()) {
         g_exportParent = name; g_exportItems = g_sessionItems;
         g_exportGeneration = g_generation.load();
-        g_exportBusy = true; g_exportRequested = true;
+        g_exportBusy = true;
+        start = true;
     }
     LeaveCriticalSection(&g_lock);
     CoTaskMemFree(name);
+    if (!start) return;
+    // The previous export has finished (g_exportBusy was clear), so this only
+    // releases its handle.
+    JoinExportThread();
+    HANDLE thread = CreateThread(nullptr, 0, ExportThread, nullptr, 0, nullptr);
+    if (!thread) {
+        EnterCriticalSection(&g_lock);
+        g_exportBusy = false;
+        g_exportItems.clear();
+        LeaveCriticalSection(&g_lock);
+        SetWindowTextW(g_sessionStatus, L"Export could not start. Originals were kept.");
+        return;
+    }
+    g_exportThread.store(thread);
     SetWindowTextW(g_sessionStatus, L"Exporting copies. Originals are kept. You can close this window.");
     EnableWindow(GetDlgItem(owner, SESSION_EXPORT), FALSE);
     EnableWindow(GetDlgItem(owner, SESSION_START), FALSE);
@@ -3076,7 +3123,6 @@ static void ChooseExportFolder(HWND owner) {
     EnableWindow(g_captionEdit, FALSE);
     EnableWindow(GetDlgItem(owner, SESSION_UP), FALSE);
     EnableWindow(GetDlgItem(owner, SESSION_DOWN), FALSE);
-    SetEvent(g_workEvent);
 }
 
 static LRESULT CALLBACK PreviewWindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
@@ -3209,6 +3255,8 @@ static LRESULT CALLBACK SessionWindowProc(HWND window, UINT message, WPARAM wp, 
     return DefWindowProcW(window,message,wp,lp);
 }
 
+static HICON AppIcon(bool small);  // Defined with the tray icon below.
+
 static void ShowSessionWindow(bool start) {
     HWND window=g_sessionWindow.load();
     if(!window){
@@ -3216,7 +3264,7 @@ static void ShowSessionWindow(bool start) {
         preview.lpszClassName=L"SnapSentryPreview";preview.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&preview);
         WNDCLASSW cls{};cls.lpfnWndProc=SessionWindowProc;cls.hInstance=GetModuleHandleW(nullptr);
         cls.lpszClassName=L"SnapSentrySession";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
-        cls.hbrBackground=GetSysColorBrush(COLOR_BTNFACE);cls.hIcon=LoadIconW(nullptr,IDI_APPLICATION);RegisterClassW(&cls);
+        cls.hbrBackground=GetSysColorBrush(COLOR_BTNFACE);cls.hIcon=AppIcon(false);RegisterClassW(&cls);
         window=CreateWindowExW(WS_EX_CONTROLPARENT,L"SnapSentrySession",L"SnapSentry - Review session",
             WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,980,680,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
         g_sessionWindow.store(window);
@@ -3239,6 +3287,22 @@ static std::atomic<HWND> g_promptWindow{nullptr};
 static constexpr UINT kPromptStop = WM_APP + 30;
 static NOTIFYICONDATAW g_trayIcon{}; // UI STA only.
 static int g_registeredSessionKey = 0;
+static HICON g_appIconLarge = nullptr;  // UI STA only, destroyed on exit.
+static HICON g_appIconSmall = nullptr;
+
+// SnapSentry runs inside windhawk.exe, so its icon is the one that identifies
+// it in the tray. Falls back to the stock application icon.
+static HICON AppIcon(bool small) {
+    if (!g_appIconLarge && !g_appIconSmall) {
+        wchar_t path[MAX_PATH];
+        DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+        if (length && length < ARRAYSIZE(path)) {
+            ExtractIconExW(path, 0, &g_appIconLarge, &g_appIconSmall, 1);
+        }
+    }
+    HICON icon = small ? g_appIconSmall : g_appIconLarge;
+    return icon ? icon : LoadIconW(nullptr, IDI_APPLICATION);
+}
 
 static void SyncSessionControls(const Settings& settings) {
     HWND window = g_promptWindow.load();
@@ -3256,7 +3320,7 @@ static void SyncSessionControls(const Settings& settings) {
         g_trayIcon.cbSize = sizeof(g_trayIcon); g_trayIcon.hWnd = window; g_trayIcon.uID = 1;
         g_trayIcon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         g_trayIcon.uCallbackMessage = kTrayMessage;
-        g_trayIcon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+        g_trayIcon.hIcon = AppIcon(true);
         wcscpy_s(g_trayIcon.szTip, L"SnapSentry capture sessions");
         if (!Shell_NotifyIconW(NIM_ADD, &g_trayIcon)) g_trayIcon = {};
     } else if (!settings.sessions && g_trayIcon.cbSize) {
@@ -3314,7 +3378,8 @@ static DWORD WINAPI PromptThread(LPVOID) {
         if (SUCCEEDED(apartment)) CoUninitialize();
         SetEvent(g_stopEvent); return 0;
     }
-    EnablePerMonitorUi();
+    // windhawk.exe's manifest already makes the process per-monitor DPI aware
+    // (PerMonitorV2), so the review window scales without a per-thread change.
     INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&controls);
     WNDCLASSW cls{}; cls.lpfnWndProc = PromptWindowProc; cls.hInstance = GetModuleHandleW(nullptr);
@@ -3375,6 +3440,10 @@ static DWORD WINAPI PromptThread(LPVOID) {
     UnregisterClassW(L"SnapSentryControl", GetModuleHandleW(nullptr));
     UnregisterClassW(L"SnapSentrySession", GetModuleHandleW(nullptr));
     UnregisterClassW(L"SnapSentryPreview", GetModuleHandleW(nullptr));
+    // The tray icon and the window class that used these are gone by now.
+    if (g_appIconLarge) DestroyIcon(g_appIconLarge);
+    if (g_appIconSmall) DestroyIcon(g_appIconSmall);
+    g_appIconLarge = g_appIconSmall = nullptr;
     RoUninitialize(); CoUninitialize();
     return 0;
 }
@@ -3434,6 +3503,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     // destructive handle until they run, so dropping them on unload keeps files.
     g_pendingCleanup.clear();
     g_retryCaptures.clear();
+    JoinExportThread();  // It hashes with g_hashAlgorithm.
     if (g_hashAlgorithm) BCryptCloseAlgorithmProvider(g_hashAlgorithm, 0);
     g_hashAlgorithm = nullptr;
     DestroyWindow(g_clipboardOwner); g_clipboardOwner = nullptr;
@@ -3760,6 +3830,9 @@ void WhTool_ModUninit() {
     // Both threads observe g_stopEvent and must be gone before their events and
     // critical sections are destroyed.
     WaitForMultipleObjects(ARRAYSIZE(threads), threads, TRUE, INFINITE);
+    // An export started just as the stop event was set sees it straight away
+    // and exits; it must still be gone before the lock and events below are.
+    JoinExportThread();
     if (g_promptThread) CloseHandle(g_promptThread);
     if (g_watchThread) {
         CloseHandle(g_watchThread);
@@ -3788,9 +3861,18 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod boilerplate. Runs the mod in a dedicated windhawk.exe
-// process instead of injecting into other processes. See:
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
