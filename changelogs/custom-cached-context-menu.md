@@ -1,3 +1,32 @@
+## 1.1.1 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4d0e9c036ca788eae9817ed8d7b28714cac6e97f/mods/custom-cached-context-menu.wh.cpp))
+
+### Added
+- A "Background pre-build" setting (on by default). Turning it off skips the
+  startup warm-up, which is an extra moment where every registered context-menu
+  handler is loaded; handlers then load only for menus that open, as with the
+  stock menu. This avoids startup crashes from faulty third-party extensions,
+  while a handler that would crash the stock menu still does when its menu is
+  built. The first open of each context builds on demand; later opens stay
+  instant. The mod's own New submenu and Send to entries are unaffected: their
+  lists are built by the invalidation thread, which always runs.
+
+### Fixed
+- Extension items on a folder background now invoke their verb on the current
+  folder directly when the folder registration runs the same command, instead
+  of going through the deferred menu population.
+- Labels that embed the selected file's name (for example NanaZip's
+  "Extract to "<name>"") are cached as templates and re-rendered with the
+  current name, so they no longer show a previous file's name and their
+  invocation matches again. Only the start of a quoted label segment is
+  templated, and folders keep their full name. Existing caches rebuild once
+  after the update.
+- The per-thread bitmap and owner-subclass buffers are released on unload
+  instead of staying on Explorer's long-lived UI threads.
+
+### Changed
+- Debug logging now reports when a live-menu match was found but its invocation
+  failed.
+
 ## 1.1.0 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3275a4ab62bd8c754a1820acf3cdff814fe08575/mods/custom-cached-context-menu.wh.cpp))
 
 ### Added

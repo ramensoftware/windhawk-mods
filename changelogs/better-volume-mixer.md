@@ -1,3 +1,10 @@
+## 1.6.0 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1783f8739a19d202886cb964262eb4c3d66fd943/mods/better-volume-mixer.wh.cpp))
+
+* Added optional alert sound when changing volume
+* Added togglable option to mute apps by clicking their icons
+* Muted apps now have grayscaled icons
+* Shortened setting descriptions
+
 ## 1.5.7 ([Oct 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7f63d65fc05d4235f2404ba2d507504073a69c3/mods/better-volume-mixer.wh.cpp))
 
 * Added option to stop Windows notifications from covering the mixer

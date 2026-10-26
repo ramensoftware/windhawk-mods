@@ -2,7 +2,7 @@
 // @id              custom-cached-context-menu
 // @name            Custom Cached Context Menu
 // @description     Instantly-opening cached Explorer context menu that is fully customizable: themes, layout, colors, animations, rules, and custom commands.
-// @version         1.1.0
+// @version         1.1.1
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshlwapi -luuid -lcomctl32 -ladvapi32 -lgdi32 -luxtheme -lversion -ld3d11 -ld2d1 -ldwrite -ldcomp
@@ -61,6 +61,7 @@ and discovers extension items in the background, so repeated opens are instant.
 | Theme | Custom (menu.ini) | Loads the appearance from `<mod storage>\themes\<name>.ini` (created from the bundled preset on first use). `menu.ini` is never modified by theme selection. |
 | Show classic menu item | on | Adds a "Show classic menu" entry at the bottom of the menu. |
 | Top action bar | off | Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only. |
+| Background pre-build | on | Warms common menus at startup so their first open is instant. Off keeps the stock menu's exposure: handlers load only for menus that open, and each first open builds on demand. |
 | Warm-up extensions | common list | Comma-separated file types pre-built at Explorer startup. |
 | Warm-up delay | 5 s | Delay before background warm-up starts. |
 | Clear cache | off | Turn on to delete cached models; they rebuild on next use. |
@@ -97,10 +98,15 @@ or use the in-menu settings browser.
 - Nav-pane menus are cached per tree node for the session and refresh after
   use, so the first open of each node pays the shell's population cost.
 - Core menu labels are English; cached extension labels come from the shell
-  and are localized.
+  and are localized. Labels that embed the selected file's name (for example
+  "Extract to \"<name>\"") are re-rendered with the current name.
 - Native fallback menus apply the configured submenu delay through the system
   `MenuShowDelay` value while the menu is open (restored on close); Windows
   has no per-menu delay API.
+- Context-menu handlers run inside Explorer, so a faulty third-party shell
+  extension can crash it (the background pre-build loads every registered
+  handler). If Explorer crashes when a menu opens, disable the offending
+  extension, for example with ShellExView.
 
 ## Feedback
 
@@ -181,6 +187,9 @@ MIT
 - clearCache: false
   $name: Clear cache
   $description: Turn on to delete the cached menu models; they rebuild on next use.
+- warmup: true
+  $name: Background pre-build
+  $description: Warms common menus shortly after Explorer starts so their first open is instant. Turning it off skips loading every registered context-menu handler at startup (the stock menu's exposure), which avoids startup crashes from faulty third-party extensions; the first open of each context then builds on demand, like the stock menu. A handler that would crash the stock menu still crashes.
 - warmupExtensions: ".txt, .pdf, .zip, .rar, .7z, .jpg, .png, .mp4, .mp3, .docx, .xlsx, .exe, .lnk"
   $name: Warm-up extensions
   $description: Comma-separated file types whose menus are pre-built at Explorer startup.
@@ -271,6 +280,7 @@ struct Settings {
     bool showMoreOptionsItem = true;
     bool topBar = false;
     int submenuDelayMs = 150;
+    bool warmup = true;
     int warmupDelaySeconds = 5;
     bool clearCache = false;
     bool debugLogging = false;
@@ -402,6 +412,7 @@ void LoadSettings() {
     next.showMoreOptionsItem = Wh_GetIntSetting(L"showMoreOptionsItem") != 0;
     next.topBar = Wh_GetIntSetting(L"topBar") != 0;
     next.submenuDelayMs = Wh_GetIntSetting(L"submenuDelayMs");
+    next.warmup = Wh_GetIntSetting(L"warmup") != 0;
     next.warmupDelaySeconds = Wh_GetIntSetting(L"warmupDelaySeconds");
     next.clearCache = Wh_GetIntSetting(L"clearCache") != 0;
     next.debugLogging = Wh_GetIntSetting(L"debugLogging") != 0;
@@ -1100,8 +1111,8 @@ void LogShellNewProbe(const wchar_t* ext) {
     }
 }
 
-// Builds the template list once. Warm-up prebuilds it; a first open can build
-// it synchronously as a one-time fallback.
+// Builds the template list once. The warm-up thread or the invalidation
+// thread prepares it, so the open path never pays for the registry walk.
 void EnsureNewTemplates() {
     if (g_newTemplatesReady.load(std::memory_order_acquire)) {
         return;
@@ -13283,6 +13294,8 @@ inline HotkeyHost g_hotkeyHost;
 // Defined after OwnerSubclass; removes every window subclass this DLL
 // installed so comctl32 cannot call into unloaded code.
 void RemoveOwnerSubclasses();
+// Defined after the recording map; releases its heap on unload.
+void ReleaseRecordedItemBitmaps();
 
 LRESULT CALLBACK ControlWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
                                    LPARAM lParam) {
@@ -13291,6 +13304,7 @@ LRESULT CALLBACK ControlWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
         // Captures belong to the thread that parked them; release them here,
         // on that thread, while the shell objects are still valid.
         ReleasePendingCapturesForCurrentThread();
+        ReleaseRecordedItemBitmaps();
         if (g_menuSession) {
             g_menuSession->done = true;
             PostThreadMessageW(GetCurrentThreadId(), WM_NULL, 0, 0);
@@ -13838,7 +13852,7 @@ MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
 namespace cmo {
 
 constexpr uint32_t kCacheMagic = 0x434F4D4F;  // "COMO"
-constexpr uint32_t kCacheVersion = 15;
+constexpr uint32_t kCacheVersion = 16;
 constexpr uint32_t kMaxCacheEntries = 1024;
 constexpr uint32_t kMaxModelItems = 4096;
 constexpr uint32_t kMaxMenuDepth = 16;
@@ -15027,6 +15041,13 @@ uint32_t MapExtensionMenuState(UINT state) {
 thread_local std::unordered_map<uintptr_t, std::unordered_map<UINT, HBITMAP>>
     g_recordedItemBitmaps;
 
+// Explorer's UI threads outlive the mod, so the thread-local container's
+// destructor never runs; release its heap explicitly.
+void ReleaseRecordedItemBitmaps() {
+    std::unordered_map<uintptr_t, std::unordered_map<UINT, HBITMAP>>()
+        .swap(g_recordedItemBitmaps);
+}
+
 void ClearRecordedItemBitmaps() {
     g_recordedItemBitmaps.clear();
 }
@@ -15684,9 +15705,6 @@ void InitializeMenuRecursive(PendingCapture& capture, HMENU menu, UINT position)
     }
 }
 
-// Debug dump of a native menu: labels, ids, offsets and bitmap sentinels.
-// Run with Debug logging after the menu closes, when dynamic submenus have
-// been populated.
 void DumpMenuTree(HMENU menu, UINT idCmdFirst, int depth) {
     if (!g_settings->debugLogging || !menu) {
         return;
@@ -15898,7 +15916,119 @@ void CaptureOwnerDrawIcons(PendingCapture& capture, std::vector<MenuItem>& items
     }
 }
 
-void DiscoverIntoCache(PendingCapture& capture, const ContextSignature& signature) {
+// Stands in for the selected file's name in cached labels.
+constexpr wchar_t kDynamicNamePlaceholder = L'\x01';
+
+// File name without its last extension ("archive.zip" -> "archive").
+std::wstring FileNameStem(const std::wstring& path) {
+    std::wstring name = path;
+    const size_t slash = name.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) {
+        name.erase(0, slash + 1);
+    }
+    const size_t dot = name.find_last_of(L'.');
+    if (dot != std::wstring::npos && dot > 0) {
+        name.resize(dot);
+    }
+    return name;
+}
+
+// Replaces the selected item's name inside quoted label segments with a
+// placeholder. A model cached per extension type would otherwise keep one
+// file's name (for example NanaZip's "Extract to \"<name>\"") and be stale
+// for every other file of the same type.
+std::wstring TemplateDynamicLabel(const std::wstring& label,
+                                  const std::wstring& name) {
+    if (name.empty() || label.empty()) {
+        return label;
+    }
+    std::wstring result;
+    result.reserve(label.size());
+    bool inQuotes = false;
+    bool segmentStart = false;
+    for (size_t i = 0; i < label.size();) {
+        if (label[i] == L'"') {
+            inQuotes = !inQuotes;
+            result += L'"';
+            ++i;
+            // Only the start of a quoted segment holds the dynamic name
+            // (archive tools render "Extract to \"<name>\""); a name that
+            // merely appears inside text must not match.
+            segmentStart = inQuotes;
+            continue;
+        }
+        if (inQuotes && segmentStart && i + name.size() <= label.size() &&
+            _wcsnicmp(label.c_str() + i, name.c_str(), name.size()) == 0) {
+            // Only a complete name: a short stem must not match the start of
+            // a longer quoted word ("Vis" in "Visual Studio").
+            const size_t end = i + name.size();
+            const bool boundary = end == label.size() ||
+                                  label[end] == L'"' || label[end] == L'.' ||
+                                  label[end] == L'\\';
+            if (boundary) {
+                result += kDynamicNamePlaceholder;
+                i = end;
+                segmentStart = false;
+                continue;
+            }
+        }
+        segmentStart = false;
+        result += label[i];
+        ++i;
+    }
+    return result;
+}
+
+// The name dynamic labels embed: the stem for files, the full name for
+// folders (folder names are not "name.ext", and the folder cache is shared
+// between folders).
+std::wstring DynamicLabelName(Scope scope, const std::wstring& path) {
+    if (path.empty()) {
+        return std::wstring();
+    }
+    if (scope == Scope::Files) {
+        return FileNameStem(path);
+    }
+    if (scope == Scope::Folders) {
+        const size_t slash = path.find_last_of(L"\\/");
+        return slash == std::wstring::npos ? path : path.substr(slash + 1);
+    }
+    return std::wstring();
+}
+
+// Resolves those placeholders with the current selection's name.
+std::wstring ResolveDynamicLabel(const std::wstring& label,
+                                 const std::wstring& name) {
+    std::wstring result;
+    result.reserve(label.size() + name.size());
+    for (const wchar_t c : label) {
+        if (c == kDynamicNamePlaceholder) {
+            result += name;
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
+void TemplateDynamicLabels(std::vector<MenuItem>& items,
+                           const std::wstring& name) {
+    for (MenuItem& item : items) {
+        item.label = TemplateDynamicLabel(item.label, name);
+        TemplateDynamicLabels(item.children, name);
+    }
+}
+
+void ResolveDynamicLabels(std::vector<MenuItem>& items,
+                          const std::wstring& name) {
+    for (MenuItem& item : items) {
+        item.label = ResolveDynamicLabel(item.label, name);
+        ResolveDynamicLabels(item.children, name);
+    }
+}
+
+void DiscoverIntoCache(PendingCapture& capture, const ContextSignature& signature,
+                       const std::vector<std::wstring>& paths) {
     if (capture.discoveryDone || !capture.obj) {
         return;
     }
@@ -15934,6 +16064,15 @@ void DiscoverIntoCache(PendingCapture& capture, const ContextSignature& signatur
            static_cast<unsigned long long>(GetTickCount64() - start));
     if (g_settings->debugLogging) {
         DumpModelItems(model.items, 0);
+    }
+    if (signature.scope != Scope::NavPane &&
+        signature.shape == Shape::Single && paths.size() == 1) {
+        // Labels that embed the selected file's name would be stale for every
+        // other file of the same type; store templates and resolve them with
+        // the current name at open. Nav-pane models are shown as-is without
+        // that resolution step.
+        TemplateDynamicLabels(model.items,
+                              DynamicLabelName(signature.scope, paths.front()));
     }
     // Warm the render-ready layout for the custom menu while we are already
     // paying discovery cost, so the next open is a cache hit. The prebuild
@@ -17300,8 +17439,8 @@ bool EnsureContextPopulated(PendingCapture& capture) {
     // Extensions may attach bitmaps with SetMenuItemBitmaps during population;
     // start a fresh recording so lookups match this menu.
     ClearRecordedItemBitmaps();
-    ReplayInto(capture.obj, menu, capture.indexMenu, capture.idCmdFirst, capture.idCmdLast,
-               capture.flags);
+    ReplayInto(capture.obj, menu, capture.indexMenu, capture.idCmdFirst,
+               capture.idCmdLast, capture.flags);
 
     capture.populatedMenu = menu;
     capture.populated = true;
@@ -17350,11 +17489,19 @@ InvokeResult InvokeExtensionItem(const MenuItem& item, const InvocationContext& 
     // previous versions" hitting Properties).
     if (auto nativeOffset = FindNativeOffsetInMenu(
             capture.populatedMenu, capture.idCmdFirst, ctx.liveContext, item)) {
+        if (g_settings->debugLogging) {
+            Wh_Log(L"Live match '%s' -> offset %u", item.label.c_str(),
+                   *nativeOffset);
+        }
         MenuItem offsetItem = item;
         offsetItem.canonicalVerb.clear();
         offsetItem.verbOffset = *nativeOffset;
         if (InvokeContextItem(ctx.liveContext, offsetItem, ctx)) {
             return InvokeResult::Handled;
+        }
+        if (g_settings->debugLogging) {
+            Wh_Log(L"Live match invoke failed for '%s' (offset %u)",
+                   item.label.c_str(), *nativeOffset);
         }
     }
     if (!item.canonicalVerb.empty() &&
@@ -17913,9 +18060,99 @@ bool VerbNeedsBrowserSite(const std::wstring& verb) {
     return EqualsIgnoreCase(verb, L"opennewtab");
 }
 
+// The item a direct verb invocation acts on: the single selected path, or
+// the current folder for background menus. Background verbs are registered
+// for folders, so ShellExecuteEx resolves them there (and the folder verb of
+// the same name performs the same action).
+std::wstring DirectVerbTargetPath(const InvocationContext& ctx) {
+    if (ctx.paths.size() == 1) {
+        return ctx.paths.front();
+    }
+    if (ctx.paths.empty()) {
+        return ctx.directory;
+    }
+    return std::wstring();
+}
+
+// Reads a shell verb's command line (the default value of its "command" key).
+std::wstring ReadShellVerbCommand(const std::wstring& keyPath) {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, keyPath.c_str(), 0, KEY_QUERY_VALUE,
+                      &key) != ERROR_SUCCESS) {
+        return std::wstring();
+    }
+    wchar_t buffer[1024] = {};
+    DWORD size = sizeof(buffer) - sizeof(wchar_t);
+    DWORD type = 0;
+    std::wstring command;
+    if (RegQueryValueExW(key, nullptr, nullptr, &type,
+                         reinterpret_cast<BYTE*>(buffer), &size) ==
+            ERROR_SUCCESS &&
+        (type == REG_SZ || type == REG_EXPAND_SZ)) {
+        command.assign(buffer, size / sizeof(wchar_t));
+        while (!command.empty() &&
+               (command.back() == L'\0' || command.back() == L' ')) {
+            command.pop_back();
+        }
+    }
+    RegCloseKey(key);
+    return command;
+}
+
+// %1, %V, %L and %D all mean the folder for these registrations; normalize
+// them so the same command with different placeholders matches. %W is the
+// working directory instead, so a pair using it is not equivalent.
+std::wstring NormalizeVerbCommand(const std::wstring& command) {
+    std::wstring result;
+    result.reserve(command.size());
+    for (size_t i = 0; i < command.size();) {
+        if (command[i] == L'%' && i + 1 < command.size()) {
+            const wchar_t c = static_cast<wchar_t>(towlower(command[i + 1]));
+            if (c == L'1' || c == L'v' || c == L'l' || c == L'd') {
+                result += L"%x";
+                i += 2;
+                continue;
+            }
+        }
+        result += command[i];
+        ++i;
+    }
+    return result;
+}
+
+// A command that uses the working directory cannot be compared across the
+// folder and background registrations: ShellExecuteEx runs the former without
+// lpDirectory, so %W would not be the current folder.
+bool UsesWorkingDirectory(const std::wstring& command) {
+    return StrStrIW(command.c_str(), L"%W") != nullptr;
+}
+
+// Background items are registered under Directory\\Background\\shell, while
+// the direct path invokes the folder verb (Directory\\shell). That is only
+// safe when both registrations run the same command; otherwise the deferred
+// population resolves the background item itself.
+bool BackgroundVerbMatchesFolderVerb(const std::wstring& verb) {
+    const std::wstring folderCommand =
+        ReadShellVerbCommand(L"Directory\\shell\\" + verb + L"\\command");
+    const std::wstring backgroundCommand = ReadShellVerbCommand(
+        L"Directory\\Background\\shell\\" + verb + L"\\command");
+    if (folderCommand.empty() || backgroundCommand.empty() ||
+        UsesWorkingDirectory(folderCommand) ||
+        UsesWorkingDirectory(backgroundCommand)) {
+        return false;
+    }
+    return _wcsicmp(NormalizeVerbCommand(folderCommand).c_str(),
+                    NormalizeVerbCommand(backgroundCommand).c_str()) == 0;
+}
+
 bool TryInvokeVerbDirect(const MenuItem& item, const InvocationContext& ctx) {
-    if (ctx.paths.size() != 1 || item.canonicalVerb.empty() ||
+    const std::wstring target = DirectVerbTargetPath(ctx);
+    if (target.empty() || item.canonicalVerb.empty() ||
         VerbNeedsBrowserSite(item.canonicalVerb)) {
+        return false;
+    }
+    if (ctx.paths.empty() &&
+        !BackgroundVerbMatchesFolderVerb(item.canonicalVerb)) {
         return false;
     }
     SHELLEXECUTEINFOW info = {};
@@ -17923,7 +18160,7 @@ bool TryInvokeVerbDirect(const MenuItem& item, const InvocationContext& ctx) {
     info.fMask = SEE_MASK_FLAG_NO_UI;
     info.hwnd = ctx.owner;
     info.lpVerb = item.canonicalVerb.c_str();
-    info.lpFile = ctx.paths.front().c_str();
+    info.lpFile = target.c_str();
     info.nShow = SW_SHOWNORMAL;
     return ShellExecuteExW(&info) != FALSE;
 }
@@ -19253,7 +19490,7 @@ public:
                 RemoveWindowSubclass(hwnd, &OwnerSubclass::Proc, kOwnerSubclassId);
             }
         }
-        g_subclassOwners.clear();
+        std::vector<HWND>().swap(g_subclassOwners);
     }
 
 private:
@@ -19456,6 +19693,12 @@ int WarmupJitterMs(uint32_t seed) {
 class Warmup {
 public:
     void Start() {
+        // The pre-build loads every registered context-menu handler; a faulty
+        // third-party handler can crash Explorer there. Turning it off keeps
+        // the stock menu's exposure (handlers load only for menus that open).
+        if (!g_settings->warmup) {
+            return;
+        }
         std::lock_guard<std::mutex> lock(lifecycleMutex_);
         if (thread_ || g_unloading.load()) {
             return;
@@ -19759,6 +20002,12 @@ private:
             MenuModel model = BuildModelFromHMenu(offscreen, 1, signature, menu);
             ClearRecordedItemBitmaps();
             DestroyMenu(offscreen);
+            // The scratch file's name is not the real one; store templates so
+            // the provisional model does not show "<storage>\\warmup" names.
+            if (!model.items.empty() && signature.shape == Shape::Single) {
+                TemplateDynamicLabels(model.items,
+                                      DynamicLabelName(signature.scope, path));
+            }
             if (!model.items.empty()) {
                 ApplyRegistryIcons(model.items, signature);
                 model.handlerModules =
@@ -19933,11 +20182,21 @@ private:
         if (!g_unloading.load()) {
             g_warmup.Stop();
             g_warmup.Start();
+            if (!g_settings->warmup) {
+                // With no warm-up thread, rebuild the Send to entries here;
+                // this runs off the UI thread.
+                RebuildSendToChildren();
+            }
         }
         Wh_Log(L"%s; cache invalidated", reason);
     }
 
     void Run() {
+        // The New submenu is built from these templates. This thread always
+        // runs, unlike the warm-up, so the list is ready even when the
+        // background pre-build is off.
+        EnsureNewTemplates();
+
         uint64_t registryFingerprint = ComputeRegistryFingerprint();
         ULONGLONG lastCheck = GetTickCount64();
 
@@ -20140,11 +20399,20 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
             // refreshed after the menu closes.
             if (!cached && !capture.discoveryDone) {
                 if (g_settings->debugLogging) Wh_Log(L"Populating before showing the menu");
-                DiscoverIntoCache(capture, signature);
+                DiscoverIntoCache(capture, signature, paths);
                 cached = g_cache.Find(signature);
                 needsDiscovery = !cached || (cached->flags & kModelWarmup);
             }
 
+            if (cached) {
+                // A cached model may hold label templates from another file
+                // of the same type; resolve them with the current name.
+                ResolveDynamicLabels(
+                    cached->items,
+                    paths.size() == 1
+                        ? DynamicLabelName(scope, paths.front())
+                        : std::wstring());
+            }
             model = cached
                         ? MergeCoreWithCached(BuildCoreModel(scope, paths, shape),
                                               *cached)
@@ -20280,7 +20548,7 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
             Wh_Log(L"Menu creation failed; using the native menu");
             ShowNativeReplay(capture, owner, pt);
             if (needsDiscovery && !capture.discoveryDone) {
-                DiscoverIntoCache(capture, signature);
+                DiscoverIntoCache(capture, signature, paths);
             }
             break;
         }
@@ -20338,7 +20606,7 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
         // Warm-up entries are provisional: refresh them from the real context
         // now that the menu has closed. Live entries never populate again.
         if (needsDiscovery && !capture.discoveryDone) {
-            DiscoverIntoCache(capture, signature);
+            DiscoverIntoCache(capture, signature, paths);
         }
         break;
     }
@@ -20725,6 +20993,12 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"Custom Cached Context Menu settings changed");
     cmo::LoadSettings();
     cmo::g_hotkeyHost.SettingsChanged();
+
+    if (cmo::g_settings->warmup) {
+        cmo::g_warmup.Start();  // no-op while it is already running
+    } else {
+        cmo::g_warmup.Stop();
+    }
 
     if (cmo::g_settings->themeIndex != cmo::g_lastAppliedTheme) {
         cmo::g_themeStore.ApplySelectedTheme(cmo::g_settings->themeIndex);

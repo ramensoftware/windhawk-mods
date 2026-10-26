@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-26T15:05:00.000Z</updated>
+    <updated>2026-10-26T21:02:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Flashlight Desktop Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/flashlight-desktop-icons#18d4cc081c7dd2eeb3fdfac4f5ef52385baec3b8</id>
+        <link href="https://windhawk.net/mods/flashlight-desktop-icons"/>
+        <updated>2026-10-26T21:02:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="flashlightdesktopicons">Flashlight Desktop Icons</h1>
+<p>Makes desktop icons semi-transparent (or completely invisible) when idle. When
+the mouse cursor moves over the desktop, only the icons within the configured
+pixel radius smoothly reveal themselves, and they fade back to their idle
+opacity once the mouse stops moving.</p>
+<p><img src="https://i.imgur.com/UvM4nxK.gif" alt="Flashlight Desktop Icons demo" /></p>
+<ul>
+<li>No overlay windows: each icon's alpha is applied at draw time with GDI custom
+draw, so nothing blocks clicks and no wallpaper layers are duplicated.
+Compatible with Wallpaper Engine and other live wallpapers.</li>
+<li>No background threads and no polling: repainting is driven by mouse events
+and a fade timer running on the desktop's own thread, so the mod does no work
+at all while the mouse is away from the desktop.</li>
+<li>Labels fade together with their icons. Enable the "Hide Icon Labels" setting
+to remove the text under desktop icons entirely.</li>
+<li>Dragging a file over the desktop reveals the icons around the drag cursor,
+so you can see what you are dropping onto.</li>
+<li>Double-clicking empty desktop space hides all icons; double-clicking again
+returns to flashlight mode (rather than making all icons fully visible).</li>
+</ul>
+<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Transparent Desktop Icons with Spotlight</a>
+reveals icons around the cursor using a DirectComposition overlay mask. This
+mod instead computes each icon's alpha from its distance to the cursor and
+applies it per icon at draw time (GDI custom draw), with no overlay or
+wallpaper layers.</li>
+<li><a href="https://windhawk.net/mods/desktop-icons-transparency">Desktop Icons Transparency</a>
+applies one fixed opacity to all desktop icons. This mod's opacity is
+per-icon and follows the cursor.</li>
+<li><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide & Fluent Hover Reveal</a>
+and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> hide and
+reveal icons in bulk (per section or on toggle). This mod's default
+experience is a continuous visibility gradient around the cursor.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Faded labels are drawn in the mod's own style (white text with a glow)
+rather than Explorer's shadow style, so a label changes slightly when its
+icon reaches full opacity and Explorer takes over drawing it.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/desktop-icons-transparency">desktop-icons-transparency</a>
+by zed712969-crypto: desktop window discovery and subclassing patterns.</li>
+<li><a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
+by HeyOkay: the drag-and-drop reveal approach (hooking the desktop's
+IDropTarget vtable methods).</li>
+</ul>]]></content>
+        <author>
+            <name>dantepicachu</name>
+            <uri>https://github.com/dantepicachu11-coder</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.0]]></title>
         <id>https://windhawk.net/mods/altbinz-dark#4028990b798d125c7ee88e143561bdb17b3eb643</id>
@@ -1249,38 +1308,6 @@ enabled. If another styling mod causes excessive flashing, compare with it off.<
         <author>
             <name>RobotsNeverDie</name>
             <uri>https://github.com/RBND</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Calendar Week Numbers 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-calendar-week-numbers#401da104b37b14c0c9c2dbae2336c30c63bac29f</id>
-        <link href="https://windhawk.net/mods/taskbar-calendar-week-numbers"/>
-        <updated>2026-10-24T09:04:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarcalendarweeknumbers">Taskbar Calendar Week Numbers</h1>
-<p>Adds a week number column to the calendar flyout that opens when you click the
-clock in the Windows 11 taskbar, like the week numbers in Outlook.</p>
-<p><img src="https://raw.githubusercontent.com/Maveric2005/windhawk-calendar-week-numbers/main/images/screenshot.png" alt="Calendar flyout with week numbers" /></p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Week numbering</strong>: ISO 8601 (default; used in Germany and most of Europe)
-or the first-week-of-year rule from the Windows regional settings.</li>
-<li><strong>Column header</strong>: text above the column. Empty means automatic ("KW" for a
-German Windows display language, "Wk" otherwise). A single space hides it.</li>
-<li><strong>Week number color</strong>: the Windows accent color (default, the same color as
-today's date) or the normal text color.</li>
-<li><strong>Column width</strong>, <strong>font size</strong> and <strong>opacity</strong> of the week numbers.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Only the calendar flyout is changed. The mod writes nothing to disk and makes
-no network requests.</li>
-<li>The calendar's day cells get slightly narrower to make room for the column.</li>
-<li>The calendar flyout is hosted in <code>ShellExperienceHost.exe</code>. Tested on
-Windows 11 build 26220.</li>
-</ul>]]></content>
-        <author>
-            <name>Maveric2005</name>
-            <uri>https://github.com/Maveric2005</uri>
         </author>
     </entry>
 </feed>

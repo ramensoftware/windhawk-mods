@@ -1078,7 +1078,7 @@
         "ratingUsers": 73,
         "reviews": 0,
         "trendingSorting": 6.130513845876806,
-        "updated": 1792749606000,
+        "updated": 1793048559000,
         "users": 2773
       },
       "metadata": {
@@ -1093,7 +1093,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.5.7"
+        "version": "1.6.0"
       }
     },
     "block-smb-quick-access": {
@@ -3693,7 +3693,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 4.200932750634447,
-        "updated": 1792382626000,
+        "updated": 1793048549000,
         "users": 255
       },
       "metadata": {
@@ -3709,7 +3709,7 @@
         ],
         "license": "MIT",
         "name": "Custom Cached Context Menu",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "custom-cmd-startup-text": {
@@ -7710,6 +7710,33 @@
         "version": "2.0"
       }
     },
+    "flashlight-desktop-icons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793048554000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793048554000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "dantepicachu",
+        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -luxtheme",
+        "description": "Make desktop icons semi-transparent or invisible when idle, and reveal ONLY the icons near the mouse cursor within a customizable radius. Works flawlessly with Wallpaper Engine.",
+        "github": "https://github.com/dantepicachu11-coder",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Flashlight Desktop Icons",
+        "version": "1.0.0"
+      }
+    },
     "flexible-explorer-toolbars-deluxe": {
       "details": {
         "defaultSorting": 162,
@@ -8038,7 +8065,7 @@
         "rating": 0,
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0,
         "updated": 1793027070000,
         "users": 0
