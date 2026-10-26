@@ -3122,6 +3122,7 @@ struct Controller {
                         L"Выберите только один файл."));
       return;
     }
+    std::wstring full(32768, L'\0');  // one buffer; each path keeps its length
     for (auto& path : list) {
       bool absolute = (path.size() > 2 && path[1] == L':' &&
                        (path[2] == L'\\' || path[2] == L'/')) ||
@@ -3137,15 +3138,13 @@ struct Controller {
         }
         path = folder + (folder.back() == L'\\' ? L"" : L"\\") + path;
       }
-      std::wstring full(32768, L'\0');
       DWORD n = GetFullPathNameW(path.c_str(), static_cast<DWORD>(full.size()),
                                  full.data(), nullptr);
       if (!n || n >= full.size()) {
         Warn(UiText(L"The path is not valid.", L"Некорректный путь."));
         return;
       }
-      full.resize(n);
-      path = std::move(full);
+      path.assign(full.data(), n);
     }
     if (request.mode == Picker::Folder) {
       DWORD attr = GetFileAttributesW(list[0].c_str());
@@ -3542,7 +3541,8 @@ struct Controller {
       Wh_Log(L"Explorer Picker is not active in Explorer -> native dialog");
       return;
     }
-    if (!allowElevated && ElevatedAbove(service)) {
+    const bool elevatedAbove = ElevatedAbove(service);
+    if (elevatedAbove && !allowElevated) {
       Wh_Log(L"Elevated process: picker disabled by settings");
       return;
     }
@@ -3556,8 +3556,9 @@ struct Controller {
       panel = nullptr;
       return;
     }
-    // Explorer runs with ordinary rights; let it answer an elevated caller.
-    if (Elevated())
+    // Explorer runs with fewer rights; let it answer an elevated caller. With
+    // equal rights the filter stays closed to lower-integrity processes.
+    if (elevatedAbove)
       ChangeWindowMessageFilterEx(panel, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
     requestId = (GetTickCount() ^ (GetCurrentThreadId() << 8) ^
                  static_cast<DWORD>(reinterpret_cast<UINT_PTR>(this))) |
@@ -3783,7 +3784,7 @@ std::wstring Remembered(bool save) {
   std::wstring value(32768, L'\0');
   value.resize(Wh_GetStringValue((save ? lastSaveKey : lastOpenKey).c_str(),
                                  value.data(), value.size()));
-  value.resize(wcsnlen(value.c_str(), value.size()));
+  value.shrink_to_fit();
   DWORD attr = value.empty() ? INVALID_FILE_ATTRIBUTES
                              : GetFileAttributesW(value.c_str());
   return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)
@@ -6571,12 +6572,12 @@ std::map<void*, const void*> nativeHookTargets;
 // for another apartment is a proxy whose method thunks are shared by every
 // proxied interface of the process; hooking them corrupts unrelated COM calls.
 bool InDialogModule(const void* address) {
-  HMODULE dialogs = GetModuleHandleW(L"comdlg32.dll"), module = nullptr;
-  return dialogs &&
+  HMODULE comdlg = GetModuleHandleW(L"comdlg32.dll"), module = nullptr;
+  return comdlg &&
          GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             static_cast<LPCWSTR>(address), &module) &&
-         module == dialogs;
+         module == comdlg;
 }
 bool SameNativeModule(void* caller, void* target) {
   HMODULE first = nullptr, second = nullptr;
@@ -6935,8 +6936,8 @@ bool TrackDialog(IUnknown* object) {
       AddAlias(object, existing);
     else if (identity && !existing)
       Wh_Log(
-          L"The file dialog is a proxy for another apartment; keeping the "
-          L"native dialog");
+          L"The file dialog is not implemented in comdlg32 (for example a "
+          L"proxy for another apartment)");
     if (identity)
       CallNative([&] { return identity->Release(); });
     CallNative([&] { return native->Release(); });
@@ -7123,7 +7124,8 @@ HRESULT WINAPI CreateExHook(REFCLSID clsid,
 // The .NET runtime and other programs activate through the class object
 // instead of CoCreateInstance. The dialog factories' CreateInstance code in
 // comdlg32 is hooked once; only objects made by the factories handed out for
-// the two dialog classes are tracked. Factories hold no references here.
+// the two dialog classes are tracked. Each recorded factory keeps a reference
+// until unload, so its address cannot be reused by another object.
 [[clang::no_destroy]] std::map<void*, bool> dialogFactories;
 std::optional<bool> FactoryKind(void* factory) {
   std::lock_guard lock(dialogLock);
@@ -7165,11 +7167,14 @@ void WatchFactory(IUnknown* object, bool save) {
     }
     if (hooked) {
       std::lock_guard guard(dialogLock);
-      if (dialogFactories.size() < 64)
-        dialogFactories[factory] = save;
+      // comdlg32's factories are long-lived; the cap only bounds the map.
+      if (dialogFactories.size() < 64 &&
+          dialogFactories.try_emplace(factory, save).second)
+        factory = nullptr;  // the map owns this reference now
     }
   }
-  factory->Release();
+  if (factory)
+    factory->Release();
 }
 using GetClassFn = decltype(&CoGetClassObject);
 GetClassFn originalGetClass = nullptr;
@@ -7194,17 +7199,21 @@ HRESULT WINAPI GetClassHook(REFCLSID clsid,
 }
 void UninitDialogs() {
   // Hooks have been removed and all active calls have completed. Release
-  // state without touching application-owned native dialog pointers.
+  // state without touching application-owned native dialog pointers; drop the
+  // mod's own references to the dialog class factories.
   std::map<void*, std::shared_ptr<DialogRecord>> old;
+  std::map<void*, bool> factories;
   {
     std::lock_guard lock(dialogLock);
     if (dialogs) {
       old.swap(*dialogs);
       dialogs.reset();
     }
-    dialogFactories.clear();
+    factories.swap(dialogFactories);
   }
   old.clear();
+  for (auto& factory : factories)
+    static_cast<IUnknown*>(factory.first)->Release();
 }
 }  // namespace Bridge
 
