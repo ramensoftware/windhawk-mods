@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
-// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional delayed hover display.
-// @version         1.3.1
+// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional hover delay tuning.
+// @version         1.4.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -22,7 +22,6 @@ Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:
 - Taskbar app icon tooltips and labels on hover
 - Windows Start button hover tooltip
 - System tray status icons tooltips (Network, Volume, Battery, Clock)
-- System XAML shell UI hosted in Explorer (Task View, snap layouts, and virtual desktops)
 
 If you also wish to hide application window preview thumbnails, use the [Disable Taskbar Thumbnails](https://windhawk.net/mods/taskbar-thumbnails) mod, which can be used alongside this mod.
 
@@ -40,7 +39,7 @@ If you also wish to hide application window preview thumbnails, use the [Disable
 - **Hide Start Button Tooltip**: Suppresses the hover tooltip appearing over the Windows Start button.
 - **Hide System Tray & Status Tooltips**: Suppresses hover tooltips over system status icons (Network, Volume, Battery, and Clock).
 - **Hide System Tray Overflow Tooltips**: Suppresses hover tooltips for hidden application icons inside the system tray overflow drawer. When turned off, tooltips remain visible for apps in the drawer.
-- **Additional Hover Delay for Visible Tooltips (ms)**: Adds an extra stationary hover delay in milliseconds before displaying tooltips for areas that are **not** hidden (`0` = native timing). Areas configured to be hidden remain permanently suppressed and are unaffected by this delay.
+- **Tooltip Hover Delay (ms)**: Configures the hover delay in milliseconds before displaying tooltips for areas that are **not** hidden (`-1` = native Windows timing ~400 ms, `0` = instant, `1` to `10000` = custom delay). Hidden areas remain permanently suppressed.
 
 ## Compatibility
 
@@ -75,12 +74,12 @@ If you find this mod useful, you can support its development and maintenance:
     Suppresses hover tooltips for hidden application icons inside the system
     tray overflow drawer. When turned off, tooltips remain visible for apps in
     the drawer.
-- tooltipHoverDelayMs: 0
-  $name: Additional Hover Delay for Visible Tooltips (ms)
+- tooltipHoverDelayMs: -1
+  $name: Tooltip Hover Delay (ms)
   $description: >-
-    Adds an extra stationary hover delay in milliseconds before displaying
-    tooltips that are not hidden (0 = native timing). Hidden tooltip areas
-    remain permanently suppressed.
+    Duration in milliseconds before displaying visible tooltips. Set to 0 for
+    instant display, 1-10000 for custom delay, or -1 for native Windows timing
+    (~400 ms). Hidden areas remain permanently suppressed.
 */
 // ==/WindhawkModSettings==
 
@@ -165,6 +164,13 @@ static constexpr GUID kIID_IToolTipServiceStatics = {
     0xE245,
     0x48AA,
     {0xA8, 0xC8, 0xD1, 0x07, 0x3E, 0xD7, 0x63, 0x19}};
+
+// {85361600-1C63-4627-BCB1-3A89E0BC9C55}
+static constexpr GUID kIID_IUISettings = {
+    0x85361600,
+    0x1C63,
+    0x4627,
+    {0xBC, 0xB1, 0x3A, 0x89, 0xE0, 0xBC, 0x9C, 0x55}};
 
 struct IToolTipAbi : public IInspectable {
     virtual HRESULT STDMETHODCALLTYPE get_HorizontalOffset(double* value) = 0;
@@ -365,7 +371,7 @@ struct Settings {
     std::atomic<bool> hideStartButtonTooltip{true};
     std::atomic<bool> hideSystemTrayTooltips{true};
     std::atomic<bool> hideTrayOverflowTooltips{true};
-    std::atomic<int> tooltipHoverDelayMs{0};
+    std::atomic<int> tooltipHoverDelayMs{-1};
 } g_settings;
 
 static void LoadSettings() {
@@ -383,7 +389,7 @@ static void LoadSettings() {
         std::memory_order_relaxed);
 
     int delayMs = Wh_GetIntSetting(L"tooltipHoverDelayMs");
-    delayMs = std::clamp(delayMs, 0, 60000);
+    delayMs = std::clamp(delayMs, -1, 60000);
     g_settings.tooltipHoverDelayMs.store(delayMs, std::memory_order_relaxed);
 }
 
@@ -642,6 +648,91 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
     }
 
     return ToolTipArea::TaskbarApp;
+}
+
+// IUISettings ABI: get_MouseHoverTime is at vtable index 17
+using UISettings_get_MouseHoverTime_t =
+    HRESULT(__stdcall*)(void* pThis, uint32_t* value);
+static UISettings_get_MouseHoverTime_t
+    g_uiSettingsGetMouseHoverTimeOriginal = nullptr;
+static std::atomic<bool> g_mouseHoverTimeHooked{false};
+
+static HRESULT __stdcall UISettings_get_MouseHoverTime_Hook(void* pThis,
+                                                            uint32_t* value) {
+    if (!value) {
+        return E_POINTER;
+    }
+    int delayMs =
+        g_settings.tooltipHoverDelayMs.load(std::memory_order_relaxed);
+    if (delayMs >= 0) {
+        uint32_t hoverTime = static_cast<uint32_t>(std::min(delayMs, 400));
+        *value = hoverTime;
+        return S_OK;
+    }
+    if (g_uiSettingsGetMouseHoverTimeOriginal) {
+        return g_uiSettingsGetMouseHoverTimeOriginal(pThis, value);
+    }
+    return S_OK;
+}
+
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+static SystemParametersInfoW_t SystemParametersInfoW_Original = nullptr;
+
+static BOOL WINAPI SystemParametersInfoW_Hook(UINT uiAction,
+                                              UINT uiParam,
+                                              PVOID pvParam,
+                                              UINT fWinIni) {
+    if (uiAction == SPI_GETMOUSEHOVERTIME && pvParam) {
+        int delayMs =
+            g_settings.tooltipHoverDelayMs.load(std::memory_order_relaxed);
+        if (delayMs >= 0) {
+            uint32_t hoverTime = static_cast<uint32_t>(std::min(delayMs, 400));
+            *reinterpret_cast<UINT*>(pvParam) = static_cast<UINT>(hoverTime);
+            return TRUE;
+        }
+    }
+    return SystemParametersInfoW_Original(uiAction, uiParam, pvParam, fWinIni);
+}
+
+static bool HookIUISettingsVTable() {
+    try {
+        ComPtr<IInspectable> spInsp;
+        HRESULT hr = RoActivateInstance(
+            HStringReference(L"Windows.UI.ViewManagement.UISettings").Get(),
+            &spInsp);
+        if (FAILED(hr) || !spInsp) {
+            Wh_Log(L"[HOOK] Failed to activate UISettings (hr=0x%08X)", hr);
+            return false;
+        }
+
+        ComPtr<IInspectable> spSettings;
+        hr = spInsp->QueryInterface(kIID_IUISettings, &spSettings);
+        if (FAILED(hr) || !spSettings) {
+            Wh_Log(L"[HOOK] QueryInterface(IUISettings) failed (hr=0x%08X)", hr);
+            return false;
+        }
+
+        void** vtable = *reinterpret_cast<void***>(spSettings.Get());
+        if (!vtable || !vtable[17]) {
+            Wh_Log(L"[HOOK] Invalid vtable entry at index 17");
+            return false;
+        }
+
+        auto pMethod = reinterpret_cast<void*>(vtable[17]);
+        if (!g_mouseHoverTimeHooked.exchange(true)) {
+            WindhawkUtils::SetFunctionHook(
+                pMethod,
+                reinterpret_cast<void*>(UISettings_get_MouseHoverTime_Hook),
+                reinterpret_cast<void**>(&g_uiSettingsGetMouseHoverTimeOriginal));
+            Wh_ApplyHookOperations();
+            Wh_Log(L"[HOOK] Hooked IUISettings::get_MouseHoverTime at %p",
+                   pMethod);
+        }
+        return true;
+    } catch (...) {
+        Wh_Log(L"[HOOK] Exception in HookIUISettingsVTable");
+        return false;
+    }
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -1005,8 +1096,8 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
         return S_OK;
     }
 
-    if (!hideApps && !hideStart && !hideTray && !hideDrawer && delayMs <= 0) {
-        // All areas visible and no extra delay: allow opening immediately
+    if (!hideApps && !hideStart && !hideTray && !hideDrawer && delayMs <= 400) {
+        // All areas visible and no extra delay above native 400ms: allow opening immediately
         if (g_toolTipPutIsOpenOriginal) {
             return g_toolTipPutIsOpenOriginal(pThis, value);
         }
@@ -1019,8 +1110,11 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
         return S_OK;
     }
 
-    if (delayMs > 0 && ScheduleDelayedToolTipOpen(pThis, delayMs)) {
-        return S_OK;
+    if (delayMs > 400) {
+        int extraDelay = delayMs - 400;
+        if (ScheduleDelayedToolTipOpen(pThis, extraDelay)) {
+            return S_OK;
+        }
     }
 
     if (g_toolTipPutIsOpenOriginal) {
@@ -1719,6 +1813,11 @@ BOOL Wh_ModInit() {
                                    &ShowWindow_Original);
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
+    WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
+                                   SystemParametersInfoW_Hook,
+                                   &SystemParametersInfoW_Original);
+
+    HookIUISettingsVTable();
 
     if (HMODULE systemTrayModule = GetModuleHandleW(L"SystemTray.dll")) {
         g_systemTrayHooked = true;
