@@ -46,7 +46,9 @@ The mod does **not** replace system files.
   cascading **Resize** submenu. The bottom command bar (touch / keyboard) provides
   Advanced, Run, Resize and Unpin.
 - **Search**: typing starts a search. The search charm covers apps, settings and
-  files, with the Everywhere / Apps / Settings / Files scopes.
+  files, with the Everywhere / Apps / Settings / Files scopes. Settings are the real ones:
+  the classic Control Panel items and tasks (for example Personalization) and the pages of the
+  Settings app, found by name or by their keywords.
 - **All Apps view**: accessed via the circle arrow at the bottom left; sortable by
   name, date installed or category.
 - **Real tile colors**: packaged apps use their own tile color and artwork; classic
@@ -1075,7 +1077,11 @@ struct AppEntry { std::wstring name, lower, parse; bool exe, desktop;
                   int charmCat = CC_APP;
                   bool dir = false;
                   bool searchOnly = false;
-                  bool direct = false; };
+                  bool direct = false;
+                  std::wstring keywords;   // lower-case search keywords (settings entries)
+                  std::string pidl;        // absolute PIDL bytes (Control Panel items)
+                  int launchKind = 0;      // 0 = ShellExecute(AppTarget); see enum SettingLaunch
+                  std::wstring launch; };
 // Copy of the entry the context menu was opened on: g_results can be re-sorted
 // (e.g. when the file list finishes) while the menu is open.
 static AppEntry g_ctxApp;
@@ -3831,7 +3837,9 @@ static void LoadIconFor(size_t i) {
         }
     }
     IShellItem* item = NULL;
-    if (FAILED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&item))) || !item) return;
+    if (!a.pidl.empty()) {
+        if (FAILED(SHCreateItemFromIDList((PCIDLIST_ABSOLUTE)a.pidl.data(), IID_PPV_ARGS(&item))) || !item) return;
+    } else if (FAILED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&item))) || !item) return;
     IShellItemImageFactory* factory = NULL;
     if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
         const int want = std::min(256, std::max(48, 2 * ScI(48)));
@@ -4244,6 +4252,443 @@ static void WalkStartLnks(const std::wstring& dir, int depth, size_t rootLen,
     FindClose(hf);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Settings catalog. These are the same two sources Open-Shell uses for its "Settings" category:
+//  1. Classic Control Panel: the items of the Control Panel folder, the Administrative Tools and
+//     the "All Tasks" folder (shell:::{ED7BA470-...}) with their keywords. They are opened through
+//     their PIDL, exactly as the shell does.
+//  2. Modern Settings: %windir%\ImmersiveControlPanel\Settings\AllSystemSettings_*.xml, the file
+//     SystemSettings.exe itself is indexed from. Every <SearchableContent> gives the page name,
+//     keywords, host and deep link; pages are opened the way Windows search opens them.
+// ---------------------------------------------------------------------------------------------
+enum SettingLaunch { SL_NONE = 0, SL_PIDL = 1, SL_SHELLEXEC = 2, SL_PROCESS = 3, SL_ACTIVATE = 4 };
+
+static const PROPERTYKEY kPkeyKeywords =
+    { { 0xF29F85E0, 0x4FF9, 0x1068, { 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9 } }, 5 };
+static const GUID kBhidEnumItems =
+    { 0x94F60519, 0x2850, 0x4924, { 0xAA, 0x5A, 0xD1, 0x5E, 0x84, 0x86, 0x80, 0x39 } };
+static const CLSID kClsidActivationManager =
+    { 0x45BA127D, 0x10A8, 0x46EA, { 0x8A, 0xB7, 0x56, 0xEA, 0x90, 0x78, 0x94, 0x3C } };
+static const wchar_t kSettingsAumid[] =
+    L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel";
+
+static bool AppsStopRequested() {
+    return g_appsStop && WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0;
+}
+
+static std::wstring ExpandEnvW(const std::wstring& s) {
+    wchar_t buf[2048];
+    DWORD n = ExpandEnvironmentStringsW(s.c_str(), buf, (DWORD)(sizeof(buf) / sizeof(buf[0])));
+    if (n == 0 || n > sizeof(buf) / sizeof(buf[0])) return s;
+    return buf;
+}
+
+// ---- tiny tolerant XML reader (the settings file is machine generated and well formed) ----
+static std::wstring ReadTextFileW(const std::wstring& path) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return L"";
+    LARGE_INTEGER sz = {};
+    if (!GetFileSizeEx(f, &sz) || sz.QuadPart < 4 || sz.QuadPart > 64LL * 1024 * 1024) { CloseHandle(f); return L""; }
+    std::string bytes((size_t)sz.QuadPart, '\0');
+    DWORD got = 0;
+    const BOOL ok = ReadFile(f, &bytes[0], (DWORD)bytes.size(), &got, NULL);
+    CloseHandle(f);
+    if (!ok || got < 4) return L"";
+    bytes.resize(got);
+    const BYTE* b = (const BYTE*)bytes.data();
+    if (b[0] == 0xFF && b[1] == 0xFE)
+        return std::wstring((const wchar_t*)(bytes.data() + 2), (bytes.size() - 2) / 2);
+    const size_t off = (bytes.size() >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) ? 3 : 0;
+    const int n = MultiByteToWideChar(CP_UTF8, 0, bytes.data() + off, (int)(bytes.size() - off), NULL, 0);
+    if (n <= 0) return L"";
+    std::wstring w((size_t)n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, bytes.data() + off, (int)(bytes.size() - off), &w[0], n);
+    return w;
+}
+
+static std::wstring XmlDecode(const std::wstring& s) {
+    if (s.find(L'&') == std::wstring::npos) return s;
+    static const struct { const wchar_t* ent; wchar_t ch; } named[] = {
+        { L"&amp;", L'&' }, { L"&lt;", L'<' }, { L"&gt;", L'>' }, { L"&quot;", L'"' }, { L"&apos;", L'\'' } };
+    std::wstring r;
+    r.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        if (s[i] == L'&') {
+            bool hit = false;
+            for (const auto& e : named) {
+                const size_t n = wcslen(e.ent);
+                if (s.compare(i, n, e.ent) == 0) { r += e.ch; i += n; hit = true; break; }
+            }
+            if (hit) continue;
+            if (i + 3 < s.size() && s[i + 1] == L'#') {
+                const bool hex = (s[i + 2] == L'x' || s[i + 2] == L'X');
+                const size_t semi = s.find(L';', i);
+                if (semi != std::wstring::npos && semi - i <= 10) {
+                    const wchar_t* start = s.c_str() + i + (hex ? 3 : 2);
+                    wchar_t* end = NULL;
+                    const unsigned long v = wcstoul(start, &end, hex ? 16 : 10);
+                    if (end == s.c_str() + semi && v > 0 && v < 0x10000) { r += (wchar_t)v; i = semi + 1; continue; }
+                }
+            }
+        }
+        r += s[i++];
+    }
+    return r;
+}
+
+// Finds the first <name ...>content</name> inside x[from, to) and returns the content range.
+static bool XmlRange(const std::wstring& x, size_t from, size_t to, const wchar_t* name,
+                     size_t* cs, size_t* ce) {
+    const std::wstring open = std::wstring(L"<") + name;
+    size_t p = from;
+    while ((p = x.find(open, p)) != std::wstring::npos && p < to) {
+        const size_t q = p + open.size();
+        if (q < to && (x[q] == L'>' || x[q] == L' ' || x[q] == L'/' || x[q] == L'\t' || x[q] == L'\r' || x[q] == L'\n')) {
+            const size_t gt = x.find(L'>', q);
+            if (gt == std::wstring::npos || gt >= to) return false;
+            if (x[gt - 1] == L'/') { *cs = *ce = gt; return true; }
+            const std::wstring close = std::wstring(L"</") + name + L">";
+            const size_t e = x.find(close, gt + 1);
+            if (e == std::wstring::npos || e > to) return false;
+            *cs = gt + 1; *ce = e;
+            return true;
+        }
+        p = q;
+    }
+    return false;
+}
+
+static std::wstring XmlText(const std::wstring& x, size_t from, size_t to, const wchar_t* name) {
+    size_t cs = 0, ce = 0;
+    if (!XmlRange(x, from, to, name, &cs, &ce)) return L"";
+    std::wstring t = x.substr(cs, ce - cs);
+    if (t.compare(0, 9, L"<![CDATA[") == 0) {
+        const size_t end = t.rfind(L"]]>");
+        if (end != std::wstring::npos && end >= 9) return t.substr(9, end - 9);
+    }
+    return XmlDecode(t);
+}
+
+// ---- indirect strings: "@%SystemRoot%\system32\x.dll,-123", "@{PackageFamily?ms-resource://...}" ----
+static std::wstring PackageFullNameFromFamily(const std::wstring& family) {
+    typedef LONG (WINAPI *GetPackagesByPackageFamily_t)(PCWSTR, UINT32*, PWSTR*, UINT32*, PWSTR);
+    static GetPackagesByPackageFamily_t pGet = (GetPackagesByPackageFamily_t)
+        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetPackagesByPackageFamily");
+    if (!pGet) return L"";
+    UINT32 count = 0, len = 0;
+    if (pGet(family.c_str(), &count, NULL, &len, NULL) != ERROR_INSUFFICIENT_BUFFER || count == 0) return L"";
+    std::vector<PWSTR> names(count);
+    std::vector<wchar_t> buf(len);
+    if (pGet(family.c_str(), &count, names.data(), &len, buf.data()) != ERROR_SUCCESS || count == 0) return L"";
+    return names[0];
+}
+
+static std::wstring IndirectOne(const std::wstring& s) {
+    wchar_t buf[1024];
+    buf[0] = 0;
+    HRESULT hr = SHLoadIndirectString(s.c_str(), buf, 1024, NULL);
+    if (hr == E_INVALIDARG && s.size() > 3 && s[0] == L'@' && s[1] == L'{') {
+        std::wstring inner = s.substr(2);
+        if (!inner.empty() && inner.back() == L'}') inner.pop_back();
+        const size_t q = inner.find(L'?');
+        if (q != std::wstring::npos) {
+            const std::wstring full = PackageFullNameFromFamily(inner.substr(0, q));
+            if (!full.empty()) {
+                const std::wstring fixed = L"@{" + full + L"?" + inner.substr(q + 1) + L"}";
+                buf[0] = 0;
+                hr = SHLoadIndirectString(fixed.c_str(), buf, 1024, NULL);
+            }
+        }
+    }
+    return SUCCEEDED(hr) ? std::wstring(buf) : std::wstring();
+}
+
+static std::wstring TranslateSettingString(const std::wstring& s) {
+    if (s.empty() || s[0] != L'@') return s;
+    if (s.size() > 1 && s[1] == L'@') {                    // "@@res1@res2": several resources joined
+        std::wstring r;
+        size_t pos = 1;
+        while (pos < s.size()) {
+            size_t next = s.find(L'@', pos + 1);
+            if (next == std::wstring::npos) next = s.size();
+            r += IndirectOne(s.substr(pos, next - pos));
+            pos = next;
+        }
+        return r;
+    }
+    return IndirectOne(s);
+}
+
+static bool SettingsKeywordsOnly(const std::wstring& s) { return s.find_first_not_of(L"; \t\r\n") == std::wstring::npos; }
+
+static std::wstring FindAllSystemSettingsXml() {
+    wchar_t win[MAX_PATH] = {};
+    if (!GetWindowsDirectoryW(win, MAX_PATH)) return L"";
+    const std::wstring dir = std::wstring(win) + L"\\ImmersiveControlPanel\\Settings";
+    // Known names first (as Open-Shell does), then any AllSystemSettings_*.xml for newer builds.
+    const wchar_t* known[] = { L"AllSystemSettings_{FDB289F3-FCFC-4702-8015-18926E996EC1}.xml",
+                               L"AllSystemSettings_{253E530E-387D-4BC2-959D-E6F86122E5F2}.xml" };
+    for (const wchar_t* k : known) {
+        const std::wstring p = dir + L"\\" + k;
+        if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) return p;
+    }
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW((dir + L"\\AllSystemSettings_*.xml").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return L"";
+    std::wstring best;
+    FILETIME bestTime = {};
+    do {
+        if (best.empty() || CompareFileTime(&fd.ftLastWriteTime, &bestTime) > 0) {
+            best = dir + L"\\" + fd.cFileName;
+            bestTime = fd.ftLastWriteTime;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best;
+}
+
+struct ModernSettingRec { std::wstring fileName, description, keywords, parse, launch; int kind; };
+
+static void ParseModernSettings(std::vector<AppEntry>& out) {
+    const std::wstring path = FindAllSystemSettingsXml();
+    if (path.empty()) { Wh_Log(L"Settings: AllSystemSettings xml not found"); return; }
+    const std::wstring x = ReadTextFileW(path);
+    if (x.empty()) { Wh_Log(L"Settings: cannot read %s", path.c_str()); return; }
+
+    std::vector<ModernSettingRec> recs;
+    size_t p = 0;
+    while ((p = x.find(L"<SearchableContent", p)) != std::wstring::npos) {
+        if (AppsStopRequested()) return;
+        size_t e = x.find(L"</SearchableContent>", p);
+        if (e == std::wstring::npos) break;
+        const size_t from = p, to = e;
+        p = e;
+
+        size_t ics = 0, ice = 0, ccs = 0, cce = 0;
+        std::wstring deepLink;
+        if (XmlRange(x, from, to, L"ApplicationInformation", &ics, &ice))
+            deepLink = TranslateSettingString(XmlText(x, ics, ice, L"DeepLink"));
+        const std::wstring pageId    = TranslateSettingString(XmlText(x, from, to, L"PageID"));
+        const std::wstring hostId    = TranslateSettingString(XmlText(x, from, to, L"HostID"));
+        const std::wstring groupId   = TranslateSettingString(XmlText(x, from, to, L"GroupID"));
+        const std::wstring settingId = TranslateSettingString(XmlText(x, from, to, L"SettingID"));
+
+        std::wstring description, keywords;
+        if (XmlRange(x, from, to, L"SettingInformation", &ccs, &cce)) {
+            description = TranslateSettingString(XmlText(x, ccs, cce, L"Description"));
+            if (description.empty()) description = TranslateSettingString(XmlText(x, ccs, cce, L"Name"));
+            keywords += TranslateSettingString(XmlText(x, ccs, cce, L"HighKeywords"));
+            keywords += L";";
+            keywords += TranslateSettingString(XmlText(x, ccs, cce, L"LowKeywords"));
+            keywords += L";";
+            keywords += TranslateSettingString(XmlText(x, ccs, cce, L"Keywords"));
+        }
+        if (description.empty()) continue;
+
+        ModernSettingRec r;
+        r.fileName = XmlText(x, from, to, L"Filename");
+        r.description = description;
+        r.keywords = SettingsKeywordsOnly(keywords) ? std::wstring() : keywords;
+        r.parse = L"ms-settings:" + pageId;          // only used to pick the Settings icon
+        r.kind = SL_NONE;
+
+        // Same dispatch Windows uses for the three kinds of hosts (as in Open-Shell's context menu).
+        if (_wcsicmp(hostId.c_str(), L"{6E6DDBCB-9C89-434B-A994-D5F22239523B}") == 0) {          // Windows Security
+            if (deepLink.empty()) continue;
+            r.launch = L"windowsdefender://" + deepLink; r.kind = SL_SHELLEXEC;
+        } else if (_wcsicmp(hostId.c_str(), L"{7E0522FC-1AC4-41CA-AFD0-3610417A9C41}") == 0) {   // shell folder page
+            if (pageId.empty()) continue;
+            r.launch = L"shell:::" + pageId; r.kind = SL_SHELLEXEC;
+        } else if (_wcsicmp(hostId.c_str(), L"{12B1697E-D3A0-4DBC-B568-CCF64A3F934D}") == 0) {   // legacy applet command
+            if (deepLink.empty()) continue;
+            r.launch = deepLink;
+            r.kind = deepLink.compare(0, 8, L"shell:::") == 0 ? SL_SHELLEXEC : SL_PROCESS;
+        } else {                                                                                  // SystemSettings page
+            if (pageId.empty()) continue;
+            r.launch = L"page=" + pageId;
+            if (!settingId.empty()) r.launch += L"&target=" + settingId;
+            else if (!groupId.empty()) r.launch += L"&group=" + groupId;
+            r.launch += L"&ActivationType=Search";
+            r.kind = SL_ACTIVATE;
+        }
+        recs.push_back(std::move(r));
+    }
+
+    // Newer pages (e.g. "SomeSetting-2") come first, then one entry per visible name.
+    std::stable_sort(recs.begin(), recs.end(), [](const ModernSettingRec& a, const ModernSettingRec& b) {
+        return a.fileName > b.fileName; });
+    std::unordered_map<std::wstring, bool> seen;
+    for (ModernSettingRec& r : recs) {
+        const std::wstring key = LowerW(r.description);
+        if (!seen.emplace(key, true).second) continue;
+        AppEntry a{};
+        a.name = r.description; a.lower = key; a.parse = r.parse;
+        a.exe = false; a.desktop = false; a.date = 0; a.cat = 2;
+        a.charmCat = CC_SETTING; a.searchOnly = true; a.direct = true;
+        a.keywords = LowerW(r.keywords);
+        a.launchKind = r.kind; a.launch = r.launch;
+        out.push_back(std::move(a));
+    }
+    Wh_Log(L"Settings: %u modern settings from %s", (unsigned)out.size(), path.c_str());
+}
+
+// ---- classic Control Panel / Administrative Tools / All Tasks ----
+static std::wstring ShellItemKeywords(IShellItem* item) {
+    IShellItem2* i2 = NULL;
+    if (FAILED(item->QueryInterface(IID_PPV_ARGS(&i2))) || !i2) return L"";
+    PROPVARIANT v;
+    PropVariantInit(&v);
+    std::wstring r;
+    if (SUCCEEDED(i2->GetProperty(kPkeyKeywords, &v))) {
+        if ((v.vt == VT_LPWSTR || v.vt == VT_BSTR) && v.pwszVal) {
+            r = v.pwszVal;
+        } else if (v.vt == (VT_VECTOR | VT_LPWSTR) || v.vt == (VT_VECTOR | VT_BSTR)) {
+            for (ULONG k = 0; k < v.calpwstr.cElems; ++k) {
+                if (!v.calpwstr.pElems[k]) continue;
+                r += L";";
+                r += v.calpwstr.pElems[k];
+            }
+        }
+    }
+    PropVariantClear(&v);
+    i2->Release();
+    return LowerW(r);
+}
+
+static void AddShellSetting(std::vector<AppEntry>& out, IShellItem* item, bool wantKeywords) {
+    PWSTR nm = NULL;
+    if (FAILED(item->GetDisplayName(SIGDN_PARENTRELATIVEEDITING, &nm)) || !nm) return;
+    std::wstring name = nm;
+    CoTaskMemFree(nm);
+    if (name.empty()) return;
+    PIDLIST_ABSOLUTE pidl = NULL;
+    if (FAILED(SHGetIDListFromObject(item, &pidl)) || !pidl) return;
+    AppEntry a{};
+    a.name = name; a.lower = LowerW(name);
+    PWSTR pn = NULL;
+    if (SUCCEEDED(item->GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, &pn)) && pn) { a.parse = pn; CoTaskMemFree(pn); }
+    else a.parse = name;
+    a.exe = false; a.desktop = false; a.date = 0; a.cat = 2;
+    a.charmCat = CC_SETTING; a.searchOnly = true; a.direct = true;
+    a.launchKind = SL_PIDL;
+    a.pidl.assign((const char*)pidl, ILGetSize(pidl));
+    CoTaskMemFree(pidl);
+    if (wantKeywords) a.keywords = ShellItemKeywords(item);
+    out.push_back(std::move(a));
+}
+
+static void CollectShellSettings(std::vector<AppEntry>& out, IShellItem* folder, bool withFolders,
+                                 bool recursive, bool wantKeywords, int depth) {
+    if (depth > 4 || out.size() > 6000) return;
+    IEnumShellItems* en = NULL;
+    if (FAILED(folder->BindToHandler(NULL, kBhidEnumItems, IID_PPV_ARGS(&en))) || !en) return;
+    IShellItem* child = NULL;
+    while (!AppsStopRequested() && en->Next(1, &child, NULL) == S_OK && child) {
+        SFGAOF fl = 0;
+        if (SUCCEEDED(child->GetAttributes(SFGAO_FOLDER | SFGAO_STREAM | SFGAO_LINK | SFGAO_HIDDEN, &fl)) &&
+            !(fl & SFGAO_HIDDEN)) {
+            if (recursive && (fl & (SFGAO_FOLDER | SFGAO_STREAM | SFGAO_LINK)) == SFGAO_FOLDER)
+                CollectShellSettings(out, child, withFolders, recursive, wantKeywords, depth + 1);
+            if (withFolders || !(fl & SFGAO_FOLDER))
+                AddShellSetting(out, child, wantKeywords);
+        }
+        child->Release();
+        child = NULL;
+    }
+    en->Release();
+}
+
+static IShellItem* ShellItemFromKnownFolder(REFKNOWNFOLDERID id) {
+    PIDLIST_ABSOLUTE pidl = NULL;
+    if (FAILED(SHGetKnownFolderIDList(id, 0, NULL, &pidl)) || !pidl) return NULL;
+    IShellItem* item = NULL;
+    if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item)))) item = NULL;
+    CoTaskMemFree(pidl);
+    return item;
+}
+
+static void AddCharmSettingsEntries(std::vector<AppEntry>& list) {
+    std::vector<AppEntry> found;
+
+    if (IShellItem* cp = ShellItemFromKnownFolder(FOLDERID_ControlPanelFolder)) {
+        CollectShellSettings(found, cp, true, false, true, 0);
+        cp->Release();
+    }
+    if (IShellItem* at = ShellItemFromKnownFolder(FOLDERID_AdminTools)) {
+        CollectShellSettings(found, at, false, true, false, 0);
+        at->Release();
+    }
+    if (IShellItem* cat = ShellItemFromKnownFolder(FOLDERID_CommonAdminTools)) {
+        CollectShellSettings(found, cat, false, true, false, 0);
+        cat->Release();
+    }
+    {
+        IShellItem* tasks = NULL;   // "All Tasks" (God Mode): hundreds of tasks with good keywords
+        if (SUCCEEDED(SHCreateItemFromParsingName(L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}", NULL,
+                                                  IID_PPV_ARGS(&tasks))) && tasks) {
+            CollectShellSettings(found, tasks, false, false, true, 0);
+            tasks->Release();
+        }
+    }
+    Wh_Log(L"Settings: %u classic Control Panel items", (unsigned)found.size());
+    if (!AppsStopRequested()) ParseModernSettings(found);
+
+    // One row per visible name; the classic item wins over the modern page with the same name.
+    std::unordered_map<std::wstring, bool> seen;
+    for (const AppEntry& a : list) if (!a.exe) seen.emplace(a.lower, true);
+    for (AppEntry& a : found) {
+        if (!seen.emplace(a.lower, true).second) continue;
+        list.push_back(std::move(a));
+    }
+}
+
+static void LaunchSettingEntry(const AppEntry& a) {
+    switch (a.launchKind) {
+    case SL_PIDL: {
+        if (a.pidl.empty()) break;
+        SHELLEXECUTEINFOW sei = {};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
+        sei.lpIDList = (LPVOID)a.pidl.data();
+        sei.nShow = SW_SHOWNORMAL;
+        ShellExecuteExW(&sei);
+        break;
+    }
+    case SL_SHELLEXEC:
+        ShellExecuteW(NULL, L"open", a.launch.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        break;
+    case SL_PROCESS: {
+        const std::wstring cmd = ExpandEnvW(a.launch);
+        std::vector<wchar_t> buf(cmd.begin(), cmd.end());
+        buf.push_back(0);
+        STARTUPINFOW si = {};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi = {};
+        if (CreateProcessW(NULL, buf.data(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        } else {
+            ShellExecuteW(NULL, L"open", cmd.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        }
+        break;
+    }
+    case SL_ACTIVATE: {
+        bool ok = false;
+        IApplicationActivationManager* mgr = NULL;
+        if (SUCCEEDED(CoCreateInstance(kClsidActivationManager, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&mgr))) && mgr) {
+            DWORD pid = 0;
+            ok = SUCCEEDED(mgr->ActivateApplication(kSettingsAumid, a.launch.c_str(), AO_NONE, &pid));
+            mgr->Release();
+        }
+        if (!ok) ShellExecuteW(NULL, L"open", a.parse.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 static DWORD WINAPI AppsThread(LPVOID) {
   RunGuarded(L"AppsThread", [] {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -4313,6 +4758,10 @@ static DWORD WINAPI AppsThread(LPVOID) {
         }
     }
 
+    if (!first) {
+        try { AddCharmSettingsEntries(list); }
+        catch (...) { Wh_Log(L"Settings: scan failed"); }
+    }
     AddCharmSystemEntries(list);
     Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
@@ -4325,6 +4774,7 @@ static DWORD WINAPI AppsThread(LPVOID) {
         ReleaseSRWLockExclusive(&g_appsLock);
         InterlockedExchange(&g_appsReady, 1);
         if (g_wnd) PostMessageW(g_wnd, WM_APP_APPS_READY, 0, 0);
+        if (g_appsRefresh) SetEvent(g_appsRefresh);   // second pass: adds the settings catalog
     } else {
         std::vector<AppEntry>* np = new std::vector<AppEntry>(std::move(list));
         AcquireSRWLockExclusive(&g_appsLock);
@@ -4532,13 +4982,17 @@ static void RunSearch() {
             if (g_charmScope == 1 && a.charmCat != CC_APP)     continue;
             if (g_charmScope == 2 && a.charmCat != CC_SETTING) continue;
             if (g_charmScope == 3 && a.charmCat != CC_FILE)    continue;
-            bool all = true;
-            for (const std::wstring& w : words)
-                if (a.lower.find(w) == std::wstring::npos) { all = false; break; }
+            bool all = true, inName = true;
+            for (const std::wstring& w : words) {
+                if (a.lower.find(w) != std::wstring::npos) continue;
+                inName = false;
+                if (a.keywords.empty() || a.keywords.find(w) == std::wstring::npos) { all = false; break; }
+            }
             if (!all) continue;
             const int rank = (a.charmCat == CC_APP ? 0 : a.charmCat == CC_SETTING ? 2 : 4)
                            + (a.lower.rfind(q, 0) == 0 ? 0 : 2)
-                           + (a.dir ? 1 : 0);
+                           + (a.dir ? 1 : 0)
+                           + (inName ? 0 : 1);
             hits.push_back({ rank, (int)i });
         }
         auto cmp = [](const Hit& a, const Hit& b) {
@@ -4630,6 +5084,7 @@ static void LeaveSearch() {
 
 static void LaunchEntry(const AppEntry& a) {
     if (a.desktop) { CloseStart(g_firstDesktopAfterLogon); return; }
+    if (a.launchKind != 0) { CloseStart(); LaunchSettingEntry(a); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
     ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
