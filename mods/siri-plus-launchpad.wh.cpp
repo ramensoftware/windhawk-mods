@@ -2,7 +2,7 @@
 // @id              siri-plus-launchpad
 // @name            Siri Plus Launchpad
 // @description     Replaces the Start menu with a macOS 27 Siri-style launcher: search bar with categories, app tabs, files, clipboard, actions and live liquid glass
-// @version         1.43.3
+// @version         1.44.0
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Siri-Plus-Launchpad
@@ -135,11 +135,9 @@ All options are in the mod's **Settings** tab in Windhawk, with names in English
 - Live blur needs **Transparency effects** turned on in Windows (*Settings → Personalization → Colors*). Without it, a blurred still image is used.
 - Optional: [Everything](https://www.voidtools.com) for instant file search (run it normally, not as administrator)
 
-## Installation
-1. Install [Windhawk](https://windhawk.net).
-2. Search for **Siri Plus Launchpad** in Windhawk's mod browser and click **Install**.
-   Or click **Create a new mod**, paste the contents of `siri-plus-launchpad.wh.cpp` from this repository, then **Compile** and **Enable**.
-3. Press the Windows key.
+## Compatibility
+- **Fullscreen Start** (`fullscreen-start`): don't enable both. Each one replaces the Start menu through the same hook without calling the original, so only one of them would get the Windows key.
+- **Spotlight Launcher**: it adds a separate search bar on Alt+Space and leaves the Start menu alone. This mod replaces the Start menu itself (Windows key and Start button) and adds app tabs, folders, files, clipboard history and actions. Both can be used together.
 
 ---
 
@@ -166,7 +164,7 @@ Everything else (Original Siri and Floating modes, live liquid glass, themes, ap
 Developed and maintained by **Thiago Silva** ([github.com/brideinflame-rgb](https://github.com/brideinflame-rgb)).
 
 ## License
-Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License v3.0** (see `LICENSE`).
+Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License v3.0**.
 
 The parts that come from Rafael Mendes' *Fullscreen Start* are also available under their original license:
 
@@ -192,171 +190,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
-## Changelog
-### 1.43.3
-- The category shortcuts belong to Original Siri: they moved to block ⑥ (Floating and Original Siri) and work only in that mode; block ⑦ is now just "Opening"
-### 1.43.2
-- Fixed: turning the Clipboard category off now really stops monitoring and clears the history
-- Fixed: Original Siri no longer creates hidden folders when an app is dropped on another (tabs replace folders there; dragging to the taskbar still pins)
-- Fixed: a possible crash when an app vanished while being drawn
-- Code cleanup: one power menu definition, unused variables removed, a lost press on the tab strip no longer blocks hovering
-### 1.43.1
-- New README (everything the mod does and customizes, credits, support link)
-- License: GPL-3.0 (parts from Fullscreen Start keep their MIT notice)
-### 1.43.0
-- Shortcuts: only the Ctrl shortcuts for the categories remain, and they are configurable (defaults Ctrl+1 Apps, Ctrl+2 Files, Ctrl+3 Actions, Ctrl+4 Clipboard); they work in every mode and appear in the categories menu
-- Removed the global Win+key shortcuts (and their keyboard hook)
-### 1.42.0
-- Renamed to **Siri Plus Launchpad** (id `siri-plus-launchpad`, repository github.com/brideinflame-rgb/Siri-Plus-Launchpad)
-- The former Siri mode is now called **Floating** (same settings value, nothing to reconfigure)
-- Original Siri is the main mode and the default on install
-### 1.41.3
-- Clipboard is a list: each row shows the first line of what was copied and, below, a preview of the rest (or its size)
-### 1.41.2
-- Right-clicking the search bar no longer offers "New tab": it shows a text menu (cut, copy, paste, select all, delete all; only paste when empty)
-- Original Siri: the tab options appear only inside the apps panel
-### 1.41.1
-- Original Siri: clicking the bar before picking a category offers the categories instead of opening Apps with no way back; typing right away picks Apps (the back arrow and Esc work)
-### 1.41.0
-- Original Siri: hovering the category icon in the bar turns it into a back arrow; clicking it goes back to "Search" like Esc
-- Original Siri: clicking the empty bar next to the category reopens the categories menu to switch directly
-### 1.40.1
-- The selected filter and the page dots are more discreet: a faint capsule with a hairline edge instead of raised glass; the dots' capsule shows fully only when the mouse is near
-### 1.40.0
-- Original Siri: the built-in tabs can be deleted too (right-click > "Restore default tabs" brings them back), and apps can be added to or removed from them
-- Original Siri: Tab / Shift+Tab walks the app tabs, or the results in Files, Clipboard and Actions
-- Original Siri: the filter strip has no outline; hold and drag it sideways (its hidden side fades out)
-### 1.39.0
-- Original Siri: an "All" filter comes first (every app, with the recent row)
-- Original Siri: your own tabs (up to 6) instead of folders - right-click an app or the strip for "New tab", type its name, then "Add app" opens every app: long-press to pick as many as you want (picked apps jiggle), Done saves
-- Original Siri: right-click a tab to rename or delete it; inside a tab, "Remove from tab"; the filter strip scrolls sideways with the wheel when it is full
-### 1.38.0
-- Original Siri: the first row of apps shows the recently opened or installed apps (or the most used, or nothing - a setting), with a thin line under it
-### 1.37.1
-- Original Siri: Esc after picking a category goes back to "Search" with the magnifier and offers the categories again (arrows + Enter or the mouse)
-### 1.37.0
-- Original Siri: the bar says just "Search" when it opens; picking a category makes its icon and name glide from the menu into the bar
-### 1.36.1
-- Original Siri: the categories menu is larger and macOS-like (same glass as the bar, big icons, keycap shortcuts, aligned rows)
-### 1.36.0
-- New mode: Original Siri (macOS 27 style). Hovering the bar drops down Applications, Files, Actions and Clipboard with icons and Ctrl+1..4 shortcuts; the search works inside the chosen category
-- Actions category: lock, sleep, restart, shut down, sign out, settings, task manager, file explorer, control panel, screenshot, empty recycle bin
-- Applications: filters (Utilities, Productivity, Entertainment, Social, Creativity, Reading, Other) and the most used apps in the first row
-### 1.35.1
-- Siri power button: opens the same power options pill as typing "shut down"; with that pill turned off, it opens the power menu outside the results box, on its right
-### 1.35.0
-- Siri mode: optional floating power button next to the bar; it slides out from behind the bar once the bar is complete and opens the power menu
-### 1.34.2
-- Live blur rebuilt on Windows.UI.Composition: cut exactly to the shapes with smooth corners (no more blurred film around the menus), adjustable strength again
-### 1.34.1
-- Live blur: fixed the blurred rectangle that showed around the menus; the blur is now cut to the shapes
-### 1.34.0
-- Live blur: Windows' own blur under the menus, cut to their shapes, so animated wallpapers and videos keep playing behind a blurred glass (falls back to the blurred still image if Windows refuses it)
-### 1.33.0
-- One Background blur level (0-100) in Appearance for every theme and mode; 0 keeps the live background (replaces the Live background switch and the Custom theme blur)
-### 1.32.0
-- New Live background option (on by default): animated wallpapers and videos keep playing behind the menus in every mode and theme
-- Window mode: the page indicator now sits inside the glass panel
-### 1.31.0
-- Raised liquid-glass buttons: power button, centered search box, clear button, category strip and its selected tab, page indicator, Siri power options and context menu rows
-- Power menu translated in Window and Fullscreen modes
-### 1.30.0
-- Settings reorganized into short, clearly named blocks; a single Theme choice now applies to every mode
-- Custom theme settings grouped in one block (one color/opacity for the window, the Siri bar and the panel)
-- One corner rounding setting for window, fullscreen (now rounded too), open folders and the Siri panel
-- Glass transparency now also applies to the Light and Siri themes
-- Light and Siri themes: smaller, discreet shadow and soft edges like the Clear glass theme
-- Removed settings that no longer changed anything useful (Liquid Glass toggle, separate bar/panel colors, separate radii)
-- Note: settings were renamed, so they start from their default values once
-### 1.29.1
-- Clear glass theme: smaller, discreet shadow; soft gray edge (light at the top and bottom, darker in the middle, LiquidGlass style)
-- New setting: Clear glass transparency (100 = completely clear)
-### 1.29.0
-- The bright Glassmorphism theme is now called Light
-- New Clear glass theme: fully translucent glass with a thick-glass edge that casts a shadow on the wallpaper
-### 1.28.0
-- New Theme menu in each mode block: Custom (all color, blur, glass and border settings), Glassmorphism (bright translucent glass with a soft shadow) and Siri (macOS 27 gradient)
-- Removed the Blur Mode menu: in the Custom theme, blur strength 0 turns blur off
-- Siri mode now also blurs what is behind the pill and the panel
-- Removed the "Siri wave without the circle" animation
-### 1.26.0
-- Removed the activation GIF feature and its settings (the circle zoom, bounce and "sucked in" closing remain)
-### 1.25.2
-- Siri mode closing: the bar collapses without zoom or bounce and is sucked into the bubble, which then shrinks and fades away
-### 1.25.1
-- Siri mode: the opening circle is no longer cut at the top
-- The circle pops in with an adjustable zoom, returns to the bar height and then the bar expands (also on closing)
-### 1.25.0
-- Siri mode: optional activation GIF. Set a GIF file in the settings: it plays when the bar is invoked (black background removed automatically) and the bar then emerges from it with a fade
-### 1.24.2
-- Siri mode: restored the continuous dark-to-light gradient (darkest on the pill, lighter and slightly cool at the bottom of the panel), now visible on dark colors, with an adjustable intensity
-### 1.24.1
-- Files: duplicate paths are removed from the results and each file shows its folder under its name
-### 1.24.0
-- Siri mode: new animated "Siri wave" circle (colorful flowing blobs on a dark disk) for opening/closing; selectable in the settings (wave / soft glow / none)
-### 1.23.0
-- Siri mode: adjustable bounce for the circle opening/closing and for the Apps/Files/Clipboard box (0-100 %, 0 = none)
-### 1.22.0
-- Fix: the Clipboard (or Files) category could still be opened with Tab after being disabled in the settings
-- Fix: category strip clicks now match the drawn labels (translated labels have different widths); the highlight slides again
-- Fix: Ctrl+V pasted twice, Ctrl+Backspace did nothing, and plain Left/Right/Home/End no longer navigate the grid; Delete key added
-- Fix: a stale text cursor position could crash after clearing the search or picking a history entry
-- Smoother animations: frames follow the monitor refresh rate (high-resolution timer instead of the 15.6 ms WM_TIMER)
-- More messages translated (Everything status, "New folder with N items")
-- Code cleanup and changelog tidy-up
-### 1.21.1
-- Fixes the undeclared Direct2D factory identifier in the Files tab folder icon code
-### 1.21.0
-- Small folder icon in the Siri Files search tab
-### 1.20.9
-- Navigation direction is a General setting shared by all modes
-- Vertical scrolling uses the clickable page indicator (no scrollbar)
-### 1.20.1
-- Siri Apps results: long-press to select, drag onto another app to create a folder, horizontal pages
-### 1.19.1
-- Siri mode skips the synchronous backdrop capture so opening stays responsive
-### 1.19.0
-- Faster, cancellable file scans and hardened Everything IPC parsing
-### 1.18.1
-- Mouse selection, caret navigation and selection-aware copy/cut/paste in the search box
-### 1.18.0
-- Ctrl+A / Ctrl+C / Ctrl+X in the search box
-### 1.12.0
-- Automatic interface language (Portuguese, English, Spanish, French, German, Italian)
-### 1.11.0
-- Direct shortcuts (must start with Win): Win+A Applications, Win+S Files, Win+D Clipboard (configurable)
-### 1.10.1
-- Files tab: empty search shows only the search history, with a trash icon to clear it
-- Files shown as a list (new default, switchable in settings)
-### 1.10.0
-- Everything via IPC (WM_COPYDATA), no Everything64.dll needed
-- New: options to disable Files search and Clipboard history
-- Files tab shows the indexer error/status
-### 1.9.0
-- New: Apps / Files / Clipboard categories in Window, Fullscreen and Siri modes
-- New: global file indexer setting (Everything, Windows Search, direct scan)
-- New: asynchronous file search with debounce; configurable result and clipboard limits
-### 1.8.0
-- Settings reorganized into Mode, mode-specific and General blocks
-- Animations are now configured per mode
-- New: Siri closing animation (pill -> dot -> hide)
-### 1.7.0
-- Siri pill-only opening, intro animation, tabs, separate pill/panel settings
-### 1.6.0
-- Power pill in Siri mode
-### 1.5.0
-- Siri display mode
-### 1.4.0
-- Clear button and Uninstall
-### 1.3.0
-- Liquid Glass and jiggle
-### 1.2.0
-- Search inside folders
-### 1.1.0
-- Power button position
-### 1.0.0
-- First release
 */
 // ==/WindhawkModReadme==
 
@@ -840,10 +673,11 @@ constexpr float kFolderOpenSeconds = 0.34f;
 constexpr float kFolderCloseSeconds = 0.24f;
 
 // g_layoutItems encoding (main screen):
-//   0..999                     -> index in g_apps
-//   1000..999999               -> folder (1000 + folder index)
+//   0..kFolderBase-1           -> index in g_apps
+//   kFolderBase..999999        -> folder (kFolderBase + folder index)
 //   kFolderAppBase..kTabBase-1 -> app inside a folder (search result)
 //   >= kTabBase                -> category item (Files / Clipboard): kTabBase + index in g_tabItems
+constexpr int kFolderBase = 100000;
 constexpr int kFolderAppBase = 1000000;
 constexpr int kTabBase = 900000000;
 
@@ -892,7 +726,6 @@ float AnimSeconds(Anim a, bool closing) {
 
 struct Settings {
     Theme theme = Theme::Custom;       // Window / Fullscreen
-    Theme siriTheme = Theme::Custom;   // Siri
     int blurAmount = 60;
     int glassTransparency = 80;   // Clear glass theme
     bool liveBackground = true;   // no snapshot: animated wallpapers and videos keep playing behind
@@ -915,7 +748,6 @@ struct Settings {
     bool dragToPin = true;
     bool showPower = true;
     bool powerRight = false;
-    bool liquidGlass = true;
     bool jiggle = true;
     bool darkText = false;
     bool siri = false;
@@ -952,13 +784,13 @@ struct Settings {
 Settings g_settings;
 std::atomic<bool> g_winKeyEnabled{true};
 std::atomic<bool> g_startButtonEnabled{true};
-[[clang::no_destroy]] std::vector<std::wstring> g_searchHistory;
+std::vector<std::wstring> g_searchHistory;
 bool g_historyEnabled = true;
 bool g_filesList = false;
 
 struct Shortcut { bool valid = false, shift = false; UINT vk = 0; };
 Shortcut g_shortcuts[4];   // category shortcuts (Ctrl+...), indexed by tab id: Apps, Files, Clipboard, Actions
-[[clang::no_destroy]] std::wstring g_shortcutLabels[4];   // as shown in the categories menu
+std::wstring g_shortcutLabels[4];   // as shown in the categories menu
 void SaveSearchHistory();
 void QueryChanged();
 
@@ -1039,7 +871,6 @@ void LoadSettings() {
     // ② Theme (one for every mode)
     std::wstring theme = S(L"theme");
     s.theme = theme == L"light" ? Theme::Light : theme == L"siri" ? Theme::Siri : theme == L"custom" ? Theme::Custom : Theme::Glass;
-    s.siriTheme = s.theme;
 
     // ③ Appearance
     s.glassTransparency = std::clamp(I(L"appearance.transparency"), 0, 100);
@@ -1055,7 +886,6 @@ void LoadSettings() {
     s.siriPillOpacity = std::min(1.0f, s.opacity + 0.12f);
     s.siriShadeStrength = std::clamp(I(L"custom.shading"), 0, 100);
     s.siriShade = s.siriShadeStrength > 0;
-    s.liquidGlass = true;
     s.borderWidth = std::clamp(I(L"custom.borderWidth"), 0, 8);
     s.borderColor = ParseColor(S(L"custom.borderColor"), s.borderColor);
     s.borderOpacity = std::clamp(I(L"custom.borderOpacity"), 0, 100) / 100.0f;
@@ -1105,7 +935,7 @@ void LoadSettings() {
     s.clipEnabled = I(L"clipboard.enabled") != 0;
     s.clipMax = std::clamp(I(L"clipboard.size"), 5, 200);
 
-    Theme active = s.siri ? s.siriTheme : s.theme;
+    Theme active = s.theme;
     s.darkText = active == Theme::Light ? true : active != Theme::Custom ? false : Luma(s.siri ? s.siriPanelColor : s.tint) > 0.6f;
     g_settings = s;
     BuildTabs();
@@ -1143,11 +973,11 @@ struct Folder {
 using AppList = std::vector<std::shared_ptr<App>>;
 [[clang::no_destroy]] AppList g_apps;
 [[clang::no_destroy]] AppList g_tabItems;
-[[clang::no_destroy]] std::vector<std::wstring> g_clipHistory;
+std::vector<std::wstring> g_clipHistory;
 constexpr WCHAR kHistoryKey[] = L"fileHistory";
 constexpr int kHistoryMax = 20;
 [[clang::no_destroy]] std::vector<Folder> g_folders;
-[[clang::no_destroy]] std::vector<int> g_layoutItems;
+std::vector<int> g_layoutItems;
 
 bool g_appsLoaded;
 double g_appsTime;
@@ -1303,7 +1133,7 @@ int g_openFolderIndex = -1;
 int g_siriTab;            // 0 Apps, 1 Files, 2 Clipboard
 float g_tabSlide;         // animated tab indicator (visible slot)
 float g_tabNatural[4];
-[[clang::no_destroy]] std::unordered_map<std::wstring, float> g_chipWidths;   // measured filter labels (cleared when the scale changes)
+std::unordered_map<std::wstring, float> g_chipWidths;   // measured filter labels (cleared when the scale changes)
 float g_chipPad;   // padding around a filter label
 bool g_searchActive;      // Window/Fullscreen: category strip visible (search bar clicked or typing)
 float g_tabsAnim;         // Window/Fullscreen: 0 hidden -> 1 strip fully shown
@@ -1317,12 +1147,12 @@ bool g_siriClosingPill;   // closing: panel collapses, then pill -> dot -> hide
 
 bool IsTabItem(int it) { return it >= kTabBase; }
 bool IsFolderApp(int it) { return it >= kFolderAppBase && it < kTabBase; }
-bool IsFolderItem(int it) { return it >= 1000 && it < kFolderAppBase; }
+bool IsFolderItem(int it) { return it >= kFolderBase && it < kFolderAppBase; }
 
 App* ResolveApp(int it) {
     if (it < 0) return nullptr;
     if (IsTabItem(it)) { int i = it - kTabBase; return i < (int)g_tabItems.size() ? g_tabItems[i].get() : nullptr; }
-    if (it < 1000) return it < (int)g_apps.size() ? g_apps[it].get() : nullptr;
+    if (it < kFolderBase) return it < (int)g_apps.size() ? g_apps[it].get() : nullptr;
     if (!IsFolderApp(it)) return nullptr;
     int f = (it - kFolderAppBase) / 10000, a = (it - kFolderAppBase) % 10000;
     if (f >= (int)g_folders.size() || a >= (int)g_folders[f].apps.size()) return nullptr;
@@ -1333,11 +1163,11 @@ App* ResolveApp(int it) {
 std::vector<std::wstring> Split(const std::wstring& s, WCHAR sep);
 int g_recommendedCount = 7;   // apps per row in the Siri panel (set by the layout)
 constexpr WCHAR kLaunchKey[] = L"launchCounts";
-[[clang::no_destroy]] std::unordered_map<std::wstring, int> g_launchCounts;   // launches through the mod, by lowercase target
-[[clang::no_destroy]] std::unordered_map<std::wstring, int> g_userAssist;     // Windows' own run counts (UserAssist)
-[[clang::no_destroy]] std::unordered_map<std::wstring, unsigned long long> g_userAssistTime;   // ... and when they last ran (FILETIME)
-[[clang::no_destroy]] std::unordered_map<std::wstring, unsigned long long> g_launchTimes;      // last launch through the mod
-[[clang::no_destroy]] std::unordered_map<std::wstring, unsigned long long> g_firstSeen;         // when an app first showed up (installed)
+std::unordered_map<std::wstring, int> g_launchCounts;   // launches through the mod, by lowercase target
+std::unordered_map<std::wstring, int> g_userAssist;     // Windows' own run counts (UserAssist)
+std::unordered_map<std::wstring, unsigned long long> g_userAssistTime;   // ... and when they last ran (FILETIME)
+std::unordered_map<std::wstring, unsigned long long> g_launchTimes;      // last launch through the mod
+std::unordered_map<std::wstring, unsigned long long> g_firstSeen;         // when an app first showed up (installed)
 constexpr WCHAR kKnownAppsKey[] = L"knownApps";
 int g_firstRowCount;   // items in the Original Siri first row (a line is drawn under it)
 
@@ -1350,10 +1180,10 @@ int g_appFilter = -1;   // Original Siri: app category filter (-1 = all)
 
 // Original Siri: user tabs, shown after the built-in filters (each keeps the apps the user picked)
 struct CustomTab { std::wstring name; std::vector<std::wstring> targets; };
-[[clang::no_destroy]] std::vector<CustomTab> g_customTabs;
+std::vector<CustomTab> g_customTabs;
 constexpr int kMaxCustomTabs = 6;
 constexpr int kChipAll = -1, kChipCustom = 100, kChipCancel = -100, kChipDone = -101, kNoChip = -1000;
-[[clang::no_destroy]] std::unordered_set<App*> g_selection;   // multi-select (Original Siri: the apps picked for a tab)
+std::unordered_set<App*> g_selection;   // multi-select (Original Siri: the apps picked for a tab)
 int g_pickerChip = kNoChip;  // the tab whose apps are being picked
 bool Picking() { return g_pickerChip != kNoChip; }
 int g_pickerPrevFilter = -1;
@@ -1497,11 +1327,15 @@ PCWSTR FilterLabel(int i) {
     return Tr(kLabels[std::clamp(i, 0, kFilterCount - 1)]);
 }
 
-bool HasWord(const std::wstring& text, const std::wstring& word) {
+// Whole words only (a plural "s" is fine); a keyword ending in '*' is a stem ("translat*" matches "Translator")
+bool HasWord(const std::wstring& text, const std::wstring& keyword) {
+    bool stem = !keyword.empty() && keyword.back() == L'*';
+    std::wstring word = stem ? keyword.substr(0, keyword.size() - 1) : keyword;
     for (size_t at = text.find(word); at != std::wstring::npos; at = text.find(word, at + 1)) {
-        bool before = at == 0 || !iswalnum(text[at - 1]);
-        bool after = at + word.size() >= text.size() || !iswalnum(text[at + word.size()]);
-        if (word.size() > 3 || (before && after)) return true;
+        if (at > 0 && iswalnum(text[at - 1])) continue;
+        size_t end = at + word.size();
+        if (end < text.size() && text[end] == L's' && !stem) end++;
+        if (stem || end >= text.size() || !iswalnum(text[end])) return true;
     }
     return false;
 }
@@ -1510,8 +1344,8 @@ int AppCategory(const App& a) {
     static const std::vector<std::pair<int, std::vector<std::wstring>>> kRules = {
         {3, {L"whatsapp", L"telegram", L"discord", L"instagram", L"facebook", L"messenger", L"twitter", L"tiktok", L"linkedin",
              L"skype", L"signal", L"reddit", L"snapchat", L"threads", L"wechat", L"teams"}},
-        {2, {L"spotify", L"netflix", L"prime video", L"disney", L"hbo", L"youtube", L"twitch", L"steam", L"epic games", L"game", L"jogo",
-             L"xbox", L"playstation", L"bluestacks", L"emulat", L"vlc", L"media player", L"music", L"música", L"movies", L"filmes",
+        {2, {L"spotify", L"netflix", L"prime video", L"disney", L"hbo", L"youtube", L"twitch", L"steam", L"epic games", L"game*", L"jogo*",
+             L"xbox", L"playstation", L"bluestacks", L"emulat*", L"vlc", L"media player", L"music*", L"música", L"movies", L"filmes",
              L"kodi", L"plex", L"deezer", L"roblox", L"minecraft", L"league of", L"valorant", L"ubisoft", L"ea app", L"battle.net",
              L"riot", L"gog", L"tv", L"death stranding", L"anchor"}},
         {4, {L"photoshop", L"illustrator", L"premiere", L"after effects", L"lightroom", L"indesign", L"figma", L"canva", L"blender",
@@ -1519,17 +1353,17 @@ int AppCategory(const App& a) {
              L"clipchamp", L"paint 3d", L"sketch", L"autocad", L"unity", L"unreal", L"cinema 4d", L"affinity", L"audition", L"camera", L"câmera"}},
         {5, {L"edge", L"chrome", L"firefox", L"opera", L"brave", L"browser", L"navegador", L"kindle", L"reader", L"leitor", L"news",
              L"notícias", L"weather", L"clima", L"maps", L"mapas", L"wikipedia", L"books", L"livros", L"bible", L"bíblia",
-             L"dictionary", L"dicionário", L"translat", L"tradutor", L"chatgpt", L"copilot", L"gemini", L"claude", L"perplexity"}},
+             L"dictionary", L"dicionário", L"translat*", L"tradutor", L"chatgpt", L"copilot", L"gemini", L"claude", L"perplexity"}},
         {1, {L"word", L"excel", L"powerpoint", L"outlook", L"onenote", L"access", L"publisher", L"office", L"acrobat", L"pdf",
-             L"notion", L"to do", L"todo", L"calendar", L"calendário", L"mail", L"zoom", L"slack", L"trello", L"evernote", L"bank",
-             L"banco", L"financ", L"money", L"project", L"visio", L"code", L"studio", L"intellij", L"pycharm", L"git", L"docker",
+             L"notion", L"to do", L"todo", L"calendar", L"calendário", L"mail", L"zoom", L"slack", L"trello", L"evernote", L"bank*",
+             L"banco", L"financ*", L"money", L"project", L"visio", L"code", L"studio", L"intellij", L"pycharm", L"git*", L"docker",
              L"sql", L"python", L"java", L"node", L"clínica", L"clinic", L"agenda"}},
-        {0, {L"calc", L"notepad", L"bloco de notas", L"settings", L"configura", L"terminal", L"powershell", L"cmd", L"prompt",
+        {0, {L"calc*", L"notepad", L"bloco de notas", L"settings", L"configura*", L"terminal", L"powershell", L"cmd", L"prompt",
              L"explorer", L"explorador", L"task manager", L"gerenciador", L"control", L"painel", L"paint", L"snipping", L"captura",
-             L"recorte", L"clock", L"relógio", L"alarm", L"7-zip", L"winrar", L"everything", L"windhawk", L"defrag", L"desfragment",
+             L"recorte", L"clock", L"relógio", L"alarm", L"7-zip", L"winrar", L"everything", L"windhawk", L"defrag*", L"desfragment*",
              L"backup", L"cleanup", L"limpeza", L"disk", L"disco", L"device", L"dispositivo", L"printer", L"impressora", L"remote",
-             L"remota", L"anydesk", L"teamviewer", L"vpn", L"bluetooth", L"store", L"loja", L"diagnós", L"diagnos", L"calibr",
-             L"altsnap", L"utility", L"tools", L"ferrament", L"assistência", L"assistance", L"dolby", L"driver", L"update"}},
+             L"remota", L"anydesk", L"teamviewer", L"vpn", L"bluetooth", L"store", L"loja", L"diagnós*", L"diagnos*", L"calibr*",
+             L"altsnap", L"utilit*", L"tools", L"ferrament*", L"assistência", L"assistance", L"dolby", L"driver", L"update"}},
     };
     std::wstring text = ToLower(a.name);
     for (const auto& [category, words] : kRules)
@@ -1540,7 +1374,7 @@ int AppCategory(const App& a) {
 
 // Built-in tabs can be deleted (hidden) and the user can add or take apps out of them
 struct BuiltinTab { bool hidden = false; std::vector<std::wstring> added, removed; };
-[[clang::no_destroy]] BuiltinTab g_builtinTabs[kFilterCount];
+BuiltinTab g_builtinTabs[kFilterCount];
 
 bool ListHas(const std::vector<std::wstring>& v, const std::wstring& t) { return std::find(v.begin(), v.end(), t) != v.end(); }
 
@@ -1588,7 +1422,7 @@ void BuildMainItems(std::vector<int>& out) {
         if (g_settings.siriOriginal && g_settings.siriFirstRow && g_query.empty() && !filter && !picking) {
             // First row: recently opened/installed apps, or the most used ones; a line separates it from the rest
             std::vector<std::pair<unsigned long long, int>> scored;
-            for (int i = 0; i < (int)g_apps.size() && i < 1000; i++) {
+            for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++) {
                 unsigned long long score = g_settings.siriFirstRow == 1 ? RecentTime(*g_apps[i]) : (unsigned long long)UsageScore(*g_apps[i]);
                 if (score > 0) scored.push_back({score, i});
             }
@@ -1601,7 +1435,7 @@ void BuildMainItems(std::vector<int>& out) {
             }
             prefix = out.size();
         }
-        for (int i = 0; i < (int)g_apps.size() && i < 1000; i++)
+        for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++)
             if (ToLower(g_apps[i]->name).find(q) != std::wstring::npos && keep(*g_apps[i])) out.push_back(i);
         for (int f = 0; f < (int)g_folders.size(); f++)
             for (int a = 0; a < (int)g_folders[f].apps.size() && a < 10000; a++)
@@ -1616,11 +1450,11 @@ void BuildMainItems(std::vector<int>& out) {
     size_t next = 0;
     for (int i = 0; i < (int)g_apps.size(); i++) {
         while (next < folderOrder.size() && !NameLess(g_apps[i]->name, g_folders[folderOrder[next]].sortKey)) {
-            out.push_back(1000 + folderOrder[next++]);
+            out.push_back(kFolderBase + folderOrder[next++]);
         }
         out.push_back(i);
     }
-    while (next < folderOrder.size()) out.push_back(1000 + folderOrder[next++]);
+    while (next < folderOrder.size()) out.push_back(kFolderBase + folderOrder[next++]);
 }
 
 void UndoFolder(int index) {
@@ -1633,11 +1467,15 @@ void UndoFolder(int index) {
 ////////////////////////////////////////////////////////////////////////////////
 // Clipboard helpers
 
-std::wstring ReadClipboardText(size_t maxLen) {
+bool ExcludedFromHistory();
+
+// forHistory: items marked as secret (passwords...) are not read for the clipboard history
+std::wstring ReadClipboardText(size_t maxLen, bool forHistory = false) {
     std::wstring text;
     bool open = false;
     for (int i = 0; i < 5 && !(open = OpenClipboard(g_wnd) != 0); i++) Sleep(10);
     if (!open) return text;
+    if (forHistory && ExcludedFromHistory()) { CloseClipboard(); return text; }
     if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
         if (auto* p = (PCWSTR)GlobalLock(data)) { text = p; GlobalUnlock(data); }
     }
@@ -1842,7 +1680,7 @@ void ReconcileFolders(AppList& fresh) {
 ////////////////////////////////////////////////////////////////////////////////
 // Custom icons
 
-[[clang::no_destroy]] std::unordered_map<std::wstring, std::wstring> g_customIcons;
+std::unordered_map<std::wstring, std::wstring> g_customIcons;
 bool g_dialogOpen;
 
 void SaveCustomIcons() {
@@ -1927,9 +1765,9 @@ bool PickImage(HWND owner, std::wstring& out) {
 // File search: Everything (IPC) / Windows Search / direct scan (worker threads)
 
 std::atomic<UINT> g_fileSearchGen{0};
-std::atomic<int> g_fileThreads{0};
+std::vector<HANDLE> g_fileThreadHandles;   // file search threads (UI thread only), joined at teardown
 [[clang::no_destroy]] AppList g_fileResults;
-[[clang::no_destroy]] std::wstring g_fileStatus;
+std::wstring g_fileStatus;
 bool g_fileSearching;
 
 struct FileJob { std::wstring query; Indexer indexer; int max; int iconPx; UINT gen; HWND wnd; };
@@ -1993,7 +1831,6 @@ LRESULT CALLBACK EvIpcProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, msg, w, l);
 }
 
-// FIX: the class was never registered -> CreateWindowExW failed ("IPC window failed")
 std::atomic<bool> g_evClassRegistered{false};
 SRWLOCK g_evClassLock = SRWLOCK_INIT;
 
@@ -2005,14 +1842,14 @@ bool EnsureEvIpcClass() {
         wc.lpfnWndProc = EvIpcProc;
         wc.hInstance = (HINSTANCE)&__ImageBase;
         wc.lpszClassName = kEvIpcClass;
-        if (RegisterClassExW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) g_evClassRegistered = true;
+        if (RegisterClassExW(&wc)) g_evClassRegistered = true;
         else Wh_Log(L"Everything: RegisterClassEx failed (%u)", GetLastError());
     }
     ReleaseSRWLockExclusive(&g_evClassLock);
     return g_evClassRegistered;
 }
 
-void UnregisterEvIpcClass() { // call from Wh_ModUninit
+void UnregisterEvIpcClass() {   // called from StartThread's teardown, after the file threads are joined
     if (g_evClassRegistered.exchange(false)) UnregisterClassW(kEvIpcClass, (HINSTANCE)&__ImageBase);
 }
 
@@ -2033,7 +1870,7 @@ HWND CreateEvReplyWindow() {
 // Runs on the file worker thread: the reply window lives and dies on this thread.
 bool SearchEverything(const FileJob& job, std::vector<std::wstring>& out, std::wstring& status) {
     HWND ev = FindEverything();
-        if (!ev) { status = Tr(L"Everything is not running"); return false; }
+    if (!ev) { status = Tr(L"Everything is not running"); return false; }
     if (!EnsureEvIpcClass()) { status = L"Everything: IPC class failed"; return false; }
 
     EvReply reply{&out, job.max, false};
@@ -2061,11 +1898,10 @@ bool SearchEverything(const FileJob& job, std::vector<std::wstring>& out, std::w
         status = GetLastError() == ERROR_ACCESS_DENIED
             ? Tr(L"Everything is running as admin (run it without admin)")
             : Tr(L"Everything did not accept the query");
-        } else if (!accepted && !reply.done) {
-            DWORD_PTR loaded = 1;
-            SendMessageTimeoutW(ev, kEvWmIpc, kEvIsDbLoaded, 0, SMTO_ABORTIFHUNG, 500, &loaded);
-            status = loaded ? Tr(L"Everything rejected the query") : Tr(L"Everything is still indexing...");
-
+    } else if (!accepted && !reply.done) {
+        DWORD_PTR loaded = 1;
+        SendMessageTimeoutW(ev, kEvWmIpc, kEvIsDbLoaded, 0, SMTO_ABORTIFHUNG, 500, &loaded);
+        status = loaded ? Tr(L"Everything rejected the query") : Tr(L"Everything is still indexing...");
     } else {
         double deadline = Now() + 3.0;
         while (!reply.done && !Stale(job.gen) && Now() < deadline) {
@@ -2186,7 +2022,7 @@ void ScanFallback(const FileJob& job, std::vector<std::wstring>& out) {
 }
 // Icon cache by extension (shared by file threads)
 struct CachedIcon { std::vector<UINT32> pixels; int size; };
-[[clang::no_destroy]] std::unordered_map<std::wstring, CachedIcon> g_extIcons;
+std::unordered_map<std::wstring, CachedIcon> g_extIcons;
 SRWLOCK g_extIconsLock = SRWLOCK_INIT;
 int g_extIconsPx;
 
@@ -2262,7 +2098,6 @@ DWORD WINAPI FileSearchThread(void* param) {
     }
     if (comInitialized) CoUninitialize();
     if (!Stale(job->gen) && IsWindow(job->wnd) && PostMessageW(job->wnd, WM_APP_FILES, 0, (LPARAM)res.get())) res.release();
-    g_fileThreads--;
     return 0;
 }
 
@@ -2273,9 +2108,15 @@ void StartFileSearch(const std::wstring& q) {
     g_fileSearching = g_settings.filesEnabled && q.size() >= 2;
     if (!g_fileSearching) return;
     auto* job = new FileJob{q, g_settings.indexer, g_settings.maxResults, CurrentIconPixels(), gen, g_wnd};
-    g_fileThreads++;
-    if (HANDLE t = CreateThread(nullptr, 0, FileSearchThread, job, 0, nullptr)) CloseHandle(t);
-    else { g_fileThreads--; delete job; g_fileSearching = false; }
+    if (HANDLE t = CreateThread(nullptr, 0, FileSearchThread, job, 0, nullptr)) {
+        // Forget the searches that already finished; the running ones are waited for at teardown
+        std::erase_if(g_fileThreadHandles, [](HANDLE h) {
+            if (WaitForSingleObject(h, 0) != WAIT_OBJECT_0) return false;
+            CloseHandle(h);
+            return true;
+        });
+        g_fileThreadHandles.push_back(t);
+    } else { delete job; g_fileSearching = false; }
 }
 
 void CancelFileSearch() {
@@ -2290,7 +2131,7 @@ void CancelFileSearch() {
 void LoadTabSource() {
     g_tabItems.clear();
     if (g_siriTab == 1 && g_settings.filesEnabled) {
-        if (g_query.empty()) {          // busca vazia: apenas o histórico de buscas
+        if (g_query.empty()) {          // empty search: only the search history
             if (g_historyEnabled) {
                 for (const auto& q : g_searchHistory) {
                     auto app = std::make_shared<App>();
@@ -2298,7 +2139,7 @@ void LoadTabSource() {
                     g_tabItems.push_back(std::move(app));
                 }
             }
-        } else {                        // digitando: resultados do indexador
+        } else {                        // typing: the indexer results
             g_tabItems = g_fileResults;
         }
     } else if (g_siriTab == 3) {
@@ -2405,7 +2246,7 @@ ID2D1Bitmap* GetBitmap(App& app) {
 
 D2D1_COLOR_F Alpha(D2D1_COLOR_F c, float a) { c.a = a; return c; }
 
-Theme ActiveTheme() { return g_settings.siri ? g_settings.siriTheme : g_settings.theme; }
+Theme ActiveTheme() { return g_settings.theme; }
 
 // Blur behind the shapes: the Custom theme uses the General setting, the other themes have their own
 // One blur level for every theme; 0 keeps the background live (nothing is captured)
@@ -2600,14 +2441,14 @@ bool g_swiping; float g_swipeStartScroll; double g_lastFlip;
 
 Layout g_mainLayout;
 float g_mainScroll;
-[[clang::no_destroy]] std::vector<int> g_mainItems;
+std::vector<int> g_mainItems;
 
 D2D1_RECT_F g_folderOrigin{};
 float g_folderAnim;
 bool g_folderClosing;
 
 bool g_renaming, g_renameSelectAll;
-[[clang::no_destroy]] std::wstring g_renameText;
+std::wstring g_renameText;
 
 [[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_labelFormat, g_searchFormat, g_siriFormat, g_messageFormat, g_titleFormat, g_menuFormat, g_tabFormat, g_listFormat, g_listSubFormat, g_glyphFormat, g_hintFormat, g_glyphLargeFormat, g_categoryFormat, g_keyFormat;
 float g_formatScale;
@@ -3322,7 +3163,7 @@ struct PopupMenu {
     bool category = false;   // Original Siri: the categories menu shown when hovering the bar
     bool keyboard = false;   // opened by Esc: stays until the mouse has been over it once
 };
-[[clang::no_destroy]] PopupMenu g_menu;
+PopupMenu g_menu;
 
 float MenuItemTop(int i) {
     float y = g_menu.rect.top + (g_menu.category ? 8 : 6) * g_layout.scale;
@@ -3509,7 +3350,7 @@ App* AppOfMain(int idx) {
 App* SelectableApp(int idx) {
     App* a = AppOfMain(idx);
     int it = g_layoutItems[idx];
-    return a && (it < 1000 || (Picking() && it >= kFolderAppBase && it < kTabBase)) ? a : nullptr;
+    return a && (it < kFolderBase || (Picking() && it >= kFolderAppBase && it < kTabBase)) ? a : nullptr;
 }
 bool IsSelected(int idx) { App* a = SelectableApp(idx); return a && g_selection.count(a); }
 
@@ -3840,8 +3681,22 @@ void DoPowerAction(int id) {
             }
             break;
         }
-        case kMenuRestart:  EnableShutdownPrivilege(); ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_FLAG_PLANNED); break;
-        case kMenuShutdown: EnableShutdownPrivilege(); ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF, SHTDN_REASON_FLAG_PLANNED); break;
+        case kMenuRestart:
+            EnableShutdownPrivilege();
+            if (InitiateShutdownW(nullptr, nullptr, 0, SHUTDOWN_RESTART | SHUTDOWN_FORCE_OTHERS, SHTDN_REASON_FLAG_PLANNED) != ERROR_SUCCESS)
+                ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_FLAG_PLANNED);
+            break;
+        case kMenuShutdown: {
+            // Like Windows' own Shut down: a hybrid shutdown when Fast Startup is on
+            EnableShutdownPrivilege();
+            DWORD hiberboot = 0, size = sizeof(hiberboot);
+            RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power", L"HiberbootEnabled",
+                         RRF_RT_REG_DWORD, nullptr, &hiberboot, &size);
+            DWORD flags = SHUTDOWN_POWEROFF | SHUTDOWN_FORCE_OTHERS | (hiberboot ? SHUTDOWN_HYBRID : 0);
+            if (InitiateShutdownW(nullptr, nullptr, 0, flags, SHTDN_REASON_FLAG_PLANNED) != ERROR_SUCCESS)
+                ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF | (hiberboot ? EWX_HYBRID_SHUTDOWN : 0), SHTDN_REASON_FLAG_PLANNED);
+            break;
+        }
         case kMenuSignOut:  ExitWindowsEx(EWX_LOGOFF, 0); break;
     }
 }
@@ -3958,7 +3813,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
     for (int i = first; i < last; i++) {
         int item = items[i];
         if (item < 0) continue;
-        if (IsFolderItem(item) ? item - 1000 >= (int)g_folders.size() : !ResolveApp(item)) continue;
+        if (IsFolderItem(item) ? item - kFolderBase >= (int)g_folders.size() : !ResolveApp(item)) continue;
         Cell c = CellAtIn(L, scroll, i);
 
         bool sel = interactive && IsSelected(i);
@@ -3969,7 +3824,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         float opacity = dragDim * alpha * PageFade(L, scroll, i);
 
         if (IsFolderItem(item)) {
-            const Folder& f = g_folders[item - 1000];
+            const Folder& f = g_folders[item - kFolderBase];
             float labelOpacity = opacity;
             if (item == hiddenFolderItem) labelOpacity *= 1.0f - hiddenFade;
             else DrawFolderIcon(f, c.icon, opacity);
@@ -4036,9 +3891,9 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         int item = items[g_dragItem];
         D2D1_RECT_F dragRect = D2D1::RectF(g_dragX - L.icon / 2, g_dragY - L.icon / 2, g_dragX + L.icon / 2, g_dragY + L.icon / 2);
         if (IsFolderItem(item)) {
-            if (item - 1000 < (int)g_folders.size()) DrawFolderIcon(g_folders[item - 1000], dragRect, 0.8f);
+            if (item - kFolderBase < (int)g_folders.size()) DrawFolderIcon(g_folders[item - kFolderBase], dragRect, 0.8f);
         } else if (App* da = ResolveApp(item)) {
-            if (GroupDrag() && item < 1000) DrawGroupDrag(dragRect, item);
+            if (GroupDrag() && item < kFolderBase) DrawGroupDrag(dragRect, item);
             else if (ID2D1Bitmap* bitmap = GetBitmap(*da))
                 g_target->DrawBitmap(bitmap, dragRect, 0.8f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         }
@@ -4146,7 +4001,6 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
 void StartFrames();
 
 void DrawGlass(const D2D1_RECT_F& r, float radius, float sheenScale = 1.0f) {
-    if (!g_settings.liquidGlass) return;
     float s = g_layout.scale;
     float w = r.right - r.left;
     ComPtr<ID2D1GradientStopCollection> sheenStops;
@@ -4826,12 +4680,15 @@ void ReleaseGlassComposition() {
     g_glass.queue.Reset();
 }
 
+bool g_glassClassOk;
+
 void CreateGlassWindow(HINSTANCE instance) {
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = GlassWndProc;
     wc.hInstance = instance;
     wc.lpszClassName = kGlassClass;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) { Wh_Log(L"Glass window class failed (%u)", GetLastError()); return; }
+    g_glassClassOk = true;
     g_glassWnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
                                  WS_EX_NOACTIVATE, kGlassClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
     if (!g_glassWnd) return;
@@ -4967,7 +4824,7 @@ void Render() {
             g_target->SetTransform(bgMatrix);
             DrawSearchBar(g_mainLayout, 1.0f - 0.85f * t);
             DrawPowerButton(g_mainLayout, 1.0f - t);
-            DrawMainGrid(g_mainLayout, g_mainItems, g_mainScroll, bgFade, false, 1000 + g_openFolderIndex, t);
+            DrawMainGrid(g_mainLayout, g_mainItems, g_mainScroll, bgFade, false, kFolderBase + g_openFolderIndex, t);
         };
         D2D1_RECT_F from = D2D1::RectF(
             center.x + (g_folderOrigin.left - center.x) * bgScale, center.y + (g_folderOrigin.top - center.y) * bgScale,
@@ -5121,7 +4978,7 @@ void OpenFolder(int folderIndex) {
 
     int layoutIdx = -1;
     for (int i = 0; i < (int)g_mainItems.size(); i++) {
-        if (g_mainItems[i] == 1000 + folderIndex) { layoutIdx = i; break; }
+        if (g_mainItems[i] == kFolderBase + folderIndex) { layoutIdx = i; break; }
     }
     if (layoutIdx >= 0) {
         g_folderOrigin = CellAtIn(g_mainLayout, g_mainScroll, layoutIdx).icon;
@@ -5407,7 +5264,7 @@ void LaunchApp(int item) {
         if (g_openFolderIndex >= (int)g_folders.size() || item >= (int)g_folders[g_openFolderIndex].apps.size()) return;
         ap = g_folders[g_openFolderIndex].apps[item].get();
     } else {
-        if (IsFolderItem(item)) { OpenFolder(item - 1000); return; }
+        if (IsFolderItem(item)) { OpenFolder(item - kFolderBase); return; }
         ap = ResolveApp(item);
     }
     if (!ap) return;
@@ -5515,9 +5372,22 @@ void OnFilesFound(FileResult* res) {
     RefreshTabItems(false);
 }
 
+// Formats that password managers and other apps set to keep an item out of clipboard history (clipboard must be open)
+bool ExcludedFromHistory() {
+    static const UINT exclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    static const UINT viewerIgnore = RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
+    static const UINT canInclude = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+    if (IsClipboardFormatAvailable(exclude) || IsClipboardFormatAvailable(viewerIgnore)) return true;
+    bool excluded = false;
+    if (HANDLE h = GetClipboardData(canInclude); h && GlobalSize(h) >= sizeof(DWORD)) {
+        if (auto* v = (const DWORD*)GlobalLock(h)) { excluded = *v == 0; GlobalUnlock(h); }
+    }
+    return excluded;
+}
+
 void OnClipboardUpdate() {
     if (!g_settings.clipEnabled) return;   // off: nothing is monitored
-    std::wstring text = ReadClipboardText(20000);
+    std::wstring text = ReadClipboardText(20000, true);
     if (text.find_first_not_of(L" \t\r\n") == std::wstring::npos) return;
     auto it = std::find(g_clipHistory.begin(), g_clipHistory.end(), text);
     if (it != g_clipHistory.end()) g_clipHistory.erase(it);
@@ -5544,7 +5414,7 @@ void PasteText() {
 void CopyQueryToClipboard() {
     size_t a = QueryHasSelection() ? QuerySelStart() : 0;
     size_t b = QueryHasSelection() ? QuerySelEnd() : g_query.size();
-    if (a >= b || !OpenClipboard(nullptr)) return;
+    if (a >= b || !OpenClipboard(g_wnd)) return;
     std::wstring selected = g_query.substr(a, b - a);
     EmptyClipboard();
     const SIZE_T bytes = (selected.size() + 1) * sizeof(wchar_t);
@@ -5727,7 +5597,11 @@ void OnKeyDown(WPARAM key) {
     }
     if (key >= '1' && key <= '9' && ctrlDown && g_openFolderIndex < 0) {
         int n = (int)(key - '1');
-        if (n < (int)g_layoutItems.size()) LaunchApp(g_layoutItems[n]);
+        // Actions (sign out, shut down...) only run from a click or Enter, never from Ctrl+digit
+        if (n < (int)g_layoutItems.size()) {
+            App* target = ResolveApp(g_layoutItems[n]);
+            if (!target || target->kind != 4) LaunchApp(g_layoutItems[n]);
+        }
         return;
     }
     if (g_settings.siri && g_powerPillWanted && g_powerPillAnim > 0.9f) {
@@ -5901,7 +5775,7 @@ void EndDrag() {
                 app = g_folders[g_openFolderIndex].apps[item].get();
         } else if (!IsFolderItem(item)) app = ResolveApp(item);
         if (app && app->kind != 0) app = nullptr;
-        if (app && g_openFolderIndex < 0 && item < 1000 && g_selection.size() > 1 && g_selection.count(app)) {
+        if (app && g_openFolderIndex < 0 && item < kFolderBase && g_selection.size() > 1 && g_selection.count(app)) {
             for (auto& a : g_apps) if (g_selection.count(a.get())) PinToTaskbar(a->target);
         } else if (app) PinToTaskbar(app->target);
         Render(); return;
@@ -5920,7 +5794,7 @@ void EndDrag() {
     int toIdx = ItemAt((int)g_dragX, (int)g_dragY);
     int fromItem = g_layoutItems[fromIdx];
     g_dragItem = -1;
-    if (toIdx < 0 || toIdx == fromIdx || fromItem >= 1000) return;
+    if (toIdx < 0 || toIdx == fromIdx || fromItem >= kFolderBase) return;
     int toItem = g_layoutItems[toIdx];
     if (IsFolderApp(toItem) || IsTabItem(toItem)) return;
     App* dragged = ResolveApp(fromItem);
@@ -5928,7 +5802,7 @@ void EndDrag() {
     std::unordered_set<App*> moving;
     if (g_selection.count(dragged)) moving = g_selection; else moving.insert(dragged);
 
-    if (toItem < 1000) {
+    if (toItem < kFolderBase) {
         App* targetRaw = ResolveApp(toItem);
         if (!targetRaw) return;
         auto targetIt = std::find_if(g_apps.begin(), g_apps.end(), [&](const std::shared_ptr<App>& a) { return a.get() == targetRaw; });
@@ -5947,7 +5821,7 @@ void EndDrag() {
         g_folders.push_back(std::move(f));
     } else {
         auto taken = TakeApps(moving);
-        auto& dst = g_folders[toItem - 1000].apps;
+        auto& dst = g_folders[toItem - kFolderBase].apps;
         dst.insert(dst.end(), taken.begin(), taken.end());
     }
     g_selection.clear();
@@ -6319,7 +6193,7 @@ void ExecuteMenu(int id) {
         case kMenuUndoFolder: UndoFolderAt(folder); break;
         case kMenuSelect: if (app && !g_selection.erase(app)) g_selection.insert(app); Render(); break;
         case kMenuSelectAll:
-            for (int it : g_layoutItems) if (it >= 0 && it < 1000 && it < (int)g_apps.size()) g_selection.insert(g_apps[it].get());
+            for (int it : g_layoutItems) if (it >= 0 && it < kFolderBase && it < (int)g_apps.size()) g_selection.insert(g_apps[it].get());
             Render(); break;
         case kMenuClearSelection: g_selection.clear(); Render(); break;
         case kMenuNewFolder:
@@ -6787,7 +6661,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_menu.folder = g_openFolderIndex;
             } else {
                 int index = ItemAt(x, y);
-                if (index >= 0 && IsFolderItem(g_layoutItems[index])) g_menu.folder = g_layoutItems[index] - 1000;
+                if (index >= 0 && IsFolderItem(g_layoutItems[index])) g_menu.folder = g_layoutItems[index] - kFolderBase;
                 else if (App* a = AppOfMain(index)) {
                     g_menu.appIdx = index;
                     if (SelectableApp(index)) {
@@ -6886,9 +6760,12 @@ DWORD WINAPI StartThread(void*) {
     wc.hInstance = instance;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kWindowClass;
-    RegisterClassExW(&wc);
+    // A class left from an earlier load would point to code that is gone: never reuse it
+    bool classOk = RegisterClassExW(&wc) != 0;
+    if (!classOk) Wh_Log(L"Window class failed (%u)", GetLastError());
 
-    HWND wnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED, kWindowClass, L"Start", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
+    HWND wnd = classOk ? CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED, kWindowClass, L"Start", WS_POPUP, 0, 0, 0, 0,
+                                         nullptr, nullptr, instance, nullptr) : nullptr;
     bool ok = g_d2d && g_dwrite && wnd;
     if (ok) { g_wnd = wnd; SetTimer(wnd, kTimerFirstLoad, 3000, nullptr); AddClipboardFormatListener(wnd); CreateGlassWindow(instance); }
     SetEvent(g_readyEvent);
@@ -6912,7 +6789,8 @@ DWORD WINAPI StartThread(void*) {
     g_wnd = nullptr; g_workerStop = true;
     ++g_fileSearchGen;                                   // every file thread becomes stale
     if (g_worker) { WaitForSingleObject(g_worker, INFINITE); CloseHandle(g_worker); g_worker = nullptr; }
-    while (g_fileThreads > 0) Sleep(10);                 // file threads run code from this module
+    for (HANDLE h : g_fileThreadHandles) { WaitForSingleObject(h, INFINITE); CloseHandle(h); }   // they run code from this module
+    std::vector<HANDLE>().swap(g_fileThreadHandles);
     UnregisterEvIpcClass();                              // Everything IPC reply windows are gone
     AcquireSRWLockExclusive(&g_extIconsLock);
     g_extIcons.clear(); g_extIconsPx = 0;
@@ -6926,15 +6804,17 @@ DWORD WINAPI StartThread(void*) {
     g_clipHistory.clear();
     g_searchHistory.clear();
     g_fileStatus.clear();
-    g_folders.clear(); g_customIcons.clear(); g_mainItems.clear(); g_backdropImage = {}; FreeSurface(g_surface);
+    std::vector<Folder>().swap(g_folders); g_customIcons.clear(); g_mainItems.clear(); g_backdropImage = {}; FreeSurface(g_surface);
     g_labelFormat.Reset(); g_searchFormat.Reset(); g_siriFormat.Reset(); g_messageFormat.Reset();
     g_titleFormat.Reset(); g_menuFormat.Reset(); g_tabFormat.Reset(); g_listFormat.Reset();
     g_listSubFormat.Reset(); g_glyphFormat.Reset(); g_hintFormat.Reset();
     g_glyphLargeFormat.Reset(); g_categoryFormat.Reset(); g_keyFormat.Reset();
     ResetTarget(); g_dwrite.Reset(); g_d2d.Reset();
     DestroyGlassWindow();
-    UnregisterClassW(kGlassClass, instance);
-    UnregisterClassW(kWindowClass, instance); OleUninitialize(); return 0;
+    if (g_glassClassOk) { UnregisterClassW(kGlassClass, instance); g_glassClassOk = false; }
+    if (classOk) UnregisterClassW(kWindowClass, instance);
+    OleUninitialize();
+    return 0;
 }
 
 bool IsFolderWindowsProcess() {
