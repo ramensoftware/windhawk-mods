@@ -1,10 +1,14 @@
 // ==WindhawkMod==
 // @id              radial-window-switcher
 // @name            Radial Window Switcher
-// @description     Круговой переключатель окон в стиле macOS вместо стандартного Alt+Tab
-// @version         3.0.2
-// @author          you
+// @name:ru-RU      Круговой переключатель окон
+// @description     A macOS-style radial Alt+Tab: app icons in a ring, a live window preview and smooth animations
+// @description:ru-RU Круговой Alt+Tab в стиле macOS: иконки приложений по кругу, живое превью окна и плавные анимации
+// @version         1.0.0
+// @author          kotikdetka
+// @github          https://github.com/kotikdetka
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lgdiplus -lgdi32 -ldwmapi -lversion
 // @license         MIT
 // ==/WindhawkMod==
@@ -13,53 +17,83 @@
 /*
 # Radial Window Switcher
 
-Круговой переключатель открытых окон: иконки приложений по кругу, в центре —
-название выбранного приложения и заголовок окна.
+Replaces the standard Alt+Tab with a radial switcher: the icons of open
+windows are arranged in a ring in the center of the screen, the name of the
+selected app is shown in the middle, and a live preview of the selected window
+appears next to its sector.
 
-## Управление
-- Зажмите **Alt** и нажмите **Tab** — откроется круг по центру экрана.
-- Не отпуская Alt, жмите **Tab** — следующее окно, **Shift + Tab** — предыдущее.
-- Рядом с выбранным сектором показывается живое превью окна, как в обычном Alt+Tab.
-- Отпустили **Alt** — переключение на выбранное окно.
-- **Esc** — закрыть без переключения.
-- Быстрое нажатие Alt + Tab переключает на предыдущее окно, как раньше.
-- Мышь меню не использует: всё управление с клавиатуры.
+## Usage
 
-## Заметки
-- Мод работает внутри explorer.exe. Если запущено несколько процессов
-  проводника, реагирует только тот, что владеет рабочим столом и панелью задач.
-- Свёрнутые окна превью не показывают — Windows не отдаёт их изображение.
+- Hold **Alt** and press **Tab** to open the ring.
+- While holding Alt, press **Tab** for the next window, **Shift+Tab** for the
+  previous one. Arrow keys also work.
+- Release **Alt** to switch to the selected window.
+- Press **Esc** to close the ring without switching.
+- A quick Alt+Tab switches to the previous window, just like the standard one.
+
+## Features
+
+- Smooth animations: the ring spins in, sectors pop out one by one, the
+  selection glows and a pointer glides to the selected app.
+- Live window previews (DWM thumbnails), like the standard Alt+Tab.
+- The selected sector uses the Windows accent color.
+- Per-monitor DPI aware; the ring opens on the monitor with the cursor.
+- Can use Alt+\` or Alt+Q instead of Alt+Tab, keeping the standard switcher.
+
+## Notes
+
+- The standard Alt+Tab is blocked inside Explorer, so only the radial
+  switcher appears.
+- Minimized windows have no preview: Windows doesn't render them.
+- Shortcuts can't be captured while an elevated (administrator) window is in
+  the foreground, the same as for any non-elevated program.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - trigger: altTab
-  $name: Сочетание клавиш
-  $description: Alt держите зажатым, второй клавишей листайте окна
+  $name: Shortcut
+  $name:ru-RU: Сочетание клавиш
+  $description: Hold Alt and press the second key to cycle through windows
+  $description:ru-RU: Держите Alt и нажимайте вторую клавишу, чтобы листать окна
   $options:
-  - altTab: "Alt + Tab (заменить стандартный)"
-  - altBacktick: "Alt + ` (Ё)"
-  - altQ: "Alt + Q"
+  - altTab: Alt+Tab (replace the standard switcher)
+  - altBacktick: Alt+` (key above Tab)
+  - altQ: Alt+Q
+  $options:ru-RU:
+  - altTab: Alt+Tab (заменить стандартный)
+  - altBacktick: Alt+` (клавиша Ё)
+  - altQ: Alt+Q
 - activateOnRelease: true
-  $name: Переключать при отпускании Alt
-  $description: Если выключено — меню остаётся открытым, выбор клавишей Enter
+  $name: Switch when Alt is released
+  $name:ru-RU: Переключать при отпускании Alt
+  $description: If disabled, the ring stays open until Enter is pressed
+  $description:ru-RU: Если выключено, меню остаётся открытым до нажатия Enter
 - showPreview: true
-  $name: Показывать живое превью окна
+  $name: Show live window preview
+  $name:ru-RU: Показывать живое превью окна
 - previewSize: 380
-  $name: Ширина превью (px)
+  $name: Preview width (px)
+  $name:ru-RU: Ширина превью (px)
 - radius: 230
-  $name: Радиус круга (px)
+  $name: Ring radius (px)
+  $name:ru-RU: Радиус круга (px)
 - iconSize: 64
-  $name: Размер иконок (px)
+  $name: Icon size (px)
+  $name:ru-RU: Размер иконок (px)
 - maxItems: 12
-  $name: Максимум окон в круге
+  $name: Maximum number of windows
+  $name:ru-RU: Максимум окон в круге
 - dimOpacity: 70
-  $name: Затемнение фона (0–200)
+  $name: Background dimming (0-200)
+  $name:ru-RU: Затемнение фона (0-200)
 - useAccentColor: true
-  $name: Подсвечивать выбранный сектор акцентным цветом Windows
+  $name: Highlight the selection with the Windows accent color
+  $name:ru-RU: Подсвечивать выбранный сектор акцентным цветом Windows
 - animate: true
-  $name: Анимация появления
+  $name: Animations
+  $name:ru-RU: Анимации
 */
 // ==/WindhawkModSettings==
 
@@ -1033,7 +1067,7 @@ static bool Render() {
             if (n > 0 && g_sel >= 0 && g_sel < n) {
                 name = g_items[g_sel].name;
             } else {
-                name = L"Нет открытых окон";
+                name = L"No open windows";
             }
             float te = EaseOutCubic(textT);
             float tw = cr * 1.6f;
