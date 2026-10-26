@@ -38,6 +38,12 @@ the native controls.
 The mod does not change Alt+Tab or the desktop preview shown when hovering
 over the taskbar's Task View button.
 
+## Screenshots
+
+| Full Task View with desktops at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
+| :---: | :---: | :---: |
+| ![Full Task View with desktops at the top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/01.png) | ![No Task View with Desktop list at the center + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png) | ![Windows default + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png) |
+
 ## Settings
 
 ### Task View behavior
