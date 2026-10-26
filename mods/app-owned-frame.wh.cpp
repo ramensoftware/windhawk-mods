@@ -140,13 +140,13 @@ Before: without the mod. After: with the mod. Provided by the submitter.
     - legacyGutterColor: ""
       $name: Residual resize gutter color (empty disables)
       $name:ru: Цвет остаточного системного отступа (пусто — выключено)
-      $description: Optional #RRGGBB flat fill for the allocated non-client gutter, including the same DWM caption color for a residual top strip. Requires legacyPaint and Advanced inclusion. Never paints client/buttons/ordinary native captions. No geometry changes. Off restores queried original caption color or system default.
-      $description:ru: Необязательный цвет #RRGGBB для оставшегося системного отступа, включая верхнюю полосу DWM. Нужны legacyPaint и Advanced. Клиент, кнопки и обычные заголовки не закрашиваются; геометрия не меняется. При отключении восстанавливается прочитанный цвет заголовка или системный по умолчанию.
+      $description: Optional #RRGGBB flat fill for the allocated non-client gutter, including the same DWM caption color for a residual top strip. Requires Use the application's own title bar and the Advanced inclusion entry. Never paints client/buttons/ordinary native captions. No geometry changes. Off restores queried original caption color or system default.
+      $description:ru: Необязательный цвет #RRGGBB для оставшегося системного отступа, включая верхнюю полосу DWM. Нужны «Использовать собственный заголовок программы» и список Advanced. Клиент, кнопки и обычные заголовки не закрашиваются; геометрия не меняется. При отключении восстанавливается прочитанный цвет заголовка или системный по умолчанию.
     - dwmCaptionPaint: false
       $name: Delegate caption painting to DWM, not classic GDI
       $name:ru: Передавать отрисовку заголовка DWM, не классическому GDI
-      $description: Experimental for legacy custom captions; requires legacyPaint and Advanced inclusion. Uses real messages only. No geometry, style or maximize changes.
-      $description:ru: Эксперимент для собственных legacy-заголовков; нужны legacyPaint и включение Advanced. Только реальные сообщения. Не меняет размер, стиль или максимизацию.
+      $description: Experimental for legacy custom captions; requires Use the application's own title bar and the Advanced inclusion entry. Has no effect while Prepare the custom title bar at startup is enabled. Uses real messages only. No geometry, style or maximize changes.
+      $description:ru: Эксперимент для собственных legacy-заголовков; нужны «Использовать собственный заголовок программы» и список Advanced. Не действует, пока включена подготовка заголовка при запуске. Только реальные сообщения. Не меняет размер, стиль или максимизацию.
     - earlyDwm: false
       $name: Prepare the custom title bar at startup
       $name:ru: Подготавливать собственный заголовок при запуске
@@ -182,7 +182,7 @@ Before: without the mod. After: with the mod. Provided by the submitter.
     - frameGeometry: auto
     - legacyPaint: true
     - legacyGutterColor: ""
-    - dwmCaptionPaint: true
+    - dwmCaptionPaint: false
     - earlyDwm: true
     - removeBackdrop: false
     - nativeResize: false
@@ -235,8 +235,8 @@ struct CompositionData {
 using SetComposition = BOOL(WINAPI*)(HWND, CompositionData*);
 SetComposition setComposition = nullptr;
 constexpr int kNcRenderingExiled = 11;
-constexpr DWORD kBorderColor = 34;
-constexpr DWORD kSystemBackdrop = 38;
+constexpr DWORD kBorderColor = DWMWA_BORDER_COLOR;
+constexpr DWORD kSystemBackdrop = DWMWA_SYSTEMBACKDROP_TYPE;
 constexpr COLORREF kNoBorder = 0xFFFFFFFE;
 constexpr COLORREF kDefaultBorder = 0xFFFFFFFF;
 constexpr UINT kReconfigure = WM_APP + 33;
@@ -264,7 +264,7 @@ struct CaptionFillState {
 
 bool ReconcileCaptionFill(HWND window, CaptionFillState& state, COLORREF color,
                           bool force = false) {
-    constexpr DWORD captionAttribute = 35; // DWMWA_CAPTION_COLOR, Win11 22000+.
+    constexpr DWORD captionAttribute = DWMWA_CAPTION_COLOR; // Win11 22000+.
     if (color == 0xFFFFFFFE && !state.changed) return true;
     if (color != 0xFFFFFFFE && state.changed && state.applied == color && !force)
         return true;
@@ -1638,8 +1638,8 @@ void Apply(HWND window, bool forceBorder = false) {
     if (state.process.removeBackdrop && state.backdropReadable) {
         DWORD backdrop = 0;
         if (SUCCEEDED(DwmGetWindowAttribute(window, kSystemBackdrop, &backdrop, sizeof(backdrop))) &&
-            backdrop != 1) {
-            const DWORD none = 1; // DWMSBT_NONE: no system material behind NC.
+            backdrop != DWMSBT_NONE) {
+            const DWORD none = DWMSBT_NONE; // No system material behind NC.
             if (RecordRollbackIntent(window,state,4) &&
                 SUCCEEDED(DwmSetWindowAttribute(window, kSystemBackdrop, &none, sizeof(none))))
                 state.backdropChanged = true;
