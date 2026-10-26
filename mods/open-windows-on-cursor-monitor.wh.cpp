@@ -17,10 +17,35 @@
 /*
 ![Demo](https://i.imgur.com/zQZIHsM.gif)
 
-Windows restores a window on the monitor it was last on, and new
+**English:** Windows restores a window on the monitor it was last on, and new
 programs always open on the primary monitor. This mod makes every window open
 on the monitor under the mouse cursor instead. All four features have their own
+toggle:
 
+- **Taskbar button click** - clicking a taskbar button brings the window over
+  with a single click: if it's the active window and it's on another monitor,
+  the click moves it instead of minimizing it (switchable back to minimizing).
+- **Tray icon click** - windows opened *or* merely restored by clicking a
+  notification area icon follow the cursor.
+- **Start menu / search launch** - programs started from the Start menu or the
+  search panel, whether newly launched or already running.
+- **Newly launched programs** - the main window of a program that just started,
+  no matter how it was started.
+
+On mixed-resolution / mixed-scaling setups the window is only moved by default:
+the size is left to Windows and the app, exactly like dragging the window over by
+hand, so there's no extra zoom animation. Resolutions and scaling factors are
+read at runtime, so any combination of any number of monitors works.
+
+Two things worth knowing:
+
+- A program counts as newly launched for `newAppMaxAgeMs` after its process
+  starts, so windows of programs started at sign-in or by another program are
+  moved too, and apps that restore their own saved position are overridden.
+- File Explorer windows are part of explorer.exe and are skipped, so they only
+  follow the cursor on the taskbar click path.
+
+---
 
 # 任务栏 / 托盘点击窗口跟随鼠标所在屏幕
 
@@ -29,6 +54,27 @@ Windows 默认行为是：点击任务栏上的程序图标时，窗口回到它
 
 本插件让这两种情况弹出的窗口，都出现在**鼠标所在的显示器**（也就是你点击的
 那个任务栏所在的屏幕）。
+
+## 功能
+
+- **任务栏图标点击**：点一下就把窗口移过来，不会先最小化一次
+- **托盘 / 通知区图标点击**：新弹出的窗口、已打开被激活的窗口都算
+- **开始菜单 / 搜索面板启动**：新启动和已打开的都跳过来
+- **新打开的软件**：主窗口不再固定开在主屏
+
+## 分辨率 / 缩放不同的屏幕
+
+插件默认**只移动位置**，大小交给 Windows 和程序自己按缩放比处理 —— 和用鼠标
+把窗口拖到另一个屏幕完全一样，不会出现额外的放大/缩小动画。分辨率和缩放比
+都是运行时读取的，任意组合、任意数量的显示器都适用，不区分主副屏。
+
+## 备注
+
+- 四个功能开关会安装系统钩子，改动后插件会自动重载一次；其余设置项即时生效。
+- 进程启动后 `newAppMaxAgeMs` 内都算“新打开”，所以开机自启、被其他程序拉起的
+  软件也会被移动，程序自己记忆的窗口位置会被覆盖。
+- 资源管理器窗口属于 explorer.exe 自身，不会被移动（只有任务栏点击这一条路径
+  对它们生效）。
 */
 // ==/WindhawkModReadme==
 
@@ -176,8 +222,9 @@ Windows 默认行为是：点击任务栏上的程序图标时，窗口回到它
     appear within this window are moved. Set to 0 for no time limit: the last
     click position then keeps qualifying, wherever the cursor has moved to
   $description:zh-CN: >-
-    点击托盘图标或开始菜单项后，程序可能立刻也可能稍后才弹出/激活窗口。这个
-    时间窗内出现的窗口才会被移动；设为 0 表示只要鼠标停在该区域就一直生效
+    点击托盘图标或开始菜单项后，程序可能过一会儿才弹出/激活窗口。只有在这个
+    时间窗内出现的窗口才会被移动；设为 0 表示不限时间，最后一次点击的位置
+    一直有效（之后鼠标移到哪里都不影响）
 - settleDelayMs: 200
   $name: Post-move correction delay (ms)
   $name:zh-CN: 移动后的二次校正延迟（毫秒）
@@ -216,13 +263,11 @@ Windows 默认行为是：点击任务栏上的程序图标时，窗口回到它
 
 #include <windows.h>
 #include <dwmapi.h>
-#include <psapi.h>
 #include <shellscalingapi.h>
 
 #include <atomic>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 // DWM is used to suppress the maximize/restore animation while a maximized
@@ -332,12 +377,13 @@ void LoadSettings() {
     g_settings.startMenuEnabled =
         Wh_GetIntSetting(L"startMenuClickEnabled") != 0;
 
-    PCWSTR activeWindowClick = Wh_GetStringSetting(L"activeWindowClick");
+    WindhawkUtils::StringSetting activeWindowClick =
+        WindhawkUtils::StringSetting::make(L"activeWindowClick");
     g_settings.moveActiveInsteadOfMinimize =
         wcscmp(activeWindowClick, L"minimize") != 0;
-    Wh_FreeStringSetting(activeWindowClick);
 
-    PCWSTR sizeMode = Wh_GetStringSetting(L"windowSizeMode");
+    WindhawkUtils::StringSetting sizeMode =
+        WindhawkUtils::StringSetting::make(L"windowSizeMode");
     if (wcscmp(sizeMode, L"relative") == 0) {
         g_settings.sizeMode = SizeMode::Relative;
     } else if (wcscmp(sizeMode, L"dpi") == 0) {
@@ -347,17 +393,16 @@ void LoadSettings() {
     } else {
         g_settings.sizeMode = SizeMode::Auto;
     }
-    Wh_FreeStringSetting(sizeMode);
 
     g_settings.clampToWorkArea = Wh_GetIntSetting(L"clampToWorkArea") != 0;
 
-    PCWSTR placement = Wh_GetStringSetting(L"placement");
+    WindhawkUtils::StringSetting placement =
+        WindhawkUtils::StringSetting::make(L"placement");
     g_settings.centerOnMonitor = wcscmp(placement, L"keepOffset") != 0;
-    Wh_FreeStringSetting(placement);
 
-    PCWSTR trayArea = Wh_GetStringSetting(L"trayArea");
+    WindhawkUtils::StringSetting trayArea =
+        WindhawkUtils::StringSetting::make(L"trayArea");
     g_settings.trayAreaOnlyRight = wcscmp(trayArea, L"full") != 0;
-    Wh_FreeStringSetting(trayArea);
 
     g_settings.taskbarClickDelayMs = Wh_GetIntSetting(L"taskbarClickDelayMs");
     if (g_settings.taskbarClickDelayMs < 0 || g_settings.taskbarClickDelayMs > 5000) {
@@ -394,13 +439,13 @@ void LoadSettings() {
         g_settings.minWindowSize = 0;
     }
 
-    PCWSTR processes = Wh_GetStringSetting(L"excludedProcesses");
+    WindhawkUtils::StringSetting processes =
+        WindhawkUtils::StringSetting::make(L"excludedProcesses");
     g_settings.excludedProcesses = ParseList(processes);
-    Wh_FreeStringSetting(processes);
 
-    PCWSTR classes = Wh_GetStringSetting(L"excludedClasses");
+    WindhawkUtils::StringSetting classes =
+        WindhawkUtils::StringSetting::make(L"excludedClasses");
     g_settings.excludedClasses = ParseList(classes);
-    Wh_FreeStringSetting(classes);
 }
 
 // ============================================================================
@@ -630,9 +675,8 @@ struct PendingMove {
     DWORD dueTime;
 };
 
-CRITICAL_SECTION g_pendingLock;
+SRWLOCK g_pendingLock = SRWLOCK_INIT;
 std::vector<PendingMove> g_pendingMoves;
-bool g_pendingInitialized = false;
 
 HANDLE g_stopEvent = nullptr;
 // Auto-reset event used to wake the worker thread when a move is queued, so it
@@ -646,6 +690,21 @@ DWORD g_workerThreadId = 0;
 // under its feet.
 constexpr UINT kReloadSettingsMessage = WM_APP;
 
+// Posted by the low-level mouse hook to the worker thread, so the click it just
+// recorded gets classified there. The classification has to look at the windows
+// while they're still on screen (the Start menu cloaks the moment it closes, and
+// a cloaked window no longer counts), yet it's too much work to do inside a
+// hook - Windows unhooks low-level hooks that take too long - so it's deferred
+// by a single message instead.
+constexpr UINT kClassifyClickMessage = WM_APP + 1;
+
+// Where the last mouse click landed, as far as this mod cares.
+enum class ClickArea {
+    None,
+    Tray,
+    ShellLaunch,  // Start menu / search panel
+};
+
 // Where and when the last mouse click happened, and what was under the cursor
 // at that moment. The taskbar click hook clears the timestamp to say "this click
 // was a taskbar button, not a tray icon or a Start menu entry".
@@ -653,6 +712,20 @@ std::atomic<DWORD> g_lastMouseDownTick{0};
 std::atomic<LONG> g_lastMouseDownX{0};
 std::atomic<LONG> g_lastMouseDownY{0};
 std::atomic<HWND> g_lastMouseDownHwnd{nullptr};
+
+// The result of classifying the last click, together with the timestamp it was
+// classified from, so that a window appearing before the classification had a
+// chance to run isn't matched against the previous click's result.
+std::atomic<int> g_lastClickArea{0};
+std::atomic<DWORD> g_lastClickAreaTick{0};
+
+// Forgets the recorded click, so neither the tray nor the Start menu path can
+// claim it.
+void ClearRecordedClick() {
+    g_lastMouseDownTick = 0;
+    g_lastClickArea = (int)ClickArea::None;
+    g_lastClickAreaTick = 0;
+}
 
 void QueuePendingMove(HWND hWnd, HMONITOR hMonitor, int delayMs,
                       bool requireForeground, bool adjustOnly,
@@ -946,26 +1019,26 @@ void PerformMove(HWND hWnd, HMONITOR hTargetMonitor, bool requireForeground,
     // is the normal case now that the position is computed from the predicted
     // size. Set "settleDelayMs" to 0 to skip it entirely.
     if (!adjustOnly && g_settings.settleDelayMs > 0) {
+        // Only the modes that resize on purpose hand the second pass a size to
+        // re-apply; in "auto" and "none" the size the app settled on is the
+        // right one, and forcing the pre-move size back would undo the app's own
+        // DPI reaction.
         QueuePendingMove(hWnd, hTargetMonitor, g_settings.settleDelayMs, false,
-                         true, moveOnly ? 0 : newWidth,
-                         moveOnly ? 0 : newHeight);
+                         true, rescaling ? newWidth : 0,
+                         rescaling ? newHeight : 0);
     }
 }
 
 void QueuePendingMove(HWND hWnd, HMONITOR hMonitor, int delayMs,
                       bool requireForeground, bool adjustOnly = false,
                       int desiredWidth = 0, int desiredHeight = 0) {
-    if (!g_pendingInitialized) {
-        return;
-    }
-
     PendingMove move{hWnd,        hMonitor,      requireForeground,
                      adjustOnly,  desiredWidth,  desiredHeight,
                      GetTickCount() + (DWORD)delayMs};
 
-    EnterCriticalSection(&g_pendingLock);
+    AcquireSRWLockExclusive(&g_pendingLock);
     g_pendingMoves.push_back(move);
-    LeaveCriticalSection(&g_pendingLock);
+    ReleaseSRWLockExclusive(&g_pendingLock);
 
     if (g_wakeEvent) {
         SetEvent(g_wakeEvent);
@@ -978,7 +1051,7 @@ void ProcessDueMoves() {
         bool found = false;
         DWORD now = GetTickCount();
 
-        EnterCriticalSection(&g_pendingLock);
+        AcquireSRWLockExclusive(&g_pendingLock);
         for (size_t i = 0; i < g_pendingMoves.size(); i++) {
             if ((long)(g_pendingMoves[i].dueTime - now) <= 0) {
                 move = g_pendingMoves[i];
@@ -987,7 +1060,7 @@ void ProcessDueMoves() {
                 break;
             }
         }
-        LeaveCriticalSection(&g_pendingLock);
+        ReleaseSRWLockExclusive(&g_pendingLock);
 
         if (!found) {
             return;
@@ -1004,7 +1077,7 @@ DWORD GetTimeUntilNextMove() {
     DWORD now = GetTickCount();
     DWORD timeout = INFINITE;
 
-    EnterCriticalSection(&g_pendingLock);
+    AcquireSRWLockExclusive(&g_pendingLock);
 
     for (const auto& move : g_pendingMoves) {
         long remaining = (long)(move.dueTime - now);
@@ -1018,15 +1091,15 @@ DWORD GetTimeUntilNextMove() {
         }
     }
 
-    LeaveCriticalSection(&g_pendingLock);
+    ReleaseSRWLockExclusive(&g_pendingLock);
 
     return timeout;
 }
 
 void ClearPendingMoves() {
-    EnterCriticalSection(&g_pendingLock);
+    AcquireSRWLockExclusive(&g_pendingLock);
     g_pendingMoves.clear();
-    LeaveCriticalSection(&g_pendingLock);
+    ReleaseSRWLockExclusive(&g_pendingLock);
 }
 
 // ============================================================================
@@ -1066,8 +1139,9 @@ void WINAPI CTaskListWnd__HandleClick_Hook(LPVOID pThis,
     // This click was on a taskbar button. Forget the recorded click, so the
     // tray / Start menu paths don't mistake it for one of theirs. The low-level
     // mouse hook records the mouse-down before the taskbar sees the click, so
-    // clearing it here is always in time.
-    g_lastMouseDownTick = 0;
+    // clearing it here is always in time - and clearing the timestamp invalidates
+    // the classification too, whether it has run yet or not.
+    ClearRecordedClick();
 
     HWND pendingWnd = nullptr;
     bool suppressClick = false;
@@ -1178,14 +1252,47 @@ bool HookTaskbarSymbols() {
 }
 
 // ============================================================================
+// "Show desktop" button
+// ============================================================================
+
+// The "show desktop" button sits at the far right of every taskbar, right in the
+// half that counts as the tray. Pressing it a second time restores every window
+// and re-activates the one that was active before. That doesn't go through the
+// taskbar button hook, so without this the activation would look exactly like a
+// window raised by a tray icon click and get pulled over to this monitor.
+using CTray__RaiseDesktop_t = void(WINAPI*)(LPVOID pThis, int flags);
+CTray__RaiseDesktop_t CTray__RaiseDesktop_Original;
+
+void WINAPI CTray__RaiseDesktop_Hook(LPVOID pThis, int flags) {
+    Wh_Log(L"> show desktop, flags %d", flags);
+
+    ClearRecordedClick();
+
+    CTray__RaiseDesktop_Original(pThis, flags);
+}
+
+bool HookShowDesktopSymbol() {
+    // explorer.exe
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(protected: void __cdecl CTray::_RaiseDesktop(enum RAISEDESKTOPFLAGS))"},
+            &CTray__RaiseDesktop_Original,
+            CTray__RaiseDesktop_Hook,
+        },
+    };
+
+    return HookSymbols(GetModuleHandleW(nullptr), symbolHooks,
+                       ARRAYSIZE(symbolHooks));
+}
+
+// ============================================================================
 // Shell launch surfaces (Start menu / search panel)
 // ============================================================================
 
 // True when the click landed on the Start menu or the search panel - the two
-// places a program is launched from by clicking. The window is the one that was
-// under the cursor at click time, so it still identifies the click after the
-// Start menu has closed (it's only cloaked by then, which is why the cloaked
-// state has to be checked here rather than by looking at what's on top now).
+// places a program is launched from by clicking. The check runs while the click
+// is still fresh, because the Start menu is cloaked - and would fail this test -
+// from the moment it starts closing.
 bool IsShellLaunchWindow(HWND hWnd) {
     if (!hWnd) {
         return false;
@@ -1278,9 +1385,8 @@ struct HandledProcess {
     int height;
 };
 
-CRITICAL_SECTION g_handledLock;
+SRWLOCK g_handledLock = SRWLOCK_INIT;
 std::vector<HandledProcess> g_handledProcesses;
-bool g_handledInitialized = false;
 
 // Decides whether this window should be moved, and remembers it.
 //
@@ -1290,16 +1396,12 @@ bool g_handledInitialized = false;
 // clearly bigger window of the same process shows up shortly after, it takes
 // over.
 bool ShouldHandleProcessWindow(DWORD processId, int width, int height) {
-    if (!g_handledInitialized) {
-        return true;
-    }
-
     DWORD now = GetTickCount();
     bool handled = false;
     bool result = true;
     long long area = (long long)width * height;
 
-    EnterCriticalSection(&g_handledLock);
+    AcquireSRWLockExclusive(&g_handledLock);
 
     for (size_t i = 0; i < g_handledProcesses.size();) {
         // Forget entries after a minute.
@@ -1332,19 +1434,15 @@ bool ShouldHandleProcessWindow(DWORD processId, int width, int height) {
             HandledProcess{processId, now, width, height});
     }
 
-    LeaveCriticalSection(&g_handledLock);
+    ReleaseSRWLockExclusive(&g_handledLock);
 
     return result;
 }
 
 void ClearHandledProcesses() {
-    if (!g_handledInitialized) {
-        return;
-    }
-
-    EnterCriticalSection(&g_handledLock);
+    AcquireSRWLockExclusive(&g_handledLock);
     g_handledProcesses.clear();
-    LeaveCriticalSection(&g_handledLock);
+    ReleaseSRWLockExclusive(&g_handledLock);
 }
 
 // ============================================================================
@@ -1379,18 +1477,81 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
             g_lastMouseDownX = info->pt.x;
             g_lastMouseDownY = info->pt.y;
             g_lastMouseDownTick = GetTickCount();
+
+            // Classify what the click landed on right away, but on the worker
+            // thread rather than in here: the Start menu is already closing, and
+            // the work is far too slow for inside a low-level hook.
+            if (g_workerThreadId) {
+                PostThreadMessageW(g_workerThreadId, kClassifyClickMessage, 0, 0);
+            }
         }
     }
 
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// Where the last mouse click landed, as far as this mod cares.
-enum class ClickArea {
-    None,
-    Tray,
-    ShellLaunch,  // Start menu / search panel
-};
+// True when the click landed on the Windows 10 "show desktop" button. It sits
+// even further right than the tray, but it isn't a tray icon - pressing it again
+// restores the windows and re-activates the one that was active before, which
+// mustn't be mistaken for a window raised by a tray click.
+bool IsShowDesktopButton(HWND clickedWnd) {
+    for (HWND w = clickedWnd; w; w = GetParent(w)) {
+        wchar_t className[64] = {};
+        if (!GetClassNameW(w, className, ARRAYSIZE(className))) {
+            break;
+        }
+
+        if (_wcsicmp(className, L"TrayShowDesktopButtonWClass") == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// True when the click landed on the notification area - either on the tray
+// itself or on one of the panels it opens.
+bool IsPointOnTraySurface(HWND clickedWnd, POINT pt) {
+    // A taskbar button isn't the tray, even though it's on the same taskbar.
+    if (IsTaskListWindow(clickedWnd)) {
+        return false;
+    }
+
+    HWND rootWnd = clickedWnd ? GetAncestor(clickedWnd, GA_ROOT) : nullptr;
+    if (!rootWnd) {
+        return IsPointOnTrayArea(pt);
+    }
+
+    std::wstring rootClass = GetWindowClass(rootWnd);
+
+    // The hidden-icons overflow panel floats above the taskbar, outside the rect
+    // the tray area check looks at, so icons kept in it are recognized by their
+    // panel's window class.
+    if (_wcsicmp(rootClass.c_str(), L"NotifyIconOverflowWindow") == 0) {
+        return true;
+    }
+
+    if (IsShowDesktopButton(clickedWnd)) {
+        return false;
+    }
+
+    return IsPointOnTrayArea(pt);
+}
+
+// Decides which surface the last click landed on. It has to run while the
+// clicked surface is still on screen: the Start menu is cloaked from the moment
+// it closes, and a cloaked window no longer identifies it.
+ClickArea ClassifyClick(HWND clickedWnd, POINT pt) {
+    if (g_settings.trayWindowEnabled && IsPointOnTraySurface(clickedWnd, pt)) {
+        return ClickArea::Tray;
+    }
+
+    if (g_settings.startMenuEnabled && IsShellLaunchWindow(clickedWnd)) {
+        return ClickArea::ShellLaunch;
+    }
+
+    return ClickArea::None;
+}
 
 // Returns the area of the most recent click, provided it happened recently
 // enough. The remembered click position is more reliable than the current
@@ -1408,15 +1569,15 @@ ClickArea GetRecentClickArea(POINT* clickPoint) {
     }
 
     POINT pt{g_lastMouseDownX.load(), g_lastMouseDownY.load()};
-    HWND clickedWnd = g_lastMouseDownHwnd;
 
-    ClickArea area = ClickArea::None;
+    ClickArea area = (ClickArea)g_lastClickArea.load();
 
-    if (g_settings.trayWindowEnabled && !IsTaskListWindow(clickedWnd) &&
-        IsPointOnTrayArea(pt)) {
-        area = ClickArea::Tray;
-    } else if (g_settings.startMenuEnabled && IsShellLaunchWindow(clickedWnd)) {
-        area = ClickArea::ShellLaunch;
+    if (g_lastClickAreaTick != tick) {
+        // The window appeared before the worker thread got around to classifying
+        // the click, so do it here - everything is still on screen.
+        area = ClassifyClick(g_lastMouseDownHwnd, pt);
+        g_lastClickArea = (int)area;
+        g_lastClickAreaTick = tick;
     }
 
     if (area != ClickArea::None && clickPoint) {
@@ -1627,6 +1788,22 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
                 continue;
             }
 
+            if (msg.message == kClassifyClickMessage) {
+                // A few milliseconds after the mouse-down, so the clicked
+                // surfaces are guaranteed to still be there.
+                DWORD classifiedTick = g_lastMouseDownTick.load();
+                POINT pt{g_lastMouseDownX.load(), g_lastMouseDownY.load()};
+                int area = (int)ClassifyClick(g_lastMouseDownHwnd, pt);
+
+                // Only publish the result if the click hasn't changed while it
+                // was being classified.
+                if (g_lastMouseDownTick.load() == classifiedTick) {
+                    g_lastClickArea = area;
+                    g_lastClickAreaTick = classifiedTick;
+                }
+                continue;
+            }
+
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -1680,14 +1857,6 @@ bool StartWorkerThread() {
 
 void StopWorkerThread() {
     if (!g_workerThread) {
-        if (g_wakeEvent) {
-            CloseHandle(g_wakeEvent);
-            g_wakeEvent = nullptr;
-        }
-        if (g_stopEvent) {
-            CloseHandle(g_stopEvent);
-            g_stopEvent = nullptr;
-        }
         return;
     }
 
@@ -1701,12 +1870,21 @@ void StopWorkerThread() {
 
     CloseHandle(g_workerThread);
     g_workerThread = nullptr;
+}
 
-    CloseHandle(g_wakeEvent);
-    g_wakeEvent = nullptr;
+// Both events stay open until Wh_ModUninit: the taskbar click hook is still
+// installed while the worker thread is being stopped, and a click landing in
+// between would signal an already closed handle.
+void CloseWorkerThreadHandles() {
+    if (g_wakeEvent) {
+        CloseHandle(g_wakeEvent);
+        g_wakeEvent = nullptr;
+    }
 
-    CloseHandle(g_stopEvent);
-    g_stopEvent = nullptr;
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
 }
 
 void UnhookTrayHooks() {
@@ -1762,12 +1940,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    InitializeCriticalSection(&g_pendingLock);
-    g_pendingInitialized = true;
-
-    InitializeCriticalSection(&g_handledLock);
-    g_handledInitialized = true;
-
     if (!StartWorkerThread()) {
         Wh_Log(L"Failed to start the worker thread");
     }
@@ -1776,6 +1948,13 @@ BOOL Wh_ModInit() {
     // is also what tells taskbar clicks apart from tray clicks.
     if (!HookTaskbarSymbols()) {
         Wh_Log(L"Taskbar click symbols not found");
+    }
+
+    // Only the tray and Start menu paths work off the recorded click, so only
+    // they need the show desktop button to be told apart from a tray icon.
+    if ((g_settings.trayWindowEnabled || g_settings.startMenuEnabled) &&
+        !HookShowDesktopSymbol()) {
+        Wh_Log(L"Show desktop symbol not found");
     }
 
     return TRUE;
@@ -1797,15 +1976,7 @@ void Wh_ModUninit() {
     ClearPendingMoves();
     ClearHandledProcesses();
 
-    if (g_pendingInitialized) {
-        DeleteCriticalSection(&g_pendingLock);
-        g_pendingInitialized = false;
-    }
-
-    if (g_handledInitialized) {
-        DeleteCriticalSection(&g_handledLock);
-        g_handledInitialized = false;
-    }
+    CloseWorkerThreadHandles();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
