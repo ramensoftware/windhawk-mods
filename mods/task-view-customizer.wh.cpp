@@ -36,7 +36,7 @@ the native controls.
   list near the bottom.
 
 The mod does not change Alt+Tab or the desktop preview shown when hovering
-over the taskbar Task View button.
+over the taskbar's Task View button.
 
 ## Settings
 
@@ -59,7 +59,7 @@ selection of desktop thumbnails. Click a desktop to switch instead. The option
 applies to all Task View modes and leaves keyboard navigation available.
 **Desktop hover switching delay (ms)** sets the wait before that preview switches.
 The default is **400 ms**, matching the current Windows mouse-hover delay read
-by Task View. Enter 0â€“600000; blank or invalid text preserves the native delay.
+by Task View. Enter 0ÔÇô600000; blank or invalid text preserves the native delay.
 Prevent switching desktops on hover takes priority over this setting.
 
 ### New desktop button
@@ -129,10 +129,9 @@ Install as a local Windhawk mod, compile and enable it. Close and reopen
 Task View after changing mode, materials or colors. Disabling the mod restores
 saved native layout properties, brushes and bindings.
 
-For reliable Task View detection, keep **Windows 11 Taskbar Styler** or
-another Explorer XAML diagnostics consumer enabled. The mod observes existing
-diagnostics lookups; it does not register its own consumer or change another
-mod's settings. Windhawk downloads Windows debugging symbols when needed.
+Task View is detected through Switcher's native Loaded callbacks and animation
+targets. No Taskbar Styler or other XAML diagnostics consumer is required.
+Windhawk downloads Windows debugging symbols when needed.
 
 ## Compatibility
 
@@ -171,7 +170,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Disables entrance and exit motion. Independent of background material and transparency."
     - scrollAnimationSpeed: 100
       $name: Desktop scroll animation speed (%)
-      $description: "100 = current Windows speed (default). 50 = half speed. 200 = double speed. Range: 10â€“500. Applies to horizontal scrolling that reveals a desktop tile."
+      $description: "100 = current Windows speed (default). 50 = half speed. 200 = double speed. Range: 10ÔÇô500. Applies to horizontal scrolling that reveals a desktop tile."
   $name: Animations and scrolling
 - DesktopList:
     - preventHoverSwitch: false
@@ -179,7 +178,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Require a click to switch desktops instead of the delayed mouse-hover preview. Applies to Task View in all modes. Keyboard switching remains available. Reopen Task View after changing this option."
     - hoverSwitchDelayMs: "400"
       $name: Desktop hover switching delay (ms)
-      $description: "Time before hovering a desktop switches its preview. Windows currently uses 400 ms (the system mouse-hover delay). Enter 0â€“600000; blank or invalid input follows the system delay. Prevent switching desktops on hover overrides this value. Reopen Task View after changing."
+      $description: "Time before hovering a desktop switches its preview. Windows currently uses 400 ms (the system mouse-hover delay). Enter 0ÔÇô600000; blank or invalid input follows the system delay. Prevent switching desktops on hover overrides this value. Reopen Task View after changing."
     - desktopFrameWidth: "full"
       $name: Desktop list background width
       $options:
@@ -188,10 +187,10 @@ with other shell customization mods can depend on the Windows build.
       - percent: Percentage of screen
     - desktopFramePercent: 70
       $name: Desktop list width (% of screen)
-      $description: "Used with Percentage of screen. Range: 10â€“100. Overflowing desktop tiles remain scrollable."
+      $description: "Used with Percentage of screen. Range: 10ÔÇô100. Overflowing desktop tiles remain scrollable."
     - desktopFrameMargin: 8
       $name: Virtual desktop list frame margin (px)
-      $description: "Extra space around the desktop list frame, outside the taskbar area. Taskbar clearance follows its actual edge, size and monitor DPI, including small taskbars. Default: 8. Range: 0â€“200."
+      $description: "Extra space around the desktop list frame, outside the taskbar area. Taskbar clearance follows its actual edge, size and monitor DPI, including small taskbars. Default: 8. Range: 0ÔÇô200."
   $name: Desktop list layout
 - NewDesktop:
     - moveToRight: false
@@ -238,7 +237,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Solid starts opaque; the transparency percentage can make it translucent without blur. Acrylic blurs content behind panels. Clear removes the material. Mica uses blurred wallpaper with a theme-colored tint, falling back to solid if unavailable. Disable desktop list background takes priority."
     - materialTransparency: -1
       $name: Task View background material transparency (%)
-      $description: "0 = default material strength; 100 = clear for Native, Solid and Acrylic. For Mica, reduces tint/luminosity to reveal more wallpaper while keeping the wallpaper layer opaque. Thumbnails and labels stay solid. Outside 0â€“100 uses default strength (-1). Hidden strip settings take priority. Reopen Task View after changing."
+      $description: "0 = default material strength; 100 = clear for Native, Solid and Acrylic. For Mica, reduces tint/luminosity to reveal more wallpaper while keeping the wallpaper layer opaque. Thumbnails and labels stay solid. Outside 0ÔÇô100 uses default strength (-1). Hidden strip settings take priority. Reopen Task View after changing."
     - removeListBorder: false
       $name: Remove desktop list background border
       $description: "Removes the outer desktop strip frame, without removing desktop selection borders."
@@ -256,7 +255,7 @@ with other shell customization mods can depend on the Windows build.
       - both: Border and background
     - highlightOpacity: 20
       $name: Highlight background opacity (%)
-      $description: "Accent-colored fill for hovered or selected desktops. Range: 0â€“100. Used with Background only and Border and background."
+      $description: "Accent-colored fill for hovered or selected desktops. Range: 0ÔÇô100. Used with Background only and Border and background."
   $name: Desktop highlights
 - Colors:
     - backgroundColorDark: "native"
@@ -282,7 +281,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Separate from panel materials. An explicit backdrop selection overrides Disable full-screen background blur. Acrylic uses a live XAML backdrop, rather than SWS's captured snapshot; Windows may use its solid fallback when system transparency is disabled."
     - backdropDimOpacity: 18
       $name: Backdrop Dim Opacity (%)
-      $description: "Black tint strength of the Acrylic backdrop, 0â€“100. Separate from panel transparency."
+      $description: "Black tint strength of the Acrylic backdrop, 0ÔÇô100. Separate from panel transparency."
     - disableFullscreenBlur: true
       $name: Disable full-screen background blur
       $description: "Keep the wallpaper clear even when Windows transparency effects are enabled. Independent of the desktop thumbnail strip background. Applies to every Task View mode. Reopen Task View after changing this setting."
@@ -316,6 +315,8 @@ with other shell customization mods can depend on the Windows build.
 #include <mutex>
 #include <vector>
 #include <string>
+#include <optional>
+#include <functional>
 
 namespace wf = winrt::Windows::Foundation;
 namespace xaml = winrt::Windows::UI::Xaml;
@@ -337,6 +338,7 @@ template <> inline constexpr winrt::guid winrt::impl::guid_v<EffectInterop>{
 
 namespace {
 std::atomic<bool> g_stopping{false};
+std::atomic<unsigned> g_settingsRevision{0};
 std::atomic<bool> g_hooksReady{false};
 std::atomic_flag g_installing = ATOMIC_FLAG_INIT;
 std::atomic<int> g_scrollSpeed{100};
@@ -366,6 +368,7 @@ std::mutex g_colorMutex;
 std::wstring g_colors[4];
 std::atomic<int> g_colorRevision{0};
 void LoadFrameSettings() {
+    ++g_settingsRevision;
     g_preventHoverSwitch = Wh_GetIntSetting(L"DesktopList.preventHoverSwitch") != 0;
     auto hoverDelay = Wh_GetStringSetting(L"DesktopList.hoverSwitchDelayMs");
     int64_t delay = 0;
@@ -433,8 +436,9 @@ thread_local bool g_insideLayout = false;
 thread_local bool g_insideScroll = false;
 
 struct LayoutGuard {
+    bool previous = g_insideLayout;
     LayoutGuard() { g_insideLayout = true; }
-    ~LayoutGuard() { g_insideLayout = false; }
+    ~LayoutGuard() { g_insideLayout = previous; }
 };
 
 // Preserve local values and bindings, not just effective values. Clearing an
@@ -453,14 +457,13 @@ struct SavedProperty {
         }
     }
 
-    void Restore(xaml::FrameworkElement const& element) const {
-        if (binding) {
-            element.SetBinding(property, binding);
-        } else if (local == xaml::DependencyProperty::UnsetValue()) {
-            element.ClearValue(property);
-        } else {
-            element.SetValue(property, local);
-        }
+    bool Restore(xaml::FrameworkElement const& element) const noexcept {
+        try {
+            if (binding) element.SetBinding(property, binding);
+            else if (local == xaml::DependencyProperty::UnsetValue()) element.ClearValue(property);
+            else element.SetValue(property, local);
+            return true;
+        } catch (...) { Wh_Log(L"Property restoration failed: %08X", winrt::to_hresult()); return false; }
     }
 };
 
@@ -522,7 +525,7 @@ xaml::Thickness GetTaskbarClearance(xaml::FrameworkElement const& element, DWORD
         viewport.bottom = viewport.top + static_cast<LONG>(std::lround(element.ActualHeight() * scale));
     }
     struct BarSearch { HMONITOR monitor; RECT screen, available; bool found = false; } bar{monitor, info.rcMonitor, info.rcWork};
-    EnumWindows([](HWND window, LPARAM parameter) __attribute__((stdcall)) -> BOOL {
+    auto inspectBar = [](HWND window, LPARAM parameter) -> BOOL {
         auto& bar = *reinterpret_cast<BarSearch*>(parameter);
         wchar_t name[64]{}; GetClassNameW(window, name, ARRAYSIZE(name));
         if ((wcscmp(name, L"Shell_TrayWnd") && wcscmp(name, L"Shell_SecondaryTrayWnd")) ||
@@ -541,7 +544,10 @@ xaml::Thickness GetTaskbarClearance(xaml::FrameworkElement const& element, DWORD
         }
         bar.found = true;
         return FALSE;
-    }, reinterpret_cast<LPARAM>(&bar));
+    };
+    if (auto primary = FindWindowW(L"Shell_TrayWnd", nullptr)) inspectBar(primary, reinterpret_cast<LPARAM>(&bar));
+    for (HWND secondary = nullptr; !bar.found && (secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr));)
+        inspectBar(secondary, reinterpret_cast<LPARAM>(&bar));
     return TaskbarClearance(viewport, bar.available, scale);
 }
 
@@ -560,17 +566,18 @@ struct ScrollMotion : std::enable_shared_from_this<ScrollMotion> {
     ULONGLONG start = 0, nativeStart = 0;
     double from = 0, target = 0, duration = 0;
 
-    void CancelRendering() {
-        if (rendering) {
-            media::CompositionTarget::Rendering(renderingToken);
-            rendering = false;
-        }
+    void CancelRendering() noexcept {
+        if (!rendering) return;
+        rendering = false;
+        try { media::CompositionTarget::Rendering(renderingToken); }
+        catch (...) { Wh_Log(L"Scroll rendering detach failed: %08X", winrt::to_hresult()); }
     }
     void Stop() {
         CancelRendering();
         if (observing) {
-            if (auto control = scroll.get()) control.ViewChanged(viewChangedToken);
             observing = false;
+            try { if (auto control = scroll.get()) control.ViewChanged(viewChangedToken); }
+            catch (...) { Wh_Log(L"Scroll ViewChanged detach failed: %08X", winrt::to_hresult()); }
         }
     }
     bool Request(double offset, int speed) {
@@ -590,7 +597,6 @@ struct ScrollMotion : std::enable_shared_from_this<ScrollMotion> {
                     current->nativeStart = 0;
                     if (elapsed >= 40 && elapsed <= 2000) {
                         g_nativeScrollDuration = static_cast<int>(elapsed);
-                        Wh_SetIntValue(L"nativeScrollDurationMs", static_cast<int>(elapsed));
                     }
                 }
             });
@@ -658,6 +664,8 @@ xaml::FrameworkElement FindDesktopTile(xaml::DependencyObject const& parent, int
     return nullptr;
 }
 
+void DisconnectWallpaperMaterial(media::Brush const& brush);
+
 struct MaterialState {
     winrt::weak_ref<xaml::FrameworkElement> element;
     SavedProperty property;
@@ -666,15 +674,24 @@ struct MaterialState {
     int style = -1;
     int revision = -1;
     bool dark = false;
+    bool wallpaperReplacement = false;
+    void ReleaseReplacement() {
+        if (wallpaperReplacement && replacement) DisconnectWallpaperMaterial(replacement);
+        replacement = nullptr;
+        wallpaperReplacement = false;
+    }
     winrt::Windows::UI::Color color{};
     bool applied = false;
     void Restore() {
         if (!applied) return;
-        if (auto current = element.get()) property.Restore(current);
+        if (wallpaperReplacement && replacement) DisconnectWallpaperMaterial(replacement);
+        if (auto current = element.get()) {
+            if (!property.Restore(current) && wallpaperReplacement) current.ClearValue(property.property);
+        }
         applied = false;
         percent = -1;
         style = -1;
-        replacement = nullptr;
+        ReleaseReplacement();
     }
 };
 
@@ -685,9 +702,11 @@ namespace effects = winrt::Windows::Graphics::Effects;
 bool DarkTheme(xaml::FrameworkElement const& element) {
     return element.ActualTheme() == xaml::ElementTheme::Dark;
 }
+std::atomic<uint32_t> g_accentColor{0xFF0078D7};
 Color AccentColor() {
-    return winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
-        winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+    auto value = g_accentColor.load();
+    return {static_cast<uint8_t>(value >> 24), static_cast<uint8_t>(value >> 16),
+            static_cast<uint8_t>(value >> 8), static_cast<uint8_t>(value)};
 }
 bool CustomColor(xaml::FrameworkElement const& element, bool border, Color& color) {
     std::wstring value;
@@ -708,6 +727,8 @@ bool CustomColor(xaml::FrameworkElement const& element, bool border, Color& colo
     return true;
 }
 
+std::atomic<int> g_liveWallpaperEffects{0}, g_liveWallpaperMaterials{0};
+
 struct WallpaperTintEffect : winrt::implements<WallpaperTintEffect,
     effects::IGraphicsEffect, effects::IGraphicsEffectSource, EffectInterop> {
     winrt::hstring name;
@@ -715,7 +736,8 @@ struct WallpaperTintEffect : winrt::implements<WallpaperTintEffect,
     effects::IGraphicsEffectSource background{nullptr}, foreground{nullptr};
     WallpaperTintEffect(uint32_t blendMode, effects::IGraphicsEffectSource const& back,
                         effects::IGraphicsEffectSource const& front)
-        : mode(blendMode), background(back), foreground(front) {}
+        : mode(blendMode), background(back), foreground(front) { ++g_liveWallpaperEffects; }
+    ~WallpaperTintEffect() { --g_liveWallpaperEffects; Wh_Log(L"WallpaperTintEffect released"); }
     winrt::hstring Name() { return name; }
     void Name(winrt::hstring const& value) { name = value; }
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
@@ -747,7 +769,9 @@ struct WallpaperMaterial : media::XamlCompositionBrushBaseT<WallpaperMaterial> {
     WallpaperMaterial(xaml::FrameworkElement const& target, Color color, double opacity)
         : element(winrt::make_weak(target)), tint(color), strength(opacity) {
         auto fallback = color; fallback.A = 255; FallbackColor(fallback);
+        ++g_liveWallpaperMaterials;
     }
+    ~WallpaperMaterial() { --g_liveWallpaperMaterials; Wh_Log(L"WallpaperMaterial released"); }
     void OnConnected() {
         try {
             auto target = element.get();
@@ -772,8 +796,17 @@ struct WallpaperMaterial : media::XamlCompositionBrushBaseT<WallpaperMaterial> {
             Wh_Log(L"Mica wallpaper material connected (tint %u, strength %.2f)", tint.A, strength);
         } catch (...) { Wh_Log(L"Mica wallpaper material unavailable: %08X; using solid fallback", winrt::to_hresult()); }
     }
-    void OnDisconnected() { CompositionBrush(nullptr); }
+    void Disconnect() {
+        auto brush = CompositionBrush();
+        CompositionBrush(nullptr);
+        if (brush) brush.Close();
+    }
+    void OnDisconnected() { Disconnect(); }
 };
+
+void DisconnectWallpaperMaterial(media::Brush const& brush) {
+    if (brush) winrt::get_self<WallpaperMaterial>(brush.as<media::IXamlCompositionBrushBaseOverrides>())->Disconnect();
+}
 
 struct BorderState {
     winrt::weak_ref<controls::Border> element;
@@ -832,6 +865,7 @@ struct HighlightState {
     SavedProperty tilePrimaryFocus, tileSecondaryFocus;
     winrt::event_token entered{}, exited{};
     bool hovered = false, applied = false;
+    std::function<void()> changed;
     media::SolidColorBrush fill{nullptr}, accent{nullptr}, clear{nullptr};
     void Restore() {
         if (!applied) return;
@@ -841,10 +875,11 @@ struct HighlightState {
         if (auto current = tile.get()) { tilePrimaryFocus.Restore(current); tileSecondaryFocus.Restore(current); }
         applied = false;
     }
-    void Stop() {
-        Restore();
-        if (auto current = tile.get()) { current.PointerEntered(entered); current.PointerExited(exited); }
+    void Detach() noexcept {
+        try { if (auto current = tile.get()) current.PointerEntered(entered); } catch (...) {}
+        try { if (auto current = tile.get()) current.PointerExited(exited); } catch (...) {}
     }
+    void Stop() { Detach(); Restore(); }
 };
 
 void ApplyMaterials(xaml::DependencyObject const& node,
@@ -897,7 +932,7 @@ void ApplyMaterials(xaml::DependencyObject const& node,
                         state->element = winrt::make_weak(element);
                         state->property = SavedProperty(element, property);
                         state->original = brush;
-                        state->replacement = nullptr;
+                        state->ReleaseReplacement();
                         state->percent = -1;
                         state->style = -1;
                         state->applied = false;
@@ -918,6 +953,7 @@ void ApplyMaterials(xaml::DependencyObject const& node,
                     // hover brushes retain their color and alpha.
                     bool basePanel = frame || acrylic || (solid && solid.Color().A * solid.Opacity() >= 128);
                     if (basePanel && custom) color = configured;
+                    state->ReleaseReplacement();
                     if (style == 3 && basePanel) {
                         state->replacement = media::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
                     } else if (style == 1 && basePanel) {
@@ -927,6 +963,7 @@ void ApplyMaterials(xaml::DependencyObject const& node,
                     } else if (style == 4 && basePanel) {
                         if (!custom) color = DarkTheme(element) ? Color{204, 32, 32, 32} : Color{128, 243, 243, 243};
                         state->replacement = winrt::make<WallpaperMaterial>(element, color, opacity);
+                        state->wallpaperReplacement = true;
                     } else if ((style == 2 && basePanel) || (style == 0 && acrylic)) {
                         auto original = acrylic;
                         media::AcrylicBrush replacement;
@@ -968,7 +1005,7 @@ void ApplyMaterials(xaml::DependencyObject const& node,
         ApplyMaterials(media::VisualTreeHelper::GetChild(node, i), saved, depth + 1);
 }
 
-struct LayoutState {
+struct LayoutState : std::enable_shared_from_this<LayoutState> {
     struct HoverTimer {
         winrt::weak_ref<xaml::DispatcherTimer> timer;
         winrt::Windows::Foundation::TimeSpan interval;
@@ -1265,11 +1302,16 @@ struct LayoutState {
                 color.A = static_cast<uint8_t>(g_highlightOpacity * 255 / 100);
                 saved->fill = media::SolidColorBrush(color);
                 saved->clear = media::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
+                saved->changed = [weak = weak_from_this()] {
+                    if (g_stopping || g_insideLayout) return;
+                    try { if (auto state = weak.lock(); state && !state->detached) { LayoutGuard guard; state->ApplyHighlights(); } }
+                    catch (...) { Wh_Log(L"Highlight event update failed: %08X", winrt::to_hresult()); }
+                };
                 saved->entered = tile.PointerEntered([weak = std::weak_ptr(saved)](auto const&, auto const&) {
-                    if (auto current = weak.lock()) current->hovered = true;
+                    if (auto current = weak.lock()) { current->hovered = true; if (current->changed) current->changed(); }
                 });
                 saved->exited = tile.PointerExited([weak = std::weak_ptr(saved)](auto const&, auto const&) {
-                    if (auto current = weak.lock()) current->hovered = false;
+                    if (auto current = weak.lock()) { current->hovered = false; if (current->changed) current->changed(); }
                 });
                 highlights.push_back(saved);
             }
@@ -1298,8 +1340,9 @@ struct LayoutState {
             saved->applied = true;
         }
     }
-    bool windowsHeld = false;
-    winrt::event_token releaseToken{};
+    winrt::event_token keyUpToken{}, unloadedToken{}, sizeToken{}, themeToken{};
+    winrt::event_token selectionToken{}, containersToken{};
+    winrt::weak_ref<controls::ListView> desktopList;
     bool DismissList() {
         HWND foreground = GetForegroundWindow();
         DWORD process = 0;
@@ -1323,7 +1366,6 @@ struct LayoutState {
         list.ScrollIntoView(list.Items().GetAt(next));
         if (auto container = list.ContainerFromIndex(next).try_as<controls::Control>())
             container.Focus(xaml::FocusState::Keyboard);
-        Wh_SetIntValue(L"lastTabDesktop", next);
     }
     winrt::event_token keyToken{};
     winrt::event_token outsideClickToken{};
@@ -1351,11 +1393,16 @@ struct LayoutState {
         double original;
     };
     std::vector<SavedKeyFrame> animationFrames[2];
-    double diagnosticMinY = 0, diagnosticMaxY = 0;
     winrt::event_token layoutToken{};
     bool applied = false;
     bool detached = false;
     int appliedMode = -1;
+    bool appearanceDirty = true, clearanceDirty = true;
+    unsigned appearanceRevision = 0;
+    uint32_t desktopCount = UINT32_MAX;
+    double clearanceWidth = -1, clearanceHeight = -1, clearanceScale = -1;
+    xaml::Thickness cachedClearance{};
+    winrt::Windows::UI::ViewManagement::UISettings uiSettings{nullptr};
     winrt::weak_ref<controls::Grid> desktopGrid;
     winrt::weak_ref<controls::StackPanel> desktopStack;
     winrt::weak_ref<controls::ScrollViewer> desktopScroll;
@@ -1549,7 +1596,6 @@ struct LayoutState {
             controls::Grid::SetColumn(background, 0);
             controls::Grid::SetColumnSpan(background, 2);
         }
-        Wh_SetIntValue(L"newDesktopPinned", 1);
     }
 
     void UnpinNewDesktopButton() {
@@ -1671,11 +1717,28 @@ struct LayoutState {
                 saved.hidden = false;
             }
         }
-        ApplyMaterials(desktopElement, materials);
-        ApplyMaterials(windowElement, materials);
-        ApplyBorders(desktopElement, borders);
-        ApplyBorders(windowElement, borders);
-        ApplyHighlights();
+        auto revision = g_settingsRevision.load();
+        if (appearanceRevision != revision) { appearanceDirty = true; clearanceDirty = true; }
+        if (uiSettings) {
+            auto accent = uiSettings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+            uint32_t packed = uint32_t(accent.A) << 24 | uint32_t(accent.R) << 16 | uint32_t(accent.G) << 8 | accent.B;
+            if (g_accentColor.exchange(packed) != packed) appearanceDirty = true;
+        }
+        if (auto list = desktopList.get()) {
+            auto count = list.Items().Size();
+            if (desktopCount != count) { desktopCount = count; appearanceDirty = true; }
+        }
+        if (appearanceDirty) {
+            appearanceDirty = false;
+            try {
+                ApplyMaterials(desktopElement, materials);
+                ApplyMaterials(windowElement, materials);
+                ApplyBorders(desktopElement, borders);
+                ApplyBorders(windowElement, borders);
+                ApplyHighlights();
+                appearanceRevision = revision;
+            } catch (...) { appearanceDirty = true; throw; }
+        }
         // A transparent background receives clicks in the empty part of this
         // XAML surface without changing the underlying desktop's appearance.
         if (listOnly && !inputBackgroundApplied) {
@@ -1704,7 +1767,6 @@ struct LayoutState {
             layoutGrid.RowDefinitions().Clear();
             layoutGrid.RowDefinitions().Append(mode == 0 ? windowRow : desktopRow);
             layoutGrid.RowDefinitions().Append(mode == 0 ? desktopRow : windowRow);
-            Wh_SetIntValue(L"layoutApplied", 1);
             Wh_Log(L"Applied Task View desktop row 0 and window row 1");
         }
         int desktopRowIndex = mode == 0 ? 1 : 0;
@@ -1724,7 +1786,14 @@ struct LayoutState {
         if (!std::isnan(windowElement.Height())) windowElement.Height(NAN);
         xaml::Thickness zero{};
         double frameMargin = g_desktopFrameMargin.load();
-        auto clearance = GetTaskbarClearance(layoutGrid, threadId);
+        auto scale = layoutGrid.XamlRoot() ? layoutGrid.XamlRoot().RasterizationScale() : 1.0;
+        if (clearanceDirty || clearanceWidth != layoutGrid.ActualWidth() ||
+            clearanceHeight != layoutGrid.ActualHeight() || clearanceScale != scale) {
+            cachedClearance = GetTaskbarClearance(layoutGrid, threadId);
+            clearanceWidth = layoutGrid.ActualWidth(); clearanceHeight = layoutGrid.ActualHeight(); clearanceScale = scale;
+            clearanceDirty = false;
+        }
+        auto clearance = cachedClearance;
         bool topAnchored = mode == 1 || mode == 2;
         bool bottomAnchored = mode == 0 || mode == 4;
         xaml::Thickness desktopMargin{frameMargin + clearance.Left,
@@ -1769,80 +1838,81 @@ struct LayoutState {
         appliedMode = mode;
     }
 
+    void Detach() noexcept {
+        if (detached) return;
+        detached = true;
+        auto attempt = [](auto&& action) { try { action(); } catch (...) { Wh_Log(L"Task View event detach failed: %08X", winrt::to_hresult()); } };
+        attempt([&] { if (auto element = root.get()) element.LayoutUpdated(layoutToken); });
+        attempt([&] { if (auto element = root.get()) element.KeyDown(keyToken); });
+        attempt([&] { if (auto element = root.get()) element.KeyUp(keyUpToken); });
+        attempt([&] { if (auto element = root.get()) element.PointerPressed(outsideClickToken); });
+        attempt([&] { if (auto element = root.get()) element.Unloaded(unloadedToken); });
+        attempt([&] { if (auto element = root.get()) element.SizeChanged(sizeToken); });
+        attempt([&] { if (auto element = root.get()) element.ActualThemeChanged(themeToken); });
+        attempt([&] { if (auto list = desktopList.get()) list.SelectionChanged(selectionToken); });
+        attempt([&] { if (auto list = desktopList.get()) list.ContainerContentChanging(containersToken); });
+        for (auto const& highlight : highlights) highlight->Detach();
+        for (auto const& motion : scrollMotions) attempt([&] { motion->Stop(); });
+    }
+
     void Restore() {
+        Detach();
         LayoutGuard guard;
-        for (auto const& saved : hoverTimers) {
-            try { if (auto timer = saved.timer.get()) timer.Interval(saved.interval); }
-            catch (...) {}
-        }
+        auto attempt = [](auto&& action) { try { action(); } catch (...) { Wh_Log(L"Task View property cleanup failed: %08X", winrt::to_hresult()); } };
+        for (auto const& saved : hoverTimers)
+            attempt([&] { if (auto timer = saved.timer.get()) timer.Interval(saved.interval); });
         hoverTimers.clear();
-        RestoreNewDesktopTemplate();
+        attempt([&] { RestoreNewDesktopTemplate(); });
         for (auto const& saved : newDesktopStretchProperties)
-            if (auto element = saved.element.get()) saved.property.Restore(element);
+            attempt([&] { if (auto element = saved.element.get()) saved.property.Restore(element); });
         newDesktopStretchProperties.clear();
         for (auto const& saved : newDesktopAppearanceProperties)
-            if (auto element = saved.element.get()) saved.property.Restore(element);
+            attempt([&] { if (auto element = saved.element.get()) saved.property.Restore(element); });
         newDesktopAppearanceProperties.clear();
-        if (nativeButtonResized) if (auto button = nativeButton.get()) {
-            nativeButtonWidth.Restore(button);
-            nativeButtonMinWidth.Restore(button);
-        }
-        media::CompositionTarget::Rendering(releaseToken);
+        attempt([&] { if (nativeButtonResized) if (auto button = nativeButton.get()) {
+            nativeButtonWidth.Restore(button); nativeButtonMinWidth.Restore(button);
+        } });
         ClearAnimationTargets();
-        for (auto const& motion : scrollMotions) motion->Stop();
-        if (auto rootElement = root.get()) {
-            rootElement.LayoutUpdated(layoutToken);
-            rootElement.KeyDown(keyToken);
-            rootElement.PointerPressed(outsideClickToken);
-        }
-        detached = true;
-        if (nativeButtonHidden) if (auto button = nativeButton.get()) nativeButtonVisibility.Restore(button);
-        for (auto const& highlight : highlights) highlight->Stop();
-        for (auto& material : materials) material.Restore();
-        for (auto& border : borders) border.Restore();
-        if (fullscreenBackground.hidden) {
-            if (auto background = fullscreenBackground.element.get()) {
-                fullscreenBackground.background.Restore(background);
-                fullscreenBackground.opacity.Restore(background);
-            }
-            fullscreenBackground.hidden = false;
-        }
-        for (auto& saved : listBackgrounds) {
-            if (saved.hidden) {
-                if (auto background = saved.element.get()) {
-                    saved.background.Restore(background);
-                    saved.opacity.Restore(background);
-                }
-                saved.hidden = false;
-            }
-        }
-        for (auto const& saved : modeElements) {
-            if (auto element = saved.element.get()) {
-                saved.opacity.Restore(element);
-                saved.hitTest.Restore(element);
-            }
-        }
-        UnpinNewDesktopButton();
-        if (!applied) return;
-        for (auto const& frames : animationFrames) {
-            for (auto const& saved : frames) saved.frame.Value(saved.original);
-        }
-        if (auto desktopElement = desktops.get()) {
-            for (auto const& property : desktopProperties) property.Restore(desktopElement);
-        }
-        if (auto windowElement = windows.get()) {
-            for (auto const& property : windowProperties) property.Restore(windowElement);
-        }
-        if (auto layoutGrid = grid.get()) {
+        attempt([&] { if (nativeButtonHidden) if (auto button = nativeButton.get()) nativeButtonVisibility.Restore(button); });
+        for (auto const& highlight : highlights) attempt([&] { highlight->Restore(); });
+        for (auto& material : materials) attempt([&] { material.Restore(); });
+        for (auto& border : borders) attempt([&] { border.Restore(); });
+        auto restoreBackground = [&](ListBackground& saved) {
+            attempt([&] { if (saved.hidden) if (auto background = saved.element.get()) {
+                saved.background.Restore(background); saved.opacity.Restore(background);
+            } });
+            saved.hidden = false;
+        };
+        restoreBackground(fullscreenBackground);
+        for (auto& saved : listBackgrounds) restoreBackground(saved);
+        for (auto const& saved : modeElements) attempt([&] { if (auto element = saved.element.get()) {
+            saved.opacity.Restore(element); saved.hitTest.Restore(element);
+        } });
+        attempt([&] { UnpinNewDesktopButton(); });
+        for (auto const& frames : animationFrames)
+            for (auto const& saved : frames) attempt([&] { saved.frame.Value(saved.original); });
+        for (auto const& property : desktopProperties)
+            attempt([&] { if (auto element = desktops.get()) property.Restore(element); });
+        for (auto const& property : windowProperties)
+            attempt([&] { if (auto element = windows.get()) property.Restore(element); });
+        attempt([&] { if (applied) if (auto layoutGrid = grid.get()) {
             if (inputBackgroundApplied) originalInputBackground.Restore(layoutGrid);
             layoutGrid.RowDefinitions().Clear();
             for (auto const& row : originalRows) layoutGrid.RowDefinitions().Append(row);
-        }
+        } });
     }
+
 };
 
 std::mutex g_statesMutex;
-std::vector<std::shared_ptr<LayoutState>> g_states;
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<LayoutState>>> g_states{std::in_place};
+void RetireState(std::shared_ptr<LayoutState> state) {
+    if (!state || state->threadId != GetCurrentThreadId()) return;
+    try { state->Restore(); } catch (...) { Wh_Log(L"Unloaded Task View restoration failed: %08X", winrt::to_hresult()); }
+    std::lock_guard lock(g_statesMutex);
+    std::erase(*g_states, state);
+    Wh_Log(L"Task View state retired on thread %u; states remaining: %zu", GetCurrentThreadId(), g_states->size());
+}
 thread_local LayoutState* g_hoverTimerContext = nullptr;
 using HoverTimerStart_t = HRESULT(WINAPI*)(void*);
 HoverTimerStart_t HoverTimerStart_Original = nullptr;
@@ -1860,7 +1930,6 @@ HRESULT WINAPI HoverTimerStart_Hook(void* self) {
                 auto interval = timer.Interval();
                 timers.push_back({winrt::make_weak(timer), interval});
                 saved = std::prev(timers.end());
-                Wh_SetIntValue(L"nativeDesktopHoverDelayMs", static_cast<int>(interval.count() / 10000));
             }
             int delay = g_hoverSwitchDelayMs;
             auto interval = delay >= 0 ? winrt::Windows::Foundation::TimeSpan{static_cast<int64_t>(delay) * 10000} : saved->interval;
@@ -1873,18 +1942,19 @@ HRESULT WINAPI HoverTimerStart_Hook(void* self) {
 using PointerAdd_t = HRESULT(WINAPI*)(void*, void*, winrt::event_token*);
 using PointerRemove_t = HRESULT(WINAPI*)(void*, winrt::event_token);
 using NativePointerInvoke_t = HRESULT(WINAPI*)(void*, void*, void*);
-PointerAdd_t PointerEnterAdd_Original, PointerMoveAdd_Original;
-PointerRemove_t PointerEnterRemove_Original, PointerMoveRemove_Original;
+PointerAdd_t PointerEnterAdd_Original, PointerMoveAdd_Original, LoadedAdd_Original;
+PointerRemove_t PointerEnterRemove_Original, PointerMoveRemove_Original, LoadedRemove_Original;
 struct NativeHoverHook { void* target; NativePointerInvoke_t original = nullptr; };
 struct NativeHoverSubscription {
     void* element; void* handler; winrt::event_token token; bool moved;
     winrt::weak_ref<xaml::UIElement> owner;
     DWORD thread;
+    bool loaded = false;
 };
 std::mutex g_hoverHandlersMutex;
 std::vector<std::shared_ptr<NativeHoverHook>> g_nativeHoverHooks;
 std::vector<NativeHoverSubscription> g_hoverSubscriptions;
-std::atomic<bool> g_hoverSuppressionRecorded{false};
+void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors);
 bool IsSwitcherCode(void* address) {
     HMODULE module = nullptr;
     return address && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -1922,17 +1992,27 @@ bool IsDesktopMouseHover(xaml::Input::PointerRoutedEventArgs const& args, xaml::
 HRESULT WINAPI NativeHoverInvoke_Hook(void* self, void* sender, void* arguments) {
     NativePointerInvoke_t original = nullptr;
     bool hoverSubscriber = false;
+    xaml::FrameworkElement loadedElement{nullptr};
     auto target = (*reinterpret_cast<void***>(self))[3];
     {
         std::lock_guard lock(g_hoverHandlersMutex);
         for (auto const& hook : g_nativeHoverHooks) if (hook->target == target) { original = hook->original; break; }
         if (!g_stopping) for (auto const& saved : g_hoverSubscriptions)
             if (saved.handler == self && saved.thread == GetCurrentThreadId()) {
-                try { if (saved.owner.get()) { hoverSubscriber = true; break; } }
+                try { if (auto owner = saved.owner.get()) {
+                    if (saved.loaded) loadedElement = owner.as<xaml::FrameworkElement>();
+                    else hoverSubscriber = true;
+                    break;
+                } }
                 catch (...) {} // A disappearing UI owner must retain native behavior.
             }
     }
     if (!original) return E_UNEXPECTED;
+    if (loadedElement && !g_stopping) {
+        try { ObserveElement(loadedElement, true); }
+        catch (...) { Wh_Log(L"Task View Loaded observation failed: %08X", winrt::to_hresult()); }
+        return original(self, sender, arguments);
+    }
     std::shared_ptr<LayoutState> hoverState;
     if (hoverSubscriber && arguments && !g_stopping) {
         try {
@@ -1940,11 +2020,10 @@ HRESULT WINAPI NativeHoverInvoke_Hook(void* self, void* sender, void* arguments)
             xaml::FrameworkElement root{nullptr};
             if (IsDesktopMouseHover(args, &root)) {
                 if (g_preventHoverSwitch) {
-                    if (!g_hoverSuppressionRecorded.exchange(true)) Wh_SetIntValue(L"desktopHoverSuppressed", 1);
                     return S_OK;
                 }
                 std::lock_guard lock(g_statesMutex);
-                for (auto const& state : g_states)
+                for (auto const& state : *g_states)
                     if (state->threadId == GetCurrentThreadId() && !state->detached && state->root.get() == root) {
                         hoverState = state;
                         break;
@@ -1960,18 +2039,29 @@ HRESULT WINAPI NativeHoverInvoke_Hook(void* self, void* sender, void* arguments)
     return original(self, sender, arguments);
 }
 
-void TrackDesktopPointerHandler(void* self, void* handler, winrt::event_token token, bool moved, void* caller) {
+void TrackDesktopPointerHandler(void* self, void* handler, winrt::event_token token, bool moved, void* caller, bool loaded = false) {
     if (g_stopping || !handler) return;
     auto invoke = (*reinterpret_cast<void***>(handler))[3];
     if (!IsSwitcherCode(caller) && !IsSwitcherCode(invoke)) return;
-    xaml::IUIElement element{nullptr}; winrt::copy_from_abi(element, self);
+    xaml::UIElement owner{nullptr};
+    if (loaded) {
+        xaml::IFrameworkElement element{nullptr}; winrt::copy_from_abi(element, self);
+        owner = element.as<xaml::UIElement>();
+    } else {
+        xaml::IUIElement element{nullptr}; winrt::copy_from_abi(element, self);
+        owner = element.as<xaml::UIElement>();
+    }
     NativeHoverSubscription subscription{self, handler, token, moved,
-        winrt::make_weak(element.as<xaml::UIElement>()), GetCurrentThreadId()};
+        winrt::make_weak(owner), GetCurrentThreadId(), loaded};
     // Leave the native delegate object and event token unchanged. Hook only
     // its Invoke entry, forwarding every call except a tracked desktop hover.
     std::shared_ptr<NativeHoverHook> hook;
     {
         std::lock_guard lock(g_hoverHandlersMutex);
+        std::erase_if(g_hoverSubscriptions, [](auto const& saved) {
+            if (saved.thread != GetCurrentThreadId()) return false;
+            try { return !saved.owner.get(); } catch (...) { return true; }
+        });
         for (auto const& candidate : g_nativeHoverHooks) if (candidate->target == invoke) { hook = candidate; break; }
         if (hook) { g_hoverSubscriptions.push_back(subscription); return; }
     }
@@ -1990,12 +2080,11 @@ void TrackDesktopPointerHandler(void* self, void* handler, winrt::event_token to
         std::lock_guard lock(g_hoverHandlersMutex);
         std::erase(g_nativeHoverHooks, hook);
         std::erase_if(g_hoverSubscriptions, [&](auto const& saved) {
-            return saved.element == self && saved.token == token && saved.moved == moved;
+            return saved.element == self && saved.token == token && saved.moved == moved && !saved.loaded;
         });
         Wh_Log(L"Could not hook native desktop hover callback"); return;
     }
     Wh_ApplyHookOperations();
-    Wh_SetIntValue(L"desktopHoverHandlerCaptured", 1);
 }
 HRESULT AddDesktopPointerHandler(void* self, void* handler, winrt::event_token* token, bool moved, void* caller) {
     auto original = moved ? PointerMoveAdd_Original : PointerEnterAdd_Original;
@@ -2011,7 +2100,7 @@ HRESULT RemoveDesktopPointerHandler(void* self, winrt::event_token token, bool m
     if (SUCCEEDED(result) && !g_stopping) {
         std::lock_guard lock(g_hoverHandlersMutex);
         std::erase_if(g_hoverSubscriptions, [&](auto const& saved) {
-            return saved.element == self && saved.token == token && saved.moved == moved;
+            return saved.element == self && saved.token == token && saved.moved == moved && !saved.loaded;
         });
     }
     return result;
@@ -2025,8 +2114,8 @@ HRESULT WINAPI PointerMoveAdd_Hook(void* self, void* handler, winrt::event_token
 HRESULT WINAPI PointerEnterRemove_Hook(void* self, winrt::event_token token) { return RemoveDesktopPointerHandler(self, token, false); }
 HRESULT WINAPI PointerMoveRemove_Hook(void* self, winrt::event_token token) { return RemoveDesktopPointerHandler(self, token, true); }
 
-void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors = false) {
-    if (!element || g_insideLayout || g_stopping) return;
+void ObserveElementCore(xaml::FrameworkElement const& element, bool walkAncestors) {
+    if (!element || g_stopping) return;
     LayoutGuard guard;
     auto name = element.Name();
     if (!walkAncestors && name != L"VirtualDesktopBar" && name != L"SwitchItemListControl" &&
@@ -2049,7 +2138,7 @@ void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors = 
 
     {
         std::lock_guard lock(g_statesMutex);
-        for (auto const& state : g_states) {
+        for (auto const& state : *g_states) {
             if (state->threadId == GetCurrentThreadId() &&
                 state->root.get() == rootElement) return;
         }
@@ -2073,53 +2162,34 @@ void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors = 
     if (!desktops || !windows) return;
 
     auto state = std::make_shared<LayoutState>();
+    struct RegistrationGuard {
+        std::shared_ptr<LayoutState> state;
+        bool published = false;
+        ~RegistrationGuard() { if (!published) state->Detach(); }
+    } registration{state};
     state->threadId = GetCurrentThreadId();
     state->root = winrt::make_weak(rootElement);
+    state->uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
+    state->unloadedToken = rootElement.Unloaded([weak = std::weak_ptr(state)](auto const&, auto const&) {
+        if (auto current = weak.lock()) RetireState(std::move(current));
+    });
+    state->sizeToken = rootElement.SizeChanged([weak = std::weak_ptr(state)](auto const&, auto const&) {
+        if (auto current = weak.lock()) current->clearanceDirty = true;
+    });
+    state->themeToken = rootElement.ActualThemeChanged([weak = std::weak_ptr(state)](auto const&, auto const&) {
+        if (auto current = weak.lock()) { current->appearanceDirty = true; current->Apply(); }
+    });
     state->desktops = winrt::make_weak(desktops);
     state->windows = winrt::make_weak(windows);
     state->grid = winrt::make_weak(grid);
     state->originalInputBackground = SavedProperty(grid, controls::Panel::BackgroundProperty());
-    state->releaseToken = media::CompositionTarget::Rendering(
-        [weak = std::weak_ptr(state)](auto const&, auto const&) {
-            auto current = weak.lock();
-            if (!current || current->detached || g_stopping) return;
-            try {
-                if (auto bar = current->desktops.get()) {
-                    if (auto transform = bar.RenderTransform().try_as<media::TranslateTransform>()) {
-                        double y = transform.Y();
-                        if (y < current->diagnosticMinY) {
-                            current->diagnosticMinY = y;
-                            Wh_SetIntValue(L"slideObservedMinY", static_cast<int>(y));
-                        }
-                        if (y > current->diagnosticMaxY) {
-                            current->diagnosticMaxY = y;
-                            Wh_SetIntValue(L"slideObservedMaxY", static_cast<int>(y));
-                        }
-                    }
-                }
-            } catch (...) {}
-            try {
-                if (!g_insideLayout) { LayoutGuard guard; current->ApplyHighlights(); }
-            } catch (...) { Wh_Log(L"Desktop highlight update failed: %08X", winrt::to_hresult()); }
-            wchar_t name[128]{};
-            HWND foreground = GetForegroundWindow();
-            GetClassNameW(foreground, name, ARRAYSIZE(name));
-            DWORD process = 0;
-            DWORD foregroundThread = GetWindowThreadProcessId(foreground, &process);
-            if (!g_closeOnWindowsRelease || process != GetCurrentProcessId() ||
-                foregroundThread != current->threadId ||
-                (wcscmp(name, L"XamlExplorerHostIslandWindow") != 0 &&
-                 wcscmp(name, L"MultitaskingViewFrame") != 0)) {
-                current->windowsHeld = false;
-                return;
-            }
-            bool held = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
-            if (held) current->windowsHeld = true;
-            else if (current->windowsHeld) {
-                current->windowsHeld = false;
-                if (current->DismissList()) Wh_SetIntValue(L"windowsReleaseDismissed", 1);
-            }
-        });
+    state->keyUpToken = rootElement.KeyUp([weak = std::weak_ptr(state)](auto const&, xaml::Input::KeyRoutedEventArgs const& args) {
+        if (g_stopping || !g_closeOnWindowsRelease) return;
+        if (args.Key() != winrt::Windows::System::VirtualKey::LeftWindows &&
+            args.Key() != winrt::Windows::System::VirtualKey::RightWindows) return;
+        try { if (auto current = weak.lock(); current && !current->detached) current->DismissList(); }
+        catch (...) { Wh_Log(L"Windows-key release dismissal failed: %08X", winrt::to_hresult()); }
+    });
     state->outsideClickToken = rootElement.PointerPressed(
         [weak = std::weak_ptr(state)](auto const&, xaml::Input::PointerRoutedEventArgs const& args) {
             if (g_stopping || !IsListOnlyMode()) return;
@@ -2133,7 +2203,6 @@ void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors = 
                     point.Y >= 0 && point.Y < desktops.ActualHeight()) return;
                 if (!current->DismissList()) return;
                 args.Handled(true);
-                Wh_SetIntValue(L"outsideClickDismissed", 1);
             } catch (...) { Wh_Log(L"Outside-click dismissal failed: %08X", winrt::to_hresult()); }
         });
     state->keyToken = rootElement.KeyDown([weak = std::weak_ptr(state)](auto const&, xaml::Input::KeyRoutedEventArgs const& args) {
@@ -2164,70 +2233,47 @@ void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors = 
         state->desktopProperties.emplace_back(desktops, property);
         state->windowProperties.emplace_back(windows, property);
     }
+    if (auto list = FindNamedChild<controls::ListView>(desktops, L"DesktopsList")) {
+        state->desktopList = winrt::make_weak(list);
+        state->selectionToken = list.SelectionChanged([weak = std::weak_ptr(state)](auto const&, auto const&) {
+            if (g_stopping || g_insideLayout) return;
+            try { if (auto current = weak.lock(); current && !current->detached) { LayoutGuard guard; current->ApplyHighlights(); } }
+            catch (...) { Wh_Log(L"Selection highlight update failed: %08X", winrt::to_hresult()); }
+        });
+        state->containersToken = list.ContainerContentChanging([weak = std::weak_ptr(state)](auto const&, auto const&) {
+            if (auto current = weak.lock()) current->appearanceDirty = true;
+        });
+    }
     // The event owns only a weak state; the registry owns the state itself.
     state->layoutToken = rootElement.LayoutUpdated(
         [weak = std::weak_ptr(state)](auto const&, auto const&) {
             try {
-                if (auto current = weak.lock()) current->Apply();
+                if (auto current = weak.lock(); current && !current->detached) current->Apply();
             } catch (...) {
                 Wh_Log(L"Task View layout update failed: %08X", winrt::to_hresult());
             }
         });
     {
         std::lock_guard lock(g_statesMutex);
-        g_states.push_back(state);
+        g_states->push_back(state);
+        registration.published = true;
     }
     Wh_Log(L"Found full Task View root on thread %u", state->threadId);
     // Apply on the next layout pass; the reentrancy guard is active here.
     rootElement.InvalidateArrange();
 }
 
-using Arrange_t = HRESULT(WINAPI*)(void*, wf::Rect);
-Arrange_t Arrange_Original;
-HRESULT WINAPI Arrange_Hook(void* self, wf::Rect rectangle) {
-    if (!g_insideLayout && !g_stopping) {
-        try {
-            xaml::IUIElement element{nullptr};
-            winrt::copy_from_abi(element, self);
-            ObserveElement(element.try_as<xaml::FrameworkElement>());
-        } catch (...) {
-            Wh_Log(L"Task View arrange observation failed: %08X", winrt::to_hresult());
-        }
+void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors) {
+    if (g_insideLayout || g_stopping) return;
+    // Retire expired owners on this UI thread even if Windows omitted Unloaded.
+    std::vector<std::shared_ptr<LayoutState>> stale;
+    {
+        std::lock_guard lock(g_statesMutex);
+        for (auto const& state : *g_states)
+            if (state->threadId == GetCurrentThreadId() && !state->root.get()) stale.push_back(state);
     }
-    return Arrange_Original(self, rectangle);
-}
-
-using ActualHeight_t = HRESULT(WINAPI*)(void*, double*);
-ActualHeight_t ActualHeight_Original;
-HRESULT WINAPI ActualHeight_Hook(void* self, double* height) {
-    HRESULT result = ActualHeight_Original(self, height);
-    if (SUCCEEDED(result) && !g_insideLayout && !g_stopping) {
-        try {
-            xaml::IFrameworkElement element{nullptr};
-            winrt::copy_from_abi(element, self);
-            ObserveElement(element.as<xaml::FrameworkElement>());
-        } catch (...) {
-            Wh_Log(L"Task View height observation failed: %08X", winrt::to_hresult());
-        }
-    }
-    return result;
-}
-
-using DiagnosticsLookup_t = HRESULT(WINAPI*)(void*, unsigned long long, void**);
-DiagnosticsLookup_t DiagnosticsLookup_Original;
-HRESULT WINAPI DiagnosticsLookup_Hook(void* self, unsigned long long handle,
-                                     void** inspectable) {
-    HRESULT result = DiagnosticsLookup_Original(self, handle, inspectable);
-    if (SUCCEEDED(result) && inspectable && *inspectable && !g_insideLayout && !g_stopping) {
-        try {
-            wf::IInspectable object{nullptr};
-            winrt::copy_from_abi(object, *inspectable);
-            ObserveElement(object.try_as<xaml::FrameworkElement>(), true);
-        } catch (...) {
-            Wh_Log(L"Diagnostics observation failed: %08X", winrt::to_hresult());
-        }
-    }
-    return result;
+    for (auto& state : stale) RetireState(std::move(state));
+    ObserveElementCore(element, walkAncestors);
 }
 
 struct AnimationTarget {
@@ -2289,8 +2335,6 @@ void ApplyDesktopSlideDirection(animation::Timeline const& timeline) {
     for (auto const& tracked : g_animationTargets) {
         if (tracked.timeline.get() != timeline) continue;
         if (auto target = tracked.target.get()) {
-            Wh_SetStringValue(L"slideLastTarget", target.Name().c_str());
-            Wh_SetStringValue(L"slideLastProperty", property.c_str());
         }
     }
     if (property != L"(UIElement.RenderTransform).(TranslateTransform.Y)" &&
@@ -2303,7 +2347,7 @@ void ApplyDesktopSlideDirection(animation::Timeline const& timeline) {
         auto target = tracked.target.get();
         if (!target) return;
         std::lock_guard lock(g_statesMutex);
-        for (auto const& state : g_states) {
+        for (auto const& state : *g_states) {
             if (state->threadId != GetCurrentThreadId() || state->desktops.get() != target) continue;
             auto frames = keyframes.KeyFrames();
             if (frames.Size() == 0) return;
@@ -2314,8 +2358,6 @@ void ApplyDesktopSlideDirection(animation::Timeline const& timeline) {
                 });
                 if (saved == savedFrames.end()) savedFrames.push_back({frame, frame.Value()});
                 frame.Value(g_desktopSlideFromTop ? -std::abs(frame.Value()) : std::abs(frame.Value()));
-                if (frame.Value() != 0) Wh_SetIntValue(L"slideAppliedY", static_cast<int>(frame.Value()));
-                Wh_SetIntValue(L"animationReversed", 1);
             }
             return;
         }
@@ -2358,10 +2400,13 @@ void ResolveDesktopSlideTargets(animation::Timeline const& timeline) {
     if (coreTarget.value) {
             xaml::DependencyObject target{nullptr};
             if (FAILED(GetPeer(coreTarget.value, winrt::guid_of<xaml::IDependencyObject>(), winrt::put_abi(target)))) return;
+            // Discovery from a Switcher animation does not require any other
+            // diagnostics consumer. Identity checks below still gate mutation.
+            ObserveElementCore(target.try_as<xaml::FrameworkElement>(), true);
             xaml::FrameworkElement bar{nullptr};
             {
                 std::lock_guard lock(g_statesMutex);
-                for (auto const& state : g_states) {
+                for (auto const& state : *g_states) {
                     if (state->threadId != GetCurrentThreadId() || state->detached) continue;
                     auto candidate = state->desktops.get();
                     if (candidate && (target == candidate || target == candidate.RenderTransform())) {
@@ -2376,7 +2421,6 @@ void ResolveDesktopSlideTargets(animation::Timeline const& timeline) {
                 return !existing || existing == timeline;
             });
             g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(bar)});
-            Wh_SetIntValue(L"slideResolvedNativeTarget", 1);
             ApplyDesktopSlideDirection(timeline);
     }
 }
@@ -2387,18 +2431,29 @@ HRESULT WINAPI CoreStoryboardBegin_Hook(void* self, unsigned int flags) {
     bool taskViewThread = false;
     if (!g_stopping && !g_insideLayout) {
         std::lock_guard lock(g_statesMutex);
-        for (auto const& state : g_states)
+        for (auto const& state : *g_states)
             if (state->threadId == GetCurrentThreadId() && !state->detached) {
                 taskViewThread = true;
                 break;
             }
+    }
+    if (!g_stopping && !g_insideLayout && !taskViewThread) {
+        auto foreground = GetForegroundWindow();
+        DWORD process = 0;
+        auto foregroundThread = GetWindowThreadProcessId(foreground, &process);
+        if (process == GetCurrentProcessId() && foregroundThread == GetCurrentThreadId()) {
+            wchar_t name[80]{};
+            GetClassNameW(foreground, name, ARRAYSIZE(name));
+            taskViewThread = wcscmp(name, L"MultitaskingViewFrame") == 0 ||
+                             wcscmp(name, L"XamlExplorerHostIslandWindow") == 0;
+        }
+        taskViewThread = taskViewThread || IsSwitcherCode(__builtin_return_address(0));
     }
     if (taskViewThread) {
         LayoutGuard guard;
         try {
             animation::Timeline timeline{nullptr};
             if (SUCCEEDED(GetPeer(self, winrt::guid_of<animation::ITimeline>(), winrt::put_abi(timeline))) && timeline) {
-                Wh_SetIntValue(L"slideNativeBeginCaptured", 1);
                 ResolveDesktopSlideTargets(timeline);
             }
         } catch (...) { Wh_Log(L"Native storyboard inspection failed: %08X", winrt::to_hresult()); }
@@ -2409,7 +2464,6 @@ HRESULT WINAPI CoreStoryboardBegin_Hook(void* self, unsigned int flags) {
 using StoryboardBegin_t = HRESULT(WINAPI*)(void*);
 StoryboardBegin_t StoryboardBegin_Original;
 HRESULT WINAPI StoryboardBegin_Hook(void* self) {
-    Wh_SetIntValue(L"slideBeginInsideLayout", g_insideLayout ? 1 : 0);
     bool skip = false;
     if (!g_stopping && !g_insideLayout) {
         try {
@@ -2458,7 +2512,7 @@ bool AnimateDesktopScroll(controls::ScrollViewer const& scroll, double offset) {
     std::shared_ptr<ScrollMotion> motion;
     {
         std::lock_guard lock(g_statesMutex);
-        for (auto const& state : g_states) {
+        for (auto const& state : *g_states) {
             if (state->threadId != GetCurrentThreadId() || !state->root.get()) continue;
             for (auto const& candidate : state->scrollMotions) {
                 if (candidate->scroll.get() == scroll) { motion = candidate; break; }
@@ -2501,7 +2555,6 @@ HRESULT WINAPI ChangeView_Hook(void* self, void* horizontal, void* vertical,
                 winrt::copy_from_abi(offset, horizontal);
                 bool result = AnimateDesktopScroll(scroll, offset.Value());
                 if (changed) *changed = result;
-                Wh_SetIntValue(L"desktopScrollAnimated", 1);
                 return S_OK;
             }
         } catch (...) {}
@@ -2519,12 +2572,33 @@ HRESULT WINAPI ScrollHorizontal_Hook(void* self, double offset) {
             auto scroll = scrollInterface.as<controls::ScrollViewer>();
             if (IsDesktopScroll(scroll)) {
                 AnimateDesktopScroll(scroll, offset);
-                Wh_SetIntValue(L"desktopScrollAnimated", 1);
                 return S_OK;
             }
         } catch (...) {}
     }
     return ScrollHorizontal_Original(self, offset);
+}
+
+// IFrameworkElement Loaded slots are SDK-defined (43/44). Capture only
+// Switcher-owned native delegates. We add no event delegate of our own here.
+HRESULT WINAPI LoadedAdd_Hook(void* self, void* handler, winrt::event_token* token) {
+    auto caller = __builtin_return_address(0);
+    auto result = LoadedAdd_Original(self, handler, token);
+    if (SUCCEEDED(result) && token && !g_stopping) {
+        try { TrackDesktopPointerHandler(self, handler, *token, false, caller, true); }
+        catch (...) { Wh_Log(L"Switcher Loaded handler tracking failed: %08X", winrt::to_hresult()); }
+    }
+    return result;
+}
+HRESULT WINAPI LoadedRemove_Hook(void* self, winrt::event_token token) {
+    auto result = LoadedRemove_Original(self, token);
+    if (SUCCEEDED(result) && !g_stopping) {
+        std::lock_guard lock(g_hoverHandlersMutex);
+        std::erase_if(g_hoverSubscriptions, [&](auto const& saved) {
+            return saved.loaded && saved.element == self && saved.token == token;
+        });
+    }
+    return result;
 }
 
 void InstallXamlHooks() {
@@ -2567,6 +2641,10 @@ void InstallXamlHooks() {
             PointerMoveAdd_Hook, &PointerMoveAdd_Original);
         bool moveRemove = WindhawkUtils::SetFunctionHook(reinterpret_cast<PointerRemove_t>(uiVtable[60]),
             PointerMoveRemove_Hook, &PointerMoveRemove_Original);
+        bool loadedAdd = WindhawkUtils::SetFunctionHook(reinterpret_cast<PointerAdd_t>(frameworkVtable[43]),
+            LoadedAdd_Hook, &LoadedAdd_Original);
+        bool loadedRemove = WindhawkUtils::SetFunctionHook(reinterpret_cast<PointerRemove_t>(frameworkVtable[44]),
+            LoadedRemove_Hook, &LoadedRemove_Original);
         bool hoverHooks = enterAdd && enterRemove && moveAdd && moveRemove;
         if (!hoverHooks) {
             if (enterAdd) Wh_RemoveFunctionHook(uiVtable[63]);
@@ -2574,25 +2652,17 @@ void InstallXamlHooks() {
             if (moveAdd) Wh_RemoveFunctionHook(uiVtable[59]);
             if (moveRemove) Wh_RemoveFunctionHook(uiVtable[60]);
         }
-        // Fixed slots in the published WinRT IUIElement/IFrameworkElement ABI,
-        // including the six IInspectable entries; no object offsets involved.
-        bool arrange = WindhawkUtils::SetFunctionHook(
-            reinterpret_cast<Arrange_t>(uiVtable[92]), Arrange_Hook, &Arrange_Original);
-        bool height = WindhawkUtils::SetFunctionHook(
-            reinterpret_cast<ActualHeight_t>(frameworkVtable[14]), ActualHeight_Hook, &ActualHeight_Original);
-        if (arrange && height && begin && scrollOffset && changeView) {
+        if (begin && scrollOffset && changeView && loadedAdd && loadedRemove) {
             Wh_ApplyHookOperations();
             g_hooksReady = true;
-            Wh_SetIntValue(L"hoverSwitchHookReady", hoverHooks ? 1 : 0);
-            Wh_SetIntValue(L"hoverDelayHookReady", hoverTimer && hoverHooks ? 1 : 0);
-            Wh_Log(L"Installed Windows.UI.Xaml layout hooks");
+            Wh_Log(L"Installed XAML Task View event and animation hooks");
         } else {
+            if (loadedAdd) Wh_RemoveFunctionHook(frameworkVtable[43]);
+            if (loadedRemove) Wh_RemoveFunctionHook(frameworkVtable[44]);
             if (hoverTimer) Wh_RemoveFunctionHook(timerVtable[11]);
             if (scrollOffset) Wh_RemoveFunctionHook(scrollVtable[58]);
             if (changeView) Wh_RemoveFunctionHook(scrollVtable2[15]);
             if (begin) Wh_RemoveFunctionHook(storyboardVtable[9]);
-            if (arrange) Wh_RemoveFunctionHook(uiVtable[92]);
-            if (height) Wh_RemoveFunctionHook(frameworkVtable[14]);
             if (hoverHooks) {
                 Wh_RemoveFunctionHook(uiVtable[63]); Wh_RemoveFunctionHook(uiVtable[64]);
                 Wh_RemoveFunctionHook(uiVtable[59]); Wh_RemoveFunctionHook(uiVtable[60]);
@@ -2609,7 +2679,7 @@ void InstallXamlHooks() {
 }
 
 using WindowThreadProc = void(*)(void*);
-struct WindowThreadCall { WindowThreadProc proc; void* parameter; };
+struct WindowThreadCall { WindowThreadProc proc; void* parameter; bool completed = false; };
 UINT g_threadMessage;
 
 LRESULT CALLBACK CallWindowHook(int code, WPARAM wParam, LPARAM lParam) {
@@ -2618,6 +2688,7 @@ LRESULT CALLBACK CallWindowHook(int code, WPARAM wParam, LPARAM lParam) {
         if (message->message == g_threadMessage && message->lParam) {
             auto call = reinterpret_cast<WindowThreadCall*>(message->lParam);
             call->proc(call->parameter);
+            call->completed = true;
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -2636,7 +2707,7 @@ bool RunOnWindowThread(HWND window, WindowThreadProc proc, void* parameter) {
     WindowThreadCall call{proc, parameter};
     SendMessageW(window, g_threadMessage, 0, reinterpret_cast<LPARAM>(&call));
     UnhookWindowsHookEx(hook);
-    return true;
+    return call.completed;
 }
 
 void InitializeWindow(HWND window) {
@@ -2664,51 +2735,36 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className,
 
 BOOL Wh_ModInit() {
     LoadFrameSettings();
-    Wh_SetIntValue(L"hoverSwitchHookReady", 0);
-    Wh_SetIntValue(L"desktopHoverHandlerCaptured", 0);
-    Wh_SetIntValue(L"desktopHoverSuppressed", 0);
     const wchar_t* viewMode = Wh_GetStringSetting(L"General.viewMode");
     g_viewMode = (std::max)(0, (std::min)(viewMode ? _wtoi(viewMode) : 0, 4));
     Wh_FreeStringSetting(viewMode);
     g_desktopFrameMargin = (std::max)(0, (std::min)(Wh_GetIntSetting(L"DesktopList.desktopFrameMargin"), 200));
     int speed = Wh_GetIntSetting(L"Animations.scrollAnimationSpeed");
     g_scrollSpeed = (std::max)(10, (std::min)(speed > 0 ? speed : 100, 500));
-    g_nativeScrollDuration = (std::max)(40, (std::min)(Wh_GetIntValue(L"nativeScrollDurationMs", 250), 2000));
-    Wh_SetIntValue(L"desktopScrollAnimated", 0);
-    Wh_SetIntValue(L"newDesktopPinned", 0);
-    Wh_SetIntValue(L"layoutApplied", 0);
-    Wh_SetIntValue(L"animationReversed", 0);
-    Wh_SetIntValue(L"slideAppliedY", 0);
-    Wh_SetIntValue(L"slideObservedMinY", 0);
-    Wh_SetIntValue(L"slideObservedMaxY", 0);
-    Wh_SetIntValue(L"slideRequestedTop", g_desktopSlideFromTop ? 1 : 0);
-    Wh_SetIntValue(L"slideResolvedNativeTarget", 0);
-    Wh_SetIntValue(L"slideNativeBeginCaptured", 0);
+    g_nativeScrollDuration = 250;
     HMODULE xamlModule = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr,
                                       LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!xamlModule) return FALSE;
     // Windows.UI.Xaml.dll
     WindhawkUtils::SYMBOL_HOOK windowsUiXamlHooks[] = {
-        {{L"public: virtual long __cdecl XamlDiagnostics::GetIInspectableFromHandle(unsigned __int64,struct IInspectable * *)"},
-         &DiagnosticsLookup_Original, DiagnosticsLookup_Hook},
         {{L"long __cdecl DirectUI::DXamlServices::GetPeer(class CDependencyObject *,struct _GUID const &,void * *)"},
          &GetPeer},
         {{L"long __cdecl Storyboard_SetTarget(class CTimeline *,class CDependencyObject *)"},
          &CoreSetTarget_Original, CoreSetTarget_Hook},
-        {{L"public: class xref_ptr<class CDependencyObject> __cdecl CTimeline::GetTargetObject(void)const"},
+        {{L"public: class xref_ptr<class CDependencyObject> __cdecl CTimeline::GetTargetObject(void)const "},
          &TimelineGetTarget_Original},
         {{L"long __cdecl ctl::do_query_interface<class DirectUI::DependencyObject,struct IInspectable>(class ctl::ComPtr<class DirectUI::DependencyObject> &,struct IInspectable *)"}, &QueryNativePeer},
         {{L"protected: void __cdecl ctl::ComPtr<class DirectUI::DependencyObject>::InternalRelease(void)"}, &ReleaseNativePeer},
-        {{L"public: class CDependencyObject * __cdecl DirectUI::DependencyObject::GetHandle(void)const"}, &NativePeerHandle},
+        {{L"public: class CDependencyObject * __cdecl DirectUI::DependencyObject::GetHandle(void)const "}, &NativePeerHandle},
         {{L"public: void __cdecl CDependencyObject::Release(void)"}, &CoreRelease},
         {{L"public: long __cdecl CStoryboard::BeginPrivate(unsigned int)"}, &CoreStoryboardBegin_Original, CoreStoryboardBegin_Hook},
     };
     if (!WindhawkUtils::HookSymbols(xamlModule, windowsUiXamlHooks,
                                     ARRAYSIZE(windowsUiXamlHooks))) {
-        Wh_Log(L"Required XAML diagnostics lookup hook is unavailable");
+        Wh_Log(L"Required XAML animation symbols are unavailable");
         return FALSE;
     }
-    Wh_Log(L"Installed passive XAML diagnostics lookup hook");
+    Wh_Log(L"Installed XAML animation symbol hooks");
     g_threadMessage = RegisterWindowMessageW(
         L"Windhawk.TaskViewCustomizer.RunOnThread");
     return g_threadMessage && WindhawkUtils::SetFunctionHook(
@@ -2738,6 +2794,29 @@ void Wh_ModSettingsChanged() {
     g_desktopFrameMargin = (std::max)(0, (std::min)(Wh_GetIntSetting(L"DesktopList.desktopFrameMargin"), 200));
     int speed = Wh_GetIntSetting(L"Animations.scrollAnimationSpeed");
     g_scrollSpeed = (std::max)(10, (std::min)(speed > 0 ? speed : 100, 500));
+    std::vector<DWORD> threads;
+    {
+        std::lock_guard lock(g_statesMutex);
+        for (auto const& state : *g_states)
+            if (std::find(threads.begin(), threads.end(), state->threadId) == threads.end()) threads.push_back(state->threadId);
+    }
+    for (auto thread : threads) {
+        HWND window = nullptr;
+        EnumThreadWindows(thread, [](HWND candidate, LPARAM parameter) __attribute__((stdcall)) -> BOOL {
+            *reinterpret_cast<HWND*>(parameter) = candidate; return FALSE;
+        }, reinterpret_cast<LPARAM>(&window));
+        if (window) RunOnWindowThread(window, [](void*) {
+            std::vector<std::shared_ptr<LayoutState>> states;
+            {
+                std::lock_guard lock(g_statesMutex);
+                for (auto const& state : *g_states) if (state->threadId == GetCurrentThreadId()) states.push_back(state);
+            }
+            for (auto const& state : states) {
+                state->appearanceDirty = state->clearanceDirty = true;
+                try { state->Apply(); } catch (...) { Wh_Log(L"Task View settings update failed: %08X", winrt::to_hresult()); }
+            }
+        }, nullptr);
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -2745,36 +2824,33 @@ void Wh_ModBeforeUninit() {
     std::vector<std::shared_ptr<LayoutState>> states;
     {
         std::lock_guard lock(g_statesMutex);
-        states.swap(g_states);
+        states.swap(*g_states);
     }
-    for (auto const& state : states) {
-        // Task View has a window on its UI thread. A synchronous thread call
-        // removes event handlers before Windhawk unloads this DLL.
+    for (auto& state : states) {
         HWND threadWindow = nullptr;
         EnumThreadWindows(state->threadId, [](HWND window, LPARAM parameter) __attribute__((stdcall)) -> BOOL {
             *reinterpret_cast<HWND*>(parameter) = window;
             return FALSE;
         }, reinterpret_cast<LPARAM>(&threadWindow));
-        bool restored = false;
-        if (threadWindow) {
-            restored = RunOnWindowThread(threadWindow, [](void* parameter) {
-                try {
-                    static_cast<LayoutState*>(parameter)->Restore();
-                } catch (...) {
-                    Wh_Log(L"Task View restoration failed: %08X", winrt::to_hresult());
-                }
-            }, state.get());
-        }
-        if (!restored || !state->detached) {
-            // An event delegate may still belong to a live root. Keep this
-            // module mapped if its UI thread can no longer be reached; the
-            // callback sees g_stopping and its weak state is already expired.
-            HMODULE retainedModule;
-            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_PIN,
-                               reinterpret_cast<LPCWSTR>(&Arrange_Hook),
-                               &retainedModule);
-            Wh_Log(L"UI thread unavailable; retaining module until Explorer exits");
+        bool released = threadWindow && RunOnWindowThread(threadWindow, [](void* parameter) {
+            auto& current = *static_cast<std::shared_ptr<LayoutState>*>(parameter);
+            try { current->Restore(); }
+            catch (...) { Wh_Log(L"Task View restoration failed: %08X", winrt::to_hresult()); }
+            current.reset(); // Last XAML references released on their owning UI thread.
+        }, &state);
+        if (!released) {
+            // The UI thread may already have exited. Never destroy its XAML
+            // references on the engine thread or pin another copy of the mod.
+            (void)new std::shared_ptr<LayoutState>(std::move(state));
+            Wh_Log(L"UI thread unavailable; leaving its affine references untouched");
         }
     }
+}
+
+void Wh_ModUninit() {
+    // Empty vector storage is safe to release here; UI-owned states were
+    // already released on their UI threads in Wh_ModBeforeUninit.
+    g_states.reset();
+    Wh_Log(L"Mica objects remaining at unload: %d materials, %d effects",
+           g_liveWallpaperMaterials.load(), g_liveWallpaperEffects.load());
 }
