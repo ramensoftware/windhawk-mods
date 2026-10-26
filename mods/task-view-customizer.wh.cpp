@@ -36,7 +36,7 @@ the native controls.
   list near the bottom.
 
 The mod does not change Alt+Tab or the desktop preview shown when hovering
-over the taskbar's Task View button.
+over the taskbar Task View button.
 
 ## Settings
 
