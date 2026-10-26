@@ -1226,21 +1226,40 @@ std::wstring TargetIfTagShortcut(const std::wstring& path, const std::wstring& r
 // then costs one lookup per selected file instead of a walk, and an
 // allocation, over every row there is.
 std::unordered_map<std::wstring, std::vector<std::wstring>> g_taggedByPath;
+std::unordered_map<std::wstring, std::vector<std::wstring>> g_taggedByFolderAndStem;
+std::unordered_set<std::wstring> g_taggedFolders;
 std::unordered_map<std::wstring, std::wstring> g_linkTargets;     // lnk -> target
 SRWLOCK g_countsLock = SRWLOCK_INIT;
 
 void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
     std::unordered_map<std::wstring, std::vector<std::wstring>> taggedByPath;
     taggedByPath.reserve(rows.size());
+    std::unordered_map<std::wstring, std::vector<std::wstring>> taggedByFolderAndStem;
+    taggedByFolderAndStem.reserve(rows.size());
+    std::unordered_set<std::wstring> taggedFolders;
     std::unordered_map<std::wstring, std::wstring> linkTargets;
     linkTargets.reserve(rows.size());
+
     for (const auto& r : rows) {
-        taggedByPath[LowerPath(r.path)].push_back(r.tag);
+        std::wstring lower = LowerPath(r.path);
+        taggedByPath[lower].push_back(r.tag);
         linkTargets[LowerPath(s.root + L"\\" + FolderNameFor(r.tag) + L"\\" + r.lnk)] = r.path;
+
+        size_t lastSlash = lower.find_last_of(L"\\/");
+        if (lastSlash != std::wstring::npos) {
+            std::wstring dir = lower.substr(0, lastSlash);
+            taggedFolders.insert(dir);
+            std::wstring filename = lower.substr(lastSlash + 1);
+            size_t dot = filename.find_last_of(L'.');
+            std::wstring stem = (dot != std::wstring::npos) ? filename.substr(0, dot) : filename;
+            taggedByFolderAndStem[dir + L"\\" + stem].push_back(r.tag);
+        }
     }
 
     AcquireSRWLockExclusive(&g_countsLock);
     g_taggedByPath.swap(taggedByPath);
+    g_taggedByFolderAndStem.swap(taggedByFolderAndStem);
+    g_taggedFolders.swap(taggedFolders);
     g_linkTargets.swap(linkTargets);
     ReleaseSRWLockExclusive(&g_countsLock);
 }
@@ -1650,9 +1669,22 @@ void QueueAdd(const std::wstring& tag, std::vector<std::wstring> paths) {
     }
     AcquireSRWLockExclusive(&g_countsLock);
     for (const auto& p : paths) {
-        auto& list = g_taggedByPath[LowerPath(p)];
+        std::wstring lower = LowerPath(p);
+        auto& list = g_taggedByPath[lower];
         if (std::find(list.begin(), list.end(), tag) == list.end()) {
             list.push_back(tag);
+        }
+        size_t lastSlash = lower.find_last_of(L"\\/");
+        if (lastSlash != std::wstring::npos) {
+            std::wstring dir = lower.substr(0, lastSlash);
+            g_taggedFolders.insert(dir);
+            std::wstring filename = lower.substr(lastSlash + 1);
+            size_t dot = filename.find_last_of(L'.');
+            std::wstring stem = (dot != std::wstring::npos) ? filename.substr(0, dot) : filename;
+            auto& stemList = g_taggedByFolderAndStem[dir + L"\\" + stem];
+            if (std::find(stemList.begin(), stemList.end(), tag) == stemList.end()) {
+                stemList.push_back(tag);
+            }
         }
     }
     ReleaseSRWLockExclusive(&g_countsLock);
@@ -1671,12 +1703,28 @@ void QueueRemove(const std::wstring& tag, std::vector<std::wstring> paths) {
     }
     AcquireSRWLockExclusive(&g_countsLock);
     for (const auto& p : paths) {
-        auto it = g_taggedByPath.find(LowerPath(p));
+        std::wstring lower = LowerPath(p);
+        auto it = g_taggedByPath.find(lower);
         if (it != g_taggedByPath.end()) {
             if (tag.empty()) {
                 it->second.clear();
             } else {
                 it->second.erase(std::remove(it->second.begin(), it->second.end(), tag), it->second.end());
+            }
+        }
+        size_t lastSlash = lower.find_last_of(L"\\/");
+        if (lastSlash != std::wstring::npos) {
+            std::wstring dir = lower.substr(0, lastSlash);
+            std::wstring filename = lower.substr(lastSlash + 1);
+            size_t dot = filename.find_last_of(L'.');
+            std::wstring stem = (dot != std::wstring::npos) ? filename.substr(0, dot) : filename;
+            auto stemIt = g_taggedByFolderAndStem.find(dir + L"\\" + stem);
+            if (stemIt != g_taggedByFolderAndStem.end()) {
+                if (tag.empty()) {
+                    stemIt->second.clear();
+                } else {
+                    stemIt->second.erase(std::remove(stemIt->second.begin(), stemIt->second.end(), tag), stemIt->second.end());
+                }
             }
         }
     }
@@ -1894,6 +1942,18 @@ struct HookCall {
     ~HookCall() { g_hookCalls--; }
 };
 
+struct DefViewPaintState {
+    std::wstring folder;
+    DWORD folderChecked = 0;
+    bool capturing = false;
+    bool detailsMode = false;
+    int tagsOffset = -1;
+    int tagsWidth = 0;
+};
+std::unordered_map<HWND, DefViewPaintState> g_paintStates;
+SRWLOCK g_paintStatesLock = SRWLOCK_INIT;
+thread_local HWND t_lastDefView = nullptr;
+
 HWND FindDesktopListView();
 
 void BroadcastRefresh() {
@@ -1902,6 +1962,10 @@ void BroadcastRefresh() {
     std::erase_if(g_trackedFileViews, [](HWND h) { return !IsWindow(h); });
     views = g_trackedFileViews;
     ReleaseSRWLockExclusive(&g_fileViewsLock);
+
+    AcquireSRWLockExclusive(&g_paintStatesLock);
+    std::erase_if(g_paintStates, [](const auto& p) { return !IsWindow(p.first); });
+    ReleaseSRWLockExclusive(&g_paintStatesLock);
 
     for (HWND h : views) {
         HWND target = GetParent(h) ? GetParent(h) : h;
@@ -1933,6 +1997,12 @@ void FillRounded(Gdiplus::Graphics& g, COLORREF color, int x, int y, int w, int 
 bool HasClass(HWND hwnd, PCWSTR name) {
     WCHAR cls[64];
     return hwnd && GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, name) == 0;
+}
+
+bool IsDesktopDefView(HWND defView) {
+    if (!defView || !IsWindow(defView)) return false;
+    HWND parent = GetParent(defView);
+    return parent && (HasClass(parent, L"Progman") || HasClass(parent, L"WorkerW"));
 }
 
 // Add System.Keywords to a Details view without discarding the user's existing
@@ -2024,7 +2094,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         TrackFileView(hwnd);
     }
     if (hwnd && hWndParent && !g_unloading &&
-        HasClass(hwnd, L"SysListView32") && HasClass(hWndParent, L"SHELLDLL_DefView")) {
+        HasClass(hwnd, L"SysListView32") && HasClass(hWndParent, L"SHELLDLL_DefView") &&
+        IsDesktopDefView(hWndParent)) {
         SubclassDesktopListView(hwnd);
     }
     return hwnd;
@@ -2195,24 +2266,14 @@ std::vector<std::wstring> GetSelectedPaths(HWND defView) {
                 lvi.cchTextMax = MAX_PATH;
                 if (SendMessageW(lv, LVM_GETITEMTEXTW, sel, (LPARAM)&lvi) > 0 && name[0]) {
                     std::wstring fullPath = std::wstring(userDesk) + L"\\" + name;
-                    if (GetFileAttributesW(fullPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                        WIN32_FIND_DATAW wfd;
-                        HANDLE hFind = FindFirstFileW((fullPath + L".*").c_str(), &wfd);
-                        if (hFind != INVALID_HANDLE_VALUE) {
-                            fullPath = std::wstring(userDesk) + L"\\" + wfd.cFileName;
-                            FindClose(hFind);
-                        } else {
-                            fullPath = std::wstring(pubDesk) + L"\\" + name;
-                            if (GetFileAttributesW(fullPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                                hFind = FindFirstFileW((fullPath + L".*").c_str(), &wfd);
-                                if (hFind != INVALID_HANDLE_VALUE) {
-                                    fullPath = std::wstring(pubDesk) + L"\\" + wfd.cFileName;
-                                    FindClose(hFind);
-                                }
-                            }
+                    if (GetFileAttributesW(fullPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                        paths.push_back(fullPath);
+                    } else {
+                        std::wstring pubPath = std::wstring(pubDesk) + L"\\" + name;
+                        if (GetFileAttributesW(pubPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                            paths.push_back(pubPath);
                         }
                     }
-                    paths.push_back(fullPath);
                 }
             }
         }
@@ -2227,7 +2288,7 @@ std::vector<std::wstring> GetSelectedPaths(HWND defView) {
 
 
 
-std::vector<std::wstring> TagsForPaintPath(const std::wstring& path);
+std::vector<std::wstring> TagsForPaintPath(const std::wstring& folder, const std::wstring& name);
 HWND g_desktopListView = nullptr;
 std::vector<HWND> g_subclassedListViews;
 std::vector<RECT> g_lastDesktopDotRects;
@@ -2246,6 +2307,14 @@ void PaintDesktopDots(HWND hwnd) {
     SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, userDesktop);
     WCHAR publicDesktop[MAX_PATH] = {};
     SHGetFolderPathW(nullptr, CSIDL_COMMON_DESKTOPDIRECTORY, nullptr, 0, publicDesktop);
+
+    AcquireSRWLockShared(&g_countsLock);
+    bool desktopHasTags = (g_taggedFolders.count(LowerPath(userDesktop)) > 0) ||
+                          (g_taggedFolders.count(LowerPath(publicDesktop)) > 0);
+    ReleaseSRWLockShared(&g_countsLock);
+    if (!desktopHasTags) {
+        return;
+    }
 
     auto settings = GetSettings();
     if (settings->tags.empty()) {
@@ -2280,26 +2349,10 @@ void PaintDesktopDots(HWND hwnd) {
             continue;
         }
 
-        std::wstring fullPath = std::wstring(userDesktop) + L"\\" + itemName;
-        if (GetFileAttributesW(fullPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-            WIN32_FIND_DATAW wfd;
-            HANDLE hFind = FindFirstFileW((fullPath + L".*").c_str(), &wfd);
-            if (hFind != INVALID_HANDLE_VALUE) {
-                fullPath = std::wstring(userDesktop) + L"\\" + wfd.cFileName;
-                FindClose(hFind);
-            } else {
-                fullPath = std::wstring(publicDesktop) + L"\\" + itemName;
-                if (GetFileAttributesW(fullPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                    hFind = FindFirstFileW((fullPath + L".*").c_str(), &wfd);
-                    if (hFind != INVALID_HANDLE_VALUE) {
-                        fullPath = std::wstring(publicDesktop) + L"\\" + wfd.cFileName;
-                        FindClose(hFind);
-                    }
-                }
-            }
+        std::vector<std::wstring> names = TagsForPaintPath(userDesktop, itemName);
+        if (names.empty()) {
+            names = TagsForPaintPath(publicDesktop, itemName);
         }
-
-        std::vector<std::wstring> names = TagsForPaintPath(fullPath);
         if (names.empty()) {
             continue;
         }
@@ -2415,7 +2468,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(HWND hwnd, UINT message, WPARAM wPa
 }
 
 void SubclassDesktopListView(HWND hwnd) {
-    if (!hwnd || g_unloading) {
+    if (!hwnd || g_unloading || !IsDesktopDefView(GetParent(hwnd))) {
         return;
     }
     AcquireSRWLockExclusive(&g_listViewsLock);
@@ -2484,16 +2537,6 @@ BOOL CALLBACK FindFileViewsProc(HWND hwnd, LPARAM) {
 // Row decoration and tag painting
 // ---------------------------------------------------------------------------
 
-struct DefViewPaintState {
-    std::wstring folder;
-    DWORD folderChecked = 0;
-    bool capturing = false;
-    bool detailsMode = false;
-    int tagsOffset = -1;
-    int tagsWidth = 0;
-};
-std::unordered_map<HWND, DefViewPaintState> g_paintStates;
-SRWLOCK g_paintStatesLock = SRWLOCK_INIT;
 
 HWND FolderViewAncestor(HWND hwnd) {
     for (int i = 0; hwnd && i < 24; i++, hwnd = GetParent(hwnd)) {
@@ -2643,6 +2686,7 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG* message) {
         if (message->message == WM_PAINT || message->message == WM_ERASEBKGND) {
             HWND defView = FolderViewAncestor(message->hwnd);
             if (defView) {
+                t_lastDefView = defView;
                 DWORD now = GetTickCount();
                 bool needCapture = false;
                 AcquireSRWLockShared(&g_paintStatesLock);
@@ -2709,39 +2753,38 @@ std::wstring FileNameForElement(void* element) {
     return {};
 }
 
-std::vector<std::wstring> TagsForPaintPath(const std::wstring& path) {
+std::vector<std::wstring> TagsForPaintPath(const std::wstring& folder, const std::wstring& name) {
     std::vector<std::wstring> tags;
-    std::wstring lower = LowerPath(path);
+    if (folder.empty() || name.empty()) {
+        return tags;
+    }
+    std::wstring lowerFolder = LowerPath(folder);
+    std::wstring lowerName = LowerPath(name);
+
     AcquireSRWLockShared(&g_countsLock);
-    auto found = g_taggedByPath.find(lower);
-    if (found != g_taggedByPath.end()) {
-        tags = found->second;
+    // 1. If folder has no tagged items at all, return immediately (zero overhead)
+    if (g_taggedFolders.count(lowerFolder) == 0) {
         ReleaseSRWLockShared(&g_countsLock);
         return tags;
+    }
+
+    // 2. Exact match by full path
+    std::wstring fullPath = lowerFolder + L"\\" + lowerName;
+    auto it = g_taggedByPath.find(fullPath);
+    if (it != g_taggedByPath.end()) {
+        tags = it->second;
+        ReleaseSRWLockShared(&g_countsLock);
+        return tags;
+    }
+
+    // 3. In-memory stem match (for hidden extensions)
+    size_t dot = lowerName.find_last_of(L'.');
+    std::wstring stem = (dot != std::wstring::npos) ? lowerName.substr(0, dot) : lowerName;
+    auto stemIt = g_taggedByFolderAndStem.find(lowerFolder + L"\\" + stem);
+    if (stemIt != g_taggedByFolderAndStem.end()) {
+        tags = stemIt->second;
     }
     ReleaseSRWLockShared(&g_countsLock);
-
-    DWORD attr = GetFileAttributesW(path.c_str());
-    if (attr != INVALID_FILE_ATTRIBUTES) {
-        return tags;
-    }
-
-    WIN32_FIND_DATAW fd;
-    std::wstring searchPattern = path + L".*";
-    HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &fd);
-    if (hFind != INVALID_HANDLE_VALUE) {
-        size_t lastSlash = path.find_last_of(L"\\/");
-        std::wstring dir = (lastSlash != std::wstring::npos) ? path.substr(0, lastSlash + 1) : L"";
-        std::wstring fullPath = dir + fd.cFileName;
-        FindClose(hFind);
-
-        AcquireSRWLockShared(&g_countsLock);
-        auto foundReal = g_taggedByPath.find(LowerPath(fullPath));
-        if (foundReal != g_taggedByPath.end()) {
-            tags = foundReal->second;
-        }
-        ReleaseSRWLockShared(&g_countsLock);
-    }
     return tags;
 }
 
@@ -2753,6 +2796,9 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
     HWND hwnd = WindowFromDC(dc);
     HWND defView = hwnd ? FolderViewAncestor(hwnd) : nullptr;
     if (!defView) {
+        defView = t_lastDefView;
+    }
+    if (!defView || !IsWindow(defView)) {
         return;
     }
 
@@ -2762,7 +2808,7 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
 
     AcquireSRWLockShared(&g_paintStatesLock);
     auto it = g_paintStates.find(defView);
-    if (it != g_paintStates.end() && !it->second.folder.empty() && (now - it->second.folderChecked <= 500)) {
+    if (it != g_paintStates.end() && (now - it->second.folderChecked <= 500)) {
         st = it->second;
     } else {
         needRefresh = true;
@@ -2785,18 +2831,20 @@ void PaintTagDots(void* element, HDC dc, const RECT& row) {
         return;
     }
 
+    std::wstring lowerFolder = LowerPath(st.folder);
+    AcquireSRWLockShared(&g_countsLock);
+    bool folderHasTags = g_taggedFolders.count(lowerFolder) > 0;
+    ReleaseSRWLockShared(&g_countsLock);
+    if (!folderHasTags) {
+        return;
+    }
+
     std::wstring name = FileNameForElement(element);
     if (name.empty()) {
         return;
     }
 
-    std::wstring path = st.folder;
-    if (!path.empty() && path.back() != L'\\' && path.back() != L'/') {
-        path += L'\\';
-    }
-    path += name;
-
-    std::vector<std::wstring> names = TagsForPaintPath(path);
+    std::vector<std::wstring> names = TagsForPaintPath(st.folder, name);
     if (names.empty()) {
         return;
     }
