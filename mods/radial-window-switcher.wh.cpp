@@ -7,9 +7,9 @@
 // @version         1.0.0
 // @author          kotikdetka
 // @github          https://github.com/kotikdetka
+// @include         windhawk.exe
 // @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdiplus -lgdi32 -ldwmapi -lversion
+// @compilerOptions -lgdiplus -lgdi32 -ldwmapi -lversion -lshcore -lshell32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -42,11 +42,12 @@ appears next to its sector.
 
 ## Notes
 
-- The standard Alt+Tab is blocked inside Explorer, so only the radial
-  switcher appears.
+- The switcher runs in its own Windhawk process. Only a small part runs in
+  Explorer: it catches Explorer's Alt+Tab hotkey and hands it to the
+  switcher, so the standard switcher doesn't open as well.
 - Minimized windows have no preview: Windows doesn't render them.
-- Shortcuts can't be captured while an elevated (administrator) window is in
-  the foreground, the same as for any non-elevated program.
+- Alt+\` and Alt+Q can't be caught while an elevated (administrator) window is
+  in the foreground. Alt+Tab works there too, through Explorer.
 */
 // ==/WindhawkModReadme==
 
@@ -99,10 +100,13 @@ appears next to its sector.
 
 #define NOMINMAX
 #include <windows.h>
-#include <windowsx.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
+#include <shellapi.h>
+#include <shellscalingapi.h>
 #include <tlhelp32.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -111,7 +115,6 @@ appears next to its sector.
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace gp = Gdiplus;
@@ -136,19 +139,16 @@ struct Settings {
 };
 
 static Settings g_settings;
-static std::atomic<DWORD> g_triggerVk{VK_TAB};
+static std::atomic<DWORD> g_triggerScan{0x0F};
 static std::atomic<bool> g_activateOnRelease{true};
 
 static void LoadSettings() {
     Settings s;
-    PCWSTR trig = Wh_GetStringSetting(L"trigger");
-    if (trig) {
-        if (wcscmp(trig, L"altBacktick") == 0) {
-            s.trigger = Trigger::AltBacktick;
-        } else if (wcscmp(trig, L"altQ") == 0) {
-            s.trigger = Trigger::AltQ;
-        }
-        Wh_FreeStringSetting(trig);
+    const auto trig = WindhawkUtils::StringSetting::make(L"trigger");
+    if (wcscmp(trig, L"altBacktick") == 0) {
+        s.trigger = Trigger::AltBacktick;
+    } else if (wcscmp(trig, L"altQ") == 0) {
+        s.trigger = Trigger::AltQ;
     }
     s.activateOnRelease = Wh_GetIntSetting(L"activateOnRelease") != 0;
     s.showPreview = Wh_GetIntSetting(L"showPreview") != 0;
@@ -162,18 +162,16 @@ static void LoadSettings() {
     g_settings = s;
     g_activateOnRelease = s.activateOnRelease;
 
+    // Matched by scan code, so the physical key is the same on every layout.
     switch (s.trigger) {
-        case Trigger::AltTab:
-            g_triggerVk = VK_TAB;
-            break;
         case Trigger::AltQ:
-            g_triggerVk = 'Q';
+            g_triggerScan = 0x10;
             break;
         case Trigger::AltBacktick:
-            g_triggerVk = VK_OEM_3;  // ` / Ё
+            g_triggerScan = 0x29;  // the key above Tab
             break;
         default:
-            g_triggerVk = VK_TAB;
+            g_triggerScan = 0x0F;  // Tab
             break;
     }
 }
@@ -193,10 +191,19 @@ constexpr UINT WM_RS_QUIT = WM_APP + 7;
 constexpr UINT WM_RS_REHOOK = WM_APP + 8;
 constexpr UINT WM_RS_PREWARM = WM_APP + 9;
 constexpr UINT_PTR kTimerId = 1;
-constexpr DWORD kDwmaCloaked = 14;  // DWMWA_CLOAKED
 constexpr float kPi = 3.14159265358979f;
 constexpr wchar_t kClassName[] = L"RadialWindowSwitcher_Windhawk";
 constexpr wchar_t kPreviewClassName[] = L"RadialWindowSwitcherPreview_Windhawk";
+// The switcher window's title tells Explorer whether it can take Alt+Tab
+// over right now. FindWindow compares titles without sending messages.
+constexpr wchar_t kTitleIdle[] = L"Radial Window Switcher";
+constexpr wchar_t kTitleReady[] = L"Radial Window Switcher (ready)";
+// Posted by Explorer to the switcher window when it gets the Alt+Tab hotkey.
+// wParam: 1 for Shift+Alt+Tab.
+constexpr wchar_t kHotkeyMessageName[] = L"RadialWindowSwitcher_Hotkey";
+// Explorer's thread that receives the Alt+Tab hotkey.
+constexpr wchar_t kAltTabThreadName[] = L"Immersive Shell";
+static UINT g_hotkeyMessage = 0;
 
 static HINSTANCE g_hInst = nullptr;
 static HANDLE g_thread = nullptr;
@@ -211,9 +218,7 @@ static HANDLE g_hookReadyEvent = nullptr;
 // Shared between the UI thread and the keyboard-hook thread.
 static std::atomic<bool> g_visible{false};
 static std::atomic<bool> g_pending{false};  // show requested, not processed yet
-static std::atomic<bool> g_isShellProcess{true};  // refreshed by the UI thread
 static std::atomic<bool> g_altHeld{false};  // physical Alt state, set by the hook
-constexpr UINT_PTR kShellCheckTimerId = 2;
 static bool g_dirty = false;
 static ULONGLONG g_animStart = 0;
 
@@ -436,7 +441,7 @@ static bool IsSwitchableWindow(HWND h) {
         return false;
     }
     int cloaked = 0;
-    if (SUCCEEDED(DwmGetWindowAttribute(h, kDwmaCloaked, &cloaked,
+    if (SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_CLOAKED, &cloaked,
                                         sizeof(cloaked))) &&
         cloaked) {
         return false;
@@ -581,20 +586,11 @@ static bool EnsureDib(int w, int h) {
 }
 
 static float GetMonitorScale(HMONITOR mon) {
-    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-    static GetDpiForMonitor_t fn = []() -> GetDpiForMonitor_t {
-        HMODULE m = LoadLibraryW(L"shcore.dll");
-        return m ? (GetDpiForMonitor_t)(void*)GetProcAddress(m, "GetDpiForMonitor")
-                 : nullptr;
-    }();
     UINT x = 96, y = 96;
-    if (fn && SUCCEEDED(fn(mon, 0, &x, &y))) {
-        return x / 96.f;
+    if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &x, &y))) {
+        x = 96;
     }
-    HDC dc = GetDC(nullptr);
-    int d = GetDeviceCaps(dc, LOGPIXELSX);
-    ReleaseDC(nullptr, dc);
-    return d / 96.f;
+    return x / 96.f;
 }
 
 // The menu always opens in the center of the monitor with the cursor.
@@ -725,13 +721,20 @@ static float AnimMs(ULONGLONG since) {
     return (float)(GetTickCount64() - since);
 }
 
+// Read once per frame in Render() rather than per sector.
+static DWORD g_accentColor = 0;
+static bool g_hasAccentColor = false;
+
+static void RefreshAccentColor() {
+    BOOL opaque = FALSE;
+    g_hasAccentColor = g_settings.useAccentColor &&
+                       SUCCEEDED(DwmGetColorizationColor(&g_accentColor, &opaque));
+}
+
 static gp::Color GetAccentColor(BYTE alpha) {
-    if (g_settings.useAccentColor) {
-        DWORD c = 0;
-        BOOL opaque = FALSE;
-        if (SUCCEEDED(DwmGetColorizationColor(&c, &opaque))) {
-            return gp::Color(alpha, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
-        }
+    if (g_hasAccentColor) {
+        DWORD c = g_accentColor;
+        return gp::Color(alpha, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
     }
     return gp::Color((BYTE)std::min(255, alpha * 3 / 4), 255, 255, 255);
 }
@@ -891,6 +894,7 @@ static bool Render() {
     if (!g_bits || !g_hwnd) {
         return false;
     }
+    RefreshAccentColor();
     const float s = L.scale;
     const float ms = AnimMs(g_animStart);
     const int n = (int)g_items.size();
@@ -1123,27 +1127,8 @@ static void ForceForeground(HWND h) {
     if (IsIconic(h)) {
         ShowWindowAsync(h, SW_RESTORE);
     }
-    SendDummyKey();
-    if (SetForegroundWindow(h) && GetForegroundWindow() == h) {
-        return;
-    }
-    HWND fg = GetForegroundWindow();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD me = GetCurrentThreadId();
-    if (fgThread && fgThread != me) {
-        AttachThreadInput(me, fgThread, TRUE);
-        SetForegroundWindow(h);
-        BringWindowToTop(h);
-        AttachThreadInput(me, fgThread, FALSE);
-    }
-    if (GetForegroundWindow() != h) {
-        using SwitchToThisWindow_t = void(WINAPI*)(HWND, BOOL);
-        static auto pSwitch = (SwitchToThisWindow_t)(void*)GetProcAddress(
-            GetModuleHandleW(L"user32.dll"), "SwitchToThisWindow");
-        if (pSwitch) {
-            pSwitch(h, TRUE);
-        }
-    }
+    SendDummyKey();  // makes this process the source of the last input
+    SetForegroundWindow(h);
 }
 
 static void HideSwitcher() {
@@ -1186,13 +1171,10 @@ static void ShowSwitcher(bool reverse) {
     SendDummyKey();  // stops the Alt-release from opening app menu bars
     // g_pending stays true until g_visible is set, so the hook keeps
     // swallowing Tab while icons are being collected.
-    ULONGLONG buildStart = GetTickCount64();
     ComputeLayout();
     BuildItems((int)std::lround(g_lay.icon * 1.25f));
 
     int n = (int)g_items.size();
-    Wh_Log(L"Showing switcher with %d windows (built in %llu ms)", n,
-           GetTickCount64() - buildStart);
     g_sel = 0;
     if (n > 1) {
         HWND fg = GetForegroundWindow();
@@ -1253,7 +1235,6 @@ static void OnTimer() {
     if (g_settings.activateOnRelease &&
         GetTickCount64() - g_animStart > 250 && altUpTicks >= 6) {
         altUpTicks = 0;
-        Wh_Log(L"Closing: Alt is up (timer check)");
         ActivateSelected();
         return;
     }
@@ -1264,25 +1245,10 @@ static void OnTimer() {
 }
 
 // ============================================================================
-// Keyboard hook
+// Keyboard hook (tool process)
 // ============================================================================
 
 static bool KeyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
-
-// Only the explorer process that owns the desktop/taskbar reacts to the
-// hotkey; other explorer.exe processes (folder windows) stay passive.
-static bool IsShellProcess() {
-    HWND shell = GetShellWindow();
-    if (!shell) {
-        shell = FindWindowW(L"Shell_TrayWnd", nullptr);
-    }
-    if (!shell) {
-        return true;
-    }
-    DWORD pid = 0;
-    GetWindowThreadProcessId(shell, &pid);
-    return pid == GetCurrentProcessId();
-}
 
 static LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     HWND hwnd = g_hwnd;
@@ -1297,17 +1263,15 @@ static LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
     bool up = wp == WM_KEYUP || wp == WM_SYSKEYUP;
     DWORD vk = k->vkCode;
+    bool isTrigger = k->scanCode == g_triggerScan && !(k->flags & LLKHF_EXTENDED);
     bool isAlt = vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU;
     bool isModifier = isAlt || vk == VK_SHIFT || vk == VK_LSHIFT ||
                       vk == VK_RSHIFT || vk == VK_CONTROL ||
                       vk == VK_LCONTROL || vk == VK_RCONTROL ||
                       vk == VK_LWIN || vk == VK_RWIN;
-    // Explorer re-installs its own Alt+Tab hook, which puts it ahead of ours.
-    // Re-install ours on every fresh Alt press so it is always called first.
     if (isAlt) {
-        if (down && !g_altHeld) {
+        if (down) {
             g_altHeld = true;
-            PostThreadMessageW(g_hookThreadId, WM_RS_REHOOK, 0, 0);
         } else if (up) {
             g_altHeld = false;
         }
@@ -1317,8 +1281,8 @@ static LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
 
     if (!active) {
         // Keep this path instant: no logging, no SendInput, no window
-        // lookups. A slow answer makes Windows open its own Alt+Tab too.
-        if (down && vk == g_triggerVk && g_isShellProcess) {
+        // lookups.
+        if (down && isTrigger) {
             bool alt = g_altHeld || (k->flags & LLKHF_ALTDOWN) ||
                        KeyDown(VK_MENU);
             bool otherMods = KeyDown(VK_CONTROL) || KeyDown(VK_LWIN) ||
@@ -1343,7 +1307,7 @@ static LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
         return CallNextHookEx(nullptr, code, wp, lp);
     }
     if (down) {
-        if (vk == g_triggerVk) {
+        if (isTrigger) {
             PostMessageW(hwnd, KeyDown(VK_SHIFT) ? WM_RS_PREV : WM_RS_NEXT, 0,
                          0);
         } else if (vk == VK_ESCAPE) {
@@ -1359,13 +1323,14 @@ static LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     return 1;  // swallow everything else while the menu is open
 }
 
-// The hook runs on its own thread that does nothing else, so it always
-// answers instantly. If the hook is slow, Windows skips it and the system
-// Alt+Tab opens alongside ours.
 // Installs a fresh hook first, then removes the old one, so there is no gap.
+// Called once at startup, and again only when Windows seems to have dropped
+// the hook (see OnForwardedHotkey): a new hook goes ahead of the ones other
+// programs installed after it, so it isn't re-installed needlessly.
 static void InstallKeyboardHook() {
     HHOOK fresh = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, g_hInst, 0);
     if (!fresh) {
+        Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
         return;
     }
     HHOOK old = g_hook;
@@ -1375,29 +1340,20 @@ static void InstallKeyboardHook() {
     }
 }
 
+// The hook runs on its own thread that does nothing else, so it always answers
+// quickly and Windows doesn't drop it for exceeding LowLevelHooksTimeout.
 static DWORD WINAPI HookThreadProc(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create queue
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
     InstallKeyboardHook();
-    if (!g_hook) {
-        Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
-    } else {
-        Wh_Log(L"Keyboard hook installed, trigger vk=0x%X", (DWORD)g_triggerVk);
-    }
     SetEvent(g_hookReadyEvent);
 
-    // Also refresh the hook periodically, in case Explorer re-hooked.
-    SetTimer(nullptr, 0, 1000, nullptr);
-
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_RS_REHOOK ||
-            (msg.message == WM_TIMER && msg.hwnd == nullptr)) {
-            // Don't swap the hook mid-gesture while our menu is open.
-            if (!g_visible && !g_pending) {
-                InstallKeyboardHook();
-            }
+        if (msg.message == WM_RS_REHOOK) {
+            Wh_Log(L"Installing the keyboard hook again");
+            InstallKeyboardHook();
             continue;
         }
         TranslateMessage(&msg);
@@ -1410,86 +1366,76 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     return 0;
 }
 
-// ============================================================================
-// Blocking the system Alt+Tab inside Explorer
-// ============================================================================
-//
-// Windows delivers Alt+Tab to Explorer as a WM_HOTKEY message, and Explorer
-// then shows its own switcher. Since this mod lives inside Explorer, a
-// WH_GETMESSAGE hook on Explorer's threads catches that message, turns it
-// into WM_NULL and opens our menu instead. The system switcher never sees it.
-
-static std::vector<HHOOK> g_msgHooks;
-static std::unordered_set<DWORD> g_msgHookedThreads;
-
-static LRESULT CALLBACK GetMsgProc(int code, WPARAM wp, LPARAM lp) {
-    if (code == HC_ACTION && lp && g_triggerVk == VK_TAB) {
-        MSG* m = reinterpret_cast<MSG*>(lp);
-        if (m->message == WM_HOTKEY) {
-            UINT mods = LOWORD(m->lParam);
-            UINT vk = HIWORD(m->lParam);
-            HWND hwnd = g_hwnd;
-            if (vk == VK_TAB && (mods & MOD_ALT) &&
-                !(mods & (MOD_CONTROL | MOD_WIN)) && hwnd) {
-                if (wp == PM_REMOVE) {
-                    bool shift = (mods & MOD_SHIFT) != 0;
-                    if (!g_visible && !g_pending) {
-                        g_pending = true;
-                        PostMessageW(hwnd, WM_RS_SHOW, shift ? 1 : 0, 0);
-                    } else {
-                        PostMessageW(hwnd, shift ? WM_RS_PREV : WM_RS_NEXT, 0, 0);
-                    }
-                }
-                m->message = WM_NULL;
-            }
-        }
+static DWORD GetIntegrityLevel(HANDLE process) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        return 0;
     }
-    return CallNextHookEx(nullptr, code, wp, lp);
+    DWORD level = 0;
+    BYTE buffer[sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
+                            &size)) {
+        auto* label = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buffer);
+        PSID sid = label->Label.Sid;
+        level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return level;
 }
 
-// Hooks every Explorer thread not hooked yet. Called again periodically to
-// pick up threads Explorer creates later.
-static void HookExplorerThreads() {
-    if (!g_isShellProcess) {
+// True if the window belongs to a process this one can't see the keys of
+// (e.g. an elevated app).
+static bool IsAboveThisProcess(HWND hwnd) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return true;
+    }
+    DWORD level = GetIntegrityLevel(process);
+    CloseHandle(process);
+    static const DWORD ownLevel = GetIntegrityLevel(GetCurrentProcess());
+    return !level || level > ownLevel;
+}
+
+// Explorer received the Alt+Tab hotkey and handed it over: the keyboard hook
+// didn't see the keys, usually because an elevated window is in front.
+static void OnForwardedHotkey(bool shift) {
+    if (g_visible || g_pending) {
+        MoveSelection(shift ? -1 : 1);
         return;
     }
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snap == INVALID_HANDLE_VALUE) {
-        return;
+    // Otherwise the hook should have seen the keys: Windows may have dropped
+    // it, which would leave every Alt+Tab to this path from now on.
+    HWND foreground = GetForegroundWindow();
+    if (foreground && !IsAboveThisProcess(foreground)) {
+        PostThreadMessageW(g_hookThreadId, WM_RS_REHOOK, 0, 0);
     }
-    DWORD pid = GetCurrentProcessId();
-    THREADENTRY32 te{};
-    te.dwSize = sizeof(te);
-    if (Thread32First(snap, &te)) {
-        do {
-            if (te.th32OwnerProcessID != pid ||
-                g_msgHookedThreads.count(te.th32ThreadID)) {
-                continue;
-            }
-            g_msgHookedThreads.insert(te.th32ThreadID);
-            HHOOK h = SetWindowsHookExW(WH_GETMESSAGE, GetMsgProc, g_hInst,
-                                        te.th32ThreadID);
-            if (h) {
-                g_msgHooks.push_back(h);
-            }
-        } while (Thread32Next(snap, &te));
-    }
-    CloseHandle(snap);
+    g_pending = true;
+    ShowSwitcher(shift);
 }
 
-static void UnhookExplorerThreads() {
-    for (HHOOK h : g_msgHooks) {
-        UnhookWindowsHookEx(h);
+static void PublishState() {
+    if (g_hwnd) {
+        SetWindowTextW(g_hwnd, g_settings.trigger == Trigger::AltTab
+                                   ? kTitleReady
+                                   : kTitleIdle);
     }
-    g_msgHooks.clear();
-    g_msgHookedThreads.clear();
 }
 
 // ============================================================================
-// Window & thread
+// Window & thread (tool process)
 // ============================================================================
 
 static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == g_hotkeyMessage && g_hotkeyMessage) {
+        if (g_settings.trigger == Trigger::AltTab) {
+            OnForwardedHotkey(wp != 0);
+        }
+        return 0;
+    }
     switch (msg) {
         case WM_RS_SHOW:
             if (g_visible) {
@@ -1506,13 +1452,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_RS_ACTIVATE:
             if (g_visible) {
-                Wh_Log(L"Closing: Alt released / Enter");
                 ActivateSelected();
             }
             return 0;
         case WM_RS_CANCEL:
             if (g_visible) {
-                Wh_Log(L"Closing: Esc");
                 HideSwitcher();
             }
             return 0;
@@ -1520,14 +1464,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (g_visible) HideSwitcher();
             LoadSettings();
             g_appCache.clear();
+            PublishState();
             return 0;
         case WM_RS_PREWARM:
             if (!g_visible && !g_pending) {
-                ULONGLONG t0 = GetTickCount64();
                 ComputeLayout();
                 BuildItems((int)std::lround(g_lay.icon * 1.25f));
-                Wh_Log(L"Prewarmed %u windows in %llu ms", (UINT)g_items.size(),
-                       GetTickCount64() - t0);
                 g_items.clear();
             }
             return 0;
@@ -1538,9 +1480,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             if (wp == kTimerId) {
                 OnTimer();
-            } else if (wp == kShellCheckTimerId) {
-                g_isShellProcess = IsShellProcess();
-                HookExplorerThreads();
             }
             return 0;
         case WM_MOUSEACTIVATE:
@@ -1574,12 +1513,7 @@ static LRESULT CALLBACK PreviewProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static DWORD WINAPI ThreadProc(LPVOID) {
-    using SetThreadDpiAwarenessContext_t = HANDLE(WINAPI*)(HANDLE);
-    auto pSetDpi = (SetThreadDpiAwarenessContext_t)(void*)GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
-    if (pSetDpi) {
-        pSetDpi((HANDLE)-4);  // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    }
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     gp::GdiplusStartupInput gdipInput;
     ULONG_PTR gdipToken = 0;
@@ -1602,10 +1536,15 @@ static DWORD WINAPI ThreadProc(LPVOID) {
     // WS_EX_TRANSPARENT: the menu never catches mouse clicks.
     g_hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
                                  WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                             kClassName, L"Radial Window Switcher", WS_POPUP, 0,
-                             0, 1, 1, nullptr, nullptr, g_hInst, nullptr);
+                             kClassName, kTitleIdle, WS_POPUP, 0, 0, 1, 1,
+                             nullptr, nullptr, g_hInst, nullptr);
 
     if (g_hwnd) {
+        // Explorer runs at a higher integrity level than this process may, so
+        // let its forwarded message through UIPI.
+        ChangeWindowMessageFilterEx(g_hwnd, g_hotkeyMessage, MSGFLT_ALLOW,
+                                    nullptr);
+
         // Owned by the menu window, so it always stays above it.
         g_previewHwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
@@ -1613,24 +1552,22 @@ static DWORD WINAPI ThreadProc(LPVOID) {
             kPreviewClassName, L"", WS_POPUP, 0, 0, 1, 1, g_hwnd, nullptr,
             g_hInst, nullptr);
         if (g_previewHwnd) {
-            DWORD corner = 2;  // DWMWCP_ROUND (Windows 11)
-            DwmSetWindowAttribute(g_previewHwnd, 33, &corner, sizeof(corner));
+            DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+            DwmSetWindowAttribute(g_previewHwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                                  &corner, sizeof(corner));
         }
-    }
 
-    if (g_hwnd) {
-        g_isShellProcess = IsShellProcess();
-        HookExplorerThreads();
-        Wh_Log(L"Hooked %u Explorer threads", (UINT)g_msgHooks.size());
         // Load icons and app names in advance so the first Alt+Tab is fast.
         PostMessageW(g_hwnd, WM_RS_PREWARM, 0, 0);
-        SetTimer(g_hwnd, kShellCheckTimerId, 2000, nullptr);
+
         g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0,
                                     &g_hookThreadId);
         if (g_hookThread) {
-            WaitForSingleObject(g_hookReadyEvent, 3000);
+            // Always set by HookThreadProc right after installing the hook.
+            WaitForSingleObject(g_hookReadyEvent, INFINITE);
         }
+        PublishState();
     } else {
         Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
     }
@@ -1644,10 +1581,9 @@ static DWORD WINAPI ThreadProc(LPVOID) {
         }
     }
 
-    UnhookExplorerThreads();
     if (g_hookThread) {
         PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 3000);
+        WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
     }
@@ -1669,13 +1605,7 @@ static DWORD WINAPI ThreadProc(LPVOID) {
     return 0;
 }
 
-// ============================================================================
-// Windhawk entry points
-// ============================================================================
-
-BOOL Wh_ModInit() {
-    Wh_Log(L"Init in pid %u", GetCurrentProcessId());
-
+BOOL WhTool_ModInit() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&ThreadProc), &g_hInst);
@@ -1692,23 +1622,19 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"Settings changed");
-    if (g_hwnd) {
-        PostMessageW(g_hwnd, WM_RS_RELOAD, 0, 0);
+void WhTool_ModSettingsChanged() {
+    if (HWND hwnd = g_hwnd) {
+        PostMessageW(hwnd, WM_RS_RELOAD, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+void WhTool_ModUninit() {
     if (g_thread) {
-        WaitForSingleObject(g_readyEvent, 3000);
-        if (g_hwnd) {
-            PostMessageW(g_hwnd, WM_RS_QUIT, 0, 0);
+        WaitForSingleObject(g_readyEvent, INFINITE);  // always set by ThreadProc
+        if (HWND hwnd = g_hwnd) {
+            PostMessageW(hwnd, WM_RS_QUIT, 0, 0);
         }
-        if (WaitForSingleObject(g_thread, 5000) != WAIT_OBJECT_0) {
-            Wh_Log(L"Worker thread did not exit in time");
-        }
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
@@ -1716,4 +1642,414 @@ void Wh_ModUninit() {
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
     }
+}
+
+// ============================================================================
+// Explorer's Alt+Tab hotkey (explorer.exe)
+// ============================================================================
+//
+// The standard switcher is started by a hotkey that Explorer registers for
+// itself. The keyboard hook in the tool process normally swallows Tab before
+// that, but low-level hooks don't see keys while an elevated window is in
+// front. Hotkeys are delivered in every case, so Explorer's "Immersive Shell"
+// thread (the one that receives the hotkey) is watched, and the hotkey is
+// handed to the switcher instead of opening the standard one.
+//
+// This is the only part of the mod that runs inside Explorer.
+
+static bool g_isExplorer = false;
+static HHOOK g_messageHook = nullptr;
+static HANDLE g_messageHookThread = nullptr;  // to know when it ends
+static std::atomic<int> g_messageHookCalls{0};
+static HANDLE g_explorerStopEvent = nullptr;
+static HANDLE g_explorerThread = nullptr;
+
+// Hands the hotkey to the switcher. Returns false if the switcher isn't
+// running or doesn't replace Alt+Tab; the standard switcher then opens.
+static bool ForwardHotkey(bool shift) {
+    HWND switcher = FindWindowW(kClassName, kTitleReady);
+    if (!switcher) {
+        return false;
+    }
+    // Explorer has just received the hotkey, so it may pass the foreground
+    // on. The switcher needs it to activate the chosen window.
+    DWORD processId = 0;
+    GetWindowThreadProcessId(switcher, &processId);
+    AllowSetForegroundWindow(processId);
+    return PostMessageW(switcher, g_hotkeyMessage, shift ? 1 : 0, 0) != FALSE;
+}
+
+static LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
+    g_messageHookCalls++;
+
+    auto* msg = reinterpret_cast<MSG*>(lParam);
+    if (code == HC_ACTION && wParam == PM_REMOVE && msg &&
+        msg->message == WM_HOTKEY && HIWORD(msg->lParam) == VK_TAB) {
+        const UINT mods = LOWORD(msg->lParam);
+        if ((mods & MOD_ALT) && !(mods & (MOD_CONTROL | MOD_WIN)) &&
+            ForwardHotkey((mods & MOD_SHIFT) != 0)) {
+            // Explorer gets an empty message instead of the hotkey.
+            msg->message = WM_NULL;
+        }
+    }
+
+    const LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+    g_messageHookCalls--;
+    return result;
+}
+
+// The ID of Explorer's thread that receives the hotkey, or 0.
+static DWORD FindAltTabThread() {
+    DWORD found = 0;
+    const DWORD processId = GetCurrentProcessId();
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    THREADENTRY32 entry{sizeof(entry)};
+    for (BOOL more = Thread32First(snapshot, &entry); more && !found;
+         more = Thread32Next(snapshot, &entry)) {
+        if (entry.th32OwnerProcessID != processId) {
+            continue;
+        }
+        HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE,
+                                   entry.th32ThreadID);
+        if (!thread) {
+            continue;
+        }
+        PWSTR name = nullptr;
+        if (SUCCEEDED(GetThreadDescription(thread, &name)) && name &&
+            wcscmp(name, kAltTabThreadName) == 0) {
+            found = entry.th32ThreadID;
+        }
+        if (name) {
+            LocalFree(name);
+        }
+        CloseHandle(thread);
+    }
+    CloseHandle(snapshot);
+    return found;
+}
+
+static bool HookAltTabThread() {
+    const DWORD threadId = FindAltTabThread();
+    if (!threadId) {
+        return false;
+    }
+    HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+    if (!thread) {
+        return false;
+    }
+    // A thread of this process: no module (SetWindowsHookEx docs).
+    HHOOK hook =
+        SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, nullptr, threadId);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx(WH_GETMESSAGE) failed: %u", GetLastError());
+        CloseHandle(thread);
+        return false;
+    }
+    Wh_Log(L"Hooked Explorer's thread %u", threadId);
+    g_messageHook = hook;
+    g_messageHookThread = thread;
+    return true;
+}
+
+static void UnhookAltTabThread() {
+    if (g_messageHook) {
+        UnhookWindowsHookEx(g_messageHook);
+        g_messageHook = nullptr;
+    }
+    if (g_messageHookThread) {
+        CloseHandle(g_messageHookThread);
+        g_messageHookThread = nullptr;
+    }
+    // Let calls already running on Explorer's thread leave the module before
+    // it gets unloaded. No new calls start after unhooking, so this ends.
+    while (g_messageHookCalls > 0) {
+        Sleep(1);
+    }
+}
+
+static DWORD WINAPI ExplorerThreadProc(LPVOID) {
+    // Only the shell process (the one with the taskbar) receives the hotkey.
+    // Other Explorer processes (separate folder windows) have nothing to do.
+    for (;;) {
+        if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(taskbar, &processId);
+            if (processId != GetCurrentProcessId()) {
+                return 0;
+            }
+            break;
+        }
+        // Explorer is still starting up.
+        if (WaitForSingleObject(g_explorerStopEvent, 1000) != WAIT_TIMEOUT) {
+            return 0;
+        }
+    }
+
+    // Hooks the thread, and again if it's ever created anew. Until it's
+    // found, it's looked for again, less and less often.
+    DWORD interval = 500;
+    for (;;) {
+        if (!g_messageHook) {
+            HookAltTabThread();
+        }
+        const HANDLE events[] = {g_explorerStopEvent, g_messageHookThread};
+        const DWORD result =
+            WaitForMultipleObjects(g_messageHook ? 2 : 1, events, FALSE,
+                                   g_messageHook ? INFINITE : interval);
+        if (result == WAIT_TIMEOUT) {
+            interval = std::min<DWORD>(interval * 2, 30000);
+        } else if (result == WAIT_OBJECT_0 + 1) {
+            // The thread ended (its ID can be reused).
+            UnhookAltTabThread();
+            interval = 500;
+        } else {
+            break;
+        }
+    }
+
+    UnhookAltTabThread();
+    return 0;
+}
+
+static void StartExplorerPart() {
+    // Nothing to block if the switcher doesn't replace Alt+Tab.
+    if (g_settings.trigger != Trigger::AltTab) {
+        return;
+    }
+    g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_explorerThread =
+        CreateThread(nullptr, 0, ExplorerThreadProc, nullptr, 0, nullptr);
+}
+
+static void StopExplorerPart() {
+    if (g_explorerThread) {
+        SetEvent(g_explorerStopEvent);
+        WaitForSingleObject(g_explorerThread, INFINITE);
+        CloseHandle(g_explorerThread);
+        g_explorerThread = nullptr;
+    }
+    if (g_explorerStopEvent) {
+        CloseHandle(g_explorerStopEvent);
+        g_explorerStopEvent = nullptr;
+    }
+}
+
+static bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH];
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length == ARRAYSIZE(path)) {
+        return false;
+    }
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, L"explorer.exe") == 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// This mod also targets explorer.exe: there, each callback runs the Explorer
+// part instead (the lines marked "explorer.exe part").
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    g_hotkeyMessage = RegisterWindowMessageW(kHotkeyMessageName);
+
+    // explorer.exe part.
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        LoadSettings();
+        StartExplorerPart();
+        return TRUE;
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        StopExplorerPart();
+        LoadSettings();
+        StartExplorerPart();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        StopExplorerPart();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
