@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.49
+// @version         0.54
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -31,8 +31,12 @@ its glass appearance comes from the user's other customization tools.
 
 ## Browse with a clear trail
 
-- Select a folder to reveal its contents in the next column. Choose a different
-  folder earlier in the trail to replace the columns that follow it.
+- By default, select a folder to reveal its contents in the next column. Choose
+  a different folder earlier in the trail to replace the columns that follow it.
+- Prefer deliberate opening? In **Browsing**, set **Expand folders** to
+  **On double-click or Enter**. Up/Down and single-click change the selection;
+  double-click, Enter or Right Arrow opens the selected folder in the next column.
+  File previews still follow the selection.
 - Start with one column and add only the columns you use. Drag a thin divider to
   resize a column live; the layout scrolls horizontally as your path grows.
 - Press **Right Arrow** to enter the selected folder's column and **Left Arrow**
@@ -42,6 +46,37 @@ its glass appearance comes from the user's other customization tools.
   continues along the column trail. **Open in new window** keeps its native behavior.
 - Browse **Home** and **This PC**, local and network folders, and archives exposed
   by your Windows Shell providers, including supported ZIP, RAR and 7z folders.
+
+## Choose your folder view
+
+The **Browsing** settings card lets you choose **Default column view**: share your
+latest view, or select Details, List, Small icons, Icons, Tiles or Content.
+With **Use default folder view**, changing any column's layout or icon size also
+updates the other automatic columns. No column acts as the master. The latest
+successful choice is saved immediately for new columns and future windows;
+closing an older tab or window does not replace it. On first use, the mod reads
+the original Explorer view when available.
+
+**This PC view** can follow your default column view or use its own layout.
+An explicit global or This PC layout takes priority: its manual changes stay
+local and do not replace the shared automatic view. Try Tiles or Content for
+native drive information; Windows and its Shell provider determine which details
+and capacity indicators appear.
+
+Save settings to apply a changed view policy to open columns. Explorer's top
+**View** menu targets the last-focused column, and each column's right-click
+**View** menu works directly. In automatic mode these changes become the shared
+choice, including the exact icon size. In a specific default mode they stay in
+that column until it navigates or its applicable default changes. Saving unrelated
+settings does not reset the view or icon size. The shared preference belongs to
+the mod and does not change Windows' saved per-folder views. Live synchronization
+covers tabs and windows within the same Explorer process. A newly started Explorer
+process loads the saved choice. Updates wait while a click or menu is in use.
+Left/Right Arrow retain column navigation.
+
+Settings are ordered as General, Browsing, Columns, Inspector and Compatibility.
+The existing controls retain their storage keys so saved preferences survive the
+reorganization. Click **Save settings** after editing.
 
 ## Choose your column width
 
@@ -58,7 +93,7 @@ setting off clears saved sizes and returns columns to the selected sizing mode.
 
 Enable **Fit window** to share available space between automatic columns. Manually
 resized columns keep their chosen widths. Automatic columns stop shrinking at
-**Minimum fitted column width**, then the view scrolls horizontally. The Inspector
+**Minimum fitted width**, then the view scrolls horizontally. The Inspector
 keeps its reserved space. Fitting never saves automatic sizes as manual choices.
 Click **Save settings** to apply changes.
 
@@ -78,7 +113,7 @@ it on the right and show folder details too.
 ## Turn columns on or off
 
 With Explorer focused, press **Ctrl+Alt+Shift+V** (the default) to switch column
-browsing across open and new Explorer windows and tabs. Change **Toggle shortcut**
+browsing across open and new Explorer windows and tabs. Change **Keyboard shortcut**
 in the mod settings, for example to `Ctrl+Shift+C` or `F8`. Use `Ctrl`, `Alt`,
 `Shift` and/or `Win` separated by `+`, followed by a letter, digit, `F1`–`F24`,
 or a named key: `Space`, `Tab`, `Enter`, `Esc`, `Backspace`, `Delete`, `Insert`,
@@ -91,7 +126,7 @@ The shortcut only runs in Explorer, not while typing in an address/search/rename
 field or using Right Alt (AltGr). Extra modifiers prevent a match. Choose a
 combination that does not conflict with another Explorer command: the configured
 shortcut takes precedence there, but cannot override Windows-reserved shortcuts.
-It remains available to other apps. **Enable columns by default** controls the
+It remains available to other apps. **Start with columns** controls the
 initial mode.
 Use Explorer's main sidebar or address bar to change the first column's location.
 Click **Save settings** in Windhawk to apply configuration changes.
@@ -103,6 +138,9 @@ Click **Save settings** in Windhawk to apply configuration changes.
 - Windows 11 context menus are available on supported x64 builds in the 26100,
   26200 and 26300 families. Other builds and architectures use classic menus.
   **Use classic context menus** forces that fallback inside the columns.
+- The top **View** layout choices are routed on matching native Windows folder
+  views. If this routing is unavailable on your Shell implementation, use the
+  column's right-click **View** menu.
 - Use a column's context menu or keyboard shortcuts for file operations. The
   hidden native view's selection is cleared before columns cover it. The outer
   command bar's **New** and **Paste** still target the original tab folder;
@@ -116,7 +154,7 @@ Click **Save settings** in Windhawk to apply configuration changes.
   require an external application.
 - Some metadata and document-preview calls run on Explorer's UI thread. A slow
   handler or unavailable network file can pause the window. Installed media
-  codecs run inside Explorer; **Enable inline audio and video** can be turned
+  codecs run inside Explorer; **Inline audio and video** can be turned
   off for setups with incompatible codecs. Slow providers can delay unload.
 - Other mods that rearrange Explorer's file area may need compatibility testing.
 
@@ -130,23 +168,54 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
 // ==WindhawkModSettings==
 /*
 - EnableByDefault: true
-  $name: Enable columns by default
-  $description: On starts a fresh Explorer/mod session with columns enabled. Off starts with regular Explorer until the toggle shortcut is pressed. The shortcut switches all open and new windows on or off. Changing this setting applies immediately.
+  $name: General · Start with columns
+  $description: Start Explorer with column browsing enabled. Turn this off to start with regular Explorer and activate columns with your shortcut. Saving changes the mode in open windows too.
 - ToggleShortcut: Ctrl+Alt+Shift+V
-  $name: Toggle shortcut
-  $description: Explorer-only shortcut. Combine Ctrl, Alt, Shift or Win with a letter, digit, F1-F24 or named key (see Details), e.g. Ctrl+Shift+C or F8. Empty disables it. Invalid values use Ctrl+Alt+Shift+V. Does not run in text fields or with Right Alt (AltGr). Save settings to apply.
-- FixedInspector: false
-  $name: Use fixed-width Inspector
-  $description: Off places file previews after the folder columns and fills the remaining window space. On keeps the Inspector fixed on the far right and also shows folder details.
+  $name: General · Keyboard shortcut
+  $description: Toggle columns across Explorer windows and tabs. For example, Ctrl+Shift+C or F8. Leave empty to disable. Runs only in Explorer, outside text fields; Right Alt (AltGr) is ignored. Invalid values use Ctrl+Alt+Shift+V. Save settings to apply.
+- Browsing:
+    - DefaultViewMode: details
+      $name: Default column view
+      $description: Use default folder view shares the latest layout and icon size across automatic columns. Change any column to update the others; the choice is saved immediately for future windows. A specific layout remains a starting view for each column.
+      $options:
+        - default: Use default folder view
+        - details: Details (default)
+        - list: List
+        - small-icons: Small icons
+        - icons: Icons
+        - tiles: Tiles
+        - content: Content
+    - ThisPCViewMode: default
+      $name: This PC view
+      $description: Follow Default column view and its shared automatic view, or choose a separate layout for This PC. A specific layout stays separate from automatic changes. Tiles and Content can show native drive information.
+      $options:
+        - default: Follow default column view (default)
+        - details: Details
+        - list: List
+        - small-icons: Small icons
+        - icons: Icons
+        - tiles: Tiles
+        - content: Content
+    - FolderExpansion: selection
+      $name: Expand folders
+      $description: On selection opens the next column as you browse. On double-click or Enter lets you move the selection without opening every folder. Right Arrow still enters the selected folder. File previews remain available.
+      $options:
+        - selection: On selection (default)
+        - activation: On double-click or Enter
+  $name: Browsing
+  $description: Choose your folder view and how the column trail opens.
 - DefaultColumnWidth: 300
-  $name: Default column width
-  $description: Starting width in fixed-width mode, from 180 to 1200 at 100% display scaling. Windows scales it automatically. Saved manual widths take priority. Save settings to update open columns you have not manually resized.
+  $name: Columns · Default column width
+  $description: Starting width in fixed-width mode, from 180 to 1200 at 100% display scaling. Saved manual widths take priority. Saving updates columns you have not manually resized.
+- RememberColumnWidths: false
+  $name: Columns · Remember resized widths
+  $description: Save manually resized widths by column position, including after closing Explorer. Saved sizes override the default in new windows. Turning this off clears saved sizes and returns columns to the selected sizing mode.
 - FitWindow: false
-  $name: Fit window
-  $description: Share available window space between automatic columns. Manually resized columns keep their width, and file previews retain their space. Columns stop shrinking at the minimum fitted width, then scroll horizontally. Save settings to apply.
+  $name: Columns · Fit window
+  $description: Share available window space between automatic columns. Manually resized columns keep their width, and the Inspector retains its space. Once automatic columns reach the minimum below, scroll horizontally to see more.
 - MinimumFittedColumnWidth: "240"
-  $name: Minimum fitted column width
-  $description: Smallest automatic column width when Fit window is enabled. Windows display scaling is applied automatically. Manually resized columns can be narrower. Save settings to apply.
+  $name: Columns · Minimum fitted width
+  $description: Smallest automatic column width when Fit window is on. Display scaling is applied automatically. Manually resized columns can be narrower.
   $options:
     - "180": "180"
     - "200": "200"
@@ -156,12 +225,9 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
     - "360": "360"
     - "480": "480"
     - "600": "600"
-- RememberColumnWidths: false
-  $name: Remember resized widths
-  $description: Save manually resized widths by column position across closing and reopening Explorer. Saved sizes override the default in new windows. Turning this off clears saved sizes and returns columns to the selected sizing mode. Save settings to apply.
 - DividerWidth: "4"
-  $name: Resize grab area
-  $description: Choose how much space you can grab to resize a column. Higher values make it easier to catch with your mouse. The visible divider stays one pixel thin. Save settings to apply.
+  $name: Columns · Resize grab area
+  $description: Choose how much space you can grab to resize a column. Wider is easier to catch with your mouse. The visible divider stays one pixel thin.
   $options:
     - "2": "2 (narrow)"
     - "3": "3"
@@ -174,15 +240,18 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
     - "10": "10"
     - "11": "11"
     - "12": "12 (maximum)"
-- ClassicContextMenus: false
-  $name: Use classic context menus
-  $description: On uses the old right-click menu in folder columns only. Off requests the Windows 11 menu when available, with the classic menu as a fallback. Applies to the next menu opened.
-- DelayedPaintRepairs: true
-  $name: Refresh views after navigation and resizing
-  $description: Perform additional redraws after folders load and columns resize. Leave enabled for drawing recovery; disable to compare if another styling mod causes excessive flashing.
+- FixedInspector: false
+  $name: Inspector · Use fixed-width Inspector
+  $description: Off places file previews after the folder columns and fills the remaining window space. On docks the Inspector on the right at a fixed width and also shows folder details.
 - InlineMediaPlayback: true
-  $name: Enable inline audio and video
-  $description: Off keeps file information and Open with, without starting the inline media player or decoding waveforms. Applies to the current preview after saving.
+  $name: Inspector · Inline audio and video
+  $description: Show playback controls and decode audio waveforms for supported files. Turn off to keep file information and Open with without loading the inline player. Applies to the current preview when saved.
+- ClassicContextMenus: false
+  $name: Compatibility · Use classic context menus
+  $description: Use the older right-click menu inside folder columns. When off, request the Windows 11 menu on supported builds and fall back to classic when unavailable. Applies to the next menu opened.
+- DelayedPaintRepairs: true
+  $name: Compatibility · Refresh views after navigation and resizing
+  $description: Add redraw recovery after loading folders and resizing columns. Leave on normally. Try turning this off if another styling mod causes excessive flashing.
 */
 // ==/WindhawkModSettings==
 
@@ -267,6 +336,8 @@ constexpr UINT kOverlayBoundsMessage = WM_APP + 52;
 constexpr UINT kExplorerWindowMessage = WM_APP + 53;
 constexpr UINT kToggleColumnsMessage = WM_APP + 54;
 constexpr UINT kNativeStructureMessage = WM_APP + 55;
+constexpr UINT kPaneViewModeMessage = WM_APP + 56;
+constexpr UINT kNativeFrameViewMessage = WM_APP + 57;
 constexpr UINT_PTR kPaletteRefreshTimerId = 10;
 constexpr UINT kPaletteSettleDelayMs = 150;
 constexpr UINT_PTR kSelectionRetryTimerId = 9;
@@ -300,6 +371,28 @@ struct Session;
 class PaneNavigationSink;
 class MediaEngineNotify;
 
+struct AutoColumnView {
+    FOLDERVIEWMODE mode = FVM_AUTO;
+    int iconSize = 0;
+};
+
+bool ValidAutoColumnView(const AutoColumnView& view) {
+    return view.mode >= FVM_FIRST && view.mode <= FVM_LAST &&
+        view.iconSize > 0 && view.iconSize <= 4096;
+}
+
+int PackAutoRootView(const AutoColumnView& view) {
+    return ValidAutoColumnView(view) ? (view.iconSize << 8) | static_cast<int>(view.mode) : 0;
+}
+
+bool UnpackAutoRootView(int packed, AutoColumnView& view) {
+    if (packed <= 0) return false;
+    AutoColumnView candidate{static_cast<FOLDERVIEWMODE>(packed & 0xff), packed >> 8};
+    if (!ValidAutoColumnView(candidate)) return false;
+    view = candidate;
+    return true;
+}
+
 struct Pane {
     Session* session = nullptr;
     HWND window = nullptr;
@@ -308,6 +401,10 @@ struct Pane {
     IShellBrowser* navigationBrowser = nullptr;
     IServiceProvider* browserSite = nullptr;
     PIDLIST_ABSOLUTE navigationTarget = nullptr;
+    PIDLIST_ABSOLUTE activationTarget = nullptr;
+    ULONG_PTR selectionSerial = 0;
+    ULONG_PTR activationSerial = 0;
+    bool activationPending = false;
     IUnknown* styledView = nullptr;
     PaneNavigationSink* navigationSink = nullptr;
     DWORD navigationCookie = 0;
@@ -321,9 +418,39 @@ struct Pane {
     ULONG_PTR generation = 0;
     ULONG_PTR navigationSerial = 0;
     bool selectionDirty = true;
+    bool thisPCView = false;
+    bool viewModeDirty = true;
+    bool viewModeUpdatePosted = false;
+    ULONG_PTR viewModeSettingsSerial = 0;
+    FOLDERVIEWMODE configuredViewMode = FVM_AUTO;
+    AutoColumnView autoView;
+    bool autoViewPending = false;
+    ULONG_PTR sharedAutoRevision = 0;
+    IFolderView* observedView = nullptr;
+    IFolderView2* observedView2 = nullptr;
+    ULONG_PTR observedBinding = 0;
+    ULONG_PTR autoManualIntent = 0;
+    ULONG_PTR autoSuccessfulIntent = 0;
+    unsigned autoCaptureAttempts = 0;
+    ULONG_PTR autoCaptureNavigation = 0;
+    bool autoCapturePosted = false;
+    ULONG_PTR manualViewSerial = 0;
+    FOLDERVIEWMODE failedViewMode = FVM_AUTO;
     unsigned menuRequests = 0;
     HRESULT lastMenuResult = E_PENDING;
 };
+
+void ClearFolderActivation(Pane& pane) {
+    CoTaskMemFree(pane.activationTarget);
+    pane.activationTarget = nullptr;
+    pane.activationPending = false;
+    ++pane.activationSerial;
+}
+
+void ClearPendingAutoView(Pane& pane) {
+    pane.autoView = {};
+    pane.autoViewPending = false;
+}
 
 void ClearNavigationTarget(Pane& pane) {
     CoTaskMemFree(pane.navigationTarget);
@@ -345,6 +472,12 @@ struct WavePreview {
 std::atomic<int> g_defaultColumnWidthSetting{kDefaultColumnWidth};
 std::atomic<bool> g_rememberColumnWidths{false};
 std::atomic<bool> g_fitWindow{false};
+std::atomic<bool> g_expandFoldersOnSelection{true};
+
+bool ReadFolderExpansionSetting() {
+    auto value = WindhawkUtils::StringSetting::make(L"Browsing.FolderExpansion");
+    return !value.get() || wcscmp(value.get(), L"activation") != 0;
+}
 std::atomic<int> g_minFittedColumnWidthSetting{kDefaultMinimumFittedColumnWidth};
 SRWLOCK g_savedColumnWidthsLock = SRWLOCK_INIT;
 
@@ -633,6 +766,75 @@ void LoadToggleShortcut() {
     g_toggleShortcut.store(shortcut);
 }
 
+std::atomic<FOLDERVIEWMODE> g_defaultViewModeSetting{FVM_DETAILS};
+std::atomic<FOLDERVIEWMODE> g_thisPCViewModeSetting{FVM_AUTO}; // FVM_AUTO means inherit the global setting.
+std::atomic<ULONG_PTR> g_viewModeSettingsSerial{1};
+
+FOLDERVIEWMODE ParseColumnViewMode(PCWSTR value, FOLDERVIEWMODE fallback) {
+    if (!value || !*value) return fallback;
+    const struct { PCWSTR name; FOLDERVIEWMODE mode; } modes[] = {
+        {L"default", FVM_AUTO},
+        {L"details", FVM_DETAILS}, {L"list", FVM_LIST},
+        {L"small-icons", FVM_SMALLICON}, {L"icons", FVM_ICON},
+        {L"tiles", FVM_TILE}, {L"content", FVM_CONTENT},
+    };
+    for (const auto& mode : modes)
+        if (!_wcsicmp(value, mode.name)) return mode.mode;
+    return fallback;
+}
+
+void LoadColumnViewModeSettings() {
+    auto global = WindhawkUtils::StringSetting::make(L"Browsing.DefaultViewMode");
+    auto computer = WindhawkUtils::StringSetting::make(L"Browsing.ThisPCViewMode");
+    FOLDERVIEWMODE globalMode = ParseColumnViewMode(global.get(), FVM_DETAILS);
+    FOLDERVIEWMODE computerMode = ParseColumnViewMode(computer.get(), FVM_AUTO);
+    bool changed = g_defaultViewModeSetting.exchange(globalMode) != globalMode;
+    changed |= g_thisPCViewModeSetting.exchange(computerMode) != computerMode;
+    if (changed) g_viewModeSettingsSerial.fetch_add(1);
+}
+
+FOLDERVIEWMODE ColumnViewMode(bool thisPC) {
+    FOLDERVIEWMODE computer = g_thisPCViewModeSetting.load();
+    return thisPC && computer != FVM_AUTO ? computer : g_defaultViewModeSetting.load();
+}
+
+bool ReadSharedAutoView(AutoColumnView& view, ULONG_PTR* revision = nullptr);
+void AdoptSharedAutoView(Pane& pane);
+void QueueAutoViewCapture(Pane& pane, ULONG_PTR intent);
+void BindPaneObservedView(Pane& pane, IUnknown* shell);
+void UnbindPaneObservedView(Pane& pane, bool retiring = true);
+ULONG_PTR BeginAutoManualIntent(Pane& pane);
+void CompleteAutoManualIntent(Pane& pane, ULONG_PTR intent, HRESULT result);
+void RefreshColumnViewModeConfiguration(Pane& pane) {
+    ULONG_PTR settings = g_viewModeSettingsSerial.load();
+    if (pane.viewModeSettingsSerial == settings) return;
+    if (pane.configuredViewMode != ColumnViewMode(pane.thisPCView)) {
+        pane.sharedAutoRevision = 0;
+        pane.viewModeDirty = true;
+        pane.failedViewMode = FVM_AUTO;
+        if (ColumnViewMode(pane.thisPCView) != FVM_AUTO) ClearPendingAutoView(pane);
+    }
+    // A setting affecting another folder type must not reset this column's
+    // manual View choice or icon size, and needs no Shell call to acknowledge.
+    pane.viewModeSettingsSerial = settings;
+    AdoptSharedAutoView(pane);
+}
+
+void MarkColumnViewManual(Pane& pane) {
+    ClearPendingAutoView(pane);
+    ++pane.manualViewSerial;
+    pane.configuredViewMode = ColumnViewMode(pane.thisPCView);
+    pane.viewModeSettingsSerial = g_viewModeSettingsSerial.load();
+    pane.viewModeDirty = false;
+    pane.failedViewMode = FVM_AUTO;
+}
+
+bool IsThisPCColumn(const std::wstring& path) {
+    // Browse/Refresh paths use the Shell's desktop-absolute parsing name for
+    // virtual roots. Compare that namespace identity, never a localized title.
+    return !_wcsicmp(path.c_str(), L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}");
+}
+
 std::atomic<bool> g_fixedInspectorSetting{false};
 std::atomic<bool> g_classicContextMenus{false};
 std::atomic<bool> g_delayedPaintRepairs{true};
@@ -733,6 +935,7 @@ struct Session final : std::enable_shared_from_this<Session> {
     int defaultColumnWidth = kDefaultColumnWidth;
     bool rememberColumnWidths = false;
     bool fitWindow = false;
+    bool expandFoldersOnSelection = true;
     int minFittedColumnWidth = kDefaultMinimumFittedColumnWidth;
     int placedColumnWidths[kMaxColumns] = {};
     int placedColumnCount = 0;
@@ -790,6 +993,21 @@ struct Session final : std::enable_shared_from_this<Session> {
     // These COM interfaces are created, queried and released only on this
     // tab's UI thread. ShellWindows enumeration is discovery/recovery only.
     IWebBrowser2* nativeAutomation = nullptr;
+    IFolderView* nativeFrameFolderView = nullptr;
+    IFolderView2* nativeFrameFolderView2 = nullptr;
+    ULONG_PTR nativeFrameViewBinding = 0;
+    bool nativeFrameViewPosted = false;
+    int nativeFrameViewPane = -1;
+    ULONG_PTR nativeFrameViewRequest = 0;
+    ULONG_PTR nativeFrameViewAutoIntent = 0;
+    ULONG_PTR nativeFrameViewPaneGeneration = 0;
+    ULONG_PTR nativeFrameViewNavigation = 0;
+    ULONG_PTR nativeFrameViewConnection = 0;
+    ULONG_PTR nativeFrameViewRootNavigation = 0;
+    ULONG_PTR nativeFrameViewRequestBinding = 0;
+    IExplorerBrowser* nativeFrameViewRequestBrowser = nullptr; // Equality only; guarded by pane generation.
+    FOLDERVIEWMODE nativeFrameViewMode = FVM_AUTO;
+    int nativeFrameViewIconSize = -1;
     IShellBrowser* nativeBrowser = nullptr;
     DWORD nativeBrowserThread = 0;
     ULONG_PTR nativeConnectionGeneration = 0;
@@ -878,6 +1096,84 @@ std::shared_ptr<Session> SessionForTab(HWND tab) {
         if (entry.tab == tab) { result = entry.owner; break; }
     ReleaseSRWLockShared(&g_sessionsLock);
     return result;
+}
+
+constexpr UINT kSharedAutoViewMessage = WM_APP + 58;
+constexpr UINT kObserveAutoViewMessage = WM_APP + 59;
+constexpr UINT_PTR kSharedAutoRetryTimerId = 14;
+SRWLOCK g_sharedAutoViewLock = SRWLOCK_INIT;
+bool g_sharedAutoLoaded = false; // Protected with the packed pair/revision below.
+int g_sharedAutoPacked = 0;
+ULONG_PTR g_sharedAutoRevision = 0;
+ULONG_PTR g_sharedAutoPublishedIntent = 0;
+std::atomic<ULONG_PTR> g_autoManualSequence{1};
+
+void LoadSharedAutoViewLocked() {
+    if (g_sharedAutoLoaded) return;
+    AutoColumnView view;
+    int saved = Wh_GetIntValue(L"AutoRootViewV1", 0);
+    if (UnpackAutoRootView(saved, view)) { g_sharedAutoPacked = saved; g_sharedAutoRevision = 1; }
+    g_sharedAutoLoaded = true;
+}
+bool ReadSharedAutoView(AutoColumnView& view, ULONG_PTR* revision) {
+    AcquireSRWLockExclusive(&g_sharedAutoViewLock);
+    LoadSharedAutoViewLocked();
+    bool valid = UnpackAutoRootView(g_sharedAutoPacked, view);
+    if (revision) *revision = g_sharedAutoRevision;
+    ReleaseSRWLockExclusive(&g_sharedAutoViewLock);
+    return valid;
+}
+ULONG_PTR SharedAutoRevision() {
+    AutoColumnView view; ULONG_PTR revision = 0;
+    ReadSharedAutoView(view, &revision);
+    return revision;
+}
+bool SharedAutoIntentCurrent(ULONG_PTR intent) {
+    AcquireSRWLockShared(&g_sharedAutoViewLock);
+    bool current = intent >= g_sharedAutoPublishedIntent;
+    ReleaseSRWLockShared(&g_sharedAutoViewLock);
+    return current;
+}
+bool PublishSharedAutoView(const AutoColumnView& view, ULONG_PTR intent, bool seedOnly = false) {
+    int packed = PackAutoRootView(view);
+    if (!packed || g_unloading.load()) return false;
+    bool accepted = false, stored = true;
+    ULONG_PTR revision = 0;
+    AcquireSRWLockExclusive(&g_sharedAutoViewLock);
+    LoadSharedAutoViewLocked();
+    if ((!seedOnly || !g_sharedAutoPacked) && (!intent || intent >= g_sharedAutoPublishedIntent)) {
+        g_sharedAutoPacked = packed;
+        g_sharedAutoPublishedIntent = std::max(g_sharedAutoPublishedIntent, intent);
+        revision = ++g_sharedAutoRevision;
+        // Serialize state and durable storage together. No COM/window/session
+        // callbacks run here, and an older publisher cannot write afterward.
+        if (!seedOnly) stored = Wh_SetIntValue(L"AutoRootViewV1", packed);
+        accepted = true;
+    }
+    ReleaseSRWLockExclusive(&g_sharedAutoViewLock);
+    if (!stored) Wh_Log(L"[Columns] Could not save the shared automatic view");
+    if (!accepted) return false;
+    if (!seedOnly) Wh_Log(L"[Columns auto view] Shared mode=%d iconSize=%d revision=%llu intent=%llu",
+        static_cast<int>(view.mode), view.iconSize, static_cast<unsigned long long>(revision),
+        static_cast<unsigned long long>(intent));
+    struct Target { HWND window; ULONG_PTR identity; };
+    std::vector<Target> targets;
+    AcquireSRWLockShared(&g_sessionsLock);
+    for (const auto& record : g_sessions) targets.push_back({record.overlay, record.owner->identity});
+    ReleaseSRWLockShared(&g_sessionsLock);
+    for (const auto& target : targets)
+        PostMessageW(target.window, kSharedAutoViewMessage, target.identity, revision);
+    return true;
+}
+void AdoptSharedAutoView(Pane& pane) {
+    if (ColumnViewMode(pane.thisPCView) != FVM_AUTO || pane.autoManualIntent) return;
+    AutoColumnView shared; ULONG_PTR revision = 0;
+    if (!ReadSharedAutoView(shared, &revision) || pane.sharedAutoRevision == revision) return;
+    pane.autoView = shared;
+    pane.autoViewPending = true;
+    pane.viewModeDirty = true;
+    pane.failedViewMode = FVM_AUTO;
+    pane.sharedAutoRevision = revision;
 }
 
 std::vector<HWND> SessionWindows() {
@@ -1120,6 +1416,48 @@ void QueueSelectionUpdate(Pane& pane) {
     if (!session.selectionUpdatePosted && IsWindow(session.overlay)) {
         session.selectionUpdatePosted = PostMessageW(session.overlay,
             kSelectionUpdateMessage, session.identity, 0) != FALSE;
+    }
+}
+
+void QueuePaneViewModeUpdate(Pane& pane) {
+    Session& session = Context();
+    if (session.closed || g_unloading.load()) return;
+    RefreshColumnViewModeConfiguration(pane);
+    // View-created/completed callbacks also happen for manual native View
+    // commands. They are readiness signals, not requests to force defaults.
+    if (!pane.viewModeDirty) return;
+    if (!pane.viewModeUpdatePosted && IsWindow(session.overlay))
+        pane.viewModeUpdatePosted = PostMessageW(session.overlay, kPaneViewModeMessage,
+            static_cast<WPARAM>(pane.index), static_cast<LPARAM>(pane.generation)) != FALSE;
+}
+
+bool QueueFolderActivation(Pane& pane, PCIDLIST_ABSOLUTE target = nullptr) {
+    if (Context().closed || g_unloading.load()) return false;
+    // Keep the requested identity across the callback and any held-pointer
+    // delay. A changed target or newer input makes this request ineligible.
+    PIDLIST_ABSOLUTE copy = target ? ILCloneFull(target) : nullptr;
+    if (target && !copy) return false;
+    ClearFolderActivation(pane);
+    pane.activationTarget = copy;
+    pane.activationPending = true;
+    QueueSelectionUpdate(pane);
+    return true;
+}
+
+void CancelPendingFolderActivations() {
+    for (int i = 0; i < Context().columnCount; ++i)
+        ClearFolderActivation(Context().panes[i]);
+}
+
+void ApplyFolderExpansionSettings() {
+    bool expand = g_expandFoldersOnSelection.load();
+    if (Context().expandFoldersOnSelection == expand) return;
+    Context().expandFoldersOnSelection = expand;
+    CancelPendingFolderActivations();
+    if (expand && Context().columnCount > 0) {
+        int active = std::clamp(Context().activePane, 0, Context().columnCount - 1);
+        Context().columnSelection[active].clear();
+        QueueSelectionUpdate(Context().panes[active]);
     }
 }
 
@@ -1456,6 +1794,7 @@ public:
         Pane& pane = Context().panes[index_];
         if (pane.browserSite != static_cast<IServiceProvider*>(this) ||
             pane.generation != generation_) return S_OK;
+        if (change == CDBOSC_SELCHANGE) ++pane.selectionSerial;
         if (change == CDBOSC_SELCHANGE || change == CDBOSC_RENAME ||
             change == CDBOSC_STATECHANGE || change == CDBOSC_SETFOCUS)
             QueueSelectionUpdate(pane);
@@ -1686,14 +2025,16 @@ public:
         Pane& pane = Context().panes[index_];
         // Only explicit tab/sidebar navigation may replace this column.
         // Shell folder activation (double-click, Enter, Open) stays in the
-        // column chain, processed by the usual selection handler after return.
+        // column chain, processed by posted work after this callback returns.
         if (target && pane.navigationTarget &&
             ILIsEqual(target, pane.navigationTarget)) return S_OK;
         Wh_Log(L"[Columns] Pane %d folder activation kept in columns", index_);
-        QueueSelectionUpdate(pane);
+        if (Context().expandFoldersOnSelection) QueueSelectionUpdate(pane);
+        else if (!QueueFolderActivation(pane, target))
+            Wh_Log(L"[Columns] Could not queue folder activation for pane %d", index_);
         return E_ABORT;
     }
-    HRESULT STDMETHODCALLTYPE OnViewCreated(IShellView*) override {
+    HRESULT STDMETHODCALLTYPE OnViewCreated(IShellView* created) override {
         CallbackScope callbackScope;
         auto owner = owner_.lock();
         if (!owner || owner->closed) return S_OK;
@@ -1701,6 +2042,10 @@ public:
         if (g_unloading.load() || Context().panes[index_].generation != generation_ ||
             Context().panes[index_].navigationSink != this) return S_OK;
         Wh_Log(L"[Columns] Pane %d view created", index_);
+        BindPaneObservedView(Context().panes[index_], created);
+        if (Context().closed || g_unloading.load() || Context().panes[index_].generation != generation_ ||
+            Context().panes[index_].navigationSink != this) return S_OK;
+        QueuePaneViewModeUpdate(Context().panes[index_]);
         QueueSelectionUpdate(Context().panes[index_]);
         return S_OK;
     }
@@ -1717,6 +2062,7 @@ public:
             if (!target || !ILIsEqual(target, pane.navigationTarget)) return S_OK;
             ClearNavigationTarget(pane);
         }
+        QueuePaneViewModeUpdate(pane);
         QueueSelectionUpdate(pane);
         DWORD elapsed = pane.awaitingNavigationRepair ?
                         GetTickCount() - pane.navigationStarted : 0;
@@ -1757,6 +2103,7 @@ void PaintSplitterContents(HWND window, HDC dc, const RECT* area = nullptr);
 void CancelPendingFocus();
 void CancelColumnResize();
 
+void ClearPendingNativeFrameView(bool preserveCapture = false);
 void CancelFocusForUserInput(HWND target) {
     HWND root = GetAncestor(target, GA_ROOT);
     if (!root) return;
@@ -1768,6 +2115,10 @@ void CancelFocusForUserInput(HWND target) {
         if (owner && owner->explorer == root) {
             SessionScope scope(owner);
             CancelPendingFocus();
+            // Duplicate Shell selection notifications must not cancel a valid
+            // activation. Newer mouse-down/key-down input does cancel it.
+            CancelPendingFolderActivations();
+            ClearPendingNativeFrameView();
         }
     }
 }
@@ -2080,7 +2431,604 @@ bool ViewRectInTab(HWND fileView, HWND tab, RECT* result, bool allowEmpty = fals
     return allowEmpty || nonempty;
 }
 
+// Bridge only the four documented view-mode methods of the native DefView.
+// Discover their implementation before hooks activate. No command IDs, UI
+// Automation, polling, or writes to the hidden native folder's view are needed.
+using NativeGetViewModeFn = HRESULT (STDMETHODCALLTYPE*)(IFolderView*, UINT*);
+using NativeSetViewModeFn = HRESULT (STDMETHODCALLTYPE*)(IFolderView*, UINT);
+using NativeSetViewModeAndSizeFn = HRESULT (STDMETHODCALLTYPE*)(IFolderView2*, FOLDERVIEWMODE, int);
+using NativeGetViewModeAndSizeFn = HRESULT (STDMETHODCALLTYPE*)(IFolderView2*, FOLDERVIEWMODE*, int*);
+NativeGetViewModeFn g_nativeGetViewModeOriginal = nullptr;
+NativeSetViewModeFn g_nativeSetViewModeOriginal = nullptr;
+NativeSetViewModeAndSizeFn g_nativeSetViewModeAndSizeOriginal = nullptr;
+NativeGetViewModeAndSizeFn g_nativeGetViewModeAndSizeOriginal = nullptr;
+void* g_nativeFrameViewEntries[4] = {};
+HMODULE g_nativeFrameViewModules[4] = {};
+std::atomic<bool> g_nativeFrameViewHooksReady{false};
+thread_local unsigned g_nativeFrameViewDepth = 0;
+thread_local unsigned g_nativeFrameViewApplying = 0;
+thread_local Session* g_nativeFrameViewApplyingOwner = nullptr;
+thread_local ULONG_PTR g_nativeFrameViewApplyingRequest = 0;
+thread_local ULONG_PTR g_nativeFrameViewApplyingInput = 0;
+struct NativeFrameViewScope {
+    NativeFrameViewScope() { ++g_nativeFrameViewDepth; }
+    ~NativeFrameViewScope() { --g_nativeFrameViewDepth; }
+};
+struct NativeFrameViewApplyScope {
+    Session* previousOwner;
+    ULONG_PTR previousRequest;
+    ULONG_PTR previousInput;
+    NativeFrameViewApplyScope(Session* owner, ULONG_PTR request)
+        : previousOwner(g_nativeFrameViewApplyingOwner), previousRequest(g_nativeFrameViewApplyingRequest),
+          previousInput(g_nativeFrameViewApplyingInput) {
+        ++g_nativeFrameViewApplying;
+        g_nativeFrameViewApplyingOwner = owner;
+        g_nativeFrameViewApplyingRequest = request;
+        g_nativeFrameViewApplyingInput = g_nativeInputEpoch.load();
+    }
+    ~NativeFrameViewApplyScope() {
+        --g_nativeFrameViewApplying;
+        g_nativeFrameViewApplyingOwner = previousOwner;
+        g_nativeFrameViewApplyingRequest = previousRequest;
+        g_nativeFrameViewApplyingInput = previousInput;
+    }
+};
+
+void ClearPendingNativeFrameView(bool preserveCapture) {
+    Session& owner = Context();
+    int index = owner.nativeFrameViewPane;
+    if (!preserveCapture && index >= 0 && index < owner.columnCount &&
+        owner.panes[index].autoManualIntent == owner.nativeFrameViewAutoIntent)
+        CompleteAutoManualIntent(owner.panes[index], owner.nativeFrameViewAutoIntent, E_ABORT);
+    owner.nativeFrameViewAutoIntent = 0;
+    Context().nativeFrameViewPane = -1;
+    Context().nativeFrameViewRequestBrowser = nullptr;
+    ++Context().nativeFrameViewRequest;
+}
+
+bool NativeFrameViewEligible(const Session& session) {
+    return !g_unloading.load() && !session.closed && !session.suspended &&
+        session.nativeBrowserThread == GetCurrentThreadId() &&
+        session.nativeSelectionGuarded && !session.rootNavigationPending &&
+        !session.nativeNavigationInProgress && !session.nativePointerPending &&
+        session.nativeFrameFolderView && session.nativeFrameFolderView2 &&
+        IsWindowVisible(session.overlay) && IsWindowVisible(session.tab) &&
+        session.activePane >= 0 && session.activePane < session.columnCount;
+}
+
+std::shared_ptr<Session> NativeFrameViewSession(const void* object, bool setter = false) {
+    // Setters only queue work, so a newer command pumped by a getter must still
+    // replace the pending request. Getters retain the recursion guard.
+    if (!g_nativeFrameViewHooksReady.load() || (g_nativeFrameViewDepth && !setter) || g_unloading.load()) return {};
+    std::shared_ptr<Session> result;
+    DWORD thread = GetCurrentThreadId();
+    AcquireSRWLockShared(&g_sessionsLock);
+    for (const auto& entry : g_sessions) {
+        // Ask Windows for the window's thread before reading any mutable
+        // session state: other Explorer UI threads own independent sessions.
+        if (GetWindowThreadProcessId(entry.overlay, nullptr) != thread) continue;
+        if ((object == entry.owner->nativeFrameFolderView || object == entry.owner->nativeFrameFolderView2) &&
+            NativeFrameViewEligible(*entry.owner)) {
+            // Same-request calls from a provider's own setter are mirror
+            // updates. A new mouse/key gesture advances the request revision,
+            // so a genuine newer top-menu command may still queue safely.
+            if (setter && g_nativeFrameViewApplying && entry.owner.get() == g_nativeFrameViewApplyingOwner &&
+                entry.owner->nativeFrameViewRequest == g_nativeFrameViewApplyingRequest) continue;
+            result = entry.owner;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_sessionsLock);
+    return result && NativeFrameViewEligible(*result) ? result : nullptr;
+}
+
+struct NativeFrameViewTarget {
+    int index = -1;
+    ULONG_PTR generation = 0, navigation = 0, connection = 0, rootNavigation = 0, binding = 0;
+    IExplorerBrowser* browser = nullptr; // Compared only; the pane owns it until a guarded AddRef.
+};
+
+bool CaptureNativeFrameViewTarget(NativeFrameViewTarget& target) {
+    Session& session = Context();
+    if (!NativeFrameViewEligible(session)) return false;
+    Pane& pane = session.panes[session.activePane];
+    if (!pane.browser || !pane.initialized || pane.navigationTarget || pane.awaitingNavigationRepair) return false;
+    target = {session.activePane, pane.generation, pane.navigationSerial,
+        session.nativeConnectionGeneration, session.nativeNavigationGeneration,
+        session.nativeFrameViewBinding, pane.browser};
+    return true;
+}
+
+bool NativeFrameViewTargetCurrent(const NativeFrameViewTarget& target) {
+    Session& session = Context();
+    return NativeFrameViewEligible(session) && session.activePane == target.index &&
+        session.nativeConnectionGeneration == target.connection &&
+        session.nativeNavigationGeneration == target.rootNavigation &&
+        session.nativeFrameViewBinding == target.binding &&
+        target.index >= 0 && target.index < session.columnCount &&
+        session.panes[target.index].generation == target.generation &&
+        session.panes[target.index].navigationSerial == target.navigation &&
+        session.panes[target.index].browser == target.browser &&
+        !session.panes[target.index].navigationTarget &&
+        !session.panes[target.index].awaitingNavigationRepair;
+}
+
+HRESULT ReadNativeFrameActiveView(FOLDERVIEWMODE* mode, int* iconSize) {
+    if (!mode || !iconSize) return E_POINTER;
+    NativeFrameViewTarget target;
+    if (!CaptureNativeFrameViewTarget(target)) return E_ABORT;
+    ULONG_PTR manual = Context().panes[target.index].manualViewSerial;
+    ULONG_PTR request = Context().nativeFrameViewRequest;
+    auto current = [&] {
+        return NativeFrameViewTargetCurrent(target) &&
+            Context().panes[target.index].manualViewSerial == manual &&
+            Context().nativeFrameViewRequest == request;
+    };
+    target.browser->AddRef();
+    IFolderView2* view = nullptr;
+    HRESULT hr = target.browser->GetCurrentView(IID_IFolderView2, reinterpret_cast<void**>(&view));
+    target.browser->Release();
+    if (FAILED(hr) || !view || !current()) {
+        if (view) view->Release();
+        return FAILED(hr) ? hr : E_ABORT;
+    }
+    FOLDERVIEWMODE actualMode = FVM_AUTO;
+    int actualSize = 0;
+    hr = view->GetViewModeAndIconSize(&actualMode, &actualSize);
+    view->Release();
+    if (!current()) return E_ABORT;
+    if (SUCCEEDED(hr)) { *mode = actualMode; *iconSize = actualSize; }
+    return hr;
+}
+
+bool QueueNativeFrameView(FOLDERVIEWMODE mode, int iconSize) {
+    NativeFrameViewTarget target;
+    if (!CaptureNativeFrameViewTarget(target)) return false;
+    auto& session = Context();
+    ClearPendingNativeFrameView();
+    ++session.nativeFrameViewRequest;
+    session.nativeFrameViewPane = target.index;
+    session.nativeFrameViewPaneGeneration = target.generation;
+    session.nativeFrameViewNavigation = target.navigation;
+    session.nativeFrameViewConnection = target.connection;
+    session.nativeFrameViewRootNavigation = target.rootNavigation;
+    session.nativeFrameViewRequestBinding = target.binding;
+    session.nativeFrameViewRequestBrowser = target.browser;
+    session.nativeFrameViewMode = mode;
+    session.nativeFrameViewIconSize = iconSize;
+    // Record explicit intent now so a previously posted default update cannot
+    // replace the choice while this message waits for the mouse/menu to finish.
+    MarkColumnViewManual(session.panes[target.index]);
+    session.nativeFrameViewAutoIntent = BeginAutoManualIntent(session.panes[target.index]);
+    if (!session.nativeFrameViewPosted) {
+        session.nativeFrameViewPosted = PostMessageW(session.overlay,
+            kNativeFrameViewMessage, session.identity, 0) != FALSE;
+        if (!session.nativeFrameViewPosted) { ClearPendingNativeFrameView(); return false; }
+    }
+    Wh_Log(L"[Columns view bridge] Queued pane=%d mode=%d iconSize=%d",
+        target.index, static_cast<int>(mode), iconSize);
+    return true;
+}
+
+void ApplyPendingNativeFrameView() {
+    auto& session = Context();
+    int index = session.nativeFrameViewPane;
+    if (index < 0) return;
+    NativeFrameViewTarget target = {index, session.nativeFrameViewPaneGeneration,
+        session.nativeFrameViewNavigation, session.nativeFrameViewConnection,
+        session.nativeFrameViewRootNavigation, session.nativeFrameViewRequestBinding,
+        session.nativeFrameViewRequestBrowser};
+    ULONG_PTR request = session.nativeFrameViewRequest;
+    ULONG_PTR autoIntent = session.nativeFrameViewAutoIntent;
+    auto current = [&] { return session.nativeFrameViewRequest == request && NativeFrameViewTargetCurrent(target); };
+    if (!NativeFrameViewTargetCurrent(target)) { ClearPendingNativeFrameView(); return; }
+    if (g_nativeFrameViewApplying) {
+        // A provider can pump this posted message before its previous setter
+        // returns. Apply the newest choice after that call, never reentrantly.
+        SetTimer(session.overlay, kSelectionRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return;
+    }
+    bool menuActive = static_cast<bool>(NativeMenuSessionOnThread());
+    if (!current()) {
+        if (session.nativeFrameViewRequest == request) ClearPendingNativeFrameView();
+        return;
+    }
+    if (menuActive) {
+        SetTimer(session.overlay, kSelectionRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return;
+    }
+    if (NativePointerInteractionActive()) { SchedulePointerRelease(true); return; }
+    FOLDERVIEWMODE mode = session.nativeFrameViewMode;
+    int iconSize = session.nativeFrameViewIconSize;
+    NativeFrameViewScope forwarding;
+    target.browser->AddRef();
+    IFolderView2* view = nullptr;
+    HRESULT hr = target.browser->GetCurrentView(IID_IFolderView2, reinterpret_cast<void**>(&view));
+    target.browser->Release();
+    if (FAILED(hr) || !view || !current()) {
+        if (view) view->Release();
+        if (session.nativeFrameViewRequest == request) ClearPendingNativeFrameView();
+        return;
+    }
+    menuActive = static_cast<bool>(NativeMenuSessionOnThread());
+    if (!current()) {
+        view->Release();
+        if (session.nativeFrameViewRequest == request) ClearPendingNativeFrameView();
+        return;
+    }
+    // Menu queries and provider calls may pump a new held mouse gesture.
+    if (NativePointerInteractionActive() || menuActive) {
+        view->Release();
+        if (!current()) {
+            if (session.nativeFrameViewRequest == request) ClearPendingNativeFrameView();
+            return;
+        }
+        SchedulePointerRelease(true);
+        SetTimer(session.overlay, kSelectionRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return;
+    }
+    MarkColumnViewManual(session.panes[index]);
+    {
+        // Provider-internal native updates while applying must not enqueue the
+        // same command again. New commands pumped by a read query may queue.
+        NativeFrameViewApplyScope applying(&session, request);
+        hr = view->SetViewModeAndIconSize(mode, iconSize);
+    }
+    view->Release();
+    if (autoIntent && !session.closed && index >= 0 && index < session.columnCount &&
+        session.panes[index].generation == target.generation &&
+        session.panes[index].navigationSerial == target.navigation && session.panes[index].browser == target.browser)
+        CompleteAutoManualIntent(session.panes[index], autoIntent, hr);
+    if (session.nativeFrameViewRequest == request) ClearPendingNativeFrameView(SUCCEEDED(hr));
+    Wh_Log(L"[Columns view bridge] Applied pane=%d mode=%d iconSize=%d result=%08X",
+        index, static_cast<int>(mode), iconSize, static_cast<unsigned>(hr));
+}
+
+HRESULT CapturePaneAutoView(Pane& pane, AutoColumnView& output, bool closing = false, bool allowSuspended = false);
+ULONG_PTR BeginAutoManualIntent(Pane& pane) {
+    if (ColumnViewMode(pane.thisPCView) != FVM_AUTO) return 0;
+    pane.autoManualIntent = ++g_autoManualSequence;
+    pane.autoCaptureNavigation = pane.navigationSerial;
+    pane.autoCaptureAttempts = 0;
+    return pane.autoManualIntent;
+}
+void QueueAutoViewCapture(Pane& pane, ULONG_PTR intent) {
+    if (!intent || pane.autoManualIntent != intent || Context().closed || g_unloading.load()) return;
+    if (!pane.autoCapturePosted)
+        pane.autoCapturePosted = PostMessageW(Context().overlay, kObserveAutoViewMessage,
+            pane.index, pane.generation) != FALSE;
+    if (!pane.autoCapturePosted && IsWindow(Context().overlay))
+        SetTimer(Context().overlay, kSharedAutoRetryTimerId, kSelectionRetryDelayMs, nullptr);
+}
+void CompleteAutoManualIntent(Pane& pane, ULONG_PTR intent, HRESULT result) {
+    if (!intent) return;
+    if (ColumnViewMode(pane.thisPCView) != FVM_AUTO || Context().closed || g_unloading.load()) {
+        pane.autoManualIntent = pane.autoSuccessfulIntent = 0;
+        return;
+    }
+    if (FAILED(result)) {
+        if (pane.autoManualIntent != intent) return;
+        pane.autoManualIntent = pane.autoSuccessfulIntent;
+        if (pane.autoManualIntent) QueueAutoViewCapture(pane, pane.autoManualIntent);
+        else { pane.sharedAutoRevision = 0; AdoptSharedAutoView(pane); QueuePaneViewModeUpdate(pane); }
+        return;
+    }
+    if (intent < pane.autoSuccessfulIntent) return;
+    pane.autoSuccessfulIntent = intent;
+    if (pane.autoManualIntent != intent) return; // A newer issued choice retains control until it succeeds/fails.
+    MarkColumnViewManual(pane);
+    QueueAutoViewCapture(pane, intent);
+}
+void UnbindPaneObservedView(Pane& pane, bool retiring) {
+    auto* base = std::exchange(pane.observedView, nullptr);
+    auto* extended = std::exchange(pane.observedView2, nullptr);
+    ++pane.observedBinding;
+    if (retiring) {
+        pane.autoManualIntent = 0;
+        pane.autoSuccessfulIntent = 0;
+        pane.autoCaptureAttempts = 0;
+        pane.autoCaptureNavigation = 0;
+        pane.autoCapturePosted = false;
+    }
+    if (extended) extended->Release();
+    if (base) base->Release();
+}
+void BindPaneObservedView(Pane& pane, IUnknown* shell) {
+    if (!shell || !g_nativeFrameViewHooksReady.load() || !pane.session || pane.session->closed || g_unloading.load()) return;
+    Session* owner = pane.session;
+    ULONG_PTR generation = pane.generation, navigation = pane.navigationSerial, binding = pane.observedBinding;
+    IFolderView* base = nullptr; IFolderView2* extended = nullptr;
+    HRESULT hr = shell->QueryInterface(IID_IFolderView, reinterpret_cast<void**>(&base));
+    if (SUCCEEDED(hr)) hr = shell->QueryInterface(IID_IFolderView2, reinterpret_cast<void**>(&extended));
+    auto current = [&] { return !owner->closed && !g_unloading.load() && pane.generation == generation &&
+        pane.navigationSerial == navigation && pane.observedBinding == binding; };
+    bool supported = SUCCEEDED(hr) && base && extended &&
+        (*reinterpret_cast<void***>(base))[3] == g_nativeFrameViewEntries[0] &&
+        (*reinterpret_cast<void***>(base))[4] == g_nativeFrameViewEntries[1] &&
+        (*reinterpret_cast<void***>(extended))[35] == g_nativeFrameViewEntries[2] &&
+        (*reinterpret_cast<void***>(extended))[36] == g_nativeFrameViewEntries[3];
+    if (current() && supported && (base != pane.observedView || extended != pane.observedView2)) {
+        UnbindPaneObservedView(pane, false); // Same-folder view replacement preserves its manual intent.
+        ++binding;
+        if (current()) { pane.observedView = base; pane.observedView2 = extended; base = nullptr; extended = nullptr; }
+    }
+    if (extended) extended->Release();
+    if (base) base->Release();
+}
+std::shared_ptr<Session> HostedViewSession(const void* object, int& index) {
+    if (!g_nativeFrameViewHooksReady.load() || g_unloading.load()) return {};
+    DWORD thread = GetCurrentThreadId();
+    std::shared_ptr<Session> result;
+    AcquireSRWLockShared(&g_sessionsLock);
+    for (const auto& record : g_sessions) {
+        if (GetWindowThreadProcessId(record.overlay, nullptr) != thread) continue;
+        Session& owner = *record.owner;
+        if (owner.closed || owner.suspended) continue;
+        // Controlled/default/follower setters have their own explicit intent
+        // route. Their nested native mirror updates must never become manual.
+        if (g_nativeFrameViewApplying) continue;
+        for (int i = 0; i < owner.columnCount; ++i) {
+            Pane& pane = owner.panes[i];
+            if ((object == pane.observedView || object == pane.observedView2) && pane.generation &&
+                pane.initialized && !pane.navigationTarget && !pane.awaitingNavigationRepair &&
+                ColumnViewMode(pane.thisPCView) == FVM_AUTO) {
+                result = record.owner; index = i; break;
+            }
+        }
+        if (result) break;
+    }
+    ReleaseSRWLockShared(&g_sessionsLock);
+    return result;
+}
+void CaptureObservedAutoView(Pane& pane) {
+    pane.autoCapturePosted = false;
+    Session& owner = Context();
+    ULONG_PTR intent = pane.autoManualIntent;
+    // A coalesced old capture may arrive while a newer top-menu setter is only
+    // queued. Never attribute the previous native layout to unexecuted intent.
+    if (!intent || pane.autoSuccessfulIntent != intent) return;
+    if (owner.closed || g_unloading.load() || pane.autoCaptureNavigation != pane.navigationSerial ||
+        ColumnViewMode(pane.thisPCView) != FVM_AUTO || !SharedAutoIntentCurrent(intent)) {
+        pane.autoManualIntent = pane.autoSuccessfulIntent = 0;
+        pane.sharedAutoRevision = 0; AdoptSharedAutoView(pane); QueuePaneViewModeUpdate(pane); return;
+    }
+    ULONG_PTR generation = pane.generation, navigation = pane.navigationSerial;
+    bool defer = owner.suspended || pane.navigationTarget || pane.awaitingNavigationRepair ||
+        g_nativeFrameViewApplying || NativePointerInteractionActive();
+    bool menuActive = false;
+    if (!defer) menuActive = static_cast<bool>(NativeMenuSessionOnThread());
+    // Native menu discovery may pump a close, replacement or newer command.
+    if (owner.closed || g_unloading.load() || pane.generation != generation ||
+        pane.navigationSerial != navigation || pane.autoManualIntent != intent) return;
+    if (ColumnViewMode(pane.thisPCView) != FVM_AUTO) {
+        pane.autoManualIntent = pane.autoSuccessfulIntent = 0; return;
+    }
+    if (defer || menuActive || NativePointerInteractionActive()) {
+        if (NativePointerInteractionActive()) SchedulePointerRelease(true);
+        if (IsWindow(owner.overlay)) SetTimer(owner.overlay, kSharedAutoRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return;
+    }
+    ULONG_PTR binding = pane.observedBinding, settings = g_viewModeSettingsSerial.load();
+    AutoColumnView actual;
+    HRESULT hr = CapturePaneAutoView(pane, actual);
+    if (owner.closed || g_unloading.load() || pane.generation != generation || pane.navigationSerial != navigation ||
+        pane.autoManualIntent != intent) return;
+    if (ColumnViewMode(pane.thisPCView) != FVM_AUTO) {
+        pane.autoManualIntent = pane.autoSuccessfulIntent = 0; return;
+    }
+    if (pane.observedBinding != binding || g_viewModeSettingsSerial.load() != settings) {
+        SetTimer(owner.overlay, kSharedAutoRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return; // Re-read the replacement view/settings without losing its successful intent.
+    }
+    if (hr == E_ABORT && pane.autoCaptureAttempts++ < kSelectionRetryLimit) {
+        SetTimer(owner.overlay, kSharedAutoRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return;
+    }
+    pane.autoManualIntent = pane.autoSuccessfulIntent = 0;
+    if (SUCCEEDED(hr)) PublishSharedAutoView(actual, intent);
+    pane.sharedAutoRevision = 0;
+    AdoptSharedAutoView(pane);
+    QueuePaneViewModeUpdate(pane);
+}
+
+HRESULT STDMETHODCALLTYPE NativeGetViewModeHook(IFolderView* self, UINT* mode) {
+    CallbackScope callbackScope;
+    auto owner = NativeFrameViewSession(self);
+    if (owner) {
+        SessionScope session(std::move(owner));
+        NativeFrameViewScope forwarding;
+        FOLDERVIEWMODE actual = FVM_AUTO;
+        int size = 0;
+        HRESULT hr = mode ? ReadNativeFrameActiveView(&actual, &size) : E_POINTER;
+        if (SUCCEEDED(hr)) { *mode = static_cast<UINT>(actual); return hr; }
+    }
+    return g_nativeGetViewModeOriginal(self, mode);
+}
+
+HRESULT STDMETHODCALLTYPE NativeSetViewModeHook(IFolderView* self, UINT mode) {
+    CallbackScope callbackScope;
+    if (mode >= FVM_FIRST && mode <= FVM_LAST) {
+        int index = -1;
+        if (auto owner = HostedViewSession(self, index)) {
+            SessionScope scope(owner);
+            Pane& pane = owner->panes[index];
+            ULONG_PTR generation = pane.generation, navigation = pane.navigationSerial;
+            ULONG_PTR intent = BeginAutoManualIntent(pane);
+            HRESULT hr;
+            { NativeFrameViewApplyScope applying(owner.get(), owner->nativeFrameViewRequest);
+              hr = g_nativeSetViewModeOriginal(self, mode); }
+            if (!owner->closed && pane.generation == generation && pane.navigationSerial == navigation) {
+                CompleteAutoManualIntent(pane, intent, hr);
+            }
+            return hr;
+        }
+    }
+    auto owner = NativeFrameViewSession(self, true);
+    if (owner && mode >= FVM_FIRST && mode <= FVM_LAST) {
+        SessionScope session(std::move(owner));
+        NativeFrameViewScope forwarding;
+        if (QueueNativeFrameView(static_cast<FOLDERVIEWMODE>(mode), -1)) return S_OK;
+    }
+    return g_nativeSetViewModeOriginal(self, mode);
+}
+
+HRESULT STDMETHODCALLTYPE NativeSetViewModeAndSizeHook(IFolderView2* self, FOLDERVIEWMODE mode, int size) {
+    CallbackScope callbackScope;
+    if (((mode >= FVM_FIRST && mode <= FVM_LAST) || mode == FVM_AUTO) && (size > 0 || size == -1)) {
+        int index = -1;
+        if (auto owner = HostedViewSession(self, index)) {
+            SessionScope scope(owner);
+            Pane& pane = owner->panes[index];
+            ULONG_PTR generation = pane.generation, navigation = pane.navigationSerial;
+            ULONG_PTR intent = BeginAutoManualIntent(pane);
+            HRESULT hr;
+            { NativeFrameViewApplyScope applying(owner.get(), owner->nativeFrameViewRequest);
+              hr = g_nativeSetViewModeAndSizeOriginal(self, mode, size); }
+            if (!owner->closed && pane.generation == generation && pane.navigationSerial == navigation) {
+                CompleteAutoManualIntent(pane, intent, hr);
+            }
+            return hr;
+        }
+    }
+    auto owner = NativeFrameViewSession(self, true);
+    if (owner && ((mode >= FVM_FIRST && mode <= FVM_LAST) || mode == FVM_AUTO) && (size > 0 || size == -1)) {
+        SessionScope session(std::move(owner));
+        NativeFrameViewScope forwarding;
+        if (QueueNativeFrameView(mode, size)) return S_OK;
+    }
+    return g_nativeSetViewModeAndSizeOriginal(self, mode, size);
+}
+
+HRESULT STDMETHODCALLTYPE NativeGetViewModeAndSizeHook(IFolderView2* self, FOLDERVIEWMODE* mode, int* size) {
+    CallbackScope callbackScope;
+    auto owner = NativeFrameViewSession(self);
+    if (owner) {
+        SessionScope session(std::move(owner));
+        NativeFrameViewScope forwarding;
+        HRESULT hr = ReadNativeFrameActiveView(mode, size);
+        if (SUCCEEDED(hr)) return hr;
+    }
+    return g_nativeGetViewModeAndSizeOriginal(self, mode, size);
+}
+
+void DisconnectNativeFrameView() {
+    ++Context().nativeFrameViewBinding;
+    ClearPendingNativeFrameView();
+    auto* base = std::exchange(Context().nativeFrameFolderView, nullptr);
+    auto* extended = std::exchange(Context().nativeFrameFolderView2, nullptr);
+    // Remove exact-pointer routes before releasing either COM reference.
+    if (extended) extended->Release();
+    if (base) base->Release();
+}
+
+void BindNativeFrameView(IShellView* shell, IUnknown* identity, HWND window) {
+    auto& session = Context();
+    if (!g_nativeFrameViewHooksReady.load() || session.closed || g_unloading.load() ||
+        (session.nativeFrameFolderView && session.nativeFrameFolderView2)) return;
+    ULONG_PTR selection = session.nativeSelectionGeneration;
+    ULONG_PTR connection = session.nativeConnectionGeneration;
+    IFolderView* base = nullptr;
+    IFolderView2* extended = nullptr;
+    HRESULT hr = shell->QueryInterface(IID_IFolderView, reinterpret_cast<void**>(&base));
+    if (SUCCEEDED(hr)) hr = shell->QueryInterface(IID_IFolderView2, reinterpret_cast<void**>(&extended));
+    bool current = !session.closed && !g_unloading.load() && session.nativeSelectionGeneration == selection &&
+        session.nativeConnectionGeneration == connection && session.nativeSelectionIdentity == identity &&
+        session.nativeSelectionWindow == window && !session.nativeFrameFolderView && !session.nativeFrameFolderView2;
+    bool supported = SUCCEEDED(hr) && base && extended &&
+        (*reinterpret_cast<void***>(base))[3] == g_nativeFrameViewEntries[0] &&
+        (*reinterpret_cast<void***>(base))[4] == g_nativeFrameViewEntries[1] &&
+        (*reinterpret_cast<void***>(extended))[35] == g_nativeFrameViewEntries[2] &&
+        (*reinterpret_cast<void***>(extended))[36] == g_nativeFrameViewEntries[3];
+    if (current && supported) {
+        session.nativeFrameFolderView = base;
+        session.nativeFrameFolderView2 = extended;
+        ++session.nativeFrameViewBinding;
+        Wh_Log(L"[Columns view bridge] Native view bound tab=%p", session.tab);
+    } else {
+        if (extended) extended->Release();
+        if (base) base->Release();
+        if (current) Wh_Log(L"[Columns view bridge] Native implementation unavailable: %08X", static_cast<unsigned>(hr));
+    }
+}
+
+struct NativeFrameViewProbe {
+    void* entries[4] = {};
+    HMODULE modules[4] = {};
+    HRESULT result = E_FAIL;
+};
+
+DWORD WINAPI ResolveNativeFrameViewEntries(void* argument) {
+    auto& probe = *static_cast<NativeFrameViewProbe*>(argument);
+    HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    probe.result = apartment;
+    if (FAILED(apartment)) return 0;
+    IShellFolder* desktop = nullptr;
+    IShellView* shell = nullptr;
+    IFolderView* base = nullptr;
+    IFolderView2* extended = nullptr;
+    probe.result = SHGetDesktopFolder(&desktop);
+    SFV_CREATE create = {sizeof(create), desktop, nullptr, nullptr};
+    if (SUCCEEDED(probe.result)) probe.result = SHCreateShellFolderView(&create, &shell);
+    if (SUCCEEDED(probe.result)) probe.result = shell->QueryInterface(IID_IFolderView, reinterpret_cast<void**>(&base));
+    if (SUCCEEDED(probe.result)) probe.result = shell->QueryInterface(IID_IFolderView2, reinterpret_cast<void**>(&extended));
+    if (SUCCEEDED(probe.result)) {
+        // These slots are fixed by the public IFolderView/IFolderView2 SDK ABI.
+        // The probe creates no view window and never browses a user directory.
+        probe.entries[0] = (*reinterpret_cast<void***>(base))[3];
+        probe.entries[1] = (*reinterpret_cast<void***>(base))[4];
+        probe.entries[2] = (*reinterpret_cast<void***>(extended))[35];
+        probe.entries[3] = (*reinterpret_cast<void***>(extended))[36];
+        for (unsigned i = 0; i < ARRAYSIZE(probe.entries); ++i) {
+            for (unsigned j = 0; j < i; ++j)
+                if (probe.entries[i] == probe.entries[j]) probe.result = E_NOINTERFACE;
+            if (!probe.entries[i]) probe.result = E_NOINTERFACE;
+            if (FAILED(probe.result)) break;
+            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                    reinterpret_cast<PCWSTR>(probe.entries[i]), &probe.modules[i])) {
+                probe.result = HRESULT_FROM_WIN32(GetLastError());
+                break;
+            }
+        }
+    }
+    if (extended) extended->Release();
+    if (base) base->Release();
+    if (shell) shell->Release();
+    if (desktop) desktop->Release();
+    CoUninitialize();
+    return 0;
+}
+
+bool RegisterNativeFrameViewHooks() {
+    NativeFrameViewProbe probe;
+    HANDLE thread = CreateThread(nullptr, 0, ResolveNativeFrameViewEntries, &probe, 0, nullptr);
+    if (!thread) return false;
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    if (FAILED(probe.result)) {
+        for (auto module : probe.modules) if (module) FreeLibrary(module);
+        Wh_Log(L"[Columns view bridge] Probe failed: %08X", static_cast<unsigned>(probe.result));
+        return false;
+    }
+    for (unsigned i = 0; i < ARRAYSIZE(probe.entries); ++i) {
+        g_nativeFrameViewEntries[i] = probe.entries[i];
+        g_nativeFrameViewModules[i] = probe.modules[i]; // Retain through hook removal and callback drain.
+    }
+    bool ready = WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeGetViewModeFn>(probe.entries[0]),
+        NativeGetViewModeHook, &g_nativeGetViewModeOriginal);
+    ready &= WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeSetViewModeFn>(probe.entries[1]),
+        NativeSetViewModeHook, &g_nativeSetViewModeOriginal);
+    ready &= WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeSetViewModeAndSizeFn>(probe.entries[2]),
+        NativeSetViewModeAndSizeHook, &g_nativeSetViewModeAndSizeOriginal);
+    ready &= WindhawkUtils::SetFunctionHook(reinterpret_cast<NativeGetViewModeAndSizeFn>(probe.entries[3]),
+        NativeGetViewModeAndSizeHook, &g_nativeGetViewModeAndSizeOriginal);
+    g_nativeFrameViewHooksReady.store(ready);
+    Wh_Log(L"[Columns view bridge] Init registration=%d", ready);
+    return ready;
+}
+
+
 void DisconnectNativeSelectionEvents() {
+    DisconnectNativeFrameView();
     // The first binding belongs to the new root; a later disconnect retires it.
     if (Context().nativeRestorationViewIdentity) {
         Context().nativeRestorationBlockedSerial = Context().nativeRestorationRootSerial;
@@ -2102,6 +3050,7 @@ void DisconnectNativeSelectionEvents() {
 HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity, HWND window) {
     if (Context().nativeSelectionIdentity == identity && Context().nativeSelectionWindow == window &&
         Context().nativeSelectionConnection && Context().nativeSelectionCookie) {
+        BindNativeFrameView(view, identity, window);
         BindNativeRestorationPermit(identity, window);
         return S_OK;
     }
@@ -2142,6 +3091,7 @@ HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity, HWND 
         identity->AddRef();
         Context().nativeSelectionIdentity = identity;
         Context().nativeSelectionWindow = window;
+        BindNativeFrameView(view, identity, window);
         BindNativeRestorationPermit(identity, window);
     } else if (connection) {
         if (cookie) connection->Unadvise(cookie);
@@ -2779,10 +3729,145 @@ void ConnectNavigationEvents(HWND explorer) {
     else { LogHr(L"Navigation events: connect", hr); DisconnectNavigationEvents(); }
 }
 
+
+// Read a view on its owning UI thread, keeping both browser and view alive.
+// A reused root may already be hidden for its next navigation. Closing reads
+// deliberately allow closed/unloading state and ignore the held close-button.
+HRESULT CapturePaneAutoView(Pane& pane, AutoColumnView& output,
+        bool closing, bool allowSuspended) {
+    Session& session = Context();
+    if (pane.session != &session || !pane.browser || !pane.initialized || pane.navigationTarget ||
+        (session.overlay && GetWindowThreadProcessId(session.overlay, nullptr) != GetCurrentThreadId()) ||
+        session.closed != closing || (!allowSuspended && session.suspended) ||
+        (!closing && g_unloading.load())) return E_ABORT;
+    IExplorerBrowser* browser = pane.browser;
+    ULONG_PTR generation = pane.generation, navigation = pane.navigationSerial;
+    ULONG_PTR manual = pane.manualViewSerial, selection = pane.selectionSerial;
+    ULONG_PTR rootNavigation = session.nativeNavigationGeneration, connection = session.nativeConnectionGeneration;
+    ULONG_PTR settings = g_viewModeSettingsSerial.load(), input = g_nativeInputEpoch.load();
+    auto current = [&] {
+        if (session.closed != closing || pane.generation != generation || pane.navigationSerial != navigation ||
+            pane.session != &session || pane.browser != browser || pane.navigationTarget || pane.manualViewSerial != manual ||
+            pane.selectionSerial != selection || g_viewModeSettingsSerial.load() != settings ||
+            (!allowSuspended && session.suspended)) return false;
+        if (!closing && (g_unloading.load() || session.nativeNavigationGeneration != rootNavigation ||
+                session.nativeConnectionGeneration != connection || g_nativeInputEpoch.load() != input)) return false;
+        if (!closing && NativePointerInteractionActive()) {
+            SchedulePointerRelease(true);
+            return false;
+        }
+        return true;
+    };
+    if (!current()) return E_ABORT;
+    browser->AddRef();
+    IFolderView2* view = nullptr;
+    HRESULT hr = browser->GetCurrentView(IID_IFolderView2, reinterpret_cast<void**>(&view));
+    browser->Release();
+    if (FAILED(hr) || !view || !current()) {
+        if (view) view->Release();
+        return current() ? (FAILED(hr) ? hr : E_NOINTERFACE) : E_ABORT;
+    }
+    AutoColumnView result;
+    hr = view->GetViewModeAndIconSize(&result.mode, &result.iconSize);
+    view->Release();
+    if (!current()) return E_ABORT; // Release can pump input too.
+    if (FAILED(hr)) return hr;
+    if (!ValidAutoColumnView(result)) return E_FAIL;
+    output = result;
+    return S_OK;
+}
+
+HRESULT CaptureNativeAutoRootView(AutoColumnView& output) {
+    Session& session = Context();
+    IShellBrowser* browser = session.nativeBrowser;
+    if (!browser || session.nativeBrowserThread != GetCurrentThreadId()) return E_NOINTERFACE;
+    ULONG_PTR connection = session.nativeConnectionGeneration, navigation = session.nativeNavigationGeneration;
+    ULONG_PTR observer = session.nativeSelectionGeneration, binding = session.nativeFrameViewBinding;
+    ULONG_PTR settings = g_viewModeSettingsSerial.load(), input = g_nativeInputEpoch.load();
+    auto current = [&] {
+        if (session.closed || g_unloading.load() || session.nativeBrowser != browser ||
+            session.nativeSelectionGeneration != observer || session.nativeFrameViewBinding != binding ||
+            session.nativeConnectionGeneration != connection || session.nativeNavigationGeneration != navigation ||
+            g_viewModeSettingsSerial.load() != settings || g_nativeInputEpoch.load() != input) return false;
+        if (NativePointerInteractionActive()) {
+            SchedulePointerRelease(false, true);
+            return false;
+        }
+        return true;
+    };
+    if (!current()) return E_ABORT;
+    browser->AddRef();
+    IShellView* shell = nullptr;
+    IFolderView2* view = nullptr;
+    HRESULT hr = browser->QueryActiveShellView(&shell);
+    if (SUCCEEDED(hr) && shell && current())
+        hr = shell->QueryInterface(IID_IFolderView2, reinterpret_cast<void**>(&view));
+    if (shell) shell->Release();
+    browser->Release();
+    if (FAILED(hr) || !view || !current()) {
+        if (view) view->Release();
+        return current() ? (FAILED(hr) ? hr : E_NOINTERFACE) : E_ABORT;
+    }
+    AutoColumnView result;
+    {
+        // Native top-menu getters normally redirect to our active column.
+        // Read the original root instead, never a just-created empty column.
+        NativeFrameViewScope forwarding;
+        hr = view == session.nativeFrameFolderView2 && g_nativeGetViewModeAndSizeOriginal ?
+            g_nativeGetViewModeAndSizeOriginal(view, &result.mode, &result.iconSize) :
+            view->GetViewModeAndIconSize(&result.mode, &result.iconSize);
+    }
+    view->Release();
+    if (!current()) return E_ABORT;
+    if (FAILED(hr)) return hr;
+    if (!ValidAutoColumnView(result)) return E_FAIL;
+    output = result;
+    return S_OK;
+}
+
+void SetPendingAutoView(Pane& pane, const AutoColumnView& view) {
+    if (!ValidAutoColumnView(view)) return;
+    pane.autoView = view;
+    pane.autoViewPending = true;
+    pane.viewModeDirty = true;
+}
+
+HRESULT PrepareNewAutoRootView(Pane& pane) {
+    AutoColumnView view;
+    ULONG_PTR revision = 0;
+    if (ReadSharedAutoView(view, &revision)) {
+        SetPendingAutoView(pane, view);
+        pane.sharedAutoRevision = revision;
+        return S_OK;
+    }
+    ULONG_PTR generation = pane.generation;
+    HRESULT hr = CaptureNativeAutoRootView(view);
+    if (Context().closed || pane.generation != generation) return E_ABORT;
+    if (SUCCEEDED(hr)) {
+        PublishSharedAutoView(view, 0, true);
+        if (ReadSharedAutoView(view, &revision)) {
+            SetPendingAutoView(pane, view);
+            pane.sharedAutoRevision = revision;
+        }
+    }
+    return hr == E_ABORT ? hr : S_OK; // No readable seed leaves the initial choice to Windows.
+}
+
+
 void ReleasePane(Pane& pane) {
     pane.generation = 0;
+    UnbindPaneObservedView(pane);
     pane.navigationSerial = 0;
     pane.selectionDirty = false;
+    pane.viewModeDirty = false;
+    ClearPendingAutoView(pane);
+    pane.viewModeUpdatePosted = false;
+    pane.viewModeSettingsSerial = 0;
+    pane.sharedAutoRevision = 0;
+    pane.configuredViewMode = FVM_AUTO;
+    pane.manualViewSerial = 0;
+    pane.failedViewMode = FVM_AUTO;
+    pane.thisPCView = false;
     IShellBrowser* navigation = std::exchange(pane.navigationBrowser, nullptr);
     if (navigation) navigation->Release();
     if (pane.browserSite)
@@ -2818,6 +3903,7 @@ void ReleasePane(Pane& pane) {
     pane.lastSetRect = 0;
     pane.generation = 0;
     pane.selectionDirty = false;
+    ClearFolderActivation(pane);
     pane.path.clear();
     pane.window = nullptr;
     pane.viewHost = nullptr;
@@ -2825,10 +3911,35 @@ void ReleasePane(Pane& pane) {
 
 HRESULT BrowsePidl(Pane& pane, PCIDLIST_ABSOLUTE pidl, const std::wstring& path,
         ULONG_PTR* startedSerial = nullptr) {
+    AutoColumnView carried;
+    bool autoTarget = ColumnViewMode(IsThisPCColumn(path)) == FVM_AUTO;
+    ULONG_PTR sharedRevision = 0;
+    if (autoTarget && ReadSharedAutoView(carried, &sharedRevision)) {
+        SetPendingAutoView(pane, carried);
+        pane.sharedAutoRevision = sharedRevision;
+    } else if (autoTarget && !pane.path.empty() && pane.browser && pane.initialized) {
+        if (ColumnViewMode(pane.thisPCView) == FVM_AUTO) {
+            HRESULT snapshot = CapturePaneAutoView(pane, carried, false, true);
+            if (snapshot == E_ABORT) return snapshot;
+        } else if (!pane.index) {
+            // Leaving an explicit This PC override must restore the automatic
+            // root preference, not make that override the next saved default.
+            ClearPendingAutoView(pane);
+            HRESULT seed = PrepareNewAutoRootView(pane);
+            if (FAILED(seed)) return seed;
+        }
+    }
+    if (!autoTarget) ClearPendingAutoView(pane);
+    else if (ValidAutoColumnView(carried)) SetPendingAutoView(pane, carried);
     pane.navigationSerial = ++g_navigationSequence;
+    UnbindPaneObservedView(pane);
+    ClearFolderActivation(pane);
     if (startedSerial) *startedSerial = pane.navigationSerial;
     ClearNavigationTarget(pane);
     if (!pidl || !pane.browser) return E_INVALIDARG;
+    pane.thisPCView = IsThisPCColumn(path);
+    pane.viewModeDirty = true;
+    pane.failedViewMode = FVM_AUTO;
     pane.navigationTarget = ILCloneFull(pidl);
     HRESULT hr = pane.navigationTarget ?
         pane.browser->BrowseToIDList(pidl, SBSP_ABSOLUTE) : E_OUTOFMEMORY;
@@ -2851,12 +3962,115 @@ HRESULT BrowsePath(Pane& pane, const std::wstring& path) {
     return hr;
 }
 
+// Apply defaults for a true folder navigation or an effective configuration
+// change. A replacement view alone may come from a manual native View command;
+// that command and its chosen icon size take precedence over the defaults.
+void ApplyPaneViewMode(Pane& pane) {
+    RefreshColumnViewModeConfiguration(pane);
+    AdoptSharedAutoView(pane);
+    ULONG_PTR settings = g_viewModeSettingsSerial.load();
+    if (!pane.viewModeDirty || !pane.browser || !pane.initialized || pane.navigationTarget ||
+        !pane.session || pane.session->closed || pane.session->suspended || g_unloading.load()) return;
+    Session* menuOwner = pane.session;
+    IExplorerBrowser* menuBrowser = pane.browser;
+    ULONG_PTR menuGeneration = pane.generation, menuNavigation = pane.navigationSerial;
+    ULONG_PTR menuManual = pane.manualViewSerial;
+    bool menuActive = false;
+    if (!pane.autoManualIntent && !g_nativeFrameViewApplying)
+        menuActive = static_cast<bool>(NativeMenuSessionOnThread());
+    if (menuOwner->closed || menuOwner->suspended || g_unloading.load() || pane.session != menuOwner ||
+        pane.browser != menuBrowser || !pane.initialized || pane.navigationTarget ||
+        pane.generation != menuGeneration || pane.navigationSerial != menuNavigation ||
+        pane.manualViewSerial != menuManual || g_viewModeSettingsSerial.load() != settings) return;
+    if (pane.autoManualIntent || g_nativeFrameViewApplying || menuActive) {
+        if (IsWindow(menuOwner->overlay)) SetTimer(menuOwner->overlay, kSharedAutoRetryTimerId, kSelectionRetryDelayMs, nullptr);
+        return;
+    }
+    if (NativePointerInteractionActive()) {
+        SchedulePointerRelease(true);
+        return; // Changing a native view can rearrange items under a held click.
+    }
+    FOLDERVIEWMODE requested = ColumnViewMode(pane.thisPCView);
+    if (requested == FVM_AUTO && !pane.autoViewPending) {
+        // Saving Auto preserves an existing manual layout. New columns can
+        // instead carry a captured exact view from their parent/root preference.
+        pane.viewModeDirty = false;
+        pane.viewModeSettingsSerial = settings;
+        pane.configuredViewMode = FVM_AUTO;
+        pane.failedViewMode = FVM_AUTO;
+        return;
+    }
+    AutoColumnView inherited = pane.autoView;
+    ULONG_PTR sharedRevision = pane.sharedAutoRevision;
+    Session* owner = pane.session;
+    IExplorerBrowser* browser = pane.browser;
+    ULONG_PTR generation = pane.generation;
+    ULONG_PTR navigation = pane.navigationSerial;
+    ULONG_PTR manual = pane.manualViewSerial;
+    auto current = [&] {
+        if (!owner || owner->closed || owner->suspended || g_unloading.load() || pane.generation != generation ||
+            pane.navigationSerial != navigation || pane.browser != browser || pane.navigationTarget ||
+            pane.manualViewSerial != manual || g_viewModeSettingsSerial.load() != settings ||
+            pane.autoManualIntent || (requested == FVM_AUTO && SharedAutoRevision() != sharedRevision)) return false;
+        // Providers may pump a fresh mouse-down while answering either query.
+        // Revalidate identity first so a replaced pane is never marked dirty.
+        if (NativePointerInteractionActive()) {
+            pane.viewModeDirty = true;
+            SchedulePointerRelease(true);
+            return false;
+        }
+        return true;
+    };
+    browser->AddRef();
+    IFolderView2* view = nullptr;
+    HRESULT hr = browser->GetCurrentView(IID_IFolderView2, reinterpret_cast<void**>(&view));
+    browser->Release();
+    if (FAILED(hr) || !view || !current()) {
+        if (view) view->Release();
+        return; // A navigation/view-created notification will retry a not-yet-ready view.
+    }
+    FOLDERVIEWMODE wanted = requested == FVM_AUTO ? inherited.mode :
+        (pane.failedViewMode == requested ? FVM_DETAILS : requested);
+    int wantedSize = requested == FVM_AUTO ? inherited.iconSize : -1;
+    FOLDERVIEWMODE existing = FVM_AUTO;
+    int iconSize = 0;
+    hr = view->GetViewModeAndIconSize(&existing, &iconSize);
+    if (!current()) { view->Release(); return; }
+    pane.viewModeDirty = false;
+    pane.viewModeSettingsSerial = settings;
+    pane.configuredViewMode = requested;
+    ClearPendingAutoView(pane);
+    if (FAILED(hr) || existing != wanted || (wantedSize > 0 && iconSize != wantedSize)) {
+        // -1 asks Windows for this view mode's native default icon size.
+        NativeFrameViewApplyScope applying(owner, owner->nativeFrameViewRequest);
+        hr = view->SetViewModeAndIconSize(wanted, wantedSize);
+        if (current() && FAILED(hr) && requested == FVM_AUTO) {
+            pane.failedViewMode = wanted; // A rejected inherited view must not overwrite the saved preference.
+            Wh_Log(L"[Columns view] Pane %d inherited mode=%d iconSize=%d unavailable: %08X",
+                pane.index, static_cast<int>(wanted), wantedSize, static_cast<unsigned>(hr));
+        } else if (current() && FAILED(hr)) {
+            pane.failedViewMode = requested; // Do not loop if this provider rejects the chosen mode.
+            Wh_Log(L"[Columns view] Pane %d mode=%d failed: %08X; using Details",
+                pane.index, static_cast<int>(wanted), static_cast<unsigned>(hr));
+            if (wanted != FVM_DETAILS && current()) {
+                HRESULT fallback = view->SetViewModeAndIconSize(FVM_DETAILS, -1);
+                if (FAILED(fallback)) LogHr(L"SetViewModeAndIconSize(Details fallback)", fallback);
+            }
+        } else if (current()) {
+            Wh_Log(L"[Columns view] Pane %d mode=%d thisPC=%d",
+                pane.index, static_cast<int>(wanted), pane.thisPCView);
+        }
+    }
+    view->Release();
+}
+
 void ReadInspectorColors();
 void RefreshPane(Pane& pane) {
     if (!pane.browser || !pane.initialized) return;
     IFolderView* view = nullptr;
     if (SUCCEEDED(pane.browser->GetCurrentView(IID_IFolderView,
             reinterpret_cast<void**>(&view)))) {
+        BindPaneObservedView(pane, view);
         IPersistFolder2* folder = nullptr;
         if (SUCCEEDED(view->GetFolder(IID_IPersistFolder2,
                 reinterpret_cast<void**>(&folder)))) {
@@ -2871,6 +4085,13 @@ void RefreshPane(Pane& pane) {
                 }
                 if (SUCCEEDED(pathHr) && path && pane.path != path) {
                     pane.path = path;
+                    bool computer = IsThisPCColumn(pane.path);
+                    if (pane.thisPCView != computer) {
+                        pane.thisPCView = computer;
+                        pane.viewModeDirty = true;
+                        pane.failedViewMode = FVM_AUTO;
+                        QueuePaneViewModeUpdate(pane);
+                    }
                     InvalidateRect(pane.window, nullptr, FALSE);
                 }
                 CoTaskMemFree(path);
@@ -3446,6 +4667,16 @@ SelectedItem SelectedShellItem(IShellItem* item) {
     }
     CoTaskMemFree(path);
     item->Release();
+    return result;
+}
+
+SelectedItem SelectedFolderActivation(PCIDLIST_ABSOLUTE target) {
+    SelectedItem result;
+    IShellItem* item = nullptr;
+    HRESULT hr = SHCreateItemFromIDList(target, IID_IShellItem,
+        reinterpret_cast<void**>(&item));
+    if (SUCCEEDED(hr) && item) result = SelectedShellItem(item);
+    if (item) item->Release();
     return result;
 }
 
@@ -5583,13 +6814,45 @@ bool ShowPreview(const std::wstring& path) {
 }
 
 void RemoveColumnsAfter(int index);
-bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity = nullptr);
+bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity = nullptr,
+    bool* interrupted = nullptr);
+void RetryInterruptedColumnAppend(int index, ULONG_PTR generation, const std::wstring& path,
+        bool activated, ULONG_PTR input, ULONG_PTR selection, ULONG_PTR root, ULONG_PTR connection,
+        PCIDLIST_ABSOLUTE target = nullptr) {
+    Session& session = Context();
+    if (session.closed || session.suspended || g_unloading.load() || index < 0 || index >= session.columnCount ||
+        session.nativeNavigationGeneration != root || session.nativeConnectionGeneration != connection) return;
+    Pane& pane = session.panes[index];
+    if (pane.generation != generation || session.columnSelection[index] != path) return;
+    // A newer reentrant activation may already have fulfilled this navigation.
+    // Preserve its child view, selection and any open Inspector.
+    if (index + 1 < session.columnCount && session.panes[index + 1].path == path) return;
+    session.columnSelection[index].clear();
+    pane.selectionDirty = true;
+    // Preserve an explicit Right/Enter/double-click only while its selection
+    // and input remain current. Newer gestures must choose their own action.
+    if (activated && g_nativeInputEpoch.load() == input && pane.selectionSerial == selection && target) {
+        // Bind the retry to the original selected identity as well as its input
+        // serial. Providers may change selection before posting its event.
+        PIDLIST_ABSOLUTE copy = ILCloneFull(target);
+        if (copy) {
+            ClearFolderActivation(pane);
+            pane.activationTarget = copy;
+            pane.activationPending = true;
+        }
+    }
+    if (NativePointerInteractionActive()) SchedulePointerRelease(true);
+    else if (session.selectionRetryAttempts < kSelectionRetryLimit) {
+        ++session.selectionRetryAttempts;
+        SetTimer(session.overlay, kSelectionRetryTimerId, kSelectionRetryDelayMs, nullptr);
+    }
+}
 bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity,
-    ULONG_PTR* startedSerial = nullptr);
+    ULONG_PTR* startedSerial = nullptr, const AutoColumnView* inheritedView = nullptr);
 void TestPaintOnly(const wchar_t* reason);
 
 void ProcessSelectionUpdates(bool recovery) {
-    if (Context().suspended || Context().closed) return;
+    if (Context().suspended || Context().closed || g_unloading.load()) return;
     if (NativePointerInteractionActive()) {
         if (recovery)
             for (int i = 0; i < Context().columnCount; ++i)
@@ -5597,35 +6860,118 @@ void ProcessSelectionUpdates(bool recovery) {
         SchedulePointerRelease(true);
         return;
     }
+    ApplyPendingNativeFrameView();
+    for (int i = 0; i < Context().columnCount && !Context().closed; ++i)
+        if (Context().panes[i].autoManualIntent) CaptureObservedAutoView(Context().panes[i]);
+    for (int i = 0; i < Context().columnCount && !Context().closed && !Context().suspended; ++i)
+        ApplyPaneViewMode(Context().panes[i]);
+    if (Context().closed || Context().suspended || g_unloading.load()) return;
     bool queryFailed = false;
     for (int i = 0; i < Context().columnCount; ++i) {
         Pane& pane = Context().panes[i];
         if (pane.awaitingNavigationRepair || pane.navigationTarget) break;
         if (!recovery && !pane.selectionDirty) continue;
         ULONG_PTR generation = pane.generation;
+        ULONG_PTR selectionSerial = pane.selectionSerial;
+        ULONG_PTR activationSerial = pane.activationSerial;
+        bool activationPending = pane.activationPending;
+        auto activationTarget = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+            pane.activationTarget ? ILCloneFull(pane.activationTarget) : nullptr, CoTaskMemFree);
+        if (pane.activationTarget && !activationTarget) {
+            queryFailed = true;
+            break;
+        }
         SelectedItem selected = SelectedPath(pane);
+        SelectedItem activatedTarget;
+        // Normalize Home wrappers and shortcuts by the same path used for the
+        // current selection. Provider calls happen here, after the callback.
+        if (activationTarget) activatedTarget = SelectedFolderActivation(activationTarget.get());
         // COM providers can pump input while answering. Never apply a snapshot
         // after a new gesture starts or the originating pane has been replaced.
-        if (Context().closed || i >= Context().columnCount ||
+        if (Context().closed || Context().suspended || g_unloading.load() || i >= Context().columnCount ||
             Context().panes[i].generation != generation) return;
+        if (pane.selectionSerial != selectionSerial || pane.activationSerial != activationSerial) {
+            QueueSelectionUpdate(pane);
+            return;
+        }
         if (NativePointerInteractionActive()) {
             pane.selectionDirty = true;
             SchedulePointerRelease(true);
             return;
         }
-        if (!selected.querySucceeded) {
+        if (!selected.querySucceeded || (activationTarget && !activatedTarget.querySucceeded)) {
             pane.selectionDirty = true; // Query failure never removes descendants.
             queryFailed = true;
             break;
         }
         pane.selectionDirty = false;
-        if (selected.path == Context().columnSelection[i]) continue;
+        bool activated = activationPending && selected.folder && !selected.path.empty() &&
+            (!activationTarget || (activatedTarget.folder && activatedTarget.identity &&
+                selected.identity && ILIsEqual(activatedTarget.identity.get(), selected.identity.get())));
+        ClearFolderActivation(pane);
+        if (selected.path == Context().columnSelection[i] && !activated) {
+            // Manual browsing preserves child selections while a parent is
+            // highlighted. Restore a file Inspector when that child is focused
+            // again, without reopening its folder or restarting an active preview.
+            if (i == Context().activePane && !selected.folder && !selected.path.empty() &&
+                (Context().previewIndex < 0 || Context().previewPath != selected.path)) {
+                ShowPreview(selected.path);
+                break;
+            }
+            continue;
+        }
         Context().columnSelection[i] = selected.path;
+        if (selected.folder && !Context().expandFoldersOnSelection && !activated) {
+            // Highlighting a folder must not rebuild the trail. Clear a stale
+            // file Inspector, or update fixed-Inspector folder details, while
+            // keeping already-opened folder views alive.
+            if (Context().fixedInspector) ShowPreview(selected.path);
+            else {
+                bool hadPreview = Context().previewIndex >= 0;
+                ClearPreview();
+                if (hadPreview) LayoutPanes(Context().overlay);
+            }
+            break;
+        }
+        if (activated && i + 1 < Context().columnCount &&
+            Context().panes[i + 1].path == selected.path) {
+            RequestFocusColumn(i + 1);
+            break;
+        }
+        ULONG_PTR actionInput = g_nativeInputEpoch.load();
+        ULONG_PTR actionRoot = Context().nativeNavigationGeneration;
+        ULONG_PTR actionConnection = Context().nativeConnectionGeneration;
+        ULONG_PTR actionSettings = g_viewModeSettingsSerial.load();
+        ULONG_PTR actionNavigation = Context().panes[i].navigationSerial;
+        ULONG_PTR actionManual = Context().panes[i].manualViewSerial;
+        auto actionCurrent = [&] {
+            return !Context().closed && !Context().suspended && !g_unloading.load() &&
+                i < Context().columnCount && Context().panes[i].generation == generation &&
+                Context().panes[i].selectionSerial == selectionSerial &&
+                Context().panes[i].navigationSerial == actionNavigation &&
+                Context().panes[i].manualViewSerial == actionManual &&
+                g_viewModeSettingsSerial.load() == actionSettings &&
+                Context().nativeNavigationGeneration == actionRoot &&
+                Context().nativeConnectionGeneration == actionConnection &&
+                g_nativeInputEpoch.load() == actionInput && !NativePointerInteractionActive();
+        };
         RemoveColumnsAfter(i);
+        if (!actionCurrent()) {
+            RetryInterruptedColumnAppend(i, generation, selected.path, activated,
+                actionInput, selectionSerial, actionRoot, actionConnection, selected.identity.get());
+            return;
+        }
         if (!selected.path.empty()) {
             if (selected.folder) {
                 Wh_Log(L"[Columns] Extending from %d: %s", i, selected.path.c_str());
-                AppendColumn(selected.path, selected.identity.get());
+                bool interrupted = false;
+                AppendColumn(selected.path, selected.identity.get(), &interrupted);
+                if (interrupted) {
+                    RetryInterruptedColumnAppend(i, generation, selected.path, activated,
+                        actionInput, selectionSerial, actionRoot, actionConnection, selected.identity.get());
+                    return;
+                }
+                if (!actionCurrent()) return;
             } else Wh_Log(L"[Columns] Preview from %d: %s", i, selected.path.c_str());
             ShowPreview(selected.path);
         }
@@ -6018,6 +7364,8 @@ bool ApplyNativeLocation(NativeLocation location) {
             InitializeColumnWidth(hwnd, 0);
             loaded = CreatePane(hwnd, 0, Context().tabPath, Context().nativeLocationIdentity, &rootSerial) &&
                 CreateSplitter(0);
+            if (Context().closed || Context().nativeConnectionGeneration != connection ||
+                Context().nativeNavigationGeneration != navigation) return false;
             if (!loaded) {
                 HWND paneWindow = active.window;
                 ReleasePane(active);
@@ -6076,6 +7424,7 @@ void CleanupSession(HWND hwnd) {
     if (Context().closed) return;
     // Retire the cross-thread handles before releasing UI-owned state.
     Context().closed = true;
+    KillTimer(hwnd, kSharedAutoRetryTimerId);
     DetachNativeBoundsTracking();
     CancelPendingFocus();
     CancelColumnResize();
@@ -6202,6 +7551,10 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         {
             CancelColumnResize();
             ApplyColumnWidthSettings(hwnd);
+            ApplyFolderExpansionSettings();
+            for (int i = 0; i < Context().columnCount && !Context().closed; ++i)
+                ApplyPaneViewMode(Context().panes[i]);
+            if (Context().closed || g_unloading.load()) return 0;
             Context().dividerWidth = g_dividerWidthSetting.load();
             ReadInspectorColors();
             bool previous = Context().fixedInspector;
@@ -6312,6 +7665,20 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             Context().scrollX += -GET_WHEEL_DELTA_WPARAM(wp) / 2;
             LayoutPanes(hwnd);
             return 0;
+        case kNativeFrameViewMessage:
+            if (wp == Context().identity) {
+                Context().nativeFrameViewPosted = false;
+                ApplyPendingNativeFrameView();
+            }
+            return 0;
+        case kPaneViewModeMessage:
+            if (wp < static_cast<WPARAM>(Context().columnCount) &&
+                static_cast<ULONG_PTR>(lp) == Context().panes[wp].generation) {
+                Pane& pane = Context().panes[wp];
+                pane.viewModeUpdatePosted = false;
+                ApplyPaneViewMode(pane);
+            }
+            return 0;
         case kPaneNavigationCompleteMessage:
             if (wp < static_cast<WPARAM>(Context().columnCount) &&
                 static_cast<ULONG_PTR>(lp) == Context().panes[wp].navigationSerial) {
@@ -6389,6 +7756,17 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         case kNavigationEventMessage:
         case kSelectionUpdateMessage:
         case WM_TIMER: {
+            if (message == WM_TIMER && wp == kSharedAutoRetryTimerId) {
+                KillTimer(hwnd, kSharedAutoRetryTimerId);
+                if (!Context().closed && !Context().suspended && IsWindowVisible(Context().tab)) {
+                    for (int i = 0; i < Context().columnCount && !Context().closed; ++i) {
+                        if (Context().panes[i].autoManualIntent) CaptureObservedAutoView(Context().panes[i]);
+                        if (Context().closed || Context().suspended || g_unloading.load()) break;
+                        ApplyPaneViewMode(Context().panes[i]);
+                    }
+                }
+                return 0;
+            }
             if (message == WM_TIMER && wp == kPaletteRefreshTimerId) {
                 if (NativeMenuSessionOnThread()) return 0;
                 KillTimer(hwnd, kPaletteRefreshTimerId);
@@ -6529,6 +7907,23 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         case WM_SETTINGCHANGE:
             SetTimer(hwnd, kPaletteRefreshTimerId, kPaletteSettleDelayMs, nullptr);
             return 0;
+        case kSharedAutoViewMessage:
+            if (wp == Context().identity && !Context().closed && !g_unloading.load()) {
+                for (int i = 0; i < Context().columnCount; ++i) {
+                    AdoptSharedAutoView(Context().panes[i]);
+                    QueuePaneViewModeUpdate(Context().panes[i]);
+                }
+                if (!Context().suspended)
+                    for (int i = 0; i < Context().columnCount && !Context().closed; ++i)
+                        ApplyPaneViewMode(Context().panes[i]);
+            }
+            return 0;
+        case kObserveAutoViewMessage:
+            if (wp < static_cast<WPARAM>(Context().columnCount)) {
+                Pane& pane = Context().panes[wp];
+                if (pane.generation == static_cast<ULONG_PTR>(lp)) CaptureObservedAutoView(pane);
+            }
+            return 0;
         case WM_CLOSE:
             CleanupSession(hwnd);
             DestroyWindow(hwnd);
@@ -6541,12 +7936,23 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
 }
 
 bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity,
-        ULONG_PTR* startedSerial) {
+        ULONG_PTR* startedSerial, const AutoColumnView* inheritedView) {
     Pane& pane = Context().panes[index];
     pane.index = index;
     pane.generation = ++g_paneSequence;
     pane.selectionDirty = true;
     pane.session = &Context();
+    pane.thisPCView = IsThisPCColumn(path);
+    ClearPendingAutoView(pane);
+    if (ColumnViewMode(pane.thisPCView) == FVM_AUTO) {
+        AutoColumnView shared;
+        ULONG_PTR revision = 0;
+        if (ReadSharedAutoView(shared, &revision)) {
+            SetPendingAutoView(pane, shared);
+            pane.sharedAutoRevision = revision;
+        } else if (inheritedView) SetPendingAutoView(pane, *inheritedView);
+        else if (!index && FAILED(PrepareNewAutoRootView(pane))) return false;
+    }
     pane.window = CreateWindowExW(0, kPaneClass, L"",
         WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
         0, 0, 100, 100, overlay, nullptr, HINST_THISCOMPONENT, &pane);
@@ -6599,8 +8005,20 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
         EBO_NOBORDER | EBO_NOPERSISTVIEWSTATE));
     if (FAILED(hr)) LogHr(L"SetOptions", hr);
     RECT inside = {0, 0, 100, 100};
-    FOLDERSETTINGS settings = {FVM_DETAILS, FWF_AUTOARRANGE};
-    hr = pane.browser->Initialize(pane.viewHost, &inside, &settings);
+    pane.thisPCView = IsThisPCColumn(path);
+    pane.viewModeDirty = true;
+    pane.viewModeUpdatePosted = false;
+    pane.viewModeSettingsSerial = 0;
+    pane.sharedAutoRevision = 0;
+    pane.configuredViewMode = FVM_AUTO;
+    pane.manualViewSerial = 0;
+    pane.failedViewMode = FVM_AUTO;
+    FOLDERVIEWMODE initialMode = ColumnViewMode(pane.thisPCView);
+    if (initialMode == FVM_AUTO && pane.autoViewPending) initialMode = pane.autoView.mode;
+    FOLDERSETTINGS settings = {static_cast<UINT>(initialMode), FWF_AUTOARRANGE};
+    // A null settings pointer leaves the initial folder view to Windows.
+    hr = pane.browser->Initialize(pane.viewHost, &inside,
+        initialMode == FVM_AUTO ? nullptr : &settings);
     if (FAILED(hr)) {
         LogHr(L"Initialize", hr);
         return false;
@@ -6643,8 +8061,37 @@ void RemoveColumnsAfter(int index) {
     ScrollToNewestColumn();
 }
 
-bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity) {
+bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity, bool* interrupted) {
+    if (interrupted) *interrupted = false;
+    auto retired = [&] { if (interrupted) *interrupted = true; return false; };
+    AutoColumnView inherited;
+    int expectedCount = Context().columnCount;
+    ULONG_PTR input = g_nativeInputEpoch.load(), root = Context().nativeNavigationGeneration;
+    ULONG_PTR connection = Context().nativeConnectionGeneration;
+    ULONG_PTR generation = expectedCount > 0 ? Context().panes[expectedCount - 1].generation : 0;
+    ULONG_PTR selection = expectedCount > 0 ? Context().panes[expectedCount - 1].selectionSerial : 0;
+    ULONG_PTR paneNavigation = expectedCount > 0 ? Context().panes[expectedCount - 1].navigationSerial : 0;
+    ULONG_PTR manual = expectedCount > 0 ? Context().panes[expectedCount - 1].manualViewSerial : 0;
+    ULONG_PTR settings = g_viewModeSettingsSerial.load();
+    auto current = [&] {
+        return !Context().closed && !Context().suspended && !g_unloading.load() &&
+            Context().columnCount == expectedCount && Context().nativeNavigationGeneration == root &&
+            Context().nativeConnectionGeneration == connection && g_nativeInputEpoch.load() == input &&
+            g_viewModeSettingsSerial.load() == settings &&
+            (!expectedCount || (Context().panes[expectedCount - 1].generation == generation &&
+                Context().panes[expectedCount - 1].selectionSerial == selection &&
+                Context().panes[expectedCount - 1].navigationSerial == paneNavigation &&
+                Context().panes[expectedCount - 1].manualViewSerial == manual)) && !NativePointerInteractionActive();
+    };
+    if (!current()) return retired();
+    if (ColumnViewMode(IsThisPCColumn(path)) == FVM_AUTO && ReadSharedAutoView(inherited)) {
+        // Every automatic column follows the latest shared choice.
+    } else if (expectedCount > 0 && ColumnViewMode(IsThisPCColumn(path)) == FVM_AUTO) {
+        HRESULT snapshot = CapturePaneAutoView(Context().panes[expectedCount - 1], inherited);
+        if (snapshot == E_ABORT || !current()) return retired();
+    }
     ClearPreview();
+    if (!current()) return retired();
     if (!Context().overlay || Context().columnCount >= kMaxColumns) {
         Wh_Log(L"[Columns] Maximum column depth reached");
         return false;
@@ -6652,7 +8099,8 @@ bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity) {
     int index = Context().columnCount;
     if (!CreateSplitter(index))
         return false;
-    if (!CreatePane(Context().overlay, index, path, identity)) {
+    if (!CreatePane(Context().overlay, index, path, identity, nullptr,
+            ValidAutoColumnView(inherited) ? &inherited : nullptr)) {
         HWND paneWindow = Context().panes[index].window;
         ReleasePane(Context().panes[index]);
         if (IsWindow(paneWindow)) DestroyWindow(paneWindow);
@@ -6717,6 +8165,7 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
     Context().inlineMediaPlayback = g_inlineMediaPlayback.load();
     Context().defaultColumnWidth = g_defaultColumnWidthSetting.load();
     Context().rememberColumnWidths = g_rememberColumnWidths.load();
+    Context().expandFoldersOnSelection = g_expandFoldersOnSelection.load();
     Context().fitWindow = g_fitWindow.load();
     Context().minFittedColumnWidth = g_minFittedColumnWidthSetting.load();
     Context().dividerWidth = g_dividerWidthSetting.load();
@@ -6934,10 +8383,28 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
                     } else if (msg->wParam == VK_RIGHT) {
                         if (NativePointerInteractionActive()) {
                             msg->message = WM_NULL;
-                            QueueSelectionUpdate(Context().panes[i]);
+                            QueueFolderActivation(Context().panes[i]);
                             break;
                         }
                         ULONG_PTR generation = Context().panes[i].generation;
+                        ULONG_PTR selection = Context().panes[i].selectionSerial;
+                        ULONG_PTR input = g_nativeInputEpoch.load();
+                        ULONG_PTR navigation = Context().nativeNavigationGeneration;
+                        ULONG_PTR connection = Context().nativeConnectionGeneration;
+                        ULONG_PTR settings = g_viewModeSettingsSerial.load();
+                        ULONG_PTR paneNavigation = Context().panes[i].navigationSerial;
+                        ULONG_PTR manual = Context().panes[i].manualViewSerial;
+                        auto actionCurrent = [&] {
+                            return !Context().closed && !Context().suspended && !g_unloading.load() &&
+                                i < Context().columnCount && Context().panes[i].generation == generation &&
+                                Context().panes[i].selectionSerial == selection &&
+                                Context().panes[i].navigationSerial == paneNavigation &&
+                                Context().panes[i].manualViewSerial == manual &&
+                                g_viewModeSettingsSerial.load() == settings &&
+                                Context().nativeNavigationGeneration == navigation &&
+                                Context().nativeConnectionGeneration == connection &&
+                                g_nativeInputEpoch.load() == input && !NativePointerInteractionActive();
+                        };
                         SelectedItem selected = SelectedPath(Context().panes[i]);
                         if (Context().closed || i >= Context().columnCount ||
                             Context().panes[i].generation != generation) {
@@ -6946,17 +8413,31 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
                         }
                         if (NativePointerInteractionActive()) {
                             msg->message = WM_NULL;
-                            QueueSelectionUpdate(Context().panes[i]);
+                            QueueFolderActivation(Context().panes[i]);
                             break;
                         }
+                        if (!actionCurrent()) { msg->message = WM_NULL; break; }
                         if (selected.folder && !selected.path.empty()) {
                             if (i + 1 >= Context().columnCount ||
                                 Context().panes[i + 1].path != selected.path) {
                                 Context().columnSelection[i] = selected.path;
                                 RemoveColumnsAfter(i);
-                                AppendColumn(selected.path, selected.identity.get());
+                                if (!actionCurrent()) {
+                                    RetryInterruptedColumnAppend(i, generation, selected.path, true,
+                                        input, selection, navigation, connection, selected.identity.get());
+                                    msg->message = WM_NULL; break;
+                                }
+                                bool interrupted = false;
+                                AppendColumn(selected.path, selected.identity.get(), &interrupted);
+                                if (interrupted) {
+                                    RetryInterruptedColumnAppend(i, generation, selected.path, true,
+                                        input, selection, navigation, connection, selected.identity.get());
+                                    msg->message = WM_NULL; break;
+                                }
+                                if (!actionCurrent()) { msg->message = WM_NULL; break; }
                                 ShowPreview(selected.path);
                             }
+                            if (!actionCurrent()) { msg->message = WM_NULL; break; }
                             if (i + 1 < Context().columnCount) {
                                 msg->message = WM_NULL;
                                 RequestFocusColumn(i + 1);
@@ -7367,11 +8848,13 @@ BOOL Wh_ModInit() {
     g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
     ApplyRememberColumnWidthsSetting(true);
     g_fitWindow.store(Wh_GetIntSetting(L"FitWindow") != 0);
+    g_expandFoldersOnSelection.store(ReadFolderExpansionSetting());
     g_minFittedColumnWidthSetting.store(ReadMinimumFittedColumnWidthSetting());
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
     LoadToggleShortcut();
+    LoadColumnViewModeSettings();
     Wh_Log(L"[Columns settings] Loaded v%s default=%d fixedInspector=%d classicMenus=%d divider=%d minFit=%d",
         WH_MOD_VERSION, g_enableByDefault.load(), g_fixedInspectorSetting.load(), g_classicContextMenus.load(),
         g_dividerWidthSetting.load(), g_minFittedColumnWidthSetting.load());
@@ -7387,6 +8870,8 @@ BOOL Wh_ModInit() {
     }
     if (!RegisterColumnBrowseHook())
         Wh_Log(L"[Columns new tab] Optional redirect unavailable; continuing without it");
+    if (!RegisterNativeFrameViewHooks())
+        Wh_Log(L"[Columns view bridge] Top View routing unavailable; column View menus remain native");
     return TRUE;
 }
 
@@ -7411,11 +8896,13 @@ void Wh_ModSettingsChanged() {
     g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
     ApplyRememberColumnWidthsSetting(false);
     g_fitWindow.store(Wh_GetIntSetting(L"FitWindow") != 0);
+    g_expandFoldersOnSelection.store(ReadFolderExpansionSetting());
     g_minFittedColumnWidthSetting.store(ReadMinimumFittedColumnWidthSetting());
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
     LoadToggleShortcut();
+    LoadColumnViewModeSettings();
     // Publish the layout/menu preferences before the helper can open new tabs.
     if (g_enableByDefault.exchange(preference) != preference) {
         g_preferenceChangePending.store(true);
@@ -7456,6 +8943,10 @@ void Wh_ModUninit() {
     // Windhawk disables function hooks before Wh_ModUninit. All callbacks
     // have drained above, so their implementation module can now be released.
     if (g_columnBrowseModule) { FreeLibrary(g_columnBrowseModule); g_columnBrowseModule = nullptr; }
+    for (auto& module : g_nativeFrameViewModules) {
+        if (module) FreeLibrary(module);
+        module = nullptr;
+    }
     Wh_Log(L"[Columns unload] Uninit completed after %llu ms", GetTickCount64() - started);
 }
 
