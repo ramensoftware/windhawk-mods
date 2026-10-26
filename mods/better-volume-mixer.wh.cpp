@@ -2,7 +2,7 @@
 // @id           better-volume-mixer
 // @name         Better Volume Mixer
 // @description  A customizable volume mixer for master and per-app volume, right from the system tray
-// @version      1.5.7
+// @version      1.6.0
 // @author       0Allu
 // @github       https://github.com/0Allu
 // @homepage     https://github.com/0Allu/better-volume-mixer
@@ -16,8 +16,8 @@
 /*
 # Better Volume Mixer
 
-A compact volume mixer for Windows 11. Control master volume, individual apps,
-and playback devices directly from the system tray.
+A compact volume mixer for Windows 11. Change master volume, each app's volume
+and the playback device from the system tray.
 
 ![Better Volume Mixer demo](https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer.png)
 
@@ -28,7 +28,8 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 
 * Master and per-app volume controls
 * Quick playback device switching
-* Mute buttons and middle-click mute
+* Mute buttons and middle-click mute, or click an app's icon to mute it
+* Optional alert sound when you change the volume
 * Muted master-volume indicator in the mixer
 * Tray icon that shows the master volume level
 * Middle-click the tray icon to toggle master mute
@@ -52,7 +53,7 @@ Temporary hides last until the mod restarts. To undo them sooner, right-click
 the tray icon and choose **Restore temporarily hidden sources**. Hiding a source
 does not mute it.
 
-Most appearance and behavior options can be changed from the mod settings.
+You can change most of the mixer's look and behavior in the mod settings.
 
 Some features might not work while an elevated (administrator) program has the
 focus.
@@ -69,51 +70,61 @@ and enable **Hide volume icon** in its settings.
 /*
 - compactMode: false
   $name: Compact mode
-  $description: Use a smaller, denser layout with shorter rows and a narrower window, so more apps fit at once. Off by default.
+  $description: Shorter rows and a narrower window, so more apps fit.
 - theme: system
   $name: Theme
-  $description: Choose the mixer appearance or follow the current Windows theme.
+  $description: Follow the Windows theme or choose one.
   $options:
   - system: Follow Windows
   - dark: Dark
   - light: Light
 - visualStyle: windows11
   $name: Visual style
-  $description: Windows 11 has rounded corners and the Windows 11 slider. Windows 10 has square corners, neutral gray colors, the flat Windows 10 slider with its bar-shaped handle, and no gap above the taskbar. Either style works with every theme.
+  $description: Windows 11 has rounded corners and its slider. Windows 10 has square corners, gray colors and a flat slider. Both work with any theme.
   $options:
   - windows11: Windows 11
   - windows10: Windows 10
 - backgroundOpacity: 85
   $name: Background opacity
-  $description: Background opacity from 0 to 100 percent. Text and controls remain opaque. Blur is applied where supported by Windows.
+  $description: 0 to 100 percent. Text and controls stay opaque.
 - backgroundEffect: blur
   $name: Background effect
-  $description: What shows through the mixer while background opacity is below 100. Frosted glass blurs the background and evens out its brightness, so text stays readable over anything; lower the background opacity to make it more glassy. Blur only blurs it, and bright backgrounds can wash out the text at low opacity.
+  $description: Used when opacity is below 100. Frosted glass keeps text readable over bright backgrounds; plain blur can wash it out.
   $options:
   - glass: Frosted glass
   - blur: Blur
   - none: No blur
 - windowBorder: true
   $name: Window border
-  $description: Show the thin outline that Windows draws around the mixer. Turn off for a borderless look.
+  $description: Show the thin outline Windows draws around the mixer.
 - volumeStep: 5
   $name: Mouse-wheel volume step
-  $description: Percentage points per mouse-wheel step over an app or master-volume row, or over the tray icon. Valid range is 1 to 20; default is 5.
+  $description: Percent per wheel step over a row or the tray icon, from 1 to 20.
 - keyboardControls: false
   $name: Keyboard controls
-  $description: Up/Down selects a row, Left/Right changes volume by the mouse-wheel step, and M toggles mute. Works while the mixer is focused. Off by default.
+  $description: Up/Down selects a row, Left/Right changes its volume, and M mutes it.
 - exactVolumeEntry: false
   $name: Exact volume entry
-  $description: Click a percentage to enter a whole number from 0 to 100. Enter applies it; Escape or clicking elsewhere cancels. Off by default.
+  $description: Click a percentage to type a volume from 0 to 100.
+- muteWithIcon: false
+  $name: Click icons to mute
+  $description: Click an icon to mute or unmute. Replaces the mute buttons; muted apps show a badge.
+- volumeSound: off
+  $name: Volume change sound
+  $description: Play the Windows alert sound after changing master volume or System sounds.
+  $options:
+  - off: Off
+  - noWheel: Exclude mouse wheel
+  - always: Always play
 - animations: true
   $name: Enable animations
-  $description: Animate opening and closing, hover effects, and volume changes. The mixer opens and closes like the taskbar flyouts of the chosen visual style. The Windows animation preference is also respected.
+  $description: Animate opening, closing, hover effects and volume changes. Follows the Windows animation setting.
 - closeWhenFocusIsLost: true
   $name: Close when focus is lost
-  $description: Automatically close the mixer when you click somewhere else.
+  $description: Close the mixer when you click somewhere else.
 - maxVisibleApps: "7"
   $name: Applications per page
-  $description: Maximum app rows per page, limited by available display space. Master volume does not count toward this limit.
+  $description: App rows per page, limited by screen space. Master volume is not counted.
   $options:
   - "1": "1"
   - "2": "2"
@@ -132,25 +143,25 @@ and enable **Hide volume icon** in its settings.
   - "15": "15"
 - moveNotifications: true
   $name: Move notifications out of the way
-  $description: While the mixer is open, Windows notifications that would cover it are moved aside, and come back when it closes.
+  $description: While the mixer is open, notifications that would cover it are moved aside.
 - showAllSessions: false
   $name: Show all audio sessions
-  $description: Show every audio session separately for each playback device, including unused or idle ones, instead of one row per app. Most users can leave this off.
+  $description: List every session on every device, including idle ones, instead of one row per app.
 - customApps:
   - - app: ""
       $name: App name
-      $description: Enter the executable name (for example Spotify.exe or Spotify), its full path, or the original name shown in the mixer. Matching ignores capitalization. Leave blank to ignore this entry.
+      $description: Executable name (for example Spotify.exe), full path, or the name shown in the mixer. Not case-sensitive.
     - displayName: ""
       $name: Custom display name
       $description: Leave blank to keep the original name.
     - defaultVolume: -1
       $name: Default volume percentage
-      $description: Use 0 to 100, or -1 to leave volume unchanged. Applied once when a session is detected, even with the mixer closed, and again if you change this default. Mute status is preserved.
+      $description: 0 to 100, or -1 to leave it unchanged. Set once for each new session, even with the mixer closed.
   $name: Custom app configuration
-  $description: Add an entry for each app to customize. The first matching entry wins. Up to 256 entries are supported.
+  $description: The first matching entry wins. Up to 256 entries.
 - hiddenApps: [""]
   $name: Hidden applications
-  $description: Add executable names (for example Spotify.exe or Spotify), full paths, or original mixer names to hide. Matching ignores capitalization. Blank entries are ignored. Hiding does not mute the app or disable its configured default volume. Up to 256 entries are supported.
+  $description: Executable names, full paths, or mixer names to hide. Not case-sensitive. Up to 256 entries.
 */
 // ==/WindhawkModSettings==
 
@@ -251,6 +262,7 @@ constexpr UINT_PTR TIMER_NAME_TOOLTIP = 4;
 constexpr UINT_PTR TIMER_TRIM = 5;
 constexpr UINT_PTR TIMER_TRAY_WATCH = 6;
 constexpr UINT_PTR TIMER_VOLUME_INDICATOR = 7;
+constexpr UINT_PTR TIMER_VOLUME_SOUND = 8;
 constexpr UINT VOLUME_INDICATOR_TIME = 1500;
 constexpr UINT NAME_TOOLTIP_DELAY = 1000;
 constexpr UINT TRAY_ICON_ID = 0x4D58;
@@ -292,6 +304,9 @@ struct Settings {
     int volumeStep = 5;
     bool keyboardControls = false;
     bool exactVolumeEntry = false;
+    bool muteWithIcon = false;
+    bool volumeSound = false;
+    bool volumeSoundOnWheel = false;
     std::vector<CustomApp> customApps;
     std::vector<std::wstring> hiddenApps;
 };
@@ -316,6 +331,7 @@ struct AppSession {
     std::vector<std::wstring> legacyPinKeys;
     bool pinned = false;
     bool active = false;
+    bool systemSounds = false;
     // Set while scanning: whether any session qualifies the row to be shown,
     // whether a hide rule matched, and which session named and leveled it.
     bool listed = false;
@@ -346,6 +362,7 @@ struct AppSession {
             legacyPinKeys = std::move(other.legacyPinKeys);
             pinned = other.pinned;
             active = other.active;
+            systemSounds = other.systemSounds;
             listed = other.listed;
             hidden = other.hidden;
             namePriority = other.namePriority;
@@ -439,6 +456,7 @@ HFONT g_bodyFont;
 HFONT g_smallFont;
 HFONT g_symbolFont;
 HFONT g_entryFont; // For the exact volume entry box, which Windows draws.
+HFONT g_badgeFont; // The mute glyph on an app icon.
 ULONG_PTR g_gdiplusToken;
 Gdiplus::Font* g_titleTypography;
 Gdiplus::Font* g_bodyTypography;
@@ -530,6 +548,7 @@ int g_scrollRow;
 int g_availableAppRows = 15;
 int g_hoverRow = DRAG_NONE;
 bool g_hoverThumb; // The pointer is over the slider thumb of g_hoverRow.
+bool g_hoverIcon;  // The pointer is over the icon of g_hoverRow, which mutes.
 POINT g_pointer{}; // Last pointer position, in client coordinates.
 int g_dragRow = DRAG_NONE;
 bool g_mouseTracking;
@@ -656,6 +675,12 @@ void LoadSettings() {
     g_settings.windowBorder = Wh_GetIntSetting(L"windowBorder") != 0;
     g_settings.keyboardControls = Wh_GetIntSetting(L"keyboardControls") != 0;
     g_settings.exactVolumeEntry = Wh_GetIntSetting(L"exactVolumeEntry") != 0;
+    g_settings.muteWithIcon = Wh_GetIntSetting(L"muteWithIcon") != 0;
+    WindhawkUtils::StringSetting sound =
+        WindhawkUtils::StringSetting::make(L"volumeSound");
+    g_settings.volumeSound = wcscmp(sound.get(), L"noWheel") == 0 ||
+                             wcscmp(sound.get(), L"always") == 0;
+    g_settings.volumeSoundOnWheel = wcscmp(sound.get(), L"always") == 0;
     g_settings.volumeStep =
         ClampInt(Wh_GetIntSetting(L"volumeStep"), 1, 20);
 
@@ -1060,6 +1085,10 @@ void DeleteFonts() {
         DeleteObject(g_entryFont);
         g_entryFont = nullptr;
     }
+    if (g_badgeFont) {
+        DeleteObject(g_badgeFont);
+        g_badgeFont = nullptr;
+    }
 }
 
 Gdiplus::Font* CreateTypographyFont(PCWSTR preferredFamily, float pixels) {
@@ -1121,6 +1150,10 @@ void CreateFonts(HWND hWnd) {
         ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     g_symbolFont = CreateFontW(
         -MulDiv(13, g_dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, g_symbolFace);
+    g_badgeFont = CreateFontW(
+        -MulDiv(10, g_dpi, 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, g_symbolFace);
     // The entry box is an ordinary opaque window, so it can have ClearType,
@@ -1355,10 +1388,10 @@ bool ShouldIncludeSession(AudioSessionState state, const std::wstring& id,
             g_activatedSessions.insert(id);
         }
     }
-    // Include the full default-output list. Only additional outputs need
-    // playback history, preventing their unused idle sessions from flooding it.
-    // Playback state also works for muted apps, allowing users to unmute them.
-    // If the ID query failed, show active sessions without remembering them.
+    // Every session of the default output is listed. Other outputs only list
+    // sessions that have played, so their idle ones do not flood the list.
+    // Muted apps still count as playing, so they can be unmuted here. If the
+    // ID query failed, show active sessions without remembering them.
     return isDefault || g_settings.showAllSessions ||
            state == AudioSessionStateActive ||
            (!id.empty() && g_activatedSessions.count(id) != 0);
@@ -2049,6 +2082,7 @@ bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
             created.processId = processId;
             created.executablePath = processPath;
             created.pinKey = pinKey;
+            created.systemSounds = systemSounds;
             if (diagnostics) {
                 Wh_Log(L"Mixer: app '%s', PID=%lu, active=%d, output='%s'",
                        displayName.c_str(), processId,
@@ -2208,8 +2242,8 @@ bool EnsureDefaultEndpointVolume() {
     if (g_endpointVolume) {
         return true;
     }
-    // Fallback path: no live binding yet. Bind through the helper so the
-    // callback is registered against the current window.
+    // Nothing is bound yet. Bind through the helper so the callback goes to
+    // the current window.
     return BindDefaultEndpointVolume(g_hWnd.load());
 }
 
@@ -2289,6 +2323,26 @@ void ToggleRowMute(int row) {
         control->SetMute(newMuted, nullptr);
     }
     app.muted = newMuted;
+}
+
+enum class VolumeInput { Release, Keys, Wheel };
+
+// Like the Windows volume slider, beeps once a change is done. The beep plays
+// through System sounds, so only that row and master volume set its loudness.
+void PlayVolumeSound(int row, VolumeInput input) {
+    if (!g_settings.volumeSound ||
+        (input == VolumeInput::Wheel && !g_settings.volumeSoundOnWheel)) return;
+    if (row != DRAG_MASTER &&
+        (row < 0 || row >= static_cast<int>(g_apps->size()) ||
+         !(*g_apps)[row].systemSounds)) return;
+    HWND window = g_hWnd.load();
+    if (input == VolumeInput::Release) {
+        KillTimer(window, TIMER_VOLUME_SOUND);
+        MessageBeep(MB_OK);
+        return;
+    }
+    // Each notch or key repeat restarts the wait, so one beep follows the last.
+    SetTimer(window, TIMER_VOLUME_SOUND, 200, nullptr);
 }
 
 bool IsCompact() {
@@ -2419,18 +2473,29 @@ RECT IconTileRectForRow(int visibleRow) {
     return {Scale(22), top + Scale(12), Scale(58), top + Scale(48)};
 }
 
+RECT PercentRectForRow(int visibleRow, int clientWidth);
+
 RECT NameRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
+    // Without mute buttons the name runs up to the percentage.
+    int right = g_settings.muteWithIcon
+        ? PercentRectForRow(visibleRow, clientWidth).left - Scale(8)
+        : clientWidth - Scale(132);
     if (IsCompact()) {
-        return {Scale(62), top + Scale(2), clientWidth - Scale(132),
-                top + Scale(26)};
+        return {Scale(62), top + Scale(2), right, top + Scale(26)};
     }
-    return {Scale(68), top + Scale(7), clientWidth - Scale(132),
-            top + Scale(31)};
+    return {Scale(68), top + Scale(7), right, top + Scale(31)};
 }
 
 RECT PercentRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
+    if (g_settings.muteWithIcon) {
+        // Master volume lines up with the end of its slider; apps leave room
+        // for the pin.
+        int right = clientWidth - Scale(visibleRow ? (IsCompact() ? 50 : 60) : 28);
+        int offset = Scale(IsCompact() ? 2 : 7);
+        return {right - Scale(48), top + offset, right, top + offset + Scale(24)};
+    }
     if (IsCompact()) {
         if (visibleRow == 0) {
             return {clientWidth - Scale(100), top + Scale(2),
@@ -2450,12 +2515,14 @@ RECT SliderRectForRow(int visibleRow, int clientWidth) {
         return {Scale(62), top + offset, clientWidth - Scale(28),
                 top + offset + Scale(8)};
     }
-    return {Scale(68), top + Scale(38), clientWidth - Scale(78),
-            top + Scale(46)};
+    return {Scale(68), top + Scale(38),
+            clientWidth - Scale(g_settings.muteWithIcon ? 28 : 78), top + Scale(46)};
 }
 
+// Empty when the icons mute instead.
 RECT MuteRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
+    if (g_settings.muteWithIcon) return {};
     if (IsCompact()) {
         return {clientWidth - Scale(46), top + Scale(2),
                 clientWidth - Scale(22), top + Scale(26)};
@@ -2466,6 +2533,15 @@ RECT MuteRectForRow(int visibleRow, int clientWidth) {
 
 RECT PinRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
+    if (g_settings.muteWithIcon) {
+        // In the mute button's place, level with the name.
+        if (IsCompact()) {
+            return {clientWidth - Scale(46), top + Scale(2),
+                    clientWidth - Scale(22), top + Scale(26)};
+        }
+        return {clientWidth - Scale(56), top + Scale(5),
+                clientWidth - Scale(24), top + Scale(33)};
+    }
     if (IsCompact()) {
         return {clientWidth - Scale(72), top + Scale(2),
                 clientWidth - Scale(48), top + Scale(26)};
@@ -2575,6 +2651,7 @@ bool FinishVolumeEntry(HWND owner, bool commit, bool returnFocus) {
             return false;
         }
         SetRowVolume(g_volumeEntryRow, percent / 100.0f);
+        PlayVolumeSound(g_volumeEntryRow, VolumeInput::Release);
     }
     HWND entry = g_volumeEntry;
     g_volumeEntry = nullptr;
@@ -2697,6 +2774,7 @@ bool HandleRowKey(HWND window, WPARAM key, LPARAM flags) {
             : (*g_apps)[g_selectedRow].volume;
         SetRowVolume(g_selectedRow, volume +
             (key == VK_RIGHT ? 1 : -1) * g_settings.volumeStep / 100.0f);
+        PlayVolumeSound(g_selectedRow, VolumeInput::Keys);
         InvalidateRect(window, nullptr, FALSE);
         return true;
     }
@@ -3371,11 +3449,100 @@ PCWSTR VolumeGlyph(float volume, bool muted) {
 void DrawMuteButton(HDC dc, int visibleRow, int clientWidth, bool muted,
                     float volume, COLORREF rowColor, float rowHighlight) {
     RECT button = MuteRectForRow(visibleRow, clientWidth);
+    if (IsRectEmpty(&button)) return;
     if (muted) {
         DrawSurface(dc, button, Radius(8), rowColor, rowHighlight + 1.0f);
     }
     DrawLabel(dc, VolumeGlyph(volume, muted), button, g_symbolFont,
               muted ? g_theme.accent : IconColor(),
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+DWORD RecoverPixelAlpha(DWORD black, DWORD white);
+
+// Draws an icon gray and faded, like a disabled one. It is drawn on black and
+// on white to find its transparency, then turned gray and blended in.
+void DrawMutedIcon(HDC dc, int x, int y, HICON icon, int size) {
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* blackBits = nullptr;
+    void* whiteBits = nullptr;
+    HBITMAP black = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &blackBits, nullptr, 0);
+    HBITMAP white = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &whiteBits, nullptr, 0);
+    HDC memory = CreateCompatibleDC(dc);
+    bool drawn = false;
+    if (black && white && blackBits && whiteBits && memory) {
+        RECT all{0, 0, size, size};
+        HGDIOBJ previous = SelectObject(memory, white);
+        FillSolidRect(memory, all, RGB(255, 255, 255));
+        DrawIconEx(memory, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL);
+        SelectObject(memory, black);
+        FillSolidRect(memory, all, RGB(0, 0, 0));
+        DrawIconEx(memory, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL);
+        GdiFlush();
+        auto* pixels = static_cast<DWORD*>(blackBits);
+        auto* onWhite = static_cast<const DWORD*>(whiteBits);
+        for (int i = 0; i < size * size; ++i) {
+            DWORD pixel = RecoverPixelAlpha(pixels[i], onWhite[i]);
+            DWORD alpha = pixel >> 24;
+            DWORD gray = (((pixel >> 16) & 255) * 77 + ((pixel >> 8) & 255) * 150 +
+                          (pixel & 255) * 29) >> 8;
+            gray = std::min(gray, alpha);
+            pixels[i] = (alpha << 24) | (gray << 16) | (gray << 8) | gray;
+        }
+        // Light gray icons fade into a light background sooner.
+        BLENDFUNCTION blend{AC_SRC_OVER, 0, static_cast<BYTE>(g_lightTheme ? 180 : 140),
+                            AC_SRC_ALPHA};
+        drawn = AlphaBlend(dc, x, y, size, size, memory, 0, 0, size, size, blend) != FALSE;
+        SelectObject(memory, previous);
+    }
+    if (memory) DeleteDC(memory);
+    if (black) DeleteObject(black);
+    if (white) DeleteObject(white);
+    if (!drawn) DrawIconEx(dc, x, y, icon, size, size, 0, nullptr, DI_NORMAL);
+}
+
+// The mute mark over the bottom-right corner of an app icon: an accent disc,
+// set apart from the icon by a ring of the row surface behind it.
+void DrawMuteBadge(HDC dc, const RECT& iconTile, COLORREF rowColor, float rowHighlight) {
+    int size = Scale(IsCompact() ? 18 : 20);
+    int overhang = Scale(4);
+    RECT ring = {iconTile.right + overhang - size, iconTile.bottom + overhang - size,
+                 iconTile.right + overhang, iconTile.bottom + overhang};
+    RECT disc = ring;
+    InflateRect(&disc, -Scale(2), -Scale(2));
+    COLORREF ringColor = SurfaceColor(rowColor, rowHighlight);
+    COLORREF accent = g_theme.accent;
+    int luma = (GetRValue(accent) * 299 + GetGValue(accent) * 587 + GetBValue(accent) * 114) / 1000;
+    COLORREF glyph = luma > 150 ? RGB(0, 0, 0) : RGB(255, 255, 255);
+
+    bool drawn = false;
+    if (!IsWindows10Style() && g_gdiplusToken) {
+        Gdiplus::Graphics graphics(dc);
+        if (graphics.GetLastStatus() == Gdiplus::Ok) {
+            graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+            for (auto [rect, color] : {std::pair{ring, ringColor}, std::pair{disc, accent}}) {
+                Gdiplus::SolidBrush brush(Gdiplus::Color(
+                    255, GetRValue(color), GetGValue(color), GetBValue(color)));
+                graphics.FillEllipse(&brush, static_cast<float>(rect.left),
+                                     static_cast<float>(rect.top),
+                                     static_cast<float>(rect.right - rect.left),
+                                     static_cast<float>(rect.bottom - rect.top));
+            }
+            drawn = true;
+        }
+    }
+    if (!drawn) {
+        DrawRoundedRect(dc, ring, Radius(IsCompact() ? 18 : 20), ringColor);
+        DrawRoundedRect(dc, disc, Radius(IsCompact() ? 14 : 16), accent);
+    }
+    DrawLabel(dc, L"\uE74F", disc, g_badgeFont, glyph,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
@@ -3449,17 +3616,27 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     }
 
     RECT iconTile = IconTileRectForRow(visibleRow);
+    bool iconHovered = g_settings.muteWithIcon && g_hoverIcon && g_hoverRow == dataRow;
     DrawSurface(dc, iconTile, Radius(10),
-                    master ? g_theme.background : g_theme.panel);
+                    master ? g_theme.background : g_theme.panel, iconHovered ? 1.5f : 0.0f);
+    // The master icon shows its own mute mark. A muted app's icon turns gray,
+    // and gets a badge when there are no mute buttons.
+    bool mutedApp = muted && !master;
     if (icon) {
         int iconSize = Scale(24);
-        DrawIconEx(dc,
-                   iconTile.left + (iconTile.right - iconTile.left - iconSize) / 2,
-                   iconTile.top + (iconTile.bottom - iconTile.top - iconSize) / 2,
-                   icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+        int iconX = iconTile.left + (iconTile.right - iconTile.left - iconSize) / 2;
+        int iconY = iconTile.top + (iconTile.bottom - iconTile.top - iconSize) / 2;
+        if (mutedApp) {
+            DrawMutedIcon(dc, iconX, iconY, icon, iconSize);
+        } else {
+            DrawIconEx(dc, iconX, iconY, icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+        }
     } else {
         DrawLabel(dc, L"\uE8D6", iconTile, g_symbolFont, IconColor(),
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
+    if (mutedApp && g_settings.muteWithIcon) {
+        DrawMuteBadge(dc, iconTile, base, visual.hover);
     }
 
     RECT nameRect = NameRectForRow(visibleRow, clientWidth);
@@ -3533,7 +3710,7 @@ void RenderMixerContents(HDC dc, const RECT& client) {
     if (!g_audioAvailable) {
         RECT message = {Scale(24), HeaderHeight() + Scale(30),
                         client.right - Scale(24), client.bottom - Scale(20)};
-        DrawLabel(dc, L"No controllable playback sessions or default output.", message,
+        DrawLabel(dc, L"No output device or app sessions to control.", message,
                   g_bodyFont, g_theme.secondaryText,
                   DT_CENTER | DT_VCENTER | DT_WORDBREAK);
     } else {
@@ -3553,7 +3730,7 @@ void RenderMixerContents(HDC dc, const RECT& client) {
                           client.right - Scale(24), client.bottom - Scale(12)};
             DrawLabel(dc, g_settings.showAllSessions
                               ? L"No applications have a playback session."
-                              : L"No app sessions found. Start playback to add one.",
+                              : L"No apps yet. Play audio in an app to add it.",
                       empty, g_bodyFont, g_theme.secondaryText,
                       DT_CENTER | DT_VCENTER | DT_WORDBREAK);
         } else {
@@ -3622,14 +3799,10 @@ struct PixelBuffer {
 PixelBuffer g_blackFrame, g_whiteFrame;
 
 DWORD RecoverPixelAlpha(DWORD black, DWORD white) {
-    // Only surfaces are drawn differently against the two mattes; opaque
-    // foreground content (text, icons, dividers, fully-covered pixels of
-    // antialiased edges) comes out byte-identical either way. That case is
-    // bit-for-bit equivalent to the general formula below (equal channels
-    // give zero transparency, so alpha is 255 and each output channel is
-    // just min(blackChannel, 255) == blackChannel), so skip straight to the
-    // answer instead of doing three shifts, two subtractions and two clamps
-    // per pixel for content that is going to end up fully opaque anyway.
+    // Only surfaces differ between the two mattes. Opaque content such as
+    // text, icons and fully covered edge pixels comes out identical, and for
+    // those the formula below gives alpha 255 and the black-matte color. Most
+    // pixels are like that, so return the result directly.
     if ((black & 0x00FFFFFFu) == (white & 0x00FFFFFFu)) {
         return 0xFF000000u | (black & 0x00FFFFFFu);
     }
@@ -4495,6 +4668,7 @@ void ScrollMasterVolume(HWND hWnd, int delta) {
     g_trayWheelRemainder -= notches * WHEEL_DELTA;
     SetRowVolume(DRAG_MASTER,
                  GetMasterVolume() + notches * g_settings.volumeStep / 100.0f);
+    PlayVolumeSound(DRAG_MASTER, VolumeInput::Wheel);
     if (IsWindowVisible(hWnd)) {
         InvalidateRect(hWnd, nullptr, FALSE);
     } else {
@@ -5522,16 +5696,21 @@ void HandlePointerMove(HWND hWnd, POINT point) {
     }
     int row = RowFromPoint(point);
     bool thumbHovered = false;
+    bool iconHovered = false;
     if (row != DRAG_NONE) {
         RECT slider = SliderRectForRow(VisibleRowForDataRow(row), client.right);
         float volume = row == DRAG_MASTER ? g_masterPaintVolume
                                           : (*g_apps)[row].volume;
         thumbHovered = SliderThumbContains(slider, volume, point);
+        RECT icon = IconTileRectForRow(VisibleRowForDataRow(row));
+        iconHovered = g_settings.muteWithIcon && g_dragRow == DRAG_NONE &&
+                      PtInRect(&icon, point);
     }
     g_pointer = point;
-    if (row != g_hoverRow || thumbHovered != g_hoverThumb) {
+    if (row != g_hoverRow || thumbHovered != g_hoverThumb || iconHovered != g_hoverIcon) {
         g_hoverRow = row;
         g_hoverThumb = thumbHovered;
+        g_hoverIcon = iconHovered;
         InvalidateRect(hWnd, nullptr, FALSE);
     }
 
@@ -5599,10 +5778,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             RefreshMasterIcons(hWnd, true);
 
-            // Lifetime watcher: react to default-output changes even when the
-            // mixer is hidden, so tray mute controls always target the current
-            // device. CoCreateInstance here runs on the UI thread and the
-            // notifications are marshalled through the window message below.
+            // Watch for default-output changes for as long as the window
+            // exists, so tray mute controls always target the current device.
+            // The notifications reach this UI thread as a window message.
             IMMDeviceEnumerator* uiEnumerator = nullptr;
             if (SUCCEEDED(CoCreateInstance(
                     __uuidof(MMDeviceEnumerator), nullptr,
@@ -5645,9 +5823,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 QueueTrayToggle(hWnd, event == NIN_KEYSELECT);
             } else if (action == TrayAction::Menu) {
                 g_trayPressKnown = false;
-                // WM_CONTEXTMENU coordinates in the tray callback are not
-                // guaranteed. Anchor keyboard menus at the icon, others at
-                // the cursor, rather than decoding an undefined wParam.
+                // The tray callback's WM_CONTEXTMENU coordinates are not
+                // reliable. Anchor keyboard menus at the icon and others at
+                // the cursor.
                 POINT cursor = {};
                 GetCursorPos(&cursor);
                 RECT iconRect = {};
@@ -5761,6 +5939,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 HideVolumeIndicator(hWnd);
                 return 0;
             }
+            if (wParam == TIMER_VOLUME_SOUND) {
+                KillTimer(hWnd, TIMER_VOLUME_SOUND);
+                MessageBeep(MB_OK);
+                return 0;
+            }
             if (wParam == TIMER_TRAY_WATCH) {
                 WatchTrayPointer();
                 return 0;
@@ -5837,6 +6020,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             g_mouseTracking = false;
             g_hoverRow = DRAG_NONE;
             g_hoverThumb = false;
+            g_hoverIcon = false;
             g_closeHovered = false;
             g_hoverPageButton = -1;
             InvalidateRect(hWnd, nullptr, FALSE);
@@ -5888,7 +6072,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 ToggleSourcePin(hWnd, row);
                 return 0;
             }
-            RECT muteRect = MuteRectForRow(visibleRow, client.right);
+            RECT muteRect = g_settings.muteWithIcon ? IconTileRectForRow(visibleRow)
+                                                    : MuteRectForRow(visibleRow, client.right);
             if (PtInRect(&muteRect, point)) {
                 ToggleRowMute(row);
                 InvalidateRect(hWnd, nullptr, FALSE);
@@ -5956,8 +6141,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
 
         case WM_LBUTTONUP:
             if (g_dragRow != DRAG_NONE) {
+                int row = g_dragRow;
                 g_dragRow = DRAG_NONE;
                 ReleaseCapture();
+                PlayVolumeSound(row, VolumeInput::Release);
             }
             return 0;
 
@@ -5980,6 +6167,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                                                    : (*g_apps)[row].volume;
                 SetRowVolume(row, current + notches *
                                               g_settings.volumeStep / 100.0f);
+                PlayVolumeSound(row, VolumeInput::Wheel);
                 InvalidateRect(hWnd, nullptr, FALSE);
             } else if (!g_apps->empty() && notches) {
                 ChangePage(hWnd, -notches);
@@ -6008,8 +6196,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 KillTimer(hWnd, TIMER_CHECK_FOCUS);
             } else if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen && !g_sourceMenuOpen &&
                 g_settings.closeWhenFocusIsLost && MixerOpen(hWnd)) {
-                // Capture intent even if activation arrives before the tray's
-                // mouse-down callback. Focus dismissal remains independent.
+                // Activation can arrive before the tray's mouse-down callback,
+                // so note a press on the icon here as well.
                 POINT cursor = {};
                 RECT iconRect = {};
                 if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) &&
@@ -6206,7 +6394,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
         return 1;
     }
 
-    // Without its class, the volume indicator simply never shows.
+    // Without its class, the volume indicator never shows.
     WNDCLASSEXW indicatorClass{};
     indicatorClass.cbSize = sizeof(indicatorClass);
     indicatorClass.lpfnWndProc = VolumeIndicatorProc;
