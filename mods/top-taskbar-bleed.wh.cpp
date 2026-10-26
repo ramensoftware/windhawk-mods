@@ -26,7 +26,9 @@ continue up into the bar.
 position setting on builds that have it, or a mod such as *Taskbar on top for
 Windows 11*). On other dock positions this mod stays idle, unless the
 experimental **Any taskbar position** option is on: then a bottom, left or
-right taskbar is painted with the maximized window's title bar color too.
+right taskbar (the latter two via a mod such as *Vertical Taskbar for Windows
+11*) is painted with the maximized window's title bar color too. Vertical
+taskbars always get the flat color, never the gradient.
 
 How it works:
 
@@ -66,15 +68,16 @@ Supports multiple monitors (each taskbar follows its own monitor).
 
 Settings: **Poll interval** (how often a static title bar is re-checked; window
 changes are event-driven regardless), **Excluded programs** (executables whose
-windows should never trigger the bleed) and the experimental **Gradient bleed**
-toggle described above.
+windows should never trigger the bleed), and the experimental **Gradient
+bleed** and **Any taskbar position** toggles described above.
 
 The panel is a regular XAML `Border` named `TaskbarBleedPanel`, so its shape can
 be styled with *Windows 11 Taskbar Styler* like any other taskbar element.
 Target `Border#TaskbarBleedPanel` and set, for example, `Margin=4,4,4,0` or
-`CornerRadius=8,8,0,0` (the panel's bottom edge meets the window, so the
-rounded corners are normally the top ones). Leave `Background` and `Opacity`
-alone - the mod drives those (the background is a gradient brush).
+`CornerRadius=8,8,0,0` (on a top taskbar the panel's bottom edge meets the
+window, so the rounded corners are normally the top ones; on a bottom taskbar
+it is the other way round). Leave `Background` and `Opacity` alone - the mod
+drives those (the background is a gradient brush).
 
 ## Notes
 
@@ -125,7 +128,7 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
     $description: Follow a title bar's horizontal gradient (Mica) instead of its single dominant color. Samples four points across the window's width; apps that place toolbar icons or other content along the very top of their title bar may show it in the gradient.
   - AnyDock: false
     $name: Any taskbar position
-    $description: Also paint taskbars docked at the bottom, left or right. The color still comes from the maximized window's title bar, so a bottom taskbar takes the title bar's color without touching it.
+    $description: Also paint taskbars docked at the bottom, left or right. The color still comes from the maximized window's title bar, so a bottom taskbar takes the title bar's color without touching it. Vertical taskbars always get the flat color, not the gradient.
   $name: Experimental
 */
 // ==/WindhawkModSettings==
@@ -181,7 +184,7 @@ constexpr int kGradientPoints = 4;
 using Gradient = std::array<Rgb, kGradientPoints>;
 
 struct Settings {
-    int pollIntervalMs = 250;                     // steady-state re-check of a static edge
+    int pollIntervalMs = 250;                     // steady-state re-check of a static title bar
     std::vector<std::wstring> excludedProcesses;  // lowercase basenames
     bool gradient = false;                        // experimental: four-point gradient instead of one color
     bool anyDock = false;                         // experimental: paint bottom/left/right taskbars too
@@ -839,6 +842,14 @@ bool CursorOverTaskbarPopup(HWND taskbar) {
     return _wcsicmp(cls, L"Shell_TrayWnd") != 0 && _wcsicmp(cls, L"Shell_SecondaryTrayWnd") != 0;
 }
 
+// A left/right taskbar (vertical-taskbar mods). The panel rotates with the
+// taskbar's frame there, so a horizontal gradient would run along the bar;
+// vertical taskbars always get the flat color.
+bool IsTaskbarVertical(HWND taskbar) {
+    RECT tb;
+    return taskbar && GetWindowRect(taskbar, &tb) && (tb.bottom - tb.top) > (tb.right - tb.left);
+}
+
 bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
     RECT tb;
     if (!taskbar || !GetWindowRect(taskbar, &tb)) return false;
@@ -1253,8 +1264,11 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
             for (int x = 0; x < w; x++)
                 if (!mask[x]) visible.push_back(px[(size_t)y * w + x]);
         sampled = DominantColor(visible.empty() ? px : visible);
-        if (ctx.settings->gradient) st.lastGradient = SampleGradient(px, w, h, mask, sampled);
-        else st.lastGradient.fill(sampled);  // flat: four equal stops
+        if (ctx.settings->gradient && !IsTaskbarVertical(taskbar)) {
+            st.lastGradient = SampleGradient(px, w, h, mask, sampled);
+        } else {
+            st.lastGradient.fill(sampled);  // flat: four equal stops
+        }
     }
     bool colorChanged = !st.haveLastSample || sampled != st.lastSample;
     st.changedThisTick = pixelsChanged;
