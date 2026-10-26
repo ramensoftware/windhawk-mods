@@ -31,8 +31,7 @@ This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 The mod replaces the Start experience with a full-screen Start screen modeled after
 Windows 8.1: tiles arranged in groups, an All Apps view, type-to-search, and the
 corresponding menus and animations. Feedback and suggestions are accepted. The mod
-has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2, Windows 11 25H2
-and Windows 11 26H2.
+has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.
 
 Note: This is a best-effort modification. Layout, colors, icons and animations are
 inspired by Windows 8.1. Tiles display the real Windows 10/11 applications, so
@@ -52,23 +51,11 @@ The mod does **not** replace system files.
   name, date installed or category.
 - **Real tile colors**: packaged apps use their own tile color and artwork; classic
   programs that declare a tile color (such as Chrome) use it as well.
-- **StartAllBack Start button**: clicking the Start button of StartAllBack's own taskbar opens
-  this Start screen instead of the Windows 11 Start menu. StartAllBack draws that button itself and
-  it never goes through the Windows launcher, so the mod detects the button window (`Start`, or
-  `SIBOrb` on builds that use that name) and intercepts the click with the low-level mouse hook it
-  already uses for the search charm. The click is consumed inside the button's own window
-  procedure, which is what makes it work on the first click too.
-- **Windows 8/8.1 tile gradients**: every tile is shaded the way Windows 8 and 8.1 did
-  it, with the top lighter and the bottom darker, instead of the flat fill that Windows
-  10 and 11 use. The gradient is derived from the color of the tile, so it covers the
-  Windows 10/11 UWP apps (the `BackgroundColor` of the package manifest or of the
-  VisualElements manifest), the 8.x Metro style apps, the tiles whose color is sampled
-  from the app icon and the classic programs that declare a tile color. A soft gradient
-  is also laid over the app artwork, so packaged apps that ship full-bleed artwork are no
-  longer flat either.
-- **Friendly to taskbar patchers**: StartAllBack and ExplorerPatcher are detected and
-  everything that touches the shell is deferred until their taskbar exists (see
-  *Compatibility with StartAllBack and ExplorerPatcher* below).
+- **Windows 8/8.1 tile gradients**: tiles are shaded like on Windows 8.1, lighter at the top and
+  darker at the bottom, using each tile's own color. The strength can be changed, or the gradient
+  turned off, in the settings.
+- **StartAllBack and ExplorerPatcher**: the mod works next to both (see below), and the StartAllBack
+  Start button opens this Start screen too.
 - **Background options**: the classic petal artwork, a solid color, the accent
   color, the desktop wallpaper, or a custom image.
 - **Optional 8.1-style layout**: modern versions of the old Windows 8.1 apps
@@ -91,48 +78,13 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 
 ## Compatibility with StartAllBack and ExplorerPatcher
 
-Up to version 1.0.0 the mod could leave the taskbar in the stock style after a sign-in or
-after `explorer.exe` was restarted, when StartAllBack and ExplorerPatcher were installed:
-Windhawk loads a mod before Explorer starts executing, and in that window the mod loaded
-`twinui.pcshell.dll`, created a full-screen window in a z-band and installed a keyboard
-hook. StartAllBack and ExplorerPatcher patch the shell in the very same phase, and the
-Win32 taskbar was created before they could finish.
-
-From version 1.1.0:
-
-- `Wh_ModInit` only reads the settings. It no longer loads any DLL, creates any window or
-  hooks anything.
-- The Start screen window, the full-screen buffers, the Direct2D device and the keyboard
-  hook are created only after `Shell_TrayWnd` and the shell window exist, plus a settle
-  delay (**Delay before creating the Start screen window**, 4000 ms by default when a
-  third-party shell is detected).
-- `twinui.pcshell.dll` is hooked by a background thread as soon as Windows itself loads
-  the DLL. The forced load is only a fallback, done after the shell has settled, and it
-  can be turned off with **Let Windows load the Start menu code**.
-- StartAllBack and ExplorerPatcher are detected from their modules and from their
-  settings keys (`HKCU\Software\StartIsBack`, `HKCU\Software\ExplorerPatcher`). The
-  detection can be overridden with the **Compatibility with StartAllBack and
-  ExplorerPatcher** setting.
-- The mod still never hooks or patches taskbar functions, bands or XAML: it only reads
-  the shell state. The Windows key is handled by the mod's own keyboard hook.
-- **The StartAllBack Start button** is handled separately: StartAllBack draws that button itself
-  (a child window of the taskbar of class `Start`, the same name Explorer uses for the classic Start
-  button) and it never calls the Windows launcher, which is why the Windows key worked while its
-  Start button opened the Windows 11 menu. The mod looks for that window and, while the mouse is over
-  it, consumes the click inside the button's own window procedure (window subclassing), so
-  StartAllBack never sees it and cannot open the Windows 11 Start menu. The low-level mouse hook is
-  kept as a fallback for the case in which the button cannot be subclassed. A second click on the
-  button closes the Start screen again, like Windows does. Nothing else on the taskbar is affected, and turning off **Open with the StartAllBack
-  Start button** restores the previous behaviour. The mod log prints
-  `StartAllBack Start button subclassed: clicking it opens this Start screen` once the button is
-  detected and the subclass installed.
-
-If the classic taskbar still comes back once, restart Explorer from the patcher's own
-menu (StartAllBack: *StartAllBack > Restart Explorer*; ExplorerPatcher: *Properties >
-Restart File Explorer*), or set **Compatibility** to *Always on* and the delay to 8000 ms. The
-keyboard hook is enough to open the Start screen even when the `ShowStartView` hook could
-not be installed; in that case use the Windows key instead of the Start button, or keep
-StartAllBack's own Start menu disabled as you already do.
+- When StartAllBack or ExplorerPatcher is installed, the mod waits until their taskbar is ready
+  before it creates the Start screen, so the taskbar keeps its style after signing in or
+  restarting Explorer. On a slow PC, increase **Delay before creating the Start screen window**.
+- The StartAllBack Start button opens this Start screen, and clicking it again closes it. Turn off
+  **Open with the StartAllBack Start button** to get StartAllBack's own Start menu back.
+- If the old taskbar still comes back, restart Explorer from StartAllBack or ExplorerPatcher, or
+  set **Compatibility with StartAllBack and ExplorerPatcher** to *Always on* and the delay to 8000 ms.
 
 ## Additional information
 - The mod is compatible with the **Windows 8/8.1 Charms Bar Recreation** and the
@@ -152,43 +104,6 @@ StartAllBack's own Start menu disabled as you already do.
   mod is based.
 - **WinBoeing 777** - Testing on Windows 10 22H2
 - All testers who reported bugs and provided feedback.
-
-## Changelog
-
-### 1.1.0
-- **Windows 8/8.1 tile gradients.** Tiles were drawn with a flat fill; they now use the
-  Windows 8.1 shading (lighter at the top, darker at the bottom) derived from the color of
-  each tile. This covers the Windows 10/11 UWP apps (package manifest `BackgroundColor`),
-  the 8.x Metro style apps (VisualElements manifest), the tiles whose color is sampled
-  from the app icon and the classic programs that declare a tile color. A soft gradient is
-  also drawn over the app artwork, so packaged apps with full-bleed artwork are shaded as
-  well. New settings: **Windows 8/8.1 tile gradients**, **Gradient strength**, **Keep the
-  gradient over the app artwork**. Turning the first one off restores the flat 1.0.0 look.
-- **StartAllBack and ExplorerPatcher compatibility.** Fixed the taskbar reverting to the
-  classic style after a sign-in or an Explorer restart when the mod ran together with
-  StartAllBack (native Start menu disabled) and ExplorerPatcher. `Wh_ModInit` no longer
-  loads `twinui.pcshell.dll`, creates no window and installs no hook; the shell is only
-  touched once the taskbar exists, after a configurable settle delay. The `ShowStartView`
-  hook is installed in the background when Windows loads the DLL. New settings:
-  **Compatibility with StartAllBack and ExplorerPatcher**, **Delay before creating the
-  Start screen window**, **Let Windows load the Start menu code**.
-- **Search charm, empty state.** Clicking the search charm while the query was empty could open
-  an application: the click fell through the panel to the All Apps list drawn underneath, whose
-  rows are hidden with an empty query, so an invisible row was launched. The charm now owns every
-  click inside its panel, and the empty state shows the Windows 8.1 "type to search" hint instead
-  of a blank area.
-- **Tile captions.** The caption of a Medium tile no longer runs outside the tile: it uses the
-  smaller Windows 8.1 font on Medium/Small tiles and is clipped with an ellipsis. The caption box
-  is DPI-scaled now as well, so it no longer drifts on scaled displays.
-- The default gradient strength is **Subtle**, the closest to the Windows 8 start screen.
-- All of the new settings are applied live; the compatibility settings are read at sign-in
-  and take effect at the next Explorer start.
-- **The StartAllBack Start button now opens this Start screen.** With StartAllBack's own taskbar,
-  clicking its Start button opened the Windows 11 Start menu while the Windows key opened this one,
-  because that button never goes through the Windows launcher. The mod now finds the button window
-  (class `Start` on the tested StartAllBack build, `SIBOrb` on others) and intercepts its click. New setting: **Open with
-  the StartAllBack Start button**.
-- Tested on Windows 11 26H2 next to StartAllBack and ExplorerPatcher.
 
 ## Notes 
 
@@ -487,11 +402,11 @@ StartAllBack's own Start menu disabled as you already do.
   $name:es: "Abrir con el botón Inicio de StartAllBack"
   $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack"
   $name:pt: "Abrir com o botão Iniciar do StartAllBack"
-  $description: "StartAllBack draws its own taskbar and its own Start button, and that button does not go through the Windows launcher, so the Windows key setting alone cannot catch it. With this on, clicking the StartAllBack Start button opens this Start screen instead of the Windows 11 Start menu. The mod finds the button by its window class (Start or SIBOrb) and never touches anything else on the taskbar. Turn this off if you want StartAllBack's own Start menu back."
-  $description:it: "StartAllBack disegna una propria barra delle applicazioni e un proprio pulsante Start, e quel pulsante non passa dal launcher di Windows, quindi l'opzione del tasto Windows da sola non lo intercetta. Con questa opzione attiva, facendo clic sul pulsante Start di StartAllBack si apre questa schermata Start invece del menu Start di Windows 11. La mod trova il pulsante dalla sua classe finestra (Start o SIBOrb) e non tocca nient'altro della barra. Disattivala se vuoi riavere il menu Start di StartAllBack."
-  $description:es: "StartAllBack dibuja su propia barra de tareas y su propio botón Inicio, y ese botón no pasa por el lanzador de Windows, así que la opción de la tecla Windows no lo intercepta. Con esta opción activada, al hacer clic en el botón Inicio de StartAllBack se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. La mod encuentra el botón por su clase de ventana (SIBOrb) y no toca nada más de la barra."
-  $description:fr: "StartAllBack dessine sa propre barre des tâches et son propre bouton Démarrer, et ce bouton ne passe pas par le lanceur de Windows : l'option de la touche Windows ne suffit donc pas. Avec cette option active, cliquer sur le bouton Démarrer de StartAllBack ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Le mod repère le bouton par sa classe de fenêtre (SIBOrb) et ne touche à rien d'autre sur la barre."
-  $description:pt: "O StartAllBack desenha sua própria barra de tarefas e seu próprio botão Iniciar, e esse botão não passa pelo launcher do Windows, então a opção da tecla Windows sozinha não o intercepta. Com esta opção ativa, clicar no botão Iniciar do StartAllBack abre esta Tela Inicial em vez do menu Iniciar do Windows 11. A mod encontra o botão pela classe da janela (SIBOrb) e não mexe em mais nada na barra."
+  $description: "StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
+  $description:it: "StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
+  $description:es: "StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
+  $description:fr: "StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
+  $description:pt: "O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
 - seedStartLayout: false
   $name: "Populate Start with a Windows 8.1 style layout from installed apps"
   $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
@@ -920,9 +835,9 @@ static const UINT WM_APP_CHARM_POINTER = WM_APP + 14;
 static const UINT WM_APP_SEED_LAYOUT = WM_APP + 15;
 static const UINT WM_APP_FILES_READY = WM_APP + 16;
 static const UINT WM_APP_APPS_REFRESH = WM_APP + 17;
-static const UINT_PTR kOrbTimerId = 0xA5;
 static const UINT WM_HOOKCTL_MOUSE_ON  = WM_APP + 30;
 static const UINT WM_HOOKCTL_MOUSE_OFF = WM_APP + 31;
+static const UINT WM_HOOKCTL_ORB_REFRESH = WM_APP + 32;   // re-scan the StartAllBack Start button now
 static const ULONG_PTR kMagic = 0x38303435;
 static const wchar_t* kClassName = L"Win8StartScreenMod8045";
 static const wchar_t* kDesktopTarget = L"win8start:desktop";
@@ -1072,32 +987,32 @@ static volatile LONG g_deferStartHook = 1;         // don't force-load twinui.pc
 static volatile LONG g_shellPatch = 0;             // bitmask of the detected third-party shells
 static volatile LONG g_startButtonHook = 1;        // intercept the StartAllBack Start button
 
-// StartAllBack draws its own taskbar and its own Start button, and that button does not go through
-// XamlLauncher::ShowStartView, so hooking the Windows launcher never sees it: clicking it opened the
-// Windows 11 Start menu while the Windows key opened this one. The button is a window of class
-// SIBOrb (the name is inside StartAllBackX64.dll), so the mod watches for it and swallows the click
-// with the low-level mouse hook it already uses for the search charm.
+enum : LONG { SHELL_PATCH_STARTALLBACK = 1, SHELL_PATCH_EXPLORERPATCHER = 2 };
+
+// StartAllBack draws its own Start button, and that button does not go through
+// XamlLauncher::ShowStartView, so hooking the Windows launcher never sees it. The button is a child
+// window of this process's taskbar; it is subclassed (WindhawkUtils::SetWindowSubclassFromAnyThread)
+// and its click opens this Start screen. Only done while StartAllBack is loaded in this process.
+// g_orbWnd is only used on the hook thread. g_orbRect/g_orbCount are written there and read by the
+// Start window, under g_orbLock.
 static HWND g_orbWnd[8] = {};
 static RECT g_orbRect[8] = {};
 static int g_orbCount = 0;
+static SRWLOCK g_orbLock = SRWLOCK_INIT;
 static bool g_orbLogged = false;
-static bool g_orbSwallowUp = false;
-static volatile LONG g_mouseHookWant = 0;   // bit 0 = search charm, bit 1 = StartAllBack Start button
+static volatile LONG g_mouseHookWant = 0;   // bit 0 = search charm
 
-// Subclassing the Start button window is the reliable path: the click never reaches StartAllBack, so
-// its Windows 11 Start menu cannot open, no matter what the hit-testing or the hook timing says.
-// Installed with WindhawkUtils::SetWindowSubclassFromAnyThread (the helper does the cross-thread
-// work and drops the subclass on WM_NCDESTROY), removed with
-// WindhawkUtils::RemoveWindowSubclassFromAnyThread before this DLL is unloaded.
-static HWND g_orbSub[8] = {};
+// Windows subclassed by OrbSubclassProc: the Start buttons and their child windows. Only touched by
+// the hook thread, and by the UI thread after the hook thread has been joined.
+static HWND g_orbSub[16] = {};
 static int g_orbSubCount = 0;
-static DWORD g_orbPressTick = 0;
+static DWORD g_orbPressTick = 0;      // taskbar thread only (subclass procedure)
 static HWND g_orbPressWnd = NULL;     // window that took the capture for the current press
 static bool g_orbSubFailLogged = false;
+static bool g_orbPressOnStart = false; // Start window: press on the button area, waiting for the release
 static volatile LONG g_orbClicks = 0; // clicks forwarded to the Start screen, for the log
-// The same physical click can be reported by both the subclass and the mouse hook; the Start window
-// ignores a second toggle that arrives inside this window, and a user double click is still fast
-// enough to be swallowed here (which is what "click, click" has to do anyway).
+// The Start button and the Windows key can report the same action twice in a row; the Start window
+// ignores a second toggle that arrives inside this window.
 static const DWORD kOrbToggleDebounceMs = 250;
 static void EnsureOrbSubclass();
 static void RemoveOrbSubclasses();
@@ -7760,8 +7675,7 @@ static void SuppressOtherSearchCharm() { POINT z = { 0, 0 }; DismissCompanionSea
 
 static LRESULT CALLBACK CharmMouseProc(int code, WPARAM wp, LPARAM lp);
 
-// The low-level mouse hook is shared by the search charm and the StartAllBack Start button, so it is
-// reference counted: it stays installed while at least one of them needs it.
+// The low-level mouse hook is only used by the search charm, and only while it is open.
 static void UpdateMouseHook() {
     const LONG want = InterlockedCompareExchange(&g_mouseHookWant, 0, 0);
     if (want != 0 && !g_mouseHook) {
@@ -7782,43 +7696,44 @@ static void SetCharmMouseHook(bool on) {
     if (g_hookTid) PostThreadMessageW(g_hookTid, on ? WM_HOOKCTL_MOUSE_ON : WM_HOOKCTL_MOUSE_OFF, 0, 0);
 }
 
-// Window classes of the Start button drawn by StartAllBack. StartAllBackX64.dll contains both
-// "SIBOrb" and the classic name, and a real installation reports the Start button as a child window
-// of Shell_TrayWnd whose class is plain "Start" (that is the class Explorer uses for the classic
-// taskbar Start button too), so both names are accepted.
-static bool IsStartOrbClass(const wchar_t* cls, bool insideTaskbar) {
-    if (!cls || !*cls) return false;
-    if (!_wcsicmp(cls, L"SIBOrb") || !_wcsicmp(cls, L"SIBStartButton") ||
-        !_wcsicmp(cls, L"SABOrb") || !_wcsicmp(cls, L"SABStartButton")) return true;
-    // A generic name like this is only trusted inside a taskbar window.
-    return insideTaskbar && !_wcsicmp(cls, L"Start");
+// Class of the Start button inside the taskbar: "Start" on current StartAllBack builds (the same
+// name Explorer uses), "SIBOrb" on older ones.
+static bool IsStartOrbClass(const wchar_t* cls) {
+    return cls && (!_wcsicmp(cls, L"Start") || !_wcsicmp(cls, L"SIBOrb"));
 }
-static bool IsTaskbarRootClass(const wchar_t* cls) {
-    if (!cls || !*cls) return false;
-    if (!_wcsicmp(cls, L"Shell_TrayWnd") || !_wcsicmp(cls, L"Shell_SecondaryTrayWnd") ||
-        !_wcsicmp(cls, L"SIBTaskbar") || !_wcsicmp(cls, L"TaskbarSIB")) return true;
-    // StartAllBack may rename its taskbar host between builds: treat any SIB*/SAB* window as one, so
-    // that the Start button is still found inside it.
-    return !_wcsnicmp(cls, L"SIB", 3) || !_wcsnicmp(cls, L"SAB", 3);
+// True while StartAllBack is detected and its DLL is loaded in this explorer.exe. Without it the
+// Start button belongs to Explorer and is reached through the ShowStartView hook instead.
+static bool StartAllBackRunning() {
+    if (!(InterlockedCompareExchange(&g_shellPatch, 0, 0) & SHELL_PATCH_STARTALLBACK)) return false;
+    static const wchar_t* const kModules[] = {
+        L"StartAllBackX64.dll", L"StartAllBack.dll", L"StartAllBackLoaderX64.dll", L"StartAllBackLoader.dll",
+    };
+    for (const wchar_t* module : kModules)
+        if (GetModuleHandleW(module)) return true;
+    return false;
 }
+struct OrbScan { HWND wnd[8]; int count; };
 static BOOL CALLBACK OrbEnumChildProc(HWND h, LPARAM lp) {
-    int* count = (int*)lp;
-    if (*count >= (int)ARRAYSIZE(g_orbWnd)) return FALSE;
-    wchar_t cls[64] = {};
-    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && IsStartOrbClass(cls, true))
-        g_orbWnd[(*count)++] = h;
+    OrbScan* scan = (OrbScan*)lp;
+    if (scan->count >= (int)ARRAYSIZE(scan->wnd)) return FALSE;
+    wchar_t cls[32] = {};
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && IsStartOrbClass(cls)) scan->wnd[scan->count++] = h;
     return TRUE;
 }
-static BOOL CALLBACK OrbEnumProc(HWND h, LPARAM lp) {
-    int* count = (int*)lp;
-    if (*count >= (int)ARRAYSIZE(g_orbWnd)) return FALSE;
-    wchar_t cls[64] = {};
-    if (!GetClassNameW(h, cls, ARRAYSIZE(cls))) return TRUE;
-    if (IsStartOrbClass(cls, false)) { g_orbWnd[(*count)++] = h; return TRUE; }
-    if (IsTaskbarRootClass(cls)) EnumChildWindows(h, OrbEnumChildProc, lp);
-    return TRUE;
+// Only the taskbars of this process are scanned, never windows of other programs.
+static void ScanTaskbarsOfThisProcess(OrbScan* scan) {
+    static const wchar_t* const kBars[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"SIBTaskbar" };
+    const DWORD self = GetCurrentProcessId();
+    for (const wchar_t* cls : kBars) {
+        HWND bar = NULL;
+        for (int guard = 0; guard < 16 && (bar = FindWindowExW(NULL, bar, cls, NULL)) != NULL; ++guard) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(bar, &pid);
+            if (pid == self) EnumChildWindows(bar, OrbEnumChildProc, (LPARAM)scan);
+        }
+    }
 }
-// Diagnosis aid: when StartAllBack is present but its Start button was not found, print the window
+// Diagnosis aid: when StartAllBack is running but its Start button was not found, print the window
 // classes of the taskbar once, so that a renamed button is easy to spot in the mod log.
 static bool g_orbScanLogged = false;
 static BOOL CALLBACK OrbClassLogProc(HWND h, LPARAM lp) {
@@ -7832,123 +7747,79 @@ static BOOL CALLBACK OrbClassLogProc(HWND h, LPARAM lp) {
 }
 static void LogTaskbarClassesOnce() {
     if (g_orbScanLogged) return;
-    if (InterlockedCompareExchange(&g_shellPatch, 0, 0) == 0) return;
     HWND bar = FindWindowW(L"Shell_TrayWnd", NULL);
     if (!bar) return;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(bar, &pid);
+    if (pid != GetCurrentProcessId()) return;
     g_orbScanLogged = true;
-    Wh_Log(L"StartAllBack Start button not found by class name; listing the taskbar windows instead");
+    Wh_Log(L"StartAllBack Start button not found; listing the taskbar windows instead");
     int n = 0;
     EnumChildWindows(bar, OrbClassLogProc, (LPARAM)&n);
 }
 
-// Runs on the hook thread, which is also the thread the low-level mouse hook runs on, so the rects
-// below are only read and written there.
-static void RefreshStartOrb() {
-    const bool enabled = InterlockedCompareExchange(&g_startButtonHook, 0, 0) != 0;
-    if (!enabled) {
-        if (g_orbCount) { g_orbCount = 0; SetMouseHookBit(2, false); }
-        return;
-    }
-    HWND previous[8];
-    memcpy(previous, g_orbWnd, sizeof(previous));
-    const int previousCount = g_orbCount;
-    memset(g_orbWnd, 0, sizeof(g_orbWnd));
-    g_orbCount = 0;
-    EnumWindows(OrbEnumProc, (LPARAM)&g_orbCount);
-    int kept = 0;
-    for (int i = 0; i < g_orbCount; ++i) {
-        RECT r = {};
-        if (!IsWindowVisible(g_orbWnd[i]) || !GetWindowRect(g_orbWnd[i], &r)) continue;
-        const int w = r.right - r.left, h = r.bottom - r.top;
-        if (w < 4 || h < 4) continue;
-        // A Start button is small and roughly square; refuse anything that spans the taskbar, so that
-        // a container window with the same class name can never swallow clicks by mistake.
-        if (w > ScI(600) || w > 12 * h) {
-            wchar_t clsSkip[64] = {};
-            GetClassNameW(g_orbWnd[i], clsSkip, ARRAYSIZE(clsSkip));
-            Wh_Log(L"Skipping Start-like window of class %s: %dx%d px is not a Start button", clsSkip, w, h);
-            continue;
-        }
-        g_orbWnd[kept] = g_orbWnd[i];
-        g_orbRect[kept] = r;
-        ++kept;
-    }
-    g_orbCount = kept;
-    if (g_orbCount == 0) g_orbSwallowUp = false;
-    SetMouseHookBit(2, g_orbCount > 0);
-    if (g_orbCount > 0 && (!g_orbLogged || previousCount != g_orbCount)) {
-        wchar_t cls[64] = {};
-        GetClassNameW(g_orbWnd[0], cls, ARRAYSIZE(cls));
-        RECT r = g_orbRect[0];
-        Wh_Log(L"StartAllBack Start button found (class %s, %d window(s), rect %d,%d-%d,%d): it opens this Start screen",
-               cls, g_orbCount, (int)r.left, (int)r.top, (int)r.right, (int)r.bottom);
-        g_orbLogged = true;
-    } else if (g_orbCount == 0) {
-        g_orbLogged = false;
-        LogTaskbarClassesOnce();
-    }
-    EnsureOrbSubclass();
-}
-// True only when the Start button itself is the window under the cursor. The rect alone is not
-// enough: once this Start screen is open it covers the button, and a click there has to reach the
-// Start screen instead of toggling it.
-// Screen-space test used by the Start window itself: while the Start screen is open it covers the
-// button, so a click there must close the screen instead of doing nothing. The rects are refreshed
-// by the hook thread; a stale or half updated rect can only make this click do nothing, which is
-// exactly what happened before.
+// Screen-space test used by the Start window: while the Start screen is open it covers the button,
+// so a click there has to close the screen.
 static bool OrbScreenContains(POINT pt) {
-    const int count = g_orbCount;
-    for (int i = 0; i < count && i < (int)ARRAYSIZE(g_orbRect); ++i)
-        if (PtInRect(&g_orbRect[i], pt)) return true;
-    return false;
+    bool hit = false;
+    AcquireSRWLockShared(&g_orbLock);
+    for (int i = 0; i < g_orbCount && i < (int)ARRAYSIZE(g_orbRect); ++i)
+        if (PtInRect(&g_orbRect[i], pt)) { hit = true; break; }
+    ReleaseSRWLockShared(&g_orbLock);
+    return hit;
 }
-// Every Start button click ends up here, whichever path saw it first, so that the counter and the
-// log stay meaningful. The toggle itself is decided by the Start window, where g_open, g_closing and
-// the current view are all consistent.
-static void RequestStartToggle(const wchar_t* source) {
+// Every Start button click ends up here. The toggle itself is decided by the Start window, where
+// g_open, g_closing and the current view are all consistent.
+static void RequestStartToggle() {
     if (!g_wnd) return;
     const LONG n = InterlockedIncrement(&g_orbClicks);
     if (n <= 3 || n % 20 == 0)
-        Wh_Log(L"StartAllBack Start button click %d via the %s: open=%d closing=%d",
-               (int)n, source, (int)g_open, (int)g_closing);
+        Wh_Log(L"StartAllBack Start button click %d: open=%d closing=%d", (int)n, (int)g_open, (int)g_closing);
     if (!PostMessageW(g_wnd, WM_APP_TOGGLE, 0, 0))
         Wh_Log(L"Couldn't post the Start toggle, error %u", (unsigned)GetLastError());
 }
 
-// Clicks on the StartAllBack Start button, intercepted inside its own window procedure: the press and
-// the release are consumed here, so neither StartAllBack nor Explorer ever sees them.
-// WindhawkUtils::WH_SUBCLASSPROC takes (HWND, UINT, WPARAM, LPARAM, DWORD_PTR dwRefData): unlike
-// comctl32's SUBCLASSPROC there is no uIdSubclass parameter, and the wrapper removes the subclass on
-// WM_NCDESTROY by itself.
+// Runs on the taskbar thread, inside the Start button (or one of its child windows). dwRefData is
+// the Start button itself. The press takes the capture, so the release always comes back here; only
+// a release on the button counts, like a normal push button. Neither message reaches StartAllBack.
+// WindhawkUtils::WH_SUBCLASSPROC has no uIdSubclass parameter, and the wrapper removes the subclass
+// on WM_NCDESTROY by itself.
 static LRESULT CALLBACK OrbSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR dwRefData) {
-    (void)dwRefData;
+    const HWND button = dwRefData ? (HWND)dwRefData : hWnd;
+    if (InterlockedCompareExchange(&g_startButtonHook, 0, 0) == 0) {
+        // Turned off in the settings: give back a capture taken just before, then stay out of the way.
+        if (g_orbPressWnd == hWnd) {
+            g_orbPressWnd = NULL;
+            g_orbPressTick = 0;
+            if (GetCapture() == hWnd) ReleaseCapture();
+        }
+        return DefSubclassProc(hWnd, msg, wp, lp);
+    }
     switch (msg) {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
     case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
         g_orbPressTick = GetTickCount();
         g_orbPressWnd = hWnd;
-        // Take the capture. Without it the release goes to whichever window happens to be under the
-        // cursor, so moving the mouse by one pixel while clicking lost the click completely - that is
-        // why the Start button only worked now and then.
         SetCapture(hWnd);
         return 0;
     case WM_LBUTTONUP:
     case WM_NCLBUTTONUP: {
-        const bool pressed = g_orbPressTick && GetTickCount() - g_orbPressTick < 5000;
+        const bool ours = g_orbPressWnd == hWnd && g_orbPressTick && GetTickCount() - g_orbPressTick < 5000;
         g_orbPressTick = 0;
-        if (g_orbPressWnd == hWnd && GetCapture() == hWnd) ReleaseCapture();
         g_orbPressWnd = NULL;
-        // With the capture held, the release arrives here even when the mouse was dragged away: only
-        // a release on the button counts, like a normal push button.
+        if (GetCapture() == hWnd) ReleaseCapture();
+        if (!ours) break;
         POINT cp = {};
-        const bool onButton = !GetCursorPos(&cp) || OrbScreenContains(cp);
-        if (pressed && onButton) {
-            RequestStartToggle(L"window subclass");
-            return 0;
-        }
-        break;
+        RECT br = {};
+        const bool onButton = !GetCursorPos(&cp) || !GetWindowRect(button, &br) || PtInRect(&br, cp);
+        if (onButton) RequestStartToggle();
+        return 0;   // StartAllBack never saw the press, so it must not see the release either
     }
+    case WM_CAPTURECHANGED:
+        if ((HWND)lp != hWnd && g_orbPressWnd == hWnd) { g_orbPressWnd = NULL; g_orbPressTick = 0; }
+        break;
     }
     return DefSubclassProc(hWnd, msg, wp, lp);
 }
@@ -7958,60 +7829,99 @@ static void RemoveOrbSubclasses() {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_orbSub[i], OrbSubclassProc);
     g_orbSubCount = 0;
 }
+struct OrbChildren { HWND wnd[4]; int count; };
+static BOOL CALLBACK OrbChildCollectProc(HWND h, LPARAM lp) {
+    OrbChildren* c = (OrbChildren*)lp;
+    if (c->count >= (int)ARRAYSIZE(c->wnd)) return FALSE;
+    c->wnd[c->count++] = h;
+    return TRUE;
+}
+static bool OrbSubclassed(HWND h) {
+    for (int k = 0; k < g_orbSubCount; ++k) if (g_orbSub[k] == h) return true;
+    return false;
+}
+static bool SubclassOrbWindow(HWND h, HWND button) {
+    if (OrbSubclassed(h)) return true;
+    if (g_orbSubCount >= (int)ARRAYSIZE(g_orbSub)) return false;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(h, OrbSubclassProc, (DWORD_PTR)button)) return false;
+    g_orbSub[g_orbSubCount++] = h;
+    return true;
+}
+// Hook thread only. Subclasses every Start button that was found, plus its child windows, so that a
+// press is caught wherever it lands on the button.
 static void EnsureOrbSubclass() {
-    if (InterlockedCompareExchange(&g_startButtonHook, 0, 0) == 0) { RemoveOrbSubclasses(); return; }
-    for (int i = 0; i < g_orbCount; ++i) {
-        HWND h = g_orbWnd[i];
-        bool known = false;
-        for (int k = 0; k < g_orbSubCount; ++k) if (g_orbSub[k] == h) known = true;
-        if (known) continue;
-        if (g_orbSubCount >= (int)ARRAYSIZE(g_orbSub)) break;
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(h, OrbSubclassProc, 0)) {
-            g_orbSubFailLogged = false;
-            g_orbSub[g_orbSubCount++] = h;
-            Wh_Log(L"StartAllBack Start button subclassed: clicking it opens this Start screen");
-        } else if (!g_orbSubFailLogged) {
-            // Not fatal: the mouse hook covers the button as well.
-            g_orbSubFailLogged = true;
-            Wh_Log(L"Couldn't subclass the StartAllBack Start button; the mouse hook handles it instead");
-        }
-    }
     int kept = 0;
     for (int k = 0; k < g_orbSubCount; ++k)
         if (IsWindow(g_orbSub[k])) g_orbSub[kept++] = g_orbSub[k];
     g_orbSubCount = kept;
+    for (int i = 0; i < g_orbCount; ++i) {
+        HWND button = g_orbWnd[i];
+        const bool isNew = !OrbSubclassed(button);
+        if (!SubclassOrbWindow(button, button)) {
+            if (!g_orbSubFailLogged) {
+                g_orbSubFailLogged = true;
+                Wh_Log(L"Couldn't subclass the StartAllBack Start button, error %u", (unsigned)GetLastError());
+            }
+            continue;
+        }
+        g_orbSubFailLogged = false;
+        OrbChildren children = {};
+        EnumChildWindows(button, OrbChildCollectProc, (LPARAM)&children);
+        for (int c = 0; c < children.count; ++c) SubclassOrbWindow(children.wnd[c], button);
+        if (isNew) Wh_Log(L"StartAllBack Start button subclassed: clicking it opens this Start screen");
+    }
 }
 
-// True when the window is the taskbar or one of its children (including StartAllBack's own layers).
-static bool IsTaskbarWindow(HWND h) {
-    for (HWND w = h; w; w = GetParent(w)) {
-        wchar_t cls[64] = {};
-        if (GetClassNameW(w, cls, ARRAYSIZE(cls)) && IsTaskbarRootClass(cls)) return true;
+// Hook thread only. Returns the period, in milliseconds, of the next check: short while StartAllBack
+// is running and the button is still missing, longer once it has been found, and long when there is
+// nothing to look for.
+static UINT RefreshStartOrb() {
+    const bool enabled = InterlockedCompareExchange(&g_startButtonHook, 0, 0) != 0 && StartAllBackRunning();
+    if (!enabled) {
+        RemoveOrbSubclasses();
+        if (g_orbCount) {
+            AcquireSRWLockExclusive(&g_orbLock);
+            g_orbCount = 0;
+            ReleaseSRWLockExclusive(&g_orbLock);
+            memset(g_orbWnd, 0, sizeof(g_orbWnd));
+        }
+        g_orbLogged = false;
+        return 2000;
     }
-    return false;
-}
-static bool OrbContains(POINT pt) {
-    for (int i = 0; i < g_orbCount; ++i) {
-        if (!PtInRect(&g_orbRect[i], pt)) continue;
-        HWND at = WindowFromPoint(pt);
-        if (!at) return true;   // nothing owns the point: trust the rect
-        // This Start screen is on top of the button. While it is open the click belongs to it (it
-        // closes on that click), but while it is still sliding away the click has to bring it back,
-        // otherwise the button looks dead for a moment.
-        if (at == g_wnd || IsChild(g_wnd, at)) return g_closing != false;
-        // The button itself, one of its children, or one of the windows that host it: some builds
-        // skip the button in hit-testing, in which case the taskbar gets the click.
-        if (at == g_orbWnd[i]) return true;
-        if (IsChild(g_orbWnd[i], at)) return true;
-        if (IsChild(at, g_orbWnd[i])) return true;
-        if (GetParent(g_orbWnd[i]) == at) return true;
-        if (GetAncestor(at, GA_ROOT) == g_orbWnd[i]) return true;
-        // StartAllBack may put its own layer over the button; anything of the taskbar inside the
-        // button rectangle is accepted. A hidden taskbar is not matched, so an auto-hidden taskbar
-        // never makes the mod swallow a click meant for another window.
-        if (IsTaskbarWindow(at)) return true;
+    OrbScan scan = {};
+    ScanTaskbarsOfThisProcess(&scan);
+    HWND wnd[8] = {};
+    RECT rect[8] = {};
+    int kept = 0;
+    for (int i = 0; i < scan.count; ++i) {
+        RECT r = {};
+        if (!IsWindowVisible(scan.wnd[i]) || !GetWindowRect(scan.wnd[i], &r)) continue;
+        const int w = r.right - r.left, h = r.bottom - r.top;
+        if (w < 4 || h < 4) continue;
+        // A Start button is small and roughly square; refuse anything that spans the taskbar.
+        if (w > ScI(600) || w > 12 * h) continue;
+        wnd[kept] = scan.wnd[i];
+        rect[kept] = r;
+        ++kept;
     }
-    return false;
+    const int previousCount = g_orbCount;
+    memcpy(g_orbWnd, wnd, sizeof(g_orbWnd));
+    AcquireSRWLockExclusive(&g_orbLock);
+    memcpy(g_orbRect, rect, sizeof(g_orbRect));
+    g_orbCount = kept;
+    ReleaseSRWLockExclusive(&g_orbLock);
+    if (kept > 0 && (!g_orbLogged || previousCount != kept)) {
+        wchar_t cls[32] = {};
+        GetClassNameW(wnd[0], cls, ARRAYSIZE(cls));
+        Wh_Log(L"StartAllBack Start button found (class %s, %d window(s), rect %d,%d-%d,%d)",
+               cls, kept, (int)rect[0].left, (int)rect[0].top, (int)rect[0].right, (int)rect[0].bottom);
+        g_orbLogged = true;
+    } else if (kept == 0) {
+        g_orbLogged = false;
+        LogTaskbarClassesOnce();
+    }
+    EnsureOrbSubclass();
+    return kept > 0 ? 1000 : 300;
 }
 static void OpenCharm(wchar_t firstChar) {
     if (!g_open || g_closing) return;
@@ -8892,6 +8802,7 @@ static void OpenStart(bool atLogon = false) {
     g_scrollCur = g_scrollTarget = 0.0f;
     g_view = VIEW_START;
     g_zoomOut = false; g_zoomTick = 0; g_hoverZoomBtn = false; g_hoverGroup = -1;
+    g_sbArrowDir = 0; g_sbDrag = false; g_orbPressOnStart = false;
     g_dragGroup = -1; g_dragGroupMoved = false; g_dragGroupDx = 0.0f;
     g_namingGroup = -1; g_groupNameEdit.clear(); g_focus = -1; g_alphaGrid = false;
     g_charmOpen = false; g_charmTick = 0; g_leaveTick = 0; g_charmHover = -1; g_charmPressed = -1;
@@ -9169,8 +9080,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_TOGGLE: {
         DWORD now = NowMs();
-        // The Start button and the Windows key can report the same click through two different
-        // paths: only the first report inside the debounce window acts.
+        // The Start button, the Windows key and ShowStartView can report the same action twice in a
+        // row: only the first report inside the debounce window acts.
         if (now - g_lastToggleTick < kOrbToggleDebounceMs) {
             Wh_Log(L"Start toggle ignored: another one %u ms ago", (unsigned)(now - g_lastToggleTick));
             return 0;
@@ -9518,7 +9429,14 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             g_swallowCharmUp = true;
             return 0;
         }
-        if (!g_open) return 0;
+        if (!g_open) {
+            // A click on the StartAllBack Start button while the screen is still sliding away opens
+            // it again.
+            POINT op = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            ClientToScreen(h, &op);
+            if (g_closing && OrbScreenContains(op)) { g_orbPressOnStart = true; SetCapture(h); }
+            return 0;
+        }
         if (g_namingGroup >= 0 && !g_customize && !g_closing && g_view == VIEW_START) {
             POINT xp = { (short)LOWORD(lp), (short)HIWORD(lp) };
             RECT fr;
@@ -9570,6 +9488,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             SetCapture(h);
             return 0;
         }
+        {
+            // The Start screen covers the StartAllBack Start button. A press there that no visible
+            // control took (scroll bar, app bar, tiles, buttons) is a click on the Start button.
+            POINT op = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            ClientToScreen(h, &op);
+            if (!g_closing && !g_charmOpen && g_hover < 0 && !g_hoverArrow && !g_hoverPwr && !g_hoverSrch &&
+                !g_hoverZoomBtn && !g_hoverAccount && OrbScreenContains(op)) {
+                g_orbPressOnStart = true;
+                SetCapture(h);
+                return 0;
+            }
+        }
         if (g_view == VIEW_START && !g_charmOpen && !g_barVisible && ZoomPresence(NowMs()) > 0.5f) {
             float wx, wy; ScreenToWorld((short)LOWORD(lp), (short)HIWORD(lp), &wx, &wy);
             int zg = GroupAtWorld(wx, wy);
@@ -9588,12 +9518,16 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_LBUTTONUP: {
         ReleaseCapture();
-        {
-            // Clicking the Start button of StartAllBack while this Start screen is open closes it,
-            // the way Windows does, even though the button itself is covered by the screen.
+        if (g_orbPressOnStart) {
+            // Release of a press on the StartAllBack Start button (see WM_LBUTTONDOWN).
+            g_orbPressOnStart = false;
             POINT spt = { (short)LOWORD(lp), (short)HIWORD(lp) };
             ClientToScreen(h, &spt);
-            if (g_open && !g_closing && !g_charmOpen && OrbScreenContains(spt)) { CloseStart(); return 0; }
+            if (OrbScreenContains(spt)) {
+                if (g_open && !g_closing) CloseStart();
+                else if (g_closing) PostMessageW(h, WM_APP_TOGGLE, 0, 0);   // reopens
+            }
+            return 0;
         }
         if (g_swallowMenuUp) { g_swallowMenuUp = false; return 0; }
         if (g_swallowCharmUp) { g_swallowCharmUp = false; g_pressed = -1; g_charmPressed = -1; return 0; }
@@ -9767,7 +9701,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 // Explorer was restarted. Everything that touches the shell is now deferred until the taskbar
 // exists, plus a settle delay, and Wh_ModInit itself only reads the settings.
 enum : LONG { SHELL_COMPAT_AUTO = 0, SHELL_COMPAT_ALWAYS = 1, SHELL_COMPAT_NEVER = 2 };
-enum : LONG { SHELL_PATCH_STARTALLBACK = 1, SHELL_PATCH_EXPLORERPATCHER = 2 };
 
 static bool ShellModuleLoaded(const wchar_t* name) {
     return name && GetModuleHandleW(name) != NULL;
@@ -9882,6 +9815,12 @@ static bool InstallStartHookOnce(bool allowLoad) {
     if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"HookSymbols failed for ShowStartView; using the keyboard hook only");
         return true;             // give up: retrying would fail the same way
+    }
+    // This runs after Wh_ModInit has returned, so Windhawk does not apply the hook by itself: a hook
+    // registered now stays pending until Wh_ApplyHookOperations is called.
+    if (!Wh_ApplyHookOperations()) {
+        Wh_Log(L"Wh_ApplyHookOperations failed for ShowStartView; using the keyboard hook only");
+        return true;
     }
     g_startHooked = true;
     Wh_Log(L"ShowStartView hooked: the Windows key and the taskbar Start button open this Start screen");
@@ -10027,33 +9966,6 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
 static LRESULT CALLBACK CharmMouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION) {
         const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
-        // The StartAllBack Start button is handled by the low level hook *and* by the window
-        // subclass, every time, because either path can miss a click on its own: the hook loses it if
-        // the hit test does not recognise the window under the cursor, the subclass loses it if
-        // StartAllBack recreates the button window or if the press lands on one of its children.
-        // They cannot both report the same click: swallowing the press here means the window never
-        // sees it, so the subclass stays quiet, and vice versa.
-        if (m && g_orbCount > 0) {
-            if (wp == WM_LBUTTONDOWN) {
-                if (OrbContains(m->pt)) {
-                    // The press never reaches StartAllBack, so its own Start menu cannot open.
-                    if (!g_orbSwallowUp) {
-                        g_orbSwallowUp = true;
-                        // Keep the button rectangle current: StartAllBack may have just rebuilt it.
-                        PostThreadMessageW(GetCurrentThreadId(), WM_TIMER, kOrbTimerId, 0);
-                    }
-                    return 1;
-                }
-                g_orbSwallowUp = false;
-            } else if (wp == WM_LBUTTONUP && g_orbSwallowUp) {
-                // The press was swallowed, so swallow the release too; toggle only if the mouse is
-                // still over the button (a drag away cancels it, like a normal button).
-                const bool stillOnButton = OrbContains(m->pt);
-                g_orbSwallowUp = false;
-                if (stillOnButton) RequestStartToggle(L"mouse hook");
-                return 1;
-            }
-        }
         switch (wp) {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
@@ -10077,19 +9989,28 @@ static DWORD WINAPI HookThread(LPVOID) {
     g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, GetModuleHandleW(NULL), 0);
     if (g_hook) Wh_Log(L"Keyboard hook installed");
     else Wh_Log(L"SetWindowsHookEx failed, error %u", (unsigned)GetLastError());
-    // Watch for the StartAllBack Start button; the first check runs right away. The period is short
-    // because StartAllBack rebuilds its taskbar windows while it settles, and a button window that
-    // is not watched yet is a click that goes to StartAllBack instead of to this Start screen.
-    SetTimer(NULL, kOrbTimerId, 300, NULL);
-    RefreshStartOrb();
+    // Watch for the StartAllBack Start button; the first check runs right away. For a thread timer
+    // SetTimer ignores nIDEvent and returns the ID that WM_TIMER will carry, so that one is kept.
+    UINT_PTR orbTimer = 0;
+    UINT orbPeriod = 0;
+    auto refreshOrb = [&orbTimer, &orbPeriod]() {
+        const UINT period = RefreshStartOrb();
+        if (period != orbPeriod || !orbTimer) {
+            if (orbTimer) KillTimer(NULL, orbTimer);
+            orbTimer = SetTimer(NULL, 0, period, NULL);
+            orbPeriod = period;
+        }
+    };
+    refreshOrb();
     while (GetMessageW(&m, NULL, 0, 0) > 0) {
         if (m.message == WM_HOOKCTL_MOUSE_ON) { SetMouseHookBit(1, true); continue; }
         if (m.message == WM_HOOKCTL_MOUSE_OFF) { SetMouseHookBit(1, false); continue; }
-        if (m.message == WM_TIMER && m.hwnd == NULL && m.wParam == kOrbTimerId) { RefreshStartOrb(); continue; }
+        if (m.message == WM_TIMER && m.hwnd == NULL && orbTimer && m.wParam == orbTimer) { refreshOrb(); continue; }
+        if (m.message == WM_HOOKCTL_ORB_REFRESH) { refreshOrb(); continue; }
         TranslateMessage(&m);
         DispatchMessageW(&m);
     }
-    KillTimer(NULL, kOrbTimerId);
+    if (orbTimer) KillTimer(NULL, orbTimer);
     if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = NULL; }
     if (g_hook) UnhookWindowsHookEx(g_hook);
     g_hook = NULL;
@@ -10260,8 +10181,6 @@ static void UiRun() {
 }
 
 static void UiTeardown() {
-    // The subclass procedures live in this DLL: they must be gone before it is unmapped.
-    RemoveOrbSubclasses();
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
     if (g_logonStop) { CloseHandle(g_logonStop); g_logonStop = NULL; }
@@ -10303,6 +10222,10 @@ static void UiTeardown() {
         WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread); g_hookThread = NULL;
     }
+    // The subclass procedure lives in this DLL, so it must be gone before the DLL is unmapped. The
+    // hook thread, the only other thread that adds subclasses, has been joined above, so nothing can
+    // add one after this.
+    RemoveOrbSubclasses();
     if (g_hookReady) { CloseHandle(g_hookReady); g_hookReady = NULL; }
     if (g_wnd) DestroyWindow(g_wnd);
     g_wnd = NULL;
@@ -10440,6 +10363,7 @@ static void LoadSettings() {
         {
             WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"tileGradientStrength"));
             if (wcscmp(value.get(), L"subtle") == 0) strength = 0;
+            else if (wcscmp(value.get(), L"normal") == 0) strength = 1;
             else if (wcscmp(value.get(), L"strong") == 0) strength = 2;
         }
         if (InterlockedExchange(&g_tileGradient, grad) != grad) chromeChanged = true;
@@ -10460,7 +10384,9 @@ static void LoadSettings() {
         const LONG oldDelay = InterlockedExchange(&g_startupDelayMs, delay);
         const LONG defer = Wh_GetIntSetting(L"deferStartHook") != 0 ? 1 : 0;
         const LONG oldDefer = InterlockedExchange(&g_deferStartHook, defer);
-        InterlockedExchange(&g_startButtonHook, Wh_GetIntSetting(L"startButtonHook") != 0 ? 1 : 0);
+        const LONG startButton = Wh_GetIntSetting(L"startButtonHook") != 0 ? 1 : 0;
+        if (InterlockedExchange(&g_startButtonHook, startButton) != startButton && g_hookTid)
+            PostThreadMessageW(g_hookTid, WM_HOOKCTL_ORB_REFRESH, 0, 0);   // apply it right away
         // These three decide what happens while Explorer starts, so they only take effect the
         // next time Explorer starts; say so instead of silently ignoring the change.
         if (oldMode != mode || oldDelay != delay || oldDefer != defer)
@@ -10519,28 +10445,38 @@ BOOL Wh_ModInit() {
             if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
             return FALSE;
         }
-        // The Start menu hook is installed in the background, never from Wh_ModInit: this runs
-        // before Explorer has built its shell, and StartAllBack/ExplorerPatcher need that window
-        // for themselves. See StartHookThread.
-        if (!g_keyboardOnly) {
-            g_startHookStop = CreateEventW(NULL, TRUE, FALSE, NULL);
-            g_startHookThread = CreateThread(NULL, 0, StartHookThread, NULL, 0, NULL);
-            if (!g_startHookThread)
-                Wh_Log(L"Couldn't create the Start hook thread; the keyboard hook is the only way to open the Start screen");
-        }
         return TRUE;
     });
 }
 
-void Wh_ModUninit() {
-    RunGuarded(L"ModUninit", [] {
+// The Start menu hook is installed in the background, never from Wh_ModInit: that runs before
+// Explorer has built its shell, and StartAllBack/ExplorerPatcher need it for themselves. The thread
+// starts here because Wh_ApplyHookOperations can't be called before Wh_ModInit returns, and it is
+// stopped in Wh_ModBeforeUninit because no hook can be set or applied after that returns. See
+// StartHookThread.
+void Wh_ModAfterInit() {
+    RunGuarded(L"ModAfterInit", [] {
+        if (g_keyboardOnly || !g_thread) return;
+        g_startHookStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (g_startHookStop) g_startHookThread = CreateThread(NULL, 0, StartHookThread, NULL, 0, NULL);
+        if (!g_startHookThread)
+            Wh_Log(L"Couldn't create the Start hook thread; the keyboard hook is the only way to open the Start screen");
+    });
+}
+
+void Wh_ModBeforeUninit() {
+    RunGuarded(L"ModBeforeUninit", [] {
         if (g_startHookStop) SetEvent(g_startHookStop);
         if (g_startHookThread) {
             WaitForSingleObject(g_startHookThread, INFINITE);
             CloseHandle(g_startHookThread);
             g_startHookThread = NULL;
         }
-        if (g_startHookStop) { CloseHandle(g_startHookStop); g_startHookStop = NULL; }
+    });
+}
+
+void Wh_ModUninit() {
+    RunGuarded(L"ModUninit", [] {
         if (g_thread) {
             if (g_uiStop) SetEvent(g_uiStop);
             HANDLE readyWait[2] = { g_uiReady, g_thread };
@@ -10552,5 +10488,7 @@ void Wh_ModUninit() {
         }
         if (g_uiReady) { CloseHandle(g_uiReady); g_uiReady = NULL; }
         if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
+        // Checked by the UI thread too (StopRequested), so it is closed only now.
+        if (g_startHookStop) { CloseHandle(g_startHookStop); g_startHookStop = NULL; }
     });
 }
