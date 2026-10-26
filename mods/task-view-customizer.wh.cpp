@@ -40,9 +40,9 @@ over the taskbar's Task View button.
 
 ## Screenshots
 
-| Full Task View with desktops at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
+| Full Task View with Desktops list at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
 | :---: | :---: | :---: |
-| ![Full Task View with desktops at the top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/1.png) | ![No Task View with Desktop list at the center + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png) | ![Windows default + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png) |
+| ![Full Task View with Desktops list at the top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/1.png) | ![No Task View with Desktops list at the center + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png) | ![Windows default + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png) |
 
 ## Settings
 
