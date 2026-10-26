@@ -54,8 +54,8 @@ Leave an action empty to do nothing.
 slider and mute button above the application mixer in Windows 11's Sound
 output flyout. Moving the slider unmutes the output;
 external volume changes and output-device switches are reflected while open.
-Disable the standalone Sound Output Master Volume mod when using this
-feature. Close and reopen the flyout after changing this option.
+Do not combine this with another mod that inserts a master-volume row into
+the same flyout. Close and reopen the flyout after changing this option.
 
 Sound can show currently playing media in its tooltip and use an output-device
 glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
@@ -98,7 +98,7 @@ information as accessible names and use system keyboard-focus visuals.
 
 The custom-action prefix scheme and action-format documentation are adapted from
 [Ultimate Custom Tray](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp)
-by [Salyts](https://github.com/Salyts).
+by [Salyts](https://github.com/Salyts), licensed under MIT.
 
 Select **Custom action** for **Control Center action** or **Battery click
 action**, then enter an action in that group's **Custom action** field. The
@@ -191,6 +191,32 @@ menu presenter receives its name after creation.
 */
 // ==/WindhawkModReadme==
 
+/*
+Custom-action portions adapted from Ultimate Custom Tray by Salyts:
+
+MIT License
+
+Copyright (c) 2026 Salyts
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 // ==WindhawkModSettings==
 /*
 - sound:
@@ -216,7 +242,7 @@ menu presenter receives its name after creation.
       $description: "When enabled, the sound icon uses an output-device glyph for headphones, speakers, display audio, etc. Muted/unavailable audio still uses the normal mute glyph."
     - showMasterVolumeInOutputPicker: true
       $name: Show master volume in Sound output
-      $description: "Add a master volume slider and mute button above the application sliders in the Windows 11 Sound output flyout. Close and reopen the flyout after first enabling the feature. Disable the standalone Sound Output Master Volume mod when using this option."
+      $description: "Add a master volume slider and mute button above the application sliders in the Windows 11 Sound output flyout. Close and reopen the flyout after changing this option. Do not combine with another mod that inserts a master-volume row into the same flyout."
     - middleClickAction: toggle_mute
       $name: Middle-click action
       $options:
@@ -5576,7 +5602,7 @@ static void RefreshEnergySaverStateAsync() {
     // create a Settings apartment merely to poll an unchanged preference.
     if (g_batteryButton && !g_energySaverBusy.load() &&
         g_energySaverReadInvalidated.exchange(false))
-        QueueEnergySaverWork(false);
+        QueueEnergySaverWork(0);
 }
 
 static void AppendWinUiEnergySaverItem(wuc::MenuFlyout const& flyout) {
@@ -5597,7 +5623,7 @@ static void AppendWinUiEnergySaverItem(wuc::MenuFlyout const& flyout) {
         auto eventSource = item;
         auto eventToken = eventSource.Click([](auto const&, auto const&) {
         if (g_unloading) return;
-        QueueEnergySaverWork(true);
+        QueueEnergySaverWork(1);
     });
         g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
@@ -7120,6 +7146,9 @@ static void RemoveXamlButtons() {
     g_batteryPercentageText = nullptr;
     g_batteryContent = nullptr;
     g_trayPanel = nullptr;
+    // Preserve the font across settings/layout rebuilds, but release it on
+    // actual mod unload while still on the taskbar's owning UI thread.
+    if (g_unloading) g_nativeBatteryFont = nullptr;
     g_nativeGroupedButtonStyle = g_nativeNotifyIconStyle = nullptr;
     g_sizeRefreshTrayElement = g_sizeRefreshControlCenterButton = nullptr;
 }
@@ -7268,37 +7297,189 @@ static std::atomic<bool> g_enabled = false;
 static void LoadSettings() {
     g_enabled = Wh_GetIntSetting(L"sound.showMasterVolumeInOutputPicker") != 0;
 }
-static wchar_t g_statusKey[MAX_PATH];
-static void Status(PCWSTR message) {
-    Wh_SetStringValue(g_statusKey, message);
-    Wh_Log(L"%s", message);
-}
 
-// Audio callbacks never access XAML. They coalesce work onto the row's UI
-// dispatcher; endpoint discovery happens only when binding or devices change.
+// One MTA service owns all Core Audio registrations for this process.
+// Rows read cached plain values and queue writes; they never own COM audio
+// interfaces, so a dead XAML dispatcher cannot prevent audio cleanup.
 struct MasterRow;
-struct RowAudioObserver : winrt::implements<RowAudioObserver,
+static void NotifyAudioRows();
+struct AudioSnapshot { bool available = false; float level = 0; bool muted = false; };
+struct AudioCommand { bool toggleMute; float level; };
+static std::mutex g_audioLifecycleMutex, g_audioDataMutex;
+static AudioSnapshot g_audioSnapshot;
+static std::deque<AudioCommand> g_audioCommands;
+static HANDLE g_audioThread = nullptr, g_audioStop = nullptr;
+static HANDLE g_audioChanged = nullptr, g_audioRebind = nullptr;
+
+struct MasterAudioObserver : winrt::implements<MasterAudioObserver,
         IMMNotificationClient, IAudioEndpointVolumeCallback> {
-    std::weak_ptr<MasterRow> row;
-    winrt::agile_ref<CoreDispatcher> dispatcher;
-    std::mutex mutex;
-    bool stopped = false, queued = false, rebind = false;
-    RowAudioObserver(std::weak_ptr<MasterRow> owner, CoreDispatcher const& ui)
-        : row(std::move(owner)), dispatcher(ui) {}
-    void Queue(bool bind) noexcept;
-    void Stop() noexcept { std::lock_guard lock(mutex); stopped = true; }
+    HANDLE changed, rebind;
+    std::atomic<bool> stopping{false};
+    MasterAudioObserver(HANDLE volumeEvent, HANDLE deviceEvent)
+        : changed(volumeEvent), rebind(deviceEvent) {}
     HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
-        Queue(false); return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
-        if (flow == eRender && role == eMultimedia) Queue(true);
+        if (!stopping) SetEvent(changed);
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { Queue(true); return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { Queue(true); return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { Queue(true); return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
+        if (!stopping && flow == eRender && role == eMultimedia) SetEvent(rebind);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
+        if (!stopping) SetEvent(rebind);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
+        if (!stopping) SetEvent(rebind);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
+        if (!stopping) SetEvent(rebind);
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
 };
+
+static AudioSnapshot ReadAudioSnapshot() {
+    std::lock_guard lock(g_audioDataMutex);
+    return g_audioSnapshot;
+}
+
+static DWORD WINAPI AudioServiceThread(void*) {
+    const HRESULT apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(apartment)) {
+        Wh_Log(L"Master volume MTA initialization failed: %08X", apartment);
+        return 0;
+    }
+    {
+        winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+        winrt::com_ptr<IAudioEndpointVolume> volume;
+        auto observer = winrt::make_self<MasterAudioObserver>(g_audioChanged, g_audioRebind);
+        bool endpointRegistered = false, volumeRegistered = false;
+        auto unbind = [&] {
+            if (volume && volumeRegistered) volume->UnregisterControlChangeNotify(observer.get());
+            volumeRegistered = false;
+            volume = nullptr;
+        };
+        auto bind = [&] {
+            unbind();
+            try {
+                if (!enumerator) {
+                    winrt::check_hresult(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                        CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), enumerator.put_void()));
+                    winrt::check_hresult(enumerator->RegisterEndpointNotificationCallback(observer.get()));
+                    endpointRegistered = true;
+                }
+                winrt::com_ptr<IMMDevice> device;
+                winrt::check_hresult(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, device.put()));
+                winrt::check_hresult(device->Activate(__uuidof(IAudioEndpointVolume),
+                    CLSCTX_INPROC_SERVER, nullptr, volume.put_void()));
+                winrt::check_hresult(volume->RegisterControlChangeNotify(observer.get()));
+                volumeRegistered = true;
+            } catch (...) {
+                volume = nullptr;
+                Wh_Log(L"Master volume endpoint binding failed: %08X", winrt::to_hresult());
+                if (!endpointRegistered) enumerator = nullptr;
+            }
+        };
+        auto publish = [&] {
+            AudioSnapshot snapshot;
+            if (volume) {
+                BOOL muted = FALSE;
+                snapshot.available = SUCCEEDED(volume->GetMasterVolumeLevelScalar(&snapshot.level)) &&
+                    SUCCEEDED(volume->GetMute(&muted));
+                snapshot.muted = muted != FALSE;
+            }
+            {
+                std::lock_guard lock(g_audioDataMutex);
+                g_audioSnapshot = snapshot;
+            }
+            NotifyAudioRows();
+        };
+        bind();
+        publish();
+        const HANDLE waits[]{g_audioStop, g_audioRebind, g_audioChanged};
+        while (!g_stopping) {
+            const DWORD result = WaitForMultipleObjects(3, waits, FALSE, INFINITE);
+            if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
+            if (g_stopping) break;
+            if (result == WAIT_OBJECT_0 + 1 ||
+                WaitForSingleObject(g_audioRebind, 0) == WAIT_OBJECT_0)
+                bind();
+            std::deque<AudioCommand> commands;
+            {
+                std::lock_guard lock(g_audioDataMutex);
+                commands.swap(g_audioCommands);
+            }
+            for (auto const& command : commands) {
+                if (g_stopping || !volume) break;
+                HRESULT hr;
+                if (command.toggleMute) {
+                    BOOL muted = FALSE;
+                    hr = volume->GetMute(&muted);
+                    if (SUCCEEDED(hr)) hr = volume->SetMute(!muted, nullptr);
+                } else {
+                    hr = volume->SetMasterVolumeLevelScalar(command.level, nullptr);
+                    if (SUCCEEDED(hr)) hr = volume->SetMute(FALSE, nullptr);
+                }
+                if (FAILED(hr)) Wh_Log(L"Master volume write failed: %08X", hr);
+            }
+            publish();
+        }
+        observer->stopping = true;
+        unbind();
+        if (enumerator && endpointRegistered)
+            enumerator->UnregisterEndpointNotificationCallback(observer.get());
+        // All audio interfaces and registrations are released here, in MTA,
+        // before the unload thread joins us and closes notification events.
+    }
+    CoUninitialize();
+    return 0;
+}
+
+static void EnsureAudioService() {
+    std::lock_guard lock(g_audioLifecycleMutex);
+    if (g_stopping || g_audioThread) return;
+    g_audioStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_audioChanged = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_audioRebind = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (g_audioStop && g_audioChanged && g_audioRebind)
+        g_audioThread = CreateThread(nullptr, 0, AudioServiceThread, nullptr, 0, nullptr);
+    if (!g_audioThread) {
+        for (auto event : {g_audioStop, g_audioChanged, g_audioRebind}) if (event) CloseHandle(event);
+        g_audioStop = g_audioChanged = g_audioRebind = nullptr;
+        Wh_Log(L"Could not start master volume audio service");
+    }
+}
+
+static void QueueAudioCommand(AudioCommand command) {
+    std::lock_guard lock(g_audioLifecycleMutex);
+    if (g_stopping || !g_audioThread) return;
+    {
+        std::lock_guard dataLock(g_audioDataMutex);
+        // Collapse adjacent slider updates while retaining mute-click order.
+        if (!command.toggleMute && !g_audioCommands.empty() && !g_audioCommands.back().toggleMute)
+            g_audioCommands.back() = command;
+        else
+            g_audioCommands.push_back(command);
+    }
+    SetEvent(g_audioChanged);
+}
+
+static void StopAudioService() {
+    std::lock_guard lock(g_audioLifecycleMutex);
+    if (g_audioStop) SetEvent(g_audioStop);
+    if (g_audioThread) {
+        WaitForSingleObject(g_audioThread, INFINITE);
+        CloseHandle(g_audioThread);
+        g_audioThread = nullptr;
+    }
+    for (auto event : {g_audioStop, g_audioChanged, g_audioRebind}) if (event) CloseHandle(event);
+    g_audioStop = g_audioChanged = g_audioRebind = nullptr;
+    std::lock_guard dataLock(g_audioDataMutex);
+    g_audioCommands.clear();
+    g_audioSnapshot = {};
+}
 
 struct MasterRow : std::enable_shared_from_this<MasterRow> {
     controls::Grid row{nullptr}, wrapper{nullptr};
@@ -7307,10 +7488,7 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
     controls::Button mute{nullptr};
     controls::FontIcon glyph{nullptr};
     controls::Slider slider{nullptr};
-    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
-    winrt::com_ptr<IAudioEndpointVolume> volume;
-    winrt::com_ptr<RowAudioObserver> audioObserver;
-    bool enumeratorRegistered = false, volumeRegistered = false;
+    bool listening = false;
     winrt::event_token clicked{}, changed{}, loaded{}, unloaded{};
     winrt::event_token entered{}, exited{}, themeChanged{};
     int oldRow{}, oldColumn{}, oldRowSpan{}, oldColumnSpan{};
@@ -7318,49 +7496,6 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
     bool hasMuteState = false, lastMuted = false;
     bool hovering = false;
 
-    ~MasterRow() { StopAudio(); }
-
-    void BindVolume() noexcept {
-        if (volume && volumeRegistered) volume->UnregisterControlChangeNotify(audioObserver.get());
-        volumeRegistered = false;
-        volume = nullptr;
-        try {
-            winrt::com_ptr<IMMDevice> device;
-            winrt::check_hresult(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, device.put()));
-            winrt::check_hresult(device->Activate(__uuidof(IAudioEndpointVolume),
-                CLSCTX_INPROC_SERVER, nullptr, volume.put_void()));
-            winrt::check_hresult(volume->RegisterControlChangeNotify(audioObserver.get()));
-            volumeRegistered = true;
-        } catch (...) {
-            volume = nullptr;
-            Wh_Log(L"Master volume endpoint binding failed: %08X", winrt::to_hresult());
-        }
-    }
-
-    void StartAudio() noexcept {
-        if (enumerator || g_stopping) return;
-        try {
-            winrt::check_hresult(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-                CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), enumerator.put_void()));
-            audioObserver = winrt::make_self<RowAudioObserver>(weak_from_this(), row.Dispatcher());
-            winrt::check_hresult(enumerator->RegisterEndpointNotificationCallback(audioObserver.get()));
-            enumeratorRegistered = true;
-            BindVolume();
-        } catch (...) {
-            Wh_Log(L"Master volume notifications failed: %08X", winrt::to_hresult());
-            StopAudio();
-        }
-    }
-
-    void StopAudio() noexcept {
-        if (audioObserver) audioObserver->Stop();
-        if (volume && volumeRegistered) volume->UnregisterControlChangeNotify(audioObserver.get());
-        if (enumerator && enumeratorRegistered) enumerator->UnregisterEndpointNotificationCallback(audioObserver.get());
-        volumeRegistered = enumeratorRegistered = false;
-        volume = nullptr;
-        enumerator = nullptr;
-        audioObserver = nullptr;
-    }
 
     void UpdateHighlight() noexcept {
         try {
@@ -7378,11 +7513,10 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
         try {
             const int size = kGlyphSize;
             if (glyph.FontSize() != size) glyph.FontSize(size);
-            if (!volume) throw winrt::hresult_error(E_NOTFOUND);
-            float level;
-            BOOL muted;
-            winrt::check_hresult(volume->GetMasterVolumeLevelScalar(&level));
-            winrt::check_hresult(volume->GetMute(&muted));
+            const auto snapshot = ReadAudioSnapshot();
+            if (!snapshot.available) throw winrt::hresult_error(E_NOTFOUND);
+            const float level = snapshot.level;
+            const bool muted = snapshot.muted;
             updating = true;
             slider.Value(std::round(level * 100));
             updating = false;
@@ -7401,9 +7535,11 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
             }
         } catch (...) {
             updating = false;
-            slider.IsEnabled(false);
-            mute.IsEnabled(false);
-            glyph.Glyph(L"\xE74F");
+            // A disconnected XAML element can also reject the fallback
+            // update. Never let that escape this notification callback.
+            try { slider.IsEnabled(false); } catch (...) {}
+            try { mute.IsEnabled(false); } catch (...) {}
+            try { glyph.Glyph(L"\xE74F"); } catch (...) {}
         }
     }
 
@@ -7485,35 +7621,26 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
         clicked = mute.Click([weak](auto const&, auto const&) {
             if (auto self = weak.lock(); self && !g_stopping) {
                 try {
-                    auto volume = self->volume;
-                    if (!volume) throw winrt::hresult_error(E_NOTFOUND);
-                    BOOL muted;
-                    winrt::check_hresult(volume->GetMute(&muted));
-                    winrt::check_hresult(volume->SetMute(!muted, nullptr));
+                    QueueAudioCommand({true, 0});
                 } catch (...) { Wh_Log(L"Mute failed: %08X", winrt::to_hresult()); }
-                self->Refresh();
             }
         });
         changed = slider.ValueChanged([weak](auto const&, auto const& args) {
             if (auto self = weak.lock(); self && !self->updating && !g_stopping) {
                 try {
-                    auto volume = self->volume;
-                    if (!volume) throw winrt::hresult_error(E_NOTFOUND);
-                    winrt::check_hresult(volume->SetMasterVolumeLevelScalar(
-                        static_cast<float>(args.NewValue() / 100), nullptr));
-                    winrt::check_hresult(volume->SetMute(FALSE, nullptr));
+                    QueueAudioCommand({false, static_cast<float>(args.NewValue() / 100)});
                 } catch (...) { Wh_Log(L"Volume failed: %08X", winrt::to_hresult()); }
-                self->Refresh();
             }
         });
         loaded = row.Loaded([weak](auto const&, auto const&) {
             if (auto self = weak.lock(); self && !g_stopping) {
-                self->StartAudio();
+                self->listening = true;
+                EnsureAudioService();
                 self->Refresh();
             }
         });
         unloaded = row.Unloaded([weak](auto const&, auto const&) {
-            if (auto self = weak.lock()) self->StopAudio();
+            if (auto self = weak.lock()) self->listening = false;
         });
 
         wrapper = controls::Grid();
@@ -7548,11 +7675,11 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
             parent.Children().InsertAt(index, list);
             throw;
         }
-        StartAudio();
+        listening = true;
+        EnsureAudioService();
         Refresh();
         Wh_Log(L"Inserted master volume above %s#%s",
                winrt::get_class_name(list).c_str(), list.Name().c_str());
-        Status(L"Master volume row inserted");
     }
 
     void RestorePlacement() {
@@ -7563,17 +7690,30 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
     }
 
     bool Remove() noexcept {
-        StopAudio();
-        try {
-            if (mute) {
-                mute.Click(clicked);
-                mute.PointerEntered(entered);
-                mute.PointerExited(exited);
-                mute.ActualThemeChanged(themeChanged);
+        listening = false;
+        bool clean = true;
+        auto attempt = [&](auto&& action) {
+            try { action(); }
+            catch (...) {
+                clean = false;
+                Wh_Log(L"Master row cleanup step failed: %08X", winrt::to_hresult());
             }
-            if (slider) slider.ValueChanged(changed);
-            if (row) { row.Loaded(loaded); row.Unloaded(unloaded); }
-            if (wrapper && parent && list) {
+        };
+        // Revoke independently so one disconnected element cannot skip the
+        // later handlers or stop cleanup of the remaining rows.
+        if (mute) {
+            attempt([&] { mute.Click(clicked); });
+            attempt([&] { mute.PointerEntered(entered); });
+            attempt([&] { mute.PointerExited(exited); });
+            attempt([&] { mute.ActualThemeChanged(themeChanged); });
+        }
+        if (slider) attempt([&] { slider.ValueChanged(changed); });
+        if (row) {
+            attempt([&] { row.Loaded(loaded); });
+            attempt([&] { row.Unloaded(unloaded); });
+        }
+        if (wrapper && parent && list) {
+            attempt([&] {
                 uint32_t index;
                 if (parent.Children().IndexOf(wrapper, index)) {
                     parent.Children().RemoveAt(index);
@@ -7581,42 +7721,14 @@ struct MasterRow : std::enable_shared_from_this<MasterRow> {
                     RestorePlacement();
                     parent.Children().InsertAt(index, list);
                 }
-            }
-            return true;
-        } catch (...) {
-            Wh_Log(L"Row cleanup failed: %08X", winrt::to_hresult());
-            return false;
+            });
         }
+        return clean;
     }
 };
 
-void RowAudioObserver::Queue(bool bind) noexcept {
-    std::lock_guard lock(mutex);
-    if (stopped || g_stopping) return;
-    rebind = rebind || bind;
-    if (queued) return;
-    queued = true;
-    try {
-        dispatcher.get().RunAsync(CoreDispatcherPriority::Low, [self = get_strong()] {
-            bool bind;
-            {
-                std::lock_guard lock(self->mutex);
-                self->queued = false;
-                if (self->stopped || g_stopping) return;
-                bind = std::exchange(self->rebind, false);
-            }
-            if (auto row = self->row.lock()) {
-                if (bind && row->enumerator) row->BindVolume();
-                row->Refresh();
-            }
-        });
-    } catch (...) {
-        queued = false;
-        Wh_Log(L"Master volume dispatcher unavailable: %08X", winrt::to_hresult());
-    }
-}
-
 struct UiState {
+    std::atomic<bool> refreshQueued{false};
     DWORD threadId{};
     CoreDispatcher dispatcher{nullptr};
     std::vector<std::shared_ptr<MasterRow>> rows;
@@ -7634,12 +7746,40 @@ static std::shared_ptr<UiState> CurrentUi(xaml::FrameworkElement const& element)
     std::lock_guard lock(g_uiMutex);
     if (g_stopping || !g_uiStates) return nullptr;
     for (auto const& state : *g_uiStates)
-        if (state->threadId == GetCurrentThreadId()) return state;
+        if (state->threadId == GetCurrentThreadId() && state->dispatcher == element.Dispatcher()) return state;
     auto state = std::make_shared<UiState>();
     state->threadId = GetCurrentThreadId();
     state->dispatcher = element.Dispatcher();
     g_uiStates->push_back(state);
     return state;
+}
+
+static void NotifyAudioRows() {
+    if (g_stopping) return;
+    std::vector<std::shared_ptr<UiState>> states;
+    {
+        std::lock_guard lock(g_uiMutex);
+        if (g_uiStates) states = *g_uiStates;
+    }
+    // Uninit joins this worker before moving the global state vector. A weak
+    // capture ensures queued notifications don't own thread-affine row state.
+    for (auto const& state : states) {
+        if (g_stopping || state->refreshQueued.exchange(true)) continue;
+        try {
+            state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low,
+                [weak = std::weak_ptr<UiState>(state)] {
+                    if (auto state = weak.lock()) {
+                        state->refreshQueued = false;
+                        if (g_stopping) return;
+                        for (auto const& row : state->rows)
+                            if (row->listening) row->Refresh();
+                    }
+                });
+        } catch (...) {
+            state->refreshQueued = false;
+            Wh_Log(L"Master volume dispatcher unavailable: %08X", winrt::to_hresult());
+        }
+    }
 }
 
 static xaml::FrameworkElement FindAppList(xaml::DependencyObject const& root) {
@@ -7703,10 +7843,9 @@ static void ConsiderElement(xaml::FrameworkElement const& element) {
                         state->rows.push_back(std::move(row));
                     } else {
                         Wh_Log(L"Mixer list parent isn't a Panel; no row inserted");
-                        Status(L"Mixer list parent isn't a Panel");
                     }
                 } else {
-                    Status(L"Mixer loaded but app list not found");
+                    Wh_Log(L"Mixer loaded but app list not found");
                 }
             }
         } catch (...) { Wh_Log(L"Injection failed: %08X", winrt::to_hresult()); }
@@ -7738,7 +7877,6 @@ static HRESULT WINAPI ActivateType_Hook(void* type, void** result) {
             });
             state->observers.push_back({weak, token});
             Wh_Log(L"Observed native VolumeMixerList activation");
-            Status(L"Observed native VolumeMixerList activation");
         }
     } catch (...) { Wh_Log(L"Mixer activation observation failed: %08X", winrt::to_hresult()); }
     return hr;
@@ -7770,15 +7908,13 @@ static void HandleControlCenterModule(HMODULE module, bool applyHooks) {
         if (!type || !type.IsConstructible()) throw winrt::hresult_error(E_NOINTERFACE);
         // Six IInspectable methods precede twelve IXamlType getters.
         auto target = (*reinterpret_cast<void***>(winrt::get_abi(type)))[18];
-        if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(ActivateType_Hook),
-                               reinterpret_cast<void**>(&ActivateType_Original)) ||
+        if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<ActivateType_t>(target),
+                                           ActivateType_Hook, &ActivateType_Original) ||
             (applyHooks && !Wh_ApplyHookOperations()))
             throw winrt::hresult_error(E_FAIL);
         Wh_Log(L"Hooked native mixer XAML activation at %p", target);
-        Status(L"Native mixer activation hooked");
     } catch (...) {
         Wh_Log(L"Mixer activation hook unavailable: %08X", winrt::to_hresult());
-        Status(L"Native mixer activation hook unavailable");
     }
     if (uninitialize) CoUninitialize();
 }
@@ -7786,11 +7922,7 @@ static void HandleControlCenterModule(HMODULE module, bool applyHooks) {
 BOOL Init() {
     LoadSettings();
     if (!g_enabled) return FALSE;
-    wchar_t path[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    auto name = wcsrchr(path, L'\\');
-    swprintf_s(g_statusKey, L"%s.status", name ? name + 1 : path);
-    Status(L"Waiting for ControlCenter module load notification");
+    Wh_Log(L"Waiting for ControlCenter module load notification");
     HandleControlCenterModule(GetControlCenterModule(), false);
     return TRUE;
 }
@@ -7803,6 +7935,10 @@ void AfterInit() {
 
 void Uninit() {
     g_stopping = true;
+    // This is independent of every XAML dispatcher, including dead ones.
+    // Join guarantees all endpoint/volume registrations have been removed
+    // and the service can no longer queue a UI notification.
+    StopAudioService();
     std::vector<std::shared_ptr<UiState>> states;
     {
         std::lock_guard lock(g_uiMutex);
@@ -7810,36 +7946,49 @@ void Uninit() {
         g_uiStates.reset();
     }
     for (auto const& state : states) {
+        auto retained = std::make_shared<std::atomic<bool>>(false);
         try {
-            // Queue behind the observation callbacks at the same priority so
-            // no queued lambda remains when Windhawk unloads the module.
-            // RunAsync can silently succeed without running the callback
-            // during dispatcher shutdown. TryRunAsync reports that case.
-            const bool cleaned = state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low, [state] {
-                for (auto const& observer : state->observers)
-                    if (auto element = observer.element.get())
-                        element.Loaded(observer.loaded);
-                state->observers.clear();
-                for (auto const& row : state->rows)
-                    if (!row->Remove()) throw winrt::hresult_error(E_FAIL);
-                state->rows.clear();
-                state->pending.clear();
-            }).get();
-            if (!cleaned) throw winrt::hresult_error(RPC_E_DISCONNECTED);
-            // StopAudio synchronizes callback dispatch. Drain callbacks queued
-            // before it stopped before allowing our code to be unloaded.
-            if (!state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low, [] {}).get())
-                throw winrt::hresult_error(RPC_E_DISCONNECTED);
+            const bool cleaned = state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low,
+                [state, retained] {
+                    for (auto const& observer : state->observers) {
+                        try {
+                            if (auto element = observer.element.get()) element.Loaded(observer.loaded);
+                        } catch (...) {
+                            *retained = true;
+                            Wh_Log(L"Mixer observer cleanup failed: %08X", winrt::to_hresult());
+                        }
+                    }
+                    state->observers.clear();
+                    for (auto it = state->rows.begin(); it != state->rows.end();) {
+                        if ((*it)->Remove()) {
+                            it = state->rows.erase(it);
+                        } else {
+                            *retained = true;
+                            ++it;
+                        }
+                    }
+                    state->pending.clear();
+                }).get();
+            if (!cleaned) *retained = true;
         } catch (...) {
-            Wh_Log(L"UI thread has shut down; retaining affine state: %08X", winrt::to_hresult());
-            // The UI apartment is gone. Intentional process-lifetime retention
-            // is safer than releasing its XAML objects on Windhawk's thread.
-            // Any orphaned native event/audio callback also needs its code
-            // to remain mapped until the host exits. Normal unload never pins.
-            HMODULE owner = nullptr;
-            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<PCWSTR>(&Uninit), &owner);
+            *retained = true;
+            Wh_Log(L"Master volume UI cleanup unavailable: %08X", winrt::to_hresult());
+        }
+        // Always attempt the barrier, even when a row's cleanup failed.
+        // No producer can queue more work after StopAudioService has joined.
+        try {
+            if (!state->dispatcher.TryRunAsync(CoreDispatcherPriority::Low, [] {}).get())
+                *retained = true;
+        } catch (...) {
+            *retained = true;
+            Wh_Log(L"Master volume UI drain unavailable: %08X", winrt::to_hresult());
+        }
+        if (*retained) {
+            // Only XAML references remain here. A dead dispatcher cannot run
+            // its events; all Core Audio callbacks were removed above.
+            // Keep affine references until process exit without pinning code.
             (void)new std::shared_ptr<UiState>(state);
+            Wh_Log(L"Retained unreachable XAML state; mod remains unloadable");
         }
     }
 }
@@ -7857,10 +8006,12 @@ static HMODULE GetTaskbarViewModuleHandle() {
 static void HandleRelevantModuleLoaded(HMODULE module) {
     if (!module || g_unloading) return;
     if (g_isSoundOutputHost) {
+        if (SoundOutputMasterVolume::g_activationHookAttempted.load()) return;
         if (module == SoundOutputMasterVolume::GetControlCenterModule())
             SoundOutputMasterVolume::HandleControlCenterModule(module, true);
-    } else if (module == GetTaskbarViewModuleHandle()) {
-        ResolveNativeTooltipPlacement(module);
+    } else {
+        if (g_nativeTooltipResolutionAttempted.load()) return;
+        if (module == GetTaskbarViewModuleHandle()) ResolveNativeTooltipPlacement(module);
     }
 }
 
