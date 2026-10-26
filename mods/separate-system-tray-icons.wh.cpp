@@ -2591,13 +2591,13 @@ static void ResolveNativeTooltipPlacement() {
     auto module = GetModuleHandleW(L"Taskbar.View.dll");
     if (!module) return;
     g_nativeTooltipResolutionAttempted = true;
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {{
-            LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))",
-            LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const & __ptr64,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))"
+            LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))"
         }, &g_nativeTooltipPlacement, nullptr, true},
     };
-    WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols));
+    WindhawkUtils::HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
     Wh_Log(L"Native taskbar tooltip placement helper: %p.", g_nativeTooltipPlacement);
 }
 
