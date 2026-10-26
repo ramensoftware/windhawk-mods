@@ -2,7 +2,7 @@
 // @id              notification-center-follows-taskbar
 // @name            Notification Center Follows Taskbar
 // @description     Correct Notification Center placement for all taskbar positions, with an optional calendar/notifications swap.
-// @version         1.0.1
+// @version         1.0.0
 // @author          Asteski
 // @github          https://github.com/Asteski
 // @include         explorer.exe
