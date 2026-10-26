@@ -456,6 +456,7 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 #include <new>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <algorithm>
 #include <cwctype>
 #include <stdlib.h>
@@ -837,6 +838,7 @@ static const UINT WM_APP_CHARM_POINTER = WM_APP + 14;
 static const UINT WM_APP_SEED_LAYOUT = WM_APP + 15;
 static const UINT WM_APP_FILES_READY = WM_APP + 16;
 static const UINT WM_APP_APPS_REFRESH = WM_APP + 17;
+static const UINT WM_APP_SETTINGS_READY = WM_APP + 18;
 static const UINT WM_HOOKCTL_MOUSE_ON  = WM_APP + 30;
 static const UINT WM_HOOKCTL_MOUSE_OFF = WM_APP + 31;
 static const UINT WM_HOOKCTL_ORB_REFRESH = WM_APP + 32;   // re-scan the StartAllBack Start button now
@@ -1108,6 +1110,11 @@ static HANDLE g_appsThread = NULL, g_appsStop = NULL;
 static SRWLOCK g_appsLock = SRWLOCK_INIT;
 static HANDLE g_filesNeed = NULL;
 static std::vector<AppEntry>* g_pendingFiles = NULL;
+static std::vector<AppEntry>* g_pendingSettings = NULL;
+// One pixel buffer shared by all modern Settings pages (they all use the SystemSettings icon).
+static BYTE* g_sharedSettingsPx = NULL;
+static int g_sharedSettingsW = 0, g_sharedSettingsH = 0;
+static SRWLOCK g_sharedSettingsLock = SRWLOCK_INIT;
 // Catalog refresh: the worker rebuilds the list, the UI thread applies it (so g_apps is
 // never replaced under a reader), then signals g_iconsGo to let the worker load icons.
 static HANDLE g_appsRefresh = NULL, g_iconsGo = NULL;
@@ -3824,6 +3831,22 @@ static void LoadIconFor(size_t i) {
         }
         return;
     }
+    const bool modernPage = a.launchKind != 0 && path.rfind(L"ms-settings:", 0) == 0;
+    if (modernPage) {   // every Settings page uses the same SystemSettings icon: extract it once
+        BYTE* copy = NULL;
+        AcquireSRWLockExclusive(&g_sharedSettingsLock);
+        if (g_sharedSettingsPx) {
+            const size_t bytes = (size_t)g_sharedSettingsW * (size_t)g_sharedSettingsH * 4;
+            copy = new (std::nothrow) BYTE[bytes];
+            if (copy) {
+                memcpy(copy, g_sharedSettingsPx, bytes);
+                g_icons[i].px = copy; g_icons[i].w = g_sharedSettingsW; g_icons[i].h = g_sharedSettingsH;
+                InterlockedExchange(&g_icons[i].ready, 1);
+            }
+        }
+        ReleaseSRWLockExclusive(&g_sharedSettingsLock);
+        if (copy) return;
+    }
     if (path.rfind(L"ms-settings:", 0) == 0) {
         wchar_t win[MAX_PATH] = {};
         if (GetWindowsDirectoryW(win, MAX_PATH))
@@ -3850,6 +3873,15 @@ static void LoadIconFor(size_t i) {
             if (BitmapToPixels(hbm, &px, &w, &h)) {
                 g_icons[i].px = px; g_icons[i].w = w; g_icons[i].h = h;
                 InterlockedExchange(&g_icons[i].ready, 1);
+                if (modernPage) {
+                    AcquireSRWLockExclusive(&g_sharedSettingsLock);
+                    if (!g_sharedSettingsPx) {
+                        const size_t bytes = (size_t)w * (size_t)h * 4;
+                        BYTE* c = new (std::nothrow) BYTE[bytes];
+                        if (c) { memcpy(c, px, bytes); g_sharedSettingsPx = c; g_sharedSettingsW = w; g_sharedSettingsH = h; }
+                    }
+                    ReleaseSRWLockExclusive(&g_sharedSettingsLock);
+                }
             }
             DeleteObject(hbm);
         }
@@ -4338,20 +4370,24 @@ static std::wstring XmlDecode(const std::wstring& s) {
 }
 
 // Finds the first <name ...>content</name> inside x[from, to) and returns the content range.
+// The search is confined to the record: a missing tag never scans on into the next records.
 static bool XmlRange(const std::wstring& x, size_t from, size_t to, const wchar_t* name,
                      size_t* cs, size_t* ce) {
+    if (to > x.size()) to = x.size();
+    if (from >= to) return false;
+    const std::wstring_view v(x.data() + from, to - from);
     const std::wstring open = std::wstring(L"<") + name;
-    size_t p = from;
-    while ((p = x.find(open, p)) != std::wstring::npos && p < to) {
+    const std::wstring close = std::wstring(L"</") + name + L">";
+    size_t p = 0;
+    while ((p = v.find(std::wstring_view(open), p)) != std::wstring_view::npos) {
         const size_t q = p + open.size();
-        if (q < to && (x[q] == L'>' || x[q] == L' ' || x[q] == L'/' || x[q] == L'\t' || x[q] == L'\r' || x[q] == L'\n')) {
-            const size_t gt = x.find(L'>', q);
-            if (gt == std::wstring::npos || gt >= to) return false;
-            if (x[gt - 1] == L'/') { *cs = *ce = gt; return true; }
-            const std::wstring close = std::wstring(L"</") + name + L">";
-            const size_t e = x.find(close, gt + 1);
-            if (e == std::wstring::npos || e > to) return false;
-            *cs = gt + 1; *ce = e;
+        if (q < v.size() && (v[q] == L'>' || v[q] == L' ' || v[q] == L'/' || v[q] == L'\t' || v[q] == L'\r' || v[q] == L'\n')) {
+            const size_t gt = v.find(L'>', q);
+            if (gt == std::wstring_view::npos) return false;
+            if (v[gt - 1] == L'/') { *cs = *ce = from + gt; return true; }
+            const size_t e = v.find(std::wstring_view(close), gt + 1);
+            if (e == std::wstring_view::npos) return false;
+            *cs = from + gt + 1; *ce = from + e;
             return true;
         }
         p = q;
@@ -4608,7 +4644,12 @@ static IShellItem* ShellItemFromKnownFolder(REFKNOWNFOLDERID id) {
     return item;
 }
 
-static void AddCharmSettingsEntries(std::vector<AppEntry>& list) {
+// The settings do not change within a session: they are built once (BuildSettingsCache, on the
+// catalog thread, after the apps are already published) and then only appended to the catalog.
+static std::vector<AppEntry> g_settingsCache;   // catalog thread only
+static bool g_settingsBuilt = false;
+
+static void BuildSettingsCache() {
     std::vector<AppEntry> found;
 
     if (IShellItem* cp = ShellItemFromKnownFolder(FOLDERID_ControlPanelFolder)) {
@@ -4636,11 +4677,20 @@ static void AddCharmSettingsEntries(std::vector<AppEntry>& list) {
 
     // One row per visible name; the classic item wins over the modern page with the same name.
     std::unordered_map<std::wstring, bool> seen;
-    for (const AppEntry& a : list) if (!a.exe) seen.emplace(a.lower, true);
+    g_settingsCache.clear();
     for (AppEntry& a : found) {
         if (!seen.emplace(a.lower, true).second) continue;
-        list.push_back(std::move(a));
+        g_settingsCache.push_back(std::move(a));
     }
+    g_settingsCache.shrink_to_fit();
+}
+
+// Appends the cached settings to a freshly built catalog (skipping names the catalog already has).
+static void AppendSettingsTo(std::vector<AppEntry>& list) {
+    std::unordered_map<std::wstring, bool> seen;
+    for (const AppEntry& a : list) if (!a.exe && a.charmCat != CC_FILE) seen.emplace(a.lower, true);
+    for (const AppEntry& a : g_settingsCache)
+        if (seen.emplace(a.lower, true).second) list.push_back(a);
 }
 
 static void LaunchSettingEntry(const AppEntry& a) {
@@ -4758,10 +4808,7 @@ static DWORD WINAPI AppsThread(LPVOID) {
         }
     }
 
-    if (!first) {
-        try { AddCharmSettingsEntries(list); }
-        catch (...) { Wh_Log(L"Settings: scan failed"); }
-    }
+    if (g_settingsBuilt) AppendSettingsTo(list);   // refreshes reuse the settings built at start-up
     AddCharmSystemEntries(list);
     Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
@@ -4774,7 +4821,6 @@ static DWORD WINAPI AppsThread(LPVOID) {
         ReleaseSRWLockExclusive(&g_appsLock);
         InterlockedExchange(&g_appsReady, 1);
         if (g_wnd) PostMessageW(g_wnd, WM_APP_APPS_READY, 0, 0);
-        if (g_appsRefresh) SetEvent(g_appsRefresh);   // second pass: adds the settings catalog
     } else {
         std::vector<AppEntry>* np = new std::vector<AppEntry>(std::move(list));
         AcquireSRWLockExclusive(&g_appsLock);
@@ -4789,11 +4835,27 @@ static DWORD WINAPI AppsThread(LPVOID) {
 
     for (size_t i = 0; i < g_apps.size(); ++i) {
         if (WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0) break;
-        if (g_apps[i].charmCat == CC_FILE || g_apps[i].exe) continue;
+        if (g_apps[i].charmCat == CC_FILE || g_apps[i].exe || g_apps[i].searchOnly) continue;
         LoadIconFor(i);
         if ((i & 7) == 7 && g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
     }
     if (g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
+
+    // Settings catalog: built once per session, after the apps are shown, and appended to g_apps
+    // (the same way scanned files are) so no app icon is reloaded.
+    if (!g_settingsBuilt && !AppsStopRequested()) {
+        try { BuildSettingsCache(); }
+        catch (...) { Wh_Log(L"Settings: scan failed"); }
+        g_settingsBuilt = true;
+        if (!g_settingsCache.empty() && !AppsStopRequested()) {
+            std::vector<AppEntry>* sets = new std::vector<AppEntry>(g_settingsCache);
+            AcquireSRWLockExclusive(&g_appsLock);
+            delete g_pendingSettings;
+            g_pendingSettings = sets;
+            ReleaseSRWLockExclusive(&g_appsLock);
+            if (g_wnd) PostMessageW(g_wnd, WM_APP_SETTINGS_READY, 0, 0);
+        }
+    }
 
     // Wait for either a file-scan request or a catalog refresh request.
     HANDLE wait3[3] = { g_appsStop, g_filesNeed, g_appsRefresh };
@@ -5246,7 +5308,7 @@ static ID2D1Bitmap* IconGpu(int appIdx) {
     }
     IconSlot& s = g_icons[appIdx];
     if (s.gpu) return s.gpu;
-    if (!InterlockedCompareExchange(&s.ready, 0, 0) && g_apps[appIdx].exe) LoadIconFor((size_t)appIdx);
+    if (!InterlockedCompareExchange(&s.ready, 0, 0) && (g_apps[appIdx].exe || g_apps[appIdx].searchOnly)) LoadIconFor((size_t)appIdx);
     if (!InterlockedCompareExchange(&s.ready, 0, 0) || !s.px) return NULL;
     D2D1_BITMAP_PROPERTIES p = {};
     p.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -7956,7 +8018,7 @@ static void CharmRender(int contOff) {
             }
             if ((size_t)idx < g_icons.size()) {
             IconSlot& sl = g_icons[(size_t)idx];
-            if (!InterlockedCompareExchange(&sl.ready, 1, 1) && (g_apps[idx].charmCat == CC_FILE || g_apps[idx].exe))
+            if (!InterlockedCompareExchange(&sl.ready, 1, 1) && (g_apps[idx].charmCat == CC_FILE || g_apps[idx].exe || g_apps[idx].searchOnly))
                 LoadIconFor((size_t)idx);
             if (InterlockedCompareExchange(&sl.ready, 1, 1) && sl.px && sl.w > 0) {
                 bool drewIcon = false;
@@ -9666,6 +9728,32 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     }
+    case WM_APP_SETTINGS_READY: {
+        std::vector<AppEntry>* sets = NULL;
+        size_t added = 0;
+        AcquireSRWLockExclusive(&g_appsLock);
+        sets = g_pendingSettings;
+        g_pendingSettings = NULL;
+        if (sets) {
+            std::unordered_map<std::wstring, bool> seen;
+            for (const AppEntry& a : g_apps) if (!a.exe && a.charmCat != CC_FILE) seen.emplace(a.lower, true);
+            for (AppEntry& a : *sets) {
+                if (!seen.emplace(a.lower, true).second) continue;
+                g_apps.push_back(std::move(a));
+                ++added;
+            }
+            g_icons.resize(g_apps.size());
+        }
+        ReleaseSRWLockExclusive(&g_appsLock);
+        delete sets;
+        if (added) {
+            Wh_Log(L"Search: %u catalog entries including settings", (unsigned)g_apps.size());
+            RunSearch();
+            if (g_charmOpen) CharmRender(g_charmCont);
+            if (g_open) RepaintNow();
+        }
+        return 0;
+    }
     case WM_APP_ICON_READY:
         if (g_iconBitmapCache) g_iconBitmapCache->clear();
         // Tile accent colours are the only thing that depends on icons; skip the
@@ -10654,6 +10742,12 @@ static void UiTeardown() {
     g_pendingApps = NULL;
     delete g_pendingFiles;
     g_pendingFiles = NULL;
+    delete g_pendingSettings;
+    g_pendingSettings = NULL;
+    delete[] g_sharedSettingsPx;
+    g_sharedSettingsPx = NULL;
+    g_settingsCache.clear();
+    g_settingsBuilt = false;
     if (g_wallStop) SetEvent(g_wallStop);
     if (g_wallWake) SetEvent(g_wallWake);
     if (g_wallThread) {
