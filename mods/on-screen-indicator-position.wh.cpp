@@ -921,6 +921,46 @@ UINT QueryMonitorDpi(HMONITOR monitor) {
     return SUCCEEDED(hr) && dpiX ? dpiX : 96;
 }
 
+// "<display name> <interface name>" for display profiles to match against.
+// Looking up the interface name can be slow on some systems, and a volume
+// change places the indicator once per step, so the last answer is reused for a
+// few seconds. The short lifetime picks up a dock or monitor change promptly.
+// Fixed-size buffers rather than thread_local strings, whose destructors could
+// run after the mod is unloaded.
+SRWLOCK g_monitorNameLock = SRWLOCK_INIT;
+WCHAR g_cachedDevice[CCHDEVICENAME];
+WCHAR g_cachedMonitorName[CCHDEVICENAME + 1 + 128];
+ULONGLONG g_cachedMonitorNameTime;
+
+std::wstring MonitorDisplayName(PCWSTR device) {
+    constexpr ULONGLONG kCacheMs = 5000;
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockShared(&g_monitorNameLock);
+    if (g_cachedMonitorNameTime && now - g_cachedMonitorNameTime < kCacheMs &&
+        wcscmp(g_cachedDevice, device) == 0) {
+        std::wstring cached = g_cachedMonitorName;
+        ReleaseSRWLockShared(&g_monitorNameLock);
+        return cached;
+    }
+    ReleaseSRWLockShared(&g_monitorNameLock);
+
+    std::wstring name = device;
+    DISPLAY_DEVICEW displayDevice{};
+    displayDevice.cb = sizeof(displayDevice);
+    if (EnumDisplayDevicesW(device, 0, &displayDevice,
+                            EDD_GET_DEVICE_INTERFACE_NAME)) {
+        name += L" ";
+        name += displayDevice.DeviceID;
+    }
+
+    AcquireSRWLockExclusive(&g_monitorNameLock);
+    wcsncpy_s(g_cachedDevice, device, _TRUNCATE);
+    wcsncpy_s(g_cachedMonitorName, name.c_str(), _TRUNCATE);
+    g_cachedMonitorNameTime = now;
+    ReleaseSRWLockExclusive(&g_monitorNameLock);
+    return name;
+}
+
 void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
     const auto settings = g_settings.load();
     const Indicator kind = g_currentIndicator.load();
@@ -932,14 +972,7 @@ void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
         MONITORINFOEXW info{};
         info.cbSize = sizeof(info);
         if (GetMonitorInfoW(monitor, &info)) {
-            monitorName = info.szDevice;
-            DISPLAY_DEVICEW device{};
-            device.cb = sizeof(device);
-            if (EnumDisplayDevicesW(info.szDevice, 0, &device,
-                                    EDD_GET_DEVICE_INTERFACE_NAME)) {
-                monitorName += L" ";
-                monitorName += device.DeviceID;
-            }
+            monitorName = MonitorDisplayName(info.szDevice);
         }
     }
     Placement placement = ResolvePlacement(*settings, kind, monitorName.c_str(),
