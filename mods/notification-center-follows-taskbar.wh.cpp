@@ -2,7 +2,7 @@
 // @id              notification-center-follows-taskbar
 // @name            Notification Center Follows Taskbar
 // @description     Correct Notification Center placement for all taskbar positions, with an optional calendar/notifications swap.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Asteski
 // @github          https://github.com/Asteski
 // @include         explorer.exe
@@ -20,8 +20,8 @@
 Keeps the Windows 11 Notification Center (Win+N, including its calendar)
 correctly positioned with top, bottom, left, and right taskbars. Detects the
 taskbar on the flyout's monitor automatically. Adds the missing correction for
-top taskbars, anchored to the right with an 8 logical pixel vertical gap; retains
-Windows' placement for the other edges. Auto-hidden taskbars use the monitor's
+top taskbars, with an 8 logical pixel vertical gap; retains the horizontal
+position chosen by Windows or other mods. Auto-hidden taskbars use the monitor's
 working area.
 
 Install alongside your taskbar positioning mod. Close and reopen
@@ -38,6 +38,21 @@ Remove any Notification Center Styler rules that swap these panels or force
 their heights, row definitions, or row positions before enabling this option.
 Cosmetic styling can remain. Switching the option off restores the original
 transforms, including bindings. The positioning fix works without the swap.
+
+## Other positioning mods
+
+The top-taskbar fix changes only Y by default, so horizontal alignment from
+Shell Flyout Positions is preserved. This mod and Shell Flyout Positions both
+observe the flyout being uncloaked; they should not both force its X coordinate.
+
+**Repair right-edge position after Explorer restarts** is optional. It forces
+right alignment for top taskbars and overrides a left/center alignment selected
+in another mod. Leave it off when using Shell Flyout Positions. It is retained
+because we observed a surviving shell host occasionally reopening on the left
+after Explorer/taskbar recreation; forcing right alignment corrected that case.
+
+ShellExperienceHost loads this mod only while panel swapping is enabled. Window
+creation only schedules initialization; XAML is accessed later on its UI thread.
 */
 // ==/WindhawkModReadme==
 
@@ -46,6 +61,9 @@ transforms, including bindings. The positioning fix works without the swap.
 - swapPanels: false
   $name: Swap notifications and calendar
   $description: Put the calendar above notifications while keeping Windows' native panel sizes and scrolling. No fixed height limit or row sizing overrides.
+- repairHorizontalPosition: false
+  $name: Repair right-edge position after Explorer restarts
+  $description: Force right alignment with top taskbars. Leave off to preserve horizontal alignment from Windows or Shell Flyout Positions.
 */
 // ==/WindhawkModSettings==
 
@@ -58,7 +76,8 @@ transforms, including bindings. The positioning fix works without the swap.
 #include <limits>
 #include <algorithm>
 #include <cmath>
-#include <windhawk_utils.h>
+#include <optional>
+#include <commctrl.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -73,6 +92,7 @@ decltype(&SetWindowRgn) SetWindowRgn_Original;
 decltype(&DwmSetWindowAttribute) DwmSetWindowAttribute_Original;
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_swapPanels{false};
+std::atomic<bool> g_repairHorizontalPosition{false};
 bool g_shellHost = false;
 thread_local bool g_adjusting = false;
 
@@ -158,14 +178,19 @@ void Restore(HWND window) {
     GetWindowThreadProcessId(window, &pid);
     if (pid == saved.processId && GetWindowRect(window, &rect) &&
         MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) == saved.monitor &&
-        rect.left == saved.appliedX && rect.top == saved.appliedY) {
-        SetWindowPos(window, nullptr, saved.originalX, saved.originalY, 0, 0,
+        (rect.left == saved.appliedX || rect.top == saved.appliedY)) {
+        // Another positioning mod may have changed X after our correction.
+        // Restore only coordinates that still contain our applied value.
+        LONG x = rect.left == saved.appliedX ? saved.originalX : rect.left;
+        LONG y = rect.top == saved.appliedY ? saved.originalY : rect.top;
+        SetWindowPos(window, nullptr, x, y, 0, 0,
                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
 
 POINT CalculateTopTaskbarPosition(const MONITORINFO& info, const RECT& visible,
-                                 UINT dpi) {
+                                 UINT dpi, LONG nativeX,
+                                 bool repairHorizontalPosition = false) {
     LONG verticalGap = MulDiv(8, dpi ? dpi : 96, 96);
     // Use the visible region's right edge, not the outer host width: the host
     // can include transparent space. Don't retain a stale X after Explorer
@@ -176,7 +201,8 @@ POINT CalculateTopTaskbarPosition(const MONITORINFO& info, const RECT& visible,
                    ? info.rcWork.top : info.rcMonitor.top;
     // The shell region already includes the panel's native right-side inset.
     // Adding our vertical gap on X too doubles that spacing for top taskbars.
-    return {right - visible.right, top + verticalGap - visible.top};
+    return {repairHorizontalPosition ? right - visible.right : nativeX,
+            top + verticalGap - visible.top};
 }
 
 void Adjust(HWND window, HRGN region) {
@@ -200,7 +226,8 @@ void Adjust(HWND window, HRGN region) {
         return;
     }
     UINT dpi = GetDpiForWindow(window);
-    POINT target = CalculateTopTaskbarPosition(info, visible, dpi);
+    POINT target = CalculateTopTaskbarPosition(info, visible, dpi, outer.left,
+                                              g_repairHorizontalPosition);
     if (outer.left == target.x && outer.top == target.y) return;
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
@@ -214,11 +241,11 @@ void Adjust(HWND window, HRGN region) {
         auto [it, inserted] = g_placements.try_emplace(
             window, Placement{outer.left, outer.top, target.x, target.y, pid, monitor});
         if (!inserted) {
-            if (it->second.processId != pid || it->second.monitor != monitor ||
-                outer.left != it->second.appliedX || outer.top != it->second.appliedY) {
+            bool newSession = it->second.processId != pid || it->second.monitor != monitor;
+            if (newSession || outer.left != it->second.appliedX)
                 it->second.originalX = outer.left;
+            if (newSession || outer.top != it->second.appliedY)
                 it->second.originalY = outer.top;
-            }
             it->second.appliedX = target.x;
             it->second.appliedY = target.y;
             it->second.processId = pid;
@@ -268,18 +295,31 @@ using namespace winrt::Windows::UI::Xaml::Data;
 
 std::atomic<HWND> g_window{nullptr};
 UINT g_message;
-HANDLE g_stopEvent = nullptr, g_worker = nullptr;
 std::mutex g_candidateMutex;
 std::vector<HWND> g_candidates;
+std::unordered_map<HWND, HHOOK> g_pendingAttach;
+enum : WPARAM { kInitialize = 1, kRefresh, kStop };
 struct CoreWindowInterop : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE get_WindowHandle(HWND* window) = 0;
 };
 // XAML state is exclusively owned by the ActionCenter UI thread.
-Grid g_grid{nullptr};
-FrameworkElement g_notifications{nullptr}, g_calendar{nullptr};
-TranslateTransform g_notificationShift{nullptr}, g_calendarShift{nullptr};
+[[clang::no_destroy]] Grid g_grid{nullptr};
+[[clang::no_destroy]] FrameworkElement g_notifications{nullptr}, g_calendar{nullptr};
+[[clang::no_destroy]] TranslateTransform g_notificationShift{nullptr}, g_calendarShift{nullptr};
 winrt::event_token g_layoutToken{};
 bool g_hasLayoutToken = false, g_updating = false;
+winrt::weak_ref<Grid> g_rejectedGrid;
+
+struct CoreWindowEvents {
+    HWND window = nullptr;
+    winrt::Windows::UI::Core::CoreWindow core{nullptr};
+    winrt::event_token activated{}, visible{};
+    FrameworkElement discoveryRoot{nullptr};
+    winrt::event_token discoveryToken{};
+};
+// Explicitly revoked/released on the owning UI thread during normal unload.
+// Process exit deliberately leaves them for the OS; no XAML CRT teardown.
+[[clang::no_destroy]] thread_local std::optional<CoreWindowEvents> t_events;
 
 struct SavedProperty {
     DependencyObject object;
@@ -297,17 +337,19 @@ struct SavedProperty {
         else object.SetValue(property, value);
     }
 };
-std::vector<SavedProperty> g_saved;
+[[clang::no_destroy]] std::optional<std::vector<SavedProperty>> g_saved;
 
 void RestoreLayout() noexcept {
     if (g_grid && g_hasLayoutToken) {
         try { g_grid.LayoutUpdated(g_layoutToken); } catch (...) {}
     }
     g_hasLayoutToken = false;
-    for (auto it = g_saved.rbegin(); it != g_saved.rend(); ++it) {
-        try { it->Restore(); } catch (...) {}
+    if (g_saved) {
+        for (auto it = g_saved->rbegin(); it != g_saved->rend(); ++it) {
+            try { it->Restore(); } catch (...) {}
+        }
     }
-    g_saved.clear();
+    g_saved.reset();
     g_notificationShift = nullptr;
     g_calendarShift = nullptr;
     g_notifications = nullptr;
@@ -371,7 +413,7 @@ void UpdateTransforms() noexcept {
 }
 
 TranslateTransform AddTranslation(FrameworkElement const& element) {
-    g_saved.emplace_back(element, UIElement::RenderTransformProperty());
+    g_saved->emplace_back(element, UIElement::RenderTransformProperty());
     auto original = element.RenderTransform();
     TransformGroup group;
     if (original) group.Children().Append(original);
@@ -398,16 +440,20 @@ void ApplyGrid(Grid const& grid) {
     if (!notifications || !calendar) return;
     // An existing Styler row swap must be removed before enabling this option.
     if (Grid::GetRow(calendar) <= Grid::GetRow(notifications)) {
-        Wh_Log(L"Panel swap skipped: panels are already reordered by another style");
+        if (g_rejectedGrid.get() != grid) {
+            Wh_Log(L"Panel swap skipped: panels are already reordered by another style");
+            g_rejectedGrid = winrt::make_weak(grid);
+        }
         return;
     }
     g_grid = grid;
     g_notifications = notifications;
     g_calendar = calendar;
+    g_saved.emplace();
     // Keep the lower notifications panel's shadow above the calendar after
     // swapping. The shared restoration path preserves any prior local value
     // or binding when the option is disabled or the mod is unloaded.
-    g_saved.emplace_back(notifications, Canvas::ZIndexProperty());
+    g_saved->emplace_back(notifications, Canvas::ZIndexProperty());
     Canvas::SetZIndex(notifications, 1);
     g_notificationShift = AddTranslation(notifications);
     g_calendarShift = AddTranslation(calendar);
@@ -417,6 +463,80 @@ void ApplyGrid(Grid const& grid) {
     g_hasLayoutToken = true;
     UpdateTransforms();
     Wh_Log(L"Panel swap attached without changing native layout sizes");
+}
+
+void Refresh(HWND nativeWindow) noexcept;
+
+void RevokeDiscovery() noexcept {
+    if (!t_events || !t_events->discoveryRoot) return;
+    try { t_events->discoveryRoot.LayoutUpdated(t_events->discoveryToken); } catch (...) {}
+    t_events->discoveryRoot = nullptr;
+    t_events->discoveryToken = {};
+}
+
+void UnregisterCoreWindowEvents(HWND window) noexcept {
+    if (!t_events || t_events->window != window) return;
+    RevokeDiscovery();
+    try { t_events->core.Activated(t_events->activated); } catch (...) {}
+    try { t_events->core.VisibilityChanged(t_events->visible); } catch (...) {}
+    t_events.reset();
+}
+
+bool MatchesCoreWindow(winrt::Windows::UI::Core::CoreWindow const& core,
+                       HWND window) {
+    if (!core) return false;
+    constexpr GUID iid{0x45d64a29, 0xa63e, 0x4cb6,
+                       {0xb4, 0x98, 0x57, 0x81, 0xd2, 0x98, 0xcb, 0x4f}};
+    winrt::com_ptr<CoreWindowInterop> interop;
+    if (FAILED(winrt::get_unknown(core)->QueryInterface(iid, interop.put_void()))) return false;
+    HWND actual = nullptr;
+    return SUCCEEDED(interop->get_WindowHandle(&actual)) && actual == window;
+}
+
+void RegisterCoreWindowEvents(HWND window) noexcept {
+    if (g_unloading) return;
+    CoreWindowEvents state;
+    try {
+        auto core = winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread();
+        if (!MatchesCoreWindow(core, window)) return;
+        if (t_events && t_events->window == window && t_events->core == core) return;
+        if (t_events) UnregisterCoreWindowEvents(t_events->window);
+        state.window = window;
+        state.core = core;
+        state.activated = core.Activated([window](auto const&, auto const& args) {
+            if (!g_unloading && args.WindowActivationState() !=
+                    winrt::Windows::UI::Core::CoreWindowActivationState::Deactivated)
+                PostMessageW(window, g_message, kRefresh, 0);
+        });
+        state.visible = core.VisibilityChanged([window](auto const&, auto const& args) {
+            if (!g_unloading && args.Visible())
+                PostMessageW(window, g_message, kRefresh, 0);
+        });
+        if (!g_unloading) {
+            t_events.emplace(std::move(state));
+            return;
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't register CoreWindow events: %08X", winrt::to_hresult().value);
+    }
+    if (state.core) {
+        if (state.activated.value) {
+            try { state.core.Activated(state.activated); } catch (...) {}
+        }
+        if (state.visible.value) {
+            try { state.core.VisibilityChanged(state.visible); } catch (...) {}
+        }
+    }
+}
+
+void WatchForContent(FrameworkElement const& root, HWND window) {
+    if (!root || !t_events || t_events->window != window) return;
+    if (t_events->discoveryRoot == root) return;
+    RevokeDiscovery();
+    t_events->discoveryRoot = root;
+    t_events->discoveryToken = root.LayoutUpdated([window](auto const&, auto const&) {
+        if (!g_unloading) Refresh(window);
+    });
 }
 
 void Refresh(HWND nativeWindow) noexcept {
@@ -431,20 +551,18 @@ void Refresh(HWND nativeWindow) noexcept {
         if (!window) return;
         // A process can host several CoreWindows, including the toast page.
         // Bind only the actual Win+N XAML root and its matching native window.
-        constexpr GUID iid{0x45d64a29, 0xa63e, 0x4cb6,
-                           {0xb4, 0x98, 0x57, 0x81, 0xd2, 0x98, 0xcb, 0x4f}};
-        winrt::com_ptr<CoreWindowInterop> interop;
-        if (FAILED(winrt::get_unknown(window.CoreWindow())->QueryInterface(iid, interop.put_void()))) return;
-        HWND actual = nullptr;
-        if (FAILED(interop->get_WindowHandle(&actual)) || actual != nativeWindow) return;
+        if (!MatchesCoreWindow(window.CoreWindow(), nativeWindow)) return;
         auto grid = FindPanelGrid(window.Content());
         if (!grid) {
             if (owner == nativeWindow) {
                 RestoreLayout();
                 g_window = nullptr;
             }
+            WatchForContent(window.Content().try_as<FrameworkElement>(), nativeWindow);
             return;
         }
+        RevokeDiscovery();
+        if (g_unloading) return;
         HWND expected = nullptr;
         if (!owner && !g_window.compare_exchange_strong(expected, nativeWindow)) return;
         ApplyGrid(grid);
@@ -457,110 +575,184 @@ void Refresh(HWND nativeWindow) noexcept {
 }
 
 LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam,
-                            LPARAM lParam, DWORD_PTR) {
+                            LPARAM lParam, UINT_PTR subclassId, DWORD_PTR) {
     if (message == g_message) {
-        if (g_unloading || !g_swapPanels) {
-            KillTimer(window, reinterpret_cast<UINT_PTR>(&g_window));
-            if (g_window == window) RestoreLayout();
+        if (wParam == kStop || g_unloading || !g_swapPanels) {
+            if (g_window == window) {
+                RestoreLayout();
+                g_window = nullptr;
+            }
+            UnregisterCoreWindowEvents(window);
+            RemoveWindowSubclass(window, WindowProc, subclassId);
         } else {
-            // This message is posted, never called from CreateWindowEx or a
-            // loader callback. XAML is only touched from the normal UI loop.
-            SetTimer(window, reinterpret_cast<UINT_PTR>(&g_window), 250, nullptr);
+            RegisterCoreWindowEvents(window);
             Refresh(window);
         }
         return 0;
     }
-    if (message == WM_TIMER && wParam == reinterpret_cast<UINT_PTR>(&g_window)) {
-        BOOL cloaked = FALSE;
-        if (!g_swapPanels || (IsWindowVisible(window) &&
-            SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && !cloaked))
-            Refresh(window);
-        return 0;
-    }
+    // If the initial posted message preceded CoreWindow initialization, the
+    // first real show/activation schedules another safe registration attempt.
+    if (!g_unloading && ((message == WM_SHOWWINDOW && wParam) ||
+        (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE)))
+        PostMessageW(window, g_message, kInitialize, 0);
     if (message == WM_NCDESTROY) {
-        KillTimer(window, reinterpret_cast<UINT_PTR>(&g_window));
         if (g_window == window) {
             RestoreLayout();
             g_window = nullptr;
         }
+        UnregisterCoreWindowEvents(window);
+        RemoveWindowSubclass(window, WindowProc, subclassId);
         std::lock_guard lock(g_candidateMutex);
         std::erase(g_candidates, window);
     }
     return DefSubclassProc(window, message, wParam, lParam);
 }
 
+LRESULT CALLBACK InitializeOnThread(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && wParam == PM_REMOVE) {
+        auto message = reinterpret_cast<MSG*>(lParam);
+        if (message->message == g_message && message->wParam == kInitialize) {
+            HHOOK hook = nullptr;
+            {
+                std::lock_guard lock(g_candidateMutex);
+                auto it = g_pendingAttach.find(message->hwnd);
+                if (it != g_pendingAttach.end()) {
+                    hook = it->second;
+                    g_pendingAttach.erase(it);
+                }
+            }
+            if (hook) {
+                UnhookWindowsHookEx(hook);
+                // Only Win32 work here. Registering XAML events happens when
+                // this posted message is subsequently dispatched to the HWND.
+                if (g_unloading || !SetWindowSubclass(message->hwnd, WindowProc,
+                        reinterpret_cast<UINT_PTR>(WindowProc), 0)) {
+                    std::lock_guard lock(g_candidateMutex);
+                    std::erase(g_candidates, message->hwnd);
+                }
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
 void Attach(HWND window) {
     DWORD pid = 0;
-    GetWindowThreadProcessId(window, &pid);
+    DWORD thread = GetWindowThreadProcessId(window, &pid);
     WCHAR name[64];
-    if (g_unloading || pid != GetCurrentProcessId() ||
+    if (g_unloading || !g_swapPanels || !thread || pid != GetCurrentProcessId() ||
         !GetClassNameW(window, name, ARRAYSIZE(name)) ||
         wcscmp(name, L"Windows.UI.Core.CoreWindow") != 0) return;
     {
         std::lock_guard lock(g_candidateMutex);
+        // Unload can begin after the initial check but before this lock.
+        if (g_unloading) return;
         if (std::find(g_candidates.begin(), g_candidates.end(), window) != g_candidates.end()) return;
         g_candidates.push_back(window);
+        HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, InitializeOnThread, nullptr, thread);
+        if (!hook) {
+            std::erase(g_candidates, window);
+            return;
+        }
+        g_pendingAttach.emplace(window, hook);
     }
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(window, WindowProc, 0)) {
-        std::lock_guard lock(g_candidateMutex);
-        std::erase(g_candidates, window);
-        return;
+    if (!PostMessageW(window, g_message, kInitialize, 0)) {
+        HHOOK hook = nullptr;
+        {
+            std::lock_guard lock(g_candidateMutex);
+            auto it = g_pendingAttach.find(window);
+            if (it != g_pendingAttach.end()) {
+                hook = it->second;
+                g_pendingAttach.erase(it);
+            }
+            std::erase(g_candidates, window);
+        }
+        if (hook) UnhookWindowsHookEx(hook);
     }
-    PostMessageW(window, g_message, 0, 0);
 }
 
-DWORD WINAPI Worker(void*) {
-    // No CreateWindowEx hook: calling XAML from within window construction can
-    // re-enter initialization and deadlock the host.
-    while (WaitForSingleObject(g_stopEvent, 250) == WAIT_TIMEOUT) {
-        if (g_swapPanels && !g_window) {
-            EnumWindows([](HWND window, LPARAM) -> BOOL {
-                Attach(window);
-                return TRUE;
-            }, 0);
-        }
-    }
-    return 0;
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD,
+    int, int, int, int, HWND, HMENU, HINSTANCE, void*, DWORD);
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD,
+    int, int, int, int, HWND, HMENU, HINSTANCE, void*, DWORD, DWORD);
+CreateWindowInBand_t CreateWindowInBand_Original;
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+
+HWND WINAPI CreateWindowInBand_Hook(DWORD exStyle, LPCWSTR className,
+    LPCWSTR title, DWORD style, int x, int y, int width, int height, HWND parent,
+    HMENU menu, HINSTANCE instance, void* param, DWORD band) {
+    HWND window = CreateWindowInBand_Original(exStyle, className, title, style,
+        x, y, width, height, parent, menu, instance, param, band);
+    if (window) Attach(window);
+    return window;
+}
+
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD exStyle, LPCWSTR className,
+    LPCWSTR title, DWORD style, int x, int y, int width, int height, HWND parent,
+    HMENU menu, HINSTANCE instance, void* param, DWORD band, DWORD flags) {
+    HWND window = CreateWindowInBandEx_Original(exStyle, className, title, style,
+        x, y, width, height, parent, menu, instance, param, band, flags);
+    if (window) Attach(window);
+    return window;
+}
+
+bool HookWindowCreation() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) return false;
+    auto create = GetProcAddress(user32, "CreateWindowInBand");
+    auto createEx = GetProcAddress(user32, "CreateWindowInBandEx");
+    if (!create && !createEx) return false;
+    if (create && !Wh_SetFunctionHook(reinterpret_cast<void*>(create),
+            reinterpret_cast<void*>(CreateWindowInBand_Hook),
+            reinterpret_cast<void**>(&CreateWindowInBand_Original))) return false;
+    if (createEx && !Wh_SetFunctionHook(reinterpret_cast<void*>(createEx),
+            reinterpret_cast<void*>(CreateWindowInBandEx_Hook),
+            reinterpret_cast<void**>(&CreateWindowInBandEx_Original))) return false;
+    return true;
+}
+
+void FindExistingWindows() {
+    // One pass on load; creation hooks and CoreWindow events handle the rest.
+    EnumWindows([](HWND window, LPARAM) -> BOOL {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(window, &pid);
+        if (pid == GetCurrentProcessId()) Attach(window);
+        return TRUE;
+    }, 0);
 }
 
 void Stop() {
-    if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_worker) {
-        WaitForSingleObject(g_worker, INFINITE);
-        CloseHandle(g_worker);
-        g_worker = nullptr;
-    }
     std::vector<HWND> candidates;
+    std::vector<HHOOK> pending;
     {
         std::lock_guard lock(g_candidateMutex);
         candidates = g_candidates;
+        for (auto const& entry : g_pendingAttach) pending.push_back(entry.second);
+        g_pendingAttach.clear();
     }
-    for (HWND window : candidates) {
-        SendMessageW(window, g_message, 0, 0);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, WindowProc);
-    }
+    for (HHOOK hook : pending) UnhookWindowsHookEx(hook);
+    // A synchronous message drains any initialization and revokes every WinRT
+    // handler/reference on its UI thread before this DLL can be unloaded.
+    for (HWND window : candidates) SendMessageW(window, g_message, kStop, 0);
     g_window = nullptr;
     { std::lock_guard lock(g_candidateMutex); g_candidates.clear(); }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
 }
 }  // namespace PanelSwap
 }  // namespace
 
 BOOL Wh_ModInit() {
     g_swapPanels = Wh_GetIntSetting(L"swapPanels") != 0;
+    g_repairHorizontalPosition = Wh_GetIntSetting(L"repairHorizontalPosition") != 0;
     WCHAR path[MAX_PATH];
     if (!GetModuleFileNameW(nullptr, path, ARRAYSIZE(path))) return FALSE;
     auto name = wcsrchr(path, L'\\');
     g_shellHost = name && _wcsicmp(name + 1, L"ShellExperienceHost.exe") == 0;
     if (g_shellHost) {
+        if (!g_swapPanels) return FALSE;
         PanelSwap::g_message = RegisterWindowMessageW(
             L"Windhawk_NotificationCenterFollowsTaskbar_PanelSwap");
         if (!PanelSwap::g_message) return FALSE;
-        PanelSwap::g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        return PanelSwap::g_stopEvent != nullptr;
+        return PanelSwap::HookWindowCreation();
     }
     return Wh_SetFunctionHook(reinterpret_cast<void*>(SetWindowRgn),
                               reinterpret_cast<void*>(SetWindowRgn_Hook),
@@ -572,22 +764,16 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     if (g_shellHost) {
-        PanelSwap::g_worker = CreateThread(nullptr, 0, PanelSwap::Worker, nullptr, 0, nullptr);
-        if (!PanelSwap::g_worker) Wh_Log(L"Panel swap discovery thread failed: %lu", GetLastError());
+        PanelSwap::FindExistingWindows();
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
     g_swapPanels = Wh_GetIntSetting(L"swapPanels") != 0;
-    if (g_shellHost) {
-        std::vector<HWND> candidates;
-        {
-            std::lock_guard lock(PanelSwap::g_candidateMutex);
-            candidates = PanelSwap::g_candidates;
-        }
-        for (HWND window : candidates)
-            PostMessageW(window, PanelSwap::g_message, 0, 0);
-    }
+    g_repairHorizontalPosition = Wh_GetIntSetting(L"repairHorizontalPosition") != 0;
+    // Reload removes the ShellExperienceHost half entirely when swapping is off.
+    *reload = g_shellHost;
+    return TRUE;
 }
 
 void Wh_ModBeforeUninit() {
@@ -607,4 +793,5 @@ void Wh_ModBeforeUninit() {
         Restore(window);
     }
 }
+
 
