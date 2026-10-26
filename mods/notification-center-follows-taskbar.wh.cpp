@@ -4,6 +4,7 @@
 // @description     Correct Notification Center placement for all taskbar positions, with an optional calendar/notifications swap.
 // @version         1.0.0
 // @author          Asteski
+// @github          https://github.com/Asteski
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
@@ -14,7 +15,7 @@
 /*
 # Notification Center Follows Taskbar
 
-![Demonstration](https://github.com/Asteski/Windhawk-Mods/blob/1744240412f6ac4ec4cdfaa1dc313807644b6d07/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png)
+![Demonstration](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png)
 
 Keeps the Windows 11 Notification Center (Win+N, including its calendar)
 correctly positioned with top, bottom, left, and right taskbars. Detects the
