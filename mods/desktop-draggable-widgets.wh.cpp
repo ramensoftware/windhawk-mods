@@ -1,93 +1,123 @@
 // ==WindhawkMod==
 // @id              desktop-draggable-widgets
 // @name            JonaOS Draggable Desktop Widgets
-// @description     Draggable widgets with transparent, light, and dark themes. You can add a custom folder path in the mod settings to open your desired music folder.
-// @version         7.2
+// @description     Interactive desktop widgets which provides user ease of accessing and controling functions like WiFi, Hotspot, Bluetooth with just a click, switching between Light and Dark mode with a single click, accessing Music, play and pause from the widget.
+// @version         7.3
 // @author          Jona like it, code it
 // @github          https://github.com/Stunning-dev
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32 -lpropsys -lwlanapi -lbthprops -ladvapi32 -liphlpapi
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # JonaOS Draggable Desktop Widgets
-View Calendar, Time, Battery, Open your Music easily and fast without need of navigating through folders to reach Music folder, and Control Volume really fast by dragging the slider. Dragging moves them to any position on the Desktop and positions are remembered, the Quick Settings shortcuts need Windows 11 (Windows 10 falls back to full Settings pages), and the panel is primary-monitor only.
+View your Date and Time easily, Battery and Volume level, access your custom Music folder fast, switch between light and dark mode by a single click, and control Volume by dragging the slider. Dragging moves widgets to any desktop position and positions are remembered. Quick Settings shortcuts need Windows 11 (Windows 10 falls back to full Settings pages), and the panel is primary-monitor only.
+![image](https://i.imgur.com/mOe74M9.png)
+*Widgets can be placed anywhere on the desktop*
+
+![image](https://i.imgur.com/fiC4MML.gif)
+*Show or hide any widget*
+
+![image](https://i.imgur.com/dH0qXDQ.png)
+*Choose between Flip-Clock, Classic and Roman numeral clock styles*
+
+![image](https://i.imgur.com/Ud3Onqt.png)
+*Choose between Month, Agenda or Day calendar styles*
+
+![image](https://i.imgur.com/T9ueXuM.gif)
+*Music Visualizers animate when audio is detected, Pause and play music, click music icon to open folder*
+
 ![image](https://i.imgur.com/QsdEEBq.png)
-*Volume and Battery widgets can be made Horizontal, Vertical and Round*
-![image](https://i.imgur.com/OT1h1u1.png)
+*The Volume and Battery widgets can be made Horizontal, Vertical or Round*
+
+![image](https://i.imgur.com/tdKZtAi.png)
+*IwinLight*
+
+![image](https://i.imgur.com/wMXurku.png)
+*IwinDark*
+
+![image](https://i.imgur.com/NSQm7Ns.png)
 *LiquidGlass*
-![image](https://i.imgur.com/DjpCK5N.png)
-*WhiteTransparent*
-![image](https://i.imgur.com/9gl361Y.png)
-*AcrylicTranslucent*
-![image](https://i.imgur.com/KY8iKNf.png)
-*JonaOSLight*
-![image](https://i.imgur.com/MOJocT6.png)
-*JonaOSDark*
-![image](https://i.imgur.com/gXqefEW.png)
-*Banana*
-![image](https://i.imgur.com/sKjSb9O.png)
-*Winblue*
-![image](https://i.imgur.com/qFwDZWj.png)
-*Monochrome*
-![image](https://i.imgur.com/LVPGKke.png)
-*Altmonochrome*
-![image](https://i.imgur.com/KjSVQMg.png)
-*HoneyDawn*
-![image](https://i.imgur.com/pW2OSDr.png)
-*Pink*
-![image](https://i.imgur.com/bqdmOPo.png)
-*CharcoalCream*
-![image](https://i.imgur.com/YKWtU5i.png)
-*CrimsomBlush*
-![image](https://i.imgur.com/evaldRJ.png)
-*DeepTeal*
-![image](https://i.imgur.com/1yBbaNX.png)
-*OceanSand*
-![image](https://i.imgur.com/GnqSLmN.png)
-*IndigoMist*
-![image](https://i.imgur.com/77dsN6g.png)
-*SpruceMist*
-![image](https://i.imgur.com/3ZjPKWy.png)
+
+![image](https://i.imgur.com/UUZWG9p.png)
+*WhiteTint*
+
+![image](https://i.imgur.com/uZDwiZR.png)
+*Acrylic*
+
+![image](https://i.imgur.com/s8rJTXN.png)
+*Yellow*
+
+![image](https://i.imgur.com/urVX94G.png)
+*BlackWhite*
+
+![image](https://i.imgur.com/kq1CjNO.png)
+*Altblackwhite*
+
+![image](https://i.imgur.com/1o9MbYY.png)
+*Dawn*
+
+![image](https://i.imgur.com/PUFU9MY.png)
+*Flamingo*
+
+![image](https://i.imgur.com/ugpmURt.png)
+*Charcoal*
+
+![image](https://i.imgur.com/GjNYvnX.png)
+*Crimsom*
+
+![image](https://i.imgur.com/xQBQLrs.png)
+*DeepBlue*
+
+![image](https://i.imgur.com/nJgbsjg.png)
+*Indigo*
+
+![image](https://i.imgur.com/h96ViXO.png)
+*Spruce*
+
+![image](https://i.imgur.com/mzz6UAn.png)
 *PlumCream*
-![image](https://i.imgur.com/vH5eTqi.png)
-*ForestSage*
-![image](https://i.imgur.com/0vqcJfm.png)
+
+![image](https://i.imgur.com/oJHqtbk.png)
+*Army*
+
+![image](https://i.imgur.com/c77zrw0.png)
 *PineFrost*
+
 ![image](https://i.imgur.com/nodjpJE.png)
-*You can paste your custom folder path eg(E:Music) to open your Music*
+*Paste your custom folder path eg(K:Music) to open your Music*
+
 ![image](https://i.imgur.com/Eyx3ht4.png)
-*You can apply a your custom color code eg(#177DDC)*
+*Apply your custom color code eg(#178DDC)*
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- appearanceTheme: liquidGlass
+- appearanceTheme: iwinLight
   $name: Appearance theme
-  $description: Choose the desktop widget appearance. White transparent keeps the original glass look.
+  $description: Choose the desktop widget appearance. White tint keeps the original glass look.
   $options:
-  - liquidGlass: Liquid Glass / Tahoe
-  - whiteTransparent: White transparent
-  - acrylicTranslucent: Acrylic/Translucent
-  - jonaOSLight: JonaOS Light mode
-  - jonaOSDark: JonaOS Dark mode
-  - banana: Banana
-  - winblue: Winblue
-  - monochrome: Monochrome
-  - altmonochrome: Altmonochrome
-  - honeyDawn: Honey Dawn
-  - pink: Pink
-  - charcoalCream: CharcoalCream
-  - crimsomBlush: CrimsomBlush
-  - deepTeal: DeepTeal
-  - oceanSand: OceanSand
-  - indigoMist: IndigoMist
-  - spruceMist: SpruceMist
+  - iwinLight: Iwin Light mode
+  - iwinDark: Iwin Dark mode
+  - liquidGlass: Liquid Glass
+  - whiteTint: White tint
+  - acrylic: Acrylic
+  - yellow: Yellow
+  - blackWhite: Black White
+  - altblackwhite: Altblackwhite
+  - dawn: Dawn
+  - flamingo: Flamingo
+  - charcoal: Charcoal
+  - crimsom: Crimsom
+  - teal: Teal
+  - deepblue: DeepBlue
+  - indigo: Indigo
+  - spruce: Spruce
   - plumCream: PlumCream
-  - forestSage: ForestSage
+  - army: Army
   - pineFrost: PineFrost
 
 - volumeWidgetOrientation: horizontal
@@ -116,15 +146,56 @@ View Calendar, Time, Battery, Open your Music easily and fast without need of na
   $options:
   - horizontal: Horizontal
   - vertical: Vertical
+- calendarMode: month
+  $name: Calendar mode
+  $description: Choose the classic month grid, an agenda-style view, or a large day view for today.
+  $options:
+  - month: Month
+  - agenda: Agenda
+  - day: Day
+- clockStyle: classicAnalog
+  $name: Clock style
+  $description: Choose the Clock widget design. Classic Analog is the default.
+  $options:
+  - flip: Flip Clock
+  - roman: Roman Analog
+  - classicAnalog: Classic Analog
+- showCalendar: true
+  $name: Show Calendar widget
+- showClock: true
+  $name: Show Clock widget
+- showMusic: true
+  $name: Show Music / Now Playing widget
+- showVolume: true
+  $name: Show Volume widget
+- showBattery: true
+  $name: Show Battery widget
+- showSearch: true
+  $name: Show Windows Search widget
+- showPersonalization: true
+  $name: Show Personalization widget
+- showWifi: true
+  $name: Show WiFi widget
+- showHotspot: true
+  $name: Show Hotspot widget
+- showBluetooth: true
+  $name: Show Bluetooth widget
+- showMode: true
+  $name: Show Mode widget
+  $description: Click to switch Windows between light and dark mode. The label and toggle show the active mode. Drag to reposition the widget.
 - materialCustomColor: ""
-  $name: Liquid Glass / Tahoe custom color
-  $description: Optional custom color for Liquid Glass / Tahoe accents, icons, sliders, and controls. Use #RRGGBB, RRGGBB, 0xRRGGBB, or #AARRGGBB. This setting applies only to Liquid Glass / Tahoe. Acrylic keeps its built-in colors.
+  $name: Liquid Glass custom color
+  $description: Optional custom color for Liquid Glass accents, icons, sliders, and controls. Use #RRGGBB, RRGGBB, 0xRRGGBB, or #AARRGGBB. This setting applies only to Liquid Glass. Acrylic keeps its built-in colors.
 - musicFolderPath: ""
   $name: Music folder path
-  $description: Paste a folder path here (e.g. D:\Music) to open that folder when you click the Music widget. Leave empty to open the default Music folder.
+  $description: Paste a folder path here (e.g. D:\Music) to open that folder when you click the music note button. Leave empty to open the default Music folder.
 */
 // ==/WindhawkModSettings==
 
+// WIN32_LEAN_AND_MEAN is supplied in @compilerOptions above because Windhawk
+// force-includes windhawk_api.h (and thus windows.h) before this source file.
+// That prevents windows.h from pulling in legacy winsock.h first.
+#include <winsock2.h>
 #include <windhawk_api.h>
 
 #include <windows.h>
@@ -132,13 +203,45 @@ View Calendar, Time, Battery, Open your Music easily and fast without need of na
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <endpointvolume.h>
+#include <audioclient.h>
 #include <mmdeviceapi.h>
+#include <propsys.h>
+#include <functiondiscoverykeys_devpkey.h>
+// Local definition of PKEY_Device_FriendlyName so the linker doesn't need
+// an external symbol (avoids "undefined symbol: _PKEY_Device_FriendlyName").
+static const PROPERTYKEY kPkeyDeviceFriendlyName = {
+    {0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}},
+    14
+};
+#include <wlanapi.h>
+#include <bluetoothapis.h>
+#include <iphlpapi.h>
 #include <shlobj.h>
 #include <shellapi.h>
+
+// Windhawk currently builds with MinGW headers where IAudioMeterInformation
+// can be only forward-declared in endpointvolume.h. Complete the COM interface
+// so Release() and GetPeakValue() are valid member calls.
+#if defined(__MINGW32__)
+__CRT_UUID_DECL(IAudioMeterInformation,
+                0xC02216F6, 0x8C67, 0x4B5B,
+                0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64)
+
+MIDL_INTERFACE("C02216F6-8C67-4B5B-9D00-D008E73E0064")
+IAudioMeterInformation : public IUnknown {
+public:
+    virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* pfPeak) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMeteringChannelCount(UINT* pnChannelCount) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetChannelsPeakValues(
+        UINT u32ChannelCount, float* afPeakValues) = 0;
+    virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* pdwHardwareSupportMask) = 0;
+};
+#endif
 
 #include <algorithm>
 #include <cmath>
 #include <cwchar>
+#include <vector>
 
 using namespace Gdiplus;
 
@@ -147,7 +250,11 @@ namespace {
 constexpr int kDesignW = 390;
 constexpr int kDesignH = 620;
 constexpr UINT_PTR kTickTimer = 1;
+constexpr UINT_PTR kVisualizerTimer = 2;
+constexpr UINT_PTR kShortcutStateTimer = 3;
 constexpr DWORD kTimerMs = 1000;
+constexpr DWORD kVisualizerTimerMs = 80;
+constexpr DWORD kShortcutStateTimerMs = 100;
 constexpr UINT kSettingsChangedMessage = WM_APP + 1;
 constexpr UINT kVolumeChangedMessage   = WM_APP + 2;
 constexpr UINT kAudioDeviceChangedMessage = WM_APP + 3;
@@ -164,35 +271,34 @@ enum WidgetId {
     WidgetWifi,
     WidgetHotspot,
     WidgetBluetooth,
-    WidgetAccessibility,
+    WidgetMode,
     WidgetCount,
 };
 
 enum class AppearanceTheme {
+    IwinLight,
+    IwinDark,
     LiquidGlass,
-    WhiteTransparent,
-    AcrylicTranslucent,
-    JonaOSLight,
-    JonaOSDark,
-    Banana,
-    Winblue,
-    Monochrome,
-    Altmonochrome,
-    HoneyDawn,
-    Pink,
-    CharcoalCream,
-    CrimsomBlush,
-    DeepTeal,
-    OceanSand,
-    IndigoMist,
-    SpruceMist,
+    WhiteTint,
+    Acrylic,
+    Yellow,
+    BlackWhite,
+    Altblackwhite,
+    Dawn,
+    Flamingo,
+    Charcoal,
+    Crimsom,
+    Teal,
+    DeepBlue,
+    Indigo,
+    Spruce,
     PlumCream,
-    ForestSage,
+    Army,
     PineFrost,
 
 
 };
-AppearanceTheme g_appearanceTheme = AppearanceTheme::JonaOSLight;
+AppearanceTheme g_appearanceTheme = AppearanceTheme::IwinLight;
 
 struct ThemePalette {
     AppearanceTheme theme;
@@ -208,27 +314,26 @@ struct ThemePalette {
 constexpr BYTE kSolid = 255;
 
 ThemePalette g_palettes[] = {
-    {AppearanceTheme::AcrylicTranslucent, L"acrylicTranslucent", Color(215, 0x00, 0x78, 0xD7), Color(120, 0x20, 0x22, 0x28), Color(150, 0x1A, 0x1C, 0x22), Color(kSolid, 0xFF, 0xFF, 0xFF), Color(kSolid, 0xF5, 0xF7, 0xFA), Color(kSolid, 0xF0, 0xF4, 0xF8)},
-    {AppearanceTheme::Banana,      L"banana",      Color(kSolid, 0x11, 0x12, 0x0D), Color(kSolid, 0xFB, 0xBC, 0x04), Color(kSolid, 0xFB, 0xBC, 0x04), Color(kSolid, 0xFF, 0xFB, 0xF4), Color(kSolid, 0x11, 0x12, 0x0D), Color(kSolid, 0xFF, 0xFB, 0xF4)},
-    {AppearanceTheme::Winblue, L"winblue", Color(kSolid, 0xAC, 0xC8, 0xDE), Color(kSolid, 0x18, 0x74, 0xFD), Color(kSolid, 0x18, 0x74, 0xFD), Color(kSolid, 0x18, 0x74, 0xFD), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xFE, 0xFE, 0xFE)},
-    {AppearanceTheme::Monochrome, L"monochrome", Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xAA, 0xAD, 0xB1), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0x04, 0x04, 0x08)},
-    {AppearanceTheme::Altmonochrome, L"altmonochrome", Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xFE, 0xFE, 0xFE)},
-    {AppearanceTheme::HoneyDawn,   L"honeyDawn",   Color(kSolid, 0xFA, 0xD7, 0x8B), Color(kSolid, 0xFF, 0xF7, 0xE8), Color(kSolid, 0xD8, 0x96, 0x45), Color(kSolid, 0x4A, 0x2D, 0x0D), Color(kSolid, 0x42, 0x30, 0x1A), Color(kSolid, 0xFF, 0xFB, 0xEF)},
-    {AppearanceTheme::Pink,         L"pink",         Color(kSolid, 0xB8, 0x1E, 0x68), Color(kSolid, 0xFF, 0xEB, 0xF5), Color(kSolid, 0xF4, 0x79, 0xB8), Color(kSolid, 0xFF, 0xF7, 0xFC), Color(kSolid, 0x43, 0x12, 0x2B), Color(kSolid, 0xFF, 0xFB, 0xFE)},
-    {AppearanceTheme::CharcoalCream, L"charcoalCream", Color(kSolid, 0x11, 0x11, 0x11), Color(kSolid, 0xF5, 0xEB, 0xDD), Color(kSolid, 0xF5, 0xEB, 0xDD), Color(kSolid, 0xF5, 0xEB, 0xDD), Color(kSolid, 0x11, 0x11, 0x11), Color(kSolid, 0x11, 0x11, 0x11)},
-    {AppearanceTheme::CrimsomBlush,  L"crimsomBlush",  Color(kSolid, 0xFD, 0x18, 0x43), Color(kSolid, 0xFF, 0xF9, 0xFA), Color(kSolid, 0xFF, 0xF9, 0xFA), Color(kSolid, 0xFF, 0xF9, 0xFA), Color(kSolid, 0xFD, 0x18, 0x43), Color(kSolid, 0xFD, 0x18, 0x43)},
-    {AppearanceTheme::DeepTeal,      L"deepTeal",      Color(kSolid, 0x00, 0x47, 0x41), Color(kSolid, 0xF0, 0xED, 0xE4), Color(kSolid, 0xF0, 0xED, 0xE4), Color(kSolid, 0xF0, 0xED, 0xE4), Color(kSolid, 0x00, 0x47, 0x41), Color(kSolid, 0x00, 0x47, 0x41)},
-    {AppearanceTheme::OceanSand,     L"oceanSand",     Color(kSolid, 0x00, 0x41, 0x6A), Color(kSolid, 0xF0, 0xEA, 0xD6), Color(kSolid, 0xF0, 0xEA, 0xD6), Color(kSolid, 0xF0, 0xEA, 0xD6), Color(kSolid, 0x00, 0x41, 0x6A), Color(kSolid, 0x00, 0x41, 0x6A)},
-    {AppearanceTheme::IndigoMist,    L"indigoMist",    Color(kSolid, 0x27, 0x18, 0x7E), Color(kSolid, 0xF7, 0xF7, 0xFF), Color(kSolid, 0xF7, 0xF7, 0xFF), Color(kSolid, 0xF7, 0xF7, 0xFF), Color(kSolid, 0x27, 0x18, 0x7E), Color(kSolid, 0x27, 0x18, 0x7E)},
-    {AppearanceTheme::SpruceMist,    L"spruceMist",    Color(kSolid, 0x00, 0x46, 0x43), Color(kSolid, 0xF0, 0xED, 0xE5), Color(kSolid, 0xF0, 0xED, 0xE5), Color(kSolid, 0xF0, 0xED, 0xE5), Color(kSolid, 0x00, 0x46, 0x43), Color(kSolid, 0x00, 0x46, 0x43)},
+    {AppearanceTheme::Acrylic, L"acrylic", Color(215, 0x00, 0x78, 0xD7), Color(120, 0x20, 0x22, 0x28), Color(150, 0x1A, 0x1C, 0x22), Color(kSolid, 0xFF, 0xFF, 0xFF), Color(kSolid, 0xF5, 0xF7, 0xFA), Color(kSolid, 0xF0, 0xF4, 0xF8)},
+    {AppearanceTheme::Yellow,      L"yellow",      Color(kSolid, 0x11, 0x12, 0x0D), Color(kSolid, 0xFB, 0xBC, 0x04), Color(kSolid, 0xFB, 0xBC, 0x04), Color(kSolid, 0xFF, 0xFB, 0xF4), Color(kSolid, 0x11, 0x12, 0x0D), Color(kSolid, 0xFF, 0xFB, 0xF4)},
+    {AppearanceTheme::BlackWhite, L"blackWhite", Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xAA, 0xAD, 0xB1), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0x04, 0x04, 0x08)},
+    {AppearanceTheme::Altblackwhite, L"altblackwhite", Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0x04, 0x04, 0x08), Color(kSolid, 0xFE, 0xFE, 0xFE), Color(kSolid, 0xFE, 0xFE, 0xFE)},
+    {AppearanceTheme::Dawn,   L"dawn",   Color(kSolid, 0xFA, 0xD7, 0x8B), Color(kSolid, 0xFF, 0xF7, 0xE8), Color(kSolid, 0xD8, 0x96, 0x45), Color(kSolid, 0x4A, 0x2D, 0x0D), Color(kSolid, 0x42, 0x30, 0x1A), Color(kSolid, 0xFF, 0xFB, 0xEF)},
+    {AppearanceTheme::Flamingo,    L"flamingo",         Color(kSolid, 0xB8, 0x1E, 0x68), Color(kSolid, 0xFF, 0xEB, 0xF5), Color(kSolid, 0xF4, 0x79, 0xB8), Color(kSolid, 0xFF, 0xF7, 0xFC), Color(kSolid, 0x43, 0x12, 0x2B), Color(kSolid, 0xFF, 0xFB, 0xFE)},
+    {AppearanceTheme::Charcoal, L"charcoal", Color(kSolid, 0x11, 0x11, 0x11), Color(kSolid, 0xF5, 0xEB, 0xDD), Color(kSolid, 0xF5, 0xEB, 0xDD), Color(kSolid, 0xF5, 0xEB, 0xDD), Color(kSolid, 0x11, 0x11, 0x11), Color(kSolid, 0x11, 0x11, 0x11)},
+    {AppearanceTheme::Crimsom,  L"crimsom",  Color(kSolid, 0xFD, 0x18, 0x43), Color(kSolid, 0xFF, 0xF9, 0xFA), Color(kSolid, 0xFF, 0xF9, 0xFA), Color(kSolid, 0xFF, 0xF9, 0xFA), Color(kSolid, 0xFD, 0x18, 0x43), Color(kSolid, 0xFD, 0x18, 0x43)},
+    {AppearanceTheme::Teal,      L"teal",      Color(kSolid, 0x00, 0x47, 0x41), Color(kSolid, 0xF0, 0xED, 0xE4), Color(kSolid, 0xF0, 0xED, 0xE4), Color(kSolid, 0xF0, 0xED, 0xE4), Color(kSolid, 0x00, 0x47, 0x41), Color(kSolid, 0x00, 0x47, 0x41)},
+    {AppearanceTheme::DeepBlue,     L"deepblue",     Color(kSolid, 0x00, 0x41, 0x6A), Color(kSolid, 0xF0, 0xEA, 0xD6), Color(kSolid, 0xF0, 0xEA, 0xD6), Color(kSolid, 0xF0, 0xEA, 0xD6), Color(kSolid, 0x00, 0x41, 0x6A), Color(kSolid, 0x00, 0x41, 0x6A)},
+    {AppearanceTheme::Indigo,    L"indigo",    Color(kSolid, 0x27, 0x18, 0x7E), Color(kSolid, 0xF7, 0xF7, 0xFF), Color(kSolid, 0xF7, 0xF7, 0xFF), Color(kSolid, 0xF7, 0xF7, 0xFF), Color(kSolid, 0x27, 0x18, 0x7E), Color(kSolid, 0x27, 0x18, 0x7E)},
+    {AppearanceTheme::Spruce,    L"spruce",    Color(kSolid, 0x00, 0x46, 0x43), Color(kSolid, 0xF0, 0xED, 0xE5), Color(kSolid, 0xF0, 0xED, 0xE5), Color(kSolid, 0xF0, 0xED, 0xE5), Color(kSolid, 0x00, 0x46, 0x43), Color(kSolid, 0x00, 0x46, 0x43)},
     {AppearanceTheme::PlumCream,     L"plumCream",     Color(kSolid, 0x38, 0x19, 0x32), Color(kSolid, 0xFF, 0xF3, 0xE6), Color(kSolid, 0xFF, 0xF3, 0xE6), Color(kSolid, 0xFF, 0xF3, 0xE6), Color(kSolid, 0x38, 0x19, 0x32), Color(kSolid, 0x38, 0x19, 0x32)},
-    {AppearanceTheme::ForestSage,    L"forestSage",    Color(kSolid, 0x1A, 0x25, 0x17), Color(kSolid, 0xAC, 0xC8, 0xA2), Color(kSolid, 0xAC, 0xC8, 0xA2), Color(kSolid, 0xAC, 0xC8, 0xA2), Color(kSolid, 0x1A, 0x25, 0x17), Color(kSolid, 0x1A, 0x25, 0x17)},
+    {AppearanceTheme::Army,    L"army",    Color(kSolid, 0x1A, 0x25, 0x17), Color(kSolid, 0xAC, 0xC8, 0xA2), Color(kSolid, 0xAC, 0xC8, 0xA2), Color(kSolid, 0xAC, 0xC8, 0xA2), Color(kSolid, 0x1A, 0x25, 0x17), Color(kSolid, 0x1A, 0x25, 0x17)},
     {AppearanceTheme::PineFrost,     L"pineFrost",     Color(kSolid, 0x03, 0x32, 0x2E), Color(kSolid, 0xF4, 0xF4, 0xF4), Color(kSolid, 0xF4, 0xF4, 0xF4), Color(kSolid, 0xF4, 0xF4, 0xF4), Color(kSolid, 0x03, 0x32, 0x2E), Color(kSolid, 0x03, 0x32, 0x2E)},
 };
 
 
-// ── JonaOS per-widget colour tables ──────────────────────────────────────────
-struct JonaOSPalette {
+// ── Iwin per-widget colour tables ──────────────────────────────────────────
+struct IwinPalette {
     // Calendar
     Color calHeader;
     Color calHeaderText;
@@ -273,13 +378,9 @@ struct JonaOSPalette {
     Color hotspotFrame;
     Color hotspotText;
     Color hotspotIcon;
-    // Accessibility
-    Color accessibilityFrame;
-    Color accessibilityText;
-    Color accessibilityIcon;
 };
 
-static const JonaOSPalette g_jonaOSLight = {
+static const IwinPalette g_iwinLight = {
     // Calendar
     Color(255,0xFF,0x3B,0x30), // calHeader      — Red
     Color(255,0xE5,0xE5,0xEA), // calHeaderText  — Light grey
@@ -332,13 +433,9 @@ static const JonaOSPalette g_jonaOSLight = {
     Color(255,0xE5,0xE5,0xEA), // hotspotFrame
     Color(255,0x34,0xC7,0x59), // hotspotText    — Green
     Color(255,0x34,0xC7,0x59), // hotspotIcon    — Green
-    // Accessibility
-    Color(255,0xE5,0xE5,0xEA), // accessibilityFrame
-    Color(255,0x00,0x7A,0xFF), // accessibilityText  — Blue
-    Color(255,0x00,0x7A,0xFF), // accessibilityIcon  — Blue
 };
 
-static const JonaOSPalette g_jonaOSDark = {
+static const IwinPalette g_iwinDark = {
     // Calendar
     Color(255,0x1C,0x1C,0x1E), // calHeader      — Dark grey
     Color(255,0xFF,0x3B,0x30), // calHeaderText  — Red
@@ -391,15 +488,11 @@ static const JonaOSPalette g_jonaOSDark = {
     Color(255,0x1C,0x1C,0x1E), // hotspotFrame
     Color(255,0xE5,0xE5,0xEA), // hotspotText
     Color(255,0x34,0xC7,0x59), // hotspotIcon    — Green
-    // Accessibility
-    Color(255,0x1C,0x1C,0x1E), // accessibilityFrame
-    Color(255,0xE5,0xE5,0xEA), // accessibilityText
-    Color(255,0x00,0x7A,0xFF), // accessibilityIcon — Blue
 };
 
-const JonaOSPalette* CurrentJonaOSPalette() {
-    if (g_appearanceTheme == AppearanceTheme::JonaOSLight) return &g_jonaOSLight;
-    if (g_appearanceTheme == AppearanceTheme::JonaOSDark)  return &g_jonaOSDark;
+const IwinPalette* CurrentIwinPalette() {
+    if (g_appearanceTheme == AppearanceTheme::IwinLight) return &g_iwinLight;
+    if (g_appearanceTheme == AppearanceTheme::IwinDark)  return &g_iwinDark;
     return nullptr;
 }
 
@@ -417,10 +510,10 @@ Widget g_widgets[WidgetCount] = {
     {WidgetBattery,         RectF(0,   430, 350, 30),  false},
     {WidgetSearch,          RectF(0,   480, 165, 34),  false},
     {WidgetPersonalization, RectF(185, 480, 165, 34),  false},
-    {WidgetWifi,            RectF(0,   530, 80,  70),  true},
-    {WidgetHotspot,         RectF(90,  530, 80,  70),  true},
-    {WidgetBluetooth,       RectF(180, 530, 80,  70),  true},
-    {WidgetAccessibility,   RectF(270, 530, 80,  70),  true},
+    {WidgetWifi,            RectF(0,   530, 160, 53.333333f), false},
+    {WidgetHotspot,         RectF(180, 530, 160, 53.333333f), false},
+    {WidgetBluetooth,       RectF(0,   603, 160, 53.333333f), false},
+    {WidgetMode,            RectF(180, 603, 160, 53.333333f), false},
 };
 
 
@@ -435,9 +528,17 @@ float g_scale = 1.0f;
 constexpr float kWidgetSizeScale = 0.75f;
 constexpr float kSmallButtonHeight = 34.0f;
 constexpr float kSmallButtonFontSize = 15.0f;
-constexpr float kRoundShortcutWidth = 80.0f;
-constexpr float kRoundShortcutHeight = 70.0f;
-constexpr float kRoundShortcutFontSize = 12.0f;
+// Pill measurements are logical units: 0.75 render scale produces the
+// requested 120x40 px pill, 50x20 px toggle, and 16 px knob on screen.
+constexpr float kPillShortcutWidth = 160.0f;
+constexpr float kPillShortcutHeight = 53.333333f;
+constexpr float kPillShortcutGap = 20.0f;
+constexpr float kPillToggleWidth = 66.666667f;
+constexpr float kPillToggleHeight = 26.666667f;
+constexpr float kPillToggleInset = 5.333333f;
+constexpr float kPillToggleKnobDiameter = 21.333333f;
+constexpr float kPillShortcutFontSize = 13.5f;
+constexpr float kPillShortcutIconScale = 0.75f;
 // 166.667 logical px * 0.75 = 125 screen px.
 constexpr float kRoundMeterDiameter = 166.666667f;
 constexpr float kRoundMeterThickness = 40.0f;       // 30 screen px
@@ -456,30 +557,75 @@ enum class SliderOrientation {
     Round,
 };
 
+enum class CalendarMode {
+    Month,
+    Agenda,
+    Day,
+};
+
+enum class ClockStyle {
+    Flip,
+    Roman,
+    ClassicAnalog,
+};
+
+enum class LiveState {
+    Unknown,
+    On,
+    Off,
+    Unavailable,
+};
+
 int g_dragWidget = -1;
 PointF g_dragDelta;
 PointF g_dragStart;
 bool g_dragMoved = false;
 bool g_draggingSlider = false;
 float g_volumeLevel = 1.0f;
+bool g_volumeMuted = false;
 float g_batteryLevel = 1.0f;
 bool g_onBatteryCapable = false;
+bool g_batteryCharging = false;
+bool g_batteryFull = false;
 AppearanceTheme _appearanceTheme = AppearanceTheme::LiquidGlass;
 SliderOrientation g_volumeWidgetOrientation = SliderOrientation::Horizontal;
 SliderOrientation g_batteryWidgetOrientation = SliderOrientation::Horizontal;
 bool g_searchWidgetVertical = false;
 bool g_personalizationWidgetVertical = false;
+CalendarMode g_calendarMode = CalendarMode::Month;
+ClockStyle g_clockStyle = ClockStyle::ClassicAnalog;
+bool g_widgetEnabled[WidgetCount] = {
+    true, true, true, true, true, true, true, true, true, true, true
+};
 BYTE g_materialAccentR = 0xFE;
 BYTE g_materialAccentG = 0xFE;
 BYTE g_materialAccentB = 0xFE;
 wchar_t g_musicFolderPath[1024] = L"";
+LiveState g_wifiState = LiveState::Unavailable;
+LiveState g_hotspotState = LiveState::Unavailable;
+LiveState g_bluetoothState = LiveState::Unavailable;
+LiveState g_darkModeState = LiveState::Unavailable;
+wchar_t g_outputDeviceName[128] = L"Output device";
+bool g_mediaAudioActive = false;
+bool g_mediaControlAvailable = false;
+wchar_t g_mediaTitle[96] = L"";
+wchar_t g_mediaSubtitle[128] = L"";
+wchar_t g_agendaLine1[128] = L"No events available";
+wchar_t g_agendaLine2[128] = L"";
 int g_lastRenderedMinute = -1;
 
 IMMDeviceEnumerator*          g_audioEnumerator = nullptr;
 IMMDevice*                    g_audioDevice = nullptr;
 IAudioEndpointVolume*         g_endpointVolume = nullptr;
+IAudioMeterInformation*       g_audioMeter = nullptr;
 IAudioEndpointVolumeCallback* g_volumeCallback = nullptr;
 IMMNotificationClient*        g_audioNotificationClient = nullptr;
+
+constexpr int kMusicBarCount = 7;
+constexpr float kMusicRestHeights[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
+float g_musicBarHeights[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
+float g_musicBarTargets[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
+unsigned int g_musicRandomSeed = 0x6C8E9CF5u;
 
 struct RenderSurface {
     HDC      memDc      = nullptr;
@@ -557,7 +703,7 @@ bool PtInRectF(const RectF& rc, PointF pt) {
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
 const ThemePalette* CurrentTheme() {
-    if (g_appearanceTheme == AppearanceTheme::WhiteTransparent ||
+    if (g_appearanceTheme == AppearanceTheme::WhiteTint ||
         g_appearanceTheme == AppearanceTheme::LiquidGlass) {
         return nullptr;
     }
@@ -571,6 +717,18 @@ const ThemePalette* CurrentTheme() {
 
 bool IsLiquidGlassTheme() {
     return g_appearanceTheme == AppearanceTheme::LiquidGlass;
+}
+
+bool IsWhiteTintTheme() {
+    return g_appearanceTheme == AppearanceTheme::WhiteTint;
+}
+
+// White Tint has a deliberately pale background. It must never share the
+// white-text fallback used by the darker legacy themes.
+Color DefaultWidgetTextColor(BYTE alpha = 245) {
+    return IsWhiteTintTheme()
+        ? Color(alpha, 0x1C, 0x1C, 0x1E)
+        : Color(alpha, 255, 255, 255);
 }
 
 Color LiquidGlassTextColor(BYTE alpha = 252) {
@@ -589,7 +747,7 @@ Color MaterialThemeHeaderColor(const ThemePalette* theme) {
 }
 
 Color MaterialIconColor(const ThemePalette* theme, bool liquidGlass, Color fallback) {
-    // The custom material color is exclusive to Liquid Glass / Tahoe.
+    // The custom material color is exclusive to Liquid Glass.
     if (liquidGlass) {
         return MaterialAccentColor();
     }
@@ -679,6 +837,32 @@ SliderOrientation ReadSliderOrientationSetting(const wchar_t* name) {
     return orientation;
 }
 
+bool ReadBoolSetting(const wchar_t* name, bool defaultValue = true) {
+    int intValue = Wh_GetIntSetting(name);
+    if (intValue != 0) return true;
+
+    PCWSTR value = Wh_GetStringSetting(name);
+    if (!value) return defaultValue;
+    if (value[0] == L'\0') {
+        Wh_FreeStringSetting(value);
+        return false;
+    }
+    bool result = defaultValue;
+    if (wcscmp(value, L"false") == 0 || wcscmp(value, L"0") == 0 ||
+        wcscmp(value, L"off") == 0) {
+        result = false;
+    } else if (wcscmp(value, L"true") == 0 || wcscmp(value, L"1") == 0 ||
+               wcscmp(value, L"on") == 0) {
+        result = true;
+    }
+    Wh_FreeStringSetting(value);
+    return result;
+}
+
+bool IsWidgetEnabled(int widgetId) {
+    return widgetId >= 0 && widgetId < WidgetCount && g_widgetEnabled[widgetId];
+}
+
 bool IsWidgetRoundMeter(int widgetId) {
     switch (widgetId) {
         case WidgetVolume:
@@ -687,6 +871,11 @@ bool IsWidgetRoundMeter(int widgetId) {
             return g_batteryWidgetOrientation == SliderOrientation::Round;
     }
     return false;
+}
+
+bool IsPillShortcut(int widgetId) {
+    return widgetId == WidgetWifi || widgetId == WidgetHotspot ||
+           widgetId == WidgetBluetooth || widgetId == WidgetMode;
 }
 
 bool IsWidgetVertical(int widgetId) {
@@ -724,6 +913,8 @@ int CalendarRowCount(int year, int month) {
 }
 
 float DynamicCalendarHeight() {
+    if (g_calendarMode == CalendarMode::Day) return 120.0f;
+    if (g_calendarMode == CalendarMode::Agenda) return 180.0f;
     SYSTEMTIME st;
     GetLocalTime(&st);
     return CalendarRowCount(st.wYear, st.wMonth) >= 6 ? 200.0f : 180.0f;
@@ -731,7 +922,8 @@ float DynamicCalendarHeight() {
 
 // Called every Render() tick — adjusts ONLY Height, never X/Y.
 void UpdateCalendarHeight() {
-    g_widgets[WidgetCalendar].rc.Height = DynamicCalendarHeight();
+    if (IsWidgetEnabled(WidgetCalendar))
+        g_widgets[WidgetCalendar].rc.Height = DynamicCalendarHeight();
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -740,25 +932,57 @@ void UpdateCalendarHeight() {
 // kSettingsChangedMessage — never from Render() — so dragged positions
 // survive the one-second timer ticks.
 
+RectF RectForOrientation(const RectF& current, bool vertical,
+                         float horizontalWidth, float verticalWidth,
+                         float horizontalHeight = 30.0f);
+RectF RectForSliderOrientation(const RectF& current, SliderOrientation orientation,
+                               float horizontalWidth = 350.0f);
+
 void ApplyDefaultWidgetLayout() {
     const float calH    = DynamicCalendarHeight();
     const float kCalGap = 10.0f;
+    float y = 0.0f;
 
-    g_widgets[WidgetCalendar].rc = RectF(0, 0, 350, calH);
+    if (IsWidgetEnabled(WidgetCalendar)) {
+        g_widgets[WidgetCalendar].rc = RectF(0, y, 350, calH);
+        y += calH + kCalGap;
+    }
 
-    const float clockY = calH + kCalGap;
-    g_widgets[WidgetClock].rc = RectF(0,   clockY, 165, 170);
-    g_widgets[WidgetMusic].rc = RectF(180, clockY, 165, 170);
-
-    float y = clockY + 170.0f + 10.0f;
+    const bool showClock = IsWidgetEnabled(WidgetClock);
+    const bool showMusic = IsWidgetEnabled(WidgetMusic);
+    if (showClock && showMusic) {
+        g_widgets[WidgetClock].rc = RectF(0,   y, 165, 170);
+        g_widgets[WidgetMusic].rc = RectF(180, y, 165, 170);
+        y += 180.0f;
+    } else if (showClock) {
+        g_widgets[WidgetClock].rc = RectF(0, y, 165, 170);
+        y += 180.0f;
+    } else if (showMusic) {
+        g_widgets[WidgetMusic].rc = RectF(0, y, 165, 170);
+        y += 180.0f;
+    }
 
     const bool volumeVertical = g_volumeWidgetOrientation == SliderOrientation::Vertical;
     const bool batteryVertical = g_batteryWidgetOrientation == SliderOrientation::Vertical;
     const bool volumeRound = g_volumeWidgetOrientation == SliderOrientation::Round;
     const bool batteryRound = g_batteryWidgetOrientation == SliderOrientation::Round;
+    const bool showVolume = IsWidgetEnabled(WidgetVolume);
+    const bool showBattery = IsWidgetEnabled(WidgetBattery);
     const float roundD = kRoundMeterDiameter;
 
-    if (!volumeVertical && !batteryVertical && !volumeRound && !batteryRound) {
+    if (!showVolume && !showBattery) {
+        // Nothing in this row.
+    } else if (showVolume && !showBattery) {
+        g_widgets[WidgetVolume].rc = RectForSliderOrientation(
+            RectF(0, y, 350, 30), g_volumeWidgetOrientation);
+        y += IsWidgetRoundMeter(WidgetVolume) ? roundD + 20.0f :
+             IsWidgetVertical(WidgetVolume)  ? kVerticalWidgetHeight + 20.0f : 50.0f;
+    } else if (!showVolume && showBattery) {
+        g_widgets[WidgetBattery].rc = RectForSliderOrientation(
+            RectF(0, y, 350, 30), g_batteryWidgetOrientation);
+        y += IsWidgetRoundMeter(WidgetBattery) ? roundD + 20.0f :
+             IsWidgetVertical(WidgetBattery)  ? kVerticalWidgetHeight + 20.0f : 50.0f;
+    } else if (!volumeVertical && !batteryVertical && !volumeRound && !batteryRound) {
         g_widgets[WidgetVolume].rc  = RectF(0, y, 350, 30);
         y += 50.0f;
         g_widgets[WidgetBattery].rc = RectF(0, y, 350, 30);
@@ -793,7 +1017,21 @@ void ApplyDefaultWidgetLayout() {
         y += roundD + 20.0f;
     }
 
-    if (!g_searchWidgetVertical && !g_personalizationWidgetVertical) {
+    const bool showSearch = IsWidgetEnabled(WidgetSearch);
+    const bool showPersonalization = IsWidgetEnabled(WidgetPersonalization);
+    if (!showSearch && !showPersonalization) {
+        // Nothing in this row.
+    } else if (showSearch && !showPersonalization) {
+        g_widgets[WidgetSearch].rc = RectForOrientation(
+            RectF(0, y, 165, kSmallButtonHeight), g_searchWidgetVertical, 165.0f,
+            kSearchVerticalWidth, kSmallButtonHeight);
+        y += g_searchWidgetVertical ? kVerticalWidgetHeight + 20.0f : 50.0f;
+    } else if (!showSearch && showPersonalization) {
+        g_widgets[WidgetPersonalization].rc = RectForOrientation(
+            RectF(0, y, 165, kSmallButtonHeight), g_personalizationWidgetVertical, 165.0f,
+            kSearchVerticalWidth, kSmallButtonHeight);
+        y += g_personalizationWidgetVertical ? kVerticalWidgetHeight + 20.0f : 50.0f;
+    } else if (!g_searchWidgetVertical && !g_personalizationWidgetVertical) {
         g_widgets[WidgetSearch].rc          = RectF(0,   y, 165, kSmallButtonHeight);
         g_widgets[WidgetPersonalization].rc = RectF(185, y, 165, kSmallButtonHeight);
         y += 50.0f;
@@ -811,28 +1049,36 @@ void ApplyDefaultWidgetLayout() {
         y += kVerticalWidgetHeight + 20.0f;
     }
 
-    g_widgets[WidgetWifi].rc          = RectF(0,   y, kRoundShortcutWidth, kRoundShortcutHeight);
-    g_widgets[WidgetHotspot].rc       = RectF(90,  y, kRoundShortcutWidth, kRoundShortcutHeight);
-    g_widgets[WidgetBluetooth].rc     = RectF(180, y, kRoundShortcutWidth, kRoundShortcutHeight);
-    g_widgets[WidgetAccessibility].rc = RectF(270, y, kRoundShortcutWidth, kRoundShortcutHeight);
+    int shortcutSlot = 0;
+    const int shortcuts[] = {WidgetWifi, WidgetHotspot, WidgetBluetooth, WidgetMode};
+    for (int widgetId : shortcuts) {
+        if (!IsWidgetEnabled(widgetId)) continue;
+        const int column = shortcutSlot % 2;
+        const int row = shortcutSlot / 2;
+        g_widgets[widgetId].rc = RectF(column * (kPillShortcutWidth + kPillShortcutGap),
+                                       y + row * (kPillShortcutHeight + kPillShortcutGap),
+                                       kPillShortcutWidth, kPillShortcutHeight);
+        ++shortcutSlot;
+    }
 
     RectF desktop = LogicalDesktopBounds();
     const float rightOffset = std::max(0.0f, desktop.Width - static_cast<float>(kDesignW));
     for (Widget& widget : g_widgets) {
+        if (!IsWidgetEnabled(widget.id)) continue;
         widget.rc.X += rightOffset;
     }
 }
 
 RectF RectForOrientation(const RectF& current, bool vertical,
                           float horizontalWidth, float verticalWidth,
-                          float horizontalHeight = 30.0f) {
+                          float horizontalHeight) {
     return vertical
         ? RectF(current.X, current.Y, verticalWidth, kVerticalWidgetHeight)
         : RectF(current.X, current.Y, horizontalWidth, horizontalHeight);
 }
 
 RectF RectForSliderOrientation(const RectF& current, SliderOrientation orientation,
-                               float horizontalWidth = 350.0f) {
+                               float horizontalWidth) {
     if (orientation == SliderOrientation::Vertical) {
         return RectF(current.X, current.Y, 70.0f, kVerticalWidgetHeight);
     }
@@ -881,36 +1127,39 @@ void ApplyOrientationResizeIfNeeded(SliderOrientation oldVolumeOrientation,
     }
 }
 
-// ── FIX B: LoadSettings — WhiteTransparent theme bug fixed ───────────────────
-// Previously the "whiteTransparent" setting value was not explicitly handled,
+// ── FIX B: LoadSettings — WhiteTint theme bug fixed ───────────────────
+// Previously the "whiteTint" setting value was not explicitly handled,
 // so it fell through to the g_palettes loop which does not contain it, and
 // g_appearanceTheme silently stayed as LiquidGlass.  The else-if branch below
 // corrects that.
 
 void LoadSettings() {
-    g_appearanceTheme = AppearanceTheme::LiquidGlass;
+    g_appearanceTheme = AppearanceTheme::IwinLight;
     g_volumeWidgetOrientation = SliderOrientation::Horizontal;
     g_batteryWidgetOrientation = SliderOrientation::Horizontal;
     g_searchWidgetVertical = false;
     g_personalizationWidgetVertical = false;
+    g_calendarMode = CalendarMode::Month;
+    g_clockStyle = ClockStyle::ClassicAnalog;
+    for (int i = 0; i < WidgetCount; ++i) g_widgetEnabled[i] = true;
     ResetMaterialAccentColor();
     g_musicFolderPath[0] = L'\0';
 
     PCWSTR theme = Wh_GetStringSetting(L"appearanceTheme");
     if (theme) {
-        if (wcscmp(theme, L"liquidGlass") == 0) {
+        if (_wcsicmp(theme, L"liquidGlass") == 0) {
             g_appearanceTheme = AppearanceTheme::LiquidGlass;
-        } else if (wcscmp(theme, L"whiteTransparent") == 0) {
-            // FIX B: was missing — caused White Transparent to silently stay
+        } else if (_wcsicmp(theme, L"whiteTint") == 0) {
+            // FIX B: was missing — caused White Tint to silently stay
             // as LiquidGlass because it is not in the g_palettes array.
-            g_appearanceTheme = AppearanceTheme::WhiteTransparent;
-        } else if (wcscmp(theme, L"jonaOSLight") == 0) {
-            g_appearanceTheme = AppearanceTheme::JonaOSLight;
-        } else if (wcscmp(theme, L"jonaOSDark") == 0) {
-            g_appearanceTheme = AppearanceTheme::JonaOSDark;
+            g_appearanceTheme = AppearanceTheme::WhiteTint;
+        } else if (_wcsicmp(theme, L"iwinLight") == 0) {
+            g_appearanceTheme = AppearanceTheme::IwinLight;
+        } else if (_wcsicmp(theme, L"iwinDark") == 0) {
+            g_appearanceTheme = AppearanceTheme::IwinDark;
         } else {
             for (const ThemePalette& palette : g_palettes) {
-                if (wcscmp(theme, palette.settingValue) == 0) {
+                if (_wcsicmp(theme, palette.settingValue) == 0) {
                     g_appearanceTheme = palette.theme;
                     break;
                 }
@@ -925,6 +1174,40 @@ void LoadSettings() {
     g_personalizationWidgetVertical = ReadVerticalOrientationSetting(L"personalizationWidgetOrientation");
     g_widgets[WidgetVolume].round = g_volumeWidgetOrientation == SliderOrientation::Round;
     g_widgets[WidgetBattery].round = g_batteryWidgetOrientation == SliderOrientation::Round;
+
+    PCWSTR calendarMode = Wh_GetStringSetting(L"calendarMode");
+    if (calendarMode) {
+        if (wcscmp(calendarMode, L"agenda") == 0) {
+            g_calendarMode = CalendarMode::Agenda;
+        } else if (wcscmp(calendarMode, L"day") == 0) {
+            g_calendarMode = CalendarMode::Day;
+        }
+        Wh_FreeStringSetting(calendarMode);
+    }
+
+    PCWSTR clockStyle = Wh_GetStringSetting(L"clockStyle");
+    if (clockStyle) {
+        if (wcscmp(clockStyle, L"roman") == 0) {
+            g_clockStyle = ClockStyle::Roman;
+        } else if (wcscmp(clockStyle, L"classicAnalog") == 0) {
+            g_clockStyle = ClockStyle::ClassicAnalog;
+        }
+        // "flip" remains available explicitly; missing and unknown values use
+        // the Classic Analog default.
+        Wh_FreeStringSetting(clockStyle);
+    }
+
+    g_widgetEnabled[WidgetCalendar]        = ReadBoolSetting(L"showCalendar", true);
+    g_widgetEnabled[WidgetClock]           = ReadBoolSetting(L"showClock", true);
+    g_widgetEnabled[WidgetMusic]           = ReadBoolSetting(L"showMusic", true);
+    g_widgetEnabled[WidgetVolume]          = ReadBoolSetting(L"showVolume", true);
+    g_widgetEnabled[WidgetBattery]         = ReadBoolSetting(L"showBattery", true);
+    g_widgetEnabled[WidgetSearch]          = ReadBoolSetting(L"showSearch", true);
+    g_widgetEnabled[WidgetPersonalization] = ReadBoolSetting(L"showPersonalization", true);
+    g_widgetEnabled[WidgetWifi]            = ReadBoolSetting(L"showWifi", true);
+    g_widgetEnabled[WidgetHotspot]         = ReadBoolSetting(L"showHotspot", true);
+    g_widgetEnabled[WidgetBluetooth]       = ReadBoolSetting(L"showBluetooth", true);
+    g_widgetEnabled[WidgetMode]            = ReadBoolSetting(L"showMode", true);
 
     PCWSTR materialCustomColor = Wh_GetStringSetting(L"materialCustomColor");
     if (materialCustomColor) {
@@ -946,6 +1229,7 @@ void LoadSettings() {
 
 void SaveWidgetPositions() {
     for (const Widget& widget : g_widgets) {
+        if (!IsWidgetEnabled(widget.id)) continue;
         wchar_t key[32];
         swprintf_s(key, L"widgetPosition%d", widget.id);
         wchar_t value[64];
@@ -965,7 +1249,7 @@ void LoadWidgetPositions() {
         if (swscanf_s(value, L"%f,%f", &x, &y) == 2) {
             widget.rc.X = x;
             widget.rc.Y = y;
-            ClampWidgetToDesktop(widget);
+            if (IsWidgetEnabled(widget.id)) ClampWidgetToDesktop(widget);
         }
     }
 }
@@ -993,6 +1277,7 @@ bool PtInWidget(const Widget& widget, PointF pt) {
 
 int HitTestWidget(PointF pt) {
     for (int i = WidgetCount - 1; i >= 0; --i) {
+        if (!IsWidgetEnabled(g_widgets[i].id)) continue;
         if (PtInWidget(g_widgets[i], pt)) return i;
     }
     return -1;
@@ -1050,6 +1335,43 @@ bool PtInVolumeSlider(PointF pt) {
     return PtInRectF(VolumeSliderRect(), pt);
 }
 
+bool PtInVolumeMuteButton(PointF pt) {
+    if (!IsWidgetEnabled(WidgetVolume)) return false;
+    RectF rc = g_widgets[WidgetVolume].rc;
+    if (!PtInRectF(rc, pt)) return false;
+    if (g_volumeWidgetOrientation == SliderOrientation::Round) {
+        const float cx = rc.X + rc.Width / 2.0f;
+        const float cy = rc.Y + rc.Height / 2.0f;
+        const float dx = pt.X - cx;
+        const float dy = pt.Y - cy;
+        return dx * dx + dy * dy <= 28.0f * 28.0f;
+    }
+    if (g_volumeWidgetOrientation == SliderOrientation::Vertical) {
+        return PtInRectF(RectF(rc.X, rc.Y, rc.Width, 36.0f), pt);
+    }
+    return PtInRectF(RectF(rc.X, rc.Y, 88.0f, rc.Height), pt);
+}
+
+bool PtInMusicPlayButton(PointF pt) {
+    if (!IsWidgetEnabled(WidgetMusic)) return false;
+    RectF rc = g_widgets[WidgetMusic].rc;
+    const float px = rc.X + 62.0f;
+    const float py = rc.Y + 125.0f;
+    const float dx = pt.X - px;
+    const float dy = pt.Y - py;
+    return dx * dx + dy * dy <= 22.0f * 22.0f;
+}
+
+bool PtInMusicFolderButton(PointF pt) {
+    if (!IsWidgetEnabled(WidgetMusic)) return false;
+    RectF rc = g_widgets[WidgetMusic].rc;
+    const float px = rc.X + 112.0f;
+    const float py = rc.Y + 125.0f;
+    const float dx = pt.X - px;
+    const float dy = pt.Y - py;
+    return dx * dx + dy * dy <= 22.0f * 22.0f;
+}
+
 float VolumeLevelFromPoint(PointF pt, bool continuingDrag) {
     if (g_volumeWidgetOrientation == SliderOrientation::Round) {
         RectF rc = g_widgets[WidgetVolume].rc;
@@ -1072,7 +1394,7 @@ float VolumeLevelFromPoint(PointF pt, bool continuingDrag) {
 
 // ── Audio / battery COM helpers (unchanged from original) ─────────────────────
 
-class VolumeEndpointCallback : public IAudioEndpointVolumeCallback {
+class VolumeEndpointCallback final : public IAudioEndpointVolumeCallback {
 public:
     ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_refCount); }
     ULONG STDMETHODCALLTYPE Release() override {
@@ -1102,7 +1424,7 @@ private:
     volatile LONG m_refCount = 1;
 };
 
-class AudioNotificationClient : public IMMNotificationClient {
+class AudioNotificationClient final : public IMMNotificationClient {
 public:
     ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_refCount); }
     ULONG STDMETHODCALLTYPE Release() override {
@@ -1138,6 +1460,10 @@ void ReleaseAudioEndpoint() {
         g_endpointVolume->Release();
         g_endpointVolume = nullptr;
     }
+    if (g_audioMeter) {
+        g_audioMeter->Release();
+        g_audioMeter = nullptr;
+    }
     if (g_audioDevice) { g_audioDevice->Release(); g_audioDevice = nullptr; }
 }
 
@@ -1166,6 +1492,9 @@ bool BindAudioEndpoint() {
     hr = g_audioDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
                                  reinterpret_cast<void**>(&g_endpointVolume));
     if (FAILED(hr)) { ReleaseAudioEndpoint(); return false; }
+    hr = g_audioDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr,
+                                 reinterpret_cast<void**>(&g_audioMeter));
+    if (FAILED(hr)) g_audioMeter = nullptr;
     if (!g_volumeCallback) g_volumeCallback = new VolumeEndpointCallback();
     if (g_volumeCallback)  g_endpointVolume->RegisterControlChangeNotify(g_volumeCallback);
     return true;
@@ -1186,37 +1515,395 @@ void InitAudio() {
     BindAudioEndpoint();
 }
 
-void RefreshVolume() {
+void RefreshOutputDeviceName() {
+    wcscpy_s(g_outputDeviceName, ARRAYSIZE(g_outputDeviceName), L"Output device");
+    if (!g_audioDevice) return;
+
+    IPropertyStore* properties = nullptr;
+    if (FAILED(g_audioDevice->OpenPropertyStore(STGM_READ, &properties)) || !properties)
+        return;
+
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    if (SUCCEEDED(properties->GetValue(kPkeyDeviceFriendlyName, &value)) &&
+        value.vt == VT_LPWSTR && value.pwszVal && value.pwszVal[0]) {
+        wcsncpy_s(g_outputDeviceName, ARRAYSIZE(g_outputDeviceName), value.pwszVal, _TRUNCATE);
+    }
+    PropVariantClear(&value);
+    properties->Release();
+}
+
+bool RefreshVolume() {
+    float oldLevel = g_volumeLevel;
+    bool oldMuted = g_volumeMuted;
+    wchar_t oldDevice[ARRAYSIZE(g_outputDeviceName)];
+    wcscpy_s(oldDevice, ARRAYSIZE(oldDevice), g_outputDeviceName);
+
     if (!g_endpointVolume) BindAudioEndpoint();
     if (g_endpointVolume) {
         float level = 0.0f;
         if (SUCCEEDED(g_endpointVolume->GetMasterVolumeLevelScalar(&level)))
             g_volumeLevel = Clamp(level, 0.0f, 1.0f);
+        BOOL muted = FALSE;
+        if (SUCCEEDED(g_endpointVolume->GetMute(&muted)))
+            g_volumeMuted = muted != FALSE;
     }
+    RefreshOutputDeviceName();
+    return std::fabs(oldLevel - g_volumeLevel) > 0.001f ||
+           oldMuted != g_volumeMuted ||
+           wcscmp(oldDevice, g_outputDeviceName) != 0;
 }
 
 void SetSystemVolume(float level) {
     level = Clamp(level, 0.0f, 1.0f);
     if (!g_endpointVolume) BindAudioEndpoint();
-    if (g_endpointVolume)  g_endpointVolume->SetMasterVolumeLevelScalar(level, nullptr);
+    if (g_endpointVolume) {
+        g_endpointVolume->SetMasterVolumeLevelScalar(level, nullptr);
+        if (level > 0.001f) g_endpointVolume->SetMute(FALSE, nullptr);
+    }
     g_volumeLevel = level;
+    if (level > 0.001f) g_volumeMuted = false;
+}
+
+void ToggleSystemMute() {
+    if (!g_endpointVolume) BindAudioEndpoint();
+    if (g_endpointVolume) {
+        BOOL muted = FALSE;
+        if (SUCCEEDED(g_endpointVolume->GetMute(&muted))) {
+            g_endpointVolume->SetMute(!muted, nullptr);
+            g_volumeMuted = !muted;
+        }
+    }
+}
+
+float NextMusicRandom01() {
+    g_musicRandomSeed = g_musicRandomSeed * 1664525u + 1013904223u;
+    return static_cast<float>((g_musicRandomSeed >> 8) & 0x00FFFFFFu) / 16777215.0f;
+}
+
+bool RefreshMusicVisualizer() {
+    if (!g_audioMeter) BindAudioEndpoint();
+
+    float peak = 0.0f;
+    const bool audioActive =
+        g_audioMeter &&
+        SUCCEEDED(g_audioMeter->GetPeakValue(&peak)) &&
+        peak > 0.015f;
+    g_mediaAudioActive = audioActive;
+    g_mediaControlAvailable = audioActive;
+    if (audioActive) {
+        wcscpy_s(g_mediaTitle, ARRAYSIZE(g_mediaTitle), L"Now playing");
+        swprintf_s(g_mediaSubtitle, L"Media on %s", g_outputDeviceName);
+    } else {
+        g_mediaTitle[0] = L'\0';
+        g_mediaSubtitle[0] = L'\0';
+    }
+
+    for (int i = 0; i < kMusicBarCount; ++i) {
+        if (audioActive) {
+            const float minimum = 14.0f + peak * 8.0f;
+            const float maximum = 38.0f + peak * 40.0f;
+            g_musicBarTargets[i] = minimum + NextMusicRandom01() * (maximum - minimum);
+        } else {
+            g_musicBarTargets[i] = kMusicRestHeights[i];
+        }
+    }
+
+    bool changed = false;
+    const float smoothing = audioActive ? 0.45f : 0.18f;
+    for (int i = 0; i < kMusicBarCount; ++i) {
+        const float oldHeight = g_musicBarHeights[i];
+        g_musicBarHeights[i] += (g_musicBarTargets[i] - g_musicBarHeights[i]) * smoothing;
+        if (std::fabs(g_musicBarHeights[i] - oldHeight) > 0.1f) changed = true;
+    }
+    return changed;
+}
+
+void ToggleMediaPlayPause() {
+    INPUT inputs[2] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_MEDIA_PLAY_PAUSE;
+    inputs[1] = inputs[0];
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, inputs, sizeof(INPUT));
 }
 
 bool RefreshBattery() {
     float oldBatteryLevel     = g_batteryLevel;
     bool  oldOnBatteryCapable = g_onBatteryCapable;
+    bool  oldCharging         = g_batteryCharging;
+    bool  oldFull             = g_batteryFull;
     SYSTEM_POWER_STATUS status = {};
     if (GetSystemPowerStatus(&status)) {
         if (status.BatteryFlag == 128 || status.BatteryLifePercent == 255) {
             g_onBatteryCapable = false;
             g_batteryLevel = 1.0f;
+            g_batteryCharging = false;
+            g_batteryFull = false;
         } else {
             g_onBatteryCapable = true;
             g_batteryLevel = Clamp(status.BatteryLifePercent / 100.0f, 0.0f, 1.0f);
+            g_batteryCharging = status.ACLineStatus == 1 && g_batteryLevel < 0.995f;
+            g_batteryFull = status.ACLineStatus == 1 && g_batteryLevel >= 0.995f;
         }
     }
     return oldOnBatteryCapable != g_onBatteryCapable ||
+           oldCharging != g_batteryCharging ||
+           oldFull != g_batteryFull ||
            std::fabs(oldBatteryLevel - g_batteryLevel) > 0.001f;
+}
+
+LiveState QueryWifiState() {
+    HANDLE wlan = nullptr;
+    DWORD negotiated = 0;
+    if (WlanOpenHandle(2, nullptr, &negotiated, &wlan) != ERROR_SUCCESS || !wlan)
+        return LiveState::Unavailable;
+
+    LiveState state = LiveState::Unavailable;
+    PWLAN_INTERFACE_INFO_LIST interfaces = nullptr;
+    if (WlanEnumInterfaces(wlan, nullptr, &interfaces) == ERROR_SUCCESS && interfaces) {
+        if (interfaces->dwNumberOfItems == 0) {
+            state = LiveState::Unavailable;
+        } else {
+            state = LiveState::Off;
+            for (DWORD i = 0; i < interfaces->dwNumberOfItems; ++i) {
+                const WLAN_INTERFACE_INFO& info = interfaces->InterfaceInfo[i];
+                DWORD dataSize = 0;
+                PVOID data = nullptr;
+                WLAN_OPCODE_VALUE_TYPE valueType;
+                bool radioOn = info.isState != wlan_interface_state_not_ready;
+                if (WlanQueryInterface(wlan, &info.InterfaceGuid, wlan_intf_opcode_radio_state,
+                                       nullptr, &dataSize, &data, &valueType) == ERROR_SUCCESS &&
+                    data) {
+                    PWLAN_RADIO_STATE radio = reinterpret_cast<PWLAN_RADIO_STATE>(data);
+                    radioOn = false;
+                    for (DWORD phy = 0; phy < radio->dwNumberOfPhys; ++phy) {
+                        if (radio->PhyRadioState[phy].dot11SoftwareRadioState == dot11_radio_state_on &&
+                            radio->PhyRadioState[phy].dot11HardwareRadioState == dot11_radio_state_on) {
+                            radioOn = true;
+                            break;
+                        }
+                    }
+                    WlanFreeMemory(data);
+                }
+                if (radioOn) {
+                    state = LiveState::On;
+                    break;
+                }
+            }
+        }
+        WlanFreeMemory(interfaces);
+    }
+    WlanCloseHandle(wlan, nullptr);
+    return state;
+}
+
+LiveState QueryBluetoothState() {
+    BLUETOOTH_FIND_RADIO_PARAMS params = {};
+    params.dwSize = sizeof(params);
+    HANDLE radio = nullptr;
+    HBLUETOOTH_RADIO_FIND find = BluetoothFindFirstRadio(&params, &radio);
+    if (find) {
+        if (radio) CloseHandle(radio);
+        BluetoothFindRadioClose(find);
+        return LiveState::On;
+    }
+    return GetLastError() == ERROR_NO_MORE_ITEMS ? LiveState::Off : LiveState::Unavailable;
+}
+
+LiveState QueryHotspotState() {
+    ULONG size = 0;
+    DWORD result = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_ALL_INTERFACES,
+                                        nullptr, nullptr, &size);
+    if (result != ERROR_BUFFER_OVERFLOW || size == 0) return LiveState::Unavailable;
+
+    std::vector<BYTE> buffer(size);
+    IP_ADAPTER_ADDRESSES* adapters =
+        reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+    result = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_ALL_INTERFACES,
+                                  nullptr, adapters, &size);
+    if (result != ERROR_SUCCESS) return LiveState::Unavailable;
+
+    bool sawHotspotAdapter = false;
+    for (IP_ADAPTER_ADDRESSES* adapter = adapters; adapter; adapter = adapter->Next) {
+        const wchar_t* name = adapter->FriendlyName;
+        const wchar_t* desc = adapter->Description;
+        const bool match =
+            (name && (wcsstr(name, L"Wi-Fi Direct") || wcsstr(name, L"Mobile Hotspot"))) ||
+            (desc && (wcsstr(desc, L"Wi-Fi Direct") || wcsstr(desc, L"Mobile Hotspot")));
+        if (!match) continue;
+
+        sawHotspotAdapter = true;
+        // The virtual adapter only comes Up (with an IP such as 192.168.137.1)
+        // while the hotspot is actually running.
+        if (adapter->OperStatus == IfOperStatusUp && adapter->FirstUnicastAddress)
+            return LiveState::On;
+    }
+    return sawHotspotAdapter ? LiveState::Off : LiveState::Unavailable;
+}
+
+// Windows.Devices.Radios is the supported desktop API for controlling radio
+// hardware.  The ABI is used directly so this mod remains buildable with the
+// MinGW headers shipped by Windhawk (which do not include C++/WinRT).
+typedef void* HSTRING;
+constexpr GUID kIidRadioStatics =
+    {0x5fb6a12e, 0x67cb, 0x46ae, {0xaa, 0xe9, 0x65, 0x91, 0x9f, 0x86, 0xef, 0xf4}};
+
+using WindowsCreateString_t = HRESULT (WINAPI*)(const wchar_t*, UINT32, HSTRING*);
+using WindowsDeleteString_t = HRESULT (WINAPI*)(HSTRING);
+using RoGetActivationFactory_t = HRESULT (WINAPI*)(HSTRING, REFIID, void**);
+
+void ReleaseWinRtObject(void* object) {
+    if (object) reinterpret_cast<ULONG (STDMETHODCALLTYPE*)(void*)>(
+        (*reinterpret_cast<void***>(object))[2])(object);
+}
+
+bool WaitForAsyncOperation(void* operation) {
+    // IAsyncInfo::get_Status is vtable slot 7. Status 1 is Completed.
+    auto getStatus = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, INT*)>(
+        (*reinterpret_cast<void***>(operation))[7]);
+    for (int i = 0; i < 100; ++i) {
+        INT status = 0;
+        if (FAILED(getStatus(operation, &status))) return false;
+        if (status == 1) return true;
+        if (status == 2 || status == 3) return false;
+        Sleep(20);
+    }
+    return false;
+}
+
+void* GetRadioView(bool requestAccess = false) {
+    HMODULE combase = LoadLibraryW(L"combase.dll");
+    if (!combase) return nullptr;
+    const auto createString = reinterpret_cast<WindowsCreateString_t>(
+        GetProcAddress(combase, "WindowsCreateString"));
+    const auto deleteString = reinterpret_cast<WindowsDeleteString_t>(
+        GetProcAddress(combase, "WindowsDeleteString"));
+    const auto getFactory = reinterpret_cast<RoGetActivationFactory_t>(
+        GetProcAddress(combase, "RoGetActivationFactory"));
+    if (!createString || !deleteString || !getFactory) { FreeLibrary(combase); return nullptr; }
+
+    HSTRING className = nullptr;
+    void* factory = nullptr;
+    void* operation = nullptr;
+    void* view = nullptr;
+    const HRESULT createResult = createString(L"Windows.Devices.Radios.Radio", 28, &className);
+    if (SUCCEEDED(createResult)) {
+        const HRESULT factoryResult = getFactory(className, kIidRadioStatics, &factory);
+        if (SUCCEEDED(factoryResult)) {
+            bool accessAllowed = true;
+            if (requestAccess) {
+                void* accessOperation = nullptr;
+                auto requestRadioAccessAsync = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+                    (*reinterpret_cast<void***>(factory))[9]);
+                accessAllowed = SUCCEEDED(requestRadioAccessAsync(factory, &accessOperation)) &&
+                    WaitForAsyncOperation(accessOperation);
+                if (accessAllowed) {
+                    INT accessStatus = 1; // RadioAccessStatus::DeniedByUser
+                    auto getAccessResult = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, INT*)>(
+                        (*reinterpret_cast<void***>(accessOperation))[13]);
+                    accessAllowed = SUCCEEDED(getAccessResult(accessOperation, &accessStatus)) &&
+                                    accessStatus == 0; // RadioAccessStatus::Allowed
+                }
+                ReleaseWinRtObject(accessOperation);
+            }
+            auto getRadiosAsync = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+                (*reinterpret_cast<void***>(factory))[6]);
+            if (accessAllowed && SUCCEEDED(getRadiosAsync(factory, &operation)) && WaitForAsyncOperation(operation)) {
+                auto getResults = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+                    (*reinterpret_cast<void***>(operation))[13]);
+                if (FAILED(getResults(operation, &view))) view = nullptr;
+            }
+        }
+    }
+    ReleaseWinRtObject(operation);
+    ReleaseWinRtObject(factory);
+    if (className) deleteString(className);
+    FreeLibrary(combase);
+    return view;
+}
+
+constexpr wchar_t kPersonalizeKey[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+
+LiveState QueryDarkModeState() {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kPersonalizeKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+        return LiveState::Unavailable;
+
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    DWORD type = 0;
+    const LONG result = RegQueryValueExW(
+        key, L"AppsUseLightTheme", nullptr, &type,
+        reinterpret_cast<LPBYTE>(&value), &size);
+    RegCloseKey(key);
+
+    if (result == ERROR_FILE_NOT_FOUND) return LiveState::Off;  // Windows defaults to light.
+    if (result != ERROR_SUCCESS || type != REG_DWORD) return LiveState::Unavailable;
+    return value == 0 ? LiveState::On : LiveState::Off;
+}
+
+void BroadcastThemeChange() {
+    // Notify every top-level window without waiting for each process to handle
+    // the message. The previous SendMessageTimeout call could wait up to one
+    // second, which made a Mode-widget toggle appear sluggish.
+    SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                       reinterpret_cast<LPARAM>(L"ImmersiveColorSet"));
+}
+
+void OpenUri(const wchar_t* uri);
+
+void ToggleDarkMode() {
+    const bool turnOn = QueryDarkModeState() != LiveState::On;
+    const DWORD lightThemeValue = turnOn ? 0 : 1;  // 0 = dark, 1 = light
+
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kPersonalizeKey, 0, KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
+        OpenUri(L"ms-settings:colors");
+        return;
+    }
+
+    const LONG appsResult = RegSetValueExW(
+        key, L"AppsUseLightTheme", 0, REG_DWORD,
+        reinterpret_cast<const BYTE*>(&lightThemeValue), sizeof(lightThemeValue));
+    const LONG systemResult = RegSetValueExW(
+        key, L"SystemUsesLightTheme", 0, REG_DWORD,
+        reinterpret_cast<const BYTE*>(&lightThemeValue), sizeof(lightThemeValue));
+    RegCloseKey(key);
+
+    if (appsResult != ERROR_SUCCESS || systemResult != ERROR_SUCCESS) {
+        OpenUri(L"ms-settings:colors");
+        return;
+    }
+
+    g_darkModeState = turnOn ? LiveState::On : LiveState::Off;
+    BroadcastThemeChange();
+}
+
+bool RefreshSlowSystemStates() {
+    LiveState oldWifi = g_wifiState;
+    LiveState oldHotspot = g_hotspotState;
+    LiveState oldBluetooth = g_bluetoothState;
+    LiveState oldDarkMode = g_darkModeState;
+    wchar_t oldAgenda1[ARRAYSIZE(g_agendaLine1)];
+    wchar_t oldAgenda2[ARRAYSIZE(g_agendaLine2)];
+    wcscpy_s(oldAgenda1, ARRAYSIZE(oldAgenda1), g_agendaLine1);
+    wcscpy_s(oldAgenda2, ARRAYSIZE(oldAgenda2), g_agendaLine2);
+
+    g_wifiState = QueryWifiState();
+    g_hotspotState = QueryHotspotState();
+    g_bluetoothState = QueryBluetoothState();
+    g_darkModeState = QueryDarkModeState();
+    wcscpy_s(g_agendaLine1, ARRAYSIZE(g_agendaLine1), L"No events available");
+    g_agendaLine2[0] = L'\0';
+
+    return oldWifi != g_wifiState ||
+           oldHotspot != g_hotspotState ||
+           oldBluetooth != g_bluetoothState ||
+           oldDarkMode != g_darkModeState ||
+           wcscmp(oldAgenda1, g_agendaLine1) != 0 ||
+           wcscmp(oldAgenda2, g_agendaLine2) != 0;
 }
 
 void OpenUri(const wchar_t* uri) {
@@ -1305,11 +1992,12 @@ void DrawLiquidGlass(Graphics& g, const Widget& widget) {
         DrawArcF(g, &coolEdge, glintRc.X, glintRc.Y, glintRc.Width, glintRc.Height,  35.0f, 105.0f);
         return;
     }
-    DrawRoundedRectangle(g, widget.rc, 18, noBackdrop, &outerEdge);
-    DrawRoundedRectangle(g, Deflate(widget.rc, 3, 3), 15, noBackdrop, &innerEdge);
+    const float cornerRadius = IsPillShortcut(widget.id) ? widget.rc.Height / 2.0f : 18.0f;
+    DrawRoundedRectangle(g, widget.rc, cornerRadius, noBackdrop, &outerEdge);
+    DrawRoundedRectangle(g, Deflate(widget.rc, 3, 3), std::max(2.0f, cornerRadius - 3.0f), noBackdrop, &innerEdge);
     RectF sheenRc = Deflate(widget.rc, 5, 5);
     sheenRc.Height = std::min(28.0f, sheenRc.Height * 0.45f);
-    DrawRoundedRectangle(g, sheenRc, 14, topSheen);
+    DrawRoundedRectangle(g, sheenRc, std::min(14.0f, sheenRc.Height / 2.0f), topSheen);
     g.DrawLine(&topGlint, widget.rc.X + 20.0f, widget.rc.Y + 2.0f,
                widget.rc.X + widget.rc.Width - 20.0f, widget.rc.Y + 2.0f);
     g.DrawLine(&coolEdge, widget.rc.X + 12.0f, widget.rc.Y + widget.rc.Height - 2.0f,
@@ -1320,9 +2008,9 @@ void DrawGlass(Graphics& g, const Widget& widget) {
     if (IsLiquidGlassTheme()) { DrawLiquidGlass(g, widget); return; }
     if (IsWidgetRoundMeter(widget.id)) return;
 
-    // ── JonaOS themes: every widget has its own frame colour ─────────────
+    // ── Iwin themes: every widget has its own frame colour ─────────────
     {
-        const JonaOSPalette* jp = CurrentJonaOSPalette();
+        const IwinPalette* jp = CurrentIwinPalette();
         if (jp) {
             Color frameColor;
             switch (widget.id) {
@@ -1336,14 +2024,15 @@ void DrawGlass(Graphics& g, const Widget& widget) {
                 case WidgetWifi:            frameColor = jp->wifiFrame;            break;
                 case WidgetHotspot:         frameColor = jp->hotspotFrame;         break;
                 case WidgetBluetooth:       frameColor = jp->bluetoothFrame;       break;
-                case WidgetAccessibility:   frameColor = jp->accessibilityFrame;   break;
+                case WidgetMode:            frameColor = jp->personalizationFrame; break;
                 default:                    frameColor = Color(255,0xE5,0xE5,0xEA); break;
             }
             SolidBrush fill(frameColor);
+            const float cornerRadius = IsPillShortcut(widget.id) ? widget.rc.Height / 2.0f : 18.0f;
             if (widget.round) {
                 g.FillEllipse(&fill, widget.rc);
             } else {
-                DrawRoundedRectangle(g, widget.rc, 18, fill);
+                DrawRoundedRectangle(g, widget.rc, cornerRadius, fill);
             }
             // Calendar also needs a distinct header bar on top
             if (widget.id == WidgetCalendar) {
@@ -1361,7 +2050,9 @@ void DrawGlass(Graphics& g, const Widget& widget) {
     if (theme) {
         SolidBrush fill(widget.id == WidgetCalendar ? theme->body : theme->accent);
         if (widget.round) g.FillEllipse(&fill, widget.rc);
-        else DrawRoundedRectangle(g, widget.rc, 18, fill);
+        else DrawRoundedRectangle(g, widget.rc,
+                                  IsPillShortcut(widget.id) ? widget.rc.Height / 2.0f : 18.0f,
+                                  fill);
         if (widget.id == WidgetCalendar) {
             SolidBrush ribbon(MaterialThemeHeaderColor(theme));
             RectF ribbonRc(widget.rc.X, widget.rc.Y, widget.rc.Width, 40.0f);
@@ -1371,7 +2062,7 @@ void DrawGlass(Graphics& g, const Widget& widget) {
         }
         return;
     }
-    // WhiteTransparent path
+    // WhiteTint path
     SolidBrush glass(Color(112, 255, 255, 255));
     Pen edge(Color(165, 255, 255, 255), 1.2f);
     Pen inner(Color(55,  255, 255, 255), 1.0f);
@@ -1381,20 +2072,21 @@ void DrawGlass(Graphics& g, const Widget& widget) {
         RectF innerRc = Deflate(widget.rc, 3, 3);
         g.DrawEllipse(&inner, innerRc);
     } else {
-        DrawRoundedRectangle(g, widget.rc, 18, glass, &edge);
+        const float cornerRadius = IsPillShortcut(widget.id) ? widget.rc.Height / 2.0f : 18.0f;
+        DrawRoundedRectangle(g, widget.rc, cornerRadius, glass, &edge);
         SolidBrush sheen(Color(20, 255, 255, 255));
-        DrawRoundedRectangle(g, Deflate(widget.rc, 3, 3), 15, sheen, &inner);
+        DrawRoundedRectangle(g, Deflate(widget.rc, 3, 3), std::max(2.0f, cornerRadius - 3.0f), sheen, &inner);
     }
 }
 
 void DrawAcrylicGrain(Graphics& g, const Widget& widget) {
-    if (g_appearanceTheme != AppearanceTheme::AcrylicTranslucent) return;
+    if (g_appearanceTheme != AppearanceTheme::Acrylic) return;
     if (IsWidgetRoundMeter(widget.id)) return;
     GraphicsPath clipPath;
     if (widget.round) {
         clipPath.AddEllipse(widget.rc);
     } else {
-        const float d = 36.0f;
+        const float d = IsPillShortcut(widget.id) ? widget.rc.Height : 36.0f;
         RectF rc = widget.rc;
         clipPath.AddArc(rc.X, rc.Y, d, d, 180, 90);
         clipPath.AddArc(rc.X + rc.Width - d, rc.Y, d, d, 270, 90);
@@ -1453,10 +2145,10 @@ void DrawCalendar(Graphics& g, const Widget& widget, FontFamily& family) {
     RectF rc = widget.rc;
     const ThemePalette* theme = CurrentTheme();
     const bool liquidGlass = IsLiquidGlassTheme();
-    const JonaOSPalette* jp = CurrentJonaOSPalette();
-    SolidBrush headerText(jp ? jp->calHeaderText : theme ? theme->textOnHeader : liquidGlass ? LiquidGlassTextColor()     : Color(245, 255, 255, 255));
-    SolidBrush text      (jp ? jp->calBodyText   : theme ? theme->textOnBody   : liquidGlass ? LiquidGlassTextColor(245)  : Color(245, 255, 255, 255));
-    SolidBrush muted     (jp ? jp->calBodyText   : theme ? theme->textOnBody   : liquidGlass ? LiquidGlassTextColor(205)  : Color(205, 255, 255, 255));
+    const IwinPalette* jp = CurrentIwinPalette();
+    SolidBrush headerText(jp ? jp->calHeaderText : theme ? theme->textOnHeader : liquidGlass ? LiquidGlassTextColor()     : DefaultWidgetTextColor());
+    SolidBrush text      (jp ? jp->calBodyText   : theme ? theme->textOnBody   : liquidGlass ? LiquidGlassTextColor(245)  : DefaultWidgetTextColor(245));
+    SolidBrush muted     (jp ? jp->calBodyText   : theme ? theme->textOnBody   : liquidGlass ? LiquidGlassTextColor(205)  : DefaultWidgetTextColor(205));
     SolidBrush red(Color(255, 220, 30, 45));
     Font header (&family, 18, FontStyleRegular, UnitPixel);
     Font dayFont(&family, 14, FontStyleRegular, UnitPixel);
@@ -1469,8 +2161,58 @@ void DrawCalendar(Graphics& g, const Widget& widget, FontFamily& family) {
         L"January", L"February", L"March",     L"April",   L"May",      L"June",
         L"July",    L"August",   L"September", L"October", L"November", L"December"
     };
+    const wchar_t* dayNames[] = {
+        L"Sunday", L"Monday", L"Tuesday", L"Wednesday", L"Thursday", L"Friday", L"Saturday"
+    };
     wchar_t year[8];
     swprintf_s(year, L"%u", st.wYear);
+
+    if (g_calendarMode == CalendarMode::Day) {
+        wchar_t dayNumber[8];
+        swprintf_s(dayNumber, L"%u", st.wDay);
+        Font dayNumberFont(&family, 68, FontStyleRegular, UnitPixel);
+        Font monthFont(&family, 28, FontStyleRegular, UnitPixel);
+        Font weekdayFont(&family, 20, FontStyleRegular, UnitPixel);
+        constexpr float dayModeContentOffsetY = 12.0f;
+        DrawTextFit(g, dayNumber, dayNumberFont,
+                    RectF(rc.X + 18, rc.Y + 14 + dayModeContentOffsetY, 118,
+                          rc.Height - 28.0f - dayModeContentOffsetY / 2.0f), text,
+                    StringAlignmentCenter, StringAlignmentCenter);
+        DrawTextFit(g, months[st.wMonth - 1], monthFont,
+                    RectF(rc.X + 148, rc.Y + 28 + dayModeContentOffsetY, rc.Width - 164, 34), text,
+                    StringAlignmentNear, StringAlignmentCenter);
+        DrawTextFit(g, dayNames[st.wDayOfWeek], weekdayFont,
+                    RectF(rc.X + 148, rc.Y + 64 + dayModeContentOffsetY, rc.Width - 164, 28), text,
+                    StringAlignmentNear, StringAlignmentCenter);
+        return;
+    }
+
+    if (g_calendarMode == CalendarMode::Agenda) {
+        wchar_t today[64];
+        swprintf_s(today, L"%s %u", months[st.wMonth - 1], st.wDay);
+        Font titleFont(&family, 22, FontStyleRegular, UnitPixel);
+        Font agendaFont(&family, 15, FontStyleRegular, UnitPixel);
+        Font smallFont(&family, 13, FontStyleRegular, UnitPixel);
+        DrawTextFit(g, L"Agenda", header,
+                    RectF(rc.X + 16, rc.Y + 12, rc.Width - 32, 24), headerText,
+                    StringAlignmentNear, StringAlignmentCenter);
+        DrawTextFit(g, today, titleFont,
+                    RectF(rc.X + 16, rc.Y + 48, rc.Width - 32, 34), text,
+                    StringAlignmentNear, StringAlignmentCenter);
+        DrawTextFit(g, g_agendaLine1, agendaFont,
+                    RectF(rc.X + 16, rc.Y + 98, rc.Width - 32, 28), muted,
+                    StringAlignmentNear, StringAlignmentCenter);
+        if (g_agendaLine2[0]) {
+            DrawTextFit(g, g_agendaLine2, smallFont,
+                        RectF(rc.X + 16, rc.Y + 128, rc.Width - 32, 24), muted,
+                        StringAlignmentNear, StringAlignmentCenter);
+        } else {
+            DrawTextFit(g, L"Calendar access is best-effort", smallFont,
+                        RectF(rc.X + 16, rc.Y + 128, rc.Width - 32, 24), muted,
+                        StringAlignmentNear, StringAlignmentCenter);
+        }
+        return;
+    }
 
     DrawTextFit(g, months[st.wMonth - 1], header,
                 RectF(rc.X + 16, rc.Y + 10, 170, 24), headerText,
@@ -1517,77 +2259,198 @@ void DrawCalendar(Graphics& g, const Widget& widget, FontFamily& family) {
     }
 }
 
-void DrawClock(Graphics& g, const Widget& widget, FontFamily& family) {
-    RectF rc = widget.rc;
+struct ClockColors {
+    Color face;
+    Color text;
+    Color ticks;
+    Color hands;
+    Color tile;
+    Color tileBorder;
+    bool fillAnalogFace;
+};
+
+ClockColors ResolveClockColors() {
     const ThemePalette* theme = CurrentTheme();
-    const bool liquidGlass = IsLiquidGlassTheme();
-    const JonaOSPalette* jp = CurrentJonaOSPalette();
-    const float cx = rc.X + rc.Width  / 2.0f;
+    const IwinPalette* jp = CurrentIwinPalette();
+    if (jp) {
+        return {jp->clockFace, jp->clockNums, jp->clockTicks, jp->clockHands,
+                jp->clockFace, jp->clockTicks, true};
+    }
+    if (theme) {
+        const Color header = MaterialThemeHeaderColor(theme);
+        return {header, theme->textOnHeader, theme->textOnHeader, theme->textOnHeader,
+                header, theme->textOnHeader, true};
+    }
+    if (IsLiquidGlassTheme()) {
+        return {LiquidGlassTextColor(150), LiquidGlassTextColor(), LiquidGlassTextColor(220),
+                MaterialAccentColor(), Color(72, 255, 255, 255), MaterialAccentColor(180),
+                false};
+    }
+    if (IsWhiteTintTheme()) {
+        const Color dark = DefaultWidgetTextColor();
+        return {Color(238, 255, 255, 255), dark, dark, dark,
+                Color(220, 255, 255, 255), Color(180, 0x1C, 0x1C, 0x1E),
+                true};
+    }
+    return {Color(230, 255, 255, 255), Color(245, 255, 255, 255),
+            Color(255, 255, 210, 38), Color(255, 35, 125, 255),
+            Color(70, 255, 255, 255), Color(180, 255, 255, 255),
+            false};
+}
+
+void GetClockText(const SYSTEMTIME& st, wchar_t* timeText, size_t timeCount,
+                  wchar_t* amPm, size_t amPmCount) {
+    const int hour12 = st.wHour % 12 == 0 ? 12 : st.wHour % 12;
+    swprintf_s(timeText, timeCount, L"%02d:%02d", hour12, st.wMinute);
+    swprintf_s(amPm, amPmCount, st.wHour < 12 ? L"AM" : L"PM");
+}
+
+void DrawClockAnalog(Graphics& g, const Widget& widget, FontFamily& family,
+                     const ClockColors& colors, bool roman) {
+    const RectF rc = widget.rc;
+    const float cx = rc.X + rc.Width / 2.0f;
     const float cy = rc.Y + rc.Height / 2.0f;
     const float radius = 70.0f;
-    Color dialColor     = jp ? jp->clockFace : theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? LiquidGlassTextColor(150) : Color(230, 255, 255, 255);
-    Color dialTextColor = jp ? jp->clockNums : theme ? theme->textOnHeader             : liquidGlass ? LiquidGlassTextColor()    : Color(245, 255, 255, 255);
-    Pen dialPen(dialColor, 2.0f);
-    Pen hourTick  (jp ? jp->clockTicks : theme ? dialTextColor : liquidGlass ? LiquidGlassTextColor()    : Color(255, 255, 210, 38), 3.0f);
-    Pen minuteTick(jp ? jp->clockTicks : theme ? dialTextColor : liquidGlass ? LiquidGlassTextColor(220) : Color(230, 255, 255, 255), 1.2f);
-    SolidBrush text(dialTextColor);
-    Font numFont(&family, 13, FontStyleRegular, UnitPixel);
+    Pen dialPen(colors.face, 2.0f);
+    Pen hourTick(colors.ticks, 3.0f);
+    Pen minuteTick(colors.ticks, 1.2f);
+    SolidBrush text(colors.text);
+    Font numFont(&family, roman ? 12.0f : 13.0f, FontStyleRegular, UnitPixel);
 
-    if (theme || jp) {
-        SolidBrush dialFill(dialColor);
+    if (colors.fillAnalogFace) {
+        SolidBrush dialFill(colors.face);
         FillEllipseF(g, &dialFill, cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
     }
     DrawEllipseF(g, &dialPen, cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
-
     for (int i = 0; i < 60; ++i) {
-        float angle = (i * 6.0f - 90.0f) * 3.14159265f / 180.0f;
-        bool  hour  = i % 5 == 0;
-        float outer = radius - 3;
-        float inner = hour ? radius - 17 : radius - 10;
+        const float angle = (i * 6.0f - 90.0f) * 3.14159265f / 180.0f;
+        const bool hour = i % 5 == 0;
+        const float outer = radius - 3;
+        const float inner = hour ? radius - 17 : radius - 10;
         Pen& pen = hour ? hourTick : minuteTick;
         g.DrawLine(&pen, cx + std::cos(angle) * inner, cy + std::sin(angle) * inner,
                          cx + std::cos(angle) * outer, cy + std::sin(angle) * outer);
     }
+
+    static const wchar_t* romanLabels[] = {
+        L"I", L"II", L"III", L"IV", L"V", L"VI", L"VII", L"VIII", L"IX", L"X", L"XI", L"XII"
+    };
     for (int n = 1; n <= 12; ++n) {
-        float angle = (n * 30.0f - 90.0f) * 3.14159265f / 180.0f;
-        wchar_t label[4];
-        swprintf_s(label, L"%d", n);
+        const float angle = (n * 30.0f - 90.0f) * 3.14159265f / 180.0f;
+        wchar_t arabic[4];
+        swprintf_s(arabic, L"%d", n);
+        const wchar_t* label = roman ? romanLabels[n - 1] : arabic;
+        const float labelHalfWidth = roman ? 15.0f : 11.0f;
+        const float labelWidth = roman ? 30.0f : 22.0f;
         DrawTextFit(g, label, numFont,
-                    RectF(cx + std::cos(angle) * 49 - 11, cy + std::sin(angle) * 49 - 9, 22, 18), text);
+                    RectF(cx + std::cos(angle) * 49 - labelHalfWidth,
+                          cy + std::sin(angle) * 49 - 9, labelWidth, 18), text);
     }
 
     SYSTEMTIME st;
     GetLocalTime(&st);
-    float minute    = static_cast<float>(st.wMinute);
-    float hour      = (st.wHour % 12) + minute / 60.0f;
-    float minAngle  = (minute * 6.0f  - 90.0f) * 3.14159265f / 180.0f;
-    float hourAngle = (hour   * 30.0f - 90.0f) * 3.14159265f / 180.0f;
-    Color handColor = jp ? jp->clockHands : theme ? dialTextColor : liquidGlass ? MaterialAccentColor() : Color(255, 35, 125, 255);
-    Pen handPen(handColor, 4.0f);
+    const float minute = static_cast<float>(st.wMinute);
+    const float hour = (st.wHour % 12) + minute / 60.0f;
+    const float minAngle = (minute * 6.0f - 90.0f) * 3.14159265f / 180.0f;
+    const float hourAngle = (hour * 30.0f - 90.0f) * 3.14159265f / 180.0f;
+    Pen handPen(colors.hands, 4.0f);
     handPen.SetStartCap(LineCapRound);
     handPen.SetEndCap(LineCapRound);
     g.DrawLine(&handPen, cx, cy, cx + std::cos(hourAngle) * 35, cy + std::sin(hourAngle) * 35);
-    g.DrawLine(&handPen, cx, cy, cx + std::cos(minAngle)  * 53, cy + std::sin(minAngle)  * 53);
-    SolidBrush handHub(handColor);
+    g.DrawLine(&handPen, cx, cy, cx + std::cos(minAngle) * 53, cy + std::sin(minAngle) * 53);
+    SolidBrush handHub(colors.hands);
     FillEllipseF(g, &handHub, cx - 4.0f, cy - 4.0f, 8.0f, 8.0f);
+}
+
+void DrawClockFlip(Graphics& g, const Widget& widget, FontFamily& family,
+                   const ClockColors& colors) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    wchar_t timeText[8], amPm[4];
+    GetClockText(st, timeText, ARRAYSIZE(timeText), amPm, ARRAYSIZE(amPm));
+    const RectF rc = widget.rc;
+    wchar_t hourText[3] = {timeText[0], timeText[1], L'\0'};
+    wchar_t minuteText[3] = {timeText[3], timeText[4], L'\0'};
+    const float tileY = rc.Y + 36.0f;
+    RectF hourTile(rc.X + 13.0f, tileY, 58.0f, 62.0f);
+    RectF minuteTile(rc.X + 94.0f, tileY, 58.0f, 62.0f);
+    SolidBrush tileFill(colors.tile);
+    Pen tileEdge(colors.tileBorder, 1.1f);
+    Pen seam(Color(95, colors.text.GetR(), colors.text.GetG(), colors.text.GetB()), 1.0f);
+    SolidBrush primary(colors.text);
+    SolidBrush accent(colors.hands);
+    Font tileFont(&family, 36, FontStyleRegular, UnitPixel);
+    Font amPmFont(&family, 11, FontStyleBold, UnitPixel);
+    Font colonFont(&family, 36, FontStyleBold, UnitPixel);
+
+    DrawRoundedRectangle(g, hourTile, 10.0f, tileFill, &tileEdge);
+    DrawRoundedRectangle(g, minuteTile, 10.0f, tileFill, &tileEdge);
+    g.DrawLine(&seam, hourTile.X + 5, hourTile.Y + hourTile.Height / 2.0f,
+                     hourTile.X + hourTile.Width - 5, hourTile.Y + hourTile.Height / 2.0f);
+    g.DrawLine(&seam, minuteTile.X + 5, minuteTile.Y + minuteTile.Height / 2.0f,
+                     minuteTile.X + minuteTile.Width - 5, minuteTile.Y + minuteTile.Height / 2.0f);
+    DrawTextFit(g, hourText, tileFont, hourTile, primary);
+    DrawTextFit(g, minuteText, tileFont, minuteTile, primary);
+    DrawTextFit(g, L":", colonFont, RectF(rc.X + 70, tileY + 9, 25, 42), accent);
+    RectF badge(rc.X + 61.0f, rc.Y + 11.0f, 43.0f, 18.0f);
+    DrawRoundedRectangle(g, badge, 8.0f, tileFill, &tileEdge);
+    DrawTextFit(g, amPm, amPmFont, badge, primary);
+}
+
+void DrawClock(Graphics& g, const Widget& widget, FontFamily& family) {
+    const ClockColors colors = ResolveClockColors();
+    switch (g_clockStyle) {
+        case ClockStyle::Roman:
+            DrawClockAnalog(g, widget, family, colors, true);
+            break;
+        case ClockStyle::ClassicAnalog:
+            DrawClockAnalog(g, widget, family, colors, false);
+            break;
+        case ClockStyle::Flip:
+        default:
+            DrawClockFlip(g, widget, family, colors);
+            break;
+    }
+}
+
+void DrawBeamNotesIcon(Graphics& g, float cx, float cy, Color color) {
+    Pen pen(color, 3.0f);
+    pen.SetStartCap(LineCapRound);
+    pen.SetEndCap(LineCapRound);
+    SolidBrush brush(color);
+    g.DrawLine(&pen, cx - 8.0f, cy - 13.0f, cx - 8.0f, cy + 8.0f);
+    g.DrawLine(&pen, cx + 8.0f, cy - 17.0f, cx + 8.0f, cy + 4.0f);
+    g.DrawLine(&pen, cx - 8.0f, cy - 13.0f, cx + 8.0f, cy - 17.0f);
+    g.DrawLine(&pen, cx - 8.0f, cy - 8.0f, cx + 8.0f, cy - 12.0f);
+    FillEllipseF(g, &brush, cx - 18.0f, cy + 5.0f, 13.0f, 10.0f);
+    FillEllipseF(g, &brush, cx - 2.0f, cy + 1.0f, 13.0f, 10.0f);
 }
 
 void DrawMusic(Graphics& g, const Widget& widget) {
     RectF rc = widget.rc;
     const ThemePalette* theme = CurrentTheme();
     const bool liquidGlass = IsLiquidGlassTheme();
-    const JonaOSPalette* jp = CurrentJonaOSPalette();
+    const IwinPalette* jp = CurrentIwinPalette();
     SolidBrush blue  (MaterialIconColor(theme, liquidGlass, Color(235, 80,  160, 255)));
     SolidBrush cyan  (MaterialIconColor(theme, liquidGlass, Color(235, 60,  220, 240)));
     SolidBrush yellow(theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? LiquidGlassTextColor(240) : Color(255, 255, 210, 38));
-    int heights[] = {24, 52, 34, 68, 46, 58, 28};
+    SolidBrush textBrush(jp ? jp->musicPlayFrame : theme ? theme->textOnBody : liquidGlass ? LiquidGlassTextColor() : DefaultWidgetTextColor());
+    Font titleFont(L"Segoe UI", 13, FontStyleRegular, UnitPixel);
+    Font subFont(L"Segoe UI", 11, FontStyleRegular, UnitPixel);
+    if (g_mediaControlAvailable && g_mediaTitle[0]) {
+        DrawTextFit(g, g_mediaTitle, titleFont, RectF(rc.X + 10, rc.Y + 10, rc.Width - 20, 20),
+                    textBrush);
+        DrawTextFit(g, g_mediaSubtitle, subFont, RectF(rc.X + 10, rc.Y + 30, rc.Width - 20, 18),
+                    textBrush);
+    }
     const float barW  = 9;
     const float gap   = 8;
-    const float total = 7 * barW + 6 * gap;
+    const float total = kMusicBarCount * barW + (kMusicBarCount - 1) * gap;
     const float x0    = rc.X + (rc.Width - total) / 2.0f;
     const float baseY = rc.Y + 93;
-    for (int i = 0; i < 7; ++i) {
-        RectF bar(x0 + i * (barW + gap), baseY - heights[i], barW, static_cast<float>(heights[i]));
+    for (int i = 0; i < kMusicBarCount; ++i) {
+        const float height = Clamp(g_musicBarHeights[i], 12.0f, 78.0f);
+        RectF bar(x0 + i * (barW + gap), baseY - height, barW, height);
         if (jp) {
             SolidBrush jbar(jp->musicBars[i]);
             DrawRoundedRectangle(g, bar, 4, jbar);
@@ -1595,39 +2458,81 @@ void DrawMusic(Graphics& g, const Widget& widget) {
             DrawRoundedRectangle(g, bar, 4, (i % 2) ? cyan : blue);
         }
     }
-    const float px = rc.X + rc.Width  / 2.0f;
+    const float px = rc.X + 62.0f;
     const float py = rc.Y + 125;
+    const float nx = rc.X + 112.0f;
+    const float ny = py;
     if (jp) {
         SolidBrush jplayFrame(jp->musicPlayFrame);
         FillEllipseF(g, &jplayFrame, px - 18.0f, py - 18.0f, 36.0f, 36.0f);
+        FillEllipseF(g, &jplayFrame, nx - 18.0f, ny - 18.0f, 36.0f, 36.0f);
     } else {
         FillEllipseF(g, &yellow, px - 18.0f, py - 18.0f, 36.0f, 36.0f);
+        FillEllipseF(g, &yellow, nx - 18.0f, ny - 18.0f, 36.0f, 36.0f);
     }
-    PointF points[] = {PointF(px - 5, py - 9), PointF(px - 5, py + 9), PointF(px + 10, py)};
-    SolidBrush playGlyph(jp ? jp->musicPlayGlyph : theme ? theme->textOnHeader : liquidGlass ? MaterialAccentColor() : Color(255, 35, 35, 35));
-    g.FillPolygon(&playGlyph, points, 3);
+    Color playGlyphColor = jp ? jp->musicPlayGlyph : theme ? theme->textOnHeader : liquidGlass ? MaterialAccentColor() : Color(255, 35, 35, 35);
+    SolidBrush playGlyph(playGlyphColor);
+    if (g_mediaControlAvailable && g_mediaAudioActive) {
+        DrawRoundedRectangle(g, RectF(px - 8.0f, py - 10.0f, 6.0f, 20.0f), 2.0f, playGlyph);
+        DrawRoundedRectangle(g, RectF(px + 3.0f, py - 10.0f, 6.0f, 20.0f), 2.0f, playGlyph);
+    } else {
+        PointF points[] = {PointF(px - 5, py - 9), PointF(px - 5, py + 9), PointF(px + 10, py)};
+        g.FillPolygon(&playGlyph, points, 3);
+    }
+    DrawBeamNotesIcon(g, nx, ny, playGlyphColor);
 }
 
 void DrawVolumeIcon(Graphics& g, float cx, float cy, Color color);
 void DrawBatteryIcon(Graphics& g, float cx, float cy, Color color);
+
+void VolumeLabel(wchar_t* buffer, size_t count) {
+    int percent = static_cast<int>(std::round(Clamp(g_volumeLevel, 0.0f, 1.0f) * 100.0f));
+    if (g_volumeMuted) {
+        swprintf_s(buffer, count, L"Muted");
+    } else {
+        swprintf_s(buffer, count, L"Volume %d%%", percent);
+    }
+}
+
+void BatteryLabel(wchar_t* buffer, size_t count) {
+    int percent = static_cast<int>(std::round(Clamp(g_batteryLevel, 0.0f, 1.0f) * 100.0f));
+    if (!g_onBatteryCapable) {
+        swprintf_s(buffer, count, L"Battery unavailable");
+    } else if (g_batteryFull) {
+        swprintf_s(buffer, count, L"Full %d%%", percent);
+    } else if (g_batteryCharging) {
+        swprintf_s(buffer, count, L"Charging %d%%", percent);
+    } else {
+        swprintf_s(buffer, count, L"Battery %d%%", percent);
+    }
+}
+
+const wchar_t* LiveStateText(LiveState state) {
+    switch (state) {
+        case LiveState::On: return L"On";
+        case LiveState::Off: return L"Off";
+        case LiveState::Unavailable: return L"N/A";
+        default: return L"...";
+    }
+}
 
 void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
                 float value, Color fillColor, FontFamily& family) {
     RectF rc = widget.rc;
     const ThemePalette* theme = CurrentTheme();
     const bool liquidGlass = IsLiquidGlassTheme();
-    const JonaOSPalette* jp = CurrentJonaOSPalette();
-    Color jonaTextColor = Color(255,0x1C,0x1C,0x1E);
-    Color jonaFillColor = fillColor;
-    Color jonaShellColor = Color(255,0xE5,0xE5,0xEA);
+    const IwinPalette* jp = CurrentIwinPalette();
+    Color iwinTextColor = Color(255,0x1C,0x1C,0x1E);
+    Color iwinFillColor = fillColor;
+    Color iwinShellColor = Color(255,0xE5,0xE5,0xEA);
     if (jp) {
-        if (widget.id == WidgetVolume)  { jonaTextColor = jp->volumeText;  jonaFillColor = jp->volumeSlider;  jonaShellColor = jp->volumeFrame;  }
-        if (widget.id == WidgetBattery) { jonaTextColor = jp->batteryText; jonaFillColor = jp->batterySlider; jonaShellColor = jp->batteryFrame; }
+        if (widget.id == WidgetVolume)  { iwinTextColor = jp->volumeText;  iwinFillColor = jp->volumeSlider;  iwinShellColor = jp->volumeFrame;  }
+        if (widget.id == WidgetBattery) { iwinTextColor = jp->batteryText; iwinFillColor = jp->batterySlider; iwinShellColor = jp->batteryFrame; }
     }
     Font font(&family, 13, FontStyleRegular, UnitPixel);
-    SolidBrush text(jp ? jonaTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : Color(245, 255, 255, 255));
-    Color shellColor = jp ? jonaShellColor : theme ? theme->accent : liquidGlass ? LiquidGlassTextColor(90) : Color(105, 255, 255, 255);
-    Color activeColor = jp ? jonaFillColor : theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? MaterialAccentColor() : fillColor;
+    SolidBrush text(jp ? iwinTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : DefaultWidgetTextColor());
+    Color shellColor = jp ? iwinShellColor : theme ? theme->accent : liquidGlass ? LiquidGlassTextColor(90) : Color(105, 255, 255, 255);
+    Color activeColor = jp ? iwinFillColor : theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? MaterialAccentColor() : fillColor;
     if (IsWidgetRoundMeter(widget.id)) {
         const float shellThickness = kRoundMeterThickness;
         const float indicatorThickness = kSliderIndicatorThickness;
@@ -1694,7 +2599,7 @@ void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
     }
     SolidBrush fill(activeColor);
     DrawRoundedRectangle(g, filled, indicatorThickness / 2.0f, fill);
-    SolidBrush thumb(jp ? jonaTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : Color(245, 255, 255, 255));
+    SolidBrush thumb(jp ? iwinTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : DefaultWidgetTextColor());
     const float thumbDiameter = indicatorThickness;
     if (vertical) {
         FillEllipseF(g, &thumb, slider.X,
@@ -1703,6 +2608,12 @@ void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
     } else {
         FillEllipseF(g, &thumb, slider.X + slider.Width * Clamp(value, 0.0f, 1.0f) - thumbDiameter / 2.0f,
                      slider.Y, thumbDiameter, thumbDiameter);
+    }
+    if (widget.id == WidgetVolume && !vertical && g_outputDeviceName[0]) {
+        Font deviceFont(&family, 10, FontStyleRegular, UnitPixel);
+        DrawTextFit(g, g_outputDeviceName, deviceFont,
+                    RectF(rc.X + 100.0f, rc.Y, rc.Width - 108.0f, rc.Height),
+                    text);
     }
 }
 
@@ -1746,6 +2657,17 @@ void DrawBatteryIcon(Graphics& g, float cx, float cy, Color color) {
     DrawRoundedRectangle(g, body, 4.0f, SolidBrush(Color(0, 0, 0, 0)), &pen);
     DrawRoundedRectangle(g, RectF(cx + 16.0f, cy - 4.0f, 5.0f, 8.0f), 2.0f, brush);
     DrawRoundedRectangle(g, RectF(cx - 13.0f, cy - 5.0f, 20.0f, 10.0f), 3.0f, brush);
+    if (g_batteryCharging) {
+        const int luminance = (color.GetR() * 299 + color.GetG() * 587 + color.GetB() * 114) / 1000;
+        SolidBrush bolt(luminance < 150 ? Color(255, 255, 255, 255) : Color(255, 0, 0, 0));
+        PointF points[] = {
+            PointF(cx - 1.0f, cy - 8.0f), PointF(cx + 5.0f, cy - 8.0f),
+            PointF(cx + 1.0f, cy - 1.0f), PointF(cx + 6.0f, cy - 1.0f),
+            PointF(cx - 4.0f, cy + 8.0f), PointF(cx - 1.0f, cy + 2.0f),
+            PointF(cx - 6.0f, cy + 2.0f),
+        };
+        g.FillPolygon(&bolt, points, ARRAYSIZE(points));
+    }
 }
 
 void DrawWifiIcon(Graphics& g, float cx, float cy, Color color) {
@@ -1782,15 +2704,34 @@ void DrawBluetoothIcon(Graphics& g, float cx, float cy, Color color) {
     g.DrawLine(&pen, cx - 12, cy + 10, cx + 12, cy - 10);
 }
 
-void DrawAccessibilityIcon(Graphics& g, float cx, float cy, Color color) {
-    Pen pen(color, 3.0f);
-    pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+void DrawMoonIcon(Graphics& g, float cx, float cy, Color color) {
     SolidBrush brush(color);
-    FillEllipseF(g, &brush, cx - 5.0f, cy - 22.0f, 10.0f, 10.0f);
-    g.DrawLine(&pen, cx - 20, cy - 5,  cx + 20, cy - 5);
-    g.DrawLine(&pen, cx,      cy - 5,  cx,      cy + 12);
-    g.DrawLine(&pen, cx,      cy + 12, cx - 13, cy + 23);
-    g.DrawLine(&pen, cx,      cy + 12, cx + 13, cy + 23);
+    GraphicsPath outer;
+    GraphicsPath cutout;
+    outer.AddEllipse(cx - 12.0f, cy - 12.0f, 24.0f, 24.0f);
+    cutout.AddEllipse(cx - 2.0f, cy - 16.0f, 22.0f, 22.0f);
+    Region crescent(&outer);
+    crescent.Exclude(&cutout);
+    g.FillRegion(&brush, &crescent);
+}
+
+void DrawSunIcon(Graphics& g, float cx, float cy, Color color) {
+    Pen ray(color, 3.0f);
+    ray.SetStartCap(LineCapRound);
+    ray.SetEndCap(LineCapRound);
+    SolidBrush center(color);
+    FillEllipseF(g, &center, cx - 8.0f, cy - 8.0f, 16.0f, 16.0f);
+
+    constexpr float kInnerRadius = 13.0f;
+    constexpr float kOuterRadius = 20.0f;
+    constexpr float kPi = 3.14159265358979323846f;
+    for (int i = 0; i < 8; ++i) {
+        const float angle = (kPi * 2.0f * i) / 8.0f;
+        const float dx = std::cos(angle);
+        const float dy = std::sin(angle);
+        g.DrawLine(&ray, cx + dx * kInnerRadius, cy + dy * kInnerRadius,
+                   cx + dx * kOuterRadius, cy + dy * kOuterRadius);
+    }
 }
 
 void DrawSmallButton(Graphics& g, const Widget& widget, const wchar_t* label,
@@ -1798,16 +2739,16 @@ void DrawSmallButton(Graphics& g, const Widget& widget, const wchar_t* label,
     RectF rc = widget.rc;
     const ThemePalette* theme = CurrentTheme();
     const bool liquidGlass = IsLiquidGlassTheme();
-    const JonaOSPalette* jp = CurrentJonaOSPalette();
-    Color jonaTextColor = Color(255,0x1C,0x1C,0x1E);
-    Color jonaIconColor = Color(255,0x34,0xC7,0x59);
+    const IwinPalette* jp = CurrentIwinPalette();
+    Color iwinTextColor = Color(255,0x1C,0x1C,0x1E);
+    Color iwinIconColor = Color(255,0x34,0xC7,0x59);
     if (jp) {
-        if (widget.id == WidgetSearch)          { jonaTextColor = jp->searchText;          jonaIconColor = jp->searchIcon;          }
-        if (widget.id == WidgetPersonalization) { jonaTextColor = jp->personalizationText; jonaIconColor = jp->personalizationIcon; }
+        if (widget.id == WidgetSearch)          { iwinTextColor = jp->searchText;          iwinIconColor = jp->searchIcon;          }
+        if (widget.id == WidgetPersonalization) { iwinTextColor = jp->personalizationText; iwinIconColor = jp->personalizationIcon; }
     }
-    Color iconColor = jp ? jonaIconColor : MaterialIconColor(theme, liquidGlass, Color(255, 255, 210, 38));
+    Color iconColor = jp ? iwinIconColor : MaterialIconColor(theme, liquidGlass, Color(255, 255, 210, 38));
     Font font(&family, kSmallButtonFontSize, FontStyleRegular, UnitPixel);
-    SolidBrush text(jp ? jonaTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : Color(245, 255, 255, 255));
+    SolidBrush text(jp ? iwinTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : DefaultWidgetTextColor());
     const bool vertical = IsWidgetVertical(widget.id);
     RectF iconRc = vertical
         ? RectF(rc.X + rc.Width / 2.0f - 11.0f, rc.Y + 18.0f, 22, 22)
@@ -1820,33 +2761,90 @@ void DrawSmallButton(Graphics& g, const Widget& widget, const wchar_t* label,
         DrawTextFit(g, label, font, RectF(rc.X + 42, rc.Y, rc.Width - 48, rc.Height), text);
 }
 
-void DrawRoundShortcut(Graphics& g, const Widget& widget, const wchar_t* label,
-                       int kind, FontFamily& family) {
+void DrawPillShortcut(Graphics& g, const Widget& widget, const wchar_t* label,
+                      int kind, FontFamily& family) {
     RectF rc = widget.rc;
     const ThemePalette* theme = CurrentTheme();
     const bool liquidGlass = IsLiquidGlassTheme();
-    const JonaOSPalette* jp = CurrentJonaOSPalette();
-    Color jonaTextColor = Color(255,0xE5,0xE5,0xEA);
-    Color jonaIconColor = Color(255,0xFF,0x3B,0x30);
+    const IwinPalette* jp = CurrentIwinPalette();
+    Color iwinTextColor = Color(255,0xE5,0xE5,0xEA);
+    Color iwinIconColor = Color(255,0xFF,0x3B,0x30);
     if (jp) {
         switch (widget.id) {
-            case WidgetWifi:          jonaTextColor = jp->wifiText;          jonaIconColor = jp->wifiIcon;          break;
-            case WidgetBluetooth:     jonaTextColor = jp->bluetoothText;     jonaIconColor = jp->bluetoothIcon;     break;
-            case WidgetHotspot:       jonaTextColor = jp->hotspotText;       jonaIconColor = jp->hotspotIcon;       break;
-            case WidgetAccessibility: jonaTextColor = jp->accessibilityText; jonaIconColor = jp->accessibilityIcon; break;
+            case WidgetWifi:          iwinTextColor = jp->wifiText;          iwinIconColor = jp->wifiIcon;          break;
+            case WidgetBluetooth:     iwinTextColor = jp->bluetoothText;     iwinIconColor = jp->bluetoothIcon;     break;
+            case WidgetHotspot:       iwinTextColor = jp->hotspotText;       iwinIconColor = jp->hotspotIcon;       break;
+            case WidgetMode:          iwinTextColor = jp->personalizationText; iwinIconColor = jp->personalizationIcon; break;
             default: break;
         }
     }
-    Color iconColor = jp ? jonaIconColor : MaterialIconColor(theme, liquidGlass, Color(255, 255, 210, 38));
-    float cx = rc.X + rc.Width  / 2.0f;
-    float cy = rc.Y + 28.0f;
-    if      (kind == 0) DrawWifiIcon        (g, cx, cy - 4, iconColor);
-    else if (kind == 1) DrawHotspotIcon     (g, cx, cy,     iconColor);
-    else if (kind == 2) DrawBluetoothIcon   (g, cx, cy,     iconColor);
-    else                DrawAccessibilityIcon(g, cx, cy,    iconColor);
-    Font font(&family, kRoundShortcutFontSize, FontStyleRegular, UnitPixel);
-    SolidBrush text(jp ? jonaTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : Color(245, 255, 255, 255));
-    DrawTextFit(g, label, font, RectF(rc.X + 2, rc.Y + 46, rc.Width - 4, 20), text);
+    Color iconColor = jp ? iwinIconColor : MaterialIconColor(theme, liquidGlass, Color(255, 255, 210, 38));
+    LiveState state = LiveState::Unavailable;
+    if (widget.id == WidgetWifi) state = g_wifiState;
+    else if (widget.id == WidgetHotspot) state = g_hotspotState;
+    else if (widget.id == WidgetBluetooth) state = g_bluetoothState;
+    else if (widget.id == WidgetMode) state = g_darkModeState;
+
+    const float iconCx = rc.X + 25.333333f; // 19 screen px from the left edge.
+    const float iconCy = rc.Y + rc.Height / 2.0f;
+    GraphicsState iconState = g.Save();
+    g.TranslateTransform(iconCx, iconCy);
+    g.ScaleTransform(kPillShortcutIconScale, kPillShortcutIconScale);
+    g.TranslateTransform(-iconCx, -iconCy);
+    if      (kind == 0) DrawWifiIcon          (g, iconCx, iconCy - 4, iconColor);
+    else if (kind == 1) DrawHotspotIcon       (g, iconCx, iconCy,     iconColor);
+    else if (kind == 2) DrawBluetoothIcon     (g, iconCx, iconCy,     iconColor);
+    else if (kind == 3 && state == LiveState::Off)
+                         DrawSunIcon           (g, iconCx, iconCy,     iconColor);
+    else                DrawMoonIcon          (g, iconCx, iconCy,     iconColor);
+    g.Restore(iconState);
+
+    const RectF toggleRc(rc.X + rc.Width - kPillToggleWidth - kPillToggleInset,
+                         rc.Y + (rc.Height - kPillToggleHeight) / 2.0f,
+                         kPillToggleWidth, kPillToggleHeight);
+bool enabled = false;
+
+switch (widget.id) {
+    case WidgetWifi:
+        enabled = (g_wifiState == LiveState::On);
+        break;
+
+    case WidgetHotspot:
+        enabled = (g_hotspotState == LiveState::On);
+        break;
+
+    case WidgetBluetooth:
+        enabled = (g_bluetoothState == LiveState::On);
+        break;
+
+    case WidgetMode:
+        enabled = (g_darkModeState == LiveState::On);
+        break;
+}
+
+const Color trackColor =
+    enabled ? iconColor
+            : Color(185, 112, 112, 118);
+
+const float knobInset =
+    (toggleRc.Height - kPillToggleKnobDiameter) / 2.0f;
+
+const float knobX =
+    enabled
+        ? toggleRc.X + toggleRc.Width -
+              kPillToggleKnobDiameter -
+              knobInset
+        : toggleRc.X + knobInset;
+    SolidBrush track(trackColor);
+    SolidBrush knob(Color(245, 255, 255, 255));
+    DrawRoundedRectangle(g, toggleRc, toggleRc.Height / 2.0f, track);
+    FillEllipseF(g, &knob, knobX, toggleRc.Y + knobInset,
+                 kPillToggleKnobDiameter, kPillToggleKnobDiameter);
+
+    Font font(&family, kPillShortcutFontSize, FontStyleRegular, UnitPixel);
+    SolidBrush text(jp ? iwinTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : DefaultWidgetTextColor());
+    DrawTextFit(g, label, font,
+                RectF(rc.X + 43.0f, rc.Y, toggleRc.X - rc.X - 48.0f, rc.Height), text);
 }
 
 int CurrentMinuteKey() {
@@ -1916,20 +2914,31 @@ void Render() {
 
         FontFamily family(L"Segoe UI");
 
-        for (const Widget& widget : g_widgets) DrawGlass(g, widget);
-        for (const Widget& widget : g_widgets) DrawAcrylicGrain(g, widget);
+        for (const Widget& widget : g_widgets)
+            if (IsWidgetEnabled(widget.id)) DrawGlass(g, widget);
+        for (const Widget& widget : g_widgets)
+            if (IsWidgetEnabled(widget.id)) DrawAcrylicGrain(g, widget);
 
-        DrawCalendar   (g, g_widgets[WidgetCalendar],        family);
-        DrawClock      (g, g_widgets[WidgetClock],           family);
-        DrawMusic      (g, g_widgets[WidgetMusic]);
-        DrawSlider     (g, g_widgets[WidgetVolume],  L"Volume",  g_volumeLevel,  Color(255, 40,  120, 255), family);
-        DrawSlider     (g, g_widgets[WidgetBattery], L"Battery", g_batteryLevel, Color(255, 45,  205, 92),  family);
-        DrawSmallButton(g, g_widgets[WidgetSearch],          L"Windows Search", 0, family);
-        DrawSmallButton(g, g_widgets[WidgetPersonalization], L"Personalization", 1, family);
-        DrawRoundShortcut(g, g_widgets[WidgetWifi],          L"WiFi",          0, family);
-        DrawRoundShortcut(g, g_widgets[WidgetHotspot],       L"Hotspot",       1, family);
-        DrawRoundShortcut(g, g_widgets[WidgetBluetooth],     L"Bluetooth",     2, family);
-        DrawRoundShortcut(g, g_widgets[WidgetAccessibility], L"Accessibility", 3, family);
+        wchar_t volumeLabel[64];
+        wchar_t batteryLabel[64];
+        VolumeLabel(volumeLabel, ARRAYSIZE(volumeLabel));
+        BatteryLabel(batteryLabel, ARRAYSIZE(batteryLabel));
+
+        if (IsWidgetEnabled(WidgetCalendar))        DrawCalendar   (g, g_widgets[WidgetCalendar],        family);
+        if (IsWidgetEnabled(WidgetClock))           DrawClock      (g, g_widgets[WidgetClock],           family);
+        if (IsWidgetEnabled(WidgetMusic))           DrawMusic      (g, g_widgets[WidgetMusic]);
+        if (IsWidgetEnabled(WidgetVolume))          DrawSlider     (g, g_widgets[WidgetVolume],  volumeLabel,  g_volumeMuted ? 0.0f : g_volumeLevel,  Color(255, 40,  120, 255), family);
+        if (IsWidgetEnabled(WidgetBattery))         DrawSlider     (g, g_widgets[WidgetBattery], batteryLabel, g_batteryLevel, Color(255, 45,  205, 92),  family);
+        if (IsWidgetEnabled(WidgetSearch))          DrawSmallButton(g, g_widgets[WidgetSearch],          L"Windows Search", 0, family);
+        if (IsWidgetEnabled(WidgetPersonalization)) DrawSmallButton(g, g_widgets[WidgetPersonalization], L"Personalization", 1, family);
+        if (IsWidgetEnabled(WidgetWifi))            DrawPillShortcut(g, g_widgets[WidgetWifi],          L"WiFi",        0, family);
+        if (IsWidgetEnabled(WidgetHotspot))         DrawPillShortcut(g, g_widgets[WidgetHotspot],       L"Hotspot",     1, family);
+        if (IsWidgetEnabled(WidgetBluetooth))       DrawPillShortcut(g, g_widgets[WidgetBluetooth],     L"Bluetooth",   2, family);
+        if (IsWidgetEnabled(WidgetMode)) {
+            const wchar_t* modeLabel = g_darkModeState == LiveState::On ? L"Dark Mode" :
+                                       g_darkModeState == LiveState::Off ? L"Light Mode" : L"Mode";
+            DrawPillShortcut(g, g_widgets[WidgetMode], modeLabel, 3, family);
+        }
     }
 
     SIZE  size = {w, h};
@@ -1981,10 +2990,10 @@ void HandleClick(int widgetId) {
             OpenQuickSettingsDirect(L"ms-actioncenter:controlcenter/bluetooth",
                                     L"ms-controlcenter:bluetooth",
                                     L"ms-settings:bluetooth"); break;
-        case WidgetAccessibility:
-            OpenQuickSettingsDirect(L"ms-actioncenter:controlcenter/accessibility",
-                                    L"ms-controlcenter:accessibility",
-                                    L"ms-settings:easeofaccess"); break;
+        case WidgetMode:
+            ToggleDarkMode();
+            Render();
+            break;
     }
 }
 
@@ -1998,20 +3007,36 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             MARGINS margins = {-1};
             DwmExtendFrameIntoClientArea(hwnd, &margins);
             SetTimer(hwnd, kTickTimer, kTimerMs, nullptr);
+            SetTimer(hwnd, kVisualizerTimer, kVisualizerTimerMs, nullptr);
+            SetTimer(hwnd, kShortcutStateTimer, kShortcutStateTimerMs, nullptr);
             UpdateScale();
             ApplyDefaultWidgetLayout();
             LoadWidgetPositions();
             InitAudio();
             RefreshVolume();
+            RefreshMusicVisualizer();
             RefreshBattery();
+            RefreshSlowSystemStates();
             Render();
             return 0;
         }
 
         case WM_TIMER: {
-            bool batteryChanged = RefreshBattery();
-            if (batteryChanged || CurrentMinuteKey() != g_lastRenderedMinute) {
-                Render();
+            if (wParam == kTickTimer) {
+                bool volumeChanged = RefreshVolume();
+                bool batteryChanged = RefreshBattery();
+                if (volumeChanged || batteryChanged ||
+                    CurrentMinuteKey() != g_lastRenderedMinute) {
+                    Render();
+                }
+            } else if (wParam == kVisualizerTimer) {
+                if (RefreshMusicVisualizer()) {
+                    Render();
+                }
+            } else if (wParam == kShortcutStateTimer) {
+                if (RefreshSlowSystemStates()) {
+                    Render();
+                }
             }
             return 0;
         }
@@ -2031,6 +3056,7 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case kAudioDeviceChangedMessage:
             BindAudioEndpoint();
             RefreshVolume();
+            RefreshMusicVisualizer();
             Render();
             return 0;
 
@@ -2040,9 +3066,12 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             const bool oldSearchVertical          = g_searchWidgetVertical;
             const bool oldPersonalizationVertical = g_personalizationWidgetVertical;
             LoadSettings();
+            ApplyDefaultWidgetLayout();
+            LoadWidgetPositions();
             ApplyOrientationResizeIfNeeded(oldVolumeOrientation, oldBatteryOrientation,
                                            oldSearchVertical, oldPersonalizationVertical);
-            for (Widget& widget : g_widgets) ClampWidgetToDesktop(widget);
+            for (Widget& widget : g_widgets)
+                if (IsWidgetEnabled(widget.id)) ClampWidgetToDesktop(widget);
             Render();
             return 0;
         }
@@ -2121,8 +3150,21 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             g_dragWidget       = -1;
             g_dragMoved        = false;
             ReleaseCapture();
-            if (!wasSlider && !wasMoved && relWidget >= 0 && PtInWidget(g_widgets[relWidget], pt))
-                HandleClick(g_widgets[relWidget].id);
+            if (!wasSlider && !wasMoved && relWidget >= 0 && PtInWidget(g_widgets[relWidget], pt)) {
+                if (relWidget == WidgetVolume && PtInVolumeMuteButton(pt)) {
+                    ToggleSystemMute();
+                    Render();
+                } else if (relWidget == WidgetMusic && PtInMusicPlayButton(pt)) {
+                    ToggleMediaPlayPause();
+                    Render();
+                } else if (relWidget == WidgetMusic && PtInMusicFolderButton(pt)) {
+                    OpenMusicFolder();
+                } else if (relWidget == WidgetMusic) {
+                    return 0;
+                } else {
+                    HandleClick(g_widgets[relWidget].id);
+                }
+            }
             if (wasMoved && relWidget >= 0)
                 SaveWidgetPositions();
             return 0;
@@ -2144,6 +3186,8 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case WM_DESTROY:
             SaveWidgetPositions();
             KillTimer(hwnd, kTickTimer);
+            KillTimer(hwnd, kVisualizerTimer);
+            KillTimer(hwnd, kShortcutStateTimer);
             ShutdownAudio();
             DestroyRenderSurface();
             g_hwnd = nullptr;
