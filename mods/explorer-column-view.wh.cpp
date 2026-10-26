@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.43
+// @version         0.48
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -43,6 +43,25 @@ its glass appearance comes from the user's other customization tools.
 - Browse **Home** and **This PC**, local and network folders, and archives exposed
   by your Windows Shell providers, including supported ZIP, RAR and 7z folders.
 
+## Choose your column width
+
+Set **Default column width** in Settings to choose the starting width for folder
+columns in fixed-width mode, from 180 to 1200 at 100% display scaling. The default
+is 300, and Windows display scaling is applied automatically. Saving updates open
+columns that you have not manually resized.
+
+Enable **Remember resized widths** to save your manually adjusted widths by column
+position, including after closing Explorer or restarting the mod. Saved sizes take
+priority over the default in new windows. Existing tabs retain their own widths;
+the last saved resize at each position is used by future windows. Turning this
+setting off clears saved sizes and returns columns to the selected sizing mode.
+
+Enable **Fit window** to share available space between automatic columns. Manually
+resized columns keep their chosen widths. Automatic columns stop shrinking at
+**Minimum fitted column width**, then the view scrolls horizontally. The Inspector
+keeps its reserved space. Fitting never saves automatic sizes as manual choices.
+Click **Save settings** to apply changes.
+
 ## Look closer with the Inspector
 
 Selecting a file opens its Inspector after the folder columns, filling the
@@ -81,8 +100,8 @@ Click **Save settings** in Windhawk to apply configuration changes.
 
 - Designed for Windows 11. The mod hosts native Shell views and follows existing
   Explorer styling; it does not include a glass theme.
-- Windows 11 context menus are available on supported x64 builds in the 26100
-  and 26200 families. Other builds and architectures use classic menus.
+- Windows 11 context menus are available on supported x64 builds in the 26100,
+  26200 and 26300 families. Other builds and architectures use classic menus.
   **Use classic context menus** forces that fallback inside the columns.
 - Use a column's context menu or keyboard shortcuts for file operations. The
   hidden native view's selection is cleared before columns cover it. The outer
@@ -119,9 +138,42 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
 - FixedInspector: false
   $name: Use fixed-width Inspector
   $description: Off places file previews after the folder columns and fills the remaining window space. On keeps the Inspector fixed on the far right and also shows folder details.
-- DividerWidth: 4
-  $name: Divider width
-  $description: Width of the draggable divider area, from 2 to 12 logical pixels. Default 4. The visible separator stays one physical pixel; the rest matches the folder background. Save settings to apply.
+- DefaultColumnWidth: 300
+  $name: Default column width
+  $description: Starting width in fixed-width mode, from 180 to 1200 at 100% display scaling. Windows scales it automatically. Saved manual widths take priority. Save settings to update open columns you have not manually resized.
+- FitWindow: false
+  $name: Fit window
+  $description: Share available window space between automatic columns. Manually resized columns keep their width, and file previews retain their space. Columns stop shrinking at the minimum fitted width, then scroll horizontally. Save settings to apply.
+- MinimumFittedColumnWidth: "240"
+  $name: Minimum fitted column width
+  $description: Smallest automatic column width when Fit window is enabled. Windows display scaling is applied automatically. Manually resized columns can be narrower. Save settings to apply.
+  $options:
+    - "180": "180"
+    - "200": "200"
+    - "240": "240 (default)"
+    - "280": "280"
+    - "300": "300"
+    - "360": "360"
+    - "480": "480"
+    - "600": "600"
+- RememberColumnWidths: false
+  $name: Remember resized widths
+  $description: Save manually resized widths by column position across closing and reopening Explorer. Saved sizes override the default in new windows. Turning this off clears saved sizes and returns columns to the selected sizing mode. Save settings to apply.
+- DividerWidth: "4"
+  $name: Resize grab area
+  $description: Choose how much space you can grab to resize a column. Higher values make it easier to catch with your mouse. The visible divider stays one pixel thin. Save settings to apply.
+  $options:
+    - "2": "2 (narrow)"
+    - "3": "3"
+    - "4": "4 (default)"
+    - "5": "5"
+    - "6": "6"
+    - "7": "7"
+    - "8": "8 (wide)"
+    - "9": "9"
+    - "10": "10"
+    - "11": "11"
+    - "12": "12 (maximum)"
 - ClassicContextMenus: false
   $name: Use classic context menus
   $description: On uses the old right-click menu in folder columns only. Off requests the Windows 11 menu when available, with the classic menu as a fallback. Applies to the next menu opened.
@@ -231,6 +283,10 @@ constexpr UINT_PTR kLiveResizeTimerId = 1; // Splitter-window timer, separate fr
 constexpr DWORD kLiveResizeIntervalMs = 16;
 constexpr int kMaxColumns = 64;
 constexpr int kDefaultColumnWidth = 300;
+constexpr int kMinColumnWidth = 180;
+constexpr int kMaxColumnWidth = 1200; // Default-width setting limit.
+constexpr int kMaxResizedColumnWidth = 16384; // Fitted columns can be wider than the default limit.
+constexpr int kDefaultMinimumFittedColumnWidth = 240;
 constexpr int kInspectorWidth = 360;
 constexpr wchar_t kOverlayClass[] = L"WindhawkExplorerColumnViewOverlay";
 constexpr wchar_t kPaneClass[] = L"WindhawkExplorerColumnViewPane";
@@ -285,6 +341,53 @@ struct WavePreview {
     ULONGLONG frames = 0;
     std::vector<float> peaks;
 };
+
+std::atomic<int> g_defaultColumnWidthSetting{kDefaultColumnWidth};
+std::atomic<bool> g_rememberColumnWidths{false};
+std::atomic<bool> g_fitWindow{false};
+std::atomic<int> g_minFittedColumnWidthSetting{kDefaultMinimumFittedColumnWidth};
+SRWLOCK g_savedColumnWidthsLock = SRWLOCK_INIT;
+
+int ReadMinimumFittedColumnWidthSetting() {
+    int width = Wh_GetIntSetting(L"MinimumFittedColumnWidth");
+    return width ? std::clamp(width, kMinColumnWidth, kMaxColumnWidth) : kDefaultMinimumFittedColumnWidth;
+}
+
+int LoadSavedColumnWidth(int index) {
+    if (index < 0 || index >= kMaxColumns) return 0;
+    wchar_t key[48] = {};
+    swprintf_s(key, ARRAYSIZE(key), L"ColumnWidthV1_%d", index);
+    AcquireSRWLockShared(&g_savedColumnWidthsLock);
+    int width = g_rememberColumnWidths.load() ? Wh_GetIntValue(key, 0) : 0;
+    ReleaseSRWLockShared(&g_savedColumnWidthsLock);
+    return width >= kMinColumnWidth && width <= kMaxResizedColumnWidth ? width : 0;
+}
+
+void StoreSavedColumnWidth(int index, int width) {
+    if (index < 0 || index >= kMaxColumns || width < kMinColumnWidth || width > kMaxResizedColumnWidth) return;
+    wchar_t key[48] = {};
+    swprintf_s(key, ARRAYSIZE(key), L"ColumnWidthV1_%d", index);
+    AcquireSRWLockExclusive(&g_savedColumnWidthsLock);
+    bool wanted = g_rememberColumnWidths.load();
+    bool saved = !wanted || Wh_SetIntValue(key, width);
+    ReleaseSRWLockExclusive(&g_savedColumnWidthsLock);
+    if (!saved) Wh_Log(L"[Columns] Could not save resized width for column %d", index);
+}
+
+void ClearSavedColumnWidths() {
+    AcquireSRWLockExclusive(&g_savedColumnWidthsLock);
+    for (int i = 0; i < kMaxColumns; ++i) {
+        wchar_t key[48] = {};
+        swprintf_s(key, ARRAYSIZE(key), L"ColumnWidthV1_%d", i);
+        Wh_DeleteValue(key);
+    }
+    ReleaseSRWLockExclusive(&g_savedColumnWidthsLock);
+}
+int ReadDefaultColumnWidthSetting() {
+    int width = Wh_GetIntSetting(L"DefaultColumnWidth");
+    // Missing settings on an existing installation preserve its original width.
+    return width ? std::clamp(width, kMinColumnWidth, kMaxColumnWidth) : kDefaultColumnWidth;
+}
 
 std::atomic<int> g_dividerWidthSetting{kSeparatorWidth};
 int ReadDividerWidthSetting() {
@@ -607,7 +710,19 @@ struct Session final : std::enable_shared_from_this<Session> {
     int focusRequest = -1;
     int focusAttempts = 0;
     unsigned focusEpoch = 0;
-    int columnWidths[kMaxColumns] = {};
+    int columnWidths[kMaxColumns] = {}; // Current physical-pixel geometry.
+    bool columnWidthCustomized[kMaxColumns] = {};
+    int rememberedColumnWidths[kMaxColumns] = {}; // Logical widths, local to this tab.
+    int defaultColumnWidth = kDefaultColumnWidth;
+    bool rememberColumnWidths = false;
+    bool fitWindow = false;
+    int minFittedColumnWidth = kDefaultMinimumFittedColumnWidth;
+    int placedColumnWidths[kMaxColumns] = {};
+    int placedColumnCount = 0;
+    int placedSeparatorWidth = 0;
+    bool fitLayoutPending = false;
+    bool columnPointerHeld = false;
+    bool revealNewestColumn = false;
     int columnCount = 0;
     int scrollX = 0;
     bool inLayout = false;
@@ -824,10 +939,11 @@ const MenuPlatform& GetMenuPlatform() {
 
 constexpr bool IsSupportedMenuPlatform(DWORD major, DWORD build, WORD architecture) {
     // 24H2 received the exact V2 IID in KB5052093 (26100.3323). 24H2/25H2
-    // share servicing/system files (KB5054156). This is a scoped family gate,
-    // not a cast of the older interface or a promise about later Windows ABIs.
+    // share servicing/system files (KB5054156); 26H2 joins them via KB5121794.
+    // KB5127648 lists the same x64 menu/Shell binaries for all three families.
+    // Keep this gate scoped and require the exact V2 IID at runtime.
     return architecture == PROCESSOR_ARCHITECTURE_AMD64 && major == 10 &&
-        (build == 26100 || build == 26200);
+        (build == 26100 || build == 26200 || build == 26300);
 }
 
 bool IsSupportedMenuPlatform() {
@@ -1685,7 +1801,13 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wp, LPARAM lp) {
                 if (wp == WM_RBUTTONUP) {
                     if (Context().panes[i].browserSite)
                         static_cast<PaneBrowserSite*>(Context().panes[i].browserSite)->RecordMenuInput();
-                } else SetActivePane(i);
+                } else {
+                    SetActivePane(i);
+                    if (Context().fitWindow) {
+                        Context().columnPointerHeld = true;
+                        SchedulePointerRelease(false);
+                    }
+                }
                 break;
             }
         }
@@ -2861,7 +2983,53 @@ int InspectorWidth(HWND overlay) {
 }
 
 int DefaultColumnWidth(HWND overlay) {
-    return MulDiv(kDefaultColumnWidth, GetDpiForWindow(overlay), 96);
+    UINT dpi = GetDpiForWindow(overlay);
+    return MulDiv(Context().defaultColumnWidth, dpi ? dpi : 96, 96);
+}
+
+void InitializeColumnWidth(HWND overlay, int index) {
+    int remembered = 0;
+    if (Context().rememberColumnWidths) {
+        remembered = Context().rememberedColumnWidths[index];
+        if (!remembered) remembered = LoadSavedColumnWidth(index);
+        Context().rememberedColumnWidths[index] = remembered;
+    }
+    Context().columnWidthCustomized[index] = remembered != 0;
+    UINT dpi = GetDpiForWindow(overlay);
+    Context().columnWidths[index] = remembered ? MulDiv(remembered, dpi ? dpi : 96, 96)
+                                              : DefaultColumnWidth(overlay);
+}
+
+void ApplyColumnWidthSettings(HWND overlay) {
+    int width = g_defaultColumnWidthSetting.load();
+    bool remember = g_rememberColumnWidths.load();
+    bool enabling = !Context().rememberColumnWidths && remember;
+    bool forgetting = Context().rememberColumnWidths && !remember;
+    Context().defaultColumnWidth = width;
+    Context().rememberColumnWidths = remember;
+    Context().fitWindow = g_fitWindow.load();
+    Context().minFittedColumnWidth = g_minFittedColumnWidthSetting.load();
+    if (!remember)
+        for (auto& saved : Context().rememberedColumnWidths) saved = 0;
+    UINT dpi = GetDpiForWindow(overlay);
+    if (!dpi) dpi = 96;
+    for (int i = 0; i < Context().columnCount; ++i) {
+        if (forgetting) Context().columnWidthCustomized[i] = false;
+        if (remember && Context().columnWidthCustomized[i] && !Context().rememberedColumnWidths[i]) {
+            Context().rememberedColumnWidths[i] = std::clamp(
+                MulDiv(Context().columnWidths[i], 96, dpi), kMinColumnWidth, kMaxResizedColumnWidth);
+            StoreSavedColumnWidth(i, Context().rememberedColumnWidths[i]);
+        } else if (enabling && !Context().columnWidthCustomized[i]) {
+            int saved = LoadSavedColumnWidth(i);
+            if (saved) {
+                Context().rememberedColumnWidths[i] = saved;
+                Context().columnWidthCustomized[i] = true;
+                Context().columnWidths[i] = MulDiv(saved, dpi, 96);
+            }
+        }
+        if (!Context().columnWidthCustomized[i] && !Context().fitWindow)
+            Context().columnWidths[i] = DefaultColumnWidth(overlay);
+    }
 }
 
 int SeparatorWidth() {
@@ -2880,6 +3048,11 @@ void RefreshLayoutDpi(UINT dpi) {
             Context().columnWidths[i] = std::max(1,
                 MulDiv(Context().columnWidths[i], dpi, previous));
         Context().scrollX = std::max(0, MulDiv(Context().scrollX, dpi, previous));
+        for (int i = 0; i < Context().placedColumnCount; ++i)
+            Context().placedColumnWidths[i] = std::max(1,
+                MulDiv(Context().placedColumnWidths[i], dpi, previous));
+        Context().placedSeparatorWidth = std::max(1,
+            MulDiv(Context().placedSeparatorWidth, dpi, previous));
     }
     Context().layoutDpi = dpi;
 }
@@ -2890,10 +3063,32 @@ int TotalColumnWidth() {
     return total;
 }
 
+void FitAutomaticColumnWidths(HWND overlay, int viewport) {
+    if (!Context().fitWindow || Context().resizeSplitter) return;
+    int automatic = 0;
+    int available = viewport - SlotCount() * SeparatorWidth();
+    for (int i = 0; i < SlotCount(); ++i) {
+        if (Context().columnWidthCustomized[i]) available -= Context().columnWidths[i];
+        else ++automatic;
+    }
+    if (!automatic) return;
+    UINT dpi = GetDpiForWindow(overlay);
+    int minimum = MulDiv(Context().minFittedColumnWidth, dpi ? dpi : 96, 96);
+    available = std::max(0, available);
+    int width = std::max(minimum, available / automatic);
+    int remainder = available >= minimum * automatic ? available % automatic : 0;
+    for (int i = 0; i < SlotCount(); ++i)
+        if (!Context().columnWidthCustomized[i]) {
+            Context().columnWidths[i] = width + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) --remainder;
+        }
+}
+
 void LayoutPanes(HWND overlay) {
     if (Context().inLayout || !IsWindow(overlay)) return;
     if (Context().resizeSplitter && !Context().applyingColumnResize) {
-        CancelColumnResize();
+        if (Context().fitWindow) Context().fitLayoutPending = true;
+        else CancelColumnResize();
         return;
     }
     Context().inLayout = true;
@@ -2901,17 +3096,45 @@ void LayoutPanes(HWND overlay) {
     GetClientRect(overlay, &rect);
     int inspectorWidth = InspectorWidth(overlay);
     int viewport = std::max(1, static_cast<int>(rect.right) - inspectorWidth);
-    int total = TotalColumnWidth();
-    Context().scrollX = std::clamp(Context().scrollX, 0, std::max(0, total - viewport));
-    SCROLLINFO scroll = {};
-    scroll.cbSize = sizeof(scroll);
-    scroll.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-    scroll.nMin = 0;
-    scroll.nMax = std::max(0, total - 1);
-    scroll.nPage = viewport;
-    scroll.nPos = Context().scrollX;
-    SetScrollInfo(overlay, SB_HORZ, &scroll, TRUE);
-    GetClientRect(overlay, &rect);
+    bool heldItem = Context().columnPointerHeld || Context().pointerSelectionPending || Context().nativePointerPending;
+    bool deferFit = Context().fitWindow && !Context().resizeSplitter && heldItem && NativePointerInteractionActive();
+    if (deferFit) {
+        Context().fitLayoutPending = true;
+        SchedulePointerRelease(false);
+    } else {
+        Context().fitLayoutPending = false;
+        if (!Context().resizeSplitter) Context().columnPointerHeld = false;
+        int anchor = -1, offset = Context().scrollX;
+        int oldCount = std::min(Context().placedColumnCount, SlotCount());
+        for (int i = 0; i < oldCount; ++i) {
+            int span = Context().placedColumnWidths[i] + Context().placedSeparatorWidth;
+            if (offset < span || i == oldCount - 1) { anchor = i; break; }
+            offset -= span;
+        }
+        FitAutomaticColumnWidths(overlay, viewport);
+        if (Context().fitWindow && !Context().resizeSplitter && !Context().revealNewestColumn && anchor >= 0) {
+            Context().scrollX = 0;
+            for (int i = 0; i < anchor; ++i)
+                Context().scrollX += Context().columnWidths[i] + SeparatorWidth();
+            Context().scrollX += std::clamp(offset, 0,
+                std::max(0, Context().columnWidths[anchor] + SeparatorWidth() - 1));
+        }
+        int total = TotalColumnWidth();
+        int end = std::max(0, total - viewport);
+        if (Context().revealNewestColumn && !Context().resizeSplitter) {
+            Context().scrollX = end;
+            Context().revealNewestColumn = false;
+        } else Context().scrollX = std::clamp(Context().scrollX, 0, end);
+        SCROLLINFO scroll = {};
+        scroll.cbSize = sizeof(scroll);
+        scroll.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+        scroll.nMin = 0;
+        scroll.nMax = std::max(0, total - 1);
+        scroll.nPage = viewport;
+        scroll.nPos = Context().scrollX;
+        SetScrollInfo(overlay, SB_HORZ, &scroll, TRUE);
+    }
+    GetClientRect(overlay, &rect); // Horizontal scrollbar visibility can change the height.
     int height = rect.bottom;
     int x = -Context().scrollX;
     constexpr UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
@@ -2926,7 +3149,10 @@ void LayoutPanes(HWND overlay) {
                          SeparatorWidth(), height, flags);
             x += SeparatorWidth();
         }
+        Context().placedColumnWidths[i] = Context().columnWidths[i];
     }
+    Context().placedColumnCount = SlotCount();
+    Context().placedSeparatorWidth = SeparatorWidth();
     if (IsWindow(Context().previewWindow)) {
         int inspectorLeft = Context().fixedInspector ? rect.right - inspectorWidth : x;
         int expandedWidth = std::max(inspectorWidth,
@@ -2941,10 +3167,8 @@ void LayoutPanes(HWND overlay) {
 
 void ScrollToNewestColumn() {
     if (!Context().overlay) return;
-    RECT rect = {};
-    GetClientRect(Context().overlay, &rect);
-    Context().scrollX = std::max(0, TotalColumnWidth() -
-        (static_cast<int>(rect.right) - InspectorWidth(Context().overlay)));
+    // Consume only after automatic widths have been calculated, never during a held gesture.
+    Context().revealNewestColumn = true;
     LayoutPanes(Context().overlay);
 }
 
@@ -3015,9 +3239,14 @@ void UpdateColumnResizeAtPoint(POINT point, bool finalUpdate = false) {
     int index = Context().resizeColumn;
     if (!splitter || index < 0 || index >= Context().columnCount) return;
     int dpi = GetDpiForWindow(Context().overlay);
-    int width = std::clamp(Context().resizeStartWidth +
-                          static_cast<int>(point.x) - Context().resizeStartX,
-                          MulDiv(180, dpi, 96), MulDiv(1200, dpi, 96));
+    if (!dpi) dpi = 96;
+    int delta = static_cast<int>(point.x) - Context().resizeStartX;
+    // A fitted column can exceed the fixed-width setting's limit. Clicking its
+    // divider without moving must neither shrink it nor create a manual choice.
+    int maximum = std::max(Context().resizeStartWidth,
+        MulDiv(Context().fitWindow ? kMaxResizedColumnWidth : kMaxColumnWidth, dpi, 96));
+    int width = delta == 0 ? Context().resizeStartWidth : std::clamp(
+        Context().resizeStartWidth + delta, MulDiv(kMinColumnWidth, dpi, 96), maximum);
     Context().resizeProposedWidth = width;
     ApplyLiveColumnResize(finalUpdate);
 }
@@ -3028,10 +3257,20 @@ void FinishColumnResize(POINT point) {
     HWND splitter = Context().resizeSplitter;
     int index = Context().resizeColumn;
     int width = Context().resizeProposedWidth;
+    bool changed = width != Context().resizeStartWidth;
     ResetColumnResizeState();
     if (GetCapture() == splitter) ReleaseCapture();
     if (index < 0 || index >= Context().columnCount || Context().closed) return;
     Context().columnWidths[index] = width;
+    if (changed) {
+        Context().columnWidthCustomized[index] = true;
+        if (Context().rememberColumnWidths) {
+            UINT dpi = GetDpiForWindow(Context().overlay);
+            Context().rememberedColumnWidths[index] = std::clamp(
+                MulDiv(width, 96, dpi ? dpi : 96), kMinColumnWidth, kMaxResizedColumnWidth);
+            StoreSavedColumnWidth(index, Context().rememberedColumnWidths[index]);
+        }
+    }
     // Preserve the user's current viewport. LayoutPanes only clamps it when
     // shrinking leaves fewer columns than the visible width.
     LayoutPanes(Context().overlay);
@@ -5759,7 +5998,7 @@ bool ApplyNativeLocation(NativeLocation location) {
             // Unsupported initial roots retain only their navigation observer.
             // Build the first column on the first supported navigation event.
             Context().columnCount = 1;
-            Context().columnWidths[0] = DefaultColumnWidth(hwnd);
+            InitializeColumnWidth(hwnd, 0);
             loaded = CreatePane(hwnd, 0, Context().tabPath, Context().nativeLocationIdentity, &rootSerial) &&
                 CreateSplitter(0);
             if (!loaded) {
@@ -5833,6 +6072,9 @@ void CleanupSession(HWND hwnd) {
     KillTimer(hwnd, kPointerReleaseTimerId);
     Context().pointerSelectionPending = false;
     Context().nativePointerPending = false;
+    Context().columnPointerHeld = false;
+    Context().fitLayoutPending = false;
+    Context().revealNewestColumn = false;
     Context().pointerRootCompletionSerial = 0;
     // UI closure never joins provider or decoder calls. The helper owns retired
     // jobs until their thread handles signal; actual DLL unload drains them.
@@ -5942,6 +6184,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         case kLayoutSettingsChangedMessage:
         {
             CancelColumnResize();
+            ApplyColumnWidthSettings(hwnd);
             Context().dividerWidth = g_dividerWidthSetting.load();
             ReadInspectorColors();
             bool previous = Context().fixedInspector;
@@ -6162,6 +6405,8 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             if (message == WM_TIMER && wp == kPointerReleaseTimerId) {
                 if (NativePointerInteractionActive()) return 0;
                 KillTimer(hwnd, kPointerReleaseTimerId);
+                bool refit = std::exchange(Context().fitLayoutPending, false);
+                Context().columnPointerHeld = false;
                 bool selection = std::exchange(Context().pointerSelectionPending, false);
                 // Keep this obligation across transient queries and later
                 // clicks; only a confirmed native location may clear it.
@@ -6179,6 +6424,8 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                 if (selection && !nativeNavigation && !complete &&
                     IsWindowVisible(Context().tab) && !Context().suspended)
                     ProcessSelectionUpdates(false);
+                if (refit && !Context().closed && !Context().suspended)
+                    LayoutPanes(hwnd);
                 return 0;
             }
             if (message == WM_TIMER && wp == kSelectionRetryTimerId) {
@@ -6368,6 +6615,8 @@ void RemoveColumnsAfter(int index) {
             DestroyWindow(Context().splitters[last]);
         Context().splitters[last] = nullptr;
         Context().columnWidths[last] = 0;
+        Context().columnWidthCustomized[last] = false;
+        if (!Context().rememberColumnWidths) Context().rememberedColumnWidths[last] = 0;
         Context().columnSelection[last].clear();
         --Context().columnCount;
     }
@@ -6394,7 +6643,7 @@ bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity) {
         Context().splitters[index] = nullptr;
         return false;
     }
-    Context().columnWidths[index] = DefaultColumnWidth(Context().overlay);
+    InitializeColumnWidth(Context().overlay, index);
     Context().columnSelection[index].clear();
     ++Context().columnCount;
     if (index > 0)
@@ -6449,6 +6698,10 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
         return;
     }
     Context().inlineMediaPlayback = g_inlineMediaPlayback.load();
+    Context().defaultColumnWidth = g_defaultColumnWidthSetting.load();
+    Context().rememberColumnWidths = g_rememberColumnWidths.load();
+    Context().fitWindow = g_fitWindow.load();
+    Context().minFittedColumnWidth = g_minFittedColumnWidthSetting.load();
     Context().dividerWidth = g_dividerWidthSetting.load();
     ReadInspectorColors();
     Context().overlay = CreateWindowExW(0, kOverlayClass, L"Explorer Column View",
@@ -6473,8 +6726,10 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
     Context().scrollX = 0;
     for (auto& selection : Context().columnSelection) selection.clear();
     for (auto& width : Context().columnWidths) width = 0;
+    for (auto& custom : Context().columnWidthCustomized) custom = false;
+    for (auto& saved : Context().rememberedColumnWidths) saved = 0;
     Context().layoutDpi = GetDpiForWindow(Context().overlay);
-    Context().columnWidths[0] = DefaultColumnWidth(Context().overlay);
+    InitializeColumnWidth(Context().overlay, 0);
     // A dormant session keeps navigation events for unsupported/transient roots.
     // A confirmed supported location creates pane zero through the same path
     // as subsequent sidebar navigation.
@@ -7092,6 +7347,10 @@ BOOL Wh_ModInit() {
     g_columnsEnabled.store(g_enableByDefault.load());
     g_fixedInspectorSetting.store(Wh_GetIntSetting(L"FixedInspector") != 0);
     g_classicContextMenus.store(Wh_GetIntSetting(L"ClassicContextMenus") != 0);
+    g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
+    g_rememberColumnWidths.store(Wh_GetIntSetting(L"RememberColumnWidths") != 0);
+    g_fitWindow.store(Wh_GetIntSetting(L"FitWindow") != 0);
+    g_minFittedColumnWidthSetting.store(ReadMinimumFittedColumnWidthSetting());
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
@@ -7131,6 +7390,12 @@ void Wh_ModSettingsChanged() {
     bool preference = Wh_GetIntSetting(L"EnableByDefault") != 0;
     g_fixedInspectorSetting.store(Wh_GetIntSetting(L"FixedInspector") != 0);
     g_classicContextMenus.store(Wh_GetIntSetting(L"ClassicContextMenus") != 0);
+    g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
+    bool remember = Wh_GetIntSetting(L"RememberColumnWidths") != 0;
+    if (g_rememberColumnWidths.exchange(remember) && !remember)
+        ClearSavedColumnWidths();
+    g_fitWindow.store(Wh_GetIntSetting(L"FitWindow") != 0);
+    g_minFittedColumnWidthSetting.store(ReadMinimumFittedColumnWidthSetting());
     g_dividerWidthSetting.store(ReadDividerWidthSetting());
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
