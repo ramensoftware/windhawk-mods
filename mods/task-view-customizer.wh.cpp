@@ -59,7 +59,7 @@ selection of desktop thumbnails. Click a desktop to switch instead. The option
 applies to all Task View modes and leaves keyboard navigation available.
 **Desktop hover switching delay (ms)** sets the wait before that preview switches.
 The default is **400 ms**, matching the current Windows mouse-hover delay read
-by Task View. Enter 0ÔÇô600000; blank or invalid text preserves the native delay.
+by Task View. Enter 0-600000; blank or invalid text preserves the native delay.
 Prevent switching desktops on hover takes priority over this setting.
 
 ### New desktop button
@@ -170,7 +170,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Disables entrance and exit motion. Independent of background material and transparency."
     - scrollAnimationSpeed: 100
       $name: Desktop scroll animation speed (%)
-      $description: "100 = current Windows speed (default). 50 = half speed. 200 = double speed. Range: 10ÔÇô500. Applies to horizontal scrolling that reveals a desktop tile."
+      $description: "100 = current Windows speed (default). 50 = half speed. 200 = double speed. Range: 10-500. Applies to horizontal scrolling that reveals a desktop tile."
   $name: Animations and scrolling
 - DesktopList:
     - preventHoverSwitch: false
@@ -178,7 +178,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Require a click to switch desktops instead of the delayed mouse-hover preview. Applies to Task View in all modes. Keyboard switching remains available. Reopen Task View after changing this option."
     - hoverSwitchDelayMs: "400"
       $name: Desktop hover switching delay (ms)
-      $description: "Time before hovering a desktop switches its preview. Windows currently uses 400 ms (the system mouse-hover delay). Enter 0ÔÇô600000; blank or invalid input follows the system delay. Prevent switching desktops on hover overrides this value. Reopen Task View after changing."
+      $description: "Time before hovering a desktop switches its preview. Windows currently uses 400 ms (the system mouse-hover delay). Enter 0-600000; blank or invalid input follows the system delay. Prevent switching desktops on hover overrides this value. Reopen Task View after changing."
     - desktopFrameWidth: "full"
       $name: Desktop list background width
       $options:
@@ -187,10 +187,10 @@ with other shell customization mods can depend on the Windows build.
       - percent: Percentage of screen
     - desktopFramePercent: 70
       $name: Desktop list width (% of screen)
-      $description: "Used with Percentage of screen. Range: 10ÔÇô100. Overflowing desktop tiles remain scrollable."
+      $description: "Used with Percentage of screen. Range: 10-100. Overflowing desktop tiles remain scrollable."
     - desktopFrameMargin: 8
       $name: Virtual desktop list frame margin (px)
-      $description: "Extra space around the desktop list frame, outside the taskbar area. Taskbar clearance follows its actual edge, size and monitor DPI, including small taskbars. Default: 8. Range: 0ÔÇô200."
+      $description: "Extra space around the desktop list frame, outside the taskbar area. Taskbar clearance follows its actual edge, size and monitor DPI, including small taskbars. Default: 8. Range: 0-200."
   $name: Desktop list layout
 - NewDesktop:
     - moveToRight: false
@@ -237,7 +237,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Solid starts opaque; the transparency percentage can make it translucent without blur. Acrylic blurs content behind panels. Clear removes the material. Mica uses blurred wallpaper with a theme-colored tint, falling back to solid if unavailable. Disable desktop list background takes priority."
     - materialTransparency: -1
       $name: Task View background material transparency (%)
-      $description: "0 = default material strength; 100 = clear for Native, Solid and Acrylic. For Mica, reduces tint/luminosity to reveal more wallpaper while keeping the wallpaper layer opaque. Thumbnails and labels stay solid. Outside 0ÔÇô100 uses default strength (-1). Hidden strip settings take priority. Reopen Task View after changing."
+      $description: "0 = default material strength; 100 = clear for Native, Solid and Acrylic. For Mica, reduces tint/luminosity to reveal more wallpaper while keeping the wallpaper layer opaque. Thumbnails and labels stay solid. Outside 0-100 uses default strength (-1). Hidden strip settings take priority. Reopen Task View after changing."
     - removeListBorder: false
       $name: Remove desktop list background border
       $description: "Removes the outer desktop strip frame, without removing desktop selection borders."
@@ -255,7 +255,7 @@ with other shell customization mods can depend on the Windows build.
       - both: Border and background
     - highlightOpacity: 20
       $name: Highlight background opacity (%)
-      $description: "Accent-colored fill for hovered or selected desktops. Range: 0ÔÇô100. Used with Background only and Border and background."
+      $description: "Accent-colored fill for hovered or selected desktops. Range: 0-100. Used with Background only and Border and background."
   $name: Desktop highlights
 - Colors:
     - backgroundColorDark: "native"
@@ -281,7 +281,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Separate from panel materials. An explicit backdrop selection overrides Disable full-screen background blur. Acrylic uses a live XAML backdrop, rather than SWS's captured snapshot; Windows may use its solid fallback when system transparency is disabled."
     - backdropDimOpacity: 18
       $name: Backdrop Dim Opacity (%)
-      $description: "Black tint strength of the Acrylic backdrop, 0ÔÇô100. Separate from panel transparency."
+      $description: "Black tint strength of the Acrylic backdrop. Range: 0-100. Separate from panel transparency."
     - disableFullscreenBlur: true
       $name: Disable full-screen background blur
       $description: "Keep the wallpaper clear even when Windows transparency effects are enabled. Independent of the desktop thumbnail strip background. Applies to every Task View mode. Reopen Task View after changing this setting."
