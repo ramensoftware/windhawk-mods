@@ -2,7 +2,7 @@
 // @id              siri-plus-launchpad
 // @name            Siri Plus Launchpad
 // @description     Replaces the Start menu with a macOS 27 Siri-style launcher: search bar with categories, app tabs, files, clipboard, actions and live liquid glass
-// @version         1.44.0
+// @version         1.45.3
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Siri-Plus-Launchpad
@@ -20,6 +20,8 @@ A [Windhawk](https://windhawk.net) mod that replaces the Windows 11 Start menu w
 
 Press the **Windows key** (or click **Start**) and type, or pick what you want to search from the menu that drops down from the bar.
 
+![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20siri%20Original%20degrad%C3%AA.gif)
+
 ---
 
 ## Highlights
@@ -36,6 +38,33 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 
 ---
 
+## Screenshots
+
+### Original Siri (default)
+| Siri | Clear glass | Light |
+|---|---|---|
+| ![Original Siri, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20siri%20Original%20degrad%C3%AA.gif) | ![Original Siri, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20siri%20Original%20vidro.gif) | ![Original Siri, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20siri%20Original%20Claro%20.gif) |
+
+### Floating
+| Siri | Clear glass | Light |
+|---|---|---|
+| ![Floating, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20flutuante%20degrad%C3%AA.gif) | ![Floating, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20flutuante%20transparente.gif) | ![Floating, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20flutuante%20claro.gif) |
+
+### Window
+![Window mode, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20Janela%20degrad%C3%AA.gif)
+
+| | Siri | Clear glass | Light |
+|---|---|---|---|
+| Centered search box | ![Window, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20janela%20degrade.png) | ![Window, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20janela%20vidro.png) | ![Window, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20janela%20claro.png) |
+| Search on the top bar | ![Window, Siri theme, top bar](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20janela%20degrade%20pesquisa%20na%20barra%20superior.png) | ![Window, Clear glass theme, top bar](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20janela%20vidro%20pesquisa%20na%20barra%20superior.png) | ![Window, Light theme, top bar](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/Modo%20janela%20claro%20pesquisa%20na%20barra%20superior.png) |
+
+### Fullscreen
+| Siri | Clear glass | Light |
+|---|---|---|
+| ![Fullscreen, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/modo%20tela%20cheia%20degrade.png) | ![Fullscreen, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/modo%20tela%20cheia%20vidro.png) | ![Fullscreen, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/modo%20tela%20cheia%20claro.png) |
+
+---
+
 ## Modes
 
 ### Original Siri (default)
@@ -43,21 +72,19 @@ A search bar in the macOS 27 style.
 
 - **Categories menu**: hover over the bar (or click it) and a menu drops down with **Applications**, **Files**, **Actions** and **Clipboard**, each with its icon and its keyboard shortcut (default **Ctrl+1 … Ctrl+4**, configurable).
 - Picking a category makes its icon and name glide from the menu into the bar, and the search then works inside that category. If you type straight away, you go to Applications.
-- **Going back**:
-  - Hover the category icon in the bar and it turns into a back arrow. Click it, or press **Esc**, to return to "Search" with the magnifier.
-  - Click the empty text next to the icon to reopen the categories menu and switch directly.
+- **Going back**: hover the category icon in the bar and it turns into a back arrow. Click it, or press **Esc**, to return to "Search" with the magnifier and pick another category.
 - **App tabs**:
   - **All** comes first and shows every app.
   - Then the automatic categories: Utilities, Productivity, Entertainment, Social, Creativity, Reading and Other.
   - Then up to **6 tabs of your own**, for example "Games".
 - **First row**: recently opened or installed apps, or the most used ones (configurable), separated from the rest by a thin line.
-- **Actions**: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin.
+- **Actions**: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin. Shut down works like Windows' own (fast startup when it is on) and warns before signing off other users who are still signed in.
 
 ### Floating
 The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble.
 
 ### Window and Fullscreen
-The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Fullscreen respects the work area and the space reserved by docks.
+The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.
 
 ---
 
@@ -66,7 +93,7 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 | What | How |
 |---|---|
 | Create a tab | Right-click an app → **New tab with this app**, or right-click the tab strip / an empty area → **New tab**. Type the name and press **Enter** |
-| Add apps | Inside a tab, right-click → **Add app**. A picker shows every app: **long-press** to select as many as you want (selected apps jiggle), then **Done** |
+| Add apps | Inside a tab, right-click → **Add app**. A picker shows every app: **long-press** the first one, then a simple click selects or deselects the others (selected apps jiggle); **Done** saves |
 | Remove an app | Inside a tab, right-click the app → **Remove from tab** |
 | Rename or delete | Right-click the tab → **Rename tab** / **Delete tab** |
 | Built-in tabs | They can also be edited (add or remove apps) and deleted. **Restore default tabs** brings them back |
@@ -81,13 +108,14 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 - The maximum number of results is configurable.
 
 ## Clipboard
-- Keeps the texts you copy while the mod runs. The number of items is configurable.
+- Keeps the texts you copy while the mod runs (in memory only, never saved). The number of items is configurable.
+- **Passwords stay out**: items that password managers and browsers mark as secret are skipped, just like Windows' own clipboard history (Win+V).
 - Shown as a **list**: the first line of each text, with a preview of the rest (or its size) underneath.
 - Click an item to copy it again. Turning the category off also stops monitoring and clears the history.
 
 ## Apps and icons
 - **Search** apps by typing.
-- **Folders** (Window/Fullscreen): drag apps together, rename, undo.
+- **Folders** (Window and Fullscreen): drag apps together, rename, undo. The Siri modes list the apps of every folder together.
 - **Multi-select** with jiggling icons, **pin to taskbar** (also by dragging an icon to the taskbar), **uninstall**.
 - **Custom icons**: right-click an app → **Change icon...** and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; **Reset icon** brings back the original. Works in every mode, including apps inside folders.
 - Icon size, number of columns and the scrolling direction are configurable.
@@ -122,10 +150,10 @@ All options are in the mod's **Settings** tab in Windhawk, with names in English
 | **Ctrl+1 / 2 / 3 / 4** | Original Siri: go to Applications / Files / Actions / Clipboard (configurable) |
 | **Tab / Shift+Tab** | Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions |
 | Arrows + **Enter** | Move through results / open |
-| Other **Ctrl+digits** | Launch the matching result |
+| Other **Ctrl+digits** | Launch the matching result (never an action such as Shut down) |
 | **Esc** | Closes menus, then clears the search, goes back to the categories and finally closes |
 | Right-click on the search bar | Cut, Copy, Paste, Select all, Delete all |
-| Long-press an app | Select it (in Original Siri, inside the app picker) |
+| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → **New folder with N items** puts them in a folder; Original Siri: inside the app picker) |
 
 ---
 
@@ -625,7 +653,9 @@ const UiTranslation kUiTranslations[] = {
     {L"Copy", L"Copiar", L"Copiar", L"Copier", L"Kopieren", L"Copia"},
     {L"Paste", L"Colar", L"Pegar", L"Coller", L"Einfügen", L"Incolla"},
     {L"Delete all", L"Apagar tudo", L"Borrar todo", L"Tout effacer", L"Alles löschen", L"Cancella tutto"},
+    {L"Someone else is still using this PC. If you continue, they could lose unsaved work.", L"Outra pessoa ainda está usando este computador. Se você continuar, ela pode perder trabalhos não salvos.", L"Otra persona sigue usando este equipo. Si continúas, podría perder el trabajo no guardado.", L"Quelqu’un d’autre utilise encore ce PC. Si vous continuez, cette personne risque de perdre son travail non enregistré.", L"Jemand anderes verwendet diesen PC noch. Wenn Sie fortfahren, gehen möglicherweise ungespeicherte Arbeiten verloren.", L"Qualcun altro sta ancora usando questo PC. Se continui, potrebbe perdere il lavoro non salvato."},
     {L"Restore default tabs", L"Restaurar abas padrão", L"Restaurar pestañas predeterminadas", L"Restaurer les onglets par défaut", L"Standard-Tabs wiederherstellen", L"Ripristina schede predefinite"},
+    {L"Click apps to select or deselect them", L"Clique nos aplicativos para selecionar ou desmarcar", L"Haz clic en las aplicaciones para elegirlas o quitarlas", L"Cliquez sur les applications pour les choisir ou les retirer", L"Apps anklicken zum Auswählen oder Abwählen", L"Fai clic sulle app per sceglierle o toglierle"},
     {L"Hold an app to select it", L"Segure um aplicativo para selecioná-lo", L"Mantén pulsada una aplicación para elegirla", L"Maintenez une application pour la choisir", L"App gedrückt halten, um sie auszuwählen", L"Tieni premuta un’app per sceglierla"},
     {L"Everything did not reply", L"O Everything não respondeu", L"Everything no respondió", L"Everything n’a pas répondu", L"Everything hat nicht geantwortet", L"Everything non ha risposto"},
 };
@@ -2424,6 +2454,7 @@ struct Layout {
     int columns = 1; float gridLeft = 0; float viewTop = 0, viewBottom = 0; int visibleRows = 1;
     float contentHeight = 0; D2D1_RECT_F search{}, btnBack{}, panel{}, btnPower{};
     bool horizontal = false; float pageWidth = 1; int perPage = 1, pages = 1;
+    float clipLeft = 0, clipRight = 0;   // horizontal limits of the grid (0, 0 = the whole window)
     D2D1_RECT_F dots{}; float dotsH = 20, dotGap = 16;
     int extraBottom = 0;
     D2D1_RECT_F siriPanel{};
@@ -2834,7 +2865,10 @@ void ComputeSiriLayout() {
 
     int count = (int)g_layoutItems.size();
     int rows = (count + L.columns - 1) / L.columns;
-    L.pageWidth = L.horizontal ? W : std::max(1.0f, L.cellHeight * L.visibleRows);
+    // Siri panels: pages are as wide as the panel and slide inside it, never over the wallpaper
+    L.pageWidth = L.horizontal ? panelW : std::max(1.0f, L.cellHeight * L.visibleRows);
+    L.clipLeft = panelLeft + std::round(2 * s);
+    L.clipRight = panelRight - std::round(2 * s);
     L.perPage = std::max(1, L.visibleRows * L.columns);
     L.pages = std::max(1, (count + L.perPage - 1) / L.perPage);
     L.contentHeight = L.horizontal ? 0.0f : rows * L.cellHeight;
@@ -2957,6 +2991,10 @@ void ComputeLayout() {
 
     int count = (int)g_layoutItems.size();
     L.pageWidth = L.horizontal ? (inFolder ? (L.panel.right - L.panel.left) : W) : (L.cellHeight * L.visibleRows);
+    // Pages slide only inside the glass: the open folder's panel, or the window minus the room left for the theme shadow
+    if (inFolder) { L.clipLeft = L.panel.left + std::round(2 * s); L.clipRight = L.panel.right - std::round(2 * s); }
+    else if (WindowInset(s) > 0) { L.clipLeft = WindowInset(s) + std::round(2 * s); L.clipRight = W - WindowInset(s) - std::round(2 * s); }
+    else L.clipLeft = L.clipRight = 0;
     L.perPage = std::max(1, L.visibleRows * L.columns);
     L.pages = std::max(1, (count + L.perPage - 1) / L.perPage);
     L.contentHeight = L.horizontal ? 0 : ((count + L.columns - 1) / L.columns) * L.cellHeight;
@@ -3044,11 +3082,6 @@ bool HitBack(float x, float y) {
     if (!g_settings.siriOriginal || !g_siriChosen || g_flyAnim < 1.0f || g_openFolderIndex >= 0) return false;
     return InRect(BackButtonRect(g_layout), x, y);
 }
-// ...and clicking the empty text next to it reopens the categories to switch
-bool HitChosenText(float x, float y) {
-    if (!g_settings.siriOriginal || !g_siriChosen || !g_query.empty() || g_flyAnim < 1.0f || g_openFolderIndex >= 0) return false;
-    return InRect(g_layout.search, x, y) && !HitBack(x, y);
-}
 
 bool HitClear(float x, float y) {
     if (g_openFolderIndex >= 0 || g_query.empty()) return false;
@@ -3088,6 +3121,7 @@ int ItemAt(int px, int py) {
     if (g_settings.siri && g_siriAnim < 0.99f) return -1;
     const Layout& L = g_layout; float x = (float)px, y = (float)py;
     if (y < L.viewTop || y >= L.viewBottom) return -1;
+    if (L.clipRight > L.clipLeft && (x < L.clipLeft || x >= L.clipRight)) return -1;   // outside the Siri panel
     int index;
     if (L.horizontal) {
         float vx = x + std::round(g_scroll) - L.gridLeft;
@@ -3288,21 +3322,27 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
     g_target->SetTransform(D2D1::Matrix3x2F::Scale(k, k, g_menu.origin) * base);
     D2D1_RECT_F r = g_menu.rect; float rad = (g_menu.category ? 24 : 14) * s;
     if (g_menu.category) { DrawCategoryMenu(r, rad, e); return; }
-    for (int i = 1; i <= 3; i++) {
-        float g = i * 3 * s;
-        Fill(D2D1::RectF(r.left - g, r.top - g + 5 * s, r.right + g, r.bottom + g + 5 * s), D2D1::ColorF(0, 0, 0, 0.06f * e), rad + g);
+    // Same glass, shadow and rim as the selected theme (power menu and context menus, in every mode)
+    bool themed = ActiveTheme() != Theme::Custom;
+    PushOpacity(e);
+    if (themed) {
+        DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+    } else {
+        DrawThemeShadow(r, rad, 0.20f, 10 * s, 4 * s);
+        ComPtr<ID2D1RoundedRectangleGeometry> geo;
+        g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, rad, rad), &geo);
+        if (geo) {
+            g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo.Get()), nullptr);
+            if (BlurStrength() > 0) {
+                if (ID2D1Bitmap* bmp = GetBackdropBitmap())
+                    g_target->DrawBitmap(bmp, D2D1::RectF(0, 0, (float)L.width, (float)L.height), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                        D2D1::RectF(0, 0, g_backdropImage.sourceWidth, g_backdropImage.sourceHeight));
+            }
+            Fill(r, ThemeMenuColor());
+            Fill(r, D2D1::ColorF(1, 1, 1, 0.07f));
+            g_target->PopLayer();
+        }
     }
-    ComPtr<ID2D1RoundedRectangleGeometry> geo;
-    g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, rad, rad), &geo);
-    if (!geo) return;
-    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), e), nullptr);
-    if (BlurStrength() > 0) {
-        if (ID2D1Bitmap* bmp = GetBackdropBitmap())
-            g_target->DrawBitmap(bmp, D2D1::RectF(0, 0, (float)L.width, (float)L.height), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                D2D1::RectF(0, 0, g_backdropImage.sourceWidth, g_backdropImage.sourceHeight));
-    }
-    Fill(r, ThemeMenuColor());
-    Fill(r, D2D1::ColorF(1, 1, 1, 0.07f));
     for (int i = 0; i < (int)g_menu.items.size(); i++) {
         const MenuItem& it = g_menu.items[i]; float top = MenuItemTop(i);
         if (it.separator) {
@@ -3333,6 +3373,7 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
         }
     }
     g_target->PopLayer();
+    if (themed) return;   // the themed shape already has its rim
     D2D1_GRADIENT_STOP rimStops[3] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.55f)}, {0.5f, D2D1::ColorF(1, 1, 1, 0.12f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.35f)}};
     if (auto rim = MakeGradient(rimStops, 3, D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.right, r.bottom))) {
         rim->SetOpacity(e);
@@ -3590,7 +3631,7 @@ void DrawSearchBar(const Layout& L, float a) {
 
     if (g_query.empty() && original) {
         if (!flying) {
-            PCWSTR ph = Picking() ? Tr(L"Hold an app to select it") : g_siriChosen ? TabLabel(g_siriTab) : Tr(L"Search");
+            PCWSTR ph = Picking() ? (g_selection.empty() ? Tr(L"Hold an app to select it") : Tr(L"Click apps to select or deselect them")) : g_siriChosen ? TabLabel(g_siriTab) : Tr(L"Search");
             g_brush->SetColor(Fg((g_siriChosen ? 0.62f : 0.4f) * a));
             g_target->DrawText(ph, (UINT32)wcslen(ph), fmt, text, g_brush.Get());
         }
@@ -3670,6 +3711,20 @@ void EnableShutdownPrivilege() {
     CloseHandle(token);
 }
 
+#ifndef ERROR_SHUTDOWN_USERS_LOGGED_ON
+#define ERROR_SHUTDOWN_USERS_LOGGED_ON 1191L
+#endif
+
+// Like Windows: other signed-in users are only signed off after a warning (Cancel keeps them)
+DWORD ShutdownWithWarning(DWORD flags) {
+    DWORD r = InitiateShutdownW(nullptr, nullptr, 0, flags, SHTDN_REASON_FLAG_PLANNED);
+    if (r == ERROR_SHUTDOWN_USERS_LOGGED_ON &&
+        MessageBoxW(nullptr, Tr(L"Someone else is still using this PC. If you continue, they could lose unsaved work."), L"Siri Plus Launchpad",
+                    MB_OKCANCEL | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND) == IDOK)
+        r = InitiateShutdownW(nullptr, nullptr, 0, flags | SHUTDOWN_FORCE_OTHERS, SHTDN_REASON_FLAG_PLANNED);
+    return r;
+}
+
 void DoPowerAction(int id) {
     switch (id) {
         case kMenuLock: LockWorkStation(); break;
@@ -3681,20 +3736,22 @@ void DoPowerAction(int id) {
             }
             break;
         }
-        case kMenuRestart:
+        case kMenuRestart: {
             EnableShutdownPrivilege();
-            if (InitiateShutdownW(nullptr, nullptr, 0, SHUTDOWN_RESTART | SHUTDOWN_FORCE_OTHERS, SHTDN_REASON_FLAG_PLANNED) != ERROR_SUCCESS)
-                ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_FLAG_PLANNED);
+            DWORD r = ShutdownWithWarning(SHUTDOWN_RESTART);
+            if (r != ERROR_SUCCESS && r != ERROR_SHUTDOWN_USERS_LOGGED_ON) ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_FLAG_PLANNED);
             break;
+        }
         case kMenuShutdown: {
             // Like Windows' own Shut down: a hybrid shutdown when Fast Startup is on
             EnableShutdownPrivilege();
             DWORD hiberboot = 0, size = sizeof(hiberboot);
             RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power", L"HiberbootEnabled",
                          RRF_RT_REG_DWORD, nullptr, &hiberboot, &size);
-            DWORD flags = SHUTDOWN_POWEROFF | SHUTDOWN_FORCE_OTHERS | (hiberboot ? SHUTDOWN_HYBRID : 0);
-            if (InitiateShutdownW(nullptr, nullptr, 0, flags, SHTDN_REASON_FLAG_PLANNED) != ERROR_SUCCESS)
-                ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF | (hiberboot ? EWX_HYBRID_SHUTDOWN : 0), SHTDN_REASON_FLAG_PLANNED);
+            DWORD r = ShutdownWithWarning(SHUTDOWN_POWEROFF | (hiberboot ? SHUTDOWN_HYBRID : 0));
+            // Hibernation turned off leaves Fast Startup unavailable: try a plain shutdown
+            if (r != ERROR_SUCCESS && r != ERROR_SHUTDOWN_USERS_LOGGED_ON && hiberboot) r = ShutdownWithWarning(SHUTDOWN_POWEROFF);
+            if (r != ERROR_SUCCESS && r != ERROR_SHUTDOWN_USERS_LOGGED_ON) ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF, SHTDN_REASON_FLAG_PLANNED);
             break;
         }
         case kMenuSignOut:  ExitWindowsEx(EWX_LOGOFF, 0); break;
@@ -3807,7 +3864,9 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
     } else if (items.empty()) {
         return;
     }
-    g_target->PushAxisAlignedClip(D2D1::RectF(0, L.viewTop, (float)L.width, L.viewBottom), D2D1_ANTIALIAS_MODE_ALIASED);
+    bool panelClip = L.clipRight > L.clipLeft;
+    g_target->PushAxisAlignedClip(D2D1::RectF(panelClip ? L.clipLeft : 0, L.viewTop, panelClip ? L.clipRight : (float)L.width, L.viewBottom),
+                                  D2D1_ANTIALIAS_MODE_ALIASED);
     int first, last; VisibleRange(L, scroll, (int)items.size(), first, last);
 
     for (int i = first; i < last; i++) {
@@ -5781,8 +5840,8 @@ void EndDrag() {
         Render(); return;
     }
 
-    // Folders are supported in the Apps category, including Floating Apps results (Original Siri uses tabs instead)
-    if (g_siriTab != 0 || g_settings.siriOriginal) { g_dragItem = -1; return; }
+    // Folders are made only in Window and Fullscreen: the Siri modes show every app in one list (Original Siri uses tabs)
+    if (g_siriTab != 0 || g_settings.siri) { g_dragItem = -1; return; }
 
     if (g_openFolderIndex >= 0) {
         g_dragItem = -1;
@@ -5896,6 +5955,8 @@ void BackToCategoryMenu() {
 
 // Original Siri: hovering the bar drops down the categories, each with its icon and shortcut
 void OpenCategoryMenu() {
+    // While the power options are showing (button or typed "shut down"), the bar does not offer the categories
+    if (g_powerPillWanted || g_powerPillAnim > 0.01f) return;
     const Layout& L = g_layout;
     float s = L.scale;
     std::vector<MenuItem> items;
@@ -6285,7 +6346,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // A long press selects the app; it must not act like a normal
                 // left click or synthesize a right-click/context-menu action.
                 // (Original Siri selects only while picking apps for a tab)
-                if (g_shown && g_settings.siri && (!g_settings.siriOriginal || Picking()) && g_siriTab == 0 && g_pressed >= 0 &&
+                if (g_shown && (!g_settings.siriOriginal || Picking()) && g_siriTab == 0 && g_pressed >= 0 &&
                     !g_isDragging && g_openFolderIndex < 0 && g_pressed < (int)g_layoutItems.size()) {
                     int item = g_layoutItems[g_pressed];
                     if (SelectableApp(g_pressed)) {
@@ -6308,7 +6369,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (LOWORD(lParam) == HTCLIENT) {
                 POINT p; GetCursorPos(&p); ScreenToClient(hwnd, &p);
                 bool hand = TabAt((float)p.x, (float)p.y) >= 0 || FilterAt((float)p.x, (float)p.y) != kNoChip ||
-                            HitBack((float)p.x, (float)p.y) || HitChosenText((float)p.x, (float)p.y);
+                            HitBack((float)p.x, (float)p.y);
                 SetCursor(LoadCursorW(nullptr, hand ? IDC_HAND : IDC_ARROW));
                 return TRUE;
             }
@@ -6429,8 +6490,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             if (g_openFolderIndex < 0 && PowerButtonOn() && InRect(g_layout.btnPower, (float)x, (float)y)) {
                 g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
+                // The options open beside the button, on its side of the bar (left button: to the left; right button: to the right)
+                const D2D1_RECT_F& b = g_layout.btnPower;
+                float gap = 10 * g_layout.scale;
                 bool right = g_settings.powerRight;
-                OpenMenu(right ? g_layout.btnPower.right : g_layout.btnPower.left, g_layout.btnPower.bottom + 6 * g_layout.scale, PowerMenuItems(), right);
+                OpenMenu(right ? b.right + gap : b.left - gap, b.top, PowerMenuItems(), !right);
+                bool beside = right ? g_menu.rect.left >= b.right : g_menu.rect.right <= b.left;
+                // No room on that side (the button is at the window's edge): below the button instead
+                if (!beside) OpenMenu(right ? b.right : b.left, b.bottom + 6 * g_layout.scale, PowerMenuItems(), right);
                 return 0;
             }
             int powerChoice = PowerChoiceAt((float)x, (float)y);
@@ -6462,12 +6529,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (HitBack((float)x, (float)y)) {
                     g_backHover = false; g_ignoreUp = true;
                     BackToCategoryMenu();
-                    return 0;
-                }
-                if (HitChosenText((float)x, (float)y)) {
-                    g_ignoreUp = true;
-                    OpenCategoryMenu();
-                    Render();
                     return 0;
                 }
                 if (g_settings.siriOriginal && !g_siriChosen && InRect(g_layout.search, (float)x, (float)y)) {
@@ -6502,7 +6563,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_longPressTriggered = false;
             g_isDragging = false; g_swiping = false; g_swipeStartScroll = g_scrollTarget;
             g_pressedEmpty = g_pressed < 0 && !InRect(g_layout.search, (float)x, (float)y);
-            if (g_settings.siri && g_pressed >= 0 && g_openFolderIndex < 0)
+            if (g_pressed >= 0 && g_openFolderIndex < 0)
                 SetTimer(hwnd, kTimerLongPress, kLongPressDelayMs, nullptr);
             Render(); return 0;
         }
@@ -6543,7 +6604,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 GoToPage(std::abs(dx) > pw * 0.12f ? base + (dx < 0 ? 1 : -1) : base);
             } else if (g_pressed >= 0) {
                 if (g_isDragging) { g_dragX = (float)x; g_dragY = (float)y; EndDrag(); }
-                else if (ItemAt(x, y) == g_pressed && !Picking()) LaunchApp(g_layoutItems[g_pressed]);
+                else if (ItemAt(x, y) == g_pressed) {
+                    // Selection mode: after a long press selected an app, a simple click selects (or deselects) the others
+                    App* app = SelectableApp(g_pressed);
+                    bool selecting = !g_selection.empty() && (Picking() || !g_settings.siriOriginal);
+                    if (selecting && app) {
+                        if (!g_selection.erase(app)) g_selection.insert(app);
+                        StartFrames();
+                    } else if (!Picking()) LaunchApp(g_layoutItems[g_pressed]);
+                }
             } else if (g_pressedEmpty && ItemAt(x, y) < 0 && !Picking()) {
                 if (g_openFolderIndex >= 0) {
                     if (!InRect(g_layout.panel, (float)x, (float)y)) CloseFolder();
@@ -6667,7 +6736,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (SelectableApp(index)) {
                         bool sel = g_selection.count(a) != 0;
                         items.push_back({sel ? Tr(L"Deselect") : Tr(L"Select"), kMenuSelect});
-                        items.push_back({sel && n > 1 ? withN : std::wstring(Tr(L"New folder with this app")), kMenuNewFolder});
+                        // Floating mode shows the apps of every folder in one list, so no folders are made there
+                        if (!g_settings.siri) items.push_back({sel && n > 1 ? withN : std::wstring(Tr(L"New folder with this app")), kMenuNewFolder});
                         items.push_back({L"", 0, true});
                         items.push_back({sel && n > 1 ? Tr(L"Pin selected to taskbar") : Tr(L"Pin to taskbar"), kMenuPin});
                     } else {
@@ -6679,8 +6749,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     items.push_back({L"", 0, true});
                     items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
                 } else {
-                    items.push_back({n ? withN : std::wstring(Tr(L"New folder")), kMenuNewFolder});
-                    items.push_back({Tr(L"Select all"), kMenuSelectAll});
+                    if (!g_settings.siri) {
+                        items.push_back({n ? withN : std::wstring(Tr(L"New folder")), kMenuNewFolder});
+                        items.push_back({Tr(L"Select all"), kMenuSelectAll});
+                    }
                     if (n) items.push_back({Tr(L"Clear selection"), kMenuClearSelection});
                 }
             }
@@ -6703,6 +6775,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 items.push_back({L"", 0, true});
                 items.push_back({Tr(L"Undo folder"), kMenuUndoFolder, false, true});
             }
+            if (items.empty()) return 0;
             OpenMenu((float)x, (float)y, std::move(items));
             return 0;
         }
