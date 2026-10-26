@@ -2,11 +2,13 @@
 // @id              separate-system-tray-icons
 // @name            Separate System Tray Icons
 // @description     Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Asteski
-// @license         MIT
+// @license         GPL-3.0
 // @github          https://github.com/Asteski
 // @include         explorer.exe
+// @include         ShellHost.exe
+// @include         ShellExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lshell32 -lole32 -loleaut32 -lruntimeobject -luuid -liphlpapi -lwlanapi -lbthprops
 // ==/WindhawkMod==
@@ -21,25 +23,64 @@ button is hidden while the mod is active and restored when it is unloaded.
 
 ![Demonstration](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif)
 
-This mod injects real XAML `FontIcon` elements into the Windows 11 taskbar tray.
-That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.
+Buttons use XAML controls with font glyphs and vector artwork, keeping the
+icons sharp at different display scales.
 
 Buttons:
 
 - Bluetooth -> Bluetooth flyout
 - Network -> Network flyout
-- Sound -> Control Center, sound output picker or volume mixer
-- Control Center -> Control Center or a custom action
-- Battery -> Control Center or a custom action
+- Sound -> Sound output picker by default, or Control Center/volume mixer
+- Control Center -> Control Center, Project, or a custom action
+- Battery -> Power settings by default, or Control Center/custom action
 
 Use **Toggle buttons visibility** to choose which buttons appear. Drag items in
 **Button order** to arrange the buttons, including Battery. Removing an entry
-hides that button; adding it back shows it when its visibility toggle is enabled. The battery
-button appears only when Windows reports a battery.
+hides that button; adding it back shows it when its visibility toggle is
+enabled. Battery appears only on devices where Windows reports a battery.
 
 Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
 muting. **Volume scroll step** selects Windows' default step or 1, 5, or 10
-percentage points per wheel notch.
+percentage points per wheel notch. Middle-click can instead run a custom
+action; the other buttons also have independent custom middle-click actions.
+Leave an action empty to do nothing.
+
+**Show master volume in Sound output**, enabled by default, adds a master
+slider and mute button above the application mixer in Windows 11's Sound
+output flyout. Moving the slider unmutes the output;
+external volume changes and output-device switches are reflected while open.
+Disable the standalone Sound Output Master Volume mod when using this
+feature. Close and reopen the flyout after changing this option.
+
+Sound can show currently playing media in its tooltip and use an output-device
+glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
+devices and their battery percentages (when reported by Windows) in its tooltip
+and change appearance when switched off. Network can show Wi-Fi signal
+strength and open a custom URL for **Perform speed test**.
+
+Right-click a button for its context menu, including sound output selection,
+Bluetooth pairing/file transfer, network actions, and battery preferences.
+**Swap troubleshooting position** moves troubleshooting to the bottom of
+the sound, Bluetooth, and network menus, moving the bottom actions to the top.
+
+Under Battery, **Match other buttons' size without percentage** uses the
+standard tray-button dimensions when percentage is hidden. It defaults to
+off, retaining the wider horizontal battery button. Vertical icon-only sizing
+and percentage-enabled layout are unchanged.
+
+On first use on a device with a battery, the mod enables Windows' battery
+percentage preference. Later changes in Settings or the battery menu are
+preserved, including across Explorer restarts.
+
+Battery percentage appears beside the icon on horizontal taskbars and below
+it on vertical taskbars. **Use small battery icon** switches between 12- and
+16-pixel glyphs without changing the percentage text size.
+
+**Show leaf icon in Energy saver** is enabled by default. It overlays a green
+vector leaf at the battery's bottom-left instead of replacing the battery.
+The outline and center line follow the taskbar's light/dark theme. While the
+leaf is shown, Energy saver does not turn the battery fill yellow; charging
+and low-battery colors are retained.
 
 Partial movements from smooth-scrolling mice accumulate into full wheel notches;
 horizontal scrolling does not change volume. Reach the buttons through Windows'
@@ -47,27 +88,22 @@ taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
 or the Menu key to open a context menu. Buttons expose their current tooltip
 information as accessible names and use system keyboard-focus visuals.
 
-Sound can show currently playing media in its tooltip and use an output-device
-glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
-devices and their battery percentages (when reported by Windows) in its tooltip
-and change appearance when switched off. Network can
-show Wi-Fi signal strength and open a custom URL for **Perform speed test**.
-
 ## Action formats
 
 The custom-action prefix scheme and action-format documentation are adapted from
 [Ultimate Custom Tray](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp)
-by [Salyts](https://github.com/Salyts), licensed under MIT.
+by [Salyts](https://github.com/Salyts).
 
-Select **Custom action** for **Control Center action** or **Battery click action**, then
-enter an action in that group's **Custom action** field.
+Select **Custom action** for **Control Center action** or **Battery click
+action**, then enter an action in that group's **Custom action** field. The
+same formats work in **Custom middle-click action** fields.
 
 | Prefix | Example | Description |
 |--------|---------|-------------|
 | `" "` | `"C:\Program Files\app.exe"` | Opens a file or folder by absolute path. |
 | `~` | `~Downloads` | Opens a folder or file by name. |
 | `cmd:` | `cmd:control` | Runs a command through `cmd.exe`. |
-| `ps:` / `powershell:` | `ps:shutdown /r /f /t 0` | Runs through `powershell.exe`. |
+| `ps:` / `powershell:` | `ps:Start-Process notepad` | Runs through `powershell.exe`. |
 | `key:` / `hotkey:` | `key:Ctrl+Shift+Esc` | Simulates a keyboard shortcut with virtual key presses. |
 | `web:` | `web:https://windhawk.net/` | Opens a URL in the default browser. |
 | `ms-settings:` | `ms-settings:bluetooth` | Opens a Windows Settings page. |
@@ -76,13 +112,19 @@ For shortcut actions, use `Modifier+Modifier+Key`.
 Supported modifiers: `Ctrl`, `Alt`, `Shift`, `Win`.
 Examples: `key:Ctrl+Alt+D`, `hotkey:Win+R`, `key:0x7B` (F12 by VK code).
 
-## Taskbar Styler targets
+## Compatibility
 
 Status changes use Windows notifications where available, with a 60-second
 fallback refresh. The Wi-Fi connecting animation updates every 500 ms while
 Windows reports an active connection attempt.
 This version currently manages the primary taskbar; separate-monitor taskbars
 are not supported by the current implementation.
+
+The taskbar buttons run in Explorer. The optional master-volume addition
+runs in ShellHost or ShellExperienceHost, depending on the Windows version.
+Manual installation of the battery font is not required on supported builds.
+
+## Taskbar Styler targets
 
 The injected buttons normally use `SystemTray.OmniButton`. If a fallback is
 needed, the mod logs the actual control class; the button names stay the same.
@@ -94,11 +136,15 @@ needed, the mod logs the actual control class; the button names stay the same.
 | `SystemTray.OmniButton#SeparateQuickSettingsXamlSound` | Sound button, including wheel and middle-click handling. |
 | `SystemTray.OmniButton#SeparateQuickSettingsXamlControlCenter` | Separate Control Center button; the original grouped button is always hidden. |
 | `SystemTray.OmniButton#SeparateQuickSettingsXamlBattery` | Separate battery button, including its highlight and click handling. |
+| `StackPanel#SeparateTrayBatteryContent` | Battery glyph and percentage layout; horizontal or vertical to match the taskbar. |
 | `TextBlock#SeparateTrayBatteryPercentage` | Battery percentage text. |
-| `Grid#SeparateTrayIconLayers` | Glyph host; battery uses natural dimensions, other buttons use a 16-by-16 host. |
+| `Grid#SeparateTrayIconLayers` | Layered glyph host; battery has its own measured dimensions, other buttons use a 16-by-16 host. |
 | `FontIcon#SeparateTrayIconPrimary` | Main status or output-device glyph. |
 | `FontIcon#SeparateTrayIconUnderlay` | Theme-aware grey underlying glyph, where applicable. |
 | `FontIcon#SeparateTrayIconOverlay` | Additional status layer, including Bluetooth's unavailable indicator and battery charge-level fill. |
+| `Viewbox#SeparateTrayBatteryEnergySaverOverlay` | Scalable Energy saver leaf overlay. |
+| `Path#SeparateTrayLeafBody` | Leaf shape and green fill. |
+| `Path#SeparateTrayLeafStem` | Theme-aware center line of the leaf. |
 | `MenuFlyoutPresenter#SeparateTrayContextMenuPresenter` | WinUI context menu presenter, named when the menu opens. |
 
 The layer names are shared across buttons. An unqualified layer selector affects
@@ -112,6 +158,14 @@ controlStyles:
 ```
 
 ### Hover highlights and generated templates
+
+Highlight geometry follows a live native notification icon's rendered insets
+on all taskbar edges. The mod stretches its existing template background using
+those insets instead of assigning a compact/default fixed highlight height.
+Insets are refreshed on hover and when the tray is rebuilt. Battery also
+refreshes its layout after percentage or taskbar-position changes. If no
+usable native reference is available, the existing control template supplies
+layout.
 
 The native button template contains `Border#BackgroundBorder` on the supported
 taskbar build. This is the existing hover-highlight element. Use the visual-tree
@@ -128,19 +182,6 @@ overwritten by the next update. Stable names provide selectors, but external
 stylers may not observe every dynamically created element. In particular, the
 menu presenter receives its name after creation.
 
-## ⚠ Important usage note ⚠
-
-In case if battery won't show properly on your system, System Battery (*Sysbatt.ttf*)
-font needs to be installed manually. It's part of *Windows.UI.ControlCenter*
-package, but is not actually installed by default. The missing font is stored in:
-
-```
-C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
-```
-
-In order to install the font, right-click the *Sysbatt.ttf* file, and choose *Install*
-from the context menu.
-
 */
 // ==/WindhawkModReadme==
 
@@ -155,7 +196,7 @@ from the context menu.
       - "1": 1%
       - "5": 5%
       - "10": 10%
-    - soundClickAction: quick_settings
+    - soundClickAction: sound_output
       $name: Sound click action
       $description: "What happens when the separated sound icon is clicked. Open sound output picker simulates Ctrl+Win+V, which can also be received by the focused app."
       $options:
@@ -167,8 +208,19 @@ from the context menu.
     - soundIconFollowsOutputDevice: false
       $name: Sound glyph follows output device
       $description: "When enabled, the sound icon uses an output-device glyph for headphones, speakers, display audio, etc. Muted/unavailable audio still uses the normal mute glyph."
+    - showMasterVolumeInOutputPicker: true
+      $name: Show master volume in Sound output
+      $description: "Add a master volume slider and mute button above the application sliders in the Windows 11 Sound output flyout. Close and reopen the flyout after first enabling the feature. Disable the standalone Sound Output Master Volume mod when using this option."
+    - middleClickAction: toggle_mute
+      $name: Middle-click action
+      $options:
+      - toggle_mute: Toggle mute
+      - custom: Custom action
+    - middleClickCustomAction: ""
+      $name: Custom middle-click action
+      $description: "Used when Middle-click action is Custom action. Uses the same action formats as Control Center custom actions."
   $name: Sound
-  $description: Scroll to change volume and unmute. Middle-click to toggle mute. Choose the click action and volume step below.
+  $description: Scroll to change volume and unmute. Configure click and middle-click actions below.
 - bluetooth:
     - showConnectedDevicesInTooltip: true
       $name: Show connected devices in tooltip
@@ -176,6 +228,9 @@ from the context menu.
     - changeGlyphWhenDisabled: true
       $name: Show unavailable Bluetooth indicator
       $description: Change the Bluetooth icon appearance while Bluetooth is off.
+    - middleClickCustomAction: ""
+      $name: Custom middle-click action
+      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
   $name: Bluetooth
 - network:
     - showSignalStrengthInTooltip: true
@@ -183,6 +238,9 @@ from the context menu.
     - speedTestUrl: "https://www.speedtest.net/run"
       $name: Speed test custom URL
       $description: Website opened by Perform speed test. Enter a full http:// or https:// address.
+    - middleClickCustomAction: ""
+      $name: Custom middle-click action
+      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
   $name: Network
 - controlCenter:
     - controlCenterGlyph: F4C3
@@ -191,23 +249,36 @@ from the context menu.
       $name: Control Center action
       $options:
       - default: Open Control Center
+      - project: Open Project
       - custom: Custom action
     - controlCenterAction: "ms-controlcenter:"
       $name: Custom action
       $description: "Used when Custom action is selected. Supports file paths, ~ folders, cmd:, ps:, powershell:, key:, hotkey:, web:, and ms-settings: actions."
+    - middleClickCustomAction: ""
+      $name: Custom middle-click action
+      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
   $name: Control Center
 - battery:
     - smallGlyph: false
       $name: Use small battery icon
       $description: Use a smaller battery icon. Turn off for the default size. Percentage text keeps its normal size.
-    - actionMode: default
+    - energySaverLeafGlyph: true
+      $name: Show leaf icon in Energy saver
+      $description: Overlay a green leaf at the bottom-left of the battery icon while Energy saver is active. Battery and percentage remain visible.
+    - matchOtherButtonSize: false
+      $name: Match other buttons' size without percentage
+      $description: "Use the same button and highlight dimensions as the other tray icons when battery percentage is hidden. When disabled, keep the wider horizontal battery button. Percentage-enabled layout is unchanged."
+    - actionMode: custom
       $name: Battery click action
       $options:
       - default: Open Control Center
       - custom: Custom action
-    - customAction: "ms-controlcenter:"
+    - customAction: "ms-settings:powersleep"
       $name: Custom action
       $description: "Used when Custom action is selected. Supports file paths, ~ folders, cmd:, ps:, powershell:, key:, hotkey:, web:, and ms-settings: actions."
+    - middleClickCustomAction: ""
+      $name: Custom middle-click action
+      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
   $name: Battery
 - visibility:
     - showSoundButton: true
@@ -230,6 +301,9 @@ from the context menu.
   - network: Network
   - controlcenter: Control Center
   - battery: Battery
+- swapTroubleshootingWithBottom: false
+  $name: Swap troubleshooting position
+  $description: "Move troubleshooting to the bottom of Bluetooth, network, and sound menus, swapping it with the bottom action(s)."
 */
 // ==/WindhawkModSettings==
 
@@ -291,7 +365,10 @@ from the context menu.
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/base.h>
 
 namespace wf = winrt::Windows::Foundation;
@@ -309,12 +386,18 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
 
 struct Settings {
-    std::wstring soundClickAction = L"quick_settings";
+    bool soundMiddleClickToggleMute = true;
+    std::wstring soundMiddleClickAction;
+    std::wstring bluetoothMiddleClickAction;
+    std::wstring networkMiddleClickAction;
+    std::wstring controlCenterMiddleClickAction;
+    std::wstring batteryMiddleClickAction;
+    std::wstring soundClickAction = L"sound_output";
     int volumeWheelStep = 0;
     std::wstring controlCenterGlyph = L"F4C3";
     std::wstring controlCenterAction = L"ms-controlcenter:";
-    std::wstring batteryAction = L"ms-controlcenter:";
-    bool batteryCustomAction = false;
+    std::wstring batteryAction = L"ms-settings:powersleep";
+    bool batteryCustomAction = true;
     bool showConnectedDevicesInTooltip = true;
     bool changeBluetoothGlyphWhenDisabled = true;
     bool showSignalStrengthInTooltip = true;
@@ -325,9 +408,12 @@ struct Settings {
     bool showControlCenterButton = true;
     bool showBatteryButton = true;
     bool smallBatteryGlyph = false;
+    bool batteryMatchOtherButtonSize = false;
+    bool energySaverLeafGlyph = true;
     bool showCurrentlyPlayingInSoundTooltip = true;
     bool soundIconFollowsOutputDevice = false;
     std::wstring buttonOrder = L"sound,bluetooth,network,controlcenter,battery";
+    bool swapTroubleshootingWithBottom = false;
 };
 
 enum class NetworkKind {
@@ -361,6 +447,13 @@ struct AudioOutputEndpoint {
 };
 
 static void UpdateDynamicXamlIcons();
+static void PostTrayRefresh(bool radiosChanged);
+static void RefreshBatteryMenuItems();
+static void QueueEnergySaverWork(int operation);
+static bool TryApplyNativeNetworkGlyphs();
+static bool TryApplyNativeSoundGlyphs();
+static bool TryApplyNativeBatteryGlyphs(wuxm::Brush const& fill);
+static void ApplyNativeBatteryFont();
 static void RequestBluetoothTooltipRefresh();
 enum TrayRefreshReason : unsigned {
     RefreshAudio = 1u << 0,
@@ -419,10 +512,27 @@ struct IconLayers {
 
 [[clang::no_destroy]] static IconLayers g_bluetoothIcon;
 [[clang::no_destroy]] static IconLayers g_networkIcon;
+[[clang::no_destroy]] static wf::IInspectable g_nativeNetworkViewModel{nullptr};
+[[clang::no_destroy]] static wf::IInspectable g_nativeSoundViewModel{nullptr};
+[[clang::no_destroy]] static wf::IInspectable g_nativeBatteryViewModel{nullptr};
+[[clang::no_destroy]] static wuxm::FontFamily g_nativeBatteryFont{nullptr};
+static ULONGLONG g_nextNativeBatteryFontSearch = 0;
+static double g_nativeBatteryGlyphWidth = NAN;
+static double g_nativeBatteryGlyphHeight = NAN;
+static double g_nativeBatteryGlyphFontSize = 16;
+static bool g_usingNativeBatteryGlyphs = false;
+static ULONGLONG g_nextNativeBatterySearch = 0;
+[[clang::no_destroy]] static wuxmk::IXamlMetadataProvider g_trayMetadataProvider{nullptr};
+static bool g_usingNativeNetworkGlyphs = false;
+static ULONGLONG g_nextNativeNetworkSearch = 0;
+static bool g_usingNativeSoundGlyphs = false;
+static ULONGLONG g_nextNativeSoundSearch = 0;
 [[clang::no_destroy]] static IconLayers g_soundIcon;
 [[clang::no_destroy]] static IconLayers g_compactGroupedIcon;
 [[clang::no_destroy]] static IconLayers g_batteryIcon;
+[[clang::no_destroy]] static wux::FrameworkElement g_batteryLeafIcon{nullptr};
 [[clang::no_destroy]] static wuc::TextBlock g_batteryPercentageText{nullptr};
+[[clang::no_destroy]] static wuc::StackPanel g_batteryContent{nullptr};
 static std::atomic<int> g_batteryPercentageEnabled{-1};
 static std::wstring g_batteryTooltipCache;
 
@@ -471,7 +581,7 @@ static HANDLE StartOwnedWorker(std::function<void()> task) {
     if (g_unloading) { ReleaseSRWLockExclusive(&g_workerThreadsLock); return nullptr; }
     auto work = new (std::nothrow) Work{std::move(task)};
     if (!work) { ReleaseSRWLockExclusive(&g_workerThreadsLock); return nullptr; }
-    HANDLE thread = CreateThread(nullptr, 0, [](void* parameter) -> DWORD {
+    HANDLE thread = CreateThread(nullptr, 0, +[](void* parameter) WINAPI -> DWORD {
         auto work = static_cast<Work*>(parameter);
         try { work->task(); } catch (...) {}
         delete work;
@@ -576,12 +686,19 @@ static std::wstring LoadButtonOrderSetting() {
 }
 
 static void LoadSettings() {
-    g_settings.batteryCustomAction = GetStringSettingWithDefault(L"battery.actionMode", L"default") == L"custom";
+    g_settings.soundMiddleClickToggleMute =
+        GetStringSettingWithDefault(L"sound.middleClickAction", L"toggle_mute") != L"custom";
+    g_settings.soundMiddleClickAction = GetStringSettingWithDefault(L"sound.middleClickCustomAction", L"");
+    g_settings.bluetoothMiddleClickAction = GetStringSettingWithDefault(L"bluetooth.middleClickCustomAction", L"");
+    g_settings.networkMiddleClickAction = GetStringSettingWithDefault(L"network.middleClickCustomAction", L"");
+    g_settings.controlCenterMiddleClickAction = GetStringSettingWithDefault(L"controlCenter.middleClickCustomAction", L"");
+    g_settings.batteryMiddleClickAction = GetStringSettingWithDefault(L"battery.middleClickCustomAction", L"");
+    g_settings.batteryCustomAction = GetStringSettingWithDefault(L"battery.actionMode", L"custom") == L"custom";
     g_settings.batteryAction = g_settings.batteryCustomAction
-        ? GetStringSettingWithDefault(L"battery.customAction", L"ms-controlcenter:")
+        ? GetStringSettingWithDefault(L"battery.customAction", L"ms-settings:powersleep")
         : L"ms-controlcenter:";
     g_settings.soundClickAction =
-        GetStringSettingWithDefault(L"sound.soundClickAction", L"quick_settings");
+        GetStringSettingWithDefault(L"sound.soundClickAction", L"sound_output");
     const auto volumeStep = GetStringSettingWithDefault(L"sound.volumeWheelStep", L"0");
     g_settings.volumeWheelStep = volumeStep == L"1" ? 1 :
         volumeStep == L"5" ? 5 : volumeStep == L"10" ? 10 : 0;
@@ -590,7 +707,11 @@ static void LoadSettings() {
     g_settings.controlCenterAction =
         GetStringSettingWithDefault(L"controlCenter.controlCenterAction",
                                     L"ms-controlcenter:");
-    if (GetStringSettingWithDefault(L"controlCenter.actionMode", L"default") != L"custom")
+    const auto controlCenterActionMode =
+        GetStringSettingWithDefault(L"controlCenter.actionMode", L"default");
+    if (controlCenterActionMode == L"project")
+        g_settings.controlCenterAction = L"key:Win+P";
+    else if (controlCenterActionMode != L"custom")
         g_settings.controlCenterAction = L"ms-controlcenter:";
     g_settings.showConnectedDevicesInTooltip = Wh_GetIntSetting(L"bluetooth.showConnectedDevicesInTooltip") != 0;
     g_settings.changeBluetoothGlyphWhenDisabled = Wh_GetIntSetting(L"bluetooth.changeGlyphWhenDisabled") != 0;
@@ -608,11 +729,15 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"visibility.showBatteryButton") != 0;
     // Preserve the existing stored toggle when upgrading from battery-only sizing.
     g_settings.smallBatteryGlyph = Wh_GetIntSetting(L"battery.smallGlyph") != 0;
+    g_settings.batteryMatchOtherButtonSize = Wh_GetIntSetting(L"battery.matchOtherButtonSize") != 0;
+    g_settings.energySaverLeafGlyph = Wh_GetIntSetting(L"battery.energySaverLeafGlyph") != 0;
     g_settings.showCurrentlyPlayingInSoundTooltip =
         Wh_GetIntSetting(L"sound.showCurrentlyPlayingInSoundTooltip") != 0;
     g_settings.soundIconFollowsOutputDevice =
         Wh_GetIntSetting(L"sound.soundIconFollowsOutputDevice") != 0;
     g_settings.buttonOrder = LoadButtonOrderSetting();
+    g_settings.swapTroubleshootingWithBottom =
+        Wh_GetIntSetting(L"swapTroubleshootingWithBottom") != 0;
     Wh_Log(L"Tray button settings: bluetooth=%d network=%d sound=%d order=[%s].",
            g_settings.showBluetoothButton, g_settings.showNetworkButton,
            g_settings.showSoundButton, g_settings.buttonOrder.c_str());
@@ -742,6 +867,8 @@ static std::wstring StripQuotes(std::wstring const& value) {
 }
 
 static bool GetKnownFolderPath(PCWSTR name, std::wstring& out) {
+    // Used by custom actions such as ~Downloads. Resolve through Windows so
+    // redirected folders and profiles on other drives remain supported.
     KNOWNFOLDERID folderId{};
     std::wstring lower = ToLower(name);
     if (lower == L"downloads") {
@@ -1060,66 +1187,6 @@ static void OpenSoundOutput() {
     // Ctrl+Win+V is Windows' native sound-output picker command.
     if (!SendShortcut(MOD_CONTROL | MOD_WIN, 'V'))
         Wh_Log(L"Failed to invoke the native sound output picker shortcut.");
-}
-
-static std::wstring UriEncode(std::wstring const& text) {
-    std::wstring result;
-    wchar_t buffer[4]{};
-    for (wchar_t ch : text) {
-        const bool safe =
-            (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') ||
-            (ch >= L'0' && ch <= L'9') || ch == L'-' || ch == L'_' ||
-            ch == L'.' || ch == L'~';
-        if (safe) {
-            result.push_back(ch);
-        } else if (ch <= 0x7F) {
-            swprintf_s(buffer, L"%%%02X", static_cast<unsigned>(ch));
-            result += buffer;
-        } else {
-            // Endpoint IDs used here are ASCII. Keep any unexpected non-ASCII
-            // text intact rather than corrupting it with a partial UTF-8 encode.
-            result.push_back(ch);
-        }
-    }
-    return result;
-}
-
-static std::wstring GetDefaultAudioOutputEndpointId() {
-    std::wstring id;
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const bool coInitialized = SUCCEEDED(hr);
-    if (hr == RPC_E_CHANGED_MODE) hr = S_OK;
-    if (FAILED(hr)) return id;
-
-    IMMDeviceEnumerator* enumerator = nullptr;
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                          __uuidof(IMMDeviceEnumerator),
-                          reinterpret_cast<void**>(&enumerator));
-    if (SUCCEEDED(hr) && enumerator) {
-        IMMDevice* device = nullptr;
-        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
-                                                          &device)) &&
-            device) {
-            LPWSTR rawId = nullptr;
-            if (SUCCEEDED(device->GetId(&rawId)) && rawId) {
-                id = rawId;
-                CoTaskMemFree(rawId);
-            }
-            device->Release();
-        }
-        enumerator->Release();
-    }
-
-    if (coInitialized) CoUninitialize();
-    return id;
-}
-
-static void OpenDefaultAudioDeviceProperties() {
-    QueueShellWork([] {
-        const std::wstring id = GetDefaultAudioOutputEndpointId();
-        ExecuteActionWorker(id.empty() ? L"ms-settings:sound-devices" :
-            L"ms-settings:sound-properties?endpointId=" + UriEncode(id));
-    });
 }
 
 static std::atomic<int> g_airplaneModeState{-1};
@@ -1474,16 +1541,8 @@ static void OpenControlPanelWindow(PCWSTR parameters, PCWSTR label) {
 }
 
 
-static void OpenSpeakerSetup() {
-    OpenControlPanelWindow(L"mmsys.cpl,,0", L"speaker setup");
-}
-
 static void OpenSoundsControlPanel() {
     OpenControlPanelWindow(L"mmsys.cpl,,2", L"sounds control panel");
-}
-
-static void OpenBluetoothOptions() {
-    OpenControlPanelWindow(L"bthprops.cpl", L"Bluetooth options");
 }
 
 static void OpenBluetoothFileTransfer(bool send) {
@@ -2307,49 +2366,108 @@ static void DumpXamlTree(wux::DependencyObject const& root,
     }
 }
 
-static double GetTargetHighlightHeight() {
-    if (g_trayButtonHeight <= 34) {
-        return 28;
-    }
-    if (g_trayButtonHeight >= 44) {
-        return 40;
-    }
-    const double fallback = g_trayButtonHeight - 4;
-    return fallback > 0 ? fallback : 0;
-}
+// The normal tray owns its layout-mode padding, template and styles. Observe
+// the result instead of imposing horizontal-taskbar highlight heights.
+static winrt::weak_ref<wux::FrameworkElement> g_nativeTrayMetricReference;
 
 static void ApplyHoverBackgroundMetrics(wux::FrameworkElement const& button) {
-    if (!button) {
-        return;
-    }
-
+    if (!button || g_unloading) return;
     try {
-        auto background =
-            FindChildByName(button, L"BackgroundBorder").try_as<wux::FrameworkElement>();
-        if (!background) {
-            return;
+        auto reference = g_nativeTrayMetricReference.get();
+        if (!reference || !reference.XamlRoot() ||
+            reference.XamlRoot() != button.XamlRoot()) return;
+        auto nativeBackground = FindChildByName(reference, L"BackgroundBorder")
+                                    .try_as<wux::FrameworkElement>();
+        auto background = FindChildByName(button, L"BackgroundBorder")
+                              .try_as<wux::FrameworkElement>();
+        if (!nativeBackground || !background) return;
+        const double referenceWidth = reference.ActualWidth();
+        const double referenceHeight = reference.ActualHeight();
+        const double nativeWidth = nativeBackground.ActualWidth();
+        const double nativeHeight = nativeBackground.ActualHeight();
+        if (referenceWidth <= 0 || referenceHeight <= 0 ||
+            nativeWidth <= 0 || nativeHeight <= 0 ||
+            button.ActualWidth() <= 0 || button.ActualHeight() <= 0) return;
+        auto nativeOrigin = nativeBackground.TransformToVisual(reference)
+                                .TransformPoint({0, 0});
+        double left = nativeOrigin.X;
+        double top = nativeOrigin.Y;
+        double right = referenceWidth - left - nativeWidth;
+        double bottom = referenceHeight - top - nativeHeight;
+        // A hidden/unarranged or animated reference is not a reliable metric.
+        if (left < -0.5 || top < -0.5 || right < -0.5 || bottom < -0.5) return;
+
+        if (button == g_batteryButton && g_settings.batteryMatchOtherButtonSize && g_batteryContent &&
+            g_batteryContent.Orientation() == wuc::Orientation::Horizontal &&
+            g_batteryPercentageText &&
+            g_batteryPercentageText.Visibility() != wux::Visibility::Visible) {
+            const double scale = button.XamlRoot().RasterizationScale();
+            if (scale > 0) right -= 1.0 / scale;
         }
 
-        const double targetHeight = GetTargetHighlightHeight();
-        background.ClearValue(wux::FrameworkElement::HeightProperty());
-        background.ClearValue(wux::FrameworkElement::MaxHeightProperty());
-        background.ClearValue(wux::FrameworkElement::MinHeightProperty());
-        background.Height(targetHeight);
-        background.MaxHeight(targetHeight);
-        background.VerticalAlignment(wux::VerticalAlignment::Center);
-
-        if (auto uiElement = background.try_as<wux::UIElement>()) {
-            uiElement.InvalidateMeasure();
-            uiElement.InvalidateArrange();
+        if (button == g_batteryButton && g_batteryPercentageText &&
+            g_batteryPercentageText.Visibility() == wux::Visibility::Visible) {
+            const bool vertical = g_batteryContent &&
+                g_batteryContent.Orientation() == wuc::Orientation::Vertical;
+            // Battery is wider/taller than a normal tray item. Preserve the
+            // native highlight's exact cross-axis size, rather than letting
+            // a difference in outer battery size stretch or shrink it.
+            if (vertical) {
+                left += (button.ActualWidth() - referenceWidth) / 2;
+                right = button.ActualWidth() - left - nativeWidth;
+            } else {
+                top += (button.ActualHeight() - referenceHeight) / 2;
+                bottom = button.ActualHeight() - top - nativeHeight;
+            }
+            // Match physical pixel edges at fractional monitor scaling. Snap
+            // the border rectangle, not four independent margin lengths.
+            auto root = button.XamlRoot().Content();
+            const auto origin = button.TransformToVisual(root).TransformPoint({0, 0});
+            const double scale = button.XamlRoot().RasterizationScale();
+            if (scale > 0) {
+                auto snap = [scale](double value) { return std::round(value * scale) / scale; };
+                right = button.ActualWidth() - (snap(origin.X + button.ActualWidth() - right) - origin.X);
+                bottom = button.ActualHeight() - (snap(origin.Y + button.ActualHeight() - bottom) - origin.Y);
+                left = snap(origin.X + left) - origin.X;
+                top = snap(origin.Y + top) - origin.Y;
+            }
         }
 
-        Wh_Log(L"Applied hover BackgroundBorder height %.1f for %s#%s at tray height %.1f.",
-               targetHeight, winrt::get_class_name(button).c_str(),
-               button.Name().c_str(), g_trayButtonHeight);
+        auto parent = wuxm::VisualTreeHelper::GetParent(background)
+                          .try_as<wux::FrameworkElement>();
+        if (!parent || parent.ActualWidth() <= 0 || parent.ActualHeight() <= 0) return;
+        const auto parentOrigin = parent.TransformToVisual(button).TransformPoint({0, 0});
+        const wux::Thickness inset{
+            left - parentOrigin.X,
+            top - parentOrigin.Y,
+            right - (button.ActualWidth() - parentOrigin.X - parent.ActualWidth()),
+            bottom - (button.ActualHeight() - parentOrigin.Y - parent.ActualHeight())};
+
+        // Stretch inside the existing template. Its border, visual states and
+        // styling remain in charge of painting. Width can grow for battery %.
+        auto clearIfLocal = [&](wux::DependencyProperty const& property) {
+            if (background.ReadLocalValue(property) != wux::DependencyProperty::UnsetValue())
+                background.ClearValue(property);
+        };
+        clearIfLocal(wux::FrameworkElement::WidthProperty());
+        clearIfLocal(wux::FrameworkElement::MinWidthProperty());
+        clearIfLocal(wux::FrameworkElement::MaxWidthProperty());
+        clearIfLocal(wux::FrameworkElement::HeightProperty());
+        clearIfLocal(wux::FrameworkElement::MinHeightProperty());
+        clearIfLocal(wux::FrameworkElement::MaxHeightProperty());
+        if (background.HorizontalAlignment() != wux::HorizontalAlignment::Stretch)
+            background.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+        if (background.VerticalAlignment() != wux::VerticalAlignment::Stretch)
+            background.VerticalAlignment(wux::VerticalAlignment::Stretch);
+        const auto previous = background.Margin();
+        if (previous.Left != inset.Left || previous.Top != inset.Top ||
+            previous.Right != inset.Right || previous.Bottom != inset.Bottom) {
+            background.Margin(inset);
+            Wh_Log(L"Native tray highlight insets %.1f,%.1f,%.1f,%.1f -> %s.",
+                   left, top, right, bottom, button.Name().c_str());
+        }
     } catch (...) {
-        Wh_Log(L"ApplyHoverBackgroundMetrics failed for %s#%s: 0x%08X",
-               winrt::get_class_name(button).c_str(), button.Name().c_str(),
-               winrt::to_hresult());
+        Wh_Log(L"Native tray highlight layout unavailable: 0x%08X", winrt::to_hresult());
     }
 }
 
@@ -2437,41 +2555,135 @@ static bool GetTaskbarGeometry(RECT* taskbarRect, RECT* hostRect,
     return true;
 }
 
-// Shell chooses its own mouse-relative geometry while it opens a tooltip.
-// Applying these values in ToolTip::Opened runs after that Shell step, while
-// retaining the native tooltip template and behaviour.
+static bool IsBatteryLayoutHorizontal() {
+    RECT bar{}, host{};
+    bool horizontal = true, first = true;
+    GetTaskbarGeometry(&bar, &host, &horizontal, &first);
+    // A vertical-taskbar mod may transform the XAML tray without immediately
+    // changing the hosting HWND's rectangle. Use the arranged tray on screen.
+    if (g_trayPanel && g_trayPanel.ActualWidth() > 0 && g_trayPanel.ActualHeight() > 0) {
+        auto bounds = g_trayPanel.TransformToVisual(nullptr).TransformBounds(
+            {0, 0, static_cast<float>(g_trayPanel.ActualWidth()),
+             static_cast<float>(g_trayPanel.ActualHeight())});
+        if (bounds.Height > bounds.Width * 1.5f) return false;
+        if (bounds.Width > bounds.Height * 1.5f) return true;
+    }
+    return horizontal;
+}
+
+static double GetBatteryLeafOffsetX() {
+    const double base = g_settings.smallBatteryGlyph ? -4 : -5;
+    const bool shiftRight = !g_settings.smallBatteryGlyph &&
+        g_settings.energySaverLeafGlyph && g_settings.batteryMatchOtherButtonSize &&
+        IsBatteryLayoutHorizontal();
+    return base + (shiftRight ? 2 : 0);
+}
+
+// Resolve Windows' own placement helper without detouring it. The optional
+// fallback uses the same local exclusion rectangle and themed spacing.
+using NativeTooltipPlacement_t = void(__cdecl*)(
+    wuc::ToolTip const&, int, wf::Size, wf::Size, bool, bool);
+static NativeTooltipPlacement_t g_nativeTooltipPlacement = nullptr;
+static bool g_nativeTooltipResolutionAttempted = false;
+
+static void ResolveNativeTooltipPlacement() {
+    if (g_nativeTooltipResolutionAttempted) return;
+    auto module = GetModuleHandleW(L"Taskbar.View.dll");
+    if (!module) return;
+    g_nativeTooltipResolutionAttempted = true;
+    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+        {{
+            LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))",
+            LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const & __ptr64,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))"
+        }, &g_nativeTooltipPlacement, nullptr, true},
+    };
+    WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols));
+    Wh_Log(L"Native taskbar tooltip placement helper: %p.", g_nativeTooltipPlacement);
+}
+
 static void ApplyNativeTrayToolTipPlacement(
     wuc::ToolTip const& tip, wux::FrameworkElement const& targetButton) {
-    if (!tip || !targetButton) {
-        return;
-    }
+    if (!tip || !targetButton) return;
+    RECT taskbarRect{}, hostRect{};
+    bool horizontal = true, nearFirstEdge = true;
+    if (!GetTaskbarGeometry(&taskbarRect, &hostRect, &horizontal, &nearFirstEdge)) return;
 
-    RECT taskbarRect{};
-    RECT hostRect{};
-    bool horizontal = true;
-    bool nearFirstEdge = true;
-    if (!GetTaskbarGeometry(&taskbarRect, &hostRect, &horizontal,
-                            &nearFirstEdge)) {
-        return;
-    }
-
+    // Native TaskbarLocation order: Left, Top, Right, Bottom.
+    const int location = horizontal ? (nearFirstEdge ? 1 : 3)
+                                    : (nearFirstEdge ? 0 : 2);
     const auto placement = horizontal
-                               ? (nearFirstEdge ? wucp::PlacementMode::Bottom
-                                                : wucp::PlacementMode::Top)
-                               : (nearFirstEdge ? wucp::PlacementMode::Right
-                                                : wucp::PlacementMode::Left);
-    constexpr double kGap = 12.0;
+        ? (nearFirstEdge ? wucp::PlacementMode::Bottom : wucp::PlacementMode::Top)
+        : (nearFirstEdge ? wucp::PlacementMode::Right : wucp::PlacementMode::Left);
+    const wf::Size actual{
+        static_cast<float>(targetButton.ActualWidth()),
+        static_cast<float>(targetButton.ActualHeight())};
+    if (actual.Width <= 0 || actual.Height <= 0) return;
+    wf::Size desired{
+        static_cast<float>(targetButton.Width()),
+        static_cast<float>(targetButton.Height())};
+
     wuc::ToolTipService::SetPlacementTarget(targetButton, targetButton);
     wuc::ToolTipService::SetPlacement(targetButton, placement);
     tip.PlacementTarget(targetButton);
     tip.Placement(placement);
-    tip.HorizontalOffset(horizontal ? 0.0 : (nearFirstEdge ? kGap : -kGap));
-    tip.VerticalOffset(horizontal ? (nearFirstEdge ? kGap : -kGap) : 0.0);
+    tip.HorizontalOffset(0);
+    tip.VerticalOffset(0);
+
+    // Match the native helper's exclusion rectangle. Horizontal taskbars use
+    // a square based on the owning row's height; vertical taskbars use the
+    // desired width (or actual width when auto-sized) and actual height.
     tip.PlacementRect(winrt::box_value(wf::Rect{
-                             0.0f, 0.0f,
-                             static_cast<float>(targetButton.ActualWidth()),
-                             static_cast<float>(targetButton.ActualHeight())})
-                          .as<wf::IReference<wf::Rect>>());
+        0, 0,
+        horizontal ? actual.Height
+                   : (std::isfinite(desired.Width) ? desired.Width : actual.Width),
+        actual.Height}).as<wf::IReference<wf::Rect>>());
+
+    auto excludeVerticalTray = [&] {
+        if (horizontal || !g_trayPanel ||
+            g_trayPanel.XamlRoot() != targetButton.XamlRoot()) return;
+        const double width = g_trayPanel.ActualWidth();
+        if (!std::isfinite(width) || width <= 0) return;
+        // A wide vertical tray can contain several icon columns. Its entire
+        // width, rather than just this icon's column, must remain unobscured.
+        // Express the tray bounds in the tooltip owner's local coordinates;
+        // keep the owner's Y so the tooltip still tracks the hovered row.
+        const auto origin = g_trayPanel.TransformToVisual(targetButton)
+                                .TransformPoint({0, 0});
+        tip.PlacementRect(winrt::box_value(wf::Rect{
+            origin.X, 0, static_cast<float>(width), actual.Height})
+                .as<wf::IReference<wf::Rect>>());
+    };
+
+    ResolveNativeTooltipPlacement();
+    if (g_nativeTooltipPlacement) {
+        try {
+            // The optional flags select special button layouts. These tray
+            // buttons use the ordinary, non-expanded layout.
+            g_nativeTooltipPlacement(tip, location, desired, actual, false, false);
+            excludeVerticalTray();
+            return;
+        } catch (...) {
+            Wh_Log(L"Native tooltip placement failed: 0x%08X; using themed fallback.",
+                   winrt::to_hresult());
+        }
+    }
+    try {
+        auto resource = wux::Application::Current().Resources()
+            .TryLookup(winrt::box_value(L"ToolTipMargin"));
+        if (resource) {
+            const double margin = winrt::unbox_value<double>(resource);
+            if (std::isfinite(margin)) {
+                // Windows' orientation helper supplies a positive resource
+                // offset in the active axis for both opposing edges.
+                if (horizontal) tip.VerticalOffset(margin);
+                else tip.HorizontalOffset(margin);
+            }
+        }
+    } catch (...) {
+        // Keep the button-local placement and XAML's own spacing when this
+        // Windows build has no compatible taskbar margin resource.
+    }
+    excludeVerticalTray();
 }
 
 static void SetTrayToolTip(wux::FrameworkElement const& targetButton,
@@ -2550,6 +2762,20 @@ static void RemoveInjectedControls(wuc::Panel const& parent) {
     }
 
     RevokeEvents(g_uiEventRevokers);
+    g_nativeNetworkViewModel = nullptr;
+    g_nativeSoundViewModel = nullptr;
+    g_nativeBatteryViewModel = nullptr;
+    // FontFamily is an immutable resource reference, not a visual. Retain it
+    // across tray rebuilds: the hidden native template may not be realized
+    // again soon enough to rediscover its packaged font before first paint.
+    g_nextNativeBatteryFontSearch = 0;
+    g_usingNativeBatteryGlyphs = false;
+    g_nextNativeBatterySearch = 0;
+    g_trayMetadataProvider = nullptr;
+    g_usingNativeNetworkGlyphs = false;
+    g_nextNativeNetworkSearch = 0;
+    g_usingNativeSoundGlyphs = false;
+    g_nextNativeSoundSearch = 0;
     try { if (g_activeTrayContextFlyout) g_activeTrayContextFlyout.Hide(); } catch (...) {}
     g_activeTrayContextFlyout = nullptr;
     auto children = parent.Children();
@@ -2567,7 +2793,9 @@ static void RemoveInjectedControls(wuc::Panel const& parent) {
     g_soundButton = nullptr;
     g_batteryButton = nullptr;
     g_batteryIcon = {};
+    g_batteryLeafIcon = nullptr;
     g_batteryPercentageText = nullptr;
+    g_batteryContent = nullptr;
     g_batteryTooltipCache.clear();
     g_compactGroupedButton = nullptr;
     g_bluetoothIcon = {};
@@ -2680,6 +2908,7 @@ static bool TryCaptureTrayButtonMetricsFromElement(
 
     g_trayButtonWidth = width;
     g_trayButtonHeight = height;
+    g_nativeTrayMetricReference = winrt::make_weak(reference);
     Wh_Log(L"Captured single tray button metrics from %s#%s: %.1fx%.1f%s.",
            winrt::get_class_name(reference).c_str(), reference.Name().c_str(),
            g_trayButtonWidth, g_trayButtonHeight,
@@ -2805,11 +3034,22 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
     element.MinWidth(0);
     element.MaxWidth(g_trayButtonWidth);
     if (element.Name() == L"SeparateQuickSettingsXamlBattery") {
+        const bool horizontal = IsBatteryLayoutHorizontal();
+        const bool percentage = g_batteryPercentageEnabled.load() == 1;
         // Icon-only layout must not depend on repeated glyph measurements.
-        element.Width(g_batteryPercentageEnabled.load() == 1
-            ? NAN : (g_settings.smallBatteryGlyph ? 31.0 : 36.0));
+        const double iconWidth = horizontal && !g_settings.batteryMatchOtherButtonSize
+            ? (g_settings.smallBatteryGlyph ? 31.0 : 36.0) : g_trayButtonWidth;
+        element.Width(horizontal && percentage ? NAN : iconWidth);
         element.MinWidth(0);
-        element.MaxWidth(INFINITY);
+        element.MaxWidth(percentage ? INFINITY : iconWidth);
+        if (!horizontal && percentage) {
+            element.Height(NAN);
+            element.MinHeight(g_trayButtonHeight);
+            element.MaxHeight(INFINITY);
+            element.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            element.VerticalAlignment(wux::VerticalAlignment::Center);
+            return;
+        }
     }
     element.MinHeight(0);
     element.MaxHeight(g_trayButtonHeight);
@@ -2896,12 +3136,32 @@ static void RefreshInjectedButtonMetrics() {
 static void AttachTaskbarSizeRefreshHandlers(
     wux::FrameworkElement const& trayElement,
     wux::FrameworkElement const& controlCenterButton) {
-    auto handler = [](wf::IInspectable const& sender,
+    auto lastHorizontal = std::make_shared<bool>(IsBatteryLayoutHorizontal());
+    auto handler = [lastHorizontal](wf::IInspectable const& sender,
                       wux::SizeChangedEventArgs const& args) {
         const auto oldSize = args.PreviousSize();
         const auto newSize = args.NewSize();
         if (oldSize.Width == newSize.Width && oldSize.Height == newSize.Height) {
             return;
+        }
+
+        // Queue cached-state rendering after this arrange pass, including
+        // when hit-target metrics are unchanged. Relocation can otherwise
+        // leave the battery horizontal until the next power-status update.
+        PostTrayRefresh(false);
+
+        const bool horizontal = IsBatteryLayoutHorizontal();
+        const bool sameOrientation = horizontal == *lastHorizontal;
+        *lastHorizontal = horizontal;
+        if (sameOrientation) {
+            if (auto reference = g_nativeTrayMetricReference.get(); reference &&
+                reference.ActualWidth() == g_trayButtonWidth &&
+                reference.ActualHeight() == g_trayButtonHeight) {
+                // Battery percentage changes the tray's extent, not the
+                // native hit-target metrics. Rebuilding every button here
+                // discards their templates and interrupts hover states.
+                return;
+            }
         }
 
         auto element = sender.try_as<wux::FrameworkElement>();
@@ -3004,8 +3264,11 @@ static void EnsureUpdateTimer() {
                    g_displayNetworkState.kind == NetworkKind::WifiConnecting) {
             // Advancing belongs solely to this 500 ms timer. Rendering a
             // status snapshot must not consume an animation frame.
-            ++g_wifiConnectingFrame;
-            g_networkIcon.primary.Glyph(GetNetworkGlyph(g_displayNetworkState));
+            if (!TryApplyNativeNetworkGlyphs()) {
+                g_usingNativeNetworkGlyphs = false;
+                ++g_wifiConnectingFrame;
+                g_networkIcon.primary.Glyph(GetNetworkGlyph(g_displayNetworkState));
+            }
         }
     });
         g_timerEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
@@ -3490,6 +3753,17 @@ template<typename T> static void SetTrayForeground(T const& element, wuxm::Brush
     element.Foreground(brush);
 }
 static std::atomic<int> g_energySaverState{-1};
+static std::atomic<int> g_energySaverActive{-1};
+static std::atomic<bool> g_modernEnergySaverStatusSeen{false};
+static constexpr GUID kPowerSavingStatus{
+    0xe00958c0, 0xc213, 0x4ace, {0xac, 0x77, 0xfe, 0xcc, 0xed, 0x2e, 0xee, 0xa5}};
+static constexpr GUID kEnergySaverStatus{
+    0x550e8400, 0xe29b, 0x41d4, {0xa7, 0x16, 0x44, 0x66, 0x55, 0x44, 0x00, 0x00}};
+
+static int GetEnergySaverDisplayState() {
+    const int active = g_energySaverActive.load();
+    return active >= 0 ? active : g_energySaverState.load();
+}
 
 static wuxm::Brush BatteryStatusBrush(PCWSTR resource, wu::Color fallback) {
     try {
@@ -3517,23 +3791,38 @@ static void UpdateSeparateBatteryButton() {
     SetTrayVisibility(g_batteryButton, present && g_settings.showBatteryButton
         ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     if (!present) return;
+    static bool percentageDefaultChecked = false;
+    if (!percentageDefaultChecked) {
+        percentageDefaultChecked = true;
+        // This is a Windows preference. Initialize it once per installation,
+        // then honor subsequent changes from Settings or the battery menu.
+        if (!Wh_GetIntValue(L"batteryPercentageDefaultApplied", 0))
+            QueueEnergySaverWork(3);
+    }
     const bool percentKnown = status.BatteryLifePercent <= 100;
     const int percent = percentKnown ? status.BatteryLifePercent : 0;
     const int level = (std::clamp)((percent + 9) / 10, 1, 10);
     const bool charging = (status.BatteryFlag & 8) != 0;
+    // Active charging stops at full charge or a firmware charge limit.
+    // Keep the connected-power artwork visible while AC is online, but
+    // retain the actual charging flag for the tooltip's precise wording.
+    const bool powerConnected = status.ACLineStatus == 1 || charging;
     // Also honor the modern Always use energy saver setting, including AC.
     // It is refreshed off-thread; never invoke Settings COM from rendering.
-    const bool saver = status.SystemStatusFlag == 1 || g_energySaverState.load() == 1;
+    const int activeSaver = g_energySaverActive.load();
+    const bool saver = activeSaver >= 0 ? activeSaver == 1 :
+        status.SystemStatusFlag == 1 || g_energySaverState.load() == 1;
+    const bool showLeaf = saver && g_settings.energySaverLeafGlyph;
     auto foreground = MakeIconBrush();
     auto fill = foreground;
     wchar_t base = 0xF8D0;
     wchar_t overlay = static_cast<wchar_t>(0xF8D0 + level);
     // SysBatt Fluent Icons layer mapping from the trashpanda fork.
-    if (saver && !charging) {
+    if (saver && !showLeaf && !powerConnected) {
         base = 0xF8D0;
         overlay = static_cast<wchar_t>(0xF8D0 + level);
         fill = wuxm::SolidColorBrush(wu::Color{255, 234, 163, 0});
-    } else if (charging) {
+    } else if (powerConnected) {
         base = 0xF8DB;
         overlay = level <= 2 ? static_cast<wchar_t>(0xF8D0 + level)
                              : static_cast<wchar_t>(0xF8DC + level - 3);
@@ -3543,38 +3832,116 @@ static void UpdateSeparateBatteryButton() {
     } else if (percent <= 20) {
         fill = BatteryStatusBrush(L"SystemFillColorCautionBrush", {255, 157, 93, 0});
     }
-    SetTrayGlyph(g_batteryIcon.primary, std::wstring(1, base));
-    SetTrayForeground(g_batteryIcon.primary, foreground);
-    SetTrayGlyph(g_batteryIcon.overlay, std::wstring(1, overlay));
-    SetTrayForeground(g_batteryIcon.overlay, fill);
-    SetTrayVisibility(g_batteryIcon.overlay, percentKnown && percent > 0
-        ? wux::Visibility::Visible : wux::Visibility::Collapsed);
-    SetTrayVisibility(g_batteryIcon.underlay, wux::Visibility::Collapsed);
+    ApplyNativeBatteryFont();
+    if (!TryApplyNativeBatteryGlyphs(fill)) {
+        g_usingNativeBatteryGlyphs = false;
+        SetTrayGlyph(g_batteryIcon.primary, std::wstring(1, base));
+        SetTrayForeground(g_batteryIcon.primary, foreground);
+        SetTrayGlyph(g_batteryIcon.overlay, std::wstring(1, overlay));
+        SetTrayForeground(g_batteryIcon.overlay, fill);
+        SetTrayVisibility(g_batteryIcon.overlay, percentKnown && percent > 0
+            ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        SetTrayVisibility(g_batteryIcon.underlay, wux::Visibility::Collapsed);
+    }
+    if (g_batteryLeafIcon) {
+        // The leaf carries the Energy saver indication. Preserve normal
+        // battery fill (including charging/low-battery colors) instead of
+        // taking the native Energy saver yellow brush override.
+        if (showLeaf) SetTrayForeground(g_batteryIcon.overlay, fill);
+        const double size = g_batteryIcon.primary.FontSize() * 0.75;
+        if (g_batteryLeafIcon.Width() != size) g_batteryLeafIcon.Width(size);
+        if (g_batteryLeafIcon.Height() != size) g_batteryLeafIcon.Height(size);
+        if (auto offset = g_batteryLeafIcon.RenderTransform().try_as<wuxm::TranslateTransform>()) {
+            const double x = GetBatteryLeafOffsetX();
+            if (offset.X() != x) offset.X(x);
+        }
+        // Reuse the tray foreground for both strokes: black in light mode,
+        // light in dark mode. The green interior stays independently filled.
+        for (auto name : {L"SeparateTrayLeafBody", L"SeparateTrayLeafStem"}) {
+            if (auto shape = FindChildByName(g_batteryLeafIcon, name)
+                    .try_as<wux::Shapes::Shape>())
+                shape.Stroke(foreground);
+        }
+        SetTrayVisibility(g_batteryLeafIcon, showLeaf ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    }
     const bool showPercent = percentKnown && g_batteryPercentageEnabled.load() == 1;
-    if (auto content = wuxm::VisualTreeHelper::GetParent(g_batteryPercentageText)
-            .try_as<wuc::StackPanel>()) {
+    // Visibility and text must participate in this measure pass, rather than
+    // changing them after the button has already chosen its size.
+    const std::wstring label = percentKnown ? std::to_wstring(percent) + L"%" : L"";
+    if (g_batteryPercentageText.Text() != label) g_batteryPercentageText.Text(label);
+    SetTrayVisibility(g_batteryPercentageText, showPercent ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    const bool horizontal = IsBatteryLayoutHorizontal();
+    if (auto content = g_batteryContent) {
+        auto orientation = horizontal ? wuc::Orientation::Horizontal : wuc::Orientation::Vertical;
+        double spacing = horizontal ? 4 : 0;
+        // Glyph-layer panels are not the glyph/percentage layout panel.
+        // Do not copy their zero inter-layer spacing into the visible row.
+        if (content.Orientation() != orientation) content.Orientation(orientation);
+        if (content.Spacing() != spacing) content.Spacing(spacing);
         // The fixed icon-only button already gets its inset from the native
         // OmniButton template. Extra content margins consume the glyph's space
         // and clip it inside that fixed width.
-        const double inset = showPercent ? 8 : 0;
+        const double inset = showPercent && horizontal ? 8 : 0;
         const auto margin = content.Margin();
         if (margin.Left != inset || margin.Right != inset)
             content.Margin({inset, 0, inset, 0});
     }
-    const double batteryWidth = showPercent
-        ? NAN : (g_settings.smallBatteryGlyph ? 31.0 : 36.0);
+    const double iconWidth = horizontal && !g_settings.batteryMatchOtherButtonSize
+        ? (g_settings.smallBatteryGlyph ? 31.0 : 36.0) : g_trayButtonWidth;
+    const double batteryWidth = showPercent && horizontal ? NAN : iconWidth;
+    const double batteryMaxWidth = showPercent ? INFINITY : iconWidth;
+    if (g_batteryButton.MaxWidth() != batteryMaxWidth)
+        g_batteryButton.MaxWidth(batteryMaxWidth);
     const double currentWidth = g_batteryButton.Width();
-    if (showPercent ? !std::isnan(currentWidth) : currentWidth != batteryWidth)
+    if (std::isnan(batteryWidth) ? !std::isnan(currentWidth) : currentWidth != batteryWidth)
         g_batteryButton.Width(batteryWidth);
+    // Two vertical rows must measure naturally instead of being clipped to
+    // the height captured from a single-glyph notification button.
+    const bool stackedPercentage = showPercent && !horizontal;
+    // Measure only our own stack. Do not change native template ancestors:
+    // those participate in the tray's shared layout and visual states.
+    double batteryHeight = g_trayButtonHeight;
+    if (stackedPercentage && g_batteryContent) {
+        g_batteryContent.Measure({static_cast<float>(batteryWidth), INFINITY});
+        double padding = 0;
+        if (auto control = g_batteryButton.try_as<wuc::Control>()) {
+            const auto p = control.Padding();
+            padding = p.Top + p.Bottom;
+        }
+        // Keep the normal row's surrounding space, then add the percentage
+        // row. Merely max(normal row, glyph + text) often keeps the old height
+        // unchanged, squeezing both rows into one notification hit target.
+        const double extraRow = std::max(0.0,
+            static_cast<double>(g_batteryContent.DesiredSize().Height) -
+            static_cast<double>(g_batteryIcon.host.DesiredSize().Height));
+        batteryHeight = std::max(g_trayButtonHeight,
+            std::max(g_trayButtonHeight + extraRow,
+                static_cast<double>(g_batteryContent.DesiredSize().Height) + padding));
+    }
+    if (g_batteryButton.MinHeight() != 0) g_batteryButton.MinHeight(0);
+    if (g_batteryButton.MaxHeight() != INFINITY) g_batteryButton.MaxHeight(INFINITY);
+    if (g_batteryButton.Height() != batteryHeight) {
+        g_batteryButton.Height(batteryHeight);
+        g_batteryButton.InvalidateMeasure();
+        if (g_trayPanel) g_trayPanel.InvalidateMeasure();
+        Wh_Log(L"Battery measured layout: horizontal=%d percentage=%d height=%.1f.",
+               horizontal, showPercent, batteryHeight);
+    }
+    if (auto offset = g_batteryPercentageText.RenderTransform().try_as<wuxm::TranslateTransform>()) {
+        const double y = horizontal ? -1 : 0;
+        if (offset.Y() != y) offset.Y(y);
+    }
     // Center the visible SysBatt outline, whose ink is offset in its font box.
     if (auto offset = g_batteryIcon.host.RenderTransform().try_as<wuxm::TranslateTransform>()) {
-        const double x = showPercent ? 0 : 2;
+        // SysBatt's advance box is asymmetric even when copied from the
+        // native text element. Keep its optical correction for icon-only
+        // buttons; percentage rows retain their existing baseline alignment.
+        // Keep horizontal optical centering unchanged. Vertical battery
+        // glyphs use no horizontal translation, with or without percentage.
+        const double x = horizontal ? (showPercent ? 0 : 2) : 0;
         if (offset.X() != x) offset.X(x);
     }
-    const std::wstring label = percentKnown ? std::to_wstring(percent) + L"%" : L"";
-    if (g_batteryPercentageText.Text() != label) g_batteryPercentageText.Text(label);
     SetTrayForeground(g_batteryPercentageText, foreground);
-    SetTrayVisibility(g_batteryPercentageText, showPercent ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     std::wstring tooltip = percentKnown ? L"Battery: " + label : L"Battery";
     tooltip += charging ? L" (Charging)" :
         status.ACLineStatus == 1 ? (percentKnown && percent == 100
@@ -3587,9 +3954,421 @@ static void UpdateSeparateBatteryButton() {
     }
     // Match the menu's AlwaysOn toggle. The legacy power-status flag can remain
     // on (for example, automatic low-battery saving) after that toggle is off.
-    if (g_energySaverState.load() == 1 && !charging)
+    if (saver && !charging)
         tooltip += L"\n\nEnergy saver is enabled";
     SetCachedTrayToolTip(g_batteryButton, g_batteryTooltipCache, tooltip);
+    ApplyHoverBackgroundMetrics(g_batteryButton);
+}
+
+// Read the shell's own XAML metadata instead of calling private C++ methods
+// or depending on build-specific object offsets. All reads run on the tray UI
+// thread; the original controls are observed without moving their content.
+static wf::IInspectable ReadTrayProperty(wf::IInspectable const& object, PCWSTR name) {
+    if (!object) return nullptr;
+    try {
+        if (auto provider = object.try_as<wux::Data::ICustomPropertyProvider>()) {
+            auto property = provider.GetCustomProperty(name);
+            if (property && property.CanRead()) return property.GetValue(object);
+        }
+        if (!g_trayMetadataProvider) {
+            auto module = GetModuleHandleW(L"SystemTray.dll");
+            auto factoryFn = module ? reinterpret_cast<HRESULT(WINAPI*)(void*, void**)>(
+                GetProcAddress(module, "DllGetActivationFactory")) : nullptr;
+            if (!factoryFn) return nullptr;
+            winrt::hstring typeName = L"SystemTray.XamlMetaDataProvider";
+            wf::IActivationFactory factory{nullptr};
+            winrt::check_hresult(factoryFn(winrt::get_abi(typeName), winrt::put_abi(factory)));
+            g_trayMetadataProvider = factory.ActivateInstance<wf::IInspectable>()
+                .as<wuxmk::IXamlMetadataProvider>();
+        }
+        auto type = g_trayMetadataProvider.GetXamlType(winrt::get_class_name(object));
+        if (!type) return nullptr;
+        auto member = type.GetMember(name);
+        if (member) return member.GetValue(object);
+    } catch (...) {}
+    return nullptr;
+}
+
+static bool IsNativeNetworkModel(wf::IInspectable const& object, int depth = 0) {
+    if (!object || depth > 3) return false;
+    const auto name = winrt::get_class_name(object);
+    if (name == L"SystemTray.NetworkSystemTrayIconDataModel" ||
+        name == L"SystemTray.NetworkButton") return true;
+    if (!std::wstring_view(name).starts_with(L"SystemTray.")) return false;
+    for (auto property : {L"DataModel", L"ContentVM", L"ViewModel"}) {
+        auto child = ReadTrayProperty(object, property);
+        if (child && child != object && IsNativeNetworkModel(child, depth + 1)) return true;
+    }
+    return false;
+}
+
+static bool ResolveNativeNetworkGlyphs() {
+    if (g_nativeNetworkViewModel) return true;
+    const auto now = GetTickCount64();
+    if (!g_trayControlCenterButton || now < g_nextNativeNetworkSearch) return false;
+    g_nextNativeNetworkSearch = now + 5000;
+    struct Candidate { wux::DependencyObject element; bool network; };
+    std::vector<Candidate> stack{{g_trayControlCenterButton, false}};
+    static int diagnosticCount = 0;
+    while (!stack.empty()) {
+        auto candidate = stack.back();
+        stack.pop_back();
+        if (auto element = candidate.element.try_as<wux::FrameworkElement>()) {
+            if (IsInjectedElement(element)) continue;
+            const auto klass = winrt::get_class_name(element);
+            candidate.network = candidate.network || klass == L"SystemTray.NetworkButton";
+            auto viewModel = ReadTrayProperty(element, L"ViewModel");
+            auto context = element.DataContext();
+            if (!viewModel) viewModel = context;
+            if (viewModel && winrt::get_class_name(viewModel) != L"SystemTray.TextIconContentViewModel") {
+                auto content = ReadTrayProperty(viewModel, L"ContentVM");
+                if (content) viewModel = content;
+            }
+            if (viewModel && winrt::get_class_name(viewModel) == L"SystemTray.TextIconContentViewModel") {
+                const bool network = candidate.network || IsNativeNetworkModel(viewModel) ||
+                    IsNativeNetworkModel(context);
+                if (diagnosticCount < 16) {
+                    ++diagnosticCount;
+                    Wh_Log(L"Native network candidate: %s#%s model=%s network=%d.",
+                           klass.c_str(), element.Name().c_str(),
+                           winrt::get_class_name(viewModel).c_str(), network);
+                }
+                if (network) {
+                    auto base = ReadTrayProperty(viewModel, L"BaseText");
+                    if (!base || winrt::unbox_value_or<winrt::hstring>(base, L"").empty()) continue;
+                    if (auto changes = viewModel.try_as<wux::Data::INotifyPropertyChanged>()) {
+                        auto token = changes.PropertyChanged([](auto const&, auto const&) {
+                            // Post only a UI refresh. Do not enumerate adapters
+                            // or touch XAML from the model's notification thread.
+                            if (!g_unloading) PostTrayRefresh(false);
+                        });
+                        g_uiEventRevokers.push_back([weak = winrt::make_weak(changes), token] {
+                            if (auto source = weak.get()) source.PropertyChanged(token);
+                        });
+                    }
+                    g_nativeNetworkViewModel = viewModel;
+                    Wh_Log(L"Native network glyph source selected: %s#%s.",
+                           klass.c_str(), element.Name().c_str());
+                    return true;
+                }
+            }
+        }
+        for (int i = wuxm::VisualTreeHelper::GetChildrenCount(candidate.element) - 1; i >= 0; --i)
+            stack.push_back({wuxm::VisualTreeHelper::GetChild(candidate.element, i), candidate.network});
+    }
+    if (diagnosticCount < 16) {
+        ++diagnosticCount;
+        Wh_Log(L"Native network model not available; using manual network glyphs.");
+    }
+    return false;
+}
+
+static bool TryApplyNativeNetworkGlyphs() {
+    try {
+        if (!g_networkIcon.primary || !ResolveNativeNetworkGlyphs()) return false;
+        auto baseValue = ReadTrayProperty(g_nativeNetworkViewModel, L"BaseText");
+        if (!baseValue) return false;
+        const auto base = winrt::unbox_value_or<winrt::hstring>(baseValue, L"");
+        if (base.empty()) return false;
+        // Read all layers before updating so a failed read keeps the manual
+        // fallback coherent. Empty underlays/overlays are valid native states.
+        auto underlayValue = ReadTrayProperty(g_nativeNetworkViewModel, L"UnderlayText");
+        auto overlayValue = ReadTrayProperty(g_nativeNetworkViewModel, L"OverlayText");
+        if (!underlayValue || !overlayValue) return false;
+        const auto underlay = winrt::unbox_value_or<winrt::hstring>(underlayValue, L"");
+        const auto overlay = winrt::unbox_value_or<winrt::hstring>(overlayValue, L"");
+        SetTrayGlyph(g_networkIcon.primary, base);
+        SetTrayForeground(g_networkIcon.primary, MakeIconBrush());
+        SetTrayGlyph(g_networkIcon.underlay, underlay);
+        SetTrayForeground(g_networkIcon.underlay, MakeUnderlayBrush());
+        SetTrayVisibility(g_networkIcon.underlay, underlay.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        SetTrayGlyph(g_networkIcon.overlay, overlay);
+        SetTrayForeground(g_networkIcon.overlay, MakeIconBrush());
+        SetTrayVisibility(g_networkIcon.overlay, overlay.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        if (!g_usingNativeNetworkGlyphs) Wh_Log(L"Network glyphs now follow native base/underlay/overlay text.");
+        g_usingNativeNetworkGlyphs = true;
+        return true;
+    } catch (...) {
+        Wh_Log(L"Native network glyph read failed: 0x%08X; using manual fallback.", winrt::to_hresult());
+    }
+    return false;
+}
+
+static bool IsNativeSoundModel(wf::IInspectable const& object, int depth = 0) {
+    if (!object || depth > 3) return false;
+    const auto name = winrt::get_class_name(object);
+    if (name == L"SystemTray.VolumeSystemTrayIconDataModel" ||
+        name == L"SystemTray.VolumeButton") return true;
+    if (!std::wstring_view(name).starts_with(L"SystemTray.")) return false;
+    for (auto property : {L"DataModel", L"ContentVM", L"ViewModel"}) {
+        auto child = ReadTrayProperty(object, property);
+        if (child && child != object && IsNativeSoundModel(child, depth + 1)) return true;
+    }
+    return false;
+}
+
+static bool ResolveNativeSoundGlyphs() {
+    if (g_nativeSoundViewModel) return true;
+    const auto now = GetTickCount64();
+    if (!g_trayControlCenterButton || now < g_nextNativeSoundSearch) return false;
+    g_nextNativeSoundSearch = now + 5000;
+    struct Candidate { wux::DependencyObject element; bool sound; };
+    std::vector<Candidate> stack{{g_trayControlCenterButton, false}};
+    static int diagnosticCount = 0;
+    while (!stack.empty()) {
+        auto candidate = stack.back();
+        stack.pop_back();
+        if (auto element = candidate.element.try_as<wux::FrameworkElement>()) {
+            if (IsInjectedElement(element)) continue;
+            const auto klass = winrt::get_class_name(element);
+            candidate.sound = candidate.sound || klass == L"SystemTray.VolumeButton";
+            auto viewModel = ReadTrayProperty(element, L"ViewModel");
+            auto context = element.DataContext();
+            if (!viewModel) viewModel = context;
+            if (viewModel && winrt::get_class_name(viewModel) != L"SystemTray.TextIconContentViewModel") {
+                auto content = ReadTrayProperty(viewModel, L"ContentVM");
+                if (content) viewModel = content;
+            }
+            if (viewModel && winrt::get_class_name(viewModel) == L"SystemTray.TextIconContentViewModel") {
+                const bool sound = candidate.sound || IsNativeSoundModel(viewModel) ||
+                    IsNativeSoundModel(context);
+                if (diagnosticCount < 16) {
+                    ++diagnosticCount;
+                    Wh_Log(L"Native sound candidate: %s#%s model=%s sound=%d.",
+                           klass.c_str(), element.Name().c_str(),
+                           winrt::get_class_name(viewModel).c_str(), sound);
+                }
+                if (sound) {
+                    auto base = ReadTrayProperty(viewModel, L"BaseText");
+                    if (!base || winrt::unbox_value_or<winrt::hstring>(base, L"").empty()) continue;
+                    if (auto changes = viewModel.try_as<wux::Data::INotifyPropertyChanged>()) {
+                        auto token = changes.PropertyChanged([](auto const&, auto const&) {
+                            // Post only a UI refresh. Do not enumerate adapters
+                            // or touch XAML from the model's notification thread.
+                            if (!g_unloading) PostTrayRefresh(false);
+                        });
+                        g_uiEventRevokers.push_back([weak = winrt::make_weak(changes), token] {
+                            if (auto source = weak.get()) source.PropertyChanged(token);
+                        });
+                    }
+                    g_nativeSoundViewModel = viewModel;
+                    Wh_Log(L"Native sound glyph source selected: %s#%s.",
+                           klass.c_str(), element.Name().c_str());
+                    return true;
+                }
+            }
+        }
+        for (int i = wuxm::VisualTreeHelper::GetChildrenCount(candidate.element) - 1; i >= 0; --i)
+            stack.push_back({wuxm::VisualTreeHelper::GetChild(candidate.element, i), candidate.sound});
+    }
+    if (diagnosticCount < 16) {
+        ++diagnosticCount;
+        Wh_Log(L"Native sound model not available; using manual sound glyphs.");
+    }
+    return false;
+}
+
+static bool TryApplyNativeSoundGlyphs() {
+    try {
+        if (!g_soundIcon.primary || !ResolveNativeSoundGlyphs()) return false;
+        auto baseValue = ReadTrayProperty(g_nativeSoundViewModel, L"BaseText");
+        if (!baseValue) return false;
+        const auto base = winrt::unbox_value_or<winrt::hstring>(baseValue, L"");
+        if (base.empty()) return false;
+        // Read all layers before updating so a failed read keeps the manual
+        // fallback coherent. Empty underlays/overlays are valid native states.
+        auto underlayValue = ReadTrayProperty(g_nativeSoundViewModel, L"UnderlayText");
+        auto overlayValue = ReadTrayProperty(g_nativeSoundViewModel, L"OverlayText");
+        if (!underlayValue || !overlayValue) return false;
+        const auto underlay = winrt::unbox_value_or<winrt::hstring>(underlayValue, L"");
+        const auto overlay = winrt::unbox_value_or<winrt::hstring>(overlayValue, L"");
+        SetTrayGlyph(g_soundIcon.primary, base);
+        SetTrayForeground(g_soundIcon.primary, MakeIconBrush());
+        SetTrayGlyph(g_soundIcon.underlay, underlay);
+        SetTrayForeground(g_soundIcon.underlay, MakeUnderlayBrush());
+        SetTrayVisibility(g_soundIcon.underlay, underlay.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        SetTrayGlyph(g_soundIcon.overlay, overlay);
+        SetTrayForeground(g_soundIcon.overlay, MakeIconBrush());
+        SetTrayVisibility(g_soundIcon.overlay, overlay.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        if (!g_usingNativeSoundGlyphs) Wh_Log(L"Sound glyphs now follow native base/underlay/overlay text.");
+        g_usingNativeSoundGlyphs = true;
+        return true;
+    } catch (...) {
+        Wh_Log(L"Native sound glyph read failed: 0x%08X; using manual fallback.", winrt::to_hresult());
+    }
+    return false;
+}
+
+static bool IsNativeBatteryModel(wf::IInspectable const& object, int depth = 0) {
+    if (!object || depth > 3) return false;
+    const auto name = winrt::get_class_name(object);
+    if (name == L"SystemTray.PowerSystemTrayIconDataModel" ||
+        name == L"SystemTray.BatteryIconContent") return true;
+    if (!std::wstring_view(name).starts_with(L"SystemTray.")) return false;
+    for (auto property : {L"DataModel", L"ContentVM", L"ViewModel"}) {
+        auto child = ReadTrayProperty(object, property);
+        if (child && child != object && IsNativeBatteryModel(child, depth + 1)) return true;
+    }
+    return false;
+}
+
+static void ApplyNativeBatteryFont() {
+    // Preserve the native packaged font reference instead of looking up only
+    // the globally installed family name. Never move the native visual.
+    if (g_trayControlCenterButton &&
+        GetTickCount64() >= g_nextNativeBatteryFontSearch) {
+        g_nextNativeBatteryFontSearch = GetTickCount64() + 5000;
+        struct Candidate { wux::DependencyObject element; bool battery; };
+        std::vector<Candidate> stack{{g_trayControlCenterButton, false}};
+        while (!stack.empty()) {
+            auto candidate = stack.back();
+            stack.pop_back();
+            auto element = candidate.element.try_as<wux::FrameworkElement>();
+            if (element && IsInjectedElement(element)) continue;
+            if (element && winrt::get_class_name(element) == L"SystemTray.BatteryIconContent")
+                candidate.battery = true;
+            if (candidate.battery) {
+                wuxm::FontFamily font{nullptr};
+                if (auto text = candidate.element.try_as<wuc::TextBlock>()) font = text.FontFamily();
+                else if (auto icon = candidate.element.try_as<wuc::FontIcon>()) font = icon.FontFamily();
+                if (font) {
+                    std::wstring source(font.Source());
+                    std::transform(source.begin(), source.end(), source.begin(),
+                        [](wchar_t ch) { return static_cast<wchar_t>(towlower(ch)); });
+                    if (source.find(L"sysbatt") != std::wstring::npos) {
+                        const bool changed = !g_nativeBatteryFont ||
+                            g_nativeBatteryFont.Source() != font.Source();
+                        g_nativeBatteryFont = font;
+                        if (element && element.ActualWidth() > 0 && element.ActualHeight() > 0) {
+                            g_nativeBatteryGlyphWidth = element.ActualWidth();
+                            g_nativeBatteryGlyphHeight = element.ActualHeight();
+                            if (auto text = element.try_as<wuc::TextBlock>())
+                                g_nativeBatteryGlyphFontSize = text.FontSize();
+                            else if (auto icon = element.try_as<wuc::FontIcon>())
+                                g_nativeBatteryGlyphFontSize = icon.FontSize();
+                        }
+                        if (changed) Wh_Log(L"Native battery font resource selected: %s", font.Source().c_str());
+                    }
+                }
+            }
+            for (int i = wuxm::VisualTreeHelper::GetChildrenCount(candidate.element) - 1; i >= 0; --i)
+                stack.push_back({wuxm::VisualTreeHelper::GetChild(candidate.element, i), candidate.battery});
+        }
+    }
+    if (g_nativeBatteryFont) {
+        for (auto const& glyph : {g_batteryIcon.primary, g_batteryIcon.underlay, g_batteryIcon.overlay})
+            if (glyph) {
+                glyph.FontFamily(g_nativeBatteryFont);
+                const double size = g_settings.smallBatteryGlyph ? 12 : 16;
+                if (glyph.FontSize() != size) glyph.FontSize(size);
+            }
+        // FontIcon's natural advance can differ from the native TextBlock's
+        // layout box. Reserve that native box so glyph ink cannot overlap %.
+        if (g_batteryIcon.host && g_nativeBatteryGlyphFontSize > 0 &&
+            std::isfinite(g_nativeBatteryGlyphWidth) && std::isfinite(g_nativeBatteryGlyphHeight)) {
+            const double ratio = (g_settings.smallBatteryGlyph ? 12.0 : 16.0) /
+                g_nativeBatteryGlyphFontSize;
+            const double width = g_nativeBatteryGlyphWidth * ratio;
+            const double height = g_nativeBatteryGlyphHeight * ratio;
+            if (g_batteryIcon.host.Width() != width) g_batteryIcon.host.Width(width);
+            if (g_batteryIcon.host.Height() != height) g_batteryIcon.host.Height(height);
+        }
+    }
+}
+
+static bool ResolveNativeBatteryGlyphs() {
+    if (g_nativeBatteryViewModel) return true;
+    const auto now = GetTickCount64();
+    if (!g_trayControlCenterButton || now < g_nextNativeBatterySearch) return false;
+    g_nextNativeBatterySearch = now + 5000;
+    struct Candidate { wux::DependencyObject element; bool battery; };
+    std::vector<Candidate> stack{{g_trayControlCenterButton, false}};
+    static int diagnosticCount = 0;
+    while (!stack.empty()) {
+        auto candidate = stack.back();
+        stack.pop_back();
+        if (auto element = candidate.element.try_as<wux::FrameworkElement>()) {
+            if (IsInjectedElement(element)) continue;
+            const auto klass = winrt::get_class_name(element);
+            candidate.battery = candidate.battery || klass == L"SystemTray.BatteryIconContent";
+            auto viewModel = ReadTrayProperty(element, L"ViewModel");
+            auto context = element.DataContext();
+            if (!viewModel) viewModel = context;
+            if (viewModel && winrt::get_class_name(viewModel) != L"SystemTray.TextIconContentViewModel") {
+                auto content = ReadTrayProperty(viewModel, L"ContentVM");
+                if (content) viewModel = content;
+            }
+            if (viewModel && winrt::get_class_name(viewModel) == L"SystemTray.TextIconContentViewModel") {
+                const bool battery = candidate.battery || IsNativeBatteryModel(viewModel) ||
+                    IsNativeBatteryModel(context);
+                if (diagnosticCount < 16) {
+                    ++diagnosticCount;
+                    Wh_Log(L"Native battery candidate: %s#%s model=%s battery=%d.",
+                           klass.c_str(), element.Name().c_str(),
+                           winrt::get_class_name(viewModel).c_str(), battery);
+                }
+                if (battery) {
+                    auto base = ReadTrayProperty(viewModel, L"BaseText");
+                    if (!base || winrt::unbox_value_or<winrt::hstring>(base, L"").empty()) continue;
+                    if (auto changes = viewModel.try_as<wux::Data::INotifyPropertyChanged>()) {
+                        auto token = changes.PropertyChanged([](auto const&, auto const&) {
+                            // Post only a UI refresh. Do not query power status
+                            // or touch XAML from the model's notification thread.
+                            if (!g_unloading) PostTrayRefresh(false);
+                        });
+                        g_uiEventRevokers.push_back([weak = winrt::make_weak(changes), token] {
+                            if (auto source = weak.get()) source.PropertyChanged(token);
+                        });
+                    }
+                    g_nativeBatteryViewModel = viewModel;
+                    Wh_Log(L"Native battery glyph source selected: %s#%s.",
+                           klass.c_str(), element.Name().c_str());
+                    return true;
+                }
+            }
+        }
+        for (int i = wuxm::VisualTreeHelper::GetChildrenCount(candidate.element) - 1; i >= 0; --i)
+            stack.push_back({wuxm::VisualTreeHelper::GetChild(candidate.element, i), candidate.battery});
+    }
+    if (diagnosticCount < 16) {
+        ++diagnosticCount;
+        Wh_Log(L"Native battery model not available; using manual battery glyphs.");
+    }
+    return false;
+}
+
+static bool TryApplyNativeBatteryGlyphs(wuxm::Brush const& fill) {
+    try {
+        if (!g_batteryIcon.primary || !ResolveNativeBatteryGlyphs()) return false;
+        auto baseValue = ReadTrayProperty(g_nativeBatteryViewModel, L"BaseText");
+        if (!baseValue) return false;
+        const auto base = winrt::unbox_value_or<winrt::hstring>(baseValue, L"");
+        if (base.empty()) return false;
+        // Read all layers before updating so a failed read keeps the manual
+        // fallback coherent. Empty underlays/overlays are valid native states.
+        auto underlayValue = ReadTrayProperty(g_nativeBatteryViewModel, L"UnderlayText");
+        auto overlayValue = ReadTrayProperty(g_nativeBatteryViewModel, L"OverlayText");
+        if (!underlayValue || !overlayValue) return false;
+        const auto underlay = winrt::unbox_value_or<winrt::hstring>(underlayValue, L"");
+        const auto overlay = winrt::unbox_value_or<winrt::hstring>(overlayValue, L"");
+        SetTrayGlyph(g_batteryIcon.primary, base);
+        SetTrayForeground(g_batteryIcon.primary, MakeIconBrush());
+        SetTrayGlyph(g_batteryIcon.underlay, underlay);
+        SetTrayForeground(g_batteryIcon.underlay, MakeUnderlayBrush());
+        SetTrayVisibility(g_batteryIcon.underlay, underlay.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        SetTrayGlyph(g_batteryIcon.overlay, overlay);
+        // Keep charging/low-battery colors when Windows does not expose an override.
+        auto overlayBrush = ReadTrayProperty(g_nativeBatteryViewModel,
+            L"IconOverlayForegroundOverride").try_as<wuxm::Brush>();
+        SetTrayForeground(g_batteryIcon.overlay, overlayBrush ? overlayBrush : fill);
+        SetTrayVisibility(g_batteryIcon.overlay, overlay.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        if (!g_usingNativeBatteryGlyphs) Wh_Log(L"Battery glyphs now follow native base/underlay/overlay text.");
+        g_usingNativeBatteryGlyphs = true;
+        return true;
+    } catch (...) {
+        Wh_Log(L"Native battery glyph read failed: 0x%08X; using manual fallback.", winrt::to_hresult());
+    }
+    return false;
 }
 
 static void UpdateDynamicXamlIcons() {
@@ -3602,6 +4381,7 @@ static void UpdateDynamicXamlIcons() {
     try {
         RefreshEnergySaverStateAsync();
         UpdateSeparateBatteryButton();
+        RefreshBatteryMenuItems();
         auto primaryBrush = MakeIconBrush();
         auto underlayBrush = MakeUnderlayBrush();
         if (g_compactGroupedIcon.primary)
@@ -3653,21 +4433,24 @@ static void UpdateDynamicXamlIcons() {
                 g_wifiConnectingFrame = 0;
             }
             g_displayNetworkState = state;
-            SetTrayGlyph(g_networkIcon.primary, GetNetworkGlyph(state));
-            SetTrayForeground(g_networkIcon.primary, primaryBrush);
             SetCachedTrayToolTip(g_networkButton, g_networkTooltipCache,
                                  GetNetworkTooltip(state));
-            if (g_networkIcon.underlay) {
-                SetTrayGlyph(g_networkIcon.underlay, L"\xE701");
-                SetTrayForeground(g_networkIcon.underlay, underlayBrush);
-                SetTrayVisibility(g_networkIcon.underlay,
-                    state.kind == NetworkKind::Wifi ||
-                            state.kind == NetworkKind::WifiConnecting
-                        ? wux::Visibility::Visible
-                        : wux::Visibility::Collapsed);
-            }
-            if (g_networkIcon.overlay) {
-                SetTrayVisibility(g_networkIcon.overlay, wux::Visibility::Collapsed);
+            if (!TryApplyNativeNetworkGlyphs()) {
+                g_usingNativeNetworkGlyphs = false;
+                SetTrayGlyph(g_networkIcon.primary, GetNetworkGlyph(state));
+                SetTrayForeground(g_networkIcon.primary, primaryBrush);
+                if (g_networkIcon.underlay) {
+                    SetTrayGlyph(g_networkIcon.underlay, L"\xE701");
+                    SetTrayForeground(g_networkIcon.underlay, underlayBrush);
+                    SetTrayVisibility(g_networkIcon.underlay,
+                        state.kind == NetworkKind::Wifi ||
+                                state.kind == NetworkKind::WifiConnecting
+                            ? wux::Visibility::Visible
+                            : wux::Visibility::Collapsed);
+                }
+                if (g_networkIcon.overlay) {
+                    SetTrayVisibility(g_networkIcon.overlay, wux::Visibility::Collapsed);
+                }
             }
         }
 
@@ -3675,24 +4458,27 @@ static void UpdateDynamicXamlIcons() {
             SoundState const& state = snapshot.sound;
             const bool useOutputDeviceGlyph =
                 g_settings.soundIconFollowsOutputDevice && state.available && !state.muted;
-            SetTrayGlyph(g_soundIcon.primary, useOutputDeviceGlyph
-                                          ? GetSoundOutputDeviceGlyph(state)
-                                          : GetSoundGlyph(state));
-            SetTrayForeground(g_soundIcon.primary, primaryBrush);
             SetCachedTrayToolTip(g_soundButton, g_soundTooltipCache,
                                  GetSoundTooltip(state));
-            if (g_soundIcon.underlay) {
-                SetTrayGlyph(g_soundIcon.underlay, L"\xEBC5");
-                SetTrayForeground(g_soundIcon.underlay, underlayBrush);
-                SetTrayVisibility(g_soundIcon.underlay,
-                    state.available && !state.muted && !useOutputDeviceGlyph
-                        ? wux::Visibility::Visible
-                        : wux::Visibility::Collapsed);
-            }
-            if (g_soundIcon.overlay) {
-                SetTrayGlyph(g_soundIcon.overlay, L"\xE74F");
-                SetTrayForeground(g_soundIcon.overlay, primaryBrush);
-                SetTrayVisibility(g_soundIcon.overlay, wux::Visibility::Collapsed);
+            if (useOutputDeviceGlyph || !TryApplyNativeSoundGlyphs()) {
+                g_usingNativeSoundGlyphs = false;
+                SetTrayGlyph(g_soundIcon.primary, useOutputDeviceGlyph
+                                          ? GetSoundOutputDeviceGlyph(state)
+                                          : GetSoundGlyph(state));
+                SetTrayForeground(g_soundIcon.primary, primaryBrush);
+                if (g_soundIcon.underlay) {
+                    SetTrayGlyph(g_soundIcon.underlay, L"\xEBC5");
+                    SetTrayForeground(g_soundIcon.underlay, underlayBrush);
+                    SetTrayVisibility(g_soundIcon.underlay,
+                        state.available && !state.muted && !useOutputDeviceGlyph
+                            ? wux::Visibility::Visible
+                            : wux::Visibility::Collapsed);
+                }
+                if (g_soundIcon.overlay) {
+                    SetTrayGlyph(g_soundIcon.overlay, L"\xE74F");
+                    SetTrayForeground(g_soundIcon.overlay, primaryBrush);
+                    SetTrayVisibility(g_soundIcon.overlay, wux::Visibility::Collapsed);
+                }
             }
         }
         UpdateTimerCadence();
@@ -3784,8 +4570,25 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
     if (message == WM_POWERBROADCAST) {
         if (wp == PBT_POWERSETTINGCHANGE) {
             auto* setting = reinterpret_cast<POWERBROADCAST_SETTING*>(lp);
-            if (setting && IsEqualGUID(setting->PowerSetting, GUID_ACDC_POWER_SOURCE))
-                InvalidateEnergySaverRead();
+            if (setting) {
+                const bool modern = IsEqualGUID(setting->PowerSetting, kEnergySaverStatus);
+                const bool legacy = IsEqualGUID(setting->PowerSetting, kPowerSavingStatus);
+                if ((modern || legacy) && setting->DataLength == sizeof(DWORD)) {
+                    DWORD value = 0;
+                    memcpy(&value, setting->Data, sizeof(value));
+                    if (modern) g_modernEnergySaverStatusSeen.store(true);
+                    // Modern Energy saver also operates on AC. Do not let
+                    // the legacy battery-only status overwrite its report.
+                    if (modern || !g_modernEnergySaverStatusSeen.load()) {
+                        g_energySaverActive.store(value != 0 ? 1 : 0);
+                        Wh_Log(L"Energy saver active state: %u (%s notification).",
+                               value, modern ? L"modern" : L"legacy");
+                        PostTrayRefresh(false);
+                    }
+                }
+                if (modern || legacy || IsEqualGUID(setting->PowerSetting, GUID_ACDC_POWER_SOURCE))
+                    InvalidateEnergySaverRead();
+            }
         }
         RequestTrayRefresh(RefreshPower);
         return TRUE;
@@ -3965,7 +4768,7 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
     HANDLE keyEvents[3]{CreateEventW(nullptr, FALSE, FALSE, nullptr),
                         CreateEventW(nullptr, FALSE, FALSE, nullptr),
                         CreateEventW(nullptr, FALSE, FALSE, nullptr)};
-    HPOWERNOTIFY power[2]{};
+    HPOWERNOTIFY power[4]{};
     std::vector<std::pair<HANDLE, HDEVNOTIFY>> radios;
     struct RadioStateSubscription {
         wdr::Radio radio;
@@ -4046,6 +4849,8 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
             TRUE, WirelessStatusChanged, nullptr, nullptr, nullptr) == ERROR_SUCCESS) sources |= 8;
     power[0] = RegisterPowerSettingNotification(work.window, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
     power[1] = RegisterPowerSettingNotification(work.window, &GUID_BATTERY_PERCENTAGE_REMAINING, DEVICE_NOTIFY_WINDOW_HANDLE);
+    power[2] = RegisterPowerSettingNotification(work.window, &kPowerSavingStatus, DEVICE_NOTIFY_WINDOW_HANDLE);
+    power[3] = RegisterPowerSettingNotification(work.window, &kEnergySaverStatus, DEVICE_NOTIFY_WINDOW_HANDLE);
     if (power[0] && power[1]) sources |= 16;
     bindRadios();
     for (auto [handle, notification] : radios) if (notification) sources |= 32;
@@ -4264,27 +5069,17 @@ static PCWSTR ButtonKindName(ButtonKind kind) {
 
 enum class TrayContextCommand : UINT {
     BluetoothAddDevice = 1,
-    BluetoothAllowDevice,
-    BluetoothDevices,
     BluetoothSendFile,
     BluetoothReceiveFile,
-    BluetoothPan,
     BluetoothSettings,
     BluetoothTroubleshoot,
-    NetworkAvailable,
-    NetworkWifiSettings,
-    NetworkEthernetSettings,
     NetworkSpeedTest,
     NetworkSettings,
-    NetworkAirplaneMode,
     NetworkToggleAirplaneMode,
     NetworkFirewallProtection,
     NetworkTroubleshoot,
     SoundSettings,
     SoundMixer,
-    SoundSpeakerSetup,
-    SoundAdvancedAudioEnhancements,
-    SoundAdvancedSpatialSound,
     SoundSounds,
     SoundTroubleshoot,
     QuickSettingsTaskManager,
@@ -4298,35 +5093,17 @@ static void ExecuteTrayContextCommand(TrayContextCommand command) {
         case TrayContextCommand::BluetoothAddDevice:
             OpenAddBluetoothDevice();
             break;
-        case TrayContextCommand::BluetoothAllowDevice:
-            OpenBluetoothOptions();
-            break;
-        case TrayContextCommand::BluetoothDevices:
-            OpenBluetooth();
-            break;
         case TrayContextCommand::BluetoothSendFile:
             OpenBluetoothFileTransfer(true);
             break;
         case TrayContextCommand::BluetoothReceiveFile:
             OpenBluetoothFileTransfer(false);
             break;
-        case TrayContextCommand::BluetoothPan:
-            ExecuteAction(L"ms-settings:network");
-            break;
         case TrayContextCommand::BluetoothSettings:
             ExecuteAction(L"ms-settings:bluetooth");
             break;
         case TrayContextCommand::BluetoothTroubleshoot:
             ExecuteAction(L"ms-settings:troubleshoot");
-            break;
-        case TrayContextCommand::NetworkAvailable:
-            OpenNetwork();
-            break;
-        case TrayContextCommand::NetworkWifiSettings:
-            ExecuteAction(L"ms-settings:network-wifi");
-            break;
-        case TrayContextCommand::NetworkEthernetSettings:
-            ExecuteAction(L"ms-settings:network-ethernet");
             break;
         case TrayContextCommand::NetworkSpeedTest:
             if (g_settings.speedTestUrl.starts_with(L"https://") ||
@@ -4338,9 +5115,6 @@ static void ExecuteTrayContextCommand(TrayContextCommand command) {
             break;
         case TrayContextCommand::NetworkSettings:
             ExecuteAction(L"ms-settings:network");
-            break;
-        case TrayContextCommand::NetworkAirplaneMode:
-            ExecuteAction(L"ms-settings:network-airplanemode");
             break;
         case TrayContextCommand::NetworkToggleAirplaneMode:
             SetAirplaneModeLikelyEnabled(g_airplaneModeState.load() != 1);
@@ -4356,13 +5130,6 @@ static void ExecuteTrayContextCommand(TrayContextCommand command) {
             break;
         case TrayContextCommand::SoundMixer:
             OpenVolumeMixer();
-            break;
-        case TrayContextCommand::SoundSpeakerSetup:
-            OpenSpeakerSetup();
-            break;
-        case TrayContextCommand::SoundAdvancedAudioEnhancements:
-        case TrayContextCommand::SoundAdvancedSpatialSound:
-            OpenDefaultAudioDeviceProperties();
             break;
         case TrayContextCommand::SoundSounds:
             OpenSoundsControlPanel();
@@ -4420,28 +5187,80 @@ static void AppendWinUiSeparator(
     items.Append(wuc::MenuFlyoutSeparator());
 }
 
+static void MoveWinUiItemToIndex(
+    wfc::IVector<wuc::MenuFlyoutItemBase> const& items,
+    PCWSTR text, uint32_t targetIndex) {
+    for (uint32_t i = 0; i < items.Size(); ++i) {
+        auto item = items.GetAt(i).try_as<wuc::MenuFlyoutItem>();
+        auto subItem = items.GetAt(i).try_as<wuc::MenuFlyoutSubItem>();
+        if ((!item || item.Text() != text) &&
+            (!subItem || subItem.Text() != text)) continue;
+        auto value = items.GetAt(i);
+        items.RemoveAt(i);
+        if (targetIndex > items.Size()) targetIndex = items.Size();
+        items.InsertAt(targetIndex, value);
+        return;
+    }
+}
+
+static void MoveWinUiTroubleshootToBottom(
+    wfc::IVector<wuc::MenuFlyoutItemBase> const& items,
+    PCWSTR text) {
+    for (uint32_t i = 0; i < items.Size(); ++i) {
+        auto item = items.GetAt(i).try_as<wuc::MenuFlyoutItem>();
+        if (!item || item.Text() != text) continue;
+        auto value = items.GetAt(i);
+        items.RemoveAt(i);
+        items.Append(value);
+        return;
+    }
+}
+
 static void AppendWinUiBluetoothContextMenu(wuc::MenuFlyout const& flyout) {
     auto items = flyout.Items();
-    AppendWinUiContextItem(items, L"Troubleshoot bluetooth problems",
-                           TrayContextCommand::BluetoothTroubleshoot,
-                           L"\xE90F");
-    AppendWinUiSeparator(items);
+    if (g_settings.swapTroubleshootingWithBottom) {
+        AppendWinUiContextItem(items, L"Send a File",
+                               TrayContextCommand::BluetoothSendFile, L"\xE724");
+        AppendWinUiContextItem(items, L"Receive a File",
+                               TrayContextCommand::BluetoothReceiveFile, L"\xE896");
+        AppendWinUiSeparator(items);
+    } else {
+        AppendWinUiContextItem(items, L"Troubleshoot bluetooth problems",
+                               TrayContextCommand::BluetoothTroubleshoot,
+                               L"\xE90F");
+        AppendWinUiSeparator(items);
+    }
     AppendWinUiContextItem(items, L"Bluetooth settings",
                            TrayContextCommand::BluetoothSettings, L"\xE713");
     AppendWinUiContextItem(items, L"Connect a new device",
                            TrayContextCommand::BluetoothAddDevice, L"\xE710");
     AppendWinUiSeparator(items);
-    AppendWinUiContextItem(items, L"Send a File",
-                           TrayContextCommand::BluetoothSendFile, L"\xE724");
-    AppendWinUiContextItem(items, L"Receive a File",
-                           TrayContextCommand::BluetoothReceiveFile, L"\xE896");
+    if (g_settings.swapTroubleshootingWithBottom) {
+        AppendWinUiContextItem(items, L"Troubleshoot bluetooth problems",
+                               TrayContextCommand::BluetoothTroubleshoot,
+                               L"\xE90F");
+    } else {
+        AppendWinUiContextItem(items, L"Send a File",
+                               TrayContextCommand::BluetoothSendFile, L"\xE724");
+        AppendWinUiContextItem(items, L"Receive a File",
+                               TrayContextCommand::BluetoothReceiveFile, L"\xE896");
+    }
+    if (g_settings.swapTroubleshootingWithBottom) {
+        MoveWinUiTroubleshootToBottom(items, L"Troubleshoot bluetooth problems");
+    }
 }
 
 static void AppendWinUiSoundContextMenu(wuc::MenuFlyout const& flyout) {
     auto items = flyout.Items();
-    AppendWinUiContextItem(items, L"Troubleshoot sound problems",
-                           TrayContextCommand::SoundTroubleshoot, L"\xE90F");
-    AppendWinUiSeparator(items);
+    if (g_settings.swapTroubleshootingWithBottom) {
+        AppendWinUiContextItem(items, L"Sounds", TrayContextCommand::SoundSounds,
+                               L"\xE8D6");
+        AppendWinUiSeparator(items);
+    } else {
+        AppendWinUiContextItem(items, L"Troubleshoot sound problems",
+                               TrayContextCommand::SoundTroubleshoot, L"\xE90F");
+        AppendWinUiSeparator(items);
+    }
     AppendWinUiContextItem(items, L"Sound settings",
                            TrayContextCommand::SoundSettings, L"\xE713");
     AppendWinUiContextItem(items, L"Open volume mixer",
@@ -4486,10 +5305,18 @@ static void AppendWinUiSoundContextMenu(wuc::MenuFlyout const& flyout) {
             outputSubmenu.Items().Append(outputItem);
         }
     }
+    if (!g_settings.swapTroubleshootingWithBottom) {
+        AppendWinUiContextItem(items, L"Sounds", TrayContextCommand::SoundSounds,
+                               L"\xE8D6");
+    }
     items.Append(outputSubmenu);
 
-    AppendWinUiContextItem(items, L"Sounds", TrayContextCommand::SoundSounds,
-                           L"\xE8D6");
+    if (g_settings.swapTroubleshootingWithBottom) {
+        MoveWinUiItemToIndex(items, L"Output device", 0);
+        MoveWinUiItemToIndex(items, L"Sounds", 1);
+        AppendWinUiContextItem(items, L"Troubleshoot sound problems",
+                               TrayContextCommand::SoundTroubleshoot, L"\xE90F");
+    }
 }
 
 static void AppendWinUiNetworkContextMenu(wuc::MenuFlyout const& flyout) {
@@ -4497,9 +5324,39 @@ static void AppendWinUiNetworkContextMenu(wuc::MenuFlyout const& flyout) {
     RefreshAirplaneModeAsync();
     const bool airplaneEnabled = g_airplaneModeState.load() == 1;
 
-    AppendWinUiContextItem(items, L"Troubleshoot network problems",
-                           TrayContextCommand::NetworkTroubleshoot, L"\xE90F");
-    AppendWinUiSeparator(items);
+    auto appendAirplane = [&]() {
+        wuc::MenuFlyoutItem airplaneItem;
+        airplaneItem.Text(airplaneEnabled ? L"Disable Airplane mode"
+                                          : L"Enable Airplane mode");
+        {
+            wuc::FontIcon icon;
+            icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+            icon.Glyph(L"\xE709");
+            icon.Width(16);
+            icon.Height(16);
+            icon.FontSize(16);
+            airplaneItem.Icon(icon);
+        }
+        auto eventSource = airplaneItem;
+        auto eventToken = eventSource.Click([](wf::IInspectable const&,
+                                               wux::RoutedEventArgs const&) {
+            if (g_unloading) return;
+            ExecuteTrayContextCommand(TrayContextCommand::NetworkToggleAirplaneMode);
+        });
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+            if (auto source = weakSource.get()) source.Click(eventToken);
+        });
+        items.Append(airplaneItem);
+    };
+
+    if (g_settings.swapTroubleshootingWithBottom) {
+        appendAirplane();
+        AppendWinUiSeparator(items);
+    } else {
+        AppendWinUiContextItem(items, L"Troubleshoot network problems",
+                               TrayContextCommand::NetworkTroubleshoot, L"\xE90F");
+        AppendWinUiSeparator(items);
+    }
     AppendWinUiContextItem(items, L"Network and Internet settings",
                            TrayContextCommand::NetworkSettings, L"\xE713");
     AppendWinUiContextItem(items, L"Firewall protection",
@@ -4509,30 +5366,16 @@ static void AppendWinUiNetworkContextMenu(wuc::MenuFlyout const& flyout) {
     AppendWinUiContextItem(items, L"Perform speed test",
                            TrayContextCommand::NetworkSpeedTest, L"\xF42F");
 
-    wuc::MenuFlyoutItem airplaneItem;
-    airplaneItem.Text(airplaneEnabled ? L"Disable Airplane mode"
-                                      : L"Enable Airplane mode");
-    {
-        wuc::FontIcon icon;
-        icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
-        icon.Glyph(L"\xE709");
-        icon.Width(16);
-        icon.Height(16);
-        icon.FontSize(16);
-        airplaneItem.Icon(icon);
+    if (g_settings.swapTroubleshootingWithBottom) {
+        AppendWinUiContextItem(items, L"Troubleshoot network problems",
+                               TrayContextCommand::NetworkTroubleshoot, L"\xE90F");
+        MoveWinUiItemToIndex(items, L"Perform speed test", 0);
+        MoveWinUiItemToIndex(items, airplaneEnabled ? L"Disable Airplane mode"
+                                                    : L"Enable Airplane mode", 1);
+        MoveWinUiTroubleshootToBottom(items, L"Troubleshoot network problems");
+    } else {
+        appendAirplane();
     }
-    {
-        auto eventSource = airplaneItem;
-        auto eventToken = eventSource.Click([](wf::IInspectable const&,
-                          wux::RoutedEventArgs const&) {
-        if (g_unloading) return;
-        ExecuteTrayContextCommand(TrayContextCommand::NetworkToggleAirplaneMode);
-    });
-        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
-            if (auto source = weakSource.get()) source.Click(eventToken);
-        });
-    }
-    items.Append(airplaneItem);
 }
 
 static void AppendWinUiQuickSettingsContextMenu(wuc::MenuFlyout const& flyout) {
@@ -4593,14 +5436,18 @@ static bool ReadBatteryBooleanSetting(
 }
 
 static std::atomic<bool> g_energySaverBusy{false};
+static std::atomic<bool> g_energySaverReadInvalidated{true};
+static winrt::weak_ref<wuc::MenuFlyoutItem> g_energySaverMenuItem;
+static winrt::weak_ref<wuc::MenuFlyoutItem> g_batteryPercentageMenuItem;
 static void InvalidateEnergySaverRead() {
-    g_energySaverState.store(-1);
+    // Keep a usable cached value while a fresh Settings read is in flight.
+    g_energySaverReadInvalidated.store(true);
 }
 static SRWLOCK g_energySaverQueueLock = SRWLOCK_INIT;
 static unsigned g_batteryOperationsQueued = 0;
 
 struct EnergySaverWork {
-    int operation;  // 0: refresh, 1: energy saver toggle, 2: percentage toggle.
+    int operation;  // 0: refresh, 1: saver toggle, 2: percentage toggle, 3: initial percentage enable.
 };
 
 static DWORD WINAPI EnergySaverWorker(void* parameter) {
@@ -4615,26 +5462,41 @@ nextOperation:
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         initialized = true;
         {
-            const bool percentageOperation = work.operation == 2;
+            const bool percentageOperation = work.operation == 2 || work.operation == 3;
             auto setting = GetBatteryBooleanSetting(percentageOperation
                 ? L"SystemSettings_PowerAndBattery_BatteryPercentageToggle"
                 : L"SystemSettings_PowerAndBattery_EnergySaverAlwaysOn");
             bool enabled = ReadBatteryBooleanSetting(setting);
-            if (work.operation) {
-                auto value = winrt::box_value(!enabled);
+            if (work.operation && (work.operation != 3 || !enabled)) {
+                const bool requested = work.operation == 3 ? true : !enabled;
+                auto value = winrt::box_value(requested);
                 winrt::hstring key{L"Value"};
                 winrt::check_hresult(setting->SetValue(
                     reinterpret_cast<HSTRING>(winrt::get_abi(key)),
                     reinterpret_cast<::IInspectable*>(winrt::get_abi(value))));
                 enabled = ReadBatteryBooleanSetting(setting);
+                // SetValue can return before the Settings handler publishes
+                // its new value. Reopen the object to avoid its stale cache.
+                // This bounded verification runs only on the owned worker.
+                for (int attempt = 0; enabled != requested && attempt < 15 && !g_unloading; ++attempt) {
+                    Sleep(100);
+                    setting = GetBatteryBooleanSetting(percentageOperation
+                        ? L"SystemSettings_PowerAndBattery_BatteryPercentageToggle"
+                        : L"SystemSettings_PowerAndBattery_EnergySaverAlwaysOn");
+                    enabled = ReadBatteryBooleanSetting(setting);
+                }
+                if (enabled != requested)
+                    Wh_Log(L"Battery setting change still pending: operation=%d requested=%d observed=%d.",
+                           work.operation, requested, enabled);
             }
             if (percentageOperation)
                 stateChanged = g_batteryPercentageEnabled.exchange(enabled ? 1 : 0) != (enabled ? 1 : 0);
             else stateChanged = g_energySaverState.exchange(enabled ? 1 : 0) != (enabled ? 1 : 0);
+            if (work.operation == 3 && enabled)
+                Wh_SetIntValue(L"batteryPercentageDefaultApplied", 1);
         }
     } catch (...) {
         error = winrt::to_hresult();
-        if (work.operation != 2) g_energySaverState.store(-1);
     }
     if (initialized) winrt::uninit_apartment();
     if (FAILED(error) && work.operation) {
@@ -4642,13 +5504,17 @@ nextOperation:
     }
     AcquireSRWLockExclusive(&g_energySaverQueueLock);
     if (g_batteryOperationsQueued) {
-        work.operation = (g_batteryOperationsQueued & 1) ? 1 : 2;
+        work.operation = (g_batteryOperationsQueued & 1) ? 1 :
+            (g_batteryOperationsQueued & 2) ? 2 : 3;
         g_batteryOperationsQueued &= ~(1u << (work.operation - 1));
         ReleaseSRWLockExclusive(&g_energySaverQueueLock);
         goto nextOperation;
     }
     g_energySaverBusy.store(false);
     ReleaseSRWLockExclusive(&g_energySaverQueueLock);
+    // Refresh open menu items even when the value did not change: the first
+    // read may have completed after the menu was built in an unknown state.
+    PostTrayRefresh(false);
     if (work.operation || stateChanged) RequestTrayRefresh(RefreshPower);
     return 0;
 }
@@ -4676,8 +5542,8 @@ static void QueueEnergySaverWork(int operation) {
 static void RefreshEnergySaverStateAsync() {
     // Registry/power notifications invalidate the cache. Do not continuously
     // create a Settings apartment merely to poll an unchanged preference.
-    if (g_batteryButton && g_energySaverState.load() < 0 &&
-        !g_energySaverBusy.load())
+    if (g_batteryButton && !g_energySaverBusy.load() &&
+        g_energySaverReadInvalidated.exchange(false))
         QueueEnergySaverWork(false);
 }
 
@@ -4691,9 +5557,10 @@ static void AppendWinUiEnergySaverItem(wuc::MenuFlyout const& flyout) {
     icon.Height(16);
     icon.FontSize(16);
     item.Icon(icon);
-    const int state = g_energySaverState.load();
+    const int state = GetEnergySaverDisplayState();
     item.Text(state == 1 ? L"Disable Energy saver" : L"Enable Energy saver");
-    item.IsEnabled(state >= 0 && !g_energySaverBusy.load());
+    item.IsEnabled(state >= 0);
+    g_energySaverMenuItem = winrt::make_weak(item);
     {
         auto eventSource = item;
         auto eventToken = eventSource.Click([](auto const&, auto const&) {
@@ -4719,17 +5586,47 @@ static void SetBatteryPercentageCheck(wuc::MenuFlyoutItem const& item, bool enab
     winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetItemStatus(item, enabled ? L"Checked" : L"Unchecked");
 }
 
+static void RefreshBatteryMenuItems() {
+    if (auto item = g_energySaverMenuItem.get()) {
+        const int state = GetEnergySaverDisplayState();
+        const winrt::hstring text = state == 1 ? L"Disable Energy saver" : L"Enable Energy saver";
+        if (item.Text() != text) item.Text(text);
+        if (item.IsEnabled() != (state >= 0)) item.IsEnabled(state >= 0);
+    }
+    if (auto item = g_batteryPercentageMenuItem.get()) {
+        const int state = g_batteryPercentageEnabled.load();
+        if (item.IsEnabled() != (state >= 0)) item.IsEnabled(state >= 0);
+        const winrt::hstring status = state == 1 ? L"Checked" : L"Unchecked";
+        if (wuxa::AutomationProperties::GetItemStatus(item) != status)
+            SetBatteryPercentageCheck(item, state == 1);
+    }
+}
+
 static void AppendWinUiBatteryPercentageItem(wuc::MenuFlyout const& flyout) {
+    auto toggleAfterClose = std::make_shared<bool>(false);
+    auto closedToken = flyout.Closed([toggleAfterClose](auto const&, auto const&) {
+        // Resizing an open menu's anchor during its closing animation makes
+        // the popup briefly move/clip. Commit the setting after it has closed.
+        if (std::exchange(*toggleAfterClose, false) && !g_unloading)
+            QueueEnergySaverWork(2);
+    });
+    g_contextMenuEventRevokers.push_back([weak = winrt::make_weak(flyout), closedToken] {
+        if (auto source = weak.get()) source.Closed(closedToken);
+    });
     wuc::MenuFlyoutItem item;
     item.Text(L"Battery percentage");
     const int state = g_batteryPercentageEnabled.load();
     SetBatteryPercentageCheck(item, state == 1);
-    item.IsEnabled(state >= 0 && !g_energySaverBusy.load());
+    item.IsEnabled(state >= 0);
+    g_batteryPercentageMenuItem = winrt::make_weak(item);
     {
         auto eventSource = item;
-        auto eventToken = eventSource.Click([](auto const&, auto const&) {
+        auto eventToken = eventSource.Click([toggleAfterClose, weak = winrt::make_weak(flyout)](auto const&, auto const&) {
         if (g_unloading) return;
-        QueueEnergySaverWork(2);
+        if (auto menu = weak.get()) {
+            *toggleAfterClose = true;
+            menu.Hide();
+        }
     });
         g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
@@ -5458,7 +6355,26 @@ struct TrayButtonInputState {
 
 static void AttachTrayButtonHandlers(wux::FrameworkElement const& element,
                                      ButtonKind kind) {
+    if (kind == ButtonKind::Battery) {
+        auto token = element.SizeChanged([](auto const&, auto const&) {
+            // Reconcile the border against the final arranged size, rather
+            // than leaving margins calculated from the previous orientation.
+            if (!g_unloading) PostTrayRefresh(false);
+        });
+        g_uiEventRevokers.push_back([weak = winrt::make_weak(element), token] {
+            if (auto source = weak.get()) source.SizeChanged(token);
+        });
+    }
     auto uiElement = element.as<wux::UIElement>();
+    {
+        auto token = uiElement.PointerEntered([](wf::IInspectable const& sender,
+                                                 wuxi::PointerRoutedEventArgs const&) {
+            if (!g_unloading) ApplyHoverBackgroundMetrics(sender.as<wux::FrameworkElement>());
+        });
+        g_uiEventRevokers.push_back([weak = winrt::make_weak(uiElement), token] {
+            if (auto source = weak.get()) source.PointerEntered(token);
+        });
+    }
     auto input = std::make_shared<TrayButtonInputState>();
     if (auto control = element.try_as<wuc::Control>()) {
         control.IsTabStop(true);
@@ -5572,8 +6488,18 @@ static void AttachTrayButtonHandlers(wux::FrameworkElement const& element,
             }
 
             SuppressMiddleClickTap(kind);
-            if (kind == ButtonKind::Sound) {
+            if (kind == ButtonKind::Sound && g_settings.soundMiddleClickToggleMute) {
                 ToggleDefaultEndpointMute();
+            } else {
+                std::wstring action;
+                switch (kind) {
+                    case ButtonKind::Sound: action = g_settings.soundMiddleClickAction; break;
+                    case ButtonKind::Bluetooth: action = g_settings.bluetoothMiddleClickAction; break;
+                    case ButtonKind::Network: action = g_settings.networkMiddleClickAction; break;
+                    case ButtonKind::ControlCenter: action = g_settings.controlCenterMiddleClickAction; break;
+                    case ButtonKind::Battery: action = g_settings.batteryMiddleClickAction; break;
+                }
+                if (!action.empty()) ExecuteAction(action);
             }
             args.Handled(true);
         });
@@ -5712,15 +6638,46 @@ static OrderedTrayButtons CreateTrayButtons() {
         host.Height(NAN);
         host.RenderTransform(wuxm::TranslateTransform());
         for (auto const& glyph : {g_batteryIcon.primary, g_batteryIcon.overlay, g_batteryIcon.underlay}) {
-            glyph.FontFamily(wuxm::FontFamily(L"SysBatt Fluent Icons"));
+            glyph.FontFamily(g_nativeBatteryFont ? g_nativeBatteryFont :
+                wuxm::FontFamily(L"SysBatt Fluent Icons"));
             glyph.FontSize(g_settings.smallBatteryGlyph ? 12 : 16);
             glyph.Width(NAN);
             glyph.Height(NAN);
         }
         // Replace the original icon content before reparenting its grid.
+        // A separate layer leaves the native outline/fill/charging layers
+        // intact and stays inside the battery's existing measurement box.
+        // Filled vector artwork: FontIcon foreground cannot fill the hollow
+        // interior of an outline glyph. Viewbox scales all paths together.
+        g_batteryLeafIcon = wuxmk::XamlReader::Load(LR"(
+            <Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                     Stretch="Uniform">
+                <Canvas Width="16" Height="16">
+                    <Path Name="SeparateTrayLeafBody"
+                          Data="M8,1 C6,3 2,6 2,9 C2,12 4.8,14 8,14 C11.2,14 14,12 14,9 C14,6 10,3 8,1 Z"
+                          Fill="#8EC22E" Stroke="Black" StrokeThickness="1"
+                          StrokeLineJoin="Round"/>
+                    <Path Name="SeparateTrayLeafStem" Data="M8,7 L8,15"
+                          Stroke="Black" StrokeThickness="1"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                </Canvas>
+            </Viewbox>)").as<wux::FrameworkElement>();
+        g_batteryLeafIcon.Name(L"SeparateTrayBatteryEnergySaverOverlay");
+        g_batteryLeafIcon.Width(g_settings.smallBatteryGlyph ? 9 : 12);
+        g_batteryLeafIcon.Height(g_settings.smallBatteryGlyph ? 9 : 12);
+        wuxm::TranslateTransform leafOffset;
+        leafOffset.X(GetBatteryLeafOffsetX());
+        g_batteryLeafIcon.RenderTransform(leafOffset);
+        g_batteryLeafIcon.HorizontalAlignment(wux::HorizontalAlignment::Left);
+        g_batteryLeafIcon.VerticalAlignment(wux::VerticalAlignment::Bottom);
+        g_batteryLeafIcon.IsHitTestVisible(false);
+        g_batteryLeafIcon.Visibility(wux::Visibility::Collapsed);
+        host.Children().Append(g_batteryLeafIcon);
         if (auto items = g_batteryButton.try_as<wuc::ItemsControl>()) items.Items().Clear();
         else if (auto control = g_batteryButton.try_as<wuc::ContentControl>()) control.Content(nullptr);
         wuc::StackPanel content;
+        g_batteryContent = content;
+        content.Name(L"SeparateTrayBatteryContent");
         content.Orientation(wuc::Orientation::Horizontal);
         content.VerticalAlignment(wux::VerticalAlignment::Center);
         content.Spacing(4);
@@ -5743,6 +6700,7 @@ static OrderedTrayButtons CreateTrayButtons() {
             // The taskbar can be created before application resources exist.
         }
         g_batteryPercentageText.VerticalAlignment(wux::VerticalAlignment::Center);
+        g_batteryPercentageText.HorizontalAlignment(wux::HorizontalAlignment::Center);
         wuxm::TranslateTransform percentageOffset;
         // Keep the full inter-item gap; only a small baseline correction is
         // needed. These are XAML DIPs, scaled by the monitor's DPI.
@@ -5825,6 +6783,10 @@ static bool TryInjectBesideControlCenterButton(wux::FrameworkElement const& root
         g_trayControlCenterButton = controlCenterButton;
         CaptureTrayButtonMetricsFromPanel(parentPanel, controlCenterButton);
         AttachTaskbarSizeRefreshHandlers(parentElement, controlCenterButton);
+        ResolveNativeNetworkGlyphs();
+        ResolveNativeSoundGlyphs();
+        ApplyNativeBatteryFont();
+        ResolveNativeBatteryGlyphs();
         HideOriginalGroupedButton(controlCenterButton);
 
         auto children = parentPanel.Children();
@@ -5963,6 +6925,10 @@ static bool ApplyXamlButtons() {
     g_trayPanel = trayGrid;
     g_trayControlCenterButton = controlCenterButton;
     AttachTaskbarSizeRefreshHandlers(trayGrid, controlCenterButton);
+    ResolveNativeNetworkGlyphs();
+    ResolveNativeSoundGlyphs();
+    ApplyNativeBatteryFont();
+    ResolveNativeBatteryGlyphs();
     HideOriginalGroupedButton(controlCenterButton);
 
     int insertCol = static_cast<int>(trayGrid.ColumnDefinitions().Size());
@@ -6118,7 +7084,9 @@ static void RemoveXamlButtons() {
     g_compactGroupedButton = g_trayControlCenterButton = g_originalGroupedButton = nullptr;
     g_bluetoothIcon = {}; g_networkIcon = {}; g_soundIcon = {};
     g_batteryIcon = {}; g_compactGroupedIcon = {};
+    g_batteryLeafIcon = nullptr;
     g_batteryPercentageText = nullptr;
+    g_batteryContent = nullptr;
     g_trayPanel = nullptr;
     g_nativeGroupedButtonStyle = g_nativeNotifyIconStyle = nullptr;
     g_sizeRefreshTrayElement = g_sizeRefreshControlCenterButton = nullptr;
@@ -6251,7 +7219,526 @@ static bool HookTaskbarDllSymbols() {
     return true;
 }
 
+// Sound Output Master Volume, by Asteski, imported from version 0.2.6.
+// Distributed under GPL-3.0. The glyph size is fixed at 16 pixels.
+namespace SoundOutputMasterVolume {
+namespace xaml = winrt::Windows::UI::Xaml;
+namespace controls = xaml::Controls;
+namespace media = xaml::Media;
+namespace automation = xaml::Automation;
+namespace foundation = winrt::Windows::Foundation;
+using winrt::Windows::UI::Core::CoreDispatcher;
+using winrt::Windows::UI::Core::CoreDispatcherPriority;
+
+static std::atomic<bool> g_stopping = false;
+static constexpr int kGlyphSize = 16;
+static std::atomic<bool> g_enabled = false;
+static void LoadSettings() {
+    g_enabled = Wh_GetIntSetting(L"sound.showMasterVolumeInOutputPicker") != 0;
+}
+static HANDLE g_stopEvent;
+static HANDLE g_attachThread;
+static wchar_t g_statusKey[MAX_PATH];
+static void Status(PCWSTR message) {
+    Wh_SetStringValue(g_statusKey, message);
+    Wh_Log(L"%s", message);
+}
+
+// All XAML work, including Core Audio access, stays on its owning UI thread.
+// Poll only while the flyout row is loaded. Resolving the default endpoint on
+// every operation also prevents a device switch from leaving stale bindings.
+static winrt::com_ptr<IAudioEndpointVolume> DefaultVolume() {
+    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+    winrt::check_hresult(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+        CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), enumerator.put_void()));
+    winrt::com_ptr<IMMDevice> device;
+    winrt::check_hresult(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
+                                                            device.put()));
+    winrt::com_ptr<IAudioEndpointVolume> volume;
+    winrt::check_hresult(device->Activate(__uuidof(IAudioEndpointVolume),
+                                         CLSCTX_INPROC_SERVER, nullptr,
+                                         volume.put_void()));
+    return volume;
+}
+
+struct MasterRow : std::enable_shared_from_this<MasterRow> {
+    controls::Grid row{nullptr}, wrapper{nullptr};
+    controls::Panel parent{nullptr};
+    xaml::FrameworkElement list{nullptr};
+    controls::Button mute{nullptr};
+    controls::FontIcon glyph{nullptr};
+    controls::Slider slider{nullptr};
+    xaml::DispatcherTimer timer{nullptr};
+    winrt::event_token clicked{}, changed{}, loaded{}, unloaded{}, tick{};
+    winrt::event_token entered{}, exited{}, themeChanged{};
+    int oldRow{}, oldColumn{}, oldRowSpan{}, oldColumnSpan{};
+    bool updating = false;
+    bool hasMuteState = false, lastMuted = false;
+    bool hovering = false;
+
+    void UpdateHighlight() noexcept {
+        try {
+            auto color = winrt::Windows::UI::Colors::Transparent();
+            if (hovering) {
+                color = mute.ActualTheme() == xaml::ElementTheme::Light
+                    ? winrt::Windows::UI::Color{255, 233, 233, 233}
+                    : winrt::Windows::UI::Color{255, 49, 49, 49};
+            }
+            mute.Background(media::SolidColorBrush(color));
+        } catch (...) { Wh_Log(L"Hover update failed: %08X", winrt::to_hresult()); }
+    }
+
+    void Refresh() noexcept {
+        try {
+            const int size = kGlyphSize;
+            if (glyph.FontSize() != size) glyph.FontSize(size);
+            auto volume = DefaultVolume();
+            float level;
+            BOOL muted;
+            winrt::check_hresult(volume->GetMasterVolumeLevelScalar(&level));
+            winrt::check_hresult(volume->GetMute(&muted));
+            updating = true;
+            slider.Value(std::round(level * 100));
+            updating = false;
+            slider.IsEnabled(true);
+            mute.IsEnabled(true);
+            glyph.Glyph(muted ? L"\xE74F" : level == 0 ? L"\xE992" :
+                        level <= 0.33f ? L"\xE993" :
+                        level <= 0.66f ? L"\xE994" : L"\xE995");
+            if (!hasMuteState || lastMuted != (muted != FALSE)) {
+                automation::AutomationProperties::SetName(mute,
+                                                         muted ? L"Unmute" : L"Mute");
+                controls::ToolTipService::SetToolTip(mute,
+                    winrt::box_value(muted ? L"Unmute" : L"Mute"));
+                lastMuted = muted != FALSE;
+                hasMuteState = true;
+            }
+        } catch (...) {
+            updating = false;
+            slider.IsEnabled(false);
+            mute.IsEnabled(false);
+            glyph.Glyph(L"\xE74F");
+        }
+    }
+
+    void Create(xaml::FrameworkElement const& appList, controls::Panel const& host) {
+        list = appList;
+        parent = host;
+        row = controls::Grid();
+        row.Name(L"SoundOutputMasterVolume");
+        row.Height(44);
+        row.Margin({0, 0, 0, 0});
+        auto iconColumn = controls::ColumnDefinition();
+        iconColumn.Width({40, xaml::GridUnitType::Pixel});
+        row.ColumnDefinitions().Append(iconColumn);
+        auto sliderColumn = controls::ColumnDefinition();
+        sliderColumn.Width({1, xaml::GridUnitType::Star});
+        row.ColumnDefinitions().Append(sliderColumn);
+        mute = controls::Button();
+        mute.Name(L"SoundOutputMasterMute");
+        // Only explicit pointer handling controls this background. There are
+        // no native state animations or competing theme-resource setters.
+        mute.Template(xaml::Markup::XamlReader::Load(LR"(
+            <ControlTemplate TargetType="Button"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        )").as<controls::ControlTemplate>());
+        mute.Width(40);
+        mute.Height(40);
+        mute.Padding({0, 0, 0, 0});
+        mute.VerticalAlignment(xaml::VerticalAlignment::Center);
+        // Translate the whole button, including
+        // its hit target, without shifting the adjacent slider's left edge.
+        mute.Background(media::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+        mute.BorderBrush(media::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+        mute.BorderThickness({0, 0, 0, 0});
+        auto buttonOffset = media::TranslateTransform();
+        buttonOffset.X(2);
+        buttonOffset.Y(1);
+        mute.RenderTransform(buttonOffset);
+        glyph = controls::FontIcon();
+        glyph.Name(L"SoundOutputMasterGlyph");
+        glyph.FontFamily(media::FontFamily(L"Segoe Fluent Icons"));
+        glyph.FontSize(kGlyphSize);
+        mute.Content(glyph);
+        slider = controls::Slider();
+        slider.Name(L"SoundOutputMasterSlider");
+        slider.Minimum(0);
+        slider.Maximum(100);
+        slider.StepFrequency(1);
+        slider.SmallChange(1);
+        slider.LargeChange(10);
+        slider.Margin({6, 0, 16, 0});
+        slider.VerticalAlignment(xaml::VerticalAlignment::Center);
+        automation::AutomationProperties::SetName(slider, L"Master volume");
+        controls::Grid::SetColumn(slider, 1);
+        row.Children().Append(mute);
+        row.Children().Append(slider);
+
+        auto weak = weak_from_this();
+        entered = mute.PointerEntered([weak](auto const&, auto const&) {
+            if (auto self = weak.lock(); self && !g_stopping) {
+                self->hovering = true;
+                self->UpdateHighlight();
+            }
+        });
+        exited = mute.PointerExited([weak](auto const&, auto const&) {
+            if (auto self = weak.lock(); self && !g_stopping) {
+                self->hovering = false;
+                self->UpdateHighlight();
+            }
+        });
+        themeChanged = mute.ActualThemeChanged([weak](auto const&, auto const&) {
+            if (auto self = weak.lock(); self && !g_stopping)
+                self->UpdateHighlight();
+        });
+        clicked = mute.Click([weak](auto const&, auto const&) {
+            if (auto self = weak.lock(); self && !g_stopping) {
+                try {
+                    auto volume = DefaultVolume();
+                    BOOL muted;
+                    winrt::check_hresult(volume->GetMute(&muted));
+                    winrt::check_hresult(volume->SetMute(!muted, nullptr));
+                } catch (...) { Wh_Log(L"Mute failed: %08X", winrt::to_hresult()); }
+                self->Refresh();
+            }
+        });
+        changed = slider.ValueChanged([weak](auto const&, auto const& args) {
+            if (auto self = weak.lock(); self && !self->updating && !g_stopping) {
+                try {
+                    auto volume = DefaultVolume();
+                    winrt::check_hresult(volume->SetMasterVolumeLevelScalar(
+                        static_cast<float>(args.NewValue() / 100), nullptr));
+                    winrt::check_hresult(volume->SetMute(FALSE, nullptr));
+                } catch (...) { Wh_Log(L"Volume failed: %08X", winrt::to_hresult()); }
+                self->Refresh();
+            }
+        });
+        timer = xaml::DispatcherTimer();
+        timer.Interval(std::chrono::milliseconds(150));
+        tick = timer.Tick([weak](auto const&, auto const&) {
+            if (auto self = weak.lock(); self && !g_stopping) self->Refresh();
+        });
+        loaded = row.Loaded([weak](auto const&, auto const&) {
+            if (auto self = weak.lock(); self && !g_stopping) {
+                self->Refresh();
+                self->timer.Start();
+            }
+        });
+        unloaded = row.Unloaded([weak](auto const&, auto const&) {
+            if (auto self = weak.lock()) self->timer.Stop();
+        });
+
+        wrapper = controls::Grid();
+        wrapper.Name(L"SoundOutputMasterVolumeHost");
+        auto top = controls::RowDefinition();
+        top.Height({1, xaml::GridUnitType::Auto});
+        wrapper.RowDefinitions().Append(top);
+        wrapper.RowDefinitions().Append(controls::RowDefinition());
+        oldRow = controls::Grid::GetRow(list);
+        oldColumn = controls::Grid::GetColumn(list);
+        oldRowSpan = controls::Grid::GetRowSpan(list);
+        oldColumnSpan = controls::Grid::GetColumnSpan(list);
+        controls::Grid::SetRow(wrapper, oldRow);
+        controls::Grid::SetColumn(wrapper, oldColumn);
+        controls::Grid::SetRowSpan(wrapper, oldRowSpan);
+        controls::Grid::SetColumnSpan(wrapper, oldColumnSpan);
+        uint32_t index;
+        if (!parent.Children().IndexOf(list, index))
+            throw winrt::hresult_error(E_UNEXPECTED);
+        parent.Children().RemoveAt(index);
+        try {
+            controls::Grid::SetRow(list, 1);
+            controls::Grid::SetColumn(list, 0);
+            controls::Grid::SetRowSpan(list, 1);
+            controls::Grid::SetColumnSpan(list, 1);
+            wrapper.Children().Append(row);
+            wrapper.Children().Append(list);
+            parent.Children().InsertAt(index, wrapper);
+        } catch (...) {
+            wrapper.Children().Clear();
+            RestorePlacement();
+            parent.Children().InsertAt(index, list);
+            throw;
+        }
+        Refresh();
+        Wh_Log(L"Inserted master volume above %s#%s",
+               winrt::get_class_name(list).c_str(), list.Name().c_str());
+        Status(L"Master volume row inserted");
+    }
+
+    void RestorePlacement() {
+        controls::Grid::SetRow(list, oldRow);
+        controls::Grid::SetColumn(list, oldColumn);
+        controls::Grid::SetRowSpan(list, oldRowSpan);
+        controls::Grid::SetColumnSpan(list, oldColumnSpan);
+    }
+
+    void Remove() noexcept {
+        try {
+            if (timer) { timer.Stop(); timer.Tick(tick); }
+            if (mute) {
+                mute.Click(clicked);
+                mute.PointerEntered(entered);
+                mute.PointerExited(exited);
+                mute.ActualThemeChanged(themeChanged);
+            }
+            if (slider) slider.ValueChanged(changed);
+            if (row) { row.Loaded(loaded); row.Unloaded(unloaded); }
+            if (wrapper && parent && list) {
+                uint32_t index;
+                if (parent.Children().IndexOf(wrapper, index)) {
+                    parent.Children().RemoveAt(index);
+                    wrapper.Children().Clear();
+                    RestorePlacement();
+                    parent.Children().InsertAt(index, list);
+                }
+            }
+        } catch (...) { Wh_Log(L"Row cleanup failed: %08X", winrt::to_hresult()); }
+    }
+};
+
+struct UiState {
+    DWORD threadId{};
+    CoreDispatcher dispatcher{nullptr};
+    std::vector<std::shared_ptr<MasterRow>> rows;
+    std::vector<winrt::weak_ref<xaml::FrameworkElement>> pending;
+    struct Observer {
+        winrt::weak_ref<xaml::FrameworkElement> element;
+        winrt::event_token loaded;
+    };
+    std::vector<Observer> observers;
+};
+static std::mutex g_uiMutex;
+static std::vector<std::shared_ptr<UiState>> g_uiStates;
+static std::shared_ptr<UiState> CurrentUi(xaml::FrameworkElement const& element) {
+    std::lock_guard lock(g_uiMutex);
+    for (auto const& state : g_uiStates)
+        if (state->threadId == GetCurrentThreadId()) return state;
+    auto state = std::make_shared<UiState>();
+    state->threadId = GetCurrentThreadId();
+    state->dispatcher = element.Dispatcher();
+    g_uiStates.push_back(state);
+    return state;
+}
+
+static xaml::FrameworkElement FindAppList(xaml::DependencyObject const& root) {
+    // Select the items control within VolumeMixerList, never the endpoint list
+    // or an individual app's visual template.
+    for (int i = 0, count = media::VisualTreeHelper::GetChildrenCount(root);
+         i < count; ++i) {
+        auto child = media::VisualTreeHelper::GetChild(root, i);
+        if (child.try_as<controls::ItemsControl>())
+            return child.as<xaml::FrameworkElement>();
+        if (auto found = FindAppList(child)) return found;
+    }
+    return nullptr;
+}
+
+static void ConsiderElement(xaml::FrameworkElement const& element) {
+    if (!g_enabled || g_stopping) return;
+    auto mixer = element;
+    while (mixer && winrt::get_class_name(mixer) != L"ControlCenter.VolumeMixerList") {
+        mixer = media::VisualTreeHelper::GetParent(mixer)
+                    .try_as<xaml::FrameworkElement>();
+    }
+    if (!mixer) return;
+    auto state = CurrentUi(mixer);
+    for (auto it = state->rows.begin(); it != state->rows.end();) {
+        if (!(*it)->wrapper.XamlRoot()) {
+            (*it)->Remove();
+            it = state->rows.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto const& row : state->rows) {
+        if (row->wrapper.XamlRoot() == mixer.XamlRoot() &&
+            row->wrapper.Parent()) {
+            // One mixer per flyout XamlRoot. Detached old trees must not stop
+            // a newly built flyout from getting its own row.
+            auto ancestor = row->wrapper.as<xaml::DependencyObject>();
+            while (ancestor) {
+                if (ancestor == mixer) return;
+                ancestor = media::VisualTreeHelper::GetParent(ancestor);
+            }
+        }
+    }
+    for (auto const& weak : state->pending) if (weak.get() == mixer) return;
+    auto weak = winrt::make_weak(mixer);
+    state->pending.push_back(weak);
+    state->dispatcher.RunAsync(CoreDispatcherPriority::Low, [weak, state] {
+        if (g_stopping || !g_enabled) { state->pending.clear(); return; }
+        try {
+            auto mixer = weak.get();
+            if (mixer) {
+                auto list = FindAppList(mixer);
+                if (list) {
+                    auto parent = media::VisualTreeHelper::GetParent(list)
+                                      .try_as<controls::Panel>();
+                    if (parent) {
+                        auto row = std::make_shared<MasterRow>();
+                        row->Create(list, parent);
+                        state->rows.push_back(std::move(row));
+                    } else {
+                        Wh_Log(L"Mixer list parent isn't a Panel; no row inserted");
+                        Status(L"Mixer list parent isn't a Panel");
+                    }
+                } else {
+                    Status(L"Mixer loaded but app list not found");
+                }
+            }
+        } catch (...) { Wh_Log(L"Injection failed: %08X", winrt::to_hresult()); }
+        state->pending.clear();
+    });
+}
+
+// IXamlType::ActivateInstance has a public COM ABI. The shell's metadata
+// provider supplies the actual function used by the compiled XAML loader,
+// including when WinRT activation factories aren't used for custom controls.
+using ActivateType_t = HRESULT(WINAPI*)(void*, void**);
+static ActivateType_t ActivateType_Original;
+static HRESULT WINAPI ActivateType_Hook(void* type, void** result) {
+    HRESULT hr = ActivateType_Original(type, result);
+    if (FAILED(hr) || !result || !*result || g_stopping) return hr;
+    try {
+        foundation::IInspectable object{nullptr};
+        winrt::copy_from_abi(object, *result);
+        auto element = object.try_as<xaml::FrameworkElement>();
+        if (element && winrt::get_class_name(element) == L"ControlCenter.VolumeMixerList") {
+            auto state = CurrentUi(element);
+            auto weak = winrt::make_weak(element);
+            auto token = element.Loaded([weak](auto const&, auto const&) {
+                if (g_stopping) return;
+                try {
+                    if (auto mixer = weak.get()) ConsiderElement(mixer);
+                } catch (...) { Wh_Log(L"Mixer Loaded failed: %08X", winrt::to_hresult()); }
+            });
+            state->observers.push_back({weak, token});
+            Wh_Log(L"Observed native VolumeMixerList activation");
+            Status(L"Observed native VolumeMixerList activation");
+        }
+    } catch (...) { Wh_Log(L"Mixer activation observation failed: %08X", winrt::to_hresult()); }
+    return hr;
+}
+
+static DWORD WINAPI AttachThread(void*) {
+    HRESULT apartmentHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(apartmentHr)) return 0;
+    while (!g_stopping) {
+        auto module = GetModuleHandleW(L"ControlCenter.dll");
+        if (!module) module = GetModuleHandleW(L"Windows.UI.ControlCenter.dll");
+        if (module) {
+            try {
+                auto factoryFn = reinterpret_cast<HRESULT(WINAPI*)(void*,void**)>(
+                    GetProcAddress(module, "DllGetActivationFactory"));
+                if (!factoryFn) throw winrt::hresult_error(E_NOINTERFACE);
+                winrt::hstring name = L"ControlCenter.XamlMetaDataProvider";
+                foundation::IActivationFactory factory{nullptr};
+                winrt::check_hresult(factoryFn(winrt::get_abi(name), winrt::put_abi(factory)));
+                auto provider = factory.ActivateInstance<foundation::IInspectable>()
+                    .as<xaml::Markup::IXamlMetadataProvider>();
+                auto type = provider.GetXamlType(L"ControlCenter.VolumeMixerList");
+                if (!type || !type.IsConstructible()) throw winrt::hresult_error(E_NOINTERFACE);
+                // Six IInspectable methods precede twelve IXamlType getters.
+                auto target = (*reinterpret_cast<void***>(winrt::get_abi(type)))[18];
+                if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(ActivateType_Hook),
+                                        reinterpret_cast<void**>(&ActivateType_Original)) ||
+                    !Wh_ApplyHookOperations()) throw winrt::hresult_error(E_FAIL);
+                Wh_Log(L"Hooked native mixer XAML activation at %p; no diagnostics connection", target);
+                Status(L"Native mixer activation hooked; no diagnostics connection");
+                break;
+            } catch (...) {
+                Wh_Log(L"Mixer activation hook unavailable: %08X", winrt::to_hresult());
+                // A loaded but incompatible provider won't improve by polling.
+                break;
+            }
+        }
+        if (WaitForSingleObject(g_stopEvent, 250) != WAIT_TIMEOUT) break;
+    }
+    CoUninitialize();
+    return 0;
+}
+
+BOOL Init() {
+    LoadSettings();
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    auto name = wcsrchr(path, L'\\');
+    swprintf_s(g_statusKey, L"%s.status", name ? name + 1 : path);
+    Status(L"Waiting for ControlCenter module");
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    return g_stopEvent != nullptr;
+}
+
+void AfterInit() {
+    g_attachThread = CreateThread(nullptr, 0, AttachThread, nullptr, 0, nullptr);
+    if (!g_attachThread) Wh_Log(L"Couldn't start XAML attachment thread");
+}
+
+void SettingsChanged() {
+    LoadSettings();
+    std::vector<std::shared_ptr<UiState>> states;
+    { std::lock_guard lock(g_uiMutex); states = g_uiStates; }
+    for (auto const& state : states) {
+        try {
+            state->dispatcher.RunAsync(CoreDispatcherPriority::Low, [state] {
+                if (g_stopping) return;
+                if (!g_enabled) {
+                    for (auto const& row : state->rows) row->Remove();
+                    state->rows.clear();
+                } else {
+                    for (auto const& observer : state->observers)
+                        if (auto element = observer.element.get()) ConsiderElement(element);
+                }
+            }).get();
+        } catch (...) { Wh_Log(L"Master volume settings update failed: %08X", winrt::to_hresult()); }
+    }
+}
+
+void Uninit() {
+    g_stopping = true;
+    SetEvent(g_stopEvent);
+    if (g_attachThread) {
+        WaitForSingleObject(g_attachThread, INFINITE);
+        CloseHandle(g_attachThread);
+    }
+    std::vector<std::shared_ptr<UiState>> states;
+    { std::lock_guard lock(g_uiMutex); states.swap(g_uiStates); }
+    for (auto const& state : states) {
+        try {
+            // Queue behind the observation callbacks at the same priority so
+            // no queued lambda remains when Windhawk unloads the module.
+            state->dispatcher.RunAsync(CoreDispatcherPriority::Low, [state] {
+                for (auto const& observer : state->observers)
+                    if (auto element = observer.element.get())
+                        element.Loaded(observer.loaded);
+                state->observers.clear();
+                for (auto const& row : state->rows) row->Remove();
+                state->rows.clear();
+                state->pending.clear();
+            }).get();
+        } catch (...) { Wh_Log(L"UI thread has shut down: %08X", winrt::to_hresult()); }
+    }
+    CloseHandle(g_stopEvent);
+}
+
+
+} // namespace SoundOutputMasterVolume
+
+static bool g_isSoundOutputHost = false;
+
 BOOL Wh_ModInit() {
+    wchar_t processPath[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath));
+    const wchar_t* processName = wcsrchr(processPath, L'\\');
+    processName = processName ? processName + 1 : processPath;
+    g_isSoundOutputHost = _wcsicmp(processName, L"explorer.exe") != 0;
+    if (g_isSoundOutputHost) return SoundOutputMasterVolume::Init();
     LoadSettings();
 
     if (!HookTaskbarDllSymbols()) {
@@ -6263,10 +7750,12 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (g_isSoundOutputHost) { SoundOutputMasterVolume::AfterInit(); return; }
     ApplyFromTaskbarThread();
 }
 
 void Wh_ModSettingsChanged() {
+    if (g_isSoundOutputHost) { SoundOutputMasterVolume::SettingsChanged(); return; }
     if (HWND currentTaskbar = FindCurrentProcessTaskbarWnd())
         g_taskbarWnd = currentTaskbar;
     if (g_taskbarWnd &&
@@ -6279,6 +7768,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (g_isSoundOutputHost) { SoundOutputMasterVolume::Uninit(); return; }
     g_unloading = true;
     // This can wait for network/audio RPC, so do it on Windhawk's unload
     // thread before any XAML cleanup is marshalled to Explorer's UI thread.
