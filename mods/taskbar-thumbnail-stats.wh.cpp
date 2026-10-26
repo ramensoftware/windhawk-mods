@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.5
+// @version         1.6
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
@@ -88,6 +88,12 @@ slowed down, and only while a thumbnail is actually visible.
   $options:
   - overlay: Over the preview image, at its bottom
   - below: Below the preview image
+- singleLine: true
+  $name: Single line
+  $description: >-
+    Keep the line on one row, shortening it with "…" if it doesn't fit. When
+    disabled, a long line wraps to a second row, which can make the line
+    change height as the values change
 - fontSize: 10
   $name: Font size
   $description: In pixels (the thumbnail title is about 12)
@@ -189,6 +195,7 @@ struct Settings {
     bool showProcessCount = true;
     bool includeChildren = true;
     Position position = Position::overlay;
+    bool singleLine = true;
     double fontSize = 10;
     BackgroundMode background = BackgroundMode::accent;
     Color backgroundColor{255, 58, 110, 165};
@@ -1233,6 +1240,15 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
 
     textBlock.FontSize(settings.fontSize);
 
+    // A line that barely fits would otherwise wrap and unwrap as the values
+    // change, making the line jump between one and two rows.
+    if (settings.singleLine) {
+        textBlock.TextWrapping(TextWrapping::NoWrap);
+        textBlock.TextTrimming(TextTrimming::CharacterEllipsis);
+    } else {
+            textBlock.TextTrimming(TextTrimming::None);
+    }
+
     // Reset what a previous style may have set.
     border.ClearValue(Controls::Border::BackgroundProperty());
     textBlock.ClearValue(Controls::TextBlock::ForegroundProperty());
@@ -1977,6 +1993,8 @@ void LoadSettings() {
     auto position = WindhawkUtils::StringSetting::make(L"position");
     settings->position = wcscmp(position.get(), L"below") == 0 ? Position::below
                                                          : Position::overlay;
+
+    settings->singleLine = Wh_GetIntSetting(L"singleLine");
 
     int fontSize = Wh_GetIntSetting(L"fontSize");
     settings->fontSize = (fontSize >= 6 && fontSize <= 40) ? fontSize : 10;
