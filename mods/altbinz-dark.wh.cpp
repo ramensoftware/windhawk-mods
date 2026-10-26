@@ -131,6 +131,7 @@ back completely.
 #include <string.h>
 #include <math.h>
 #include <algorithm>
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -262,19 +263,19 @@ static std::unordered_map<HMODULE, int>* g_callerKind;  // 1 = the app, 2 = syst
 // The answer only depends on the call site, and the same few call sites draw all the time: a small
 // table (address and kind in one word, so a read is never torn) avoids the module look-up
 // (which takes the loader lock) for each call.
-static uint32_t g_callerCache[1024];
+static std::atomic<uint32_t> g_callerCache[1024];
 
 static int CallerKindUncached(void* ret);
 
 static int CallerKind(void* ret) {
     const uint32_t a = (uint32_t)(uintptr_t)ret;
     const size_t slot = ((a >> 2) ^ (a >> 12)) & 1023;
-    const uint32_t v = g_callerCache[slot];
+    const uint32_t v = g_callerCache[slot].load(std::memory_order_relaxed);
     if (v != 0 && (v & ~3u) == (a & ~3u)) {
         return (int)(v & 3u);
     }
     const int kind = CallerKindUncached(ret);
-    g_callerCache[slot] = (a & ~3u) | (uint32_t)kind;
+    g_callerCache[slot].store((a & ~3u) | (uint32_t)kind, std::memory_order_relaxed);
     return kind;
 }
 
@@ -1095,7 +1096,8 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
         return false;
     }
 
-    const bool pooled = TryEnterCriticalSection(&g_tempCs) != FALSE;
+    // only small blits use the shared bitmap, the few large ones allocate their own (keeps the pool small)
+    const bool pooled = w <= 1024 && h <= 1024 && TryEnterCriticalSection(&g_tempCs) != FALSE;
     HDC mem = nullptr;
     HBITMAP tmp = nullptr;
     HGDIOBJ old = nullptr;
@@ -1762,7 +1764,6 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    memset(g_callerCache, 0, sizeof(g_callerCache));
     LoadSettings();
     RestoreBitmaps();  // the skin bitmaps are re-colored again with the new values on their next use
     for (int i = 0; i < 32; i++) {
