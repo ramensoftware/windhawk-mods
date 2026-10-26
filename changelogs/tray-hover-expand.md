@@ -1,3 +1,7 @@
+## 1.7.1 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/25974f385d970a26b236378ed19cb5df42b62122/mods/tray-hover-expand.wh.cpp))
+
+* Do not suppress hover when the taskbar itself is visible under the cursor, so an auto-hiding taskbar works as soon as it is revealed, and a maximized window is no longer mistaken for a fullscreen app
+
 ## 1.7.0 ([Sep 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/691c1898c7f30d05c5f44e919692a0268fb815f1/mods/tray-hover-expand.wh.cpp))
 
 - Identify the chevron by its class name plus AutomationId, independent of the  display language, and accept it only when exactly one element matches

@@ -511,6 +511,33 @@
         "version": "1.2"
       }
     },
+    "altbinz-dark": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793027100000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793027100000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86"
+        ],
+        "author": "MrSmith",
+        "compilerOptions": "-lgdi32 -luser32 -luxtheme",
+        "description": "Dark colors for the skinned user interface of Alt.Binz, with a custom surface color, gradients and colored progress bars",
+        "github": "https://github.com/MrSmith2017",
+        "include": [
+          "altbinz.exe"
+        ],
+        "name": "Alt.Binz Dark Mode",
+        "version": "1.0.0"
+      }
+    },
     "always-allow-ctrl-shift-enter": {
       "details": {
         "defaultSorting": 495,
@@ -689,6 +716,27 @@
         ],
         "name": "App Theme Crash Fixer",
         "version": "1.0.0"
+      }
+    },
+    "app-volume-booster": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793027077000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793027077000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "shubho",
+        "compilerOptions": "-lole32",
+        "description": "Boost the volume of chosen apps beyond 100%, with optional compressor mode and per-app overrides",
+        "github": "https://github.com/shubho193",
+        "name": "App Volume Booster",
+        "version": "1.0"
       }
     },
     "audio-hardware-volume-preset": {
@@ -3603,20 +3651,21 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": 3.1730613196314037,
-        "updated": 1791662543000,
+        "updated": 1793027054000,
         "users": 251
       },
       "metadata": {
         "author": "Ulrizza",
         "compilerOptions": "-ld2d1 -lole32 -lgdi32 -lshell32 -lwindowscodecs -lwinmm -lshcore",
-        "description": "A fully customizable cursor trail overlay for the Windows desktop.",
+        "description": "A fully customizable cursor trail for the Windows desktop.",
         "github": "https://github.com/Ulrizza",
         "include": [
-          "windhawk.exe"
+          "windhawk.exe",
+          "explorer.exe"
         ],
         "license": "MIT",
         "name": "Simple Cursor Trail",
-        "version": "1.2"
+        "version": "1.6"
       }
     },
     "custom-cached-context-menu": {
@@ -7954,6 +8003,34 @@
         "version": "1.4"
       }
     },
+    "gpu-accelerated-explorer-view": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793027070000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793027070000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DarkionAvey",
+        "compilerOptions": "-ldcomp -ld3d11 -ldxgi -ld2d1 -ldwrite -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -luser32 -lgdi32 -lwindowscodecs -ldwmapi -luxtheme -lpropsys -lcomctl32 -lruntimeobject",
+        "description": "GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations",
+        "github": "https://github.com/DarkionAvey",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-2.0",
+        "name": "GPU-accelerated explorer.exe list and grid views",
+        "version": "0.9.240"
+      }
+    },
     "harmful-files-autoaccept": {
       "details": {
         "defaultSorting": 920,
@@ -8863,6 +8940,35 @@
         "name": "Keyboard Shortcut Actions",
         "twitter": "https://twitter.com/m417z",
         "version": "1.0.1"
+      }
+    },
+    "language-applet-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793027060000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793027060000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "AdmXP8",
+        "compilerOptions": "-lwininet -ladvapi32",
+        "description": "Brings back the Control Panel \"Language\" applet on later versions of Windows downloading the original files from Microsoft's symbol server",
+        "github": "https://github.com/AdmXP8",
+        "include": [
+          "explorer.exe",
+          "rundll32.exe",
+          "control.exe"
+        ],
+        "name": "Language Applet Restorer",
+        "version": "1.0.0"
       }
     },
     "legacy-alt-tab": {
@@ -10061,7 +10167,7 @@
         "ratingUsers": 28,
         "reviews": 0,
         "trendingSorting": 67.5,
-        "updated": 1792814415000,
+        "updated": 1793027083000,
         "users": 675
       },
       "metadata": {
@@ -10070,13 +10176,13 @@
         ],
         "author": "caotu2k5",
         "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32",
-        "description": "Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution.",
+        "description": "Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, app suggestions while typing, and instant history execution.",
         "github": "https://github.com/caotu2k5",
         "include": [
           "explorer.exe"
         ],
         "name": "Modern Run Dialog UI For Windows 10 & 11",
-        "version": "3.0.4"
+        "version": "3.0.6"
       }
     },
     "modernize-folder-picker-dialog": {
@@ -12324,6 +12430,32 @@
         ],
         "license": "MIT",
         "name": "Proportional cursor between monitors",
+        "version": "1.0.0"
+      }
+    },
+    "psp-dark-mdi-frames": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793027089000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793027089000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "MrSmith",
+        "compilerOptions": "-lgdi32 -luser32",
+        "description": "Dark title bars and frames for the image windows in Corel PaintShop Pro",
+        "github": "https://github.com/MrSmith2017",
+        "homepage": "https://github.com/MrSmith2017/psp-dark-image-windows",
+        "include": [
+          "Corel PaintShop Pro.exe"
+        ],
+        "license": "MIT",
+        "name": "PaintShop Pro Dark Image Windows",
         "version": "1.0.0"
       }
     },
@@ -17879,7 +18011,7 @@
         "ratingUsers": 61,
         "reviews": 0,
         "trendingSorting": -0.12430509074337506,
-        "updated": 1788289180000,
+        "updated": 1793027095000,
         "users": 955
       },
       "metadata": {
@@ -17892,7 +18024,7 @@
         ],
         "license": "MIT",
         "name": "Tray hover expand",
-        "version": "1.7.0"
+        "version": "1.7.1"
       }
     },
     "tray-overflow-list": {
@@ -19316,7 +19448,7 @@
         "rating": 9,
         "ratingBreakdown": [8, 10, 19, 16, 143],
         "ratingUsers": 196,
-        "reviews": 1,
+        "reviews": 2,
         "trendingSorting": 0.2721332638562602,
         "updated": 1792148509000,
         "users": 3376
@@ -20297,6 +20429,31 @@
         "license": "MIT",
         "name": "Window Opacity",
         "version": "0.1.0"
+      }
+    },
+    "window-rules": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793027065000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793027065000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "metanoid18",
+        "compilerOptions": "-luser32 -ldwmapi",
+        "description": "Apply a rule to an app's windows: force position and size, move to a monitor, set opacity, keep on top. Matches executable, class and title.",
+        "github": "https://github.com/Metanoid18",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Window Rules",
+        "version": "1.0"
       }
     },
     "window-wobble": {

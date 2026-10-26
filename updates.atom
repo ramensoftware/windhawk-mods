@@ -2,12 +2,446 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-25T22:37:40.000Z</updated>
+    <updated>2026-10-26T15:05:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.0]]></title>
+        <id>https://windhawk.net/mods/altbinz-dark#4028990b798d125c7ee88e143561bdb17b3eb643</id>
+        <link href="https://windhawk.net/mods/altbinz-dark"/>
+        <updated>2026-10-26T15:05:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="altbinzdarkmode">Alt.Binz Dark Mode</h1>
+<p><img src="https://raw.githubusercontent.com/MrSmith2017/altbinz-dark-mode/main/altbinz-dark-mode.png" alt="Before and after: the light blue Alt.Binz versus the dark one" /></p>
+<p>Alt.Binz draws its whole user interface from a light blue skin. This mod
+re-colors everything that is drawn with GDI: brushes, pens, text colors, system
+colors and the opaque skin bitmaps. Common dialogs and shell menus keep
+Windows' own dark mode.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested with Alt.Binz 0.48.4 (32-bit) at 100% display scaling on Windows 11. Some
+elements (the column header bars, the progress bar fills and the status bar button)
+are recognized by their size and color, so another version may look different.</p>
+<h2 id="surfacecolor">Surface color</h2>
+<p>The blue skin surface (toolbar, tabs, status bar, dialogs, Setup) can get another
+color: enter a hex code (for example <code>2F5A96</code>). Very bright colors are darkened
+so that the light text stays readable.</p>
+<h2 id="surfacegradient">Surface gradient</h2>
+<p>Instead of one color the surface can run between two colors. Enter both as hex
+codes, the angle in degrees (0 = left to right, 90 = top to bottom) and the
+balance: 50 is the middle, a higher value gives the end color more room, a lower
+value the start color. The gradient wins over the single surface color.</p>
+<h2 id="progressbars">Progress bars</h2>
+<p>The fill of the progress bars can get one color or, with a second color, a
+gradient, either from top to bottom or from left to right. Leave both empty for the
+default blue.</p>
+<h2 id="appearance">Appearance</h2>
+<p>These values are applied when Alt.Binz is restarted:</p>
+<ul>
+<li><strong>Background lightness</strong>: how dark the lists and dark areas are (percent).</li>
+<li><strong>Text lightness</strong>: how bright text and lines are (percent). Ignored when a text color is set.</li>
+<li><strong>Text color</strong>: an optional color for text and lines.</li>
+<li><strong>List background color</strong>: an optional color for the large list areas.</li>
+<li><strong>Saturation</strong>: how colorful the blue skin is (percent).</li>
+</ul>
+<p>The <strong>column header color</strong> (the header bars of the lists) and everything else is
+applied live. If you disable the mod, restart Alt.Binz to get the original look
+back completely.</p>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray hover expand 1.7.1]]></title>
+        <id>https://windhawk.net/mods/tray-hover-expand#25974f385d970a26b236378ed19cb5df42b62122</id>
+        <link href="https://windhawk.net/mods/tray-hover-expand"/>
+        <updated>2026-10-26T15:04:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Do not suppress hover when the taskbar itself is visible under the cursor, so an auto-hiding taskbar works as soon as it is revealed, and a maximized window is no longer mistaken for a fullscreen app</li>
+</ul>]]></content>
+        <author>
+            <name>wygodad</name>
+            <uri>https://github.com/wygodad</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PaintShop Pro Dark Image Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/psp-dark-mdi-frames#fa09f39b629470ff8b921ca599c14d262d7d9b48</id>
+        <link href="https://windhawk.net/mods/psp-dark-mdi-frames"/>
+        <updated>2026-10-26T15:04:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="paintshopprodarkimagewindows">PaintShop Pro Dark Image Windows</h1>
+<p><img src="https://raw.githubusercontent.com/MrSmith2017/psp-dark-image-windows/main/psp-dark-image-windows.png" alt="Before and after: light blue-gray image window frames versus dark ones" /></p>
+<p>Corel PaintShop Pro has a dark theme, but the image windows inside the
+workspace keep a light blue-gray frame that looks like Windows XP or 7. They
+are classic MDI child windows, and Windows draws their frames itself, with no
+dark variant.</p>
+<p>This mod paints those frames in dark colors instead:</p>
+<ul>
+<li>title bar, border, icon and title text</li>
+<li>minimize, maximize and close buttons with hover and pressed states</li>
+<li>minimized image windows</li>
+</ul>
+<p>Maximized image windows are left to Windows. Everything is drawn by the mod,
+so no theme files or system settings are touched, and the mod only affects
+PaintShop Pro.</p>
+<h2 id="optionalflashfix">Optional flash fix</h2>
+<p>When you switch between images, PaintShop Pro rebuilds the drop-down lists in
+the tool options bar. For a few frames their selection fields flash white,
+because the Windows combo box falls back to its default brush. The flash fix
+paints that field in dark gray instead.</p>
+<h2 id="settings">Settings</h2>
+<p>All colors are entered as hex codes, for example <code>282828</code> or <code>#282828</code>. A
+value that cannot be read falls back to its default. Changes apply right away.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Tested with PaintShop Pro 2022 on Windows 11. Other versions may work, but
+have not been tested.</li>
+<li>If something looks wrong, disable the mod: the original frames come back
+immediately.</li>
+</ul>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 3.0.6]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#1b66e28eee1f1299f896cfa1bd3d8c738210e99b</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-10-26T15:04:43.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixed an issue on Windows 11 build 26300.9807+ where the classic Run dialog appeared when shell32.pdb symbols were unavailable on Microsoft's symbol server (HTTP 404), by adding an automatic symbol-less hooking fallback (DialogBoxParamW, DialogBoxIndirectParamW, CreateDialogParamW, CreateDialogIndirectParamW, and ShowWindow) (#6544).</p>
+<p>Added experimental PowerToys Run-style app and command suggestions while typing (enableAppSuggestions), indexing Start Menu shortcuts, Registry App Paths, built-in system tools, and recent history with lazy icon loading and keyboard/mouse navigation (Up/Down, Tab to autocomplete, Enter or click to launch).</p>
+<p>Restored the distinct high-contrast colors and Direct2D vector icons for the 3 bottom action buttons (Browse with folder icon, Run in Fluent Blue with return arrow icon, and Exit in dark crimson with close icon) across all surface themes including Liquid Glass, with dynamic button width adaptation for localized labels.</p>
+<p>Added 10 new display languages (totaling 21 languages): Thai (th), Indonesian (id), Malay (ms), Portuguese (pt), Ukrainian (uk), Polish (pl), Dutch (nl), Turkish (tr), Hindi (hi), and Arabic (ar).</p>]]></content>
+        <author>
+            <name>caotu2k5</name>
+            <uri>https://github.com/caotu2k5</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[App Volume Booster 1.0]]></title>
+        <id>https://windhawk.net/mods/app-volume-booster#f7ba2c934c8f67d4488624208f890a0eb4c7614a</id>
+        <link href="https://windhawk.net/mods/app-volume-booster"/>
+        <updated>2026-10-26T15:04:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="appvolumebooster">App Volume Booster</h1>
+<p>Changes the loudness of the audio an app sends to Windows, so it can go past the
+100% limit of the volume mixer.</p>
+<p>This mod doesn't target any process by default.</p>
+<p><strong>Which apps:</strong> open this mod's <em>Advanced</em> tab -&gt; <em>Custom process inclusion list</em> and
+list the exe names you want affected (one per line). Only those processes get the mod.
+Restart an app after adding it to the list.</p>
+<p><em>Note for games:</em> Games are excluded by default in Windhawk. To work with games, they need
+to be specifically added to the inclusion list from Windhawk's Advanced settings:
+<em>Settings > Advanced settings > More advanced settings > Process Inclusion List</em>.</p>
+<p><strong>How loud:</strong> every included app uses the default settings. To give one app its own
+settings, click <strong>+</strong> under <em>Per-app overrides</em>, type its exe name and choose its volume
+and mode. An override only applies to apps that are also in the inclusion list.
+Overrides with an empty process name are ignored.</p>
+<p><strong>Modes</strong></p>
+<ul>
+<li><em>Gain</em> (default): multiplies the audio by the volume %. 100 = unchanged, 200 = twice as
+loud. Anything pushed past full scale is clipped.</li>
+<li><em>Compressor</em>: turns down the loud parts, then applies the volume % as makeup gain, so
+quiet material gets louder with less distortion on loud peaks. Tune it with threshold,
+ratio, attack and release (these settings are shared by all apps).</li>
+</ul>
+<p>Changes apply live. Lower your system volume before starting, boosted audio can be very loud.
+Exclusive-mode streams, spatial audio streams (e.g. Windows Sonic / Dolby Atmos, which bypass
+IAudioRenderClient), and apps that bypass WASAPI entirely may not be affected.</p>
+<p><strong>Troubleshooting:</strong> start the app <em>after</em> enabling the mod (streams created earlier are not seen), then check Windhawk's log for this mod. It reports each stream's format and whether audio is being processed.</p>]]></content>
+        <author>
+            <name>shubho</name>
+            <uri>https://github.com/shubho193</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 0.9.240]]></title>
+        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#6937b85477825dcbee84bf84d05718f0e68436dd</id>
+        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
+        <updated>2026-10-26T15:04:30.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/refs/heads/main/assets/showcase.gif" alt="Showcase GIF" /></p>
+<h1 id="gpuacceleratedexplorerexelistandgridviews">GPU-accelerated <code>explorer.exe</code> list and grid views</h1>
+<p>A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations and modern look.</p>
+<ul>
+<li>Replicates explorer views using hardware accelerated graphics: Details list and icons grid, including thumbnails, sorting and grouping.</li>
+<li>Animated interactions: grouping, sorting, selecting/cutting/copying files, and many more.</li>
+<li>Smooth scrolling, touchpad gestures and inertia scrolling.</li>
+<li>RTL language support.</li>
+<li>Optional button to switch back to native Explorer view; <strong>Ctrl+Alt+F9</strong> also works when the button is hidden.</li>
+<li>Prioritizes responsiveness and animations over efficiency.</li>
+<li>Less likely to break in future Windows updates since it does not modify the default views of explorer but recreates them</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Adjustable Item Height</strong> — Smooth zooming with <code>Ctrl</code>+ mouse wheel or pinch gestures.</li>
+<li><strong>Custom Fonts</strong> — Personalize the appearance with your preferred fonts.</li>
+<li><strong>Text Antialiasing</strong> — Use Windows monitor tuning, smooth grayscale, or no antialiasing while preserving transparent backgrounds.</li>
+<li><strong>Animated Selection & Hover States</strong> — Smooth visual transitions, including a dedicated selection style for file names only.</li>
+<li><strong>Dynamic Zebra Striping</strong> — Animated alternating row colors for improved readability.</li>
+<li><strong>Smooth Scrolling</strong> — Fluid scrolling for a more responsive browsing experience.</li>
+<li><strong>Seamless View Switching</strong> — Overlays the default Explorer views, letting you switch between the modded and native views directly from the Explorer window.</li>
+<li><strong>Faster Loading</strong> — Improves load times through caching and by skipping file pre-sorting.</li>
+<li><strong>Adaptive Image Quality</strong> — Matches icon and thumbnail resolution to visible size and available memory.</li>
+</ul>
+<h2 id="reportbugs">Report bugs</h2>
+<p>Report bugs in the mod's main repository <a href="https://github.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/issues">Here</a>.
+Enable <strong>Enable logging</strong> when reproducing a bug and include Windhawk's log in
+the report. Logs include file names and paths; disable the option afterward.</p>]]></content>
+        <author>
+            <name>DarkionAvey</name>
+            <uri>https://github.com/DarkionAvey</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Rules 1.0]]></title>
+        <id>https://windhawk.net/mods/window-rules#166b3d81bc080be08987c19059d0e0aaaaa051bb</id>
+        <link href="https://windhawk.net/mods/window-rules"/>
+        <updated>2026-10-26T15:04:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowrules">Window Rules</h1>
+<p>Tell Windows what to do with an app's windows, once, and stop fixing them by
+hand. Each rule matches a window (by executable, window class and title) and
+asks for one or more of:</p>
+<ul>
+<li>a position and size, in pixels</li>
+<li>a monitor to open on</li>
+<li>an opacity level</li>
+<li>always on top</li>
+</ul>
+<p>Rules are tried in order. The first enabled rule that matches a window is the
+only one applied to it -- later rules are not consulted for that window, and
+actions are never merged across rules. That is the same model KWin rules and
+WindowManager use, and it is the one that stays predictable when two of your
+rules would both apply.</p>
+<h2 id="whatitdoes">What it does</h2>
+<p>Open the app and the rule happens: the window is moved, sized and made
+translucent where the rule says so. Move the window yourself and the mod lets go
+-- your position wins for the rest of the session, and the rule is not re-applied
+to that window until the app is started again. Saving the settings re-applies
+every rule to the windows that are open at that moment, so editing a rule shows
+you its effect immediately instead of at the next restart.</p>
+<p>Nothing else is touched: no focus, no hiding, and no continuous watch over
+windows that are already in place.</p>
+<h2 id="alwaysontop">Always on top</h2>
+<p>A rule can keep an app's windows above other windows. The window goes up when it
+opens and stays up: activating another window does not take the top away, because
+Windows keeps a window's topmost bit until something actually removes it.</p>
+<p>What it deliberately does not do is fight for the top:</p>
+<ul>
+<li><strong>Another always-on-top window can sit above yours.</strong> The taskbar and other
+pinned apps are the user's own choices, and the mod does not climb back over
+them.</li>
+<li><strong>A fullscreen app on the same monitor makes it step aside.</strong> A window pinned by
+this mod is lowered while a fullscreen game or video covers its monitor, and
+raised again when that app is gone. A maximized window is not fullscreen and
+never triggers this.</li>
+<li><strong>If the app clears the bit itself, the mod leaves it cleared</strong>, and the journal
+says <code>app-cleared</code>, rather than pinning it again on the next activation.</li>
+<li><strong>Dragging the window stops the mod touching it</strong>, the z-order included, for the
+rest of the session.</li>
+<li><strong>Turning the rule off takes the window back down.</strong> The mod only ever lowers a
+bit it set itself, so an app that pins its own windows is never affected.</li>
+<li><strong>The same goes for opacity.</strong> The mod records the windows it made translucent,
+so changing the level takes effect on windows that are already open, and
+clearing the level, deleting the rule or turning the mod off puts them back to
+fully opaque. Only windows the mod faded itself are touched: an app that draws
+its own transparency is never made opaque by this.</li>
+</ul>
+<p>One consequence worth knowing before you pin something: a topmost window stays
+above whatever you switch to with Alt+Tab, so if the pinned window covers most of
+the screen, switching away looks like nothing happened -- the window you wanted is
+behind it. That is how the topmost bit works, not something this mod adds. Pin
+small windows, or leave the rule on "No change" while you are switching around.</p>
+<h2 id="wherewindowsgoandinwhatunits">Where windows go, and in what units</h2>
+<p><strong>Positions and sizes are in physical pixels, not points.</strong> A rule that says
+<code>800x600</code> gets a window 800 physical pixels wide whatever the display scale is,
+so on a 150% display it will look smaller than the same rule on a 100% one. That
+is not adjustable in this version, and it is the same truth the whole mod works
+in: the mod reads and writes physical pixels, and reports them in the journal so
+that what it did can be checked by hand.</p>
+<p><strong>A position is measured from the top-left of the target monitor, not from the
+desktop.</strong> <code>position: 100,200</code> means 100 pixels in and 200 down from the corner
+of the monitor the rule names -- or of the monitor the window is already on, when
+the rule names none. So a rule survives docking, undocking and adding a monitor
+above the primary, which the same numbers in desktop coordinates would not. X and
+Y may be negative to place a window partly off the edge.</p>
+<h2 id="howmatchingworks">How matching works</h2>
+<p>A rule has three optional match fields. Every field you fill in must match; a
+field you leave blank matches anything. The fields are:</p>
+<ul>
+<li><strong>Executable</strong> -- a file name (<code>notepad</code> or <code>notepad.exe</code>) or a full path.</li>
+<li><strong>Window class</strong> -- the window's class name, for example <code>Notepad</code> or
+<code>Chrome_WidgetWin_1</code>.</li>
+<li><strong>Window title</strong> -- searched <em>inside</em> the title, so a fragment is enough.</li>
+</ul>
+<p>All matching is case-insensitive. <code>*</code> and <code>?</code> are wildcards, so <code>chrome*</code> matches
+<code>chrome.exe</code> and <code>Untitled*</code> matches any title starting that way. To use a full
+regular expression, wrap it in slashes: <code>/^Document - \w+\.txt$/</code>. Nothing else
+is treated as a pattern, so a path like <code>C:\Program Files (x86)\Steam\steam.exe</code>
+or a title like <code>Inbox | Outlook</code> matches literally.</p>
+<h2 id="whatitdoesnotdoandwherethelimitsare">What it does not do, and where the limits are</h2>
+<ul>
+<li>Hide a window from the taskbar or Alt+Tab. Toggling the extended window style is
+one-shot and applications reset it themselves; a version that cannot re-assert
+would be a broken promise, so it is not here yet.</li>
+<li>Move windows between virtual desktops: that needs an undocumented Windows
+interface, and this mod does not use one.</li>
+<li><strong>Override an app that insists.</strong> A rule is applied when the window appears and
+re-applied once if the app immediately moves it somewhere else. An app that
+moves its window again after that wins -- the mod stops rather than fighting it.</li>
+<li><strong>A rule waits for a minimized window to be restored.</strong> A minimized window has
+no meaningful rectangle to move, so nothing is applied while it is minimized;
+the rule is applied the moment you restore it, including for an app that starts
+in the tray.</li>
+<li><strong>A maximized window stays maximized.</strong> The mod does not restore it to normal
+first, and what Windows does with a maximized window's restore rectangle is
+Windows' business rather than the mod's, so a rule that sets a position may not
+show until you restore the window yourself.</li>
+<li><strong>Opacity on a window that is already translucent by itself.</strong> Those windows
+draw their own transparency; a flat opacity level would replace it with
+something that renders wrong, so the mod reports <code>already-layered</code> in the journal
+and leaves them alone.</li>
+<li><strong>Change a window's size when the app is in charge of it.</strong> Some apps re-create
+their window when resized; they are left as they are after the single retry.</li>
+<li><strong>The invisible border.</strong> Since Windows 10 a window's rectangle includes about
+seven pixels of invisible resize border on the left, right and bottom, so
+<code>position: 0,0</code> leaves a small visible gap at the left, and an <code>800x600</code> window
+looks about 14 pixels narrower and 7 shorter. The mod does exactly what the
+numbers say in the coordinates Windows reports, and the journal prints them.</li>
+<li><strong>File Explorer windows are not matched.</strong> <code>explorer.exe</code> is on the built-in
+exclude list, because the same process owns the taskbar, the desktop and the
+shell's own windows. Explorer windows cannot be targeted by a rule in this
+version.</li>
+<li><strong>A window on another virtual desktop is left alone until you save the
+settings while it is in front of you.</strong> Those windows are cloaked, and the mod
+ignores cloaked windows on purpose. So if you delete a rule while one of its
+windows sits on another desktop, that window keeps its opacity and its always on
+top until the next settings save with it visible, or until you turn the mod off.
+Nothing is left behind after that.</li>
+<li><strong>Always on top and fullscreen is detected geometrically.</strong> A window counts as
+fullscreen when it covers a monitor and is not maximized. A window that nearly
+covers a monitor is not detected, so a pinned window can stay above it.</li>
+<li><strong>Stepping aside for a fullscreen app is tested, not observed, across
+monitors.</strong> It was built and tried on a single-monitor machine, so "a game on
+the other monitor leaves this window pinned" has not been watched happening.</li>
+</ul>
+<h2 id="notthesameasothermods">Not the same as other mods</h2>
+<ul>
+<li><strong>Always On Top Windows</strong> pins and unpins the active window with a hotkey, by
+hand. This mod keeps an app's windows on top automatically, every time they
+open.</li>
+<li><strong>Prevent Focus Stealing</strong> and <strong>Snap Commander</strong> already cover their own
+actions (focus, and snapping to screen regions) and this mod deliberately does
+not re-implement them.</li>
+<li><strong>Where I Left It</strong> remembers where you left a window and puts it back. This
+mod puts a window where <em>you</em> say, every time. Do not list the same app in
+both mods' settings at once: both would place the window, in an order neither
+can control. The same goes for <strong>Snap Commander</strong>'s auto-snap rules.</li>
+</ul>
+<h2 id="diagnostics">Diagnostics</h2>
+<p><strong>Write a diagnostics journal</strong> appends to <code>window-rules-journal.txt</code> in a folder
+of your own: <code>&lt;Windhawk mod storage&gt;\&lt;your SID&gt;</code>, created with an access control
+list that gives full access to you, to SYSTEM and to administrators, and to nobody
+else. Journal lines carry executable names and window titles, and the shared mod
+storage folder is readable by every account on the machine, so the file is kept
+where only you can read it. If that folder cannot be created the journal is simply
+not written; the mod itself is unaffected.</p>
+<p>Neither the file nor the folder exists until you turn the journal on. It is capped
+at 1 MB (past that it starts again from empty, with a line saying so), and it is
+<strong>off by default</strong>; turn it on when a rule does something you did not expect, or
+when reporting a bug, and the file will say what the mod decided and why. Every
+line is prefixed with what it is doing:</p>
+<ul>
+<li><code>RULES-LOADED</code> and <code>RULE-LOADED</code> -- the rules as the mod understood them, with
+any problem it found in a rule, so a typo is visible instead of silent.</li>
+<li><code>RULE-HIT</code> -- which rule matched which window, and which field decided it.</li>
+<li><code>RULE-NONE</code> -- a window that no rule matched (a few per app, not every one).</li>
+<li><code>RULE-FILTER-SKIP</code> -- a window that was never matched at all, and why.</li>
+<li><code>APPLY</code> -- what was done to a matched window, with the rectangle it was at and
+the rectangle the rule asked for, and why nothing happened when nothing did
+(<code>already-there</code>, <code>overridden</code>, <code>minimized</code>, <code>refused</code>).</li>
+<li><code>SETTLE</code> -- whether the window stayed where the rule put it, was put back once,
+or was left alone because the app kept moving it.</li>
+<li><code>OVERRIDE</code> -- you moved a window yourself; the mod has let go of it.</li>
+<li><code>OPACITY</code> -- what happened to the level, and why: <code>applied</code>, <code>already-there</code>,
+<code>already-layered</code> (the app draws its own transparency, left alone), <code>failed</code>
+(the window refused the change), <code>app-cleared</code> (the app removed the style
+itself), <code>withdrawn</code> (the rule stopped asking, or the mod was turned off).</li>
+<li><code>MONITOR-SKIP</code> -- a rule names a monitor that is not there.</li>
+<li><code>TOPMOST</code> -- what happened to the z-order, and why: <code>applied</code>, <code>already-there</code>,
+<code>overridden</code>, <code>minimized</code>, <code>refused</code>, <code>yielded</code> (a fullscreen app took the
+monitor), <code>reclaimed</code> (it gave the monitor back), <code>app-cleared</code> (the app
+removed the bit itself), <code>withdrawn</code> (the rule stopped asking), or
+<code>not-claimed</code> (the window is on top, but this mod did not put it there).</li>
+<li><code>REAPPLY-PASS</code> -- the sweep after a settings save, and how many windows it moved.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>Rules are read from the top down, and <strong>an entry with every field blank ends the
+list</strong> -- the settings template ships one blank entry, so a fresh install has no
+rules at all until you fill it in. Leave the blank entry last.</p>
+<p>A rule with no match fields is not loaded, because it would apply to every window
+on the desktop; the journal says <code>RULE-PROBLEM</code> and names the rule. To mean every
+window on purpose, put a <code>*</code> in one of the match fields.</p>]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Language Applet Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/language-applet-restorer#2e6bcbf393658d3d17205cd0aaaa012f79751153</id>
+        <link href="https://windhawk.net/mods/language-applet-restorer"/>
+        <updated>2026-10-26T15:04:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="languageappletrestorer">Language Applet Restorer</h1>
+<p>Restores the classic Control Panel <strong>Language</strong> applet from windows 10 1709 and optionally the classic <strong>Region</strong> applet (<code>intl.cpl</code>) of Windows 10 1709 on later versions of Windows.</p>
+<h2 id="preview">Preview:</h2>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151430.png" alt="mainpage" /></p>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151455.png" alt="advancepage" /></p>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151500.png" alt="addlang" /></p>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/intl1709.png" alt="intl.cpl" /></p>
+<h2 id="whatisdownloadedfromwhereandwhen">What is downloaded, from where, and when</h2>
+<p>The mod does not contain any Microsoft binaries. The first time it runs inside <code>explorer.exe</code>, it downloads five files of Windows 10 1709 (build 16299), about 3.7 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
+<p><code>intl.cpl</code>, <code>UserLanguagesCpl.dll</code>, <code>WinLangdb.dll</code>, <code>Bcp47Langs.dll</code> and <code>dui70.dll</code>.</p>
+<p>The size and SHA-256 of every file are checked against values pinned in the mod, and a file that doesn't match is discarded. The originals are kept in the mod's storage folder (<code>dl</code>); patched copies and small compatibility shims are generated from them into <code>bin</code>. Nothing is downloaded again as long as <code>dl</code> is present.</p>
+<p><strong>Offline:</strong> if the files are not on disk and there is no internet connection, the applet is simply not added and the reason is written to the mod's log. Connect to the internet and restart <code>explorer.exe</code> once. After a successful first run the mod works offline, provided <em>Keep downloaded files</em> is on.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Page language</strong>: language of the restored Language page and its Control Panel tooltip. <em>Automatic</em> follows the Windows UI language. Available: English, Italian, Persian, Spanish, French, Portuguese.</li>
+<li><strong>Force translations</strong>: use the embedded translations for the six languages above, instead of relying only on the generated <code>.mui</code> files.</li>
+<li><strong>Keep downloaded files when the mod is disabled</strong>: keep <code>dl</code> and <code>bin</code> in the storage folder so the mod works offline and doesn't download again. If off, the files are deleted when the mod is unloaded.</li>
+<li><strong>Redirect Control Panel's intl.cpl to the restored one</strong>: when enabled, opening Region (<code>intl.cpl</code>) from Control Panel, the Run dialog or <code>control.exe</code> loads the restored 1709 <code>intl.cpl</code> instead of the system one. This is done in <code>explorer.exe</code>, <code>rundll32.exe</code> and <code>control.exe</code>; the mod does nothing in other processes. It only affects windows opened after the setting is changed. The restored file is checked against the expected contents right before it is loaded; if that fails, or the files are not downloaded yet, the system <code>intl.cpl</code> is used.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Only <strong>x64</strong> is supported (no ARM64).</li>
+<li>The 2017 components run inside <code>explorer.exe</code>. A crash in them restarts Explorer.</li>
+<li>The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside <code>explorer.exe</code> (<code>control.exe</code> only gets the part needed to find the applet by name), and the applet's COM classes are created from inside <code>explorer.exe</code>. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (<code>vreg-&lt;pid&gt;.hiv</code> in the mod's storage folder, loaded with <code>RegLoadAppKeyW</code>), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start). If the hive cannot be loaded, the applet is simply not shown.</li>
+<li><strong>Compatibility:</strong> <code>intl.cpl</code> redirection overlaps with the <code>win7-intl-control-panel-restorer</code> mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which <code>intl.cpl</code> is opened.</li>
+<li>While the mod is enabled, one string in <code>shell32.dll</code>'s memory (the applet's entry in Windows' built-in hide list) is blanked so that Control Panel lists the applet. It is restored when the mod is disabled; nothing on disk is changed.</li>
+<li>Links in the applet that open the Settings app are not changed by this mod. The <code>settings-to-control-panel</code> mod can redirect them.</li>
+</ul>
+<h2 id="specialthanksto">Special Thanks to:</h2>
+<p>babamohammed2022 for adding various languages.</p>]]></content>
+        <author>
+            <name>AdmXP8</name>
+            <uri>https://github.com/AdmXP8</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Simple Cursor Trail 1.6]]></title>
+        <id>https://windhawk.net/mods/cursor-trail#3f4ace0fe0c3f6f9c48882fe50b4b2e351e4f1e7</id>
+        <link href="https://windhawk.net/mods/cursor-trail"/>
+        <updated>2026-10-26T15:04:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the "Always on top" setting, enabled by default. The trail now draws above the taskbar, Start menu and other shell surfaces. Explorer hosts a layered, click-through window in the UIAccess Z-order band (falling back to the system-tools band), and the trail is drawn into it; if that is not possible, the trail falls back to its own overlay window.</li>
+<li>Turning the setting off unloads the <code>explorer.exe</code> side and keeps the trail in the normal desktop band.</li>
+</ul>]]></content>
+        <author>
+            <name>Ulrizza</name>
+            <uri>https://github.com/Ulrizza</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Taskbar Tooltips 1.3.1]]></title>
         <id>https://windhawk.net/mods/hide-taskbar-tooltips#6774848bf06023622d0918a8b2d2110e315a7c9e</id>
@@ -497,367 +931,6 @@ mod is based.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.0.0]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#734714f248424422007d996d861940948d4eb2e5</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-10-25T10:03:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="toptaskbarbleed">Top Taskbar Bleed</h1>
-<p>When a maximized window sits under a top-docked taskbar, the taskbar gets a
-full-width color panel behind its buttons that matches the window's top edge
-(optionally as a gradient, for Mica title bars), so the window's title bar
-appears to continue up into the bar.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif" alt="Demo" /></p>
-<p><strong>Requires a taskbar docked at the top of the screen</strong> (via the taskbar
-position setting on builds that have it, or a mod such as <em>Taskbar on top for
-Windows 11</em>). On other dock positions this mod stays idle.</p>
-<p>How it works:</p>
-<ul>
-<li>A tracker thread watches window events and finds, per monitor, the foremost
-maximized window (the first maximized window in z-order on that monitor -
-not necessarily the foreground window, so a small dialog on top of a
-maximized app doesn't cancel the bleed).</li>
-<li>The window's top edge row is captured from the screen and reduced to its
-dominant color (so a bit of text or an icon can't skew it); that color is
-the panel and decides the taskbar theme. Pixels covered by another window -
-a flyout, a thumbnail, a tooltip, a dialog near the top edge - are left out,
-so floating windows never tint the bleed. Hovering a taskbar thumbnail
-(Aero Peek) bleeds the peeked window if it is maximized on that monitor and
-hides the panel otherwise, since the desktop is what shows through.</li>
-<li>Experimental <strong>Gradient bleed</strong>: instead of one color, the dominant colors
-of four windows at 20/40/60/80% of the width - away from the app icon on the
-left, the caption buttons on the right and a centered title - become a
-horizontal gradient, so a Mica or gradient title bar continues into the bar
-(a flat one stays flat). A point that doesn't fit the rest (a toolbar
-reaching that far, a hovered control) is bridged from its neighbors. Off by
-default: apps that put content along their very top edge can still show it.</li>
-<li>One panel per taskbar is inserted into the taskbar's XAML tree, above the
-taskbar background and below the buttons. The panel mirrors the edge: window
-changes (switching, maximizing, minimizing) are picked up from window events
-and applied on the next composed frame, and the edge is re-sampled in
-between - every <strong>Poll interval</strong> (250 ms by default) while it is static,
-every 25 ms while it is changing - so a title bar that recolors in place
-(focus fade, tab switch, app theme change) is followed frame by frame. With
-Windows animations on, a window being zoomed into place isn't committed
-until its edge has actually landed, so the panel never flashes the background
-behind it; with animations off the first sample is applied as is.</li>
-</ul>
-<p>Supports multiple monitors (each taskbar follows its own monitor).</p>
-<p>Settings: <strong>Poll interval</strong> (how often a static edge is re-checked; window
-changes are event-driven regardless), <strong>Excluded programs</strong> (executables whose
-windows should never trigger the bleed) and the experimental <strong>Gradient bleed</strong>
-toggle described above.</p>
-<p>The panel is a regular XAML <code>Border</code> named <code>TaskbarBleedPanel</code>, so its shape can
-be styled with <em>Windows 11 Taskbar Styler</em> like any other taskbar element.
-Target <code>Border#TaskbarBleedPanel</code> and set, for example, <code>Margin=4,4,4,0</code> or
-<code>CornerRadius=8,8,0,0</code> (the panel's bottom edge meets the window, so the
-rounded corners are normally the top ones). Leave <code>Background</code> and <code>Opacity</code>
-alone - the mod drives those (the background is a gradient brush).</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The taskbar's XAML tree is reached through <code>taskbar.dll</code> and
-<code>Taskbar.View.dll</code> symbols (downloaded by Windhawk on first run), not through
-XAML diagnostics, so the mod coexists with Windows 11 Taskbar Styler and other
-XAML-diagnostics consumers. The bleed applies as soon as the mod is enabled.</li>
-<li>Cost: with a maximized window present, each poll is one small screen
-readback (a 1px-high strip) plus a window enumeration; it doesn't register in
-Task Manager at either rate, and the fast rate only runs during a transition.
-With no maximized window the poll timer is off, and window events are only
-acted on when they come from a maximized window or the window being
-followed, so tooltips, thumbnails and overlays cost nothing.</li>
-<li>Windows that exclude themselves from capture (protected media, some
-remote-desktop clients) return no usable pixels; the panel then keeps its
-last color.</li>
-<li>The 1px taskbar border line (<code>BackgroundStroke</code>) breaks the illusion; it is
-hidden while a panel is showing and restored when the panel hides.</li>
-<li>Readability: a light title bar bled into a dark-mode taskbar leaves white
-labels on a light panel (and vice versa). While a panel is showing, the mod
-switches that monitor's taskbar to the theme that matches the bled color
-(light panel -&gt; light mode, dark panel -&gt; dark mode) and restores the
-previous theme when the panel hides. This is done per taskbar through XAML's
-<code>RequestedTheme</code>, so only the affected monitor changes and the system theme
-itself is untouched.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The taskbar-thread helpers (<code>RunFromWindowThread</code>, <code>FindCurrentProcessTaskbarWnd</code>)
-and the <code>taskbar.dll</code> XAML-root lookup are ported from
-<a href="https://windhawk.net/mods/taskbar-multirow">Taskbar multi-row</a> by m417z,
-licensed under the GNU GPL v3.0. This mod is published under the same license.</p>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Scroll 1.0.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-scroll#365a77bb8705c9f36705cf265a395a7c499780a8</id>
-        <link href="https://windhawk.net/mods/drag-to-scroll"/>
-        <updated>2026-10-25T10:03:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dragtoscroll">Drag to Scroll</h1>
-<p>Hold <strong><code>Ctrl</code> + Right-Click</strong> and drag your mouse to scroll smoothly and naturally across desktop applications, including web browsers (Chrome, Edge, Firefox), text editors (VS Code, Notepad++), File Explorer, and legacy Win32 utilities.</p>
-<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/preview-global-drag-to-scroll.webp" alt="Drag to Scroll Demo" /></p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li><strong>High-Resolution Micro-Scrolling:</strong> Injects fractional wheel increments for fluid, trackpad-like scrolling in modern desktop apps and web browsers.</li>
-<li><strong>Legacy Control Detection:</strong> Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete <code>WM_VSCROLL</code> line steps to preserve native line-by-line movement.</li>
-<li><strong>Hands-Free Cruising:</strong> Release the Right Mouse Button while continuing to hold <code>Ctrl</code> to let the page cruise automatically based on cursor offset. Cruising disengages instantly on keypress, mouse click, or <code>Ctrl</code> release.</li>
-<li><strong>Zero Zoom Interference:</strong> Dynamically masks <code>Ctrl</code> state during scroll dispatch so applications never accidentally trigger browser zoom or editor scaling.</li>
-<li><strong>Accidental Click Protection:</strong> Tapping <code>Ctrl + Right-Click</code> in place without exceeding the deadzone transparently passes through as a regular right-click.</li>
-</ul>
-<h2 id="compatibilitylimitations">Compatibility &amp; Limitations</h2>
-<ul>
-<li><strong>Packaged & Modern UI Surfaces:</strong> Certain modern Windows interfaces (such as the Windows Start Menu or some packaged store apps) do not process standard Win32 mouse-drag messages through the message queue and are not supported.</li>
-<li><strong>CAD & 3D Software:</strong> If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to <code>Ctrl + Right-Click</code>, you can exclude those executables under the mod's <strong>Advanced</strong> tab in Windhawk.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Live Update for Windows 11 2.0.206]]></title>
-        <id>https://windhawk.net/mods/live-update-for-windows-widget#43716e11539b8e7bfaab4e9df11350e613c0d859</id>
-        <link href="https://windhawk.net/mods/live-update-for-windows-widget"/>
-        <updated>2026-10-25T08:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="liveupdateforwindows11">Live Update for Windows 11</h1>
-<p>A unified, single-slot "Live Activity" widget injected natively into the primary Windows 11 XAML taskbar. Instead of running multiple separate taskbar widgets or external desktop overlay windows, <strong>Live Update</strong> multiplexes contextual activities into one compact taskbar slot with a native XAML flyout popup.</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview1.png" alt="Overview: Media" /></p>
-<p>Overview: Media</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview2.png" alt="Overview: RAM Alert" /></p>
-<p>Overview: RAM Alert</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview3.png" alt="Overview: Device Battery & Bluetooth Battery" /></p>
-<p>Overview: Device Battery &amp; Bluetooth Battery</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview4.png" alt="Overview: Sensitive Permission" /></p>
-<p>Overview: Sensitive Permission</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview5.png" alt="Overview: Wi-Fi Hotspot" /></p>
-<p>Overview: Wi-Fi Hotspot</p>
-<h2 id="howthismoddiffersfromexistingmods">How this mod differs from existing mods</h2>
-<ul>
-<li><strong>Native single-slot multiplexer vs. external overlays:</strong> Unlike <em>Dynamic Island for Windows</em> (which runs as a separate overlay window at the top of the screen), this mod embeds directly inside the native Windows 11 taskbar layout (<code>SystemTrayFrameGrid</code> / <code>RootGrid</code>) and shares a single compact slot across all active providers.</li>
-<li><strong>Contextual activity switching vs. single-purpose widgets:</strong> Unlike standalone media mods (<em>Taskbar Music Lounge</em>, <em>Taskbar Fluent Media Player</em>, <em>Island Media Controls</em>) or calendar-only mods (<em>Lunar & Holiday Calendar</em>), this widget automatically switches to newly started activities (such as media playback, power connection, timer start, or microphone/camera access) while keeping a Vietnamese lunar calendar &amp; almanac as the idle baseline.</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Media:</strong> Shows album artwork, track title, artist, interactive seek bar, and Fluent transport controls for players integrated with Windows Global System Media Transport Controls (GSMTC), with session switching for up to 16 active sessions.</li>
-<li><strong>Battery & Bluetooth:</strong> Displays charge percentage, charging/discharging state, estimated remaining/full time, connected Bluetooth device battery levels, and a shortcut to Windows Power &amp; battery settings (<code>ms-settings:powersleep</code>).</li>
-<li><strong>Windows Clock (status reader):</strong> Displays active Stopwatch, Timer, and enabled Alarm entries observed from the Windows Clock app, continuing to advance locally from the last synced state when the app is minimized.</li>
-<li><strong>Lunar Calendar, Almanac & Vietnamese Culture Index:</strong> Computes UTC+7 Vietnamese lunar dates, Can Chi, Nạp Âm, auspicious hours (Giờ Hoàng Đạo), and 12 Trực using the Hồ Ngọc Đức algorithm. Includes a monthly calendar view, Vietnamese holiday list, and a built-in Vietnamese culture topic index that opens reference articles in your default browser.</li>
-<li><strong>Privacy Activity:</strong> Passively monitors active Microphone (Core Audio), Camera (Media Foundation sensor monitor), and Location usage and lists the reporting applications.</li>
-<li><strong>Task Progress:</strong> Passively observes taskbar progress (<code>ITaskbarList3</code>) for File Explorer, browsers, and archivers to display ongoing transfers in one place.</li>
-<li><strong>Displays & Wi-Fi Hotspot:</strong> Shows active external monitors/projection mode (<code>QueryDisplayConfig</code>) and Windows Mobile Hotspot status/connected client count (<code>NetworkOperatorTetheringManager</code>).</li>
-<li><strong>System Alerts (RAM & Storage on by default; Temperature optional, off by default):</strong></li>
-<li><strong>RAM & Storage (enabled by default):</strong> Alerts when physical RAM crosses 80%/90%/95% or when any fixed drive has less than 10% free space (listing the low-space volumes).</li>
-<li><strong>CPU/GPU Temperature (optional, off by default):</strong> Alerts when CPU/GPU temperatures from a local LibreHardwareMonitor web server (<code>http://127.0.0.1:&lt;port&gt;/data.json</code>) cross 70/80/90 °C.</li>
-<li><strong>OBS Studio Recording (optional, off by default):</strong> Connects to local OBS WebSocket v5 (<code>ws://127.0.0.1:&lt;port&gt;</code>) when OBS is running to display recording elapsed time and Pause/Resume/Stop buttons.</li>
-</ul>
-<h2 id="quicktogglespositioningnotes">Quick toggles, positioning &amp; notes</h2>
-<ul>
-<li><strong>Taskbar position (<code>root_left</code> on centered taskbar, automatic <code>tray_left</code> on left-aligned taskbar):</strong> By default (<code>root_left</code>), when the Windows 11 taskbar is centered, the widget sits on the left side of the taskbar right after the native Windows Widgets button (or at the left edge if Widgets is turned off in Windows Settings). You can optionally enable <strong>Hide Windows Widgets button in left corner</strong> (<code>appearance.hideWidgetsButton</code>, off by default) to collapse the native Widgets button while using <code>root_left</code> and restore its original state when disabled. Whenever the taskbar is left-aligned (<code>TaskbarAl = 0</code>), <code>root_left</code> automatically falls back to the system tray (<code>tray_left</code>) so the Start button and app icons are never covered.</li>
-<li><strong>Right-click quick toggles vs. Windhawk settings:</strong> Toggles in the widget's right-click context menu save quick runtime overrides (<code>ui.*</code>) that take precedence over the Windhawk settings tab. Saving settings in Windhawk (or choosing <strong>Reset to Windhawk settings</strong> in the context menu) clears all runtime overrides.</li>
-<li><strong>OBS WebSocket password:</strong> The <code>obs.password</code> field is stored as a standard Windhawk mod setting, so it is included in Windhawk settings exports.</li>
-</ul>
-<h2 id="optionallocalintegrationssetup">Optional local integrations setup</h2>
-<ul>
-<li><strong>OBS Studio:</strong> Enable <strong>Tools > WebSocket Server Settings > Enable WebSocket server</strong> in OBS Studio (v28+), then enable <strong>OBS recording</strong> in the mod settings and match the port (default <code>4455</code>) and password.</li>
-<li><strong>LibreHardwareMonitor (Temperature):</strong> In LibreHardwareMonitor, enable <strong>Options > Remote Web Server > Run</strong>, then enable <strong>Temperature alerts</strong> in the mod settings and match the local port (default <code>8085</code>).</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>Supported OS:</strong> Windows 11 (build 22000 or later) with the native primary XAML taskbar.</li>
-<li>Windows 10 and third-party replacement taskbars are not supported.</li>
-</ul>
-<hr />
-<h2 id="tingvit">Tiếng Việt</h2>
-<p><strong>Live Update for Windows 11</strong> tích hợp nhiều hoạt động trực tiếp (Live Activities) vào <strong>một vị trí duy nhất</strong> trên thanh taskbar gốc của Windows 11.</p>
-<h3 id="imkhcbitsoviccmodhinc">Điểm khác biệt so với các mod hiện có</h3>
-<ul>
-<li><strong>Tích hợp trực tiếp vào taskbar thay vì cửa sổ nổi:</strong> Khác với <em>Dynamic Island for Windows</em> (tạo cửa sổ nổi riêng phía trên màn hình), mod này gắn trực tiếp vào cây giao diện XAML của taskbar Windows 11 và dùng chung một ô hiển thị duy nhất.</li>
-<li><strong>Tự động chuyển đổi theo ngữ cảnh:</strong> Khác với các mod chỉ hiển thị nhạc hoặc chỉ hiển thị âm lịch, Live Update tự động ưu tiên hoạt động mới phát sinh (như phát nhạc, cắm sạc, bật hẹn giờ, dùng micro/camera, quay OBS) và hiển thị Âm lịch &amp; Tử vi khi ở trạng thái nghỉ.</li>
-</ul>
-<h3 id="cchotnghtr">Các hoạt động hỗ trợ</h3>
-<ul>
-<li><strong>Phương tiện (Media):</strong> Ảnh bìa, tên bài hát, nghệ sĩ, thanh tua và nút điều khiển nhạc hỗ trợ nhiều phiên phát cùng lúc.</li>
-<li><strong>Pin & Thiết bị Bluetooth:</strong> Phần trăm pin, thời gian ước tính, mức pin thiết bị Bluetooth đang kết nối và nút mở nhanh cài đặt Nguồn &amp; Pin của Windows.</li>
-<li><strong>Đồng hồ Windows:</strong> Đọc trạng thái Bấm giờ, Hẹn giờ và Báo thức từ ứng dụng Đồng hồ Windows; tiếp tục đếm từ mốc đồng bộ cuối khi thu nhỏ ứng dụng.</li>
-<li><strong>Âm lịch, Tử vi & Danh mục Văn hóa Việt:</strong> Tính ngày âm lịch, Can Chi, Nạp Âm, Giờ Hoàng Đạo, Trực, lịch tháng và danh sách ngày lễ Việt Nam. Mục <strong>Văn hóa</strong> cung cấp danh mục chủ đề văn hóa Việt Nam và mở bài viết tham khảo trong trình duyệt mặc định khi bấm vào.</li>
-<li><strong>Quyền riêng tư:</strong> Hiển thị ứng dụng đang sử dụng Micro, Camera hoặc Vị trí.</li>
-<li><strong>Tiến trình tác vụ:</strong> Theo dõi trạng thái tiến độ trên taskbar của File Explorer, trình duyệt và phần mềm giải nén.</li>
-<li><strong>Trình chiếu & Điểm phát sóng Wi-Fi:</strong> Hiển thị màn hình phụ đang kết nối và trạng thái Mobile Hotspot cùng danh sách thiết bị.</li>
-<li><strong>Cảnh báo hệ thống (RAM & Bộ nhớ bật mặc định; Nhiệt độ tùy chọn, tắt mặc định):</strong></li>
-<li><strong>RAM & Ổ đĩa (bật mặc định):</strong> Cảnh báo khi RAM vượt 80%/90%/95% hoặc khi ổ đĩa cố định còn dưới 10% dung lượng trống (hiển thị rõ tên ổ đĩa bị đầy).</li>
-<li><strong>Nhiệt độ CPU/GPU (tùy chọn, tắt mặc định):</strong> Cảnh báo khi nhiệt độ CPU/GPU đọc từ LibreHardwareMonitor Remote Web Server (<code>http://127.0.0.1:&lt;port&gt;/data.json</code>) vượt 70/80/90 °C.</li>
-<li><strong>Quay màn hình OBS (tùy chọn, tắt mặc định):</strong> Kết nối cục bộ (<code>127.0.0.1</code>) với OBS WebSocket v5 khi bật trong cài đặt để hiển thị thời lượng quay và nút Tạm dừng/Tiếp tục/Dừng.</li>
-</ul>
-<h3 id="luvvtrmenuchutphimtkhuobs">Lưu ý về vị trí, menu chuột phải &amp; mật khẩu OBS</h3>
-<ul>
-<li><strong>Vị trí mặc định (<code>root_left</code> khi taskbar căn giữa, tự động về <code>tray_left</code> khi taskbar căn trái):</strong> Mặc định khi thanh taskbar Windows 11 căn giữa, widget nằm ở góc trái (<code>root_left</code>) ngay sau nút Các tiện ích (Widgets) của Windows để không chồng lấp (hoặc sát mép trái nếu bạn đã tắt Widgets trong cài đặt Windows). Bạn có thể bật tùy chọn <strong>Ẩn nút Các tiện ích (Widgets) ở góc trái</strong> (<code>appearance.hideWidgetsButton</code>, tắt mặc định) nếu muốn ẩn nút Widgets gốc khi dùng <code>root_left</code> (tự khôi phục đúng trạng thái ban đầu khi tắt). Khi thanh taskbar được căn trái (<code>TaskbarAl = 0</code>), mod sẽ tự động chuyển vị trí về khay hệ thống (<code>tray_left</code>) để không bao giờ đè lên nút Start và các biểu tượng ứng dụng.</li>
-<li><strong>Menu chuột phải và cài đặt Windhawk:</strong> Các tùy chọn bật/tắt nhanh trong menu chuột phải lưu trạng thái ghi đè tạm thời (<code>ui.*</code>) và được ưu tiên hơn trang cài đặt Windhawk. Khi bạn bấm Lưu trong trang cài đặt Windhawk (hoặc chọn <strong>Khôi phục theo cài đặt Windhawk</strong> trong menu chuột phải), các ghi đè tạm thời này sẽ được xóa.</li>
-<li><strong>Mật khẩu OBS WebSocket:</strong> Trường <code>obs.password</code> là cài đặt thông thường của Windhawk nên sẽ được bao gồm khi xuất (export) cài đặt Windhawk.</li>
-</ul>]]></content>
-        <author>
-            <name>caotu2k5</name>
-            <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.7.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#32487935f11043237f1f92606db29d60475d7953</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2026-10-25T00:50:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the WindowGlass theme to fix a broken background for some context menus.</li>
-<li>Improved translucent background effects in dark mode which are now applied more uniformly to the whole Explorer window.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.8]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#4197cf6f0971248a458b2cf23c1279e44200b907</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2026-10-24T23:21:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the Command Center theme.</li>
-<li>Updated the Borderless theme.</li>
-<li>Fixed misaligned switch controls, e.g. the Bluetooth toggle switch.</li>
-<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
-<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
-<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Settings Styler 1.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-settings-styler#7986323bd6b7c28686248b4347550ea9df58d723</id>
-        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
-        <updated>2026-10-24T21:56:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the Translucent Seamless theme.</li>
-<li>Fixed the mod not detecting a newly created Settings window in some cases, requiring to re-enable the mod to apply the styling.</li>
-<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
-<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
-<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Key to Search 1.0]]></title>
-        <id>https://windhawk.net/mods/windows-key-to-search#1e165a9cf47b589451bf8628cbf6395ba53c745d</id>
-        <link href="https://windhawk.net/mods/windows-key-to-search"/>
-        <updated>2026-10-24T21:01:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowskeytosearch">Windows Key to Search</h1>
-<p>Tap either Windows key to open Search instead of Start. Search opens when the
-key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
-and Win+S continue to work normally. The generated shortcut is held for 50 ms
-before release.</p>
-<p>By default, the helper runs without requesting administrator privileges. On
-Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
-On Windhawk 2.0 alpha 4 or later, the mod requests UIAccess, which also covers
-administrator windows when that host is available.</p>
-<p>The optional <strong>Support administrator windows on Windhawk 1.7.3</strong> setting launches
-an elevated helper. It is off by default. Enabling it can show a UAC prompt at
-every sign-in, and after enabling or updating the mod. The prompt runs on a
-background thread, and an already-running helper prevents another prompt.
-If elevation is cancelled, the helper runs normally instead. Disable and
-re-enable the mod after changing this setting. On Windhawk 2.0, leave this
-setting off and use its UIAccess host.</p>
-<p>The helper uses Windhawk's <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">tool-mod launcher</a>,
-with an optional background elevation path on older Windhawk versions.</p>
-<p>Windows-key mouse gestures used by tools such as AltDrag or AltSnap are not
-supported: the mod withholds the Windows key until another keyboard key is
-pressed. UAC's secure desktop is outside the scope of the mod.</p>]]></content>
-        <author>
-            <name>Tyler</name>
-            <uri>https://github.com/snowtyler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TopBar for Windows 1.4.1]]></title>
-        <id>https://windhawk.net/mods/windhawk-topbar#cc988a903bbf7aad82025e31a485561824478fa2</id>
-        <link href="https://windhawk.net/mods/windhawk-topbar"/>
-        <updated>2026-10-24T19:02:19.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Addition:</strong></p>
-<ul>
-<li>Added a Shortcuts panel in the Settings app to assign custom keyboard shortcuts for flyouts, Start, Search, and Restart Explorer, including support for overriding Windows default keys.</li>
-<li><strong>Added Titlebar Bleed:</strong> When a window is maximized, the TopBar now samples the maximized window's titlebar gradient and displays it behind the bar's content.</li>
-</ul>
-<p><strong>Updates:</strong></p>
-<ul>
-<li>Fixed the Top Bar not hiding in full screen window.</li>
-<li>Fixed the Auto-Hide animation causing the Top Bar to misalign to the top-left.</li>
-<li>Fixed TopBar popup is misaligned at top left, and is rendering small when secondary is set to Vertical Alignment.</li>
-<li>Fixed the DWM backdrop shadow appearing when Top Bar hides in auto hide mode.(made it less noticeable)</li>
-<li>Updated the Reload action to temporarily switch to Default mode before reloading and switching back to Auto-Hide, fixing a mouse input bug.</li>
-<li>Topbar now force-restarts on resolution, and display scale changes to avoid misalignment of topbar.</li>
-<li>Added popup misalignment detection. if the bar gets misaligned, the topbar restarts the thread fixing it.</li>
-<li>Updated the Notification flyout to hide the "Show full notification" button for short messages.</li>
-<li>Fixed activation pill not re-centering after resolution or scale changes.</li>
-<li>Now, setting Width=Auto for <code>Grid#TopBarRoot</code> makes combine removes space between Left, Right, and Center panel and topbar looks like a dynamic island instead of a Bar.</li>
-<li>Fixed GreenBar theme not applying custom colors to WinUI3 icons.</li>
-</ul>]]></content>
-        <author>
-            <name>WasiXGamer</name>
-            <uri>https://github.com/wasixgamer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Minecraft launcher region detection spoof 0.1.0]]></title>
-        <id>https://windhawk.net/mods/minecraft-launcher-region-spoof#59268a9c67ff2f2a6709162c426e1eacbf525832</id>
-        <link href="https://windhawk.net/mods/minecraft-launcher-region-spoof"/>
-        <updated>2026-10-24T18:00:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="minecraftlauncherregiondetectionspoof">Minecraft launcher region detection spoof</h1>
-<p>Presents Singapore region information to PCL CE and HMCL to bypass their
-mainland China restrictions on downloading, installing and repairing Minecraft.
-The purpose is to give users the same choice of launcher features across regions.</p>
-<h2 id="regionandtimezone">Region and time zone</h2>
-<ul>
-<li>PCL CE: user region <code>SG</code>, Windows device region GeoID <code>215</code>, and
-<code>Singapore Standard Time</code>.</li>
-<li>HMCL: Windows user GeoID <code>215</code>, JVM country <code>SG</code>, and JVM time zone
-<code>Asia/Singapore</code>. Existing <code>user.country</code> and <code>user.timezone</code> JVM options are
-replaced, and legacy <code>user.region</code> options are removed.</li>
-<li>The affected launcher's time zone is fixed to UTC+8, without daylight saving
-time. Local times shown by the launcher use UTC+8 even when Windows is set to
-another time zone.</li>
-<li>Language settings are preserved. Locale-dependent formats can reflect the
-Singapore region. The overrides apply within the target processes.</li>
-</ul>
-<h2 id="targetprocesses">Target processes</h2>
-<p>Supports 64-bit x64 and ARM64 processes with these executable names:</p>
-<ul>
-<li><code>PCL2_CE*.exe</code> for PCL CE.</li>
-<li><code>HMCL*.exe</code> for HMCL executables.</li>
-<li><code>java.exe</code> and <code>javaw.exe</code> when the command line launches <code>HMCL*.jar</code>,
-a JAR embedded in <code>HMCL*.exe</code>, or the main class <code>org.jackhuang.hmcl.Main</code>.</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<p>Enable the mod before starting HMCL so that its region options are set before
-JVM creation. Restart PCL CE after enabling the mod to refresh its cached region
-and local time zone. To restore the original region behavior, disable the mod and
-fully restart the affected launcher.</p>
-<h2 id="upstreamchanges">Upstream changes</h2>
-<ul>
-<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3673">PCL CE #3673</a> introduces
-mainland China restrictions for Minecraft and modpack downloads, installation
-and repair, using Windows region, locale, language and time zone signals.</li>
-<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3676">PCL CE #3676</a> adds the Windows
-device region as an additional detection signal.</li>
-<li><a href="https://github.com/HMCL-dev/HMCL/pull/7017">HMCL #7017</a> introduces mainland China
-restrictions for game downloads.</li>
-</ul>]]></content>
-        <author>
-            <name>Creeam</name>
-            <uri>https://github.com/HaHaWTH</uri>
         </author>
     </entry>
 </feed>

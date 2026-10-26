@@ -2,12 +2,405 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-25T18:01:58.000Z</updated>
+    <updated>2026-10-26T15:05:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.0]]></title>
+        <id>https://windhawk.net/mods/altbinz-dark#4028990b798d125c7ee88e143561bdb17b3eb643</id>
+        <link href="https://windhawk.net/mods/altbinz-dark"/>
+        <updated>2026-10-26T15:05:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="altbinzdarkmode">Alt.Binz Dark Mode</h1>
+<p><img src="https://raw.githubusercontent.com/MrSmith2017/altbinz-dark-mode/main/altbinz-dark-mode.png" alt="Before and after: the light blue Alt.Binz versus the dark one" /></p>
+<p>Alt.Binz draws its whole user interface from a light blue skin. This mod
+re-colors everything that is drawn with GDI: brushes, pens, text colors, system
+colors and the opaque skin bitmaps. Common dialogs and shell menus keep
+Windows' own dark mode.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested with Alt.Binz 0.48.4 (32-bit) at 100% display scaling on Windows 11. Some
+elements (the column header bars, the progress bar fills and the status bar button)
+are recognized by their size and color, so another version may look different.</p>
+<h2 id="surfacecolor">Surface color</h2>
+<p>The blue skin surface (toolbar, tabs, status bar, dialogs, Setup) can get another
+color: enter a hex code (for example <code>2F5A96</code>). Very bright colors are darkened
+so that the light text stays readable.</p>
+<h2 id="surfacegradient">Surface gradient</h2>
+<p>Instead of one color the surface can run between two colors. Enter both as hex
+codes, the angle in degrees (0 = left to right, 90 = top to bottom) and the
+balance: 50 is the middle, a higher value gives the end color more room, a lower
+value the start color. The gradient wins over the single surface color.</p>
+<h2 id="progressbars">Progress bars</h2>
+<p>The fill of the progress bars can get one color or, with a second color, a
+gradient, either from top to bottom or from left to right. Leave both empty for the
+default blue.</p>
+<h2 id="appearance">Appearance</h2>
+<p>These values are applied when Alt.Binz is restarted:</p>
+<ul>
+<li><strong>Background lightness</strong>: how dark the lists and dark areas are (percent).</li>
+<li><strong>Text lightness</strong>: how bright text and lines are (percent). Ignored when a text color is set.</li>
+<li><strong>Text color</strong>: an optional color for text and lines.</li>
+<li><strong>List background color</strong>: an optional color for the large list areas.</li>
+<li><strong>Saturation</strong>: how colorful the blue skin is (percent).</li>
+</ul>
+<p>The <strong>column header color</strong> (the header bars of the lists) and everything else is
+applied live. If you disable the mod, restart Alt.Binz to get the original look
+back completely.</p>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PaintShop Pro Dark Image Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/psp-dark-mdi-frames#fa09f39b629470ff8b921ca599c14d262d7d9b48</id>
+        <link href="https://windhawk.net/mods/psp-dark-mdi-frames"/>
+        <updated>2026-10-26T15:04:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="paintshopprodarkimagewindows">PaintShop Pro Dark Image Windows</h1>
+<p><img src="https://raw.githubusercontent.com/MrSmith2017/psp-dark-image-windows/main/psp-dark-image-windows.png" alt="Before and after: light blue-gray image window frames versus dark ones" /></p>
+<p>Corel PaintShop Pro has a dark theme, but the image windows inside the
+workspace keep a light blue-gray frame that looks like Windows XP or 7. They
+are classic MDI child windows, and Windows draws their frames itself, with no
+dark variant.</p>
+<p>This mod paints those frames in dark colors instead:</p>
+<ul>
+<li>title bar, border, icon and title text</li>
+<li>minimize, maximize and close buttons with hover and pressed states</li>
+<li>minimized image windows</li>
+</ul>
+<p>Maximized image windows are left to Windows. Everything is drawn by the mod,
+so no theme files or system settings are touched, and the mod only affects
+PaintShop Pro.</p>
+<h2 id="optionalflashfix">Optional flash fix</h2>
+<p>When you switch between images, PaintShop Pro rebuilds the drop-down lists in
+the tool options bar. For a few frames their selection fields flash white,
+because the Windows combo box falls back to its default brush. The flash fix
+paints that field in dark gray instead.</p>
+<h2 id="settings">Settings</h2>
+<p>All colors are entered as hex codes, for example <code>282828</code> or <code>#282828</code>. A
+value that cannot be read falls back to its default. Changes apply right away.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Tested with PaintShop Pro 2022 on Windows 11. Other versions may work, but
+have not been tested.</li>
+<li>If something looks wrong, disable the mod: the original frames come back
+immediately.</li>
+</ul>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[App Volume Booster 1.0]]></title>
+        <id>https://windhawk.net/mods/app-volume-booster#f7ba2c934c8f67d4488624208f890a0eb4c7614a</id>
+        <link href="https://windhawk.net/mods/app-volume-booster"/>
+        <updated>2026-10-26T15:04:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="appvolumebooster">App Volume Booster</h1>
+<p>Changes the loudness of the audio an app sends to Windows, so it can go past the
+100% limit of the volume mixer.</p>
+<p>This mod doesn't target any process by default.</p>
+<p><strong>Which apps:</strong> open this mod's <em>Advanced</em> tab -&gt; <em>Custom process inclusion list</em> and
+list the exe names you want affected (one per line). Only those processes get the mod.
+Restart an app after adding it to the list.</p>
+<p><em>Note for games:</em> Games are excluded by default in Windhawk. To work with games, they need
+to be specifically added to the inclusion list from Windhawk's Advanced settings:
+<em>Settings > Advanced settings > More advanced settings > Process Inclusion List</em>.</p>
+<p><strong>How loud:</strong> every included app uses the default settings. To give one app its own
+settings, click <strong>+</strong> under <em>Per-app overrides</em>, type its exe name and choose its volume
+and mode. An override only applies to apps that are also in the inclusion list.
+Overrides with an empty process name are ignored.</p>
+<p><strong>Modes</strong></p>
+<ul>
+<li><em>Gain</em> (default): multiplies the audio by the volume %. 100 = unchanged, 200 = twice as
+loud. Anything pushed past full scale is clipped.</li>
+<li><em>Compressor</em>: turns down the loud parts, then applies the volume % as makeup gain, so
+quiet material gets louder with less distortion on loud peaks. Tune it with threshold,
+ratio, attack and release (these settings are shared by all apps).</li>
+</ul>
+<p>Changes apply live. Lower your system volume before starting, boosted audio can be very loud.
+Exclusive-mode streams, spatial audio streams (e.g. Windows Sonic / Dolby Atmos, which bypass
+IAudioRenderClient), and apps that bypass WASAPI entirely may not be affected.</p>
+<p><strong>Troubleshooting:</strong> start the app <em>after</em> enabling the mod (streams created earlier are not seen), then check Windhawk's log for this mod. It reports each stream's format and whether audio is being processed.</p>]]></content>
+        <author>
+            <name>shubho</name>
+            <uri>https://github.com/shubho193</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 0.9.240]]></title>
+        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#6937b85477825dcbee84bf84d05718f0e68436dd</id>
+        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
+        <updated>2026-10-26T15:04:30.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/refs/heads/main/assets/showcase.gif" alt="Showcase GIF" /></p>
+<h1 id="gpuacceleratedexplorerexelistandgridviews">GPU-accelerated <code>explorer.exe</code> list and grid views</h1>
+<p>A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations and modern look.</p>
+<ul>
+<li>Replicates explorer views using hardware accelerated graphics: Details list and icons grid, including thumbnails, sorting and grouping.</li>
+<li>Animated interactions: grouping, sorting, selecting/cutting/copying files, and many more.</li>
+<li>Smooth scrolling, touchpad gestures and inertia scrolling.</li>
+<li>RTL language support.</li>
+<li>Optional button to switch back to native Explorer view; <strong>Ctrl+Alt+F9</strong> also works when the button is hidden.</li>
+<li>Prioritizes responsiveness and animations over efficiency.</li>
+<li>Less likely to break in future Windows updates since it does not modify the default views of explorer but recreates them</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Adjustable Item Height</strong> — Smooth zooming with <code>Ctrl</code>+ mouse wheel or pinch gestures.</li>
+<li><strong>Custom Fonts</strong> — Personalize the appearance with your preferred fonts.</li>
+<li><strong>Text Antialiasing</strong> — Use Windows monitor tuning, smooth grayscale, or no antialiasing while preserving transparent backgrounds.</li>
+<li><strong>Animated Selection & Hover States</strong> — Smooth visual transitions, including a dedicated selection style for file names only.</li>
+<li><strong>Dynamic Zebra Striping</strong> — Animated alternating row colors for improved readability.</li>
+<li><strong>Smooth Scrolling</strong> — Fluid scrolling for a more responsive browsing experience.</li>
+<li><strong>Seamless View Switching</strong> — Overlays the default Explorer views, letting you switch between the modded and native views directly from the Explorer window.</li>
+<li><strong>Faster Loading</strong> — Improves load times through caching and by skipping file pre-sorting.</li>
+<li><strong>Adaptive Image Quality</strong> — Matches icon and thumbnail resolution to visible size and available memory.</li>
+</ul>
+<h2 id="reportbugs">Report bugs</h2>
+<p>Report bugs in the mod's main repository <a href="https://github.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/issues">Here</a>.
+Enable <strong>Enable logging</strong> when reproducing a bug and include Windhawk's log in
+the report. Logs include file names and paths; disable the option afterward.</p>]]></content>
+        <author>
+            <name>DarkionAvey</name>
+            <uri>https://github.com/DarkionAvey</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Rules 1.0]]></title>
+        <id>https://windhawk.net/mods/window-rules#166b3d81bc080be08987c19059d0e0aaaaa051bb</id>
+        <link href="https://windhawk.net/mods/window-rules"/>
+        <updated>2026-10-26T15:04:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowrules">Window Rules</h1>
+<p>Tell Windows what to do with an app's windows, once, and stop fixing them by
+hand. Each rule matches a window (by executable, window class and title) and
+asks for one or more of:</p>
+<ul>
+<li>a position and size, in pixels</li>
+<li>a monitor to open on</li>
+<li>an opacity level</li>
+<li>always on top</li>
+</ul>
+<p>Rules are tried in order. The first enabled rule that matches a window is the
+only one applied to it -- later rules are not consulted for that window, and
+actions are never merged across rules. That is the same model KWin rules and
+WindowManager use, and it is the one that stays predictable when two of your
+rules would both apply.</p>
+<h2 id="whatitdoes">What it does</h2>
+<p>Open the app and the rule happens: the window is moved, sized and made
+translucent where the rule says so. Move the window yourself and the mod lets go
+-- your position wins for the rest of the session, and the rule is not re-applied
+to that window until the app is started again. Saving the settings re-applies
+every rule to the windows that are open at that moment, so editing a rule shows
+you its effect immediately instead of at the next restart.</p>
+<p>Nothing else is touched: no focus, no hiding, and no continuous watch over
+windows that are already in place.</p>
+<h2 id="alwaysontop">Always on top</h2>
+<p>A rule can keep an app's windows above other windows. The window goes up when it
+opens and stays up: activating another window does not take the top away, because
+Windows keeps a window's topmost bit until something actually removes it.</p>
+<p>What it deliberately does not do is fight for the top:</p>
+<ul>
+<li><strong>Another always-on-top window can sit above yours.</strong> The taskbar and other
+pinned apps are the user's own choices, and the mod does not climb back over
+them.</li>
+<li><strong>A fullscreen app on the same monitor makes it step aside.</strong> A window pinned by
+this mod is lowered while a fullscreen game or video covers its monitor, and
+raised again when that app is gone. A maximized window is not fullscreen and
+never triggers this.</li>
+<li><strong>If the app clears the bit itself, the mod leaves it cleared</strong>, and the journal
+says <code>app-cleared</code>, rather than pinning it again on the next activation.</li>
+<li><strong>Dragging the window stops the mod touching it</strong>, the z-order included, for the
+rest of the session.</li>
+<li><strong>Turning the rule off takes the window back down.</strong> The mod only ever lowers a
+bit it set itself, so an app that pins its own windows is never affected.</li>
+<li><strong>The same goes for opacity.</strong> The mod records the windows it made translucent,
+so changing the level takes effect on windows that are already open, and
+clearing the level, deleting the rule or turning the mod off puts them back to
+fully opaque. Only windows the mod faded itself are touched: an app that draws
+its own transparency is never made opaque by this.</li>
+</ul>
+<p>One consequence worth knowing before you pin something: a topmost window stays
+above whatever you switch to with Alt+Tab, so if the pinned window covers most of
+the screen, switching away looks like nothing happened -- the window you wanted is
+behind it. That is how the topmost bit works, not something this mod adds. Pin
+small windows, or leave the rule on "No change" while you are switching around.</p>
+<h2 id="wherewindowsgoandinwhatunits">Where windows go, and in what units</h2>
+<p><strong>Positions and sizes are in physical pixels, not points.</strong> A rule that says
+<code>800x600</code> gets a window 800 physical pixels wide whatever the display scale is,
+so on a 150% display it will look smaller than the same rule on a 100% one. That
+is not adjustable in this version, and it is the same truth the whole mod works
+in: the mod reads and writes physical pixels, and reports them in the journal so
+that what it did can be checked by hand.</p>
+<p><strong>A position is measured from the top-left of the target monitor, not from the
+desktop.</strong> <code>position: 100,200</code> means 100 pixels in and 200 down from the corner
+of the monitor the rule names -- or of the monitor the window is already on, when
+the rule names none. So a rule survives docking, undocking and adding a monitor
+above the primary, which the same numbers in desktop coordinates would not. X and
+Y may be negative to place a window partly off the edge.</p>
+<h2 id="howmatchingworks">How matching works</h2>
+<p>A rule has three optional match fields. Every field you fill in must match; a
+field you leave blank matches anything. The fields are:</p>
+<ul>
+<li><strong>Executable</strong> -- a file name (<code>notepad</code> or <code>notepad.exe</code>) or a full path.</li>
+<li><strong>Window class</strong> -- the window's class name, for example <code>Notepad</code> or
+<code>Chrome_WidgetWin_1</code>.</li>
+<li><strong>Window title</strong> -- searched <em>inside</em> the title, so a fragment is enough.</li>
+</ul>
+<p>All matching is case-insensitive. <code>*</code> and <code>?</code> are wildcards, so <code>chrome*</code> matches
+<code>chrome.exe</code> and <code>Untitled*</code> matches any title starting that way. To use a full
+regular expression, wrap it in slashes: <code>/^Document - \w+\.txt$/</code>. Nothing else
+is treated as a pattern, so a path like <code>C:\Program Files (x86)\Steam\steam.exe</code>
+or a title like <code>Inbox | Outlook</code> matches literally.</p>
+<h2 id="whatitdoesnotdoandwherethelimitsare">What it does not do, and where the limits are</h2>
+<ul>
+<li>Hide a window from the taskbar or Alt+Tab. Toggling the extended window style is
+one-shot and applications reset it themselves; a version that cannot re-assert
+would be a broken promise, so it is not here yet.</li>
+<li>Move windows between virtual desktops: that needs an undocumented Windows
+interface, and this mod does not use one.</li>
+<li><strong>Override an app that insists.</strong> A rule is applied when the window appears and
+re-applied once if the app immediately moves it somewhere else. An app that
+moves its window again after that wins -- the mod stops rather than fighting it.</li>
+<li><strong>A rule waits for a minimized window to be restored.</strong> A minimized window has
+no meaningful rectangle to move, so nothing is applied while it is minimized;
+the rule is applied the moment you restore it, including for an app that starts
+in the tray.</li>
+<li><strong>A maximized window stays maximized.</strong> The mod does not restore it to normal
+first, and what Windows does with a maximized window's restore rectangle is
+Windows' business rather than the mod's, so a rule that sets a position may not
+show until you restore the window yourself.</li>
+<li><strong>Opacity on a window that is already translucent by itself.</strong> Those windows
+draw their own transparency; a flat opacity level would replace it with
+something that renders wrong, so the mod reports <code>already-layered</code> in the journal
+and leaves them alone.</li>
+<li><strong>Change a window's size when the app is in charge of it.</strong> Some apps re-create
+their window when resized; they are left as they are after the single retry.</li>
+<li><strong>The invisible border.</strong> Since Windows 10 a window's rectangle includes about
+seven pixels of invisible resize border on the left, right and bottom, so
+<code>position: 0,0</code> leaves a small visible gap at the left, and an <code>800x600</code> window
+looks about 14 pixels narrower and 7 shorter. The mod does exactly what the
+numbers say in the coordinates Windows reports, and the journal prints them.</li>
+<li><strong>File Explorer windows are not matched.</strong> <code>explorer.exe</code> is on the built-in
+exclude list, because the same process owns the taskbar, the desktop and the
+shell's own windows. Explorer windows cannot be targeted by a rule in this
+version.</li>
+<li><strong>A window on another virtual desktop is left alone until you save the
+settings while it is in front of you.</strong> Those windows are cloaked, and the mod
+ignores cloaked windows on purpose. So if you delete a rule while one of its
+windows sits on another desktop, that window keeps its opacity and its always on
+top until the next settings save with it visible, or until you turn the mod off.
+Nothing is left behind after that.</li>
+<li><strong>Always on top and fullscreen is detected geometrically.</strong> A window counts as
+fullscreen when it covers a monitor and is not maximized. A window that nearly
+covers a monitor is not detected, so a pinned window can stay above it.</li>
+<li><strong>Stepping aside for a fullscreen app is tested, not observed, across
+monitors.</strong> It was built and tried on a single-monitor machine, so "a game on
+the other monitor leaves this window pinned" has not been watched happening.</li>
+</ul>
+<h2 id="notthesameasothermods">Not the same as other mods</h2>
+<ul>
+<li><strong>Always On Top Windows</strong> pins and unpins the active window with a hotkey, by
+hand. This mod keeps an app's windows on top automatically, every time they
+open.</li>
+<li><strong>Prevent Focus Stealing</strong> and <strong>Snap Commander</strong> already cover their own
+actions (focus, and snapping to screen regions) and this mod deliberately does
+not re-implement them.</li>
+<li><strong>Where I Left It</strong> remembers where you left a window and puts it back. This
+mod puts a window where <em>you</em> say, every time. Do not list the same app in
+both mods' settings at once: both would place the window, in an order neither
+can control. The same goes for <strong>Snap Commander</strong>'s auto-snap rules.</li>
+</ul>
+<h2 id="diagnostics">Diagnostics</h2>
+<p><strong>Write a diagnostics journal</strong> appends to <code>window-rules-journal.txt</code> in a folder
+of your own: <code>&lt;Windhawk mod storage&gt;\&lt;your SID&gt;</code>, created with an access control
+list that gives full access to you, to SYSTEM and to administrators, and to nobody
+else. Journal lines carry executable names and window titles, and the shared mod
+storage folder is readable by every account on the machine, so the file is kept
+where only you can read it. If that folder cannot be created the journal is simply
+not written; the mod itself is unaffected.</p>
+<p>Neither the file nor the folder exists until you turn the journal on. It is capped
+at 1 MB (past that it starts again from empty, with a line saying so), and it is
+<strong>off by default</strong>; turn it on when a rule does something you did not expect, or
+when reporting a bug, and the file will say what the mod decided and why. Every
+line is prefixed with what it is doing:</p>
+<ul>
+<li><code>RULES-LOADED</code> and <code>RULE-LOADED</code> -- the rules as the mod understood them, with
+any problem it found in a rule, so a typo is visible instead of silent.</li>
+<li><code>RULE-HIT</code> -- which rule matched which window, and which field decided it.</li>
+<li><code>RULE-NONE</code> -- a window that no rule matched (a few per app, not every one).</li>
+<li><code>RULE-FILTER-SKIP</code> -- a window that was never matched at all, and why.</li>
+<li><code>APPLY</code> -- what was done to a matched window, with the rectangle it was at and
+the rectangle the rule asked for, and why nothing happened when nothing did
+(<code>already-there</code>, <code>overridden</code>, <code>minimized</code>, <code>refused</code>).</li>
+<li><code>SETTLE</code> -- whether the window stayed where the rule put it, was put back once,
+or was left alone because the app kept moving it.</li>
+<li><code>OVERRIDE</code> -- you moved a window yourself; the mod has let go of it.</li>
+<li><code>OPACITY</code> -- what happened to the level, and why: <code>applied</code>, <code>already-there</code>,
+<code>already-layered</code> (the app draws its own transparency, left alone), <code>failed</code>
+(the window refused the change), <code>app-cleared</code> (the app removed the style
+itself), <code>withdrawn</code> (the rule stopped asking, or the mod was turned off).</li>
+<li><code>MONITOR-SKIP</code> -- a rule names a monitor that is not there.</li>
+<li><code>TOPMOST</code> -- what happened to the z-order, and why: <code>applied</code>, <code>already-there</code>,
+<code>overridden</code>, <code>minimized</code>, <code>refused</code>, <code>yielded</code> (a fullscreen app took the
+monitor), <code>reclaimed</code> (it gave the monitor back), <code>app-cleared</code> (the app
+removed the bit itself), <code>withdrawn</code> (the rule stopped asking), or
+<code>not-claimed</code> (the window is on top, but this mod did not put it there).</li>
+<li><code>REAPPLY-PASS</code> -- the sweep after a settings save, and how many windows it moved.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>Rules are read from the top down, and <strong>an entry with every field blank ends the
+list</strong> -- the settings template ships one blank entry, so a fresh install has no
+rules at all until you fill it in. Leave the blank entry last.</p>
+<p>A rule with no match fields is not loaded, because it would apply to every window
+on the desktop; the journal says <code>RULE-PROBLEM</code> and names the rule. To mean every
+window on purpose, put a <code>*</code> in one of the match fields.</p>]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Language Applet Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/language-applet-restorer#2e6bcbf393658d3d17205cd0aaaa012f79751153</id>
+        <link href="https://windhawk.net/mods/language-applet-restorer"/>
+        <updated>2026-10-26T15:04:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="languageappletrestorer">Language Applet Restorer</h1>
+<p>Restores the classic Control Panel <strong>Language</strong> applet from windows 10 1709 and optionally the classic <strong>Region</strong> applet (<code>intl.cpl</code>) of Windows 10 1709 on later versions of Windows.</p>
+<h2 id="preview">Preview:</h2>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151430.png" alt="mainpage" /></p>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151455.png" alt="advancepage" /></p>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151500.png" alt="addlang" /></p>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/intl1709.png" alt="intl.cpl" /></p>
+<h2 id="whatisdownloadedfromwhereandwhen">What is downloaded, from where, and when</h2>
+<p>The mod does not contain any Microsoft binaries. The first time it runs inside <code>explorer.exe</code>, it downloads five files of Windows 10 1709 (build 16299), about 3.7 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
+<p><code>intl.cpl</code>, <code>UserLanguagesCpl.dll</code>, <code>WinLangdb.dll</code>, <code>Bcp47Langs.dll</code> and <code>dui70.dll</code>.</p>
+<p>The size and SHA-256 of every file are checked against values pinned in the mod, and a file that doesn't match is discarded. The originals are kept in the mod's storage folder (<code>dl</code>); patched copies and small compatibility shims are generated from them into <code>bin</code>. Nothing is downloaded again as long as <code>dl</code> is present.</p>
+<p><strong>Offline:</strong> if the files are not on disk and there is no internet connection, the applet is simply not added and the reason is written to the mod's log. Connect to the internet and restart <code>explorer.exe</code> once. After a successful first run the mod works offline, provided <em>Keep downloaded files</em> is on.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Page language</strong>: language of the restored Language page and its Control Panel tooltip. <em>Automatic</em> follows the Windows UI language. Available: English, Italian, Persian, Spanish, French, Portuguese.</li>
+<li><strong>Force translations</strong>: use the embedded translations for the six languages above, instead of relying only on the generated <code>.mui</code> files.</li>
+<li><strong>Keep downloaded files when the mod is disabled</strong>: keep <code>dl</code> and <code>bin</code> in the storage folder so the mod works offline and doesn't download again. If off, the files are deleted when the mod is unloaded.</li>
+<li><strong>Redirect Control Panel's intl.cpl to the restored one</strong>: when enabled, opening Region (<code>intl.cpl</code>) from Control Panel, the Run dialog or <code>control.exe</code> loads the restored 1709 <code>intl.cpl</code> instead of the system one. This is done in <code>explorer.exe</code>, <code>rundll32.exe</code> and <code>control.exe</code>; the mod does nothing in other processes. It only affects windows opened after the setting is changed. The restored file is checked against the expected contents right before it is loaded; if that fails, or the files are not downloaded yet, the system <code>intl.cpl</code> is used.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Only <strong>x64</strong> is supported (no ARM64).</li>
+<li>The 2017 components run inside <code>explorer.exe</code>. A crash in them restarts Explorer.</li>
+<li>The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside <code>explorer.exe</code> (<code>control.exe</code> only gets the part needed to find the applet by name), and the applet's COM classes are created from inside <code>explorer.exe</code>. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (<code>vreg-&lt;pid&gt;.hiv</code> in the mod's storage folder, loaded with <code>RegLoadAppKeyW</code>), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start). If the hive cannot be loaded, the applet is simply not shown.</li>
+<li><strong>Compatibility:</strong> <code>intl.cpl</code> redirection overlaps with the <code>win7-intl-control-panel-restorer</code> mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which <code>intl.cpl</code> is opened.</li>
+<li>While the mod is enabled, one string in <code>shell32.dll</code>'s memory (the applet's entry in Windows' built-in hide list) is blanked so that Control Panel lists the applet. It is restored when the mod is disabled; nothing on disk is changed.</li>
+<li>Links in the applet that open the Settings app are not changed by this mod. The <code>settings-to-control-panel</code> mod can redirect them.</li>
+</ul>
+<h2 id="specialthanksto">Special Thanks to:</h2>
+<p>babamohammed2022 for adding various languages.</p>]]></content>
+        <author>
+            <name>AdmXP8</name>
+            <uri>https://github.com/AdmXP8</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Shortcut Arrow Overlays 1.0.0]]></title>
         <id>https://windhawk.net/mods/remove-shortcut-arrows#99b2c90b8dcdc892d7bcbe4d5978e47dced3a0bb</id>
@@ -888,375 +1281,6 @@ Windows 11 build 26220.</li>
         <author>
             <name>Maveric2005</name>
             <uri>https://github.com/Maveric2005</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DynamicDock 1.0]]></title>
-        <id>https://windhawk.net/mods/dynamicdock#85728c31fb7c3783cd5a2dc6a597f1e10da9e340</id>
-        <link href="https://windhawk.net/mods/dynamicdock"/>
-        <updated>2026-10-23T19:01:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dynamicdock">DynamicDock</h1>
-<p>Best for use with ultrawide monitors, but works on any monitor. Instead of the taskbar popping up in the middle of the screen, 
-the taskbar appears or slides the icons to your mouse <strong>right where your mouse touches the screens edge</strong>.</p>
-<p>This is still the real Windows taskbar, so everything works like normal: jump lists (right-click), hover thumbnails, badges, drag and drop, the tray and the clock.</p>
-<p><img src="https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/assets/DynamicDock-default-taskbar.gif" alt="DynamicDock in action" /></p>
-<p><img src="https://raw.githubusercontent.com/IIKiiNGsLYII/DynamicDock/assets/DynamicDock-with-mods.gif" alt="DynamicDock in action" /></p>
-<h2 id="bottomtaskbarsworkswithautohideoralwaysvisible">Bottom taskbars (works with auto-hide or always visible)</h2>
-<ol>
-<li>Choose how the taskbar shows:<ul>
-<li><strong>Auto-hide:</strong> confirm or turn on <strong>Automatically hide the taskbar</strong> in Windows Settings &gt; Personalization &gt; Taskbar &gt; Taskbar behaviors &gt; Select "Automatically hide the taskbar" from the menu.</li>
-<li><strong>Always visible:</strong> this mod also works with the default bottom taskbar that is always visible. Be sure to turn on <strong>Keep the bottom Windows default taskbar full width</strong> in the <strong>Bottom taskbar</strong> settings.</li></ul></li>
-<li>Keep <strong>Taskbar alignment</strong> on <strong>Center</strong>.</li>
-<li>Move the mouse to the bottom edge of the screen anywhere: the bar opens under it or simply slides the icons to your mouse with the default taskbar.</li>
-</ol>
-<ul>
-<li><strong>Keep in mind</strong> that taskbars change widths based on the amount of icons in the bar. Some additional adjustments may be required as the total taskbar pixel count changes to maintain functionality and spacing as you desire.</li>
-</ul>
-<h2 id="toptaskbar">Top taskbar</h2>
-<ol>
-<li>In Windows Settings &gt; Personalization &gt; Taskbar &gt; Taskbar behaviors, set <strong>Taskbar position</strong> to <strong>Top</strong>. This option
-only exists in recent Windows 11 builds (for example 26200.9711). If your build doesn't have it, use the
-<a href="https://windhawk.net/mods/taskbar-on-top">Taskbar on top for Windows 11</a> mod to move the taskbar to the top.</li>
-<li>In DynamicDock's settings, open <strong>Top taskbar</strong> and turn on <strong>Taskbar on top of screen</strong>.</li>
-<li>Touch the top edge of the screen anywhere: the app icons slide under the mouse.</li>
-</ol>
-<ul>
-<li>The taskbar itself stays full width across the top (Windows can't auto-hide it there), and the tray and clock
-stay at the right edge. Only the row of app icons moves, so nothing collapses or leaves empty space.</li>
-<li>The center zone, limits, edge distance and smooth movement work the same. The icons never slide under the tray.</li>
-<li>The <strong>Tray and clock</strong> and <strong>Rounded corners</strong> settings are for the compact bottom bar only and are ignored for the top taskbar option.</li>
-</ul>
-<h2 id="fullwidthbottomtaskbar">Full-width bottom taskbar</h2>
-<p>Prefer the taskbar to stay full width at the bottom too? Turn on <strong>Keep the bottom taskbar full width</strong> (in the
-<strong>Bottom taskbar</strong> section). The taskbar then works like the top one: it pops up full width with Widgets in the
-left corner and the tray and clock at the right edge, and only the app icons slide to the mouse.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Works with the <strong>default Windows 11 taskbar</strong> and with the <strong>Windows 11 Taskbar
-Styler</strong> mod (DynamicDock moves the bar; the styler keeps deciding how it looks).</li>
-<li>Settings marked <strong>(default taskbar only)</strong> change the look of the plain Windows
-taskbar. When Taskbar Styler or a similar mod restyles the taskbar, those
-settings are skipped so they don't fight that mod's look.</li>
-<li>Other taskbar mods (icon size, clock customization, auto-hide instant show,
-thumbnail reorder) can be used alongside it. <em>Taskbar auto-hide instant show</em>
-is recommended: it removes Windows' delay before the taskbar pops up.</li>
-<li>Windows 11 only.  </li>
-</ul>
-<h2 id="troubleshootingtrythisifthingsarenotworkingcorrectly">Troubleshooting (Try this if things are not working correctly)</h2>
-<ul>
-<li><strong>The bar doesn't move, or the taskbar looks stuck in a moved position:</strong> turn
-DynamicDock off and on again in Windhawk. If that doesn't fix it, restart
-Explorer: open Task Manager, search for <strong>Windows Explorer</strong>, right-click <strong>Windows Explorer</strong> and choose
-<strong>Restart</strong>. This rebuilds the taskbar from scratch (it also closes open File
-Explorer windows). You may need to tap your windows key on the keyboard for the taskbar to reappear. Then return to windhawk and toggle your mods on/off as needed to function properly.</li>
-<li>After installing or updating the mod, the first touch of the screen edge can
-take a moment while DynamicDock finds the taskbar.</li>
-<li>To report a problem, turn on <strong>Debug logging</strong> on the mod's Advanced tab,
-reproduce it, and share the lines from the mod's log. You should see logs being created as you tap the screen edge in different places.</li>
-</ul>]]></content>
-        <author>
-            <name>IIKiiNGsLYII</name>
-            <uri>https://github.com/IIKiiNGsLYII</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Clock Styler 0.4.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-clock-styler#f09550cbeffb51073c224969a2ba706a481d69b6</id>
-        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
-        <updated>2026-10-23T17:03:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lockscreenclockstyler">Lock Screen Clock Styler</h1>
-<p>Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.</p>
-<h2 id="features">Features:</h2>
-<ul>
-<li><strong>Minimalist Sonoma (Clean Typography):</strong> Apple-inspired lock screen typography with date positioned above the time, slender display numerals, dual-layer atmospheric shadow, and bottom-left or center placement.</li>
-<li><strong>Modern Flip Clock:</strong> Split glass cards for hour and minute with an elegant horizontal flip seam.</li>
-<li><strong>Classic Flip Clock:</strong> Classic mechanical Solari-inspired flip clock with matte charcoal flap cards, aged ivory cream typography, mechanical split seam, and hinge axle clips.</li>
-<li><strong>Cyberpunk Sci-Fi HUD Terminal:</strong> Bespoke tactical Netrunner HUD terminal with dark obsidian glass chassis, tactical corner brackets in acid yellow and hot magenta, top telemetry diagnostic bar, electric cyan digits with rhythmic tactical pulse, and bottom telemetry date logger.</li>
-<li><strong>Retro Pixel / LED Dot Matrix Clock:</strong> Authentic dot matrix display inspired by classic digital boards with active and ambient inactive LED dots.</li>
-<li><strong>Minimalist Aura / Floating Clock:</strong> Frameless floating typography with ambient soft drop-shadow depth and an elegant frosted date pill.</li>
-<li><strong>Battery & Charging Capsule:</strong> Live battery percentage and power indicator (⚡ %85) for laptop users, automatically hidden on desktop PCs.</li>
-<li><strong>12-Hour / 24-Hour Format:</strong> Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.</li>
-<li><strong>Show Seconds Toggle:</strong> Optional live seconds display. Supported by every style except the two flip clocks.</li>
-<li><strong>Frosted Glass / Acrylic Styling:</strong> Translucent glass panels with subtle border highlights and rounded corners.</li>
-<li><strong>Dynamic Date Display:</strong> Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.</li>
-<li><strong>Hide Default Widgets:</strong> Clean up the lock screen by hiding MSN weather, sports, and news widgets.</li>
-<li><strong>Hide / Replace Default Clock:</strong> Seamlessly replace the stock Windows 11 clock with custom styles or adjust vertical offsets.</li>
-<li><strong>Extensive Customization:</strong> Card opacity, font size, vertical offsets, and alignments are fully customizable via settings.</li>
-<li><strong>No XAML Diagnostics:</strong> The mod walks the lock screen visual tree from its own UI thread instead of registering a XAML Diagnostics TAP. It can therefore run alongside other XAML-based Windhawk mods such as Windows 11 Start Menu Styler.</li>
-</ul>
-<h2 id="screenshots">Screenshots:</h2>
-<p>| Style | Preview |
-| :---: | :---: |
-| Minimalist Sonoma | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png" alt="Minimalist Sonoma" /> |
-| Retro Pixel / LED Matrix | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/Retro%20Pixel.png" alt="Retro Pixel" /> |
-| Modern Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/modern%20flip%20clock.png" alt="Modern Flip Clock" /> |
-| Classic Flip Clock | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/classical%20flip%20clock.png" alt="Classic Flip Clock" /> |
-| Cyberpunk Sci-Fi HUD | <img src="https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20style.png" alt="Cyberpunk Sci-Fi HUD" /> |</p>
-<h2 id="securitynote">Security Note:</h2>
-<p>This mod exclusively targets <code>LockApp.exe</code>. It does not inject into or interfere with <code>LogonUI.exe</code> or <code>winlogon.exe</code> in the Secure Desktop, preventing any system lockup or logon security risks.</p>]]></content>
-        <author>
-            <name>ali0zdas</name>
-            <uri>https://github.com/ali0zdas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enter to Rename in File Explorer 0.4.0]]></title>
-        <id>https://windhawk.net/mods/macos-enter-rename#9f270d11043b5f657484cc66bcf077aa80b2036d</id>
-        <link href="https://windhawk.net/mods/macos-enter-rename"/>
-        <updated>2026-10-23T16:02:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="entertorenameinfileexplorer">Enter to Rename in File Explorer</h1>
-<p>Use <strong>Enter</strong> to rename a selected file or folder in Windows File Explorer,
-like in macOS Finder. Press <strong>Enter</strong> again to confirm the new name.
-The standard <strong>F2</strong> shortcut is unchanged.</p>
-<h2 id="scope">Scope</h2>
-<ul>
-<li>Works only in File Explorer windows, not on the desktop or in file dialogs,
-and only when the keyboard focus appears to be inside Explorer's shell file
-list.</li>
-<li>Does not intercept Enter while editing text, in the address/search controls,
-or with Ctrl, Alt, or Shift pressed.</li>
-<li>This mod intentionally does <em>not</em> remap Ctrl+Enter to open a file.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested by the original user on Windows 11 for files, folders, rename confirmation,
-search, and multi-selection. Other Windows versions, Explorer extensions and
-alternative list controls have not yet been validated.</p>
-<h2 id="notes">Notes</h2>
-<p>The mod intercepts Enter and synthesizes an F2 key press. The context check
-is based on Explorer window classes, which might differ across builds.
-If the mod causes unintended behavior, disable it in Windhawk.</p>]]></content>
-        <author>
-            <name>emagiaco</name>
-            <uri>https://github.com/emagiaco</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Refined Quick Settings and Sound 0.1.154]]></title>
-        <id>https://windhawk.net/mods/refined-quick-settings-and-sound#9c7175f4a37662b14e99df140efbb33936871863</id>
-        <link href="https://windhawk.net/mods/refined-quick-settings-and-sound"/>
-        <updated>2026-10-22T23:04:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="refinedquicksettingsandsound">Refined Quick Settings and Sound</h1>
-<p><img src="https://raw.githubusercontent.com/HeyOkay/Refined-Quick-Settings-and-Sound/main/docs/assets/preview-lossless.webp" alt="Quick Settings and Sound preview" /></p>
-<p>This "vanilla+" Windhawk mod reworks the Windows 11 "Quick Settings" and
-"Volume mixer" panels and makes them fit for daily use. It follows the
-Windows 11 design language, refining existing features and adding new ones:
-thin sliders, even row spacing at every display scale and a smooth frame
-transition to the Sound page.</p>
-<p>Everything runs inside the shell's own panels (ShellHost): no extra windows,
-the system Acrylic, fonts, themes, lists, bindings and animations are kept, and
-customizations are restored when the mod is unloaded.</p>
-<h2 id="features">Features</h2>
-<p><strong>Quick Settings</strong></p>
-<ul>
-<li>Brightness control for DDC/CI-compatible displays, with animated glyphs.</li>
-<li>Press the brightness glyph to toggle night light on and off.</li>
-<li>Open display settings directly from the glyph on the right side of the slider.</li>
-</ul>
-<p><strong>Sound</strong></p>
-<ul>
-<li>The "Sound output" page is now simply "Sound".</li>
-<li>Change the output and input devices and the spatial sound provider from
-dropdown lists.</li>
-<li>Below them, a reworked Volume mixer for the apps. It is collapsible and
-remembers its last state.</li>
-<li>Mouse wheel on every slider; press an app's icon to mute and restore it, or
-its volume number to set it to 100.</li>
-<li>Hide apps from the mixer by name (setting below).</li>
-</ul>
-<p><strong>Taskbar</strong></p>
-<ul>
-<li>Click the volume icon to open Sound directly.</li>
-<li>The system's animated volume glyph and an Ethernet glyph for wired networks.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11 24H2 or later (Quick Settings hosted by ShellHost), x86-64
-(ARM64 is untested).
-Development testing: build 26300, primarily at 125% scale.</li>
-<li>Other Windows builds and display scales need validation. The mod depends on
-internal shell XAML elements and symbols which can change with Windows updates.</li>
-<li>DDC/CI brightness requires a compatible monitor with DDC/CI enabled.</li>
-<li>Added labels such as "Sound" and "Input device" are in English.</li>
-<li>The first Sound opening in each ShellHost process starts with the mixer
-collapsed; subsequent openings remember its state.</li>
-</ul>
-<p>Control Center discovery uses COM-interface symbol hooks in ControlCenter.dll and the public XAML visual tree; it does not open a XAML Diagnostics connection. Compatibility with other mods that edit the same controls still requires live testing. If the panel was already open when enabling the mod, close and reopen it; restart ShellHost if it is not picked up.</p>
-<h2 id="notes">Notes</h2>
-<p>Disable other mods that change the Quick Settings, the Sound page or the
-taskbar volume icon before enabling this one. Errors are written to the
-Windhawk log.</p>
-<h2 id="creditsandlicense">Credits and license</h2>
-<p>GPL-3.0-only. The UI-thread dispatch technique follows
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-notification-center-styler.wh.cpp">m417z's Notification Center Styler</a>
-(GPL-3.0). ControlCenter.dll discovery uses the COM produce-interface pattern
-documented by <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/per-monitor-brightness.wh.cpp">Per-monitor brightness</a>.
-The hidden-applications parser is adapted from the local
-Sound Output Direct and Taller mod (GPL-3.0-only).
-The sliders-horizontal and ethernet-port icons are from
-<a href="https://lucide.dev/">Lucide</a> (ISC); the license notice is included below
-in this source file.</p>]]></content>
-        <author>
-            <name>HeyOkay</name>
-            <uri>https://github.com/HeyOkay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mute Focused Window 1.0]]></title>
-        <id>https://windhawk.net/mods/mute-focused-window#b947ebaf2f1b237297b90ed9fe480958f701f311</id>
-        <link href="https://windhawk.net/mods/mute-focused-window"/>
-        <updated>2026-10-22T15:04:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mutefocusedwindow">Mute Focused Window</h1>
-<p>Press <strong>Ctrl+Alt+M</strong> to mute the app whose window has focus. Press it again to
-unmute it. Other apps keep playing.</p>
-<p>This changes the same per-app mute as the Windows Volume Mixer, so the mixer
-shows the result and can undo it.</p>
-<h2 id="whatgetsmuted">What gets muted</h2>
-<p>The mod mutes every audio session that belongs to the focused window's app, on
-every active output device. If some of those sessions are muted and others are
-not, the first press mutes them all.</p>
-<p>Browsers and Electron apps such as Discord play sound from a helper process
-instead of the process that owns the window. The mod therefore includes the
-app's background child processes too. A child process with its own visible
-window is treated as a separate app and left alone. For example, a media player
-launched from a terminal keeps playing when you mute the terminal.</p>
-<h2 id="hotkey">Hotkey</h2>
-<p>Change the hotkey in the mod's settings. Write any modifiers and exactly one
-key, joined by <code>+</code>, for example <code>Ctrl+Alt+M</code>, <code>Win+Shift+F9</code> or <code>Pause</code>.</p>
-<ul>
-<li>Modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.</li>
-<li>Keys: <code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F24</code>, <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>,
-<code>Backspace</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>,
-<code>Down</code>, <code>Left</code>, <code>Right</code>, <code>Pause</code>, <code>ScrollLock</code>, <code>PrintScreen</code>, <code>Numpad0</code>–
-<code>Numpad9</code>, <code>VolumeMute</code>, <code>VolumeDown</code>, <code>VolumeUp</code>, <code>MediaPlayPause</code>,
-<code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code>.</li>
-<li>Any other key: its virtual-key code in hexadecimal, such as <code>0x4D</code>.</li>
-</ul>
-<p>Windows gives a hotkey to only one program at a time, and other apps stop
-receiving that key combination. If the hotkey does nothing, another program may
-already own it. Turn on logging in the mod's Advanced tab to see why.</p>
-<p>The default, Ctrl+Alt+M, also takes Word's Insert Comment shortcut. On keyboard
-layouts with an AltGr key, Windows treats AltGr as Ctrl+Alt, so AltGr+M (<code>µ</code> on
-German layouts) stops typing its character. Choose another hotkey if you need
-either.</p>
-<h2 id="usingthekeyboardsmutekey">Using the keyboard's Mute key</h2>
-<p>Most keyboards with a dedicated Mute key, and laptops with a mute function key,
-send <code>VolumeMute</code>.</p>
-<ul>
-<li>Set the hotkey to <code>VolumeMute</code> to make the Mute key mute the focused app
-instead of everything. Also turn on <strong>Mute the system when there's no app to
-mute</strong>, so the key still mutes everything when you press it on the desktop,
-the taskbar, a File Explorer window or an app without audio.</li>
-<li>Set the hotkey to <code>Ctrl+VolumeMute</code> to keep the Mute key as it is and use
-Ctrl+Mute for the focused app.</li>
-</ul>
-<p>Keyboard software that reassigns the Mute key can stop it from sending
-<code>VolumeMute</code>.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>A browser is muted as a whole, not tab by tab. The Volume Mixer shows it the
-same way.</li>
-<li>An app started from the focused app and hidden in the tray, with no visible
-window, counts as part of the focused app. For example, a music player
-started from a launcher and minimized to the tray is muted along with the
-launcher. Windows gives no reliable way to tell such an app from the hidden
-helper processes that browsers and Electron apps play their sound through.</li>
-<li>Windows remembers an app's mute setting. An app you muted is still muted the
-next time it starts; press the hotkey or use the Volume Mixer to unmute it.</li>
-<li>Pressing the hotkey on the desktop, the taskbar or a File Explorer window does
-nothing, unless <strong>Mute the system when there's no app to mute</strong> is on.</li>
-<li>That system mute doesn't show Windows' volume indicator.</li>
-</ul>]]></content>
-        <author>
-            <name>Benevolent Anarchy</name>
-            <uri>https://github.com/cicely-f</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bulk Copy File and Folder Names 0.3.0]]></title>
-        <id>https://windhawk.net/mods/bulk-copy-file-and-folder-names#5faa114e2d64c77e02d79f4a54a79f92c89137dd</id>
-        <link href="https://windhawk.net/mods/bulk-copy-file-and-folder-names"/>
-        <updated>2026-10-22T15:04:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bulkcopyfileandfoldernames">Bulk Copy File and Folder Names</h1>
-<p>Windows has Copy as path (Ctrl+Shift+C), but it gives you full paths in quotes,
-and often you only want the names. This mod copies the names of the files and
-folders you select in File Explorer as plain text, one per line. It works on one
-item or on many at once. A selection can mix files and folders.</p>
-<h2 id="rightclickmenu">Right-click menu</h2>
-<p>Right-click a file, a folder, or a selection of many files and folders in a File
-Explorer window. The classic menu gets two entries, Copy name and Copy name
-without extension. On Windows 11 they're in the menu you get from Show more
-options or Shift+right-click. The entries are on by default, and you can turn
-them off in the settings.</p>
-<p>Copy name without extension keeps folder names whole, so <code>sub.folder</code> stays
-<code>sub.folder</code>, and <code>a.tar.gz</code> becomes <code>a.tar</code>. A name that starts with a dot, like
-<code>.gitignore</code>, stays whole.</p>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>The hotkeys are off until you turn them on, so a fresh install takes no key away
-from File Explorer. To turn them on, open the mod's Settings tab in Windhawk,
-tick Hotkeys, and save. The defaults are Ctrl+Shift+Y for names with extensions
-and Ctrl+Shift+U for names without. You can change both keys there too.</p>
-<p>A key is handled inside the File Explorer window that has the focus, so it never
-reaches other programs. It does nothing while you type in a rename box, the
-address bar or the search box, and it does nothing when no file or folder is
-selected. In both cases the key goes to File Explorer as usual.</p>
-<p>If you pick a key that File Explorer already uses, like Ctrl+Shift+N for New
-folder, the mod wins while the hotkeys are on and something is selected.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li>Hotkeys: turn the two key combinations on. Off by default.</li>
-<li>Modifiers and key for each copy action. Ctrl+Alt and Ctrl+Alt+Shift also
-match AltGr, so skip them if your keyboard layout types letters with AltGr.</li>
-<li>Separator: a new line, a comma, or a space between names.</li>
-<li>Quote names: put each name in double quotes.</li>
-<li>Right-click menu: show the two menu entries. On by default.</li>
-</ul>
-<h2 id="limits">Limits</h2>
-<ul>
-<li>The keys and menu entries don't work on the desktop or in file dialogs. Only
-File Explorer windows count.</li>
-<li>The Windows 11 compact menu can't take new entries from a mod. Use Show more
-options.</li>
-<li>The menu entries don't show on the column header menu, the menu you get from
-empty space in a folder, or the menu you get after a drag with the right
-mouse button.</li>
-<li>Items that aren't files or folders, like drives in This PC, give their
-internal name.</li>
-<li>If nothing is selected, nothing happens.</li>
-</ul>
-<h2 id="tutorial">Tutorial</h2>
-<ol>
-<li>Select the files and folders in a File Explorer window. A mix of both is
-fine.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-1-select.png" alt="A File Explorer window with two folders and five files selected in the demo-names folder" /></li>
-<li>Hold Shift and right-click the selection. Pick Copy name or Copy name
-without extension.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-4-right-click-menu.png" alt="The lower part of the classic right-click menu, with Copy name and Copy name without extension in their own group above Properties" /></li>
-<li>Paste. Copy name gives you every name with its extension, one per line.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-2-names-with-extensions.png" alt="The selected names pasted into a text window, one per line, with their extensions" /></li>
-<li>Copy name without extension drops the extension from files and keeps the
-full name of folders.
-<img src="https://raw.githubusercontent.com/Shaerif/windhawk-mods/main/docs/screenshots/bulk-copy-step-3-names-without-extensions.png" alt="The same names pasted again without extensions, while the folder Backup.2025 keeps its full name" /></li>
-<li>If you'd rather use the keyboard, tick Hotkeys in the settings. Ctrl+Shift+Y
-then does what Copy name does, and Ctrl+Shift+U does what Copy name without
-extension does.</li>
-</ol>
-<h3 id="gotchas">Gotchas</h3>
-<ul>
-<li>In step 2, the compact Windows 11 menu can't show the entries. Use
-Shift+right-click or Show more options.</li>
-<li>In step 4, only the last extension goes, so <code>archive.tar.gz</code> becomes
-<code>archive.tar</code>.</li>
-<li>In step 5, a key does nothing while you type in a rename box, the address bar
-or the search box, and nothing while no item is selected. File Explorer gets
-the key instead.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The way the hotkeys are caught, a hook on TranslateAcceleratorW that steps
-aside while a text box has the focus, follows the approach of the Explorer
-Custom Shortcuts mod.</p>]]></content>
-        <author>
-            <name>Shaerif</name>
-            <uri>https://github.com/Shaerif</uri>
         </author>
     </entry>
 </feed>
