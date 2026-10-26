@@ -2,14 +2,12 @@
 // @id              dynamicdock
 // @name            DynamicDock
 // @description     For Ultrawide Monitors: Force the taskbar to follow your mouse when it touches the edge and your icons will be centered on your mouse. Works with default and modded taskbars.
-// @version         1.1
+// @version         1.0.1
 // @author          IIKiiNGsLYII
 // @github          https://github.com/IIKiiNGsLYII
 // @include         explorer.exe
-// @include         StartMenuExperienceHost.exe
-// @include         SearchHost.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -50,12 +48,10 @@ Prefer the taskbar to stay full width at the bottom too? Turn on **Keep the bott
 left corner and the tray and clock at the right edge, and only the app icons slide to the mouse.
 
 ## Start menu above the dock
-Turn on **Open Start above the dock** (in the **Start menu** settings) and the Start menu, opened with the
-Windows key or the Start button, appears above the moved bar instead of in the middle of the screen. Its search
-box moves along with it, and the menu always stays fully on screen. To do this, DynamicDock also runs inside the
-Start menu (StartMenuExperienceHost.exe) and its search box (SearchHost.exe).
-- If "Activate a window by hovering over it with the mouse" is turned on in Windows, keep the mouse still while
-  Start opens: hovering over another window activates it and closes Start (this is Windows behavior).
+Want the Start menu to open above the moved bar instead of in the middle of the screen? Install the
+[Shell Flyout Positions](https://windhawk.net/mods/shell-flyout-positions) mod alongside DynamicDock and, in its
+**Start menu** settings, set **Horizontal alignment** to **Center-aligned to the Start button** (or left/right-aligned
+to the Start button). DynamicDock moves the Start button with the bar, so Start then opens right above it.
 
 ## Compatibility
 - Works with the **default Windows 11 taskbar** and with the **Windows 11 Taskbar
@@ -136,11 +132,6 @@ Start menu (StartMenuExperienceHost.exe) and its search box (SearchHost.exe).
     $name: Keep the bottom Windows default taskbar full width (move only the icons)
     $description: Instead of gathering into a compact floating bar, the bottom taskbar stays full width with Widgets in the left corner and the tray and clock at the right edge. Only the app icons slide to the mouse. When on, the Tray and clock and Rounded corners settings are not used. This setting is not compatible with a modded taskbar styler.
   $name: Bottom taskbar
-- Start:
-  - FollowDock: false
-    $name: Open Start above the dock
-    $description: When the bar has moved away from the center, the Start menu (Windows key or Start button) opens above it instead of in the middle of the screen. Uses the main taskbar.
-  $name: Start menu
 - Appearance:
   - Corners: none
     $name: Rounded corners (default bottom taskbar only)
@@ -197,7 +188,6 @@ struct Settings {
     bool smoothFollow;
     bool topTaskbar;  // taskbar at the top of the screen: watch the top edge
     bool bottomFullWidth;  // bottom taskbar stays full width; only the icons move (like the top taskbar)
-    bool startFollowDock;  // open the Start menu above the moved bar
     TrayMode trayMode;
     Corners corners;
     int cornerRadius;  // screen pixels
@@ -876,146 +866,6 @@ void TickBar(Bar& b, POINT pt, Settings const& s) {
     }
 }
 
-// ---- Start menu above the dock ----
-// Explorer works out how far the main bar's center is from the screen center (physical pixels). When that changes,
-// it keeps the value as a property of the taskbar window (read once by the Start menu and search box processes when
-// the mod loads there) and posts it to their windows. The Start menu (StartMenuExperienceHost) and its search box
-// (SearchHost) then shift themselves while hidden, so Start opens above the dock with no flash. Nothing polls.
-constexpr wchar_t kStartShiftProp[] = L"DynamicDock.StartShift";
-UINT ShiftMsg() {  // registered on first use, not while the DLL is being loaded
-    static UINT msg = RegisterWindowMessage(L"DynamicDock.ApplyStartShift");
-    return msg;
-}
-
-// The main CoreWindow of the process with this image name (the largest one; the others are 1x1 helper windows).
-// With no name: of the current process.
-HWND FindCoreWindow(const wchar_t* exeName) {
-    HWND best = nullptr;
-    long bestArea = 1;
-    for (HWND h = nullptr; (h = FindWindowEx(nullptr, h, L"Windows.UI.Core.CoreWindow", nullptr));) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(h, &pid);
-        if (exeName) {
-            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-            if (!process) continue;
-            WCHAR path[MAX_PATH];
-            DWORD size = MAX_PATH;
-            bool match = QueryFullProcessImageName(process, 0, path, &size) && wcsrchr(path, L'\\') && !_wcsicmp(wcsrchr(path, L'\\') + 1, exeName);
-            CloseHandle(process);
-            if (!match) continue;
-        } else if (pid != GetCurrentProcessId()) {
-            continue;
-        }
-        RECT r;
-        if (!GetWindowRect(h, &r)) continue;
-        if (long area = (long)(r.right - r.left) * (r.bottom - r.top); area > bestArea) {
-            best = h;
-            bestArea = area;
-        }
-    }
-    return best;
-}
-
-void PostStartShift(INT_PTR dx) {
-    for (auto exe : {L"StartMenuExperienceHost.exe", L"SearchHost.exe"})
-        if (HWND h = FindCoreWindow(exe)) PostMessage(h, ShiftMsg(), (WPARAM)dx, 0);
-}
-
-void PublishStartShift(Settings const& s, HWND tray) {  // poll thread; does work only when the value changes
-    static INT_PTR published = 0;
-    Bar& b = GetBar(tray);
-    INT_PTR dx = 0;
-    if (s.startFollowDock && b.appliedX != INT_MIN && b.spanLeft <= b.spanRight)
-        dx = (b.spanLeft + b.spanRight) / 2 - (b.monitor.left + b.monitor.right) / 2;
-    if (dx == published) return;
-    published = dx;
-    if (dx) SetProp(tray, kStartShiftProp, (HANDLE)dx);
-    else RemoveProp(tray, kStartShiftProp);
-    PostStartShift(dx);
-}
-
-enum class Host { explorer, start, search };
-Host g_host = Host::explorer;
-HWND g_hostWindow;  // the Start menu / search box window of this process
-int g_hostShift;    // shift currently applied, physical pixels (that window's UI thread)
-
-// Keep the shifted menu inside the monitor: limit the shift to the free space beside the centered menu.
-int ClampShift(int dx, int monitorWidth, int menuWidth) {
-    int room = std::max(0, (monitorWidth - menuWidth) / 2);
-    return std::clamp(dx, -room, room);
-}
-
-// Start menu: the window spans the whole screen with the menu centered in it, so shift the XAML content. UI thread.
-void ShiftStartMenu(int dx) {
-    auto content = Window::Current().Content().try_as<FrameworkElement>();
-    if (!content) return;
-    double scale = content.XamlRoot() ? content.XamlRoot().RasterizationScale() : 1;
-    auto menu = FindByClass(content, L"StartSizingFrame", 12);
-    RECT r;
-    GetWindowRect(g_hostWindow, &r);
-    int menuPx = menu ? (int)(menu.ActualWidth() * scale) : 0;
-    dx = ClampShift(dx, r.right - r.left, menuPx);
-    Translate(content).X(dx / scale);
-    Wh_Log(L"Start menu shifted by %d px", dx);
-}
-
-// Search box: its own window, sized to the menu and centered; place it centered + shift.
-int SearchBoxX(HWND h, int width) {
-    MONITORINFO mi = {sizeof(mi)};
-    GetMonitorInfo(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi);
-    int monitorWidth = mi.rcMonitor.right - mi.rcMonitor.left;
-    return mi.rcMonitor.left + (monitorWidth - width) / 2 + ClampShift(g_hostShift, monitorWidth, width);
-}
-
-void ApplyHostShift(HWND h, int dx) {  // that window's UI thread
-    g_hostShift = dx;
-    if (g_host == Host::start) {
-        ShiftStartMenu(dx);
-    } else {
-        RECT r;
-        GetWindowRect(h, &r);
-        SetWindowPos(h, nullptr, SearchBoxX(h, r.right - r.left), r.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        Wh_Log(L"Search box shifted by %d px", dx);
-    }
-}
-
-LRESULT CALLBACK HostSubclassProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
-    if (msg == ShiftMsg()) {  // from Explorer (lp = 0), or from this mod's unload (lp = 1)
-        try {
-            ApplyHostShift(h, (int)(INT_PTR)wp);
-            if (lp && g_host == Host::start) {
-                RestoreTransforms();
-                g_xamlReleased = true;
-            }
-        } catch (...) {
-        }
-        return 0;
-    }
-    if (msg == WM_WINDOWPOSCHANGING && g_host == Host::search && g_hostShift) {  // Windows re-centers it on each show
-        auto* pos = (WINDOWPOS*)lp;
-        if (!(pos->flags & SWP_NOMOVE)) {
-            RECT r;
-            GetWindowRect(h, &r);
-            pos->x = SearchBoxX(h, (pos->flags & SWP_NOSIZE) ? r.right - r.left : pos->cx);
-        }
-    }
-    return DefSubclassProc(h, msg, wp, lp);
-}
-
-// Start menu / search box processes: find this process's window (it may not exist yet right after the process
-// starts), subclass it, apply the current shift once, then exit. After that, Explorer's messages drive everything.
-DWORD WINAPI HostThread(void*) {
-    do {
-        if (HWND h = FindCoreWindow(nullptr); h && WindhawkUtils::SetWindowSubclassFromAnyThread(h, HostSubclassProc, 0)) {
-            g_hostWindow = h;
-            HWND tray = FindWindow(L"Shell_TrayWnd", nullptr);
-            int dx = tray ? (int)(INT_PTR)GetProp(tray, kStartShiftProp) : 0;
-            if (dx) PostMessage(h, ShiftMsg(), (WPARAM)(INT_PTR)dx, 0);
-            return 0;
-        }
-    } while (WaitForSingleObject(g_stopEvent, 500) == WAIT_TIMEOUT);
-    return 0;
-}
 void CALLBACK OnTick(HWND, UINT, UINT_PTR, DWORD) {
     try {
         POINT pt;
@@ -1030,7 +880,6 @@ void CALLBACK OnTick(HWND, UINT, UINT_PTR, DWORD) {
             for (HWND h : taskbars) ProbeFrame(GetBar(h));
         }
         for (HWND h : taskbars) TickBar(GetBar(h), pt, s);
-        PublishStartShift(s, taskbars.front());
         // A taskbar that is no longer handled (All monitors turned off) goes back to normal.
         for (Bar* b : AllBars())
             if (b->appliedX != INT_MIN && std::find(taskbars.begin(), taskbars.end(), b->hwnd) == taskbars.end()) Apply(*b, INT_MIN, false);
@@ -1128,7 +977,6 @@ void LoadSettings() {
     s.smoothFollow = Wh_GetIntSetting(L"Position.SmoothFollow");
     s.topTaskbar = Wh_GetIntSetting(L"TopTaskbar.Enabled");
     s.bottomFullWidth = Wh_GetIntSetting(L"BottomTaskbar.FullWidth");
-    s.startFollowDock = Wh_GetIntSetting(L"Start.FollowDock");
     std::wstring tray = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"Tray.TrayPlacement")).get();
     s.trayMode = tray == L"edge" ? TrayMode::edge : tray == L"hidden" ? TrayMode::hidden : TrayMode::withBar;
     s.edgePadding = std::max(0, Wh_GetIntSetting(L"Position.EdgePadding"));
@@ -1144,12 +992,6 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    WCHAR path[MAX_PATH];
-    GetModuleFileName(nullptr, path, MAX_PATH);
-    std::wstring_view exe = wcsrchr(path, L'\\') ? wcsrchr(path, L'\\') + 1 : path;
-    if (!_wcsicmp(exe.data(), L"StartMenuExperienceHost.exe")) g_host = Host::start;
-    else if (!_wcsicmp(exe.data(), L"SearchHost.exe")) g_host = Host::search;
-    if (g_host != Host::explorer) return TRUE;  // only the Start shift runs there; no taskbar hooks
     LoadSettings();
     Wh_Log(L"Init: Taskbar.View %s", GetTaskbarViewModule() ? L"already loaded" : L"not loaded yet, waiting for it");
     if (HMODULE module = GetTaskbarViewModule()) {
@@ -1163,11 +1005,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (g_host != Host::explorer) {
-        g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-        g_thread = CreateThread(nullptr, 0, HostThread, nullptr, 0, nullptr);
-        return;
-    }
     // Taskbar.View.dll may have loaded between Wh_ModInit and the LoadLibraryExW hook going live.
     if (!g_taskbarViewHooked) {
         if (HMODULE module = GetTaskbarViewModule(); module && !g_taskbarViewHooked.exchange(true) && HookTaskbarView(module))
@@ -1187,18 +1024,6 @@ void Wh_ModBeforeUninit() {
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
-    }
-    if (g_host != Host::explorer) {  // put the Start menu / search box back and stop touching them
-        if (g_hostWindow && IsWindow(g_hostWindow)) {
-            SendMessage(g_hostWindow, ShiftMsg(), 0, 1);  // shift 0 + final cleanup, on the window's UI thread
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hostWindow, HostSubclassProc);
-        }
-        if (g_host == Host::search) g_xamlReleased = true;  // never touches XAML
-        return;
-    }
-    if (HWND tray = FindWindow(L"Shell_TrayWnd", nullptr)) {
-        RemoveProp(tray, kStartShiftProp);
-        PostStartShift(0);  // the Start menu and search box go back to the center
     }
     g_unloading = true;  // queued checks return immediately; only the resets below still run
     auto bars = AllBars();
@@ -1232,7 +1057,6 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_host != Host::explorer) return;
     // Put every bar back first (compact and full-width modes move different parts), then use the new settings.
     for (Bar* b : AllBars()) Apply(*b, INT_MIN, false);
     LoadSettings();
