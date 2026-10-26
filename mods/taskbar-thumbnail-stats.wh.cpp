@@ -1246,7 +1246,8 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
         textBlock.TextWrapping(TextWrapping::NoWrap);
         textBlock.TextTrimming(TextTrimming::CharacterEllipsis);
     } else {
-            textBlock.TextTrimming(TextTrimming::None);
+        textBlock.TextWrapping(TextWrapping::Wrap);
+        textBlock.TextTrimming(TextTrimming::None);
     }
 
     // Reset what a previous style may have set.
@@ -1388,7 +1389,6 @@ bool InjectStats(ViewState& state) {
     }
 
     Controls::TextBlock textBlock;
-    textBlock.TextWrapping(TextWrapping::Wrap);
     textBlock.TextAlignment(TextAlignment::Center);
 
     Controls::Border border;
