@@ -216,9 +216,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Exact demangled names were verified with Windhawk Symbol Helper.
-    // Single exact demangled names from Windhawk Symbol Helper.
-    const WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // taskmgr.exe
+    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             { L"public: long __cdecl WdcDataMonitor::CreateImageListWithResizedImage(void)" },
             &WdcCreateImageList_Original,
@@ -230,8 +229,7 @@ BOOL Wh_ModInit() {
             WdcAddResizedIcon_Hook,
         },
     };
-    if (!WindhawkUtils::HookSymbols(taskmgr, symbolHooks,
-                                   ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(taskmgr, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"Could not resolve WDC helpers; check the Taskmgr PDB symbols");
         return FALSE;
     }
