@@ -2592,12 +2592,12 @@ static void ResolveNativeTooltipPlacement() {
     if (!module) return;
     g_nativeTooltipResolutionAttempted = true;
     // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{
             LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))"
         }, &g_nativeTooltipPlacement, nullptr, true},
     };
-    WindhawkUtils::HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
+    WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
     Wh_Log(L"Native taskbar tooltip placement helper: %p.", g_nativeTooltipPlacement);
 }
 
