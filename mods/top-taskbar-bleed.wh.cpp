@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              top-taskbar-bleed
 // @name            Top Taskbar Bleed
-// @description     Bleeds the color of a maximized window's top edge into a top-docked taskbar behind the task buttons
-// @version         1.0.1
+// @description     Bleeds the color of a maximized window's title bar into a top-docked taskbar behind the task buttons
+// @version         1.1.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -16,15 +16,17 @@
 # Top Taskbar Bleed
 
 When a maximized window sits under a top-docked taskbar, the taskbar gets a
-full-width color panel behind its buttons that matches the window's top edge
-(optionally as a gradient, for Mica title bars), so the window's title bar
-appears to continue up into the bar.
+full-width color panel behind its buttons that matches the window's title bar
+(optionally as a gradient, for Mica title bars), so the title bar appears to
+continue up into the bar.
 
 ![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif)
 
 **Requires a taskbar docked at the top of the screen** (via the taskbar
 position setting on builds that have it, or a mod such as *Taskbar on top for
-Windows 11*). On other dock positions this mod stays idle.
+Windows 11*). On other dock positions this mod stays idle, unless the
+experimental **Any taskbar position** option is on: then a bottom, left or
+right taskbar is painted with the maximized window's title bar color too.
 
 How it works:
 
@@ -32,10 +34,11 @@ How it works:
   maximized window (the first maximized window in z-order on that monitor -
   not necessarily the foreground window, so a small dialog on top of a
   maximized app doesn't cancel the bleed).
-- The window's top edge row is captured from the screen and reduced to its
-  dominant color (so a bit of text or an icon can't skew it); that color is
-  the panel and decides the taskbar theme. Pixels covered by another window -
-  a flyout, a thumbnail, a tooltip, a dialog near the top edge - are left out,
+- The first row of the window's title bar is captured from the screen and
+  reduced to its dominant color (so a bit of text or an icon can't skew it);
+  that color is the panel and decides the taskbar theme. Pixels covered by
+  another window - a flyout, a thumbnail, a tooltip, a dialog near the title
+  bar - are left out,
   so floating windows never tint the bleed. Hovering a taskbar thumbnail
   (Aero Peek) bleeds the peeked window if it is maximized on that monitor and
   hides the panel otherwise, since the desktop is what shows through.
@@ -45,21 +48,23 @@ How it works:
   horizontal gradient, so a Mica or gradient title bar continues into the bar
   (a flat one stays flat). A point that doesn't fit the rest (a toolbar
   reaching that far, a hovered control) is bridged from its neighbors. Off by
-  default: apps that put content along their very top edge can still show it.
+  default: apps that put content along the very top of their title bar can
+  still show it.
 - One panel per taskbar is inserted into the taskbar's XAML tree, above the
-  taskbar background and below the buttons. The panel mirrors the edge: window
-  changes (switching, maximizing, minimizing) are picked up from window events
-  and applied on the next composed frame, and the edge is re-sampled in
+  taskbar background and below the buttons. The panel mirrors the title bar:
+  window changes (switching, maximizing, minimizing) are picked up from window
+  events and applied on the next composed frame, and the title bar is
+  re-sampled in
   between - every **Poll interval** (250 ms by default) while it is static,
   every 25 ms while it is changing - so a title bar that recolors in place
   (focus fade, tab switch, app theme change) is followed frame by frame. With
   Windows animations on, a window being zoomed into place isn't committed
-  until its edge has actually landed, so the panel never flashes the background
+  until its title bar has actually landed, so the panel never flashes the background
   behind it; with animations off the first sample is applied as is.
 
 Supports multiple monitors (each taskbar follows its own monitor).
 
-Settings: **Poll interval** (how often a static edge is re-checked; window
+Settings: **Poll interval** (how often a static title bar is re-checked; window
 changes are event-driven regardless), **Excluded programs** (executables whose
 windows should never trigger the bleed) and the experimental **Gradient bleed**
 toggle described above.
@@ -110,14 +115,17 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
 /*
 - PollIntervalMs: 250
   $name: Poll interval (ms)
-  $description: How often the window edge is re-checked while nothing is happening. Window changes (switching, maximizing, minimizing) are picked up from events immediately regardless; this only decides how soon a title bar that recolors on its own (a tab switch, an app theme change) is followed. Lower is more responsive, higher costs less.
+  $description: How often the window's title bar is re-checked while nothing is happening. Window changes (switching, maximizing, minimizing) are picked up from events immediately regardless; this only decides how soon a title bar that recolors on its own (a tab switch, an app theme change) is followed. Lower is more responsive, higher costs less.
 - ExcludedProcesses: [""]
   $name: Excluded programs
   $description: Executable names (e.g. game.exe) whose windows never trigger the bleed.
 - Experimental:
   - Gradient: false
     $name: Gradient bleed
-    $description: Follow a title bar's horizontal gradient (Mica) instead of its single dominant color. Samples four points across the window's width; apps that place toolbar icons or other content along their very top edge may show it in the gradient.
+    $description: Follow a title bar's horizontal gradient (Mica) instead of its single dominant color. Samples four points across the window's width; apps that place toolbar icons or other content along the very top of their title bar may show it in the gradient.
+  - AnyDock: false
+    $name: Any taskbar position
+    $description: Also paint taskbars docked at the bottom, left or right. The color still comes from the maximized window's title bar, so a bottom taskbar takes the title bar's color without touching it.
   $name: Experimental
 */
 // ==/WindhawkModSettings==
@@ -176,6 +184,7 @@ struct Settings {
     int pollIntervalMs = 250;                     // steady-state re-check of a static edge
     std::vector<std::wstring> excludedProcesses;  // lowercase basenames
     bool gradient = false;                        // experimental: four-point gradient instead of one color
+    bool anyDock = false;                         // experimental: paint bottom/left/right taskbars too
 };
 
 std::mutex g_settingsMutex;
@@ -203,6 +212,7 @@ void LoadSettings() {
     }
     s.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"PollIntervalMs"), 50, 60000);
     s.gradient = Wh_GetIntSetting(L"Experimental.Gradient") != 0;
+    s.anyDock = Wh_GetIntSetting(L"Experimental.AnyDock") != 0;
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -477,7 +487,7 @@ struct Island {
     wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // the root's own RequestedTheme (restored on hide)
     bool originalSystemLight = false;  // Windows mode when originalTheme was captured
     int64_t themeCallbackToken = 0;  // RegisterPropertyChangedCallback on the root's RequestedTheme (0 = none)
-    Rgb color{};         // dominant color of the edge (theme decision)
+    Rgb color{};         // dominant color of the title bar (theme decision)
     Gradient gradient{};  // what the panel shows
 };
 
@@ -520,7 +530,7 @@ enum class UpdateStep { Full, PanelOnly, StrokeAndTheme, ReassertTheme };
 struct IslandUpdate {
     HWND hwnd;
     bool active;
-    Rgb color;          // dominant edge color: theme decision and log
+    Rgb color;          // dominant title bar color: theme decision and log
     Gradient gradient;  // what to paint
     UpdateStep step;
 };
@@ -571,15 +581,15 @@ constexpr UINT WM_TRACKER_SETTINGS = WM_APP + 2;  // re-run the color pipeline o
 // that also covers events generated while the tracker was busy, which the
 // hook delivers only once the loop pumps messages again.
 //
-// While a maximized window is present the edge is re-sampled: every
+// While a maximized window is present the title bar is re-sampled: every
 // Poll interval (setting) when the strip is static, every kFastPollMs while it is changing
 // (a focus fade, a window landing after an animation), so the panel follows a
 // transition frame by frame instead of in coarse steps. The slow poll only has
-// to catch an edge that recolors on its own (a tab switch, an app theme
+// to catch a title bar that recolors on its own (a tab switch, an app theme
 // change) - every window change already gets the event tick - so it can be
 // leisurely; it is the steady-state cost of the mod, one EnumWindows pass and
 // one screen readback per poll. Fast polling is capped at kFastMaxMs per
-// transition so content that never settles (video at the top edge) can't keep
+// transition so content that never settles (video in the title bar) can't keep
 // it on; it re-arms once the strip has been still for kFastRearmTicks slow
 // polls.
 //
@@ -802,7 +812,7 @@ bool HookLivePreview() {
     return true;
 }
 
-// Whether Peek of `peeked` fills `hmon` with that window's edge. A window that
+// Whether Peek of `peeked` fills `hmon` with that window's title bar. A window that
 // was minimized while maximized (Win+D, minimize) is shown by Peek at full
 // size, but IsZoomed is false for it and its rect is parked off screen; its
 // placement still says WPF_RESTORETOMAXIMIZED and where it lives.
@@ -836,25 +846,29 @@ bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
     return horizontal && std::abs(tb.top - mon.top) < std::abs(tb.bottom - mon.bottom);
 }
 
-// Rows sampled along the window's top edge, starting at the very first visible
-// row: a maximized window's 1px DWM border sits in the off-screen frame zone, so
-// there is nothing to skip. One row only: it is still thousands of pixels for
-// the histogram, and going deeper starts to include toolbar icons and caption
-// buttons that some apps place right at the top edge. (An app that paints a
-// 1px line of its own along the edge would be sampled as that line; none seen
-// so far, and 2 would be the fix.)
+// Rows sampled along the top of the window's title bar, starting at the very
+// first visible row: a maximized window's 1px DWM border sits in the off-screen
+// frame zone, so there is nothing to skip. One row only: it is still thousands
+// of pixels for the histogram, and going deeper starts to include toolbar icons
+// and caption buttons that some apps place right at the top of the title bar.
+// (An app that paints a 1px line of its own along it would be sampled as that
+// line; none seen so far, and 2 would be the fix.)
 constexpr LONG kSampleRows = 1;
 
 // The frame is clipped to the work area first (some hosts report a maximized
 // frame that extends under the taskbar by the invisible border width), and then
-// kept off the taskbar window itself, so taskbar pixels - including the panel's
-// own color - can never feed back into the sampler.
+// kept off the taskbar window itself when the two overlap (a top taskbar), so
+// taskbar pixels - including the panel's own color - can never feed back into
+// the sampler. The strip is always the top of the window's title bar, whatever
+// the taskbar's position: with the experimental any-position option a bottom
+// taskbar takes the title bar's color.
 RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar) {
     RECT wr;
     if (!IntersectRect(&wr, &frame, &work)) return RECT{0, 0, 0, 0};
     LONG top = wr.top;
     RECT tb;
-    if (taskbar && GetWindowRect(taskbar, &tb) && top < tb.bottom && wr.left < tb.right && wr.right > tb.left) {
+    if (taskbar && GetWindowRect(taskbar, &tb) && top < tb.bottom && top + kSampleRows > tb.top &&
+        wr.left < tb.right && wr.right > tb.left) {
         top = tb.bottom;
     }
     RECT r{wr.left, top, wr.right, top + kSampleRows};
@@ -939,7 +953,7 @@ uint64_t HashPixels(const std::vector<uint32_t>& px) {
 }
 
 // Columns of the strip covered by windows above the target in z-order (flyouts,
-// thumbnails, tooltips, a dialog near the top edge). Pixels in those columns
+// thumbnails, tooltips, a dialog near the title bar). Pixels in those columns
 // are left out of the dominant color, so a floating window never tints the
 // bleed. Click-through and fully transparent overlays don't cover anything,
 // and a window covering the whole strip is ignored (an overlay that slipped
@@ -1054,7 +1068,7 @@ int ColorDistance(Rgb a, Rgb b) {
     return std::max({std::abs(a.r - b.r), std::abs(a.g - b.g), std::abs(a.b - b.b)});
 }
 
-// Gradient along the edge: the dominant color of a window of kGradientWindow x
+// Gradient along the title bar: the dominant color of a window of kGradientWindow x
 // the width, centered at 20/40/60/80% of it. Those positions avoid the app
 // icon and menu on the left, the caption buttons on the right, and most of a
 // centered title; a Mica gradient is far smoother than four points need. A
@@ -1102,7 +1116,7 @@ Gradient SampleGradient(const std::vector<uint32_t>& px, int w, int h, const std
     return g;
 }
 
-// The panel mirrors the edge: no color thresholds or settle times. For the
+// The panel mirrors the title bar: no color thresholds or settle times. For the
 // current target, any difference between the sampled gradient (four equal
 // points when the gradient option is off) and the one showing is applied on
 // the spot. The only wait is the new-target hold described above, and it waits
@@ -1155,7 +1169,7 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         return;
     }
 
-    if (!IsTaskbarTopDocked(taskbar, mi.rcMonitor)) {
+    if (!ctx.settings->anyDock && !IsTaskbarTopDocked(taskbar, mi.rcMonitor)) {
         if (!st.notTopLogged) Wh_Log(L"taskbar %p: not docked at top, idle", taskbar);
         Deactivate(st, taskbar);
         st.notTopLogged = true;
@@ -1264,7 +1278,7 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
     }
 
     // Peek fallback without the hook: keep the panel while a taskbar flyout is
-    // hovered, and until the edge has settled again afterwards.
+    // hovered, and until the title bar has settled again afterwards.
     if (!g_peekHooked && !targetChanged && st.active) {
         if (CursorOverTaskbarPopup(taskbar)) {
             if (!st.peekFrozen) Wh_Log(L"taskbar %p: taskbar flyout hovered, holding the panel", taskbar);
