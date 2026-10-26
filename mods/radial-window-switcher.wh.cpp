@@ -17,6 +17,8 @@
 /*
 # Radial Window Switcher
 
+![Radial Window Switcher](https://raw.githubusercontent.com/kotikdetka/radial-window-switcher/6fe413c441dce347eaf6f80ea5c2bb8c68d17b27/photo_2026-10-26_18-49-46.jpg)
+
 Replaces the standard Alt+Tab with a radial switcher: the icons of open
 windows are arranged in a ring in the center of the screen, the name of the
 selected app is shown in the middle, and a live preview of the selected window
