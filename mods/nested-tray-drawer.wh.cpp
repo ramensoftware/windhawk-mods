@@ -2,7 +2,7 @@
 // @id              nested-tray-drawer
 // @name            Nested Tray Drawer
 // @description     Collect rarely used tray icons in a second drawer.
-// @version         0.1.10
+// @version         0.1.11
 // @author          MEI
 // @github          https://github.com/Meidios
 // @include         explorer.exe
@@ -55,7 +55,7 @@ support. Never bypass these checks to force compatibility.
 There is no right-click icon picker or individual drag-out command. Disabling
 the mod restores the native tray and preserves the saved collection.
 
-## Saved collection and migration
+## Saved collection
 
 Records use Windhawk's public storage API, with a Windows-user SID suffix to
 separate users in installed Windhawk. Membership uses an app GUID, or the owning
@@ -64,21 +64,10 @@ ambiguous or inaccessible identities remain visible. Changed app identifiers can
 require recollection. Records contain app identifiers/encoded paths, not secrets;
 the encoding is not encryption. No records are transmitted.
 
-The first load imports a valid 0.1.8/0.1.9 HKCU collection from this mod's own
-legacy key. Existing Windhawk records always win, including an explicitly cleared
-collection. The catalog build reads that legacy key only for first-time import
-and never writes it or accesses another mod's internal Windhawk storage.
-
-To switch from a development/local copy, disable that copy first. Version 0.1.10
-local builds export their current valid collection as a one-way handoff when
-disabled; the catalog build imports it on first use. Confirm restoration before
-removing the old copy. Local and catalog API stores do not stay in two-way sync;
-switching back uses that copy's own saved state. Do not enable both copies.
-
 An invalid record is kept intact and icons remain visible. The chevron's context
 menu offers **Reset saved collection** for explicit recovery; a readable invalid
 API record is backed up before resetting. Uninstalling removes Windhawk-owned
-storage. The old HKCU migration backup is retained and never automatically erased.
+storage. Updates and Explorer restarts preserve the collection within the same mod ID.
 
 ## Known limits
 
@@ -332,7 +321,6 @@ std::vector<size_t> MatchCollectionKeys(std::vector<std::wstring> const& live,
 }
 // END COLLECTION RECORD
 
-constexpr WCHAR kCollectionValue[] = L"CollectedIconsV1";
 HANDLE g_collectionMutex;
 HANDLE g_instanceGuard;
 
@@ -366,9 +354,6 @@ struct CollectionLock {
 
 // BEGIN COLLECTION STORAGE
 // Canonical storage is Windhawk's public API, scoped to this mod and user.
-// The old HKCU record is a one-time, read-only import in catalog builds.
-constexpr WCHAR kUserCollectionPath[] = LR"(Software\Meidios\Windhawk\NestedTrayDrawer)";
-constexpr bool kDevelopmentBuild = std::wstring_view(WH_MOD_ID).starts_with(L"local@");
 std::wstring g_collectionStorageKey;
 std::wstring g_collectionReadyKey;
 
@@ -383,37 +368,6 @@ bool ValidStoredCollection(std::wstring const& text) {
     return !text.empty() && ParseCollectionRecord(text, keys);
 }
 
-StoredCollection ReadLegacyCollection() {
-    HKEY key{};
-    auto error = RegOpenKeyExW(HKEY_CURRENT_USER, kUserCollectionPath, 0, KEY_QUERY_VALUE, &key);
-    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
-        return {};
-    if (error != ERROR_SUCCESS)
-        return {RecordState::Error, {}};
-    DWORD bytes{}, type{};
-    error = RegQueryValueExW(key, kCollectionValue, nullptr, &type, nullptr, &bytes);
-    if (error == ERROR_FILE_NOT_FOUND) {
-        RegCloseKey(key);
-        return {};
-    }
-    if (error != ERROR_SUCCESS || type != REG_SZ || bytes < sizeof(wchar_t) ||
-        bytes > (kMaxCollectionChars + 1) * sizeof(wchar_t) || bytes % sizeof(wchar_t)) {
-        RegCloseKey(key);
-        return {RecordState::Error, {}};
-    }
-    std::vector<wchar_t> buffer(bytes / sizeof(wchar_t));
-    auto capacity = bytes;
-    error = RegQueryValueExW(key, kCollectionValue, nullptr, &type,
-                             reinterpret_cast<BYTE*>(buffer.data()), &bytes);
-    RegCloseKey(key);
-    if (error != ERROR_SUCCESS || type != REG_SZ || bytes != capacity || buffer.back() != L'\0')
-        return {RecordState::Error, {}};
-    std::wstring text(buffer.data(), buffer.size() - 1);
-    if (text.find(L'\0') != std::wstring::npos || !ValidStoredCollection(text))
-        return {RecordState::Error, std::move(text)};
-    return {RecordState::Present, std::move(text)};
-}
-
 StoredCollection ReadWindhawkCollection() {
     if (g_collectionStorageKey.empty())
         return {RecordState::Error, {}};
@@ -421,7 +375,7 @@ StoredCollection ReadWindhawkCollection() {
     auto count = Wh_GetStringValue(g_collectionStorageKey.c_str(), buffer.data(), buffer.size());
     if (!count) {
         // A marker distinguishes missing storage from an unreadable/empty value
-        // after initialization. Never re-import a stale legacy record on error.
+        // after initialization. An unreadable initialized record is preserved.
         return {Wh_GetIntValue(g_collectionReadyKey.c_str(), 0) ? RecordState::Error
                                                                 : RecordState::Missing,
                 {}};
@@ -429,22 +383,6 @@ StoredCollection ReadWindhawkCollection() {
     std::wstring text(buffer.data(), count);
     return {ValidStoredCollection(text) ? RecordState::Present : RecordState::Error,
             std::move(text)};
-}
-
-enum class MigrationChoice { KeepDestination, ImportLegacy, CreateEmpty, Refuse };
-MigrationChoice ChooseCollectionMigration(StoredCollection const& destination,
-                                          StoredCollection const& legacy) {
-    if (destination.state == RecordState::Error)
-        return MigrationChoice::Refuse;
-    if (destination.state == RecordState::Present)
-        return ValidStoredCollection(destination.text) ? MigrationChoice::KeepDestination
-                                                       : MigrationChoice::Refuse;
-    if (legacy.state == RecordState::Error)
-        return MigrationChoice::Refuse;
-    if (legacy.state == RecordState::Present)
-        return ValidStoredCollection(legacy.text) ? MigrationChoice::ImportLegacy
-                                                  : MigrationChoice::Refuse;
-    return MigrationChoice::CreateEmpty;
 }
 
 bool SaveWindhawkCollection(std::wstring const& text) {
@@ -476,6 +414,7 @@ bool WriteCollection(std::vector<std::wstring> const& keys) {
 }
 // END COLLECTION STORAGE
 
+// BEGIN STORAGE NAMES
 bool InitializeStorageNames() {
     HANDLE token{};
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
@@ -496,54 +435,26 @@ bool InitializeStorageNames() {
     return true;
 }
 
+// END STORAGE NAMES
+
+// BEGIN STORAGE INITIALIZATION
 bool InitializeCollectionStorage() {
     CollectionLock lock;
     if (!lock.acquired)
         return false;
     auto destination = ReadWindhawkCollection();
-    // An established API record takes precedence, including a cleared record.
-    auto legacy =
-        destination.state == RecordState::Missing ? ReadLegacyCollection() : StoredCollection{};
-    auto choice = ChooseCollectionMigration(destination, legacy);
-    if (choice == MigrationChoice::Refuse) {
+    if (destination.state == RecordState::Error) {
         Wh_Log(
             L"Saved collection invalid/unreadable; leaving icons visible. Use Reset saved collection to recover.");
         return true;
     }
-    if (choice == MigrationChoice::KeepDestination)
+    if (destination.state == RecordState::Present)
         return true;
-    bool saved =
-        SaveWindhawkCollection(legacy.state == RecordState::Present ? legacy.text : L"NTD1\n");
+    bool saved = SaveWindhawkCollection(L"NTD1\n");
     std::vector<std::wstring> confirmed;
-    bool verified = saved && ReadCollection(confirmed);
-    Wh_Log(L"Windhawk per-user storage initialized: source=%d success=%d entries=%zu",
-           static_cast<int>(choice), verified, confirmed.size());
-    return verified;
+    return saved && ReadCollection(confirmed) && confirmed.empty();
 }
-
-void ExportDevelopmentHandoff() {
-    // A development-only, one-way handoff. Catalog builds never write a custom
-    // registry store or read another mod's Windhawk namespace. Keep the legacy
-    // backup untouched unless a valid current local record can replace it.
-    if constexpr (kDevelopmentBuild) {
-        CollectionLock lock;
-        if (!lock.acquired)
-            return;
-        auto stored = ReadWindhawkCollection();
-        if (stored.state != RecordState::Present)
-            return;
-        HKEY key{};
-        auto error = RegCreateKeyExW(HKEY_CURRENT_USER, kUserCollectionPath, 0, nullptr, 0,
-                                     KEY_SET_VALUE, nullptr, &key, nullptr);
-        if (error == ERROR_SUCCESS) {
-            error = RegSetValueExW(key, kCollectionValue, 0, REG_SZ,
-                                   reinterpret_cast<const BYTE*>(stored.text.c_str()),
-                                   static_cast<DWORD>((stored.text.size() + 1) * sizeof(wchar_t)));
-            RegCloseKey(key);
-        }
-        Wh_Log(L"Development-to-catalog collection handoff exported: %d", error == ERROR_SUCCESS);
-    }
-}
+// END STORAGE INITIALIZATION
 
 // Symbol-based internal interface access follows System Tray Folders (Ris Peng,
 // GPLv3). Never call an implementation getter on an unverified COM interface.
@@ -1666,25 +1577,51 @@ LRESULT CALLBACK UiWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM l
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
-bool RememberUiThread() {
-    if (IsWindow(g_uiWindow))
-        return g_uiThread == GetCurrentThreadId();
+// BEGIN UI CLASS OWNERSHIP
+ATOM g_uiClassAtom;
+
+bool EnsureUiClassRegistered() {
+    if (g_uiClassAtom)
+        return true;
     WNDCLASSW windowClass{};
     windowClass.lpfnWndProc = UiWindowProc;
     windowClass.hInstance = g_selfModule;
     windowClass.lpszClassName = kUiClass;
-    if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    g_uiClassAtom = RegisterClassW(&windowClass);
+    // A matching name/HINSTANCE can belong to an earlier DLL mapped at this
+    // address. Only our own successful registration proves WndProc ownership.
+    if (!g_uiClassAtom) {
+        Wh_Log(L"UI class registration rejected: error=%lu", GetLastError());
+        return false;
+    }
+    return true;
+}
+
+bool UnregisterOwnedUiClass() {
+    if (!g_uiClassAtom)
+        return true;
+    if (!UnregisterClassW(MAKEINTATOM(g_uiClassAtom), g_selfModule)) {
+        Wh_Log(L"Owned UI class could not be unregistered: error=%lu", GetLastError());
+        return false;
+    }
+    g_uiClassAtom = 0;
+    return true;
+}
+// END UI CLASS OWNERSHIP
+
+bool RememberUiThread() {
+    if (IsWindow(g_uiWindow))
+        return g_uiThread == GetCurrentThreadId();
+    if (!EnsureUiClassRegistered())
         return false;
     auto window = CreateWindowExW(0, kUiClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                   g_selfModule, nullptr);
     if (!window) {
-        UnregisterClassW(kUiClass, g_selfModule);
         return false;
     }
     auto threadHandle = OpenThread(SYNCHRONIZE, FALSE, GetCurrentThreadId());
     if (!threadHandle) {
         DestroyWindow(window);
-        UnregisterClassW(kUiClass, g_selfModule);
         return false;
     }
     if (g_uiThreadHandle)
@@ -2056,11 +1993,10 @@ void Wh_ModBeforeUninit() {
     HWND window = g_uiWindow;
     if (window)
         SendMessageW(window, WM_CLOSE, 0, 0);
-    UnregisterClassW(kUiClass, g_selfModule);
+    bool classRemoved = UnregisterOwnedUiClass();
     g_uiWindow = nullptr;
     g_uiThread = 0;
-    Wh_Log(L"UI-thread cleanup completed: %d", ok);
-    CleanupStep(L"Export development handoff", [] { ExportDevelopmentHandoff(); });
+    Wh_Log(L"UI-thread cleanup completed: %d; owned class unregistered: %d", ok, classRemoved);
     if (g_collectionMutex) {
         CloseHandle(g_collectionMutex);
         g_collectionMutex = nullptr;
