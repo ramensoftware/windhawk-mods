@@ -20892,6 +20892,8 @@ void RebuildSearchResultsPanel();
 void ShowSearchFlyout();
 void EnsureSearchFlyoutCreated();
 void LaunchFirstSearchResult();
+static void RecenterSearchPopup();
+static void ExecuteSearchQueryAsync(std::wstring query, int queryToken);
 
 
 
@@ -20981,6 +20983,65 @@ static bool ConsumeTopBarMenuToggleMouse(WPARAM message, POINT point) {
     return true;
 }
 
+static void ExecuteSearchQueryAsync(std::wstring query, int queryToken) {
+    if (query.empty()) return;
+    if (query.size() == 1)
+        Wh_Log(L"[Search] first character query started (token=%d)", queryToken);
+    RunInBackground([query = std::move(query), queryToken] {
+        if (queryToken != g_searchToken.load()) return;
+        auto apps = search::QueryApps(query, 30);
+        if (queryToken != g_searchToken.load()) return;
+        if (query.size() == 1)
+            Wh_Log(L"[Search] first character: %zu app matches (token=%d)",
+                   apps.size(), queryToken);
+
+        // Show app matches as soon as they are ready; the localized settings
+        // catalog can take substantially longer on its first load.
+        RunOnUiThread([apps, queryToken]() mutable {
+            if (queryToken != g_searchToken.load()) return;
+            for (auto& old : g_searchResults)
+                if (old.kind == search::Result::Kind::File)
+                    apps.push_back(std::move(old));
+            g_searchResults = std::move(apps);
+            RebuildSearchResultsPanel();
+        });
+
+        std::vector<search::Result> results = std::move(apps);
+        for (auto& result : search::QuerySettings(query, 30))
+            results.push_back(std::move(result));
+        if (queryToken != g_searchToken.load()) return;
+        for (auto& result : search::QueryControlPanel(query, 20))
+            results.push_back(std::move(result));
+        if (queryToken != g_searchToken.load()) return;
+
+        auto lowerQuery = ToLowerCopy(query);
+        bool pointerOverview = search::IsPointerOverviewQuery(lowerQuery);
+        auto rank = [&](auto const& item) {
+            if (pointerOverview && item.title == search::kPointerOverviewTitle)
+                return -20;
+            auto title = ToLowerCopy(item.title);
+            auto target = ToLowerCopy(item.target);
+            auto slash = target.find_last_of(L"\\/");
+            if (slash != std::wstring::npos) target = target.substr(slash + 1);
+            if (title == lowerQuery || target == lowerQuery) return 0;
+            if (title.rfind(lowerQuery, 0) == 0 || target.rfind(lowerQuery, 0) == 0)
+                return item.kind == search::Result::Kind::App ? 9 : 10;
+            return item.kind == search::Result::Kind::App ? 29 : 30;
+        };
+        std::stable_sort(results.begin(), results.end(),
+                         [&](auto const& a, auto const& b) { return rank(a) < rank(b); });
+        RunOnUiThread([results = std::move(results), queryToken]() mutable {
+            if (queryToken != g_searchToken.load()) return;
+            for (auto& old : g_searchResults)
+                if (old.kind == search::Result::Kind::File)
+                    results.push_back(std::move(old));
+            g_searchResults = std::move(results);
+            g_searchQueryPending = false;
+            RebuildSearchResultsPanel();
+        });
+    });
+}
+
 void BuildSearchFlyoutContent() { 
     if (!g_searchFlyout) return;
 
@@ -21006,7 +21067,7 @@ void BuildSearchFlyoutContent() {
     searchBar.BorderBrush(MakeBrush(0x40, 0xFF, 0xFF, 0xFF));
     searchBar.BorderThickness(Thickness{ 1, 1, 1, 1 });
     searchBar.Height(42);
-    searchBar.VerticalAlignment(VerticalAlignment::Center);
+    searchBar.VerticalAlignment(VerticalAlignment::Top);
 
     wuxc::Grid searchInner;
     searchInner.ColumnSpacing(12);
@@ -21166,56 +21227,19 @@ void BuildSearchFlyoutContent() {
                 g_searchQueryTimer.Interval(std::chrono::milliseconds(100));
                 g_searchQueryTimer.Tick([](auto&&, auto&&) {
                     g_searchQueryTimer.Stop();
-                    std::wstring query = g_searchQuery;
-                    int queryToken = g_searchToken.load();
-                    if (query.empty()) return;
-                    if (query.size() == 1) Wh_Log(L"[Search] first character query started (token=%d)", queryToken);
-                    RunInBackground([query,queryToken]{
-                if(queryToken!=g_searchToken.load())return;
-                auto apps=search::QueryApps(query,30);
-                if(queryToken!=g_searchToken.load())return;
-                if(query.size()==1)Wh_Log(L"[Search] first character: %zu app matches (token=%d)",apps.size(),queryToken);
-                RunOnUiThread([apps,queryToken]()mutable{
-                    if(queryToken!=g_searchToken.load())return;
-                    for(auto& old:g_searchResults)if(old.kind==search::Result::Kind::File)apps.push_back(std::move(old));
-                    g_searchResults=std::move(apps);RebuildSearchResultsPanel();
-                });
-                std::vector<search::Result> instant=std::move(apps);
-                for(auto& result:search::QuerySettings(query,30))instant.push_back(std::move(result));
-                if(queryToken!=g_searchToken.load())return;
-                for(auto& result:search::QueryControlPanel(query,20))instant.push_back(std::move(result));
-                if(queryToken!=g_searchToken.load())return;
-                auto lowerQuery=ToLowerCopy(query);
-                bool pointerOverview=search::IsPointerOverviewQuery(lowerQuery);
-                auto rank=[&](const search::Result& item){
-                    if(pointerOverview&&item.title==search::kPointerOverviewTitle)return -20;
-                    auto title=ToLowerCopy(item.title),target=ToLowerCopy(item.target);
-                    auto slash=target.find_last_of(L"\\/");if(slash!=std::wstring::npos)target=target.substr(slash+1);
-                    if(title==lowerQuery||target==lowerQuery)return 0;
-                    if(title.rfind(lowerQuery,0)==0||target.rfind(lowerQuery,0)==0)return item.kind==search::Result::Kind::App?9:10;
-                    return item.kind==search::Result::Kind::App?29:30;
-                };
-                std::stable_sort(instant.begin(),instant.end(),[&](auto const& a,auto const& b){return rank(a)<rank(b);});
-                RunOnUiThread([instant=std::move(instant),queryToken]()mutable{
-                    if(queryToken!=g_searchToken.load())return;
-                    for(auto& old:g_searchResults)if(old.kind==search::Result::Kind::File)instant.push_back(std::move(old));
-                    g_searchResults=std::move(instant);
-                    g_searchQueryPending = false;
-                    RebuildSearchResultsPanel();
-                });
-                    });
+                    ExecuteSearchQueryAsync(g_searchQuery, g_searchToken.load());
                 });
             }
             g_searchQueryTimer.Stop();
-            // Do not leave the first character waiting for a second edit.
-            // A 1 ms DispatcherTimer is below reliable UI dispatcher
-            // granularity and can be lost on the first edit after opening.
-            // Keep one-character queries prompt while allowing the TextBox
-            // and its first TextChanged event to settle.
-            g_searchQueryTimer.Interval(std::chrono::milliseconds(
-                g_searchQuery.size() == 1 ? 50 : 100));
-            g_searchQueryTimer.Start();
-
+            const int queryToken = g_searchToken.load();
+            if (g_searchQuery.size() == 1) {
+                // Start single-character searches directly from TextChanged;
+                // do not rely on the timer's first tick after the popup opens.
+                ExecuteSearchQueryAsync(g_searchQuery, queryToken);
+            } else {
+                g_searchQueryTimer.Interval(std::chrono::milliseconds(100));
+                g_searchQueryTimer.Start();
+            }
             if (!g_searchDebounceTimer) {
                 g_searchDebounceTimer = DispatcherTimer();
                 g_searchDebounceTimer.Interval(std::chrono::milliseconds(350));
@@ -21348,6 +21372,10 @@ void BuildSearchFlyoutContent() {
         if (w > 0 && h > 0) {
             searchScaler.Width(w * s);
             searchScaler.Height(h * s);
+            // XAML may reposition the popup on each height-animation frame.
+            // Reassert the fixed top anchor after layout so the result area
+            // grows downward instead of moving the search field.
+            try { RecenterSearchPopup(); } catch (...) {}
         }
     });
 
@@ -21599,7 +21627,7 @@ void RebuildSearchResultsPanel() {
     if(auto it=g_namedElements.find(L"SearchLayout");it!=g_namedElements.end())if(auto grid=it->second.try_as<wuxc::Grid>()){
         // Keep the search field at the same top inset while the empty menu
         // shrinks, rather than centering it in the still-expanded row.
-        grid.Padding(emptyQuery?Thickness{24,21,24,21}:Thickness{24,20,24,20});
+        grid.Padding(emptyQuery?Thickness{24,20,24,20}:Thickness{24,20,24,20});
         grid.RowSpacing(emptyQuery?0:10);
         if(grid.RowDefinitions().Size()>=2){
             grid.RowDefinitions().GetAt(0).Height(GridLength{0,GridUnitType::Auto});
@@ -21732,8 +21760,24 @@ void RebuildSearchResultsPanel() {
     }
 
     if (g_searchResults.empty()) {
+        // The empty state is one intrinsic row directly below the search
+        // field. A Star-sized row can center its short content while fitting,
+        // making the popup appear to grow upward from the search field.
+        if (auto it = g_namedElements.find(L"SearchLayout");
+            it != g_namedElements.end()) {
+            if (auto grid = it->second.try_as<wuxc::Grid>()) {
+                if (grid.RowDefinitions().Size() >= 2)
+                    grid.RowDefinitions().GetAt(1).Height(
+                        GridLength{0, GridUnitType::Auto});
+            }
+        }
+        if (auto it = g_namedElements.find(L"SearchResultsScroller");
+            it != g_namedElements.end())
+            it->second.VerticalAlignment(VerticalAlignment::Top);
+        g_searchResultsPanel.VerticalAlignment(VerticalAlignment::Top);
         auto empty = MakeText(nullptr, L"No results.", 13, false, 0.55);
-        empty.Margin(Thickness{ 8, 12, 8, 8 });
+        empty.VerticalAlignment(VerticalAlignment::Top);
+        empty.Margin(Thickness{ 8, 8, 8, 8 });
         g_searchResultsPanel.Children().Append(empty);
         ScheduleSearchPopupFit();
         return;
