@@ -71,14 +71,37 @@ with Windhawk 1.7.3, on three displays with different resolutions and scales.
 
 The mod relies on Windows' private taskbar internals. A Windows update can change
 them: if the core hooks can't be found the mod refuses to start, and the XAML-based
-features (Right icons, Start button placement) simply stay off. Windows 10,
-ExplorerPatcher, StartAllBack and other mods that change the taskbar's alignment or
-layout are not supported. Start menu and search flyouts keep using Windows' own
-placement. No registry values are changed.
+features (Right icons, Start button placement) simply stay off. Windows 10 is not
+supported. Start menu and search flyouts keep using Windows' own placement. No
+registry values are changed. See below for tools that change the taskbar themselves.
 
 Known limit: the Widgets button isn't taken into account, so with Widgets shown the
 Start button's *Left edge* may overlap it, and so may *Right* icons or the *Right edge*
 on a taskbar where Windows moves it.
+
+## Other taskbar tools can interfere
+
+Apps and mods that add their own taskbar features, such as Start11, StartAllBack,
+ExplorerPatcher or other Windhawk taskbar mods, can take over how the taskbar buttons
+are drawn and laid out. Center, Right and the Start button placement can then look
+wrong or not apply, whatever this mod does.
+
+A known case is **Start11's "Let Start11 enhance the taskbar"**. It draws the taskbar
+buttons itself, in its own window laid over the taskbar, so the buttons this mod
+positions are not the ones you see. With Right, for example, only some of the buttons
+may show up, cut off on the left:
+
+![Right alignment with Start11's taskbar enhancement on: only some buttons are visible](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-symptom-right.png)
+
+If you see this, open Start11, go to **Taskbar** and turn **Let Start11 enhance the
+taskbar** off (or use the option below it, *Disable all taskbar features for
+compatibility with other taskbar mods*), then restart Explorer. The page should look
+like this:
+
+![Start11's Taskbar page with Let Start11 enhance the taskbar switched off](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting.png)
+
+For any other tool, switch its taskbar features off for a moment to check whether they
+are the cause.
 
 Source, build instructions and tests:
 https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
