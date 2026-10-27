@@ -2,14 +2,14 @@
 // @id              brave-acrylic
 // @name            Brave Acrylic
 // @description     Alpha: Native Brave background transparency; requires Translucent Windows
-// @version         3.4.1
+// @version         3.5
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @homepage        https://github.com/bardelyne/brave-acrylic
 // @license         MIT
 // @architecture    x86-64
 // @include         brave.exe
-// @compilerOptions -lshell32 -luser32
+// @compilerOptions -lshell32 -luser32 -lwinhttp -lbcrypt -lcrypt32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -51,7 +51,7 @@ No theme-color setup is required. Old saved color-list and website-code settings
 | **Toolbar** | On | Clear the toolbar, bookmarks bar, and unfocused address-field backgrounds. Focused address fields keep their native theme. |
 | **Webpage background** | On | Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS, and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS. |
 | **Hide duplicate Windows buttons** | Off | Optional workaround that removes the real Windows system-menu style. It can affect Alt+Space, taskbar menus and other window tools. Prefer Brave's **Use compact mode** option in Appearance. |
-| **Use Windhawk online symbol cache** | On | Let Windhawk fetch a small named-symbol cache when exact-build data is missing locally. Turn off and re-enable the mod to use only locally cached data. |
+| **Use verified online symbol cache** | On | Download and verify exact-build data against the approved GitHub pipeline before accepting any Windhawk symbol addresses. Turn off for previously verified builds only. |
 
 Some backing views and compositor properties are created with the window, so changing Vertical tabs background or Toolbar may require reopening Brave. Enabling Webpage background applies when a tab is selected, without refreshing the page. Reopening Brave after disabling it restores existing renderer defaults. The caption-button option applies immediately.
 
@@ -83,13 +83,17 @@ The native path uses **13 functions**, of which **7 are private hooks**. The imp
 
 ## Symbol resolution, privacy and updates
 
-Brave Acrylic uses Windhawk's supported `HookSymbols` / `WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl` mechanism. Every build uses Windhawk's local symbol cache first, then optionally a small text file containing the thirteen full C++ prototypes and their locations. No build-specific function addresses are embedded in the mod. Remote PDB downloads are disabled, including when a cache file is missing. There is no custom downloader or 30-minute retry thread.
+Brave Acrylic still resolves the thirteen full C++ prototypes with Windhawk's supported `HookSymbols` / `WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl` mechanism. Before accepting any returned address, the mod requires compatibility data authenticated against its approved generation pipeline. No build-specific addresses are embedded and remote PDB downloads remain disabled.
 
-The cache is published on this repository's [`symbol-cache` branch](https://github.com/bardelyne/brave-acrylic/tree/symbol-cache), under `brave-acrylic/pdb_<GUID-and-age>.txt`. It is about **1 KB** for the reference build. It is hosted by this project's author, not the official Windhawk cache repository. The publisher is trusted: local function-boundary, leaf-layout, jump-target and overlap checks are safeguards, not cryptographic proof of function identity. Native ABI or rendering changes can still require a mod update.
+The small text cache and a proof locator are published on this repository's [`symbol-cache` branch](https://github.com/bardelyne/brave-acrylic/tree/symbol-cache). Branch contents alone are not trusted. On first use of a build, the mod checks GitHub's HTTPS API for the immutable artifact's SHA256, exact PDB identity, original repository, successful run and GitHub-hosted job attempts. It fetches the workflow at that run's immutable commit and checks its complete bytes against a SHA256 compiled into the mod. The approved workflow checks out fixed extractor and action revisions. Every Windhawk-resolved address must then match the verified named entry and pass local executable-boundary, leaf, thunk and overlap checks.
 
-**No telemetry or uploads:** the mod sends no browsing history, page content, settings, account details or analytics. Windhawk makes the cache download request; the server necessarily sees the requester's IP address and the build-specific URL. Turn **Use Windhawk online symbol cache** off and re-enable the mod for offline-only resolution. Already cached symbols continue to work offline. The first use of a build needs a cache download unless matching symbols are already available locally. Existing requests cannot be withdrawn by changing a setting.
+Editing the cache branch, replacing the locator, changing the workflow, or changing tools on main cannot silently authorize different functions. A pipeline change requires a reviewed mod update approving the new policy. This trusts GitHub's API/TLS and hosted infrastructure plus the approved extractor and official Brave inputs; it is not a proof that a native ABI can never change. The data is author-hosted, not the official Windhawk cache, and maintainer acceptance remains a separate decision. See the [trust design](https://github.com/bardelyne/brave-acrylic/blob/main/docs/trusted-pipeline.md).
 
-The workflow checks official stable releases **every two hours**. It downloads Brave and its large symbols only on the GitHub runner, and only when release assets or the native compatibility contract change. It verifies the DLL/PDB identity and exact names before publishing the small text cache. GitHub can delay scheduled runs. If data is unavailable, transparency remains off; re-enable the mod or reopen Brave normally after data becomes available. Older binary-map branches are retained only for older clients.
+Successfully verified data is retained in Windhawk's per-mod storage, scoped to the exact PDB identity and approved workflow. Warm launches reuse it offline. Old Windhawk entries without this proof cannot bypass the gate. If proof, rate limits, networking or function validation prevent a first-time verification, transparency stays off rather than using unverified addresses. There is no polling or retry thread in the mod.
+
+**No telemetry, uploads or login:** requests are download-only GETs to GitHub. No token, browser cookies, history, page content, settings, account details or analytics are sent. GitHub necessarily sees the requester's IP and requested URLs, including the build identity. Turn **Use verified online symbol cache** off and re-enable the mod for offline-only operation; a build must have been verified previously. Initial verification adds several small API requests at startup and can be affected by GitHub's anonymous rate limits. Existing requests cannot be withdrawn by changing the setting.
+
+The workflow requests a check **every two hours, with a backup 30 minutes later**. GitHub can delay or drop scheduled starts, so this is not an exact timer. Unchanged releases skip all browser and PDB downloads. Large official files stay on the GitHub runner. The raw exact-PDB artifact is retained for 90 days; local verified entries continue working if upstream metadata later becomes unavailable. Re-enable the mod or reopen Brave normally after new data becomes available.
 
 ## Duplicate corner buttons
 
@@ -117,8 +121,8 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
   $name: Hide duplicate Windows buttons
   $description: "Optional workaround: removes the real Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Prefer Brave Appearance > Use compact mode. Applies immediately."
 - useOnlineSymbolCache: true
-  $name: Use Windhawk online symbol cache
-  $description: Let Windhawk download a small exact-build symbol cache when local data is missing. No telemetry, uploads or remote PDB downloads. The server sees your IP address and the build-specific URL. Turn off and re-enable the mod for offline-only resolution.
+  $name: Use verified online symbol cache
+  $description: Download exact-build symbols and verify GitHub artifact, run and approved workflow metadata. No login, uploads, telemetry or PDB downloads. GitHub sees your IP and requested URLs. Turn off and re-enable for offline-only operation with previously verified data. Missing proof disables transparency.
 */
 // ==/WindhawkModSettings==
 #include <windhawk_api.h>
@@ -134,6 +138,20 @@ BOOL Wh_ModInit() {
 #include <cwchar>
 #include <cstring>
 #include <windhawk_utils.h>
+#include <winhttp.h>
+#include <bcrypt.h>
+#include <wincrypt.h>
+#include <roapi.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Data.Json.h>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <functional>
+#include <stdexcept>
+#include <vector>
+
 
 // Native background roles, MIT, bardelyne.
 // Native ABI: x64 Brave 1.98.60 / Chromium 156. Resolve and validate every
@@ -745,9 +763,9 @@ static bool ValidateCompatibilityMap(HMODULE module, const CompatibilityMap& map
     }
     return true;
 }
-// The cache contains named symbol RVAs, not executable updates. Windhawk owns
-// HTTP, its PDB-identity cache key, local persistence, and cancellation. No
-// custom downloader, periodic retry thread, telemetry, or remote PDB fallback.
+// Windhawk retains standard named-symbol resolution and its own local cache.
+// The separate gate authenticates downloaded bytes and compares every result.
+// No executable updates, retry worker, telemetry, or remote PDB fallback.
 static constexpr wchar_t kOnlineSymbolCache[] =
     L"https://raw.githubusercontent.com/bardelyne/brave-acrylic/symbol-cache/brave-acrylic";
 
@@ -819,39 +837,409 @@ static bool ValidateSymbolAddresses(HMODULE module, void* const* addresses, size
     }
     // Bounds, exact unwind entries, approved leaf shapes, direct E9 thunks,
     // and disjoint entry/body ranges are independent local safety checks.
-    // They do not authenticate names: the symbol-cache publisher is trusted.
+    // Authentication of named entries is enforced separately by PipelineTrust.
     return ValidateCompatibilityMap(module, local, rva);
 }
+
+// Branch files only locate data. HTTPS GitHub API metadata authenticates the
+// immutable artifact digest, source run and workflow blob. The approved YAML
+// checks out fixed extractor/action commits; main cannot replace its tools.
+namespace PipelineTrust {
+using Json = winrt::Windows::Data::Json::JsonObject;
+static constexpr wchar_t kWorkflowBlob[] = L"f6a8bb8ac2140b8b9e4d0ec116959fb5e91da5a1";
+static constexpr wchar_t kWorkflowSha256[] =
+    L"bfde353d078a3e83ca112228a8e72fa22fc7fdec89b9974f092e012c1cdd4ecf";
+static constexpr uint64_t kRepositoryId = 1428612836, kWorkflowId = 394997888;
+static constexpr size_t kMaxCache = 16384;
+static std::atomic<bool> stopping{false};
+using Getter = std::function<std::string(const wchar_t*, const std::wstring&, size_t)>;
+
+static bool Hex(std::wstring_view value, size_t length) {
+    return value.size() == length && std::all_of(value.begin(), value.end(), [](wchar_t c) {
+               return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
+           });
+}
+static uint64_t Id(const Json& json, const wchar_t* key) {
+    const double value = json.GetNamedNumber(key);
+    if (!std::isfinite(value) || value < 1 || value > 9007199254740991.0 ||
+        std::floor(value) != value)
+        throw std::runtime_error("invalid GitHub identifier");
+    return static_cast<uint64_t>(value);
+}
+static Json Parse(const std::string& bytes) {
+    if (bytes.empty() || bytes.size() > 128 * 1024)
+        throw std::runtime_error("invalid metadata size");
+    return Json::Parse(winrt::to_hstring(bytes));
+}
+static std::array<unsigned char, 32> Digest(std::string_view bytes) {
+    std::array<unsigned char, 32> digest{};
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    if (bytes.size() > kMaxCache ||
+        BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0)
+        throw std::runtime_error("SHA256 unavailable");
+    const auto status = BCryptHash(
+        algorithm, nullptr, 0, reinterpret_cast<PUCHAR>(const_cast<char*>(bytes.data())),
+        static_cast<ULONG>(bytes.size()), digest.data(), static_cast<ULONG>(digest.size()));
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (status < 0)
+        throw std::runtime_error("SHA256 failed");
+    return digest;
+}
+static std::wstring HashText(std::string_view bytes) {
+    const auto digest = Digest(bytes);
+    std::wstring result;
+    for (const auto byte : digest) {
+        result += L"0123456789abcdef"[byte >> 4];
+        result += L"0123456789abcdef"[byte & 15];
+    }
+    return result;
+}
+static bool Verify(const std::string& cache, const std::string& locator, const std::wstring& pdbKey,
+                   const Getter& get) try {
+    if (cache.empty() || cache.size() > kMaxCache || stopping)
+        return false;
+    const auto pointer = Parse(locator);
+    if (pointer.GetNamedNumber(L"schema") != 1)
+        return false;
+    const auto artifactId = Id(pointer, L"artifactId");
+    const std::wstring root = L"/repos/bardelyne/brave-acrylic/";
+    const auto artifact = Parse(
+        get(L"api.github.com", root + L"actions/artifacts/" + std::to_wstring(artifactId), 32768));
+    if (Id(artifact, L"id") != artifactId ||
+        artifact.GetNamedString(L"name") != L"pdb_" + pdbKey + L".txt" ||
+        Id(artifact, L"size_in_bytes") != cache.size() ||
+        artifact.GetNamedString(L"digest") != L"sha256:" + HashText(cache))
+        return false;
+    const auto origin = artifact.GetNamedObject(L"workflow_run");
+    const auto runId = Id(origin, L"id");
+    const std::wstring revision{origin.GetNamedString(L"head_sha")};
+    if (!Hex(revision, 40) || origin.GetNamedString(L"head_branch") != L"main" ||
+        Id(origin, L"repository_id") != kRepositoryId ||
+        Id(origin, L"head_repository_id") != kRepositoryId)
+        return false;
+    const auto run =
+        Parse(get(L"api.github.com", root + L"actions/runs/" + std::to_wstring(runId), 65536));
+    const auto event = run.GetNamedString(L"event");
+    if (Id(run, L"id") != runId || Id(run, L"workflow_id") != kWorkflowId ||
+        Id(run.GetNamedObject(L"repository"), L"id") != kRepositoryId ||
+        Id(run.GetNamedObject(L"head_repository"), L"id") != kRepositoryId ||
+        run.GetNamedString(L"path") != L".github/workflows/compatibility.yml" ||
+        run.GetNamedString(L"head_sha") != revision ||
+        run.GetNamedString(L"head_branch") != L"main" ||
+        run.GetNamedString(L"status") != L"completed" ||
+        run.GetNamedString(L"conclusion") != L"success" ||
+        (event != L"schedule" && event != L"push" && event != L"workflow_dispatch"))
+        return false;
+    // A repository owner must not substitute a self-hosted machine for the
+    // runner. Check every attempt, so an earlier untrusted attempt cannot be
+    // laundered by a later hosted rerun of the same run ID.
+    const auto jobs = Parse(
+        get(L"api.github.com",
+            root + L"actions/runs/" + std::to_wstring(runId) + L"/jobs?filter=all&per_page=100",
+            128 * 1024));
+    const auto items = jobs.GetNamedArray(L"jobs");
+    if (items.Size() == 0 || items.Size() > 100 ||
+        jobs.GetNamedNumber(L"total_count") != items.Size())
+        return false;
+    bool generated = false;
+    for (const auto& item : items) {
+        const auto job = item.GetObject();
+        const auto name = job.GetNamedString(L"name");
+        if (name != L"generate" && name != L"publish")
+            return false;
+        if (job.GetNamedValue(L"runner_id").ValueType() ==
+            winrt::Windows::Data::Json::JsonValueType::Null)
+            continue;
+        if (job.GetNamedNumber(L"runner_group_id") != 0 ||
+            job.GetNamedString(L"runner_group_name") != L"GitHub Actions" ||
+            Id(job, L"runner_id") < 1 ||
+            !std::wstring_view(job.GetNamedString(L"runner_name")).starts_with(L"GitHub Actions "))
+            return false;
+        if (name == L"generate" && job.GetNamedString(L"conclusion") == L"success")
+            generated = true;
+    }
+    if (!generated)
+        return false;
+    // Read the workflow at the run's immutable commit, never the mutable main
+    // branch or a caller-provided workflow hash. GitHub owns this association.
+    const auto workflow =
+        Parse(get(L"api.github.com",
+                  root + L"contents/.github/workflows/compatibility.yml?ref=" + revision, 32768));
+    if (workflow.GetNamedString(L"type") != L"file" ||
+        workflow.GetNamedString(L"path") != L".github/workflows/compatibility.yml" ||
+        workflow.GetNamedString(L"sha") != kWorkflowBlob ||
+        workflow.GetNamedString(L"encoding") != L"base64")
+        return false;
+    const auto content = workflow.GetNamedString(L"content");
+    DWORD length = 0;
+    if (content.empty() || content.size() > 24000 ||
+        !CryptStringToBinaryW(content.c_str(), content.size(),
+                              CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, nullptr, &length, nullptr,
+                              nullptr) ||
+        length == 0 || length > kMaxCache)
+        return false;
+    std::string yaml(length, '\0');
+    if (!CryptStringToBinaryW(content.c_str(), content.size(),
+                              CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT,
+                              reinterpret_cast<BYTE*>(yaml.data()), &length, nullptr, nullptr) ||
+        length != yaml.size())
+        return false;
+    return HashText(yaml) == kWorkflowSha256 && !stopping;
+} catch (...) {
+    return false;
+}
+
+struct Handle {
+    HINTERNET value = nullptr;
+    explicit Handle(HINTERNET v) : value(v) {
+    }
+    ~Handle() {
+        if (value)
+            WinHttpCloseHandle(value);
+    }
+    Handle(const Handle&) = delete;
+    Handle& operator=(const Handle&) = delete;
+};
+class Http {
+    const ULONGLONG deadline = GetTickCount64() + 8000;
+    Handle session{WinHttpOpen(L"BraveAcrylic/" WH_MOD_VERSION, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
+    void Check() const {
+        if (stopping || GetTickCount64() >= deadline)
+            throw std::runtime_error("verification stopped");
+    }
+
+   public:
+    std::string Get(const wchar_t* host, const std::wstring& path, size_t maximum) {
+        Check();
+        if (!session.value ||
+            (wcscmp(host, L"api.github.com") && wcscmp(host, L"raw.githubusercontent.com")) ||
+            path.empty() || path.front() != L'/' || path.size() > 256 || maximum > 128 * 1024)
+            throw std::runtime_error("invalid verification request");
+        const int timeout =
+            static_cast<int>(std::min<ULONGLONG>(2000, deadline - GetTickCount64()));
+        if (timeout < 1 || !WinHttpSetTimeouts(session.value, timeout, timeout, timeout, timeout))
+            throw std::runtime_error("verification timeout");
+        Handle connection{WinHttpConnect(session.value, host, INTERNET_DEFAULT_HTTPS_PORT, 0)};
+        Handle request{connection.value
+                           ? WinHttpOpenRequest(connection.value, L"GET", path.c_str(), nullptr,
+                                                WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                                WINHTTP_FLAG_SECURE)
+                           : nullptr};
+        DWORD disabled =
+            WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_REDIRECTS;
+        if (!request.value || !WinHttpSetOption(request.value, WINHTTP_OPTION_DISABLE_FEATURE,
+                                                &disabled, sizeof(disabled)))
+            throw std::runtime_error("verification connection failed");
+        static constexpr wchar_t headers[] =
+            L"Accept: application/vnd.github+json\r\nX-GitHub-Api-Version: 2022-11-28\r\n";
+        Check();
+        if (!WinHttpSendRequest(request.value, headers, static_cast<DWORD>(-1),
+                                WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+            !WinHttpReceiveResponse(request.value, nullptr))
+            throw std::runtime_error("verification request failed");
+        DWORD status = 0, size = sizeof(status);
+        if (!WinHttpQueryHeaders(
+                request.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX) ||
+            status != 200)
+            throw std::runtime_error("verification unavailable");
+        std::string bytes;
+        char buffer[4096];
+        for (;;) {
+            Check();
+            DWORD count = 0;
+            if (!WinHttpReadData(request.value, buffer, sizeof(buffer), &count))
+                throw std::runtime_error("verification read failed");
+            if (!count)
+                break;
+            if (bytes.size() + count > maximum)
+                throw std::runtime_error("oversized verification response");
+            bytes.append(buffer, count);
+        }
+        Check();
+        return bytes;
+    }
+};
+static std::wstring BuildKey(const BuildIdentity& id) {
+    wchar_t key[48];
+    swprintf_s(key, L"%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%X",
+               static_cast<unsigned>(id.guid.Data1), id.guid.Data2, id.guid.Data3, id.guid.Data4[0],
+               id.guid.Data4[1], id.guid.Data4[2], id.guid.Data4[3], id.guid.Data4[4],
+               id.guid.Data4[5], id.guid.Data4[6], id.guid.Data4[7], static_cast<unsigned>(id.age));
+    return key;
+}
+static std::wstring StorageKey(const BuildIdentity& id) {
+    return L"trustedPipeline1:" + std::wstring(kWorkflowBlob) + L":" + BuildKey(id);
+}
+static bool ReadLocal(const BuildIdentity& id, std::string* cache) try {
+    std::array<unsigned char, kMaxCache + 32> bytes{};
+    const auto count = Wh_GetBinaryValue(StorageKey(id).c_str(), bytes.data(), bytes.size());
+    if (count <= 32 || count > bytes.size())
+        return false;
+    const std::string data(reinterpret_cast<const char*>(bytes.data() + 32), count - 32);
+    const auto digest = Digest(data);
+    if (!std::equal(digest.begin(), digest.end(), bytes.begin()))
+        return false;
+    *cache = data;
+    return !stopping;
+} catch (...) {
+    return false;
+}
+static void SaveLocal(const BuildIdentity& id, const std::string& cache) {
+    const auto digest = Digest(cache);
+    std::vector<unsigned char> bytes(digest.begin(), digest.end());
+    bytes.insert(bytes.end(), cache.begin(), cache.end());
+    Wh_SetBinaryValue(StorageKey(id).c_str(), bytes.data(), bytes.size());
+}
+static bool Load(const BuildIdentity& id, bool online, std::string* cache) try {
+    if (stopping)
+        return false;
+    if (ReadLocal(id, cache))
+        return true;
+    if (!online)
+        return false;  // Old, unverified Windhawk entries cannot bypass the gate.
+    struct Apartment {
+        HRESULT result = RoInitialize(RO_INIT_MULTITHREADED);
+        ~Apartment() {
+            if (SUCCEEDED(result))
+                RoUninitialize();
+        }
+    } apartment;
+    if (FAILED(apartment.result) && apartment.result != RPC_E_CHANGED_MODE)
+        return false;
+    Http http;
+    const std::wstring stem =
+        L"/bardelyne/brave-acrylic/symbol-cache/brave-acrylic/pdb_" + BuildKey(id);
+    // A shared policy query prevents an older policy's CDN entry from being
+    // reused immediately after a publisher/mod update. No per-user identifier.
+    const std::wstring policy = L"?policy=" + std::wstring(kWorkflowBlob);
+    const auto locator =
+        http.Get(L"raw.githubusercontent.com", stem + L".proof.json" + policy, 2048);
+    const auto data = http.Get(L"raw.githubusercontent.com", stem + L".txt" + policy, kMaxCache);
+    if (!Verify(data, locator, BuildKey(id), [&](auto host, const auto& path, size_t maximum) {
+            return http.Get(host, path, maximum);
+        }))
+        return false;
+    SaveLocal(id, data);
+    *cache = data;
+    return true;
+} catch (...) {
+    return false;
+}
+
+static constexpr const char* kSymbols[] = {
+    "protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)",
+    "public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)",
+    "public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const",
+    "private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const",
+    "public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)",
+    "public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)",
+    "public: virtual bool __cdecl LocationBarView::HasFocus(void)const",
+    "public: virtual bool __cdecl views::View::HasFocus(void)const",
+    "public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)",
+    "public: virtual void __cdecl ContentsWebView::RenderViewReady(void)",
+    "public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)",
+    "public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)",
+    "public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)",
+};
+static_assert(ARRAYSIZE(kSymbols) == kFunctionSlots);
+static bool ParseCache(const std::string& bytes, const BuildIdentity& id, size_t* result) {
+    constexpr size_t count = kFunctionSlots;
+    if (count != kFunctionSlots || bytes.empty() || bytes.size() > kMaxCache ||
+        !std::all_of(bytes.begin(), bytes.end(),
+                     [](unsigned char c) { return c >= 32 && c <= 126; }))
+        return false;
+    std::vector<std::string_view> fields;
+    size_t begin = 0;
+    for (size_t i = 0; i <= bytes.size(); ++i)
+        if (i == bytes.size() || bytes[i] == '#') {
+            fields.emplace_back(bytes.data() + begin, i - begin);
+            begin = i + 1;
+        }
+    const auto identity =
+        "x86-64_" + std::to_string(id.timestamp) + "_" + std::to_string(id.imageSize);
+    if (fields.size() != 3 + count * 2 || fields[0] != "1" || fields[1] != "chrome.dll" ||
+        fields[2] != identity)
+        return false;
+    std::array<size_t, kFunctionSlots> entries{};
+    for (size_t i = 0; i < count; ++i) {
+        const auto name = fields[3 + i * 2], number = fields[4 + i * 2];
+        if (name != kSymbols[i] || number.empty() || number.size() > 10 || number.front() == '0')
+            return false;
+        uint64_t value = 0;
+        for (const auto c : number) {
+            if (c < '0' || c > '9')
+                return false;
+            value = value * 10 + c - '0';
+        }
+        if (!value || value >= id.imageSize ||
+            std::find(entries.begin(), entries.begin() + i, value) != entries.begin() + i)
+            return false;
+        entries[i] = static_cast<size_t>(value);
+    }
+    std::copy(entries.begin(), entries.end(), result);
+    return true;
+}
+}  // namespace PipelineTrust
 
 static bool ResolveSymbolAddresses(HMODULE module, size_t* rva) {
     void* addresses[kFunctionSlots]{};
     // chrome.dll
     WindhawkUtils::SYMBOL_HOOK chromeHooks[] = {
-        {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"}, &addresses[0]},
-        {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"}, &addresses[1]},
-        {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const"}, &addresses[2]},
-        {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const"}, &addresses[3]},
-        {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)"}, &addresses[4]},
-        {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)"}, &addresses[5]},
+        {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"},
+         &addresses[0]},
+        {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"},
+         &addresses[1]},
+        {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const"},
+         &addresses[2]},
+        {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const"},
+         &addresses[3]},
+        {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)"},
+         &addresses[4]},
+        {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)"},
+         &addresses[5]},
         {{L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const"}, &addresses[6]},
         {{L"public: virtual bool __cdecl views::View::HasFocus(void)const"}, &addresses[7]},
         {{L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)"}, &addresses[8]},
         {{L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)"}, &addresses[9]},
-        {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)"}, &addresses[10]},
-        {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)"}, &addresses[11]},
-        {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)"}, &addresses[12]},
+        {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)"},
+         &addresses[10]},
+        {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)"},
+         &addresses[11]},
+        {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)"},
+         &addresses[12]},
     };
     static_assert(ARRAYSIZE(chromeHooks) == kFunctionSlots);
+    BuildIdentity identity{};
+    std::string trustedCache;
+    std::array<size_t, kFunctionSlots> trusted{};
+    if (!GetBuildIdentity(module, &identity) ||
+        !PipelineTrust::Load(identity, s_useOnlineSymbolCache.load(std::memory_order_acquire),
+                             &trustedCache) ||
+        !PipelineTrust::ParseCache(trustedCache, identity, trusted.data())) {
+        Wh_Log(
+            L"Trusted pipeline proof unavailable or rejected; no browser functions will be used");
+        return false;
+    }
+
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-    options.symbolServer = L""; // Never fall back to downloading a multi-GB PDB.
+    options.symbolServer = L"";  // Never fall back to downloading a multi-GB PDB.
     // Use Windhawk's default undecorated C++ prototypes for standard caching.
-    options.onlineCacheUrl = s_useOnlineSymbolCache.load(std::memory_order_acquire)
-        ? kOnlineSymbolCache : L"";
+    options.onlineCacheUrl =
+        s_useOnlineSymbolCache.load(std::memory_order_acquire) ? kOnlineSymbolCache : L"";
     // Resolve without installing hooks. HookSymbols can return partial outputs
     // on failure; nothing is published unless the entire set passes validation.
-    return WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options) &&
-        ValidateSymbolAddresses(module, addresses, rva);
+    if (!WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options))
+        return false;
+    // The ordinary cache can be stale, replaced, or contain earlier unverified
+    // entries. Compare every named entry BEFORE using any function pointer.
+    const auto base = reinterpret_cast<uintptr_t>(module);
+    for (size_t i = 0; i < kFunctionSlots; ++i)
+        if (reinterpret_cast<uintptr_t>(addresses[i]) != base + trusted[i])
+            return false;
+    return !PipelineTrust::stopping && ValidateSymbolAddresses(module, addresses, rva);
 }
 
 static bool ResolveNativeBackground(HMODULE module) {
@@ -883,7 +1271,7 @@ static bool ResolveNativeBackground(HMODULE module) {
         !WindhawkUtils::SetFunctionHook(reinterpret_cast<BraveBackground::Construct>(base + rva[4]),
                                       SidebarConstructor_Hook, &s_background.originalConstruct) ||
         !HasCompleteTransparencyPath()) return false;
-    Wh_Log(L"Brave Acrylic %s: 13/13 native functions from Windhawk symbol resolution",
+    Wh_Log(L"Brave Acrylic %s: 13/13 native functions from Windhawk symbol resolution and approved pipeline",
            WH_MOD_VERSION);
     return true;
 }
@@ -987,6 +1375,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
+    PipelineTrust::stopping.store(true, std::memory_order_release);
     s_captionStopping.store(true, std::memory_order_release);
     s_captionFixActive.store(false, std::memory_order_release);
     AcquireSRWLockExclusive(&s_initLock);
