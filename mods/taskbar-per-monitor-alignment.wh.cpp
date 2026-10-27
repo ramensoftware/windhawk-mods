@@ -37,7 +37,8 @@ taskbar, and only Left or Center.
 
 * **Primary monitor / Other monitors** set the icon alignment and the Start button
   placement for every monitor of that kind. *Windows default* keeps whatever Windows
-  is set to.
+  is set to. Out of the box the primary monitor keeps Windows' own alignment and the
+  other monitors are Left.
 * **Per-monitor overrides** handle individual displays: add one row per monitor and
   pick it from the **Monitor** dropdown, *1st* to *6th from the left* or *Rightmost*.
   Positions follow the arrangement in Windows display settings, so they keep working
@@ -54,11 +55,12 @@ at the system tray. The tray itself never moves.
 
 ## Installation
 
-Install the mod, then restart Windows Explorer **once** (Task Manager > Windows
-Explorer > Restart, or sign out and back in). The mod has to be there when each
-taskbar is created to capture its settings. After that, changing settings applies
-immediately without a restart. Enable **Show my taskbar on all displays** in Windows
-settings to get a taskbar on every monitor.
+Install the mod. It takes over the running taskbars straight away, and also after an
+update or when you disable and enable it, and changing settings applies immediately.
+If a taskbar doesn't change, for instance after a Windows update has changed the
+taskbar's internals, restart Windows Explorer once (Task Manager > Windows Explorer >
+Restart). Enable **Show my taskbar on all displays** in Windows settings to get a
+taskbar on every monitor.
 
 Disabling the mod puts every taskbar back to Windows' own layout.
 
@@ -74,6 +76,10 @@ ExplorerPatcher, StartAllBack and other mods that change the taskbar's alignment
 layout are not supported. Start menu and search flyouts keep using Windows' own
 placement. No registry values are changed.
 
+Known limit: the Widgets button isn't taken into account, so with Widgets shown the
+Start button's *Left edge* may overlap it, and so may *Right* icons or the *Right edge*
+on a taskbar where Windows moves it.
+
 Source, build instructions and tests:
 https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
 */
@@ -81,7 +87,7 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
 
 // ==WindhawkModSettings==
 /*
-- primaryAlignment: center
+- primaryAlignment: default
   $name: Primary monitor alignment
   $options:
   - default: Windows default
@@ -151,14 +157,15 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-#include <commctrl.h>
 #include <oleidl.h>
 #include <algorithm>
 #include <cmath>
 #include <atomic>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Windows' GetCurrentTime macro collides with a XAML interface method.
@@ -212,33 +219,46 @@ struct Settings {
 Settings g_settings;
 std::mutex g_mutex;
 
-// One entry per live TaskbarSettings. The site holds an owning reference so the
-// window can be resolved again later; the HWND is re-queried whenever the cached
-// one is gone, so moving a taskbar or changing the primary display is handled.
+// One entry per live TaskbarSettings. The site is kept only as an identity to compare
+// against, never dereferenced and never AddRef'd: a reference held here could keep
+// a taskbar band alive that is waiting for its settings to be destroyed. The HWND is
+// looked up again whenever the cached one is gone, so moving a taskbar or changing
+// the primary display is handled.
 struct TaskbarEntry {
-    IUnknown* site = nullptr;
+    void* site = nullptr;
     HWND hwnd = nullptr;
     // Windows' own alignment, as last read while no override applied to this taskbar.
     int windowsAlignment = 1;
 };
 std::unordered_map<void*, TaskbarEntry> g_taskbars;
 std::unordered_map<void*, void*> g_interfaces;
+// Settings objects whose taskbar couldn't be found, so the search isn't repeated on
+// every read.
+std::unordered_set<void*> g_adoptTried;
 void* g_settingsInterfaceVtable;
+// The ITaskListWndSite vtables of the primary and secondary taskbar band classes.
+void* g_taskBandSiteVtable;
+void* g_secondaryTaskBandSiteVtable;
 std::atomic<bool> g_unloading = false;
+
+// Reads a pointer from memory that may not be mapped, as when looking through an
+// object of unknown size. ReadProcessMemory fails cleanly instead of faulting.
+bool ReadPointerAt(const void* address, void** out) {
+    SIZE_T read = 0;
+    return ReadProcessMemory(GetCurrentProcess(), address, out, sizeof(*out), &read) &&
+           read == sizeof(*out);
+}
 
 // C++/WinRT stores interface subobjects inside the implementation. Locate the
 // exact symbol-resolved vtable instead of assuming a fixed interface offset,
 // which was object + 0x10 in the build checked against Microsoft's symbols.
-// ReadProcessMemory fails cleanly at unreadable memory; no unchecked dereference.
 void* FindSettingsInterface(void* object) {
     // Without the vtable symbol, every empty slot would compare equal to null.
     if (!g_settingsInterfaceVtable) return nullptr;
     for (size_t offset = 0; offset < 32 * sizeof(void*); offset += sizeof(void*)) {
         void* candidate = nullptr;
         auto address = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(object) + offset);
-        SIZE_T read = 0;
-        if (!ReadProcessMemory(GetCurrentProcess(), address, &candidate, sizeof(candidate), &read) ||
-            read != sizeof(candidate)) break;
+        if (!ReadPointerAt(address, &candidate)) break;
         if (candidate == g_settingsInterfaceVtable) return address;
     }
     return nullptr;
@@ -301,24 +321,17 @@ Placement SelectPlacement(const Settings& settings, const MonitorIdentity& monit
                    : Placement{settings.secondary, settings.secondaryStart};
 }
 
-int SelectAlignment(const Settings& settings, const MonitorIdentity& monitor, bool primary) {
-    return SelectPlacement(settings, monitor, primary).icons;
-}
-
 // A Start button wanted where the icons already gather is simply left in the group.
 int ResolveStartMode(int start, int effectiveIcons) {
     return start < 0 || start == effectiveIcons ? kFollowIcons : start;
 }
 
 int ReadAlignment(const wchar_t* key) {
-    PCWSTR value = Wh_GetStringSetting(key);
-    const int result = !value                          ? kWindowsDefault :
-                       wcscmp(value, L"left") == 0     ? kLeft :
-                       wcscmp(value, L"center") == 0   ? kCenter :
-                       wcscmp(value, L"right") == 0    ? kRight :
-                                                         kWindowsDefault;
-    if (value) Wh_FreeStringSetting(value);
-    return result;
+    const auto value = WindhawkUtils::StringSetting::make(key);
+    return wcscmp(value, L"left") == 0   ? kLeft :
+           wcscmp(value, L"center") == 0 ? kCenter :
+           wcscmp(value, L"right") == 0  ? kRight :
+                                           kWindowsDefault;
 }
 
 // Device name -> friendly name and device path, from the active display paths.
@@ -410,14 +423,12 @@ void FillPosition(MonitorIdentity& identity, HMONITOR monitor) {
 }
 
 int ReadPosition(const wchar_t* key) {
-    PCWSTR value = Wh_GetStringSetting(key);
-    int result = kPositionNone;
-    if (value && wcscmp(value, L"last") == 0) result = kPositionLast;
-    else if (value && wcsncmp(value, L"pos", 3) == 0 && value[3] >= L'1' &&
-             value[3] <= L'0' + kMaxPositions && !value[4])
-        result = value[3] - L'1';
-    if (value) Wh_FreeStringSetting(value);
-    return result;
+    const auto value = WindhawkUtils::StringSetting::make(key);
+    if (wcscmp(value, L"last") == 0) return kPositionLast;
+    if (wcsncmp(value, L"pos", 3) == 0 && value.get()[3] >= L'1' &&
+        value.get()[3] <= L'0' + kMaxPositions && !value.get()[4])
+        return value.get()[3] - L'1';
+    return kPositionNone;
 }
 
 void LoadSettings() {
@@ -430,24 +441,19 @@ void LoadSettings() {
     // Read the array length via a sentinel: blank device entries are allowed,
     // so inspect alignment as well (every real row has a non-empty selection).
     for (int i = 0; i < 256; ++i) {
-        wchar_t deviceKey[64], alignmentKey[64];
+        wchar_t deviceKey[64], alignmentKey[64], startKey[64], monitorKey[64];
         swprintf_s(deviceKey, L"monitors[%d].device", i);
         swprintf_s(alignmentKey, L"monitors[%d].alignment", i);
-        PCWSTR marker = Wh_GetStringSetting(alignmentKey);
-        bool exists = marker && *marker;
-        if (marker) Wh_FreeStringSetting(marker);
-        if (!exists) break;
-        PCWSTR device = Wh_GetStringSetting(deviceKey);
-        wchar_t startKey[64], monitorKey[64];
         swprintf_s(startKey, L"monitors[%d].startAlignment", i);
         swprintf_s(monitorKey, L"monitors[%d].monitor", i);
+        if (!*WindhawkUtils::StringSetting::make(alignmentKey).get()) break;
+        const auto device = WindhawkUtils::StringSetting::make(deviceKey);
         const int position = ReadPosition(monitorKey);
         // A row names its monitor by position, or else by a typed identifier.
-        if (position != kPositionNone || (device && *device))
-            next.monitors.push_back({position != kPositionNone || !device ? L"" : device,
+        if (position != kPositionNone || *device.get())
+            next.monitors.push_back({position != kPositionNone ? L"" : device.get(),
                                      ReadAlignment(alignmentKey), ReadStartAlignment(startKey),
                                      position});
-        if (device) Wh_FreeStringSetting(device);
     }
     for (const auto& rule : next.monitors) {
         if (rule.position != kPositionNone) next.usesPosition = true;
@@ -477,11 +483,55 @@ bool OwnWindow(HWND hwnd) {
     return process == GetCurrentProcessId();
 }
 
+// The taskbar windows of this process: the primary one, and one per other monitor.
+std::vector<HWND> TaskbarWindows() {
+    std::vector<HWND> windows;
+    EnumWindows([](HWND hwnd, LPARAM data) -> BOOL {
+        DWORD process = 0;
+        GetWindowThreadProcessId(hwnd, &process);
+        wchar_t name[64]{};
+        if (process == GetCurrentProcessId() && GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
+            (wcscmp(name, L"Shell_TrayWnd") == 0 || wcscmp(name, L"Shell_SecondaryTrayWnd") == 0))
+            reinterpret_cast<std::vector<HWND>*>(data)->push_back(hwnd);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&windows));
+    return windows;
+}
+
+struct TaskbarBand { void* object = nullptr; void* site = nullptr; };
+
+// The band object behind a taskbar window and its ITaskListWndSite subobject, found
+// the way the taskbar lays them out: the band is stored in the extra window memory
+// of a child window, and the site is the subobject whose vtable is the site vtable.
+// Works for taskbars that already exist, whatever created them.
+TaskbarBand FindTaskbarBand(HWND taskbar) {
+    wchar_t name[64]{};
+    GetClassNameW(taskbar, name, ARRAYSIZE(name));
+    HWND child;
+    void* siteVtable;
+    if (wcscmp(name, L"Shell_TrayWnd") == 0) {
+        child = static_cast<HWND>(GetPropW(taskbar, L"TaskbandHWND"));
+        siteVtable = g_taskBandSiteVtable;
+    } else {
+        child = FindWindowExW(taskbar, nullptr, L"WorkerW", nullptr);
+        siteVtable = g_secondaryTaskBandSiteVtable;
+    }
+    if (!child || !siteVtable) return {};
+    void* band = reinterpret_cast<void*>(GetWindowLongPtrW(child, 0));
+    if (!band) return {};
+    for (int slot = 0; slot < 20; ++slot) {
+        void* candidate = static_cast<void**>(band) + slot;
+        void* vtable = nullptr;
+        if (!ReadPointerAt(candidate, &vtable)) break;
+        if (vtable == siteVtable) return {band, candidate};
+    }
+    return {};
+}
+
 // Returns the taskbar window for a settings object, or null when the object is
-// untracked or no window can be resolved. COM calls are made outside g_mutex,
-// with the site kept alive by an extra reference taken under the lock.
+// untracked or no window can be resolved.
 HWND ResolveWindow(void* self) {
-    IUnknown* site = nullptr;
+    void* site = nullptr;
     HWND cached = nullptr;
     {
         std::lock_guard lock(g_mutex);
@@ -489,33 +539,58 @@ HWND ResolveWindow(void* self) {
         if (entry == g_taskbars.end()) return nullptr;
         cached = entry->second.hwnd;
         site = entry->second.site;
-        if (site) site->AddRef();
     }
-    HWND hwnd = cached;
-    if (!OwnWindow(hwnd)) {
-        hwnd = WindowFromSite(site);
-        if (!OwnWindow(hwnd)) hwnd = nullptr;
-        std::lock_guard lock(g_mutex);
-        auto entry = g_taskbars.find(self);
-        if (entry != g_taskbars.end()) entry->second.hwnd = hwnd;
+    if (OwnWindow(cached)) return cached;
+    // No window yet, or it was replaced: find the taskbar whose band owns this site.
+    HWND found = nullptr;
+    for (HWND taskbar : TaskbarWindows()) {
+        if (site && FindTaskbarBand(taskbar).site == site) {
+            found = taskbar;
+            break;
+        }
     }
-    if (site) site->Release();
-    return hwnd;
+    std::lock_guard lock(g_mutex);
+    auto entry = g_taskbars.find(self);
+    if (entry != g_taskbars.end()) entry->second.hwnd = found;
+    return found;
+}
+
+// A TaskbarSettings that existed before the mod loaded was never seen by the
+// constructor hook. It keeps the site it was constructed with, so look through it
+// for the site or band of one of the taskbars that exist now.
+constexpr size_t kAdoptScanBytes = 0x400;
+bool AdoptTaskbarSettings(void* self) {
+    for (HWND taskbar : TaskbarWindows()) {
+        const TaskbarBand band = FindTaskbarBand(taskbar);
+        if (!band.site) continue;
+        for (size_t offset = 0; offset < kAdoptScanBytes; offset += sizeof(void*)) {
+            void* value = nullptr;
+            if (!ReadPointerAt(static_cast<BYTE*>(self) + offset, &value)) break;
+            if (value != band.site && value != band.object) continue;
+            void* iface = FindSettingsInterface(self);
+            {
+                std::lock_guard lock(g_mutex);
+                g_taskbars[self] = {band.site, taskbar};
+                if (iface) g_interfaces[iface] = self;
+            }
+            Wh_Log(L"Adopted existing taskbar settings %p -> window %p", self, taskbar);
+            return true;
+        }
+    }
+    return false;
 }
 
 using SettingsCtor = void* (WINAPI*)(void*, void*, IUnknown*);
 SettingsCtor g_ctor;
 void* WINAPI SettingsCtorHook(void* self, void* host, IUnknown* site) {
-    if (site) site->AddRef();
+    // Identity only: the site isn't AddRef'd or kept alive, see TaskbarEntry.
+    const HWND early = WindowFromSite(site);
     {
         std::lock_guard lock(g_mutex);
         // Register before construction: Alignment can be read by the ctor.
-        auto& entry = g_taskbars[self];
-        if (entry.site) entry.site->Release();  // Reused address, dtor not seen.
-        entry = {site, nullptr};
+        g_taskbars[self] = {site, early};
+        g_adoptTried.erase(self);
     }
-    // The site's window may not exist yet; ResolveWindow retries on each read.
-    HWND hwnd = ResolveWindow(self);
     void* result = g_ctor(self, host, site);
     void* iface = FindSettingsInterface(self);
     {
@@ -523,7 +598,7 @@ void* WINAPI SettingsCtorHook(void* self, void* host, IUnknown* site) {
         if (iface) g_interfaces[iface] = self;
     }
     Wh_Log(L"Taskbar settings %p -> site %p, window %p, alignment interface %p",
-           self, site, hwnd, iface);
+           self, site, early, iface);
     if (!iface)
         Wh_Log(L"Interface layout not recognized; only direct alignment reads can be customized.");
     return result;
@@ -532,20 +607,15 @@ void* WINAPI SettingsCtorHook(void* self, void* host, IUnknown* site) {
 using SettingsDtor = void (WINAPI*)(void*);
 SettingsDtor g_dtor;
 void WINAPI SettingsDtorHook(void* self) {
-    IUnknown* site = nullptr;
     {
         std::lock_guard lock(g_mutex);
-        auto entry = g_taskbars.find(self);
-        if (entry != g_taskbars.end()) {
-            site = entry->second.site;
-            g_taskbars.erase(entry);
-        }
+        g_taskbars.erase(self);
+        g_adoptTried.erase(self);
         for (auto i = g_interfaces.begin(); i != g_interfaces.end();) {
             if (i->second == self) i = g_interfaces.erase(i);
             else ++i;
         }
     }
-    if (site) site->Release();
     g_dtor(self);
 }
 
@@ -589,7 +659,16 @@ AlignmentGetter g_alignment;
 int OverrideAlignment(void* self, int original) {
     if (g_unloading) return original;
     HWND hwnd = ResolveWindow(self);
-    if (!hwnd) return original;
+    if (!hwnd) {
+        // Not seen by the constructor hook: it may predate the mod. Look once.
+        bool first;
+        {
+            std::lock_guard lock(g_mutex);
+            first = !g_taskbars.contains(self) && g_adoptTried.insert(self).second;
+        }
+        if (first && AdoptTaskbarSettings(self)) hwnd = ResolveWindow(self);
+        if (!hwnd) return original;
+    }
     const Placement placement = PlacementForWindow(hwnd);
     const int selected = placement.icons;
     if (selected == kWindowsDefault) {
@@ -613,9 +692,11 @@ int WINAPI AlignmentHook(void* self) {
 using AbiAlignmentGetter = HRESULT (WINAPI*)(void*, int*);
 AbiAlignmentGetter g_abiAlignment;
 HRESULT WINAPI AbiAlignmentHook(void* iface, int* value) {
-    // The original reaches the direct getter internally, so a COM read can pass
-    // through both hooks. Overriding twice is harmless: the answer comes from the
-    // monitor, not from the value being overridden.
+    // A safety net, and optional: the original normally reaches the direct getter
+    // internally, so a COM read passes through both hooks and overriding twice is
+    // harmless, because the answer comes from the monitor, not from the value being
+    // overridden. This hook covers a build where the COM getter reads the setting
+    // itself.
     HRESULT result = g_abiAlignment(iface, value);
     if (FAILED(result) || !value || g_unloading) return result;
     void* self = nullptr;
@@ -652,25 +733,32 @@ void* g_frameHeight;
 DecrefProc g_decref;
 bool g_rightSupported;
 
-bool ReadPointerAt(const void* address, void** out) {
-    SIZE_T read = 0;
-    return ReadProcessMemory(GetCurrentProcess(), address, out, sizeof(*out), &read) &&
-           read == sizeof(*out);
-}
-
 // TaskbarHost::FrameHeight begins by advancing this to the XAML element the host
 // holds, which is where that element's offset is read from rather than assumed.
 size_t TaskbarElementOffset() {
+    if (!g_frameHeight) return 0;
+#if defined(_M_X64)
     auto* code = static_cast<const BYTE*>(g_frameHeight);
     //  48 83 EC xx    sub rsp, xx
     //  48 83 C1 xx    add rcx, xx
-    if (code && code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
-        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 && code[7] <= 0x7f)
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC && code[4] == 0x48 &&
+        code[5] == 0x83 && code[6] == 0xC1 && code[7] <= 0x7f)
         return code[7];
+#elif defined(_M_ARM64)
+    // Same decoder as taskbar-multirow. Not run on ARM64 hardware by this mod's author.
+    //  7f2303d5  pacibsp
+    //  fd7bbfa9  stp   fp, lr, [sp, #-0x10]!
+    //  fd030091  mov   fp, sp
+    //  080c41f8  ldr   x8, [x0, #0x10]!
+    auto* p = static_cast<const DWORD*>(g_frameHeight);
+    if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
+        (p[3] & 0xFFF00FE0) == 0xF8400C00)
+        return (p[3] >> 12) & 0xFF;
+#endif
     return 0;
 }
 
-FrameworkElement TaskbarElementFromSite(IUnknown* site) {
+FrameworkElement TaskbarElementFromSite(void* site) {
     const size_t offset = TaskbarElementOffset();
     void* vtable = nullptr;
     if (!site || !offset || !g_decref || !ReadPointerAt(site, &vtable) || !vtable)
@@ -740,6 +828,35 @@ FrameworkElement FindStartButton(const FrameworkElement& element, int depth) {
     return nullptr;
 }
 
+// A margin this mod adjusts on the right. Windows may change the rest of it later, for
+// instance when the alignment flips, so the base is read again whenever the margin
+// isn't what was last written, instead of writing back a stale copy of an original.
+struct MarginTrack {
+    Thickness base{};
+    Thickness written{};
+    bool active = false;
+};
+
+bool SameThickness(const Thickness& a, const Thickness& b);
+
+void SetTrackedMargin(const FrameworkElement& element, MarginTrack& track, double rightAdjustment) {
+    const Thickness current = element.Margin();
+    if (!track.active || !SameThickness(current, track.written)) {
+        track.base = current;
+        track.active = true;
+    }
+    Thickness desired = track.base;
+    desired.Right += rightAdjustment;
+    track.written = desired;
+    if (!SameThickness(current, desired)) element.Margin(desired);
+}
+
+void RestoreTrackedMargin(const FrameworkElement& element, MarginTrack& track) {
+    // Leave a margin Windows set itself in the meantime alone.
+    if (track.active && SameThickness(element.Margin(), track.written)) element.Margin(track.base);
+    track.active = false;
+}
+
 // What one taskbar has been changed to, so it can be put back exactly.
 struct LayoutState {
     winrt::weak_ref<FrameworkElement> top;
@@ -747,8 +864,8 @@ struct LayoutState {
     winrt::weak_ref<FrameworkElement> tray;
     winrt::weak_ref<FrameworkElement> start;
     HorizontalAlignment originalAlignment = HorizontalAlignment::Stretch;
-    Thickness originalMargin{};
-    Thickness startOriginalMargin{};
+    MarginTrack repeaterMargin;
+    MarginTrack startMargin;
     Media::Transform startOriginalTransform{nullptr};
     Media::TranslateTransform startTransform{nullptr};
     int64_t alignmentCallback = 0;
@@ -762,7 +879,16 @@ struct LayoutState {
 // Touched only from a taskbar's own thread. Recursive because writing a property
 // calls back into the handlers below on the same thread.
 std::recursive_mutex g_xamlMutex;
-std::unordered_map<HWND, LayoutState> g_layouts;
+// Holds strong XAML references, which must only be released on the taskbar's thread
+// and not during process exit or unload, so its destructor is suppressed and it is
+// reset explicitly, on that thread, when the mod is unloaded.
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, LayoutState>> g_layouts{std::in_place};
+
+LayoutState* FindLayout(HWND hwnd) {
+    if (!g_layouts) return nullptr;
+    auto found = g_layouts->find(hwnd);
+    return found == g_layouts->end() ? nullptr : &found->second;
+}
 
 bool SameThickness(const Thickness& a, const Thickness& b) {
     return a.Left == b.Left && a.Top == b.Top && a.Right == b.Right && a.Bottom == b.Bottom;
@@ -783,13 +909,11 @@ void ReapplyLayout(LayoutState& state) {
     if (state.wantRight) {
         if (repeater.HorizontalAlignment() != HorizontalAlignment::Right)
             repeater.HorizontalAlignment(HorizontalAlignment::Right);
-        Thickness margin = state.originalMargin;
-        margin.Right += trayWidth;
-        if (!SameThickness(repeater.Margin(), margin)) repeater.Margin(margin);
+        SetTrackedMargin(repeater, state.repeaterMargin, trayWidth);
         state.rightApplied = true;
     } else if (state.rightApplied) {
         repeater.HorizontalAlignment(state.originalAlignment);
-        repeater.Margin(state.originalMargin);
+        RestoreTrackedMargin(repeater, state.repeaterMargin);
         state.rightApplied = false;
     }
 
@@ -800,7 +924,6 @@ void ReapplyLayout(LayoutState& state) {
     if (!start) return;
     if (state.wantStart != kFollowIcons) {
         if (!state.startApplied) {
-            state.startOriginalMargin = start.Margin();
             state.startOriginalTransform = start.RenderTransform();
             state.startTransform = Media::TranslateTransform();
             start.RenderTransform(state.startTransform);
@@ -808,9 +931,7 @@ void ReapplyLayout(LayoutState& state) {
         }
         // ActualWidth excludes margins, so it doesn't change with the one set below.
         const double width = start.ActualWidth();
-        Thickness margin = state.startOriginalMargin;
-        margin.Right -= width;
-        if (!SameThickness(start.Margin(), margin)) start.Margin(margin);
+        SetTrackedMargin(start, state.startMargin, -width);
 
         const double slot = start.TransformToVisual(top).TransformPoint({0, 0}).X -
                             state.startTransform.X();
@@ -819,7 +940,7 @@ void ReapplyLayout(LayoutState& state) {
         const double offset = target - slot;
         if (std::abs(offset - state.startTransform.X()) > 0.5) state.startTransform.X(offset);
     } else if (state.startApplied) {
-        start.Margin(state.startOriginalMargin);
+        RestoreTrackedMargin(start, state.startMargin);
         start.RenderTransform(state.startOriginalTransform);
         state.startApplied = false;
     }
@@ -831,23 +952,13 @@ void OnAlignmentPropertyChanged(DependencyObject sender, DependencyProperty) {
     auto element = sender.try_as<FrameworkElement>();
     if (!element) return;
     std::lock_guard lock(g_xamlMutex);
-    for (auto& entry : g_layouts) {
+    if (!g_layouts) return;
+    for (auto& entry : *g_layouts) {
         if (entry.second.wantRight && entry.second.repeater.get() == element) {
             ReapplyLayout(entry.second);
             return;
         }
     }
-}
-
-IUnknown* AcquireSiteForWindow(HWND hwnd) {
-    std::lock_guard lock(g_mutex);
-    for (auto& entry : g_taskbars) {
-        if (entry.second.hwnd == hwnd && entry.second.site) {
-            entry.second.site->AddRef();
-            return entry.second.site;
-        }
-    }
-    return nullptr;
 }
 
 void ReleaseLayoutHandlers(LayoutState& state) {
@@ -865,12 +976,11 @@ void ReleaseLayoutHandlers(LayoutState& state) {
 // taskbar is still being created.
 bool ApplyLayout(HWND hwnd, bool wantRight, int wantStart) {
     std::lock_guard lock(g_xamlMutex);
-    auto entry = g_layouts.find(hwnd);
-    if (entry == g_layouts.end()) {
+    if (!g_layouts) return true;
+    LayoutState* existing = FindLayout(hwnd);
+    if (!existing) {
         if (!wantRight && wantStart == kFollowIcons) return true;  // Nothing to undo.
-        IUnknown* site = AcquireSiteForWindow(hwnd);
-        auto root = TaskbarElementFromSite(site);
-        if (site) site->Release();
+        auto root = TaskbarElementFromSite(FindTaskbarBand(hwnd).site);
         if (!root) return false;
         // The host's element may sit anywhere in the tree; search from the top.
         FrameworkElement top = root;
@@ -883,30 +993,28 @@ bool ApplyLayout(HWND hwnd, bool wantRight, int wantStart) {
         state.top = winrt::make_weak(top);
         state.repeater = winrt::make_weak(repeater);
         state.originalAlignment = repeater.HorizontalAlignment();
-        state.originalMargin = repeater.Margin();
         if (auto tray = FindDescendantByClass(top, kTrayClassName, 64)) {
             state.tray = winrt::make_weak(tray);
             state.trayResized = tray.SizeChanged([hwnd](auto const&, auto const&) {
                 std::lock_guard lock(g_xamlMutex);
-                auto found = g_layouts.find(hwnd);
-                if (found != g_layouts.end()) ReapplyLayout(found->second);
+                if (auto* found = FindLayout(hwnd)) ReapplyLayout(*found);
             });
         }
         if (auto start = FindStartButton(top, 64)) state.start = winrt::make_weak(start);
         state.layoutUpdated = repeater.LayoutUpdated([hwnd](auto const&, auto const&) {
             std::lock_guard lock(g_xamlMutex);
-            auto found = g_layouts.find(hwnd);
-            if (found != g_layouts.end()) ReapplyLayout(found->second);
+            if (auto* found = FindLayout(hwnd)) ReapplyLayout(*found);
         });
         state.alignmentCallback = repeater.RegisterPropertyChangedCallback(
             FrameworkElement::HorizontalAlignmentProperty(), OnAlignmentPropertyChanged);
-        entry = g_layouts.emplace(hwnd, std::move(state)).first;
+        existing = &g_layouts->emplace(hwnd, std::move(state)).first->second;
         Wh_Log(L"Taskbar layout ready for window %p (start button %s)", hwnd,
-               entry->second.start.get() ? L"found" : L"missing");
+               existing->start.get() ? L"found" : L"missing");
     }
-    LayoutState& state = entry->second;
+    LayoutState& state = *existing;
     if (!state.repeater.get() || !state.top.get()) {  // The taskbar's XAML tree is gone.
-        g_layouts.erase(entry);
+        ReleaseLayoutHandlers(state);
+        g_layouts->erase(hwnd);
         return !wantRight && wantStart == kFollowIcons;
     }
     // The Start button may not exist yet when the repeater already does.
@@ -921,7 +1029,7 @@ bool ApplyLayout(HWND hwnd, bool wantRight, int wantStart) {
     ReapplyLayout(state);
     if (!wantRight && wantStart == kFollowIcons) {
         ReleaseLayoutHandlers(state);
-        g_layouts.erase(entry);
+        g_layouts->erase(hwnd);
     }
     return true;
 }
@@ -933,12 +1041,34 @@ struct ApplyRequest { bool pending = false; int value = -1; int attempts = 0; };
 constexpr UINT_PTR kRetryTimerId = 0x7B41;
 constexpr UINT kRetryIntervalMs = 400;
 constexpr int kMaxAttempts = 50;
+// wParam of the apply message: 0 applies a layout, this releases the XAML state.
+constexpr WPARAM kTeardown = 1;
 std::unordered_map<HWND, ApplyRequest> g_applyRequests;
 
 LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
                                      LPARAM lParam, DWORD_PTR) {
+    if (message == WM_NCDESTROY) {
+        // The taskbar is going away, for instance its monitor was unplugged: drop
+        // everything that refers to it, on this thread.
+        KillTimer(hwnd, kRetryTimerId);
+        {
+            std::lock_guard lock(g_xamlMutex);
+            if (auto* found = FindLayout(hwnd)) {
+                ReleaseLayoutHandlers(*found);
+                g_layouts->erase(hwnd);
+            }
+        }
+        std::lock_guard lock(g_mutex);
+        g_applyRequests.erase(hwnd);
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
     const bool isApply = g_applyMessage && message == g_applyMessage;
     const bool isRetry = message == WM_TIMER && wParam == kRetryTimerId;
+    if (isApply && wParam == kTeardown) {
+        std::lock_guard lock(g_xamlMutex);
+        g_layouts.reset();
+        return 0;
+    }
     if (isApply || isRetry) {
         if (isRetry) KillTimer(hwnd, kRetryTimerId);
         int packed = static_cast<int>(lParam);
@@ -958,6 +1088,8 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
                 return 0;
             }
         }
+        // Nothing left to apply: a retry still pending from an earlier request is moot.
+        if (packed == 0) KillTimer(hwnd, kRetryTimerId);
         const bool wantRight = LayoutWantsRight(packed);
         const int wantStart = LayoutStartMode(packed);
         if (!ApplyLayout(hwnd, wantRight, wantStart) && packed != 0 &&
@@ -974,39 +1106,57 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
 void RequestLayout(HWND hwnd, bool wantRight, int startMode) {
     const int packed = PackLayout(wantRight, startMode);
     if (!g_applyMessage || (packed != 0 && !g_rightSupported)) return;
-    std::lock_guard lock(g_mutex);
-    auto entry = g_applyRequests.find(hwnd);
-    if (entry == g_applyRequests.end()) {
+    bool needSubclass;
+    {
+        std::lock_guard lock(g_mutex);
+        needSubclass = !g_applyRequests.contains(hwnd);
         // Nothing to restore for a taskbar that was never changed.
-        if (packed == 0) return;
-        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc, 0)) {
-            Wh_Log(L"Subclassing taskbar window %p failed", hwnd);
-            return;
-        }
-        entry = g_applyRequests.emplace(hwnd, ApplyRequest{}).first;
+        if (needSubclass && packed == 0) return;
     }
-    if (entry->second.pending && entry->second.value == packed) return;
-    entry->second.pending = true;
-    entry->second.value = packed;
+    // This sends a message to the taskbar's thread, which may itself be waiting for
+    // g_mutex in an alignment read, so it must never run with g_mutex held. Two
+    // threads racing here both subclass, which only updates the same subclass.
+    if (needSubclass &&
+        !WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc, 0)) {
+        Wh_Log(L"Subclassing taskbar window %p failed", hwnd);
+        return;
+    }
+    std::lock_guard lock(g_mutex);
+    auto& entry = g_applyRequests[hwnd];
+    if (entry.pending && entry.value == packed) return;
+    entry.pending = true;
+    entry.value = packed;
     PostMessageW(hwnd, g_applyMessage, 0, packed);
 }
 
-void RefreshTaskbars() {
-    // Synchronous, bounded delivery: no dangling string pointer after unload.
-    EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-        DWORD process = 0;
-        GetWindowThreadProcessId(hwnd, &process);
-        wchar_t name[64]{};
-        if (process == GetCurrentProcessId() && GetClassNameW(hwnd, name, 64) &&
-            (wcscmp(name, L"Shell_TrayWnd") == 0 ||
-             wcscmp(name, L"Shell_SecondaryTrayWnd") == 0)) {
+// Asks every taskbar to read its settings again. With wait set the delivery is
+// synchronous and unbounded, which unloading needs: a message that times out is not
+// withdrawn, and would be read after this module is gone.
+void RefreshTaskbars(bool wait = false) {
+    for (HWND hwnd : TaskbarWindows()) {
+        const LPARAM section = reinterpret_cast<LPARAM>(L"TraySettings");
+        if (wait) {
+            SendMessageW(hwnd, WM_SETTINGCHANGE, 0, section);
+        } else {
             DWORD_PTR result;
-            SendMessageTimeoutW(hwnd, WM_SETTINGCHANGE, 0,
-                reinterpret_cast<LPARAM>(L"TraySettings"),
-                SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
+            SendMessageTimeoutW(hwnd, WM_SETTINGCHANGE, 0, section,
+                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
         }
-        return TRUE;
-    }, 0);
+    }
+}
+
+// Alignment isn't necessarily read again after a settings change, so the taskbars
+// whose layout is handled in XAML are updated directly as well.
+void RefreshLayouts() {
+    std::vector<HWND> windows = TaskbarWindows();
+    {
+        std::lock_guard lock(g_mutex);
+        for (const auto& entry : g_applyRequests) windows.push_back(entry.first);
+    }
+    std::sort(windows.begin(), windows.end());
+    windows.erase(std::unique(windows.begin(), windows.end()), windows.end());
+    for (HWND hwnd : windows)
+        if (IsWindow(hwnd)) ApplyPlacement(hwnd, PlacementForWindow(hwnd));
 }
 
 BOOL Wh_ModInit() {
@@ -1031,6 +1181,8 @@ BOOL Wh_ModInit() {
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[1], nullptr, true},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTray::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[2], nullptr, true},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl TrayUI::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[3], nullptr, true},
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_taskBandSiteVtable, nullptr, true},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_secondaryTaskBandSiteVtable, nullptr, true},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &g_frameHeight, nullptr, true},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &g_decref, nullptr, true},
     };
@@ -1046,27 +1198,20 @@ BOOL Wh_ModInit() {
     g_applyMessage = RegisterWindowMessageW(L"Windhawk_TaskbarPerMonitorAlignment_Apply");
     bool anyHostGetter = false;
     for (void* getter : g_taskbarHostGetters) anyHostGetter = anyHostGetter || getter;
-    g_rightSupported = g_applyMessage && anyHostGetter && g_decref && TaskbarElementOffset();
+    g_rightSupported = g_applyMessage && anyHostGetter && g_decref && TaskbarElementOffset() &&
+                       (g_taskBandSiteVtable || g_secondaryTaskBandSiteVtable);
     if (!g_rightSupported)
         Wh_Log(L"Right alignment unavailable on this build; Right behaves as Left.");
-    Wh_Log(L"Enabled. Restart Explorer once to capture existing taskbars.");
+    Wh_Log(L"Enabled.");
     return TRUE;
 }
 
-// Alignment isn't necessarily read again after a settings change, so the taskbars
-// whose layout is handled in XAML are updated directly as well.
-void RefreshLayouts() {
-    std::vector<HWND> windows;
-    {
-        std::lock_guard lock(g_mutex);
-        for (const auto& entry : g_taskbars)
-            if (entry.second.hwnd) windows.push_back(entry.second.hwnd);
-        for (const auto& entry : g_applyRequests) windows.push_back(entry.first);
-    }
-    std::sort(windows.begin(), windows.end());
-    windows.erase(std::unique(windows.begin(), windows.end()), windows.end());
-    for (HWND hwnd : windows)
-        if (IsWindow(hwnd)) ApplyPlacement(hwnd, PlacementForWindow(hwnd));
+void Wh_ModAfterInit() {
+    // Taskbars that exist already were never seen by the constructor hook. Have
+    // them read their alignment again, which adopts their settings objects, and
+    // lay out the XAML-based features for them directly.
+    RefreshTaskbars();
+    RefreshLayouts();
 }
 
 void Wh_ModSettingsChanged() {
@@ -1077,29 +1222,25 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    // Put each right-aligned taskbar back, synchronously, before the subclass
-    // and this module go away. The windows are collected first so no lock is
-    // held while waiting on another thread.
+    // Put each changed taskbar back and release the XAML state on the taskbar's own
+    // thread, before the subclass and this module go away. The sends are plain and
+    // blocking on purpose: skipping the restore of a busy taskbar would leave
+    // handlers registered that point into this module once it is unloaded. The
+    // windows are collected first so no lock is held while waiting on another thread.
     std::vector<HWND> subclassed;
     {
         std::lock_guard lock(g_mutex);
         for (const auto& entry : g_applyRequests) subclassed.push_back(entry.first);
         g_applyRequests.clear();
     }
-    for (HWND hwnd : subclassed) {
-        DWORD_PTR result = 0;
-        SendMessageTimeoutW(hwnd, g_applyMessage, 0, 0,
-                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
+    for (HWND hwnd : subclassed) SendMessageW(hwnd, g_applyMessage, 0, 0);
+    if (!subclassed.empty()) SendMessageW(subclassed.front(), g_applyMessage, kTeardown, 0);
+    for (HWND hwnd : subclassed)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc);
-    }
-    // Give back the site references; the destructor hook stops running shortly.
-    std::unordered_map<void*, TaskbarEntry> taskbars;
     {
         std::lock_guard lock(g_mutex);
-        taskbars.swap(g_taskbars);
+        g_taskbars.clear();
         g_interfaces.clear();
     }
-    for (auto& item : taskbars)
-        if (item.second.site) item.second.site->Release();
-    RefreshTaskbars();
+    RefreshTaskbars(true);
 }
