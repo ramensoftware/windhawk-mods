@@ -11650,7 +11650,7 @@
         "ratingUsers": 17,
         "reviews": 0,
         "trendingSorting": 0.4952908518518926,
-        "updated": 1791140677000,
+        "updated": 1793084502000,
         "users": 312
       },
       "metadata": {
@@ -11665,7 +11665,7 @@
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.4.4"
+        "version": "1.5.0"
       }
     },
     "one-hair": {

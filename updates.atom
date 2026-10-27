@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-27T00:01:19.000Z</updated>
+    <updated>2026-10-27T07:01:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[On-Screen Indicator Position 1.5.0]]></title>
+        <id>https://windhawk.net/mods/on-screen-indicator-position#a9748e5fc7e051d9899daff9d1664b18ea152a83</id>
+        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
+        <updated>2026-10-27T07:01:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Each indicator can now use its own horizontal and vertical offset, including zero, or keep the main offset.</li>
+<li>Each indicator can be left at the Windows default position on its own; the offsets still apply to it.</li>
+<li>New display profiles change placement by monitor name, number of monitors in use, and indicator.</li>
+<li>New Seconds on screen setting changes how long the indicator stays up, from 1 to 60 seconds. When it is off, the mod leaves Explorer's timers alone.</li>
+<li>Offsets are scaled using the actual scale of the monitor the indicator is on.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Task Manager Navigation Border 0.1]]></title>
         <id>https://windhawk.net/mods/disable-taskmgr-navigation-border#d3c74881949732caeed9c3045880d991110129d4</id>
@@ -801,40 +818,6 @@ window on purpose, put a <code>*</code> in one of the match fields.</p>]]></cont
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Launch Dock 1.1.0]]></title>
-        <id>https://windhawk.net/mods/quick-launch-dock#5483048714c0596d3ecfc91670898c77b60d0ead</id>
-        <link href="https://windhawk.net/mods/quick-launch-dock"/>
-        <updated>2026-10-25T19:03:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Up to four dock panels (right, left, top, bottom) in any combination, each with its own independent list of programs.</li>
-<li>Icons can be reordered by pressing and holding an icon and dragging it along the dock, or onto another panel. All panels slide out while you drag.</li>
-<li>Panel size settings: panel thickness, space around each icon and panel inner padding, set separately from the icon size.</li>
-<li>Websites can be added as slots from the "Add to the dock" item of the right-click menu, or by pasting a link from the clipboard. A click opens the address in the default browser.</li>
-<li>Websites get a gray globe icon. The optional "Download site icons" setting (off by default) lets the mod request only the site's own /favicon.ico in the background: a spinner is shown while it downloads and the globe stays if it cannot be downloaded. No third-party servers are contacted.</li>
-<li>Downloaded site icons that blend in with the panel color get a light or dark backing so they stay visible.</li>
-<li>Seven animation styles: Slide and pop (default), Jelly, Ripple, Fade, Genie, Oval and Droplet.</li>
-<li>Added an animation speed setting (default 25%) that applies to every style.</li>
-<li>Icon magnification under the cursor, like in macOS, works with any animation style.</li>
-<li>Panel opacity setting (10-100%, the icons stay opaque) and a glass style.</li>
-<li>Change icon / Reset icon in the right-click menu (PNG, JPG, BMP, GIF, ICO). The choice is remembered.</li>
-<li>Shortcut icons are taken from the shortcut target, so the shortcut arrow overlay is no longer shown.</li>
-<li>The "+" slot can be hidden in the settings. Items can still be added by drag and drop or from the "Add to the dock" item of the right-click menu of any icon.</li>
-<li>The dock lists are now stored separately for every Windows account. The first account that starts this version takes over the list saved by earlier versions.</li>
-<li>Fixed Chrome not starting and programs launching slowly: programs are now launched through Explorer.</li>
-<li>Fixed black squares behind icons.</li>
-<li>The old "Screen side" setting was removed. The list saved by previous versions stays on the right panel, so users who kept the dock on the left will see their list on the right panel.</li>
-<li>Added an animation refresh rate setting (Auto, 120, 144, 180, 240 or 360 Hz), useful for laptops whose refresh rate changes.</li>
-<li>Corner radius setting for the panel.</li>
-<li>"Follow the Windows theme" option: takes light/dark colors and the accent color from Windows and updates when the theme changes.</li>
-<li>Optional dot on icons of running programs (on by default).</li>
-<li>Small press effect when you click an icon.</li>
-</ul>]]></content>
-        <author>
-            <name>cheliks1123</name>
-            <uri>https://github.com/cheliks1123</uri>
         </author>
     </entry>
 </feed>

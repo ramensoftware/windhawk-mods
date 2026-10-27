@@ -1,3 +1,11 @@
+## 1.5.0 ([Oct 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a9748e5fc7e051d9899daff9d1664b18ea152a83/mods/on-screen-indicator-position.wh.cpp))
+
+* Each indicator can now use its own horizontal and vertical offset, including zero, or keep the main offset.
+* Each indicator can be left at the Windows default position on its own; the offsets still apply to it.
+* New display profiles change placement by monitor name, number of monitors in use, and indicator.
+* New Seconds on screen setting changes how long the indicator stays up, from 1 to 60 seconds. When it is off, the mod leaves Explorer's timers alone.
+* Offsets are scaled using the actual scale of the monitor the indicator is on.
+
 ## 1.4.4 ([Oct 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bb8f7a130795448ce79edf3fa5d3e199796b95ec/mods/on-screen-indicator-position.wh.cpp))
 
 * The readme's migration note now names the right setting, Other indicators.
