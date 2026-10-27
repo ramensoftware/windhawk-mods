@@ -776,58 +776,59 @@ std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
     return ext ? ext : L"";
 }
 
+bool IsDesktopWindow(HWND hwnd) {
+    if (!hwnd)
+        return false;
+    WCHAR cls[64] = {};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
+        return (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0);
+    }
+    return false;
+}
+
 IShellView* GetActiveShellView(HWND hExplorerWnd, HWND hCapturedFocus) {
     // 1. Detect if the focused window belongs to the Desktop
-    if (hExplorerWnd) {
-        WCHAR rootCls[64] = {};
-        if (GetClassNameW(hExplorerWnd, rootCls, ARRAYSIZE(rootCls))) {
-            if (wcscmp(rootCls, L"Progman") == 0 ||
-                wcscmp(rootCls, L"WorkerW") == 0) {
-                IShellWindows* pShellWindows = nullptr;
-                if (SUCCEEDED(CoCreateInstance(CLSID_ShellWindows, nullptr,
-                                               CLSCTX_ALL,
-                                               IID_PPV_ARGS(&pShellWindows))) &&
-                    pShellWindows) {
-                    VARIANT vEmpty;
-                    VariantInit(&vEmpty);
-                    HWND hwndDesktop = nullptr;
-                    IDispatch* pDispatch = nullptr;
+    if (IsDesktopWindow(hExplorerWnd)) {
+        IShellWindows* pShellWindows = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                       IID_PPV_ARGS(&pShellWindows))) &&
+            pShellWindows) {
+            VARIANT vEmpty;
+            VariantInit(&vEmpty);
+            long lHwnd = 0;
+            IDispatch* pDispatch = nullptr;
 
-                    HRESULT hrFind = pShellWindows->FindWindowSW(
-                        &vEmpty, &vEmpty, SWC_DESKTOP, (long*)&hwndDesktop,
-                        SWFO_NEEDDISPATCH, &pDispatch);
-                    VariantClear(&vEmpty);
+            HRESULT hrFind = pShellWindows->FindWindowSW(
+                &vEmpty, &vEmpty, SWC_DESKTOP, &lHwnd, SWFO_NEEDDISPATCH,
+                &pDispatch);
 
-                    if (SUCCEEDED(hrFind) && pDispatch) {
-                        IServiceProvider* pServiceProvider = nullptr;
-                        if (SUCCEEDED(pDispatch->QueryInterface(
-                                IID_PPV_ARGS(&pServiceProvider)))) {
-                            IShellBrowser* pShellBrowser = nullptr;
-                            if (SUCCEEDED(pServiceProvider->QueryService(
-                                    SID_STopLevelBrowser,
-                                    IID_PPV_ARGS(&pShellBrowser)))) {
-                                IShellView* pShellView = nullptr;
-                                if (SUCCEEDED(
-                                        pShellBrowser->QueryActiveShellView(
-                                            &pShellView)) &&
-                                    pShellView) {
-                                    pShellBrowser->Release();
-                                    pServiceProvider->Release();
-                                    pDispatch->Release();
-                                    pShellWindows->Release();
-                                    return pShellView;
-                                }
-                                pShellBrowser->Release();
-                            }
+            if (SUCCEEDED(hrFind) && pDispatch) {
+                IServiceProvider* pServiceProvider = nullptr;
+                if (SUCCEEDED(pDispatch->QueryInterface(
+                        IID_PPV_ARGS(&pServiceProvider)))) {
+                    IShellBrowser* pShellBrowser = nullptr;
+                    if (SUCCEEDED(pServiceProvider->QueryService(
+                            SID_STopLevelBrowser,
+                            IID_PPV_ARGS(&pShellBrowser)))) {
+                        IShellView* pShellView = nullptr;
+                        if (SUCCEEDED(pShellBrowser->QueryActiveShellView(
+                                &pShellView)) &&
+                            pShellView) {
+                            pShellBrowser->Release();
                             pServiceProvider->Release();
+                            pDispatch->Release();
+                            pShellWindows->Release();
+                            return pShellView;
                         }
-                        pDispatch->Release();
+                        pShellBrowser->Release();
                     }
-                    pShellWindows->Release();
+                    pServiceProvider->Release();
                 }
-                return nullptr;
+                pDispatch->Release();
             }
+            pShellWindows->Release();
         }
+        return nullptr;
     }
 
     // 2. Standard Explorer Window Handling (Tabs / CabinetWClass)
@@ -935,13 +936,24 @@ std::wstring GetActiveFolderPath(IShellView* psv) {
         if (SUCCEEDED(pfv->GetFolder(IID_PPV_ARGS(&ppf2)))) {
             PIDLIST_ABSOLUTE pidl = nullptr;
             if (SUCCEEDED(ppf2->GetCurFolder(&pidl)) && pidl) {
-                std::vector<WCHAR> buffer(UNICODE_STRING_MAX_CHARS);
-                if (SHGetPathFromIDListEx(pidl, buffer.data(),
-                                          static_cast<DWORD>(buffer.size()),
-                                          GPFIDL_DEFAULT)) {
-                    result = buffer.data();
-                    if (result.rfind(L"\\\\?\\", 0) == 0) {
-                        result = result.substr(4);
+                if (ILIsEmpty(pidl)) {
+                    // Desktop root shell view: resolve to user's desktop folder
+                    PWSTR desktopPath = nullptr;
+                    if (SUCCEEDED(SHGetKnownFolderPath(
+                            FOLDERID_Desktop, 0, nullptr, &desktopPath)) &&
+                        desktopPath) {
+                        result = desktopPath;
+                        CoTaskMemFree(desktopPath);
+                    }
+                } else {
+                    std::vector<WCHAR> buffer(UNICODE_STRING_MAX_CHARS);
+                    if (SHGetPathFromIDListEx(pidl, buffer.data(),
+                                              static_cast<DWORD>(buffer.size()),
+                                              GPFIDL_DEFAULT)) {
+                        result = buffer.data();
+                        if (result.rfind(L"\\\\?\\", 0) == 0) {
+                            result = result.substr(4);
+                        }
                     }
                 }
                 CoTaskMemFree(pidl);
@@ -949,18 +961,6 @@ std::wstring GetActiveFolderPath(IShellView* psv) {
             ppf2->Release();
         }
         pfv->Release();
-    }
-
-    // Fallback: If empty (virtual desktop namespace), resolve to the user's
-    // desktop folder
-    if (result.empty()) {
-        PWSTR desktopPath = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr,
-                                           &desktopPath)) &&
-            desktopPath) {
-            result = desktopPath;
-            CoTaskMemFree(desktopPath);
-        }
     }
 
     return result;
@@ -1215,15 +1215,7 @@ void ShowActionToast(HWND hOwner,
     bool hasTargetRect = false;
 
     // Detect if hOwner is desktop (Progman / WorkerW)
-    bool isDesktopOwner = false;
-    if (hOwner) {
-        WCHAR cls[64] = {};
-        if (GetClassNameW(hOwner, cls, ARRAYSIZE(cls))) {
-            if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
-                isDesktopOwner = true;
-            }
-        }
-    }
+    bool isDesktopOwner = IsDesktopWindow(hOwner);
 
     if (hOwner && !isDesktopOwner && GetWindowRect(hOwner, &rcRef)) {
         hasTargetRect = true;
@@ -1924,10 +1916,9 @@ void ExecuteInternalCommand(const std::wstring& action,
             std::wstring shortcutPath =
                 activeDir + L"\\" + baseName + L" - Shortcut.lnk";
 
-            // Handle naming collisions natively
+            // Handle naming collisions natively (checks local + Public Desktop)
             int counter = 2;
-            while (GetFileAttributesW(shortcutPath.c_str()) !=
-                   INVALID_FILE_ATTRIBUTES) {
+            while (ItemExistsOnDisk(shortcutPath, activeDir)) {
                 shortcutPath = activeDir + L"\\" + baseName + L" - Shortcut (" +
                                std::to_wstring(counter++) + L").lnk";
             }
@@ -1994,11 +1985,10 @@ void ExecuteInternalCommand(const std::wstring& action,
                allSelected.size(), activeDir.c_str());
 
         // Resolve unique folder name: New Group -> New Group (2) -> New Group
-        // (3)...
+        // (checks local + Public Desktop)
         std::wstring targetFolder = activeDir + L"\\New Group";
         int counter = 2;
-        while (GetFileAttributesW(targetFolder.c_str()) !=
-               INVALID_FILE_ATTRIBUTES) {
+        while (ItemExistsOnDisk(targetFolder, activeDir)) {
             targetFolder = activeDir + L"\\New Group (" +
                            std::to_wstring(counter++) + L")";
         }
@@ -2487,16 +2477,10 @@ void ExecuteInternalCommand(const std::wstring& action,
     // --- Open Parent Folder ---
     if (_wcsicmp(action.c_str(), L"openParentFolder") == 0) {
         // Detect if triggered from the desktop
-        if (rootHwnd) {
-            WCHAR cls[64] = {};
-            if (GetClassNameW(rootHwnd, cls, ARRAYSIZE(cls))) {
-                if (wcscmp(cls, L"Progman") == 0 ||
-                    wcscmp(cls, L"WorkerW") == 0) {
-                    ShowActionToast(rootHwnd, L"Already at root folder",
-                                    ToastType::Error);
-                    return;
-                }
-            }
+        if (IsDesktopWindow(rootHwnd)) {
+            ShowActionToast(rootHwnd, L"Already at root folder",
+                            ToastType::Error);
+            return;
         }
 
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
@@ -2934,8 +2918,7 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
 
     bool isExplorer = (wcscmp(className, L"CabinetWClass") == 0 ||
                        wcscmp(className, L"ExploreWClass") == 0);
-    bool isDesktop = (wcscmp(className, L"Progman") == 0 ||
-                      wcscmp(className, L"WorkerW") == 0);
+    bool isDesktop = IsDesktopWindow(rootHwnd);
 
     if (isDesktop && !g_enableDesktopShortcuts.load()) {
         return false;
