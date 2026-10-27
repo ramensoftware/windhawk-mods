@@ -142,6 +142,16 @@ latitude/longitude to `api.open-meteo.com` for the forecast. No account, no
 API key, no personal data — only the coordinates (or search string) you
 provided.
 
+## Theme usage statistics
+
+The mod automatically sends the selected theme and a random installation ID to
+the public TopBar theme statistics service. The ID is stored locally to count
+the same installation once when its theme changes. The report does not include
+your Windows account name or device name. The service can still see the
+request's IP address. Reports are sent on startup, after a theme change, and at
+most once per day while the mod is running. The public dashboard displays
+aggregate counts: https://topbar-theme-stats.windhawk-topbar.workers.dev/
+
 ## Process model
 
 The bar runs in its own Explorer tool process (`explorer.exe -tool-mod windhawk-topbar`).
@@ -288,6 +298,7 @@ desktop are ignored.
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <winhttp.h>
+#include <ctime>
 #include <pdh.h>
 #include <psapi.h>
 #include <dxgi.h>
@@ -1153,6 +1164,12 @@ void RegisterNamed(PCWSTR name, FrameworkElement const& element);
 bool IsWindowTopmost(HWND hwnd);
 void RunOnUiThread(std::function<void()> work);
 void RunInBackground(std::function<void()> work);
+namespace theme_stats {
+constexpr UINT_PTR kDailyTimerId = 0x544253;
+void Submit();
+void Start();
+void SettingsChanged();
+}
 RECT GetBarMonitorRect();
 void HideOrphanXamlPopups();
 void InstallLightDismissGuard(wuxc::Primitives::FlyoutBase const& fb);
@@ -38257,8 +38274,12 @@ void UpdateClockText() {
 
 LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if(message==WM_CREATE){
+        SetTimer(hwnd, theme_stats::kDailyTimerId, 24 * 60 * 60 * 1000, nullptr);
         if(!WTSRegisterSessionNotification(hwnd,NOTIFY_FOR_THIS_SESSION))
             Wh_Log(L"Session notification registration failed: %u",GetLastError());
+    }else if(message==WM_TIMER&&wParam==theme_stats::kDailyTimerId){
+        theme_stats::Submit();
+        return 0;
     }else if(message==WM_WTSSESSION_CHANGE){
         if(wParam==WTS_SESSION_LOCK||wParam==WTS_CONSOLE_DISCONNECT||wParam==WTS_REMOTE_DISCONNECT){
             g_sessionInputBlocked=true;
@@ -38269,6 +38290,7 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         }
         return 0;
     }else if(message==WM_DESTROY){
+        KillTimer(hwnd, theme_stats::kDailyTimerId);
         WTSUnRegisterSessionNotification(hwnd);
         ResetShortcutChordState();
     }
@@ -40304,6 +40326,154 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 // Settings
 // ============================================================================
 
+namespace theme_stats {
+
+constexpr wchar_t kEndpoint[] = L"https://topbar-theme-stats.windhawk-topbar.workers.dev/";
+constexpr wchar_t kRegistryPath[] = L"Software\\WasiXGamer\\WindhawkTopBar\\ThemeStats";
+constexpr ULONGLONG kReportIntervalSeconds = 24ull * 60 * 60;
+std::atomic<bool> g_requestInFlight{false};
+std::atomic<bool> g_reportPending{false};
+
+std::wstring ReadRegistryString(PCWSTR name) {
+    HKEY key{};
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryPath, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) return {};
+    DWORD type = 0, bytes = 0;
+    std::wstring result;
+    if (RegQueryValueExW(key, name, nullptr, &type, nullptr, &bytes) == ERROR_SUCCESS &&
+        type == REG_SZ && bytes >= sizeof(wchar_t) && bytes <= 4096) {
+        result.resize(bytes / sizeof(wchar_t));
+        if (RegQueryValueExW(key, name, nullptr, &type,
+                reinterpret_cast<BYTE*>(result.data()), &bytes) == ERROR_SUCCESS) {
+            while (!result.empty() && result.back() == L'\0') result.pop_back();
+        } else result.clear();
+    }
+    RegCloseKey(key);
+    return result;
+}
+
+bool WriteRegistryValue(PCWSTR name, DWORD type, const void* data, DWORD bytes) {
+    HKEY key{};
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryPath, 0, nullptr, 0,
+            KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) return false;
+    LONG status = RegSetValueExW(key, name, 0, type,
+        static_cast<const BYTE*>(data), bytes);
+    RegCloseKey(key);
+    return status == ERROR_SUCCESS;
+}
+
+void WriteRegistryString(PCWSTR name, std::wstring const& value) {
+    WriteRegistryValue(name, REG_SZ, value.c_str(),
+        static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+}
+
+std::wstring GetOrCreateInstallationId() {
+    std::wstring id = ReadRegistryString(L"InstallationId");
+    if (!id.empty()) return id;
+    GUID guid{};
+    if (FAILED(CoCreateGuid(&guid))) return {};
+    wchar_t buffer[40]{};
+    if (!StringFromGUID2(guid, buffer, ARRAYSIZE(buffer))) return {};
+    id.assign(buffer + 1, wcslen(buffer) - 2); // UUID without braces.
+    WriteRegistryString(L"InstallationId", id);
+    return id;
+}
+
+bool SendReport(std::wstring const& id, std::wstring const& theme, bool remove) {
+    std::string body = "{\"installationId\":\"";
+    for (wchar_t c : id) body.push_back(static_cast<char>(c));
+    body += "\"";
+    if (remove) body += ",\"remove\":true}";
+    else {
+        body += ",\"theme\":\"";
+        for (wchar_t c : theme) body.push_back(static_cast<char>(c));
+        body += "\"}";
+    }
+
+    URL_COMPONENTS parts{};
+    parts.dwStructSize = sizeof(parts);
+    wchar_t host[256]{};
+    parts.lpszHostName = host;
+    parts.dwHostNameLength = ARRAYSIZE(host);
+    if (!WinHttpCrackUrl(kEndpoint, 0, 0, &parts)) return false;
+    HINTERNET session = WinHttpOpen(L"Windhawk-TopBar-ThemeStats/1.0",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
+        WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) return false;
+    WinHttpSetTimeouts(session, 4000, 4000, 4000, 4000);
+    HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
+    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"POST", L"/",
+        nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+        WINHTTP_FLAG_SECURE) : nullptr;
+    BOOL ok = FALSE;
+    if (request) {
+        const wchar_t headers[] = L"Content-Type: application/json\r\n";
+        ok = WinHttpSendRequest(request, headers, static_cast<DWORD>(-1L),
+            body.data(), static_cast<DWORD>(body.size()),
+            static_cast<DWORD>(body.size()), 0) && WinHttpReceiveResponse(request, nullptr);
+        DWORD status = 0, size = sizeof(status);
+        if (ok) ok = WinHttpQueryHeaders(request,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
+            WINHTTP_NO_HEADER_INDEX) && status >= 200 && status < 300;
+    }
+    if (request) WinHttpCloseHandle(request);
+    if (connection) WinHttpCloseHandle(connection);
+    WinHttpCloseHandle(session);
+    return ok != FALSE;
+}
+
+void Submit() {
+    if (g_requestInFlight.exchange(true)) {
+        g_reportPending = true;
+        return;
+    }
+    RunInBackground([] {
+        struct Reset {
+            ~Reset() {
+                g_requestInFlight = false;
+                if (g_reportPending.exchange(false)) Submit();
+            }
+        } reset;
+        if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+        std::wstring id = GetOrCreateInstallationId();
+        if (id.empty()) return;
+        std::wstring theme = GetModEditorStringSetting(L"theme");
+        if (theme.empty()) theme = L"None";
+        const wchar_t* valid[] = {L"None", L"GreenBar", L"NoIslands", L"OS27 GoldenGate",
+            L"Midnight Neon", L"Neon Blue", L"Neon Blue (Island)"};
+        if (std::find(std::begin(valid), std::end(valid), theme) == std::end(valid)) theme = L"None";
+        std::wstring previousTheme = ReadRegistryString(L"LastTheme");
+        ULONGLONG previousTime = 0;
+        HKEY key{};
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryPath, 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
+            DWORD type = 0, bytes = sizeof(previousTime);
+            RegQueryValueExW(key, L"LastReport", nullptr, &type,
+                reinterpret_cast<BYTE*>(&previousTime), &bytes);
+            RegCloseKey(key);
+        }
+        ULONGLONG now = static_cast<ULONGLONG>(time(nullptr));
+        if (previousTheme == theme && previousTime && now >= previousTime &&
+            now - previousTime < kReportIntervalSeconds) return;
+        if (SendReport(id, theme, false)) {
+            WriteRegistryString(L"LastTheme", theme);
+            WriteRegistryValue(L"LastReport", REG_QWORD, &now, sizeof(now));
+            Wh_Log(L"[ThemeStats] theme report sent");
+        } else {
+            Wh_Log(L"[ThemeStats] report failed; will retry later");
+        }
+    });
+}
+
+void SettingsChanged() {
+    Submit();
+}
+
+void Start() {
+    Submit();
+}
+
+} // namespace theme_stats
+
 void LoadSettings() {
     // Strings: GetStringSettingCopy is already storage-first.
     // Ints: ReadIntSetting is now storage-first with an explicit fallback
@@ -41575,6 +41745,7 @@ BOOL WhTool_ModInit() {
 
     InstallProcessTransparencyBlock();
     LoadSettings();
+    theme_stats::Start();
     // Start every mode in the same visible, interactive state. If autohide
     // was selected, defer activating it until the XAML popup has been live
     // for one second (scheduled when the initial root is applied).
@@ -41607,6 +41778,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() { 
+    theme_stats::SettingsChanged();
     if (!g_uiDispatcherQueue) {
         // Settings will be loaded on next start.
         return;
