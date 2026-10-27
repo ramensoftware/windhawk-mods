@@ -88,7 +88,6 @@ If you find this mod useful, you can support its development and maintenance:
 
 #include <inspectable.h>
 #include <roapi.h>
-#include <weakreference.h>
 #include <windows.h>
 #include <winstring.h>
 #include <wrl/client.h>
@@ -97,7 +96,6 @@ If you find this mod useful, you can support its development and maintenance:
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <cstdlib>
 #include <mutex>
 #include <string_view>
 #include <unordered_set>
@@ -751,7 +749,7 @@ static HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-static HWND GetTaskbarWndForTimer() {
+static HWND GetTaskbarWnd() {
     HWND hWnd = g_taskbarWnd.load(std::memory_order_relaxed);
     if (hWnd && IsWindow(hWnd)) {
         return hWnd;
@@ -776,7 +774,7 @@ static bool IsTaskbarXamlCaller(void* returnAddress) {
         return false;
     }
 
-    HWND hTaskbarWnd = GetTaskbarWndForTimer();
+    HWND hTaskbarWnd = GetTaskbarWnd();
     return hTaskbarWnd &&
            GetWindowThreadProcessId(hTaskbarWnd, nullptr) == GetCurrentThreadId();
 }
@@ -836,6 +834,11 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
     if (hideApps && hideStart && hideTray && hideDrawer) {
         // All areas suppressed: always suppress with zero overhead
         return S_OK;
+    }
+
+    if (!hideApps && !hideStart && !hideTray && !hideDrawer) {
+        // All areas visible: allow opening immediately with zero overhead
+        return g_toolTipPutIsOpenOriginal ? g_toolTipPutIsOpenOriginal(pThis, value) : S_OK;
     }
 
     ToolTipArea area = IdentifyToolTipArea(pThis);
