@@ -2,11 +2,11 @@
 // @id              taskbar-snipper
 // @name            Taskbar Snipper
 // @description     Print Screen, or a button on the taskbar, selects part of the screen to mark up and copy or save; Win+Shift+R records it as a video to trim and copy or save
-// @version         1.1.0
+// @version         1.2.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
-// @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -luuid -lcomdlg32 -lmsimg32 -lmfplat -lmfreadwrite -lmfuuid -ld3d11
+// @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -luuid -lcomdlg32 -lmsimg32 -lmfplat -lmfreadwrite -lmfuuid -ld3d11 -loleaut32 -lruntimeobject
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,7 +14,7 @@
 /*
 # Taskbar Snipper
 
-![The screenshot and record buttons on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-snipper/screenshot.png)
+![The screenshot and record buttons on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-snipper/screenshot-1.2.png)
 
 Press **Print Screen**, or click the screenshot button on the taskbar, to select part of the
 screen. A toolbox opens right above the selection to mark it up with a pencil, lines, arrows, boxes
@@ -78,33 +78,30 @@ Explorer.
 
 ## The buttons
 
-The screenshot and record buttons sit on the taskbar like the Windows weather widget: click one to
-take a screenshot or record, right-click them for their menu, and drag them to move them along the
-taskbar. **Which buttons** in the mod's settings shows both, or just one of them, and **Buttons on
-the taskbar** turns them off; the shortcuts work either way.
+The screenshot and record buttons are part of the taskbar, which makes room for them: click one to
+take a screenshot or record, and right-click them for their menu. **Position** in the mod's
+settings puts them left of the notification area, of the Wi-Fi, volume and battery icons, or of
+the clock, or at the left end of the taskbar (free when its icons are centered). **Which buttons**
+shows both, or just one of them, and **Buttons on the taskbar** turns them off; the shortcuts work
+either way.
 
 The menu opens the screenshots and recordings folders, and **Choose the screenshots folder…** and
 **Choose the recordings folder…** pick others. The folders can be set in the mod's settings too;
 whichever you changed last is used.
 
-![Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png)
+![Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher side by side on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/side-by-side.png)
 
 From the left: [Taskbar Snipper](https://windhawk.net/mods/taskbar-snipper),
 [Taskbar Audio Flipper](https://windhawk.net/mods/taskbar-audio-flipper) and
-[Taskbar RDP Launcher](https://windhawk.net/mods/taskbar-rdp-launcher).
-
-With the Taskbar Audio Flipper or Taskbar RDP Launcher mod running too, their widgets can be joined
-with the buttons into one: right-click any of them, open **Link widgets**, and choose **Link with**
-the other. Linked, they sit side by side with a divider between them, and dragging any of them
-moves them all; **Move this widget left** and **right** change their order.
-
-Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.2 or
-later, Taskbar Snipper 1.1 or later): their widgets are inside the taskbar now, where older versions
-don't look for them, so an older one overlaps the others and doesn't follow them when they're
-dragged, reordered or unlinked.
+[Taskbar RDP Launcher](https://windhawk.net/mods/taskbar-rdp-launcher). With their mods running
+too, widgets in the same position sit side by side, in that order; right-click one and choose
+**Move left** or **Move right** to change it.
 
 ## Good to know
 
+- The mod needs Windows 11, whose taskbar the buttons are part of. The first time it starts,
+  Windhawk downloads Microsoft's symbols for the taskbar, to find its way in; that can take a
+  moment.
 - Only Print Screen on its own is taken over. Alt+Print Screen, Win+Print Screen and Win+Shift+S
   work as usual, and turning the mod off gives Print Screen back to Windows. Win+Shift+R is taken
   over while **Win+Shift+R records the screen** is on in the settings.
@@ -126,7 +123,7 @@ dragged, reordered or unlinked.
 /*
 - showButton: true
   $name: Buttons on the taskbar
-  $description: Screenshot and record buttons on the taskbar. Right-click them to choose the folders to save in, or to link them with the Taskbar Audio Flipper and Taskbar RDP Launcher widgets.
+  $description: Screenshot and record buttons on the taskbar. Right-click them to choose the folders to save in.
 - buttons: both
   $name: Which buttons
   $description: The screenshot button, the record button, or both. Their shortcuts work either way.
@@ -134,6 +131,14 @@ dragged, reordered or unlinked.
   - both: Screenshot and record
   - screenshot: Screenshot only
   - record: Record only
+- position: tray
+  $name: Position
+  $description: Where on the taskbar the buttons go. The Taskbar Audio Flipper and Taskbar RDP Launcher widgets in the same position sit beside them.
+  $options:
+  - tray: Left of the notification area
+  - systemIcons: Left of the Wi-Fi, volume and battery icons
+  - clock: Left of the clock
+  - left: At the left end of the taskbar
 - recordShortcut: true
   $name: Win+Shift+R records the screen
   $description: Takes over Windows' screen recording shortcut (the Snipping Tool's), to record with Taskbar Snipper instead.
@@ -169,14 +174,32 @@ dragged, reordered or unlinked.
 #include <mfreadwrite.h>
 #include <gdiplus.h>
 
+#undef GetCurrentTime  // winbase.h's, which XAML's headers have as a method.
+
+#include <winrt/base.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+
+#include <windhawk_utils.h>
+
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cwctype>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace gp = Gdiplus;
@@ -185,12 +208,9 @@ namespace {
 
 using ARGB = gp::ARGB;
 
-const wchar_t kWidgetClassName[] = L"TaskbarSnipper.Mod.Widget";
-const wchar_t kWidgetTitle[] = L"Taskbar Snipper";
-// This widget's place among the widgets that can link (WidgetLink::kMembers). It was never linked
-// as a pair, as the other two were before there were three.
-constexpr int kSelfMember = 2;
-constexpr int kLegacyPartner = -1;
+// Where the buttons go among the Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher
+// widgets in the same position on the taskbar, from the left, until they're moved from their menu.
+constexpr int kWidgetOrder = 0;
 
 // ---------------------------------------------------------------------------
 // Strings, files and folders
@@ -239,18 +259,6 @@ std::wstring NewFileName(const std::wstring& folder, const wchar_t* prefix, cons
         path = folder + L"\\" + name + L" (" + std::to_wstring(copy) + L")" + extension;
     }
     return path;
-}
-
-// Menu text: "&" would underline the next letter.
-std::wstring MenuText(const std::wstring& text) {
-    std::wstring escaped;
-    for (wchar_t c : text) {
-        if (c == L'&') {
-            escaped += L'&';
-        }
-        escaped += c;
-    }
-    return escaped;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,16 +436,14 @@ bool ReadUserFlag(const wchar_t* key, const wchar_t* valueName, bool fallback) {
     return value != 0;
 }
 
-// The Windows settings the widget and popups follow. They're read once, and again when Windows
-// says a setting changed (WM_SETTINGCHANGE), rather than on every placement update or paint.
+// The Windows setting the popups follow. It's read once, and again when Windows says a setting
+// changed (WM_SETTINGCHANGE), rather than on every paint.
 struct ShellSettings {
-    bool lightTaskbar = false;  // "Choose your default Windows mode", which the taskbar follows.
-    bool lightApps = true;      // "Choose your default app mode", which the popups follow.
+    bool lightApps = true;  // "Choose your default app mode".
 
     static ShellSettings Read() {
         const wchar_t* personalize = L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
         ShellSettings settings;
-        settings.lightTaskbar = ReadUserFlag(personalize, L"SystemUsesLightTheme", false);
         settings.lightApps = ReadUserFlag(personalize, L"AppsUseLightTheme", true);
         return settings;
     }
@@ -450,10 +456,6 @@ ShellSettings& CurrentShellSettings() {
 
 void RefreshShellSettings() {
     CurrentShellSettings() = ShellSettings::Read();
-}
-
-bool TaskbarUsesLightTheme() {
-    return CurrentShellSettings().lightTaskbar;
 }
 
 bool AppsUseLightTheme() {
@@ -757,18 +759,17 @@ constexpr UINT kTrimClosedMessage = WM_APP + 6;  // lParam is the window.
 // ---------------------------------------------------------------------------
 // Taskbar
 
-// Whether this is an Explorer process.
-bool InExplorer() {
-    static const bool inExplorer = []() {
-        WCHAR path[MAX_PATH];
-        DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
-        if (length == 0 || length >= MAX_PATH) {
-            return false;
+// Explorer's taskbar, if it's this process's.
+HWND OwnTaskbar() {
+    for (HWND window = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr); window;
+         window = FindWindowExW(nullptr, window, L"Shell_TrayWnd", nullptr)) {
+        DWORD process = 0;
+        GetWindowThreadProcessId(window, &process);
+        if (process == GetCurrentProcessId()) {
+            return window;
         }
-        const wchar_t* name = wcsrchr(path, L'\\');
-        return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
-    }();
-    return inExplorer;
+    }
+    return nullptr;
 }
 
 // Whether the process is an Explorer.
@@ -788,1342 +789,1235 @@ bool IsExplorerProcess(DWORD processId) {
     return explorer;
 }
 
-// Explorer's taskbar (in Explorer, this process's own if it has one). Other apps' Shell_TrayWnd
-// windows don't count: taskbar replacements such as RetroBar make one, so tray icons reach them.
-HWND TaskbarWindow() {
-    HWND explorers = nullptr;
+// Whether this is the Explorer with the taskbar, or (while Explorer is starting) about to have it.
+// Windhawk loads the mod into every Explorer process, folder windows' ("Launch folder windows in a
+// separate process", started with "/factory,") too, and those never have it. Other apps'
+// Shell_TrayWnd windows don't count: taskbar replacements such as RetroBar make one.
+bool InTaskbarProcess() {
+    std::wstring commandLine = GetCommandLineW();
+    std::transform(commandLine.begin(), commandLine.end(), commandLine.begin(), towlower);
+    if (commandLine.find(L"/factory,") != std::wstring::npos) {
+        return false;
+    }
+    if (OwnTaskbar()) {
+        return true;
+    }
     for (HWND window = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr); window;
          window = FindWindowExW(nullptr, window, L"Shell_TrayWnd", nullptr)) {
         DWORD process = 0;
         GetWindowThreadProcessId(window, &process);
-        if (process == GetCurrentProcessId() && InExplorer()) {
-            return window;
-        }
-        if (!explorers && IsExplorerProcess(process)) {
-            explorers = window;
+        if (IsExplorerProcess(process)) {
+            return false;  // Another Explorer has it.
         }
     }
-    return explorers;
+    return true;
 }
 
-// Whether this is an Explorer process for folder windows ("Launch folder windows in a separate
-// process"), started with "/factory,". Those never have the taskbar.
-bool InFolderWindowProcess() {
-    std::wstring commandLine = GetCommandLineW();
-    std::transform(commandLine.begin(), commandLine.end(), commandLine.begin(), towlower);
-    return InExplorer() && commandLine.find(L"/factory,") != std::wstring::npos;
+UINT TaskbarCreatedMessage() {
+    static const UINT message = RegisterWindowMessageW(L"TaskbarCreated");
+    return message;
 }
 
-// The taskbar to put the widget in, if there is one. In Explorer, only the process that has it:
-// Windhawk loads the mod into Explorer's folder-window processes too. (The app puts the widget in
-// Explorer's taskbar from its own process.)
-HWND WidgetTaskbar() {
-    HWND taskbar = TaskbarWindow();
-    DWORD process = 0;
-    if (taskbar && InExplorer() && GetWindowThreadProcessId(taskbar, &process) && process != GetCurrentProcessId()) {
-        return nullptr;
+// A hidden top-level window of the app's thread: it owns the app's dialogs, and hears when a
+// Windows setting, the displays or the devices change, which a window for messages only doesn't.
+class OwnerWindow {
+public:
+    std::function<void()> onSettingChange;
+    std::function<void()> onDisplayChange;
+    std::function<void(WPARAM event)> onDeviceChange;
+    std::function<void()> onTaskbarCreated;  // Explorer made the taskbar (as it started, say).
+
+    bool Create(const wchar_t* className) {
+        if (const wchar_t* registered = RegisterForwardingClass<OwnerWindow>(className)) {
+            CreateWindowExW(WS_EX_TOOLWINDOW, registered, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), this);
+        }
+        return hwnd_ != nullptr;
     }
-    return taskbar;
+
+    ~OwnerWindow() {
+        if (hwnd_) {
+            DestroyWindow(hwnd_);
+        }
+    }
+
+    HWND Handle() const { return hwnd_; }
+
+    bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+        if (message == WM_SETTINGCHANGE && onSettingChange) {
+            onSettingChange();
+        } else if (message == WM_DISPLAYCHANGE && onDisplayChange) {
+            onDisplayChange();
+        } else if (message == WM_DEVICECHANGE && onDeviceChange) {
+            onDeviceChange(wParam);
+        } else if (message == TaskbarCreatedMessage() && onTaskbarCreated) {
+            onTaskbarCreated();
+        }
+        return false;
+    }
+
+    HWND hwnd_ = nullptr;
+};
+
+// Forgets what the versions that dragged the widget along the taskbar kept: where it was, and its
+// link with the other widgets.
+void ForgetDraggedWidget() {
+    for (const wchar_t* name : {L"TaskbarOffset", L"LinkGroupOrder", L"LinkGroupOffset", L"LinkGroupStamp", L"Link", L"LinkStamp"}) {
+        Storage::Delete(name);
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Menus
+// Menus: built on the app's thread, shown by the widget as a XAML menu on the taskbar's thread;
+// the chosen item's action then runs back on the app's thread.
 
-// A popup menu built from items with actions; Show runs the chosen item's action.
+struct MenuEntry {
+    enum class Kind { Item, Separator, Heading, Submenu };
+    Kind kind = Kind::Item;
+    std::wstring text;  // A tab, then the item's shortcut, if it has one.
+    bool checked = false;
+    bool enabled = true;
+    int command = 0;                 // An item's: what the widget sends back when it's chosen.
+    std::vector<MenuEntry> entries;  // A submenu's.
+};
+
 class Menu {
 public:
-    Menu() : menu_(CreatePopupMenu()), actions_(std::make_shared<std::vector<std::function<void()>>>()) {}
-
-    ~Menu() {
-        if (owner_ && menu_) {
-            DestroyMenu(menu_);
-        }
-    }
+    Menu() : actions_(std::make_shared<std::vector<std::function<void()>>>()) {}
 
     Menu(const Menu&) = delete;
     Menu& operator=(const Menu&) = delete;
 
     void Add(const std::wstring& text, std::function<void()> action, bool checked = false, bool enabled = true) {
         actions_->push_back(std::move(action));
-        UINT flags = MF_STRING | (checked ? MF_CHECKED : 0) | (enabled ? 0 : MF_GRAYED);
-        AppendMenuW(menu_, flags, actions_->size(), MenuText(text).c_str());
+        MenuEntry entry;
+        entry.text = text;
+        entry.checked = checked;
+        entry.enabled = enabled;
+        entry.command = (int)actions_->size();
+        entries_.push_back(entry);
     }
 
-    void AddSeparator() { AppendMenuW(menu_, MF_SEPARATOR, 0, nullptr); }
+    void AddSeparator() {
+        MenuEntry entry;
+        entry.kind = MenuEntry::Kind::Separator;
+        entries_.push_back(entry);
+    }
+
+    // A line of text that can't be chosen, above the items it's about.
+    void AddHeading(const std::wstring& text) {
+        MenuEntry entry;
+        entry.kind = MenuEntry::Kind::Heading;
+        entry.text = text;
+        entries_.push_back(entry);
+    }
 
     // A submenu; items added to it share this menu's actions.
     Menu& AddSubmenu(const std::wstring& text, bool enabled = true) {
         submenus_.push_back(std::unique_ptr<Menu>(new Menu(actions_)));
-        Menu& submenu = *submenus_.back();
-        AppendMenuW(menu_, MF_POPUP | (enabled ? 0 : MF_GRAYED), (UINT_PTR)submenu.menu_, MenuText(text).c_str());
-        return submenu;
+        MenuEntry entry;
+        entry.kind = MenuEntry::Kind::Submenu;
+        entry.text = text;
+        entry.enabled = enabled;
+        entries_.push_back(entry);
+        submenuEntries_.push_back(entries_.size() - 1);
+        return *submenus_.back();
     }
 
-    // Shows the menu above the point (the widget's top edge) and runs the chosen action.
-    void Show(HWND owner, POINT point) {
-        // Like a tray icon does, take the foreground first so the menu closes when clicking elsewhere.
-        SetForegroundWindow(owner);
-        UINT command = TrackPopupMenuEx(menu_, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_LEFTALIGN,
-                                        point.x, point.y, owner, nullptr);
-        PostMessageW(owner, WM_NULL, 0, 0);
-        if (command > 0 && command <= actions_->size() && (*actions_)[command - 1]) {
-            auto actions = actions_;  // The action may rebuild menus.
+    // What the widget shows.
+    std::vector<MenuEntry> Entries() const {
+        std::vector<MenuEntry> entries = entries_;
+        for (size_t i = 0; i < submenus_.size(); i++) {
+            entries[submenuEntries_[i]].entries = submenus_[i]->Entries();
+        }
+        return entries;
+    }
+
+    // Runs the action of the item the widget sent back.
+    void Run(int command) {
+        if (command > 0 && command <= (int)actions_->size() && (*actions_)[command - 1]) {
+            auto actions = actions_;  // The action may show a new menu, ending this one.
             (*actions)[command - 1]();
         }
     }
 
 private:
-    explicit Menu(std::shared_ptr<std::vector<std::function<void()>>> actions)
-        : menu_(CreatePopupMenu()), actions_(std::move(actions)), owner_(false) {}
+    explicit Menu(std::shared_ptr<std::vector<std::function<void()>>> actions) : actions_(std::move(actions)) {}
 
-    HMENU menu_;
     std::shared_ptr<std::vector<std::function<void()>>> actions_;
+    std::vector<MenuEntry> entries_;
     std::vector<std::unique_ptr<Menu>> submenus_;
-    bool owner_ = true;  // Submenus are destroyed with the menu they're in.
+    std::vector<size_t> submenuEntries_;  // Where each submenu is in entries_.
 };
 
 // ---------------------------------------------------------------------------
-// Linking the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper widgets (the same
-// code is in all three mods). Linked widgets sit side by side as one, in the order chosen, with a
-// divider between them, and dragging any of them moves them all.
+// The widget inside the taskbar (the same code is in the Taskbar Audio Flipper, Taskbar RDP
+// Launcher and Taskbar Snipper mods). Windows 11 draws its taskbar with XAML, so the widget is
+// XAML too: elements of its own, put into the taskbar's layout, which makes room for them. Getting
+// to the taskbar's XAML takes a few of taskbar.dll's functions, which Windhawk finds by name in
+// Microsoft's symbols, as other taskbar mods do.
 //
-// Each mod keeps its own copy of the group (which widgets are in it, left to right, and where it
-// is) in its storage, and shows it to the others as properties of its widget window, stamped with
-// when it last changed: the newest copy wins. Each widget shows its id on its window too, finds the
-// others by theirs (the ones it knows, by their window class), and posts them a message whenever
-// its group, size or place changes.
+// The elements belong to the taskbar's thread and are only touched there. The app works on its
+// own thread: it posts changes to the elements (Bridge::Post), and they post clicks back to it
+// (PostToApp), so neither ever waits for the other.
 
-namespace WidgetLink {
+namespace wux = winrt::Windows::UI::Xaml;
+namespace wuxc = winrt::Windows::UI::Xaml::Controls;
+namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
-struct Member {
-    const wchar_t* name;         // As the menus show it.
-    const wchar_t* windowClass;  // Of its widget window.
-};
+namespace TaskbarXaml {
 
-// Every widget that can link, by id (its place here). Ids stay as they are: a new widget goes at
-// the end, up to 15 of them.
-constexpr Member kMembers[] = {
-    {L"Audio Flipper", L"AudioFlipper.Mod.Widget"},
-    {L"RDP Launcher", L"RDPLauncher.Mod.Widget"},
-    {L"Snipper", L"TaskbarSnipper.Mod.Widget"},
-};
-constexpr int kMemberCount = ARRAYSIZE(kMembers);
+// ---- taskbar.dll
 
-// The format of the group shown to the other widgets and kept in storage, in the top four bits of
-// its order. A widget skips copies in a format it doesn't know. Widgets added later don't need a new
-// one: an id a widget doesn't know stays in the group as it is.
-constexpr unsigned kFormat = 1;
-constexpr int kOrderSlots = 7;  // Widgets in a group: four bits each, below the format.
+void* g_taskBandSiteVftable = nullptr;  // CTaskBand's vftable for its ITaskListWndSite part.
+using GetTaskbarHost_t = void*(WINAPI*)(void* self, void* result);
+GetTaskbarHost_t g_getTaskbarHost = nullptr;
+using FrameHeight_t = int(WINAPI*)(void* self);
+FrameHeight_t g_frameHeight = nullptr;
+using Decref_t = void(WINAPI*)(void* self);
+Decref_t g_decref = nullptr;
+using StartTaskbar_t = void(WINAPI*)(void* self);
+StartTaskbar_t g_startTaskbarOriginal = nullptr;
 
-struct Group {
-    std::vector<int> order;  // The widgets in it, by id, left to right.
-    int offset = -1;         // Its left edge from the taskbar's left edge; negative for the default.
-    int stamp = 0;           // When it last changed, in seconds since 2020: the newest copy wins.
+// Called on the taskbar's thread when Explorer has made the taskbar (as it starts, or again).
+void (*g_onTaskbarStarted)(HWND taskbar) = nullptr;
 
-    bool Has(int member) const { return std::find(order.begin(), order.end(), member) != order.end(); }
-
-    // Whether this widget is linked with another.
-    bool Linked() const { return order.size() >= 2 && Has(kSelfMember); }
-
-    // The order as one number: the format, then four bits for each widget, left to right (its id
-    // plus one; none after the last).
-    int PackOrder() const {
-        unsigned packed = kFormat << 28;
-        for (size_t i = 0; i < order.size() && i < (size_t)kOrderSlots; i++) {
-            packed |= (unsigned)((order[i] + 1) & 15) << (4 * i);
-        }
-        return (int)packed;
+void WINAPI StartTaskbarHook(void* self) {
+    g_startTaskbarOriginal(self);
+    HWND taskbar = OwnTaskbar();
+    if (g_onTaskbarStarted && taskbar) {
+        g_onTaskbarStarted(taskbar);
     }
+}
 
-    // Reads the order. False for a format this widget doesn't know.
-    bool UnpackOrder(int packed) {
-        if ((unsigned)packed >> 28 != kFormat) {
-            return false;
-        }
-        order.clear();
-        for (int i = 0; i < kOrderSlots; i++) {
-            int member = (int)(((unsigned)packed >> (4 * i)) & 15) - 1;
-            if (member < 0) {
-                break;
-            }
-            if (!Has(member)) {
-                order.push_back(member);
-            }
-        }
-        return true;
+// Finds taskbar.dll's functions; false where there aren't any (Windows 10's taskbar isn't XAML).
+bool HookTaskbarDll() {
+    HMODULE module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"No taskbar.dll: error %u", GetLastError());
+        return false;
     }
-};
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_taskBandSiteVftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &g_getTaskbarHost},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &g_frameHeight},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &g_decref},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &g_startTaskbarOriginal, StartTaskbarHook},
+    };
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+}
 
-// What each widget shows on its window: its id (so any widget can find it, even one added after
-// this one), and its copy of the group.
-const wchar_t kMemberProperty[] = L"TaskbarWidgetLink.Mod.Member";
-const wchar_t kOrderProperty[] = L"TaskbarWidgetLink.Mod.Order";
-const wchar_t kOffsetProperty[] = L"TaskbarWidgetLink.Mod.Offset";
-const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.GroupStamp";
-
-// Posted to the other widgets when the group, or this widget's size or place, changes.
-UINT ChangedMessage() {
-    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.GroupChanged");
+UINT RunOnWindowThreadMessage() {
+    static const UINT message = RegisterWindowMessageW(L"TaskbarWidgets.RunOnWindowThread." WH_MOD_ID);
     return message;
 }
 
-// A stamp for a change made now, newer than the given one even within the same second.
-int NewStamp(int newerThan) {
-    SYSTEMTIME epoch{2020, 1, 3, 1};
-    FILETIME epochTime;
-    FILETIME now;
-    SystemTimeToFileTime(&epoch, &epochTime);
-    GetSystemTimeAsFileTime(&now);
-    ULARGE_INTEGER start{{epochTime.dwLowDateTime, epochTime.dwHighDateTime}};
-    ULARGE_INTEGER current{{now.dwLowDateTime, now.dwHighDateTime}};
-    int seconds = current.QuadPart > start.QuadPart ? (int)((current.QuadPart - start.QuadPart) / 10000000) : 0;
-    return std::max(seconds, newerThan + 1);
-}
-
-Group Load() {
-    Group group;
-    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
-    if (stamp != 0 && group.UnpackOrder(Storage::GetInt(L"LinkGroupOrder", 0))) {
-        group.offset = Storage::GetInt(L"LinkGroupOffset", -1);
-        group.stamp = stamp;
-        return group;
-    }
-    // Before there were three, two widgets linked as a pair, kept as Link (on or off, whether this
-    // widget was on the left, and the offset) and LinkStamp. The stamp counts even when they were
-    // unlinked: unlinking while the other widget's mod wasn't running still wins.
-    group = {};
-    if (kLegacyPartner >= 0) {
-        int pair = Storage::GetInt(L"Link", 0);
-        if (pair & 1) {
-            group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
-            group.offset = (pair >> 2) - 1;
+LRESULT CALLBACK RunOnWindowThreadHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION) {
+        auto call = (const CWPSTRUCT*)lParam;
+        if (call->message == RunOnWindowThreadMessage()) {
+            (*(const std::function<void()>*)call->lParam)();
         }
-        group.stamp = Storage::GetInt(L"LinkStamp", 0);
     }
-    return group;
+    return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-void Save(const Group& group) {
-    Storage::SetInt(L"LinkGroupOrder", group.PackOrder());
-    Storage::SetInt(L"LinkGroupOffset", group.offset);
-    Storage::SetInt(L"LinkGroupStamp", group.stamp);
-    // The pair link from before is in the group now.
-    Storage::Delete(L"Link");
-    Storage::Delete(L"LinkStamp");
-}
-
-// Shows this widget's id and copy of the group on its window, for the other widgets to read.
-void Publish(HWND window, const Group& group) {
-    SetPropW(window, kMemberProperty, (HANDLE)(INT_PTR)(kSelfMember + 1));
-    SetPropW(window, kOrderProperty, (HANDLE)(INT_PTR)group.PackOrder());
-    SetPropW(window, kOffsetProperty, (HANDLE)(INT_PTR)(std::max(-1, group.offset) + 1));
-    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)group.stamp);
-}
-
-void Unpublish(HWND window) {
-    RemovePropW(window, kMemberProperty);
-    RemovePropW(window, kOrderProperty);
-    RemovePropW(window, kOffsetProperty);
-    RemovePropW(window, kStampProperty);
-}
-
-BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
-    int member = (int)(INT_PTR)GetPropW(window, kMemberProperty) - 1;
-    if (member >= 0 && member != kSelfMember) {
-        ((std::vector<std::pair<int, HWND>>*)widgets)->emplace_back(member, window);
+// Runs the function on the window's thread, and waits for it.
+bool RunOnWindowThread(HWND window, const std::function<void()>& run) {
+    DWORD thread = GetWindowThreadProcessId(window, nullptr);
+    if (!thread) {
+        return false;
     }
-    return TRUE;
-}
-
-// The widget windows of the other widgets that are running, with their ids: top-level windows, and
-// windows inside the taskbar (a widget's mod that Windhawk loads into Explorer puts it there).
-std::vector<std::pair<int, HWND>> OtherWidgets() {
-    std::vector<std::pair<int, HWND>> widgets;
-    EnumWindows(AddOtherWidget, (LPARAM)&widgets);
-    if (HWND taskbar = TaskbarWindow()) {
-        EnumChildWindows(taskbar, AddOtherWidget, (LPARAM)&widgets);
+    if (thread == GetCurrentThreadId()) {
+        run();
+        return true;
     }
-    return widgets;
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunOnWindowThreadHook, nullptr, thread);
+    if (!hook) {
+        return false;
+    }
+    SendMessageW(window, RunOnWindowThreadMessage(), 0, (LPARAM)&run);
+    UnhookWindowsHookEx(hook);
+    return true;
 }
 
-HWND FindMember(int member) {
-    if (member == kSelfMember || member < 0) {
+bool IsReadable(const void* address, size_t size) {
+    MEMORY_BASIC_INFORMATION memory;
+    if (!VirtualQuery(address, &memory, sizeof(memory)) || memory.State != MEM_COMMIT || (memory.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
+        return false;
+    }
+    return (const BYTE*)address + size <= (const BYTE*)memory.BaseAddress + memory.RegionSize;
+}
+
+// Where TaskbarHost keeps the taskbar's XAML element, from the start of TaskbarHost::FrameHeight,
+// which reads it; 0 if its code isn't as expected.
+size_t ElementOffset() {
+#if defined(__x86_64__)
+    // sub rsp, imm8; add rcx, imm8
+    const BYTE* code = (const BYTE*)g_frameHeight;
+    if (IsReadable(code, 8) && code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC && code[4] == 0x48 && code[5] == 0x83 &&
+        code[6] == 0xC1 && code[7] <= 0x7F) {
+        return code[7];
+    }
+#elif defined(__aarch64__)
+    // pacibsp; stp fp, lr, [sp, #...]!; mov fp, sp; ldr x0, [x0, #imm]!
+    const DWORD* code = (const DWORD*)g_frameHeight;
+    if (IsReadable(code, sizeof(DWORD) * 4) && code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD && code[2] == 0x910003FD &&
+        (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        return (code[3] >> 12) & 0xFF;
+    }
+#endif
+    return 0;
+}
+
+// The taskbar's XAML (on its thread): the task band behind the taskbar window has the
+// TaskbarHost, which has the taskbar's XAML element.
+wux::XamlRoot GetXamlRoot(HWND taskbar) {
+    HWND taskSwitcher = (HWND)GetPropW(taskbar, L"TaskbandHWND");
+    void* taskBand = taskSwitcher ? (void*)GetWindowLongPtrW(taskSwitcher, 0) : nullptr;
+    if (!taskBand || !g_taskBandSiteVftable || !g_getTaskbarHost || !g_frameHeight || !g_decref) {
         return nullptr;
     }
-    if (member < kMemberCount) {
-        if (HWND window = FindWindowW(kMembers[member].windowClass, nullptr)) {
-            return window;
+    // Its ITaskListWndSite part: the first slot with that vftable.
+    void** site = (void**)taskBand;
+    for (int i = 0;; i++, site++) {
+        if (i > 20 || !IsReadable(site, sizeof(void*))) {
+            return nullptr;
         }
-        HWND taskbar = TaskbarWindow();
-        return taskbar ? FindWindowExW(taskbar, nullptr, kMembers[member].windowClass, nullptr) : nullptr;
+        if (*site == g_taskBandSiteVftable) {
+            break;
+        }
     }
-    // One added after this widget: by the id it shows.
-    for (const auto& [id, window] : OtherWidgets()) {
-        if (id == member) {
-            return window;
+    void* host[2] = {};  // A std::shared_ptr<TaskbarHost>: the object, and its reference count.
+    g_getTaskbarHost(site, host);
+    wux::XamlRoot root{nullptr};
+    size_t offset = ElementOffset();
+    if (host[0] && offset && IsReadable((BYTE*)host[0] + offset, sizeof(IUnknown*))) {
+        if (auto element = *(IUnknown**)((BYTE*)host[0] + offset)) {
+            wux::FrameworkElement frameworkElement{nullptr};
+            if (SUCCEEDED(element->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(frameworkElement))) &&
+                frameworkElement) {
+                root = frameworkElement.XamlRoot();
+            }
+        }
+    }
+    if (host[1]) {
+        g_decref(host[1]);
+    }
+    return root;
+}
+
+wux::FrameworkElement FindByName(wux::DependencyObject const& parent, std::wstring_view name, int depth = 64) {
+    int count = parent && depth > 0 ? wuxm::VisualTreeHelper::GetChildrenCount(parent) : 0;
+    for (int i = 0; i < count; i++) {
+        auto child = wuxm::VisualTreeHelper::GetChild(parent, i);
+        if (auto element = child.try_as<wux::FrameworkElement>(); element && std::wstring_view(element.Name()) == name) {
+            return element;
+        }
+        if (auto found = FindByName(child, name, depth - 1)) {
+            return found;
         }
     }
     return nullptr;
 }
 
-// Whether the widget's mod is running (this one always is).
-bool Running(int member) {
-    return member == kSelfMember || FindMember(member) != nullptr;
+// The child of the panel that is, or holds, the element.
+wux::FrameworkElement ChildHolding(wuxc::Panel const& panel, wux::FrameworkElement element) {
+    while (element) {
+        auto parent = wuxm::VisualTreeHelper::GetParent(element);
+        if (parent == panel) {
+            return element;
+        }
+        element = parent.try_as<wux::FrameworkElement>();
+    }
+    return nullptr;
 }
 
-// The newest copy of the group among the other widgets that are running.
-std::optional<Group> ReadNewest() {
-    std::optional<Group> newest;
-    for (const auto& [member, window] : OtherWidgets()) {
-        int stamp = (int)(INT_PTR)GetPropW(window, kStampProperty);
-        Group group;
-        if (stamp != 0 && (!newest || stamp > newest->stamp) && group.UnpackOrder((int)(INT_PTR)GetPropW(window, kOrderProperty))) {
-            group.offset = (int)(INT_PTR)GetPropW(window, kOffsetProperty) - 1;
-            group.stamp = stamp;
-            newest = group;
-        }
-    }
-    return newest;
+// ---- Where the widget goes: a slot in the taskbar's layout. Each slot is one horizontal panel,
+// shared by the widgets put there, in order of their places (StoredPlace).
+
+enum class Slot {
+    Tray,         // Left of the notification area.
+    SystemIcons,  // Left of the Wi-Fi, volume and battery icons.
+    Clock,        // Left of the clock.
+    Left,         // The left end of the taskbar, over it (with its icons centered, it's free).
+};
+
+Slot ReadSlot() {
+    PCWSTR value = Wh_GetStringSetting(L"position");
+    Slot slot = wcscmp(value, L"systemIcons") == 0 ? Slot::SystemIcons
+                : wcscmp(value, L"clock") == 0     ? Slot::Clock
+                : wcscmp(value, L"left") == 0      ? Slot::Left
+                                                   : Slot::Tray;
+    Wh_FreeStringSetting(value);
+    return slot;
 }
 
-// The widget, when it's on the taskbar right now.
-bool TryGetBounds(int member, RECT& bounds) {
-    HWND window = FindMember(member);
-    return window && IsWindowVisible(window) && GetWindowRect(window, &bounds) && bounds.right > bounds.left;
+std::wstring PanelName(Slot slot) {
+    return L"TaskbarWidgets.Panel." + std::to_wstring((int)slot);
 }
 
-void NotifyOthers() {
-    for (const auto& [member, window] : OtherWidgets()) {
-        PostMessageW(window, ChangedMessage(), 0, 0);
-    }
+wuxc::StackPanel NewPanel(Slot slot) {
+    wuxc::StackPanel panel;
+    panel.Name(PanelName(slot));
+    panel.Orientation(wuxc::Orientation::Horizontal);
+    panel.VerticalAlignment(wux::VerticalAlignment::Stretch);
+    return panel;
 }
 
-}  // namespace WidgetLink
-
-// ---------------------------------------------------------------------------
-// The taskbar widget
-
-// The widget's window inside the taskbar, owned by a thread that does nothing else. Windows joins
-// the input of a child window's thread with its parent's, so while the thread that owns the
-// widget's window is busy, the taskbar gets no mouse or keyboard input either. This thread only
-// shows the pictures the UI thread draws, and passes the mouse on to it, so it's never busy.
-class WidgetWindow {
-public:
-    // Messages to the UI thread's window given to Start: the widget's window is in a taskbar
-    // (wParam is the window, or null if it couldn't be made), or is gone (wParam), along with its
-    // taskbar or for good. Its other messages (WM_MOUSELEAVE, WM_CAPTURECHANGED and
-    // WM_DPICHANGED_AFTERPARENT) and the other widgets' notices come as they are.
-    static constexpr UINT kAttachedMessage = WM_APP + 0x200;
-    static constexpr UINT kDetachedMessage = WM_APP + 0x201;
-    // Its mouse messages (WM_MOUSEFIRST to WM_MOUSELAST) come as this plus their place in that range,
-    // as a menu's modal loop takes every message in that range from its thread's queue for itself,
-    // even those posted to its other windows.
-    static constexpr UINT kMouseMessage = WM_APP + 0x210;
-
-    ~WidgetWindow() { Stop(); }
-
-    bool Start(HWND input) {
-        input_ = input;
-        windowClass_ = RegisterWidgetClass();
-        if (!windowClass_) {
-            return false;
+// The slot's panel, made if it isn't there yet: among the notification area's elements, which
+// make room for it. They're in a row (a StackPanel) in recent builds of Windows 11, and in the
+// columns of a Grid in earlier ones. Null while the taskbar's layout isn't ready.
+wuxc::StackPanel PanelFor(wux::FrameworkElement const& root, Slot slot) {
+    std::wstring name = PanelName(slot);
+    auto tray = FindByName(root, L"SystemTrayFrameGrid").try_as<wuxc::Panel>();
+    if (slot == Slot::Left) {
+        // The taskbar's frame is one of the root's children.
+        wux::FrameworkElement frame{nullptr};
+        int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int i = 0; i < count && !frame; i++) {
+            auto child = wuxm::VisualTreeHelper::GetChild(root, i).try_as<wux::FrameworkElement>();
+            if (child && winrt::get_class_name(child) == L"Taskbar.TaskbarFrame") {
+                frame = child;
+            }
         }
-        ready_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        thread_ = CreateThread(nullptr, 0, ThreadProc, this, 0, &threadId_);
-        if (!thread_) {
-            Stop();
-            return false;
-        }
-        WaitForSingleObject(ready_, INFINITE);  // Its message queue is there from then on.
-        return true;
-    }
-
-    // Destroys the window and ends the thread.
-    void Stop() {
-        if (thread_) {
-            PostThreadMessageW(threadId_, WM_QUIT, 0, 0);
-            WaitForSingleObject(thread_, INFINITE);
-            CloseHandle(thread_);
-            thread_ = nullptr;
-        }
-        if (ready_) {
-            CloseHandle(ready_);
-            ready_ = nullptr;
-        }
-        if (picture_) {
-            DeleteObject(picture_);
-            picture_ = nullptr;
-        }
-    }
-
-    // Puts the window in the taskbar, unless it's in one already.
-    void Attach(HWND taskbar) { PostThreadMessageW(threadId_, kAttachMessage, 0, (LPARAM)taskbar); }
-
-    // Shows the picture (which this then owns) at the position in the taskbar's client area. With
-    // notify, the linked widgets are told once it shows (so they see where it is now).
-    void Present(HBITMAP picture, POINT position, SIZE size, bool notify) {
-        AcquireSRWLockExclusive(&lock_);
-        HBITMAP old = picture_;
-        picture_ = picture;
-        position_ = position;
-        size_ = size;
-        ReleaseSRWLockExclusive(&lock_);
-        if (old) {
-            DeleteObject(old);
-        }
-        if (HWND window = window_) {
-            PostMessageW(window, kPresentMessage, notify, 0);
-        }
-    }
-
-    // The latest point the mouse moved to, when the UI thread gets the move posted to it.
-    LPARAM TakeMouseMove() {
-        movePending_ = false;
-        return movePoint_;
-    }
-
-    // Shows or hides the window; with notify, the linked widgets are told after.
-    void SetVisible(bool visible, bool notify) {
-        if (HWND window = window_) {
-            PostMessageW(window, kVisibleMessage, visible, notify);
-        }
-    }
-
-private:
-    static constexpr UINT kAttachMessage = WM_APP + 0x202;   // To the thread.
-    static constexpr UINT kPresentMessage = WM_APP + 0x203;  // To the window.
-    static constexpr UINT kVisibleMessage = WM_APP + 0x204;  // To the window.
-
-    static const wchar_t* RegisterWidgetClass() {
-        std::vector<std::wstring>& classes = RegisteredClasses();
-        if (std::find(classes.begin(), classes.end(), kWidgetClassName) != classes.end()) {
-            return kWidgetClassName;
-        }
-        WNDCLASSEXW windowClass{sizeof(windowClass)};
-        windowClass.hInstance = ModuleInstance();
-        windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        windowClass.lpszClassName = kWidgetClassName;
-        windowClass.lpfnWndProc = WindowProc;
-        if (!RegisterClassExW(&windowClass)) {
-            Wh_Log(L"Couldn't register window class %s: error %u", kWidgetClassName, GetLastError());
+        auto rootGrid = frame ? FindByName(frame, L"RootGrid").try_as<wuxc::Grid>() : nullptr;
+        if (!tray || !rootGrid) {
             return nullptr;
         }
-        classes.push_back(kWidgetClassName);
-        return kWidgetClassName;
+        if (auto panel = FindByName(rootGrid, name, 1).try_as<wuxc::StackPanel>()) {
+            return panel;
+        }
+        wuxc::StackPanel panel = NewPanel(slot);
+        panel.HorizontalAlignment(wux::HorizontalAlignment::Left);
+        wuxc::Grid::SetColumnSpan(panel, std::max(1, (int)rootGrid.ColumnDefinitions().Size()));
+        wuxc::Grid::SetRowSpan(panel, std::max(1, (int)rootGrid.RowDefinitions().Size()));
+        wuxc::Canvas::SetZIndex(panel, 1000);
+        rootGrid.Children().Append(panel);
+        return panel;
     }
-
-    static DWORD WINAPI ThreadProc(void* parameter) {
-        auto self = (WidgetWindow*)parameter;
-        MSG message;
-        PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // Creates the message queue.
-        SetEvent(self->ready_);
-        while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-            if (!message.hwnd && message.message == kAttachMessage) {
-                self->Create((HWND)message.lParam);
-            } else {
-                DispatchMessageW(&message);
-            }
-        }
-        if (HWND window = self->window_) {
-            DestroyWindow(window);
-        }
-        return 0;
+    if (!tray) {
+        return nullptr;
     }
-
-    void Create(HWND taskbar) {
-        if (HWND window = window_) {
-            PostMessageW(input_, kAttachedMessage, (WPARAM)window, 0);  // There already.
-            return;
-        }
-        // Layered, as only a layered window draws over the content of the Windows 11 taskbar; and
-        // not mirrored when the taskbar is (for right-to-left languages), as it's drawn as it is.
-        HWND window = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOPARENTNOTIFY | WS_EX_NOINHERITLAYOUT, windowClass_, kWidgetTitle,
-                                      WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 1, 1, taskbar, nullptr, ModuleInstance(), this);
-        if (window) {
-            // Only needed when the app runs as administrator: lets the other widgets' messages
-            // through.
-            ChangeWindowMessageFilterEx(window, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
-            window_ = window;
-        }
-        PostMessageW(input_, kAttachedMessage, (WPARAM)window, 0);
+    if (auto panel = FindByName(tray, name, 1).try_as<wuxc::StackPanel>()) {
+        return panel;
     }
-
-    void PostMouse(UINT message, WPARAM wParam, LPARAM lParam) {
-        PostMessageW(input_, kMouseMessage + (message - WM_MOUSEFIRST), wParam, lParam);
-    }
-
-    // Draws the picture last given (on this thread, which owns the window).
-    void Show(HWND window, bool notify) {
-        HDC screen = GetDC(nullptr);
-        HDC memory = CreateCompatibleDC(screen);
-        AcquireSRWLockExclusive(&lock_);
-        if (picture_) {
-            HGDIOBJ previous = SelectObject(memory, picture_);
-            POINT source{0, 0};
-            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-            UpdateLayeredWindow(window, screen, &position_, &size_, memory, &source, 0, &blend, ULW_ALPHA);
-            SelectObject(memory, previous);
-        }
-        ReleaseSRWLockExclusive(&lock_);
-        DeleteDC(memory);
-        ReleaseDC(nullptr, screen);
-        if (notify) {
-            WidgetLink::NotifyOthers();
+    // What it goes before: the notification area's first element, or the one holding the
+    // system icons or the clock.
+    wux::FrameworkElement anchor{nullptr};
+    if (slot != Slot::Tray) {
+        anchor = ChildHolding(tray, FindByName(tray, slot == Slot::Clock ? L"NotificationCenterButton" : L"ControlCenterButton"));
+        if (!anchor) {
+            return nullptr;
         }
     }
-
-    static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-        if (message == WM_NCCREATE) {
-            SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)((CREATESTRUCTW*)lParam)->lpCreateParams);
+    wuxc::StackPanel panel = NewPanel(slot);
+    auto grid = tray.try_as<wuxc::Grid>();
+    if (!grid) {
+        uint32_t index = 0;
+        if (anchor) {
+            tray.Children().IndexOf(anchor, index);
         }
-        auto self = (WidgetWindow*)GetWindowLongPtrW(window, GWLP_USERDATA);
-        if (!self) {
-            return DefWindowProcW(window, message, wParam, lParam);
-        }
-        if (message == WidgetLink::ChangedMessage()) {
-            PostMessageW(self->input_, message, wParam, lParam);
-            return 0;
-        }
-        switch (message) {
-            case kPresentMessage:
-                self->Show(window, wParam != 0);
-                return 0;
-            case kVisibleMessage:
-                ShowWindow(window, wParam ? SW_SHOWNA : SW_HIDE);
-                if (lParam) {
-                    WidgetLink::NotifyOthers();
-                }
-                return 0;
-            case WM_MOUSEACTIVATE:
-                return MA_NOACTIVATE;
-            case WM_MOUSEMOVE:
-                if (!self->trackingMouse_) {
-                    TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, window, 0};
-                    self->trackingMouse_ = TrackMouseEvent(&track);
-                }
-                // Only the latest move matters, as Windows has it for a busy thread: one is posted at
-                // a time, and the UI thread takes the latest point when it gets to it (TakeMouseMove).
-                self->movePoint_ = lParam;
-                if (!self->movePending_.exchange(true)) {
-                    self->PostMouse(message, wParam, lParam);
-                }
-                return 0;
-            case WM_MOUSELEAVE:
-                self->trackingMouse_ = false;
-                PostMessageW(self->input_, message, wParam, lParam);
-                return 0;
-            case WM_LBUTTONDOWN:
-                SetCapture(window);  // For dragging.
-                self->PostMouse(message, wParam, lParam);
-                return 0;
-            case WM_LBUTTONUP:
-                self->PostMouse(message, wParam, lParam);
-                if (GetCapture() == window) {
-                    ReleaseCapture();
-                }
-                return 0;
-            case WM_MBUTTONUP:
-            case WM_RBUTTONUP:
-            case WM_MOUSEWHEEL:
-                self->PostMouse(message, wParam, lParam);
-                return 0;
-            case WM_CAPTURECHANGED:
-            case WM_DPICHANGED_AFTERPARENT:
-                PostMessageW(self->input_, message, wParam, lParam);
-                break;
-            case WM_DESTROY:
-                // Destroyed here, or along with the taskbar (which Explorer can recreate).
-                WidgetLink::Unpublish(window);
-                self->window_ = nullptr;
-                self->trackingMouse_ = false;
-                PostMessageW(self->input_, kDetachedMessage, (WPARAM)window, 0);
-                break;
-        }
-        return DefWindowProcW(window, message, wParam, lParam);
+        tray.Children().InsertAt(index, panel);
+        return panel;
     }
-
-    HWND input_ = nullptr;
-    const wchar_t* windowClass_ = nullptr;
-    HANDLE thread_ = nullptr;
-    DWORD threadId_ = 0;
-    HANDLE ready_ = nullptr;
-    std::atomic<HWND> window_{nullptr};
-    bool trackingMouse_ = false;  // On its thread.
-    std::atomic<LPARAM> movePoint_{0};
-    std::atomic<bool> movePending_{false};
-    SRWLOCK lock_ = SRWLOCK_INIT;  // For the picture.
-    HBITMAP picture_ = nullptr;
-    POINT position_{};
-    SIZE size_{};
-};
-
-// A taskbar button in the style of the Windows weather widget. Windows 11 has no API for adding
-// things to the taskbar, so it's a transparent window inside the taskbar's own window, over the
-// buttons Explorer draws there: it moves and auto-hides with the taskbar, and full-screen apps and
-// the Start menu cover it as they do the rest of the taskbar. Drag it to move it along the taskbar.
-//
-// Windhawk loads the mod into Explorer, which has the taskbar; the app puts the widget into
-// Explorer's taskbar from its own process. Either way the window is a WidgetWindow, on a thread of
-// its own, and everything else happens on the UI thread, with a hidden top-level window: it gets
-// the widget's mouse messages from the WidgetWindow, the notices Windows sends only to top-level
-// windows (settings, display and taskbar changes), and the timers, and owns the menus and
-// dialogs. When Explorer recreates the taskbar, the widget's window goes with the old one, and a
-// new one goes into the new taskbar.
-//
-// Subclasses lay out and draw the content and handle clicks.
-class TaskbarWidget {
-public:
-    virtual ~TaskbarWidget() {
-        window_.Stop();
-        if (events_.hwnd_) {
-            DestroyWindow(events_.hwnd_);
+    int column = anchor ? wuxc::Grid::GetColumn(anchor) : 0;
+    wuxc::ColumnDefinition definition;
+    definition.Width(wux::GridLengthHelper::Auto());
+    grid.ColumnDefinitions().InsertAt(column, definition);
+    for (auto const& child : grid.Children()) {
+        if (auto element = child.try_as<wux::FrameworkElement>(); element && wuxc::Grid::GetColumn(element) >= column) {
+            wuxc::Grid::SetColumn(element, wuxc::Grid::GetColumn(element) + 1);
         }
     }
+    wuxc::Grid::SetColumn(panel, column);
+    wuxc::Grid::SetRowSpan(panel, std::max(1, (int)grid.RowDefinitions().Size()));
+    grid.Children().Append(panel);
+    return panel;
+}
 
-    // Called with the widget's new offset after it's been dragged (while not linked).
-    std::function<void(int offset)> onOffsetChanged;
-
-    bool Create(int offset) {
-        offset_ = offset;
-        link_ = WidgetLink::Load();
-        events_.widget = this;
-        static const std::wstring eventsClass = std::wstring(kWidgetClassName) + L".Events";
-        if (const wchar_t* registered = RegisterForwardingClass<Events>(eventsClass.c_str())) {
-            CreateWindowExW(WS_EX_TOOLWINDOW, registered, kWidgetTitle, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), &events_);
-        }
-        if (!events_.hwnd_ || !window_.Start(events_.hwnd_)) {
-            return false;
-        }
-        // Only needed when the app runs as administrator: lets Explorer's notice through.
-        taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
-        ChangeWindowMessageFilterEx(events_.hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
-        SetTimer(events_.hwnd_, kPlacementTimer, 250, nullptr);
-        AttachToTaskbar();
-        return true;
-    }
-
-    void Destroy() {
-        SetShown(false);
-        window_.Stop();  // Its window goes, taking this widget's copy of the group with it.
-        if (linkSavePending_) {
-            linkSavePending_ = false;
-            WidgetLink::Save(link_);
-        }
-        if (hwnd_) {
-            hwnd_ = nullptr;
-            WidgetLink::NotifyOthers();  // So they close the gap.
-        }
-        if (events_.hwnd_) {
-            DestroyWindow(events_.hwnd_);  // Its timers go with it.
-        }
-    }
-
-    // A hidden window of the UI thread, for timers (which come to OnTimer), and to own menus and
-    // dialogs.
-    HWND OwnerWindow() const { return events_.hwnd_; }
-
-    bool Visible() const { return hwnd_ && visible_; }
-
-    RECT Bounds() const {
-        RECT rect{};
-        if (hwnd_) {
-            GetWindowRect(hwnd_, &rect);
-        }
-        return rect;
-    }
-
-    void SetShown(bool shown) {
-        if (shown == shown_) {
-            return;
-        }
-        shown_ = shown;
-        UpdatePlacement(true);
-    }
-
-    // Re-renders after the content changed (and resizes if its width did).
-    void ContentChanged() { UpdatePlacement(true); }
-
-    const WidgetLink::Group& Link() const { return link_; }
-
-    // Links another mod's widget with this one (joining its group if it's in one), or takes it out
-    // of the group.
-    void SetMemberLinked(int member, bool linked) {
-        WidgetLink::Group group = link_;
-        if (linked) {
-            if (group.order.size() < 2) {
-                // A new group starts where the leftmost of the two widgets is now, in the order
-                // they're in.
-                int left = taskbar_.left + (Visible() ? placedOffset_ : std::max(0, offset_));
-                RECT other;
-                bool otherFirst = false;
-                if (WidgetLink::TryGetBounds(member, other)) {
-                    otherFirst = other.left < left;
-                    left = std::min(left, (int)other.left);
-                }
-                group.order = otherFirst ? std::vector<int>{member, kSelfMember} : std::vector<int>{kSelfMember, member};
-                group.offset = std::max(0, left - (int)taskbar_.left);
-            } else {
-                // Joining the group, at its right end.
-                if (!group.Has(kSelfMember)) {
-                    group.order.push_back(kSelfMember);
-                }
-                if (!group.Has(member)) {
-                    group.order.push_back(member);
-                }
-            }
-        } else {
-            group.order.erase(std::remove(group.order.begin(), group.order.end(), member), group.order.end());
-            if (group.order.size() < 2) {
-                group.order.clear();
-            }
-        }
-        ChangeLink(group);
-        UpdatePlacement(true);
-        WidgetLink::NotifyOthers();
-    }
-
-    // Whether a widget in the group is showing left (-1) or right (1) of this one, to move past.
-    bool CanMoveInGroup(int direction) const { return NeighborShowing(direction) >= 0; }
-
-    // Moves this widget past the nearest widget in its group that's showing on its left (-1) or
-    // right (1). (Past one that's hidden, nothing would change to see.)
-    void MoveInGroup(int direction) {
-        int neighbor = NeighborShowing(direction);
-        if (neighbor < 0) {
-            return;
-        }
-        WidgetLink::Group group = link_;
-        int passed = group.order[neighbor];
-        group.order.erase(std::remove(group.order.begin(), group.order.end(), kSelfMember), group.order.end());
-        auto place = std::find(group.order.begin(), group.order.end(), passed);
-        group.order.insert(direction < 0 ? place : place + 1, kSelfMember);
-        ChangeLink(group);
-        UpdatePlacement(true);
-        WidgetLink::NotifyOthers();
-    }
-
-    // The place in the group of the nearest widget showing on this one's left (-1) or right (1),
-    // or -1.
-    int NeighborShowing(int direction) const {
-        auto self = std::find(link_.order.begin(), link_.order.end(), kSelfMember);
-        if (self == link_.order.end()) {
-            return -1;
-        }
-        RECT bounds;
-        for (int i = (int)(self - link_.order.begin()) + direction; i >= 0 && i < (int)link_.order.size(); i += direction) {
-            if (WidgetLink::TryGetBounds(link_.order[i], bounds)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    float Scale() const { return scale_; }
-
-    int Px(float value) const { return (int)std::nearbyint(value * scale_); }  // Halves to even, like the apps' Math.Round.
-
-    // Screen bounds of a part of the widget, from client x and width.
-    RECT ScreenBoundsOf(int x, int width) const {
-        RECT bounds = Bounds();
-        return {bounds.left + x, bounds.top, bounds.left + x + width, bounds.bottom};
-    }
-
-protected:
-    enum class MouseButton { Left, Middle, Right };
-
-    // The widget's content width, in pixels, for the current scale.
-    virtual int LayOut() = 0;
-    // Draws the content (the background, drag highlight and link divider are drawn already).
-    virtual void Draw(gp::Graphics& graphics, int width, int height, bool lightTaskbar) = 0;
-    // Where the widget goes when it hasn't been dragged anywhere yet.
-    virtual int DefaultOffset(int barWidth, int width) = 0;
-    virtual void OnScaleChanged() {}
-    virtual void OnHover(POINT point) {}
-    virtual void OnHoverLeave() {}
-    virtual void OnClick(POINT point, MouseButton button) {}
-    virtual void OnWheel(POINT point, int notches) {}
-    virtual void OnDragStart() {}
-    virtual void OnTimer(UINT_PTR timer) {}
-    // After the widget has been placed (to move popups anchored to it), or hidden.
-    virtual void OnPlaced() {}
-    virtual void OnHidden() {}
-
-    bool Dragging() const { return dragging_; }
-
-    bool Pressed() const { return pressed_; }
-
-    // Places the widget on the taskbar, or hides it when it shouldn't show.
-    void UpdatePlacement(bool contentChanged) {
-        HWND taskbar = hwnd_ ? GetParent(hwnd_) : nullptr;
-        RECT bar;
-        // A vertical taskbar (Windows 10 can have one) has no room for it.
-        if (!shown_ || !taskbar || !GetWindowRect(taskbar, &bar) || bar.right - bar.left <= bar.bottom - bar.top) {
-            if (hwnd_ && visible_) {
-                window_.SetVisible(false, link_.Linked());  // Telling the others, so they close the gap.
-                visible_ = false;
-            }
-            OnHidden();
-            return;
-        }
-
-        // Scale with the taskbar's display.
-        UINT dpi = GetDpiForWindow(taskbar);
-        float scale = (dpi ? dpi : 96) / 96.0f;
-        if (scale != scale_) {
-            scale_ = scale;
-            OnScaleChanged();
-            contentChanged = true;
-        }
-        bool light = TaskbarUsesLightTheme();
-        if (light != lightTaskbar_) {
-            lightTaskbar_ = light;
-            contentChanged = true;
-        }
-
-        int barWidth = bar.right - bar.left;
-        int width = std::min(LayOut(), barWidth);
-        taskbar_ = bar;
-
-        bool linked = link_.Linked();
-        if (wasLinked_ && !linked && visible_) {
-            // Just unlinked: stay where the group left this widget.
-            offset_ = std::max(0, placedOffset_);
-            if (onOffsetChanged) {
-                onOffsetChanged(offset_);
-            }
-        }
-        wasLinked_ = linked;
-
-        int x;
-        bool divider = false;
-        if (linked) {
-            // Side by side with the other widgets in the group that are showing, in its order,
-            // wherever the group was put. Every widget works it out the same way from the same
-            // numbers, so they meet without gaps.
-            int before = 0;
-            int total = 0;
-            bool reachedSelf = false;
-            for (int member : link_.order) {
-                int memberWidth = 0;
-                RECT other;
-                if (member == kSelfMember) {
-                    memberWidth = width;
-                    reachedSelf = true;
-                } else if (WidgetLink::TryGetBounds(member, other)) {
-                    memberWidth = other.right - other.left;
-                }
-                if (!reachedSelf) {
-                    before += memberWidth;
-                }
-                total += memberWidth;
-            }
-            total = std::min(total, barWidth);
-            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, total);
-            groupLeft_ = bar.left + std::max(0, std::min(groupOffset, barWidth - total));
-            x = std::min(groupLeft_ + before, (int)bar.left + barWidth - width);
-            divider = before > 0;
-        } else {
-            int preferredOffset = offset_ >= 0 ? offset_ : DefaultOffset(barWidth, width);
-            x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
-            groupLeft_ = x;
-        }
-        placedOffset_ = x - bar.left;
-        // In the taskbar's client area (mirrored, for right-to-left languages).
-        RECT target{x, bar.top, x + width, bar.bottom};
-        MapWindowPoints(nullptr, taskbar, (POINT*)&target, 2);
-
-        // The other widgets in the group are told once the widget's window has moved, so they move
-        // up against it where it is.
-        bool moved = !EqualRect(&target, &placed_) || !visible_;
-        bool notify = moved && linked;
-        if (contentChanged || moved || divider != dividerAtLeft_) {
-            dividerAtLeft_ = divider;
-            Render(target, notify && visible_);
-        }
-        if (!visible_) {
-            window_.SetVisible(true, notify);
-            visible_ = true;
-        }
-        StayOverTaskbarContent();
-        OnPlaced();
-    }
-
-    void Render() { Render(placed_); }
-
-private:
-    static constexpr UINT_PTR kPlacementTimer = 1;
-    static constexpr UINT_PTR kLinkSaveTimer = 3;
-
-    // The hidden top-level window of the UI thread.
-    struct Events {
-        TaskbarWidget* widget = nullptr;
-        HWND hwnd_ = nullptr;
-
-        bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
-            return widget->HandleEvent(message, wParam, lParam, result);
-        }
-    };
-
-    bool HandleEvent(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
-        if (taskbarCreatedMessage_ && message == taskbarCreatedMessage_) {
-            // Explorer started again, or recreated the taskbar: the widget goes into the new one.
-            AttachToTaskbar();
-            return true;
-        }
-        if (message == WidgetLink::ChangedMessage()) {
-            // Another widget moved, changed size, or changed the group.
-            SyncLink();
-            UpdatePlacement(false);
-            return true;
-        }
-        if (message >= WidgetWindow::kMouseMessage && message <= WidgetWindow::kMouseMessage + (WM_MOUSELAST - WM_MOUSEFIRST)) {
-            message = WM_MOUSEFIRST + (message - WidgetWindow::kMouseMessage);  // The widget's, handled below.
-        }
-        switch (message) {
-            case WidgetWindow::kAttachedMessage:
-                attaching_ = false;
-                if (wParam && (HWND)wParam != hwnd_) {
-                    hwnd_ = (HWND)wParam;
-                    visible_ = false;
-                    placed_ = {};
-                    // Take the other widgets' copy of the group if it changed more recently, and
-                    // let them know this one is here.
-                    WidgetLink::Publish(hwnd_, link_);
-                    SyncLink();
-                    WidgetLink::NotifyOthers();
-                    if (shown_) {
-                        UpdatePlacement(true);
-                    }
-                }
-                return true;
-            case WidgetWindow::kDetachedMessage:
-                if ((HWND)wParam == hwnd_) {
-                    hwnd_ = nullptr;
-                    visible_ = false;
-                    OnHidden();
-                    WidgetLink::NotifyOthers();
-                }
-                return true;
-            case WM_TIMER:
-                if (wParam == kPlacementTimer) {
-                    // In an Explorer process (for folder windows) that started while there was no
-                    // taskbar, and another Explorer has it now, the mod has nothing to do: it ends.
-                    if (TaskbarWindow() && !WidgetTaskbar()) {
-                        PostQuitMessage(0);
-                        return true;
-                    }
-                    // Also notices the taskbar moving or changing size.
-                    AttachToTaskbar();
-                    if (shown_) {
-                        UpdatePlacement(false);
-                    }
-                } else if (wParam == kLinkSaveTimer) {
-                    KillTimer(events_.hwnd_, kLinkSaveTimer);
-                    linkSavePending_ = false;
-                    WidgetLink::Save(link_);
-                } else {
-                    OnTimer(wParam);
-                }
-                return true;
-            case WM_DISPLAYCHANGE:
-                UpdatePlacement(true);
-                return false;
-            case WM_SETTINGCHANGE:
-                RefreshShellSettings();
-                UpdatePlacement(true);
-                return false;
-            case WM_MOUSEMOVE:
-            case WM_MOUSELEAVE:
-            case WM_LBUTTONDOWN:
-            case WM_LBUTTONUP:
-            case WM_MBUTTONUP:
-            case WM_RBUTTONUP:
-            case WM_MOUSEWHEEL:
-            case WM_CAPTURECHANGED:
-            case WM_DPICHANGED_AFTERPARENT:
-                // The widget's, from its window. Not while a dialog of this thread is open (which
-                // disables this window), as a disabled window gets no mouse input.
-                if (message == WM_MOUSEMOVE) {
-                    lParam = window_.TakeMouseMove();
-                }
-                if (hwnd_ && IsWindowEnabled(events_.hwnd_)) {
-                    HandleInput(message, wParam, lParam);
-                }
-                return true;
-        }
-        return false;
-    }
-
-    void HandleInput(UINT message, WPARAM wParam, LPARAM lParam) {
-        switch (message) {
-            case WM_MOUSEMOVE: {
-                POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                if (!pressed_) {
-                    OnHover(point);
-                    return;
-                }
-                POINT cursor;
-                GetCursorPos(&cursor);
-                int distance = cursor.x - dragStartCursorX_;
-                if (!dragging_ && std::abs(distance) < GetSystemMetrics(SM_CXDRAG)) {
-                    return;
-                }
-                if (!dragging_) {
-                    dragging_ = true;
-                    OnDragStart();
-                }
-                int dragged = std::max(0, dragStartOffset_ + distance);
-                if (wasLinked_) {
-                    WidgetLink::Group moved = link_;
-                    moved.offset = dragged;
-                    ChangeLink(moved);  // Moves the group; the other widgets follow when told.
-                } else {
-                    offset_ = dragged;
-                }
-                UpdatePlacement(true);
-                return;
-            }
-            case WM_MOUSELEAVE:
-                OnHoverLeave();
-                return;
-            case WM_LBUTTONDOWN: {
-                POINT cursor;
-                GetCursorPos(&cursor);
-                pressed_ = true;
-                dragging_ = false;
-                dragStartCursorX_ = cursor.x;
-                dragStartOffset_ = groupLeft_ - taskbar_.left;
-                return;
-            }
-            case WM_LBUTTONUP: {
-                bool wasPressed = pressed_;
-                bool wasDragging = dragging_;
-                pressed_ = false;
-                dragging_ = false;
-                if (wasDragging) {
-                    EndDrag();
-                } else if (wasPressed) {
-                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                    // Pressing and sliding off the widget before letting go doesn't click it (nor
-                    // does letting go after its window has gone with the taskbar).
-                    RECT client{};
-                    if (GetClientRect(hwnd_, &client) && PtInRect(&client, point)) {
-                        OnClick(point, MouseButton::Left);
-                    }
-                }
-                return;
-            }
-            case WM_CAPTURECHANGED:
-                // Something else took the mouse mid-press: the press ends there, and a drag stays
-                // where it got to.
-                if ((HWND)lParam != hwnd_ && pressed_) {
-                    bool wasDragging = dragging_;
-                    pressed_ = false;
-                    dragging_ = false;
-                    if (wasDragging) {
-                        EndDrag();
-                    }
-                }
-                return;
-            case WM_MBUTTONUP:
-            case WM_RBUTTONUP:
-                OnClick({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, message == WM_MBUTTONUP ? MouseButton::Middle : MouseButton::Right);
-                return;
-            case WM_MOUSEWHEEL: {
-                // Precision touchpads send fractions of a notch; add them up.
-                wheelRemainder_ += GET_WHEEL_DELTA_WPARAM(wParam);
-                int notches = wheelRemainder_ / WHEEL_DELTA;
-                wheelRemainder_ -= notches * WHEEL_DELTA;
-                if (notches != 0) {
-                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                    ScreenToClient(hwnd_, &point);
-                    OnWheel(point, notches);
-                }
-                return;
-            }
-            case WM_DPICHANGED_AFTERPARENT:
-                UpdatePlacement(true);
-                return;
-        }
-    }
-
-    // Puts the widget in the taskbar, once there is one (again).
-    void AttachToTaskbar() {
-        if (hwnd_ || attaching_) {
-            return;
-        }
-        if (HWND taskbar = WidgetTaskbar()) {
-            attaching_ = true;
-            window_.Attach(taskbar);
-        }
-    }
-
-    // A change to the group made here: it's stamped as the newest copy, shown to the other widgets,
-    // and saved once it settles (a drag changes it on every mouse move).
-    void ChangeLink(WidgetLink::Group group) {
-        int newerThan = link_.stamp;
-        if (std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest()) {
-            newerThan = std::max(newerThan, newest->stamp);
-        }
-        group.stamp = WidgetLink::NewStamp(newerThan);
-        link_ = group;
-        if (hwnd_) {
-            WidgetLink::Publish(hwnd_, link_);
-        }
-        SaveLinkSoon();
-    }
-
-    // Takes the other widgets' copy of the group when it changed more recently than this one's.
-    void SyncLink() {
-        std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest();
-        if (newest && newest->stamp > link_.stamp) {
-            link_ = *newest;
-            if (hwnd_) {
-                WidgetLink::Publish(hwnd_, link_);
-            }
-            SaveLinkSoon();
-        }
-    }
-
-    void SaveLinkSoon() {
-        linkSavePending_ = true;
-        SetTimer(events_.hwnd_, kLinkSaveTimer, 1000, nullptr);
-    }
-
-    // Keeps where a drag left the widget (or the group).
-    void EndDrag() {
-        if (wasLinked_) {
-            WidgetLink::Group moved = link_;
-            moved.offset = groupLeft_ - taskbar_.left;  // Where the group ended up after clamping.
-            ChangeLink(moved);
-            Render();
-            WidgetLink::NotifyOthers();
-        } else {
-            offset_ = placedOffset_;  // Where it ended up after clamping.
-            Render();
-            if (onOffsetChanged) {
-                onOffsetChanged(offset_);
-            }
-        }
-    }
-
-    // Draws the widget at the bounds (in the taskbar's client area), for its window to show; with
-    // notify, the linked widgets are told once it does.
-    void Render(const RECT& bounds, bool notify = false) {
-        int width = bounds.right - bounds.left;
-        int height = bounds.bottom - bounds.top;
-        if (!hwnd_ || width <= 0 || height <= 0) {
-            return;
-        }
-        placed_ = bounds;
-        BITMAPINFO info{};
-        info.bmiHeader.biSize = sizeof(info.bmiHeader);
-        info.bmiHeader.biWidth = width;
-        info.bmiHeader.biHeight = -height;
-        info.bmiHeader.biPlanes = 1;
-        info.bmiHeader.biBitCount = 32;
-        info.bmiHeader.biCompression = BI_RGB;
-        void* bits = nullptr;
-        HBITMAP bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!bitmap || !bits) {
-            if (bitmap) {
-                DeleteObject(bitmap);
-            }
-            return;
-        }
-        {
-            gp::Bitmap canvas(width, height, width * 4, PixelFormat32bppPARGB, (BYTE*)bits);
-            gp::Graphics graphics(&canvas);
-            // Nearly invisible, but fully transparent pixels would let clicks fall through to the taskbar.
-            graphics.Clear(Argb(1, 0, 0, 0));
-            graphics.SetSmoothingMode(gp::SmoothingModeAntiAlias);
-            graphics.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
-            gp::Color foreground = lightTaskbar_ ? Argb(255, 28, 28, 28) : Argb(255, 255, 255, 255);
-            if (dragging_) {
-                FillRoundedRect(graphics, WithAlpha(lightTaskbar_ ? 18 : 24, foreground),
-                                gp::RectF((float)Px(2), (float)Px(4), (float)(width - Px(4)), (float)(height - Px(8))), (float)Px(4));
-            }
-            if (dividerAtLeft_) {
-                // Linked, with another widget on the left: the divider between them.
-                gp::Pen pen(WithAlpha(lightTaskbar_ ? 50 : 60, foreground), 1);
-                graphics.DrawLine(&pen, 1.0f, (float)Px(14), 1.0f, (float)(height - Px(14)));
-            }
-            Draw(graphics, width, height, lightTaskbar_);
-        }
-        GdiFlush();
-        window_.Present(bitmap, {bounds.left, bounds.top}, {width, height}, notify);
-    }
-
-    // Keeps the widget over the taskbar's own content: the windows Explorer draws the taskbar's
-    // buttons in (Windows 11's XAML; Windows 10's task band, tray and buttons). Other windows in the
-    // taskbar, such as other mods', stay where they are.
-    void StayOverTaskbarContent() {
-        static const wchar_t* const kContent[] = {L"Windows.UI.Composition.DesktopWindowContentBridge", L"ReBarWindow32", L"TrayNotifyWnd",
-                                                  L"Start", L"TrayButton", L"TrayDummySearchControl", L"TrayShowDesktopButtonWClass"};
-        for (HWND above = GetWindow(hwnd_, GW_HWNDPREV); above; above = GetWindow(above, GW_HWNDPREV)) {
-            WCHAR className[64] = {};
-            GetClassNameW(above, className, ARRAYSIZE(className));
-            for (const wchar_t* content : kContent) {
-                if (wcscmp(className, content) == 0) {
-                    // Asynchronous, as the window is another thread's.
-                    SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-                    return;
-                }
-            }
-        }
-    }
-
-    HWND hwnd_ = nullptr;  // The widget's window, while it's in a taskbar.
-    WidgetWindow window_;
-    Events events_;
-    bool attaching_ = false;
-    bool visible_ = false;
-    RECT placed_{};  // Where the widget was last drawn, in the taskbar's client area.
-    int placedOffset_ = 0;  // And its distance from the taskbar's left edge.
-    bool shown_ = false;
-    int offset_ = -1;  // Pixels from the taskbar's left edge; negative means the default position.
-    RECT taskbar_{};
-    float scale_ = 0;
-    bool lightTaskbar_ = false;
-    UINT taskbarCreatedMessage_ = 0;
-    bool pressed_ = false;
-    bool dragging_ = false;
-    int dragStartCursorX_ = 0;
-    int dragStartOffset_ = 0;
-    int wheelRemainder_ = 0;
-    int groupLeft_ = 0;  // Left edge of the linked group on screen (or of this widget alone).
-    WidgetLink::Group link_;
-    bool linkSavePending_ = false;
-    bool wasLinked_ = false;
-    bool dividerAtLeft_ = false;  // Linked, with another widget on the left.
-};
-
-// The Link widgets submenu: links this widget with the other mods' widgets that are running (or
-// linked already), and moves it left or right among them.
-void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
-    const WidgetLink::Group& group = widget.Link();
-    std::vector<int> others;
-    for (int member = 0; member < WidgetLink::kMemberCount; member++) {
-        if (member != kSelfMember && (WidgetLink::Running(member) || (group.Linked() && group.Has(member)))) {
-            others.push_back(member);
-        }
-    }
-    if (others.empty()) {
+// Takes the panel out (and its column, in a grid) once the last widget in it has gone.
+void RemovePanelIfEmpty(wuxc::StackPanel const& panel) {
+    if (panel.Children().Size() > 0) {
         return;
     }
-    menu.AddSeparator();
-    Menu& submenu = menu.AddSubmenu(L"Link widgets");
-    for (int member : others) {
-        bool linked = group.Linked() && group.Has(member);
-        submenu.Add(std::wstring(L"Link with ") + WidgetLink::kMembers[member].name,
-                    [&widget, member, linked]() { widget.SetMemberLinked(member, !linked); }, linked);
+    auto parent = wuxm::VisualTreeHelper::GetParent(panel).try_as<wuxc::Panel>();
+    uint32_t index = 0;
+    if (!parent || !parent.Children().IndexOf(panel, index)) {
+        return;
     }
-    if (group.Linked()) {
-        submenu.AddSeparator();
-        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, widget.CanMoveInGroup(-1));
-        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, widget.CanMoveInGroup(1));
+    parent.Children().RemoveAt(index);
+    auto grid = parent.try_as<wuxc::Grid>();
+    if (!grid || grid.Name() != L"SystemTrayFrameGrid") {
+        return;  // The taskbar's own grid (Slot::Left) has no column of the panel's.
+    }
+    int column = wuxc::Grid::GetColumn(panel);
+    if (column >= (int)grid.ColumnDefinitions().Size()) {
+        return;
+    }
+    grid.ColumnDefinitions().RemoveAt(column);
+    for (auto const& child : grid.Children()) {
+        if (auto element = child.try_as<wux::FrameworkElement>(); element && wuxc::Grid::GetColumn(element) > column) {
+            wuxc::Grid::SetColumn(element, wuxc::Grid::GetColumn(element) - 1);
+        }
     }
 }
+
+// ---- Between the app's thread and the taskbar's
+
+// The app's window for the widget's messages; null while the app isn't running.
+std::atomic<HWND> g_appWindow{nullptr};
+
+// Messages from the widget to the app's window.
+constexpr UINT kAttachedMessage = WM_APP + 0x300;     // The widget is in the taskbar (again): send it everything.
+constexpr UINT kClickMessage = WM_APP + 0x301;        // wParam: the part. lParam: the MouseButton.
+constexpr UINT kWheelMessage = WM_APP + 0x302;        // wParam: the part. lParam: notches (up is positive).
+constexpr UINT kHoverMessage = WM_APP + 0x303;        // wParam: the part. lParam: 1 when the mouse came onto it, 0 when it left.
+constexpr UINT kMenuCommandMessage = WM_APP + 0x304;  // wParam: the command chosen in the menu.
+
+enum class MouseButton { Left, Middle, Right };
+
+void PostToApp(UINT message, WPARAM wParam, LPARAM lParam) {
+    if (HWND window = g_appWindow) {
+        PostMessageW(window, message, wParam, lParam);
+    }
+}
+
+// Runs changes to the widget on the taskbar's thread, posted from the app's (through the XAML
+// dispatcher, without waiting for them). None run once the mod is turning off.
+class Bridge {
+public:
+    void SetDispatcher(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher, HWND taskbar) {
+        AcquireSRWLockExclusive(&lock_);
+        dispatcher_ = dispatcher;
+        taskbar_ = taskbar;
+        ReleaseSRWLockExclusive(&lock_);
+    }
+
+    // Changes posted before the widget is in the taskbar are dropped: the app sends everything
+    // once it is (kAttachedMessage).
+    void Post(std::function<void()> change) {
+        AcquireSRWLockShared(&lock_);
+        auto dispatcher = dispatcher_;
+        ReleaseSRWLockShared(&lock_);
+        if (!dispatcher || stopping_) {
+            return;
+        }
+        try {
+            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [this, change = std::move(change)]() {
+                if (!stopping_) {
+                    try {
+                        change();
+                    } catch (...) {
+                        Wh_Log(L"Couldn't change the widget");
+                    }
+                }
+            });
+        } catch (...) {
+        }
+    }
+
+    // As the mod turns off: no more changes, and waits for those posted already to have run (as
+    // nothing), since they're the mod's code, which Windhawk unloads next. Not on the taskbar's
+    // thread.
+    void Drain() {
+        stopping_ = true;
+        AcquireSRWLockShared(&lock_);
+        auto dispatcher = dispatcher_;
+        HWND taskbar = taskbar_;
+        ReleaseSRWLockShared(&lock_);
+        if (!dispatcher || !IsWindow(taskbar)) {
+            return;
+        }
+        HANDLE ran = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        try {
+            // At a lower priority than the changes, so it runs after all of them.
+            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [ran]() { SetEvent(ran); });
+            WaitForSingleObject(ran, INFINITE);
+        } catch (...) {
+        }
+        CloseHandle(ran);
+    }
+
+private:
+    SRWLOCK lock_ = SRWLOCK_INIT;
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher_{nullptr};
+    HWND taskbar_ = nullptr;
+    std::atomic<bool> stopping_{false};
+};
+
+Bridge g_bridge;
+
+// ---- The widget's elements (on the taskbar's thread)
+
+// What a mod's widget shows: it builds its elements, and lets go of them once they're out of the
+// taskbar.
+class View {
+public:
+    virtual wux::FrameworkElement Build() = 0;
+    virtual void Forget() = 0;
+};
+
+// The widget's place among the widgets in its slot, from the left: a number kept in the mod's
+// storage, and on the widget's element (as its Tag) for the others to see. Moving a widget gives it
+// a number between its new neighbors', so theirs stay as they are.
+constexpr int kPlaceUnit = 1 << 16;
+
+int StoredPlace() {
+    return Storage::GetInt(L"WidgetPlace", kWidgetOrder * kPlaceUnit);
+}
+
+int PlaceOf(wux::FrameworkElement const& element) {
+    return winrt::unbox_value_or<int>(element.Tag(), 0);
+}
+
+wuxc::MenuFlyout g_menu{nullptr};  // The widget's menu while it's open.
+winrt::event_token g_menuClosed{};
+// Where the widget was last right-clicked, to open its menu there.
+wux::FrameworkElement g_menuTarget{nullptr};
+winrt::Windows::Foundation::Point g_menuPoint{};
+
+class WidgetHost {
+public:
+    // Puts the view's elements into the slot (once the taskbar's layout is ready, trying again
+    // for a few seconds while it isn't), and tells the app.
+    void Attach(HWND taskbar, Slot slot, View* view) {
+        Detach();
+        AcquireSRWLockExclusive(&boundsLock_);
+        taskbar_ = taskbar;
+        ReleaseSRWLockExclusive(&boundsLock_);
+        slot_ = slot;
+        view_ = view;
+        attempts_ = 0;
+        TryAttach();
+    }
+
+    // Takes the elements out (and the slot's panel, if they were the last in it).
+    void Detach() {
+        StopRetrying();
+        if (g_menu) {
+            try {
+                // It tells the app nothing more: the app may be gone.
+                g_menu.Closed(g_menuClosed);
+                g_menu.Hide();
+            } catch (...) {
+            }
+            g_menu = nullptr;
+        }
+        TakeOut();
+        Forget();
+    }
+
+    // Lets go of the elements without taking them out: the taskbar they were in has gone, and
+    // Explorer has made it again.
+    void Forget() {
+        StopRetrying();
+        g_menu = nullptr;
+        g_menuTarget = nullptr;
+        element_ = nullptr;
+        if (view_) {
+            view_->Forget();
+        }
+        AcquireSRWLockExclusive(&boundsLock_);
+        bounds_ = {};
+        ReleaseSRWLockExclusive(&boundsLock_);
+    }
+
+    wux::FrameworkElement Element() const { return element_; }
+
+    // Whether there's another widget on the left (direction -1) or right (1) in the slot.
+    bool CanMove(int direction) {
+        uint32_t index = 0;
+        auto panel = SlotPanel(index);
+        return panel && (int)index + direction >= 0 && (int)index + direction < (int)panel.Children().Size();
+    }
+
+    // Moves the widget past its neighbor on the left (direction -1) or right (1), to stay there.
+    void Move(int direction) {
+        uint32_t index = 0;
+        auto panel = SlotPanel(index);
+        int count = panel ? (int)panel.Children().Size() : 0;
+        int target = (int)index + direction;
+        if (target < 0 || target >= count) {
+            return;
+        }
+        auto placeAt = [&](int i) { return PlaceOf(panel.Children().GetAt(i).as<wux::FrameworkElement>()); };
+        // Halfway between the neighbor and the one beyond it (or a step past the neighbor, at the end).
+        int neighbor = placeAt(target);
+        int beyond = target + direction >= 0 && target + direction < count ? placeAt(target + direction) : neighbor + direction * 2 * kPlaceUnit;
+        int place = neighbor + (beyond - neighbor) / 2;
+        Storage::SetInt(L"WidgetPlace", place);
+        element_.Tag(winrt::box_value(place));
+        panel.Children().RemoveAt(index);
+        panel.Children().InsertAt(target, element_);
+    }
+
+    // Where the widget is on screen, for popups beside it (from the app's thread).
+    RECT ScreenBounds() {
+        AcquireSRWLockShared(&boundsLock_);
+        RECT bounds = bounds_;
+        HWND taskbar = taskbar_;
+        ReleaseSRWLockShared(&boundsLock_);
+        if (bounds.right <= bounds.left || !IsWindow(taskbar)) {
+            return {};
+        }
+        // The taskbar's XAML is drawn in this window, from its corner.
+        HWND content = FindWindowExW(taskbar, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+        RECT window{};
+        GetWindowRect(content ? content : taskbar, &window);
+        OffsetRect(&bounds, window.left, window.top);
+        return bounds;
+    }
+
+private:
+    void TakeOut() {
+        try {
+            if (element_) {
+                if (layoutToken_.value) {
+                    element_.LayoutUpdated(layoutToken_);
+                    layoutToken_ = {};
+                }
+                if (auto panel = wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>()) {
+                    uint32_t index = 0;
+                    if (panel.Children().IndexOf(element_, index)) {
+                        panel.Children().RemoveAt(index);
+                    }
+                    RemovePanelIfEmpty(panel);
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Couldn't take the widget out of the taskbar");
+        }
+    }
+
+    wuxc::StackPanel SlotPanel(uint32_t& index) {
+        auto panel = element_ ? wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>() : nullptr;
+        return panel && panel.Children().IndexOf(element_, index) ? panel : nullptr;
+    }
+
+    void TryAttach() {
+        try {
+            auto root = GetXamlRoot(taskbar_);
+            auto content = root ? root.Content().try_as<wux::FrameworkElement>() : nullptr;
+            auto panel = content ? PanelFor(content, slot_) : nullptr;
+            if (!panel) {
+                RetrySoon();
+                return;
+            }
+            element_ = view_->Build();
+            int place = StoredPlace();
+            element_.Tag(winrt::box_value(place));
+            // In order among the widgets in the slot.
+            uint32_t index = 0;
+            for (; index < panel.Children().Size(); index++) {
+                auto other = panel.Children().GetAt(index).try_as<wux::FrameworkElement>();
+                if (other && PlaceOf(other) > place) {
+                    break;
+                }
+            }
+            panel.Children().InsertAt(index, element_);
+            layoutToken_ = element_.LayoutUpdated([this](auto const&, auto const&) { UpdateBounds(); });
+            g_bridge.SetDispatcher(element_.Dispatcher(), taskbar_);
+            PostToApp(kAttachedMessage, 0, 0);
+        } catch (...) {
+            // The taskbar may still be setting up, as Explorer starts: try again.
+            Wh_Log(L"Couldn't put the widget in the taskbar yet");
+            TakeOut();
+            element_ = nullptr;
+            if (view_) {
+                view_->Forget();
+            }
+            RetrySoon();
+        }
+    }
+
+    // Tries again a moment later, for up to a minute: as Explorer starts, the taskbar's XAML comes
+    // some time after its window. With a timer of the thread's, as XAML's own need XAML there.
+    void RetrySoon() {
+        if (++attempts_ > 240) {
+            Wh_Log(L"Couldn't find the taskbar's layout");
+            return;
+        }
+        if (!retryTimer_) {
+            retrying_ = this;
+            retryTimer_ = SetTimer(nullptr, 0, 250, RetryTimerProc);
+        }
+    }
+
+    static void CALLBACK RetryTimerProc(HWND, UINT, UINT_PTR timer, DWORD) {
+        if (retrying_ && timer == retrying_->retryTimer_) {
+            retrying_->StopRetrying();
+            retrying_->TryAttach();
+        } else {
+            KillTimer(nullptr, timer);
+        }
+    }
+
+    void StopRetrying() {
+        if (retryTimer_) {
+            KillTimer(nullptr, retryTimer_);
+            retryTimer_ = 0;
+        }
+    }
+
+    void UpdateBounds() {
+        try {
+            auto root = element_ ? element_.XamlRoot() : nullptr;
+            if (!root) {
+                return;
+            }
+            auto rect = element_.TransformToVisual(nullptr).TransformBounds(
+                {0, 0, (float)element_.ActualWidth(), (float)element_.ActualHeight()});
+            double scale = root.RasterizationScale();
+            RECT bounds{(LONG)std::lround(rect.X * scale), (LONG)std::lround(rect.Y * scale),
+                        (LONG)std::lround((rect.X + rect.Width) * scale), (LONG)std::lround((rect.Y + rect.Height) * scale)};
+            AcquireSRWLockExclusive(&boundsLock_);
+            bounds_ = bounds;
+            ReleaseSRWLockExclusive(&boundsLock_);
+        } catch (...) {
+        }
+    }
+
+    Slot slot_ = Slot::Tray;
+    View* view_ = nullptr;
+    wux::FrameworkElement element_{nullptr};
+    winrt::event_token layoutToken_{};
+    UINT_PTR retryTimer_ = 0;
+    static inline WidgetHost* retrying_ = nullptr;
+    int attempts_ = 0;
+    SRWLOCK boundsLock_ = SRWLOCK_INIT;  // For these, which the app reads.
+    HWND taskbar_ = nullptr;
+    RECT bounds_{};  // In pixels, from the corner of the taskbar's XAML.
+};
+
+WidgetHost g_host;
+
+// The colors of the widget's highlights, as the taskbar's buttons have them. Its text and icons
+// follow the taskbar's light or dark theme by themselves.
+struct Highlights {
+    winrt::Windows::UI::Color hover;
+    winrt::Windows::UI::Color pressed;
+};
+
+Highlights HighlightsFor(wux::FrameworkElement const& element) {
+    if (element.ActualTheme() == wux::ElementTheme::Light) {
+        return {{0x12, 0x1C, 0x1C, 0x1C}, {0x0B, 0x1C, 0x1C, 0x1C}};
+    }
+    return {{0x18, 0xFF, 0xFF, 0xFF}, {0x10, 0xFF, 0xFF, 0xFF}};
+}
+
+// A part of the widget to click, scroll or hover, highlighted like the taskbar's buttons. What's
+// done to it goes to the app, as messages with the part's number.
+class Part {
+public:
+    // For the widget's own flyouts, on the taskbar's thread.
+    std::function<void(bool entered)> onHover;
+    std::function<void()> onPress;
+    std::function<void()> onClick;  // Left-clicked, after the app is told.
+
+    // plainOnClick: drops the highlight on a click, as the click shows something that copies the
+    // screen.
+    wuxc::Border Make(int part, wux::UIElement const& content, const wchar_t* name, bool plainOnClick = false) {
+        Forget();
+        part_ = part;
+        plainOnClick_ = plainOnClick;
+        hovered_ = pressed_ = false;
+        wheelRemainder_ = 0;
+        border_ = wuxc::Border();
+        border_.CornerRadius(wux::CornerRadiusHelper::FromUniformRadius(4));
+        border_.Margin(wux::ThicknessHelper::FromLengths(2, 4, 2, 4));
+        border_.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{}));  // Clear, but it takes the mouse.
+        border_.Child(content);
+        wux::Automation::AutomationProperties::SetName(border_, name);
+        enteredRevoker_ = border_.PointerEntered(winrt::auto_revoke, [this](auto const&, auto const&) {
+            hovered_ = true;
+            Paint();
+            PostToApp(kHoverMessage, part_, 1);
+            if (onHover) {
+                onHover(true);
+            }
+        });
+        exitedRevoker_ = border_.PointerExited(winrt::auto_revoke, [this](auto const&, auto const&) {
+            hovered_ = pressed_ = false;
+            Paint();
+            PostToApp(kHoverMessage, part_, 0);
+            if (onHover) {
+                onHover(false);
+            }
+        });
+        captureLostRevoker_ = border_.PointerCaptureLost(winrt::auto_revoke, [this](auto const&, auto const&) {
+            pressed_ = false;
+            Paint();
+        });
+        pressedRevoker_ = border_.PointerPressed(winrt::auto_revoke, [this](auto const&, wux::Input::PointerRoutedEventArgs const& args) {
+            pressed_ = true;
+            Paint();
+            border_.CapturePointer(args.Pointer());
+            args.Handled(true);
+            if (onPress) {
+                onPress();
+            }
+        });
+        releasedRevoker_ = border_.PointerReleased(winrt::auto_revoke, [this](auto const&, wux::Input::PointerRoutedEventArgs const& args) { OnReleased(args); });
+        // So the taskbar doesn't open its own menu too.
+        rightTappedRevoker_ = border_.RightTapped(winrt::auto_revoke, [](auto const&, wux::Input::RightTappedRoutedEventArgs const& args) { args.Handled(true); });
+        wheelRevoker_ = border_.PointerWheelChanged(winrt::auto_revoke, [this](auto const&, wux::Input::PointerRoutedEventArgs const& args) {
+            // Precision touchpads scroll by fractions of a notch; they're added up.
+            wheelRemainder_ += args.GetCurrentPoint(border_).Properties().MouseWheelDelta();
+            int notches = wheelRemainder_ / WHEEL_DELTA;
+            wheelRemainder_ -= notches * WHEEL_DELTA;
+            if (notches != 0) {
+                PostToApp(kWheelMessage, part_, notches);
+            }
+            args.Handled(true);
+        });
+        themeRevoker_ = border_.ActualThemeChanged(winrt::auto_revoke, [this](auto const&, auto const&) { Paint(); });
+        return border_;
+    }
+
+    wuxc::Border Border() const { return border_; }
+
+    // Lets go of its element, taking its handlers off it first: the element may outlive this.
+    void Forget() {
+        enteredRevoker_.revoke();
+        exitedRevoker_.revoke();
+        captureLostRevoker_.revoke();
+        pressedRevoker_.revoke();
+        releasedRevoker_.revoke();
+        rightTappedRevoker_.revoke();
+        wheelRevoker_.revoke();
+        themeRevoker_.revoke();
+        border_ = nullptr;
+    }
+
+    ~Part() { Forget(); }
+
+private:
+    void OnReleased(wux::Input::PointerRoutedEventArgs const& args) {
+        auto point = args.GetCurrentPoint(border_);
+        bool wasPressed = pressed_;
+        pressed_ = false;
+        border_.ReleasePointerCapture(args.Pointer());
+        args.Handled(true);
+        auto position = point.Position();
+        // Pressing and sliding off it before letting go doesn't click it.
+        bool click = wasPressed && position.X >= 0 && position.Y >= 0 && position.X < border_.ActualWidth() &&
+                     position.Y < border_.ActualHeight();
+        using winrt::Windows::UI::Input::PointerUpdateKind;
+        PointerUpdateKind kind = point.Properties().PointerUpdateKind();
+        if (click && kind == PointerUpdateKind::LeftButtonReleased && plainOnClick_) {
+            hovered_ = false;
+        }
+        Paint();
+        if (!click) {
+            return;
+        }
+        switch (kind) {
+            case PointerUpdateKind::LeftButtonReleased:
+                PostToApp(kClickMessage, part_, (LPARAM)MouseButton::Left);
+                if (onClick) {
+                    onClick();
+                }
+                break;
+            case PointerUpdateKind::MiddleButtonReleased:
+                PostToApp(kClickMessage, part_, (LPARAM)MouseButton::Middle);
+                break;
+            case PointerUpdateKind::RightButtonReleased:
+                g_menuTarget = border_;
+                g_menuPoint = position;
+                PostToApp(kClickMessage, part_, (LPARAM)MouseButton::Right);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void Paint() {
+        if (!border_) {
+            return;
+        }
+        Highlights highlights = HighlightsFor(border_);
+        border_.Background().as<wuxm::SolidColorBrush>().Color(pressed_   ? highlights.pressed
+                                                                : hovered_ ? highlights.hover
+                                                                           : winrt::Windows::UI::Color{});
+    }
+
+    int part_ = 0;
+    bool plainOnClick_ = false;
+    wuxc::Border border_{nullptr};
+    wux::UIElement::PointerEntered_revoker enteredRevoker_;
+    wux::UIElement::PointerExited_revoker exitedRevoker_;
+    wux::UIElement::PointerCaptureLost_revoker captureLostRevoker_;
+    wux::UIElement::PointerPressed_revoker pressedRevoker_;
+    wux::UIElement::PointerReleased_revoker releasedRevoker_;
+    wux::UIElement::RightTapped_revoker rightTappedRevoker_;
+    wux::UIElement::PointerWheelChanged_revoker wheelRevoker_;
+    wux::FrameworkElement::ActualThemeChanged_revoker themeRevoker_;
+    bool hovered_ = false;
+    bool pressed_ = false;
+    int wheelRemainder_ = 0;
+};
+
+// Closes a flyout opened by hovering a part of the widget once the mouse is off both the flyout and
+// the part for a moment (it may be crossing the gap between them), but not while a mouse button is
+// held (dragging a slider, say). The flyout's own dismissal can't see the mouse leave for the
+// desktop, only for the rest of the taskbar.
+class HoverCloser {
+public:
+    // Watches the flyout, just opened from its part, which the mouse is on; close closes it.
+    void Start(wuxc::Primitives::FlyoutBase const& flyout, wux::FrameworkElement const& content, std::function<void()> close) {
+        Stop();
+        close_ = std::move(close);
+        partHovered_ = true;
+        flyoutHovered_ = false;
+        awayTicks_ = 0;
+        openedRevoker_ = flyout.Opened(winrt::auto_revoke, [this, content](auto const&, auto const&) { WatchPresenter(content); });
+        if (!timer_) {
+            timer_ = wux::DispatcherTimer();
+            timer_.Interval(std::chrono::milliseconds(100));
+            tickRevoker_ = timer_.Tick(winrt::auto_revoke, [this](auto const&, auto const&) { Tick(); });
+        }
+        timer_.Start();
+    }
+
+    // The mouse came onto the flyout's part, or left it.
+    void PartHovered(bool hovered) { partHovered_ = hovered; }
+
+    void Stop() {
+        if (timer_) {
+            timer_.Stop();
+        }
+        openedRevoker_.revoke();
+        enteredRevoker_.revoke();
+        exitedRevoker_.revoke();
+        close_ = nullptr;
+    }
+
+    // Lets go of its timer too, as the widget goes.
+    void Forget() {
+        Stop();
+        tickRevoker_.revoke();
+        timer_ = nullptr;
+    }
+
+private:
+    // Hears the mouse on the flyout's presenter, around the content with its padding.
+    void WatchPresenter(wux::FrameworkElement const& content) {
+        wux::DependencyObject element = content;
+        while (element && !element.try_as<wuxc::FlyoutPresenter>()) {
+            element = wuxm::VisualTreeHelper::GetParent(element);
+        }
+        wux::UIElement target = element ? element.as<wux::UIElement>() : content.as<wux::UIElement>();
+        enteredRevoker_ = target.PointerEntered(winrt::auto_revoke, [this](auto const&, auto const&) { flyoutHovered_ = true; });
+        exitedRevoker_ = target.PointerExited(winrt::auto_revoke, [this](auto const&, auto const&) { flyoutHovered_ = false; });
+    }
+
+    void Tick() {
+        bool held = GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0 || GetAsyncKeyState(VK_MBUTTON) < 0;
+        if (partHovered_ || flyoutHovered_ || held) {
+            awayTicks_ = 0;
+            return;
+        }
+        if (++awayTicks_ >= 3 && close_) {
+            timer_.Stop();
+            auto close = close_;  // Closing stops this, letting go of close_.
+            close();
+        }
+    }
+
+    std::function<void()> close_;
+    wux::DispatcherTimer timer_{nullptr};
+    wux::DispatcherTimer::Tick_revoker tickRevoker_;
+    wuxc::Primitives::FlyoutBase::Opened_revoker openedRevoker_;
+    wux::UIElement::PointerEntered_revoker enteredRevoker_;
+    wux::UIElement::PointerExited_revoker exitedRevoker_;
+    bool partHovered_ = false;
+    bool flyoutHovered_ = false;
+    int awayTicks_ = 0;
+};
+
+wuxc::FontIcon MakeGlyph(const wchar_t* glyph, double size) {
+    wuxc::FontIcon icon;
+    icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+    icon.Glyph(glyph);
+    icon.FontSize(size);
+    return icon;
+}
+
+void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuFlyoutItemBase> const& items,
+                    const std::vector<MenuEntry>& entries, std::shared_ptr<int> chosen) {
+    for (const MenuEntry& entry : entries) {
+        size_t tab = entry.text.find(L'\t');
+        winrt::hstring text(entry.text.substr(0, tab));
+        switch (entry.kind) {
+            case MenuEntry::Kind::Separator:
+                items.Append(wuxc::MenuFlyoutSeparator());
+                break;
+            case MenuEntry::Kind::Heading: {
+                wuxc::MenuFlyoutItem item;
+                item.Text(text);
+                item.IsEnabled(false);
+                items.Append(item);
+                break;
+            }
+            case MenuEntry::Kind::Submenu: {
+                wuxc::MenuFlyoutSubItem submenu;
+                submenu.Text(text);
+                submenu.IsEnabled(entry.enabled);
+                AddMenuEntries(submenu.Items(), entry.entries, chosen);
+                items.Append(submenu);
+                break;
+            }
+            case MenuEntry::Kind::Item: {
+                wuxc::MenuFlyoutItem item{nullptr};
+                if (entry.checked) {
+                    wuxc::ToggleMenuFlyoutItem toggle;
+                    toggle.IsChecked(true);
+                    item = toggle;
+                } else {
+                    item = wuxc::MenuFlyoutItem();
+                }
+                item.Text(text);
+                if (tab != std::wstring::npos) {
+                    item.KeyboardAcceleratorTextOverride(entry.text.substr(tab + 1));
+                }
+                item.IsEnabled(entry.enabled);
+                item.Click([chosen, command = entry.command](auto const&, auto const&) { *chosen = command; });
+                items.Append(item);
+                break;
+            }
+        }
+    }
+}
+
+// Commands of the widget's own, for moving it among the others in its slot.
+constexpr int kMoveLeftCommand = -1;
+constexpr int kMoveRightCommand = -2;
+
+// Opens the menu where the widget was last right-clicked, with Move left and Move right when other
+// widgets share its slot. The chosen item goes to the app once the menu has closed, so what it
+// does (a screenshot, say) doesn't have the menu in it.
+void ShowMenu(const std::vector<MenuEntry>& entries) {
+    auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host.Element();
+    if (!target || !target.XamlRoot()) {
+        return;
+    }
+    if (g_menu) {
+        g_menu.Hide();
+    }
+    auto chosen = std::make_shared<int>(0);
+    wuxc::MenuFlyout menu;
+    AddMenuEntries(menu.Items(), entries, chosen);
+    if (g_host.CanMove(-1) || g_host.CanMove(1)) {
+        menu.Items().Append(wuxc::MenuFlyoutSeparator());
+        for (int command : {kMoveLeftCommand, kMoveRightCommand}) {
+            wuxc::MenuFlyoutItem item;
+            item.Text(command == kMoveLeftCommand ? L"Move left" : L"Move right");
+            item.IsEnabled(g_host.CanMove(command == kMoveLeftCommand ? -1 : 1));
+            item.Click([chosen, command](auto const&, auto const&) { *chosen = command; });
+            menu.Items().Append(item);
+        }
+    }
+    g_menuClosed = menu.Closed([chosen](auto const& sender, auto const&) {
+        if (g_menu == sender) {
+            g_menu = nullptr;
+        }
+        if (*chosen == kMoveLeftCommand || *chosen == kMoveRightCommand) {
+            g_host.Move(*chosen == kMoveLeftCommand ? -1 : 1);
+        } else if (*chosen) {
+            PostToApp(kMenuCommandMessage, *chosen, 0);
+        }
+    });
+    menu.ShouldConstrainToRootBounds(false);  // Above the taskbar, outside its XAML.
+    wuxc::Primitives::FlyoutShowOptions options;
+    options.Position(g_menuPoint);
+    options.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+    g_menu = menu;
+    menu.ShowAt(target, options);
+}
+
+}  // namespace TaskbarXaml
 
 // ---------------------------------------------------------------------------
 // The buttons on the taskbar: the screenshot button takes a screenshot (as Print Screen does), and
 // the record button records part of the screen, or stops recording. Right-click them for their
-// menu, and drag them to move them along the taskbar.
+// menu.
 
-class SnipperWidget : public TaskbarWidget {
+// What the buttons show; the app sends it.
+struct SnipButtons {
+    bool screenshot = true;  // At least one of the two.
+    bool record = true;
+    bool recording = false;  // The record button stops recording.
+};
+
+// The buttons, as the widget's parts.
+constexpr int kSnipPart = 0;
+constexpr int kRecordPart = 1;
+
+// On the taskbar's thread.
+class SnipView : public TaskbarXaml::View {
 public:
-    std::function<void()> onSnip;
-    std::function<void()> onRecord;
-    std::function<void()> onMenu;
-
-    // Which buttons show: one or both (with neither asked for, both).
-    void SetButtons(bool screenshot, bool record) {
-        if (!screenshot && !record) {
-            screenshot = record = true;
-        }
-        if (screenshot != screenshotButton_ || record != recordButton_) {
-            screenshotButton_ = screenshot;
-            recordButton_ = record;
-            hovered_ = -1;
-            ContentChanged();
-        }
+    wux::FrameworkElement Build() override {
+        wuxc::StackPanel panel;
+        panel.Orientation(wuxc::Orientation::Horizontal);
+        recordIcon_ = TaskbarXaml::MakeGlyph(kGlyphRecord, 16);
+        // Not highlighted in the screenshot or recording they start.
+        panel.Children().Append(snip_.Make(kSnipPart, TaskbarXaml::MakeGlyph(kGlyphSnip, 16), L"Take a screenshot", true));
+        panel.Children().Append(record_.Make(kRecordPart, recordIcon_, L"Record the screen", true));
+        Show(buttons_);
+        return panel;
     }
 
-    // While recording, the record button shows a stop square.
-    void SetRecording(bool recording) {
-        if (recording != recording_) {
-            recording_ = recording;
-            Render();  // Once the widget has a window.
-        }
+    void Forget() override {
+        snip_.Forget();
+        record_.Forget();
+        recordIcon_ = nullptr;
     }
 
-protected:
-    int DefaultOffset(int barWidth, int width) override {
-        // Toward the right, short of the notification area, where the taskbar is free whether its
-        // icons are centered or on the left.
-        return barWidth - width - Px(400);
-    }
-
-    int LayOut() override { return ButtonWidth() * ButtonCount(); }
-
-    void Draw(gp::Graphics& graphics, int width, int height, bool light) override {
-        gp::Color foreground = light ? Argb(255, 28, 28, 28) : Argb(255, 255, 255, 255);
-        int buttonWidth = width / ButtonCount();
-        for (int button = 0; button < ButtonCount(); button++) {
-            float left = (float)(button * buttonWidth);
-            if (button == hovered_ && !Dragging()) {
-                FillRoundedRect(graphics, WithAlpha(light ? 18 : 24, foreground),
-                                gp::RectF(left + Px(2), (float)Px(4), (float)(buttonWidth - Px(4)), (float)(height - Px(8))), (float)Px(4));
-            }
-            // About the size of the taskbar's own icons; while recording, the record button stops it.
-            gp::RectF icon(left, 0, (float)buttonWidth, (float)height);
-            const wchar_t* glyph = !IsRecordButton(button) ? kGlyphSnip : recording_ ? StopRecordingGlyph() : kGlyphRecord;
-            DrawGlyph(graphics, glyph, 18 * Scale(), icon, foreground);
+    void Show(const SnipButtons& buttons) {
+        buttons_ = buttons;
+        if (!snip_.Border()) {
+            return;
         }
-    }
-
-    void OnHover(POINT point) override {
-        int button = ButtonAt(point);
-        if (button != hovered_) {
-            hovered_ = button;
-            Render();
-        }
-    }
-
-    void OnHoverLeave() override {
-        if (hovered_ >= 0) {
-            hovered_ = -1;
-            Render();
-        }
-    }
-
-    void OnClick(POINT point, MouseButton button) override {
-        if (button == MouseButton::Left) {
-            int clicked = ButtonAt(point);
-            // Not highlighted in the screenshot or recording.
-            hovered_ = -1;
-            Render();
-            auto action = IsRecordButton(clicked) ? onRecord : onSnip;
-            if (action) {
-                action();
-            }
-        } else if (button == MouseButton::Right && onMenu) {
-            onMenu();
-        }
+        // About the size of the taskbar's own buttons, and one on its own a little wider.
+        double width = buttons.screenshot && buttons.record ? 36 : 40;
+        snip_.Border().Width(width);
+        record_.Border().Width(width);
+        snip_.Border().Visibility(buttons.screenshot ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        record_.Border().Visibility(buttons.record ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        recordIcon_.Glyph(buttons.recording ? kGlyphRecordStop : kGlyphRecord);
+        wux::Automation::AutomationProperties::SetName(record_.Border(), buttons.recording ? L"Stop recording" : L"Record the screen");
     }
 
 private:
-    int ButtonCount() const { return screenshotButton_ && recordButton_ ? 2 : 1; }
-    int ButtonWidth() const { return Px(ButtonCount() == 2 ? 40 : 44); }
-    int ButtonAt(POINT point) const { return ButtonCount() == 2 && point.x >= ButtonWidth() ? 1 : 0; }
-    // The screenshot button comes first when both show.
-    bool IsRecordButton(int button) const { return !screenshotButton_ || button == 1; }
-
-    bool screenshotButton_ = true;
-    bool recordButton_ = true;
-    bool recording_ = false;
-    int hovered_ = -1;  // The button under the mouse.
+    TaskbarXaml::Part snip_;
+    TaskbarXaml::Part record_;
+    wuxc::FontIcon recordIcon_{nullptr};
+    SnipButtons buttons_;
 };
+
+SnipView g_view;
+
+// Puts the buttons in the taskbar where the settings say, or takes them out (on the taskbar's
+// thread).
+void AttachWidget(HWND taskbar) {
+    if (Wh_GetIntSetting(L"showButton")) {
+        TaskbarXaml::g_host.Attach(taskbar, TaskbarXaml::ReadSlot(), &g_view);
+    } else {
+        TaskbarXaml::g_host.Detach();
+    }
+}
+
+// Puts the widget in the taskbar if it isn't there (from the app's thread): Explorer said it made
+// the taskbar, which the widget may have missed as Explorer started.
+void AttachIfMissing() {
+    if (HWND taskbar = OwnTaskbar()) {
+        TaskbarXaml::RunOnWindowThread(taskbar, [taskbar]() {
+            if (!TaskbarXaml::g_host.Element()) {
+                AttachWidget(taskbar);
+            }
+        });
+    }
+}
 
 // ---------------------------------------------------------------------------
 // The keyboard hook: catches Print Screen (on its own, without Alt, Ctrl, Shift or Win), and
@@ -6614,26 +6508,22 @@ public:
         pen_.thickness = std::clamp(Storage::GetInt(L"Thickness", pen_.thickness), kMinThickness, kMaxThickness);
         tidyRecordings_ = settings_.recordings.path;
         tidying_ = CreateThread(nullptr, 0, TidyProc, this, 0, nullptr);
-        if (!messages_.Create(L"TaskbarSnipper.Mod.Messages") || !notice_.Create()) {
+        ForgetDraggedWidget();
+        if (!messages_.Create(L"TaskbarSnipper.Mod.Messages") || !owner_.Create(L"TaskbarSnipper.Mod.Owner") || !notice_.Create()) {
             return false;
         }
-        messages_.onMessage = [this](UINT message, WPARAM wParam, LPARAM lParam) { OnMessage(message, lParam); };
-        // The buttons' window is there even while it's hidden, so the other widgets still see it,
-        // and it still hears about changes to the Windows settings.
-        widget_.SetButtons(settings_.screenshotButton, settings_.recordButton);
-        if (!widget_.Create(Storage::GetInt(L"TaskbarOffset", -1))) {
-            return false;
-        }
-        widget_.onOffsetChanged = [](int offset) { Storage::SetInt(L"TaskbarOffset", offset); };
-        widget_.onSnip = [this]() { StartCaptureFromWidget(); };
-        widget_.onRecord = [this]() { ToggleRecording(); };
-        widget_.onMenu = [this]() { ShowMenu(); };
-        widget_.SetShown(settings_.showButton);
+        messages_.onMessage = [this](UINT message, WPARAM wParam, LPARAM lParam) { OnMessage(message, wParam, lParam); };
+        owner_.onSettingChange = []() { RefreshShellSettings(); };
+        owner_.onTaskbarCreated = []() { AttachIfMissing(); };
+        // The buttons may be in the taskbar already, or will say when they are.
+        TaskbarXaml::g_appWindow = messages_.Handle();
+        SendButtons();
         hook_.SetRecordShortcut(settings_.recordShortcut);
         return hook_.Start(messages_.Handle());
     }
 
     ~SnipApp() {
+        TaskbarXaml::g_appWindow = nullptr;
         hook_.Stop();
         overlay_.reset();
         // Turning off while recording: the recording is finished and kept, as are any not yet copied
@@ -6644,7 +6534,6 @@ public:
         }
         recordingBar_.Hide();
         trimWindows_.clear();
-        widget_.Destroy();
         if (tidying_) {
             cancelTidy_ = TRUE;  // What's left is done next time.
             WaitForSingleObject(tidying_, INFINITE);
@@ -6655,8 +6544,27 @@ public:
     HWND MessageHandle() const { return messages_.Handle(); }
 
 private:
-    void OnMessage(UINT message, LPARAM lParam) {
+    void OnMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
+            case TaskbarXaml::kAttachedMessage:
+                SendButtons();
+                break;
+            case TaskbarXaml::kClickMessage:
+                if ((TaskbarXaml::MouseButton)lParam == TaskbarXaml::MouseButton::Right) {
+                    ShowMenu();
+                } else if ((TaskbarXaml::MouseButton)lParam == TaskbarXaml::MouseButton::Left) {
+                    if (wParam == kRecordPart) {
+                        ToggleRecording();
+                    } else {
+                        StartCaptureFromWidget();
+                    }
+                }
+                break;
+            case TaskbarXaml::kMenuCommandMessage:
+                if (auto menu = std::move(menu_)) {
+                    menu->Run((int)wParam);
+                }
+                break;
             case kPrintScreenMessage:
                 StartCapture(false);
                 break;
@@ -6670,8 +6578,7 @@ private:
                 break;
             case kSettingsChangedMessage:
                 settings_ = ModSettings::Load();
-                widget_.SetButtons(settings_.screenshotButton, settings_.recordButton);
-                widget_.SetShown(settings_.showButton);
+                SendButtons();
                 hook_.SetRecordShortcut(settings_.recordShortcut);
                 break;
             case kOverlayClosedMessage:
@@ -6710,10 +6617,23 @@ private:
     }
 
     // A screenshot from the button or its menu: waits for the screen to show the button as it is
-    // when it isn't hovered or pressed, so the screenshot shows it that way too.
+    // when it isn't hovered or pressed, and the menu gone, so the screenshot shows them that way too.
     void StartCaptureFromWidget() {
-        DwmFlush();
+        WaitForTaskbarFrame();
         StartCapture(false);
+    }
+
+    // The taskbar draws the button's change in its next frame, which the screen shows in the one
+    // after.
+    static void WaitForTaskbarFrame() {
+        DwmFlush();
+        DwmFlush();
+    }
+
+    // Tells the buttons on the taskbar what to show.
+    void SendButtons() {
+        SnipButtons buttons{settings_.screenshotButton, settings_.recordButton, recordingBar_.Shown()};
+        TaskbarXaml::g_bridge.Post([buttons]() { g_view.Show(buttons); });
     }
 
     void OnOverlayDone(std::optional<Finish> finish) {
@@ -6765,7 +6685,7 @@ private:
         if (recordingBar_.Shown()) {
             StopRecording();
         } else {
-            DwmFlush();  // As for a screenshot from the button.
+            WaitForTaskbarFrame();  // As for a screenshot from the button.
             StartCapture(true);
         }
     }
@@ -6787,7 +6707,7 @@ private:
             }
         };
         if (recordingBar_.Show(area)) {
-            widget_.SetRecording(true);
+            SendButtons();
         }
     }
 
@@ -6797,7 +6717,7 @@ private:
         SIZE size = VideoSizeFor(recordingArea_.right - recordingArea_.left, recordingArea_.bottom - recordingArea_.top);
         if (recordingPath_.empty() || !recorder_.Start(recordingPath_, size, ScreenFrames(recordingArea_))) {
             recordingBar_.Hide();
-            widget_.SetRecording(false);
+            SendButtons();
             if (!recordingPath_.empty()) {
                 DeleteFileW(recordingPath_.c_str());
                 recordingPath_.clear();
@@ -6813,7 +6733,7 @@ private:
         bool recording = recorder_.Recording();
         recorder_.Stop();
         recordingBar_.Hide();
-        widget_.SetRecording(false);
+        SendButtons();
         if (recording) {
             OpenTrimWindow(recordingPath_);
             recordingPath_.clear();  // The trim window has it now.
@@ -6825,7 +6745,7 @@ private:
         bool recording = recorder_.Recording();
         recorder_.Stop();
         recordingBar_.Hide();
-        widget_.SetRecording(false);
+        SendButtons();
         if (recording) {
             DeleteFileW(recordingPath_.c_str());
         }
@@ -6869,15 +6789,16 @@ private:
     }
 
     void ChooseFolder(SaveFolder& folder, const wchar_t* title, const wchar_t* done) {
-        std::optional<std::wstring> chosen = PickFolder(widget_.OwnerWindow(), title, folder.path);
+        std::optional<std::wstring> chosen = PickFolder(owner_.Handle(), title, folder.path);
         if (chosen) {
             folder.Choose(*chosen);
-            notice_.Show(done, *chosen, L"", nullptr, widget_.Bounds());
+            notice_.Show(done, *chosen, L"", nullptr, TaskbarXaml::g_host.ScreenBounds());
         }
     }
 
     void ShowMenu() {
-        Menu menu;
+        menu_ = std::make_unique<Menu>();
+        Menu& menu = *menu_;
         menu.Add(L"Take a screenshot\tPrint Screen", [this]() { StartCaptureFromWidget(); });
         if (recordingBar_.Shown()) {
             menu.Add(L"Stop recording", [this]() { StopRecording(); });
@@ -6895,20 +6816,16 @@ private:
         menu.Add(L"Choose the recordings folder…", [this]() {
             ChooseFolder(settings_.recordings, L"Choose the folder to save recordings in", L"Recordings will be saved here");
         });
-        AddLinkMenu(menu, widget_);
-        RECT bounds = widget_.Bounds();
-        POINT cursor;
-        GetCursorPos(&cursor);
-        // Above the widget, so the menu doesn't cover it.
-        menu.Show(widget_.OwnerWindow(), {cursor.x, bounds.top});
+        TaskbarXaml::g_bridge.Post([entries = menu.Entries()]() { TaskbarXaml::ShowMenu(entries); });
     }
 
     ModSettings settings_;
     Pen pen_;
     MessageWindow messages_;
+    OwnerWindow owner_;
     KeyboardHook hook_;
     Notice notice_;
-    SnipperWidget widget_;
+    std::unique_ptr<Menu> menu_;  // The buttons' menu, while it may be open.
     std::unique_ptr<Overlay> overlay_;
     Recorder recorder_;
     RecordingBar recordingBar_;
@@ -6996,16 +6913,35 @@ private:
 
 UiThread g_uiThread;
 std::atomic<HWND> g_messageWindow{nullptr};  // For telling the app the settings changed.
+std::atomic<bool> g_unloading{false};
+
+// Explorer has made the taskbar again (after it crashed, say): the buttons go in the new one.
+void OnTaskbarStarted(HWND taskbar) {
+    if (!g_unloading) {
+        TaskbarXaml::g_host.Forget();
+        AttachWidget(taskbar);
+    }
+}
+
+void AttachToTaskbar() {
+    if (HWND taskbar = OwnTaskbar()) {
+        TaskbarXaml::RunOnWindowThread(taskbar, [taskbar]() { AttachWidget(taskbar); });
+    }
+}
 
 }  // namespace
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
-    // Windhawk loads the mod into every Explorer process, folder windows' too: it runs in the one
-    // with the taskbar (or, while Explorer is starting, the one that's about to have it).
-    if (InFolderWindowProcess() || (TaskbarWindow() && !WidgetTaskbar())) {
+    if (!InTaskbarProcess()) {
         return FALSE;
     }
+    // Windows 10's taskbar isn't XAML, and hasn't these.
+    if (!TaskbarXaml::HookTaskbarDll()) {
+        Wh_Log(L"Couldn't find the taskbar's functions");
+        return FALSE;
+    }
+    TaskbarXaml::g_onTaskbarStarted = OnTaskbarStarted;
     return g_uiThread.Start([]() -> std::shared_ptr<void> {
         auto app = std::make_shared<SnipApp>();
         if (!app->Start()) {
@@ -7017,15 +6953,26 @@ BOOL Wh_ModInit() {
     });
 }
 
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+    AttachToTaskbar();
+}
+
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     if (HWND window = g_messageWindow) {
         PostMessageW(window, kSettingsChangedMessage, 0, 0);
     }
+    AttachToTaskbar();  // In the position chosen, or out of the taskbar.
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+    g_unloading = true;
     g_messageWindow = nullptr;
     g_uiThread.Stop();
+    TaskbarXaml::g_bridge.Drain();
+    if (HWND taskbar = OwnTaskbar()) {
+        TaskbarXaml::RunOnWindowThread(taskbar, []() { TaskbarXaml::g_host.Detach(); });
+    }
 }
