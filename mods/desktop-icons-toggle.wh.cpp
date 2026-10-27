@@ -2,11 +2,11 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons with a tray button or Ctrl+Alt+H
-// @version         1.0.2
+// @version         1.0.3
 // @author          merpzzz
 // @github          https://github.com/merpzzz
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32
+// @compilerOptions -lshell32 -lgdi32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -63,6 +63,8 @@ Initial target: Windows 11. Windows Explorer internals may change.
 #include <cstdlib>
 #include <string>
 #include <cwctype>
+#include <vector>
+#include <sddl.h>
 
 namespace {
 constexpr wchar_t kClass[] = L"Merpzzz.DesktopIconsToggle.Tray";
@@ -78,9 +80,9 @@ NOTIFYICONDATAW tray{};
 int initialVisible = -1, lastApplied = -1;
 int lastUiVisibility = -2;
 bool recoveryChecked = false;
-constexpr wchar_t kRecoveryPending[] = L"recoveryPending";
-constexpr wchar_t kRecoveryOriginal[] = L"recoveryOriginal";
-constexpr wchar_t kRecoveryApplied[] = L"recoveryApplied";
+std::wstring recoveryPending;
+std::wstring recoveryOriginal;
+std::wstring recoveryApplied;
 std::wstring shortcut = L"Tray button only";
 HICON shownIcon = nullptr, hiddenIcon = nullptr;
 
@@ -111,42 +113,88 @@ HWND FindView() {
     return view;
 }
 
-int Visibility() {
-    HWND view = FindView();
-    HWND icons = view ? FindWindowExW(view, nullptr, L"SysListView32", nullptr) : nullptr;
-    return icons ? (IsWindowVisible(icons) ? 1 : 0) : -1;
+// Windhawk's mod storage is machine-wide; Explorer's setting is per-user.
+// The SID prevents a pending recovery for user A from modifying user B's
+// desktop. If the token cannot be read, don't start the mod.
+bool InitializeRecoveryKeys() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return false;
+
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    bool ok = size && GetTokenInformation(
+        token, TokenUser, buffer.data(), size, &size);
+    CloseHandle(token);
+    if (!ok) return false;
+
+    LPWSTR sid = nullptr;
+    if (!ConvertSidToStringSidW(
+            reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &sid))
+        return false;
+
+    const std::wstring suffix = std::wstring(L"_") + sid;
+    LocalFree(sid);
+    recoveryPending = L"recoveryPending" + suffix;
+    recoveryOriginal = L"recoveryOriginal" + suffix;
+    recoveryApplied = L"recoveryApplied" + suffix;
+    return true;
 }
 
-// Sends Explorer's command, which persists the chosen visibility.
+// Registry value is Explorer's saved preference, not transient window
+// visibility. This stays correct while Explorer creates/restarts its view
+// or while another utility hides the ListView for rendering.
+int SavedVisibility() {
+    DWORD hide = 0;
+    DWORD size = sizeof(hide);
+    LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        L"HideIcons", RRF_RT_REG_DWORD, nullptr, &hide, &size);
+    if (status == ERROR_FILE_NOT_FOUND) return 1;
+    if (status != ERROR_SUCCESS) return -1;
+    return hide ? 0 : 1;
+}
+
+// Explorer command 0x7402 flips the saved preference. Never send based on
+// IsWindowVisible, and avoid sending before the desktop is ready.
 bool SendExplorerToggle(bool visible) {
-    int current = Visibility();
+    int current = SavedVisibility();
     if (current < 0) return false;
     if (current == static_cast<int>(visible)) return true;
+
     HWND view = FindView();
+    if (!view || !IsWindowVisible(view)) return false;
     DWORD_PTR result = 0;
-    return view && SendMessageTimeoutW(
-        view, WM_COMMAND, 0x7402, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK,
-        1000, &result);
+    if (!SendMessageTimeoutW(
+            view, WM_COMMAND, 0x7402, 0,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result))
+        return false;
+    return SavedVisibility() == static_cast<int>(visible);
 }
 
-// Only capture the baseline after restoring any change from an earlier crash.
+// Replay only this user's pending change, and only if no newer choice
+// has replaced it. The old unsuffixed records are deliberately ignored,
+// because a global record may be from another user.
 bool RecoverIfNeeded() {
     if (recoveryChecked) return true;
-    int current = Visibility();
+    int current = SavedVisibility();
     if (current < 0) return false;
 
-    if (Wh_GetIntValue(kRecoveryPending, 0)) {
-        int original = Wh_GetIntValue(kRecoveryOriginal, -1);
-        int applied = Wh_GetIntValue(kRecoveryApplied, -1);
+    if (Wh_GetIntValue(recoveryPending.c_str(), 0)) {
+        int original = Wh_GetIntValue(recoveryOriginal.c_str(), -1);
+        int applied = Wh_GetIntValue(recoveryApplied.c_str(), -1);
         if (original >= 0 && original <= 1 &&
             applied >= 0 && applied <= 1 &&
             current == applied && current != original) {
             if (!SendExplorerToggle(original != 0)) return false;
+            current = SavedVisibility();
+            if (current != original) return false;
         }
-        // If current != applied, a user or Windows component changed it.
-        // Never overwrite that newer setting.
-        if (!Wh_SetIntValue(kRecoveryPending, 0)) return false;
-        current = Visibility();
+        // If current != applied, respect an external setting change.
+        if (!Wh_SetIntValue(recoveryPending.c_str(), 0)) return false;
+        current = SavedVisibility();
         if (current < 0) return false;
     }
 
@@ -157,32 +205,33 @@ bool RecoverIfNeeded() {
 
 bool SetVisible(bool visible) {
     if (!RecoverIfNeeded()) return false;
-    int before = Visibility();
+    int before = SavedVisibility();
     if (before < 0) return false;
 
     if (lastApplied >= 0 && before != lastApplied) {
+        // External changes become the new baseline.
+        if (!Wh_SetIntValue(recoveryPending.c_str(), 0)) return false;
         initialVisible = before;
         lastApplied = -1;
-        Wh_SetIntValue(kRecoveryPending, 0);
     }
-
     if (before == static_cast<int>(visible)) return true;
     if (initialVisible < 0) initialVisible = before;
 
     if (static_cast<int>(visible) != initialVisible) {
-        // Commit the recovery record *before* changing Explorer's setting.
-        if (!Wh_SetIntValue(kRecoveryOriginal, initialVisible) ||
-            !Wh_SetIntValue(kRecoveryApplied, visible ? 1 : 0) ||
-            !Wh_SetIntValue(kRecoveryPending, 1))
+        // Write the rollback record before Explorer persists the change.
+        if (!Wh_SetIntValue(recoveryOriginal.c_str(), initialVisible) ||
+            !Wh_SetIntValue(recoveryApplied.c_str(), visible ? 1 : 0) ||
+            !Wh_SetIntValue(recoveryPending.c_str(), 1))
             return false;
     }
-
     if (!SendExplorerToggle(visible)) return false;
+
     lastApplied = visible ? 1 : 0;
     if (lastApplied == initialVisible)
-        Wh_SetIntValue(kRecoveryPending, 0);
+        Wh_SetIntValue(recoveryPending.c_str(), 0);
     return true;
 }
+
 
 HICON MakeIcon(bool hidden) {
     BITMAPINFO bi{};
@@ -311,13 +360,13 @@ void ReloadHotkey(HWND window) {
 void Refresh(bool add = false) {
     int visible = -1;
     if (RecoverIfNeeded()) {
-        visible = Visibility();
+        visible = SavedVisibility();
         if (lastApplied >= 0 && visible >= 0 &&
             visible != lastApplied) {
             // A change external to this mod wins.
             initialVisible = visible;
             lastApplied = -1;
-            Wh_SetIntValue(kRecoveryPending, 0);
+            Wh_SetIntValue(recoveryPending.c_str(), 0);
         }
     }
 
@@ -341,18 +390,18 @@ LRESULT CALLBACK WindowProc(HWND h, UINT message, WPARAM w, LPARAM l) {
         return 0;
     }
     if (message == WM_HOTKEY && w == 1) {
-        int current = Visibility();
+        int current = SavedVisibility();
         if (current >= 0) SetVisible(!current);
         Refresh(); return 0;
     }
     if (message == kTray) {
         if (l == WM_LBUTTONUP) {
-            int current = Visibility(); if (current >= 0) SetVisible(!current);
+            int current = SavedVisibility(); if (current >= 0) SetVisible(!current);
             Refresh();
         } else if (l == WM_RBUTTONUP || l == WM_CONTEXTMENU) {
             HMENU menu = CreatePopupMenu();
             if (!menu) return 0;
-            int current = Visibility();
+            int current = SavedVisibility();
             AppendMenuW(menu, MF_STRING | (current < 0 ? MF_GRAYED : 0), 1, L"Show desktop icons");
             AppendMenuW(menu, MF_STRING | (current < 0 ? MF_GRAYED : 0), 2, L"Hide desktop icons");
             AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -403,9 +452,9 @@ DWORD WINAPI Run(void*) {
     }
     KillTimer(h, kRefresh); UnregisterHotKey(h, 1); Shell_NotifyIconW(NIM_DELETE, &tray);
     if (recoveryChecked && initialVisible >= 0 && lastApplied >= 0 &&
-        Visibility() == lastApplied) {
+        SavedVisibility() == lastApplied) {
         if (SendExplorerToggle(initialVisible != 0))
-            Wh_SetIntValue(kRecoveryPending, 0);
+            Wh_SetIntValue(recoveryPending.c_str(), 0);
     }
     workerWindow = nullptr; DestroyWindow(h); DestroyIcon(shownIcon); DestroyIcon(hiddenIcon);
     UnregisterClassW(kClass, module); return 0;
@@ -413,6 +462,10 @@ DWORD WINAPI Run(void*) {
 }
 
 BOOL WhTool_ModInit() {
+    if (!InitializeRecoveryKeys()) {
+        Wh_Log(L"Couldn't determine the current user's SID");
+        return FALSE;
+    }
     if (!GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
