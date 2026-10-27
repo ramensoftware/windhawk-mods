@@ -2,12 +2,12 @@
 // @id              nested-tray-drawer
 // @name            Nested Tray Drawer
 // @description     Collect rarely used tray icons in a second drawer.
-// @version         0.1.9
+// @version         0.1.10
 // @author          MEI
 // @github          https://github.com/Meidios
 // @include         explorer.exe
 // @architecture    amd64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lcomctl32 -lversion -ladvapi32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -15,99 +15,89 @@
 /*
 # Nested Tray Drawer
 
-**Experimental release. Only the inspected configuration below is supported.**
-
-Add a second drawer inside Windows' hidden notification-icons drawer. Collect
-rarely used icons there while retaining the original app icons and native input
-handlers. Both drawers can remain visible together.
+Add a second drawer to Windows 11's hidden notification-icons panel. Drag an
+icon onto the added chevron to collect it, then click the chevron to open the
+second drawer. Both drawers can remain visible together. Icons retain their
+native templates, input handlers and app context menus. The footer is 40 DIP high.
 
 ![Nested Tray Drawer feature overview](https://raw.githubusercontent.com/Meidios/nested-tray-drawer/0d4ae2b9b09aba9a907541d0855e86a55a51e711/assets/feature-overview-0edbded10469.png)
 
-*Concept illustration; panel styling and example icons are illustrative.*
+*Concept illustration; example icons and panel styling are illustrative.*
 
-## Supported environment
+## Experimental compatibility
 
-This is an experimental release for one inspected Windows configuration:
+Validated on Windows 11 23H2 build 22631.5126 x64 with Windhawk 1.7.3,
+Taskbar.View.dll 2125.4507.10.0 and taskbar.dll from that installation.
+Windows 10, ARM64, other Windows builds, DPI/monitor combinations and interactions
+with other tray mods have not been validated.
 
-| Component | Verified configuration |
-| --- | --- |
-| Windows | Windows 11 23H2, build 22631.5126, x64 |
-| Windhawk | 1.7.3 |
-| Taskbar.View.dll | 2125.4507.10.0 |
-| taskbar.dll | PE timestamp 10195DD3; image size 3B6000 |
+The mod discovers SystemTray.dll, older Taskbar.View.dll or ExplorerExtensions.dll
+and resolves the required internal interfaces and methods from symbols. It no
+longer requires a particular DLL version, timestamp, image size or vtable address.
+This does not make every Windows build supported: the symbol names, root layout
+and native identity ABI must still be compatible.
 
-Other Windows builds, including other 23H2 updates, are not claimed as supported.
-Windows 10, ARM64, 24H2 and 25H2 have not been validated. Unsupported
-Taskbar.View.dll versions are rejected; unsupported identity layouts leave icons
-visible. Do not remove the version checks to force installation on another build.
+Persistent identity currently requires a recognized x64 Identity() accessor,
+QueryInterface adjustment and native identity copy ABI in taskbar.dll. Their
+instruction forms are checked before deriving any object position. Unknown forms
+are rejected; this is intentionally an amd64 release. It does not claim ARM64
+support. Never bypass these checks to force compatibility.
 
 ## Use
 
-1. Click the normal taskbar chevron to open the hidden-icons drawer.
-2. Drag an icon from that drawer onto the added chevron and release it. Repeat
-   to collect more icons; earlier collected icons are retained.
-3. Click the added chevron to open or close the second drawer. An empty drawer
-   does not open. Use the real app icons and their context menus inside it.
-4. Right-click the added chevron and choose **Restore all collected icons** to
-   return all icons and explicitly clear the saved collection.
+1. Open the normal taskbar hidden-icons drawer.
+2. Drag an icon onto the added chevron and release it. Repeat to collect more.
+3. Click the added chevron to open or close the second drawer. Both drawers can
+   remain open; an empty second drawer does not open.
+4. Right-click the chevron and choose **Restore all collected icons** to return
+   every collected icon and explicitly clear saved membership.
 
-There is no right-click icon picker. Disabling the mod removes its UI and
-restores the native tray while preserving saved membership.
+There is no right-click icon picker or individual drag-out command. Disabling
+the mod restores the native tray and preserves the saved collection.
 
-## Saved records and switching installation source
+## Saved collection and migration
 
-Starting with 0.1.8, local and catalog builds share one per-Windows-user record:
-`HKEY_CURRENT_USER\Software\Meidios\Windhawk\NestedTrayDrawer`, value
-`CollectedIconsV1`. It is independent of Windhawk's `local@` mod-ID prefix.
+Records use Windhawk's public storage API, with a Windows-user SID suffix to
+separate users in installed Windhawk. Membership uses an app GUID, or the owning
+process's exact executable path and native UID. Missing apps keep their records;
+ambiguous or inaccessible identities remain visible. Changed app identifiers can
+require recollection. Records contain app identifiers/encoded paths, not secrets;
+the encoding is not encryption. No records are transmitted.
 
-On first use, existing valid records are imported from this mod's old Windhawk
-storage. An installed Windhawk local copy can also be imported by the catalog
-build. For a portable Windhawk copy, update the local mod to 0.1.8 first.
-Existing destination records always win, including an explicitly cleared
-collection; old backups are never merged back automatically. The old record is
-retained as a backup and is not kept in two-way sync.
+The first load imports a valid 0.1.8/0.1.9 HKCU collection from this mod's own
+legacy key. Existing Windhawk records always win, including an explicitly cleared
+collection. The catalog build reads that legacy key only for first-time import
+and never writes it or accesses another mod's internal Windhawk storage.
 
-Disable the local copy before enabling the catalog copy. A per-process guard
-prevents two copies of 0.1.8 or newer from attaching at once. Older copies do not
-implement that guard and must remain disabled. Switching back to 0.1.7 or earlier
-uses its old backup, which may no longer reflect your latest organization.
+To switch from a development/local copy, disable that copy first. Version 0.1.10
+local builds export their current valid collection as a one-way handoff when
+disabled; the catalog build imports it on first use. Confirm restoration before
+removing the old copy. Local and catalog API stores do not stay in two-way sync;
+switching back uses that copy's own saved state. Do not enable both copies.
 
-Membership is saved before icons are moved. Missing apps keep their records and
-are matched when they return. A GUID identifies an icon when available; otherwise
-its exact executable path and native UID are used. Ambiguous identities stay
-visible. App updates that change those identifiers can require recollection.
+An invalid record is kept intact and icons remain visible. The chevron's context
+menu offers **Reset saved collection** for explicit recovery; a readable invalid
+API record is backed up before resetting. Uninstalling removes Windhawk-owned
+storage. The old HKCU migration backup is retained and never automatically erased.
 
-Records contain app GUIDs or encoded executable paths and UIDs; encoding is not
-encryption. The mod does not transmit records or change Windows' tray settings.
-Uninstalling the mod leaves this user-owned record in place. Use **Restore all
-collected icons** before uninstalling to clear it.
+## Known limits
 
-## Known limits and test coverage
-
-- One app menu did not expose recognized native menu state and the drawers closed
-  after the bounded menu-start grace. Other tested menus retained both drawers.
-  Custom and non-foreground app menus are not universally supported.
-- Drag collection, multiple icons, simultaneous drawers, recognized app menus,
-  mod reload restoration and icon disappearance/reappearance were tested.
-- A complete Explorer restart was not performed. The same initialization recovery
-  path is implemented, but a full process-restart test is still outstanding.
-- Full left-click/double-click/keyboard, drag-cancel, DPI, multiple-monitor and
-  coexistence testing with other taskbar mods is not complete.
-- There is no supported individual return gesture or drag out of the second
-  drawer. The restore-all command returns every collected icon.
-- Version 0.1.9 refines the footer tint, divider, spacing and rounded button.
-  Footer appearance was checked on the inspected dark-theme configuration.
-  Light/high-contrast appearance and live theme switching are not yet validated.
-
-When reporting an issue, include Windows build, the two module versions, Windhawk
-version and reproduction steps. Remove private paths or app identifiers from logs.
+- Custom app menus that do not expose foreground native menu state can dismiss
+  both drawers after the bounded menu-start grace period.
+- Complete Explorer restart, full mouse/keyboard and drag-cancel coverage,
+  light/high-contrast appearance and live theme switching remain untested.
+- Symbol discovery across module families is implemented; runtime compatibility
+  on 24H2/25H2 is not established by the local build tests.
 
 ## Credits
 
 Native overflow access is adapted from m417z's GPLv3
 [Taskbar notification icon spacing](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp).
-This mod retains its GPL-3.0 declaration. No external files are needed to compile
-this single-file mod.
+Symbol-based interface resolution and vtable verification follow Ris Peng's GPLv3
+[System Tray Folders](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/system-tray-folders.wh.cpp).
+Nested Tray Drawer keeps a separate simultaneous flyout and drag-based membership;
+it does not replace the first drawer with an in-grid folder view.
+The single-file mod retains its GPL-3.0 declaration.
 */
 // ==/WindhawkModReadme==
 
@@ -120,14 +110,16 @@ this single-file mod.
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-#include <commctrl.h>
+#include <cstring>
 #include <winver.h>
+#include <sddl.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -158,6 +150,23 @@ std::atomic<bool> g_runtimeAvailable{true};
 std::atomic<int> g_hookState;  // 0: waiting, 1: resolving, 2: ready, 3: failed.
 std::atomic<HWND> g_uiWindow;
 std::atomic<DWORD> g_uiThread;
+std::atomic<bool> g_hasDrawer;
+SRWLOCK g_attachmentLock = SRWLOCK_INIT;
+HANDLE g_cleanupEvent;
+HANDLE g_uiThreadHandle;
+thread_local unsigned g_uiCallbackDepth;
+thread_local bool g_cleanupPending;
+constexpr UINT kRemoveDrawerMessage = WM_APP + 0x731;
+
+struct UiCallbackScope {
+    UiCallbackScope() noexcept { ++g_uiCallbackDepth; }
+    ~UiCallbackScope() noexcept {
+        if (--g_uiCallbackDepth == 0 && g_cleanupPending) {
+            g_cleanupPending = false;
+            PostMessageW(g_uiWindow, kRemoveDrawerMessage, 0, 0);
+        }
+    }
+};
 
 bool Chinese() {
     return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
@@ -326,7 +335,6 @@ std::vector<size_t> MatchCollectionKeys(std::vector<std::wstring> const& live,
 constexpr WCHAR kCollectionValue[] = L"CollectedIconsV1";
 HANDLE g_collectionMutex;
 HANDLE g_instanceGuard;
-bool g_cleanupCompleted;
 
 // BEGIN INSTANCE GUARD
 HANDLE AcquireDrawerInstance(DWORD processId) {
@@ -357,12 +365,12 @@ struct CollectionLock {
 };
 
 // BEGIN COLLECTION STORAGE
-// Shared only by this mod's local/catalog copies, under the current user's hive.
-// The destination's presence is the migration marker, including a valid empty
-// collection. Never resurrect an older Windhawk backup after an explicit clear.
-constexpr WCHAR kUserCollectionPath[] = L"Software\\Meidios\\Windhawk\\NestedTrayDrawer";
-constexpr WCHAR kLegacyLocalStoragePath[] =
-    L"SOFTWARE\\Windhawk\\Engine\\ModsWritable\\local@nested-tray-drawer\\LocalStorage";
+// Canonical storage is Windhawk's public API, scoped to this mod and user.
+// The old HKCU record is a one-time, read-only import in catalog builds.
+constexpr WCHAR kUserCollectionPath[] = LR"(Software\Meidios\Windhawk\NestedTrayDrawer)";
+constexpr bool kDevelopmentBuild = std::wstring_view(WH_MOD_ID).starts_with(L"local@");
+std::wstring g_collectionStorageKey;
+std::wstring g_collectionReadyKey;
 
 enum class RecordState { Missing, Present, Error };
 struct StoredCollection {
@@ -372,13 +380,12 @@ struct StoredCollection {
 
 bool ValidStoredCollection(std::wstring const& text) {
     std::vector<std::wstring> keys;
-    // An existing empty registry string is corrupt, not a missing destination.
     return !text.empty() && ParseCollectionRecord(text, keys);
 }
 
-StoredCollection ReadRegistryCollection(HKEY hive, PCWSTR path) {
+StoredCollection ReadLegacyCollection() {
     HKEY key{};
-    auto error = RegOpenKeyExW(hive, path, 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &key);
+    auto error = RegOpenKeyExW(HKEY_CURRENT_USER, kUserCollectionPath, 0, KEY_QUERY_VALUE, &key);
     if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
         return {};
     if (error != ERROR_SUCCESS)
@@ -403,131 +410,237 @@ StoredCollection ReadRegistryCollection(HKEY hive, PCWSTR path) {
         return {RecordState::Error, {}};
     std::wstring text(buffer.data(), buffer.size() - 1);
     if (text.find(L'\0') != std::wstring::npos || !ValidStoredCollection(text))
-        return {RecordState::Error, {}};
+        return {RecordState::Error, std::move(text)};
     return {RecordState::Present, std::move(text)};
 }
 
-bool SaveRegistryCollection(HKEY hive, PCWSTR path, std::wstring const& text) {
-    if (!ValidStoredCollection(text))
-        return false;
-    HKEY key{};
-    if (RegCreateKeyExW(hive, path, 0, nullptr, 0, KEY_SET_VALUE | KEY_WOW64_64KEY, nullptr, &key,
-                        nullptr) != ERROR_SUCCESS)
-        return false;
-    auto result = RegSetValueExW(key, kCollectionValue, 0, REG_SZ,
-                                 reinterpret_cast<const BYTE*>(text.c_str()),
-                                 static_cast<DWORD>((text.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(key);
-    return result == ERROR_SUCCESS;
+StoredCollection ReadWindhawkCollection() {
+    if (g_collectionStorageKey.empty())
+        return {RecordState::Error, {}};
+    std::vector<wchar_t> buffer(kMaxCollectionChars + 1);
+    auto count = Wh_GetStringValue(g_collectionStorageKey.c_str(), buffer.data(), buffer.size());
+    if (!count) {
+        // A marker distinguishes missing storage from an unreadable/empty value
+        // after initialization. Never re-import a stale legacy record on error.
+        return {Wh_GetIntValue(g_collectionReadyKey.c_str(), 0) ? RecordState::Error
+                                                                : RecordState::Missing,
+                {}};
+    }
+    std::wstring text(buffer.data(), count);
+    return {ValidStoredCollection(text) ? RecordState::Present : RecordState::Error,
+            std::move(text)};
 }
 
-enum class MigrationChoice { KeepDestination, ImportOwn, ImportLocal, CreateEmpty, Refuse };
-
+enum class MigrationChoice { KeepDestination, ImportLegacy, CreateEmpty, Refuse };
 MigrationChoice ChooseCollectionMigration(StoredCollection const& destination,
-                                          StoredCollection const& own,
-                                          StoredCollection const& local) {
+                                          StoredCollection const& legacy) {
     if (destination.state == RecordState::Error)
         return MigrationChoice::Refuse;
     if (destination.state == RecordState::Present)
         return ValidStoredCollection(destination.text) ? MigrationChoice::KeepDestination
                                                        : MigrationChoice::Refuse;
-    if (own.state == RecordState::Error)
+    if (legacy.state == RecordState::Error)
         return MigrationChoice::Refuse;
-    if (own.state == RecordState::Present)
-        return ValidStoredCollection(own.text) ? MigrationChoice::ImportOwn
-                                               : MigrationChoice::Refuse;
-    if (local.state == RecordState::Error)
-        return MigrationChoice::Refuse;
-    if (local.state == RecordState::Present)
-        return ValidStoredCollection(local.text) ? MigrationChoice::ImportLocal
-                                                 : MigrationChoice::Refuse;
+    if (legacy.state == RecordState::Present)
+        return ValidStoredCollection(legacy.text) ? MigrationChoice::ImportLegacy
+                                                  : MigrationChoice::Refuse;
     return MigrationChoice::CreateEmpty;
 }
 
-bool BootstrapCollectionAt(HKEY hive,
-                           PCWSTR path,
-                           StoredCollection const& own,
-                           StoredCollection const& local,
-                           MigrationChoice& choice) {
-    auto destination = ReadRegistryCollection(hive, path);
-    choice = ChooseCollectionMigration(destination, own, local);
-    switch (choice) {
-        case MigrationChoice::KeepDestination:
-            return true;
-        case MigrationChoice::ImportOwn:
-            return SaveRegistryCollection(hive, path, own.text);
-        case MigrationChoice::ImportLocal:
-            return SaveRegistryCollection(hive, path, local.text);
-        case MigrationChoice::CreateEmpty:
-            return SaveRegistryCollection(hive, path, L"NTD1\n");
-        case MigrationChoice::Refuse:
-            return false;
-    }
-    return false;
+bool SaveWindhawkCollection(std::wstring const& text) {
+    if (g_collectionStorageKey.empty() || !ValidStoredCollection(text) ||
+        !Wh_SetStringValue(g_collectionStorageKey.c_str(), text.c_str()))
+        return false;
+    // The valid string also identifies an initialized destination if a process
+    // exits before the marker write. Explicit-empty is the valid NTD1 record.
+    return Wh_SetIntValue(g_collectionReadyKey.c_str(), 1);
 }
 
 bool ReadCollection(std::vector<std::wstring>& keys) {
-    auto stored = ReadRegistryCollection(HKEY_CURRENT_USER, kUserCollectionPath);
+    auto stored = ReadWindhawkCollection();
     return stored.state == RecordState::Present && ParseCollectionRecord(stored.text, keys);
 }
 
 bool WriteCollection(std::vector<std::wstring> const& keys) {
+    auto current = ReadWindhawkCollection();
+    // Only the explicit restore/reset command may replace an invalid record.
+    if (current.state == RecordState::Error && !keys.empty())
+        return false;
+    if (current.state == RecordState::Error && !current.text.empty()) {
+        auto backup = g_collectionStorageKey + L".invalid-backup";
+        if (!Wh_SetStringValue(backup.c_str(), current.text.c_str()))
+            return false;
+    }
     std::wstring text;
-    return SerializeCollectionRecord(keys, text) &&
-           SaveRegistryCollection(HKEY_CURRENT_USER, kUserCollectionPath, text);
+    return SerializeCollectionRecord(keys, text) && SaveWindhawkCollection(text);
 }
 // END COLLECTION STORAGE
+
+bool InitializeStorageNames() {
+    HANDLE token{};
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return false;
+    DWORD bytes{};
+    GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
+    std::vector<BYTE> buffer(bytes);
+    bool ok = bytes && GetTokenInformation(token, TokenUser, buffer.data(), bytes, &bytes);
+    CloseHandle(token);
+    if (!ok)
+        return false;
+    wchar_t* sid{};
+    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &sid))
+        return false;
+    g_collectionStorageKey = L"CollectionV2." + std::wstring(sid);
+    LocalFree(sid);
+    g_collectionReadyKey = g_collectionStorageKey + L".ready";
+    return true;
+}
 
 bool InitializeCollectionStorage() {
     CollectionLock lock;
     if (!lock.acquired)
         return false;
-    auto destination = ReadRegistryCollection(HKEY_CURRENT_USER, kUserCollectionPath);
-    if (destination.state != RecordState::Missing) {
-        if (destination.state == RecordState::Present)
-            return true;
-        Wh_Log(L"Existing user collection is invalid/unreadable; refusing to replace it");
-        return false;
+    auto destination = ReadWindhawkCollection();
+    // An established API record takes precedence, including a cleared record.
+    auto legacy =
+        destination.state == RecordState::Missing ? ReadLegacyCollection() : StoredCollection{};
+    auto choice = ChooseCollectionMigration(destination, legacy);
+    if (choice == MigrationChoice::Refuse) {
+        Wh_Log(
+            L"Saved collection invalid/unreadable; leaving icons visible. Use Reset saved collection to recover.");
+        return true;
     }
-    std::vector<wchar_t> buffer(kMaxCollectionChars + 1);
-    auto size = Wh_GetStringValue(kCollectionValue, buffer.data(), buffer.size());
-    StoredCollection own;
-    if (size)
-        own = {RecordState::Present, std::wstring(buffer.data(), size)};
-    StoredCollection local;
-    // Read only this mod's old namespace. Portable users can bootstrap by
-    // updating their local copy first, whose own Wh_GetStringValue works there.
-    if (own.state == RecordState::Missing)
-        local = ReadRegistryCollection(HKEY_LOCAL_MACHINE, kLegacyLocalStoragePath);
-    MigrationChoice choice;
-    if (!BootstrapCollectionAt(HKEY_CURRENT_USER, kUserCollectionPath, own, local, choice)) {
-        Wh_Log(L"Could not migrate collection; original Windhawk records left untouched");
-        return false;
-    }
-    auto confirmed = ReadRegistryCollection(HKEY_CURRENT_USER, kUserCollectionPath);
-    if (confirmed.state != RecordState::Present)
-        return false;
-    std::vector<std::wstring> keys;
-    if (!ParseCollectionRecord(confirmed.text, keys))
-        return false;
-    Wh_Log(L"User collection ready: migration=%d entries=%zu", static_cast<int>(choice),
-           keys.size());
-    return true;
+    if (choice == MigrationChoice::KeepDestination)
+        return true;
+    bool saved =
+        SaveWindhawkCollection(legacy.state == RecordState::Present ? legacy.text : L"NTD1\n");
+    std::vector<std::wstring> confirmed;
+    bool verified = saved && ReadCollection(confirmed);
+    Wh_Log(L"Windhawk per-user storage initialized: source=%d success=%d entries=%zu",
+           static_cast<int>(choice), verified, confirmed.size());
+    return verified;
 }
 
-IInspectable NativeObjectProperty(IInspectable const& object, winrt::guid const& iid, size_t slot) {
-    if (!object)
+void ExportDevelopmentHandoff() {
+    // A development-only, one-way handoff. Catalog builds never write a custom
+    // registry store or read another mod's Windhawk namespace. Keep the legacy
+    // backup untouched unless a valid current local record can replace it.
+    if constexpr (kDevelopmentBuild) {
+        CollectionLock lock;
+        if (!lock.acquired)
+            return;
+        auto stored = ReadWindhawkCollection();
+        if (stored.state != RecordState::Present)
+            return;
+        HKEY key{};
+        auto error = RegCreateKeyExW(HKEY_CURRENT_USER, kUserCollectionPath, 0, nullptr, 0,
+                                     KEY_SET_VALUE, nullptr, &key, nullptr);
+        if (error == ERROR_SUCCESS) {
+            error = RegSetValueExW(key, kCollectionValue, 0, REG_SZ,
+                                   reinterpret_cast<const BYTE*>(stored.text.c_str()),
+                                   static_cast<DWORD>((stored.text.size() + 1) * sizeof(wchar_t)));
+            RegCloseKey(key);
+        }
+        Wh_Log(L"Development-to-catalog collection handoff exported: %d", error == ERROR_SUCCESS);
+    }
+}
+
+// Symbol-based internal interface access follows System Tray Folders (Ris Peng,
+// GPLv3). Never call an implementation getter on an unverified COM interface.
+using ObjectGetter = HRESULT(WINAPI*)(void*, void**);
+GUID *g_viewIid, *g_configIid, *g_modelIid, *g_nativeIconIid;
+void *g_viewVtable, *g_configVtable, *g_modelVtable, *g_nativeIconVtable;
+ObjectGetter g_getConfiguration, g_getDataModel, g_getUdkObject;
+void *g_nativeIdentityGetter, *g_nativeIdentityCopy, *g_nativeQueryInterface;
+std::atomic<int> g_identityState;
+ptrdiff_t g_nativeThisAdjustment;
+size_t g_nativeIdentityOffset;
+
+IInspectable NativeObjectProperty(IInspectable const& object,
+                                  GUID const* iid,
+                                  void* expectedVtable,
+                                  ObjectGetter getter) {
+    if (!object || !iid || !expectedVtable || !getter)
         return nullptr;
     winrt::com_ptr<IUnknown> iface;
     if (FAILED(reinterpret_cast<IUnknown*>(winrt::get_abi(object))
-                   ->QueryInterface(reinterpret_cast<GUID const&>(iid), iface.put_void())))
+                   ->QueryInterface(*iid, iface.put_void())) ||
+        *reinterpret_cast<void**>(iface.get()) != expectedVtable)
         return nullptr;
-    auto table = *reinterpret_cast<void***>(iface.get());
-    using Getter = HRESULT(WINAPI*)(void*, void**);
     IInspectable result{nullptr};
-    winrt::check_hresult(
-        reinterpret_cast<Getter>(table[slot])(iface.get(), winrt::put_abi(result)));
+    winrt::check_hresult(getter(iface.get(), winrt::put_abi(result)));
     return result;
+}
+
+// BEGIN IDENTITY ACCESSOR
+// UDK's WinRT icon interfaces expose input and presentation, not its persistent
+// identity. Identity() returns a native MSVC object containing an owning string;
+// calling it as a MinGW C++ struct would be ABI-unsafe. On x64 recognize its
+// small, symbol-resolved accessor and copy constructor instead. Derive both
+// object adjustments from instructions, and reject every unfamiliar encoding.
+// No Windows build number, absolute address or private object offset is assumed.
+bool DecodeIdentityAccessor(const BYTE* query,
+                            const BYTE* getter,
+                            const BYTE* copy,
+                            ptrdiff_t& adjustment,
+                            size_t& identityOffset) {
+    const BYTE queryHead[] = {0x48, 0x8d, 0x41};  // lea rax,[rcx+signed byte]
+    const BYTE queryTail[] = {0x48, 0xf7, 0xd9, 0x48, 0x1b, 0xc9, 0x48, 0x23, 0xc8, 0xe9};
+    const BYTE getterHead[] = {0x40, 0x53, 0x48, 0x83, 0xec, 0x30,
+                               0x48, 0x8b, 0xda, 0x48, 0x8d, 0x51};
+    const BYTE getterCall[] = {0x48, 0x8b, 0xcb, 0xe8};
+    const BYTE getterTail[] = {0x48, 0x8b, 0xc3, 0x48, 0x83, 0xc4, 0x30, 0x5b, 0xc3};
+    // Verifies that the returned native identity starts with HWND, UINT, GUID.
+    const BYTE copyHead[] = {0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x02, 0x48, 0x8b, 0xd9,
+                             0x48, 0x89, 0x01, 0x8b, 0x42, 0x08, 0x89, 0x41, 0x08, 0x0f, 0x10, 0x42,
+                             0x0c, 0x48, 0x83, 0xc2, 0x20, 0xf3, 0x0f, 0x7f, 0x41, 0x0c};
+    if (memcmp(query, queryHead, sizeof(queryHead)) ||
+        memcmp(query + 4, queryTail, sizeof(queryTail)) ||
+        memcmp(getter, getterHead, sizeof(getterHead)) ||
+        memcmp(getter + 13, getterCall, sizeof(getterCall)) ||
+        memcmp(getter + 21, getterTail, sizeof(getterTail)) ||
+        memcmp(copy, copyHead, sizeof(copyHead)))
+        return false;
+    int32_t relative;
+    memcpy(&relative, getter + 17, sizeof(relative));
+    if (getter + 21 + relative != copy)
+        return false;
+    adjustment = static_cast<int8_t>(query[3]);
+    identityOffset = getter[12];
+    return adjustment < 0 && adjustment >= -128 && identityOffset >= sizeof(void*) &&
+           identityOffset < 128;
+}
+// END IDENTITY ACCESSOR
+
+bool ResolveNativeIdentity(HMODULE module) {
+    int expected = 0;
+    if (!g_identityState.compare_exchange_strong(expected, 1))
+        return g_identityState == 2;
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK identityHooks[] = {
+        {{LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::WindowsUdk::UI::Shell::INotificationAreaIcon>)"},
+         &g_nativeIconIid},
+        {{LR"(const winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::NotificationAreaIcon2,struct winrt::WindowsUdk::UI::Shell::INotificationAreaIcon>::`vftable')"},
+         &g_nativeIconVtable},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce_base<struct winrt::WindowsUdk::UI::Shell::implementation::NotificationAreaIcon2,struct winrt::WindowsUdk::UI::Shell::INotificationAreaIcon,void>::QueryInterface(struct winrt::guid const &,void * *))"},
+         &g_nativeQueryInterface},
+        {{LR"(public: struct NotificationAreaIconIdentity __cdecl winrt::WindowsUdk::UI::Shell::implementation::NotificationAreaIcon2::Identity(void)const)",
+          LR"(public: struct NotificationAreaIconIdentity __cdecl winrt::WindowsUdk::UI::Shell::implementation::NotificationAreaIcon2::Identity(void)const )"},
+         &g_nativeIdentityGetter},
+        {{LR"(public: __cdecl NotificationAreaIconIdentity::NotificationAreaIconIdentity(struct NotificationAreaIconIdentity const &))"},
+         &g_nativeIdentityCopy},
+    };
+    bool ok = WindhawkUtils::HookSymbols(module, identityHooks, ARRAYSIZE(identityHooks));
+    if (ok) {
+        // All three addresses are verified symbol addresses in this loaded DLL.
+        ok = DecodeIdentityAccessor(static_cast<const BYTE*>(g_nativeQueryInterface),
+                                    static_cast<const BYTE*>(g_nativeIdentityGetter),
+                                    static_cast<const BYTE*>(g_nativeIdentityCopy),
+                                    g_nativeThisAdjustment, g_nativeIdentityOffset);
+    }
+    g_identityState = ok ? 2 : 3;
+    Wh_Log(L"Native identity symbols and x64 accessor validation: %d", ok);
+    return ok;
 }
 
 std::wstring GuidCollectionKey(GUID const& guid) {
@@ -544,70 +657,52 @@ std::wstring GuidCollectionKey(GUID const& guid) {
 }
 
 std::wstring StableIconKey(IInspectable const& model) {
-    // Exact local IIDs/slots and the settings-ID field were verified from the
-    // matching public PDBs and binary. Never apply this layout to another build.
-    constexpr winrt::guid viewIid{
-        0x916b7ac1, 0xb2ac, 0x52b1, {0xa2, 0xc1, 0xd2, 0x22, 0xf8, 0xab, 0x28, 0x99}};
-    constexpr winrt::guid configIid{
-        0x009ef3d8, 0x9cc1, 0x5550, {0xba, 0xe5, 0x98, 0xdc, 0x72, 0x68, 0x5d, 0x18}};
-    constexpr winrt::guid modelIid{
-        0x9ad44317, 0xfbb6, 0x5376, {0xa1, 0x4e, 0x2b, 0xb4, 0xfa, 0x66, 0xc7, 0x65}};
-    constexpr GUID iconIid{
-        0x6130d2bf, 0x470d, 0x5859, {0xa5, 0xaf, 0x95, 0x17, 0xeb, 0x7d, 0x37, 0xe7}};
-    auto taskbar = GetModuleHandleW(L"taskbar.dll");
-    if (!taskbar)
+    if (g_identityState != 2)
         return {};
-    auto base = reinterpret_cast<const BYTE*>(taskbar);
-    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->FileHeader.TimeDateStamp != 0x10195dd3 || nt->OptionalHeader.SizeOfImage != 0x3b6000)
-        return {};
-    auto config = NativeObjectProperty(model, viewIid, 6);
-    auto dataModel = NativeObjectProperty(config, configIid, 6);
-    auto icon = NativeObjectProperty(dataModel, modelIid, 6);
+    auto config = NativeObjectProperty(model, g_viewIid, g_viewVtable, g_getConfiguration);
+    auto dataModel = NativeObjectProperty(config, g_configIid, g_configVtable, g_getDataModel);
+    auto icon = NativeObjectProperty(dataModel, g_modelIid, g_modelVtable, g_getUdkObject);
     if (!icon)
         return {};
     winrt::com_ptr<IUnknown> native;
     if (FAILED(reinterpret_cast<IUnknown*>(winrt::get_abi(icon))
-                   ->QueryInterface(iconIid, native.put_void())))
+                   ->QueryInterface(*g_nativeIconIid, native.put_void())) ||
+        *reinterpret_cast<void**>(native.get()) != g_nativeIconVtable ||
+        (*reinterpret_cast<void***>(native.get()))[0] != g_nativeQueryInterface)
         return {};
-    if (*reinterpret_cast<void**>(native.get()) != base + 0x26f068)
-        return {};
-    struct IdentityFields {
+    struct IdentityPrefix {
+        HWND owner;
         uint32_t uid;
         GUID guid;
     } fields{};
-    static_assert(sizeof(IdentityFields) == 20);
-    std::uint64_t settingsId{};
+    static_assert(offsetof(IdentityPrefix, uid) == 8 && offsetof(IdentityPrefix, guid) == 12);
     SIZE_T copied{};
-    auto object = reinterpret_cast<const BYTE*>(native.get());
-    if (!ReadProcessMemory(GetCurrentProcess(), object + 64, &fields, sizeof(fields), &copied) ||
-        copied != sizeof(fields) ||
-        !ReadProcessMemory(GetCurrentProcess(), object + 152, &settingsId, sizeof(settingsId),
-                           &copied) ||
-        copied != sizeof(settingsId))
+    auto address = reinterpret_cast<const BYTE*>(native.get()) + g_nativeThisAdjustment +
+                   g_nativeIdentityOffset;
+    if (!ReadProcessMemory(GetCurrentProcess(), address, &fields, sizeof(fields), &copied) ||
+        copied != sizeof(fields))
         return {};
     if (auto key = GuidCollectionKey(fields.guid); !key.empty())
         return key;
-    auto subkey = L"Control Panel\\NotifyIconSettings\\" + std::to_wstring(settingsId);
-    DWORD uid{}, size = sizeof(uid);
-    if (RegGetValueW(HKEY_CURRENT_USER, subkey.c_str(), L"UID", RRF_RT_REG_DWORD, nullptr, &uid,
-                     &size) != ERROR_SUCCESS ||
-        uid != fields.uid)
+    // Query the owning process through the documented API. No registry settings
+    // ID field or guessed application-name matching is needed.
+    DWORD processId{};
+    if (!fields.owner || !GetWindowThreadProcessId(fields.owner, &processId) || !processId)
+        return {};
+    std::unique_ptr<void, decltype(&CloseHandle)> process(
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId), CloseHandle);
+    if (!process)
         return {};
     wchar_t path[4097]{};
-    size = sizeof(path);
-    if (RegGetValueW(HKEY_CURRENT_USER, subkey.c_str(), L"ExecutablePath",
-                     RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, path, &size) != ERROR_SUCCESS)
-        return {};
-    auto length = wcsnlen(path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path))
+    DWORD length = ARRAYSIZE(path);
+    if (!QueryFullProcessImageNameW(process.get(), 0, path, &length) || !length ||
+        length >= ARRAYSIZE(path))
         return {};
     std::wstring lower(length, L'\0');
     if (!LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, path, static_cast<int>(length),
                        lower.data(), static_cast<int>(lower.size()), nullptr, nullptr, 0))
         return {};
-    return PathCollectionKey(lower, uid);
+    return PathCollectionKey(lower, fields.uid);
 }
 
 // BEGIN CHEVRON DROP POLICY
@@ -673,11 +768,14 @@ struct DrawerState {
     ItemsControl innerItems{nullptr};
     ItemsControl sourceMirror{nullptr};
     Controls::MenuFlyout picker{nullptr};
+    winrt::Windows::Foundation::Collections::IObservableVector<IInspectable> observedSource{
+        nullptr};
+    Controls::MenuFlyoutItem restoreCommand{nullptr};
+    winrt::event_token restoreClick{};
     std::vector<IInspectable> selectedModels;
     std::vector<IInspectable> sourceSnapshot;
     IInspectable expectedSource{nullptr};
-    int64_t sourcePropertyToken{};
-    bool sourcePropertyRegistered{};
+    winrt::event_token sourceLayout{};
     bool partitioned{};
     bool refreshQueued{};
     bool refreshDeferred{};
@@ -719,9 +817,13 @@ using NativeDismiss_t = void(WINAPI*)(void*);
 NativeDismiss_t LightDismissConditions_Original;
 NativeDismiss_t HideAnimation_Original;
 
-void ResetMenuHold(DrawerState& state) {
-    if (state.menuTimer)
-        state.menuTimer.Stop();
+void ResetMenuHold(DrawerState& state) noexcept {
+    try {
+        if (state.menuTimer)
+            state.menuTimer.Stop();
+    } catch (...) {
+        LogException(L"Stop menu hold timer");
+    }
     state.menuHold.Reset();
     state.deferredNativeDismiss = false;
 }
@@ -780,13 +882,14 @@ void RestoreSelected(DrawerState& state, bool restoreBinding = true) {
     state.innerItems.ItemsSource(nullptr);
     state.innerItems.UpdateLayout();
     if (state.sourceMirror && state.itemsChanged.value) {
-        state.sourceMirror.Items().VectorChanged(state.itemsChanged);
+        state.observedSource.VectorChanged(state.itemsChanged);
         state.itemsChanged = {};
     }
     if (restoreBinding)
         state.originalItemsSource->Restore();
     state.nativeItems.UpdateLayout();
     state.originalItemsSource.reset();
+    state.observedSource = nullptr;
     state.sourceMirror = nullptr;
     state.selectedModels.clear();
     state.sourceSnapshot.clear();
@@ -880,12 +983,15 @@ bool TrackNativeSource(DrawerState& state) {
     state.sourceMirror = ItemsControl();
     state.sourceMirror.ItemsSource(source);
     state.expectedSource = source;
-    state.itemsChanged =
-        state.sourceMirror.Items().VectorChanged([](auto const&, auto const&) noexcept {
-            if (g_unloading || !g_runtimeAvailable)
-                return;
-            QueueCollectionRefresh();
-        });
+    state.observedSource =
+        state.sourceMirror.Items()
+            .as<winrt::Windows::Foundation::Collections::IObservableVector<IInspectable>>();
+    state.itemsChanged = state.observedSource.VectorChanged([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
+        if (g_unloading || !g_runtimeAvailable)
+            return;
+        QueueCollectionRefresh();
+    });
     return true;
 }
 
@@ -1025,13 +1131,21 @@ void ShowRestoreMenu() {
     if (!g_drawer || g_unloading)
         return;
     auto& state = *g_drawer;
+    if (state.restoreCommand && state.restoreClick.value)
+        state.restoreCommand.Click(state.restoreClick);
+    state.restoreClick = {};
+    state.restoreCommand = nullptr;
     state.picker.Items().Clear();
 
     auto restore = Controls::MenuFlyoutItem();
-    restore.Text(Text(L"Restore all collected icons", L"还原全部收纳图标"));
     std::vector<std::wstring> saved;
-    restore.IsEnabled(!ReadCollection(saved) || !saved.empty());
-    restore.Click([](auto const&, auto const&) noexcept {
+    bool healthy = ReadCollection(saved);
+    restore.Text(healthy ? Text(L"Restore all collected icons", L"还原全部收纳图标")
+                         : Text(L"Reset saved collection", L"重置收纳记录"));
+    restore.IsEnabled(!healthy || !saved.empty());
+    state.restoreCommand = restore;
+    state.restoreClick = restore.Click([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable)
             return;
         try {
@@ -1054,15 +1168,27 @@ void ShowRestoreMenu() {
     state.picker.ShowAt(state.chevron);
 }
 
-void RemoveDrawer() {
+// BEGIN CLEANUP STEP
+template <typename F>
+bool CleanupStep(PCWSTR operation, F&& action) noexcept {
+    try {
+        action();
+        return true;
+    } catch (...) {
+        LogException(operation);
+        return false;
+    }
+}
+// END CLEANUP STEP
+
+void RemoveDrawer() noexcept {
     if (!g_drawer)
         return;
     auto& state = *g_drawer;
     state.closing = true;
-    ResetMenuHold(state);
-    state.picker.Hide();
-    state.inner.Hide();
-    RestoreSelected(state);
+    state.changing = true;
+    // Event removers are noexcept in C++/WinRT. Revoke before operations that
+    // can pump XAML events, including Hide(), bindings and visual-tree edits.
     if (state.click.value)
         state.chevron.Click(state.click);
     if (state.rightTap.value)
@@ -1087,20 +1213,62 @@ void RemoveDrawer() {
         state.root.ActualThemeChanged(state.appearanceChanged);
     if (state.innerLayout.value)
         state.innerItems.LayoutUpdated(state.innerLayout);
-    if (state.sourcePropertyRegistered)
-        state.nativeItems.UnregisterPropertyChangedCallback(ItemsControl::ItemsSourceProperty(),
-                                                            state.sourcePropertyToken);
-    uint32_t index;
-    if (state.root.Children().IndexOf(state.footer, index))
-        state.root.Children().RemoveAt(index);
+    if (state.sourceLayout.value)
+        state.nativeItems.LayoutUpdated(state.sourceLayout);
+    if (state.restoreCommand && state.restoreClick.value)
+        state.restoreCommand.Click(state.restoreClick);
+    CleanupStep(L"Revoke native source observer", [&] {
+        if (state.sourceMirror && state.itemsChanged.value)
+            state.observedSource.VectorChanged(state.itemsChanged);
+    });
+    CleanupStep(L"Stop menu timer", [&] {
+        if (state.menuTimer)
+            state.menuTimer.Stop();
+    });
+    state.menuHold.Reset();
+    CleanupStep(L"Hide restore menu", [&] {
+        if (state.picker)
+            state.picker.Hide();
+    });
+    CleanupStep(L"Hide inner drawer", [&] {
+        if (state.inner)
+            state.inner.Hide();
+    });
+    // Detach inner views first. An unrelated cleanup failure must never skip
+    // restoration of the original native ItemsSource/binding.
+    CleanupStep(L"Detach inner icons", [&] {
+        if (state.innerItems) {
+            state.innerItems.ItemsSource(nullptr);
+            state.innerItems.UpdateLayout();
+        }
+    });
+    CleanupStep(L"Restore native source", [&] {
+        if (state.originalItemsSource)
+            state.originalItemsSource->Restore();
+    });
+    CleanupStep(L"Refresh native layout", [&] { state.nativeItems.UpdateLayout(); });
+    CleanupStep(L"Remove drawer footer", [&] {
+        uint32_t index;
+        if (state.footer && state.root.Children().IndexOf(state.footer, index))
+            state.root.Children().RemoveAt(index);
+    });
     for (auto it = state.rootProperties.rbegin(); it != state.rootProperties.rend(); ++it)
-        it->Restore();
-    while (state.root.RowDefinitions().Size() > state.originalRowCount)
-        state.root.RowDefinitions().RemoveAtEnd();
-    state.picker.Items().Clear();
-    state.inner.Content(nullptr);
+        CleanupStep(L"Restore native layout property", [&] { it->Restore(); });
+    CleanupStep(L"Restore native grid rows", [&] {
+        while (state.root.RowDefinitions().Size() > state.originalRowCount)
+            state.root.RowDefinitions().RemoveAtEnd();
+    });
+    CleanupStep(L"Clear restore menu", [&] {
+        if (state.picker)
+            state.picker.Items().Clear();
+    });
+    CleanupStep(L"Detach inner content", [&] {
+        if (state.inner)
+            state.inner.Content(nullptr);
+    });
     g_drawer.reset();
-    Wh_Log(L"Prototype controls removed on owning UI thread");
+    g_hasDrawer = false;
+    Wh_Log(L"Drawer callbacks revoked and native presentation restored on owning UI thread");
 }
 
 void UpdateDrawerAppearance(DrawerState& state) {
@@ -1150,7 +1318,8 @@ Controls::Border CreateDrawerFooter() {
 }
 
 void InstallDrawer(Grid const& root) {
-    if (g_unloading || !g_enabled || !root || root.Name() != L"OverflowRootGrid")
+    if (g_unloading || !g_enabled || g_identityState != 2 || !root ||
+        root.Name() != L"OverflowRootGrid")
         return;
     if (g_drawer && g_drawer->root == root)
         return;
@@ -1205,6 +1374,7 @@ void InstallDrawer(Grid const& root) {
     state->inner.Content(state->innerItems);
 
     g_drawer = std::move(state);
+    g_hasDrawer = true;
     auto& current = *g_drawer;
     struct InstallRollback {
         bool committed{};
@@ -1235,6 +1405,7 @@ void InstallDrawer(Grid const& root) {
             Grid::SetRowSpan(element, 2);
     }
     current.click = current.chevron.Click([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         try {
             if (!g_drawer || g_unloading)
                 return;
@@ -1257,6 +1428,7 @@ void InstallDrawer(Grid const& root) {
     });
     current.rightTap = current.chevron.RightTapped(
         [](auto const&, Input::RightTappedRoutedEventArgs const& args) noexcept {
+            UiCallbackScope callbackScope;
             try {
                 args.Handled(true);
                 ShowRestoreMenu();
@@ -1265,18 +1437,18 @@ void InstallDrawer(Grid const& root) {
             }
         });
     current.opened = current.inner.Opened([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable)
             return;
         if (g_drawer) {
             g_drawer->open = true;
-            Wh_Log(
-                L"Inner opened: constrained=%d outerWindowVisible=%d; native dismissal unchanged",
-                g_drawer->inner.IsConstrainedToRootBounds(),
-                IsWindowVisible(g_drawer->outerWindow));
+            Wh_Log(L"Inner drawer opened; outerWindowVisible=%d",
+                   IsWindowVisible(g_drawer->outerWindow));
         }
     });
     current.innerClosing = current.inner.Closing(
         [](auto const&, Controls::Primitives::FlyoutBaseClosingEventArgs const& args) noexcept {
+            UiCallbackScope callbackScope;
             if (g_unloading || !g_runtimeAvailable)
                 return;
             try {
@@ -1290,6 +1462,7 @@ void InstallDrawer(Grid const& root) {
         });
     current.previewKey = current.innerItems.PreviewKeyDown(
         [](auto const&, Input::KeyRoutedEventArgs const& args) noexcept {
+            UiCallbackScope callbackScope;
             if (g_unloading || !g_runtimeAvailable)
                 return;
             try {
@@ -1302,6 +1475,7 @@ void InstallDrawer(Grid const& root) {
             }
         });
     current.menuTick = current.menuTimer.Tick([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable || !g_drawer)
             return;
         try {
@@ -1322,6 +1496,7 @@ void InstallDrawer(Grid const& root) {
         }
     });
     current.innerLayout = current.innerItems.LayoutUpdated([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable || !g_drawer || !g_drawer->open ||
             g_drawer->layoutReports >= 3)
             return;
@@ -1342,6 +1517,7 @@ void InstallDrawer(Grid const& root) {
         }
     });
     current.closed = current.inner.Closed([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable)
             return;
         if (g_drawer) {
@@ -1351,12 +1527,14 @@ void InstallDrawer(Grid const& root) {
         Wh_Log(L"Inner drawer closed through native Flyout lifecycle");
     });
     current.loaded = root.Loaded([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable)
             return;
         Wh_Log(L"Native outer drawer loaded");
         QueueCollectionRefresh();
     });
     current.unloaded = root.Unloaded([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable)
             return;
         try {
@@ -1371,6 +1549,7 @@ void InstallDrawer(Grid const& root) {
         }
     });
     current.footerLoaded = current.footer.Loaded([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (g_unloading || !g_runtimeAvailable || !g_drawer)
             return;
         try {
@@ -1384,6 +1563,7 @@ void InstallDrawer(Grid const& root) {
         }
     });
     current.appearanceChanged = root.ActualThemeChanged([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
         if (!g_unloading && g_runtimeAvailable)
             PostMessageW(g_uiWindow, kRefreshAppearanceMessage, 0, 0);
     });
@@ -1391,25 +1571,39 @@ void InstallDrawer(Grid const& root) {
     // High contrast is sampled when the footer loads and on UI theme changes.
     UpdateDrawerAppearance(current);
     root.Children().Append(current.footer);
-    current.sourcePropertyToken = current.nativeItems.RegisterPropertyChangedCallback(
-        ItemsControl::ItemsSourceProperty(), [](auto const&, auto const&) noexcept {
-            if (g_drawer && !g_drawer->changing && !g_drawer->closing)
-                QueueCollectionRefresh();
-        });
-    current.sourcePropertyRegistered = true;
+    // A normal revocable event avoids a throwing property-callback removal.
+    // The mirrored collection still handles icon additions/removals directly.
+    current.sourceLayout = current.nativeItems.LayoutUpdated([](auto const&, auto const&) noexcept {
+        UiCallbackScope callbackScope;
+        if (!g_unloading && g_runtimeAvailable && g_drawer && !g_drawer->changing &&
+            !g_drawer->closing) {
+            try {
+                if (g_drawer->originalItemsSource &&
+                    g_drawer->nativeItems.ItemsSource() != g_drawer->expectedSource)
+                    QueueCollectionRefresh();
+            } catch (...) {
+                LogException(L"Observe native source replacement");
+            }
+        }
+    });
     QueueCollectionRefresh();
     rollback.committed = true;
-    Wh_Log(L"Nested tray prototype entry point attached");
+    Wh_Log(L"Nested tray drawer entry point attached");
 }
 
 using Initialize_t = void(WINAPI*)(void*);
 Initialize_t Initialize_Original;
 
-constexpr UINT kRemoveDrawerMessage = WM_APP + 0x731;
 constexpr WCHAR kUiClass[] = L"Windhawk_NestedTrayDrawer_0_1_0";
 HMODULE g_selfModule;
 
 LRESULT CALLBACK UiWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    // Normal messages can invoke app/XAML code and enter nested message loops.
+    // Cleanup messages deliberately stay outside this scope.
+    std::optional<UiCallbackScope> work;
+    if (message == kRefreshAppearanceMessage || message == kRefreshCollectionMessage ||
+        message == kCollectDroppedIconMessage)
+        work.emplace();
     if (message == kRefreshAppearanceMessage) {
         if (!g_unloading && g_runtimeAvailable && g_drawer && !g_drawer->closing) {
             try {
@@ -1451,13 +1645,19 @@ LRESULT CALLBACK UiWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM l
     if (message == kRemoveDrawerMessage) {
         if (!g_runtimeAvailable)
             return 0;
-        try {
-            RemoveDrawer();
-            return 1;
-        } catch (...) {
-            LogException(L"UI-thread cleanup");
+        if (g_uiCallbackDepth) {
+            g_cleanupPending = true;
             return 0;
         }
+        RemoveDrawer();
+        SetEvent(g_cleanupEvent);
+        return 1;
+    }
+    if (message == WM_NCDESTROY) {
+        RemoveDrawer();
+        HWND expected = window;
+        if (g_uiWindow.compare_exchange_strong(expected, nullptr))
+            g_uiThread = 0;
     }
     if (message == WM_CLOSE) {
         DestroyWindow(window);
@@ -1473,7 +1673,7 @@ bool RememberUiThread() {
     windowClass.lpfnWndProc = UiWindowProc;
     windowClass.hInstance = g_selfModule;
     windowClass.lpszClassName = kUiClass;
-    if (!RegisterClassW(&windowClass))
+    if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
         return false;
     auto window = CreateWindowExW(0, kUiClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                   g_selfModule, nullptr);
@@ -1481,18 +1681,31 @@ bool RememberUiThread() {
         UnregisterClassW(kUiClass, g_selfModule);
         return false;
     }
-    g_uiThread = GetCurrentThreadId();
+    auto threadHandle = OpenThread(SYNCHRONIZE, FALSE, GetCurrentThreadId());
+    if (!threadHandle) {
+        DestroyWindow(window);
+        UnregisterClassW(kUiClass, g_selfModule);
+        return false;
+    }
+    if (g_uiThreadHandle)
+        CloseHandle(g_uiThreadHandle);
+    g_uiThreadHandle = threadHandle;
     g_uiWindow = window;
+    g_uiThread = GetCurrentThreadId();
     return true;
 }
 
 void WINAPI Initialize_Hook(void* self) {
+    UiCallbackScope callbackScope;
     Initialize_Original(self);
+    AcquireSRWLockExclusive(&g_attachmentLock);
+    struct UnlockAttachment {
+        ~UnlockAttachment() { ReleaseSRWLockExclusive(&g_attachmentLock); }
+    } unlock;
     if (g_unloading || !g_enabled)
         return;
     try {
         // The composed root slot is taken from the official tray-spacing mod.
-        // This prototype requires the exact inspected module version below.
         Grid root{nullptr};
         auto unknown = reinterpret_cast<IUnknown**>(self)[5];
         if (!unknown ||
@@ -1514,6 +1727,7 @@ using Hide_t = void(WINAPI*)(void*);
 Hide_t Hide_Original;
 Hide_t HideWindow_Original;
 void WINAPI HideWindow_Hook(void* self) {
+    UiCallbackScope callbackScope;
     if (DeferNativeDismiss(self, L"HideWindow"))
         return;
     bool inspect = !g_unloading && g_uiThread == GetCurrentThreadId() && g_drawer;
@@ -1527,11 +1741,13 @@ void WINAPI HideWindow_Hook(void* self) {
 }
 
 void WINAPI LightDismissConditions_Hook(void* self) {
+    UiCallbackScope callbackScope;
     if (!DeferNativeDismiss(self, L"light-dismiss conditions"))
         LightDismissConditions_Original(self);
 }
 
 void WINAPI HideAnimation_Hook(void* self) {
+    UiCallbackScope callbackScope;
     if (!DeferNativeDismiss(self, L"hide animation"))
         HideAnimation_Original(self);
 }
@@ -1539,6 +1755,7 @@ void WINAPI HideAnimation_Hook(void* self) {
 using NotifyPointerPressed_t = void(WINAPI*)(void*, void* const*);
 NotifyPointerPressed_t NotifyPointerPressed_Original;
 void WINAPI NotifyPointerPressed_Hook(void* self, void* const* args) {
+    UiCallbackScope callbackScope;
     if (!g_unloading && g_runtimeAvailable && g_uiThread == GetCurrentThreadId() && g_drawer &&
         args && *args) {
         try {
@@ -1583,6 +1800,7 @@ NativeDrag_t DoDrop_Original;
 NativeDismiss_t EndDrag_Original;
 
 void WINAPI DragMove_Hook(void* manager, void* sourceView, void* const* args) {
+    UiCallbackScope callbackScope;
     DragMove_Original(manager, sourceView, args);
     if (g_unloading || !g_runtimeAvailable || g_uiThread != GetCurrentThreadId() || !g_drawer ||
         !args || !*args)
@@ -1603,6 +1821,7 @@ void WINAPI DragMove_Hook(void* manager, void* sourceView, void* const* args) {
 }
 
 void WINAPI EndDrag_Hook(void* manager) {
+    UiCallbackScope callbackScope;
     EndDrag_Original(manager);
     if (!g_unloading && g_runtimeAvailable && g_uiThread == GetCurrentThreadId() && g_drawer) {
         try {
@@ -1614,6 +1833,7 @@ void WINAPI EndDrag_Hook(void* manager) {
 }
 
 void WINAPI DoDrop_Hook(void* manager, void* sourceView, void* const* args) {
+    UiCallbackScope callbackScope;
     IconCandidate dropped;
     if (!g_unloading && g_enabled && g_runtimeAvailable && g_uiThread == GetCurrentThreadId() &&
         g_drawer && args && *args && IsWindow(g_uiWindow)) {
@@ -1643,6 +1863,7 @@ void WINAPI DoDrop_Hook(void* manager, void* sourceView, void* const* args) {
         Wh_Log(L"Native outer-icon drag released over nested chevron");
 }
 void WINAPI Hide_Hook(void* self) {
+    UiCallbackScope callbackScope;
     try {
         if (g_uiThread == GetCurrentThreadId() && g_drawer) {
             if (g_drawer->open)
@@ -1657,28 +1878,46 @@ void WINAPI Hide_Hook(void* self) {
     Hide_Original(self);
 }
 
-bool SupportedModule(HMODULE module) {
-    auto resource = FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
-    auto loaded = resource ? LoadResource(module, resource) : nullptr;
-    auto bytes = loaded ? LockResource(loaded) : nullptr;
-    VS_FIXEDFILEINFO* version{};
-    UINT size{};
-    return bytes && VerQueryValueW(bytes, L"\\", reinterpret_cast<void**>(&version), &size) &&
-           size >= sizeof(*version) && version->dwFileVersionMS == MAKELONG(4507, 2125) &&
-           version->dwFileVersionLS == MAKELONG(0, 10);
+HMODULE GetSystemTrayModuleHandle() {
+    if (auto module = GetModuleHandleW(L"SystemTray.dll"))
+        return module;
+    if (auto module = GetModuleHandleW(L"Taskbar.View.dll")) {
+        auto resource = FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+        auto loaded = resource ? LoadResource(module, resource) : nullptr;
+        auto bytes = loaded ? LockResource(loaded) : nullptr;
+        VS_FIXEDFILEINFO* version{};
+        UINT size{};
+        if (bytes && VerQueryValueW(bytes, L"\\", reinterpret_cast<void**>(&version), &size) &&
+            size >= sizeof(*version) && HIWORD(version->dwFileVersionMS) < 2604)
+            return module;
+    }
+    return GetModuleHandleW(L"ExplorerExtensions.dll");
 }
 
 bool HookTrayModule(HMODULE module) {
     int expected = 0;
     if (!g_hookState.compare_exchange_strong(expected, 1))
         return g_hookState == 2;
-    if (!SupportedModule(module)) {
-        Wh_Log(L"Unsupported Taskbar.View.dll version; prototype requires 2125.4507.10.0");
-        g_hookState = 3;
-        return false;
-    }
-    // Taskbar.View.dll
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::SystemTray::IIconViewModel>)"},
+         &g_viewIid},
+        {{LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::IconViewModel,struct winrt::SystemTray::IIconViewModel>::`vftable')"},
+         &g_viewVtable},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::IconViewModel,struct winrt::SystemTray::IIconViewModel>::get_Configuration(void * *))"},
+         &g_getConfiguration},
+        {{LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::SystemTray::IIconConfiguration>)"},
+         &g_configIid},
+        {{LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::IconConfiguration,struct winrt::SystemTray::IIconConfiguration>::`vftable')"},
+         &g_configVtable},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::IconConfiguration,struct winrt::SystemTray::IIconConfiguration>::get_DataModel(void * *))"},
+         &g_getDataModel},
+        {{LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::SystemTray::INotificationAreaIconsDataModel>)"},
+         &g_modelIid},
+        {{LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::NotificationAreaIconsDataModel,struct winrt::SystemTray::INotificationAreaIconsDataModel>::`vftable')"},
+         &g_modelVtable},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::NotificationAreaIconsDataModel,struct winrt::SystemTray::INotificationAreaIconsDataModel>::get_UDKObject(void * *))"},
+         &g_getUdkObject},
         {{LR"(private: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::InitializeIfNeeded(void))"},
          &Initialize_Original,
          Initialize_Hook},
@@ -1717,8 +1956,10 @@ using LoadLibrary_t = decltype(&LoadLibraryExW);
 LoadLibrary_t LoadLibrary_Original;
 HMODULE WINAPI LoadLibrary_Hook(LPCWSTR file, HANDLE handle, DWORD flags) {
     auto module = LoadLibrary_Original(file, handle, flags);
-    if (module && g_hookState == 0 && !g_unloading &&
-        GetModuleHandleW(L"Taskbar.View.dll") == module) {
+    if (module && !g_unloading && g_identityState == 0 &&
+        GetModuleHandleW(L"taskbar.dll") == module)
+        ResolveNativeIdentity(module);
+    if (module && g_hookState == 0 && !g_unloading && GetSystemTrayModuleHandle() == module) {
         if (HookTrayModule(module))
             Wh_ApplyHookOperations();
     }
@@ -1731,14 +1972,22 @@ bool RemoveOnUiThread() {
     DWORD thread = g_uiThread;
     HWND window = g_uiWindow;
     if (!thread)
-        return !g_drawer;
+        return !g_hasDrawer;
     if (thread == GetCurrentThreadId()) {
+        if (g_uiCallbackDepth)
+            return false;
         RemoveDrawer();
         return true;
     }
-    if (!IsWindow(window) || GetWindowThreadProcessId(window, nullptr) != thread)
-        return false;
-    return SendMessageW(window, kRemoveDrawerMessage, 0, 0) == 1;
+    // Posted work cannot interrupt an active delegate via SendMessage reentry.
+    // If a nested message loop dispatches it, UiCallbackScope posts it again
+    // only after the outermost callback has returned.
+    ResetEvent(g_cleanupEvent);
+    if (!PostMessageW(window, kRemoveDrawerMessage, 0, 0))
+        return !g_hasDrawer;
+    HANDLE waits[] = {g_cleanupEvent, g_uiThreadHandle};
+    auto result = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, INFINITE);
+    return result == WAIT_OBJECT_0 || (result == WAIT_OBJECT_0 + 1 && !g_hasDrawer);
 }
 
 BOOL Wh_ModInit() {
@@ -1754,13 +2003,21 @@ BOOL Wh_ModInit() {
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
             reinterpret_cast<LPCWSTR>(&UiWindowProc), &g_selfModule))
         return FALSE;
+    std::unique_ptr<void, decltype(&CloseHandle)> cleanupEvent(
+        CreateEventW(nullptr, TRUE, FALSE, nullptr), CloseHandle);
+    if (!cleanupEvent)
+        return FALSE;
     g_enabled = Wh_GetIntSetting(L"enabled") != 0;
     auto kernel = GetModuleHandleW(L"kernelbase.dll");
     auto load = reinterpret_cast<LoadLibrary_t>(GetProcAddress(kernel, "LoadLibraryExW"));
     if (!load || !WindhawkUtils::SetFunctionHook(load, LoadLibrary_Hook, &LoadLibrary_Original))
         return FALSE;
-    auto tray = GetModuleHandleW(L"Taskbar.View.dll");
+    if (auto native = GetModuleHandleW(L"taskbar.dll"); native && !ResolveNativeIdentity(native))
+        return FALSE;
+    auto tray = GetSystemTrayModuleHandle();
     if (tray && !HookTrayModule(tray))
+        return FALSE;
+    if (!InitializeStorageNames())
         return FALSE;
     g_collectionMutex =
         CreateMutexW(nullptr, FALSE, L"Local\\Windhawk.NestedTrayDrawer.Collection.v1");
@@ -1771,39 +2028,39 @@ BOOL Wh_ModInit() {
         g_collectionMutex = nullptr;
         return FALSE;
     }
+    g_cleanupEvent = cleanupEvent.release();
     g_instanceGuard = instance.release();
     Wh_Log(L"Experimental drawer initialized; open the hidden-icons drawer to attach");
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
+    if (g_identityState == 0) {
+        if (auto native = GetModuleHandleW(L"taskbar.dll"))
+            ResolveNativeIdentity(native);
+    }
     if (g_hookState == 0) {
-        auto tray = GetModuleHandleW(L"Taskbar.View.dll");
+        auto tray = GetSystemTrayModuleHandle();
         if (tray && HookTrayModule(tray))
             Wh_ApplyHookOperations();
     }
 }
 
 void Wh_ModBeforeUninit() {
+    AcquireSRWLockExclusive(&g_attachmentLock);
     g_unloading = true;
+    ReleaseSRWLockExclusive(&g_attachmentLock);
+    // The endpoint is created before attachment. Its WM_NCDESTROY also removes
+    // the drawer, so an absent endpoint never means a live orphaned drawer.
     bool ok = RemoveOnUiThread();
-    g_cleanupCompleted = ok;
-    if (ok) {
-        HWND window = g_uiWindow;
-        if (IsWindow(window))
-            SendMessageW(window, WM_CLOSE, 0, 0);
-        UnregisterClassW(kUiClass, g_selfModule);
-        g_uiWindow = nullptr;
-        g_uiThread = 0;
-    } else {
-        // A disconnected XAML dispatcher must not leave delegate code pointing
-        // into an unmapped DLL. Keep inert code resident on exceptional failure.
-        HMODULE pinned;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           reinterpret_cast<LPCWSTR>(&UiWindowProc), &pinned);
-        Wh_Log(L"Cleanup failed; inert prototype code retained until Explorer exits");
-    }
+    HWND window = g_uiWindow;
+    if (window)
+        SendMessageW(window, WM_CLOSE, 0, 0);
+    UnregisterClassW(kUiClass, g_selfModule);
+    g_uiWindow = nullptr;
+    g_uiThread = 0;
     Wh_Log(L"UI-thread cleanup completed: %d", ok);
+    CleanupStep(L"Export development handoff", [] { ExportDevelopmentHandoff(); });
     if (g_collectionMutex) {
         CloseHandle(g_collectionMutex);
         g_collectionMutex = nullptr;
@@ -1812,16 +2069,25 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    // Called after the engine removes hooks. A failed UI cleanup keeps the
-    // inert DLL and guard resident until process exit, blocking another copy.
-    if (g_cleanupCompleted && g_instanceGuard) {
+    // Hooks are removed by the engine before this callback.
+    if (g_uiThreadHandle) {
+        CloseHandle(g_uiThreadHandle);
+        g_uiThreadHandle = nullptr;
+    }
+    if (g_cleanupEvent) {
+        CloseHandle(g_cleanupEvent);
+        g_cleanupEvent = nullptr;
+    }
+    if (g_instanceGuard) {
         CloseHandle(g_instanceGuard);
         g_instanceGuard = nullptr;
     }
 }
 
 void Wh_ModSettingsChanged() {
+    AcquireSRWLockExclusive(&g_attachmentLock);
     g_enabled = Wh_GetIntSetting(L"enabled") != 0;
+    ReleaseSRWLockExclusive(&g_attachmentLock);
     if (!g_enabled)
         RemoveOnUiThread();
 }
