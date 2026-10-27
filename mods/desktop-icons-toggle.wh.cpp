@@ -2,7 +2,7 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons with a tray button or Ctrl+Alt+H
-// @version         1.0.1
+// @version         1.0.2
 // @author          merpzzz
 // @github          https://github.com/merpzzz
 // @include         windhawk.exe
@@ -21,7 +21,9 @@ tray icon for explicit **Show** and **Hide** actions.
 
 Unlike broad keyboard automation or desktop double-click/automatic-hide mods,
 this one focuses on a dedicated, always-available tray control with an optional
-keyboard shortcut and an explicit Show/Hide menu.
+keyboard shortcut and an explicit Show/Hide menu. The hotkey can be changed
+in Windhawk's Settings tab (default **Ctrl+Alt+H**); set it to **None** to
+use the tray button alone.
 
 ## Saved Windows setting and recovery
 
@@ -46,15 +48,26 @@ Initial target: Windows 11. Windows Explorer internals may change.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- hotkey: Ctrl+Alt+H
+  $name: Toggle hotkey
+  $description: "Examples: Ctrl+Alt+H, Ctrl+Shift+K, Alt+Shift+F8, Ctrl+Alt+1. Enter None to disable the hotkey. If the default is occupied, Ctrl+Alt+F12 is tried."
+*/
+// ==/WindhawkModSettings==
+
 #include <windows.h>
 #include <shellapi.h>
 #include <cwchar>
 #include <atomic>
 #include <cstdlib>
+#include <string>
+#include <cwctype>
 
 namespace {
 constexpr wchar_t kClass[] = L"Merpzzz.DesktopIconsToggle.Tray";
 constexpr UINT kTray = WM_APP + 1;
+constexpr UINT kRebind = WM_APP + 2;
 constexpr UINT_PTR kRefresh = 1;
 HANDLE stopEvent = nullptr;
 HANDLE worker = nullptr;
@@ -68,7 +81,7 @@ bool recoveryChecked = false;
 constexpr wchar_t kRecoveryPending[] = L"recoveryPending";
 constexpr wchar_t kRecoveryOriginal[] = L"recoveryOriginal";
 constexpr wchar_t kRecoveryApplied[] = L"recoveryApplied";
-const wchar_t* shortcut = L"Tray button only";
+std::wstring shortcut = L"Tray button only";
 HICON shownIcon = nullptr, hiddenIcon = nullptr;
 
 // Win32 enumeration requires CALLBACK (__stdcall on 32-bit Windows).
@@ -199,6 +212,102 @@ HICON MakeIcon(bool hidden) {
     return icon;
 }
 
+// Parse Ctrl/Alt/Shift/Win plus one A-Z, 0-9 or F1-F12 key.
+// Reject empty, duplicate, modifier-only, and unknown combinations.
+bool ParseShortcut(const std::wstring& source, UINT& modifiers,
+                   UINT& key, std::wstring& label) {
+    std::wstring value;
+    for (wchar_t ch : source) {
+        if (!std::iswspace(ch))
+            value.push_back(static_cast<wchar_t>(std::towupper(ch)));
+    }
+    modifiers = 0;
+    key = 0;
+    size_t start = 0;
+    while (start < value.size()) {
+        size_t end = value.find(L'+', start);
+        if (end == std::wstring::npos) end = value.size();
+        std::wstring token = value.substr(start, end - start);
+        if (token.empty()) return false;
+        UINT mod = 0;
+        if (token == L"CTRL" || token == L"CONTROL") mod = MOD_CONTROL;
+        else if (token == L"ALT") mod = MOD_ALT;
+        else if (token == L"SHIFT") mod = MOD_SHIFT;
+        else if (token == L"WIN" || token == L"WINDOWS") mod = MOD_WIN;
+        if (mod) {
+            if (key || (modifiers & mod)) return false;
+            modifiers |= mod;
+        } else {
+            if (key || end != value.size() || modifiers == 0) return false;
+            if (token.size() == 1 &&
+                ((token[0] >= L'A' && token[0] <= L'Z') ||
+                 (token[0] >= L'0' && token[0] <= L'9'))) {
+                key = token[0];
+            } else if (token.size() >= 2 && token[0] == L'F') {
+                int number = 0;
+                for (size_t i = 1; i < token.size(); i++) {
+                    if (token[i] < L'0' || token[i] > L'9') return false;
+                    number = number * 10 + token[i] - L'0';
+                    if (number > 12) return false;
+                }
+                if (number < 1) return false;
+                key = VK_F1 + number - 1;
+            } else {
+                return false;
+            }
+        }
+        if (end == value.size()) break;
+        start = end + 1;
+    }
+    if (!key || !(modifiers & (MOD_ALT | MOD_CONTROL | MOD_WIN)))
+        return false;
+    label.clear();
+    if (modifiers & MOD_CONTROL) label += L"Ctrl+";
+    if (modifiers & MOD_ALT) label += L"Alt+";
+    if (modifiers & MOD_SHIFT) label += L"Shift+";
+    if (modifiers & MOD_WIN) label += L"Win+";
+    if (key >= VK_F1 && key <= VK_F12) {
+        label += L"F" + std::to_wstring(key - VK_F1 + 1);
+    } else {
+        label.push_back(static_cast<wchar_t>(key));
+    }
+    return true;
+}
+
+void ReloadHotkey(HWND window) {
+    UnregisterHotKey(window, 1);
+    shortcut = L"Tray button only";
+    PCWSTR setting = Wh_GetStringSetting(L"hotkey");
+    std::wstring requested = setting ? setting : L"Ctrl+Alt+H";
+    if (setting) Wh_FreeStringSetting(setting);
+
+    std::wstring upper;
+    for (wchar_t ch : requested) {
+        if (!std::iswspace(ch))
+            upper.push_back(static_cast<wchar_t>(std::towupper(ch)));
+    }
+    if (upper == L"NONE" || upper == L"OFF" ||
+        upper == L"DISABLED") return;
+
+    UINT modifiers = 0, key = 0;
+    std::wstring label;
+    if (!ParseShortcut(requested, modifiers, key, label)) {
+        shortcut = L"Invalid hotkey (tray only)";
+        Wh_Log(L"Invalid hotkey setting: %s", requested.c_str());
+        return;
+    }
+    if (RegisterHotKey(window, 1, modifiers | MOD_NOREPEAT, key)) {
+        shortcut = label;
+    } else if (modifiers == (MOD_CONTROL | MOD_ALT) && key == L'H' &&
+               RegisterHotKey(window, 1, MOD_CONTROL | MOD_ALT |
+                              MOD_NOREPEAT, VK_F12)) {
+        shortcut = L"Ctrl+Alt+F12";
+    } else {
+        shortcut = label + L" unavailable (tray only)";
+        Wh_Log(L"Hotkey unavailable: %s", label.c_str());
+    }
+}
+
 void Refresh(bool add = false) {
     int visible = -1;
     if (RecoverIfNeeded()) {
@@ -218,13 +327,19 @@ void Refresh(bool add = false) {
     std::swprintf(tray.szTip, ARRAYSIZE(tray.szTip),
                   L"Desktop icons: %ls | %ls",
                   visible < 0 ? L"waiting" : visible ? L"shown" : L"hidden",
-                  shortcut);
+                  shortcut.c_str());
     Shell_NotifyIconW(add ? NIM_ADD : NIM_MODIFY, &tray);
 }
 
 LRESULT CALLBACK WindowProc(HWND h, UINT message, WPARAM w, LPARAM l) {
     if (message == taskbarCreated && taskbarCreated) { Refresh(true); return 0; }
     if (message == WM_TIMER && w == kRefresh) { Refresh(); return 0; }
+    if (message == kRebind) {
+        ReloadHotkey(h);
+        lastUiVisibility = -2;
+        Refresh();
+        return 0;
+    }
     if (message == WM_HOTKEY && w == 1) {
         int current = Visibility();
         if (current >= 0) SetVisible(!current);
@@ -241,7 +356,7 @@ LRESULT CALLBACK WindowProc(HWND h, UINT message, WPARAM w, LPARAM l) {
             AppendMenuW(menu, MF_STRING | (current < 0 ? MF_GRAYED : 0), 1, L"Show desktop icons");
             AppendMenuW(menu, MF_STRING | (current < 0 ? MF_GRAYED : 0), 2, L"Hide desktop icons");
             AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-            AppendMenuW(menu, MF_STRING | MF_GRAYED, 3, shortcut);
+            AppendMenuW(menu, MF_STRING | MF_GRAYED, 3, shortcut.c_str());
             POINT p{}; GetCursorPos(&p); SetForegroundWindow(h);
             UINT command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
                                           p.x, p.y, 0, h, nullptr);
@@ -272,9 +387,7 @@ DWORD WINAPI Run(void*) {
         if (hiddenIcon) DestroyIcon(hiddenIcon);
         workerWindow = nullptr; DestroyWindow(h); UnregisterClassW(kClass, module); return 3;
     }
-    shortcut = L"Tray button only";
-    if (RegisterHotKey(h, 1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'H')) shortcut = L"Ctrl+Alt+H";
-    else if (RegisterHotKey(h, 1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F12)) shortcut = L"Ctrl+Alt+F12";
+    ReloadHotkey(h);
     tray = {}; tray.cbSize = sizeof(tray); tray.hWnd = h; tray.uID = 1;
     tray.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP; tray.uCallbackMessage = kTray;
     Refresh(true); SetTimer(h, kRefresh, 1000, nullptr);
@@ -320,7 +433,8 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    // No settings yet.
+    if (HWND h = workerWindow.load())
+        PostMessageW(h, kRebind, 0, 0);
 }
 
 void WhTool_ModUninit() {
