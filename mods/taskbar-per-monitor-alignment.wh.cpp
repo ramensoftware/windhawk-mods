@@ -560,12 +560,26 @@ HWND ResolveWindow(void* self) {
 // for the site or band of one of the taskbars that exist now.
 constexpr size_t kAdoptScanBytes = 0x400;
 bool AdoptTaskbarSettings(void* self) {
+    // Taskbars another settings object has already claimed are not candidates, so an
+    // object that doesn't hold its site in the scanned range is left alone rather than
+    // given a taskbar that belongs to a neighbor.
+    std::unordered_set<void*> claimed;
+    {
+        std::lock_guard lock(g_mutex);
+        for (const auto& entry : g_taskbars) claimed.insert(entry.second.site);
+    }
+    std::vector<std::pair<HWND, TaskbarBand>> candidates;
     for (HWND taskbar : TaskbarWindows()) {
         const TaskbarBand band = FindTaskbarBand(taskbar);
-        if (!band.site) continue;
-        for (size_t offset = 0; offset < kAdoptScanBytes; offset += sizeof(void*)) {
-            void* value = nullptr;
-            if (!ReadPointerAt(static_cast<BYTE*>(self) + offset, &value)) break;
+        if (band.site && !claimed.contains(band.site)) candidates.push_back({taskbar, band});
+    }
+    // Offsets outermost: a member of this object comes before anything that lies
+    // past its end, such as a neighboring TaskbarSettings on the heap, which holds
+    // another taskbar's site.
+    for (size_t offset = 0; offset < kAdoptScanBytes; offset += sizeof(void*)) {
+        void* value = nullptr;
+        if (!ReadPointerAt(static_cast<BYTE*>(self) + offset, &value)) break;
+        for (const auto& [taskbar, band] : candidates) {
             if (value != band.site && value != band.object) continue;
             void* iface = FindSettingsInterface(self);
             {
@@ -1066,6 +1080,16 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
     const bool isRetry = message == WM_TIMER && wParam == kRetryTimerId;
     if (isApply && wParam == kTeardown) {
         std::lock_guard lock(g_xamlMutex);
+        // Normally empty by now, each window having had its restore. A read that raced
+        // with unloading can leave a fresh entry behind: restore and release it too.
+        if (g_layouts) {
+            for (auto& entry : *g_layouts) {
+                entry.second.wantRight = false;
+                entry.second.wantStart = kFollowIcons;
+                ReapplyLayout(entry.second);
+                ReleaseLayoutHandlers(entry.second);
+            }
+        }
         g_layouts.reset();
         return 0;
     }
@@ -1202,6 +1226,9 @@ BOOL Wh_ModInit() {
                        (g_taskBandSiteVtable || g_secondaryTaskBandSiteVtable);
     if (!g_rightSupported)
         Wh_Log(L"Right alignment unavailable on this build; Right behaves as Left.");
+    if (!g_taskBandSiteVtable && !g_secondaryTaskBandSiteVtable)
+        Wh_Log(L"Taskbar band symbols unavailable: taskbars that existed before the mod "
+               L"loaded can't be found, so restart Explorer after enabling it.");
     Wh_Log(L"Enabled.");
     return TRUE;
 }
